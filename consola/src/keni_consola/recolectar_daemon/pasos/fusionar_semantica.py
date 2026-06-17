@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ import keni_consola.recolectar_daemon as _pkg
 
 from ... import config, marcas, repos
 from ...dominio import fusionar_semantica, traducir
+from .. import _comun
 from .._comun import _log
 
 
@@ -16,17 +18,29 @@ def paso_fusionar_semantica(
     *,
     ejecutor: fusionar_semantica.Ejecutor | None = None,
     recientes: list[dict[str, Any]] | None = None,
+    forzar: bool = False,
 ) -> dict[str, Any]:
-    """Fusiona con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_PIPELINE_FUSIONAR`.
+    """Fusiona con IA (Haiku) las historias del MISMO evento, por marca. Gateado `KENI_PIPELINE_FUSIONAR` (def ON).
 
     Por marca, manda hasta `KENI_FUSION_SEMANTICA_MAX` historias `nuevo` recientes a Haiku para que
-    agrupe las del mismo acontecimiento, y fusiona cada grupo (`_fusionar_grupo`). Best-effort: un
-    fallo por marca/grupo se loguea y no aborta el paso. Devuelve `{grupos, fusionadas}`.
+    agrupe las del mismo acontecimiento, y fusiona cada grupo (`_fusionar_grupo`). Es la VÍA REAL de
+    agrupación de historias del mismo evento con titulares distintos (la formación de clusters solo
+    dedup-ea EXACTO: url canónica o hash de título). Best-effort: un fallo por marca/grupo se loguea
+    y no aborta el paso. Devuelve `{grupos, fusionadas}`.
 
-    `recientes` (opcional): los clusters de la ventana YA cargados por el paso de agrupar del
-    MISMO barrido (evita re-leer la BD). None = leer de `repos.clusters_recientes`.
+    Throttle: como mucho una pasada por `_FUSIONAR_INTERVALO_SEG` (no re-llamar a Haiku en cada tick
+    de 30s); `forzar=True` lo salta (tests). `recientes` (opcional): los clusters de la ventana YA
+    cargados por el paso de agrupar del MISMO barrido (evita re-leer la BD). None = leer de
+    `repos.clusters_recientes`.
     """
     if not config.fusionar_semantica_activo():
+        return {"grupos": 0, "fusionadas": 0}
+    ahora_mono = time.monotonic()
+    if (
+        not forzar
+        and _comun._ultimo_fusionar
+        and (ahora_mono - _comun._ultimo_fusionar) < _comun._FUSIONAR_INTERVALO_SEG
+    ):
         return {"grupos": 0, "fusionadas": 0}
     ventana_h = config.cluster_ventana_h()
     maximo = config.fusion_semantica_max()
@@ -108,6 +122,7 @@ def paso_fusionar_semantica(
                 salida,
                 prompt=haiku["prompt"],
             )
+    _comun._ultimo_fusionar = ahora_mono
     if grupos_total:
         _log.info(
             "recolectar_daemon: fusionar semántico: %d grupo(s), %d historia(s) absorbida(s).",

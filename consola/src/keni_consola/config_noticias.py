@@ -8,8 +8,6 @@ from ._config_comun import (
     BREAKING_EXTRA_DIA_DEF,
     CLUSTER_BREAKING_PESO_DEF,
     CLUSTER_BREAKING_VENTANA_H_DEF,
-    CLUSTER_UMBRAL_DEF,
-    CLUSTER_UMBRAL_MERGE_DEF,
     CLUSTER_VENTANA_H_DEF,
     ENV_AFP_BASE_URL,
     ENV_AFP_CLIENT_ID,
@@ -25,8 +23,6 @@ from ._config_comun import (
     ENV_BREAKING_EXTRA_DIA,
     ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
-    ENV_CLUSTER_UMBRAL,
-    ENV_CLUSTER_UMBRAL_MERGE,
     ENV_CLUSTER_VENTANA_H,
     ENV_FEED_SLA_MIN,
     ENV_FUENTES_BAJA_CONFIANZA,
@@ -230,43 +226,6 @@ def cluster_ventana_h() -> int:
     para decidir a cuál unir un item nuevo. Acota el trabajo por barrido (nunca el archivo entero).
     """
     return _entero(ENV_CLUSTER_VENTANA_H, CLUSTER_VENTANA_H_DEF, minimo=1)
-
-
-def cluster_umbral() -> float:
-    """Umbral fuzzy de cruce de títulos para unir un item a un cluster (`KENI_CLUSTER_UMBRAL`, def 0.82).
-
-    Ratio `SequenceMatcher` mínimo (en [0,1]) para considerar dos titulares la misma historia.
-    Alto a propósito: conservador, solo une variantes claras. Valor inválido o fuera de [0,1] → def.
-    """
-    crudo = _crudo(ENV_CLUSTER_UMBRAL)
-    if not crudo:
-        return CLUSTER_UMBRAL_DEF
-    try:
-        valor = float(crudo)
-    except ValueError:
-        return CLUSTER_UMBRAL_DEF
-    if valor < 0.0 or valor > 1.0:
-        return CLUSTER_UMBRAL_DEF
-    return valor
-
-
-def cluster_umbral_merge() -> float:
-    """Umbral fuzzy del MERGE LÉXICO TARDÍO (`KENI_CLUSTER_UMBRAL_MERGE`, def 0.86; 0 apaga).
-
-    Fundir dos historias YA formadas pide más certeza que unir un item suelto, por eso el
-    default es más estricto que `cluster_umbral` (0.86 vs 0.82). Valor inválido/fuera de
-    [0,1] → def.
-    """
-    crudo = _crudo(ENV_CLUSTER_UMBRAL_MERGE)
-    if not crudo:
-        return CLUSTER_UMBRAL_MERGE_DEF
-    try:
-        valor = float(crudo)
-    except ValueError:
-        return CLUSTER_UMBRAL_MERGE_DEF
-    if valor < 0.0 or valor > 1.0:
-        return CLUSTER_UMBRAL_MERGE_DEF
-    return valor
 
 
 def cluster_breaking_fuentes() -> int:
@@ -596,13 +555,19 @@ def perfil_editorial_ttl_horas() -> int:
 
 
 def fusionar_semantica_activo() -> bool:
-    """True si se funden con IA las historias del mismo evento (`KENI_PIPELINE_FUSIONAR`, def OFF).
+    """True si se funden con IA las historias del mismo evento (`KENI_PIPELINE_FUSIONAR`, def ON).
 
-    Def OFF (IA que MUTA el pool en prod): sin el flag, la agrupación se queda en el léxico. Con el
-    flag, el daemon manda a Haiku las historias recientes por marca y funde los grupos del mismo
-    acontecimiento (conservador: ante duda no fusiona).
+    Def ON: la fusión semántica (Haiku) ES la vía de agrupación de historias del mismo evento con
+    titulares distintos —la formación de clusters solo dedup-ea EXACTO (url canónica o hash de
+    título)—, así que va encendida por defecto (en la era de la IA el léxico a medias sobra: o
+    apagado o encendido). `KENI_PIPELINE_FUSIONAR=0`/`no`/`off` la apaga. Conservador: ante duda no
+    fusiona. Mismo idiom default-ON que `recolectar`/`verificar` no usan (esos son def OFF); aquí
+    seguimos el patrón de `ingesta_filtro_activo`/`auto_programar_activo` (vacío → True).
     """
-    return _crudo(ENV_PIPELINE_FUSIONAR).lower() in _VERDADEROS
+    crudo = _crudo(ENV_PIPELINE_FUSIONAR).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
 
 
 def fusion_semantica_max() -> int:

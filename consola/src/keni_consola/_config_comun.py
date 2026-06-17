@@ -224,14 +224,10 @@ ENV_INGESTA_INTERVALO_CIENCIA_TECH = "KENI_INGESTA_INTERVALO_CIENCIA_TECH"
 ENV_INGESTA_INTERVALO_GAMING = "KENI_INGESTA_INTERVALO_GAMING"
 ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
 
-# Agrupar HISTORIAS (Ola B): ventana reciente de agrupación, umbral fuzzy de cruce de
-# títulos y heurística de "breaking" (N fuentes distintas en < M horas). Agrupación INCREMENTAL
+# Agrupar HISTORIAS (Ola B): ventana reciente de agrupación (dedup EXACTO: url canónica o hash de
+# título) y heurística de "breaking" (N fuentes distintas en < M horas). Agrupación INCREMENTAL
 # acotada por la ventana: nunca re-agrupa el archivo entero. Corre dentro del barrido de Recolectar.
 ENV_CLUSTER_VENTANA_H = "KENI_CLUSTER_VENTANA_H"
-ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
-# Umbral del MERGE LÉXICO TARDÍO de la ventana (fundir historias ya formadas que se
-# descubren iguales): MÁS estricto que el de asignación. 0 = apagado.
-ENV_CLUSTER_UMBRAL_MERGE = "KENI_CLUSTER_UMBRAL_MERGE"
 # LEGADO: umbral breaking por CONTEO de fuentes. Sustituido por el umbral PONDERADO
 # (`KENI_CLUSTER_BREAKING_PESO`); si el conteo está fijado y el peso no, se mapea (peso =
 # conteo) para no romper despliegues configurados. Ver `config.cluster_breaking_peso()`.
@@ -380,7 +376,8 @@ ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 
 # Fusionar SEMÁNTICAMENTE historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
 # recientes de una marca que cubren el mismo acontecimiento (titulares distintos) y el daemon las
-# funde en una sola (n_fuentes real). GATEADO por `KENI_PIPELINE_FUSIONAR` (def OFF). `_MAX` acota
+# funde en una sola (n_fuentes real). GATEADO por `KENI_PIPELINE_FUSIONAR` (def ON: ES la vía de
+# agrupación del mismo evento; la formación solo dedup-ea EXACTO). `_MAX` acota
 # cuántas historias por marca se mandan a Haiku por barrido (coste/contexto).
 ENV_PIPELINE_FUSIONAR = "KENI_PIPELINE_FUSIONAR"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
@@ -600,12 +597,11 @@ INGESTA_INTERVALO_DEFECTO_DEF = 600
 INGESTA_BACKOFF_TOPE_SEG = 3600
 
 # Clustering de historias (Ola B): defaults. Ventana de 72h (una historia evoluciona varios
-# días); umbral fuzzy 0.82 (alto, conservador: solo une variantes claras del mismo titular);
-# breaking PONDERADO = masa de fuentes (Σ peso por outlet) >= 3.0 sumadas en la ventana
-# ACTUAL de 6h: 3 normales, 1 potente + 1 normal, o 2 potentes. Anclado en ahora: decae solo.
+# días); la formación dedup-ea EXACTO (url canónica o hash de título), la agrupación del mismo
+# evento con titulares distintos la hace la fusión semántica (Haiku, ON por defecto); breaking
+# PONDERADO = masa de fuentes (Σ peso por outlet) >= 3.0 sumadas en la ventana ACTUAL de 6h: 3
+# normales, 1 potente + 1 normal, o 2 potentes. Anclado en ahora: decae solo.
 CLUSTER_VENTANA_H_DEF = 72
-CLUSTER_UMBRAL_DEF = 0.82
-CLUSTER_UMBRAL_MERGE_DEF = 0.86
 CLUSTER_BREAKING_FUENTES_DEF = 3  # LEGADO (conteo); ver CLUSTER_BREAKING_PESO_DEF
 CLUSTER_BREAKING_PESO_DEF = 3.0
 BREAKING_EXTRA_DIA_DEF = 4
@@ -799,8 +795,6 @@ __all__ = [
     'BREAKING_EXTRA_DIA_DEF',
     'CLUSTER_BREAKING_PESO_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
-    'CLUSTER_UMBRAL_DEF',
-    'CLUSTER_UMBRAL_MERGE_DEF',
     'CLUSTER_VENTANA_H_DEF',
     'Callable',
     'DB_POOL_MAX_DEF',
@@ -831,8 +825,6 @@ __all__ = [
     'ENV_BREAKING_EXTRA_DIA',
     'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
-    'ENV_CLUSTER_UMBRAL',
-    'ENV_CLUSTER_UMBRAL_MERGE',
     'ENV_CLUSTER_VENTANA_H',
     'ENV_COMERCIAL_INTERVALO_HORAS',
     'ENV_COMERCIAL_INTERVALO_SEGUNDOS',

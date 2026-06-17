@@ -22,8 +22,9 @@ def _etapas_activas(monkeypatch):
     """Activa los maestros togglables de las etapas (Fusionar/Priorizar/Admitir/Verificar/Copy) para
     estos tests.
 
-    El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada". Los tests
-    que ejercitan el caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
+    El default de estos toggles es OFF (salvo Fusionar, ON desde el rediseño de clustering); sin
+    esto, `_etapas_de_run` pintaría las OFF como "saltada". Los tests que ejercitan el caso
+    "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
     (Ilustrar se deja OFF por defecto; el test de Ilustrar lo enciende a propósito.)
     """
     monkeypatch.setenv(config.ENV_PIPELINE_FUSIONAR, "1")

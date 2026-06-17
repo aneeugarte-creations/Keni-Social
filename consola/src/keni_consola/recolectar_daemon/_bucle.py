@@ -259,17 +259,6 @@ def ejecutar_barrido() -> dict[str, Any]:
         # re-score y el fusionar del mismo barrido, sin re-leer la BD.
         clusters_ventana = cluster_resumen.pop("clusters_ventana", None)
 
-        # Paso de MERGE LÉXICO tardío: fusiona historias de la ventana que se descubrieron
-        # iguales después de nacer por separado (sin IA; throttled). Best-effort. ANTES del
-        # re-score para que las fusionadas se repunten ya consolidadas.
-        merge_resumen: dict[str, Any] = {"grupos": 0, "fusionadas": 0}
-        try:
-            merge_resumen = _pkg.paso_agrupar_lexico(clusters_ventana)
-            if merge_resumen.get("fusionadas"):
-                clusters_ventana = None  # la ventana cambió: que el re-score la recargue
-        except Exception:  # noqa: BLE001 -- el merge es aditivo; nunca tumba la recolección
-            _log.exception("recolectar_daemon: fallo en el paso de merge léxico.")
-
         # Paso de RE-SCORE (score que envejece): repuntúa periódicamente la ventana para que
         # la frescura DECAIGA aunque no entren items nuevos (ver `paso_rescore`). Best-effort.
         try:
@@ -277,8 +266,9 @@ def ejecutar_barrido() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- el re-score es aditivo; nunca tumba la recolección
             _log.exception("recolectar_daemon: fallo en el paso de re-score.")
 
-        # Paso de FUSIONAR SEMÁNTICAMENTE (Fase 2b): fusiona con Haiku las historias del mismo evento que el
-        # léxico no unió (titulares distintos). Gateado `KENI_PIPELINE_FUSIONAR` (def OFF). Best-effort.
+        # Paso de FUSIONAR SEMÁNTICAMENTE (Fase 2b): fusiona con Haiku las historias del MISMO evento
+        # contadas con titulares distintos (la formación solo dedup-ea EXACTO: url o hash de título).
+        # Gateado `KENI_PIPELINE_FUSIONAR` (def ON; throttled internamente). Best-effort.
         try:
             _pkg.paso_fusionar_semantica(recientes=clusters_ventana)
         except Exception:  # noqa: BLE001 -- el fusionar es aditivo; nunca tumba la recolección

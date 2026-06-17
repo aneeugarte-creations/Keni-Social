@@ -14,8 +14,8 @@ from difflib import SequenceMatcher
 
 from .. import similitud
 
-# Longitud mínima de una clave normalizada para entrar al fuzzy. Títulos muy cortos
-# ("nfl", "f1") disparan ratios altos espurios entre sí: solo casan por url exacta.
+# Longitud mínima de una clave normalizada para entrar al fuzzy de la SELECCIÓN DIVERSA
+# (`scoring.seleccionar_diversos`): títulos muy cortos disparan ratios altos espurios entre sí.
 _MIN_LONGITUD_FUZZY = 8
 
 # Umbral de "breaking" PONDERADO por defecto (lo fija el daemon vía config). Una historia es
@@ -25,11 +25,6 @@ _MIN_LONGITUD_FUZZY = 8
 # consecuencia del ranking (corroboración ponderada × velocidad), no un carril aparte.
 BREAKING_PESO_DEF = 3.0
 BREAKING_VENTANA_H_DEF = 6
-
-# Longitud mínima de un token para el BLOCKING del índice de asignación: el fuzzy solo se
-# evalúa contra clusters que comparten ≥1 token "significativo" con el item (dos títulos sin
-# tokens en común no alcanzan el umbral 0.82 en la práctica).
-_MIN_TOKEN_BLOCKING = 3
 
 
 def _parse_iso(valor: str) -> datetime | None:

@@ -10,12 +10,24 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pytest
+
 from keni_consola import recolectar_daemon, repos
 from keni_consola.dominio import fusionar_semantica
+from keni_consola.recolectar_daemon import _comun
 
 # Timestamp RECIENTE: `paso_fusionar_semantica` solo mira historias dentro de la ventana de
 # agrupar (`KENI_CLUSTER_VENTANA_H`, 72h), así que se siembran "ahora".
 _AHORA = datetime.now(UTC).isoformat()
+
+
+@pytest.fixture(autouse=True)
+def _reset_throttle_fusionar():
+    """Resetea el throttle global de `paso_fusionar_semantica` antes/después de cada test: así una
+    pasada sellada por otro test no hace que el siguiente (sin `forzar`) salga por el throttle."""
+    _comun._ultimo_fusionar = 0.0
+    yield
+    _comun._ultimo_fusionar = 0.0
 
 
 def _ej(grupos):
@@ -146,7 +158,8 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
 
 
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
-    monkeypatch.delenv("KENI_PIPELINE_FUSIONAR", raising=False)
+    # Def ON: para apagar hay que fijarlo EXPLÍCITO a "0" (no basta con no setearlo).
+    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "0")
     _inicializar("c1")
     _inicializar("c2")
     res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))

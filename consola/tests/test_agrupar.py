@@ -57,137 +57,87 @@ def test_clave_vacia_sin_url_ni_titulo():
 
 
 # --------------------------------------------------------------------------- #
-# asignar                                                                       #
+# asignar — DEDUP EXACTO (sin léxico): solo url canónica o título idéntico       #
 # --------------------------------------------------------------------------- #
 
 
 def test_asignar_une_por_misma_url():
+    # (a) Misma url canónica (host+path), distinta query/título → mismo cluster.
     item = _item(url="https://example.com/nota-1?utm_source=tw", titulo="Algo distinto")
     cluster = {"id": "c1", "clave": "url:example.com/nota-1", "titulo": "Titular original"}
     assert agrupar.asignar(item, [cluster]) == "c1"
+    # El Asignador (índice) toma la misma decisión.
+    assert agrupar.Asignador([cluster]).asignar(item) == "c1"
 
 
-def test_asignar_une_por_titulo_fuzzy():
-    cluster = {
-        "id": "c2",
-        "clave": "t:abc",
-        "titulo": "El presidente anuncia una nueva reforma para los estados",
-    }
-    item = _item(url="", titulo="El presidente anuncia nueva reforma para los estados")
-    assert agrupar.asignar(item, [cluster], umbral=0.82) == "c2"
+def test_asignar_une_por_titulo_identico_sin_url():
+    # (b) Sin url, título normalizado IDÉNTICO (mismo `t:<hash>`) → mismo cluster.
+    titulo = "¡Selección Mexicana golea!"
+    clave = agrupar.clave_cluster(_item(url="", titulo=titulo))
+    assert clave.startswith("t:")
+    cluster = {"id": "c2", "clave": clave, "titulo": titulo}
+    # Variante equivalente (sin signos / mayúsculas) colisiona por su hash.
+    item = _item(url="", titulo="seleccion mexicana golea")
+    assert agrupar.asignar(item, [cluster]) == "c2"
+    assert agrupar.Asignador([cluster]).asignar(item) == "c2"
 
 
 def test_asignar_cluster_nuevo_si_nada_casa():
     cluster = {"id": "c2", "clave": "t:abc", "titulo": "Reforma energética en el senado"}
     item = _item(url="", titulo="Resultados de la jornada de fútbol del domingo")
-    assert agrupar.asignar(item, [cluster], umbral=0.82) is None
+    assert agrupar.asignar(item, [cluster]) is None
 
 
-def test_asignar_respeta_umbral():
-    cluster = {"id": "c2", "clave": "t:abc", "titulo": "Gana el equipo local el partido de hoy"}
-    item = _item(url="", titulo="Pierde el equipo local el partido de ayer")
-    # Con umbral muy alto no une; con uno bajo sí.
-    assert agrupar.asignar(item, [cluster], umbral=0.99) is None
-    assert agrupar.asignar(item, [cluster], umbral=0.5) == "c2"
-
-
-def test_asignar_titulos_muy_cortos_no_entran_fuzzy():
-    cluster = {"id": "c2", "clave": "t:nfl", "titulo": "NFL"}
-    item = _item(url="", titulo="F1")
-    assert agrupar.asignar(item, [cluster], umbral=0.3) is None
-
-
-def test_asignar_gana_el_mas_parecido():
-    c_lejos = {"id": "lejos", "clave": "t:1", "titulo": "Reforma fiscal en discusion general"}
-    c_cerca = {"id": "cerca", "clave": "t:2", "titulo": "El presidente anuncia nueva reforma estados"}
-    item = _item(url="", titulo="El presidente anuncia nueva reforma para los estados")
-    assert agrupar.asignar(item, [c_lejos, c_cerca], umbral=0.6) == "cerca"
-
-
-def test_asignar_une_por_titulo_traducido():
-    # La historia extranjera ya TRADUCIDA debe atrapar al titular en español que llega después.
+def test_asignar_titulo_no_identico_no_une():
+    # El léxico (fuzzy) ya NO une: dos titulares parecidos pero NO idénticos forman clusters
+    # distintos; la fusión semántica (Haiku) los agrupará después.
     cluster = {
-        "id": "c-ext",
-        "clave": "t:abc",
-        "titulo": "Earthquake of 6.2 shakes Guerrero this afternoon",
-        "titulo_es": "Un sismo de 6.2 sacude Guerrero esta tarde",
+        "id": "c2",
+        "clave": agrupar.clave_cluster(_item(url="", titulo="El presidente anuncia una nueva reforma para los estados")),
+        "titulo": "El presidente anuncia una nueva reforma para los estados",
     }
-    item = _item(url="", titulo="Sismo de 6.2 sacude Guerrero esta tarde")
-    assert agrupar.asignar(item, [cluster], umbral=0.82) == "c-ext"
-    # El Asignador (índice) toma la misma decisión.
-    asignador = agrupar.Asignador([cluster], umbral=0.82)
-    assert asignador.asignar(item) == "c-ext"
+    item = _item(url="", titulo="El presidente anuncia nueva reforma para los estados")
+    assert agrupar.asignar(item, [cluster]) is None
 
 
-def test_fuzzy_veta_numeros_incompatibles():
-    # Mismo texto, cifras DISTINTAS = eventos distintos: el fuzzy no debe unirlos.
-    cluster = {"id": "c1", "clave": "t:abc", "titulo": "Sismo de magnitud 5.8 sacude Guerrero hoy"}
-    item = _item(url="", titulo="Sismo de magnitud 7.1 sacude Guerrero hoy")
-    assert agrupar.asignar(item, [cluster], umbral=0.7) is None
-    # Con la MISMA cifra sí une (la compatibilidad de números no castiga el caso bueno).
-    mismo = _item(url="", titulo="Sismo de magnitud 5.8 sacude Guerrero hoy")
-    assert agrupar.asignar(mismo, [cluster], umbral=0.7) == "c1"
+def test_asignar_sin_clave_estable_devuelve_none():
+    cluster = {"id": "c1", "clave": "t:abc", "titulo": "Algo"}
+    assert agrupar.asignar({"url": "", "titulo": ""}, [cluster]) is None
 
 
-def test_fuzzy_sin_numeros_no_se_penaliza():
-    cluster = {"id": "c1", "clave": "t:abc", "titulo": "Sismo de magnitud 5.8 sacude Guerrero"}
-    item = _item(url="", titulo="Sismo sacude Guerrero esta tarde")
-    # Un lado sin números no dispara el veto (puede unir o no por ratio, pero no por veto).
+def test_asignar_shrek_titulares_distintos_forman_singletons():
+    """Tres titulares REALES del mismo evento (trailer de Shrek 5), sin url compartida y con
+    títulos NO idénticos: el dedup exacto NO los une (cada uno es un singleton). Documenta que la
+    agrupación del mismo evento recae ahora en la fusión semántica (Haiku), no en el léxico."""
+    titulares = [
+        "SHREK 5 Trailer Features Gingerbread Twerking and a Back Alley Snowman",
+        "Shrek And Donkey Look Too Lifelike In New Shrek 5 Trailer",
+        "DreamWorks Drops First Trailer For 'Shrek 5,' Coming Next Summer",
+    ]
+    clusters = [
+        {"id": f"c{i}", "clave": agrupar.clave_cluster(_item(url="", titulo=t)), "titulo": t}
+        for i, t in enumerate(titulares)
+    ]
+    # Cada item, contra el índice de los OTROS dos, no casa con ninguno (3 singletons).
+    for i, t in enumerate(titulares):
+        item = _item(url="", titulo=t, marca="unotv")
+        otros = [c for j, c in enumerate(clusters) if j != i]
+        assert agrupar.asignar(item, otros) is None
+        assert agrupar.Asignador(otros).asignar(item) is None
+
+
+def test_numeros_incompatibles_helper_sigue_disponible():
+    # `_numeros_incompatibles` sobrevive como helper del scoring (selección diversa); un lado sin
+    # números NO dispara el veto.
     assert not agrupar._numeros_incompatibles(
-        agrupar.similitud.clave_fuzzy(item["titulo"]),
-        agrupar.similitud.clave_fuzzy(cluster["titulo"]),
+        agrupar.similitud.clave_fuzzy("Sismo sacude Guerrero esta tarde"),
+        agrupar.similitud.clave_fuzzy("Sismo de magnitud 5.8 sacude Guerrero"),
     )
-
-
-# --------------------------------------------------------------------------- #
-# grupos_lexicos: merge tardío de la ventana                                    #
-# --------------------------------------------------------------------------- #
-
-
-def test_grupos_lexicos_agrupa_duplicados_tardios():
-    clusters = [
-        {"id": "a", "titulo": "El presidente anuncia una nueva reforma para los estados", "categoria": "mx"},
-        {"id": "b", "titulo": "El presidente anuncia nueva reforma para los estados", "categoria": "mx"},
-        {"id": "c", "titulo": "Resultados de la jornada de futbol del domingo", "categoria": "deportes"},
-    ]
-    grupos = agrupar.grupos_lexicos(clusters, umbral=0.86)
-    assert grupos == [["a", "b"]]
-
-
-def test_grupos_lexicos_no_cruza_categorias_distintas():
-    clusters = [
-        {"id": "a", "titulo": "El presidente anuncia una nueva reforma para los estados", "categoria": "mx"},
-        {"id": "b", "titulo": "El presidente anuncia nueva reforma para los estados", "categoria": "deportes"},
-    ]
-    assert agrupar.grupos_lexicos(clusters, umbral=0.86) == []
-    # Una categoría VACÍA casa con cualquiera.
-    clusters[1]["categoria"] = ""
-    assert agrupar.grupos_lexicos(clusters, umbral=0.86) == [["a", "b"]]
-
-
-def test_grupos_lexicos_une_por_traduccion():
-    clusters = [
-        {"id": "ext", "titulo": "Earthquake shakes Mexico City",
-         "titulo_es": "Un sismo sacude la Ciudad de Mexico esta manana", "categoria": "mx"},
-        {"id": "mx", "titulo": "Un sismo sacude la Ciudad de Mexico esta manana", "categoria": "mx"},
-    ]
-    assert agrupar.grupos_lexicos(clusters, umbral=0.86) == [["ext", "mx"]]
-
-
-def test_grupos_lexicos_respeta_veto_de_numeros():
-    clusters = [
-        {"id": "a", "titulo": "Sismo de magnitud 5.8 sacude Guerrero hoy", "categoria": "mx"},
-        {"id": "b", "titulo": "Sismo de magnitud 7.1 sacude Guerrero hoy", "categoria": "mx"},
-    ]
-    assert agrupar.grupos_lexicos(clusters, umbral=0.5) == []
-
-
-def test_grupos_lexicos_umbral_cero_apaga():
-    clusters = [
-        {"id": "a", "titulo": "El presidente anuncia una nueva reforma", "categoria": ""},
-        {"id": "b", "titulo": "El presidente anuncia una nueva reforma", "categoria": ""},
-    ]
-    assert agrupar.grupos_lexicos(clusters, umbral=0) == []
+    # Mismas claves con cifras DISJUNTAS sí vetan.
+    assert agrupar._numeros_incompatibles(
+        agrupar.similitud.clave_fuzzy("Sismo de magnitud 5.8 sacude Guerrero hoy"),
+        agrupar.similitud.clave_fuzzy("Sismo de magnitud 7.1 sacude Guerrero hoy"),
+    )
 
 
 # --------------------------------------------------------------------------- #

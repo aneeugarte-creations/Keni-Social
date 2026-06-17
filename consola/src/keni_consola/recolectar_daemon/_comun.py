@@ -3,7 +3,7 @@
 Aquí viven, en UN SOLO sitio para no duplicar estado:
   - El logger del daemon (`_log`, nombre `keni_consola.recolectar_daemon`).
   - Los throttles globales de los pasos periódicos (`_ultimo_rescore`,
-    `_ultimo_agrupar_lexico`, `_ultima_caducidad`) y sus intervalos. Los pasos los leen y
+    `_ultimo_fusionar`, `_ultima_caducidad`) y sus intervalos. Los pasos los leen y
     los sellan vía `_comun.<var>` (no `global` cruzado de módulos): así el estado de
     throttling es único, sin copias divergentes por módulo.
   - Helpers de relevancia/rendimiento, registro de actividad IA, clasificación de marca
@@ -35,10 +35,11 @@ _log = logging.getLogger("keni_consola.recolectar_daemon")
 _RESCORE_INTERVALO_SEG = 900.0
 _ultimo_rescore = 0.0  # time.monotonic() de la última pasada completada
 
-# Merge léxico tardío: como mucho una pasada por intervalo (mismo throttle que el re-score:
-# los duplicados tardíos aparecen despacio; barrer la ventana entera cada tick sería caro).
-_AGRUPAR_LEXICO_INTERVALO_SEG = 900.0
-_ultimo_agrupar_lexico = 0.0  # time.monotonic() de la última pasada completada
+# Fusionar semántico (Haiku): como mucho una pasada por intervalo. Mandar la ventana a Haiku en
+# cada tick de 30s sería coste de tokens redundante (las historias del mismo evento aparecen
+# despacio); el throttle ligero deja que la dedup semántica corra sin re-llamar en cada barrido.
+_FUSIONAR_INTERVALO_SEG = 90.0
+_ultimo_fusionar = 0.0  # time.monotonic() de la última pasada completada
 
 # Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
 # en horas; pasarla en cada tick de 30s sería escritura irrelevante en BD sin efecto).

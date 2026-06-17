@@ -9,17 +9,16 @@ PURA: no toca BD ni red. El daemon de ingesta le pasa el item recién insertado 
 clusters de la ventana reciente (que cargó de `db`), decide a cuál unir (o crear uno
 nuevo), y persiste el resultado. Determinista y testeable sin I/O.
 
-Reutiliza la lógica de cruce de títulos del Radar (`radar._clave_fuzzy` + sinónimos +
-`SequenceMatcher`) y la normalización/hash de `dominio.dedup`, para no reinventar el
-fuzzy-matching ni divergir de cómo el Radar consolida temas.
+Reutiliza la normalización/hash de `dominio.dedup` para el cruce EXACTO de identidad.
 
-Reglas de agrupación (`asignar`):
+Reglas de agrupación (`asignar`) — DEDUP EXACTO, sin léxico:
   - (a) MISMA `url_canonica_clustering` (host+path, SIN query): es literalmente el mismo
     recurso → mismo cluster, sin ambigüedad.
-  - (b) si no, FUZZY del título normalizado del item contra el `titulo`/`clave` del cluster
-    con ratio `SequenceMatcher` ≥ `umbral` (def `KENI_CLUSTER_UMBRAL` = 0.82). Conservador:
-    títulos muy cortos no entran al fuzzy (ratios espurios).
-  - si nada casa → cluster nuevo.
+  - (b) si no hay url, título normalizado IDÉNTICO (`t:<hash>` de `dedup`).
+  - si nada casa EXACTO → cluster nuevo.
+
+La agrupación de historias del MISMO evento con titulares DISTINTOS la resuelve la fusión
+semántica con Haiku (`paso_fusionar_semantica`, ON por defecto), no el léxico.
 
 Scoring (`puntuar`): ver la fórmula documentada en su docstring.
 
@@ -38,7 +37,6 @@ from .asignacion import (
     Asignador,
     asignar,
     clave_cluster,
-    grupos_lexicos,
     url_canonica_clustering,
 )
 from .corroboracion import (
@@ -76,7 +74,6 @@ __all__ = [
     "dedup",
     "evaluar_umbral",
     "fuentes_detalle",
-    "grupos_lexicos",
     "marca_por_vocabulario",
     "peso_corroboracion",
     "peso_ventana_actual",

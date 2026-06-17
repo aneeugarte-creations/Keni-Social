@@ -12,10 +12,22 @@ from __future__ import annotations
 import contextlib
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from keni_consola import config, recolectar_daemon
 from keni_consola.dominio import ingesta
+from keni_consola.recolectar_daemon import _comun
 
 _AHORA = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _reset_throttle_fusionar():
+    """Resetea el throttle global de `paso_fusionar_semantica` antes de cada test: así una pasada
+    sellada por un test previo no hace que el siguiente (sin `forzar`) salga por el throttle."""
+    _comun._ultimo_fusionar = 0.0
+    yield
+    _comun._ultimo_fusionar = 0.0
 
 _FEED_OK = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
@@ -159,8 +171,6 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
                         lambda: llamados.append("agencias") or {"items": 0})
     monkeypatch.setattr(recolectar_daemon, "paso_agrupar",
                         lambda: llamados.append("agrupar") or {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(recolectar_daemon, "paso_agrupar_lexico",
-                        lambda *a, **k: llamados.append("merge") or {"grupos": 0, "fusionadas": 0})
     monkeypatch.setattr(recolectar_daemon, "paso_rescore",
                         lambda *a, **k: llamados.append("rescore") or {"revisados": 0, "actualizados": 0})
     monkeypatch.setattr(recolectar_daemon, "paso_fusionar_semantica",
@@ -172,8 +182,9 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
     assert resumen["feeds"] == 0
     assert resumen["items_nuevos"] == 0
     assert resumen["errores"] == 0
-    # Los pasos post-RSS corrieron AUNQUE no hubiera feeds vencidos.
-    assert llamados == ["agencias", "agrupar", "merge", "rescore", "fusion", "traducir"]
+    # Los pasos post-RSS corrieron AUNQUE no hubiera feeds vencidos (sin merge léxico: la
+    # agrupación del mismo evento la hace la fusión semántica).
+    assert llamados == ["agencias", "agrupar", "rescore", "fusion", "traducir"]
 
 
 def test_barrido_respeta_single_flight(monkeypatch):
@@ -708,35 +719,29 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
 
 
 # --------------------------------------------------------------------------- #
-# paso_agrupar_lexico: duplicados tardíos de la ventana (sin IA)                  #
+# paso_fusionar_semantica: throttle ligero (no re-llamar a Haiku en cada tick)   #
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_merge_lexico_funde_duplicados_y_excluye_promovidas(monkeypatch):
-    c1 = {"id": "c1", "titulo": "El presidente anuncia una nueva reforma para los estados",
-          "categoria": "mx", "estado": "nuevo", "publicacion_id": ""}
-    c2 = {"id": "c2", "titulo": "El presidente anuncia nueva reforma para los estados",
-          "categoria": "mx", "estado": "nuevo", "publicacion_id": ""}
-    # Promovida: aunque su título case, NO entra al merge (lo usado no se toca).
-    c3 = {"id": "c3", "titulo": "El presidente anuncia nueva reforma para los estados",
-          "categoria": "mx", "estado": "usado", "publicacion_id": "tema-1"}
-    llamadas: list[list[str]] = []
-    monkeypatch.setattr(
-        recolectar_daemon, "_fusionar_grupo",
-        lambda grupo, por_id, **kw: llamadas.append(sorted(grupo)) or True,
-    )
-    resumen = recolectar_daemon.paso_agrupar_lexico([c1, c2, c3], forzar=True)
-    assert llamadas == [["c1", "c2"]]
-    assert resumen == {"grupos": 1, "fusionadas": 1}
+def test_paso_fusionar_semantica_va_throttled(monkeypatch):
+    """Tras una pasada (que sella el throttle), la siguiente sin `forzar` sale temprano y NO
+    re-lee la ventana ni llama a Haiku; `forzar=True` la salta."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    lecturas = []
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: lecturas.append(ventana_h) or [])
+    recolectar_daemon.paso_fusionar_semantica(forzar=True)   # corre y sella el throttle
+    assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}  # throttled
+    assert len(lecturas) == 1  # la 2ª no llegó a leer la ventana
 
 
-def test_paso_merge_lexico_umbral_cero_apaga(monkeypatch):
-    monkeypatch.setenv(config.ENV_CLUSTER_UMBRAL_MERGE, "0")
-    def _no_llamar(*a, **k):  # noqa: ANN002, ANN003
-        raise AssertionError("con el umbral a 0 no debe fundir nada")
-    monkeypatch.setattr(recolectar_daemon, "_fusionar_grupo", _no_llamar)
-    resumen = recolectar_daemon.paso_agrupar_lexico([], forzar=True)
-    assert resumen == {"grupos": 0, "fusionadas": 0}
+def test_paso_fusionar_semantica_gateado_off_no_corre(monkeypatch):
+    """Con `KENI_PIPELINE_FUSIONAR=0` (apagado explícito) el paso es no-op, antes del throttle."""
+    monkeypatch.setenv(config.ENV_PIPELINE_FUSIONAR, "0")
+    def _no_leer(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("apagado: no debe leer la ventana")
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes", _no_leer)
+    assert recolectar_daemon.paso_fusionar_semantica(forzar=True) == {"grupos": 0, "fusionadas": 0}
 
 
 # --------------------------------------------------------------------------- #

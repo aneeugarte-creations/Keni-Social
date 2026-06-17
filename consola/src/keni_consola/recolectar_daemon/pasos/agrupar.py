@@ -30,9 +30,10 @@ def paso_agrupar() -> dict[str, Any]:
     Incremental: NO re-agrupa el archivo entero. Carga (1) los clusters cuya `ultimo_visto`
     está en la ventana (`KENI_CLUSTER_VENTANA_H`) y (2) hasta `_CLUSTER_BATCH` items recientes
     sin `cluster_id`, en orden cronológico. Para cada item: lo une al cluster reciente que casa
-    (misma url canónica o título fuzzy ≥ `KENI_CLUSTER_UMBRAL`) o crea uno nuevo. La decisión
-    usa `agrupar.Asignador` (claves fuzzy precomputadas + blocking por tokens: O(items ×
-    candidatos), no O(items × clusters)). Las asignaciones se escriben en LOTE (un UPDATE por
+    por clave EXACTA (misma url canónica host+path, o hash de título idéntico) o crea uno nuevo.
+    La decisión usa `agrupar.Asignador` (índice `clave → id`: O(items), no O(items × clusters)).
+    Las historias del mismo evento con titulares DISTINTOS las agrupa después la fusión semántica
+    con Haiku (`paso_fusionar_semantica`). Las asignaciones se escriben en LOTE (un UPDATE por
     cluster tocado, no uno por item). Al final, recalcula y `upsert`ea SOLO los clusters tocados
     (puntuándolos con su vocabulario de marca; si la marca dominante queda VACÍA —historias
     solo-Trends/agencias— se intenta el encaje por vocabulario de cada marca).
@@ -46,7 +47,6 @@ def paso_agrupar() -> dict[str, Any]:
     fusionar/re-score sin re-leer la BD). Un fallo de un item se loguea y no aborta el paso.
     """
     ventana_h = config.cluster_ventana_h()
-    umbral = config.cluster_umbral()
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
@@ -77,7 +77,7 @@ def paso_agrupar() -> dict[str, Any]:
     # MISMO barrido se unan entre sí sin re-consultar la BD). id -> dict-resumen del cluster.
     recientes = repos.clusters_recientes(ventana_h)
     indice: dict[str, dict[str, Any]] = {c["id"]: c for c in recientes}
-    asignador = agrupar.Asignador(recientes, umbral=umbral)
+    asignador = agrupar.Asignador(recientes)
     tocados: set[str] = set()
     asignaciones: dict[str, list[str]] = {}  # cluster_id -> item_ids (escritura en lote)
     nuevos = 0

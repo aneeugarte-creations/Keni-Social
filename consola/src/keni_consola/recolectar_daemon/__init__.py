@@ -31,7 +31,7 @@ El módulo se troceó en un paquete por áreas; este `__init__` es el FACADE que
 superficie pública (mismo nombre de import `keni_consola.recolectar_daemon`):
   - `_comun`: estado/throttles compartidos y helpers (relevancia, rendimiento, actividad IA,
     clasificación de marca, fusionar un grupo).
-  - `pasos/`: cada `paso_*` independiente (agrupar, rescore, agrupar_lexico, fusionar_semantica,
+  - `pasos/`: cada `paso_*` independiente (agrupar, rescore, fusionar_semantica,
     traducir, caducidad, agencias).
   - `_bucle`: orquestador (`ejecutar_barrido`), planificación pura y arranque del hilo
     (`iniciar_ingesta`).
@@ -91,7 +91,6 @@ from .pasos.agencias import paso_agencias  # noqa: F401
 from .pasos.caducidad import paso_caducidad  # noqa: F401
 from .pasos.agrupar import paso_agrupar  # noqa: F401
 from .pasos.fusionar_semantica import paso_fusionar_semantica  # noqa: F401
-from .pasos.agrupar_lexico import paso_agrupar_lexico  # noqa: F401
 from .pasos.rescore import paso_rescore  # noqa: F401
 from .pasos.traducir import paso_traducir  # noqa: F401
 
@@ -103,7 +102,6 @@ __all__ = [
     "paso_caducidad",
     "paso_agrupar",
     "paso_fusionar_semantica",
-    "paso_agrupar_lexico",
     "paso_rescore",
     "paso_traducir",
 ]
