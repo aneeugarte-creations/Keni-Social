@@ -38,7 +38,7 @@ export default function FaseDetalle() {
   });
 
   // Fase inexistente (slug roto) o SIN contenido propio (su subpágina Prompt · Contexto · Logs no
-  // aportaría nada, p. ej. Publicar: solo tiene su switch): vuelve a la pestaña del proceso.
+  // aportaría nada, p. ej. Admitir: no es IA ni tiene prompt): vuelve a la pestaña del proceso.
   if (!fase || !tieneContenido(fase)) {
     return <Navigate to={`/maquina/contexto?proceso=${proceso}`} replace />;
   }

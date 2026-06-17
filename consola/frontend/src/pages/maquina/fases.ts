@@ -142,25 +142,6 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       nota: "Apagar «Ilustrar» en una marca la deja sin imagen por IA.",
     },
   },
-  {
-    nombre: "Aprobar",
-    es_ia: false,
-    claves: ["KENI_AUTO_PREAPROBACION"],
-    ayuda: "El OK humano antes de programar la pieza",
-    heredada: "el switch auto-aprueba las de bajo riesgo",
-    etapa: "aprobar",
-  },
-  {
-    nombre: "Publicar",
-    es_ia: false,
-    claves: ["KENI_PUBLICAR_REAL"],
-    ayuda: "El botón de publicar postea de verdad en redes (apagado: solo previsualiza)",
-    precaucion: "Publica de verdad",
-    excepciones: {
-      base: "KENI_PUBLICAR_REAL",
-      nota: "Apagar «Publicar» en una marca la deja en simulación (sin postear).",
-    },
-  },
 ];
 
 /** Tipo de job → fase con cola (Producción). */

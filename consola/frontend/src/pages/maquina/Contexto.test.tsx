@@ -83,10 +83,14 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
-  it("en la pestaña Producción muestra sus fases, sin Idear (que es un taller evergreen, no una etapa lineal tras Publicar)", () => {
+  it("en la pestaña Producción muestra sus fases (Redactar/Ilustrar), sin Aprobar/Publicar ni Idear", () => {
     renderContexto("/maquina/contexto?proceso=produccion");
     expect(screen.getByText("Redactar")).toBeInTheDocument();
-    expect(screen.getByText("Publicar")).toBeInTheDocument();
+    expect(screen.getByText("Ilustrar")).toBeInTheDocument();
+    // «Aprobar» y «Publicar» ya NO son fases del flujo: el OK humano y la salida a redes
+    // viven en la página de programación/feed, no en este mapa de la máquina.
+    expect(screen.queryByText("Aprobar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Publicar")).not.toBeInTheDocument();
     expect(screen.queryByText("Idear")).not.toBeInTheDocument();
     // «Revisar» ya NO es una fila: corre dentro de Redactar (sin prompt/logs/toggle propios).
     expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
