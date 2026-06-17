@@ -86,7 +86,7 @@ def test_intervalo_feed_usa_intervalo_propio_si_positivo():
 
 
 def test_intervalo_feed_cae_a_default_por_categoria():
-    assert recolectar_daemon._intervalo_feed({"intervalo_min": 0, "categoria": "deportes"}) == (
+    assert recolectar_daemon._intervalo_feed({"intervalo_min": 0, "categoria": "futbol"}) == (
         config.INGESTA_INTERVALO_DEPORTES_DEF
     )
     assert recolectar_daemon._intervalo_feed({"categoria": "desconocida"}) == (
@@ -239,7 +239,7 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
     en_plan = {"id": "mx1", "nombre": "MX", "url": "https://93.184.216.34/a",
                "categoria": "mx", "marca": "unotv", "errores_seguidos": 0}
     fuera = {"id": "dep1", "nombre": "Dep", "url": "https://93.184.216.34/b",
-             "categoria": "deportes", "marca": "unotv", "errores_seguidos": 0}
+             "categoria": "futbol", "marca": "unotv", "errores_seguidos": 0}
     sin_categoria = {"id": "sc1", "nombre": "SC", "url": "https://93.184.216.34/c",
                      "categoria": "", "marca": "unotv", "errores_seguidos": 0}
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
@@ -694,7 +694,7 @@ def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkey
     marca='' e invisible para todas)."""
     item = {
         "id": "i1", "fuente_id": "google-trends", "fuente_nombre": "ESPN",
-        "categoria": "tendencias", "marca": "",  # <- Trends llega SIN marca
+        "categoria": "mx", "marca": "",  # <- Trends llega SIN marca
         "titulo": "Futbol: gol agónico en la final de la liga mx",
         "resumen": "", "url": "https://e.com/n1", "url_canonica": "e.com/n1",
         "idioma": "es", "senal": 50_000, "geo": "MX", "estado": "nuevo",

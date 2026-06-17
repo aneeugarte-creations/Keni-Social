@@ -119,7 +119,7 @@ def test_aplicables_categoria_sin_horario_cae_a_genericas():
         _f("intl", "unotv", "", 0, "14:45", "internacional"),
         _f("gen", "unotv", "", 0, "12:00"),
     ]
-    ids = [f["id"] for f in af.franjas_aplicables(franjas, "unotv", "x", "deportes")]
+    ids = [f["id"] for f in af.franjas_aplicables(franjas, "unotv", "x", "futbol")]
     assert ids == ["gen"]
 
 

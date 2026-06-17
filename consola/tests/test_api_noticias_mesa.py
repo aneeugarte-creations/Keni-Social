@@ -56,8 +56,8 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:2,internacional:1,breaking:1")
     _inicializar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
     _inicializar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
-    # Breaking: compite por la línea 'breaking' aunque su feed sea deportes.
-    _inicializar("br1", score=0.8, categoria="deportes", breaking=1, titulo="Última hora")
+    # Breaking: compite por la línea 'breaking' aunque su feed sea futbol.
+    _inicializar("br1", score=0.8, categoria="futbol", breaking=1, titulo="Última hora")
     # Sin línea en el plan: va a fuera_de_plan.
     _inicializar("dep1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
     # Usada/descartada: no son candidatas (estado != nuevo).

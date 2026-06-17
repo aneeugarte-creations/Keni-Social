@@ -1156,7 +1156,7 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
         resumen="México observa la cumbre internacional", verificacion_fuente=ver,
     )
     _inicializar_cluster(
-        "dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes", verificacion_fuente=ver
+        "dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="futbol", verificacion_fuente=ver
     )
 
     res = pc._ejecutar_barrido()

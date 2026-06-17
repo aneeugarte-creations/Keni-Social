@@ -37,10 +37,11 @@ import { CLAVE_FUENTES } from "./lib";
 const ETIQUETA_CATEGORIA: Record<string, string> = {
   mx: "México",
   internacional: "Internacional",
-  deportes: "Deportes",
-  "ciencia-tech": "Ciencia y Tech",
+  entretenimiento: "Entretenimiento",
   gaming: "Gaming",
-  tendencias: "Tendencias",
+  futbol: "Fútbol",
+  motor: "Motor",
+  "otros-deportes": "Otros deportes",
 };
 
 /**

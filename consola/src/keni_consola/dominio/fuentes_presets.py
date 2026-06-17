@@ -26,14 +26,12 @@ from typing import Any
 # agresiva) se añade en la capa API, no es de catálogo.
 CATEGORIAS_VALIDAS: tuple[str, ...] = (
     "mx",
-    "regional",
     "internacional",
-    "deportes",
     "entretenimiento",
-    "ciencia-tech",
     "gaming",
-    "negocios",
-    "tendencias",
+    "futbol",
+    "motor",
+    "otros-deportes",
 )
 
 _RUTA_INICIAL = Path(__file__).resolve().parent / "fuentes_presets.json"

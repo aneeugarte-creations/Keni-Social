@@ -29,7 +29,9 @@ Forma de un preset:
   "marca_sugerida": "unotv", "linea_sugerida": "Internacional",
   "idioma": "en", "region": "GLOBAL", "descripcion": "..." }
 ```
-Categorías: `mx`, `internacional`, `deportes`, `ciencia-tech`, `gaming`, `tendencias`.
+Categorías (vocabulario por marca; `breaking`/`evergreen` son transversales): UnoTV usa
+`mx`, `internacional`, `entretenimiento`; Claro Sports `futbol`, `motor`, `otros-deportes`, `mx`;
+Nación Gamer `gaming`. El conjunto canónico vive en `fuentes_presets.CATEGORIAS_VALIDAS`.
 
 ### API (api/fuentes.py — añadir, no romper lo existente)
 - `GET /api/fuentes/presets?categoria=` → `{ "presets": [Preset...], "categorias": ["mx",...] }`.

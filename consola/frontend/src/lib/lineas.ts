@@ -12,9 +12,9 @@ export const ETIQUETA_LINEA: Record<string, string> = {
   internacional: "Internacional",
   breaking: "Última hora",
   entretenimiento: "Entretenimiento",
-  deportes: "Deportes",
-  tendencias: "Tendencias",
-  "ciencia-tech": "Ciencia y tec",
+  futbol: "Fútbol",
+  motor: "Motor",
+  "otros-deportes": "Otros deportes",
   gaming: "Gaming",
   evergreen: "Evergreen",
 };

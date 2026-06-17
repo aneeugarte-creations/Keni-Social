@@ -29,13 +29,11 @@ from ._config_comun import (
     ENV_FUSION_SEMANTICA_MAX,
     ENV_INGESTA_BATCH,
     ENV_INGESTA_INTERVALO_BREAKING,
-    ENV_INGESTA_INTERVALO_CIENCIA_TECH,
     ENV_INGESTA_INTERVALO_DEFECTO,
     ENV_INGESTA_INTERVALO_DEPORTES,
     ENV_INGESTA_INTERVALO_GAMING,
     ENV_INGESTA_INTERVALO_INTERNACIONAL,
     ENV_INGESTA_INTERVALO_MX,
-    ENV_INGESTA_INTERVALO_TENDENCIAS,
     ENV_INGESTA_MAX_ERRORES,
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
@@ -80,13 +78,11 @@ from ._config_comun import (
     FUSION_SEMANTICA_MAX_DEF,
     INGESTA_BATCH_DEF,
     INGESTA_INTERVALO_BREAKING_DEF,
-    INGESTA_INTERVALO_CIENCIA_TECH_DEF,
     INGESTA_INTERVALO_DEFECTO_DEF,
     INGESTA_INTERVALO_DEPORTES_DEF,
     INGESTA_INTERVALO_GAMING_DEF,
     INGESTA_INTERVALO_INTERNACIONAL_DEF,
     INGESTA_INTERVALO_MX_DEF,
-    INGESTA_INTERVALO_TENDENCIAS_DEF,
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
@@ -200,11 +196,11 @@ def ingesta_filtro_activo() -> bool:
 # Cadencia por categoría: env var + defecto de cada una (segundos), para el accesor genérico.
 _INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
     "breaking": (ENV_INGESTA_INTERVALO_BREAKING, INGESTA_INTERVALO_BREAKING_DEF),
-    "deportes": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
+    "futbol": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
+    "motor": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
+    "otros-deportes": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
     "mx": (ENV_INGESTA_INTERVALO_MX, INGESTA_INTERVALO_MX_DEF),
     "internacional": (ENV_INGESTA_INTERVALO_INTERNACIONAL, INGESTA_INTERVALO_INTERNACIONAL_DEF),
-    "tendencias": (ENV_INGESTA_INTERVALO_TENDENCIAS, INGESTA_INTERVALO_TENDENCIAS_DEF),
-    "ciencia-tech": (ENV_INGESTA_INTERVALO_CIENCIA_TECH, INGESTA_INTERVALO_CIENCIA_TECH_DEF),
     "gaming": (ENV_INGESTA_INTERVALO_GAMING, INGESTA_INTERVALO_GAMING_DEF),
 }
 
@@ -212,7 +208,8 @@ _INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
 def ingesta_intervalo_categoria(categoria: str) -> int:
     """Cadencia (segundos) de sondeo para una categoría de feed.
 
-    breaking/deportes ~180s, mx/internacional/tendencias ~600s, ciencia-tech/gaming ~1800s.
+    breaking y las categorías de deporte (futbol/motor/otros-deportes, knob común
+    `KENI_INGESTA_INTERVALO_DEPORTES`) ~180s; mx/internacional ~600s; gaming ~1800s.
     Una categoría desconocida (o '') cae al defecto general (`KENI_INGESTA_INTERVALO_DEFECTO`,
     def 600s). Cada accesor es configurable por env y min 1s.
     """

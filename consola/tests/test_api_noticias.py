@@ -65,7 +65,7 @@ def test_marca_invalida_400(cliente):
 
 def test_filtra_por_estado(cliente):
     # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
-    _inicializar(fuente_id="a", clave="k1", categoria="deportes")
+    _inicializar(fuente_id="a", clave="k1", categoria="internacional")
     _inicializar(fuente_id="b", clave="k2", categoria="mx")
     assert cliente.get("/api/noticias", params={"estado": "nuevo"}).json()["total"] == 2
     assert cliente.get("/api/noticias", params={"estado": "usado"}).json()["total"] == 0
@@ -170,14 +170,14 @@ def test_cobertura_resume_salud(cliente):
     # Una fuente activa + items recientes (capturados AHORA, dentro de la ventana de 24h).
     repos.crear_fuente_rss("Demo", "https://example.com/feed.xml", categoria="mx")
     _inicializar(fuente_id="a", clave="k1", categoria="mx", capturado_en=ahora)
-    _inicializar(fuente_id="b", clave="k2", categoria="deportes", capturado_en=ahora)
+    _inicializar(fuente_id="b", clave="k2", categoria="internacional", capturado_en=ahora)
     datos = cliente.get("/api/noticias/cobertura").json()
     assert datos["feeds_activos"] >= 1
     assert datos["items_total"] == 2
     assert datos["items_24h"] == 2
     # Desglose por categoría de las últimas 24h.
     assert datos["items_24h_por_categoria"].get("mx") == 1
-    assert datos["items_24h_por_categoria"].get("deportes") == 1
+    assert datos["items_24h_por_categoria"].get("internacional") == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -207,8 +207,8 @@ def test_construir_salud_resumen_stale_y_huecos():
         {"id": "f1", "nombre": "Fresco", "categoria": "mx", "marca": "unotv", "activo": True,
          "desactivado_auto": False, "ultima_actualizacion": "x", "ultimo_error": "",
          "errores_seguidos": 0, "items_24h": 5, "ultimo_item": "2026-06-05T11:50:00+00:00"},
-        # Stale (300 min > SLA 180): activo, categoría deportes SIN items 24h -> hueco.
-        {"id": "f2", "nombre": "Viejo", "categoria": "deportes", "marca": "unotv", "activo": True,
+        # Stale (300 min > SLA 180): activo, categoría internacional SIN items 24h -> hueco.
+        {"id": "f2", "nombre": "Viejo", "categoria": "internacional", "marca": "unotv", "activo": True,
          "desactivado_auto": False, "ultima_actualizacion": "x", "ultimo_error": "boom",
          "errores_seguidos": 2, "items_24h": 0, "ultimo_item": "2026-06-05T07:00:00+00:00"},
         # Auto-desactivado: no cuenta como activo ni como categoría esperada.
@@ -227,8 +227,8 @@ def test_construir_salud_resumen_stale_y_huecos():
     assert r["items_24h"] == 5
     assert r["por_categoria"] == {"mx": 5}
     assert r["por_idioma"] == {"es": 5}
-    # 'deportes' es esperada (feed activo) pero sin items 24h -> hueco. 'gaming' no cuenta (inactivo).
-    assert r["huecos"] == ["deportes"]
+    # 'internacional' es esperada (feed activo) pero sin items 24h -> hueco. 'gaming' no cuenta (inactivo).
+    assert r["huecos"] == ["internacional"]
     assert r["frescura_global_min"] == 10
     # Por feed: frescura derivada.
     por_id = {f["id"]: f for f in salud["feeds"]}

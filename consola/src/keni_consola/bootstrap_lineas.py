@@ -162,17 +162,15 @@ def inicializar_lineas() -> int:
 # --------------------------------------------------------------------------- #
 
 # Prioridad de sondeo por categoría (mayor = más frecuente al planificar). Espeja la cadencia:
-# breaking/deportes son prioritarias; mx/internacional/tendencias medias; ciencia-tech/gaming
-# de cambio lento. El motor usa además la cadencia por categoría; la prioridad ordena los
-# vencidos dentro de un barrido.
+# las categorías de deporte (futbol/motor/otros-deportes) son prioritarias; mx/internacional
+# medias; gaming de cambio lento. El motor usa además la cadencia por categoría; la prioridad
+# ordena los vencidos dentro de un barrido.
 _PRIORIDAD_CATEGORIA: dict[str, int] = {
-    "deportes": 3,
+    "futbol": 3,
+    "motor": 3,
+    "otros-deportes": 3,
     "mx": 2,
-    "regional": 2,
     "internacional": 2,
-    "negocios": 1,
-    "tendencias": 2,
-    "ciencia-tech": 1,
     "gaming": 1,
 }
 

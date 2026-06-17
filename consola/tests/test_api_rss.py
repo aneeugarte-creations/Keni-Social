@@ -141,11 +141,11 @@ def test_crear_fuente_con_categoria_y_editarla(cliente):
     """La categoría (manda la cadencia de sondeo del motor) se crea, expone y edita por la API."""
     r = cliente.post(
         "/api/rss/fuentes",
-        json={"nombre": "Depor", "url": _URL_OK, "marca": "claro-sports", "categoria": "deportes"},
+        json={"nombre": "Depor", "url": _URL_OK, "marca": "claro-sports", "categoria": "otros-deportes"},
     )
     assert r.status_code == 200
     f = r.json()["fuente"]
-    assert f["categoria"] == "deportes"
+    assert f["categoria"] == "otros-deportes"
 
     r2 = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"categoria": "breaking"})
     assert r2.status_code == 200

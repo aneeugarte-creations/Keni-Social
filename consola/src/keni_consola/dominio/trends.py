@@ -3,8 +3,9 @@
 El RSS de Google Trends (`trends.google.com/trending/rss?geo=MX`) trae, por término en
 tendencia, su `ht:approx_traffic` (la señal HONESTA de viralidad) y sus `ht:news_item`
 (noticias reales que lo explican). Este módulo APLANA esas noticias a items del pool
-(`noticias_items`): una fila por `ht:news_item`, con la categoría 'tendencias' y la señal
-del término. Determinista y PURO (sin red): el parseo no toca la red; la descarga —con guard
+(`noticias_items`): una fila por `ht:news_item`, con su categoría editorial por geografía
+(MX → 'mx', resto → 'internacional') y la señal del término. Determinista y PURO (sin red):
+el parseo no toca la red; la descarga —con guard
 SSRF— la hace el daemon (`trends_daemon`) vía `dominio.http_feed`.
 
 El RSS genérico de `http_feed.parsear_feed` descarta el namespace `ht:` (que es justo lo que
@@ -95,7 +96,7 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
 
     Cada `<item>` es un término en tendencia (titulo + `ht:approx_traffic` + sus `ht:news_item`).
     Se aplana a una fila de pool por noticia, con `senal` = el tráfico del término y `categoria`
-    'tendencias'. Dedup por `clave` (URL canónica o hash del título). Tolerante: campos ausentes
+    por geo (MX → 'mx', resto → 'internacional'). Dedup por `clave` (URL canónica o hash del título). Tolerante: campos ausentes
     se omiten. Lanza `RSSError` si el XML no parsea.
     """
     try:
@@ -107,6 +108,9 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
     contenedor = canal if canal is not None else raiz
     items = [h for h in contenedor if http_feed._quitar_ns(h.tag) == "item"]
 
+    # La tendencia entra al vocabulario editorial por su geografía: MX → nacional, resto →
+    # internacional. Así una tendencia compite por una línea real del plan en vez de quedar fuera.
+    categoria = "mx" if (geo or "").upper() == "MX" else "internacional"
     resultado: list[dict[str, Any]] = []
     vistos: set[str] = set()
     for item in items[:MAX_TERMINOS]:
@@ -133,7 +137,7 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
                 {
                     "fuente_id": FUENTE_ID,
                     "fuente_nombre": fuente or "Google Trends",
-                    "categoria": "tendencias",
+                    "categoria": categoria,
                     "marca": "",
                     "titulo": titulo,
                     "resumen": resumen,

@@ -3,7 +3,7 @@
 Cubre:
   - `traduce_trafico`: "2K+"/"50 mil+" -> entero comparable; basura -> 0.
   - `parsear_trends_items`: aplana los `ht:news_item` a items de pool reales (titulo/url/
-    fuente), con la señal del término y categoría 'tendencias'; dedup por clave.
+    fuente), con la señal del término y categoría por geo (MX → 'mx'); dedup por clave.
   - `trends_daemon.ejecutar_barrido`: descarga (mock) + parsea + inserta en el pool.
 """
 
@@ -73,7 +73,7 @@ def test_parsear_trends_aplana_noticias():
     primero = next(i for i in items if i["titulo"] == "El Tri convoca para el amistoso")
     assert primero["fuente_id"] == "google-trends"
     assert primero["fuente_nombre"] == "ESPN"
-    assert primero["categoria"] == "tendencias"
+    assert primero["categoria"] == "mx"  # geo=MX → categoría nacional
     assert primero["senal"] == 50_000  # tráfico del término
     assert "utm_source" not in primero["url_canonica"]  # canonizada
     assert "Selección Mexicana" in primero["resumen"]

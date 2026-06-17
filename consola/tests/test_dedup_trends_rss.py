@@ -28,7 +28,7 @@ def test_encuentra_solo_las_claves_de_feeds_directos(entorno):
          "titulo": "Nota directa", "url": "https://excelsior.com.mx/n1",
          "url_canonica": "excelsior.com.mx/n1", "clave": "excelsior.com.mx/n1",
          "capturado_en": _ahora()},
-        {"fuente_id": "google-trends", "fuente_nombre": "Milenio", "categoria": "tendencias",
+        {"fuente_id": "google-trends", "fuente_nombre": "Milenio", "categoria": "mx",
          "titulo": "Solo en trends", "url": "https://milenio.com/n2",
          "url_canonica": "milenio.com/n2", "clave": "milenio.com/n2", "capturado_en": _ahora()},
     ])

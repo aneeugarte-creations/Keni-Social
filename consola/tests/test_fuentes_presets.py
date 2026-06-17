@@ -33,21 +33,19 @@ def test_categorias_son_subconjunto_del_vocabulario_canonico():
         f"Categorías fuera del vocabulario: {cats - set(fuentes_presets.CATEGORIAS_VALIDAS)}"
     )
     # Las marcas del piloto deben tener cobertura en la inicial.
-    assert {"mx", "internacional", "deportes", "gaming"} <= cats
+    assert {"mx", "internacional", "entretenimiento", "futbol", "gaming"} <= cats
 
 
 def test_categorias_validas_es_estable_y_no_depende_de_la_inicial():
     """CATEGORIAS_VALIDAS es el vocabulario editorial completo, traiga lo que traiga la inicial."""
     esperadas = {
         "mx",
-        "regional",
         "internacional",
-        "deportes",
         "entretenimiento",
-        "ciencia-tech",
         "gaming",
-        "negocios",
-        "tendencias",
+        "futbol",
+        "motor",
+        "otros-deportes",
     }
     assert esperadas == set(fuentes_presets.CATEGORIAS_VALIDAS)
 
@@ -96,10 +94,10 @@ def test_filtro_categoria_mx():
     assert all(p["categoria"] == "mx" for p in mx)
 
 
-def test_filtro_categoria_deportes():
-    dep = fuentes_presets.listar_presets(categoria="deportes")
+def test_filtro_categoria_otros_deportes():
+    dep = fuentes_presets.listar_presets(categoria="otros-deportes")
     assert len(dep) >= 3
-    assert all(p["categoria"] == "deportes" for p in dep)
+    assert all(p["categoria"] == "otros-deportes" for p in dep)
 
 
 def test_filtro_categoria_inexistente_devuelve_lista_vacia():
@@ -172,7 +170,7 @@ def test_seed_cubre_las_marcas_del_piloto():
         cats_por_marca.setdefault(p["marca_sugerida"], set()).add(p["categoria"])
 
     assert {"mx", "internacional"} <= cats_por_marca["unotv"]
-    assert "deportes" in cats_por_marca["claro-sports"]
+    assert "otros-deportes" in cats_por_marca["claro-sports"]
     assert "gaming" in cats_por_marca["nacion-gamer"]
 
 
@@ -216,7 +214,7 @@ def test_get_presets_sin_filtro(cliente):
     assert "presets" in datos
     assert "categorias" in datos
     assert len(datos["presets"]) >= 15
-    assert set(datos["categorias"]) >= {"mx", "internacional", "deportes"}
+    assert set(datos["categorias"]) >= {"mx", "internacional", "futbol"}
     # Todos tienen el campo `activa`
     for p in datos["presets"]:
         assert "activa" in p

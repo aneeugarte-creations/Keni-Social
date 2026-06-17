@@ -16,7 +16,7 @@ enchufables pero inactivos); cadencia **agresiva** (prioritarias ~2-5 min, resto
 id            TEXT PRIMARY KEY
 fuente_id     TEXT NOT NULL DEFAULT ''      -- fuentes_rss.id
 fuente_nombre TEXT NOT NULL DEFAULT ''
-categoria     TEXT NOT NULL DEFAULT ''      -- mx|internacional|deportes|ciencia-tech|gaming|tendencias|''
+categoria     TEXT NOT NULL DEFAULT ''      -- mx|internacional|entretenimiento|futbol|motor|otros-deportes|gaming|''
 marca         TEXT NOT NULL DEFAULT ''      -- de la fuente (o '' global)
 titulo        TEXT NOT NULL DEFAULT ''
 resumen       TEXT NOT NULL DEFAULT ''
@@ -71,8 +71,8 @@ Cada barrido (`ejecutar_barrido`):
 3. Inserta items nuevos (UNIQUE evita duplicados), actualiza salud
    (`ultimo_conteo`, `ultimo_error`, `ultima_actualizacion`), y **programa el
    próximo**: `proximo_sondeo = ahora + intervalo`. Intervalo = `intervalo_min` del
-   feed si >0, si no el default por categoría (config): breaking/deportes ~180s,
-   mx/internacional/tendencias ~600s, ciencia-tech/gaming ~1800s.
+   feed si >0, si no el default por categoría (config): breaking y deportes
+   (futbol/motor/otros-deportes) ~180s, mx/internacional ~600s, gaming ~1800s.
 4. **Backoff**: en error incrementa `errores_seguidos` y fija `pausado_hasta =
    ahora + min(intervalo * 2^errores, tope)`. En éxito resetea `errores_seguidos`.
 
