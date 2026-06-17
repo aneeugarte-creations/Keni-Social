@@ -181,6 +181,14 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByText(/^IA$/)).not.toBeInTheDocument();
   });
 
+  it("pieza BREAKING muestra el distintivo «Última hora» (rayo); una normal no", () => {
+    const { unmount } = renderPost(pub({ categoria: "breaking" }));
+    expect(screen.getByText("Última hora")).toBeInTheDocument();
+    unmount();
+    renderPost(pub({ categoria: "mx" }));
+    expect(screen.queryByText("Última hora")).not.toBeInTheDocument();
+  });
+
   it("ofrece me gusta y comentar (iconos), NO un botón Editar; la tarjeta abre el editor", () => {
     renderPost(pub());
     // El nombre accesible del like deriva del estado real: aquí está bloqueado (falta material).

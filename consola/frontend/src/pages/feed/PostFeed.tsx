@@ -30,6 +30,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  Zap,
 } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -293,6 +294,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // espera turno) o, antes, qué le falta a la pieza. Si la cadena no pudo cargarse, lo dice
   // (sin inventarse un "espera tu turno" que no consta).
   const esVideo = (pieza.formato ?? "").trim().toLowerCase() === "video";
+  // ÚLTIMA HORA: una pieza de categoría 'breaking' no espera franja — al aprobarla (like
+  // decisivo) se programa de inmediato (~5 min). Se avisa con un distintivo de rayo rojo para
+  // que el OK humano sea consciente de que postea ya.
+  const esBreaking = (pieza.categoria ?? "").trim().toLowerCase() === "breaking";
   const motivoBloqueo = yaAprobada
     ? pieza.revisor_nombre
       ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
@@ -441,6 +446,17 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           distintivo va en la cabecera, no sobre la imagen, para no taparla. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         <DistintivoRed red={pieza.red} formato={pieza.formato} />
+        {esBreaking && (
+          <Tooltip label="Última hora: al aprobarla se publica de inmediato (~5 min), sin esperar a su franja.">
+            <span
+              className="inline-flex items-center gap-1 font-semibold text-red-600"
+              aria-label="Última hora: se publica de inmediato al aprobar"
+            >
+              <Zap className="h-3.5 w-3.5 fill-current" aria-hidden="true" />
+              Última hora
+            </span>
+          </Tooltip>
+        )}
         {generadaPorIA ? (
           <span
             className="inline-flex items-center gap-1 text-xs font-medium text-foreground"

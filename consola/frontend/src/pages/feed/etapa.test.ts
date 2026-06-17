@@ -54,6 +54,7 @@ function pub(overrides: Partial<Pieza>): Pieza {
     fecha_fuente: "",
     fuente_original: "",
     origen: "equipo",
+    categoria: "",
     imagen: "",
     imagen_url: "",
     evergreen: false,

@@ -53,6 +53,7 @@ function pub(over: Partial<Pieza> = {}): Pieza {
     fecha_fuente: "",
     fuente_original: "",
     origen: "pipeline",
+    categoria: "",
     imagen: "",
     imagen_url: "",
     evergreen: false,

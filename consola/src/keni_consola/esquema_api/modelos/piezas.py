@@ -137,6 +137,10 @@ class Pieza(TypedDict):
     # una nota (alta manual / creación propia): la UI omite fuente y fecha.
     fuente_original: str
     origen: str
+    # Categoria del PLAN ('breaking', 'mx', 'evergreen'…), heredada del contenido padre. El feed
+    # marca las 'breaking' con un rayo rojo: al aprobarlas se programan de inmediato (~5 min),
+    # sin esperar a su franja. "" en piezas sin categoria (manuales / genericas).
+    categoria: str
     imagen: str
     imagen_url: str
     evergreen: bool

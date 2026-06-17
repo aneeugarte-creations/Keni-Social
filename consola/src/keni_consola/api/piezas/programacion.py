@@ -8,7 +8,7 @@ reubicacion, sin cambio de comportamiento).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from starlette.requests import Request
@@ -46,9 +46,12 @@ def categoria_de_pieza(pub: dict[str, Any]) -> str:
         return ""
 
 
-# Margen (min) con el que se programa una pieza BREAKING: ya, pero con aire para el último
-# vistazo humano en la parrilla. Búsqueda acotada de minuto libre por la unicidad de slot.
-_BREAKING_MARGEN_MIN = 2
+# Margen MÍNIMO (min) entre "ahora" y la hora que se programa: aire para el último vistazo
+# humano en la parrilla y, sobre todo, para que la publicación NUNCA salga con la hora ya
+# vencida. Rige dos cosas: el adelanto de un BREAKING (sale ya, pero a ahora+margen) y el PISO
+# de cualquier hueco de franja (un slot a menos de ese margen se considera demasiado pronto y
+# se salta al siguiente). Búsqueda acotada de minuto libre por la unicidad de slot.
+_MARGEN_MINIMO_MIN = 5
 _BREAKING_BUSQUEDA_MIN = 240
 
 
@@ -59,17 +62,24 @@ def calcular_hueco_para(
 
     Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
     franja aplicable a la (marca, red) de la pieza. `ahora` se puede inyectar
-    para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
-    piezas `programado` de la MISMA (marca, red) se evitan — espejo del indice de
-    unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de un MISMO
-    tema en redes distintas salen a la MISMA hora.
+    para tests; por defecto es `datetime.now(UTC)` (naive, canon del sistema). Los huecos ya
+    ocupados por OTRAS piezas `programado` de la MISMA (marca, red) se evitan — espejo del
+    indice de unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de
+    un MISMO tema en redes distintas salen a la MISMA hora.
 
     CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
     el primer minuto libre); el resto usa PRIMERO los horarios de SU línea (franjas con su
-    categoría) y, si no tiene franja propia, las franjas genéricas.
+    categoría) y, si no tiene franja propia, las franjas genéricas. En todos los casos se
+    respeta el PISO `ahora + _MARGEN_MINIMO_MIN`: nunca se devuelve un hueco ya vencido o
+    demasiado próximo para publicar.
     """
     if ahora is None:
-        ahora = datetime.now()
+        # Naive en UTC (canon del sistema, ver `tiempo.ahora_iso`): así coincide con las
+        # `fecha_programada` almacenadas y no depende de la zona del host.
+        ahora = datetime.now(UTC).replace(tzinfo=None)
+    # PISO anti-"tiempo vencido": nada se programa antes de ahora+margen. Suelo para CUALQUIER
+    # categoría; un hueco de franja por debajo de él se descarta y se cae al siguiente.
+    piso = ahora + timedelta(minutes=_MARGEN_MINIMO_MIN)
     programadas = repos.listar_piezas(estado="programado")
     ocupados_mr = {
         otra["fecha_programada"]
@@ -97,7 +107,7 @@ def calcular_hueco_para(
     # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
     # margen corto), en el primer minuto libre de su (marca, red).
     if categoria == "breaking":
-        cand = (ahora + timedelta(minutes=_BREAKING_MARGEN_MIN)).replace(second=0, microsecond=0)
+        cand = piso.replace(second=0, microsecond=0)
         for _ in range(_BREAKING_BUSQUEDA_MIN):
             clave = cand.strftime("%Y-%m-%dT%H:%M")
             if clave not in ocupados_mr:
@@ -113,11 +123,11 @@ def calcular_hueco_para(
         (f.get("categoria") or "") == categoria for f in aplican
     )
     if de_linea:
-        return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
+        return api_franjas.proximo_hueco(aplican, piso, ocupados_mr)
     # 2) Franjas-caja genéricas.
     if not aplican:
         return None
-    return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
+    return api_franjas.proximo_hueco(aplican, piso, ocupados_mr)
 
 
 async def encolar(request: Request) -> Response:

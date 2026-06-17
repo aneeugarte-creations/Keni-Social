@@ -61,7 +61,7 @@ _SELECT_PUBLICACION = (
     "c.origen AS origen, c.creado AS ccreado, "
     "c.fecha_fuente AS fecha_fuente, "
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
-    "c.tipo_contenido AS tipo_contenido, "
+    "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
     "c.formato AS formato, c.espejo AS espejo "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
@@ -126,6 +126,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "url_fuente": f["url_fuente"] or "",
         "fuente_nombre": f["fuente_nombre"] or "",
         "origen": f["origen"] or "",
+        # Categoría del PLAN (p.ej. 'breaking'): la usa el feed para avisar de "última hora"
+        # (rayo rojo) — esa pieza, al aprobarla, se programa de inmediato sin esperar franja.
+        "categoria": f["categoria"] or "",
         "imagen": f["imagen"] or "",
         # Asset de VIDEO (Ola VIDEO): clave del media (`videos/<sha256>.<ext>`) y su checklist,
         # espejo de `imagen`/`falta_imagen`. Lo usa el programador para publicar `TipoMedia.video`.

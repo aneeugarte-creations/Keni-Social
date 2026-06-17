@@ -295,6 +295,9 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # nació de una nota. La cabecera de grupo del feed lo muestra junto a `fecha_fuente`.
         "fuente_original": _fuente_original_de(pub),
         "origen": pub["origen"],
+        # Categoría del PLAN ('breaking', 'mx', 'evergreen'…): el feed avisa con un rayo rojo
+        # las de 'breaking' (al aprobarlas se programan de inmediato, sin esperar franja).
+        "categoria": pub.get("categoria") or "",
         "imagen": imagen,
         # `imagen_url`: la URL SERVIBLE de la imagen de la pieza. Si hay `imagen` horneada
         # (editor pro / legacy) se sirve esa; si la imagen se DERIVA de la receta (placa de

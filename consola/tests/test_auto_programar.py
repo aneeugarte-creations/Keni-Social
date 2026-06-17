@@ -108,6 +108,18 @@ def test_no_reusa_hueco_de_una_publicada_con_fecha_futura(cliente, ahora_fijo):
     assert actualizada["fecha_programada"] == "2026-05-20T16:00"
 
 
+def test_no_programa_en_hueco_demasiado_proximo(cliente, ahora_fijo):
+    """GUARDIA anti-"tiempo vencido": un hueco a menos del margen mínimo (ahora+5) no sirve para
+    publicar a tiempo, así que se SALTA al siguiente. Con `ahora`=10:00, la franja de las 10:03
+    queda por debajo del piso (10:05) y se cae a la de las 11:00."""
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "10:03"})  # demasiado pronto
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "11:00"})  # primer hueco válido
+    pid = _crear_aprobada(cliente)
+    actualizada = auto_programar.programar_si_aprobada(pid)
+    assert actualizada is not None
+    assert actualizada["fecha_programada"] == "2026-05-20T11:00"
+
+
 def _vincular_cluster(pid: str, *, categoria: str = "mx", breaking: int = 0) -> None:
     """Vincula la pieza a una HISTORIA del pool (cluster→contenido), como al promoverla."""
     plat = repos.obtener_pieza_fila(pid)
@@ -128,7 +140,7 @@ def test_breaking_se_programa_al_instante(cliente, ahora_fijo):
     _vincular_cluster(pid, breaking=1)
     actualizada = auto_programar.programar_si_aprobada(pid)
     assert actualizada is not None
-    assert actualizada["fecha_programada"] == "2026-05-20T10:02"  # _AHORA + 2 min
+    assert actualizada["fecha_programada"] == "2026-05-20T10:05"  # _AHORA + _MARGEN_MINIMO_MIN
 
 
 def test_categoria_usa_sus_horarios_del_plan(cliente, ahora_fijo):

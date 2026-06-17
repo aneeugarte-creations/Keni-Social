@@ -675,6 +675,7 @@ export interface Pieza {
   fecha_fuente: string;
   fuente_original: string;
   origen: string;
+  categoria: string;
   imagen: string;
   imagen_url: string;
   evergreen: boolean;
