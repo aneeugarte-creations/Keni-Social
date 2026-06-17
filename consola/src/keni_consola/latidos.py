@@ -46,10 +46,9 @@ _ALIAS = {
 #     (cada loop late con su propio nombre); la fila vieja quedó suelta.
 #   - "comercial": el apartado Comercial (snapshots) se retiró; su daemon de captura ya no
 #     existe, así que su fila vieja en `daemon_latidos` (BD hosted) no la actualiza nadie.
-#   - "programador" / "vencimientos": el programador de la parrilla y el escáner de
-#     vencimientos del tablero se retiraron; sus filas viejas en `daemon_latidos` (BD hosted)
-#     ya no las actualiza nadie.
-RETIRADOS = frozenset({"pipeline", "comercial", "programador", "vencimientos"})
+#   - "vencimientos": el escáner de vencimientos del tablero se retiró; su fila vieja en
+#     `daemon_latidos` (BD hosted) ya no la actualiza nadie.
+RETIRADOS = frozenset({"pipeline", "comercial", "vencimientos"})
 
 # Daemons cuyo bucle corre sobre `daemon_util.bucle_gateado` y por tanto CONSUMEN el flag
 # `barrido_solicitado` (POST /api/sistema/daemons/{daemon}/barrer): para ellos «Barrer ahora»
@@ -82,7 +81,7 @@ BARRIBLES = frozenset({
 # `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
 GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
 GRUPO_PRODUCCION = frozenset({"produccion", "portal"})
-GRUPO_FLUJO = frozenset({"comercial"})
+GRUPO_FLUJO = frozenset({"comercial", "programador"})
 GRUPO_INFRA = frozenset({
     "metricas",
     "metricas_piezas",
@@ -121,6 +120,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "investigacion": ("ia", "investigacion"),
     "produccion": ("ia", "produccion"),
+    "programador": ("maquina", "produccion"),
     "portal": ("maquina", "produccion"),
     "ingesta": ("maquina", "investigacion"),
     "trends": ("maquina", "investigacion"),
@@ -185,8 +185,9 @@ CLAVE_GATE = {
 
 # Daemons SIEMPRE-ON sin toggle de ajuste: su bucle corre incondicionalmente (legados con
 # `while True`, o `limpiador` con `activo_fn=lambda: True`). No tienen fila-toggle => clave_gate
-# null.
-SIN_GATE = frozenset({"limpiador", "comercial", "metricas", "metricas_piezas"})
+# null. Nota: `programador` SIEMPRE corre (su gate `KENI_PUBLICAR_REAL` solo decide publicar de
+# verdad vs dry-run, no apaga el daemon), por eso queda sin gate de encendido.
+SIN_GATE = frozenset({"limpiador", "programador", "comercial", "metricas", "metricas_piezas"})
 
 
 def clave_gate_de(daemon: str) -> str | None:

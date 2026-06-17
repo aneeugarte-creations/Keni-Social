@@ -56,9 +56,14 @@ def main() -> int:
     from .noticias_gc_daemon import iniciar_noticias_gc
     from .patrones_refresco import iniciar_refresco_patrones
     from .pipeline_contenido import iniciar_pipeline
+    from .programador import iniciar_programador
     from .limpiador_generaciones import iniciar_limpiador
     from .trends_daemon import iniciar_trends
 
+    # PUBLICADOR ("reloj del servidor"): publica las piezas `programado` cuando vence su
+    # `fecha_programada`. Gateado por marca (`KENI_PUBLICAR_REAL`/`publicar_real_para`); en
+    # las marcas sin el flag opera en dry-run (prepara, no postea).
+    iniciar_programador()
     iniciar_refresco_metricas()
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.

@@ -261,16 +261,16 @@ def test_endpoint_daemons_inactivo_viejo_no_es_atrasado(entorno):
 
 
 def test_endpoint_daemons_ignora_retirados(entorno):
-    # `pipeline` y `programador` son daemons RETIRADOS: sus filas viejas en `daemon_latidos`
+    # `pipeline` y `vencimientos` son daemons RETIRADOS: sus filas viejas en `daemon_latidos`
     # ya no las actualiza nadie y la sonda las IGNORA. Un daemon vivo (metricas) sí aparece.
     db.latido_barrido("pipeline", ok=True, intervalo_seg=15.0, tick_seg=60.0)
     _envejecer_latido("pipeline")
-    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("vencimientos", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     nombres = {d["daemon"] for d in c.get("/api/sistema/daemons").json()["daemons"]}
     assert "pipeline" not in nombres
-    assert "programador" not in nombres
+    assert "vencimientos" not in nombres
     assert "metricas" in nombres
 
 
@@ -403,7 +403,8 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
 
 def test_clave_gate_de_null_en_siempre_on():
     # Daemons SIEMPRE-ON sin toggle de ajuste -> None (el front no pinta switch on/off).
-    for d in ("limpiador", "comercial", "metricas", "metricas_piezas"):
+    # `programador` SIEMPRE corre (su gate KENI_PUBLICAR_REAL solo decide real vs dry-run).
+    for d in ("limpiador", "programador", "comercial", "metricas", "metricas_piezas"):
         assert latidos.clave_gate_de(d) is None
     # Un daemon desconocido tampoco tiene gate.
     assert latidos.clave_gate_de("daemon_nuevo_sin_clasificar") is None

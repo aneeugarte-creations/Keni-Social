@@ -1,17 +1,28 @@
-"""Publicacion a demanda de UNA pieza en Metricool/Postproxy (boton manual de la UI).
+"""Programador de piezas (#9, Fase 3): prepara/publica las piezas vencidas.
 
-Una pieza APROBADA aterriza en el feed para su aprobacion final; desde ahi el humano
-la publica en redes con el boton "publicar", que llama a `programar_pieza_metricool`.
-Este modulo arma el borrador desde la fila de pieza y lo entrega al adaptador de la
-marca (Metricool por defecto; Postproxy si la marca lo elige en `[postproxy.marcas.<id>]`).
+Que hace y, sobre todo, que NO hace
+===================================
+Una pieza APROBADA puede PROGRAMARSE para una fecha-hora (via `api/aprobacion.py`):
+pasa a estado `programado` con su `fecha_programada`. Este modulo es el reloj del
+servidor: un hilo demonio que, cuando una pieza programada VENCE (su
+`fecha_programada <= ahora`), la PREPARA estampando `preparado_en` y, si el flag
+`KENI_PUBLICAR_REAL` esta activo, la entrega al scheduler de Metricool.
 
 GATING (frontera del producto, CRITICO):
-  - `KENI_PUBLICAR_REAL` (por marca, `config.publicar_real_para`) decide si el boton
-    publica de verdad o solo PREVISUALIZA el cuerpo que se enviaria (`dry_run`).
-  - "El humano aprueba; el sistema no publica solo": no hay despacho automatico; la
-    salida a redes la dispara una persona desde el feed.
+  - Por defecto (`KENI_PUBLICAR_REAL` ausente o falso) el barrido es DRY-RUN:
+    solo estampa `preparado_en` y deja la pieza en `programado`. NADA va a
+    Metricool. Comportamiento identico al anterior.
+  - Con `KENI_PUBLICAR_REAL=1` el barrido llama a `AdaptadorPublicacionMetricool`
+    con `dry_run=False` para la marca de la pieza. Si Metricool confirma, la pieza
+    pasa a `publicado` con `id_post_metricool` guardado. Si falla o la marca no
+    tiene credenciales, la pieza SIGUE en `programado` y el error se loguea sin
+    romper el barrido (degradacion honesta).
+  - "El humano aprueba; el sistema no publica solo": el humano programa la pieza
+    con una fecha; el sistema ejecuta el despacho al scheduler de Metricool cuando
+    vence esa fecha. Metricool luego publica en las redes sociales al momento
+    programado (autoPublish=true).
 
-FLOW: fila pieza -> BorradorMetricool -> AdaptadorPublicacion(Metricool|Postproxy) -> red
+FLOW: fila pieza -> BorradorMetricool -> AdaptadorPublicacionMetricool -> Metricool
   1. `pub["red"]` (id canonico, p.ej. "x") -> `Plataforma` de keni_metricas.
   2. `pub["marca"]` (slug-guion, p.ej. "claro-sports") ->
      `marcas.id_metricas_de(...)` (guion_bajo, p.ej. "claro_sports") ->
@@ -20,17 +31,28 @@ FLOW: fila pieza -> BorradorMetricool -> AdaptadorPublicacion(Metricool|Postprox
      URL absoluta publica que Metricool puede ingerir. Sin URL publica, se omite
      la media y se loguea (el post va solo con texto, si la red lo permite).
   4. `pub["contenido"]` -> `BorradorMetricool.texto`.
+     `pub["fecha_programada"]` -> `BorradorMetricool.publicar_en`.
+
+El calculo de "que esta vencido" es una funcion PURA y DETERMINISTA (`piezas_vencidas`)
+que recibe `ahora` inyectado, para poder testearla sin reloj real ni hilo. El hilo
+(`iniciar_programador`) vive en el servidor real (`__main__`), NO en `crear_app`: los
+tests no lo arrancan (igual que la captura comercial). Cada operacion abre/cierra su
+propia conexion, asi que correr en un hilo aparte es seguro.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+import os
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from . import config, marcas, repos
+from .estados import ESTADO_PROGRAMADO
 from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.programador")
@@ -42,6 +64,16 @@ _log = logging.getLogger("keni_consola.programador")
 # es lo que provoca el DOBLE-POST (el barrido y el boton reusan esta misma logica). No es
 # un id real (no enlaza metricas); es deliberadamente legible para auditar y reconciliar.
 ID_POST_INCIERTO = "incierto-timeout"
+
+# Cadencia por defecto del barrido del programador (segundos). Un minuto basta: la
+# granularidad de las fechas programadas es el minuto.
+INTERVALO_SEGUNDOS_DEF = 60.0
+
+# VENTANA DE FRESCURA: solo se publican las piezas vencidas hace MENOS de esto. Una pieza
+# atrasada más que esta ventana (p. ej. tras un parón del daemon) NO se postea sola: su
+# contenido pudo quedar obsoleto y un disparo en lote sería ruido en redes. Queda en
+# `programado` para que el equipo la reprograme a un hueco futuro a conciencia.
+_VENTANA_PUBLICACION = timedelta(hours=2)
 
 # Canal de publicación POSTPROXY (el alternativo a Metricool). El default es Metricool
 # (cero cambio de comportamiento): solo se desvía al camino Postproxy una marca que lo
@@ -73,14 +105,42 @@ def _parsear_fecha(valor: str) -> datetime | None:
 
     Acepta 'YYYY-MM-DDTHH:MM' (o con segundos) y formatos con zona ('...Z'/'+00:00',
     que es lo que envía la UI: el picker es hora CDMX y se manda como instante UTC). Las
-    cadenas SIN zona se interpretan como UTC, para que el `publicar_en` del borrador sea
-    siempre un instante aware (nunca naive-vs-aware → TypeError)."""
+    cadenas SIN zona se interpretan como UTC. Así la comparación con `ahora` (UTC) en
+    `piezas_vencidas` siempre es aware-vs-aware (nunca naive-vs-aware → TypeError)."""
     if not valor:
         return None
     try:
         return _a_utc(datetime.fromisoformat(valor))
     except ValueError:
         return None
+
+
+def piezas_vencidas(
+    programadas: list[dict[str, Any]], ahora: datetime
+) -> list[dict[str, Any]]:
+    """Subconjunto de `programadas` que ya vencio y aun NO se preparo (PURA, testeable).
+
+    Una pieza esta vencida si: su estado es `programado`, tiene `fecha_programada`
+    valida <= `ahora`, NO tiene `preparado_en` (no se preparo ya) y vencio hace MENOS de
+    `_VENTANA_PUBLICACION` (frescura: una pieza muy atrasada NO se postea sola, la reprograma
+    el equipo). Determinista: depende solo de sus argumentos (no del reloj real ni de la BD).
+    """
+    # `ahora` puede llegar naive (p.ej. desde tests o un llamador antiguo): se normaliza a
+    # UTC para comparar aware-vs-aware con las fechas parseadas (que siempre son UTC).
+    ahora = _a_utc(ahora)
+    vencidas: list[dict[str, Any]] = []
+    for pub in programadas:
+        if pub.get("estado") != ESTADO_PROGRAMADO:
+            continue
+        if pub.get("preparado_en"):  # ya preparada en un barrido anterior
+            continue
+        fecha = _parsear_fecha(pub.get("fecha_programada") or "")
+        if fecha is None or fecha > ahora:
+            continue
+        if ahora - fecha > _VENTANA_PUBLICACION:  # demasiado atrasada: la reprograma el equipo
+            continue
+        vencidas.append(pub)
+    return vencidas
 
 
 # --------------------------------------------------------------------------- #
@@ -377,6 +437,194 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     return borrador
 
 
+# --------------------------------------------------------------------------- #
+# Preparacion de UNA pieza (enganche del posteo real)                          #
+# --------------------------------------------------------------------------- #
+
+
+def _preparar_postproxy(
+    pub: dict[str, Any], ahora: datetime, campos_base: dict[str, Any], marca_id: str
+) -> dict[str, Any] | None:
+    """Camino REAL del barrido para una marca con canal=postproxy. Análogo a Metricool.
+
+    Misma postura de degradación honesta y mismo manejo de timeout/fallo que el camino
+    Metricool de `_preparar`: si faltan credenciales (api_key global o grupo de la marca)
+    o el borrador es inviable, la pieza se prepara en dry-run y SIGUE en `programado`; un
+    TIMEOUT marca `publicado` (incierto) para no duplicar; un fallo de entrega claro LIBERA
+    `preparado_en` para reintentar. El id del post de Postproxy se guarda en la columna
+    EXISTENTE `id_post_metricool` (reusada como "id de post externo"; NO se cambia el
+    esquema: con canal=postproxy esa columna contiene el id de Postproxy).
+    """
+    pub_id = pub["id"]
+
+    api_key, group_id = _creds_postproxy(marca_id)
+    if not api_key or not group_id:
+        _log.warning(
+            "Pieza %r (marca %r): sin credenciales Postproxy (api_key global y/o "
+            "profile_group_id); se prepara en dry-run y sigue en 'programado'. Configura "
+            "[postproxy] api_key y [postproxy.marcas.%s] profile_group_id.",
+            pub_id, marca_id, marcas.id_metricas_de(marca_id),
+        )
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    # Reusa la MISMA construcción de borrador que Metricool (texto+hashtags, media,
+    # video/carrusel, publicar_en). El adaptador Postproxy lee de él lo que necesita.
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    try:
+        from keni_metricas.pieza.postproxy import AdaptadorPublicacionPostproxy
+    except ImportError:
+        _log.warning("keni_metricas no disponible; pieza real imposible.")
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    profiles = _profiles_postproxy(pub, api_key, group_id)
+    try:
+        adaptador = AdaptadorPublicacionPostproxy(api_key=api_key)
+        resultado = adaptador.programar(borrador, dry_run=False, profiles=profiles)
+    except httpx.TimeoutException:
+        _log.warning(
+            "Pieza %r: TIMEOUT al enviar a Postproxy; el post pudo entregarse. Se marca "
+            "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
+            pub_id,
+        )
+        return repos.actualizar_pieza(
+            pub_id,
+            {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
+        )
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
+        _log.exception(
+            "Pieza %r: fallo al enviar a Postproxy; se libera la preparacion y se "
+            "reintentara en el proximo barrido.",
+            pub_id,
+        )
+        try:
+            repos.actualizar_pieza(pub_id, {"preparado_en": ""})
+        except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
+            _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
+        return None
+
+    id_post = resultado.id_post or ""
+    estados_str = ", ".join(f"{r}={s}" for r, s in resultado.estados.items())
+    _log.info(
+        "Pieza %r publicada en Postproxy: id_post=%r redes=[%s] estados={%s}",
+        pub_id, id_post, ", ".join(resultado.redes), estados_str,
+    )
+    return repos.actualizar_pieza(
+        pub_id,
+        {**campos_base, "estado": "publicado", "id_post_metricool": id_post},
+    )
+
+
+def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
+    """Prepara UNA pieza vencida: estampa `preparado_en` y, si el gate esta activo,
+    entrega el borrador a Metricool.
+
+    Gate `KENI_PUBLICAR_REAL`:
+      - OFF (default): solo estampa `preparado_en` en dry-run. La pieza SIGUE en
+        `programado`. Comportamiento identico al anterior al enganche.
+      - ON: construye el borrador, resuelve las creds de la marca y llama al
+        adaptador con `dry_run=False`. Si Metricool acepta el post, la pieza pasa
+        a `publicado` y se guarda `id_post_metricool`. Errores de CONFIGURACION
+        (creds faltantes, red no soportada, borrador inviable) se loguean y la pieza
+        SIGUE en `programado` con `preparado_en` estampado (no rompe el barrido;
+        reintentar cada minuto no arregla una config rota). Un fallo de ENTREGA
+        (excepcion de red/auth contra Metricool) LIMPIA `preparado_en` para que el
+        siguiente barrido la reintente: antes quedaba estampada y `piezas_vencidas`
+        la excluia PARA SIEMPRE (pieza programada que nunca salia, en silencio).
+    """
+    # Gate maestro + excepción por marca: el maestro global debe estar ON y la marca NO excluida.
+    marca_id = pub.get("marca") or ""
+    publicar_real_flag = config.publicar_real_para(marca_id)
+
+    # Canon UTC sin offset (ver `tiempo.py`): antes `ahora.isoformat()` de un datetime aware
+    # estampaba "+00:00", que rompia el orden lexicografico contra los timestamps naive.
+    campos_base: dict[str, Any] = {"preparado_en": iso_utc(ahora)}
+
+    if not publicar_real_flag:
+        # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
+        return repos.actualizar_pieza(pub["id"], campos_base)
+
+    # --- camino REAL: DESPACHO por canal de publicación de la marca ----------
+    # Default "metricool" (cero regresión): solo una marca con canal=postproxy se desvía.
+    if config.canal_publicacion_para(marca_id) == _CANAL_POSTPROXY:
+        return _preparar_postproxy(pub, ahora, campos_base, marca_id)
+
+    # --- camino REAL Metricool (comportamiento histórico, INTACTO) ------------
+    pub_id = pub["id"]
+
+    creds = _creds_metricool(marca_id)
+    if not creds:
+        _log.warning(
+            "Pieza %r (marca %r): sin credenciales Metricool; se prepara en dry-run "
+            "y sigue en 'programado'. Configura [metricool.marcas.%s] con "
+            "user_token + user_id + blog_id.",
+            pub_id, marca_id, marcas.id_metricas_de(marca_id),
+        )
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        # Motivo ya logueado en `_borrador_de_publicacion`.
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    try:
+        from keni_metricas.pieza.metricool import AdaptadorPublicacionMetricool
+    except ImportError:
+        _log.warning("keni_metricas no disponible; pieza real imposible.")
+        return repos.actualizar_pieza(pub_id, campos_base)
+
+    try:
+        adaptador = AdaptadorPublicacionMetricool(creds=creds)
+        resultado = adaptador.programar(borrador, dry_run=False, ahora=ahora)  # type: ignore[arg-type]
+    except httpx.TimeoutException:
+        # TIMEOUT != fallo de entrega. La peticion (con su body) ya viajo entera; el post
+        # casi seguro se ENTREGO en Metricool, solo no llego la respuesta. NO liberamos el
+        # claim: hacerlo haria que el siguiente barrido REENVIE y duplique el post. Marcamos
+        # `publicado` con id incierto (queda fuera de `piezas_vencidas` y nadie reintenta).
+        # El humano verifica en redes; si no salio, re-publica a mano.
+        _log.warning(
+            "Pieza %r: TIMEOUT al enviar a Metricool; el post pudo entregarse. Se marca "
+            "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
+            pub_id,
+        )
+        return repos.actualizar_pieza(
+            pub_id,
+            {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
+        )
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
+        # FALLO DE ENTREGA CLARO (no-timeout: red caida antes de enviar, 5xx, auth rota):
+        # LIBERAR el claim limpiando `preparado_en`, para que el siguiente barrido (cada
+        # ~60 s) la vuelva a intentar. Si quedara estampado, `piezas_vencidas` la excluiria
+        # PARA SIEMPRE y la pieza moriria en `programado` sin publicarse ni avisar. El error
+        # queda en el log de cada intento (visible); no se cuenta como preparada (return None).
+        _log.exception(
+            "Pieza %r: fallo al enviar a Metricool; se libera la preparacion y se "
+            "reintentara en el proximo barrido.",
+            pub_id,
+        )
+        try:
+            repos.actualizar_pieza(pub_id, {"preparado_en": ""})
+        except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
+            _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
+        return None
+
+    # Metricool acepto el post: marcar como publicado.
+    id_post = resultado.id_post or ""
+    estados_str = ", ".join(f"{r}={s}" for r, s in resultado.estados.items())
+    _log.info(
+        "Pieza %r publicada en Metricool: id_post=%r redes=[%s] estados={%s}",
+        pub_id, id_post, ", ".join(resultado.redes), estados_str,
+    )
+    campos_publicado: dict[str, Any] = {
+        **campos_base,
+        "estado": "publicado",
+        "id_post_metricool": id_post,
+    }
+    return repos.actualizar_pieza(pub_id, campos_publicado)
+
+
 def programar_pieza_metricool(
     pub: dict[str, Any], *, ahora: datetime | None = None
 ) -> dict[str, Any]:
@@ -395,12 +643,14 @@ def programar_pieza_metricool(
     """
     ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
     marca_id = pub.get("marca") or ""
-    # Gate maestro global + excepción por marca (marca excluida -> dry-run).
+    # Mismo gate que el barrido: maestro global + excepción por marca (marca excluida -> dry-run).
     dry_run = not config.publicar_real_para(marca_id)
 
-    # GUARDA DE RE-PIEZA (solo camino REAL): si la pieza YA fue publicada (tiene
-    # `id_post_metricool` o estado `publicado`), no la re-enviamos a Metricool. En dry-run
-    # NO bloqueamos: previsualizar el cuerpo de una pieza ya publicada es inofensivo y util.
+    # GUARDA DE RE-PIEZA (solo camino REAL): el barrido automatico evita el doble envio
+    # via `preparado_en` (claim atomico), pero el boton manual no pasaba por ahi. Si la pieza
+    # YA fue publicada (tiene `id_post_metricool` o estado `publicado`), no la re-enviamos a
+    # Metricool. En dry-run NO bloqueamos: previsualizar el cuerpo de una pieza ya publicada
+    # es inofensivo y util.
     if not dry_run and (pub.get("id_post_metricool") or pub.get("estado") == "publicado"):
         return {
             "ok": False,
@@ -452,7 +702,8 @@ def programar_pieza_metricool(
         # TIMEOUT (solo camino real; el dry-run no toca red): el post casi seguro se
         # ENTREGO (la peticion viajo entera) pero no llego la respuesta. Marcamos
         # `publicado` con id incierto para NO permitir un re-click que duplique el post,
-        # y avisamos al humano (`incierto`) para que verifique en redes.
+        # y avisamos al humano (`incierto`) para que verifique en redes. Mismo criterio
+        # que el barrido automatico (ver `_preparar`).
         _log.warning(
             "Pieza %r: TIMEOUT al publicar en Metricool a demanda; se marca 'publicado' "
             "(incierto) para no duplicar. Verificar en redes.",
@@ -604,3 +855,89 @@ def _programar_pieza_postproxy(
         },
     )
     return {**base, "id_post": id_post, "estados": dict(resultado.estados)}
+
+
+def preparar_vencidas(ahora: datetime | None = None) -> int:
+    """Prepara (dry-run o real) todas las piezas programadas ya vencidas. Devuelve cuantas preparo.
+
+    Es lo que corre cada barrido del hilo y tambien se puede llamar a mano (test/CLI).
+    Lee SOLO las piezas en estado `programado` (filtro en el indice), no todo el catalogo.
+    """
+    ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
+    # Canon UTC sin offset (ver `tiempo.py`): el claim `preparado_en` se compara como TEXT.
+    ts = iso_utc(ahora)
+    programadas = repos.listar_piezas(estado=ESTADO_PROGRAMADO)
+    preparadas = 0
+    for pub in piezas_vencidas(programadas, ahora):
+        # CLAIM ATOMICO antes de publicar: estampa `preparado_en` solo si nadie lo hizo ya
+        # (UPDATE condicional, ver `repos.reclamar_preparacion`). Sustituye el patron previo
+        # SELECT(`piezas_vencidas`)->UPDATE, que con >1 replica/barrido en paralelo podia
+        # preparar/publicar DOS veces la misma pieza. Solo el barrido que GANA el claim
+        # procede a `_preparar` (publicar real). Los demas la ven ya reclamada y la saltan.
+        if not repos.reclamar_preparacion(pub["id"], ts):
+            continue
+        if _preparar(pub, ahora) is not None:
+            preparadas += 1
+    return preparadas
+
+
+def _intervalo_segundos() -> float:
+    """Intervalo del barrido en segundos (`KENI_PROGRAMADOR_INTERVALO_SEGUNDOS`, min 1.0).
+
+    Se lee directo del entorno (sin pasar por `config`): el publicador es autocontenido.
+    """
+    crudo = os.environ.get("KENI_PROGRAMADOR_INTERVALO_SEGUNDOS")
+    if crudo:
+        try:
+            return max(1.0, float(crudo))
+        except ValueError:
+            pass
+    return INTERVALO_SEGUNDOS_DEF
+
+
+def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Thread:
+    """Arranca un hilo demonio que prepara las piezas vencidas en bucle.
+
+    Pensado para el servidor real (`__main__`), NO para `crear_app`: los tests crean la
+    app sin arrancar esto. El hilo es daemon: muere al cerrar el proceso. Prepara una vez
+    al arrancar y luego cada `intervalo`. Un fallo de un barrido se loguea y NO mata el
+    hilo (el siguiente barrido reintenta).
+    """
+    intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
+
+    def bucle() -> None:
+        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
+
+        while True:
+            t0 = time.monotonic()
+            try:
+                # PUBLICADOR: prepara (y, si el gate real lo permite, publica) las piezas
+                # `programado` cuya `fecha_programada` ya venció. Es el "reloj del servidor".
+                n = preparar_vencidas()
+                if n:
+                    _log.info(
+                        "Programador: %d pieza(s) preparada(s) (KENI_PUBLICAR_REAL=%s).",
+                        n, config.publicar_real(),
+                    )
+                modo = "real" if config.publicar_real() else "dry-run"
+                resumen = f"{n} pieza(s) preparada(s) ({modo})" if n else "sin novedad"
+                latidos.barrido(
+                    "programador", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), resumen=resumen,
+                )
+            except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
+                _log.exception("Fallo en el barrido del programador.")
+                latidos.barrido(
+                    "programador", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
+                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
+                )
+            time.sleep(intervalo)
+
+    hilo = threading.Thread(target=bucle, name="programador-piezas", daemon=True)
+    hilo.start()
+    modo = "REAL (Metricool)" if config.publicar_real() else "DRY-RUN (sin publicar)"
+    _log.info(
+        "Programador de piezas activo cada %.0f s (modo: %s).",
+        intervalo, modo,
+    )
+    return hilo

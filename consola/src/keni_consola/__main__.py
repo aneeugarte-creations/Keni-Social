@@ -161,6 +161,15 @@ def main() -> int:
     except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque
         pass
 
+    # Publicador ("reloj del servidor"): un hilo demonio que, al vencer la `fecha_programada`
+    # de una pieza `programado`, la publica en redes (vía Metricool). El posteo real está
+    # gated POR MARCA (`KENI_PUBLICAR_REAL`/`publicar_real_para`): una marca sin el flag opera
+    # en dry-run (prepara, no postea). Vive aquí (servidor real), NO en `crear_app`, para no
+    # arrancarlo en los tests.
+    from .programador import iniciar_programador
+
+    iniciar_programador()
+
     # Refresco de metricas: un hilo demonio que mantiene caliente la cache de metricas
     # (Postgres), refrescandola al arrancar y cada N horas (def 4h, KENI_METRICAS_REFRESCO_HORAS).
     # Asi la UI lee datos ya calculados (instantaneo) sin golpear las APIs externas en cada

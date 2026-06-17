@@ -21,13 +21,15 @@ from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 import respx
 from httpx import Response
 
 from keni_consola import repos
-from keni_consola.programador import programar_pieza_metricool
+from keni_consola.programador import preparar_vencidas, programar_pieza_metricool
 
 _POSTPROXY_URL = "https://api.postproxy.dev/api/posts"
+_METRICOOL_URL = "https://app.metricool.com/api/v2/scheduler/posts"
 _RESP_PP_OK = {"id": "pp-post-001"}
 
 
@@ -54,6 +56,112 @@ def _creds_pp(api_key="PP_KEY", group_id="grp-1"):
 
 def _profiles(lista):
     return patch("keni_consola.programador._profiles_postproxy", return_value=lista)
+
+
+# --------------------------------------------------------------------------- #
+# Barrido automático                                                          #
+# --------------------------------------------------------------------------- #
+def test_barrido_postproxy_publica_y_guarda_id(entorno, monkeypatch):
+    """canal=postproxy + gate ON: entrega a Postproxy y marca publicado con su id."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+    pub = _pub_programada(red="x", contenido="Tweet PP")
+
+    cuerpo_enviado: dict | None = None
+
+    def capturar(request, route):  # noqa: ANN001
+        import json
+        nonlocal cuerpo_enviado
+        cuerpo_enviado = json.loads(request.content)
+        return Response(200, json=_RESP_PP_OK)
+
+    with _canal("postproxy"), _creds_pp(), _profiles(["twitter"]), respx.mock(
+        assert_all_called=False
+    ) as mock:
+        ruta = mock.post(_POSTPROXY_URL).mock(side_effect=capturar)
+        # Aseguramos que NO se toca Metricool.
+        mc = mock.post(_METRICOOL_URL).mock(Response(200, json={"data": {"id": "x"}}))
+        preparadas = preparar_vencidas(datetime.now())
+
+    assert preparadas == 1
+    assert ruta.called
+    assert not mc.called  # NO fue a Metricool
+    assert cuerpo_enviado is not None
+    assert cuerpo_enviado["post"]["body"] == "Tweet PP"
+    assert cuerpo_enviado["profiles"] == ["twitter"]
+    actualizada = repos.obtener_pieza(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["id_post_metricool"] == "pp-post-001"
+
+
+def test_barrido_postproxy_sin_creds_degrada(entorno, monkeypatch):
+    """canal=postproxy pero sin api_key/grupo: dry-run honesto, sigue en 'programado'."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    pub = _pub_programada(red="x", contenido="Tweet")
+
+    with _canal("postproxy"), patch(
+        "keni_consola.programador._creds_postproxy", return_value=(None, None)
+    ), respx.mock(assert_all_called=False) as mock:
+        ruta = mock.post(_POSTPROXY_URL).mock(Response(200, json=_RESP_PP_OK))
+        preparadas = preparar_vencidas(datetime.now())
+
+    assert preparadas == 1
+    assert not ruta.called
+    actualizada = repos.obtener_pieza(pub["id"])
+    assert actualizada["estado"] == "programado"
+    assert actualizada["preparado_en"]
+    assert actualizada.get("id_post_metricool", "") == ""
+
+
+def test_barrido_metricool_por_defecto_no_toca_postproxy(entorno, monkeypatch):
+    """canal=metricool (default): enruta a Metricool, NO toca Postproxy (regresión)."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    pub = _pub_programada(red="x", contenido="Tweet MC")
+
+    with patch(
+        "keni_consola.programador._creds_metricool",
+        return_value={"user_token": "t", "user_id": "1", "blog_id": "2"},
+    ), respx.mock(assert_all_called=False) as mock:
+        mc = mock.post(_METRICOOL_URL).mock(Response(200, json={"data": {"id": "mc-1"}}))
+        pp = mock.post(_POSTPROXY_URL).mock(Response(200, json=_RESP_PP_OK))
+        # Sin postproxy configurado, canal_publicacion_para devuelve "metricool" (default real).
+        preparar_vencidas(datetime.now())
+
+    assert mc.called
+    assert not pp.called
+    assert repos.obtener_pieza(pub["id"])["id_post_metricool"] == "mc-1"
+
+
+def test_barrido_postproxy_timeout_marca_incierto(entorno, monkeypatch):
+    """TIMEOUT en Postproxy: marca 'publicado' (incierto) y no reintenta (no doble-post)."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    pub = _pub_programada(red="x", contenido="Tweet timeout")
+
+    from keni_consola.programador import ID_POST_INCIERTO
+
+    with _canal("postproxy"), _creds_pp(), _profiles(["twitter"]), respx.mock() as mock:
+        ruta = mock.post(_POSTPROXY_URL).mock(side_effect=httpx.ReadTimeout("timed out"))
+        assert preparar_vencidas(datetime.now()) == 1
+        assert preparar_vencidas(datetime.now()) == 0  # no reintenta
+        assert ruta.call_count == 1
+
+    actualizada = repos.obtener_pieza(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
+
+
+def test_barrido_postproxy_error_libera_claim(entorno, monkeypatch):
+    """Un 5xx de Postproxy libera `preparado_en` para reintentar (igual que Metricool)."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    pub = _pub_programada(red="x", contenido="Tweet 500")
+
+    with _canal("postproxy"), _creds_pp(), _profiles(["twitter"]), respx.mock() as mock:
+        mock.post(_POSTPROXY_URL).mock(Response(500, json={"error": "boom"}))
+        assert preparar_vencidas(datetime.now()) == 0
+
+    actualizada = repos.obtener_pieza(pub["id"])
+    assert actualizada["estado"] == "programado"
+    assert actualizada["preparado_en"] == ""  # claim liberado
 
 
 # --------------------------------------------------------------------------- #
