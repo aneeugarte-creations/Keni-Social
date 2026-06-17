@@ -159,11 +159,12 @@ def _etapas_de_run(
     *,
     pool_fusion: bool = False,
     pool_editorial: bool = False,
+    hashtags_ia: bool = False,
     arte_ia: bool = False,
     critica_ia: bool = False,
 ) -> list[dict]:
-    """Deriva las 7 etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Redactar/Ilustrar
-    (toggles) + Aprobar (humana).
+    """Deriva las etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Redactar/
+    Sugerir hashtags/Ilustrar (toggles) + Aprobar (humana).
 
     Fusionar y Priorizar se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
     previos al tema; sin historia, `pool_fusion`/`pool_editorial` (hay generación de pool de la
@@ -239,6 +240,22 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "pendiente", ""
     cd = {"clave": "redactar", "nombre": "Redactar", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
 
+    # --- Sugerir hashtags: tras Redactar, antes de Ilustrar. SOLO evidencia (una generación
+    # `sugerir-hashtags` correlacionada). Es una etapa CONDICIONAL (solo corre cuando al copy le
+    # faltan hashtags), así que sin evidencia NUNCA queda "pendiente" —bloquearía el estado global
+    # de toda run cuyo copy ya traía hashtags—: se pinta "saltada" (no corrió / etapa apagada) y la
+    # tira la oculta conservando su ranura.
+    if hashtags_ia:
+        hash_estado, hash_detalle = "ok", ""
+    elif not config.sugerir_hashtags_activo():
+        hash_estado, hash_detalle = _ESTADO_SALTADA, "Desactivada"
+    else:
+        hash_estado, hash_detalle = _ESTADO_SALTADA, ""
+    hashtags = {
+        "clave": "sugerir_hashtags", "nombre": "Sugerir hashtags",
+        "estado": hash_estado, "detalle": hash_detalle, "ts": "",
+    }
+
     # --- Ilustrar: SOLO evidencia de arte IA (marcador ARTE / generación de arte correlacionada).
     # Una pieza puede traer IMAGEN sin que el arte IA corriera (la foto de la nota de una
     # fuente PROPIA, bajada al recolectar): eso NO es trabajo de esta etapa. La foto de fuente vive en la pieza (feed), no aquí.
@@ -285,7 +302,7 @@ def _etapas_de_run(
         cr_estado, cr_detalle = "pendiente", ""
     critica = {"clave": "critica", "nombre": "Crítica", "estado": cr_estado, "detalle": cr_detalle, "ts": ""}
 
-    etapas = [fusion, editorial, ci, verificación, cd, arte, aprobacion, critica]
+    etapas = [fusion, editorial, ci, verificación, cd, hashtags, arte, aprobacion, critica]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
     return etapas
@@ -327,6 +344,7 @@ def _run_de(
     metricas: dict | None = None,
     pool_fusion: bool = False,
     pool_editorial: bool = False,
+    hashtags_ia: bool = False,
     arte_ia: bool = False,
     critica_ia: bool = False,
 ) -> dict:
@@ -344,7 +362,8 @@ def _run_de(
     base = [_pieza_de(p) for p in piezas_plat]
     etapas = _etapas_de_run(
         item, base, cluster,
-        pool_fusion=pool_fusion, pool_editorial=pool_editorial, arte_ia=arte_ia,
+        pool_fusion=pool_fusion, pool_editorial=pool_editorial,
+        hashtags_ia=hashtags_ia, arte_ia=arte_ia,
         critica_ia=critica_ia,
     )
     marca = item.get("marca", "") or ""

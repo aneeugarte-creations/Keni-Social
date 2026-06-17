@@ -24,7 +24,15 @@ from ...pipeline_contenido import (
 # import-calendario). Un tema de tablero solo se lista si la máquina lo TRABAJÓ (tiene
 # generaciones del pipeline correlacionadas): el alta manual sin trabajo IA no es una run.
 _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
-_TIPOS_TRABAJO_PIPELINE = frozenset({"pipeline", TIPO_ACTIVIDAD, "autogen"})
+# Tipos de generación que son TRABAJO del pipeline (viven DENTRO de la run de su tema, no como
+# entradas sueltas): el copy/marcadores (`pipeline`/`pipeline_etapa`/`autogen`) y la sugerencia
+# de hashtags (`sugerir-hashtags`), etapa entre Redactar e Ilustrar. Sin `sugerir-hashtags` aquí,
+# su generación —que SÍ sella `publicacion_id`— resurgía como tarjeta suelta en cuanto su tema
+# salía de la ventana de runs (ya publicado/antiguo); ahora siempre se pliega en su run.
+_TIPO_SUGERIR_HASHTAGS = "sugerir-hashtags"
+_TIPOS_TRABAJO_PIPELINE = frozenset(
+    {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS}
+)
 
 # Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa
 # no se ejecuta y se pinta "Saltada" (no bloquea el estado global ni cuenta como fallo).
@@ -44,6 +52,7 @@ _ETAPAS = (
     ("admitir", "Admitir"),
     ("verificar", "Verificar"),
     ("redactar", "Redactar"),
+    ("sugerir_hashtags", "Sugerir hashtags"),
     ("ilustrar", "Ilustrar"),
     ("aprobar", "Aprobar"),
     ("critica", "Crítica"),
@@ -53,7 +62,9 @@ _ETAPAS = (
 _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
 # Admitir (crea el tema en BD) y Aprobar (humana) NO lo son: la UI las pinta como FRONTERAS.
-_ETAPAS_IA = frozenset({"fusionar", "priorizar", "verificar", "redactar", "ilustrar", "critica"})
+_ETAPAS_IA = frozenset(
+    {"fusionar", "priorizar", "verificar", "redactar", "sugerir_hashtags", "ilustrar", "critica"}
+)
 # Prompt de la Prompts de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
@@ -61,6 +72,7 @@ _PROMPT_POR_ETAPA = {
     "PRIORIZAR": "prompt/priorizar",
     "VERIFICAR": "prompt/verificar",
     "REDACTAR": "prompt/redactar",
+    "SUGERIR_HASHTAGS": "prompt/sugerir-hashtags",
     "ILUSTRAR": "prompt/ilustrar",
     "CRITICA": "prompt/critica",
 }

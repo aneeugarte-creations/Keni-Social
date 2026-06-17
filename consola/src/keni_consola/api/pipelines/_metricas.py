@@ -117,6 +117,21 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
     return out
 
 
+def _runs_con_hashtags(gens: list[dict]) -> set[str]:
+    """Ids de contenido con EVIDENCIA de que la etapa Sugerir hashtags corrió.
+
+    La sugerencia se lanza por CONTENIDO (`tipo='sugerir-hashtags'`, una sola por tema) y sella el
+    `publicacion_id` del tema (= id de la run). Su presencia es la evidencia de que la etapa corrió,
+    igual que el arte IA lo es para Ilustrar; la etapa Sugerir hashtags se deriva de ESTA evidencia
+    (no la corre cuando el copy ya traía hashtags, así que sin evidencia se pinta "saltada").
+    """
+    return {
+        cid
+        for g in gens
+        if (g.get("tipo") or "") == "sugerir-hashtags" and (cid := g.get("publicacion_id") or "")
+    }
+
+
 def _runs_con_critica_ia(gens: list[dict]) -> set[str]:
     """Ids de contenido con EVIDENCIA de que la Crítica IA corrió (job `tipo='critica-ia'`).
 

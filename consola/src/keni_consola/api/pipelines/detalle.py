@@ -24,6 +24,7 @@ from ._metricas import (
     _pool_por_marca,
     _runs_con_arte_ia,
     _runs_con_critica_ia,
+    _runs_con_hashtags,
 )
 from ._runs import _run_de
 
@@ -175,6 +176,15 @@ async def detalle(request: Request) -> Response:
         gen_crit = _generacion_publica(crit[0].get("id", "") or "")
         if gen_crit is not None:
             generaciones_por_etapa.setdefault("CRITICA", gen_crit)
+    # Sugerir hashtags: su job (`tipo='sugerir-hashtags'`) corre por contenido y sella el
+    # `publicacion_id` del tema (= esta run). Enlazamos el más reciente para enseñar su
+    # prompt+salida REALES en la etapa.
+    hashtags = [g for g in gens if (g.get("tipo") or "") == "sugerir-hashtags" and (g.get("publicacion_id") or "") == pipeline_id]
+    if hashtags:
+        hashtags.sort(key=lambda g: g.get("fecha_fin") or g.get("fecha_inicio") or "", reverse=True)
+        gen_hashtags = _generacion_publica(hashtags[0].get("id", "") or "")
+        if gen_hashtags is not None:
+            generaciones_por_etapa.setdefault("SUGERIR_HASHTAGS", gen_hashtags)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
     # La suma incluye las etapas de POOL enlazadas (Fusionar/Encaje): la cabecera cuadra con el
@@ -192,6 +202,7 @@ async def detalle(request: Request) -> Response:
                 metricas=met,
                 pool_fusion=gen_fusion is not None,
                 pool_editorial=gen_encaje is not None,
+                hashtags_ia=pipeline_id in _runs_con_hashtags(gens),
                 arte_ia=pipeline_id in _runs_con_arte_ia(gens),
                 critica_ia=pipeline_id in _runs_con_critica_ia(gens),
             ),

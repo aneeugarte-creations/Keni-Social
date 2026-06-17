@@ -59,13 +59,16 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar", "critica"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
+        "ilustrar", "aprobar", "critica",
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    # Sin cluster -> Fusionar/Priorizar saltadas; Ilustrar saltada (toggle off). Ninguna bloquea.
+    # Sin cluster -> Fusionar/Priorizar saltadas; sin sugerencia ni arte -> Sugerir hashtags/Ilustrar
+    # saltadas. Ninguna bloquea.
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "ok",
-        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente", "critica": "saltada",
+        "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
+        "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
@@ -149,7 +152,8 @@ def test_run_verificacion_saltada_genera_copy(cliente, monkeypatch):
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "saltada",
-        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente", "critica": "saltada",
+        "redactar": "ok", "sugerir_hashtags": "saltada", "ilustrar": "saltada",
+        "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
 
@@ -338,7 +342,8 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar", "critica"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "sugerir_hashtags",
+        "ilustrar", "aprobar", "critica",
     ]
     assert "actividad" in body
     assert "verificacion" in body["pipeline"]
@@ -418,6 +423,7 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
     ia = {e["clave"]: e["es_ia"] for e in run["etapas"]}
     assert ia["fusionar"] is True and ia["priorizar"] is True
     assert ia["verificar"] is True and ia["redactar"] is True and ia["ilustrar"] is True
+    assert ia["sugerir_hashtags"] is True
     assert ia["critica"] is True
     assert ia["admitir"] is False and ia["aprobar"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
@@ -608,6 +614,29 @@ def test_run_suma_metricas_de_sus_generaciones(cliente):
     # El detalle trae las MISMAS métricas (no se contradicen tarjeta y página).
     det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
     assert det["metricas"] == run["metricas"]
+
+
+def test_sugerir_hashtags_se_pliega_en_su_run_como_etapa(cliente):
+    """La generación `sugerir-hashtags` NO sale como tarjeta suelta: vive DENTRO de la run de su
+    tema como etapa entre Redactar e Ilustrar, en "ok" por la evidencia de que corrió. Y aunque su
+    tema dejara de listarse como run, tampoco resurge suelta (es trabajo del pipeline)."""
+    tema = _tema_pipeline("Tema con hashtags", verificacion_fuente="verificado")
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador",
+        copy="Copy sin hashtags.", revision="no_verificado",
+    )
+    _gen_suelta("Sugerir hashtags · Tema con hashtags", tipo="sugerir-hashtags",
+                publicacion_id=tema["id"])
+    items = cliente.get("/api/pipelines").json()["pipelines"]
+    titulos = {x["titulo"] for x in items}
+    assert "Sugerir hashtags · Tema con hashtags" not in titulos
+    run = next(x for x in items if x["titulo"] == "Tema con hashtags")
+    etapas = {e["clave"]: e for e in run["etapas"]}
+    assert etapas["sugerir_hashtags"]["estado"] == "ok"
+    assert etapas["sugerir_hashtags"]["es_ia"] is True
+    # El detalle enlaza el stream de la generación a la etapa (código SUGERIR_HASHTAGS).
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert "SUGERIR_HASHTAGS" in det["generaciones_por_etapa"]
 
 
 def test_filtros_clase_y_tipo(cliente):

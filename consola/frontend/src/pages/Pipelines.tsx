@@ -31,12 +31,14 @@ const VERIFICACION_TEXTO: Record<string, string> = {
 // consola (`components/comunes/ChipEstado`): misma etiqueta y color que Actividad/Monitor.
 export { ChipEstado };
 
-// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Redactar/Ilustrar).
+// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Redactar/Sugerir hashtags/Ilustrar).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", ilustrar: "ILUSTRAR", critica: "CRITICA",
+  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", sugerir_hashtags: "SUGERIR_HASHTAGS", ilustrar: "ILUSTRAR", critica: "CRITICA",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
+// «Sugerir hashtags» NO entra: el filtro lista runs PARADAS en una etapa, y esa etapa nunca
+// bloquea (solo "ok"/"saltada", es una sugerencia opcional), así que filtrar por ella no daría nada.
 export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "fusionar", nombre: "Fusionar" },
   { clave: "priorizar", nombre: "Priorizar" },
@@ -464,9 +466,10 @@ function PublicacionEtapa({
       </div>
     );
   }
-  if (clave === "trabajo" || clave === "critica") {
-    // Trabajo SUELTO (item `clase="actividad"`) o Crítica IA (revisión con visión en la cadena
-    // de aprobación): el contenido es el bloque entrada/salida (prompt + razonamiento + resultado).
+  if (clave === "trabajo" || clave === "critica" || clave === "sugerir_hashtags") {
+    // Trabajo SUELTO (item `clase="actividad"`), Crítica IA (revisión con visión en la cadena
+    // de aprobación) o Sugerir hashtags (propuesta tras Redactar): el contenido es el bloque
+    // entrada/salida (prompt + razonamiento + resultado).
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   // aprobar — gate HUMANO (no IA).

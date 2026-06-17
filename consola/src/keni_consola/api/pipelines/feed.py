@@ -37,6 +37,7 @@ from ._metricas import (
     _pool_por_marca,
     _runs_con_arte_ia,
     _runs_con_critica_ia,
+    _runs_con_hashtags,
 )
 from ._runs import _run_de
 
@@ -198,6 +199,7 @@ async def listar(request: Request) -> Response:
     pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
     arte_ia_runs = _runs_con_arte_ia(gens)
     critica_ia_runs = _runs_con_critica_ia(gens)
+    hashtags_runs = _runs_con_hashtags(gens)
     # Una sola lectura de las plataformas (acotada a la marca enfocada), agrupada por contenido
     # (evita N consultas). Solo se consultan piezas de las runs listadas, todas de esta marca.
     por_contenido: dict[str, list[dict]] = {}
@@ -223,6 +225,7 @@ async def listar(request: Request) -> Response:
             ),
             pool_fusion=(it.get("marca", "") or "") in pool_fusion,
             pool_editorial=(it.get("marca", "") or "") in pool_editorial,
+            hashtags_ia=(it.get("id", "") or "") in hashtags_runs,
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
             critica_ia=(it.get("id", "") or "") in critica_ia_runs,
         )
