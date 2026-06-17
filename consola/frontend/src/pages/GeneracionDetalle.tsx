@@ -6,7 +6,7 @@
  * Es el detalle al que lleva la tarjeta de un item `clase="actividad"` de Producción.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, RotateCcw, Square } from "lucide-react";
+import { RotateCcw, Square } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -104,7 +104,8 @@ export default function GeneracionDetalle() {
   return (
     <div className="space-y-5">
       {/* Cabecera (← Actividad + título) en la barra superior; las acciones (Reintentar /
-          Cancelar / Actualizar) a la derecha de esa misma barra. */}
+          Cancelar) a la derecha de esa misma barra. El detalle se auto-refresca
+          (INTERVALO_DETALLE_MS); no hay acción manual de recarga. */}
       <TituloPagina titulo={titulo} onAtras={() => navigate("/maquina/actividad")} />
       <AccionesPagina>
         <div className="flex items-center gap-1">
@@ -145,16 +146,6 @@ export default function GeneracionDetalle() {
               {cancelar.isPending ? "Cancelando…" : "Cancelar"}
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1"
-            onClick={() => q.refetch()}
-            disabled={q.isFetching}
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Actualizar
-          </Button>
         </div>
       </AccionesPagina>
 

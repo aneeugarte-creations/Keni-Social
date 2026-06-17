@@ -1,14 +1,12 @@
 import { Search } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
-import { MenuAcciones } from "@/components/layout/MenuAcciones";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
 import PublicacionesHub from "@/pages/PublicacionesHub";
 import Fuentes from "@/pages/Fuentes";
-import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
 
 /**
  * Cockpit OPERATIVO de INVESTIGACIÓN (`/maquina/investigacion`): el pool de noticias que el equipo
@@ -20,8 +18,8 @@ import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
  *   · CONTENIDOS (`PublicacionesHub`): el banco EVERGREEN —piezas que no caducan—.
  *
  * El PIPELINE (recolectar → verificar) ya NO vive aquí: se enciende y se vigila en «Contexto»
- * (Máquina), donde cada fase trae su prompt, su contexto y sus logs. El menú «⋮» (oculto en
- * Algoritmos, que aporta el suyo) ofrece los ajustes del motor.
+ * (Máquina), donde cada fase trae su prompt, su contexto y sus logs. Los ajustes del motor también
+ * viven en «Contexto» (esta página es solo operativa, sin «⋮» propio).
  */
 
 /** Pestañas del cockpit (clave `?seccion=`). Noticias (el pool) es la primera y la por defecto. */
@@ -48,13 +46,6 @@ export default function CockpitInvestigacion() {
   return (
     <>
       <TituloPagina titulo="Investigación" icono={Search} />
-      {/* El menú propio del cockpit se oculta en la pestaña Algoritmos, que aporta el suyo
-          (Refrescar…): así no se solapan dos «⋮» en la barra. */}
-      {seccion !== "algoritmos" && (
-        <AccionesPagina>
-          <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />} />
-        </AccionesPagina>
-      )}
 
       <Tabs value={seccion} onValueChange={cambiarSeccion}>
         <TabsList>

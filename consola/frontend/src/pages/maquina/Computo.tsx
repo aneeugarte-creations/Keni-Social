@@ -5,7 +5,7 @@
  * máquina; el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
+import { Activity, Clock, Cpu, Trash2, Users } from "lucide-react";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -78,6 +78,8 @@ export default function Computo() {
     refetchInterval: INTERVALO_VIVO_MS,
   });
 
+  // Invalida la cola para repintar al instante tras una acción (la vista ya auto-refresca, pero
+  // así el feedback es inmediato y no espera al siguiente tick).
   const refrescar = () => void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
 
   const cancelar = useMutation({
@@ -148,13 +150,11 @@ export default function Computo() {
 
   return (
     <div className="space-y-4 p-4">
-      {/* El título lo pinta la tira de pestañas del hub (Cómputo); aquí solo el menú de acciones. */}
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
-            Actualizar
-          </ItemMenu>
-          {esAdmin && (
+      {/* El título lo pinta la tira de pestañas del hub (Cómputo). La cola se auto-refresca
+          (INTERVALO_VIVO_MS); el kebab queda solo para la acción admin de purgar. */}
+      {esAdmin && (
+        <AccionesPagina>
+          <MenuAcciones>
             <ItemMenu
               icono={Trash2}
               className="text-destructive"
@@ -175,9 +175,9 @@ export default function Computo() {
             >
               Purgar cola
             </ItemMenu>
-          )}
-        </MenuAcciones>
-      </AccionesPagina>
+          </MenuAcciones>
+        </AccionesPagina>
+      )}
 
       {/* Enfoque a un motor (?proceso=). */}
       {proceso && (

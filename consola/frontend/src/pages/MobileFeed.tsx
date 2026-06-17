@@ -26,7 +26,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -171,7 +171,6 @@ function DialogoCrear({
 /** Página raíz del feed móvil. */
 export default function MobileFeed() {
   const { usuario } = useSesion();
-  const queryClient = useQueryClient();
 
   // La vista vive en la URL (`?vista=`), igual que en el feed de escritorio: sobrevive al
   // refresco y es compartible. DEFAULT MÓVIL deliberado: sin parámetro se arranca en
@@ -346,31 +345,10 @@ export default function MobileFeed() {
     return () => ro.disconnect();
   }, []);
 
-  // El spinner del botón Actualizar SOLO en un refresco real, no en cada página del scroll
-  // (mismo comportamiento que el feed de escritorio). "Actualizar" = volver arriba + refrescar
-  // la PRIMERA página (reset, no refetch en serie de todas las cargadas); el resto de
-  // superficies solo se marca stale y los conteos de las pestañas sí refrescan.
-  const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
-  const refrescar = () => {
-    scrollerRef.current?.scrollTo?.(0, 0);
-    void queryClient.resetQueries({ queryKey: [...CLAVE_PIEZAS, "feed"] });
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS, refetchType: "none" });
-    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PIEZAS, "conteo-feed"] });
-  };
-  const botonActualizar = (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={refrescar}
-      disabled={refrescando}
-      aria-label="Actualizar"
-      title="Actualizar"
-    >
-      <RefreshCw className={refrescando ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-    </Button>
-  );
+  // El feed se auto-refresca (refetchInterval de la vista; ver vistas.tsx), así que no hay
+  // acción manual de recarga: la frescura llega sola y por las actualizaciones in-place.
   // Con UNA sola marca asignada el selector no es una decisión (dos opciones idénticas): se
-  // oculta y las pestañas comparten fila con Actualizar. Con varias (o admin), dos filas.
+  // oculta y las pestañas ocupan toda la fila. Con varias (o admin), dos filas.
   const conSelectorMarca = marcasUsuario.length !== 1;
   // Las MISMAS 3 vistas que el escritorio (vistas.tsx): Pendientes · Publicadas · Todas.
   const tabs = (
@@ -425,15 +403,11 @@ export default function MobileFeed() {
                 etiquetaTodas={marcasUsuario.length > 0 ? "Todas mis marcas" : "Todas las marcas"}
                 className="min-w-0 flex-1"
               />
-              {botonActualizar}
             </div>
             <div className="px-4 pb-2">{tabs}</div>
           </>
         ) : (
-          <div className="flex items-center gap-2 px-4 py-2">
-            {tabs}
-            {botonActualizar}
-          </div>
+          <div className="flex items-center gap-2 px-4 py-2">{tabs}</div>
         )}
       </header>
 

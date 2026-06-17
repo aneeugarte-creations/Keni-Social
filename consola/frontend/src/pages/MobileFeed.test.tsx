@@ -167,7 +167,8 @@ describe("MobileFeed · feed móvil de revisión", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Actualizar" })).toBeInTheDocument();
+    // El feed se auto-refresca (refetchInterval de la vista): ya no hay botón manual de recarga.
+    expect(screen.queryByRole("button", { name: "Actualizar" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /crear pieza/i })).toBeInTheDocument();
     // Con UNA sola marca asignada el selector de marca no es una decisión: no se pinta.
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();

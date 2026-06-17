@@ -22,8 +22,8 @@
  *  - `PostFeed`: cada pieza como post + aprobación en línea + comentarios.
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Minus, Plus, RefreshCw } from "lucide-react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { Minus, Plus } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -31,7 +31,6 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -95,7 +94,6 @@ function guardarPref(clave: string, valor: number): void {
 }
 
 export default function FeedIdeacion() {
-  const queryClient = useQueryClient();
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
   const { marcaActiva } = useMarcaActiva();
@@ -239,9 +237,9 @@ export default function FeedIdeacion() {
       ),
     // El cursor de la siguiente página lo da el backend; ausente = última página (fin del scroll).
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
-    // La frescura llega por el botón Actualizar, las actualizaciones in-place tras cada reacción
-    // y los conteos (que SÍ refrescan al volver el foco): sin refetch en cadena de N páginas
-    // cada vez que la pestaña recupera el foco.
+    // La frescura llega por las actualizaciones in-place tras cada reacción y por los conteos
+    // (que SÍ refrescan al volver el foco): sin refetch en cadena de N páginas cada vez que la
+    // pestaña recupera el foco.
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
@@ -393,21 +391,6 @@ export default function FeedIdeacion() {
     habilitado: !topeAlcanzado,
   });
 
-  // El spinner del botón Actualizar SOLO cuando de verdad se refresca el listado, no en cada
-  // `fetchNextPage` del scroll (si no, el botón parpadea mientras bajas por el feed).
-  const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
-  // "Actualizar" = VOLVER ARRIBA + refrescar la PRIMERA página (resetQueries), la semántica
-  // estándar de refrescar un feed. NO se refetchean las N páginas cargadas (TanStack las
-  // encadenaría en serie tras una tarde de scroll); las demás superficies (lista, kanban) solo
-  // se marcan stale (refetchType: "none") y los conteos de las pestañas sí refrescan.
-  const refrescar = () => {
-    const scroller = rootRef.current?.closest("main");
-    if (scroller) scroller.scrollTop = 0;
-    void queryClient.resetQueries({ queryKey: [...CLAVE_PIEZAS, "feed-ideacion"] });
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS, refetchType: "none" });
-    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PIEZAS, "conteo-feed"] });
-  };
-
   // El número del stepper "por fila" es la PREFERENCIA, a secas (nada de "2/5"): si el
   // ancho real acota las columnas efectivas, la explicación va en title + sr-only.
   const topado = colsEfectivas < columnas;
@@ -470,16 +453,7 @@ export default function FeedIdeacion() {
               </Button>
             </Tooltip>
           </div>
-          {/* Frontera con el menú: acción de otra naturaleza (refresco, no densidad). */}
-          <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
-          {/* Actualizar (el verbo de la casa): se deshabilita SOLO durante un refresco
-              real, no en cada página del scroll infinito. */}
-          <MenuAcciones>
-            <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={refrescando}>
-              Actualizar
-            </ItemMenu>
-          </MenuAcciones>
-          {/* Frontera con el alta: crear un post es de OTRA naturaleza que ver/refrescar. */}
+          {/* Frontera con el alta: crear un post es de OTRA naturaleza que el control de densidad. */}
           <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
           {/* Alta directa: tu copy FINAL, tal cual, como borrador por red — el mismo motor
               que las piezas que nacen al usar una noticia/investigación, sin generación.

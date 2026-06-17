@@ -8,17 +8,15 @@
  * campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckSquare, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -117,38 +115,8 @@ export default function Campanias() {
     setDialogoAbierto(true);
   };
 
-  // Barra superior limpia: UN "⋮" con la ACCIÓN (nueva campaña) y la entrada «Ajustes»
-  // (el AJUSTE persistente «modo cliente»).
-  const acciones = (
-    <MenuAcciones
-      ajustesTitulo="Ajustes de campañas"
-      ajustes={
-        // Fila de capa base (con su divisor), no una caja con borde dentro del panel.
-        <section className="border-t border-border py-3 first:border-t-0">
-          <label className="flex items-center justify-between gap-3 text-sm font-medium">
-            Modo cliente
-            <Switch
-              checked={ocultarAds}
-              onCheckedChange={setOcultarAds}
-              aria-label="Modo cliente: ocultar todo lo de Ads"
-            />
-          </label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Oculta Ads; suma visualizaciones pagadas a orgánicas. Persiste al recargar.
-          </p>
-        </section>
-      }
-    >
-      <ItemMenu icono={Plus} onClick={abrirNueva}>
-        Nueva campaña
-      </ItemMenu>
-    </MenuAcciones>
-  );
-
   return (
     <>
-      <AccionesPagina>{acciones}</AccionesPagina>
-
       {listaQuery.isPending ? (
         <Esqueleto />
       ) : listaQuery.isError ? (
@@ -188,6 +156,9 @@ export default function Campanias() {
               </Select>
               {campaniaActual && (
                 <MenuAcciones>
+                  <ItemMenu icono={Plus} onClick={abrirNueva}>
+                    Nueva campaña
+                  </ItemMenu>
                   <ItemMenu icono={Pencil} onClick={() => abrirEdicion(campaniaActual)}>
                     Editar campaña
                   </ItemMenu>
@@ -198,14 +169,23 @@ export default function Campanias() {
                   >
                     Eliminar campaña
                   </ItemMenu>
+                  {/* Modo cliente: ajuste de vista persistente, como toggle directo del menú
+                      (oculta Ads y suma sus visualizaciones a las orgánicas). */}
+                  <div role="separator" className="my-1 h-px bg-border" />
+                  <ItemMenu
+                    icono={ocultarAds ? CheckSquare : Square}
+                    onClick={() => setOcultarAds((v) => !v)}
+                  >
+                    Modo cliente
+                  </ItemMenu>
                 </MenuAcciones>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Aviso visible mientras el modo cliente (panel de ajustes) está activo: que
-                  no se enseñen cifras "sin Ads" creyendo que es la vista completa. */}
+              {/* Aviso visible mientras el modo cliente está activo: que no se enseñen cifras
+                  "sin Ads" creyendo que es la vista completa. */}
               {ocultarAds && (
-                <Badge variant="secondary" title="Modo cliente activo: lo de Ads está oculto y sumado a lo orgánico. Se cambia en los ajustes de la página.">
+                <Badge variant="secondary" title="Modo cliente activo: lo de Ads está oculto y sumado a lo orgánico. Se cambia en el menú «⋮».">
                   Ads ocultos
                 </Badge>
               )}

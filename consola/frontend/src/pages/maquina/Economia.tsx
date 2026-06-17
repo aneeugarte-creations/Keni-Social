@@ -8,16 +8,14 @@
  * Respeta el switch GLOBAL de marca (la economía se acota a la marca activa; el presupuesto es
  * global). `?proceso=investigacion|produccion` enfoca a un solo motor (columna a ancho completo).
  */
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, RotateCcw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { RotateCcw } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
-import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -217,7 +215,6 @@ export default function Economia() {
   const crudoProceso = searchParams.get("proceso");
   const proceso: Proceso | undefined =
     crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
-  const qc = useQueryClient();
 
   // Presupuesto (global) + resultado de hoy: la cola trae el presupuesto; la serie, el gasto.
   const cola = useQuery({
@@ -237,11 +234,6 @@ export default function Economia() {
     refetchInterval: INTERVALO_SERIE_MS,
   });
 
-  const refrescar = () => {
-    void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
-    void qc.invalidateQueries({ queryKey: ["actividad", "agregados"] });
-  };
-
   const quitarProceso = () => {
     const params = new URLSearchParams(searchParams);
     params.delete("proceso");
@@ -252,14 +244,6 @@ export default function Economia() {
 
   return (
     <>
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
-            Actualizar
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
-
       {/* Prefiltro de proceso (?proceso=): la página queda enfocada a ese motor. */}
       {proceso && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

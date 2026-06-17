@@ -1,12 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Factory, RefreshCw } from "lucide-react";
+import { Factory } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -43,8 +41,8 @@ const PAGINA = 20;
  * del propio feed (no hay ya una query aparte de agregados solo para eso).
  *
  * Es la pestaña «Actividad» del hub de la máquina (`/maquina/actividad`): el título lo pinta la
- * tira de pestañas del hub, así que esta página NO porta su propio `<TituloPagina/>`; solo aporta
- * el menú de acciones (Actualizar) a la cabecera.
+ * tira de pestañas del hub, así que esta página NO porta su propio `<TituloPagina/>`. El feed se
+ * auto-refresca (INTERVALO_SERIE_MS); no hay acción manual de recarga.
  */
 export default function Produccion() {
   const navigate = useNavigate();
@@ -93,10 +91,6 @@ export default function Produccion() {
     [datos],
   );
 
-  function refrescar() {
-    void listaQuery.refetch();
-  }
-
   // Cada item abre su detalle: una run, su página estilo GitLab; un trabajo suelto, la
   // página de entrada/salida de su generación. Los runs de agente no tienen detalle propio.
   const abrir = React.useCallback(
@@ -116,15 +110,8 @@ export default function Produccion() {
 
   return (
     <div className="space-y-6">
-      {/* El título lo pinta la tira de pestañas del hub (Actividad); aquí solo el menú de acciones. */}
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={listaQuery.isFetching}>
-            Actualizar
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
-
+      {/* El título lo pinta la tira de pestañas del hub (Actividad). La lista se auto-refresca
+          (INTERVALO_SERIE_MS), así que no hay acción manual de recarga. */}
       {/* Filtros del feed: etapa (runs), estado (todo), tipo (trabajos sueltos). */}
       <div className="flex flex-wrap items-center gap-2">
         <Select value={etapa || "todas"} onValueChange={(v) => setEtapa(v === "todas" ? "" : v)}>

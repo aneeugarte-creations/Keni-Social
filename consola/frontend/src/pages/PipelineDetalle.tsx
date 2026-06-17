@@ -5,12 +5,10 @@
  * componentes de la lista (`Pipelines`), que exporta la maquinaria de render.
  */
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
-import { Button } from "@/components/ui/button";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import type { PipelineActividad, PipelineGeneracion, RespuestaPipelineDetalle } from "@/types";
@@ -50,14 +48,9 @@ export default function PipelineDetalle() {
 
   return (
     <div className="space-y-5">
-      {/* Cabecera (← Actividad + título) en la barra superior; «Actualizar» a su derecha. */}
+      {/* Cabecera (← Actividad + título) en la barra superior. El detalle se auto-refresca
+          (INTERVALO_DETALLE_MS); no hay acción manual de recarga. */}
       <TituloPagina titulo={titulo} onAtras={() => navigate("/maquina/actividad")} />
-      <AccionesPagina>
-        <Button variant="ghost" size="sm" className="gap-1" onClick={() => q.refetch()} disabled={q.isFetching}>
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Actualizar
-        </Button>
-      </AccionesPagina>
 
       {q.isPending ? (
         <div className="space-y-3">
