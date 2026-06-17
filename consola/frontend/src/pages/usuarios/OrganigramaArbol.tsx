@@ -4,6 +4,7 @@ import {
   hijosPorManager,
   indexarPorId,
   raices,
+  zonaDe,
   zonasOrdenadas,
 } from "@/lib/organigrama";
 import { type MarcaDisponible, type UsuarioAdmin } from "@/types";
@@ -17,6 +18,8 @@ interface Fila {
   usuario: UsuarioAdmin;
   /** Tiene personas a su cargo → marca de coordinación/dirección. */
   tieneReportes: boolean;
+  /** Zona de la persona (deriva el color del avatar). */
+  zona: string;
 }
 
 /**
@@ -43,17 +46,17 @@ export function OrganigramaArbol({
     const out: Fila[] = [];
     const tiene = (u: UsuarioAdmin) => (hijos.get(u.id)?.length ?? 0) > 0;
     const visitar = (u: UsuarioAdmin) => {
-      out.push({ usuario: u, tieneReportes: tiene(u) });
+      out.push({ usuario: u, tieneReportes: tiene(u), zona: zonaDe(u, porId) });
       for (const h of hijos.get(u.id) ?? []) visitar(h);
     };
     for (const raiz of cima) {
-      out.push({ usuario: raiz, tieneReportes: tiene(raiz) });
+      out.push({ usuario: raiz, tieneReportes: tiene(raiz), zona: zonaDe(raiz, porId) });
       for (const { cabezas } of zonasOrdenadas(hijos.get(raiz.id) ?? [])) {
         for (const cabeza of cabezas) visitar(cabeza);
       }
     }
     return out;
-  }, [cima, hijos]);
+  }, [cima, hijos, porId]);
 
   const [seleccionado, setSeleccionado] = React.useState<string | null>(null);
   const usuarioSel = seleccionado ? (porId.get(seleccionado) ?? null) : null;
@@ -61,10 +64,11 @@ export function OrganigramaArbol({
   return (
     <div className="space-y-4">
       <ul className="flex flex-col gap-1.5">
-        {filas.map(({ usuario, tieneReportes }) => (
+        {filas.map(({ usuario, tieneReportes, zona }) => (
           <li key={usuario.id}>
             <TarjetaMiembro
               usuario={usuario}
+              zona={zona}
               tieneReportes={tieneReportes}
               esYoMismo={usuario.id === idActual}
               onAbrir={setSeleccionado}
