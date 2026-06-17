@@ -111,16 +111,16 @@ export function TallerEvergreen({
           así cada ficha de idea flota igual que en la Lista de contenido y en Feedback. La
           cabecera (título + conteo + filtro) va como fila, con el mismo formato que el resto. */}
       <div className="space-y-3">
-        <div className="flex flex-row items-center justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-base font-medium">
-            <Leaf className="h-4 w-4" />
-            Banco de ideas evergreen
-            <Badge variant="secondary" className="ml-1">
+        <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+          <h2 className="flex min-w-0 items-center gap-2 text-base font-medium">
+            <Leaf className="h-4 w-4 shrink-0" />
+            <span className="truncate">Banco de ideas evergreen</span>
+            <Badge variant="secondary" className="ml-1 shrink-0">
               {ideas.length}
             </Badge>
           </h2>
           <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
-            <SelectTrigger className="w-44" aria-label="Filtrar por estado">
+            <SelectTrigger className="w-44 shrink-0" aria-label="Filtrar por estado">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
