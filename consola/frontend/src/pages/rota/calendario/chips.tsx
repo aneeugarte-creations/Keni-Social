@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
+  Clock,
   Copy,
   Loader2,
   Pencil,
@@ -142,8 +143,12 @@ export function ChipTurnoCM({
     },
   });
 
-  // Tooltip con motivo + ausencia + nota relevo, para no cargar la celda.
+  // Tooltip con horario + motivo + ausencia + nota relevo, para no cargar la celda.
   const tooltipPartes: string[] = [];
+  if (turno.inicio && turno.fin)
+    tooltipPartes.push(
+      `${turno.horario_propio ? "Horario a medida" : "Horario"}: ${turno.inicio}–${turno.fin}`,
+    );
   if (turno.motivo) tooltipPartes.push(`Motivo: ${turno.motivo}`);
   if (turno.nota_relevo) tooltipPartes.push(`Relevo: ${turno.nota_relevo}`);
   if (ausencia)
@@ -165,6 +170,9 @@ export function ChipTurnoCM({
         )}
         {ausencia && !turno.override && (
           <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+        )}
+        {turno.horario_propio && (
+          <Clock className="h-3 w-3 shrink-0 text-sky-600" aria-label="horario a medida" />
         )}
       </span>
     );
@@ -213,6 +221,9 @@ export function ChipTurnoCM({
         )}
         {ausencia && !turno.override && (
           <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+        )}
+        {turno.horario_propio && (
+          <Clock className="h-3 w-3 shrink-0 text-sky-600" aria-label="horario a medida" />
         )}
         <button
           type="button"

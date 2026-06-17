@@ -206,6 +206,13 @@ export interface TurnoRota {
   /** Nombre legible de la franja (lo emite el backend para evitar joins en el cliente). */
   franja_nombre: string;
   franja: FranjaTurno;
+  /** Horario EFECTIVO del turno ("HH:MM"): sus horas a medida si las tiene, o las de su
+   * franja. Si `fin <= inicio` cruza medianoche (p. ej. 17:00–01:00). */
+  inicio: string;
+  fin: string;
+  /** `true` si el turno lleva horas A MEDIDA (sobrescriben las de la franja). La UI lo marca
+   * como celda "cambiada"; `false` = hereda el horario de la franja (fijo). */
+  horario_propio: boolean;
   estado: EstadoTurnoRota;
   /** Cobertura forzada que rompe la rotación de sábados (la decide el coordinador de la rota). */
   override: boolean;
@@ -279,6 +286,9 @@ export interface CuerpoCrearTurnoRota {
   miembro_id: string;
   /** Id de la franja viva de la semana (modelo "franjas por semana"). */
   franja_id: string;
+  /** Horario a medida ("HH:MM"); omitir o "" = hereda las horas de la franja. */
+  inicio?: string;
+  fin?: string;
   override?: boolean;
   motivo?: string;
   nota_relevo?: string;
@@ -290,6 +300,9 @@ export interface CuerpoActualizarTurnoRota {
   fecha?: string;
   miembro_id?: string;
   franja_id?: string;
+  /** Horario a medida ("HH:MM"); "" vuelve a heredar de la franja. */
+  inicio?: string;
+  fin?: string;
   override?: boolean;
   motivo?: string;
   nota_relevo?: string;

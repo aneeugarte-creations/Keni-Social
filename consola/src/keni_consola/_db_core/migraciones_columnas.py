@@ -389,19 +389,24 @@ _COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("marca", "TEXT NOT NULL DEFAULT ''"),
 )
 
-# Columnas de PROVENANCE que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL
-# declarativo ya las trae en bases nuevas). Mismo patron que `_COLUMNAS_EVENTO_ROTA_AMPLIADAS`.
+# Columnas que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL declarativo ya
+# las trae en bases nuevas). Mismo patron que `_COLUMNAS_EVENTO_ROTA_AMPLIADAS`.
+# - origen/origen_ref: provenance del turno.
+# - inicio/fin: HORARIO PROPIO del turno ("HH:MM"). Vacio = hereda las horas de su franja; con
+#   valor, sobrescribe la franja solo para ESE turno (mismo dia, persona con horas a medida).
 _COLUMNAS_TURNO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("origen", "TEXT NOT NULL DEFAULT ''"),
     ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
+    ("inicio", "TEXT NOT NULL DEFAULT ''"),
+    ("fin", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
 def _migrar_columnas_turnos_rota(con: Any) -> None:
-    """Anade a `rota_turnos` las columnas de provenance (origen/origen_ref) si faltaran.
+    """Anade a `rota_turnos` las columnas ampliadas (provenance + horario propio) si faltaran.
 
     Idempotente: una BD nueva ya las trae por el DDL declarativo; una vieja las recibe con
-    DEFAULT '' sin reescribir nada (las filas existentes quedan como alta manual).
+    DEFAULT '' sin reescribir nada (las filas existentes quedan heredando la hora de su franja).
     """
     if not _COLUMNAS_TURNO_ROTA_AMPLIADAS:
         return

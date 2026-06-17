@@ -19,6 +19,7 @@ from ._comun import (
     _fecha_valida,
     _franja_semana_a_dict,
     _franjas_de_semana,
+    _hhmm_valido,
     _lunes_param,
     _marca_cuerpo,
     _marca_param,
@@ -285,6 +286,22 @@ def _validar_y_resolver_turno(
             )
         campos["estado"] = estado
 
+    # Horario A MEDIDA del turno: sobrescribe las horas de la franja SOLO para este turno
+    # (persona con horas distintas ese dia). Cada campo es "HH:MM" valido o "" (vuelve a
+    # heredar de la franja). NO se exige inicio<fin: un turno cruza medianoche igual que una
+    # franja (p. ej. 17:00–01:00, cobertura nocturna).
+    for clave in ("inicio", "fin"):
+        if clave in datos:
+            bruto = datos[clave]
+            if bruto in (None, ""):
+                campos[clave] = ""
+            elif _hhmm_valido(bruto):
+                campos[clave] = str(bruto).strip()
+            else:
+                return campos, JSONResponse(
+                    {"error": f"Hora «{clave}» inválida (usa HH:MM)."}, status_code=400
+                )
+
     return campos, None
 
 
@@ -413,6 +430,8 @@ async def crear_turno(request: Request) -> Response:
             miembro_id=miembro_id,
             miembro_nombre=nombres.get(miembro_id, ""),
             franja_id=franja_id,
+            inicio=campos.get("inicio", ""),
+            fin=campos.get("fin", ""),
             estado=campos.get("estado", ESTADO_ROTA_PROPUESTO),
             override=override,
             motivo=campos.get("motivo", ""),
@@ -586,6 +605,8 @@ async def crear_turnos_lote(request: Request) -> Response:
                 "miembro_id": miembro_id,
                 "miembro_nombre": nombres.get(miembro_id, ""),
                 "franja_id": franja_id,
+                "inicio": campos.get("inicio", ""),
+                "fin": campos.get("fin", ""),
                 "estado": campos.get("estado", ESTADO_ROTA_PROPUESTO),
                 "override": override,
                 "motivo": campos.get("motivo", ""),

@@ -157,6 +157,12 @@ def _turno_a_dict(
     franja_def = (franjas_por_id or {}).get(turno.get("franja_id", "") or "")
     nombre = franja_def["nombre"] if franja_def else ""
     es_descanso = bool(franja_def.get("es_descanso", False)) if franja_def else False
+    # Horario EFECTIVO del turno: si lleva horas a medida (inicio/fin propios) mandan; si no,
+    # hereda las de su franja. `horario_propio` deja que la UI marque la celda como "cambiada".
+    inicio_propio = (turno.get("inicio", "") or "").strip()
+    fin_propio = (turno.get("fin", "") or "").strip()
+    inicio_efec = inicio_propio or (franja_def["inicio"] if franja_def else "")
+    fin_efec = fin_propio or (franja_def["fin"] if franja_def else "")
     if es_descanso:
         franja_legacy = "descanso"
     elif nombre == "Mañana":
@@ -177,6 +183,10 @@ def _turno_a_dict(
         "franja_id": turno.get("franja_id", "") or "",
         "franja_nombre": nombre,
         "franja": franja_legacy,  # retrocompat: derivado del nombre de la franja.
+        # Horario efectivo (override del turno o, en su defecto, el de la franja).
+        "inicio": inicio_efec,
+        "fin": fin_efec,
+        "horario_propio": bool(inicio_propio or fin_propio),
         "estado": turno["estado"],
         "override": bool(turno["override"]),
         "motivo": turno["motivo"],
