@@ -149,8 +149,10 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # crear el tema y lo limpie ("") tras lanzar el copy en la fase CD.
     "copy_pendiente",
     # URL de la nota de origen (Investigador F3): editable para poder rellenarla post-creación
-    # cuando el pipeline resuelve la fuente de la pieza.
+    # cuando el pipeline resuelve la fuente de la pieza. `fuente_nombre` es su par legible (el
+    # medio): se rellena en el mismo momento y alimenta el filtro de limpieza `?fuente=`.
     "url_fuente",
+    "fuente_nombre",
 )
 
 
