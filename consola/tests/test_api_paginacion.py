@@ -61,6 +61,31 @@ def test_publicaciones_paginacion_respeta_filtros(cliente):
     assert len(datos["piezas"]) == 2
 
 
+def test_piezas_origen_y_exclusion_mantienen_feeds_independientes(cliente):
+    """`origen` y `excluir_origen` son inversos: el clon Portal ve SOLO su canal, el feed
+    normal lo EXCLUYE, y sin filtro (la Lista) se ven ambos."""
+    cliente.post(
+        "/api/piezas",
+        json={"marca": "unotv", "red": "x", "titulo": "Equipo", "contenido": "C"},
+    )
+    cliente.post(
+        "/api/piezas",
+        json={"marca": "unotv", "red": "x", "titulo": "Portal", "contenido": "C", "origen": "portal"},
+    )
+    # Clon Portal (`?origen=portal`): SOLO la pieza del canal.
+    solo_portal = cliente.get("/api/piezas?origen=portal").json()
+    assert {p["titulo"] for p in solo_portal["piezas"]} == {"Portal"}
+    assert solo_portal["paginacion"]["total"] == 1
+    # Feed normal (`?excluir_origen=portal`): NO se cuela la del portal.
+    normal = cliente.get("/api/piezas?excluir_origen=portal").json()
+    assert {p["titulo"] for p in normal["piezas"]} == {"Equipo"}
+    assert normal["paginacion"]["total"] == 1
+    # La Lista (sin filtro de origen) ve AMBAS.
+    todo = cliente.get("/api/piezas").json()
+    assert {p["titulo"] for p in todo["piezas"]} == {"Equipo", "Portal"}
+    assert todo["paginacion"]["total"] == 2
+
+
 # --------------------------------------------------------------------------- #
 # Generaciones                                                                #
 # --------------------------------------------------------------------------- #

@@ -55,6 +55,7 @@ import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lo
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
+  ORIGEN_PORTAL,
   PAGINAS_POR_LOTE,
   useConteosFeed,
   VISTAS,
@@ -240,12 +241,14 @@ export default function MobileFeed() {
   // SCROLL INFINITO (feed tipo red social): primera página pequeña e instantánea por keyset
   // `creado DESC`; se piden más al hacer scroll (sentinel + IntersectionObserver). El backend
   // devuelve `paginacion.cursor_siguiente` mientras haya más; al omitirlo se apaga `hasNextPage`.
+  // EXCLUYE el canal Portal: el feed de revisión es el feed NORMAL del equipo, independiente del
+  // Portal (que tiene su propia superficie de escritorio).
   const feedQuery = useInfiniteQuery({
     queryKey: [...CLAVE_PIEZAS, "feed", estadoServidor ?? "todos", marca],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
       api.piezas(
-        { estado: estadoServidor, marca: marcaParam(marca), feed: "1", cursor: pageParam },
+        { estado: estadoServidor, excluir_origen: ORIGEN_PORTAL, marca: marcaParam(marca), feed: "1", cursor: pageParam },
         signal,
       ),
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
@@ -256,7 +259,10 @@ export default function MobileFeed() {
   });
 
   // Conteos exactos de los badges (compartidos con el escritorio; ver vistas.tsx).
-  const { totalRevision, conteoVista } = useConteosFeed({ marca: marcaParam(marca) });
+  const { totalRevision, conteoVista } = useConteosFeed({
+    marca: marcaParam(marca),
+    excluirOrigen: ORIGEN_PORTAL,
+  });
 
   // Aplana todas las páginas cargadas y aplica el filtro de la vista (idempotente: el servidor
   // ya filtró por el pseudo-estado). Si el usuario tiene marcas asignadas y el filtro está en

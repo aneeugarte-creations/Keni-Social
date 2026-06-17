@@ -168,6 +168,9 @@ export interface FiltrosPiezas {
   estado?: string;
   /** Origen del contenido padre (el clon «Portal» del feed pide `origen='portal'`). */
   origen?: string;
+  /** EXCLUSIÓN por origen (inverso de `origen`): el feed normal pide `excluir_origen='portal'`
+   *  para mantenerse independiente del canal Portal. */
+  excluir_origen?: string;
   /** LIMPIEZA del feed (filtros sobre el contenido padre): categoría del plan
    *  (breaking|mx|evergreen|internacional…). */
   categoria?: string;

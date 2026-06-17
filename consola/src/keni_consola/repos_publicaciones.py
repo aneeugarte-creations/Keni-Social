@@ -75,6 +75,7 @@ def listar_piezas(
     fuente: str | None = None,
     fase: str | None = None,
     creado_antes: str | None = None,
+    excluir_origen: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -82,9 +83,10 @@ def listar_piezas(
 ) -> list[dict[str, Any]]:
     # `responsable` ("la lista"): "" = piezas libres (por coger); otro valor = de ese usuario.
     # `desde`/`hasta` (ISO): rango de `fecha_programada` para el calendario (sin fecha = fuera).
-    # `origen`: origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`).
-    # Limpieza del feed: `categoria`/`tipo_contenido`/`fuente` (exactos, del padre), `fase`
-    # (incompleto|producido|programado|publicado) y `creado_antes` (antigüedad, ISO UTC).
+    # `origen`: origen del contenido padre (el clon «Portal» del feed pide `origen='portal'`).
+    # `excluir_origen`: lo INVERSO — el feed normal pide `excluir_origen='portal'` para mantenerse
+    # independiente del canal Portal. Limpieza del feed: `categoria`/`tipo_contenido`/`fuente`
+    # (exactos, del padre), `fase` (incompleto|producido|programado|publicado) y `creado_antes`.
     return db.listar_piezas(
         marca=marca,
         red=red,
@@ -100,6 +102,7 @@ def listar_piezas(
         fuente=fuente,
         fase=fase,
         creado_antes=creado_antes,
+        excluir_origen=excluir_origen,
         limite=limite,
         desplazamiento=desplazamiento,
         cursor=cursor,
@@ -121,12 +124,13 @@ def contar_piezas(
     fuente: str | None = None,
     fase: str | None = None,
     creado_antes: str | None = None,
+    excluir_origen: str | None = None,
 ) -> int:
     return db.contar_piezas(
         marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente,
-        fase=fase, creado_antes=creado_antes,
+        fase=fase, creado_antes=creado_antes, excluir_origen=excluir_origen,
     )
 
 

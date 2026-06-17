@@ -211,7 +211,7 @@ def _feed_pagina_defecto() -> int:
 
 
 async def listar(request: Request) -> Response:
-    """Listado de piezas con filtros `?marca=&red=&estado=&evergreen=&origen=` y paginacion.
+    """Listado de piezas con filtros `?marca=&red=&estado=&evergreen=&origen=&excluir_origen=` y paginacion.
 
     Envelope RETROCOMPATIBLE: mantiene la clave `piezas` (las paginas que solo
     desestructuran esa clave siguen funcionando) y AÑADE `paginacion:{total, limite,
@@ -244,9 +244,13 @@ async def listar(request: Request) -> Response:
     # piezas SIN fecha quedan fuera del rango (ver `_filtros_publicacion`).
     desde = qp.get("desde") or None
     hasta = qp.get("hasta") or None
-    # ORIGEN del contenido padre: la pestaña «Portal» del feed pide `?origen=portal` (los
+    # ORIGEN del contenido padre: el clon «Portal» del feed pide `?origen=portal` (los
     # auto-producidos de fuente propia, cross-marca). Transversal al estado.
     origen = qp.get("origen") or None
+    # EXCLUSIÓN por origen (lo inverso de `origen`): el FEED normal pide `?excluir_origen=portal`
+    # para mantenerse independiente del canal Portal —que tiene su propia superficie—. La Lista
+    # no lo pide (ve todos los orígenes, incluido portal).
+    excluir_origen = qp.get("excluir_origen") or None
     # LIMPIEZA del feed: filtros sobre el `contenido` padre para barrer/conservar por lotes.
     #  - `categoria` (plan: breaking/mx/evergreen…), `tipo` (ia|galeria|fuente), `fuente` (medio).
     #  - `fase`: incompleto (en producción, candidato a borrar) | producido | programado | publicado.
@@ -295,14 +299,14 @@ async def listar(request: Request) -> Response:
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
-        creado_antes=creado_antes,
+        creado_antes=creado_antes, excluir_origen=excluir_origen,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_piezas(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
-        creado_antes=creado_antes,
+        creado_antes=creado_antes, excluir_origen=excluir_origen,
     )
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la

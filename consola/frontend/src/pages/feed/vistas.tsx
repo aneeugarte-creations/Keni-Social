@@ -25,6 +25,11 @@ export const PAGINAS_POR_LOTE = 5;
 // antes de renunciar (y avisar), para no descargar el feed entero persiguiendo un enlace viejo.
 export const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
 
+// CANAL «Portal»: el origen de los auto-producidos de fuente propia (cross-marca). El clon
+// Portal del feed pide `origen=ORIGEN_PORTAL`; el feed normal pide `excluir_origen=ORIGEN_PORTAL`
+// para mantenerse INDEPENDIENTE de ese canal. La Lista no usa ninguno (ve todos los orígenes).
+export const ORIGEN_PORTAL = "portal";
+
 /**
  * Pestañas del feed: una PARTICIÓN BINARIA del ciclo por ESTADO, con "Todas" como unión.
  * "Pendientes" es TODO lo que aún no salió (cualquier estado salvo `publicado`: borrador,
@@ -124,7 +129,8 @@ export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "pendiente" | "publicado" |
  * `filtros` lleva los parámetros YA resueltos para la query (ausente = sin filtro); la clave
  * usa los mismos centinelas que las claves históricas de `FeedIdeacion` (caché compartida).
  * `origen` acota TODOS los conteos al canal de la superficie (el Portal pasa `"portal"`), así
- * sus badges cuentan SOLO sus piezas; el feed normal lo omite (cuenta todos los orígenes).
+ * sus badges cuentan SOLO sus piezas; `excluirOrigen` hace lo INVERSO (el feed normal pasa
+ * `"portal"` para no contar ese canal). La Lista omite ambos (cuenta todos los orígenes).
  */
 export function useConteosFeed(filtros: {
   marca?: string;
@@ -132,6 +138,7 @@ export function useConteosFeed(filtros: {
   linea?: string;
   responsable?: string;
   origen?: string;
+  excluirOrigen?: string;
   enVivo?: boolean;
 }): {
   totalRevision: number | undefined;
@@ -140,7 +147,7 @@ export function useConteosFeed(filtros: {
   // `responsable` (lente del reparto "la lista"): cuando está activa, la Lista filtra por
   // ella, así que los badges deben contar lo MISMO que se lista (si no, el número no cuadra
   // con las filas). Ausente en los demás feeds (MobileFeed/FeedIdeacion): sin efecto.
-  const { marca, red, linea, responsable, origen, enVivo } = filtros;
+  const { marca, red, linea, responsable, origen, excluirOrigen, enVivo } = filtros;
   // `enVivo` (tablero COMPARTIDO del reparto): los conteos laten al MISMO pulso que la lista
   // y el calendario (que ya tienen refetchInterval+refetchOnWindowFocus); sin esto, tras el
   // claim de un compañero el badge se quedaba rancio mientras la lista ya había cambiado.
@@ -156,26 +163,27 @@ export function useConteosFeed(filtros: {
       linea ?? FILTRO_TODOS,
       responsable ?? "",
       origen ?? "",
+      excluirOrigen ?? "",
       estado ?? "todos",
     ] as const;
   const conteoPendiente = useQuery({
     queryKey: claveConteo("pendiente"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, estado: "pendiente", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoPublicado = useQuery({
     queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, estado: "publicado", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoRevision = useQuery({
     queryKey: claveConteo("en_revision"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, estado: "en_revision", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });

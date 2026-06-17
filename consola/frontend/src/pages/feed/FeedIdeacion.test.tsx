@@ -141,7 +141,17 @@ function stubFetch(piezas: Array<Record<string, unknown>> = [PIEZA]) {
       if (ruta.includes("/api/piezas")) {
         const params = new URL(ruta, "http://localhost").searchParams;
         const estado = params.get("estado");
-        const lista = piezas.filter((p) => casaEstado(estado, p.estado));
+        // El backend filtra por ORIGEN (el clon Portal) y por EXCLUSIÓN de origen (el feed
+        // normal, que excluye el canal Portal). El stub lo espeja para poder probar la
+        // independencia de los dos feeds.
+        const origen = params.get("origen");
+        const excluir = params.get("excluir_origen");
+        const lista = piezas.filter(
+          (p) =>
+            casaEstado(estado, p.estado) &&
+            (!origen || (p.origen ?? "") === origen) &&
+            (!excluir || (p.origen ?? "") !== excluir),
+        );
         return new Response(
           JSON.stringify({
             piezas: params.get("limite") === "1" ? lista.slice(0, 1) : lista,
@@ -244,7 +254,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
   });
 
   it("el clon «Portal» (prop origen) acota TODAS sus consultas y conteos a origen=portal, manteniendo las 3 vistas de estado", async () => {
-    stubFetch();
+    stubFetch([{ ...PIEZA, origen: "portal" }]);
     const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
     const urls: string[] = [];
     vi.stubGlobal("fetch", async (url: string | URL) => {
@@ -262,10 +272,44 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       expect.stringContaining("Todas"),
     ]);
     // El feed y los conteos van acotados al canal: TODA consulta al LISTADO (`/api/piezas?…`,
-    // no las sub-rutas como /opciones o /cadenas) lleva origen=portal.
+    // no las sub-rutas como /opciones o /cadenas) lleva origen=portal y NO excluye nada.
     const piezas = urls.filter((u) => u.includes("/api/piezas?"));
     expect(piezas.length).toBeGreaterThan(0);
     expect(piezas.every((u) => u.includes("origen=portal"))).toBe(true);
+    expect(piezas.every((u) => !u.includes("excluir_origen"))).toBe(true);
+  });
+
+  it("el feed NORMAL excluye el canal Portal (excluir_origen=portal): las piezas de portal no se cuelan", async () => {
+    // Una pieza del equipo y un «eco» del portal, ambas pendientes (la vista por defecto).
+    stubFetch([
+      PIEZA,
+      {
+        ...PIEZA,
+        id: "p2",
+        publicacion_id: "c2",
+        contenido: "Eco del portal",
+        origen: "portal",
+        etapa_ia: "lista_para_revisar",
+      },
+    ]);
+    const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      urls.push(String(url));
+      return base(url);
+    });
+
+    renderFeed();
+    // La pieza del equipo se ve; la de portal queda FUERA (feeds independientes).
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    expect(screen.queryByText("Eco del portal")).not.toBeInTheDocument();
+    // TODA consulta al listado lleva excluir_origen=portal y NO filtra POR ese canal.
+    const piezas = urls.filter((u) => u.includes("/api/piezas?"));
+    expect(piezas.length).toBeGreaterThan(0);
+    expect(piezas.every((u) => u.includes("excluir_origen=portal"))).toBe(true);
+    // OJO: "excluir_origen=portal" CONTIENE "origen=portal"; el parámetro `origen` propio se
+    // distingue por el separador previo (`?`/`&`), que aquí NO debe aparecer.
+    expect(piezas.every((u) => !/[?&]origen=portal/.test(u))).toBe(true);
   });
 
   it("arranca en la vista de la URL (?vista=pendiente) y la pestaña queda activa", async () => {

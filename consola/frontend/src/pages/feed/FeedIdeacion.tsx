@@ -54,6 +54,7 @@ import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
+  ORIGEN_PORTAL,
   PAGINAS_POR_LOTE,
   TOPE_PAGINAS_PIEZA,
   useConteosFeed,
@@ -212,8 +213,11 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
   // ORIGEN del servidor: el CANAL de la superficie (el clon «Portal» pasa `origen="portal"`),
-  // transversal al estado. El feed normal lo omite y ve todos los orígenes.
+  // transversal al estado.
   const origenServidor = origen;
+  // EXCLUSIÓN: el feed NORMAL (sin canal propio) excluye el canal Portal para mantener los dos
+  // feeds INDEPENDIENTES; el clon Portal no excluye nada (ya filtra POR su canal con `origen`).
+  const excluirOrigen = origen ? undefined : ORIGEN_PORTAL;
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
   // y más al hacer scroll (sentinel + IntersectionObserver). El backend devuelve
@@ -228,6 +232,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
       origenServidor ?? "",
+      excluirOrigen ?? "",
     ],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
@@ -238,6 +243,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           linea: linea === FILTRO_TODOS ? undefined : linea,
           estado: estadoServidor,
           origen: origenServidor,
+          excluir_origen: excluirOrigen,
           // `feed=1` activa el keyset desde la 1ª página (que va sin cursor); `cursor` encadena
           // las siguientes. Así la primera carga es pequeña/instantánea y trae `cursor_siguiente`.
           feed: "1",
@@ -260,6 +266,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     origen,
+    excluirOrigen,
   });
 
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).

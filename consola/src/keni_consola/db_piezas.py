@@ -373,6 +373,7 @@ def _filtros_publicacion(
     fuente: str | None = None,
     fase: str | None = None,
     creado_antes: str | None = None,
+    excluir_origen: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -400,11 +401,17 @@ def _filtros_publicacion(
     if red:
         clausulas.append("cp.red = ?")
         params.append(red)
-    # ORIGEN del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`): el
+    # ORIGEN del contenido padre (el clon «Portal» del feed pide `origen='portal'`): el
     # contenido `c` ya está en el JOIN del SELECT, así que se filtra directo (sin denormalizar).
     if origen:
         clausulas.append("c.origen = ?")
         params.append(origen)
+    # EXCLUSIÓN por origen: el FEED normal pide `excluir_origen='portal'` para mantenerse
+    # independiente del canal Portal (que tiene su propia superficie). Las piezas SIN origen
+    # (NULL) NO son del canal, así que se conservan (`c.origen IS NULL OR c.origen != ?`).
+    if excluir_origen:
+        clausulas.append("(c.origen IS NULL OR c.origen != ?)")
+        params.append(excluir_origen)
     # Línea editorial = etiqueta de clase `vertical` asignada al `contenido` padre. Se filtra
     # con un EXISTS sobre la tabla puente (no JOIN, para no duplicar filas si hubiera varias).
     if linea:
@@ -496,6 +503,7 @@ def listar_piezas(
     fuente: str | None = None,
     fase: str | None = None,
     creado_antes: str | None = None,
+    excluir_origen: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -514,6 +522,7 @@ def listar_piezas(
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
+        excluir_origen=excluir_origen,
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -555,11 +564,13 @@ def contar_piezas(
     fuente: str | None = None,
     fase: str | None = None,
     creado_antes: str | None = None,
+    excluir_origen: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
+        excluir_origen=excluir_origen,
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "
