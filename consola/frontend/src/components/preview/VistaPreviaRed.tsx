@@ -29,10 +29,16 @@ import {
 import * as React from "react";
 
 import { urlMedia } from "@/lib/api";
+import { ImagenMedia } from "@/components/comunes/ImagenMedia";
 import { parsearCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { cn } from "@/lib/utils";
 
 import { iconoRed, nombreRed, tamanoRed } from "../../pages/piezas/meta";
+
+// Imagen 4:5 del feed/preview: el hueco mide ~480 px CSS como mucho (tarjetas `max-w-sm`/`md`),
+// 100vw en móvil. Pedimos derivadas en estos anchos y dejamos que el navegador elija con el DPR.
+const ANCHOS_PREVIEW = [320, 640, 960, 1280];
+const SIZES_PREVIEW = "(max-width: 768px) 100vw, 480px";
 
 export interface VistaPreviaRedProps {
   red: string;
@@ -321,11 +327,11 @@ function CarruselLimpio({
           }
         >
           {portada ? (
-            <img
-              src={portada}
+            <ImagenMedia
+              nombreOUrl={portada}
               alt={titulo ?? ""}
-              loading="lazy"
-              decoding="async"
+              anchos={ANCHOS_PREVIEW}
+              sizes={SIZES_PREVIEW}
               className="h-full w-full object-cover"
             />
           ) : (
@@ -374,11 +380,11 @@ function CarruselLimpio({
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <img
-                  src={urlMedia(s.objeto)}
+                <ImagenMedia
+                  nombreOUrl={s.objeto}
                   alt={`Slide ${i + 2}`}
-                  loading="lazy"
-                  decoding="async"
+                  anchos={ANCHOS_PREVIEW}
+                  sizes={SIZES_PREVIEW}
                   className="h-full w-full object-cover"
                 />
               )}
@@ -492,7 +498,7 @@ function PreviaX({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
           {(imagen || copyIn?.trim()) && (
             <div className="relative mt-3 aspect-[4/5] w-full overflow-hidden rounded-2xl border border-border">
               {imagen ? (
-                <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                <ImagenMedia nombreOUrl={imagen} alt="" anchos={ANCHOS_PREVIEW} sizes={SIZES_PREVIEW} className="h-full w-full object-cover" />
               ) : (
                 <PlaceholderImagen className="h-full w-full" />
               )}
@@ -536,7 +542,7 @@ function PreviaInstagram({ marca, contenido, copyIn, imagen, limpia }: MockupPro
       </div>
       <div className="relative aspect-[4/5] w-full overflow-hidden">
         {imagen ? (
-          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          <ImagenMedia nombreOUrl={imagen} alt="" anchos={ANCHOS_PREVIEW} sizes={SIZES_PREVIEW} className="h-full w-full object-cover" />
         ) : (
           <PlaceholderImagen className="h-full w-full" />
         )}
@@ -579,7 +585,7 @@ function PreviaFacebook({ marca, contenido, copyIn, imagen, limpia }: MockupProp
       </div>
       {imagen ? (
         <div className="relative aspect-[4/5] w-full overflow-hidden">
-          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          <ImagenMedia nombreOUrl={imagen} alt="" anchos={ANCHOS_PREVIEW} sizes={SIZES_PREVIEW} className="h-full w-full object-cover" />
           <CapaCopyIn texto={copyIn} />
         </div>
       ) : null}
@@ -606,7 +612,7 @@ function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps)
     <div className="mx-auto w-full max-w-sm">
       <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-border bg-black">
         {imagen ? (
-          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          <ImagenMedia nombreOUrl={imagen} alt="" anchos={ANCHOS_PREVIEW} sizes={SIZES_PREVIEW} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-neutral-800 to-black text-neutral-500">
             <Play className="h-12 w-12" />
@@ -650,7 +656,7 @@ function PreviaYouTube({ marca, contenido, copyIn, imagen }: MockupProps) {
     <div className="mx-auto max-w-md text-sm">
       <div className="relative aspect-[4/5] overflow-hidden rounded-xl border border-border bg-muted">
         {imagen ? (
-          <img src={imagen} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          <ImagenMedia nombreOUrl={imagen} alt="" anchos={ANCHOS_PREVIEW} sizes={SIZES_PREVIEW} className="h-full w-full object-cover" />
         ) : (
           <PlaceholderImagen className="h-full w-full" />
         )}
@@ -757,7 +763,13 @@ export function VistaPreviaRed({
           }
         >
           {imagen ? (
-            <img src={imagen} alt={titulo ?? ""} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+            <ImagenMedia
+              nombreOUrl={imagen}
+              alt={titulo ?? ""}
+              anchos={ANCHOS_PREVIEW}
+              sizes={SIZES_PREVIEW}
+              className="h-full w-full object-cover"
+            />
           ) : (
             <PlaceholderImagen className="h-full w-full" />
           )}

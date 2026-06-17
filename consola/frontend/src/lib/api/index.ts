@@ -93,7 +93,15 @@ export const api = {
 };
 
 // Helpers + clase de error que consumen páginas/componentes vía `@/lib/api`.
-export { mensajeError, BASE_API, urlMedia, urlS3Objeto, ApiError } from "./_core";
+export {
+  mensajeError,
+  BASE_API,
+  urlMedia,
+  urlMediaAncho,
+  srcsetMedia,
+  urlS3Objeto,
+  ApiError,
+} from "./_core";
 // Tipos públicos re-exportados (los consumen el editor y tests).
 export type { ActivoMarca, PlantillaDiseno, Bloque } from "./_core";
 export type { EtiquetaPlantilla } from "./etiquetasPlantilla";

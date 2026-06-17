@@ -89,11 +89,25 @@ _CACHE_MEDIA = "public, max-age=31536000, immutable"
 async def servir(request: Request) -> Response:
     """Sirve una imagen del almacen de media por nombre (404 si falta; anti-traversal).
 
-    Camino backend-NEUTRAL: `media.leer_media` lee del disco (con anti-traversal) o del
-    bucket S3 segun el backend activo, y devolvemos los bytes con el mime de la extension.
-    Cacheable inmutable: el nombre es content-addressed, el contenido nunca cambia.
+    SIN `?w`: camino backend-NEUTRAL clasico — `media.leer_media` lee del disco (con
+    anti-traversal) o del bucket S3 segun el backend activo, y devolvemos los bytes con el mime
+    de la extension. Retrocompatible (descargas / vista a tamano completo piden el original).
+
+    CON `?w=<px>`: sirve una derivada WebP redimensionada a ese ancho (resize ON-THE-FLY con
+    cache en `deriv/`; allowlist de anchos, sin upscale). Si el original no es redimensionable
+    (video, GIF animado, formato raro) se cae al original intacto; si `w` no es un entero
+    positivo, 400. Cacheable inmutable en ambos casos: el contenido por (nombre, ancho) no cambia.
     """
     nombre = request.path_params["nombre"]
+    ancho = request.query_params.get("w")
+    if ancho is not None:
+        try:
+            deriv = media.derivada(nombre, ancho)
+        except ValueError:
+            return JSONResponse({"error": "Ancho de imagen inválido."}, status_code=400)
+        if deriv is not None:
+            datos, mime = deriv
+            return Response(datos, media_type=mime, headers={"Cache-Control": _CACHE_MEDIA})
     datos = media.leer_media(nombre)
     if datos is None:
         return JSONResponse({"error": "Esa imagen no existe."}, status_code=404)

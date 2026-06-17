@@ -147,6 +147,130 @@ def test_resolver_media_rechaza_traversal(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# GET /api/media/{nombre}?w=<px> (derivada WebP redimensionada, cache deriv/)  #
+# --------------------------------------------------------------------------- #
+
+
+def _png(ancho: int, alto: int | None = None) -> bytes:
+    """PNG opaco de `ancho`x`alto` (def cuadrado) para ejercitar el resize real (Pillow)."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (ancho, alto or ancho), (12, 120, 200)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _ancho_de(datos: bytes) -> int:
+    """Ancho en px de una imagen (cualquier formato que Pillow abra)."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(datos)) as img:
+        return img.width
+
+
+def _subir_png(cliente, ancho: int) -> str:
+    return cliente.post(
+        "/api/media", files={"archivo": ("f.png", _png(ancho), "image/png")}
+    ).json()["id"]
+
+
+def test_servir_sin_w_sirve_original(cliente):
+    """SIN `?w` el endpoint se comporta EXACTAMENTE como antes: sirve el original tal cual."""
+    nombre = _subir_png(cliente, 400)
+    r = cliente.get(f"/api/media/{nombre}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/png")
+    assert _ancho_de(r.content) == 400
+
+
+def test_servir_derivada_webp(cliente):
+    """`?w=160` sobre un PNG de 400 px -> WebP de 160 px de ancho, con caché inmutable."""
+    nombre = _subir_png(cliente, 400)
+    r = cliente.get(f"/api/media/{nombre}?w=160")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/webp"
+    assert _ancho_de(r.content) == 160
+    cache = r.headers["cache-control"]
+    assert "immutable" in cache and "max-age=31536000" in cache
+
+
+def test_derivada_no_upscale(cliente):
+    """Pedir un ancho MAYOR que el original NO agranda: se codifica al ancho real (100)."""
+    nombre = _subir_png(cliente, 100)
+    r = cliente.get(f"/api/media/{nombre}?w=640")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/webp"
+    assert _ancho_de(r.content) == 100
+
+
+def test_derivada_clampa_ancho_fuera_de_allowlist(cliente):
+    """Un ancho fuera de la allowlist se CLAMPa al permitido más cercano (no resize arbitrario)."""
+    nombre = _subir_png(cliente, 2000)
+    assert _ancho_de(cliente.get(f"/api/media/{nombre}?w=2000").content) == 1280  # -> 1280
+    assert _ancho_de(cliente.get(f"/api/media/{nombre}?w=10").content) == 64  # -> 64
+
+
+def test_derivada_cache_hit(cliente):
+    """La primera petición crea el objeto `deriv/`; la segunda lo sirve idéntico desde la caché."""
+    from keni_consola import almacen_media
+
+    nombre = _subir_png(cliente, 400)
+    primera = cliente.get(f"/api/media/{nombre}?w=160")
+    assert primera.status_code == 200
+    # Se cacheó una derivada bajo la carpeta `deriv/`.
+    claves = [k for k, _ in almacen_media.listar_objetos()]
+    assert any(k.startswith("deriv/") and k.endswith(".webp") for k in claves)
+    # La segunda petición devuelve exactamente los mismos bytes (servidos desde la caché).
+    segunda = cliente.get(f"/api/media/{nombre}?w=160")
+    assert segunda.content == primera.content
+
+
+def test_derivada_w_invalido_400(cliente):
+    """`?w` no numérico o no positivo => 400 (la allowlist no admite anchos arbitrarios)."""
+    nombre = _subir_png(cliente, 200)
+    assert cliente.get(f"/api/media/{nombre}?w=abc").status_code == 400
+    assert cliente.get(f"/api/media/{nombre}?w=0").status_code == 400
+    assert cliente.get(f"/api/media/{nombre}?w=-5").status_code == 400
+
+
+def test_derivada_original_inexistente_404(cliente):
+    """`?w` sobre un nombre que no existe sigue dando 404 (no inventa una derivada)."""
+    assert cliente.get("/api/media/fotos/noexiste.png?w=160").status_code == 404
+
+
+def test_derivada_video_sirve_original(cliente):
+    """`?w` sobre un VIDEO (no redimensionable) sirve el original intacto, sin tocar Pillow."""
+    nombre = cliente.post(
+        "/api/media/video", files={"archivo": ("clip.mp4", b"datos-de-video", "video/mp4")}
+    ).json()["id"]
+    r = cliente.get(f"/api/media/{nombre}?w=160")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("video/")
+    assert r.content == b"datos-de-video"
+
+
+def test_derivada_gif_animado_sirve_original(cliente):
+    """`?w` sobre un GIF ANIMADO sirve el original (no se redimensiona un animado)."""
+    import io
+
+    from PIL import Image
+
+    cuadros = [Image.new("RGB", (200, 200), c) for c in ((200, 0, 0), (0, 0, 200))]
+    buf = io.BytesIO()
+    cuadros[0].save(buf, format="GIF", save_all=True, append_images=cuadros[1:], duration=100, loop=0)
+    gif = buf.getvalue()
+    nombre = cliente.post("/api/media", files={"archivo": ("a.gif", gif, "image/gif")}).json()["id"]
+    r = cliente.get(f"/api/media/{nombre}?w=64")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/gif")
+    assert r.content == gif
+
+
+# --------------------------------------------------------------------------- #
 # POST /api/media/desde-url (hostear la imagen original de una URL externa)    #
 # --------------------------------------------------------------------------- #
 # La descarga binaria vive detras de `extraccion_url._DESCARGADOR_BYTES`, que se

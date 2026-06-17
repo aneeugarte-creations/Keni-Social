@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import logging
 import os
 import re
@@ -258,6 +259,107 @@ def leer_objeto(nombre: str) -> bytes | None:
     PREFETCH del worker para bajar un documento subido (la importación de parrilla) desde S3.
     """
     return almacen_media.leer_objeto(nombre)
+
+
+# --------------------------------------------------------------------------- #
+# Derivadas redimensionadas (resize on-the-fly + cache en el almacen)          #
+# --------------------------------------------------------------------------- #
+
+# Allowlist ESTRICTA de anchos de derivada (px). Un ancho pedido fuera de la lista se CLAMPa
+# al permitido mas cercano (nunca se redimensiona a un ancho arbitrario): asi un cliente no
+# puede forzar millones de variantes distintas, solo este conjunto acotado. El orden no importa.
+ANCHOS_DERIVADOS: tuple[int, ...] = (64, 160, 320, 640, 960, 1280)
+
+# Calidad WebP de las derivadas (0..100). 80 = buen equilibrio peso/calidad para feed/listas.
+_CALIDAD_WEBP = 80
+
+# Extensiones cuyas derivadas redimensionamos. Lo demas (video, etc.) se sirve TAL CUAL.
+_EXT_DERIVABLE: frozenset[str] = frozenset({"png", "jpg", "jpeg", "webp", "gif"})
+
+
+def _ancho_objetivo(valor: str | int) -> int:
+    """Ancho de la allowlist mas cercano a `valor`. Lanza ValueError si no es un entero positivo.
+
+    El llamante (`api/media.py:servir`) traduce el ValueError a un 400; un entero positivo
+    fuera de la lista se CLAMPa al permitido mas cercano (defensa anti-abuso: solo anchos de
+    `ANCHOS_DERIVADOS` llegan a Pillow).
+    """
+    try:
+        ancho = int(valor)
+    except (TypeError, ValueError) as e:
+        raise ValueError("ancho de imagen invalido") from e
+    if ancho <= 0:
+        raise ValueError("ancho de imagen invalido")
+    return min(ANCHOS_DERIVADOS, key=lambda a: abs(a - ancho))
+
+
+def _derivar_webp(datos: bytes, ancho: int) -> bytes | None:
+    """Redimensiona `datos` a lo ancho `ancho` (sin upscale) y devuelve WebP; None si no aplica.
+
+    Mantiene el aspecto y NUNCA agranda: si el original es mas estrecho que `ancho`, codifica a su
+    ancho real. Devuelve None ante un GIF ANIMADO o cualquier imagen que Pillow no pueda abrir
+    (el llamante sirve entonces el original intacto). Aplica la orientacion EXIF (fotos de movil).
+    """
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(io.BytesIO(datos)) as img:
+            if getattr(img, "is_animated", False):
+                return None
+            img = ImageOps.exif_transpose(img)
+            objetivo = min(ancho, img.width)
+            if objetivo <= 0:
+                return None
+            if objetivo < img.width:
+                alto = max(1, round(img.height * objetivo / img.width))
+                img = img.resize((objetivo, alto), Image.LANCZOS)
+            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                img = img.convert("RGBA")
+            else:
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="WEBP", quality=_CALIDAD_WEBP, method=6)
+            return buf.getvalue()
+    except Exception:  # noqa: BLE001 -- imagen corrupta/formato raro: servir el original, sin traza
+        return None
+
+
+def derivada(nombre: str, ancho: str | int) -> tuple[bytes, str] | None:
+    """Derivada WebP de `nombre` al ancho de la allowlist mas cercano a `ancho` -> `(bytes, mime)`.
+
+    Camino del resize ON-THE-FLY con cache en el almacen (`deriv/<ancho>-<raiz>.webp`): mira
+    primero la cache; si esta, la sirve; si no, lee el original, lo redimensiona (Pillow,
+    manteniendo aspecto, sin upscale), lo codifica WebP, lo guarda en la cache y lo sirve. La key
+    es DETERMINISTA y content-addressed (la raiz del original ya es uuid/sha256), asi dos
+    peticiones simultaneas del mismo derivado convergen a la misma key (idempotente).
+
+    Devuelve None si el original NO existe o NO es una imagen redimensionable (video, GIF animado,
+    formato no soportado): el llamante sirve entonces el original intacto. Lanza ValueError si
+    `ancho` no es un entero positivo (el llamante responde 400).
+    """
+    objetivo = _ancho_objetivo(ancho)
+    ext = Path(nombre).suffix.lower().lstrip(".")
+    if ext not in _EXT_DERIVABLE:
+        return None
+    raiz = nombre.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    try:
+        clave = almacen_media.componer_clave("deriv", f"{objetivo}-{raiz}.webp")
+    except ValueError:
+        return None
+    cacheada = almacen_media.leer_objeto(clave)
+    if cacheada is not None:
+        return cacheada, "image/webp"
+    original = leer_media(nombre)
+    if original is None:
+        return None
+    webp = _derivar_webp(original, objetivo)
+    if webp is None:
+        return None
+    try:
+        almacen_media.guardar_objeto(clave, webp, content_type="image/webp")
+    except Exception:  # noqa: BLE001 -- la cache es best-effort: si el guardado falla, servimos igual
+        pass
+    return webp, "image/webp"
 
 
 # Extension de VIDEO (sin punto) -> mime al servir (`/api/media/{n}` sirve tambien videos).

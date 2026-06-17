@@ -47,6 +47,7 @@ CATEGORIAS: frozenset[str] = frozenset(
         "documentos",   # documentos de importacion de parrilla (PDF/word/...; efimeros)
         "generadas",    # variantes de imagen generadas por IA (efimeras)
         "render",       # composites horneados / cache de render (reciclable, regenerable)
+        "deriv",        # derivadas redimensionadas (WebP por ancho) de un original (cache regenerable)
         "previews",     # cache del preview de plantillas (1 png por documento+muestra; regenerable)
         "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
         "logos",        # activos de marca: logos, tipografias, plecas (reusable)

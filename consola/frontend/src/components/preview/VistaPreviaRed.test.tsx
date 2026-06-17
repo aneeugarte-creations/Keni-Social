@@ -133,9 +133,9 @@ describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
     const strip = screen.getByRole("group", { name: /Carrusel de 3 slides/ });
     expect(strip).toBeInTheDocument();
     expect(screen.getByText("1/3")).toBeInTheDocument();
-    // El slide de imagen en crudo se sirve por /api/media; el de video lleva <video>.
+    // El slide de imagen en crudo se sirve por /api/media (derivada `?w=`); el de video, <video>.
     expect(
-      container.querySelector('img[src="/api/media/s2.jpg"]'),
+      container.querySelector('img[src^="/api/media/s2.jpg?w="]'),
     ).toBeInTheDocument();
     expect(container.querySelector("video")).not.toBeNull();
     // La portada abre el editor.

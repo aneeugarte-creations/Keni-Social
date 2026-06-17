@@ -62,6 +62,35 @@ export function urlMedia(nombreOUrl: string | null | undefined): string {
 }
 
 /**
+ * URL de una DERIVADA redimensionada del media (resize on-the-fly del back: `?w=<px>`).
+ * El back sirve un WebP cacheado al ancho de su allowlist más cercano (sin upscale). Una imagen
+ * EXTERNA (`http…`) no pasa por el back, así que se devuelve sin tocar. `ancho` debe ser uno de
+ * los anchos servibles (64/160/320/640/960/1280); el back clampa cualquier otro al más cercano.
+ */
+export function urlMediaAncho(
+  nombreOUrl: string | null | undefined,
+  ancho: number,
+): string {
+  const base = urlMedia(nombreOUrl);
+  if (!base || base.startsWith("http")) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}w=${ancho}`;
+}
+
+/**
+ * `srcset` de derivadas para un `<img>` responsive: `"url?w=320 320w, url?w=640 640w, …"`.
+ * Junto con `sizes`, el navegador elige el ancho adecuado según el viewport y el DPR (retina).
+ * Externa (`http…`) => "" (no hay derivadas que ofrecer). Anchos del catálogo servible.
+ */
+export function srcsetMedia(
+  nombreOUrl: string | null | undefined,
+  anchos: number[],
+): string {
+  const base = urlMedia(nombreOUrl);
+  if (!base || base.startsWith("http")) return "";
+  return anchos.map((w) => `${urlMediaAncho(base, w)} ${w}w`).join(", ");
+}
+
+/**
  * URL para servir un objeto del bucket S3 a través del back (admin). El endpoint S3 de
  * Garage es interno; los bytes se proxean por el back. `descargar` fuerza `attachment`
  * (descarga) en vez de `inline` (previsualización). La cookie de sesión viaja sola en

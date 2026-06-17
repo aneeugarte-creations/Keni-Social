@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ImagenMedia } from "@/components/comunes/ImagenMedia";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -204,10 +205,11 @@ function TarjetaPieza({
       >
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (
-            <img
-              src={imagen}
+            <ImagenMedia
+              nombreOUrl={imagen}
               alt=""
-              className="h-16 w-16 shrink-0 rounded-md border border-border object-cover"
+              ancho={160}
+              className="h-16 w-16 shrink-0 rounded-md border border-border bg-muted object-cover"
             />
           )}
           <div className="min-w-0 flex-1 space-y-1.5">
