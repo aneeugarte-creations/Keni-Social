@@ -1,9 +1,9 @@
 /**
  * Contexto (`/maquina/contexto`) — la página ÚNICA de la máquina: el pipeline de cada motor ES la
- * estructura de la página. Cuatro pestañas: Investigación y Producción (los motores, con sus fases
- * desplegables, interruptor on/off y logs en vivo), Importación (las herramientas de material
- * recibido del equipo) y Herramientas (prompts independientes: crítica, hashtags, envoltorios,
- * asistente). De cada fase cuelga su prompt y el contexto editorial que inyecta. Sustituye a los dos
+ * estructura de la página. Tres pestañas: Investigación y Producción (los motores, con sus fases
+ * desplegables, interruptor on/off y logs en vivo) y Herramientas (TODOS los agentes independientes
+ * que se lanzan a mano: material recibido del equipo, ideación, crítica y envoltorios, en cajas por
+ * tipo). De cada fase cuelga su prompt y el contexto editorial que inyecta. Sustituye a los dos
  * cockpits de pipeline y a la antigua página plana «Todos los documentos»: cada prompt se alcanza por
  * su etapa, y los editoriales por la pestaña «Contexto» del propio prompt.
  *
@@ -30,7 +30,6 @@ import {
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
   GRUPOS_HERRAMIENTAS,
-  GRUPOS_IMPORTACION,
   MAESTRO_INVESTIGACION,
   MAESTRO_PRODUCCION,
   QUEUE_INVESTIGACION,
@@ -45,8 +44,8 @@ import {
   PanelPipeline,
 } from "@/pages/monitor/PanelPipeline";
 
-type Proceso = "investigacion" | "produccion" | "importacion" | "herramientas";
-const PROCESOS: readonly Proceso[] = ["investigacion", "produccion", "importacion", "herramientas"];
+type Proceso = "investigacion" | "produccion" | "herramientas";
+const PROCESOS: readonly Proceso[] = ["investigacion", "produccion", "herramientas"];
 
 // Grupos del catálogo que gobiernan CÓMO se produce (jobs, limpieza, alertas): se ajustan desde el
 // drawer del propio Contexto (la misma página que vigila sus efectos).
@@ -60,8 +59,8 @@ export default function Contexto() {
   const param = searchParams.get("proceso");
   const proceso: Proceso = PROCESOS.includes(param as Proceso) ? (param as Proceso) : "investigacion";
   const abrirAjustes = searchParams.get("tab") === "ajustes";
-  // Solo los dos MOTORES tienen ajustes/servicios/cola; Importación y Herramientas son catálogos de
-  // prompts que se lanzan a mano (sin daemon).
+  // Solo los dos MOTORES tienen ajustes/servicios/cola; Herramientas es un catálogo de agentes
+  // independientes que se lanzan a mano (sin daemon).
   const esMotor = proceso === "investigacion" || proceso === "produccion";
   const cambiarProceso = (valor: string) =>
     setSearchParams(
@@ -115,7 +114,6 @@ export default function Contexto() {
           <TabsList>
             <TabsTrigger value="investigacion">Investigación</TabsTrigger>
             <TabsTrigger value="produccion">Producción</TabsTrigger>
-            <TabsTrigger value="importacion">Importación</TabsTrigger>
             <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
           </TabsList>
           <ControlesMaquina
@@ -159,12 +157,8 @@ export default function Contexto() {
           {esAdmin && <ServiciosMaquina motor="produccion" />}
         </TabsContent>
 
-        {/* Importación y Herramientas: agentes independientes (sin daemon). NO son un pipeline: se
-            agrupan en CAJAS por tipo (sin conectores); clicar abre el prompt en el editor (overlay). */}
-        <TabsContent value="importacion" className="mt-4">
-          <PanelAgentes grupos={GRUPOS_IMPORTACION} esAdmin={esAdmin} />
-        </TabsContent>
-
+        {/* Herramientas: TODOS los agentes independientes (sin daemon). NO son un pipeline: se agrupan
+            en CAJAS por tipo (sin conectores); clicar abre el prompt en el editor (overlay). */}
         <TabsContent value="herramientas" className="mt-4">
           <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} />
         </TabsContent>

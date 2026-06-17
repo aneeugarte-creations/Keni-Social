@@ -152,7 +152,7 @@ export const QUEUE_PRODUCCION: Record<string, string> = {
 };
 
 /**
- * Un GRUPO de agentes INDEPENDIENTES (Importación, Herramientas): prompts que se lanzan a mano y NO
+ * Un GRUPO de agentes INDEPENDIENTES (pestaña Herramientas): prompts que se lanzan a mano y NO
  * forman un pipeline. Se pintan como una CAJA por tipo (`PanelAgentes`), no como una secuencia con
  * conectores: cada caja agrupa los agentes de un mismo tipo y deja claro que son autónomos.
  */
@@ -166,11 +166,12 @@ export interface GrupoAgentes {
 }
 
 /**
- * IMPORTACIÓN — los agentes de material recibido del equipo, en dos tipos: «Recibir» (lo que llega
- * del equipo y los corresponsales) e «Importar» (calendarios/parrillas a la mesa de eventos). No son
- * un flujo de daemon: cada uno se lanza a mano sobre lo que llega.
+ * HERRAMIENTAS — TODOS los agentes independientes que NO son una etapa de la máquina, agrupados por
+ * tipo: el material recibido del equipo («Recibir», «Importar») y las herramientas de copy («Ideación»,
+ * «Crítica», «Envoltorios»). Cada uno se lanza a mano y abre su prompt. (No incluye hashtags ni el
+ * asistente de copy: solo se lanzaban por MCP/sin UI propia y se retiraron.)
  */
-export const GRUPOS_IMPORTACION: readonly GrupoAgentes[] = [
+export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   {
     titulo: "Recibir",
     descripcion: "Material que llega del equipo, portales y corresponsales",
@@ -191,14 +192,6 @@ export const GRUPOS_IMPORTACION: readonly GrupoAgentes[] = [
       { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una rota/parrilla a eventos", doc: "prompt/importar/parrilla" },
     ],
   },
-];
-
-/**
- * HERRAMIENTAS — agentes independientes que NO son una etapa de la máquina, en tres tipos: la
- * ideación evergreen, la crítica IA y los envoltorios del copy. Cada uno abre su prompt. (No incluye
- * hashtags ni el asistente de copy: solo se lanzaban por MCP/sin UI propia y se retiraron.)
- */
-export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   {
     titulo: "Ideación",
     descripcion: "Propone contenido evergreen para la marca",
