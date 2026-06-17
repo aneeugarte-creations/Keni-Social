@@ -101,7 +101,9 @@ describe("Contexto · la máquina en una página", () => {
   it("la pestaña Herramientas lista los prompts de apoyo (incl. Idear, el taller evergreen)", () => {
     renderContexto("/maquina/contexto?proceso=herramientas");
     expect(screen.getByText("Crítica")).toBeInTheDocument();
-    expect(screen.getByText("Hashtags")).toBeInTheDocument();
+    expect(screen.getByText("Carrusel")).toBeInTheDocument();
     expect(screen.getByText("Idear")).toBeInTheDocument();
+    // Hashtags (suggest) y el asistente de copy se retiraron (solo MCP/sin UI).
+    expect(screen.queryByText("Hashtags")).not.toBeInTheDocument();
   });
 });

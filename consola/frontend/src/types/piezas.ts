@@ -153,17 +153,6 @@ export interface CuerpoGrupoHashtags {
   hashtags: string[];
 }
 
-/** Cuerpo para pedir sugerencias de hashtags con IA. */
-export interface CuerpoSugerirHashtags {
-  texto: string;
-  marca: string;
-  red?: string;
-}
-
-export interface RespuestaSugerirHashtags {
-  hashtags: string[];
-}
-
 // --- Franjas (colas de publicación) ---
 
 /** Una franja horaria de la cola de publicación. */

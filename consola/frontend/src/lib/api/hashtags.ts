@@ -3,8 +3,6 @@
 import { peticion } from "./_core";
 import type {
   CuerpoGrupoHashtags,
-  CuerpoSugerirHashtags,
-  RespuestaGeneracion,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
   RespuestaMensaje,
@@ -22,7 +20,4 @@ export const apiHashtags = {
     }),
   eliminarGrupoHashtags: (id: string) =>
     peticion<RespuestaMensaje>(`/hashtags/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
-    peticion<RespuestaGeneracion>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
-
 };
