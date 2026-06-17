@@ -604,6 +604,7 @@ export function Calendario({
         dias={dias}
         franjas={franjasSemana}
         cms={cms}
+        marca={marcaActiva ?? ""}
         onCambio={invalidar}
       />
     </div>

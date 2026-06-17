@@ -105,9 +105,12 @@ function ResumenRango({
  */
 export function ImportarDocumentoParrilla({
   onAplicado,
+  marca,
 }: {
   /** Se invoca tras aplicar una propuesta (para refrescar el calendario real). */
   onAplicado: () => void;
+  /** Marca activa: dice de qué equipo son las franjas a las que se mapean las personas. */
+  marca: string;
 }) {
   const [abierto, setAbierto] = React.useState(false);
   // Propuesta activa que estamos siguiendo en el Dialog (recién subida o reabierta).
@@ -139,6 +142,7 @@ export function ImportarDocumentoParrilla({
         <DialogImportarParrilla
           propuestaId={propuestaId}
           setPropuestaId={setPropuestaId}
+          marca={marca}
           onCerrar={() => setAbierto(false)}
           onAplicado={() => {
             onAplicado();
@@ -261,11 +265,13 @@ function Dropzone({
 function DialogImportarParrilla({
   propuestaId,
   setPropuestaId,
+  marca,
   onCerrar,
   onAplicado,
 }: {
   propuestaId: string | null;
   setPropuestaId: (id: string | null) => void;
+  marca: string;
   onCerrar: () => void;
   onAplicado: () => void;
 }) {
@@ -289,7 +295,7 @@ function DialogImportarParrilla({
   const generacion = genQuery.data;
 
   const subir = useMutation({
-    mutationFn: () => api.importarParrilla(archivo!),
+    mutationFn: () => api.importarParrilla(archivo!, { marca, modo: "turnos" }),
     onSuccess: (r) => {
       setPropuestaId(r.propuesta_id);
       queryClient.invalidateQueries({ queryKey: ["parrilla", "propuestas"] });

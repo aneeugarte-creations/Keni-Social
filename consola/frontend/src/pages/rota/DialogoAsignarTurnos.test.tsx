@@ -97,6 +97,7 @@ describe("DialogoAsignarTurnos (render)", () => {
           dias={DIAS}
           franjas={FRANJAS}
           cms={CMS}
+          marca="claro-sports"
           onCambio={vi.fn()}
         />
       </QueryClientProvider>,
@@ -126,6 +127,7 @@ describe("DialogoAsignarTurnos (render)", () => {
           dias={DIAS}
           franjas={FRANJAS}
           cms={CMS}
+          marca="claro-sports"
           onCambio={vi.fn()}
         />
       </QueryClientProvider>,

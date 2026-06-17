@@ -287,16 +287,20 @@ def construir_prompt_lib() -> dict[str, Any]:
     return {"kind": PROC_PROMPT}
 
 
-def construir_parrilla_import(*, propuesta_id: str) -> dict[str, Any]:
+def construir_parrilla_import(*, propuesta_id: str, modo: str = "eventos") -> dict[str, Any]:
     """Spec del post-procesado de la IMPORTACION de parrilla (#parrilla-import).
 
     `propuesta_id` es la fila `parrilla_propuesta` a actualizar. NO lleva semana: el contexto
     de validacion se re-construye en el worker a partir de las FECHAS de las operaciones que
     devuelva claude (un documento puede cubrir varias semanas / un año entero).
+
+    `modo` viaja en el spec (no en la BD: sin migracion) para que el post-proceso sepa si es una
+    parrilla de TURNOS y, en ese caso, encaje a cada persona en una franja real del equipo.
     """
     return {
         "kind": PROC_PARRILLA_IMPORT,
         "propuesta_id": propuesta_id,
+        "modo": modo,
     }
 
 
@@ -511,7 +515,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import parrilla_import_job
 
         return parrilla_import_job.construir_procesar_parrilla_import(
-            propuesta_id=p["propuesta_id"]
+            propuesta_id=p["propuesta_id"], modo=p.get("modo", "eventos")
         )
 
     if kind == PROC_EVERGREEN_IDEAS:

@@ -183,6 +183,7 @@ export function DialogoAsignarTurnos({
   dias,
   franjas,
   cms,
+  marca,
   onCambio,
 }: {
   abierto: boolean;
@@ -195,6 +196,8 @@ export function DialogoAsignarTurnos({
   franjas: FranjaSemana[];
   /** CMs asignables de la marca activa. */
   cms: MiembroRota[];
+  /** Marca activa: el import de documento mapea las personas a las franjas de ESTA marca. */
+  marca: string;
   /** Refresca la rejilla tras asignar. */
   onCambio: () => void;
 }) {
@@ -304,6 +307,7 @@ export function DialogoAsignarTurnos({
             Sube una parrilla, un Excel o una foto: Keni propone los turnos y los revisas antes de aplicar.
           </p>
           <ImportarDocumentoParrilla
+            marca={marca}
             onAplicado={() => {
               onCambio();
               onOpenChange(false);

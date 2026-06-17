@@ -10,15 +10,23 @@ import type {
 } from "@/types";
 
 export const apiParrilla = {
-  // --- Importar documento a la parrilla (turnos + eventos) ---
+  // --- Importar documento a la parrilla (turnos) ---
   // Sube un documento (PDF/imagen/docx/xlsx/txt); un `claude -p` lo analiza en 2º plano
   // y produce una PROPUESTA (diff de operaciones que puede abarcar muchas semanas) que se
   // SONDEA por su propio estado (`/parrilla/propuestas/{id}`) hasta `estado != "generando"`.
   // El documento puede cubrir hasta un año y cada operación lleva su propia `fecha`. Aceptar
   // mergea sobre el calendario real; descartar la archiva.
-  importarParrilla: (archivo: File) => {
+  // `modo="turnos"` (lo usa «Asignar turnos») mete a cada persona en la franja del equipo que
+  // le corresponde por horario, en vez de crear una franja por persona/columna; la `marca` dice
+  // de qué equipo son las franjas. Sin opts, comportamiento legado (modo eventos, sin marca).
+  importarParrilla: (
+    archivo: File,
+    opts: { marca?: string; modo?: "eventos" | "turnos" } = {},
+  ) => {
     const form = new FormData();
     form.set("archivo", archivo);
+    if (opts.marca) form.set("marca", opts.marca);
+    if (opts.modo) form.set("modo", opts.modo);
     return peticion<RespuestaImportarParrilla>("/parrilla/importar", {
       metodo: "POST",
       form,

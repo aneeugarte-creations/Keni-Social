@@ -513,3 +513,119 @@ def test_endurecer_por_defecto_veta_la_web_y_es_mecanico():
     e = pij._endurecer(lee_fichero=False)
     assert "WebSearch" in e["disallowed_tools"] and "WebFetch" in e["disallowed_tools"]
     assert e["esfuerzo"] == "low"
+
+
+# --------------------------------------------------------------------------- #
+# Modo `turnos`: mapeo horario -> franja del equipo                           #
+# --------------------------------------------------------------------------- #
+
+# Plantilla de franjas del equipo (las MISMAS de la marca): mañana, tarde y una nocturna, para
+# probar que un turno que cruza medianoche cae en la franja correcta.
+_PLANTILLA = [
+    {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+    {"nombre": "Tarde", "inicio": "16:00", "fin": "22:00"},
+    {"nombre": "Noche", "inicio": "22:00", "fin": "02:00"},
+]
+
+
+def test_mapear_franja_inicio_en_manana():
+    # LUIS 8AM-4PM -> Mañana (solapa entera con 08:00-16:00).
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "08:00", "16:00") == "Mañana"
+
+
+def test_mapear_franja_por_mayor_solape_no_por_inicio():
+    # MARIANA 2PM-10PM empieza en banda de Mañana (14:00<16:00) pero solapa MÁS con Tarde.
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "14:00", "22:00") == "Tarde"
+
+
+def test_mapear_franja_turno_que_cruza_medianoche():
+    # TEZCU 4PM-12AM (16:00-00:00) -> Tarde (16:00-22:00 solapa 6h, Noche 22:00-00:00 solapa 2h).
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "16:00", "00:00") == "Tarde"
+    # ROGER 5PM-1AM (17:00-01:00): Tarde 17:00-22:00=5h, Noche 22:00-01:00=3h -> Tarde.
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "17:00", "01:00") == "Tarde"
+    # Un turno nocturno puro 22:00-02:00 cae en Noche.
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "22:00", "02:00") == "Noche"
+
+
+def test_mapear_franja_sin_horas_validas_devuelve_none():
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "", "") is None
+    assert pi.mapear_franja_por_solape(_PLANTILLA, "no-es-hora", "16:00") is None
+
+
+def test_canonicaliza_turno_con_nombre_de_persona_a_la_franja_real():
+    # El bug: claude emitió la COLUMNA (persona) como franja, con el horario de la persona.
+    # La canonicalización lo mete en la franja del equipo cuyo horario más solapa.
+    ops = [
+        {
+            "tipo": "crear_turno",
+            "fecha": "2026-06-15",
+            "franja": "TEZCU",  # nombre de persona/columna, NO una franja
+            "franja_inicio": "16:00",
+            "franja_fin": "00:00",
+            "miembro_id": "u1",
+        }
+    ]
+    out = pi.canonicalizar_franjas_turnos(ops, _PLANTILLA)
+    assert out[0]["franja"] == "Tarde"
+    # Solo se reescribe el NOMBRE: el horario trabajado se respeta (ya es HH:MM válido; pisarlo
+    # con el canónico podría meter un "24:00" que la re-validación del aplicar rechazaría).
+    assert out[0]["franja_inicio"] == "16:00"
+    assert out[0]["franja_fin"] == "00:00"
+
+
+def test_canonicaliza_solo_corrige_casing_si_ya_es_una_franja_real():
+    ops = [
+        {
+            "tipo": "crear_turno",
+            "fecha": "2026-06-15",
+            "franja": "tarde",  # ya es una franja, solo mal casing
+            "franja_inicio": "16:00",
+            "franja_fin": "00:00",
+            "miembro_id": "u1",
+        }
+    ]
+    out = pi.canonicalizar_franjas_turnos(ops, _PLANTILLA)
+    assert out[0]["franja"] == "Tarde"
+    assert out[0]["franja_fin"] == "00:00"  # el horario trabajado no se pisa
+
+
+def test_canonicaliza_no_toca_eventos_ni_plantilla_vacia():
+    ops = [{"tipo": "crear_evento", "fecha": "2026-06-15", "titulo": "Partido"}]
+    assert pi.canonicalizar_franjas_turnos(ops, _PLANTILLA) == ops
+    turno = [{"tipo": "crear_turno", "fecha": "2026-06-15", "franja": "TEZCU", "miembro_id": "u1"}]
+    # Sin plantilla no hay a qué mapear: se deja como vino (no se inventa nada).
+    assert pi.canonicalizar_franjas_turnos(turno, []) == turno
+
+
+# --------------------------------------------------------------------------- #
+# Modo `turnos`: prompt                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_prompt_modo_turnos_lista_franjas_con_horario_y_solo_turnos():
+    p = pij.componer_prompt(
+        ctx=_ctx(),
+        texto_documento="TEZCU 4PM-12AM | LUIS 8AM-4PM",
+        modo="turnos",
+        franjas_marca=_PLANTILLA,
+    )
+    # Emite SOLO turnos (nada de eventos/tareas).
+    assert "crear_turno" in p
+    assert "crear_evento" not in p
+    assert "crear_tarea" not in p
+    # Lista las franjas del equipo CON su horario (para que el modelo mapee por solape).
+    assert "Mañana" in p and "08:00" in p and "Tarde" in p and "Noche" in p
+    # Le explica que las cabeceras son personas/roles, NO franjas (el corazón del arreglo).
+    assert "NO es una franja" in p
+    # Embebe el roster y el documento.
+    assert "Luis" in p
+    assert "TEZCU 4PM-12AM" in p
+
+
+def test_prompt_modo_turnos_sin_franjas_marca_cae_a_nombres_por_defecto():
+    # Marca sin plantilla: el prompt sigue funcionando con los nombres por defecto (sin horario).
+    p = pij.componer_prompt(
+        ctx=_ctx(), texto_documento="LUIS 8AM-4PM", modo="turnos", franjas_marca=None
+    )
+    assert "crear_turno" in p
+    assert "Mañana" in p and "Tarde" in p

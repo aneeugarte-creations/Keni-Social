@@ -367,6 +367,114 @@ def _prompt_tareas(
     )
 
 
+def _lineas_franjas_marca(franjas_marca: list[dict[str, str]] | None) -> str:
+    """Lista las franjas de tiempo del equipo CON HORARIO para embeberlas en el prompt de turnos.
+
+    `[{nombre,inicio,fin}, ...]`. Si no hay (marca sin plantilla), cae a los slots por defecto sin
+    horario (solo como referencia de nombres).
+    """
+    if franjas_marca:
+        return "\n".join(
+            f'  - "{f.get("nombre", "")}" ({f.get("inicio", "")}–{f.get("fin", "")})'
+            for f in franjas_marca
+            if f.get("nombre")
+        )
+    return "\n".join(f'  - "{n}"' for n in _SLOTS_DEFECTO)
+
+
+def _prompt_turnos(
+    *,
+    ruta_doc: str | None,
+    texto_documento: str | None,
+    hoy: str | None,
+    miembros: dict[str, str],
+    franjas_marca: list[dict[str, str]] | None,
+) -> str:
+    """Prompt AUTOCONTENIDO (en codigo) para el modo `turnos`: convierte una PARRILLA/HORARIO de
+    trabajo en TURNOS (capacidad), metiendo a cada persona en la FRANJA de tiempo del equipo.
+
+    Va por CODIGO (no por la plantilla editable de `eventos`) por dos razones:
+      - La plantilla viva en el store de un equipo ya desplegado se inicializo para EVENTOS y
+        remata «usa el nombre de franja TAL COMO aparece en el documento»: con una parrilla
+        (matriz persona×dia) eso convierte cada COLUMNA (persona/rol) en una franja. Editar la
+        semilla no llega a ese store; un prompt en codigo SI.
+      - Una parrilla de turnos es una MATRIZ, no una lista de eventos: necesita instrucciones
+        propias (cabeceras = personas, celdas = horario) y emite SOLO turnos.
+    """
+    ancla_hoy = (
+        f"Hoy es {hoy} (zona horaria de Ciudad de México); resuelve cualquier fecha relativa o "
+        "sin año respecto a hoy. "
+        if hoy
+        else ""
+    )
+    esquema = (
+        '{"operaciones": [\n'
+        '  {"tipo": "crear_turno", "fecha": "AAAA-MM-DD", '
+        '"franja": "<NOMBRE EXACTO de una franja de la lista de arriba>", '
+        '"franja_inicio": "HH:MM", "franja_fin": "HH:MM", '
+        '"miembro_id": "<id de miembro existente>", '
+        '"nota_relevo": "<horario real del documento, p.ej. 8AM-4PM>"?}\n'
+        "]}"
+    )
+    lineas_miembros = "\n".join(
+        f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in miembros.items()
+    ) or "  (no hay miembros asignables)"
+    lineas_franjas = _lineas_franjas_marca(franjas_marca)
+    instrucciones = (
+        "EXTRAES TURNOS DE TRABAJO de una parrilla/horario del equipo de redes. La fuente suele "
+        "ser una MATRIZ: las CABECERAS de columna son PERSONAS o ROLES (p.ej. «Luis», «Roger», "
+        "«Coord matutino», «Coord vespertino»), y cada CELDA trae el HORARIO que esa persona "
+        "trabaja ese día (p.ej. «8AM-4PM», a veces «ELÍAS 9AM-5PM», donde ELÍAS es la persona). "
+        "Una cabecera/persona NO es una franja: NUNCA crees una franja con nombre de persona ni "
+        "con un rango horario como nombre.\n\n"
+        "## Miembros del equipo\n\n"
+        "Usa estos id en `miembro_id`; mapea los nombres del documento (incluidos los que vengan "
+        "dentro de una celda, p.ej. «ELÍAS 9AM-5PM») a esta lista. Si alguien no está aquí, "
+        "OMÍTELO (no inventes id):\n\n"
+        f"{lineas_miembros}\n\n"
+        "## Franjas del equipo (las ÚNICAS válidas)\n\n"
+        "El campo `franja` DEBE ser EXACTAMENTE uno de estos nombres. Para cada persona y día con "
+        "horario de trabajo, mete a la persona en la franja cuyo HORARIO MÁS solape con su turno "
+        "(da igual que coincidan varias personas en la misma franja: es normal). Pon su horario "
+        "real del documento en `franja_inicio`/`franja_fin` (HH:MM, 24h) y, si quieres, en "
+        "`nota_relevo`:\n\n"
+        f"{lineas_franjas}\n\n"
+        "## Reglas\n\n"
+        "- EMITE SOLO `crear_turno`. NADA de eventos, partidos ni tareas: aunque el documento "
+        "mencione programas o partidos, aquí solo importan los TURNOS de las personas.\n"
+        "- UN `crear_turno` por cada persona y día que TRABAJA. Si la celda dice «Descanso» / "
+        "está vacía, NO emitas turno para esa persona ese día.\n"
+        "- `fecha` SIEMPRE en ISO AAAA-MM-DD (resuelve los días de la parrilla con la fecha de "
+        "hoy de arriba si no traen año).\n"
+        "- `franja` SIEMPRE uno de los nombres de la lista; nunca un nombre de persona ni un "
+        "rango horario.\n"
+        "- No dupliques: una misma persona no repite turno el mismo día y franja."
+    )
+    if texto_documento is not None:
+        fuente = (
+            f"{ancla_hoy}El documento ya está TRANSCRITO a texto más abajo. Trabaja "
+            "EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún fichero ni uses herramientas."
+        )
+        cola = f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```"
+    else:
+        fuente = (
+            f"{ancla_hoy}Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} "
+            "(PDF, imagen/captura o Word) y extrae de ahí los turnos."
+        )
+        cola = ""
+    return (
+        "Conviertes una parrilla de trabajo en una lista de TURNOS en JSON. NO escribes en "
+        "ninguna base de datos: SOLO devuelves un bloque JSON.\n\n"
+        f"{fuente}\n\n"
+        f"{instrucciones}\n\n"
+        "## Salida\n\n"
+        "Responde con UN ÚNICO bloque ```json con esta forma EXACTA, sin texto antes ni después:"
+        f"\n\n```json\n{esquema}\n```\n\n"
+        'Si no encuentras ningún turno, devuelve `{"operaciones": []}`.'
+        f"{cola}"
+    )
+
+
 def componer_prompt(
     *,
     ctx: pi.Contexto,
@@ -375,6 +483,7 @@ def componer_prompt(
     hoy: str | None = None,
     modo: str = "eventos",
     permitir_web: bool = False,
+    franjas_marca: list[dict[str, str]] | None = None,
 ) -> str:
     """Prompt para que claude convierta el documento en operaciones JSON. PURO.
 
@@ -404,6 +513,11 @@ def componer_prompt(
         return _prompt_tareas(
             ruta_doc=ruta_doc, texto_documento=texto_documento, hoy=hoy,
             permitir_web=permitir_web,
+        )
+    if modo == "turnos":
+        return _prompt_turnos(
+            ruta_doc=ruta_doc, texto_documento=texto_documento, hoy=hoy,
+            miembros=ctx.miembros, franjas_marca=franjas_marca,
         )
     lineas_miembros = "\n".join(
         f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
@@ -501,6 +615,19 @@ class ParrillaImportError(RuntimeError):
     """Error con mensaje ya en espanol, apto para mostrar al usuario."""
 
 
+def _franjas_marca(marca: str) -> list[dict[str, str]]:
+    """Franjas de tiempo de la MARCA `[{nombre,inicio,fin}, ...]` (plantilla de la rota).
+
+    Las usa el modo `turnos` para que el prompt mapee cada persona a una franja EXISTENTE en vez
+    de inventar una por persona. Sin marca cae al singleton `default`. Tolerante a fallos: si la
+    lectura revienta, devuelve `[]` (el prompt cae a los nombres por defecto sin horario).
+    """
+    try:
+        return list(repos.obtener_plantilla_franjas(marca).get("franjas", []))
+    except Exception:  # noqa: BLE001 -- nunca dejar la importación sin prompt por un fallo de lectura
+        return []
+
+
 def lanzar(
     *,
     propuesta_id: str,
@@ -509,6 +636,7 @@ def lanzar(
     nombres_miembros: dict[str, str],
     autor: dict[str, str] | None = None,
     modo: str = "eventos",
+    marca: str = "",
 ) -> dict[str, Any]:
     """Compone el prompt y ENCOLA el job READ-ONLY. Dos caminos según el FORMATO del documento:
 
@@ -526,7 +654,8 @@ def lanzar(
         raise ParrillaImportError("El documento subido ya no está disponible.")
 
     ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
-    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
+    franjas = _franjas_marca(marca) if modo == "turnos" else None
+    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id, modo=modo)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
 
     texto = _extraer_texto_documento(datos, doc_nombre)
@@ -536,7 +665,10 @@ def lanzar(
             tipo="parrilla-import",
             titulo="Importar parrilla",
             marca="",
-            prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo),
+            prompt=componer_prompt(
+                ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo,
+                franjas_marca=franjas,
+            ),
             procesar=procesar,
             procesar_spec=procesar_spec,
             autor=autor,
@@ -555,7 +687,9 @@ def lanzar(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc, hoy=_hoy_cdmx(), modo=modo),
+        prompt=componer_prompt(
+            ctx=ctx, ruta_doc=ruta_doc, hoy=_hoy_cdmx(), modo=modo, franjas_marca=franjas,
+        ),
         procesar=procesar,
         procesar_spec=procesar_spec,
         dir_temporal=carpeta,
@@ -573,6 +707,7 @@ def lanzar_desde_texto(
     autor: dict[str, str] | None = None,
     modo: str = "eventos",
     permitir_web: bool = False,
+    marca: str = "",
 ) -> dict[str, Any]:
     """Encola el job READ-ONLY a partir de TEXTO ya extraído (un enlace o texto pegado), sin
     fichero. Es la MISMA rama "texto embebido" de `lanzar` (transformación texto→JSON sin tools
@@ -585,14 +720,16 @@ def lanzar_desde_texto(
     """
     web = permitir_web
     ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
-    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
+    franjas = _franjas_marca(marca) if modo == "turnos" else None
+    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id, modo=modo)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
     return generar.lanzar(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
         prompt=componer_prompt(
-            ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo, permitir_web=web
+            ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo, permitir_web=web,
+            franjas_marca=franjas,
         ),
         procesar=procesar,
         procesar_spec=procesar_spec,
@@ -606,7 +743,22 @@ def lanzar_desde_texto(
 # --------------------------------------------------------------------------- #
 
 
-def construir_procesar_parrilla_import(*, propuesta_id: str):  # noqa: ANN201
+def _canonicalizar_turnos_si_procede(
+    validas: list[dict[str, Any]], *, propuesta_id: str
+) -> list[dict[str, Any]]:
+    """Modo `turnos`: reescribe la `franja` de cada turno a una franja REAL del equipo.
+
+    Carga la marca de la propuesta y la plantilla de franjas de esa marca, y delega en el dominio
+    puro (`pi.canonicalizar_franjas_turnos`): cada persona acaba en la franja cuyo horario mas
+    solapa, NUNCA en una franja con su nombre. Si no hay plantilla, deja las operaciones intactas.
+    """
+    prop = repos.obtener_propuesta_parrilla(propuesta_id) or {}
+    marca = str(prop.get("marca") or "")
+    plantilla = _franjas_marca(marca)
+    return pi.canonicalizar_franjas_turnos(validas, plantilla)
+
+
+def construir_procesar_parrilla_import(*, propuesta_id: str, modo: str = "eventos"):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job de import (worker).
 
     Parsea el JSON de claude (que puede traer fechas de un año entero), re-construye el contexto
@@ -628,6 +780,11 @@ def construir_procesar_parrilla_import(*, propuesta_id: str):  # noqa: ANN201
         crudas = pi.extraer_bloque_json(salida or "") or []
         ctx = construir_contexto_validacion(crudas, nombres_miembros=nombres)
         validas, errores = pi.parsear_y_validar(salida or "", ctx)
+        if modo == "turnos":
+            # Parrilla de turnos: encaja a cada persona en una franja REAL del equipo (no una
+            # franja por persona). Se hace ANTES de guardar para que la previsualización ya
+            # muestre la franja correcta, no solo el aplicado.
+            validas = _canonicalizar_turnos_si_procede(validas, propuesta_id=propuesta_id)
         if not validas and errores and any(e.get("indice") == 0 for e in errores):
             # No hubo JSON legible en absoluto: marcamos la propuesta en error.
             motivo = next(

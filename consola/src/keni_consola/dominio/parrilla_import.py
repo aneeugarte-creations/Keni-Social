@@ -398,6 +398,116 @@ def calcular_conflicto(op_dict: dict[str, Any], ctx: Contexto) -> dict[str, Any]
 
 
 # --------------------------------------------------------------------------- #
+# Mapeo horario -> franja (modo `turnos`)                                      #
+# --------------------------------------------------------------------------- #
+# Una PARRILLA de trabajo es una MATRIZ (cabeceras = personas/roles, celdas = horario), no una
+# lista de franjas con nombre. El equipo NO quiere una franja por persona: quiere a cada persona
+# DENTRO de su franja de tiempo (Mañana/Tarde/Noche…). Aqui vive el mapeo PURO horario->franja
+# que `parrilla_import_job` aplica en el post-procesado del modo `turnos`.
+
+
+def _min_de_hhmm(hhmm: str) -> int | None:
+    """`HH:MM` -> minutos desde medianoche (acepta `24:00` = 1440). None si malformado.
+
+    Tolera un rango `HH:MM-HH:MM` quedandose con la hora de INICIO (el modelo a veces vuelca el
+    rango entero en un solo campo). PURA.
+    """
+    if not isinstance(hhmm, str) or not hhmm.strip():
+        return None
+    parte = hhmm.strip().replace("–", "-").split("-", 1)[0].strip()
+    m = re.match(r"^(\d{1,2}):(\d{2})$", parte)
+    if not m:
+        return None
+    h, mm = int(m.group(1)), int(m.group(2))
+    if not (0 <= h <= 24 and 0 <= mm <= 59) or (h == 24 and mm != 0):
+        return None
+    return h * 60 + mm
+
+
+def _intervalo_min(inicio: str, fin: str) -> tuple[int, int] | None:
+    """`[inicio, fin)` en minutos. Si `fin <= inicio`, el turno cruza medianoche (+24h). None si
+    alguna hora no parsea (p.ej. franja sin horario). PURA."""
+    ini = _min_de_hhmm(inicio)
+    fin_m = _min_de_hhmm(fin)
+    if ini is None or fin_m is None:
+        return None
+    if fin_m <= ini:
+        fin_m += 24 * 60
+    return ini, fin_m
+
+
+def _solape_min(a: tuple[int, int], b: tuple[int, int]) -> int:
+    """Minutos de solape de dos intervalos `[ini, fin)` (ya normalizados, pueden pasar de 1440)."""
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+
+
+def mapear_franja_por_solape(
+    candidatas: list[dict[str, str]], inicio: str, fin: str
+) -> str | None:
+    """NOMBRE de la franja candidata cuyo rango MAS solapa con `[inicio, fin)`. None si no hay
+    horas validas o ninguna candidata solapa.
+
+    `candidatas`: `[{nombre, inicio, fin}, ...]` (las franjas de tiempo del equipo). Soporta
+    cruces de medianoche en AMBOS lados (un turno 16:00-00:00, una franja 16:00-24:00): el turno
+    se prueba tambien desplazado -24h para alinear los husos. Empate -> la primera (orden de la
+    plantilla). PURA: no toca BD.
+    """
+    turno = _intervalo_min(inicio, fin)
+    if turno is None:
+        return None
+    mejor_nombre: str | None = None
+    mejor_solape = 0
+    for c in candidatas:
+        rango = _intervalo_min(str(c.get("inicio", "")), str(c.get("fin", "")))
+        if rango is None:
+            continue
+        s = max(
+            _solape_min(turno, rango),
+            _solape_min((turno[0] - 1440, turno[1] - 1440), rango),
+        )
+        if s > mejor_solape:
+            mejor_solape = s
+            mejor_nombre = str(c.get("nombre", "")) or None
+    return mejor_nombre
+
+
+def canonicalizar_franjas_turnos(
+    operaciones: list[dict[str, Any]], plantilla: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    """Reescribe la `franja` de cada `crear_turno` al NOMBRE de una franja de la PLANTILLA del
+    equipo, para que el import NUNCA cree una franja con nombre de persona/rango.
+
+    Para cada turno: si su `franja` ya coincide (normalizada) con una franja de la plantilla,
+    solo se corrige el casing; si no, se ENCAJA por horario (`franja_inicio`/`franja_fin`) en la
+    franja que mas solapa. Solo se reescribe el NOMBRE de la franja: el horario trabajado que
+    emitio el modelo en `franja_inicio`/`franja_fin` se respeta tal cual (ya es HH:MM valido; no
+    lo pisamos con el canonico para no introducir un `24:00` que la re-validacion del aplicar
+    rechazaria). PURA.
+
+    `plantilla`: `[{nombre,inicio,fin}, ...]` (franjas de tiempo del equipo). Si esta vacia, o un
+    turno no es mapeable (sin horario y sin nombre conocido), ese turno se deja como vino.
+    """
+    if not plantilla:
+        return operaciones
+    por_nombre = {normaliza_franja(str(f.get("nombre", ""))): f for f in plantilla}
+    for op in operaciones:
+        if op.get("tipo") != "crear_turno":
+            continue
+        objetivo = por_nombre.get(normaliza_franja(str(op.get("franja", ""))))
+        if objetivo is None:
+            nombre = mapear_franja_por_solape(
+                plantilla,
+                str(op.get("franja_inicio") or ""),
+                str(op.get("franja_fin") or ""),
+            )
+            objetivo = por_nombre.get(normaliza_franja(nombre or ""))
+        if objetivo is None:
+            continue
+        op["franja"] = str(objetivo.get("nombre", ""))
+    return operaciones
+
+
+# --------------------------------------------------------------------------- #
 # Entrada publica: parseo + validacion                                        #
 # --------------------------------------------------------------------------- #
 
