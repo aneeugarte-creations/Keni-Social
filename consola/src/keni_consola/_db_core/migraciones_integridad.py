@@ -157,7 +157,13 @@ def _migrar_checks_dominio(con: Any) -> None:
         # plataforma; el CHECK viejo aun en la tabla lo rechazaba, asi que el UPDATE que escribe
         # `borrador` fallaba con CheckViolation antes de poder re-crear el constraint. Sin
         # constraint, la normalizacion SIEMPRE entra; luego se re-aplica el CHECK nuevo.
-        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+        # FÓSIL DE NOMBRE: `publicacion` se llamó `contenido`; al renombrar la tabla, Postgres
+        # conserva el NOMBRE viejo de sus CHECK (`ck_contenido_<col>`), que `ck_{tabla}_{columna}`
+        # no captura. Ese fósil mantiene la allowlist vieja y rechazaría los valores renombrados
+        # (p. ej. `requiere_humano`), así que hay que dropearlo también, no solo `ck_publicacion_*`.
+        legados = (f"ck_contenido_{columna}",) if tabla == "publicacion" else ()
+        for cn in (nombre, *legados):
+            con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {cn}")  # noqa: S608
         # Renombra los valores legados (idempotente: WHERE = viejo) ANTES de normalizar, ya sin el
         # CHECK viejo que los prohibiría.
         for viejo, nuevo in renombres.items():

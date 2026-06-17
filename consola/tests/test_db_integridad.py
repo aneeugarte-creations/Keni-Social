@@ -178,6 +178,39 @@ def test_migracion_renombra_verificacion_fuente_legada(pg):
         con.close()
 
 
+def test_check_dropa_el_fosil_ck_contenido_de_la_tabla_renombrada(pg):
+    """Regresion (deploy hosted): `publicacion` se llamo `contenido`; al renombrar la tabla,
+    Postgres conserva el NOMBRE viejo de sus CHECK (`ck_contenido_verificacion_fuente`). La
+    migracion calculaba el nombre como `ck_{tabla}_{columna}` (`ck_publicacion_*`), asi que su
+    DROP no tocaba el fosil: este, con la allowlist VIEJA, rechazaba el valor renombrado
+    `requiere_humano` y tumbaba el deploy con CheckViolation. La migracion debe DROPear tambien
+    el fosil `ck_contenido_<col>` antes de renombrar los valores legados."""
+    from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
+
+    c = db.crear_publicacion(titulo="fosil")
+    con = _cruda()
+    try:
+        # Reproduce hosted: NINGUN constraint con el nombre nuevo y SI el fosil `ck_contenido_*`
+        # con la allowlist VIEJA (sin `requiere_humano`), con una fila en un valor legado que el
+        # renombre mandara a `requiere_humano`.
+        con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_publicacion_verificacion_fuente")
+        con.execute("UPDATE publicacion SET verificacion_fuente = 'problema' WHERE id = ?", (c["id"],))
+        con.execute(
+            "ALTER TABLE publicacion ADD CONSTRAINT ck_contenido_verificacion_fuente "
+            "CHECK (verificacion_fuente IN ('', 'no_verificado', 'problema', 'verificado'))"
+        )
+        con.commit()
+        # NO debe lanzar: DROP del fosil -> renombra 'problema'->'requiere_humano' -> ADD del nuevo.
+        _migrar_checks_dominio(con)
+        con.commit()
+        v = con.execute(
+            "SELECT verificacion_fuente FROM publicacion WHERE id = ?", (c["id"],)
+        ).fetchone()["verificacion_fuente"]
+        assert v == "requiere_humano"
+    finally:
+        con.close()
+
+
 def test_checks_normalizan_valores_invalidos_preexistentes(pg):
     """Re-aplicar la migracion sobre datos sucios normaliza al default antes del CHECK."""
     from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
