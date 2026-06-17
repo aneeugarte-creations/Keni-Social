@@ -7,15 +7,15 @@
  * cockpits de pipeline y a la antigua página plana «Todos los documentos»: cada prompt se alcanza por
  * su etapa, y los editoriales por la pestaña «Contexto» del propio prompt.
  *
- * El menú «⋮» (solo en los motores) trae los ajustes del motor de la pestaña activa y un puente a
- * Agentes (cómputo). Bajo el pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
+ * El menú «⋮» (solo en los motores) trae los ajustes del motor de la pestaña activa. Bajo el
+ * pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Layers, ListChecks } from "lucide-react";
+import { Layers } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -104,14 +104,7 @@ export default function Contexto() {
             ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
             ajustesAbiertoInicial={abrirAjustes}
             ajustes={ajustes}
-          >
-            <ItemMenu
-              icono={ListChecks}
-              onClick={() => navigate(`/maquina/computo?proceso=${proceso}`)}
-            >
-              Ver cómputo
-            </ItemMenu>
-          </MenuAcciones>
+          />
         </AccionesPagina>
       ) : null}
 

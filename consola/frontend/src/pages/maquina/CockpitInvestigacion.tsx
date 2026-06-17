@@ -1,8 +1,8 @@
-import { ListChecks, Search } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Search } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
@@ -21,7 +21,7 @@ import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
  *
  * El PIPELINE (recolectar → verificar) ya NO vive aquí: se enciende y se vigila en «Contexto»
  * (Máquina), donde cada fase trae su prompt, su contexto y sus logs. El menú «⋮» (oculto en
- * Algoritmos, que aporta el suyo) ofrece los ajustes del motor y un puente a Agentes prefiltrado.
+ * Algoritmos, que aporta el suyo) ofrece los ajustes del motor.
  */
 
 /** Pestañas del cockpit (clave `?seccion=`). Noticias (el pool) es la primera y la por defecto. */
@@ -29,7 +29,6 @@ type Seccion = "mesa" | "fuentes" | "algoritmos" | "contenidos";
 const SECCIONES: readonly Seccion[] = ["mesa", "fuentes", "algoritmos", "contenidos"];
 
 export default function CockpitInvestigacion() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const seccionParam = searchParams.get("seccion");
@@ -53,11 +52,7 @@ export default function CockpitInvestigacion() {
           (Refrescar…): así no se solapan dos «⋮» en la barra. */}
       {seccion !== "algoritmos" && (
         <AccionesPagina>
-          <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />}>
-            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/computo?proceso=investigacion")}>
-              Ver cómputo
-            </ItemMenu>
-          </MenuAcciones>
+          <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />} />
         </AccionesPagina>
       )}
 
