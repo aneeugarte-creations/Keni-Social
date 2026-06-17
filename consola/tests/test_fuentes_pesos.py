@@ -54,6 +54,39 @@ def test_peso_de_url_subdominio_casa_con_el_host_inicial():
     assert fuentes_pesos.peso_de_url("https://feeds.bbc.co.uk/news/rss.xml") == fuentes_pesos.PESO_POTENTE
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        # Cabeceras nacionales MX (piloto AMX): una primicia nacional no debe arrancar con
+        # corroboración 0 por no estar en una agencia global.
+        "https://www.eluniversal.com.mx/nacion/x",
+        "https://www.milenio.com/politica/nota",
+        "https://www.reforma.com/x",
+        "https://www.excelsior.com.mx/nacional/x",
+        "https://www.jornada.com.mx/x",
+        "https://www.elfinanciero.com.mx/economia/x",
+        "https://www.eleconomista.com.mx/x",
+        "https://expansion.mx/x",
+        "https://www.forbes.com.mx/x",
+        "https://www.proceso.com.mx/x",
+        "https://www.animalpolitico.com/x",
+        "https://aristeguinoticias.com/x",
+        "https://www.infobae.com/mexico/x",
+        "https://heraldodemexico.com.mx/x",
+        "https://www.razon.com.mx/x",
+        "https://www.elsoldemexico.com.mx/x",
+        # Deporte de referencia MX + hispano (Claro Sports).
+        "https://www.record.com.mx/futbol",
+        "https://www.mediotiempo.com/futbol/x",
+        "https://www.tudn.com/futbol/x",
+        "https://www.marca.com/futbol/x",
+        "https://as.com/futbol/x",
+    ],
+)
+def test_peso_de_url_cabeceras_mexicanas_son_potentes(url):
+    assert fuentes_pesos.peso_de_url(url) == fuentes_pesos.PESO_POTENTE
+
+
 def test_peso_de_url_no_casa_por_sufijo_parcial():
     # `notbbc.com` NO es subdominio de `bbc.com`: no debe heredar su peso.
     assert fuentes_pesos.peso_de_url("https://notbbc.com/feed") == fuentes_pesos.PESO_NORMAL

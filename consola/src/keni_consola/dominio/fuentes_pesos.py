@@ -58,6 +58,32 @@ PESOS_HOST_INICIAL: dict[str, float] = {
     # Primer nivel deportivo.
     "espn.com": PESO_POTENTE,
     "skysports.com": PESO_POTENTE,
+    # Primer nivel nacional MX (piloto AMX: una primicia de cabecera mexicana no debe arrancar
+    # con corroboración 0 por no estar en una agencia global). El peso es por HOST y no depende de
+    # que tengamos su RSS: medios sin feed público (Milenio, Proceso, Animal Político) entran al
+    # pool vía Google Trends/agregadores con su host real y deben pesar igual. Editable desde la UI.
+    "eluniversal.com.mx": PESO_POTENTE,
+    "milenio.com": PESO_POTENTE,
+    "reforma.com": PESO_POTENTE,
+    "excelsior.com.mx": PESO_POTENTE,
+    "jornada.com.mx": PESO_POTENTE,
+    "elfinanciero.com.mx": PESO_POTENTE,
+    "eleconomista.com.mx": PESO_POTENTE,
+    "expansion.mx": PESO_POTENTE,
+    "forbes.com.mx": PESO_POTENTE,
+    "proceso.com.mx": PESO_POTENTE,
+    "animalpolitico.com": PESO_POTENTE,
+    "aristeguinoticias.com": PESO_POTENTE,
+    "infobae.com": PESO_POTENTE,
+    "heraldodemexico.com.mx": PESO_POTENTE,
+    "razon.com.mx": PESO_POTENTE,
+    "elsoldemexico.com.mx": PESO_POTENTE,
+    # Deporte de referencia MX + hispano (Claro Sports).
+    "record.com.mx": PESO_POTENTE,
+    "mediotiempo.com": PESO_POTENTE,
+    "tudn.com": PESO_POTENTE,
+    "marca.com": PESO_POTENTE,
+    "as.com": PESO_POTENTE,
 }
 
 

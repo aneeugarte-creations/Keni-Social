@@ -156,7 +156,7 @@
   {
     "id": "as-mexico",
     "nombre": "AS — México",
-    "url": "https://mexico.as.com/rss/mexico/portada.xml",
+    "url": "https://feeds.as.com/mrss-s/pages/as/site/mexico.as.com/portada/",
     "categoria": "deportes",
     "marca_sugerida": "claro-sports",
     "linea_sugerida": "Deportes México",
@@ -207,5 +207,170 @@
     "idioma": "es",
     "region": "LATAM",
     "descripcion": "Noticias de videojuegos de IGN Latinoamérica (español)."
+  },
+  {
+    "id": "eluniversal-portada",
+    "nombre": "El Universal — Portada",
+    "url": "https://www.eluniversal.com.mx/arc/outboundfeeds/rss/?outputType=xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de El Universal, diario nacional de referencia (RSS verificado)."
+  },
+  {
+    "id": "eluniversal-deportes",
+    "nombre": "El Universal — Deportes",
+    "url": "https://www.eluniversal.com.mx/arc/outboundfeeds/rss/category/deportes/?outputType=xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección deportes de El Universal (feed deportivo nativo MX, verificado)."
+  },
+  {
+    "id": "jornada-edicion",
+    "nombre": "La Jornada — Edición",
+    "url": "https://www.jornada.com.mx/rss/edicion.xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Edición de La Jornada, diario nacional (RSS verificado, multi-sección)."
+  },
+  {
+    "id": "jornada-deportes",
+    "nombre": "La Jornada — Deportes",
+    "url": "https://www.jornada.com.mx/rss/deportes.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección deportes de La Jornada (feed deportivo nativo MX, verificado)."
+  },
+  {
+    "id": "reforma-portada",
+    "nombre": "Reforma — Portada",
+    "url": "https://www.reforma.com/rss/portada.xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de Reforma, diario de prestigio e investigación (RSS verificado)."
+  },
+  {
+    "id": "elfinanciero-portada",
+    "nombre": "El Financiero — Portada",
+    "url": "https://www.elfinanciero.com.mx/arc/outboundfeeds/rss/?outputType=xml",
+    "categoria": "negocios",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Economía y Negocios",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de El Financiero, referente de economía y negocios (RSS verificado)."
+  },
+  {
+    "id": "expansion-mx",
+    "nombre": "Expansión — México",
+    "url": "https://expansion.mx/rss",
+    "categoria": "negocios",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Economía y Negocios",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed general de Expansión, negocios y economía MX (RSS verificado)."
+  },
+  {
+    "id": "aristegui-editorial",
+    "nombre": "Aristegui Noticias — Editorial",
+    "url": "https://editorial.aristeguinoticias.com/feed/",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed editorial de Aristegui Noticias, independiente (WordPress, verificado)."
+  },
+  {
+    "id": "larazon-portada",
+    "nombre": "La Razón — Portada",
+    "url": "https://www.razon.com.mx/arc/outboundfeeds/rss/?outputType=xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de La Razón de México (RSS verificado)."
+  },
+  {
+    "id": "elsol-portada",
+    "nombre": "El Sol de México — Portada",
+    "url": "https://www.elsoldemexico.com.mx/rss",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de El Sol de México (cadena OEM, RSS verificado)."
+  },
+  {
+    "id": "publimetro-portada",
+    "nombre": "Publimetro — Portada",
+    "url": "https://www.publimetro.com.mx/arc/outboundfeeds/rss/?outputType=xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de Publimetro México (RSS verificado)."
+  },
+  {
+    "id": "heraldo-portada",
+    "nombre": "El Heraldo de México — Portada",
+    "url": "https://heraldodemexico.com.mx/rss/feed.html?r=1",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de El Heraldo de México (RSS verificado)."
+  },
+  {
+    "id": "record-portada",
+    "nombre": "Récord — Portada",
+    "url": "https://www.record.com.mx/rss/",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de Récord, diario deportivo mexicano (RSS verificado)."
+  },
+  {
+    "id": "marca-portada",
+    "nombre": "Marca — Portada",
+    "url": "https://e00-xlk-ue-marca.uecdn.es/rss/googlenews/portada.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes",
+    "idioma": "es",
+    "region": "GLOBAL",
+    "descripcion": "Portada de Marca, deportes en español (RSS verificado)."
+  },
+  {
+    "id": "foxsports-mx",
+    "nombre": "FOX Sports — México",
+    "url": "https://www.foxsports.com.mx/rss",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed de FOX Sports México (RSS verificado)."
   }
 ]
