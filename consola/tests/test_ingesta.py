@@ -8,6 +8,8 @@ sin identidad estable y la degradación honesta cuando el feed falla.
 
 from __future__ import annotations
 
+import pytest
+
 from keni_consola.dominio import dedup, ingesta
 
 # IP pública literal: pasa el guard SSRF de http_feed sin tocar DNS.
@@ -101,11 +103,29 @@ def test_idioma_del_feed_gana_a_la_heuristica():
     assert all(it["idioma"] == "fr" for it in items)
 
 
-def test_idioma_heuristico_distingue_es_de_en():
+def test_deteccion_idioma_en_la_ingesta_es_en():
+    """Sin idioma declarado en el feed, cada item DETECTA su idioma del texto (es/en)."""
     items, _ = ingesta.items_de_feed(_feed(idioma=""), fetcher=lambda _u: _FEED_ES)
     por_clave = {it["titulo"][:5]: it["idioma"] for it in items}
     assert por_clave["El pr"] == "es"
     assert por_clave["The m"] == "en"
+
+
+def test_detectar_idioma_extranjero_no_es():
+    """Lo que importa aguas abajo: el español sale "es" y lo EXTRANJERO no empieza por "es" (-> entra
+    a Traducir). `langdetect` distingue varios idiomas en titulares cortos, no solo es/en."""
+    pytest.importorskip("langdetect")
+    assert ingesta.detectar_idioma("El gobierno de México anuncia nuevas medidas hoy").startswith("es")
+    assert not ingesta.detectar_idioma("The government announces new measures today").startswith("es")
+    assert not ingesta.detectar_idioma("Top Gear's Jeremy Clarkson diagnosed with cancer").startswith("es")
+    assert not ingesta.detectar_idioma("Tu przeniosą się Lewandowscy, mocny komentarz Bońka").startswith("es")
+
+
+def test_idioma_por_palabras_fallback():
+    """El fallback por palabras funcionales (sin la lib) sigue dando es/en; "" sin señal clara."""
+    assert ingesta._idioma_por_palabras("the minister of the city") == "en"
+    assert ingesta._idioma_por_palabras("el presidente de la ciudad") == "es"
+    assert ingesta._idioma_por_palabras("Lewandowski") == ""
 
 
 def test_items_heredan_el_peso_de_la_fuente():

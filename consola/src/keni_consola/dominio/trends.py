@@ -143,7 +143,7 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
                     # que sea (a menudo extranjera): el idioma se DETECTA del titular real, no se
                     # asume "es" (si no, lo inglés nunca entraría a Traducir). El `resumen` es
                     # texto sintético en español, así que NO entra en la detección.
-                    "idioma": dom_ingesta._idioma_heuristico(titulo),
+                    "idioma": dom_ingesta.detectar_idioma(titulo),
                     "publicado_en": "",
                     "clave": clave,
                     "senal": senal,

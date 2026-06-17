@@ -47,6 +47,11 @@ dependencies = [
     # fijan como dependencia para que el back hosted pueda activarlos sin recompilar la imagen.
     "webauthn>=2.0",
     "cryptography>=42",
+    # Detección de idioma del pool de noticias (`dominio.ingesta.detectar_idioma`): decide qué
+    # historias son extranjeras para Traducir a MX. `langdetect` (n-gram, ~55 idiomas, pure-Python,
+    # offline) sustituye la heurística es/en por palabras; con semilla fija es determinista. Si
+    # faltara, el código degrada a la heurística (no rompe), pero se fija como dependencia.
+    "langdetect>=1.0.9",
 ]
 
 [project.optional-dependencies]

@@ -60,8 +60,20 @@ def _clave_dedup(url_can: str, titulo: str) -> str:
     return _hash_titulo(titulo)
 
 
-# Heurística MUY simple de idioma por palabras funcionales frecuentes. Solo se usa cuando el
-# feed/preset no declara idioma; es un "mejor esfuerzo" honesto (no un detector real).
+# Detección de idioma. PRIMARIO: `langdetect` (modelo n-gram, ~55 idiomas, robusto en titulares
+# cortos), DETERMINISTA con semilla fija (langdetect muestrea al azar). FALLBACK (si la lib faltara
+# o el texto no diera señal): heurística de palabras funcionales es/en. Solo se usa cuando el
+# feed/preset no declara idioma (RSS) y para Google Trends (que enlaza fuentes extranjeras).
+try:
+    from langdetect import DetectorFactory as _LD_Factory
+    from langdetect import detect as _ld_detect
+    from langdetect.lang_detect_exception import LangDetectException as _LDException
+
+    _LD_Factory.seed = 0
+    _LANGDETECT_OK = True
+except Exception:  # noqa: BLE001 -- sin la lib, se degrada a la heurística por palabras
+    _LANGDETECT_OK = False
+
 _PISTAS_ES = frozenset(
     {"el", "la", "los", "las", "de", "que", "en", "con", "por", "para", "del", "una", "un"}
 )
@@ -70,8 +82,8 @@ _PISTAS_EN = frozenset(
 )
 
 
-def _idioma_heuristico(texto: str) -> str:
-    """Adivina es/en por palabras funcionales; "" si no hay señal clara. Mejor esfuerzo."""
+def _idioma_por_palabras(texto: str) -> str:
+    """FALLBACK: adivina es/en por palabras funcionales; "" si no hay señal clara. Mejor esfuerzo."""
     palabras = dedup.clave(texto).split()
     if not palabras:
         return ""
@@ -80,6 +92,30 @@ def _idioma_heuristico(texto: str) -> str:
     if es == en:
         return ""
     return "es" if es > en else "en"
+
+
+def detectar_idioma(texto: str) -> str:
+    """Código ISO-639-1 del idioma de `texto` (es/en/pt/fr/pl/…) o "" si no hay señal.
+
+    `langdetect` (n-gram multi-idioma, determinista) sobre el texto CRUDO; ante texto muy corto, sin
+    señal o sin la lib, cae a `_idioma_por_palabras`. Aguas abajo solo se decide "es vs extranjero"
+    (Traducir traduce todo lo que no empiece por `es`), así que un código de más por un español
+    dudoso (ca/gl/pt) a lo sumo dispara una traducción es->es inocua; un inglés mal etiquetado "es"
+    —lo que pasaba antes— sí dejaba inglés en el feed, y eso es lo que esto elimina.
+    """
+    t = (texto or "").strip()
+    if len(t) < 3:
+        return ""
+    if _LANGDETECT_OK:
+        try:
+            codigo = _ld_detect(t)
+        except _LDException:
+            codigo = ""
+        except Exception:  # noqa: BLE001 -- una rareza de la lib no debe romper la ingesta
+            codigo = ""
+        if codigo:
+            return codigo.split("-")[0].lower()  # normaliza "zh-cn" -> "zh"
+    return _idioma_por_palabras(t)
 
 
 def _publicado_en(fecha_cruda: str) -> str:
@@ -137,7 +173,7 @@ def items_de_feed(
         if not clave:
             continue  # sin identidad estable: no se archiva
         resumen = (crudo.get("resumen") or "").strip()
-        idioma = idioma_feed or _idioma_heuristico(f"{titulo} {resumen}")
+        idioma = idioma_feed or detectar_idioma(f"{titulo} {resumen}")
         items.append(
             {
                 "fuente_id": feed_id,
