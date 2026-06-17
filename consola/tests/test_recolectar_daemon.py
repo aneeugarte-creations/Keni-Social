@@ -656,8 +656,8 @@ def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkey
 
 def test_paso_agrupar_clasifica_por_ia_una_corroborada_sin_marca(monkeypatch):
     """Una historia SIN marca que el vocabulario no casa (jerga/entidad nueva) pero CORROBORADA
-    por 2+ fuentes se clasifica por IA (no solo el breaking): antes quedaba huérfana e invisible
-    en los paneles por marca. Misma historia (mismo título, sin url) vista por dos outlets."""
+    por 2+ fuentes se clasifica por IA (no solo el breaking): antes quedaba sin clasificar e
+    invisible en los paneles por marca. Misma historia (mismo título, sin url) vista por dos outlets."""
     base_item = {
         "marca": "", "categoria": "internacional",
         "titulo": "Quarterly briefing on a niche protocol upgrade",  # sin vocabulario de ninguna marca

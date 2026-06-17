@@ -172,9 +172,9 @@ def paso_agrupar() -> dict[str, Any]:
                     # SIN marca pero con peso real (última hora, o corroborada por 2+ fuentes):
                     # encaje por IA (Haiku) en una de las marcas activas; cae a la de noticias si
                     # la IA duda. Sin esto, una historia que el vocabulario no casa (jerga/entidad
-                    # nueva) pero que varios medios cubren quedaba huérfana e invisible en los
+                    # nueva) pero que varios medios cubren quedaba sin clasificar e invisible en los
                     # paneles por marca. Se limita a corroboradas (2+ fuentes) para no clasificar
-                    # ruido de fuente única.
+                    # contenido irrelevante de fuente única.
                     marca_c = _pkg._clasificar_marca_ia(recalc)
                     if marca_c:
                         marca_por_ia = True
