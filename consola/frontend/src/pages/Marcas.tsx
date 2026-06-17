@@ -70,7 +70,7 @@ function SelectorCanal({
   onCambiar: (canal: CanalPieza) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-border p-0.5">
+    <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
       {CANALES.map((opcion) => {
         const activo = canal === opcion.id;
         const bloqueado = opcion.id === "postproxy" && !postproxyDisponible;
@@ -83,7 +83,7 @@ function SelectorCanal({
             onClick={() => onCambiar(opcion.id)}
             className={cn(
               "rounded px-2 py-0.5 text-xs font-medium transition-colors",
-              activo ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              activo ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               bloqueado && "cursor-not-allowed opacity-50",
             )}
           >
