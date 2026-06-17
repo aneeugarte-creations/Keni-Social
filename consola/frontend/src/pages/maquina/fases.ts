@@ -38,7 +38,7 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     nombre: "Recolectar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
-    ayuda: "Recolecta artículos de las fuentes y agrupa las notas parecidas del mismo evento",
+    ayuda: "Recolecta artículos de las fuentes y agrupa las notas idénticas (misma url o titular)",
     queue: "recolectar",
     excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
   },
