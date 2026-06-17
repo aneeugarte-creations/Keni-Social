@@ -261,25 +261,29 @@ def test_endpoint_daemons_inactivo_viejo_no_es_atrasado(entorno):
 
 
 def test_endpoint_daemons_ignora_retirados(entorno):
+    # `pipeline` y `programador` son daemons RETIRADOS: sus filas viejas en `daemon_latidos`
+    # ya no las actualiza nadie y la sonda las IGNORA. Un daemon vivo (metricas) sí aparece.
     db.latido_barrido("pipeline", ok=True, intervalo_seg=15.0, tick_seg=60.0)
     _envejecer_latido("pipeline")
     db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     nombres = {d["daemon"] for d in c.get("/api/sistema/daemons").json()["daemons"]}
     assert "pipeline" not in nombres
-    assert "programador" in nombres
+    assert "programador" not in nombres
+    assert "metricas" in nombres
 
 
 def test_endpoint_daemons_expone_barrible(entorno):
     # `barrible` = su bucle corre sobre `bucle_gateado` y CONSUME el flag de barrido forzado
-    # (latidos.BARRIBLES); los bucles legados (programador/metricas/...) no lo miran, asi que
+    # (latidos.BARRIBLES); los bucles legados (metricas/metricas_piezas/...) no lo miran, asi que
     # el front solo les ofrece "Barrer ahora" a los primeros.
     db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
-    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
     assert por_nombre["ingesta"]["barrible"] is True
-    assert por_nombre["programador"]["barrible"] is False
+    assert por_nombre["metricas"]["barrible"] is False
 
 
 # --------------------------------------------------------------------------- #
@@ -293,8 +297,6 @@ def test_grupo_de_clasifica_cada_motor():
     assert latidos.grupo_de("investigacion") == "investigacion"
     assert latidos.grupo_de("produccion") == "produccion"
     assert latidos.grupo_de("comercial") == "flujo"
-    assert latidos.grupo_de("programador") == "flujo"
-    assert latidos.grupo_de("vencimientos") == "flujo"
     assert latidos.grupo_de("metricas") == "infra"
     assert latidos.grupo_de("limpiador") == "infra"
 
@@ -309,8 +311,8 @@ def test_gasta_tokens_solo_los_que_encolan_claude():
     # patrones deriva de Metricool SIN claude => False.
     assert latidos.gasta_tokens("investigacion") is True
     assert latidos.gasta_tokens("produccion") is True
-    for d in ("ingesta", "trends", "algoritmos", "comercial", "programador",
-              "vencimientos", "metricas", "metricas_piezas", "alertas_rendimiento",
+    for d in ("ingesta", "trends", "algoritmos", "comercial",
+              "metricas", "metricas_piezas", "alertas_rendimiento",
               "media_gc", "patrones", "noticias_gc", "limpiador"):
         assert latidos.gasta_tokens(d) is False
 
@@ -338,7 +340,7 @@ def test_clase_de_clasifica_ia_maquina_sistema():
     for d in ("investigacion", "produccion"):
         assert latidos.clase_de(d) == "ia"
     # MAQUINA: parte de la maquina de contenido NO-IA.
-    for d in ("ingesta", "trends", "algoritmos", "noticias_gc", "programador", "vencimientos"):
+    for d in ("ingesta", "trends", "algoritmos", "noticias_gc"):
         assert latidos.clase_de(d) == "maquina"
     # SISTEMA: infraestructura (incl. patrones, comercial, media_gc).
     for d in ("limpiador", "media_gc", "metricas", "metricas_piezas", "alertas_rendimiento",
@@ -352,8 +354,6 @@ def test_motor_de_mapea_el_loop_o_none():
     # La maquina sirve a un motor concreto.
     assert latidos.motor_de("ingesta") == "investigacion"
     assert latidos.motor_de("noticias_gc") == "investigacion"
-    assert latidos.motor_de("programador") == "produccion"
-    assert latidos.motor_de("vencimientos") == "produccion"
     # Sistema no pertenece a ningun motor.
     for d in ("limpiador", "metricas", "patrones", "comercial"):
         assert latidos.motor_de(d) is None
@@ -394,7 +394,6 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
     assert latidos.clave_gate_de("noticias_gc") == "KENI_NOTICIAS_GC"
     assert latidos.clave_gate_de("patrones") == "KENI_PATRONES_AUTO"
     assert latidos.clave_gate_de("alertas_rendimiento") == "KENI_ALERTAS_RENDIMIENTO"
-    assert latidos.clave_gate_de("vencimientos") == "KENI_EVENTOS_VENCIMIENTOS"
     # Investigación tiene interruptor PROPIO (maestro virtual de sus etapas Recolectar/Verificar),
     # independiente de Producción (antes ambos compartían KENI_MAQUINA). Producción sí usa el
     # maestro de la máquina (su loop gatea solo con la máquina: el Avance corre incondicional).
@@ -404,7 +403,7 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
 
 def test_clave_gate_de_null_en_siempre_on():
     # Daemons SIEMPRE-ON sin toggle de ajuste -> None (el front no pinta switch on/off).
-    for d in ("limpiador", "programador", "comercial", "metricas", "metricas_piezas"):
+    for d in ("limpiador", "comercial", "metricas", "metricas_piezas"):
         assert latidos.clave_gate_de(d) is None
     # Un daemon desconocido tampoco tiene gate.
     assert latidos.clave_gate_de("daemon_nuevo_sin_clasificar") is None
@@ -507,7 +506,7 @@ def test_prompts_de_solo_los_agentes_ia():
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ]
-    for d in ("ingesta", "trends", "programador", "metricas", "limpiador", "daemon_nuevo"):
+    for d in ("ingesta", "trends", "patrones", "metricas", "limpiador", "daemon_nuevo"):
         assert latidos.prompts_de(d) == []
 
 
@@ -700,12 +699,12 @@ def test_endpoint_barrer_apagado_409(entorno):
 def test_endpoint_barrer_no_barrible_409(entorno):
     # Un daemon LEGADO (fuera de latidos.BARRIBLES) late pero su bucle NO consume el
     # flag: aceptar la solicitud la dejaria suelta para siempre. 409 sin encolarla.
-    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
-    r = c.post("/api/sistema/daemons/programador/barrer", headers=_ORIGIN)
+    r = c.post("/api/sistema/daemons/metricas/barrer", headers=_ORIGIN)
     assert r.status_code == 409
     assert "no admite barrido forzado" in r.json()["error"]
-    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "programador"]
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "metricas"]
     assert fila["barrido_solicitado"] == ""
 
 
@@ -849,7 +848,7 @@ def test_bucle_gateado_resumen_fn_falla_degrada_sin_romper(monkeypatch):
 
 
 def test_latido_barrido_resumen_llega_a_daemon_barridos(entorno):
-    # Camino LEGADO (programador/metricas/comercial): su bucle llama `latidos.barrido` directo
+    # Camino LEGADO (metricas/comercial): su bucle llama `latidos.barrido` directo
     # con `resumen=`; ese texto debe aterrizar en `daemon_barridos`.
     latidos.barrido(
         "comercial", ok=True, intervalo_seg=60.0, tick_seg=60.0,

@@ -10,13 +10,12 @@
 ║  nada sale solo a destinos no configurados.                                ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
-El tablero (`api/publicaciones`) y el barrido de vencimientos (`eventos_scanner`) llaman a
-`emitir(...)` cuando pasa algo notificable (una pieza se aprueba, un contenido vence).
-`emitir`:
+El tablero (`api/publicaciones`) llama a `emitir(...)` cuando pasa algo notificable (p. ej.
+una pieza se aprueba). `emitir`:
 
-  1. Registra el evento en la bitacora (`repos.registrar_evento_interno`). Para los
-     vencimientos se pasa una `clave_idempotencia` (tipo+plataforma+fecha) de modo que el
-     mismo vencimiento NO se re-emita en cada barrido: si la clave ya existe, se corta.
+  1. Registra el evento en la bitacora (`repos.registrar_evento_interno`). Se puede pasar una
+     `clave_idempotencia` de modo que el mismo evento NO se re-emita: si la clave ya existe,
+     se corta.
   2. Busca los webhooks ACTIVOS suscritos a ese tipo (`repos.listar_webhooks_para`) y les
      hace POST del payload, firmado con HMAC-SHA256 si el webhook tiene `secreto`.
 

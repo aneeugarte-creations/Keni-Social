@@ -154,7 +154,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     nombre: "Publicar",
     es_ia: false,
     claves: ["KENI_PUBLICAR_REAL"],
-    ayuda: "Postea de verdad en el programador (apagado: simulación)",
+    ayuda: "El botón de publicar postea de verdad en redes (apagado: solo previsualiza)",
     precaucion: "Publica de verdad",
     excepciones: {
       base: "KENI_PUBLICAR_REAL",

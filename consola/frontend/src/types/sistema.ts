@@ -552,7 +552,7 @@ export interface LatidoDaemon {
   /** ISO de la solicitud de barrido forzado pendiente, o "" si no hay ninguna. */
   barrido_solicitado: string;
   /** `true` si su bucle consume el flag de barrido forzado (`bucle_gateado`): solo a esos
-   *  se les ofrece «Barrer ahora». Los bucles legados (programador/metricas/…) no lo miran. */
+   *  se les ofrece «Barrer ahora». Los bucles legados (metricas/comercial/…) no lo miran. */
   barrible: boolean;
   /** Grupo (motor/papel) al que pertenece el daemon; agrupa el dashboard de Workers. */
   grupo: GrupoDaemon;
@@ -576,7 +576,7 @@ export interface LatidoDaemon {
    *  in-place); `[]` si no es IA. Lo da el backend (`latidos.prompts_de`). */
   prompts: PromptDaemon[];
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
-   *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (limpiador/programador/…). */
+   *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (limpiador/metricas/…). */
   clave_gate: string | null;
   /** Valor GUARDADO de ese flag propio (lo que el SWITCH refleja), SIN ANDearlo con la máquina:
    *  así el switch sigue encendido aunque la máquina esté apagada (estado `en_espera`). `null` =

@@ -123,7 +123,6 @@ ENV_PROMPTS_DIR_LEGACY = "KENI_TEXTO_DIR"
 # Programadores en segundo plano.
 ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
 ENV_COMERCIAL_INTERVALO_HORAS = "KENI_COMERCIAL_INTERVALO_HORAS"
-ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 # Refresco PROACTIVO de la cache de metricas POR PIEZA (tablero) — Fase 3 auto-operativa.
 ENV_METRICAS_PIEZAS_REFRESCO_HORAS = "KENI_METRICAS_PIEZAS_REFRESCO_HORAS"
@@ -437,15 +436,6 @@ ENV_AFP_CLIENT_ID = "KENI_AFP_CLIENT_ID"
 ENV_AFP_CLIENT_SECRET = "KENI_AFP_CLIENT_SECRET"
 ENV_AFP_BASE_URL = "KENI_AFP_BASE_URL"
 
-# Eventos internos del tablero (pieza aprobada / contenido vencido). El barrido que
-# detecta vencimientos y dispara los webhooks salientes corre como hilo demonio en el
-# servidor real (igual que el programador). El reparto a la red es OPT-IN: sin webhooks
-# activos no hay ninguna peticion de salida.
-ENV_EVENTOS_INTERVALO_SEGUNDOS = "KENI_EVENTOS_INTERVALO_SEGUNDOS"
-# Apaga del todo el barrido de vencimientos (la emision por transiciones sigue activa,
-# solo deja de escanear el reloj). `0`/`false` => no arranca el hilo.
-ENV_EVENTOS_VENCIMIENTOS = "KENI_EVENTOS_VENCIMIENTOS"
-
 # Persistencia (#130 / ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
 # S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
 # `.env.example` (NO se renombran). `DATABASE_URL` (o sus componentes `POSTGRES_*`) es
@@ -557,10 +547,6 @@ METRICAS_HISTORICO_RETENCION_DIAS_DEF = 90
 ALERTAS_INTERVALO_HORAS_DEF = 6
 # Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
 ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0
-
-# Cadencia del barrido de eventos internos (vencimientos del tablero). 5 min basta: el
-# vencimiento es por DIA (`fecha_entrega`), no hace falta granularidad fina.
-EVENTOS_INTERVALO_SEGUNDOS_DEF = 300.0
 
 # Cadencia del barrido del Investigador (Fase 1): materializa el snapshot del Radar por marca
 # cada N horas. Intervalo holgado (def 6h, igual que radar-auto): el snapshot vive con un TTL
@@ -837,8 +823,6 @@ __all__ = [
     'ENV_DB_POOL_MAX',
     'ENV_DB_POOL_MIN',
     'ENV_ESFUERZO',
-    'ENV_EVENTOS_INTERVALO_SEGUNDOS',
-    'ENV_EVENTOS_VENCIMIENTOS',
     'ENV_FEED_SLA_MIN',
     'ENV_PIPELINE_FUSIONAR',
     'ENV_FUSION_SEMANTICA_MAX',
@@ -911,7 +895,6 @@ __all__ = [
     'ENV_JOBS_MAX_INTENTOS',
     'ENV_PROMPT_MAX_CHARS',
     'ENV_PROMPT_AVISO_CHARS',
-    'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VERIFICAR',
     'ENV_VERIFICACION_EN_CURSO_TTL_MIN',
@@ -956,7 +939,6 @@ __all__ = [
     'ENV_WHISPER_MODELO',
     'ENV_WORKER_EXTERNO',
     'ENV_WORKER_SONDEO_SEGUNDOS',
-    'EVENTOS_INTERVALO_SEGUNDOS_DEF',
     'FEED_SLA_MIN_DEF',
     'FFMPEG_BIN_DEF',
     'FUENTES_BAJA_CONFIANZA_DEF',

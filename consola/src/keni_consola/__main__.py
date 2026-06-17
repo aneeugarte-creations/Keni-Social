@@ -161,23 +161,6 @@ def main() -> int:
     except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque
         pass
 
-    # Programador de piezas (#9, Fase 3): un hilo demonio que, al vencer la
-    # `fecha_programada` de una pieza `programado`, la PREPARA en dry-run (estampa
-    # `preparado_en`). Por defecto NO publica: el posteo real (vía Metricool) esta gated por
-    # `KENI_PUBLICAR_REAL` ("el humano aprueba; el sistema no publica solo"). Vive aqui
-    # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .programador import iniciar_programador
-
-    iniciar_programador()
-
-    # Barrido de EVENTOS INTERNOS del tablero (pieza vencida): un hilo demonio que, cuando
-    # un contenido pasa su `fecha_entrega` sin cerrarse, emite `contenido.vencido` y lo
-    # reparte a los webhooks salientes que el equipo haya dado de alta. SAFE BY DEFAULT: sin
-    # webhooks activos no toca la red. Vive aqui (servidor real), NO en `crear_app`.
-    from .eventos_scanner import iniciar_scanner_vencimientos
-
-    iniciar_scanner_vencimientos()
-
     # Refresco de metricas: un hilo demonio que mantiene caliente la cache de metricas
     # (Postgres), refrescandola al arrancar y cada N horas (def 4h, KENI_METRICAS_REFRESCO_HORAS).
     # Asi la UI lee datos ya calculados (instantaneo) sin golpear las APIs externas en cada

@@ -209,13 +209,11 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "revisor_id": pub.get("revisor_id") or "",
         "revisor_nombre": pub.get("revisor_nombre") or "",
         "revisado_en": pub.get("revisado_en") or "",
-        # Marca dry-run del programador (#9): instante en que quedo "lista para publicar"
-        # (preparada, NO publicada de verdad: el posteo real vía Metricool esta GATED por
-        # `KENI_PUBLICAR_REAL`). ""
-        # hasta que el programador la prepara al vencer su `fecha_programada`.
+        # Instante en que la pieza se publicó de verdad en redes (botón manual, gated por
+        # `KENI_PUBLICAR_REAL`). "" mientras no se haya publicado.
         "preparado_en": pub.get("preparado_en") or "",
-        # Id del post en Metricool cuando KENI_PUBLICAR_REAL esta activo y la pieza
-        # se envio al scheduler de Metricool. "" en dry-run y en piezas legadas.
+        # Id del post en Metricool cuando la pieza se publicó de verdad (KENI_PUBLICAR_REAL
+        # activo). "" si solo se previsualizó (dry-run) o en piezas legadas.
         "id_post_metricool": pub.get("id_post_metricool") or "",
         # Origen de la imagen: 'ia'|'galeria'|'fuente'. Si es 'fuente', `imagen_fuente` trae
         # la URL original del artículo (p.ej. de un RSS de marca propia). El editor ofrece

@@ -292,10 +292,10 @@ function Cuerpo({
   const filtrando =
     red !== FILTRO_TODOS || linea !== FILTRO_TODOS || estadoVista != null;
 
-  // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
-  // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
-  // publicar en silencio; lo hacemos visible. Se basa en el TOTAL del servidor, no en las
-  // páginas cargadas (con keyset la 1ª página podía no traer ninguna programada).
+  // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, al publicarlas
+  // solo se previsualizan (no salen a redes). Es justo el fallo que dejaba piezas sin publicar en
+  // silencio; lo hacemos visible. Se basa en el TOTAL del servidor, no en las páginas cargadas
+  // (con keyset la 1ª página podía no traer ninguna programada).
   const hayProgramadasSinSalir = debeAvisarProgramadasSinSalir(
     opciones.publicar_real,
     totalProgramadas,

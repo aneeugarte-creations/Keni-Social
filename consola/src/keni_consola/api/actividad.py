@@ -137,7 +137,7 @@ _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
     ("patrones", "Patrones de marca", "patrones_auto_activo",
      "Re-deriva los patrones editoriales por marca desde sus métricas.", config.ENV_PATRONES_AUTO),
     ("publicar_real", "Publicación real", "publicar_real",
-     "Si está OFF, el programador corre en DRY-RUN (no publica).", config.ENV_PUBLICAR_REAL),
+     "Si está OFF, el botón de publicar solo previsualiza (no publica).", config.ENV_PUBLICAR_REAL),
     ("limpiador", "Limpiador de generaciones", None,
      "Siempre activo: cierra como error las generaciones atascada.", ""),
 ]

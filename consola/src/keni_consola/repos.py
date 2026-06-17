@@ -97,7 +97,6 @@ from .repos_publicacion import (  # noqa: F401
     listar_publicacion,
     listar_publicaciones_origenes,
     listar_piezas_fila,
-    listar_publicaciones_vencido,
     listar_etiquetas,
     listar_evergreen_ideas,
     listar_insumo_items,

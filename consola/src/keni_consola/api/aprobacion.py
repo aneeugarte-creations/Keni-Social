@@ -8,14 +8,14 @@
   - POST /api/aprobacion/{id}/rechazar          -> DECIDE el nivel actual como rechazado;
         la pieza vuelve a `borrador`.
   - POST /api/aprobacion/{id}/programar {fecha} -> aprobado -> programado (NO es aprobacion;
-        es programacion: se conserva intacta porque el programador lee `programado`).
+        es programacion: deja la pieza `programado`, que es lo que la pagina feed muestra).
 
 La logica PURA (orden, "otro par de ojos", estado global) vive en `dominio.colaboracion`;
 la traduccion estado-cadena -> estado-pieza en `colaboracion.estado_publicacion_para`.
 
 GATING (frontera del producto): programar NO publica en ninguna plataforma. Deja la pieza
-en `programado` con su `fecha_programada`; el programador del servidor (`programador.py`) la
-PREPARA (dry-run) al vencer. "El humano aprueba; el sistema no publica solo."
+en `programado` con su `fecha_programada` y aterriza en el feed para su aprobacion final; la
+salida a redes la dispara una persona desde ahi. "El humano aprueba; el sistema no publica solo."
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def _reflejar_estado_pieza(
     """Aplica el estado GLOBAL de la cadena al `estado` editorial de la pieza.
 
     Lee la cadena de la pieza, la resume con `dominio.colaboracion` y traduce ese estado
-    global al estado editorial que el resto del flujo (y el programador) entiende. Ademas,
+    global al estado editorial que el resto del flujo entiende. Ademas,
     propaga al registro publico de la pieza los campos de revision legados
     (`revisor_*`/`revisado_en`) tomados de la ULTIMA decision, para que la cola/UI sigan
     mostrando quien revisó y cuándo. Devuelve la pieza actualizada.
@@ -466,9 +466,8 @@ def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
 
     Acepta 'YYYY-MM-DDTHH:MM' (o con segundos), con o sin zona ('...Z'/'+00:00'). Una
     cadena SIN zona se interpreta como UTC (convención del sistema). Debe ser estrictamente
-    futura: no tiene sentido programar para un instante ya pasado (el programador la
-    prepararia de inmediato, sorprendiendo al usuario). Se normaliza a minutos en UTC
-    ('YYYY-MM-DDTHH:MM', hora de pared UTC) para que el programador la compare en UTC.
+    futura: no tiene sentido programar para un instante ya pasado. Se normaliza a minutos en
+    UTC ('YYYY-MM-DDTHH:MM', hora de pared UTC).
     """
     if not isinstance(valor, str) or not valor.strip():
         return None, "Indica la fecha y hora de publicación (formato YYYY-MM-DDTHH:MM)."
@@ -488,9 +487,9 @@ async def programar(request: Request) -> Response:
 
     NO es aprobacion: es programacion, y se conserva intacta. Solo se puede programar una
     pieza APROBADA (el humano ya la aprobó vía la cadena). NO publica: deja la pieza en
-    `programado` con su `fecha_programada`; el programador del servidor la PREPARA (dry-run)
-    al vencer. Posteo real (vía Metricool) GATED por `KENI_PUBLICAR_REAL`. 404 si no existe;
-    409 si no está aprobada; 400 si la fecha no es válida/futura.
+    `programado` con su `fecha_programada`, que es lo que la pagina feed muestra; la salida
+    a redes la dispara una persona desde ahi. 404 si no existe; 409 si no está aprobada;
+    400 si la fecha no es válida/futura.
     """
     pieza_id = request.path_params["pieza_id"]
     pub = repos.obtener_pieza(pieza_id)

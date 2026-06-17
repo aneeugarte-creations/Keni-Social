@@ -3,8 +3,7 @@
 Emite `pieza.bajo_rendimiento` cuando una pieza publicada cae bajo el umbral de engagement
 (`KENI_ALERTAS_UMBRAL_ENGAGEMENT`): el equipo se entera (webhook/Slack) sin vigilar metricas.
 Idempotente por bucket diario (re-ejecutar el mismo dia no duplica avisos). El antiguo carril
-de "candidatas a reciclaje" se retiro: lo sustituye el EVERGREEN DIARIO automatico
-(`idear_diario`), que reemite solo una pieza green aprobada al dia.
+de "candidatas a reciclaje" se retiro.
 """
 
 from __future__ import annotations

@@ -6,7 +6,6 @@ Cubre los fixes de la auditoria de integridad:
   - filtro multi-marca en SQL (`listar/contar_piezas(marca=[...])`),
   - UNIQUE de turnos de rota (carrera del check-then-insert),
   - normalizacion idempotente de timestamps TEXT al canon UTC-sin-offset,
-  - `listar_publicaciones_vencido` (filtro de vencimientos en SQL),
   - ids de snapshots de pieza a hex completo (32).
 
 Usa el Postgres de pruebas via la fixture `entorno` (skip si no hay).
@@ -300,24 +299,6 @@ def test_items_sin_cluster_excluye_descartados(entorno):
     claves = {i["clave"] for i in sin_cluster}
     assert "vivo" in claves
     assert "muerto" not in claves
-
-
-# --------------------------------------------------------------------------- #
-# Vencimientos del tablero en SQL                                              #
-# --------------------------------------------------------------------------- #
-
-
-def test_listar_contenido_vencido_filtra_en_sql(entorno):
-    hoy = "2026-06-09"
-    db.crear_publicacion(titulo="Vencida", fecha_entrega="2026-06-01")
-    db.crear_publicacion(titulo="Hoy (no vencida)", fecha_entrega=hoy)
-    db.crear_publicacion(titulo="Futura", fecha_entrega="2026-07-01")
-    db.crear_publicacion(titulo="Sin entrega")
-    cerrada = db.crear_publicacion(titulo="Cerrada", fecha_entrega="2026-06-01")
-    db.actualizar_publicacion(cerrada["id"], {"estado": "hecha"})
-
-    vencidos = db.listar_publicaciones_vencido(hoy)
-    assert [c["titulo"] for c in vencidos] == ["Vencida"]
 
 
 # --------------------------------------------------------------------------- #

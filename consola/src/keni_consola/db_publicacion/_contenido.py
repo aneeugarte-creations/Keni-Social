@@ -28,7 +28,6 @@ __all__ = [
     "_entero_no_negativo",
     "crear_publicacion",
     "listar_publicacion",
-    "listar_publicaciones_vencido",
     "titulos_recientes_marca",
     "contar_publicacion_origen_desde",
     "resumen_plan_por_categoria",
@@ -479,26 +478,6 @@ def reparar_verificacion_en_curso_sueltos(umbral_iso: str) -> int:
         return int(cur.rowcount or 0)
     finally:
         con.close()
-
-
-def listar_publicaciones_vencido(hoy: str) -> list[dict[str, Any]]:
-    """Items con `fecha_entrega` VENCIDA (`< hoy`, ISO `YYYY-MM-DD`) y estado NO terminal.
-
-    Empuja al SQL el filtro que el scanner de vencimientos (`eventos_scanner`) aplicaba en
-    Python tras traerse el tablero ENTERO en cada barrido. Los estados terminales
-    (`publicado`/`hecha`) replican `eventos_scanner._ESTADOS_CERRADOS`. Orden estable.
-    """
-    con = _conectar()
-    try:
-        filas = con.execute(
-            f"{_SELECT_PUBLICACION} WHERE fecha_entrega <> '' AND fecha_entrega < ? "
-            "AND estado NOT IN ('publicado', 'hecha') "
-            "ORDER BY fecha_entrega ASC, creado ASC, id ASC",
-            (hoy,),
-        ).fetchall()
-    finally:
-        con.close()
-    return [_fila_a_publicacion(f) for f in filas]
 
 
 def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:

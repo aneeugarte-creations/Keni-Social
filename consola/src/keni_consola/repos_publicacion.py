@@ -107,11 +107,6 @@ def listar_publicacion(
     )
 
 
-def listar_publicaciones_vencido(hoy: str) -> list[dict[str, Any]]:
-    """Items con `fecha_entrega` vencida y estado no terminal (filtro en SQL). Delegado en `db.py`."""
-    return db.listar_publicaciones_vencido(hoy)
-
-
 def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     """Títulos del contenido reciente de una marca (dedup del pipeline). Delegado en `db.py`."""
     return db.titulos_recientes_marca(marca, desde_iso)

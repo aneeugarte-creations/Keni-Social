@@ -7,8 +7,6 @@ Pensado para el deploy HOSTED: ahi el `back` corre `uvicorn keni_consola.app:cre
 solo procesa la cola de jobs. Sin un proceso como este, los hilos demonio de fondo
 NO correrian en produccion. Este proceso aparte los mantiene vivos:
 
-  - programador de piezas (DRY-RUN salvo `KENI_PUBLICAR_REAL=1`),
-  - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento (solo leen + emiten eventos internos),
   - MÁQUINA DE CONTENIDO (Flujo C): el pipeline (`KENI_PIPELINE_REDACTAR`/`KENI_PIPELINE_RECOLECTAR`/
@@ -19,9 +17,9 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
-defecto (`KENI_PUBLICAR_REAL`, `KENI_MAQUINA`, `KENI_PIPELINE_REDACTAR`, `KENI_PIPELINE_ILUSTRAR`).
-La máquina de contenido PRODUCE hasta el borrador, pero NUNCA publica: el posteo
-real sigue gated por `KENI_PUBLICAR_REAL` (OFF). Es el mismo conjunto de daemons que
+defecto (`KENI_MAQUINA`, `KENI_PIPELINE_REDACTAR`, `KENI_PIPELINE_ILUSTRAR`).
+La máquina de contenido PRODUCE hasta el borrador, pero NUNCA publica: la salida a
+redes la dispara una persona desde el feed. Es el mismo conjunto de daemons que
 `python -m keni_consola` arranca junto al servidor; aqui van sin uvicorn.
 """
 
@@ -51,7 +49,6 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
-    from .eventos_scanner import iniciar_scanner_vencimientos
     from .recolectar_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
@@ -59,12 +56,9 @@ def main() -> int:
     from .noticias_gc_daemon import iniciar_noticias_gc
     from .patrones_refresco import iniciar_refresco_patrones
     from .pipeline_contenido import iniciar_pipeline
-    from .programador import iniciar_programador
     from .limpiador_generaciones import iniciar_limpiador
     from .trends_daemon import iniciar_trends
 
-    iniciar_programador()  # DRY-RUN salvo KENI_PUBLICAR_REAL=1: nunca publica solo.
-    iniciar_scanner_vencimientos()
     iniciar_refresco_metricas()
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.

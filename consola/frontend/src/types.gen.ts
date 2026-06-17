@@ -623,9 +623,9 @@ export interface MetricasRun {
  *
  * Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
  * `revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; "" mientras
- * no haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca
- * DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
- * via Metricool esta gated por `KENI_PUBLICAR_REAL`); "" hasta que vence su `fecha_programada`.
+ * no haya pasado por revision (incluidas las piezas legadas). `preparado_en` se estampa
+ * cuando la pieza se publica de verdad en redes (botón manual, gated por
+ * `KENI_PUBLICAR_REAL`); "" mientras no se haya publicado.
  */
 export interface Pieza {
   id: string;

@@ -14,8 +14,6 @@ from ._config_comun import (
     ENV_AUTO_PREAPROBACION,
     ENV_COMERCIAL_INTERVALO_HORAS,
     ENV_COMERCIAL_INTERVALO_SEGUNDOS,
-    ENV_EVENTOS_INTERVALO_SEGUNDOS,
-    ENV_EVENTOS_VENCIMIENTOS,
     ENV_INVESTIGADOR,
     ENV_INVESTIGADOR_INTERVALO_HORAS,
     ENV_METRICAS_HISTORICO_RETENCION_DIAS,
@@ -23,12 +21,10 @@ from ._config_comun import (
     ENV_METRICAS_REFRESCO_HORAS,
     ENV_MIN_APROBACIONES,
     ENV_PATRONES_AUTO,
-    ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
     ENV_TRENDS,
     ENV_TRENDS_GEOS,
     ENV_TRENDS_INTERVALO_MIN,
-    EVENTOS_INTERVALO_SEGUNDOS_DEF,
     INVESTIGADOR_INTERVALO_HORAS_DEF,
     METRICAS_HISTORICO_RETENCION_DIAS_DEF,
     METRICAS_PIEZAS_REFRESCO_HORAS_DEF,
@@ -74,20 +70,6 @@ def comercial_intervalo_horas() -> float | None:
         return None
     try:
         return float(crudo)
-    except ValueError:
-        return None
-
-
-def programador_intervalo_segundos() -> float | None:
-    """Intervalo del barrido del programador en s (`KENI_PROGRAMADOR_INTERVALO_SEGUNDOS`, min 1.0).
-
-    None si ausente/invalido (el llamante cae al default del modulo).
-    """
-    crudo = os.environ.get(ENV_PROGRAMADOR_INTERVALO_SEGUNDOS)
-    if not crudo:
-        return None
-    try:
-        return max(1.0, float(crudo))
     except ValueError:
         return None
 
@@ -156,36 +138,12 @@ def alertas_umbral_engagement() -> float:
     return valor if valor > 0 else ALERTAS_UMBRAL_ENGAGEMENT_DEF
 
 
-def eventos_intervalo_segundos() -> float:
-    """Intervalo del barrido de vencimientos del tablero en s (`KENI_EVENTOS_INTERVALO_SEGUNDOS`, min 1.0, def 300)."""
-    crudo = os.environ.get(ENV_EVENTOS_INTERVALO_SEGUNDOS)
-    if not crudo:
-        return EVENTOS_INTERVALO_SEGUNDOS_DEF
-    try:
-        return max(1.0, float(crudo))
-    except ValueError:
-        return EVENTOS_INTERVALO_SEGUNDOS_DEF
-
-
-def eventos_vencimientos_activos() -> bool:
-    """True (def) si el barrido de vencimientos debe arrancar. `KENI_EVENTOS_VENCIMIENTOS=0` lo apaga.
-
-    Solo controla el HILO que escanea el reloj; la emision de eventos por transicion
-    (pieza aprobada/publicada) NO depende de esto.
-    """
-    crudo = _crudo(ENV_EVENTOS_VENCIMIENTOS)
-    if not crudo:
-        return True
-    return crudo.lower() in _VERDADEROS
-
-
 def publicar_real() -> bool:
     """True si `KENI_PUBLICAR_REAL` esta a un valor afirmativo (gate de pieza real).
 
-    Por defecto OFF (False): el programador opera en DRY-RUN. Pon `KENI_PUBLICAR_REAL=1`
-    (o `true`/`yes`/`on`) para activar el posteo real al scheduler de Metricool.
-    El humano sigue aprobando; esta flag solo autoriza al sistema a enviar lo ya
-    programado a Metricool cuando vence la fecha.
+    Por defecto OFF (False): el botón de publicar solo PREVISUALIZA el cuerpo. Pon
+    `KENI_PUBLICAR_REAL=1` (o `true`/`yes`/`on`) para autorizar el posteo real a
+    Metricool/Postproxy. El humano sigue aprobando y disparando la publicación.
     """
     return _crudo(ENV_PUBLICAR_REAL).lower() in _VERDADEROS
 

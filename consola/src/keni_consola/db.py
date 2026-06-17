@@ -141,7 +141,6 @@ from .db_publicacion import (  # noqa: F401
     listar_publicacion,
     listar_publicaciones_origenes,
     listar_piezas_fila,
-    listar_publicaciones_vencido,
     listar_etiquetas,
     obtener_publicacion,
     obtener_pieza_fila,

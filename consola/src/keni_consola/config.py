@@ -59,7 +59,6 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   Programadores en segundo plano (`comercial`, `programador`):
     - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
     - KENI_COMERCIAL_INTERVALO_HORAS     intervalo captura (h)       def INTERVALO_HORAS_DEF
-    - KENI_PROGRAMADOR_INTERVALO_SEGUNDOS  intervalo barrido (s)     def INTERVALO_SEGUNDOS_DEF
     - KENI_METRICAS_REFRESCO_HORAS       refresco cache metricas (h) def 4   (min 1)
     - KENI_METRICAS_PIEZAS_REFRESCO_HORAS refresco cache POR PIEZA (h) def 4 (min 1)
     - KENI_ALERTAS_RENDIMIENTO_HORAS     barrido alertas rendim. (h) def 6   (min 1)
@@ -147,8 +146,6 @@ from ._config_comun import (  # noqa: F401
     ENV_DB_POOL_MAX,
     ENV_DB_POOL_MIN,
     ENV_ESFUERZO,
-    ENV_EVENTOS_INTERVALO_SEGUNDOS,
-    ENV_EVENTOS_VENCIMIENTOS,
     ENV_FEED_SLA_MIN,
     ENV_FFMPEG_BIN,
     ENV_FUENTES_BAJA_CONFIANZA,
@@ -222,7 +219,6 @@ from ._config_comun import (  # noqa: F401
     ENV_PROMPT_MAX_CHARS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
-    ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
     ENV_VERIFICACION_EN_CURSO_TTL_MIN,
     ENV_VERIFICACION_FUENTE_ESFUERZO,
@@ -269,7 +265,6 @@ from ._config_comun import (  # noqa: F401
     ENV_WHISPER_MODELO,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
-    EVENTOS_INTERVALO_SEGUNDOS_DEF,
     FEED_SLA_MIN_DEF,
     FFMPEG_BIN_DEF,
     FUENTES_BAJA_CONFIANZA_DEF,
@@ -518,8 +513,6 @@ from .config_programadores import (  # noqa: F401
     canal_publicacion_para,
     comercial_intervalo_horas,
     comercial_intervalo_segundos,
-    eventos_intervalo_segundos,
-    eventos_vencimientos_activos,
     investigador_activo,
     investigador_intervalo_horas,
     metricas_historico_retencion_dias,
@@ -527,7 +520,6 @@ from .config_programadores import (  # noqa: F401
     metricas_refresco_horas,
     min_aprobaciones,
     patrones_auto_activo,
-    programador_intervalo_segundos,
     publicar_real,
     publicar_real_para,
     trends_activo,

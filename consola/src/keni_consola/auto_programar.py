@@ -86,20 +86,3 @@ def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
             pieza_id, actualizada.get("fecha_programada"),
         )
     return actualizada
-
-
-def barrer_aprobadas() -> int:
-    """Encola TODAS las piezas hoy `en_revision` con sus 2 likes que tengan hueco. Devuelve cuántas.
-
-    Para programar las que ya juntaron sus likes (la auto-programación síncrona solo coge las que
-    se aprueban a partir de ahora). Las que no tengan franja/hueco se quedan `en_revision`.
-    """
-    if not config.auto_programar_activo():
-        return 0
-    programadas = 0
-    for pub in repos.listar_piezas(estado=ESTADO_EN_REVISION):
-        if programar_si_aprobada(pub["id"]) is not None:
-            programadas += 1
-    if programadas:
-        _log.info("Auto-programación: %d pieza(s) con sus likes encoladas.", programadas)
-    return programadas

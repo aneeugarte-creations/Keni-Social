@@ -301,15 +301,6 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=True,
         ),
         Ajuste(
-            clave=config.ENV_EVENTOS_VENCIMIENTOS,
-            tipo="bool",
-            etiqueta="Eventos de vencimientos",
-            ayuda="Barrido que detecta contenido vencido en el tablero y dispara los eventos "
-            "internos correspondientes.",
-            grupo="automatismos_generales",
-            defecto=True,
-        ),
-        Ajuste(
             clave=config.ENV_AUTO_PREAPROBACION,
             tipo="bool",
             etiqueta="Pre-aprobación de bajo riesgo",
@@ -377,7 +368,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PUBLICAR_REAL,
             tipo="bool",
             etiqueta="Publicación real",
-            ayuda="Envía las piezas programadas al scheduler real de Metricool; apagado = dry-run.",
+            ayuda="El botón de publicar envía la pieza a Metricool de verdad; apagado = solo previsualiza.",
             grupo="pieza",
             defecto=False,
             peligroso=True,

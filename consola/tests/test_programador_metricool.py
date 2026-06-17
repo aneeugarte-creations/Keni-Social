@@ -1,16 +1,12 @@
-"""Tests del enganche Metricool en el programador (#9, Fase 3 + Metricool).
+"""Tests de la publicación Metricool a demanda (botón manual) y sus helpers.
 
-Cubre los tres escenarios criticos del gate `KENI_PUBLICAR_REAL`:
-
-  1. DRY-RUN (gate OFF, default): comportamiento original INTACTO. La pieza queda
-     en `programado` con `preparado_en` puesto; NO se llama al endpoint de Metricool.
-
-  2. REAL (gate ON): se construye el BorradorMetricool correcto, se postea al
-     endpoint de Metricool (mocked con respx), y la pieza pasa a `publicado` con
-     `id_post_metricool` guardado.
-
-  3. DEGRADACION honesta si la marca no tiene credenciales (gate ON pero sin creds):
-     la pieza SIGUE en `programado` con `preparado_en` puesto; NO rompe el barrido.
+Cubre:
+  - Los helpers PUROS que arman el borrador desde la fila de pieza
+    (`_url_media_publica`, `_borrador_de_publicacion`, `slides_de_carrusel`, `_creds_metricool`).
+  - El botón manual `programar_pieza_metricool` bajo el gate `KENI_PUBLICAR_REAL`:
+    OFF (default) PREVISUALIZA el cuerpo (dry-run, no toca red); ON postea de verdad a
+    Metricool (mocked con respx) y pasa la pieza a `publicado` con `id_post_metricool`.
+    Degradación honesta si la marca no tiene credenciales o salta un timeout.
 
 Todos los tests mockan la red con respx (nunca tocan la API real de Metricool) y
 mockan la carga de config de Metricool (no necesitan un TOML real).
@@ -31,8 +27,6 @@ from keni_consola.programador import (
     ID_POST_INCIERTO,
     _borrador_de_publicacion,
     _url_media_publica,
-    piezas_vencidas,
-    preparar_vencidas,
     programar_pieza_metricool,
     slides_de_carrusel,
 )
@@ -293,46 +287,6 @@ def test_creds_metricool_resuelve_creds():
 
 
 # --------------------------------------------------------------------------- #
-# Test 1: DRY-RUN (gate OFF) - comportamiento original intacto                #
-# --------------------------------------------------------------------------- #
-
-
-def test_dryrun_no_llama_metricool(entorno, monkeypatch):
-    """Con KENI_PUBLICAR_REAL ausente, el barrido NO llama a Metricool (comportamiento original)."""
-    monkeypatch.delenv("KENI_PUBLICAR_REAL", raising=False)
-    pub = _pub_programada(entorno)
-
-    with respx.mock(assert_all_called=False) as mock_routes:
-        ruta = mock_routes.post(_METRICOOL_URL, name="post").mock(
-            Response(200, json=_RESP_OK)
-        )
-        preparadas = preparar_vencidas(datetime.now())
-
-    assert preparadas == 1
-    actualizada = repos.obtener_pieza(pub["id"])
-    # Dry-run: sigue en programado, preparado_en puesto, NO publicado
-    assert actualizada["estado"] == "programado"
-    assert actualizada["preparado_en"]  # estampado
-    assert actualizada.get("id_post_metricool", "") == ""  # no fue a Metricool
-    # El mock NO fue llamado
-    assert not ruta.called
-
-
-def test_dryrun_flag_false_no_llama_metricool(entorno, monkeypatch):
-    """Con KENI_PUBLICAR_REAL=false, igual que sin la variable."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "false")
-    pub = _pub_programada(entorno)
-
-    with respx.mock(assert_all_called=False) as mock_routes:
-        ruta = mock_routes.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
-        preparar_vencidas(datetime.now())
-
-    actualizada = repos.obtener_pieza(pub["id"])
-    assert actualizada["estado"] == "programado"
-    assert not ruta.called
-
-
-# --------------------------------------------------------------------------- #
 # Boton manual: programar_pieza_metricool (a demanda desde la UI)             #
 # --------------------------------------------------------------------------- #
 
@@ -364,89 +318,6 @@ def test_programar_pieza_metricool_sin_creds(entorno, monkeypatch):
         res = programar_pieza_metricool(pub)
     assert res["ok"] is False
     assert res["motivo"]
-
-
-# --------------------------------------------------------------------------- #
-# Test 2: REAL (gate ON) - posteo correcto a Metricool                        #
-# --------------------------------------------------------------------------- #
-
-
-def test_real_postea_a_metricool_y_marca_publicado(entorno, monkeypatch):
-    """Con KENI_PUBLICAR_REAL=1, se postea a Metricool y la pieza pasa a 'publicado'."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
-
-    pub = _pub_programada(entorno, red="instagram", contenido="Texto real", imagen="img.jpg")
-
-    # Mock de credenciales de Metricool para la marca "unotv"
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        mc.post(_METRICOOL_URL).mock(Response(200, json=_RESP_OK))
-        preparadas = preparar_vencidas(datetime.now())
-
-    assert preparadas == 1
-    actualizada = repos.obtener_pieza(pub["id"])
-    # Publicado de verdad
-    assert actualizada["estado"] == "publicado"
-    assert actualizada["preparado_en"]
-    assert actualizada["id_post_metricool"] == "mc-post-id-001"
-
-
-def test_real_cuerpo_correcto_a_metricool(entorno, monkeypatch):
-    """El cuerpo enviado a Metricool incluye el texto, la red y la media correctamente."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
-
-    _pub_programada(entorno, red="instagram", contenido="Copy aprobado", imagen="foto.png")
-    cuerpo_enviado: dict | None = None
-
-    def capturar_post(request, route):  # noqa: ANN001
-        import json
-        nonlocal cuerpo_enviado
-        cuerpo_enviado = json.loads(request.content)
-        return Response(200, json=_RESP_OK)
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        mc.post(_METRICOOL_URL).mock(side_effect=capturar_post)
-        preparar_vencidas(datetime.now())
-
-    assert cuerpo_enviado is not None
-    assert cuerpo_enviado["text"] == "Copy aprobado"
-    proveedores = [p["network"] for p in cuerpo_enviado["providers"]]
-    assert "instagram" in proveedores
-    assert cuerpo_enviado["media"] == ["https://social.kenitech.io/api/media/foto.png"]
-    assert cuerpo_enviado.get("saveExternalMediaFiles") is True
-
-
-def test_real_x_sin_media_publica_solo_texto(entorno, monkeypatch):
-    """X puede publicarse sin media: el cuerpo no incluye el campo 'media'."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
-
-    _pub_programada(entorno, red="x", contenido="Tweet directo", imagen="")
-    cuerpo_enviado: dict | None = None
-
-    def capturar(request, route):  # noqa: ANN001
-        import json
-        nonlocal cuerpo_enviado
-        cuerpo_enviado = json.loads(request.content)
-        return Response(200, json=_RESP_OK)
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        mc.post(_METRICOOL_URL).mock(side_effect=capturar)
-        preparar_vencidas(datetime.now())
-
-    assert cuerpo_enviado is not None
-    assert "media" not in cuerpo_enviado
-    assert cuerpo_enviado["text"] == "Tweet directo"
 
 
 def test_boton_manual_publica_ahora_y_sella_hora_real(entorno, monkeypatch):
@@ -495,155 +366,8 @@ def test_boton_manual_publica_ahora_y_sella_hora_real(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Test 3: DEGRADACION honesta si la marca no tiene credenciales               #
-# --------------------------------------------------------------------------- #
-
-
-def test_sin_creds_sigue_en_programado_no_rompe_barrido(entorno, monkeypatch):
-    """Sin creds de Metricool: la pieza se prepara (preparado_en) pero sigue en 'programado'."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")
-
-    pub = _pub_programada(entorno, red="instagram", imagen="img.jpg")
-
-    # Marca sin credenciales -> _creds_metricool devuelve None
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=None,
-    ), respx.mock(assert_all_called=False) as mc:
-        ruta = mc.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
-        preparadas = preparar_vencidas(datetime.now())
-
-    assert preparadas == 1
-    actualizada = repos.obtener_pieza(pub["id"])
-    # Degradacion honesta: preparado pero NO publicado
-    assert actualizada["estado"] == "programado"
-    assert actualizada["preparado_en"]
-    assert actualizada.get("id_post_metricool", "") == ""
-    # Nunca fue a Metricool
-    assert not ruta.called
-
-
-def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
-    """Un fallo de creds en una pieza no rompe el barrido para las demas."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
-
-    # Dos piezas en X (sin media, no necesitan URL publica). Slots DISTINTOS: el UNIQUE
-    # `idx_parrilla_slot_uniq` (marca, red, fecha_programada) no permite dos en el mismo minuto.
-    pub1 = _pub_programada(entorno, red="x", contenido="Post 1", imagen="", minutos_atras=10)
-    pub2 = _pub_programada(entorno, red="x", contenido="Post 2", imagen="", minutos_atras=5)
-
-    llamadas: list[str] = []
-
-    def creds_selectivo(marca_id: str) -> dict | None:
-        # Solo la segunda pieza tiene creds (no hay forma de distinguir por id de pieza
-        # desde _creds_metricool, pero simulamos un fallo en la primera llamada)
-        if not llamadas:
-            llamadas.append("sin_creds")
-            return None
-        llamadas.append("con_creds")
-        return _CREDS_PRUEBA
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        side_effect=creds_selectivo,
-    ), respx.mock() as mc:
-        mc.post(_METRICOOL_URL).mock(Response(200, json=_RESP_OK))
-        preparadas = preparar_vencidas(datetime.now())
-
-    assert preparadas == 2  # ambas quedan "preparadas" (aunque una en modo sin-creds)
-    a1 = repos.obtener_pieza(pub1["id"])
-    a2 = repos.obtener_pieza(pub2["id"])
-    assert a1["preparado_en"]  # la sin-creds si quedo preparada
-    assert a2["preparado_en"]  # la con-creds tambien
-
-
-def test_error_de_red_libera_la_preparacion_y_no_rompe_barrido(entorno, monkeypatch):
-    """Un fallo HTTP de Metricool se loguea, LIBERA `preparado_en` y no rompe el barrido."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
-
-    pub = _pub_programada(entorno, red="x", contenido="Tweet", imagen="")
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        # Metricool devuelve 500
-        mc.post(_METRICOOL_URL).mock(Response(500, json={"error": "server error"}))
-        preparadas = preparar_vencidas(datetime.now())
-
-    # El fallo de ENTREGA no cuenta como preparada y deja la pieza reintentable.
-    assert preparadas == 0
-    actualizada = repos.obtener_pieza(pub["id"])
-    assert actualizada["estado"] == "programado"
-    assert actualizada["preparado_en"] == ""  # claim liberado: se reintentara
-    assert actualizada.get("id_post_metricool", "") == ""
-
-
-def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch):
-    """Tras un fallo de entrega, el SIGUIENTE barrido reintenta y publica si Metricool ya
-    responde (cierre del bug 'pieza muerta en programado')."""
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
-
-    pub = _pub_programada(entorno, red="x", contenido="Tweet con reintento", imagen="")
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        # 1er barrido: 500 (fallo transitorio). 2do barrido: 200 (Metricool se recupero).
-        mc.post(_METRICOOL_URL).mock(
-            side_effect=[
-                Response(500, json={"error": "server error"}),
-                Response(200, json=_RESP_OK),
-            ]
-        )
-        assert preparar_vencidas(datetime.now()) == 0
-        assert preparar_vencidas(datetime.now()) == 1
-
-    actualizada = repos.obtener_pieza(pub["id"])
-    assert actualizada["estado"] == "publicado"
-    assert actualizada["preparado_en"]
-    assert actualizada["id_post_metricool"] == "mc-post-id-001"
-
-
-# --------------------------------------------------------------------------- #
 # Timeout: el post pudo entregarse -> NO reenviar (evitar doble-post)          #
 # --------------------------------------------------------------------------- #
-
-
-def test_timeout_marca_publicado_incierto_y_no_reenvia(entorno, monkeypatch):
-    """Un TIMEOUT del POST de pieza NO libera el claim: el post pudo entregarse.
-
-    A diferencia de un 5xx (entrega fallida, se reintenta), un ReadTimeout salta tras
-    enviar la peticion entera, asi que Metricool casi seguro la recibio. Reenviar
-    duplicaria el post. La pieza pasa a `publicado` con el marcador incierto y un
-    segundo barrido NO vuelve a postear.
-    """
-    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
-    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
-
-    pub = _pub_programada(entorno, red="x", contenido="Tweet timeout", imagen="")
-
-    with patch(
-        "keni_consola.programador._creds_metricool",
-        return_value=_CREDS_PRUEBA,
-    ), respx.mock() as mc:
-        ruta = mc.post(_METRICOOL_URL).mock(
-            side_effect=httpx.ReadTimeout("read timed out")
-        )
-        # Cuenta como preparada (no se libera el claim) y NO se reintenta en el 2o barrido.
-        assert preparar_vencidas(datetime.now()) == 1
-        assert preparar_vencidas(datetime.now()) == 0
-        assert ruta.call_count == 1  # un solo intento real: no hubo doble-envio
-
-    actualizada = repos.obtener_pieza(pub["id"])
-    assert actualizada["estado"] == "publicado"
-    assert actualizada["preparado_en"]  # claim conservado (no liberado)
-    assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
 
 
 def test_boton_manual_timeout_marca_publicado_incierto(entorno, monkeypatch):
@@ -669,27 +393,3 @@ def test_boton_manual_timeout_marca_publicado_incierto(entorno, monkeypatch):
     # La guarda de re-pieza ahora bloquea un segundo click (ya esta publicado).
     res2 = programar_pieza_metricool(repos.obtener_pieza(pub["id"]))
     assert res2["ok"] is False
-
-
-# --------------------------------------------------------------------------- #
-# Retrocompatibilidad: los tests originales de piezas_vencidas siguen pasando #
-# --------------------------------------------------------------------------- #
-
-
-def test_piezas_vencidas_pura_retrocompat():
-    """La funcion pura `piezas_vencidas` sigue siendo determinista (retrocompat)."""
-    ahora = datetime(2026, 5, 27, 12, 0)
-    vencida = {
-        "id": "a", "estado": "programado",
-        "fecha_programada": "2026-05-27T11:00", "preparado_en": "",
-    }
-    futura = {
-        "id": "b", "estado": "programado",
-        "fecha_programada": "2026-05-27T13:00", "preparado_en": "",
-    }
-    ya_prep = {
-        "id": "c", "estado": "programado",
-        "fecha_programada": "2026-05-27T10:00", "preparado_en": "2026-05-27T10:01",
-    }
-    vencidas = piezas_vencidas([vencida, futura, ya_prep], ahora)
-    assert [p["id"] for p in vencidas] == ["a"]

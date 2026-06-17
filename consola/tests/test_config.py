@@ -36,7 +36,6 @@ _TODAS = (
     config.ENV_CLAUDE_SKIP_PERMISSIONS,
     config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     config.ENV_COMERCIAL_INTERVALO_HORAS,
-    config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     config.ENV_DATABASE_URL,
     config.ENV_PG_USER,
     config.ENV_PG_PASSWORD,
@@ -216,7 +215,6 @@ def test_defaults_cuando_no_hay_env(limpio):
     assert config.claude_skip_permisos() is True
     assert config.comercial_intervalo_segundos() is None
     assert config.comercial_intervalo_horas() is None
-    assert config.programador_intervalo_segundos() is None
 
 
 # --------------------------------------------------------------------------- #
@@ -401,15 +399,6 @@ def test_pipeline_admision_default_y_clamp(limpio):
     assert config.pipeline_en_proceso_max() == 1
     limpio.setenv(config.ENV_PIPELINE_MAX, "-3")
     assert config.pipeline_max() == 1
-
-
-def test_programador_intervalo_segundos_min_1(limpio):
-    limpio.setenv(config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS, "0.1")
-    assert config.programador_intervalo_segundos() == 1.0  # clamp min 1.0
-    limpio.setenv(config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS, "30")
-    assert config.programador_intervalo_segundos() == 30.0
-    limpio.setenv(config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS, "x")
-    assert config.programador_intervalo_segundos() is None
 
 
 # --------------------------------------------------------------------------- #

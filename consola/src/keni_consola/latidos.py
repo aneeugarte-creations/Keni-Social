@@ -37,7 +37,6 @@ _ALIAS = {
     "algoritmos_refresco": "algoritmos",
     "patrones_refresco": "patrones",
     "limpiador_generaciones": "limpiador",
-    "eventos_scanner": "vencimientos",
 }
 
 # Daemons RETIRADOS/renombrados: sus filas viejas pueden seguir en `daemon_latidos`
@@ -47,7 +46,10 @@ _ALIAS = {
 #     (cada loop late con su propio nombre); la fila vieja quedó suelta.
 #   - "comercial": el apartado Comercial (snapshots) se retiró; su daemon de captura ya no
 #     existe, así que su fila vieja en `daemon_latidos` (BD hosted) no la actualiza nadie.
-RETIRADOS = frozenset({"pipeline", "comercial"})
+#   - "programador" / "vencimientos": el programador de la parrilla y el escáner de
+#     vencimientos del tablero se retiraron; sus filas viejas en `daemon_latidos` (BD hosted)
+#     ya no las actualiza nadie.
+RETIRADOS = frozenset({"pipeline", "comercial", "programador", "vencimientos"})
 
 # Daemons cuyo bucle corre sobre `daemon_util.bucle_gateado` y por tanto CONSUMEN el flag
 # `barrido_solicitado` (POST /api/sistema/daemons/{daemon}/barrer): para ellos «Barrer ahora»
@@ -63,7 +65,6 @@ BARRIBLES = frozenset({
     "algoritmos",
     "patrones",
     "limpiador",
-    "vencimientos",
     "alertas_rendimiento",
     "investigacion",
     "produccion",
@@ -80,7 +81,7 @@ BARRIBLES = frozenset({
 # `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
 GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
 GRUPO_PRODUCCION = frozenset({"produccion"})
-GRUPO_FLUJO = frozenset({"comercial", "programador", "vencimientos"})
+GRUPO_FLUJO = frozenset({"comercial"})
 GRUPO_INFRA = frozenset({
     "metricas",
     "metricas_piezas",
@@ -112,8 +113,6 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #          -> motor produccion).
 #   - maquina/investigacion:  ingesta (recolección RSS), trends (Google Trends), algoritmos (feeds
 #          de algoritmo), noticias_gc (limpia el POOL de noticias que alimenta reutilizar).
-#   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
-#          que dispara producción por caducidad).
 #   - sistema/None:  limpiador, media_gc, metricas, metricas_piezas, alertas_rendimiento, patrones
 #          (deriva de Metricool SIN claude), comercial.
 # Cualquier daemon NO mapeado cae a ("sistema", None) (ver `clase_de`/`motor_de`): nunca rompe el
@@ -125,8 +124,6 @@ _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "trends": ("maquina", "investigacion"),
     "algoritmos": ("maquina", "investigacion"),
     "noticias_gc": ("maquina", "investigacion"),
-    "programador": ("maquina", "produccion"),
-    "vencimientos": ("maquina", "produccion"),
     "limpiador": ("sistema", None),
     "media_gc": ("sistema", None),
     "metricas": ("sistema", None),
@@ -160,7 +157,6 @@ def motor_de(daemon: str) -> str | None:
 #   - noticias_gc        -> KENI_NOTICIAS_GC          (noticias_gc_daemon: noticias_gc_activo)
 #   - patrones           -> KENI_PATRONES_AUTO        (patrones_refresco: patrones_auto_activo)
 #   - alertas_rendimiento-> KENI_ALERTAS_RENDIMIENTO  (alertas_rendimiento_activas)
-#   - vencimientos       -> KENI_EVENTOS_VENCIMIENTOS (eventos_scanner: eventos_vencimientos_activos)
 #   - investigacion      -> KENI_INVESTIGACION  (maestro virtual = sus etapas Recolectar+Verificar;
 #                                           el loop gatea con gate_maquina(alguna_etapa_investigacion_activa),
 #                                           que es True sii Recolectar o Verificar lo está. Interruptor PROPIO,
@@ -181,16 +177,14 @@ CLAVE_GATE = {
     "noticias_gc": "KENI_NOTICIAS_GC",
     "patrones": "KENI_PATRONES_AUTO",
     "alertas_rendimiento": "KENI_ALERTAS_RENDIMIENTO",
-    "vencimientos": "KENI_EVENTOS_VENCIMIENTOS",
     "investigacion": "KENI_INVESTIGACION",
     "produccion": "KENI_MAQUINA",
 }
 
 # Daemons SIEMPRE-ON sin toggle de ajuste: su bucle corre incondicionalmente (legados con
 # `while True`, o `limpiador` con `activo_fn=lambda: True`). No tienen fila-toggle => clave_gate
-# null. Nota: `programador` SIEMPRE corre (su gate KENI_PUBLICAR_REAL solo decide publicar de
-# verdad vs dry-run, no apaga el daemon), por eso queda sin gate de encendido.
-SIN_GATE = frozenset({"limpiador", "programador", "comercial", "metricas", "metricas_piezas"})
+# null.
+SIN_GATE = frozenset({"limpiador", "comercial", "metricas", "metricas_piezas"})
 
 
 def clave_gate_de(daemon: str) -> str | None:
@@ -234,8 +228,6 @@ ETIQUETA = {
     "trends": "Tendencias",
     "algoritmos": "Algoritmos de plataforma",
     "noticias_gc": "GC de noticias",
-    "programador": "Programador de parrilla",
-    "vencimientos": "Vencimientos",
     "comercial": "Comercial",
     "metricas": "Métricas",
     "metricas_piezas": "Métricas de piezas",
@@ -330,17 +322,6 @@ DESCRIPCION: dict[str, str] = {
         "umbral y emite una alerta interna cuando una rinde por debajo (idempotente por día). "
         "Solo lee y emite eventos; no cambia contenido."
     ),
-    "vencimientos": (
-        "Escáner de vencimientos del tablero. Detecta el contenido cuya fecha de entrega pasó sin "
-        "cerrarse y emite el evento `contenido.vencido` (idempotente). Solo señala; no mueve "
-        "piezas por sí mismo."
-    ),
-    "programador": (
-        "Programador de la parrilla. Cada minuto prepara las piezas programadas que vencen, "
-        "ejecuta el evergreen diario y recupera las aprobadas sin programar. En dry-run (def) "
-        "solo marca; con la publicación real encendida envía al scheduler de Metricool. SIEMPRE "
-        "activo: la publicación real es un interruptor aparte, no apaga el daemon."
-    ),
     "comercial": (
         "Captura comercial. Toma snapshots periódicos de las interacciones/visualizaciones de las "
         "piezas activas para construir su serie temporal de rendimiento. Solo lee de Metricool y "
@@ -393,8 +374,6 @@ AJUSTES: dict[str, list[str]] = {
     "media_gc": ["KENI_MEDIA_GC", "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"],
     "patrones": ["KENI_PATRONES_AUTO", "KENI_PERFIL_EDITORIAL_TTL_HORAS"],
     "alertas_rendimiento": ["KENI_ALERTAS_RENDIMIENTO", "KENI_ALERTAS_UMBRAL_ENGAGEMENT"],
-    "vencimientos": ["KENI_EVENTOS_VENCIMIENTOS"],
-    "programador": ["KENI_PUBLICAR_REAL"],
 }
 
 

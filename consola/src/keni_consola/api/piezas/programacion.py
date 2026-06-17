@@ -185,8 +185,8 @@ def _encolar_en_hueco_libre(
         if hueco is None:
             return None, False
         try:
-            # `preparado_en=""`: una pieza recién (re)programada aún no se preparó; resetearlo
-            # evita que el programador la trate como ya preparada. Inocuo en el encolado manual.
+            # `preparado_en=""`: una pieza recién (re)programada aún no se ha publicado; resetearlo
+            # la deja lista para publicarse de nuevo. Inocuo en el encolado manual.
             actualizada = repos.actualizar_pieza(
                 pub["id"],
                 {"estado": "programado", "fecha_programada": hueco, "preparado_en": ""},
