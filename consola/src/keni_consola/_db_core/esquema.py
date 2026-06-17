@@ -226,8 +226,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         miembro_id     TEXT NOT NULL DEFAULT '',
         miembro_nombre TEXT NOT NULL DEFAULT '',
         franja_id      TEXT NOT NULL DEFAULT '',
-        inicio         TEXT NOT NULL DEFAULT '',
-        fin            TEXT NOT NULL DEFAULT '',
         estado         TEXT NOT NULL DEFAULT 'propuesto',
         override       INTEGER NOT NULL DEFAULT 0,
         motivo         TEXT NOT NULL DEFAULT '',

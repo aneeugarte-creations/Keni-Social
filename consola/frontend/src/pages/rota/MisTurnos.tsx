@@ -247,17 +247,7 @@ export function ListaMisTurnos({
                       aria-hidden="true"
                     />
                     {t.franja_nombre}
-                    {!esDescanso && t.inicio && (
-                      <span className="font-normal tabular-nums text-muted-foreground">
-                        · {t.inicio}–{t.fin}
-                      </span>
-                    )}
                   </span>
-                  {t.horario_propio && !esDescanso && (
-                    <Badge variant="outline" className="font-normal">
-                      Horario a medida
-                    </Badge>
-                  )}
                   {t.es_sabado && (
                     <Badge variant="outline" className="font-normal">
                       Sábado

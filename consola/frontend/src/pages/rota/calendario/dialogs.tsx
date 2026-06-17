@@ -279,10 +279,6 @@ export function DialogEditarTurno({
   const [fecha, setFecha] = React.useState(turno.fecha);
   const [miembroId, setMiembroId] = React.useState(turno.miembro_id);
   const [franja, setFranja] = React.useState<FranjaTurno>(turno.franja);
-  // Horario efectivo del turno (sus horas a medida o las de su franja). Editable: cambiarlo
-  // pone horas a medida; dejarlo igual no toca nada (sigue heredando si así estaba).
-  const [inicio, setInicio] = React.useState(turno.inicio);
-  const [fin, setFin] = React.useState(turno.fin);
   const [motivo, setMotivo] = React.useState(turno.motivo);
   const [notaRelevo, setNotaRelevo] = React.useState(turno.nota_relevo);
   // Si el backend devuelve 409 requiere_override, mostramos botón "forzar".
@@ -296,8 +292,6 @@ export function DialogEditarTurno({
         fecha?: string;
         miembro_id?: string;
         franja?: FranjaTurno;
-        inicio?: string;
-        fin?: string;
         motivo?: string;
         nota_relevo?: string;
         override?: boolean;
@@ -305,8 +299,6 @@ export function DialogEditarTurno({
       if (fecha !== turno.fecha) cuerpo.fecha = fecha;
       if (miembroId !== turno.miembro_id) cuerpo.miembro_id = miembroId;
       if (franja !== turno.franja) cuerpo.franja = franja;
-      if (inicio !== turno.inicio) cuerpo.inicio = inicio.trim();
-      if (fin !== turno.fin) cuerpo.fin = fin.trim();
       if (motivo !== turno.motivo) cuerpo.motivo = motivo;
       if (notaRelevo !== turno.nota_relevo) cuerpo.nota_relevo = notaRelevo;
       if (override) cuerpo.override = true;
@@ -333,8 +325,6 @@ export function DialogEditarTurno({
     fecha === turno.fecha &&
     miembroId === turno.miembro_id &&
     franja === turno.franja &&
-    inicio === turno.inicio &&
-    fin === turno.fin &&
     motivo === turno.motivo &&
     notaRelevo === turno.nota_relevo;
 
@@ -370,29 +360,6 @@ export function DialogEditarTurno({
                   <SelectItem value="descanso">Descanso</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Horario</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
-                placeholder="08:00"
-                className="w-28 tabular-nums"
-                aria-label="Hora de inicio"
-              />
-              <span className="text-muted-foreground">–</span>
-              <Input
-                value={fin}
-                onChange={(e) => setFin(e.target.value)}
-                placeholder="16:00"
-                className="w-28 tabular-nums"
-                aria-label="Hora de fin"
-              />
-              <span className="text-xs text-muted-foreground">
-                {turno.horario_propio ? "a medida" : "de la franja"}
-              </span>
             </div>
           </div>
           <div className="space-y-1.5">

@@ -44,27 +44,6 @@ describe("asignarDiasTurno — reparte un turno por día y clasifica el resultad
     expect(crear).not.toHaveBeenCalled();
     expect(r).toEqual({ creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 });
   });
-
-  it("con horario a medida envía inicio/fin; sin él los omite (hereda la franja)", async () => {
-    const crear = vi.spyOn(apiMod.api, "crearTurno").mockResolvedValue({} as never);
-    await asignarDiasTurno("2026-06-15", "u-luis", "f-manana", ["2026-06-15"], "07:00", "15:00");
-    expect(crear).toHaveBeenLastCalledWith({
-      lunes: "2026-06-15",
-      fecha: "2026-06-15",
-      miembro_id: "u-luis",
-      franja_id: "f-manana",
-      inicio: "07:00",
-      fin: "15:00",
-    });
-    // Horas vacías ⇒ el cuerpo NO lleva inicio/fin (el turno hereda las de su franja).
-    await asignarDiasTurno("2026-06-15", "u-luis", "f-manana", ["2026-06-16"]);
-    expect(crear).toHaveBeenLastCalledWith({
-      lunes: "2026-06-15",
-      fecha: "2026-06-16",
-      miembro_id: "u-luis",
-      franja_id: "f-manana",
-    });
-  });
 });
 
 const FRANJAS: FranjaSemana[] = [
