@@ -146,7 +146,7 @@ export const router = createBrowserRouter([
           // vieja redirige allí (compat con enlaces/marcadores).
           { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
           // El antiguo hub "Parrilla" se separó en DOS (#cal-feed):
-          // Hub Feed: feed de ideación (formato red social) + Lista de contenido.
+          // Hub Feed: feed de ideación (formato red social) + Portal + Lista de contenido.
           {
             path: "feed",
             children: [
@@ -154,6 +154,10 @@ export const router = createBrowserRouter([
               // Feed de ideación: la pieza vista como post (material → copy IA → arte) con
               // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
               { path: "feed", element: <FeedIdeacion /> },
+              // Portal: el MISMO feed acotado al canal `origen="portal"` (los auto-producidos de
+              // fuente propia, cross-marca) con sus 3 pestañas de estado. Un clon de Feed, no una
+              // pestaña-vista más, porque el portal produce mucho y merece su propia superficie.
+              { path: "portal", element: <FeedIdeacion origen="portal" /> },
               // Lista de contenido (header de acciones: aportar/crear/gestionar).
               { path: "lista", element: <ListaPublicacion /> },
             ],

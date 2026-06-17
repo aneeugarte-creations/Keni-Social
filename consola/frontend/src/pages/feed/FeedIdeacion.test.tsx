@@ -155,7 +155,7 @@ function stubFetch(piezas: Array<Record<string, unknown>> = [PIEZA]) {
   );
 }
 
-function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/") {
+function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/", origen?: string) {
   const valor: ValorSesion = {
     usuario: {
       id: "u1",
@@ -179,7 +179,7 @@ function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/") {
         <MarcaActivaProvider>
           <FiltrosPublicacionProvider>
             <MemoryRouter initialEntries={[ruta]}>
-              <FeedIdeacion />
+              <FeedIdeacion origen={origen} />
             </MemoryRouter>
           </FiltrosPublicacionProvider>
         </MarcaActivaProvider>
@@ -225,22 +225,47 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
   });
 
-  it("muestra 4 pestañas-vista del mismo feed EN ORDEN (Pendientes · Publicadas · Todas · Portal), sin 'En preparación'", async () => {
+  it("muestra 3 pestañas-vista del mismo feed EN ORDEN (Pendientes · Publicadas · Todas), sin 'En preparación' ni 'Portal'", async () => {
     stubFetch();
     renderFeed();
-    // 4 vistas: 3 partición por estado + «Portal» (transversal, por origen). Es un hub: la
-    // barra son las PESTAÑAS, sin título de página propio. El nombre accesible se compone del
-    // DOM (etiqueta completa + conteo en piezas), no de un aria-label que pise el número: por
-    // eso se matchea por regex.
+    // 3 vistas: la partición por ESTADO. Es un hub: la barra son las PESTAÑAS, sin título de
+    // página propio. El nombre accesible se compone del DOM (etiqueta completa + conteo en
+    // piezas), no de un aria-label que pise el número: por eso se matchea por regex. «Portal»
+    // ya NO es una vista del feed: es un CLON del feed (su propia superficie, ver router).
     const pestanas = await screen.findAllByRole("tab");
     expect(pestanas.map((t) => t.textContent)).toEqual([
       expect.stringContaining("Pendientes"),
       expect.stringContaining("Publicadas"),
       expect.stringContaining("Todas"),
-      expect.stringContaining("Portal"),
     ]);
+    expect(screen.queryByRole("tab", { name: /Portal/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
+  });
+
+  it("el clon «Portal» (prop origen) acota TODAS sus consultas y conteos a origen=portal, manteniendo las 3 vistas de estado", async () => {
+    stubFetch();
+    const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      urls.push(String(url));
+      return base(url);
+    });
+
+    renderFeed({}, "/", "portal");
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Sigue siendo el MISMO feed: 3 pestañas de estado, sin una pestaña «Portal» dentro.
+    const pestanas = await screen.findAllByRole("tab");
+    expect(pestanas.map((t) => t.textContent)).toEqual([
+      expect.stringContaining("Pendientes"),
+      expect.stringContaining("Publicadas"),
+      expect.stringContaining("Todas"),
+    ]);
+    // El feed y los conteos van acotados al canal: TODA consulta al LISTADO (`/api/piezas?…`,
+    // no las sub-rutas como /opciones o /cadenas) lleva origen=portal.
+    const piezas = urls.filter((u) => u.includes("/api/piezas?"));
+    expect(piezas.length).toBeGreaterThan(0);
+    expect(piezas.every((u) => u.includes("origen=portal"))).toBe(true);
   });
 
   it("arranca en la vista de la URL (?vista=pendiente) y la pestaña queda activa", async () => {

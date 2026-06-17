@@ -5,10 +5,15 @@
  * arte/formato), con un LABEL de su etapa en la pipeline, y APRUEBA en línea —como quien
  * interactúa con un post— sin abrir el kanban.
  *
- * UN feed por fecha (keyset `feed=1` + `cursor`, `creado DESC`, scroll infinito) con 4 PESTAÑAS
+ * UN feed por fecha (keyset `feed=1` + `cursor`, `creado DESC`, scroll infinito) con 3 PESTAÑAS
  * que PARTICIONAN el ciclo por ESTADO (toda pieza cae en exactamente una; "Todo el feed" es la
  * unión). La partición, el mapeo vista→estado del servidor y los conteos de los badges viven en
  * `vistas.tsx`, COMPARTIDOS con el feed móvil (`MobileFeed`).
+ *
+ * Esta misma superficie sirve de CLON «Portal» (`/operacion/feed/portal`): con la prop `origen`
+ * (= `"portal"`) todas sus consultas y conteos se acotan a ese canal —los auto-producidos de
+ * fuente PROPIA (cross-marca)— manteniendo sus 3 pestañas de estado. Sin la prop, el feed normal
+ * ve todos los orígenes.
  * La vista activa vive SOLO en la URL (`?vista=`): compartible, sobrevive al refresco y a
  * atrás/adelante del navegador (no hay estado duplicado en memoria).
  * Los badges de las pestañas cuentan PIEZAS con el total EXACTO del servidor
@@ -49,7 +54,6 @@ import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
-  ORIGEN_SERVIDOR_DE_VISTA,
   PAGINAS_POR_LOTE,
   TOPE_PAGINAS_PIEZA,
   useConteosFeed,
@@ -94,7 +98,7 @@ function guardarPref(clave: string, valor: number): void {
   }
 }
 
-export default function FeedIdeacion() {
+export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
   const { marcaActiva } = useMarcaActiva();
@@ -207,8 +211,9 @@ export default function FeedIdeacion() {
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
-  // ORIGEN del servidor (la pestaña «Portal» = `origen='portal'`, transversal al estado).
-  const origenServidor = ORIGEN_SERVIDOR_DE_VISTA[vista];
+  // ORIGEN del servidor: el CANAL de la superficie (el clon «Portal» pasa `origen="portal"`),
+  // transversal al estado. El feed normal lo omite y ve todos los orígenes.
+  const origenServidor = origen;
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
   // y más al hacer scroll (sentinel + IntersectionObserver). El backend devuelve
@@ -254,6 +259,7 @@ export default function FeedIdeacion() {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
+    origen,
   });
 
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).

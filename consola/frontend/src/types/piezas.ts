@@ -166,7 +166,7 @@ export interface FiltrosPiezas {
   marca?: string;
   red?: string;
   estado?: string;
-  /** Origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`). */
+  /** Origen del contenido padre (el clon «Portal» del feed pide `origen='portal'`). */
   origen?: string;
   /** LIMPIEZA del feed (filtros sobre el contenido padre): categoría del plan
    *  (breaking|mx|evergreen|internacional…). */

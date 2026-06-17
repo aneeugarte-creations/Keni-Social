@@ -15,7 +15,6 @@ import { api, mensajeError } from "@/lib/api";
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
-  ORIGEN_SERVIDOR_DE_VISTA,
   useConteosFeed,
   VISTAS,
   vistaDesdeParam,
@@ -190,8 +189,6 @@ function Cuerpo({
   const [searchParams, setSearchParams] = useSearchParams();
   const vista = vistaDesdeParam(searchParams.get("vista"), "pendiente");
   const estadoVista = calendario ? undefined : ESTADO_SERVIDOR_DE_VISTA[vista];
-  // ORIGEN del servidor (la pestaña «Portal»); en modo calendario no se filtra por origen.
-  const origenVista = calendario ? undefined : ORIGEN_SERVIDOR_DE_VISTA[vista];
   const cambiarVista = (v: Vista) => {
     setSearchParams(
       (prev) => {
@@ -208,7 +205,6 @@ function Cuerpo({
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     estado: estadoVista,
-    origen: origenVista,
     // Los filtros de limpieza solo aplican a la LISTA (el calendario es la programación).
     ...(calendario ? {} : limpieza),
   };
@@ -262,7 +258,6 @@ function Cuerpo({
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
       estadoVista ?? "todos",
-      origenVista ?? "",
       limpieza.antiguedad_h ?? "",
       limpieza.fase ?? "",
       limpieza.tipo ?? "",

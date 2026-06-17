@@ -7,7 +7,7 @@
  * APRUEBA, RECHAZA, COMENTA y CREA; nada de sidebar ni navegación lateral.
  *
  * Reutiliza lo existente (MISMA tarjeta y MISMA partición que el feed de escritorio):
- *  - `VISTAS` (vistas.tsx): las 4 pestañas-partición del ciclo, con conteos exactos
+ *  - `VISTAS` (vistas.tsx): las 3 pestañas-partición del ciclo, con conteos exactos
  *    (`useConteosFeed`) y el mismo vocabulario. Aquí el DEFAULT sin parámetro es
  *    "Por aprobar" (el trabajo del revisor móvil), no "Todo".
  *  - `PostFeed` por pieza: cadena de aprobación visible, like/dislike como toggle con sus
@@ -55,7 +55,6 @@ import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lo
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
-  ORIGEN_SERVIDOR_DE_VISTA,
   PAGINAS_POR_LOTE,
   useConteosFeed,
   VISTAS,
@@ -237,18 +236,16 @@ export default function MobileFeed() {
   // "Pendientes" y "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte
   // la query base sin `estado`. El filtro en cliente de la vista es idempotente sobre ellas.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
-  // ORIGEN del servidor (la pestaña «Portal» = `origen='portal'`, transversal al estado).
-  const origenServidor = ORIGEN_SERVIDOR_DE_VISTA[vista];
 
   // SCROLL INFINITO (feed tipo red social): primera página pequeña e instantánea por keyset
   // `creado DESC`; se piden más al hacer scroll (sentinel + IntersectionObserver). El backend
   // devuelve `paginacion.cursor_siguiente` mientras haya más; al omitirlo se apaga `hasNextPage`.
   const feedQuery = useInfiniteQuery({
-    queryKey: [...CLAVE_PIEZAS, "feed", estadoServidor ?? "todos", origenServidor ?? "", marca],
+    queryKey: [...CLAVE_PIEZAS, "feed", estadoServidor ?? "todos", marca],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
       api.piezas(
-        { estado: estadoServidor, origen: origenServidor, marca: marcaParam(marca), feed: "1", cursor: pageParam },
+        { estado: estadoServidor, marca: marcaParam(marca), feed: "1", cursor: pageParam },
         signal,
       ),
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
@@ -304,7 +301,6 @@ export default function MobileFeed() {
   const paginasCargadas = feedQuery.data?.pages.length ?? 0;
   const topeAlcanzado =
     estadoServidor === undefined &&
-    origenServidor === undefined &&
     vistaVacia &&
     hasNextPage &&
     paginasCargadas >= lotesBusqueda * PAGINAS_POR_LOTE;
@@ -313,7 +309,7 @@ export default function MobileFeed() {
   // página cargada pudo venir entera de otras marcas/estados, así que el pie dice "buscando"
   // (no "cargando", que afirmaría que ya hay resultados en camino).
   const filtraEnCliente =
-    (estadoServidor === undefined && origenServidor === undefined) ||
+    estadoServidor === undefined ||
     (marca === MARCA_TODAS && marcasUsuario.length > 0);
 
   // Sentinel del fondo del feed (compartido con escritorio, ver `pages/feed/infinito.tsx`).

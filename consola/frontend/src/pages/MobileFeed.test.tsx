@@ -147,22 +147,22 @@ describe("MobileFeed · feed móvil de revisión", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera compacta, las MISMAS 4 vistas del escritorio y el botón de crear", async () => {
+  it("muestra la cabecera compacta, las MISMAS 3 vistas del escritorio y el botón de crear", async () => {
     stubFetch();
     renderFeed();
     // El título queda solo para lectores de pantalla (sr-only): la cabecera no gasta una fila.
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
     // La partición compartida (vistas.tsx): el móvil ya no es una superficie capada con 2
-    // bandejas; mismo vocabulario y ORDEN que el escritorio (Pendientes · Publicadas · Todas · Portal).
-    // Por defecto manda "Pendientes".
+    // bandejas; mismo vocabulario y ORDEN que el escritorio (Pendientes · Publicadas · Todas).
+    // Por defecto manda "Pendientes". «Portal» no es vista del feed (es un clon, solo escritorio).
     const pestanas = screen.getAllByRole("tab");
-    expect(pestanas).toHaveLength(4);
+    expect(pestanas).toHaveLength(3);
     expect(pestanas.map((t) => t.textContent)).toEqual([
       expect.stringContaining("Pendientes"),
       expect.stringContaining("Publicadas"),
       expect.stringContaining("Todas"),
-      expect.stringContaining("Portal"),
     ]);
+    expect(screen.queryByRole("tab", { name: /Portal/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Pendientes/ })).toHaveAttribute(

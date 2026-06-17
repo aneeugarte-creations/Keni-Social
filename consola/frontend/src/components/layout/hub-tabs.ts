@@ -65,6 +65,8 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
 
 export const TABS_FEED: ItemTabHub[] = [
   { ruta: "/operacion/feed/feed", etiqueta: "Feed", icono: LayoutGrid },
+  // Portal: clon del Feed acotado al canal `origen="portal"` (auto-producidos de fuente propia).
+  { ruta: "/operacion/feed/portal", etiqueta: "Portal", icono: Newspaper },
   { ruta: "/operacion/feed/lista", etiqueta: "Lista", icono: ListTodo },
 ];
 
