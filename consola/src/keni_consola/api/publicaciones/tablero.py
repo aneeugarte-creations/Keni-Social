@@ -23,6 +23,7 @@ from ._comun import (
     ESTADOS_PUBLICACION,
     ESTADOS_PIEZA,
     FLUJOS_CONTENIDO,
+    ORIGEN_EQUIPO,
     PRIORIDADES_CONTENIDO,
     TIPOS_CONTENIDO,
     _contenido_a_dict,
@@ -238,6 +239,11 @@ async def crear(request: Request) -> Response:
         autor=autor_de_peticion(request),
         responsable=responsable,
         notas=_texto("notas"),
+        # Alta del equipo desde el tablero/MCP: el CONTENIDO nace con origen 'equipo' para
+        # que la etapa de Redactar lo recoja y le escriba el copy con el mismo rigor que a
+        # cualquier otro origen (verificacion + voz de marca). Las TAREAS no son contenido de
+        # feed: quedan con origen "" y fuera de la auto-generacion.
+        origen=ORIGEN_EQUIPO if clase != CLASE_TAREA else "",
         # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen. `db` coacciona
         # un valor desconocido o vacío al defecto ('ia').
         tipo_contenido=_texto("tipo_contenido"),

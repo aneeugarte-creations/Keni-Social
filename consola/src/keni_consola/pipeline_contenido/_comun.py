@@ -670,13 +670,19 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
 
 
 def _tiene_copy(tema_id: str) -> bool:
-    """True si el tema ya tiene al menos una pieza por plataforma (copy en marcha). Best-effort."""
+    """True si el tema ya tiene copy REDACTADO en al menos una pieza. Best-effort.
+
+    Mira el copy real (`falta_copy=0`, mismo canon que `estado_pieza_por_publicacion`), NO la
+    mera existencia de filas: las altas que pre-crean piezas vacías (botón Crear post / `aportar`,
+    Radar) nacen con piezas SIN copy y deben seguir siendo redactables hasta que el copy aterrice.
+    """
     if not tema_id:
         return False
     try:
-        return bool(repos.listar_piezas_fila(tema_id))
+        piezas = repos.listar_piezas_fila(tema_id)
     except Exception:  # noqa: BLE001 -- sin lectura, conservador: asumimos que NO para reintentar
         return False
+    return any(not p.get("falta_copy") or (p.get("copy") or "").strip() for p in piezas)
 
 
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:

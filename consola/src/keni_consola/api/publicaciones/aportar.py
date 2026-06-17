@@ -20,6 +20,7 @@ from ._comun import (
     _red_valida,
     _validar_marca,
     auto_responsable,
+    autogen_redactar,
     autor_de_peticion,
     media,
     redes,
@@ -240,5 +241,19 @@ async def aportar(request: Request) -> Response:
             imagen_fuente=url,
         )
 
+    # Generacion de copy en SEGUNDO PLANO, mismo camino que Radar/Breaking/usar-noticia
+    # (`autogen_redactar.lanzar_para_topic`): compone la nota desde el tema, infiere redes y
+    # encola un `claude -p` cuyo borrador rellena estas piezas (verificacion + voz de marca).
+    # BEST-EFFORT: si la skill o la cola fallan, NO rompe el alta; la etapa de Redactar del
+    # pipeline lo recoge en el siguiente barrido (red de seguridad, ya que origen='equipo').
+    genero = False
+    if marca:
+        try:
+            genero = autogen_redactar.lanzar_para_topic(item) is not None
+        except Exception:  # noqa: BLE001 -- la generacion es opcional; nunca tumba el alta
+            genero = False
+
     plataformas = repos.listar_piezas_fila(item["id"])
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
+    return JSONResponse(
+        {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}
+    )

@@ -1161,6 +1161,26 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
     assert len(ids) == 2
 
 
+def test_temas_autogen_sin_copy_incluye_temas_con_piezas_vacias(entorno):
+    """Las altas que PRE-CREAN piezas vacías (botón Crear post/`aportar`, Radar) siguen siendo
+    redactables: la selección mira el copy REAL, no la mera existencia de filas. Un tema cuyas
+    piezas ya tienen copy NO se reselecciona (no se reescribe lo ya redactado)."""
+    sin_copy = repos.crear_publicacion(
+        clase="contenido", titulo="Aporte del equipo", marca="unotv", origen="equipo",
+    )
+    repos.crear_pieza_fila(publicacion_id=sin_copy["id"], red="x", falta_copy=True)
+    repos.crear_pieza_fila(publicacion_id=sin_copy["id"], red="instagram", falta_copy=True)
+
+    con_copy = repos.crear_publicacion(
+        clase="contenido", titulo="Aporte ya redactado", marca="unotv", origen="equipo",
+    )
+    repos.crear_pieza_fila(publicacion_id=con_copy["id"], red="x", copy="Copy ya escrito")
+
+    ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
+    assert sin_copy["id"] in ids  # piezas vacías -> aún necesita copy
+    assert con_copy["id"] not in ids  # ya tiene copy -> no se reescribe
+
+
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
     """`ejecutar_redactar` lanza copy de los temas del pool vía `autogen_redactar.lanzar_para_topic`."""
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global, ejecutar_redactar no corre)

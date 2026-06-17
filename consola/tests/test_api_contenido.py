@@ -84,6 +84,29 @@ def test_crear_contenido_con_plataformas(entorno):
     assert all(p["falta_copy"] and p["falta_imagen"] for p in cont["plataformas"])
 
 
+def test_crear_contenido_nace_con_origen_equipo(entorno):
+    """El alta de CONTENIDO desde el tablero/MCP nace con origen 'equipo': la etapa de Redactar
+    del pipeline lo recoge y le escribe el copy con el mismo rigor que a cualquier otro origen."""
+    c = _cli()
+    cont = c.post(
+        "/api/publicaciones",
+        json={"titulo": "Nota del tablero", "marca": "unotv", "redes": ["x"]},
+        headers=_ORIGIN,
+    ).json()["contenido"]
+    assert cont["origen"] == "equipo"
+
+
+def test_crear_tarea_no_es_contenido_de_feed(entorno):
+    """Una TAREA no es contenido de feed: queda con origen "" y fuera de la auto-generación."""
+    c = _cli()
+    cont = c.post(
+        "/api/publicaciones",
+        json={"titulo": "Revisar pendientes", "clase": "tarea"},
+        headers=_ORIGIN,
+    ).json()["contenido"]
+    assert cont["origen"] == ""
+
+
 def test_crear_con_formato_video_crea_cinco_redes(entorno):
     """`formato=video` crea las 5 redes (foto=3 + youtube + tiktok) con falta_video activo."""
     c = _cli()
@@ -361,6 +384,9 @@ def test_aportar_crea_con_origen_equipo(entorno):
     # Una fila por red pedida, con la checklist pendiente.
     assert {p["red"] for p in cont["plataformas"]} == {"x", "instagram"}
     assert all(p["falta_copy"] for p in cont["plataformas"])
+    # El alta enciende la generación de copy EN EL MOMENTO (mismo camino que Radar/usar-noticia):
+    # no depende solo del barrido del pipeline.
+    assert r.json()["copy_en_proceso"] is True
 
 
 def test_aportar_exige_marca(entorno):
