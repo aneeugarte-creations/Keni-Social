@@ -1132,6 +1132,47 @@ def test_copiar_semana_reemplazar(cliente):
     assert semana2["turnos"][0]["franja"] == "matutino"
 
 
+def test_semana_nueva_se_prellena_desde_anterior(entorno):
+    """Al abrir por PRIMERA vez una semana nueva (admin, marca concreta), sus turnos se
+    prellenan copiando la anterior como borrador (propuesto). Ocurre una sola vez: reabrir
+    no duplica."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(2)
+    ana, beto = equipo[0], equipo[1]
+    _crear_turno(LUNES1, LUNES1, ana, franja="matutino", marca=MARCA)
+    _crear_turno(LUNES1, SAB1, beto, franja="vespertino", marca=MARCA)
+
+    admin = _cli_admin_sesion(app)
+    datos = admin.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
+    assert datos["total"] == 2
+    assert datos["aprobada"] is False
+    assert all(t["estado"] == "propuesto" for t in datos["turnos"])
+    fechas = {(t["fecha"], t["miembro_id"]) for t in datos["turnos"]}
+    assert (LUNES2, ana["id"]) in fechas
+    assert (SAB2, beto["id"]) in fechas
+
+    # Reabrir NO duplica: la semana ya tiene franjas, deja de ser virgen.
+    assert admin.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()["total"] == 2
+
+
+def test_semana_nueva_no_se_prellena_sin_anterior(entorno):
+    """Sin semana anterior con turnos, la semana nueva queda vacía (nada que copiar)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    _crear_equipo(1)
+    admin = _cli_admin_sesion(app)
+    assert admin.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()["total"] == 0
+
+
+def test_semana_nueva_no_se_prellena_para_no_admin(entorno):
+    """Solo el coordinador (sesión admin) dispara el prellenado; un GET por token (no admin)
+    deja la semana virgen vacía (no escribe turnos)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino", marca=MARCA)
+    token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    assert token_cli.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()["total"] == 0
+
+
 def test_carga_resumen_por_persona(cliente):
     """Cobertura DERIVADA: los turnos que cubren franja+fecha de eventos cuentan.
 

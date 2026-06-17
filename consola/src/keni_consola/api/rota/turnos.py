@@ -108,15 +108,46 @@ def _turnos_semana(lunes_iso: str, marca: str | None = None) -> dict[str, Any]:
     }
 
 
+def _autoprellenar_semana_nueva(lunes_iso: str, marca: str) -> None:
+    """Prellena una semana VIRGEN copiando los turnos de la anterior como borrador.
+
+    «Virgen» = aún no tiene franjas (la primera apertura las siembra) ni turnos. Por eso el
+    prellenado ocurre UNA sola vez —al abrir la semana por primera vez—: una vez tiene
+    franjas ya no es virgen, así que reabrirla, o borrarle los turnos, no la vuelve a
+    rellenar. La rotación de sábados es manual: la copia replica tal cual (estado
+    `propuesto`) y el coordinador la ajusta antes de aprobar. Sin semana anterior con turnos,
+    no hace nada.
+    """
+    if not lunes_iso or not marca:
+        return
+    if repos.listar_franjas_semana(lunes_iso, marca):
+        return
+    if repos.listar_turnos_rota(semana=lunes_iso, marca=marca):
+        return
+    from datetime import date, timedelta
+
+    try:
+        previo = (date.fromisoformat(lunes_iso) - timedelta(days=7)).isoformat()
+    except ValueError:
+        return
+    if not repos.listar_turnos_rota(semana=previo, marca=marca):
+        return
+    repos.copiar_turnos_rota(previo, lunes_iso, reemplazar=False, marca=marca)
+
+
 async def turnos_semana(request: Request) -> Response:
     """GET /api/rota/turnos[?lunes&marca]: los turnos (horario) de una semana.
 
     GRID POR MARCA: `?marca=` acota a la rejilla de esa marca; ausente = "Todas" (apila todas).
+    Al abrir por primera vez una semana nueva (admin + marca concreta), se prellena con los
+    turnos de la anterior como borrador para no repartir desde cero.
     """
     lunes = _lunes_param(request)
     marca, error = _marca_param(request)
     if error is not None:
         return error
+    if marca and _es_admin(request):
+        _autoprellenar_semana_nueva(lunes, marca)
     return JSONResponse(_turnos_semana(lunes, marca))
 
 
