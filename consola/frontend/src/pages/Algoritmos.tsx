@@ -160,7 +160,7 @@ export default function Algoritmos() {
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-2">
               <Select value={plataforma} onValueChange={setPlataforma}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-52 shrink-0">
                   <SelectValue placeholder="Plataforma" />
                 </SelectTrigger>
                 <SelectContent>
@@ -173,7 +173,7 @@ export default function Algoritmos() {
                 </SelectContent>
               </Select>
               <Select value={nivel} onValueChange={setNivel}>
-                <SelectTrigger className="w-36">
+                <SelectTrigger className="w-44 shrink-0">
                   <SelectValue placeholder="Importancia" />
                 </SelectTrigger>
                 <SelectContent>
