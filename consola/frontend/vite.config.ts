@@ -55,6 +55,32 @@ export default defineConfig({
     outDir: "../src/keni_consola/webapp",
     emptyOutDir: true,
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Las librerias PESADAS solo las usan rutas concretas (todas cargadas con React.lazy):
+        // aisladas en su propio vendor-chunk se descargan SOLO al entrar en esas rutas y, al no
+        // mezclarse con el codigo de la app, su hash sobrevive a los deploys (cache del navegador).
+        //  - konva / react-konva  -> editor de plantillas (lienzo).
+        //  - @tiptap / prosemirror -> editores de texto enriquecido (copy, prompts).
+        // React/react-dom van PRIMERO en su propio chunk: son la dependencia compartida de todas
+        // las libs anteriores, asi que sin aislarlos Rollup los mete en el primer vendor-chunk
+        // (p. ej. vendor-konva) y el entry, que necesita React, acabaria importando ESE chunk en
+        // estatico —arrastrando konva a CADA pagina—. Con React aparte, los demas vendor-chunks
+        // quedan solo en el grafo perezoso de sus rutas.
+        // recharts/@tremor (metricas) se dejan al troceo POR DEFECTO de Rollup a posta: el shell
+        // usa una utilidad d3 minuscula del arbol de recharts, asi que forzar TODA la libreria a un
+        // chunk unico haria que el entry la importara en estatico (~234 KB gzip en CADA pagina). El
+        // defecto deja recharts/@tremor en los chunks perezosos de metricas y solo hornea esa
+        // utilidad compartida en el entry, igual que antes.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/[/\\]node_modules[/\\](react|react-dom|scheduler)[/\\]/.test(id)) return "vendor-react";
+          if (/[/\\]node_modules[/\\](konva|react-konva)[/\\]/.test(id)) return "vendor-konva";
+          if (/[/\\]node_modules[/\\](@tiptap|prosemirror-[^/\\]+)[/\\]/.test(id)) return "vendor-editor";
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port: 5173,

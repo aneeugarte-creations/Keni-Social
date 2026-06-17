@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { api, ApiError, BASE_API } from "@/lib/api";
 import type { Generacion } from "@/types";
 
-/** Cada cuánto sondeamos una generación en curso (FALLBACK cuando no hay SSE). */
-const INTERVALO_MS = 1200;
+/** Cada cuánto sondeamos una generación en curso. Es la RED DE SEGURIDAD para cuando SSE no está
+ *  conectado (con SSE la query se apaga y empuja el back); 2 s basta sin recargar el back. */
+const INTERVALO_MS = 2000;
 
 /** `true` mientras la generación sigue en segundo plano. */
 export function estaEjecutando(estado: string | undefined): boolean {

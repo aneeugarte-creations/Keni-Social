@@ -15,8 +15,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 
-/** Cadencia del sondeo del badge (ms). Ligero: solo cuenta no leídas. */
-const INTERVALO_MS = 20_000;
+/** Cadencia del sondeo del badge (ms). Ligero: solo cuenta no leídas. El cajón refresca también
+ *  al volver el foco a la pestaña, así que el badge tolera una cadencia holgada de fondo. */
+const INTERVALO_MS = 30_000;
 
 /** Centinela de marca para la clave de caché cuando es "Todas" (null). */
 const MARCA_TODAS = "__todas__";
