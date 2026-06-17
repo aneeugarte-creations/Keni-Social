@@ -269,6 +269,7 @@ from .db_noticias import (  # noqa: F401
     borrar_noticia_cluster,
     caducar_pool,
     categoria_promovida_de_contenido,
+    claves_existentes_directas,
     claves_vistas,
     cluster_por_contenido,
     cluster_por_url_canonica,
@@ -552,6 +553,7 @@ __all__ = [
     "actualizar_coordinador_rota",
     "quitar_coordinador_rota",
     # Motor de ingesta persistente (Ola A).
+    "claves_existentes_directas",
     "crear_noticias_items",
     "listar_noticias_items",
     "obtener_noticia_item",

@@ -16,10 +16,12 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from . import config, daemon_util, repos
 from .dominio import http_feed
 from .dominio import trends as dom_trends
+from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.trends_daemon")
 
@@ -47,6 +49,21 @@ def _ingerir_geo(geo: str) -> int:
     except Exception:  # noqa: BLE001 -- un geo no debe matar el barrido
         _log.exception("trends: fallo inesperado leyendo geo=%s", geo)
         return 0
+    if not items:
+        return 0
+    # DEDUP Trends ↔ RSS directo: una nota que YA entró por el feed de su medio (misma url
+    # canónica) no se vuelca de nuevo desde Trends —su `fuente_id` distinto burla el UNIQUE
+    # (fuente_id, clave) y duplicaría la fila inflando `n_fuentes`—. Trends sigue aportando los
+    # medios que NO ingerimos directamente (Milenio, TUDN…), que es su valor real como descubridor.
+    try:
+        desde = iso_utc(datetime.now(UTC) - timedelta(hours=config.cluster_ventana_h()))
+        ya_directas = repos.claves_existentes_directas(
+            [it["clave"] for it in items], desde=desde, excluir_fuente=dom_trends.FUENTE_ID
+        )
+        if ya_directas:
+            items = [it for it in items if it.get("clave") not in ya_directas]
+    except Exception:  # noqa: BLE001 -- si el dedup falla, se inserta igual (el ON CONFLICT evita el dup del propio Trends)
+        _log.warning("trends: no se pudo deduplicar contra el pool (geo=%s); se inserta sin dedup extra.", geo, exc_info=True)
     if not items:
         return 0
     try:

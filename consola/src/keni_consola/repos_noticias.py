@@ -111,6 +111,12 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
     return db.crear_noticias_items(items)
 
 
+def claves_existentes_directas(
+    claves: list[str], *, desde: str = "", excluir_fuente: str = ""
+) -> set[str]:
+    return db.claves_existentes_directas(claves, desde=desde, excluir_fuente=excluir_fuente)
+
+
 def listar_noticias_items(
     *,
     marca: str | None = None,

@@ -130,6 +130,40 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
     return insertadas
 
 
+def claves_existentes_directas(
+    claves: list[str], *, desde: str = "", excluir_fuente: str = ""
+) -> set[str]:
+    """De `claves`, las que YA están en el pool desde una fuente DIRECTA (no `excluir_fuente`).
+
+    Dedup de Google Trends contra los feeds RSS inyectados: una nota que ya entró por su medio
+    (misma `clave` = url canónica) no debe duplicarse al volcarla Trends, porque su `fuente_id`
+    ("google-trends") es distinto al del feed y burla el UNIQUE `(fuente_id, clave)`. Acota a
+    items capturados desde `desde` (ventana reciente) si se pasa, y excluye `excluir_fuente` (la
+    propia fuente Trends) para no contarse a sí misma. Devuelve el subconjunto de `claves`
+    presente; vacío si no hay candidatas. Determinista.
+    """
+    candidatas = sorted({(c or "").strip() for c in claves if (c or "").strip()})
+    if not candidatas:
+        return set()
+    condiciones = [f"clave IN ({', '.join('?' for _ in candidatas)})"]
+    params: list[Any] = list(candidatas)
+    if excluir_fuente:
+        condiciones.append("fuente_id <> ?")
+        params.append(excluir_fuente)
+    if desde:
+        condiciones.append("capturado_en >= ?")
+        params.append(desde)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; los valores van parametrizados
+            f"SELECT DISTINCT clave FROM noticias_items WHERE {' AND '.join(condiciones)}",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return {fila["clave"] for fila in filas}
+
+
 def listar_noticias_items(
     *,
     marca: str | None = None,

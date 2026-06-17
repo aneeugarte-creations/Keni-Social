@@ -29,6 +29,10 @@ GEOS: dict[str, str] = {
     "CO": "Colombia",
 }
 
+# `fuente_id` FIJO de todas las noticias volcadas desde Google Trends (común a todos los geos).
+# Es la clave que el dedup de ingesta usa para distinguir Trends de los feeds RSS directos.
+FUENTE_ID = "google-trends"
+
 # Tope de términos en tendencia que se procesan por barrido (cada uno trae varias noticias).
 MAX_TERMINOS = 40
 _MAX_TITULO = 300
@@ -127,7 +131,7 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
                 resumen = f"{resumen} (~{trafico} búsquedas)" if resumen else f"~{trafico} búsquedas"
             resultado.append(
                 {
-                    "fuente_id": "google-trends",
+                    "fuente_id": FUENTE_ID,
                     "fuente_nombre": fuente or "Google Trends",
                     "categoria": "tendencias",
                     "marca": "",

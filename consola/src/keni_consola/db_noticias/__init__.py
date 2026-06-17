@@ -67,6 +67,7 @@ from .fuentes_rss import (
 from .items import (
     ESTADOS_NOTICIA_ITEM,
     actualizar_noticia_item,
+    claves_existentes_directas,
     conteos_items_recientes,
     crear_noticias_items,
     feeds_vencidos,
@@ -114,6 +115,7 @@ __all__ = [
     "vaciar_clusters",
     # noticias_items
     "actualizar_noticia_item",
+    "claves_existentes_directas",
     "conteos_items_recientes",
     "crear_noticias_items",
     "feeds_vencidos",

@@ -217,6 +217,7 @@ from .repos_noticias import (  # noqa: F401
     borrar_noticia_cluster,
     caducar_pool,
     categoria_promovida_de_contenido,
+    claves_existentes_directas,
     claves_vistas,
     cluster_por_contenido,
     cluster_por_url_canonica,

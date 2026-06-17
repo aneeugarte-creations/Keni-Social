@@ -94,6 +94,7 @@ def test_parsear_trends_xml_invalido_lanza():
 def test_daemon_barrido_descarga_parsea_inserta(monkeypatch):
     monkeypatch.setattr(trends_daemon, "_DESCARGADOR", lambda url: _TRENDS_XML)
     monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
+    monkeypatch.setattr("keni_consola.repos.claves_existentes_directas", lambda *a, **k: set())
     insertados: list[list[dict]] = []
     monkeypatch.setattr(
         "keni_consola.repos.crear_noticias_items",
@@ -104,6 +105,33 @@ def test_daemon_barrido_descarga_parsea_inserta(monkeypatch):
     assert total == 3
     assert len(insertados) == 1
     assert all(i["fuente_id"] == "google-trends" for i in insertados[0])
+
+
+def test_daemon_barrido_dedup_contra_rss_directo(monkeypatch):
+    """Una noticia que YA está en el pool por su feed RSS directo (misma url canónica) NO se
+    vuelca de nuevo desde Trends: se filtra antes de insertar (no duplica ni infla n_fuentes)."""
+    monkeypatch.setattr(trends_daemon, "_DESCARGADOR", lambda url: _TRENDS_XML)
+    monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
+    monkeypatch.setattr("keni_consola.config.trends_geos", lambda: ("MX",))
+    # 'example.com/tri' ya entró por un feed directo -> Trends no debe re-volcarla.
+    capturado: dict[str, object] = {}
+    monkeypatch.setattr(
+        "keni_consola.repos.claves_existentes_directas",
+        lambda claves, **kw: (capturado.update(claves=set(claves), kw=kw) or {"example.com/tri"}),
+    )
+    insertados: list[list[dict]] = []
+    monkeypatch.setattr(
+        "keni_consola.repos.crear_noticias_items",
+        lambda items: (insertados.append(items) or len(items)),
+    )
+    total = trends_daemon.ejecutar_barrido()
+    # De las 3 noticias, la 'tri' (ya en el pool por RSS) se descarta -> se insertan 2.
+    assert total == 2
+    claves_insertadas = {i["clave"] for i in insertados[0]}
+    assert "example.com/tri" not in claves_insertadas
+    assert claves_insertadas == {"example.com/convocados", "example.com/juego"}
+    # El dedup excluye la propia fuente Trends (para no contarse a sí misma).
+    assert capturado["kw"]["excluir_fuente"] == dom.FUENTE_ID
 
 
 def test_daemon_barrido_feed_caido_no_rompe(monkeypatch):
