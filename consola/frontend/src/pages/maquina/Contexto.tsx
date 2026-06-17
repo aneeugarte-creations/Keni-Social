@@ -39,7 +39,11 @@ import {
   slugFase,
 } from "@/pages/maquina/fases";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
-import { type FasePipeline, PanelPipeline } from "@/pages/monitor/PanelPipeline";
+import {
+  ControlesMaquina,
+  type FasePipeline,
+  PanelPipeline,
+} from "@/pages/monitor/PanelPipeline";
 
 type Proceso = "investigacion" | "produccion" | "importacion" | "herramientas";
 const PROCESOS: readonly Proceso[] = ["investigacion", "produccion", "importacion", "herramientas"];
@@ -112,16 +116,29 @@ export default function Contexto() {
       ) : null}
 
       <Tabs value={proceso} onValueChange={cambiarProceso}>
-        <TabsList>
-          <TabsTrigger value="investigacion">Investigación</TabsTrigger>
-          <TabsTrigger value="produccion">Producción</TabsTrigger>
-          <TabsTrigger value="importacion">Importación</TabsTrigger>
-          <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
-        </TabsList>
+        {/* Las pestañas y el control de la máquina (maestro del proceso activo + interruptor general)
+            comparten fila: el on/off vive a la altura de las pestañas, no dentro de cada panel. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="investigacion">Investigación</TabsTrigger>
+            <TabsTrigger value="produccion">Producción</TabsTrigger>
+            <TabsTrigger value="importacion">Importación</TabsTrigger>
+            <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
+          </TabsList>
+          <ControlesMaquina
+            claveMaestro={
+              proceso === "investigacion"
+                ? MAESTRO_INVESTIGACION
+                : proceso === "produccion"
+                  ? MAESTRO_PRODUCCION
+                  : undefined
+            }
+            esAdmin={esAdmin}
+          />
+        </div>
 
         <TabsContent value="investigacion" className="mt-4">
           <PanelPipeline
-            titulo="Investigación — descubre y verifica noticias"
             fases={FASES_INVESTIGACION}
             queuePorTipo={QUEUE_INVESTIGACION}
             admisionEn="verificar"
@@ -137,7 +154,6 @@ export default function Contexto() {
 
         <TabsContent value="produccion" className="mt-4">
           <PanelPipeline
-            titulo="Producción — convierte noticias verificadas en piezas"
             fases={FASES_PRODUCCION}
             queuePorTipo={QUEUE_PRODUCCION}
             cola={cola.data}
@@ -154,7 +170,6 @@ export default function Contexto() {
             de filas; clicar abre el prompt en el editor (overlay), sin subpágina de fase. */}
         <TabsContent value="importacion" className="mt-4">
           <PanelPipeline
-            titulo="Importación — material recibido del equipo"
             fases={FASES_IMPORTACION}
             queuePorTipo={QUEUE_VACIA}
             esAdmin={esAdmin}
@@ -163,7 +178,6 @@ export default function Contexto() {
 
         <TabsContent value="herramientas" className="mt-4">
           <PanelPipeline
-            titulo="Herramientas — prompts de apoyo (no son etapa de la máquina)"
             fases={FASES_HERRAMIENTAS}
             queuePorTipo={QUEUE_VACIA}
             esAdmin={esAdmin}

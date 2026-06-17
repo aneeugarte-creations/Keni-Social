@@ -18,7 +18,7 @@ import {
   MAESTRO_INVESTIGACION,
   MAESTRO_PRODUCCION,
 } from "@/pages/maquina/fases";
-import { PanelPipeline } from "@/pages/monitor/PanelPipeline";
+import { ControlesMaquina, PanelPipeline } from "@/pages/monitor/PanelPipeline";
 import type { AjusteAdmin } from "@/types";
 
 function aj(clave: string, etiqueta: string, valor = true): AjusteAdmin {
@@ -64,11 +64,20 @@ function renderPanel() {
   return render(
     <QueryClientProvider client={qc}>
       <PanelPipeline
-        titulo="Investigación"
         fases={FASES_INVESTIGACION}
         queuePorTipo={{}}
         claveMaestro={MAESTRO_INVESTIGACION}
       />
+    </QueryClientProvider>,
+  );
+}
+
+/** ControlesMaquina (junto a las pestañas): maestro del proceso + interruptor general «Máquina». */
+function renderControles() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <ControlesMaquina claveMaestro={MAESTRO_INVESTIGACION} />
     </QueryClientProvider>,
   );
 }
@@ -78,7 +87,6 @@ function renderProduccion(onAbrirFase = vi.fn()) {
   render(
     <QueryClientProvider client={qc}>
       <PanelPipeline
-        titulo="Producción"
         fases={FASES_PRODUCCION}
         queuePorTipo={{}}
         claveMaestro={MAESTRO_PRODUCCION}
@@ -97,15 +105,16 @@ function filaDe(nombre: string): HTMLElement {
 }
 
 describe("PanelPipeline · toggles independientes", () => {
-  it("surfacea el maestro UNA vez y no lo pinta como switch por fila", async () => {
-    renderPanel();
-    // El maestro aparece como control ÚNICO en la cabecera…
+  it("el maestro vive junto a las pestañas (ControlesMaquina), no como switch por fila", async () => {
+    // El maestro aparece como control ÚNICO en ControlesMaquina…
+    renderControles();
     expect(
       await screen.findByRole("switch", {
         name: /Investigación \(maestro del proceso/,
       }),
     ).toBeInTheDocument();
-    // …y NINGUNA fase pinta un switch que sea el maestro («switch de la fase»).
+    // …y dentro del PanelPipeline NINGUNA fase pinta un switch que sea el maestro («switch de la fase»).
+    renderPanel();
     expect(
       screen.queryByRole("switch", { name: /Investigación \(switch de la fase/ }),
     ).not.toBeInTheDocument();

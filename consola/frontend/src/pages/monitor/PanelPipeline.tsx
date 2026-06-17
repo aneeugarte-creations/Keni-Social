@@ -8,12 +8,13 @@
  *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos,
  *   · «Editar prompt» (las fases con prompt abren su doc de la Prompts en un overlay) y las
  *     «Excepciones por marca», en el menú de la fila.
- * En la cabecera, el maestro «Máquina» (`KENI_MAQUINA`): apagado, nada automático corre.
+ * El maestro del proceso y el interruptor general «Máquina» (`KENI_MAQUINA`) NO van aquí: viven
+ * junto a las pestañas de Contexto (`ControlesMaquina`). Apagados, nada automático corre.
  *
  * Genérico: el llamante le pasa las FASES (`fases`), el mapa tipo-de-job→fase para los conteos
  * (`queuePorTipo`) y opcionalmente qué fase muestra el admision de verificación (`admisionEn`). Cada
  * fase resuelve su switch por la PRIMERA de sus `claves` presente en el catálogo; las que solo
- * tienen el maestro virtual del proceso NO pintan switch por fila (lo gobierna la cabecera).
+ * tienen el maestro virtual del proceso NO pintan switch por fila (lo gobierna `ControlesMaquina`).
  */
 import { useQuery } from "@tanstack/react-query";
 import { Bot, ChevronDown, Cog, Users } from "lucide-react";
@@ -202,19 +203,89 @@ export function FilaFasePipeline({
   );
 }
 
+/**
+ * Controles de la máquina, pensados para ir JUNTO a las pestañas de Contexto: el maestro del proceso
+ * activo (`claveMaestro`: enciende/apaga todas sus fases) y el interruptor general «Máquina». Cada
+ * toggle ES su indicador de estado (verde on / rojo off). Sin admin no pinta nada.
+ */
+export function ControlesMaquina({
+  claveMaestro,
+  esAdmin = true,
+}: {
+  /** Maestro VIRTUAL del proceso activo (`KENI_INVESTIGACION`/`KENI_PRODUCCION`). */
+  claveMaestro?: string;
+  esAdmin?: boolean;
+}) {
+  const { data } = useQuery({
+    queryKey: CLAVE_AJUSTES,
+    queryFn: ({ signal }) => api.ajustes(signal),
+    enabled: esAdmin,
+  });
+  const porClave = React.useMemo(() => {
+    const mapa = new Map<string, AjusteAdmin>();
+    for (const g of data?.grupos ?? []) for (const a of g.ajustes) mapa.set(a.clave, a);
+    return mapa;
+  }, [data]);
+  const maquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
+  const maquinaOn = Boolean(maquina?.valor);
+  const maestro = esAdmin && claveMaestro ? porClave.get(claveMaestro) : undefined;
+  const maestroOn = Boolean(maestro?.valor);
+  if (!maestro && !maquina) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {maestro && (
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">
+            {maestro.etiqueta}
+            <span
+              className={cn(
+                "ml-1.5 text-xs font-medium",
+                maestroOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+              )}
+            >
+              · {maestroOn ? "on" : "off"}
+            </span>
+          </span>
+          <SwitchAjuste
+            ajuste={maestro}
+            ariaLabel={`${maestro.etiqueta} (maestro del proceso: enciende/apaga todas sus fases)`}
+            tono="estado"
+          />
+        </label>
+      )}
+      {maquina && (
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground">
+            Máquina
+            <span
+              className={cn(
+                "ml-1.5 text-xs font-medium",
+                maquinaOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+              )}
+            >
+              · {maquinaOn ? "on" : "off"}
+            </span>
+          </span>
+          <SwitchAjuste
+            ajuste={maquina}
+            ariaLabel="Máquina (interruptor general de toda la auto-producción)"
+            tono="estado"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export function PanelPipeline({
-  titulo,
   fases,
   queuePorTipo,
   admisionEn,
   cola,
   esAdmin = true,
-  chip,
   claveMaestro,
   onAbrirFase,
 }: {
-  /** Título de la cabecera del panel. */
-  titulo: string;
   /** Las fases del proceso, en orden de flujo. */
   fases: readonly FasePipeline[];
   /** Mapa tipo-de-job → clave de cola, para repartir los conteos por fase. */
@@ -225,12 +296,11 @@ export function PanelPipeline({
   cola?: ColaMonitor;
   /** Admin: lee/edita los switches del catálogo. No-admin: filas informativas. */
   esAdmin?: boolean;
-  /** Indicador opcional en la cabecera (p. ej. jobs en curso del proceso). */
-  chip?: React.ReactNode;
   /** Maestro VIRTUAL del proceso (`KENI_INVESTIGACION`/`KENI_PRODUCCION`): apaga TODAS sus fases a la
    *  vez. Las fases que resuelven su switch a ESTA clave (las que no tienen flag físico propio) NO
-   *  muestran un switch por fila —eso colapsaría el proceso entero al tocar una sola fase—: NO
-   *  pintan nada a la derecha y el maestro se surfacea UNA vez como control único en la cabecera. */
+   *  muestran un switch por fila —eso colapsaría el proceso entero al tocar una sola fase—: NO pintan
+   *  nada a la derecha; el maestro se surfacea como control único junto a las pestañas
+   *  (`ControlesMaquina`), no aquí. */
   claveMaestro?: string;
   /** Si se pasa, el click izquierdo de cada fila NAVEGA al detalle de esa fase (su subpágina
    *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
@@ -282,62 +352,8 @@ export function PanelPipeline({
   const enCurso = cola ? contar(cola.en_curso, queuePorTipo) : {};
   const esperando = cola ? contar(cola.esperando, queuePorTipo) : {};
 
-  const maquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
-  const maquinaOn = Boolean(maquina?.valor);
-  // Maestro del proceso como CONTROL ÚNICO de la cabecera (su switch enciende/apaga todas las fases).
-  const maestro = esAdmin && claveMaestro ? porClave.get(claveMaestro) : undefined;
-  const maestroOn = Boolean(maestro?.valor);
-
   return (
     <section data-testid="panel-pipeline">
-      {/* Cabecera (sin caja): título del proceso + indicador + maestro «Máquina». */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{titulo}</h3>
-        <div className="flex flex-wrap items-center gap-3">
-          {chip}
-          {maestro && (
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">
-                {maestro.etiqueta}
-                <span
-                  className={cn(
-                    "ml-1.5 text-xs font-medium",
-                    maestroOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-                  )}
-                >
-                  · {maestroOn ? "on" : "off"}
-                </span>
-              </span>
-              <SwitchAjuste
-                ajuste={maestro}
-                ariaLabel={`${maestro.etiqueta} (maestro del proceso: enciende/apaga todas sus fases)`}
-                tono="estado"
-              />
-            </label>
-          )}
-          {maquina && (
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">
-                Máquina
-                <span
-                  className={cn(
-                    "ml-1.5 text-xs font-medium",
-                    maquinaOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-                  )}
-                >
-                  · {maquinaOn ? "on" : "off"}
-                </span>
-              </span>
-              <SwitchAjuste
-                ajuste={maquina}
-                ariaLabel="Máquina (interruptor general de toda la auto-producción)"
-                tono="estado"
-              />
-            </label>
-          )}
-        </div>
-      </div>
-
       {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. */}
       <ol className="w-full">
         {fases.map((e, i) => {
