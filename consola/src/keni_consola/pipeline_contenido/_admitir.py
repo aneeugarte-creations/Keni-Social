@@ -23,7 +23,7 @@ from ._comun import (
     VERIFICACION_CADUCADA,
     VERIFICACION_EN_CURSO,
     VERIFICACION_SALTADA,
-    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_VERIFICADO,
     VERIFICADAS_OK,
     _limpiar_snippet,
     _log,
@@ -483,7 +483,7 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
         verificacion = (t.get("verificacion_fuente") or "").strip()
         if verificacion in ("", VERIFICACION_EN_CURSO):
             en_proceso.append(t)  # pendiente de verificación
-        elif verificacion in (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA) and (t.get("id") or "") not in con_copy:
+        elif verificacion in (VERIFICACION_VERIFICADO, VERIFICACION_SALTADA) and (t.get("id") or "") not in con_copy:
             en_proceso.append(t)  # verificado pero pendiente de copy
     return en_proceso
 

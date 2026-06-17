@@ -84,9 +84,9 @@ _COLS_PUBLICACION = (
     "formato",
     "id_post_metricool",
     "senal_viralidad",
-    # verificación DE LA FUENTE (pre-copy): verificacion del verificado de la nota de origen antes de generar
-    # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
-    # peso en contra: NO se generó copy). `verificar_hallazgos` es el JSON estructurado de hallazgos.
+    # verificación DE LA FUENTE (pre-copy): veredicto de la nota de origen antes de generar copy.
+    # "verificado" (✅), "requiere_humano" (⚠️, a la mesa) o "rechazado" (❗, NO se generó copy).
+    # `verificar_hallazgos` es el JSON estructurado de hallazgos.
     "verificacion_fuente",
     "verificar_hallazgos",
     # Parámetros de lanzamiento de copy PENDIENTE (JSON): el sweep guarda aquí, al crear el tema

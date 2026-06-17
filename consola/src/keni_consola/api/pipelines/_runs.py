@@ -13,8 +13,9 @@ from ...pipeline_contenido import (
     ORIGEN_PIPELINE,
     VERIFICACION_CADUCADA,
     VERIFICACION_SALTADA,
-    VERIFICACION_NO_VERIFICADO,
-    VERIFICACION_PROBLEMA,
+    VERIFICACION_VERIFICADO,
+    VERIFICACION_REQUIERE_HUMANO,
+    VERIFICACION_RECHAZADO,
     verificacion_lexica,
 )
 from ._comun import (
@@ -193,7 +194,7 @@ def _etapas_de_run(
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
     verificacion_fuente = (item.get("verificacion_fuente", "") or "").strip()
-    es_problema = verificacion_fuente == VERIFICACION_PROBLEMA
+    es_bloqueado = verificacion_fuente in (VERIFICACION_REQUIERE_HUMANO, VERIFICACION_RECHAZADO)
 
     # --- Admitir: el tema EXISTE, luego Admitir CORRIÓ (evidencia, no toggle). --------
     ci_detalle = f"Del tablero · {item.get('origen') or ''}" if es_tablero else ""
@@ -208,12 +209,14 @@ def _etapas_de_run(
         verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, ""
     elif verificacion_fuente == VERIFICACION_CADUCADA:
         verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
-    elif verificacion_fuente == VERIFICACION_PROBLEMA:
-        verificacion_estado, verificacion_detalle = "revisar", "Problema en la fuente"
+    elif verificacion_fuente == VERIFICACION_RECHAZADO:
+        verificacion_estado, verificacion_detalle = "revisar", "Rechazada en la fuente"
+    elif verificacion_fuente == VERIFICACION_REQUIERE_HUMANO:
+        verificacion_estado, verificacion_detalle = "revisar", "La IA no pudo verificar: requiere revisión"
     elif verificacion_fuente == "en_curso":
         verificacion_estado, verificacion_detalle = "en_curso", ""
-    elif verificacion_fuente == VERIFICACION_NO_VERIFICADO:
-        verificacion_estado, verificacion_detalle = "ok", "No verificado"
+    elif verificacion_fuente == VERIFICACION_VERIFICADO:
+        verificacion_estado, verificacion_detalle = "ok", "Verificada"
     elif _verificar_off(marca):
         verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, ""
     else:
@@ -221,11 +224,11 @@ def _etapas_de_run(
     verificación = {"clave": "verificar", "nombre": "Verificar", "estado": verificacion_estado, "detalle": verificacion_detalle, "ts": ""}
 
     # --- Redactar: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
-    # toggle de hoy); 'problema'/'caducada' lo omiten; el toggle solo pinta el futuro.
+    # toggle de hoy); 'requiere_humano'/'rechazado'/'caducada' lo omiten; el toggle solo pinta el futuro.
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
     if con_copy:
         cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
-    elif es_problema:
+    elif es_bloqueado:
         cd_estado, cd_detalle = "pendiente", "Omitido"
     elif verificacion_fuente == VERIFICACION_CADUCADA:
         cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"

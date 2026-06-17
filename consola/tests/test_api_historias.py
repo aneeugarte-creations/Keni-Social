@@ -540,7 +540,7 @@ def test_historia_expone_verificacion_fuente_y_marca_por_ia(cliente):
     """La historia trae el verificacion verificación de su contenido (verificación) y si la marca fue IA."""
     cont = repos.crear_publicacion(
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
-        verificacion_fuente="no_verificado",
+        verificacion_fuente="verificado",
     )
     _inicializar_cluster("h-verificación", marca="unotv")
     repos.actualizar_noticia_cluster("h-verificación", estado="usado", publicacion_id=cont["id"])
@@ -550,7 +550,7 @@ def test_historia_expone_verificacion_fuente_y_marca_por_ia(cliente):
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-verificación"
     )
-    assert h["verificacion_fuente"] == "no_verificado"  # verificacion verificación del contenido asociado (batch)
+    assert h["verificacion_fuente"] == "verificado"  # verificacion verificación del contenido asociado (batch)
     assert h["marca_clasificada_por_ia"] is True
 
 
@@ -568,29 +568,29 @@ def test_historia_expone_verificacion_nativo_del_cluster_sin_contenido(cliente):
     """ADR 0011 F3: la verificación vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
     expone su verificacion igual — así la Mesa de Investigación la muestra ❗, no como 'sin verificación'."""
     _inicializar_cluster("h-prob", marca="unotv")
-    repos.marcar_cluster_verificacion("h-prob", "problema", '{"resumen": "dato falso"}')
+    repos.marcar_cluster_verificacion("h-prob", "rechazado", '{"resumen": "dato falso"}')
 
     historias = cliente.get(
         "/api/noticias/historias", params={"marca": "unotv"}
     ).json()["historias"]
     h = next(x for x in historias if x["id"] == "h-prob")
-    assert h["verificacion_fuente"] == "problema"  # nativo del cluster, sin contenido enlazado
+    assert h["verificacion_fuente"] == "rechazado"  # nativo del cluster, sin contenido enlazado
 
     # El detalle también lo expone (mismo verificacion nativo).
     det = cliente.get("/api/noticias/historias/h-prob").json()["historia"]
-    assert det["verificacion_fuente"] == "problema"
+    assert det["verificacion_fuente"] == "rechazado"
 
 
 def test_marcar_cluster_verificacion_persiste_y_no_se_pisa_en_recalc(entorno):
     """ADR 0011 F3: `marcar_cluster_verificacion` sella el verificacion en la historia y un recalc (upsert) sin
     verificacion NO lo borra (`verificacion_fuente`/`verificar_hallazgos` en `_NO_PISAR`)."""
     _inicializar_cluster("h-v", marca="unotv")
-    repos.marcar_cluster_verificacion("h-v", "no_verificado", '{"resumen":"ok"}')
+    repos.marcar_cluster_verificacion("h-v", "verificado", '{"resumen":"ok"}')
     c = repos.obtener_noticia_cluster("h-v")
-    assert c["verificacion_fuente"] == "no_verificado"
+    assert c["verificacion_fuente"] == "verificado"
     assert c["verificar_hallazgos"] == '{"resumen":"ok"}'
     # Recalc del daemon (mismo id, sin verificacion): no debe revertir la verificación.
     _inicializar_cluster("h-v", marca="unotv", titulo="Historia re-puntuada")
     c2 = repos.obtener_noticia_cluster("h-v")
-    assert c2["verificacion_fuente"] == "no_verificado"  # preservado pese al upsert
+    assert c2["verificacion_fuente"] == "verificado"  # preservado pese al upsert
     assert c2["titulo"] == "Historia re-puntuada"  # el resto del recalc sí entra

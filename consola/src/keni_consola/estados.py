@@ -367,19 +367,23 @@ DECISION_RECHAZADO = "rechazado"
 # pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin verificar / a
 # re-verificación. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
-#   - "en_curso":      SENTINEL en curso            (`pipeline_contenido._comun.VERIFICACION_EN_CURSO`)
-#   - "saltada":       verificación desactivada para la marca (`pipeline_contenido._comun.VERIFICACION_SALTADA`)
-#   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.VERIFICACION_CADUCADA`)
-#   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERIFICACION_NO_VERIFICADO`)
-#   - "problema":      algo de peso en contra (❗)   (`dominio.verificar_fuente.VERIFICACION_PROBLEMA`)
+#   - "en_curso":        SENTINEL en curso          (`pipeline_contenido._comun.VERIFICACION_EN_CURSO`)
+#   - "saltada":         fuente propia, sin verificar por IA (`pipeline_contenido._comun.VERIFICACION_SALTADA`)
+#   - "caducada":        tema que supero el TTL      (`pipeline_contenido._comun.VERIFICACION_CADUCADA`)
+#   - "verificado":      confirmada (✅)             (`dominio.verificar_fuente.VERIFICACION_VERIFICADO`)
+#   - "requiere_humano": la IA no pudo confirmar (⚠️) (`dominio.verificar_fuente.VERIFICACION_REQUIERE_HUMANO`)
+#   - "rechazado":       falso/sátira/legal (❗)      (`dominio.verificar_fuente.VERIFICACION_RECHAZADO`)
 # Si se anade un verificacion nuevo en el pipeline, anadirlo AQUI (el CHECK lo rechazaria si no).
+# La migración `0029-checks-dominio` renombra los valores legados (`no_verificado`->`verificado`,
+# `problema`->`requiere_humano`) en `publicacion` y `noticias_clusters`.
 VERIFICACIONES_CONTENIDO: tuple[str, ...] = (
     "",
     "en_curso",
     "saltada",
     "caducada",
-    "no_verificado",
-    "problema",
+    "verificado",
+    "requiere_humano",
+    "rechazado",
 )
 
 # Cadena de aprobacion POR DEFECTO al pedir revision de una pieza (orden = nivel

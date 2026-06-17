@@ -3,10 +3,10 @@
 El equipo NO usa skills: la verificación se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La verificación
 corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
-persiste un verificación ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
+persiste un verificación ESTRUCTURADO (`verificado`/`requiere_humano`/`rechazado`) en el cluster. Aquí cubrimos,
 OFFLINE (mock de claude):
   - `asegurar_documento_verificacion` crea el documento si falta (idempotente).
-  - `lanzar_verificar_cluster` enlaza una generación, deja el cluster `en_curso` y corre barato.
+  - `lanzar_verificar_cluster` enlaza una generación, deja el cluster `en_curso` y corre fuerte.
   - el `procesar` (vía lanzador completo) persiste el verificación estructurado sobre el cluster.
 
 Usa la fixture `entorno` (Postgres aislado + Texto en tmp) y construye el cliente con un
@@ -52,7 +52,7 @@ def test_asegurar_documento_verificacion_lo_crea_si_falta(entorno):
     assert doc.cuerpo.strip()  # tiene criterios
     # Es la verificación de la FUENTE (pre-copy), NO el verificación de copy: `PROMPT_VERIFICACION_ID` = prompt/verificar.
     assert pc.PROMPT_VERIFICACION_ID == "prompt/verificar"
-    assert "VERIFICACIÓN PREVIA" in doc.cuerpo
+    assert "verificador editorial" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_verificacion()
     docs = [d for d in libprompts.listar(tipo="prompt") if d.id == pc.PROMPT_VERIFICACION_ID]
@@ -71,8 +71,8 @@ def test_lanzar_verificacion_cluster_enlaza_generacion_y_marca_en_curso(entorno)
     assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_EN_CURSO
 
 
-def test_verificacion_cluster_persiste_veredicto_no_verificado(entorno):
-    """Una verificación 🟢 sin hallazgos -> verificación `no_verificado` persistido en el cluster."""
+def test_verificacion_cluster_persiste_veredicto_verificado(entorno):
+    """Una verificación 🟢 sin hallazgos -> verificación `verificado` persistido en el cluster."""
     salida = (
         "🟢 Fuente apta.\n\n"
         '```json\n{"veredicto": "🟢", "resumen": "OK", "hallazgos": []}\n```\n'
@@ -82,11 +82,11 @@ def test_verificacion_cluster_persiste_veredicto_no_verificado(entorno):
     gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_NO_VERIFICADO
+    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_VERIFICADO
 
 
-def test_verificacion_cluster_persiste_veredicto_problema(entorno):
-    """Una verificación 🔴 con hallazgo de error -> verificación `problema` + hallazgos persistidos."""
+def test_verificacion_cluster_persiste_veredicto_rechazado(entorno):
+    """Una verificación 🔴 con hallazgo de error -> verificación `rechazado` + hallazgos persistidos."""
     salida = (
         "🔴 Problema de peso.\n\n"
         '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '
@@ -97,27 +97,27 @@ def test_verificacion_cluster_persiste_veredicto_problema(entorno):
     gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_PROBLEMA
+    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_RECHAZADO
     assert "inventado" in (actual.get("verificar_hallazgos") or "")
 
 
-def test_endurecer_verificacion_fuente_barato_por_defecto(monkeypatch):
-    """La verificación de la fuente corre BARATA por defecto: Haiku + esfuerzo low + timeout 180 s.
+def test_endurecer_verificacion_fuente_fuerte_por_defecto(monkeypatch):
+    """La verificación de la fuente corre FUERTE por defecto: Opus + esfuerzo high + timeout 600 s.
 
-    Es un filtro PERMISIVO (no redacción): no necesita el modelo/esfuerzo/timeout globales.
-    Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
+    Es la compuerta editorial y la fase más crítica (abre fuentes y corrobora con la web): el único
+    uso de Opus. Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
     """
     from keni_consola.pipeline_contenido import _verificar
 
     for var in ("KENI_VERIFICACION_FUENTE_MODELO", "KENI_VERIFICACION_FUENTE_ESFUERZO", "KENI_VERIFICACION_FUENTE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-    assert _verificar._endurecer_verificacion_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+    assert _verificar._endurecer_verificacion_fuente() == {"modelo": "opus", "esfuerzo": "high", "timeout": 600}
 
-    # Overrides por env: otro modelo / sin override (cae al global correspondiente).
-    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "sonnet")
+    # Overrides por env: abaratar a otro modelo / timeout más corto.
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "haiku")
     monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "60")
     endurecido = _verificar._endurecer_verificacion_fuente()
-    assert endurecido["modelo"] == "sonnet" and endurecido["timeout"] == 60
+    assert endurecido["modelo"] == "haiku" and endurecido["timeout"] == 60
 
     monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "")
     monkeypatch.setenv("KENI_VERIFICACION_FUENTE_ESFUERZO", "")
@@ -140,8 +140,8 @@ def test_verificacion_en_curso_ttl_configurable_con_minimo(monkeypatch):
     assert config.verificacion_en_curso_ttl_seg() == 5 * 60  # suelo
 
 
-def test_lanzar_verificacion_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):
-    """`lanzar_verificar_cluster` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
+def test_lanzar_verificacion_cluster_lanza_con_endurecer_fuerte(entorno, monkeypatch):
+    """`lanzar_verificar_cluster` pasa el `endurecer` fuerte (modelo/esfuerzo/timeout) al lanzador."""
     from keni_consola.pipeline_contenido import _verificar
 
     cliente = _cliente()  # noqa: F841 -- inicializa stores; el lanzador real se intercepta abajo
@@ -158,4 +158,4 @@ def test_lanzar_verificacion_cluster_lanza_con_endurecer_barato(entorno, monkeyp
 
     assert gen is not None and gen["id"] == "gen-verificación-c1"
     assert capturado["tipo"] == "pipeline"  # trabajo de la máquina: un solo tipo en Actividad
-    assert capturado["endurecer"] == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+    assert capturado["endurecer"] == {"modelo": "opus", "esfuerzo": "high", "timeout": 600}

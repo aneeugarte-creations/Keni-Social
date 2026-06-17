@@ -519,9 +519,9 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
-# Verificar la fuente: timeout corto (verificación permisiva con modelo rapido) y TTL del corrector de
-# temas `en_curso` sueltos (minutos; muy superior al timeout de la verificación).
-VERIFICACION_FUENTE_TIMEOUT_DEF = 180
+# Verificar la fuente: timeout holgado (abre fuentes y busca en la web con modelo fuerte) y TTL del
+# corrector de temas `en_curso` sueltos (minutos; muy superior al timeout de la verificación).
+VERIFICACION_FUENTE_TIMEOUT_DEF = 600
 VERIFICACION_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).

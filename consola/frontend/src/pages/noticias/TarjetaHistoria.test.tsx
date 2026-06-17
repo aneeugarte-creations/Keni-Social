@@ -67,16 +67,22 @@ describe("TarjetaHistoria · badges de Investigación", () => {
   it("no pinta verificacion cuando `verificacion_fuente` está vacío", () => {
     renderTarjeta(historia({ verificacion_fuente: "" }));
     expect(screen.queryByTestId("badge-verificacion-verificada")).toBeNull();
-    expect(screen.queryByTestId("badge-verificacion-problema")).toBeNull();
+    expect(screen.queryByTestId("badge-verificacion-rechazada")).toBeNull();
+    expect(screen.queryByTestId("badge-verificacion-requiere-humano")).toBeNull();
   });
 
-  it("'no_verificado' → badge «Verificada»", () => {
-    renderTarjeta(historia({ verificacion_fuente: "no_verificado" }));
+  it("'verificado' → badge «Verificada»", () => {
+    renderTarjeta(historia({ verificacion_fuente: "verificado" }));
     expect(screen.getByTestId("badge-verificacion-verificada").textContent).toMatch(/Verificada/);
   });
 
-  it("'problema' → badge «Problema en la fuente»", () => {
-    renderTarjeta(historia({ verificacion_fuente: "problema" }));
-    expect(screen.getByTestId("badge-verificacion-problema").textContent).toMatch(/Problema en la fuente/);
+  it("'requiere_humano' → badge «Requiere revisión» (la IA no pudo verificar)", () => {
+    renderTarjeta(historia({ verificacion_fuente: "requiere_humano" }));
+    expect(screen.getByTestId("badge-verificacion-requiere-humano").textContent).toMatch(/Requiere revisión/);
+  });
+
+  it("'rechazado' → badge «Rechazada en la fuente»", () => {
+    renderTarjeta(historia({ verificacion_fuente: "rechazado" }));
+    expect(screen.getByTestId("badge-verificacion-rechazada").textContent).toMatch(/Rechazada en la fuente/);
   });
 });

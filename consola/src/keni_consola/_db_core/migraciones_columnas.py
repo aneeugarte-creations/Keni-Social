@@ -575,9 +575,9 @@ _COLUMNAS_PUBLICACION_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
-    # verificación de la FUENTE (pre-copy, rediseño QPC): el pipeline verifica la NOTA DE ORIGEN antes de
-    # generar copy. `verificacion_fuente` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
-    # peso: NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
+    # verificación de la FUENTE (pre-copy): el pipeline verifica la NOTA DE ORIGEN antes de generar
+    # copy. `verificacion_fuente` = "verificado" (✅), "requiere_humano" (⚠️ a la mesa) o "rechazado"
+    # (❗ NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
     ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
     ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
@@ -897,9 +897,9 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # clasificador Haiku (breaking sin marca), 0 si vino de los items / vocabulario.
     ("marca_clasificada_por_ia", "INTEGER NOT NULL DEFAULT 0"),
     # VERIFICACIÓN (verificación de la fuente) sobre la HISTORIA, ANTES de materializar contenido de
-    # producción (ADR 0011 F3): "no_verificado" (⚠️ apta, sigue a admisión) o "problema" (❗ no
-    # se admite). `verificar_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
-    # admitir, así la frontera "verificación = investigación" queda alineada con el modelo de datos. BD
+    # producción (ADR 0011 F3): "verificado" (✅ sigue a admisión), "requiere_humano" (⚠️ no se admite,
+    # a la mesa) o "rechazado" (❗ no se admite). `verificar_hallazgos` = JSON de lo encontrado. Hereda
+    # al `contenido` al admitir, así la frontera "verificación = investigación" queda alineada. BD
     # vieja -> "" (sin verificacion: aún por verificar).
     ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),

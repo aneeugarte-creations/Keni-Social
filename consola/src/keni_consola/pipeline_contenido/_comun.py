@@ -45,8 +45,9 @@ __all__ = [
     "VERIFICACION_EN_CURSO",
     "VERIFICACION_SALTADA",
     "VERIFICACION_CADUCADA",
-    "VERIFICACION_NO_VERIFICADO",
-    "VERIFICACION_PROBLEMA",
+    "VERIFICACION_VERIFICADO",
+    "VERIFICACION_REQUIERE_HUMANO",
+    "VERIFICACION_RECHAZADO",
     "_DEFAULT_VERIFICACION_CRITERIOS",
     # og:image
     "_RE_OG_IMAGE",
@@ -148,57 +149,44 @@ VERIFICACION_SALTADA = "saltada"
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
 VERIFICACION_CADUCADA = "caducada"
 
-# Verificaciones ESTRUCTURADAS de la verificación de la FUENTE (rediseño QPC), reexportados del dominio para
+# Verificaciones ESTRUCTURADAS de la verificación de la FUENTE, reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
-VERIFICACION_NO_VERIFICADO = dom_verificar.VERIFICACION_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
-VERIFICACION_PROBLEMA = dom_verificar.VERIFICACION_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
+VERIFICACION_VERIFICADO = dom_verificar.VERIFICACION_VERIFICADO  # ✅ confirmada: se auto-produce
+VERIFICACION_REQUIERE_HUMANO = dom_verificar.VERIFICACION_REQUIERE_HUMANO  # ⚠️ la IA no pudo confirmar: a la mesa
+VERIFICACION_RECHAZADO = dom_verificar.VERIFICACION_RECHAZADO  # ❗ falso/sátira/legal de peso: excluida
 
 # Criterios por defecto del documento verificación que se CREA si aún no existe (idempotente). MISMO
 # cuerpo que la inicial `prompt/verificar` del paquete (último recurso si la inicial no se
-# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la verificación es PRE-COPY y verifica la NOTA DE
-# ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
-# PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
-# SEÑALA (no publica ni reescribe). El campo JSON `veredicto` va en slug ASCII
-# ("apta"|"problema"); el semáforo 🟢/🔴 queda como línea humana.
+# pudiera leer; si tocas uno, toca el otro). La verificación es PRE-COPY y verifica la HISTORIA DE
+# ORIGEN (no el copy, que aún no existe) ANTES de auto-producir. Es FAIL-CLOSED: confirma SOLO lo
+# que corrobora con la web; lo no confirmable va a revisión humana (`requiere_humano`) y solo lo
+# falso/de peso se rechaza (`rechazado`). El campo JSON `veredicto` va en slug ASCII
+# ("verificado"|"requiere_humano"|"rechazado"); el semáforo 🟢/🟡/🔴 queda como línea humana.
 _DEFAULT_VERIFICACION_CRITERIOS = """\
-Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO la NOTA DE ORIGEN
-(título + resumen + enlace) de la que se generará copy para redes. Haces una VERIFICACIÓN PREVIA,
-ANTES de que se redacte el copy: decides si la fuente es apta para producir contenido. NO
-redactas copy ni reescribes nada. Aplica la LÍNEA EDITORIAL adjunta (voz de marca, reglas).
+Eres el verificador editorial de AMX Contenido. En el bloque CONTEXTO tienes una historia (título,
+resumen y los enlaces de sus fuentes). Si la verificas, la máquina genera el copy y lo encola para
+aprobación humana; tu trabajo es que nada falso o sin corroborar llegue a esa cola marcado como
+verificado. No redactas copy.
 
-Modo dry-run: no publicas ni haces peticiones de red. SEÑALAS; el equipo decide.
+Tienes acceso a la web: abre las fuentes y busca lo que haga falta. Confirma SOLO lo que corrobores
+con fuentes fiables; si NO puedes confirmarlo, a revisión humana; rechaza solo lo falso, sátira o
+con un problema legal/ético de peso. Ante la duda, revisión humana. Respeta las reglas de la LÍNEA
+EDITORIAL adjunta.
 
-SÉ PERMISIVO: esta verificación es un primer filtro barato, NO una verificación a fondo. Solo levanta
-un PROBLEMA cuando hay algo de PESO en contra (un dato claramente falso, un asunto legal o ético
-serio, una fuente no fiable o sensacionalista que no debería amplificarse). Ante la duda, DEJA
-PASAR: el copy generado llevará un aviso de "no verificado" y un humano lo revisará después.
+## Veredicto
 
-## Verificacion (ANTES del detalle)
-
-Empieza, arriba del todo, por una sola línea de semáforo:
-
-🟢 (apta, seguir) · 🔴 (problema de peso, NO generar copy)
-
-No uses el amarillo: o es apta (🟢) o tiene un problema de peso (🔴).
-
-## Qué miras (a alto nivel, sin verificar a fondo)
-
-1. Veracidad evidente: ¿la nota afirma algo claramente falso o inventado? No verifiques datos uno
-   a uno; solo señala lo que salte a la vista como falso.
-2. Legal / ético: ¿hay algo serio (difamación, contenido sensible, desinformación) que desaconseje
-   amplificar esta fuente?
-3. Fuente: ¿es una fuente fiable o un clickbait/sensacionalismo que no deberíamos amplificar?
+Primera línea, solo el semáforo: 🟢 (confirmada) · 🟡 (no confirmada, a revisión humana) · 🔴 (falsa
+o con un problema de peso).
 
 ## Salida
 
 Tras el semáforo, cierra con un bloque ```json con la forma:
-{"veredicto": "apta", "resumen": "una frase",
+{"veredicto": "verificado", "resumen": "una frase",
  "hallazgos": [{"tipo": "dato|legal|voz", "gravedad": "error|aviso",
                 "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
-El campo "veredicto" va SIEMPRE en slug ASCII: "apta" (seguir) o "problema" (de peso, NO
-generar copy). El semáforo 🟢/🔴 es solo la línea humana de arriba, NO un valor del JSON.
-Usa gravedad "error" SOLO para lo de peso (lo que hace "problema"). Sin emojis en el cuerpo
-ni en el JSON.
+El campo "veredicto" va SIEMPRE en slug ASCII: "verificado" (confirmada), "requiere_humano" (no
+confirmada) o "rechazado" (de peso). El semáforo 🟢/🟡/🔴 es solo la línea humana, NO un valor del
+JSON. Usa gravedad "error" SOLO para lo de peso (lo que hace "rechazado"). Sin emojis en el JSON.
 """
 
 
@@ -491,13 +479,13 @@ def registrar_etapa(
 # admitir): en proceso + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
 # `_ADMISION_VERIFICACION` que usa `_barrido`); aqui se exponen para que el Monitor lea el admision sin
 # importar el barrido (el orquestador) desde la capa API.
-ADMISION_VERIFICACION_ESTADOS = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
+ADMISION_VERIFICACION_ESTADOS = (VERIFICACION_EN_CURSO, VERIFICACION_VERIFICADO, VERIFICACION_SALTADA)
 
 # Verificaciones que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
 # o la verificación estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
 # promueva SIN verificar) y el barrido de investigación.
-VERIFICADAS_OK = (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
+VERIFICADAS_OK = (VERIFICACION_VERIFICADO, VERIFICACION_SALTADA)
 
 
 def admision_verificacion() -> dict[str, Any]:
@@ -575,7 +563,7 @@ def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
 # REINTENTOS ACOTADOS por etapa (flujo continuo): con el tick corto, una etapa que falla se
 # relanzaría cada pocos segundos para siempre (bucle de tokens). Cada lanzamiento de verificación/Copy
 # anota su intento en `copy_pendiente` (JSON, sin migración de esquema); al agotarlos, el tema
-# se marca `problema` con un hallazgo de sistema: SALE del cupo en curso (in=out se sostiene)
+# se marca `requiere_humano` con un hallazgo de sistema: SALE del cupo en curso (in=out se sostiene)
 # y queda visible en Pipelines/tablero como fallo, para que un humano decida.
 _MAX_INTENTOS_ETAPA = 3
 
@@ -648,10 +636,11 @@ def en_backoff(tema: dict[str, Any], campo: str) -> bool:
 
 
 def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
-    """Marca el tema con verificacion `problema` por fallo REPETIDO de una etapa (salida terminal).
+    """Marca el tema `requiere_humano` por fallo REPETIDO de una etapa (salida terminal del sistema).
 
-    El tema sale del cupo en curso (deja de reintentarse y de bloquear la admisión de su marca)
-    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la verificación verificación.
+    No es un rechazo del contenido: es un fallo de SISTEMA (generación). El tema sale del cupo en
+    curso (deja de reintentarse y de bloquear la admisión de su marca) y queda visible (⚠️) con un
+    hallazgo de sistema para que un humano decida. Mismo formato que la verificación de la fuente.
     """
     import json
 
@@ -661,10 +650,10 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     }]
     try:
         repos.actualizar_publicacion(tema_id, {
-            "verificacion_fuente": VERIFICACION_PROBLEMA,
+            "verificacion_fuente": VERIFICACION_REQUIERE_HUMANO,
             "verificar_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
         })
-        _log.warning("pipeline: tema %s marcado problema por fallo repetido de %s", tema_id, etapa)
+        _log.warning("pipeline: tema %s marcado requiere_humano por fallo repetido de %s", tema_id, etapa)
     except Exception:  # noqa: BLE001 -- best-effort; el tema seguirá reintentando si no persiste
         _log.warning("pipeline: no se pudo marcar el fallo terminal del tema %s", tema_id, exc_info=True)
 

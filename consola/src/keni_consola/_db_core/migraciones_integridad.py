@@ -130,22 +130,27 @@ def _migrar_checks_dominio(con: Any) -> None:
         VERIFICACIONES_CONTENIDO,
     )
 
-    checks: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
-        ("publicacion", "estado", ESTADOS_PUBLICACION, "pendiente"),
+    # Renombres de VALOR de la verificación de fuente (ola de 3 niveles): se aplican TRAS el DROP del
+    # CHECK viejo (que prohibiría los nuevos valores) y ANTES de normalizar, para NO perder las filas
+    # (la normalización las mandaría a "" en vez de renombrarlas).
+    renombres_vf = {"no_verificado": "verificado", "problema": "requiere_humano"}
+
+    checks: tuple[tuple[str, str, tuple[str, ...], str, dict[str, str]], ...] = (
+        ("publicacion", "estado", ESTADOS_PUBLICACION, "pendiente", {}),
         # Colapso 2026-06: la allowlist de pieza pasó a (borrador/en_revision/programado/
         # publicado). El default de normalización es `borrador`: las filas viejas con valores
         # retirados (pendiente/en_curso/aprobado) se normalizan a `borrador` ANTES de re-aplicar
         # el CHECK (vuelven a preparación; conservan sus likes en `pieza_aprobaciones`).
         # Editar este default cambia el source de la fn -> su huella cambia -> la migración 0029
         # (re_aplicar_si_cambia) se RE-APLICA en hosted con la allowlist nueva.
-        ("pieza", "estado", ESTADOS_PIEZA, "borrador"),
-        ("pieza_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
-        ("usuarios", "rol", ROLES_USUARIO, "editor"),
-        # verificación de la FUENTE: '' es valido (sin verificar). NO se aplica a `noticias_clusters.verificacion_fuente`
-        # a proposito (su set de valores aun no esta centralizado; se difiere a la ola siguiente).
-        ("publicacion", "verificacion_fuente", VERIFICACIONES_CONTENIDO, ""),
+        ("pieza", "estado", ESTADOS_PIEZA, "borrador", {}),
+        ("pieza_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente", {}),
+        ("usuarios", "rol", ROLES_USUARIO, "editor", {}),
+        # verificación de la FUENTE: '' es valido (sin verificar). Renombra los valores legados a la
+        # nomenclatura de 3 niveles antes de normalizar.
+        ("publicacion", "verificacion_fuente", VERIFICACIONES_CONTENIDO, "", renombres_vf),
     )
-    for tabla, columna, allowlist, normal in checks:
+    for tabla, columna, allowlist, normal, renombres in checks:
         nombre = f"ck_{tabla}_{columna}"
         # DROP ANTES de normalizar: el CHECK VIEJO (allowlist anterior) puede PROHIBIR el propio
         # valor de normalizacion. Tras el colapso 2026-06, `borrador` es NUEVO en la allowlist de
@@ -153,6 +158,13 @@ def _migrar_checks_dominio(con: Any) -> None:
         # `borrador` fallaba con CheckViolation antes de poder re-crear el constraint. Sin
         # constraint, la normalizacion SIEMPRE entra; luego se re-aplica el CHECK nuevo.
         con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+        # Renombra los valores legados (idempotente: WHERE = viejo) ANTES de normalizar, ya sin el
+        # CHECK viejo que los prohibiría.
+        for viejo, nuevo in renombres.items():
+            con.execute(
+                f"UPDATE {tabla} SET {columna} = ? WHERE {columna} = ?",  # noqa: S608
+                (nuevo, viejo),
+            )
         # Normaliza los valores fuera de la allowlist al default (idempotente). El default
         # esta en la allowlist, asi que tras esto ninguna fila viola el CHECK.
         tocadas = con.execute(
@@ -168,6 +180,15 @@ def _migrar_checks_dominio(con: Any) -> None:
         con.execute(
             f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
             f"CHECK ({columna} IN {_en_sql(allowlist)})"
+        )
+
+    # `noticias_clusters.verificacion_fuente` NO tiene CHECK (su set aún no está centralizado), pero
+    # sus datos usan los MISMOS tokens legados: renombra también ahí para que el código (que ya solo
+    # conoce la nomenclatura de 3 niveles) lea valores consistentes. Idempotente.
+    for viejo, nuevo in renombres_vf.items():
+        con.execute(
+            "UPDATE noticias_clusters SET verificacion_fuente = ? WHERE verificacion_fuente = ?",
+            (nuevo, viejo),
         )
 
 

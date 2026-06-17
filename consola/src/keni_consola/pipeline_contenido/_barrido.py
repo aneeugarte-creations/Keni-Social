@@ -23,7 +23,7 @@ from ._comun import (
     _MAX_INTENTOS_ETAPA,
     VERIFICACION_EN_CURSO,
     VERIFICACION_SALTADA,
-    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_VERIFICADO,
     VERIFICADAS_OK,
     _log,
     anotar_intento,
@@ -147,7 +147,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 # Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de verificación y aún
 # no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta verificación se lanza por
 # tick (presupuesto = tope en proceso − admision) para que la verificación no recorra todo el pool.
-_ADMISION_VERIFICACION = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
+_ADMISION_VERIFICACION = (VERIFICACION_EN_CURSO, VERIFICACION_VERIFICADO, VERIFICACION_SALTADA)
 
 
 def _ejecutar_investigacion() -> dict[str, Any]:
@@ -235,15 +235,15 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     que pasan el umbral (`clusters_pendientes_verificar`), acotadas por el presupuesto del ADMISION
     (`tope en proceso − admision`) para no verificar todo el pool. Si la Validación está activa, lanza
     la verificación `claude -p` y marca el cluster `en_curso` (asíncrona: el verificacion lo persiste el
-    `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster
-    `saltada` (sin `claude -p`) para que la admisión lo promueva igual. Best-effort por historia;
-    `ColaLlenaError` corta la verificación de esa marca (el siguiente tick reintenta). Devuelve los
-    verificados (`{id, gen_id, verificacion_fuente}`).
+    `procesar` sobre el cluster). Si la Validación está OFF para la marca, la historia AJENA NO se
+    verifica NI se admite: queda sin verificar en el pool para que el humano la decida (nada ajeno se
+    auto-produce sin verificar). Best-effort por historia; `ColaLlenaError` corta la verificación de
+    esa marca (el siguiente tick reintenta). Devuelve los verificados (`{id, gen_id, verificacion_fuente}`).
 
     FAST PATH de MARCA PROPIA: una historia cuyo ORIGEN es el portal propio (su fuente primaria
     tiene `fuentes_rss.propia=1`) YA viene verificada por la REDACCIÓN del portal; se SALTA la
     verificación `claude -p` (se marca `saltada`) y la admisión la promueve igual —directa al feed—,
-    aunque la Validación esté ON para la marca. Las historias de fuentes AJENAS de la misma marca
+    también con la Validación OFF para la marca. Las historias de fuentes AJENAS de la misma marca
     sí pasan por verificación. El interruptor es el propio flag `propia` del feed (`propia=0` la
     re-mete en la cola de verificación).
     """
@@ -270,8 +270,6 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         pendientes = clusters_pendientes_verificar(marca, maximo=presupuesto)
         if not pendientes:
             continue
-        # Validación OFF para la marca: se SALTA la verificación; el cluster se marca `saltada` para que
-        # la admisión lo promueva igual (sin verificar). Misma FUENTE ÚNICA (config.etapa_activa).
         validacion_on = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
         # Cache por barrido del lookup `fuentes_rss.propia` (memoiza por fuente_id; ver `_es_fuente_propia`).
         cache_propia: dict[str, bool] = {}
@@ -280,16 +278,20 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
             if not cid:
                 continue
             # FAST PATH de marca PROPIA: si la fuente PRIMARIA de la historia es del portal propio,
-            # ya viene verificada por su redacción -> se salta la verificación igual que con la
-            # Validación OFF (se marca `saltada` y la admisión la promueve directa al feed).
+            # ya viene verificada por su redacción -> se marca `saltada` (sin `claude -p`) y la
+            # admisión la promueve directa al feed, también con la Validación OFF.
             es_propia = _admitir._es_fuente_propia(cluster.get("primera_fuente") or "", cache_propia)
-            if not validacion_on or es_propia:
+            if es_propia:
                 try:
                     repos.marcar_cluster_verificacion(cid, VERIFICACION_SALTADA)
                 except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
                     _log.exception("pipeline: fallo al marcar verificación de cluster saltada (%s).", cid)
                 else:
                     verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": VERIFICACION_SALTADA})
+                continue
+            # Validación OFF para la marca: la historia AJENA NO se verifica ni se admite; queda sin
+            # verificar en el pool para que el humano la decida (nada ajeno se auto-produce sin verificar).
+            if not validacion_on:
                 continue
             try:
                 gen = lanzar_verificar_cluster(cluster, autor=autor)

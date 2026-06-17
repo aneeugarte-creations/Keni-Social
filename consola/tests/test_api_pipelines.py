@@ -51,7 +51,7 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
 
     Orden NUEVO (rediseño QPC): ADMITIR -> Verificación de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
-    tema = _tema_pipeline("Tema apto", verificacion_fuente="no_verificado")
+    tema = _tema_pipeline("Tema apto", verificacion_fuente="verificado")
     repos.crear_pieza_fila(
         publicacion_id=tema["id"], red="x", estado="borrador",
         copy="Copy válido y corto.", revision="no_verificado",
@@ -70,8 +70,8 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
     # La verificación de la fuente surface el aviso ⚠️.
-    assert run["verificacion"]["no_verificado"] is True
-    assert run["verificacion"]["problema"] is False
+    assert run["verificacion"]["verificado"] is True
+    assert run["verificacion"]["rechazado"] is False
 
 
 def test_run_sin_verificacion_todo_pendiente(cliente):
@@ -93,13 +93,13 @@ def test_run_verificacion_problema_omite_copy(cliente):
         '{"resumen": "Dato falso", '
         '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "x"}]}'
     )
-    _tema_pipeline("Tema con problema", verificacion_fuente="problema", verificar_hallazgos=hallazgos)
+    _tema_pipeline("Tema con problema", verificacion_fuente="rechazado", verificar_hallazgos=hallazgos)
     run = _run_por_titulo(cliente, "Tema con problema")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["verificar"] == "revisar"
     assert etapas["redactar"] == "pendiente"
     verificación = run["verificacion"]
-    assert verificación["problema"] is True
+    assert verificación["rechazado"] is True
     assert verificación["copy_omitido"] is True
     assert verificación["hallazgos"] and verificación["hallazgos"][0]["tipo"] == "dato"
 
@@ -107,7 +107,7 @@ def test_run_verificacion_problema_omite_copy(cliente):
 def test_aprobacion_esperando_humano_es_pendiente(cliente):
     """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
     detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada."""
-    tema = _tema_pipeline("Run en revisión", verificacion_fuente="no_verificado")
+    tema = _tema_pipeline("Run en revisión", verificacion_fuente="verificado")
     repos.crear_pieza_fila(
         publicacion_id=tema["id"], red="x", estado="en_revision",
         copy="Copy.", revision="no_verificado",
@@ -121,7 +121,7 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
 
 def test_run_aprobado(cliente):
     """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
-    tema = _tema_pipeline("Tema aprobado", verificacion_fuente="no_verificado")
+    tema = _tema_pipeline("Tema aprobado", verificacion_fuente="verificado")
     repos.crear_pieza_fila(
         publicacion_id=tema["id"], red="x", estado="programado",
         copy="Copy.", revision="no_verificado",
@@ -177,7 +177,7 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
 def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     """Una run COMPLETADA pinta sus etapas por lo EJECUTADO aunque hoy TODOS los toggles estén
     apagados: encender/apagar interruptores no ilumina ni apaga la historia de las runs."""
-    tema = _tema_pipeline("Run histórica", verificacion_fuente="no_verificado")
+    tema = _tema_pipeline("Run histórica", verificacion_fuente="verificado")
     _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
     repos.crear_pieza_fila(
         publicacion_id=tema["id"], red="x", estado="programado",
@@ -302,7 +302,7 @@ def test_paginacion_envelope_y_offset(cliente):
 
 def test_etapa_actual_y_filtro_por_etapa(cliente):
     """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
-    aprob = _tema_pipeline("Run aprobada", verificacion_fuente="no_verificado")
+    aprob = _tema_pipeline("Run aprobada", verificacion_fuente="verificado")
     repos.crear_pieza_fila(
         publicacion_id=aprob["id"], red="x", estado="programado", copy="C.", revision="no_verificado",
     )
@@ -444,9 +444,9 @@ def test_problemas_lista_temas_bloqueados(cliente):
         }],
     })
     _tema_pipeline(
-        "Tema bloqueado", verificacion_fuente="problema", verificar_hallazgos=hallazgos, copy_pendiente=pend,
+        "Tema bloqueado", verificacion_fuente="rechazado", verificar_hallazgos=hallazgos, copy_pendiente=pend,
     )
-    _tema_pipeline("Tema sano", verificacion_fuente="no_verificado")
+    _tema_pipeline("Tema sano", verificacion_fuente="verificado")
 
     r = cliente.get("/api/pipelines/problemas")
     assert r.status_code == 200
@@ -468,7 +468,7 @@ def test_problemas_verificacion_roja_es_validacion(cliente):
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
     })
-    _tema_pipeline("Verificación roja", verificacion_fuente="problema", verificar_hallazgos=hallazgos)
+    _tema_pipeline("Verificación roja", verificacion_fuente="rechazado", verificar_hallazgos=hallazgos)
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
     assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
@@ -476,8 +476,8 @@ def test_problemas_verificacion_roja_es_validacion(cliente):
 
 
 def test_problemas_filtra_por_marca_y_valida(cliente):
-    _tema_pipeline("P claro", marca="claro-sports", verificacion_fuente="problema")
-    _tema_pipeline("P uno", marca="unotv", verificacion_fuente="problema")
+    _tema_pipeline("P claro", marca="claro-sports", verificacion_fuente="rechazado")
+    _tema_pipeline("P uno", marca="unotv", verificacion_fuente="rechazado")
     titulos = {
         x["titulo"]
         for x in cliente.get("/api/pipelines/problemas?marca=claro-sports").json()["problemas"]
@@ -487,7 +487,7 @@ def test_problemas_filtra_por_marca_y_valida(cliente):
 
 
 def test_problemas_vacio_sin_bloqueados(cliente):
-    _tema_pipeline("Todo bien", verificacion_fuente="no_verificado")
+    _tema_pipeline("Todo bien", verificacion_fuente="verificado")
     body = cliente.get("/api/pipelines/problemas").json()
     assert body == {"problemas": [], "total": 0}
 

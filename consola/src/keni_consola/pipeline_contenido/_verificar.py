@@ -111,11 +111,12 @@ def _contexto_verificacion_fuente(nota: str) -> str:
 
 
 def _endurecer_verificacion_fuente() -> dict[str, Any] | None:
-    """Overrides `endurecer` de la verificación de la fuente: modelo rápido + esfuerzo bajo + timeout corto.
+    """Overrides `endurecer` de la verificación de la fuente: modelo fuerte + esfuerzo alto + timeout holgado.
 
-    Es una verificación PERMISIVA (no redacción): corre con Haiku + `low` + ~180 s (configurables:
-    `KENI_VERIFICACION_FUENTE_MODELO`, `KENI_VERIFICACION_FUENTE_ESFUERZO`, `KENI_VERIFICACION_FUENTE_TIMEOUT`). Se omiten las
-    claves vacías (cada una cae a su global). None si no hay ningún override.
+    Es la compuerta editorial: abre fuentes y corrobora con la web. Corre con Opus + `high` + ~600 s
+    (configurables: `KENI_VERIFICACION_FUENTE_MODELO`, `KENI_VERIFICACION_FUENTE_ESFUERZO`,
+    `KENI_VERIFICACION_FUENTE_TIMEOUT`). Se omiten las claves vacías (cada una cae a su global). None si
+    no hay ningún override.
     """
     overrides: dict[str, Any] = {}
     modelo = config.verificacion_fuente_modelo()
@@ -136,13 +137,14 @@ def lanzar_verificar_cluster(
     """verificación de la FUENTE sobre una HISTORIA (cluster) via `claude -p`, ANTES de materializar
     contenido de producción (ADR 0011 F3).
 
-    Verificación la nota de origen del cluster (título + resumen + bloques de sus fuentes; usa los
-    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la verificación es permisiva) y sella el verificación en
-    `noticias_clusters.verificacion_fuente` (no en `contenido`: la pieza aún no existe). El barrido de
-    investigación admite luego solo las `no_verificado` (hereda el verificación al contenido) y deja
-    fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la generación; None si
-    no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA (corta la fase
-    verificación de esa marca). Runtime barato (Haiku/low/timeout corto, `_endurecer_verificacion_fuente`).
+    Verifica la nota de origen del cluster (título + resumen + bloques de sus fuentes; los cuerpos
+    ARCHIVADOS del feed son el punto de partida, el modelo abre las fuentes y busca en la web) y sella
+    el verificación en `noticias_clusters.verificacion_fuente` (no en `contenido`: la pieza aún no
+    existe). El barrido de investigación admite luego solo las `no_verificado` (hereda el verificación
+    al contenido) y deja fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la
+    generación; None si no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA
+    (corta la fase verificación de esa marca). Runtime fuerte (Opus/high/timeout holgado,
+    `_endurecer_verificacion_fuente`).
     """
     from . import _admitir
 
@@ -158,7 +160,7 @@ def lanzar_verificar_cluster(
         items = repos.items_de_cluster(cid, limite=_admitir._MAX_ENLACES_CLUSTER)
     except Exception:  # noqa: BLE001 -- sin items legibles, verificamos con título+resumen igual
         items = []
-    cuerpos = dict(repos.cuerpos_de_cluster(cid))  # archivados (gratis); sin fetch HTTP en verificación
+    cuerpos = dict(repos.cuerpos_de_cluster(cid))  # archivados: punto de partida; el modelo abre las fuentes
     nota = _admitir._nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     if not nota.strip():
         return None

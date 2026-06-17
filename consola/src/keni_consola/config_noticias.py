@@ -712,35 +712,38 @@ def verificar_activo() -> bool:
 
 
 def verificacion_fuente_modelo() -> str:
-    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_VERIFICACION_FUENTE_MODELO`, def "haiku").
+    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_VERIFICACION_FUENTE_MODELO`, def "opus").
 
-    La verificación de Verificar es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
-    rapido/economico. Mismas semanticas que `insumos_modelo`: var no fijada -> "haiku";
-    fijada a "" -> sin `--model` (default de claude); fijada a un valor -> ese modelo.
+    Verificar es LA compuerta editorial y la fase más crítica y compleja: abre las fuentes y
+    corrobora con la web, así que corre con el modelo más fuerte (opus; el resto de etapas —copy,
+    inferencias, tareas mecánicas— van con sonnet/haiku). Mismas semanticas que `insumos_modelo`:
+    var no fijada -> "opus"; fijada a "" -> sin `--model` (default de claude); fijada a un valor
+    (p. ej. "sonnet" para abaratar) -> ese modelo.
     """
     raw = os.environ.get(ENV_VERIFICACION_FUENTE_MODELO)
     if raw is None:
-        return "haiku"
+        return "opus"
     return raw.strip()
 
 
 def verificacion_fuente_esfuerzo() -> str:
-    """Esfuerzo (thinking) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_ESFUERZO`, def "low").
+    """Esfuerzo (thinking) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_ESFUERZO`, def "high").
 
-    "" (explicito) = sin override (cae a la preferencia global). El valor se valida contra
-    `preferencias.ESFUERZOS_VALIDOS` en el armado del argv (un valor invalido se ignora).
+    Verificar razona sobre fuentes abiertas con la web: corre con esfuerzo alto. "" (explicito) = sin
+    override (cae a la preferencia global). El valor se valida contra `preferencias.ESFUERZOS_VALIDOS`
+    en el armado del argv (un valor invalido se ignora).
     """
     raw = os.environ.get(ENV_VERIFICACION_FUENTE_ESFUERZO)
     if raw is None:
-        return "low"
+        return "high"
     return raw.strip()
 
 
 def verificacion_fuente_timeout() -> int:
-    """Wall-timeout (s) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_TIMEOUT`, def 180, min 0).
+    """Wall-timeout (s) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_TIMEOUT`, def 600, min 0).
 
-    0 = sin override (se usa el global `KENI_CLAUDE_TIMEOUT`). El override solo ENDURECE:
-    el runner lo topa con `min(global, override)`.
+    Holgado: Verificar abre fuentes y busca en la web. 0 = sin override (se usa el global
+    `KENI_CLAUDE_TIMEOUT`). El override solo ENDURECE: el runner lo topa con `min(global, override)`.
     """
     return _entero(ENV_VERIFICACION_FUENTE_TIMEOUT, VERIFICACION_FUENTE_TIMEOUT_DEF, minimo=0)
 

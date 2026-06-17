@@ -1,6 +1,6 @@
-"""CD — creación de contenido: lanza copy de los temas con verificación `no_verificado`.
+"""CD — creación de contenido: lanza copy de los temas con verificación `verificado`.
 
-Por cada tema cuya verificación de la fuente salió `no_verificado` y que aún no tiene copy, lanza la
+Por cada tema cuya verificación de la fuente salió `verificado` y que aún no tiene copy, lanza la
 generación por el camino PROBADO (`dominio.generar.lanzar_copy`) con los parámetros que CI guardó
 en `copy_pendiente`. Incluye también la selección del news-pool (orígenes autogen) que la etapa
 de Redactar del pipeline redacta (fundido de `autogen_redactar`).
@@ -18,7 +18,7 @@ from ._comun import (
     ETAPA_REDACTAR,
     VERIFICACION_SALTADA,
     TIPO_PIPELINE,
-    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_VERIFICADO,
     _copy_pendiente_leido,
     _log,
     _tiene_copy,
@@ -33,9 +33,16 @@ __all__ = [
     "encadenar_ilustrar_tras_redactar",
 ]
 
+# Revisión INICIAL de la pieza auto-producida. Es un eje DISTINTO del veredicto de FUENTE: si la
+# fuente se VERIFICÓ a fondo (`verificado`), la pieza nace sin aviso (sujeta al chequeo de voz); si
+# la verificación se SALTÓ (`saltada`, fuente propia que la IA no verificó), hereda el ⚠️
+# `no_verificado` para que la parrilla y Pipelines lo muestren.
+_REVISION_PIEZA_VERIFICADA = "listo"
+_REVISION_PIEZA_SIN_VERIFICAR = "no_verificado"
+
 
 def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -> dict[str, Any] | None:
-    """CD — lanza la generación de copy de UN tema cuya verificación de la fuente salió `no_verificado`.
+    """CD — lanza la generación de copy de UN tema cuya verificación de la fuente salió `verificado`.
 
     Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
     en `copy_pendiente` (nota, redes, imagen ya resuelta, fuente, clave). El borrador resultante
@@ -95,10 +102,14 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         fotos_notas=fotos_notas,
         n_notas=n_notas,
         tipo_contenido=tipo_contenido,
-        # La fuente pasó como `no_verificado` (verificación permisiva, sin verificación a fondo): las
-        # piezas heredan ese aviso (⚠️) en su verificación, para que la parrilla y Pipelines lo
-        # muestren. Si el copy trajera un verificación propio, ese manda; aquí da el por defecto.
-        revision_inicial=VERIFICACION_NO_VERIFICADO,
+        # Revisión inicial según el veredicto de FUENTE: `verificado` (la IA la confirmó a fondo)
+        # -> pieza sin aviso (sujeta al chequeo de voz); `saltada` (fuente propia, sin verificar por
+        # IA) -> ⚠️ `no_verificado`. Si el copy trae su propio veredicto, ese manda.
+        revision_inicial=(
+            _REVISION_PIEZA_VERIFICADA
+            if (tema.get("verificacion_fuente") or "") == VERIFICACION_VERIFICADO
+            else _REVISION_PIEZA_SIN_VERIFICAR
+        ),
         # Dedup al ÉXITO: el post-procesado limpia `copy_pendiente` cuando los borradores ya
         # existen. Un copy fallido conserva la marca y el barrido lo reintenta.
         limpiar_pendiente=True,
@@ -116,16 +127,16 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
 
 
 def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas listos para CD: verificación `no_verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
+    """Temas listos para CD: verificación `verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
 
     La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente:
     un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se hubiera limpiado.
-    Un tema con verificación `saltada` (etapa verificación desactivada para la marca) fluye a CD igual que uno
-    `no_verificado`; un `problema` sí bloquea.
+    Un tema con verificación `saltada` (fuente propia, sin verificar por IA) fluye a CD igual que uno
+    `verificado`; `requiere_humano`/`rechazado` sí bloquean.
     """
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
-        if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA):
+        if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_VERIFICADO, VERIFICACION_SALTADA):
             continue
         if not (tema.get("copy_pendiente") or "").strip():
             continue

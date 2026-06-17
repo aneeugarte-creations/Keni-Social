@@ -14,8 +14,9 @@ from ...estados import ORIGENES_AUTOGEN
 from ...pipeline_contenido import (
     ORIGEN_PIPELINE,
     TIPO_ACTIVIDAD,
-    VERIFICACION_NO_VERIFICADO,
-    VERIFICACION_PROBLEMA,
+    VERIFICACION_RECHAZADO,
+    VERIFICACION_REQUIERE_HUMANO,
+    VERIFICACION_VERIFICADO,
 )
 
 # Orígenes de tema que el feed acepta como RUN: los del propio pipeline (recolección del pool) y
@@ -103,8 +104,9 @@ def _verificacion_fuente_de(item: dict) -> dict:
     """Verificacion ESTRUCTURADO de la verificación de la fuente (rediseño QPC), para la UI.
 
     Lee el verificacion persistido en el TEMA (`verificacion_fuente`/`verificar_hallazgos`):
-      - `no_verificado` (⚠️): apta, no verificada a fondo; las piezas llevan el aviso.
-      - `problema` (❗): algo de peso; NO se generó copy. `hallazgos` trae el detalle.
+      - `verificado` (✅): confirmada con fuentes; se auto-produjo.
+      - `requiere_humano` (⚠️): la IA no pudo confirmar; NO se generó copy, a la mesa.
+      - `rechazado` (❗): falso/sátira/legal; NO se generó copy. `hallazgos` trae el detalle.
     `hallazgos` se parsea del JSON guardado (`{resumen, hallazgos:[...]}`); [] si vacío/ilegible.
     """
     verificacion = (item.get("verificacion_fuente", "") or "").strip()
@@ -123,9 +125,10 @@ def _verificacion_fuente_de(item: dict) -> dict:
                 hallazgos = [x for x in h if isinstance(x, dict)]
     return {
         "verificacion_fuente": verificacion,
-        "no_verificado": verificacion == VERIFICACION_NO_VERIFICADO,
-        "problema": verificacion == VERIFICACION_PROBLEMA,
-        "copy_omitido": verificacion == VERIFICACION_PROBLEMA,
+        "verificado": verificacion == VERIFICACION_VERIFICADO,
+        "requiere_humano": verificacion == VERIFICACION_REQUIERE_HUMANO,
+        "rechazado": verificacion == VERIFICACION_RECHAZADO,
+        "copy_omitido": verificacion in (VERIFICACION_REQUIERE_HUMANO, VERIFICACION_RECHAZADO),
         "resumen": resumen,
         "hallazgos": hallazgos,
     }

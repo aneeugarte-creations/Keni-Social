@@ -86,7 +86,7 @@ def test_ttl_verificacion_en_curso_derivado_del_timeout_real(monkeypatch):
 
     monkeypatch.delenv(config.ENV_VERIFICACION_EN_CURSO_TTL_MIN, raising=False)
     monkeypatch.delenv("KENI_VERIFICACION_FUENTE_TIMEOUT", raising=False)
-    assert rg._ttl_verificacion_en_curso_seg() == 2 * config.verificacion_fuente_timeout()  # def 2x180 = 360 s
+    assert rg._ttl_verificacion_en_curso_seg() == 2 * config.verificacion_fuente_timeout()  # def 2x600 = 1200 s
 
     monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "60")
     assert rg._ttl_verificacion_en_curso_seg() == 120

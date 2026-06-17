@@ -137,33 +137,34 @@ def parsear_informe(salida: str) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
-# verificación DE LA FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la NOTA de origen #
+# verificación DE LA FUENTE (pre-copy): verificación FAIL-CLOSED de la HISTORIA de origen          #
 # --------------------------------------------------------------------------- #
-# El verificación se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: verificar la nota
-# de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un verificación
-# ESTRUCTURADO con SOLO dos salidas: `no_verificado` (nada de peso en contra: seguir, la pieza
-# llevará ⚠️) o `problema` (algo de peso: NO generar copy, marcar ❗ con los hallazgos). Por
-# defecto `no_verificado` cuando hay duda (permisivo).
+# El verificación se hace ANTES del copy y por HISTORIA (cluster/fuente), no por plataforma: verifica
+# la historia de origen antes de auto-producir. Es FAIL-CLOSED y devuelve un verificación
+# ESTRUCTURADO con TRES salidas:
+#   - `verificado`:       CONFIRMADA con fuentes fiables -> se auto-produce (la pieza nace limpia).
+#   - `requiere_humano`:  la IA no pudo confirmar (sin problema claro) -> a la mesa para el humano.
+#   - `rechazado`:        falso/sátira/legal de peso -> excluida.
+# Por defecto `requiere_humano` cuando hay duda: solo una verificación POSITIVA deja pasar, y solo un
+# problema de PESO rechaza; lo ambiguo/no parseable/timeout va al humano (no se rechaza ni se produce).
 
-VERIFICACION_NO_VERIFICADO = "no_verificado"
-VERIFICACION_PROBLEMA = "problema"
+VERIFICACION_VERIFICADO = "verificado"
+VERIFICACION_REQUIERE_HUMANO = "requiere_humano"
+VERIFICACION_RECHAZADO = "rechazado"
 
-# Mapa del verificación editorial clásico (semáforo) al verificación de FUENTE: solo el rojo
-# (`no_publicar`) cuenta como `problema`; verde/amarillo (o sin verificación) -> `no_verificado`
-# (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
-_FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
-
-# CONTRATO del prompt de fuente (`prompt/verificar`): el campo JSON `veredicto` va en slug
-# ASCII ("apta" | "problema").
-_FUENTE_SLUG_APTA = "apta"
-_FUENTE_SLUG_PROBLEMA = "problema"
+# CONTRATO del prompt de fuente (`prompt/verificar`): el campo JSON `veredicto` va en slug ASCII
+# ("verificado" | "requiere_humano" | "rechazado"); acepta también el semáforo 🟢/🟡/🔴.
+_FUENTE_SLUG_VERIFICADO = "verificado"
+_FUENTE_SLUG_REQUIERE_HUMANO = "requiere_humano"
+_FUENTE_SLUG_RECHAZADO = "rechazado"
+_FUENTE_SLUGS = (_FUENTE_SLUG_VERIFICADO, _FUENTE_SLUG_REQUIERE_HUMANO, _FUENTE_SLUG_RECHAZADO)
 
 
 def _slug_verificacion_fuente(salida: str) -> str:
-    """Verificación del ÚLTIMO bloque ```json de la verificación de FUENTE: "apta"/"problema" o "".
+    """Slug del ÚLTIMO bloque ```json de la verificación de FUENTE: uno de `_FUENTE_SLUGS` o "".
 
-    Acepta el slug ASCII del contrato y el emoji legado 🟢/🔴. Cualquier otro valor (o sin
-    bloque/clave) devuelve "" y el llamante cae al camino permisivo. PURO, nunca lanza.
+    Acepta el slug ASCII del contrato y el semáforo 🟢/🟡/🔴. Cualquier otro valor (o sin
+    bloque/clave) devuelve "" y el llamante lo trata como `requiere_humano` (fail-closed). PURO.
     """
     coincidencias = list(stream._RE_BLOQUE_JSON.finditer(salida or ""))
     if not coincidencias:
@@ -178,41 +179,42 @@ def _slug_verificacion_fuente(salida: str) -> str:
     if not isinstance(v, str):
         return ""
     if "🔴" in v:
-        return _FUENTE_SLUG_PROBLEMA
+        return _FUENTE_SLUG_RECHAZADO
+    if "🟡" in v:
+        return _FUENTE_SLUG_REQUIERE_HUMANO
     if "🟢" in v:
-        return _FUENTE_SLUG_APTA
+        return _FUENTE_SLUG_VERIFICADO
     v = v.strip().lower()
-    return v if v in (_FUENTE_SLUG_APTA, _FUENTE_SLUG_PROBLEMA) else ""
+    return v if v in _FUENTE_SLUGS else ""
 
 
 def parsear_verificacion_fuente(salida: str) -> dict[str, object]:
-    """Parsea la salida de la verificación de la FUENTE en un verificación ESTRUCTURADO permisivo.
+    """Parsea la salida de la verificación de la FUENTE en un verificación ESTRUCTURADO fail-closed.
 
     Reusa `parsear_informe` (mismo formato ```json con `verificación`/`resumen`/`hallazgos`), pero
-    COLAPSA el verificación a dos valores de FUENTE:
-      - `problema` si el JSON dice "problema" (slug del contrato) o 🔴 legado / el informe
-        deriva `no_publicar`, O trae algún hallazgo de gravedad `error` (algo de peso),
-      - `no_verificado` en cualquier otro caso (incluido sin verificación / formato inesperado /
-        valor basura): PERMISIVO por diseño (ante la duda, deja pasar y la pieza llevará ⚠️).
+    COLAPSA el verificación a TRES valores de FUENTE:
+      - `rechazado` si el JSON dice "rechazado"/🔴 O trae algún hallazgo de gravedad `error` (algo
+        de peso en contra),
+      - `verificado` (CONFIRMADA) SOLO si el JSON dice "verificado"/🟢 y NO hay hallazgo de peso,
+      - `requiere_humano` en CUALQUIER otro caso: "requiere_humano"/🟡, formato inesperado, valor
+        basura, salida vacía o timeout. FAIL-CLOSED: sin verificación positiva ni rechazo claro, al humano.
 
     Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}` (mismas claves que
-    `parsear_informe`, con `verificacion` ya colapsado a `no_verificado`/`problema`). PURO.
+    `parsear_informe`, con `verificacion` ya colapsado a los tres valores de FUENTE). PURO.
     """
     informe = parsear_informe(salida)
-    crudo = str(informe.get("verificacion_fuente") or "")
     hallazgos = informe.get("hallazgos")
     hay_error = isinstance(hallazgos, list) and any(
         isinstance(h, dict) and h.get("gravedad") == "error" for h in hallazgos
     )
     slug = _slug_verificacion_fuente(salida)
-    if slug == _FUENTE_SLUG_PROBLEMA:
-        es_problema = True
-    elif slug == _FUENTE_SLUG_APTA:
-        # El JSON manda sobre la línea de semáforo; un hallazgo `error` sigue pesando.
-        es_problema = hay_error
+    if hay_error or slug == _FUENTE_SLUG_RECHAZADO:
+        veredicto = VERIFICACION_RECHAZADO
+    elif slug == _FUENTE_SLUG_VERIFICADO:
+        veredicto = VERIFICACION_VERIFICADO
     else:
-        es_problema = crudo in _FUENTE_PROBLEMA_DESDE or hay_error
-    informe["verificacion_fuente"] = VERIFICACION_PROBLEMA if es_problema else VERIFICACION_NO_VERIFICADO
+        veredicto = VERIFICACION_REQUIERE_HUMANO
+    informe["verificacion_fuente"] = veredicto
     return informe
 
 
@@ -220,7 +222,7 @@ def serializar_hallazgos(informe: dict[str, object]) -> str:
     """Serializa los hallazgos (+resumen) del informe de fuente a JSON para persistir en el tema.
 
     Compacto y autocontenido (lo lee la UI/API tal cual): `{resumen, hallazgos:[...]}`. "" si no
-    hay nada que guardar (verificacion `no_verificado` sin hallazgos), para no engordar el registro.
+    hay nada que guardar (verificacion `verificado` sin hallazgos), para no engordar el registro.
     """
     hallazgos = informe.get("hallazgos") or []
     resumen = str(informe.get("resumen") or "")
@@ -257,11 +259,11 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
             PROMPT_ID, marca, str(informe.get("informe_texto") or ""), piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
-        verificacion = str(informe.get("verificacion_fuente") or VERIFICACION_NO_VERIFICADO)
+        verificacion = str(informe.get("verificacion_fuente") or VERIFICACION_REQUIERE_HUMANO)
         # verificación sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el verificación vive en el
-        # cluster. La admisión del barrido de investigación promueve las `no_verificado` (hereda
-        # el verificación al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
-        # pieza aún no existe; nace en la admisión).
+        # cluster. La admisión del barrido de investigación promueve las `verificado` (hereda
+        # el verificación al contenido) y deja fuera `requiere_humano`/`rechazado`. NO se encadena
+        # copy aquí (la pieza aún no existe; nace en la admisión).
         if cluster_id:
             repos.marcar_cluster_verificacion(cluster_id, verificacion, serializar_hallazgos(informe))
         return {

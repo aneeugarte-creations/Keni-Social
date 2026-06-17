@@ -1,4 +1,4 @@
-import { AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Coins, Cog, OctagonAlert, Sparkles } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Coins, Cog, OctagonAlert, ShieldCheck, Sparkles } from "lucide-react";
 import * as React from "react";
 
 import { aspectoEstado, ChipEstado } from "@/components/comunes/ChipEstado";
@@ -56,31 +56,43 @@ export const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "ok", nombre: "Completado" },
 ];
 
-/** Chip de la verificación de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "verificación: problema".
- *  Nada si aún no hay verificacion (verificación pendiente/en curso: lo cubre la tira de etapas). */
+/** Chip de la verificación de la fuente: ✅ "Verificada", ⚠️ "Requiere revisión" (la IA no pudo
+ *  confirmar) o ❗ "Rechazada". Nada si aún no hay verificacion (la tira de etapas lo cubre). */
 function BadgeVerificacionFuente({ verificación, className }: { verificación?: PipelineVerificacionFuente; className?: string }) {
   if (!verificación) return null;
-  if (verificación.problema) {
+  if (verificación.rechazado) {
     return (
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
-        title={verificación.resumen || "La verificación encontró un problema; sin copy."}
+        title={verificación.resumen || "La verificación rechazó la fuente; sin copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
-        Problema
+        Rechazada
       </Badge>
     );
   }
-  if (verificación.no_verificado) {
+  if (verificación.requiere_humano) {
     return (
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-amber-500/30 bg-amber-500/15 text-amber-600", className)}
-        title="No verificada a fondo"
+        title={verificación.resumen || "La IA no pudo verificarla; requiere revisión humana."}
       >
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-        No verificado
+        Requiere revisión
+      </Badge>
+    );
+  }
+  if (verificación.verificado) {
+    return (
+      <Badge
+        variant="secondary"
+        className={cn("gap-1 border border-emerald-500/30 bg-emerald-500/15 text-emerald-600", className)}
+        title="Confirmada con fuentes fiables"
+      >
+        <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+        Verificada
       </Badge>
     );
   }
@@ -426,7 +438,7 @@ function PublicacionEtapa({
     return (
       <div className="space-y-2">
         <BloqueIA gen={generacion} plantilla={plantilla} />
-        {verificación && (verificación.no_verificado || verificación.problema) && (
+        {verificación && (verificación.verificado || verificación.requiere_humano || verificación.rechazado) && (
           <div className="space-y-2 rounded-md border p-2">
             <BadgeVerificacionFuente verificación={verificación} />
             {verificación.resumen && <p className="text-xs text-foreground/90">{verificación.resumen}</p>}

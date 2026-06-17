@@ -275,12 +275,13 @@ export interface PipelineHallazgo {
   no_verificable?: boolean;
 }
 
-/** Verificación ESTRUCTURADA de la fuente (rediseño QPC, pre-copy):
- *  `no_verificado` (⚠️ apta, no verificada a fondo) o `problema` (❗ algo de peso: sin copy). */
+/** Verificación ESTRUCTURADA de la fuente (pre-copy): `verificado` (✅ confirmada), `requiere_humano`
+ *  (⚠️ la IA no pudo confirmar: sin copy, a la mesa) o `rechazado` (❗ falso/de peso: sin copy). */
 export interface PipelineVerificacionFuente {
   verificacion_fuente: string;
-  no_verificado: boolean;
-  problema: boolean;
+  verificado: boolean;
+  requiere_humano: boolean;
+  rechazado: boolean;
   copy_omitido: boolean;
   resumen: string;
   hallazgos: PipelineHallazgo[];

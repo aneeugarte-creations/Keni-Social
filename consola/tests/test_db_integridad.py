@@ -144,12 +144,36 @@ def test_check_verificacion_fuente_acepta_vacio_y_canonicos(pg):
     c = db.crear_publicacion(titulo="t")
     con = _cruda()
     try:
-        for v in ("", "en_curso", "no_verificado", "problema", "caducada", "saltada"):
+        for v in ("", "en_curso", "verificado", "requiere_humano", "rechazado", "caducada", "saltada"):
             con.execute("UPDATE publicacion SET verificacion_fuente = ? WHERE id = ?", (v, c["id"]))
             con.commit()
         with pytest.raises(motor_db.IntegrityError):
             con.execute("UPDATE publicacion SET verificacion_fuente = 'inventado' WHERE id = ?", (c["id"],))
             con.commit()
+    finally:
+        con.close()
+
+
+def test_migracion_renombra_verificacion_fuente_legada(pg):
+    """La migración 0029 RENOMBRA los valores legados de `verificacion_fuente` a la nomenclatura de
+    3 niveles (`no_verificado`->`verificado`, `problema`->`requiere_humano`), NO los normaliza a ""."""
+    from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
+
+    verificada = db.crear_publicacion(titulo="legado-nv")
+    a_mesa = db.crear_publicacion(titulo="legado-prob")
+    con = _cruda()
+    try:
+        # Escribe valores LEGADOS saltando el CHECK actual (que ya no los admite).
+        con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_publicacion_verificacion_fuente")
+        con.execute("UPDATE publicacion SET verificacion_fuente = 'no_verificado' WHERE id = ?", (verificada["id"],))
+        con.execute("UPDATE publicacion SET verificacion_fuente = 'problema' WHERE id = ?", (a_mesa["id"],))
+        con.commit()
+        _migrar_checks_dominio(con)
+        con.commit()
+        a = con.execute("SELECT verificacion_fuente FROM publicacion WHERE id = ?", (verificada["id"],)).fetchone()
+        b = con.execute("SELECT verificacion_fuente FROM publicacion WHERE id = ?", (a_mesa["id"],)).fetchone()
+        assert a["verificacion_fuente"] == "verificado"
+        assert b["verificacion_fuente"] == "requiere_humano"
     finally:
         con.close()
 
