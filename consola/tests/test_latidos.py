@@ -505,6 +505,7 @@ def test_prompts_de_solo_los_agentes_ia():
     ]
     assert latidos.prompts_de("produccion") == [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ]
     for d in ("ingesta", "trends", "patrones", "metricas", "limpiador", "daemon_nuevo"):

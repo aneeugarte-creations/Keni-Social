@@ -249,12 +249,15 @@ def etiqueta_de(daemon: str) -> str:
 # PROMPTS de la Prompts que gobiernan cada agente IA (clase=ia): lo que el panel ofrece editar
 # in-place (cada uno abre su doc en el editor). Cada entrada es {etiqueta, doc}, con `doc` = id del
 # documento en la Prompts. SOLO los daemons IA tienen prompt (el resto no corre `claude -p`).
-# Fuente única en el backend, en sintonía con las etapas IA de los cockpits (Verificar/Redactar/
-# Ilustrar); un test verifica que cada `doc` existe en la Prompts.
+# Fuente única en el backend, en sintonía con las etapas IA que cada daemon corre en su barrido
+# (Verificar; Redactar/Sugerir hashtags/Ilustrar); un test verifica que cada `doc` existe en la
+# Prompts. La Crítica IA NO va aquí: la corre el worker en la cadena de aprobación (tras los OK
+# humanos), no el daemon de producción; su prompt se edita desde su fase en la página de Producción.
 PROMPTS: dict[str, list[dict[str, str]]] = {
     "investigacion": [{"etiqueta": "Verificar", "doc": "prompt/verificar"}],
     "produccion": [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ],
 }
@@ -280,10 +283,11 @@ DESCRIPCION: dict[str, str] = {
     ),
     "produccion": (
         "Motor de CREAR borradores (a partir de lo verificado). Cada barrido redacta el copy de "
-        "los temas verificados (claude -p), genera la imagen por IA cuando toca y avanza los "
-        "borradores completos (copy + arte) a la cola de revisión humana. El AVANCE corre siempre "
-        "que la máquina esté encendida (así no quedan borradores atascados); Redactar e Ilustrar "
-        "se gatean por su propio interruptor. NUNCA publica: todo para en el gate humano."
+        "los temas verificados (claude -p), sugiere los hashtags habituales de la marca, genera la "
+        "imagen por IA cuando toca y avanza los borradores completos (copy + arte) a la cola de "
+        "revisión humana. El AVANCE corre siempre que la máquina esté encendida (así no quedan "
+        "borradores atascados); Redactar, Sugerir hashtags e Ilustrar se gatean por su propio "
+        "interruptor. NUNCA publica: todo para en el gate humano."
     ),
     "ingesta": (
         "Recolección persistente de noticias. Sondea en segundo plano los feeds RSS vencidos "
