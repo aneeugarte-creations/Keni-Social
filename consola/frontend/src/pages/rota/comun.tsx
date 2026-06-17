@@ -319,26 +319,26 @@ export function MenuMasAcciones({
   const items: EntradaMenuContextual[] = [];
 
   if (esAdmin) {
-    // «Asignar turnos» encabeza el menú (acción principal de edición); solo en borrador
-    // —misma puerta que el resto de la edición de la rota—.
+    // Configurar la semana, en orden: «Asignar turnos» (quién trabaja; solo en borrador, misma
+    // puerta que el resto de la edición) y justo después «Franjas» (cómo se divide el día).
     if (!semanaAprobada) {
       items.push({
         etiqueta: "Asignar turnos",
         icono: CalendarPlus,
         onClick: onAbrirAsignar,
       });
-      items.push({ separador: true });
     }
+    items.push({
+      etiqueta: "Franjas",
+      icono: Clock,
+      onClick: onAbrirFranjas,
+    });
+    items.push({ separador: true });
     items.push({
       etiqueta: copiarPendiente ? "Copiando…" : "Copiar anterior",
       icono: Copy,
       onClick: onCopiarAnterior,
       deshabilitado: copiarPendiente || semanaAprobada,
-    });
-    items.push({
-      etiqueta: "Franjas",
-      icono: Clock,
-      onClick: onAbrirFranjas,
     });
     items.push({ separador: true });
   }
