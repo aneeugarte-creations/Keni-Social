@@ -1,9 +1,10 @@
 /**
  * PanelAgentes — el catálogo de agentes INDEPENDIENTES (pestaña Herramientas) como CAJAS por tipo,
- * NO como un pipeline. Cada grupo (`GrupoAgentes`) es una caja de UNA línea: su título y, en la misma
- * línea interna, sus agentes como COLUMNAS de igual ancho. Entre agentes NO hay conector (↓): no es
- * una secuencia, son prompts autónomos que se lanzan a mano. La descripción de cada agente vive en su
- * subpágina, no aquí. Clicar un agente abre su prompt en el overlay (solo admin).
+ * NO como un pipeline. Cada grupo (`GrupoAgentes`) es una caja en su propia línea: su título y
+ * subtítulo (qué cubre el tipo) y, debajo, sus agentes en UNA sola línea interna como COLUMNAS de
+ * igual ancho. Entre agentes NO hay conector (↓): no es una secuencia, son prompts autónomos que se
+ * lanzan a mano. La descripción de cada agente vive en su subpágina. Clicar un agente abre su prompt
+ * en el overlay (solo admin).
  */
 import { Bot, Cog } from "lucide-react";
 import * as React from "react";
@@ -29,7 +30,10 @@ export function PanelAgentes({
       <div className="flex flex-col gap-3">
         {grupos.map((g) => (
           <div key={g.titulo} className="rounded-xl border border-border/70 bg-muted/30 p-3">
-            <h3 className="mb-2 px-1 text-sm font-semibold">{g.titulo}</h3>
+            <div className="mb-2 px-1">
+              <h3 className="text-sm font-semibold">{g.titulo}</h3>
+              <p className="text-xs text-muted-foreground">{g.descripcion}</p>
+            </div>
             {/* Agentes en una sola línea interna, como columnas de igual ancho. */}
             <div className="grid grid-flow-col auto-cols-fr gap-2">
               {g.fases.map((f) => {

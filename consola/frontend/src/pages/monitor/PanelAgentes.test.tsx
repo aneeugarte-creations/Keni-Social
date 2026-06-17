@@ -23,6 +23,7 @@ function renderPanel(grupos: readonly GrupoAgentes[]) {
 const GRUPOS: readonly GrupoAgentes[] = [
   {
     titulo: "Recibir",
+    descripcion: "Material que llega del equipo",
     fases: [
       { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links", doc: "prompt/recibir/notas" },
       { nombre: "Portal", es_ia: true, claves: [], ayuda: "Portal/SMS", doc: "prompt/recibir/portal" },
@@ -30,6 +31,7 @@ const GRUPOS: readonly GrupoAgentes[] = [
   },
   {
     titulo: "Importar",
+    descripcion: "Calendarios y parrillas",
     fases: [
       { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una parrilla", doc: "prompt/importar/parrilla" },
     ],
@@ -44,8 +46,12 @@ describe("PanelAgentes", () => {
     expect(screen.getByRole("heading", { name: "Recibir" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Importar" })).toBeInTheDocument();
 
+    // Subtítulo de la caja (qué cubre el tipo).
+    expect(screen.getByText("Material que llega del equipo")).toBeInTheDocument();
+
     // Cada agente cuelga de SU caja (y solo de la suya): «Recibir» trae Notas/Portal, no Parrilla.
-    const cajaRecibir = screen.getByRole("heading", { name: "Recibir" }).closest("div")!;
+    // (`.closest("div")` da la cabecera título+subtítulo; su padre es la caja.)
+    const cajaRecibir = screen.getByRole("heading", { name: "Recibir" }).closest("div")!.parentElement!;
     expect(within(cajaRecibir).getByText("Notas")).toBeInTheDocument();
     expect(within(cajaRecibir).getByText("Portal")).toBeInTheDocument();
     expect(within(cajaRecibir).queryByText("Parrilla")).not.toBeInTheDocument();
