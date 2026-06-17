@@ -1,8 +1,9 @@
 """Tests PUROS (sin DB ni red) del dominio de agrupar de historias (`dominio.agrupar`).
 
 Cubre la identidad de cluster (`clave_cluster`: url canónica sin query vs hash de título), la
-asignación incremental (`asignar`: cruce por misma url, fuzzy de título, ventana/umbral, item
-nuevo), el recálculo de agregados (`recalcular`: n_items/n_fuentes/idiomas/señal/representativo/
+asignación incremental (`asignar`: DEDUP EXACTO — misma url canónica o título normalizado
+idéntico; sin léxico fuzzy, que ahora resuelve la fusión semántica con Haiku), el recálculo de
+agregados (`recalcular`: n_items/n_fuentes/idiomas/señal/representativo/
 breaking) y el scoring (`puntuar`: fórmula documentada + monotonía por señal). Todo determinista,
 con `ahora` inyectado: nunca se toca el reloj real, la BD ni la red.
 """
@@ -312,27 +313,29 @@ def test_recalcular_sin_items_deja_tracking_vacio():
 
 
 # --------------------------------------------------------------------------- #
-# Dedup por EVENTO: titulares reordenados (token-sort)                          #
+# Titulares reordenados del MISMO evento: ya NO los une `asignar` (dedup exacto, #
+# sin léxico). Los agrupa después la fusión semántica con Haiku.                 #
 # --------------------------------------------------------------------------- #
 
 
-def test_asignar_une_titulares_reordenados_mismo_evento():
-    """El mismo evento con la sintaxis cambiada (mismas palabras, otro orden) se une."""
+def test_asignar_no_une_titulares_reordenados_distinta_url():
+    """Mismo evento con la sintaxis cambiada (mismas palabras, otro orden) y URLs distintas:
+    `asignar` (dedup exacto) NO los une —los fusiona Haiku—, ya no hay léxico fuzzy."""
     cluster = {"id": "c1", "clave": "url:medio-a.com/n1",
                "titulo": "América vence a Chivas en el clásico nacional"}
     item = _item(url="https://medio-b.com/otra-nota",
                  titulo="En el clásico nacional, América vence a Chivas")
-    assert agrupar.asignar(item, [cluster]) == "c1"
+    assert agrupar.asignar(item, [cluster]) is None
 
 
-def test_asignador_une_titulares_reordenados_como_asignar():
-    """El índice incremental (`Asignador`) toma la MISMA decisión que `asignar` (paridad)."""
+def test_asignador_paridad_titulares_reordenados():
+    """El índice incremental (`Asignador`) toma la MISMA decisión que `asignar`: tampoco los une."""
     cluster = {"id": "c1", "clave": "url:medio-a.com/n1",
                "titulo": "América vence a Chivas en el clásico nacional"}
     item = _item(url="https://medio-b.com/otra-nota",
                  titulo="En el clásico nacional, América vence a Chivas")
     asignador = agrupar.Asignador([cluster])
-    assert asignador.asignar(item) == "c1"
+    assert asignador.asignar(item) is None
 
 
 def test_asignar_no_une_eventos_distintos_con_palabras_comunes():
@@ -776,41 +779,49 @@ def test_recalcular_fija_verificacion_e_idioma_representativo():
 
 
 def test_asignar_empate_exacto_gana_el_primero():
-    """A empate EXACTO de ratio gana el primer candidato (antes ganaba el último: no determinista)."""
-    c_a = {"id": "primero", "clave": "t:1", "titulo": "El presidente anuncia nueva reforma"}
-    c_b = {"id": "segundo", "clave": "t:2", "titulo": "El presidente anuncia nueva reforma"}
+    """A clave IDÉNTICA entre varios clusters gana el primer candidato (determinista, decide el
+    orden de entrada, no el azar del dict; antes ganaba el último)."""
+    clave = agrupar.clave_cluster({"url": "", "titulo": "El presidente anuncia nueva reforma"})
+    c_a = {"id": "primero", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}
+    c_b = {"id": "segundo", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}
     item = _item(url="", titulo="El presidente anuncia nueva reforma")
-    assert agrupar.asignar(item, [c_a, c_b], umbral=0.8) == "primero"
-    # Invertir el orden invierte el ganador (decide el orden de entrada, no el azar del dict).
-    assert agrupar.asignar(item, [c_b, c_a], umbral=0.8) == "segundo"
+    assert agrupar.asignar(item, [c_a, c_b]) == "primero"
+    # Invertir el orden invierte el ganador.
+    assert agrupar.asignar(item, [c_b, c_a]) == "segundo"
 
 
 def test_asignador_replica_las_decisiones_de_asignar():
+    titulo_largo = "El presidente anuncia una nueva reforma para los estados"
     clusters = [
         {"id": "u1", "clave": "url:example.com/nota-1", "titulo": "Titular original"},
-        {"id": "f1", "clave": "t:abc", "titulo": "El presidente anuncia una nueva reforma para los estados"},
+        {"id": "f1", "clave": agrupar.clave_cluster({"url": "", "titulo": titulo_largo}),
+         "titulo": titulo_largo},
     ]
-    asignador = agrupar.Asignador(clusters, umbral=0.82)
-    # (a) cruce exacto por url canónica.
+    asignador = agrupar.Asignador(clusters)
+    # (a) cruce exacto por url canónica (la query se ignora).
     por_url = _item(url="https://example.com/nota-1?utm_source=tw", titulo="Algo distinto")
     assert asignador.asignar(por_url) == "u1" == agrupar.asignar(por_url, clusters)
-    # (b) fuzzy de título.
-    por_titulo = _item(url="", titulo="El presidente anuncia nueva reforma para los estados")
-    assert asignador.asignar(por_titulo) == "f1" == agrupar.asignar(por_titulo, clusters, umbral=0.82)
+    # (b) título normalizado IDÉNTICO.
+    por_titulo = _item(url="", titulo=titulo_largo)
+    assert asignador.asignar(por_titulo) == "f1" == agrupar.asignar(por_titulo, clusters)
     # (c) nada casa -> None (cluster nuevo).
     nuevo = _item(url="", titulo="Resultados de la jornada de fútbol del domingo")
     assert asignador.asignar(nuevo) is None
-    assert agrupar.asignar(nuevo, clusters, umbral=0.82) is None
+    assert agrupar.asignar(nuevo, clusters) is None
 
 
 def test_asignador_agregar_une_items_del_mismo_barrido():
-    asignador = agrupar.Asignador([], umbral=0.82)
-    asignador.agregar({"id": "n1", "clave": "t:x", "titulo": "Gran final del torneo de verano"})
-    assert asignador.asignar(_item(url="", titulo="Gran final del torneo de verano hoy")) == "n1"
+    asignador = agrupar.Asignador([])
+    titulo = "Gran final del torneo de verano"
+    asignador.agregar(
+        {"id": "n1", "clave": agrupar.clave_cluster({"url": "", "titulo": titulo}), "titulo": titulo}
+    )
+    assert asignador.asignar(_item(url="", titulo=titulo)) == "n1"
 
 
-def test_asignador_titulos_cortos_no_entran_fuzzy():
-    asignador = agrupar.Asignador([{"id": "c", "clave": "t:nfl", "titulo": "NFL"}], umbral=0.3)
+def test_asignador_titulos_distintos_no_se_unen():
+    """Sin léxico fuzzy: dos titulares distintos (aunque cortos) nunca colisionan en `asignar`."""
+    asignador = agrupar.Asignador([{"id": "c", "clave": "t:nfl", "titulo": "NFL"}])
     assert asignador.asignar(_item(url="", titulo="F1")) is None
 
 
