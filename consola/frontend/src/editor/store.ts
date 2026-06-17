@@ -77,7 +77,9 @@ export interface EstadoEditor {
   // revés: una IMAGEN en MARCO (forma rellena). El usuario alterna entre forma vacía y foto.
   convertirEnImagen: (id: string) => void;
   convertirEnMarco: (id: string) => void;
-  quitar: (id: string) => void;
+  // `forzar` borra incluso una capa bloqueada (la papelera del panel de capas lo usa para el hueco
+  // de foto, que nace bloqueado pero el equipo puede eliminar de forma explícita).
+  quitar: (id: string, forzar?: boolean) => void;
   duplicar: (id: string) => void;
   reordenar: (id: string, delta: number) => void;
   // Reasigna `z` para que el orden de pila coincida con `ids` (primero = más arriba). Para el
@@ -248,9 +250,10 @@ export function crearStoreEditor(inicial: Documento) {
           ),
         ),
 
-      quitar: (id) => {
-        // No se borra una capa bloqueada (p. ej. el hueco de foto obligatorio).
-        if (get().documento.capas.find((c) => c.id === id)?.bloqueada) return;
+      quitar: (id, forzar) => {
+        // Una capa bloqueada no se borra por accidente; `forzar` la elimina igualmente (borrado
+        // explícito del hueco de foto desde su papelera en el panel de capas).
+        if (!forzar && get().documento.capas.find((c) => c.id === id)?.bloqueada) return;
         aplicar((doc) => conCapas(doc, doc.capas.filter((c) => c.id !== id)));
         set((s) => ({
           seleccion: s.seleccion === id ? null : s.seleccion,

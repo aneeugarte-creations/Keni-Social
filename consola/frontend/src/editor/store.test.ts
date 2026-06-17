@@ -123,6 +123,30 @@ describe("Store del editor (Zustand)", () => {
     });
   });
 
+  describe("Borrado del hueco de foto (capa bloqueada)", () => {
+    it("quitar respeta el candado por defecto; `forzar` borra el hueco de foto", () => {
+      // `documentoVacio` nace con el hueco de foto (id "foto", es_foto + bloqueada).
+      const doc = documentoVacio({ w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 }, "test");
+      const store = crearStoreEditor(doc);
+      const estado = store.getState();
+
+      expect(store.getState().documento.capas.map((c) => c.id)).toContain("foto");
+
+      // Sin forzar: el candado del hueco lo protege (la papelera del panel sale deshabilitada).
+      estado.quitar("foto");
+      expect(store.getState().documento.capas.map((c) => c.id)).toContain("foto");
+
+      // Forzando (papelera explícita del hueco): se borra y queda un documento sin hueco.
+      estado.quitar("foto", true);
+      expect(store.getState().documento.capas.map((c) => c.id)).not.toContain("foto");
+      expect(store.getState().documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)).toBe(false);
+
+      // Deshacer lo restaura (un solo paso de historial).
+      estado.deshacer();
+      expect(store.getState().documento.capas.map((c) => c.id)).toContain("foto");
+    });
+  });
+
   describe("aplicarPosiciones respeta parámetro registrar", () => {
     it("aplicarPosiciones(pos, true) registra en historial (default)", () => {
       const doc = documentoVacio({ w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 }, "test");

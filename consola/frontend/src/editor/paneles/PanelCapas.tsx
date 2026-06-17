@@ -67,7 +67,8 @@ export function PanelCapas() {
   // Fila como FUNCIÓN (no componente): se llama inline para no crear un tipo de componente nuevo
   // en cada render (que remontaría las filas y perdería el foco al renombrar).
   const fila = (capa: Capa) => {
-    // El HUECO DE FOTO (`es_foto`) es obligatorio: siempre bloqueado y no se puede borrar.
+    // El HUECO DE FOTO (`es_foto`) nace bloqueado (no se arrastra por error en el lienzo) pero SÍ se
+    // puede borrar desde su papelera; al quitar el último hueco el editor avisa con el chip ámbar.
     const esFoto = capa.tipo === "imagen" && !!(capa as CapaImagen).es_foto;
     return (
     <div
@@ -137,9 +138,9 @@ export function PanelCapas() {
       </button>
       <button
         className="shrink-0 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={capa.bloqueada}
-        onClick={(e) => { e.stopPropagation(); store.getState().quitar(capa.id); }}
-        title={capa.bloqueada ? "Capa bloqueada (no se puede borrar)" : "Borrar capa"}
+        disabled={capa.bloqueada && !esFoto}
+        onClick={(e) => { e.stopPropagation(); store.getState().quitar(capa.id, esFoto); }}
+        title={esFoto ? "Borrar hueco de foto" : capa.bloqueada ? "Capa bloqueada (no se puede borrar)" : "Borrar capa"}
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
