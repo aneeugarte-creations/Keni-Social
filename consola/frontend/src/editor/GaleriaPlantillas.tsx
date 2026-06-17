@@ -11,7 +11,7 @@
 //    `agruparPorMarca` (vista «Todas») y tarjeta «Lienzo en blanco» al final (`onLienzoBlanco`).
 
 import { Copy, Image, ImagePlus, Plus, Repeat, Trash2, Video, X } from "lucide-react";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 
 import {
   BadgeCategoria,
@@ -26,7 +26,11 @@ import {
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { agruparPorCategoria, normalizarCategoria } from "@/lib/categoriasPlantilla";
+import {
+  agruparPorCategoria,
+  categoriasPresentes,
+  normalizarCategoria,
+} from "@/lib/categoriasPlantilla";
 
 import { Telon, useCerrarConEscape } from "./Telon";
 
@@ -132,6 +136,9 @@ export function PublicacionPlantillas({
 
   const tipoEfectivo = tipoFijo ?? filtroTipo;
   const plantillasTipo = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
+  // Etiquetas presentes en TODA la galería (todos los tipos): así una etiqueta creada en una pieza
+  // se puede asignar a cualquier otra desde su selector, no solo las del catálogo.
+  const slugsPresentes = useMemo(() => categoriasPresentes(plantillas), [plantillas]);
   // Búsqueda + chip de categoría (client-side) SOBRE las del tipo activo.
   const { q, setQ, categoria, setCategoria, presentes, filtradas } =
     useFiltroPlantillas(plantillasTipo);
@@ -324,6 +331,7 @@ export function PublicacionPlantillas({
               onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
               nombre={p.nombre}
               onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
+              slugsPresentes={slugsPresentes}
             />
             {onRenombrar && editId === p.id ? (
               <input

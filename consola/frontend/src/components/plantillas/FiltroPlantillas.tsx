@@ -17,11 +17,11 @@ import { createPortal } from "react-dom";
 
 import type { PlantillaDiseno } from "@/lib/api";
 import {
-  CATEGORIAS_PLANTILLA,
   categoriasPresentes,
   coincideBusqueda,
   etiquetaCategoria,
   normalizarCategoria,
+  opcionesCategoria,
 } from "@/lib/categoriasPlantilla";
 
 /**
@@ -254,14 +254,14 @@ function _sinAcentos(texto: string): string {
  */
 function SelectorCategoria({
   slug,
-  etiqueta,
+  slugsPresentes,
   onCambiar,
   nombre,
   onRenombrar,
   children,
 }: {
   slug: string;
-  etiqueta: string;
+  slugsPresentes: string[];
   onCambiar: (valor: string) => void;
   nombre?: string;
   onRenombrar?: (nombre: string) => void;
@@ -291,16 +291,15 @@ function SelectorCategoria({
   const idNombre = useId();
   const idEtiqueta = useId();
 
-  // Opciones: catálogo completo + el valor libre actual (si no está en el catálogo), filtradas por
-  // el buscador (acento-insensible, por etiqueta y por slug).
+  // Opciones: catálogo + las etiquetas creadas en otras piezas (`slugsPresentes`) + la etiqueta de
+  // la pieza actual, filtradas por el buscador (acento-insensible, por etiqueta y por slug).
   const opciones = useMemo(() => {
-    const enCatalogo = CATEGORIAS_PLANTILLA.some((c) => c.slug === slug);
-    const base = enCatalogo ? CATEGORIAS_PLANTILLA : [{ slug, etiqueta }, ...CATEGORIAS_PLANTILLA];
+    const base = opcionesCategoria(slugsPresentes, slug);
     const q = _sinAcentos(query);
     if (!q) return base;
     const qSlug = normalizarCategoria(query);
     return base.filter((c) => _sinAcentos(c.etiqueta).includes(q) || c.slug.includes(qSlug));
-  }, [slug, etiqueta, query]);
+  }, [slug, slugsPresentes, query]);
 
   function abrir() {
     const r = refTrigger.current?.getBoundingClientRect();
@@ -583,11 +582,14 @@ export function BadgeCategoria({
   onCambiar,
   nombre,
   onRenombrar,
+  slugsPresentes = [],
 }: {
   categoria?: string | null;
   onCambiar?: (slug: string) => void;
   nombre?: string;
   onRenombrar?: (nombre: string) => void;
+  // Etiquetas presentes en TODA la galería: para que una creada en otra pieza se pueda asignar aquí.
+  slugsPresentes?: string[];
 }) {
   const slug = normalizarCategoria(categoria);
   const etiqueta = etiquetaCategoria(slug);
@@ -607,7 +609,7 @@ export function BadgeCategoria({
     <span className="group/badge inline-flex min-w-0">
       <SelectorCategoria
         slug={slug}
-        etiqueta={etiqueta}
+        slugsPresentes={slugsPresentes}
         onCambiar={onCambiar}
         nombre={nombre}
         onRenombrar={onRenombrar}

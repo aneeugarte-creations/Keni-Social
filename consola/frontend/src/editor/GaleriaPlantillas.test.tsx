@@ -260,6 +260,31 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
     expect(screen.queryByRole("option", { name: "Efemérides" })).not.toBeInTheDocument();
   });
 
+  it("el selector ofrece etiquetas creadas en OTRAS piezas (texto libre, fuera del catálogo)", () => {
+    const onCategorizar = vi.fn();
+    // «carrusel» es texto libre creado en otra pieza de la galería (aquí una miniatura); no está en
+    // el catálogo. El selector de CUALQUIER pieza debe ofrecerla, no solo las del catálogo.
+    const CARRUSEL: PlantillaDiseno = { ...MINIATURA, id: "carr-1", categoria: "carrusel" };
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA, CARRUSEL]}
+        onCargar={vi.fn()}
+        onCategorizar={onCategorizar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    // En la vista «Fotos» solo se ve ULTIMA, pero su selector conoce las etiquetas de toda la galería.
+    fireEvent.click(screen.getByTitle("Cambiar categoría"));
+    fireEvent.change(screen.getByPlaceholderText("Buscar etiqueta…"), {
+      target: { value: "carr" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: "Carrusel" }));
+    expect(onCategorizar).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cat-1" }),
+      "carrusel",
+    );
+  });
+
   it("el buscador NO crea: el botón «Crear etiqueta» abre un campo aparte y crea", () => {
     const onCategorizar = vi.fn();
     render(

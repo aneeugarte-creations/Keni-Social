@@ -84,6 +84,24 @@ export function categoriasPresentes(plantillas: PlantillaDiseno[]): string[] {
   return [...vistos].sort(_compararSlugs);
 }
 
+/**
+ * Opciones del selector de etiqueta: catálogo + las etiquetas de texto libre que el equipo ya creó
+ * en otras piezas (`slugsPresentes`) + `extraSlug` opcional (la etiqueta de la pieza actual, por si
+ * no estuviera en los datos cargados). Deduplicado por slug y ordenado: catálogo primero, texto
+ * libre después (alfabético). Sin esto, una etiqueta creada en una pieza no se podría asignar a otra.
+ */
+export function opcionesCategoria(
+  slugsPresentes: string[],
+  extraSlug?: string | null,
+): CategoriaPlantilla[] {
+  const slugs = new Set(CATEGORIAS_PLANTILLA.map((c) => c.slug));
+  for (const s of slugsPresentes) slugs.add(normalizarCategoria(s));
+  if (extraSlug) slugs.add(normalizarCategoria(extraSlug));
+  return [...slugs]
+    .sort(_compararSlugs)
+    .map((slug) => ({ slug, etiqueta: etiquetaCategoria(slug) }));
+}
+
 /** Agrupa por categoría (normalizada), en orden de catálogo. */
 export function agruparPorCategoria(
   plantillas: PlantillaDiseno[],
