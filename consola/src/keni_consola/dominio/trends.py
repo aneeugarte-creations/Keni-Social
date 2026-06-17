@@ -139,7 +139,11 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
                     "resumen": resumen,
                     "url": url,
                     "url_canonica": url_can,
-                    "idioma": "es",
+                    # Google Trends da los temas que tienden EN México, pero los enlaza a la fuente
+                    # que sea (a menudo extranjera): el idioma se DETECTA del titular real, no se
+                    # asume "es" (si no, lo inglés nunca entraría a Traducir). El `resumen` es
+                    # texto sintético en español, así que NO entra en la detección.
+                    "idioma": dom_ingesta._idioma_heuristico(titulo),
                     "publicado_en": "",
                     "clave": clave,
                     "senal": senal,

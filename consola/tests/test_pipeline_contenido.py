@@ -79,6 +79,7 @@ def _inicializar_cluster(
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
     verificacion_fuente="", primera_fuente="",
+    idioma="", traducido=0, titulo_es="", resumen_es="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
@@ -104,6 +105,7 @@ def _inicializar_cluster(
         "ultimo_visto": ultimo_visto
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion, "primera_fuente": primera_fuente,
+        "idioma": idioma, "traducido": traducido, "titulo_es": titulo_es, "resumen_es": resumen_es,
     })
     if verificacion_fuente:
         repos.marcar_cluster_verificacion(cid, verificacion_fuente)
@@ -775,6 +777,43 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     # El combinado es la unión de las claves de ambos procesos.
     combinado = pc._ejecutar_barrido()
     assert set(combinado) == {"temas", "verificados", "lanzados", "sugeridos", "artes", "avances"}
+
+
+def test_promover_omite_extranjera_sin_traducir(entorno, monkeypatch):
+    """Una historia EXTRANJERA (`idioma='en'`) sin traducir NO se promueve (saldría en inglés);
+    espera a Traducir. La misma traducida (`traducido=1`) SÍ se promueve."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _inicializar_cluster(
+        "en-crudo", titulo="Trump tells G7 summit", score=0.9, idioma="en", traducido=0,
+        verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+    _inicializar_cluster(
+        "en-trad", titulo="Trump at the G7 summit", titulo_es="Trump en la cumbre del G7",
+        score=0.9, idioma="en", traducido=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+
+    elegidos = {c["id"] for c in pc.clusters_para_promover("unotv", maximo=5)}
+
+    assert "en-trad" in elegidos  # ya traducida -> entra
+    assert "en-crudo" not in elegidos  # extranjera sin traducir -> espera
+
+
+def test_promover_usa_titulo_es_del_cluster_traducido(entorno, monkeypatch):
+    """ADMITIR usa el título TRADUCIDO (`titulo_es`) del cluster, no el original en inglés, para
+    que el tema (y el breaking que sale al feed) no salga en inglés."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _inicializar_cluster(
+        "en-trad", titulo="Federal Reserve holds rates steady",
+        titulo_es="La Reserva Federal mantiene las tasas sin cambios",
+        resumen="US central bank decision", resumen_es="Decisión del banco central de EE. UU.",
+        score=0.9, idioma="en", traducido=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+
+    temas = pc.promover_clusters_marca("unotv", maximo=2)
+
+    assert len(temas) == 1
+    assert temas[0]["titulo"] == "La Reserva Federal mantiene las tasas sin cambios"
+    assert "Federal Reserve" not in (temas[0].get("descripcion") or "")[:80]  # la nota arranca en ES
 
 
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):

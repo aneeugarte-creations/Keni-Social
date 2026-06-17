@@ -79,6 +79,25 @@ def test_parsear_trends_aplana_noticias():
     assert "Selección Mexicana" in primero["resumen"]
 
 
+def test_parsear_trends_detecta_idioma_del_titulo():
+    """El idioma se DETECTA del titular real (no se asume 'es'): Trends da temas que tienden en
+    México pero enlaza fuentes extranjeras; marcarlas 'es' a ciegas las dejaría sin traducir."""
+    es = next(
+        i for i in dom.parsear_trends_items(_TRENDS_XML, geo="MX")
+        if i["titulo"] == "El Tri convoca para el amistoso"
+    )
+    assert es["idioma"] == "es"
+    # Un titular en INGLÉS -> 'en' (así entra a la fase Traducir).
+    xml_en = _TRENDS_XML.replace(
+        "El Tri convoca para el amistoso", "Trump tells the G7 summit of his plan"
+    )
+    en = next(
+        i for i in dom.parsear_trends_items(xml_en, geo="MX")
+        if "Trump tells" in i["titulo"]
+    )
+    assert en["idioma"] == "en"
+
+
 def test_parsear_trends_dedup_por_clave():
     xml = _TRENDS_XML.replace("https://example.com/juego", "https://example.com/tri")
     items = dom.parsear_trends_items(xml, geo="MX")

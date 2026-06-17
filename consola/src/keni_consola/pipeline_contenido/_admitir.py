@@ -157,6 +157,25 @@ def _nota_de_cluster(
     return "\n\n".join(p for p in partes if p).strip()
 
 
+def _titulo_es(cluster: dict[str, Any]) -> str:
+    """Título del cluster para PRODUCCIÓN: el traducido a MX (`titulo_es`) si existe; si no, el original."""
+    return (cluster.get("titulo_es") or cluster.get("titulo") or "").strip()
+
+
+def _resumen_es(cluster: dict[str, Any]) -> str:
+    """Resumen del cluster para PRODUCCIÓN: el traducido a MX (`resumen_es`) si existe; si no, el original."""
+    return (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
+
+
+def _falta_traduccion(cluster: dict[str, Any]) -> bool:
+    """True si el cluster es de idioma EXTRANJERO y AÚN no está traducido: NO debe auto-producirse
+    (saldría en inglés). Espera a la fase Traducir, que corre con prioridad por score. Un idioma
+    vacío (sin detectar) o que empieza por `es` no bloquea."""
+    idioma = (cluster.get("idioma") or "").strip().lower()
+    es_extranjero = bool(idioma) and not idioma.startswith("es")
+    return es_extranjero and not bool(cluster.get("traducido"))
+
+
 def clusters_para_promover(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
     verificacion_estados: tuple[str, ...] = VERIFICADAS_OK,
@@ -212,6 +231,10 @@ def clusters_para_promover(
     bajo_umbral = 0
     cache_propia: dict[str, bool] = {}
     for c in clusters:
+        # EXTRANJERA SIN TRADUCIR: no se admite todavía (saldría en inglés); espera a la fase
+        # Traducir, que prioriza por score. La caducidad retira las que nunca cuajan.
+        if _falta_traduccion(c):
+            continue
         # FUENTE PROPIA (portal del cliente): NO la maneja investigación — la admite DIRECTO el
         # daemon Portal (canal aparte, sin umbral ni verificación). Aquí se omite para no admitirla
         # dos veces.
@@ -294,6 +317,10 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
     for c in clusters:
         if (c.get("verificacion_fuente") or "").strip():
             continue  # ya verificada / en curso
+        # EXTRANJERA SIN TRADUCIR: no se verifica todavía (no se gasta `claude -p` en algo que aún
+        # saldría en inglés); espera a la fase Traducir (prioriza por score).
+        if _falta_traduccion(c):
+            continue
         # FUENTE PROPIA: la maneja el canal Portal (directo, sin verificación) -> se omite aquí.
         if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
             continue
@@ -392,7 +419,7 @@ def _fotos_notas_de_familia(
     """
     fotos: list[dict[str, str]] = []
     for cluster, items in familia_con_items:
-        titulo = (cluster.get("titulo") or "").strip()
+        titulo = _titulo_es(cluster)
         if not titulo and items:
             titulo = (items[0].get("titulo") or "").strip()
         propias = _fotos_notas_de_cluster(items)
@@ -422,8 +449,8 @@ def _nota_de_familia(
     )
     bloques = [encabezado]
     for cluster, items in familia_con_items:
-        titulo = (cluster.get("titulo") or "").strip()
-        resumen = (cluster.get("resumen") or "").strip()
+        titulo = _titulo_es(cluster)
+        resumen = _resumen_es(cluster)
         cuerpos = cuerpos_por_cluster.get(cluster.get("id") or "", {})
         bloque = _nota_de_cluster(titulo, resumen, items, cuerpos)
         if bloque:
@@ -450,7 +477,7 @@ def crear_tema_de_cluster(
     marca = (cluster.get("marca") or "").strip()
     if not marca or not marcas.es_marca(marca):
         return None
-    titulo = (cluster.get("titulo") or "").strip()
+    titulo = _titulo_es(cluster)
     if not titulo and items:
         titulo = ((items[0].get("titulo") or items[0].get("url")) or "").strip()
     if not titulo:
@@ -491,7 +518,7 @@ def crear_tema_de_cluster(
                 _log.warning("pipeline: no se pudo marcar historia dup usada (%s)", cid, exc_info=True)
         _log.info("pipeline: omito historia duplicada «%s» (%s)", titulo[:60], marca)
         return None
-    resumen = (cluster.get("resumen") or "").strip()
+    resumen = _resumen_es(cluster)
     # Cuerpo de CADA fuente del cluster: PRIMERO el `content:encoded` archivado del feed (gratis,
     # ya en BD); solo para las fuentes que no lo traían se intenta el fetch HTTP (gateado). Así la
     # nota lleva el texto real de todas las fuentes, no solo sus URLs.
