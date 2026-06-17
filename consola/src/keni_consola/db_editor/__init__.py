@@ -50,6 +50,14 @@ from .media_catalogo import (
     listar_media_catalogo,
     obtener_media_catalogo,
 )
+from .etiquetas_plantilla import (
+    _COLS_ETIQUETAS_PLANTILLA,
+    _SELECT_ETIQUETAS_PLANTILLA,
+    _fila_a_etiqueta_plantilla,
+    borrar_etiqueta_plantilla,
+    listar_etiquetas_plantilla,
+    upsert_etiqueta_plantilla,
+)
 from .plantillas_diseno import (
     _CAMPOS_EDITABLES_PLANTILLAS_DISENO,
     _COLS_PLANTILLAS_DISENO,
@@ -112,6 +120,13 @@ __all__ = [
     "crear_marca_activo",
     "listar_marca_activos",
     "obtener_marca_activo",
+    # etiquetas_plantilla
+    "_COLS_ETIQUETAS_PLANTILLA",
+    "_SELECT_ETIQUETAS_PLANTILLA",
+    "_fila_a_etiqueta_plantilla",
+    "borrar_etiqueta_plantilla",
+    "listar_etiquetas_plantilla",
+    "upsert_etiqueta_plantilla",
     # plantillas_diseno
     "_CAMPOS_EDITABLES_PLANTILLAS_DISENO",
     "_COLS_PLANTILLAS_DISENO",

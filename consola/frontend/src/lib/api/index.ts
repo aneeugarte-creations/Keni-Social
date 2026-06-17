@@ -17,6 +17,7 @@ import { apiImagen } from "./imagen";
 import { apiVideo } from "./video";
 import { apiMarcaActivos } from "./marcaActivos";
 import { apiPlantillasDiseno } from "./plantillasDiseno";
+import { apiEtiquetasPlantilla } from "./etiquetasPlantilla";
 import { apiBloques } from "./bloques";
 import { apiPlantillasMarca } from "./plantillasMarca";
 import { apiRevision } from "./revision";
@@ -62,6 +63,7 @@ export const api = {
   ...apiVideo,
   ...apiMarcaActivos,
   ...apiPlantillasDiseno,
+  ...apiEtiquetasPlantilla,
   ...apiBloques,
   ...apiPlantillasMarca,
   ...apiRevision,
@@ -94,3 +96,4 @@ export const api = {
 export { mensajeError, BASE_API, urlMedia, urlS3Objeto, ApiError } from "./_core";
 // Tipos públicos re-exportados (los consumen el editor y tests).
 export type { ActivoMarca, PlantillaDiseno, Bloque } from "./_core";
+export type { EtiquetaPlantilla } from "./etiquetasPlantilla";

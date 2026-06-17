@@ -3,7 +3,7 @@
 // tarjeta + rejilla MASONRY con carga perezosa por lotes. El catálogo y la normalización viven
 // en `lib/categoriasPlantilla.ts`.
 
-import { Check, ChevronDown, Plus, Search, Tag } from "lucide-react";
+import { Check, ChevronDown, Pencil, Plus, Search, Tag, Trash2, X } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -17,11 +17,13 @@ import { createPortal } from "react-dom";
 
 import type { PlantillaDiseno } from "@/lib/api";
 import {
+  CATEGORIA_GENERAL,
   categoriasPresentes,
   coincideBusqueda,
   etiquetaCategoria,
   normalizarCategoria,
   opcionesCategoria,
+  type CatalogoEtiquetas,
 } from "@/lib/categoriasPlantilla";
 
 /**
@@ -29,7 +31,7 @@ import {
  * chip de categoría activa. Los chips salen de las categorías PRESENTES en los datos (lista
  * completa, no la filtrada: así no desaparecen al buscar).
  */
-export function useFiltroPlantillas(plantillas: PlantillaDiseno[]) {
+export function useFiltroPlantillas(plantillas: PlantillaDiseno[], catalogo?: CatalogoEtiquetas) {
   const [q, setQ] = useState("");
   const [categoria, setCategoria] = useState(""); // "" = chip «Todas»
   const presentes = useMemo(() => categoriasPresentes(plantillas), [plantillas]);
@@ -37,9 +39,10 @@ export function useFiltroPlantillas(plantillas: PlantillaDiseno[]) {
     () =>
       plantillas.filter(
         (p) =>
-          (!categoria || normalizarCategoria(p.categoria) === categoria) && coincideBusqueda(p, q),
+          (!categoria || normalizarCategoria(p.categoria) === categoria) &&
+          coincideBusqueda(p, q, catalogo),
       ),
-    [plantillas, q, categoria],
+    [plantillas, q, categoria, catalogo],
   );
   return { q, setQ, categoria, setCategoria, presentes, filtradas };
 }
@@ -203,10 +206,12 @@ export function ChipsCategoria({
   categorias,
   activa,
   onCambiar,
+  catalogo,
 }: {
   categorias: string[];
   activa: string; // "" = todas
   onCambiar: (slug: string) => void;
+  catalogo?: CatalogoEtiquetas;
 }) {
   if (categorias.length < 2) return null;
   const chip = (slug: string, etiqueta: string) => {
@@ -230,7 +235,7 @@ export function ChipsCategoria({
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {chip("", "Todas")}
-      {categorias.map((slug) => chip(slug, etiquetaCategoria(slug)))}
+      {categorias.map((slug) => chip(slug, etiquetaCategoria(slug, catalogo)))}
     </div>
   );
 }
@@ -258,6 +263,10 @@ function SelectorCategoria({
   onCambiar,
   nombre,
   onRenombrar,
+  catalogo,
+  onRenombrarEtiqueta,
+  onCrearEtiqueta,
+  onBorrarEtiqueta,
   children,
 }: {
   slug: string;
@@ -265,12 +274,21 @@ function SelectorCategoria({
   onCambiar: (valor: string) => void;
   nombre?: string;
   onRenombrar?: (nombre: string) => void;
+  // Catálogo de etiquetas de la marca (rótulos personalizados + slugs gestionados).
+  catalogo?: CatalogoEtiquetas;
+  // Modo GESTIÓN del catálogo: renombrar el RÓTULO de una etiqueta (no mueve plantillas), crear una
+  // etiqueta nueva persistiendo su rótulo, y borrar el rótulo. La marca es implícita (la de la pieza).
+  onRenombrarEtiqueta?: (slug: string, etiqueta: string) => void;
+  onCrearEtiqueta?: (etiqueta: string) => void;
+  onBorrarEtiqueta?: (slug: string) => void;
   children: ReactNode;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [query, setQuery] = useState("");
   const [nombreEdit, setNombreEdit] = useState("");
   const [activo, setActivo] = useState(0);
+  // Renombrado inline del RÓTULO de una etiqueta de la lista (lápiz por fila, modo gestión).
+  const [renEt, setRenEt] = useState<{ slug: string; valor: string } | null>(null);
   // Creación de etiqueta: campo APARTE del buscador (botón «Crear etiqueta» → input). No se mezcla
   // con la búsqueda para que cada acción sea inequívoca.
   const [creando, setCreando] = useState(false);
@@ -294,12 +312,15 @@ function SelectorCategoria({
   // Opciones: catálogo + las etiquetas creadas en otras piezas (`slugsPresentes`) + la etiqueta de
   // la pieza actual, filtradas por el buscador (acento-insensible, por etiqueta y por slug).
   const opciones = useMemo(() => {
-    const base = opcionesCategoria(slugsPresentes, slug);
+    const base = opcionesCategoria(slugsPresentes, slug, catalogo);
     const q = _sinAcentos(query);
     if (!q) return base;
     const qSlug = normalizarCategoria(query);
     return base.filter((c) => _sinAcentos(c.etiqueta).includes(q) || c.slug.includes(qSlug));
-  }, [slug, slugsPresentes, query]);
+  }, [slug, slugsPresentes, query, catalogo]);
+
+  // ¿Modo gestión del catálogo? (renombrar/crear/borrar el RÓTULO de las etiquetas de la lista).
+  const gestionEtiquetas = !!onRenombrarEtiqueta;
 
   function abrir() {
     const r = refTrigger.current?.getBoundingClientRect();
@@ -354,7 +375,21 @@ function SelectorCategoria({
   function confirmarCrear() {
     const n = nuevaEtiqueta.trim();
     if (!n) return;
-    elegir(n);
+    // En gestión, crear persiste el rótulo (preserva acentos/mayúsculas) y asigna; si no, solo asigna.
+    if (onCrearEtiqueta) {
+      onCrearEtiqueta(n);
+      cerrar();
+    } else {
+      elegir(n);
+    }
+  }
+  // Confirma el renombrado del RÓTULO de una etiqueta de la lista (no cierra: permite encadenar).
+  function commitRenEt() {
+    if (!renEt) return;
+    const valor = renEt.valor.trim();
+    const objetivo = renEt.slug;
+    setRenEt(null);
+    if (valor && valor !== etiquetaCategoria(objetivo, catalogo)) onRenombrarEtiqueta?.(objetivo, valor);
   }
   function alTeclearCrear(e: ReactKeyboardEvent) {
     if (e.key === "Enter") {
@@ -543,21 +578,84 @@ function SelectorCategoria({
             <div role="listbox" aria-label="Etiquetas" className="min-h-0 flex-1 overflow-y-auto p-1">
               {opciones.map((c, i) => {
                 const sel = c.slug === slug;
+                // Renombrado inline del rótulo (modo gestión): input + confirmar/cancelar.
+                if (gestionEtiquetas && renEt?.slug === c.slug) {
+                  return (
+                    <div key={c.slug} className="mb-0.5 flex items-center gap-1 px-1">
+                      <input
+                        autoFocus
+                        aria-label="Renombrar etiqueta"
+                        value={renEt.valor}
+                        onChange={(e) => setRenEt({ slug: c.slug, valor: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); commitRenEt(); }
+                          else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setRenEt(null); }
+                        }}
+                        className="h-7 min-w-0 flex-1 rounded-sm border border-primary bg-background px-2 text-sm outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={commitRenEt}
+                        title="Guardar nombre"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRenEt(null)}
+                        title="Cancelar"
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-input bg-background hover:bg-accent"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                }
                 return (
-                  <button
+                  <div
                     key={c.slug}
-                    type="button"
-                    role="option"
-                    aria-selected={sel}
                     onMouseEnter={() => setActivo(i)}
-                    onClick={() => elegir(c.slug)}
-                    className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                    className={`group/opt flex items-center rounded-sm ${
                       activo === i ? "bg-accent text-accent-foreground" : ""
                     }`}
                   >
-                    <Check className={`h-3.5 w-3.5 shrink-0 ${sel ? "opacity-100" : "opacity-0"}`} />
-                    <span className="truncate">{c.etiqueta}</span>
-                  </button>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={sel}
+                      onClick={() => elegir(c.slug)}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm"
+                    >
+                      <Check className={`h-3.5 w-3.5 shrink-0 ${sel ? "opacity-100" : "opacity-0"}`} />
+                      <span className="truncate">{c.etiqueta}</span>
+                    </button>
+                    {gestionEtiquetas && (
+                      // Acciones de la etiqueta (renombrar/borrar el rótulo): visibles al hover/foco.
+                      <span className="flex shrink-0 items-center gap-0.5 pr-1 opacity-0 focus-within:opacity-100 group-hover/opt:opacity-100">
+                        <button
+                          type="button"
+                          title="Renombrar etiqueta"
+                          aria-label={`Renombrar ${c.etiqueta}`}
+                          onClick={(e) => { e.stopPropagation(); setRenEt({ slug: c.slug, valor: c.etiqueta }); }}
+                          className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-foreground"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        {onBorrarEtiqueta && c.slug !== CATEGORIA_GENERAL && (
+                          <button
+                            type="button"
+                            title="Borrar etiqueta"
+                            aria-label={`Borrar ${c.etiqueta}`}
+                            onClick={(e) => { e.stopPropagation(); onBorrarEtiqueta(c.slug); }}
+                            className="grid h-6 w-6 place-items-center rounded-sm text-muted-foreground hover:bg-background hover:text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 );
               })}
               {opciones.length === 0 && (
@@ -583,6 +681,10 @@ export function BadgeCategoria({
   nombre,
   onRenombrar,
   slugsPresentes = [],
+  catalogo,
+  onRenombrarEtiqueta,
+  onCrearEtiqueta,
+  onBorrarEtiqueta,
 }: {
   categoria?: string | null;
   onCambiar?: (slug: string) => void;
@@ -590,9 +692,14 @@ export function BadgeCategoria({
   onRenombrar?: (nombre: string) => void;
   // Etiquetas presentes en TODA la galería: para que una creada en otra pieza se pueda asignar aquí.
   slugsPresentes?: string[];
+  // Catálogo de etiquetas de la marca de la pieza (rótulos personalizados) + gestión del catálogo.
+  catalogo?: CatalogoEtiquetas;
+  onRenombrarEtiqueta?: (slug: string, etiqueta: string) => void;
+  onCrearEtiqueta?: (etiqueta: string) => void;
+  onBorrarEtiqueta?: (slug: string) => void;
 }) {
   const slug = normalizarCategoria(categoria);
-  const etiqueta = etiquetaCategoria(slug);
+  const etiqueta = etiquetaCategoria(slug, catalogo);
   const badge = (
     <span
       className={`inline-flex max-w-full shrink items-center gap-0.5 truncate rounded bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground ${
@@ -613,6 +720,10 @@ export function BadgeCategoria({
         onCambiar={onCambiar}
         nombre={nombre}
         onRenombrar={onRenombrar}
+        catalogo={catalogo}
+        onRenombrarEtiqueta={onRenombrarEtiqueta}
+        onCrearEtiqueta={onCrearEtiqueta}
+        onBorrarEtiqueta={onBorrarEtiqueta}
       >
         {badge}
       </SelectorCategoria>

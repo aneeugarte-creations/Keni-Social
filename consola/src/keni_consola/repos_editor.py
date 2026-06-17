@@ -201,6 +201,23 @@ def reordenar_plantillas_diseno(ids: list[str]) -> int:
     return db.reordenar_plantillas_diseno(ids)
 
 
+# --------------------------------------------------------------------------- #
+# Etiquetas de plantilla (catálogo de categorías editable, por marca)         #
+# --------------------------------------------------------------------------- #
+
+
+def listar_etiquetas_plantilla(*, marca: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_etiquetas_plantilla(marca=marca)
+
+
+def upsert_etiqueta_plantilla(*, marca: str, slug: str, etiqueta: str) -> dict[str, Any]:
+    return db.upsert_etiqueta_plantilla(marca=marca, slug=slug, etiqueta=etiqueta)
+
+
+def borrar_etiqueta_plantilla(*, marca: str, slug: str) -> bool:
+    return db.borrar_etiqueta_plantilla(marca=marca, slug=slug)
+
+
 
 # --------------------------------------------------------------------------- #
 # Motor de video: composiciones + subtitulos (Ola VIDEO)                        #

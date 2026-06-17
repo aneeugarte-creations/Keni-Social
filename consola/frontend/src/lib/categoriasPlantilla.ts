@@ -13,6 +13,38 @@ export interface CategoriaPlantilla {
   etiqueta: string;
 }
 
+/**
+ * Catálogo de etiquetas de UNA marca (override del catálogo estático): rótulos personalizados que el
+ * equipo puso al renombrar y el conjunto de slugs gestionados. Lo inyecta el llamante desde la API
+ * (`/api/etiquetas-plantilla`). Cuando se OMITE en las funciones de abajo, estas usan el catálogo
+ * estático global (comportamiento histórico, p. ej. en tests o mientras carga la query).
+ */
+export interface CatalogoEtiquetas {
+  /** Rótulo personalizado por slug (solo entradas con override NO vacío). */
+  rotulos: Map<string, string>;
+  /** Slugs con etiqueta gestionada para la marca (aparecen como opción aunque ninguna pieza los use). */
+  slugs: Set<string>;
+}
+
+/** Construye el catálogo POR MARCA a partir de las filas de `/api/etiquetas-plantilla`. */
+export function construirCatalogosEtiquetas(
+  filas: { marca: string; slug: string; etiqueta: string }[],
+): Map<string, CatalogoEtiquetas> {
+  const out = new Map<string, CatalogoEtiquetas>();
+  for (const f of filas) {
+    const slug = normalizarCategoria(f.slug);
+    let cat = out.get(f.marca);
+    if (!cat) {
+      cat = { rotulos: new Map(), slugs: new Set() };
+      out.set(f.marca, cat);
+    }
+    cat.slugs.add(slug);
+    const et = (f.etiqueta || "").trim();
+    if (et) cat.rotulos.set(slug, et);
+  }
+  return out;
+}
+
 /** Slug del fallback: plantillas sin categoría (o con el legado "post"). */
 export const CATEGORIA_GENERAL = "general";
 
@@ -59,13 +91,22 @@ export function normalizarCategoria(valor?: string | null): string {
   return slug;
 }
 
-/** Etiqueta legible de una categoría: del catálogo o, si es texto libre, prettificada. */
-export function etiquetaCategoria(valor?: string | null): string {
-  const slug = normalizarCategoria(valor);
+/** Rótulo de un slug ya normalizado: override de la marca → catálogo estático → prettificado. */
+function _rotulo(slug: string, cat?: CatalogoEtiquetas): string {
+  const override = cat?.rotulos.get(slug);
+  if (override) return override;
   const conocida = _ETIQUETA_POR_SLUG.get(slug);
   if (conocida) return conocida;
   const texto = slug.replace(/-/g, " ");
   return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/**
+ * Etiqueta legible de una categoría: el rótulo personalizado de la marca (`cat`) si lo hay, si no del
+ * catálogo estático y, si es texto libre, prettificada.
+ */
+export function etiquetaCategoria(valor?: string | null, cat?: CatalogoEtiquetas): string {
+  return _rotulo(normalizarCategoria(valor), cat);
 }
 
 /** Orden estable de slugs: catálogo primero (en su orden), texto libre después (alfabético). */
@@ -93,18 +134,24 @@ export function categoriasPresentes(plantillas: PlantillaDiseno[]): string[] {
 export function opcionesCategoria(
   slugsPresentes: string[],
   extraSlug?: string | null,
+  cat?: CatalogoEtiquetas,
 ): CategoriaPlantilla[] {
-  const slugs = new Set(CATEGORIAS_PLANTILLA.map((c) => c.slug));
-  for (const s of slugsPresentes) slugs.add(normalizarCategoria(s));
+  // Con catálogo de marca, la BASE son SUS etiquetas (gestionadas + presentes, ya reunidas por el
+  // llamante en `cat.slugs`): así una marca solo ve sus categorías, no la lista global ni las de otra
+  // marca. En ese modo el `slugsPresentes` (de TODA la galería, multi-marca) se ignora. Sin catálogo
+  // se mantiene el comportamiento histórico (catálogo estático + presentes). «General» siempre.
+  const slugs = cat ? new Set([...cat.slugs, CATEGORIA_GENERAL]) : new Set(CATEGORIAS_PLANTILLA.map((c) => c.slug));
+  if (!cat) for (const s of slugsPresentes) slugs.add(normalizarCategoria(s));
   if (extraSlug) slugs.add(normalizarCategoria(extraSlug));
   return [...slugs]
     .sort(_compararSlugs)
-    .map((slug) => ({ slug, etiqueta: etiquetaCategoria(slug) }));
+    .map((slug) => ({ slug, etiqueta: _rotulo(slug, cat) }));
 }
 
-/** Agrupa por categoría (normalizada), en orden de catálogo. */
+/** Agrupa por categoría (normalizada), en orden de catálogo. Rótulo según el catálogo de marca (`cat`). */
 export function agruparPorCategoria(
   plantillas: PlantillaDiseno[],
+  cat?: CatalogoEtiquetas,
 ): { slug: string; etiqueta: string; plantillas: PlantillaDiseno[] }[] {
   const grupos = new Map<string, PlantillaDiseno[]>();
   for (const p of plantillas) {
@@ -115,17 +162,17 @@ export function agruparPorCategoria(
   }
   return [...grupos.keys()].sort(_compararSlugs).map((slug) => ({
     slug,
-    etiqueta: etiquetaCategoria(slug),
+    etiqueta: _rotulo(slug, cat),
     plantillas: grupos.get(slug) ?? [],
   }));
 }
 
-/** ¿La plantilla coincide con la búsqueda? Por nombre y por categoría, acento-insensible. */
-export function coincideBusqueda(p: PlantillaDiseno, q: string): boolean {
+/** ¿La plantilla coincide con la búsqueda? Por nombre y por categoría (rótulo de marca), acento-insensible. */
+export function coincideBusqueda(p: PlantillaDiseno, q: string, cat?: CatalogoEtiquetas): boolean {
   const nq = _plano(q.trim());
   if (!nq) return true;
   if (_plano(p.nombre || "").includes(nq)) return true;
   if (!/[a-z0-9]/.test(nq)) return false;
   const slug = normalizarCategoria(p.categoria);
-  return slug.includes(normalizarCategoria(q)) || _plano(etiquetaCategoria(slug)).includes(nq);
+  return slug.includes(normalizarCategoria(q)) || _plano(_rotulo(slug, cat)).includes(nq);
 }

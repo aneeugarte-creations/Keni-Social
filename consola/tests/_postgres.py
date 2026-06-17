@@ -66,6 +66,7 @@ _TABLAS = (
     "catalogo_media",
     "marca_activos",
     "plantillas_diseno",
+    "etiquetas_plantilla",
     "bloques",
     "documento_versiones",
     "webhooks",

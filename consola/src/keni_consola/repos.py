@@ -125,6 +125,7 @@ from .repos_editor import (  # noqa: F401
     actualizar_video_subtitulo,
     borrar_bloque,
     borrar_marca_activo,
+    borrar_etiqueta_plantilla,
     borrar_media_catalogo,
     borrar_plantilla_diseno,
     borrar_video_composicion,
@@ -138,6 +139,7 @@ from .repos_editor import (  # noqa: F401
     existe_media_objeto,
     listar_bloques,
     listar_documento_versiones,
+    listar_etiquetas_plantilla,
     listar_marca_activos,
     listar_media_catalogo,
     listar_plantillas_diseno,
@@ -151,6 +153,7 @@ from .repos_editor import (  # noqa: F401
     obtener_video_subtitulo,
     reordenar_plantillas_diseno,
     ultima_documento_version,
+    upsert_etiqueta_plantilla,
 )
 from .repos_hashtags_franjas import (  # noqa: F401
     borrar_franja,

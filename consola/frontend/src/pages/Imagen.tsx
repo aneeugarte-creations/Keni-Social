@@ -21,7 +21,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, Image, Plus, Save, SaveAll, Video, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { TituloPagina } from "@/components/layout/encabezado";
@@ -39,7 +39,12 @@ import { conFotoEnHuecosVacios, conTextosHorneados, documentoVacio, type Documen
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
-import { CATEGORIAS_PLANTILLA } from "@/lib/categoriasPlantilla";
+import {
+  categoriasPresentes,
+  construirCatalogosEtiquetas,
+  normalizarCategoria,
+  opcionesCategoria,
+} from "@/lib/categoriasPlantilla";
 import { prepararDocumento } from "@/lib/placa/docPieza";
 
 type TipoPlantilla = "foto" | "miniatura";
@@ -249,6 +254,30 @@ export default function Imagen() {
     // En «Todas» (marcaPanel vacío) se listan las plantillas de todas las marcas.
     enabled: marcas.length > 0,
   });
+
+  // Catálogo de ETIQUETAS por marca (rótulos personalizados de las categorías): rige cómo se rotulan
+  // las categorías en la galería y qué etiquetas ofrece cada selector. Misma clave de marca que las
+  // plantillas (en «Todas» trae las de todas las marcas).
+  const etiquetasQ = useQuery({
+    queryKey: ["etiquetas-plantilla", marcaPanel],
+    queryFn: ({ signal }) => api.etiquetasPlantilla({ marca: marcaPanel || undefined }, signal),
+    enabled: marcas.length > 0,
+  });
+  const catalogosEtiquetas = useMemo(() => {
+    const cats = construirCatalogosEtiquetas(etiquetasQ.data?.etiquetas ?? []);
+    // Garantiza una entrada por marca con AL MENOS sus categorías PRESENTES (sin depender de filas
+    // guardadas): así cada marca ve solo sus etiquetas —no la lista global de deportes/noticias—
+    // desde el primer renombrado. Los rótulos personalizados (de las filas) se conservan encima.
+    for (const p of plantillasQ.data?.plantillas ?? []) {
+      let cat = cats.get(p.marca);
+      if (!cat) {
+        cat = { rotulos: new Map(), slugs: new Set() };
+        cats.set(p.marca, cat);
+      }
+      cat.slugs.add(normalizarCategoria(p.categoria));
+    }
+    return cats;
+  }, [etiquetasQ.data, plantillasQ.data]);
 
   // RESTAURA el workspace guardado (tras un reload). El contenido de cada pestaña sale del
   // borrador local (claveAuto) si existe, o del servidor (plantilla/pieza). Las pestañas de
@@ -731,6 +760,46 @@ export default function Imagen() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo cambiar la categoría."),
   });
 
+  // RENOMBRAR el RÓTULO de una etiqueta de la marca (catálogo editable): cambia solo el texto visible
+  // (no mueve plantillas: el slug es la identidad). Persiste el override por `(marca, slug)`.
+  const renombrarEtiqueta = useMutation({
+    mutationFn: ({ marca, slug, etiqueta }: { marca: string; slug: string; etiqueta: string }) =>
+      api.guardarEtiquetaPlantilla(marca, slug, etiqueta),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["etiquetas-plantilla"] });
+      toast.success("Etiqueta renombrada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo renombrar la etiqueta."),
+  });
+
+  // CREAR una etiqueta: persiste su rótulo (preserva acentos/mayúsculas) Y la asigna a la plantilla
+  // desde cuyo selector se creó. El slug se deriva del texto igual que en el backend.
+  const crearEtiqueta = useMutation({
+    mutationFn: async ({ p, etiqueta }: { p: PlantillaDiseno; etiqueta: string }) => {
+      const slug = normalizarCategoria(etiqueta);
+      await api.guardarEtiquetaPlantilla(p.marca, slug, etiqueta);
+      await api.actualizarPlantillaDiseno(p.id, { categoria: slug });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["etiquetas-plantilla"] });
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      toast.success("Etiqueta creada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo crear la etiqueta."),
+  });
+
+  // BORRAR el rótulo personalizado de una etiqueta (no toca plantillas). El backend devuelve 409 si
+  // alguna plantilla aún usa esa categoría (el mensaje, con el conteo, va al toast).
+  const borrarEtiqueta = useMutation({
+    mutationFn: ({ marca, slug }: { marca: string; slug: string }) =>
+      api.borrarEtiquetaPlantilla(marca, slug),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["etiquetas-plantilla"] });
+      toast.success("Etiqueta eliminada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo eliminar la etiqueta."),
+  });
+
   // RENOMBRAR una plantilla ya guardada (desde la galería). Persiste y refleja el nombre en
   // cualquier pestaña atada a ella.
   const renombrarPlantilla = useMutation({
@@ -780,8 +849,20 @@ export default function Imagen() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo guardar en la pieza."),
   });
 
-  const plantillas = plantillasQ.data?.plantillas ?? [];
+  const plantillas = useMemo(() => plantillasQ.data?.plantillas ?? [], [plantillasQ.data]);
   const guardando = guardar.isPending || guardarComo.isPending || guardarEnPieza.isPending;
+
+  // Sugerencias de categoría del diálogo «Guardar como»: las etiquetas de la marca de la pieza (su
+  // catálogo + las presentes), no la lista global, para que cada marca vea solo las suyas.
+  const opcionesEtiquetaDialogo = useMemo(
+    () =>
+      opcionesCategoria(
+        categoriasPresentes(plantillas),
+        null,
+        catalogosEtiquetas.get(pestanaActiva?.marca || marcaPanel || marcaInicial),
+      ),
+    [plantillas, catalogosEtiquetas, pestanaActiva?.marca, marcaPanel, marcaInicial],
+  );
 
   return (
     // FULL-BLEED: anula el padding del `<main>` del shell para que el lienzo aproveche todo el
@@ -935,6 +1016,10 @@ export default function Imagen() {
                 onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
                 onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
                 onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+                catalogos={catalogosEtiquetas}
+                onRenombrarEtiqueta={(p, slug, etiqueta) => renombrarEtiqueta.mutate({ marca: p.marca, slug, etiqueta })}
+                onCrearEtiqueta={(p, etiqueta) => crearEtiqueta.mutate({ p, etiqueta })}
+                onBorrarEtiqueta={(p, slug) => borrarEtiqueta.mutate({ marca: p.marca, slug })}
                 onFotoMuestra={(p) => setMuestraDe(p)}
                 onReordenar={(ids) => reordenarPlantillas.mutate(ids)}
               />
@@ -985,6 +1070,10 @@ export default function Imagen() {
                 onRenombrar={(p, nombre) => renombrarPlantilla.mutate({ id: p.id, nombre })}
                 onRotar={(p, rotar) => rotarPlantilla.mutate({ id: p.id, rotar })}
                 onCategorizar={(p, categoria) => categorizarPlantilla.mutate({ id: p.id, categoria })}
+                catalogos={catalogosEtiquetas}
+                onRenombrarEtiqueta={(p, slug, etiqueta) => renombrarEtiqueta.mutate({ marca: p.marca, slug, etiqueta })}
+                onCrearEtiqueta={(p, etiqueta) => crearEtiqueta.mutate({ p, etiqueta })}
+                onBorrarEtiqueta={(p, slug) => borrarEtiqueta.mutate({ marca: p.marca, slug })}
                 onFotoMuestra={(p) => setMuestraDe(p)}
                 onReordenar={(ids) => reordenarPlantillas.mutate(ids)}
                 onLienzoBlanco={() => abrirPestana()}
@@ -1059,7 +1148,7 @@ export default function Imagen() {
               onKeyDown={(e) => { if (e.key === "Enter") confirmarNombre(); }}
             />
             <datalist id="categorias-plantilla">
-              {CATEGORIAS_PLANTILLA.map((c) => (
+              {opcionesEtiquetaDialogo.map((c) => (
                 <option key={c.slug} value={c.etiqueta} />
               ))}
             </datalist>

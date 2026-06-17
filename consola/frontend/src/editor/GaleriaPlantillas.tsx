@@ -30,6 +30,7 @@ import {
   agruparPorCategoria,
   categoriasPresentes,
   normalizarCategoria,
+  type CatalogoEtiquetas,
 } from "@/lib/categoriasPlantilla";
 
 import { Telon, useCerrarConEscape } from "./Telon";
@@ -78,6 +79,20 @@ interface PropsPublicacion {
   /** Si se omite, el badge de categoría es solo informativo (modo SELECTOR). */
   onCategorizar?: (p: PlantillaDiseno, categoria: string) => void;
   /**
+   * Catálogo de etiquetas POR MARCA (rótulos personalizados): rige cómo se ROTULAN las categorías en
+   * cabeceras, chips y badges, y qué etiquetas ofrece el selector de cada pieza (las de su marca, no
+   * la lista global). Si se omite, se usa el catálogo estático (comportamiento histórico).
+   */
+  catalogos?: Map<string, CatalogoEtiquetas>;
+  /**
+   * Modo GESTIÓN del catálogo (en el selector de cada tarjeta): renombrar el RÓTULO de una etiqueta
+   * (no mueve plantillas), crear una etiqueta nueva persistiendo su rótulo, y borrar el rótulo. La
+   * marca es la de la pieza (`p.marca`).
+   */
+  onRenombrarEtiqueta?: (p: PlantillaDiseno, slug: string, etiqueta: string) => void;
+  onCrearEtiqueta?: (p: PlantillaDiseno, etiqueta: string) => void;
+  onBorrarEtiqueta?: (p: PlantillaDiseno, slug: string) => void;
+  /**
    * Si se pasa (modo GESTIÓN), cada tarjeta ofrece «Foto y texto de muestra…»: asignar a ESA plantilla
    * una foto + titular + subtítulo representativos que se hornean en su miniatura/preview, para que la
    * galería se vea «tal cual quedaría». No entra al documento editable. Es la PUERTA de galería a la
@@ -115,6 +130,10 @@ export function PublicacionPlantillas({
   onRenombrar,
   onRotar,
   onCategorizar,
+  catalogos,
+  onRenombrarEtiqueta,
+  onCrearEtiqueta,
+  onBorrarEtiqueta,
   onFotoMuestra,
   onReordenar,
   maxColumnas,
@@ -139,9 +158,19 @@ export function PublicacionPlantillas({
   // Etiquetas presentes en TODA la galería (todos los tipos): así una etiqueta creada en una pieza
   // se puede asignar a cualquier otra desde su selector, no solo las del catálogo.
   const slugsPresentes = useMemo(() => categoriasPresentes(plantillas), [plantillas]);
+  // Catálogo de etiquetas EFECTIVO para chips/búsqueda: solo si la galería es de UNA marca (lo
+  // habitual). En la vista multi-marca («Todas») los chips son compartidos, así que se cae al
+  // catálogo estático (el rótulo por marca sí se aplica en cabeceras y badges, que sí tienen marca).
+  const catalogoUnico = useMemo(() => {
+    if (!catalogos) return undefined;
+    const marcas = new Set(plantillas.map((p) => p.marca));
+    return marcas.size === 1 ? catalogos.get([...marcas][0]) : undefined;
+  }, [catalogos, plantillas]);
   // Búsqueda + chip de categoría (client-side) SOBRE las del tipo activo.
-  const { q, setQ, categoria, setCategoria, presentes, filtradas } =
-    useFiltroPlantillas(plantillasTipo);
+  const { q, setQ, categoria, setCategoria, presentes, filtradas } = useFiltroPlantillas(
+    plantillasTipo,
+    catalogoUnico,
+  );
 
   // Carga perezosa por lotes (los datos YA están en memoria; esto solo limita el DOM). El corte
   // sigue el ORDEN DE PINTADO (sección a sección, grupo a grupo), así cada lote nuevo solo AÑADE
@@ -158,7 +187,7 @@ export function PublicacionPlantillas({
   let resto = visibles;
   const secciones = listas
     .map((lista) => {
-      const grupos = agruparPorCategoria(lista);
+      const grupos = agruparPorCategoria(lista, catalogos?.get(lista[0]?.marca));
       const corte: typeof grupos = [];
       for (const g of grupos) {
         if (resto <= 0) break;
@@ -332,6 +361,12 @@ export function PublicacionPlantillas({
               nombre={p.nombre}
               onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
               slugsPresentes={slugsPresentes}
+              catalogo={catalogos?.get(p.marca)}
+              onRenombrarEtiqueta={
+                onRenombrarEtiqueta ? (slug, etiqueta) => onRenombrarEtiqueta(p, slug, etiqueta) : undefined
+              }
+              onCrearEtiqueta={onCrearEtiqueta ? (etiqueta) => onCrearEtiqueta(p, etiqueta) : undefined}
+              onBorrarEtiqueta={onBorrarEtiqueta ? (slug) => onBorrarEtiqueta(p, slug) : undefined}
             />
             {onRenombrar && editId === p.id ? (
               <input
@@ -423,7 +458,7 @@ export function PublicacionPlantillas({
       {plantillasTipo.length > 0 && (
         <div className={`shrink-0 space-y-2 border-b border-border bg-background py-2 ${padX}`}>
           <BuscadorPlantillas valor={q} onCambiar={setQ} />
-          <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} />
+          <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} catalogo={catalogoUnico} />
         </div>
       )}
 

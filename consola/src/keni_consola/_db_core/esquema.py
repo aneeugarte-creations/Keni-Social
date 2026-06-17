@@ -874,6 +874,22 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # default «sin ordenar» (filas legadas y plantillas nuevas), que cae a «recientes primero» por
     # el `creado DESC` secundario; al reordenar se asignan 1..N en la secuencia exacta elegida.
     "CREATE INDEX IF NOT EXISTS idx_plantillas_diseno_orden ON plantillas_diseno (marca, orden)",
+    # ETIQUETAS de plantilla (catálogo de categorías editable, POR MARCA): override del rótulo
+    # LEGIBLE de una categoría. La categoría sigue siendo `plantillas_diseno.categoria` (texto libre
+    # normalizado a slug); aquí se guarda, por `(marca, slug)`, el rótulo que el equipo le puso al
+    # renombrarla. Renombrar cambia SOLO el rótulo (no mueve plantillas: el slug es la identidad).
+    # `etiqueta` vacío = usar el rótulo por defecto del catálogo del frontend.
+    """
+    CREATE TABLE IF NOT EXISTS etiquetas_plantilla (
+        id          TEXT PRIMARY KEY,
+        marca       TEXT NOT NULL DEFAULT '',
+        slug        TEXT NOT NULL DEFAULT '',
+        etiqueta    TEXT NOT NULL DEFAULT '',
+        creado      TEXT NOT NULL DEFAULT '',
+        actualizado TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_etiquetas_plantilla_marca_slug ON etiquetas_plantilla (marca, slug)",
     # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
     # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
     # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
