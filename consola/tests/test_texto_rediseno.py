@@ -117,6 +117,26 @@ def test_editoriales_scoping_por_carpeta():
     assert "editorial/rrss/unotv/marca" not in ids_claro
 
 
+def test_plataforma_reglas_por_marca_no_cruzan_a_otras_marcas():
+    # Una versión POR-MARCA de una clase "global" (plataforma/reglas) NO debe inyectarse en OTRA
+    # marca: antes `es_editorial_global` daba por global toda clase plataforma/reglas, así que el
+    # formato/reglas de Claro Sports entraban en el copy de UnoTV. Ahora solo las versiones GLOBALES
+    # (sin marca / bajo `global/`) aplican a todas.
+    libprompts.crear("Formato Claro", tipo="editorial", clase="plataforma", marcas=["claro-sports"], cuerpo="f")
+    libprompts.crear("Reglas Claro", tipo="editorial", clase="reglas", marcas=["claro-sports"], cuerpo="r")
+    libprompts.crear("Formato común", tipo="editorial", clase="plataforma", carpeta="rrss/global", cuerpo="g")
+    libprompts.crear("Imagen", tipo="editorial", clase="reglas", carpeta="reglas", cuerpo="img")  # global sin marca
+
+    ids_unotv = {d.id for d in libprompts.editoriales_de_marca("unotv")}
+    assert "editorial/formato-claro" not in ids_unotv  # plataforma de OTRA marca: fuera
+    assert "editorial/reglas-claro" not in ids_unotv  # reglas de OTRA marca: fuera
+    assert "editorial/rrss/global/formato-comun" in ids_unotv  # global: aplica a todas
+    assert "editorial/reglas/imagen" in ids_unotv  # clase global sin marca: aplica a todas
+
+    ids_claro = {d.id for d in libprompts.editoriales_de_marca("claro-sports")}
+    assert "editorial/formato-claro" in ids_claro and "editorial/reglas-claro" in ids_claro
+
+
 # --------------------------------------------------------------------------- #
 # Resolucion de pipeline + preview                                           #
 # --------------------------------------------------------------------------- #

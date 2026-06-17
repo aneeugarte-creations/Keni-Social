@@ -30,12 +30,19 @@ __all__ = [
 def es_editorial_global(doc: Documento) -> bool:
     """True si el documento editorial aplica a TODAS las marcas.
 
-    Un doc es GLOBAL por su clase (`plataforma`/`tropicalizacion`/`reglas`) o por colgar de
-    una carpeta global (`global`, `comun`, ...). Es el MISMO criterio que usa el auto-adjunto
-    (`editoriales_de_marca`); se expone para que la API (estrategia de marca) lo etiquete.
+    Un doc es GLOBAL si cuelga de una carpeta global (`global`, `comun`, ...) o si su clase es
+    global (`plataforma`/`tropicalizacion`/`reglas`) Y NO está atado a una marca concreta. Una
+    versión POR-MARCA de esas clases (p. ej. `editorial/rrss/claro-sports/plataformas` con
+    `marcas=[claro-sports]`, o cualquier doc bajo `rrss/<marca>/`) es ESPECÍFICA, no global: sin
+    esta distinción se inyectaban el formato y las reglas de TODAS las marcas en el copy de cada
+    una (clase plataforma/reglas se daba por global a secas). Mismo criterio que el auto-adjunto.
     """
     segmentos = doc.carpeta.split("/") if doc.carpeta else []
-    return doc.clase in _CLASES_GLOBALES or any(s in _CARPETAS_GLOBALES for s in segmentos)
+    if any(s in _CARPETAS_GLOBALES for s in segmentos):
+        return True  # global explícito (carpeta `global`/`comun`/...)
+    if doc.marcas or "rrss" in segmentos:
+        return False  # atado a una marca (por `marcas` o por colgar de `rrss/<marca>/`)
+    return doc.clase in _CLASES_GLOBALES
 
 
 def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Documento]:
