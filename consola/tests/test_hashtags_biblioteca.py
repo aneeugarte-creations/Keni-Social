@@ -49,16 +49,25 @@ def test_red_desconocida_usa_el_defecto():
 
 
 def test_fijos_son_la_firma_de_la_marca_y_estan_en_el_pool():
-    # La firma (nombre/portal) que va casi en cada post: la etapa la inyecta siempre.
+    # La firma (nombre de marca) que va casi en cada post: la etapa la inyecta siempre.
+    # NO incluye `portal{slug}` (tag MÁQUINA de ingesta web), que se excluye de la sugerencia.
     fijos = {
-        "unotv": ["unotv", "portalunotv"],
-        "claro-sports": ["portalclarosports"],
+        "unotv": ["unotv"],
+        "claro-sports": [],
     }
     for marca, esperado in fijos.items():
         assert hb.fijos(marca) == esperado, marca
         # Cada fijo está en el pool de candidatos (si no, la etapa nunca lo añadiría).
         pool = set(hb.candidatos(marca))
         assert all(f in pool for f in hb.fijos(marca)), marca
+
+
+def test_el_tag_portal_de_ingesta_web_nunca_se_sugiere():
+    # `portalunotv`/`portalclarosports` los usa la WEB para detectar e incrustar los vídeos de
+    # redes: son señal máquina, no hashtags de audiencia. Fuera de candidatos Y de fijos.
+    for marca, portal in (("unotv", "portalunotv"), ("claro-sports", "portalclarosports")):
+        assert portal not in hb.candidatos(marca), marca
+        assert portal not in hb.fijos(marca), marca
 
 
 def test_marca_sin_biblioteca_no_sugiere():

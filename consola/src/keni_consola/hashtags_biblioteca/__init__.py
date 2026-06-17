@@ -37,28 +37,39 @@ def biblioteca(marca: str) -> dict:
     return datos if isinstance(datos, dict) else {}
 
 
+def _tag_operativo(marca: str) -> str:
+    """El `portal{slug}` de la marca: tag MÁQUINA (la web detecta e incrusta los vídeos de redes
+    por él). NUNCA es una sugerencia de audiencia. Se excluye ya en el generador; este guard en
+    runtime evita que se cuele aunque un JSON quede obsoleto."""
+    plano = "".join(c for c in marca.lower() if c.isalnum())
+    return f"portal{plano}" if plano else ""
+
+
 def candidatos(marca: str) -> list[str]:
     """Hashtags candidatos de la marca (tags en minúscula, SIN '#'), por frecuencia desc. [] si no hay."""
+    operativo = _tag_operativo(marca)
     hashtags = biblioteca(marca).get("hashtags") or []
     salida: list[str] = []
     for h in hashtags:
         tag = str((h or {}).get("tag") or "").strip().lower().lstrip("#")
-        if tag:
+        if tag and tag != operativo:
             salida.append(tag)
     return salida
 
 
 def fijos(marca: str) -> list[str]:
-    """Hashtags FIJOS de la marca (su firma: nombre/portal/lema), en minúscula SIN '#'. [] si no hay.
+    """Hashtags FIJOS de la marca (su firma: nombre/lema), en minúscula SIN '#'. [] si no hay.
 
     Van casi en cada post y NO dependen del tema, así que la etapa los inyecta SIEMPRE (la IA solo
-    elige los temáticos). Salen del historial: muy adoptados o el handle de la marca.
+    elige los temáticos). Salen del historial: muy adoptados o el handle de la marca. NUNCA incluye
+    el `portal{slug}` (tag máquina de ingesta web).
     """
+    operativo = _tag_operativo(marca)
     crudos = biblioteca(marca).get("fijos") or []
     salida: list[str] = []
     for c in crudos:
         tag = str(c or "").strip().lower().lstrip("#")
-        if tag:
+        if tag and tag != operativo:
             salida.append(tag)
     return salida
 

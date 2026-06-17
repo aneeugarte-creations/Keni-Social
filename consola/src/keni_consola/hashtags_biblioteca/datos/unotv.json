@@ -9,8 +9,7 @@
     "tiktok": 5
   },
   "fijos": [
-    "unotv",
-    "portalunotv"
+    "unotv"
   ],
   "estadisticas_por_red": {
     "facebook": {
@@ -36,10 +35,6 @@
     {
       "tag": "unotv",
       "n": 10677
-    },
-    {
-      "tag": "portalunotv",
-      "n": 7789
     },
     {
       "tag": "tiktokinforma",

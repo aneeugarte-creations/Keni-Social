@@ -9,9 +9,7 @@
     "youtube": 0,
     "tiktok": 5
   },
-  "fijos": [
-    "portalclarosports"
-  ],
+  "fijos": [],
   "estadisticas_por_red": {
     "facebook": {
       "posts": 14290,
@@ -50,10 +48,6 @@
     {
       "tag": "aquípasa",
       "n": 4453
-    },
-    {
-      "tag": "portalclarosports",
-      "n": 3513
     },
     {
       "tag": "ligamx",

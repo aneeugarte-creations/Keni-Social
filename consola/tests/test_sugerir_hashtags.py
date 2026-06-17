@@ -48,7 +48,8 @@ def test_normaliza_un_solo_almohadilla_y_minuscula():
 def test_ensamblar_siempre_incluye_los_fijos_de_la_marca():
     # La IA NO propone la firma de la marca (no es temática); debe ir igual, al frente.
     out = dom_sh.ensamblar(["#internacional"], marca=_MARCA, cantidad=5)
-    assert out[:2] == ["#unotv", "#portalunotv"]  # los fijos de unotv, primero
+    assert out[0] == "#unotv"  # el fijo de unotv, primero
+    assert "#portalunotv" not in out  # el tag máquina de ingesta web NUNCA se sugiere
     assert "#internacional" in out
 
 
@@ -57,7 +58,8 @@ def test_ensamblar_llena_el_cupo_aunque_la_ia_no_de_nada_usable():
     # Antes salía vacío; ahora se llena con fijos + relleno por frecuencia.
     out = dom_sh.ensamblar(["#papaleon", "#habemuspapa"], marca=_MARCA, cantidad=5)
     assert len(out) == 5
-    assert out[:2] == ["#unotv", "#portalunotv"]
+    assert out[0] == "#unotv"
+    assert "#portalunotv" not in out
     assert all(t.lstrip("#") in set(hb.candidatos(_MARCA)) for t in out)
 
 
@@ -132,7 +134,8 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional", "#noexiste123", "#mexico"])
     # Firma de la marca al frente, temáticos válidos, cupo lleno (5), inventado descartado.
-    assert guardados[:2] == ["#unotv", "#portalunotv"]
+    assert guardados[0] == "#unotv"
+    assert "#portalunotv" not in guardados  # tag máquina de ingesta web, nunca
     assert "#internacional" in guardados and "#mexico" in guardados
     assert "#noexiste123" not in guardados and len(guardados) == 5
     # GEMELO: las dos piezas del contenido llevan EXACTAMENTE la misma lista.

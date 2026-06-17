@@ -109,11 +109,24 @@ def cantidad_red(stats: tuple[int, float, int, int]) -> int:
     return max(0, min(MAX_SUGERENCIAS, med_users))
 
 
+def plano_de(marca: str) -> str:
+    """Slug de la marca sin separadores (p. ej. `claro-sports` -> `clarosports`)."""
+    return "".join(c for c in marca.lower() if c.isalnum())
+
+
 def handles_de(marca: str) -> set[str]:
     """Tags que son el HANDLE de la marca: su slug sin separadores y "portal"+slug (p. ej.
     `claro-sports` -> {clarosports, portalclarosports}; `unotv` -> {unotv, portalunotv})."""
-    plano = "".join(c for c in marca.lower() if c.isalnum())
+    plano = plano_de(marca)
     return {plano, f"portal{plano}"} if plano else set()
+
+
+def excluidos_de(marca: str) -> set[str]:
+    """Tags OPERATIVOS que NUNCA se sugieren: el `portal{slug}` que la web usa para detectar e
+    incrustar los vídeos de redes (p. ej. `portalunotv`, `portalclarosports`). No es un hashtag
+    de audiencia: es una señal máquina del equipo, así que se saca de candidatos Y de fijos."""
+    plano = plano_de(marca)
+    return {f"portal{plano}"} if plano else set()
 
 
 def fijos_de(marca: str, adopcion: dict[str, float]) -> list[str]:
@@ -139,13 +152,14 @@ def procesar(
 
     bibliotecas: dict[str, dict] = {}
     for marca, plegados in crudo.items():
+        excluidos = {plegar(t) for t in excluidos_de(marca)}
         hashtags: list[dict] = []
         forma_de_plegado: dict[str, str] = {}
         for plg, grafias in plegados.items():
             total = sum(grafias.values())
             forma = max(grafias.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
             forma_de_plegado[plg] = forma
-            if total < UMBRAL:
+            if total < UMBRAL or plg in excluidos:
                 continue
             hashtags.append({"tag": forma, "n": total})
         hashtags.sort(key=lambda h: (-h["n"], h["tag"]))
