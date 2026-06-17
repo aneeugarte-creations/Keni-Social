@@ -159,6 +159,30 @@ def test_proponer_macro_eventos_json_invalido_devuelve_vacio():
     assert fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias("no soy json")) == []
 
 
+def test_proponer_macro_eventos_reutiliza_tema_macro_existente():
+    """El payload lleva el `tema_macro` ACTUAL de cada cluster y la familia REUTILIZA esa etiqueta.
+
+    Evita que Haiku etiquete el mismo evento con sinónimos ("Mundial 2026" vs "Copa del Mundo
+    2026") y parta la familia. El ejecutor falso lee el payload del prompt, toma el `tema_macro`
+    no vacío que ya existe y lo devuelve verbatim como `tema`; se verifica que se propaga."""
+    clusters = [
+        {"id": "x", "titulo": "México define su sede para el torneo", "tema_macro": "Mundial 2026"},
+        {"id": "y", "titulo": "Venta de boletos para el gran evento", "tema_macro": ""},
+    ]
+
+    def ej(prompt, _carpeta):
+        # El payload (lista JSON de historias) viene embebido en el prompt; cada item trae su
+        # `tema_macro`. Reutilizamos la etiqueta existente como tema de la familia.
+        ini, fin = prompt.index("["), prompt.rindex("]") + 1
+        items = json.loads(prompt[ini:fin])
+        existente = next((it["tema_macro"] for it in items if it.get("tema_macro")), "")
+        assert all("tema_macro" in it for it in items)  # el payload SIEMPRE lleva la etiqueta
+        return json.dumps({"familias": [{"tema": existente, "ids": ["x", "y"]}]})
+
+    familias = fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=ej)
+    assert familias == [{"tema": "Mundial 2026", "ids": ["x", "y"]}]
+
+
 # --------------------------------------------------------------------------- #
 # paso_fusionar_semantica (end-to-end, Postgres)                                  #
 # --------------------------------------------------------------------------- #

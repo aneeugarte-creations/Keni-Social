@@ -245,6 +245,9 @@ def proponer_macro_eventos(
                 str(c.get("resumen", "") or "").strip(), _MAX_CHARS_ITEM,
                 campo=f"resumen de {c['id']}", log=_log,
             )[0],
+            # Etiqueta de familia ACTUAL del cluster (puede estar vacía). Se manda para que Haiku
+            # REUTILICE verbatim una etiqueta ya existente en vez de inventar un sinónimo.
+            "tema_macro": str(c.get("tema_macro") or ""),
         }
         for c in validos
     ]

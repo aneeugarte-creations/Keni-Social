@@ -14,6 +14,24 @@ from .. import _comun
 from .._comun import _log
 
 
+def _etiqueta_canonica(ids: list[str], por_id: dict[str, dict[str, Any]], propuesta: str) -> str:
+    """Etiqueta ESTABLE de una familia de macro-evento: backstop determinista contra los sinónimos.
+
+    Reúsa la `tema_macro` YA persistida que MÁS clusters de la familia comparten (así el mismo
+    evento no se parte en «Mundial 2026» vs «Copa del Mundo 2026»: si Haiku agrupa ambos, gana la
+    etiqueta dominante y se unifican). Cae a `propuesta` (la que propuso Haiku) solo si NINGÚN
+    cluster de la familia traía etiqueta. Determinista: a empate de conteo, orden alfabético.
+    """
+    conteo: dict[str, int] = {}
+    for i in ids:
+        existente = str((por_id.get(i) or {}).get("tema_macro") or "").strip()
+        if existente:
+            conteo[existente] = conteo.get(existente, 0) + 1
+    if not conteo:
+        return propuesta
+    return max(sorted(conteo), key=lambda e: conteo[e])
+
+
 def paso_fusionar_semantica(
     *,
     ejecutor: fusionar_semantica.Ejecutor | None = None,
@@ -141,10 +159,13 @@ def paso_fusionar_semantica(
         etiquetadas = 0
         familias_desc: list[str] = []
         for familia in familias:
-            tema = str(familia.get("tema") or "").strip()
+            tema_propuesto = str(familia.get("tema") or "").strip()
             ids = [str(i) for i in (familia.get("ids") or []) if i]
-            if not tema or len(ids) < 2:
+            if not tema_propuesto or len(ids) < 2:
                 continue
+            # Backstop determinista: si la familia ya tiene una etiqueta persistida, reúsala (la
+            # dominante) en vez de la propuesta, para que el evento no se parta en sinónimos.
+            tema = _etiqueta_canonica(ids, por_id, tema_propuesto)
             try:
                 n = repos.marcar_clusters_tema_macro(ids, tema)
             except Exception:  # noqa: BLE001 -- persistir una etiqueta no aborta el paso
