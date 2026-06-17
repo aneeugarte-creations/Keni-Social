@@ -27,6 +27,7 @@ const FORMAS: { etiqueta: string; vista: React.ReactNode; atajo?: string; crear:
   { etiqueta: "Elipse", vista: <span className="h-7 w-7 rounded-full bg-foreground/80" />, atajo: "C", crear: crearElipse },
   { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } }) },
   { etiqueta: "Línea", vista: <span className="h-0.5 w-9 bg-foreground/80" />, atajo: "L", crear: crearLinea },
+  { etiqueta: "Flecha", vista: <svg viewBox="0 0 36 24" className="h-6 w-9 text-foreground/80" fill="currentColor"><polygon points="0,7 22,7 22,0 36,12 22,24 22,17 0,17" /></svg>, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "flecha", relleno: "#E30613", borde: null }) },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
