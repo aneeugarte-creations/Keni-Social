@@ -654,6 +654,51 @@ def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkey
     assert float(final.get("score") or 0.0) > 0.0
 
 
+def test_paso_agrupar_clasifica_por_ia_una_corroborada_sin_marca(monkeypatch):
+    """Una historia SIN marca que el vocabulario no casa (jerga/entidad nueva) pero CORROBORADA
+    por 2+ fuentes se clasifica por IA (no solo el breaking): antes quedaba huérfana e invisible
+    en los paneles por marca. Misma historia (mismo título, sin url) vista por dos outlets."""
+    base_item = {
+        "marca": "", "categoria": "internacional",
+        "titulo": "Quarterly briefing on a niche protocol upgrade",  # sin vocabulario de ninguna marca
+        "resumen": "", "url": "", "url_canonica": "",
+        "idioma": "en", "senal": 1_000, "geo": "", "estado": "nuevo",
+        "publicado_en": datetime.now(UTC).isoformat(),
+        "capturado_en": datetime.now(UTC).isoformat(),
+    }
+    it1 = dict(base_item, id="i1", fuente_id="agencia-a", fuente_nombre="Agencia A")
+    it2 = dict(base_item, id="i2", fuente_id="agencia-b", fuente_nombre="Agencia B")
+    eventos: list[tuple[str, object]] = []
+    monkeypatch.setattr(recolectar_daemon.config, "priorizar_perfil_activo", lambda: False)
+    monkeypatch.setattr(recolectar_daemon.config, "rendimiento_ranking_activo", lambda: False)
+    monkeypatch.setattr(recolectar_daemon.config, "clasificar_marca_ia", lambda: True)
+    monkeypatch.setattr(recolectar_daemon, "_clasificar_marca_ia", lambda recalc: "unotv")
+    monkeypatch.setattr(recolectar_daemon.repos, "limpiar_items_cluster_colgante", lambda: 0)
+    monkeypatch.setattr(recolectar_daemon.repos, "items_sin_cluster",
+                        lambda desde, lim: [dict(it1), dict(it2)])
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes", lambda ventana_h, *a, **k: [])
+    monkeypatch.setattr(recolectar_daemon.repos, "obtener_noticia_cluster", lambda cid: None)
+    monkeypatch.setattr(recolectar_daemon.repos, "items_de_cluster",
+                        lambda cid, **kw: [dict(it1, cluster_id=cid), dict(it2, cluster_id=cid)])
+    monkeypatch.setattr(recolectar_daemon.repos, "upsert_noticia_cluster",
+                        lambda c: eventos.append(("upsert", dict(c))) or dict(c))
+    monkeypatch.setattr(recolectar_daemon.repos, "asignar_cluster_items",
+                        lambda asg: eventos.append(("asignar", dict(asg))))
+    monkeypatch.setattr(recolectar_daemon.repos, "marcar_cluster_marca_ia",
+                        lambda cid: eventos.append(("sello_ia", cid)))
+
+    resumen = recolectar_daemon.paso_agrupar()
+
+    # Una sola historia (mismo título, sin url => misma clave), corroborada por 2 outlets.
+    assert resumen["clusters_nuevos"] == 1
+    final = [d for t, d in eventos if t == "upsert"][-1]
+    assert int(final.get("n_fuentes") or 0) == 2
+    assert int(final.get("breaking") or 0) == 0  # corroborada, NO breaking
+    # La IA le puso marca (antes habría quedado con marca='' por no casar vocabulario).
+    assert final["marca"] == "unotv"
+    assert ("sello_ia", final["id"]) in eventos  # se sella el encaje por IA (no lo pisa un recalc)
+
+
 # --------------------------------------------------------------------------- #
 # paso_rescore: el score ENVEJECE (la frescura decae sin items nuevos)          #
 # --------------------------------------------------------------------------- #

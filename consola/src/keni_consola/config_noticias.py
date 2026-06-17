@@ -174,23 +174,26 @@ def ingesta_max_items() -> int:
     return _entero(ENV_INGESTA_MAX_ITEMS, INGESTA_MAX_ITEMS_DEF, minimo=1)
 
 
-# FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool). Def ON: un feed asignado a
-# una marca solo archiva items que casan >= 1 término de la agenda de esa marca. Exentos los
-# feeds PROPIOS, los compartidos (sin marca) y las marcas sin vocabulario (sin criterio no se
-# filtra). Lo descartado se CUENTA por sondeo (`ultimo_filtrados`, visible en /salud).
+# FILTRO DE ENTRADA por vocabulario de marca (la puerta del pool). Def OFF: el pool ARCHIVA
+# TODO lo que entra por un feed (el embudo es sin pérdidas al frente; la selección vive en la
+# promoción y en la aprobación humana, no en la puerta). Encenderlo (`KENI_INGESTA_FILTRO=1`)
+# hace que un feed de marca solo archive items que casan >= 1 término de la agenda de esa marca
+# (exentos: feeds PROPIOS, compartidos sin marca, y marcas sin vocabulario). El matching del
+# vocabulario es por token exacto y sin stemming: una variante léxica, un sinónimo o una entidad
+# nueva no casan, y filtrar en la puerta pierde esa cobertura de forma IRREVERSIBLE (no llega ni
+# al pool). Para un medio eso es peor que archivar de más: el umbral de promoción ya contiene el
+# coste. Lo descartado (con el filtro encendido) se CUENTA por sondeo (`ultimo_filtrados`, /salud).
 ENV_INGESTA_FILTRO = "KENI_INGESTA_FILTRO"
 
 
 def ingesta_filtro_activo() -> bool:
-    """True si el filtro de ENTRADA por vocabulario está activo (`KENI_INGESTA_FILTRO`, def ON).
+    """True si el filtro de ENTRADA por vocabulario está activo (`KENI_INGESTA_FILTRO`, def OFF).
 
-    Def ON (a diferencia de las etapas IA): no gasta recursos ni borra nada ya archivado, solo
-    deja de ARCHIVAR contenido irrelevante nuevo. `0`/`no`/`off` lo apaga (se archiva todo, como antes).
+    Def OFF: se archiva TODO lo que entra por los feeds (sin pérdida de cobertura en la puerta);
+    la precisión vive aguas abajo (umbral de promoción + aprobación humana). `1`/`si`/`on` lo
+    enciende (un feed de marca solo archiva lo que casa su vocabulario).
     """
-    crudo = _crudo(ENV_INGESTA_FILTRO).lower()
-    if not crudo:
-        return True
-    return crudo not in _FALSOS
+    return _crudo(ENV_INGESTA_FILTRO).lower() in _VERDADEROS
 
 
 # Cadencia por categoría: env var + defecto de cada una (segundos), para el accesor genérico.
@@ -511,14 +514,19 @@ def noticias_gc_inactividad_horas() -> int:
 # noticia sin actividad en días no es feed, es archivo muerto. El TTL solo cambia ESTADO
 # (reversible); la retención sí borra (lo ya caducado, tras un margen largo).
 ENV_NOTICIAS_TTL_H = "KENI_NOTICIAS_TTL_H"
-NOTICIAS_TTL_H_DEF = 72  # = vida de la frescura del score: sin frescura, fuera del feed
+# El TTL del pool se DESACOPLA de la vida de la frescura del score (72h): la frescura caduca el
+# RANKING (una historia vieja deja de subir), pero no debe expulsar la historia del pool antes de
+# que un humano pueda rescatarla. Un slow-burn (tema que cuaja despacio, o que esperó cupo) seguía
+# vivo en el ranking pero podía caducar a `descartado` por inactividad antes de usarse. 7 días da
+# margen para esa recuperación manual sin reabrir la decisión de ranking.
+NOTICIAS_TTL_H_DEF = 168  # 7 días sin actividad: techo de vida en el pool (no la vida de la frescura)
 ENV_NOTICIAS_RETENCION_H = "KENI_NOTICIAS_RETENCION_H"
 NOTICIAS_RETENCION_H_DEF = 336  # 14 días: margen sobrado para auditar qué caducó
 
 
 def noticias_ttl_horas() -> int:
     """Horas sin actividad para que una historia `nuevo` no usada CADUQUE sola
-    (`KENI_NOTICIAS_TTL_H`, def 72; 0 = sin caducidad). Soft: pasa a `descartado`."""
+    (`KENI_NOTICIAS_TTL_H`, def 168 = 7 días; 0 = sin caducidad). Soft: pasa a `descartado`."""
     return _entero(ENV_NOTICIAS_TTL_H, NOTICIAS_TTL_H_DEF, minimo=0)
 
 
@@ -572,7 +580,7 @@ def fusionar_semantica_activo() -> bool:
 
 def fusion_semantica_max() -> int:
     """Máx. historias por marca y barrido que se mandan a Haiku a agrupar
-    (`KENI_FUSION_SEMANTICA_MAX`, def 40, min 2). Acota coste y tamaño de contexto."""
+    (`KENI_FUSION_SEMANTICA_MAX`, def 80, min 2). Acota coste y tamaño de contexto."""
     return _entero(ENV_FUSION_SEMANTICA_MAX, FUSION_SEMANTICA_MAX_DEF, minimo=2)
 
 

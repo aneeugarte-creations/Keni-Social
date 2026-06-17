@@ -163,14 +163,18 @@ def paso_agrupar() -> dict[str, Any]:
                     # Ya clasificada en un tick anterior (vocabulario o IA): preserva la
                     # asignación en vez de re-derivarla (evita reclasificar y perder marca).
                     marca_c = str(base.get("marca") or "")
+                corroborada = int(recalc.get("n_fuentes") or 0) >= 2
                 if (
                     not marca_c
-                    and bool(int(recalc.get("breaking") or 0))
+                    and (bool(int(recalc.get("breaking") or 0)) or corroborada)
                     and config.clasificar_marca_ia()
                 ):
-                    # Última hora SIN marca: encaje por IA (Haiku) en una de las marcas
-                    # activas; cae a la de noticias si la IA duda. Así el breaking deja de
-                    # estar varado y puede salir al feed de su marca cuando esté activa.
+                    # SIN marca pero con peso real (última hora, o corroborada por 2+ fuentes):
+                    # encaje por IA (Haiku) en una de las marcas activas; cae a la de noticias si
+                    # la IA duda. Sin esto, una historia que el vocabulario no casa (jerga/entidad
+                    # nueva) pero que varios medios cubren quedaba huérfana e invisible en los
+                    # paneles por marca. Se limita a corroboradas (2+ fuentes) para no clasificar
+                    # ruido de fuente única.
                     marca_c = _pkg._clasificar_marca_ia(recalc)
                     if marca_c:
                         marca_por_ia = True

@@ -611,3 +611,41 @@ class TestSecretosFichero:
         store_aislado.setenv("KENI_CONSOLA_ADMIN_PASS_FILE", str(p))
         assert config.s3_secret_key() is None
         assert config.admin_pass() == ""
+
+
+# --------------------------------------------------------------------------- #
+# Pool de noticias: defaults orientados a RECALL (embudo sin pérdidas al frente) #
+# --------------------------------------------------------------------------- #
+
+
+def test_ingesta_filtro_default_off(limpio, store_aislado):
+    """Sin `KENI_INGESTA_FILTRO`, el filtro de ENTRADA está APAGADO: el pool archiva todo lo que
+    entra por los feeds (no se pierde cobertura en la puerta; la precisión vive en la promoción)."""
+    store_aislado.delenv(config.ENV_INGESTA_FILTRO, raising=False)
+    assert config.ingesta_filtro_activo() is False
+
+
+@pytest.mark.parametrize("valor", ["1", "true", "on", "si", "sí", "yes"])
+def test_ingesta_filtro_se_enciende_explicitamente(limpio, store_aislado, valor):
+    store_aislado.setenv(config.ENV_INGESTA_FILTRO, valor)
+    assert config.ingesta_filtro_activo() is True
+
+
+@pytest.mark.parametrize("valor", ["0", "false", "off", "no", ""])
+def test_ingesta_filtro_negativo_sigue_apagado(limpio, store_aislado, valor):
+    store_aislado.setenv(config.ENV_INGESTA_FILTRO, valor)
+    assert config.ingesta_filtro_activo() is False
+
+
+def test_noticias_ttl_default_son_7_dias(limpio, store_aislado):
+    """El TTL del pool se desacopla de la frescura (72h): 7 días de margen para rescatar un
+    slow-burn antes de que caduque a `descartado` por inactividad."""
+    store_aislado.delenv(config.ENV_NOTICIAS_TTL_H, raising=False)
+    assert config.noticias_ttl_horas() == 168
+
+
+def test_fusion_semantica_max_default_holgado(limpio, store_aislado):
+    """El lote de fusión semántica admite hasta 80 historias/marca por barrido: un evento muy
+    cubierto (fragmentado en muchos clusters recientes) se funde en UNA pasada."""
+    store_aislado.delenv(config.ENV_FUSION_SEMANTICA_MAX, raising=False)
+    assert config.fusion_semantica_max() == 80

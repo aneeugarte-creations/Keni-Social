@@ -663,8 +663,12 @@ NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48
 # Perfil editorial: se re-extrae con Haiku cada 24h (o si cambia la línea editorial).
 PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 
-# Fusionar (semántica): hasta 40 historias por marca y barrido se mandan a Haiku a agrupar.
-FUSION_SEMANTICA_MAX_DEF = 40
+# Fusionar (semántica): hasta 80 historias por marca y barrido se mandan a Haiku a agrupar. El
+# lote toma las más recientes (`clusters_recientes` viene `ultimo_visto` desc): un evento muy
+# cubierto se fragmenta en muchos clusters (la formación dedup-ea EXACTO, no fusiona titulares
+# distintos) y todos son recientes a la vez; un cap holgado los funde en UNA pasada en vez de
+# dejar la cola para la siguiente (donde cada fragmento compite por separado con corroboración ~0).
+FUSION_SEMANTICA_MAX_DEF = 80
 
 # Rendimiento en la priorización (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
 SCORE_PESO_RENDIMIENTO_DEF = 0.15
