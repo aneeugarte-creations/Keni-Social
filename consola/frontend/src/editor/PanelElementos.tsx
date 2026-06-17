@@ -19,15 +19,27 @@ const TEXTOS: { etiqueta: string; vista: string; clase: string; chip?: boolean; 
   { etiqueta: "Pleca", vista: "EN VIVO", clase: "text-[10px] font-bold", chip: true, crear: () => nuevaCapaTexto({ w: 760, texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } }) },
 ];
 
+// Vista previa de una forma como SVG: silueta FIEL a `pathFormaLocal` (CapaNodo) y a `dibujar.mjs`,
+// no un icono genérico. `points` en un lienzo 24×24 (o el viewBox que se pase).
+const poli = (points: string, vb = "0 0 24 24", cls = "h-7 w-7") => (
+  <svg viewBox={vb} className={`${cls} text-foreground/80`} fill="currentColor"><polygon points={points} /></svg>
+);
+
 // Formas, con una vista previa real (no solo un icono). Rectángulo, Elipse y Línea son los MISMOS
-// elementos que crean los atajos R/C/L del lienzo (fábricas compartidas en `elementos.ts`).
+// elementos que crean los atajos R/C/L del lienzo (fábricas compartidas en `elementos.ts`). El resto
+// (triángulo, rombo, polígonos, estrella, flecha) son marcos con su `forma` del catálogo compartido.
 const FORMAS: { etiqueta: string; vista: React.ReactNode; atajo?: string; crear: () => CapaMarco }[] = [
   { etiqueta: "Rectángulo", vista: <span className="h-6 w-9 rounded-sm bg-foreground/80" />, atajo: "R", crear: crearRectangulo },
   { etiqueta: "Redondeado", vista: <span className="h-6 w-9 rounded-lg bg-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: "#E30613", borde: null, radio: 32 }) },
   { etiqueta: "Elipse", vista: <span className="h-7 w-7 rounded-full bg-foreground/80" />, atajo: "C", crear: crearElipse },
-  { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } }) },
+  { etiqueta: "Triángulo", vista: poli("12,1 23,23 1,23"), crear: () => nuevaCapaMarco({ w: 320, h: 280, forma: "triangulo", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Rombo", vista: poli("12,1 23,12 12,23 1,12"), crear: () => nuevaCapaMarco({ w: 300, h: 300, forma: "rombo", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Pentágono", vista: poli("12,1 22.5,8.6 18.5,20.9 5.5,20.9 1.5,8.6"), crear: () => nuevaCapaMarco({ w: 300, h: 300, forma: "pentagono", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Hexágono", vista: poli("12,1 21.5,6.5 21.5,17.5 12,23 2.5,17.5 2.5,6.5"), crear: () => nuevaCapaMarco({ w: 320, h: 300, forma: "hexagono", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Estrella", vista: poli("12,1 15.2,7.6 22.5,8.6 17.2,13.7 18.5,20.9 12,17.5 5.5,20.9 6.8,13.7 1.5,8.6 8.8,7.6"), crear: () => nuevaCapaMarco({ w: 300, h: 300, forma: "estrella", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Flecha", vista: poli("0,7 22,7 22,0 36,12 22,24 22,17 0,17", "0 0 36 24", "h-6 w-9"), crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "flecha", relleno: "#E30613", borde: null }) },
   { etiqueta: "Línea", vista: <span className="h-0.5 w-9 bg-foreground/80" />, atajo: "L", crear: crearLinea },
-  { etiqueta: "Flecha", vista: <svg viewBox="0 0 36 24" className="h-6 w-9 text-foreground/80" fill="currentColor"><polygon points="0,7 22,7 22,0 36,12 22,24 22,17 0,17" /></svg>, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "flecha", relleno: "#E30613", borde: null }) },
+  { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, crear: () => nuevaCapaMarco({ w: 360, h: 240, forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } }) },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
