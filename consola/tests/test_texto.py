@@ -228,7 +228,7 @@ def test_inicial_trae_prompt_verificacion_fuente_editable():
     # La verificación pre-copy de la FUENTE es un prompt EDITABLE de la Prompts cuyo cuerpo efectivo
     # lo trae la inicial del paquete (visible en «Prompts»).
     cuerpo = libprompts.cuerpo_efectivo("prompt/verificar")
-    assert cuerpo and "VERIFICACIÓN PREVIA" in cuerpo
+    assert cuerpo and "verificador editorial" in cuerpo
 
 
 def test_importar_inicial_no_pisa_lo_editado():

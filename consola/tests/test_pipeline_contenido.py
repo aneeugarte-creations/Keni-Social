@@ -924,9 +924,10 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
     _tema_pipeline(titulo="En proceso 2", verificacion_fuente="", copy_pendiente=pend)
-    _inicializar_cluster("c1", titulo="Hist 1", score=0.9)
-    _inicializar_cluster("c2", titulo="Hist 2", score=0.8)
-    _inicializar_cluster("c3", titulo="Hist 3", score=0.7)
+    ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
+    _inicializar_cluster("c1", titulo="Hist 1", score=0.9, verificacion_fuente=ver)
+    _inicializar_cluster("c2", titulo="Hist 2", score=0.8, verificacion_fuente=ver)
+    _inicializar_cluster("c3", titulo="Hist 3", score=0.7, verificacion_fuente=ver)
 
     res = pc._ejecutar_barrido()
 
@@ -964,13 +965,16 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,internacional:1")
-    _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx")
-    _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx")
+    ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
+    _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx", verificacion_fuente=ver)
+    _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx", verificacion_fuente=ver)
     _inicializar_cluster(
         "int1", titulo="Internacional unica historia", score=0.4, categoria="internacional",
-        resumen="México observa la cumbre internacional",
+        resumen="México observa la cumbre internacional", verificacion_fuente=ver,
     )
-    _inicializar_cluster("dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes")
+    _inicializar_cluster(
+        "dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes", verificacion_fuente=ver
+    )
 
     res = pc._ejecutar_barrido()
 
@@ -987,8 +991,11 @@ def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
-    _inicializar_cluster("br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1)
-    _inicializar_cluster("mx9", titulo="Nacional normal", score=0.9, categoria="mx")
+    ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
+    _inicializar_cluster(
+        "br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1, verificacion_fuente=ver
+    )
+    _inicializar_cluster("mx9", titulo="Nacional normal", score=0.9, categoria="mx", verificacion_fuente=ver)
 
     res = pc._ejecutar_barrido()
 
