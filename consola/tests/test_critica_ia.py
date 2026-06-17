@@ -235,3 +235,31 @@ def test_forzar_override_de_un_dislike_de_ia(entorno, monkeypatch):
     assert r.json()["pieza"]["estado"] in ("en_revision", "programado")
     plat = repos.obtener_pieza_fila(pid)
     assert repos.comentarios_sin_resolver(plat["publicacion_id"], pid) == 0
+
+
+def test_forzar_con_ia_pendiente_no_la_sella_y_encola_al_critico(entorno, monkeypatch):
+    """Forzar salta SOLO los OK humanos: la Crítica IA pendiente NO se sella, se encola al crítico.
+
+    Es el bug reportado: forzar (sin segundo par de ojos) cerraba también el nivel "Crítica IA"
+    a mano, así que el crítico nunca corría. Ahora forzar deja ese nivel pendiente y lo encola.
+    """
+    llamadas: list[str] = []
+    _activar_flag(monkeypatch, encolado=lambda pid: llamadas.append(pid))
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    pid = pub["id"]
+    autora.post(f"/api/aprobacion/{pid}/enviar-a-revision", headers=_ORIGIN)
+    # NADIE da OK humano: un coordinador fuerza directamente (no hay segundo par de ojos).
+    coord = _cli_usuario("jefa", rol="admin")
+    r = coord.post(f"/api/aprobacion/{pid}/forzar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    # La pieza NO se da por publicable: queda en revisión esperando el voto de la IA.
+    assert r.json()["pieza"]["estado"] == "en_revision"
+    cadena = repos.listar_aprobaciones(pid)
+    # El nivel Crítica IA sigue PENDIENTE (el override no lo selló) ...
+    assert colaboracion.nivel_critica_ia(cadena)["decision"] == "pendiente"
+    # ... y los niveles HUMANOS quedaron aprobados por el override.
+    humanos = [n for n in cadena if not colaboracion.es_nivel_critica_ia(n)]
+    assert humanos and all(n["decision"] == "aprobado" for n in humanos)
+    # Y se encoló al crítico exactamente una vez (best-effort, idempotente).
+    assert llamadas == [pid]

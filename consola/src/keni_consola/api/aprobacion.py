@@ -397,12 +397,16 @@ def _puede_forzar(request: Request) -> bool:
 
 
 async def forzar(request: Request) -> Response:
-    """POST /api/aprobacion/{id}/forzar: admin/coordinador APRUEBA saltándose la cadena.
+    """POST /api/aprobacion/{id}/forzar: admin/coordinador salta SOLO los OK humanos.
 
-    Aprueba TODOS los niveles pendientes (sellados como override, con traza de quién forzó) y deja
-    la pieza APROBADA, sin exigir el segundo par de ojos ni el cargo de cada nivel. El front avisa
-    con un pop-up de que se salta la cadena. 403 si la sesión no puede forzar; 404 si la pieza no
-    existe; 409 si no está en revisión.
+    Forzar bypassa el "doble par de ojos" humano (sella los niveles humanos pendientes como
+    override, con traza de quién forzó), pero NO sustituye a la Crítica IA: esa sigue siendo
+    automática. Por eso, sobre el nivel "Crítica IA":
+      - PENDIENTE (aún no corrió): se deja pendiente y se ENCOLA al crítico (debe correr igual).
+        La pieza queda `en_revision` hasta que la IA vote; forzar no la da por publicable.
+      - RECHAZADA (la IA ya vetó): override CONSCIENTE de coordinación ("publicar a pesar de la
+        IA") — se voltea a aprobado y se cierra su objeción.
+    403 si la sesión no puede forzar; 404 si la pieza no existe; 409 si no está en revisión.
     """
     if not _puede_forzar(request):
         return JSONResponse(
@@ -423,38 +427,53 @@ async def forzar(request: Request) -> Response:
     decisor_id = autor.get("id", "") or "forzado"
     decisor_nombre = autor.get("usuario", "") or "Override"
     ahora = ahora_iso()
+
+    def _sello_override() -> dict[str, Any]:
+        return {
+            "decision": DECISION_APROBADO,
+            "decisor_id": decisor_id,
+            "decisor_nombre": decisor_nombre,
+            "comentario": "Aprobación forzada (override de la cadena)",
+            "decidido_en": ahora,
+        }
+
     nivel_decidido: dict[str, Any] | None = None
+    # ¿quedó la Crítica IA por correr? -> encolar al crítico (no se sella a mano).
+    ia_por_correr = False
+    # ¿se sobreescribió un VETO de la IA? -> hay que cerrar su comentario (gate B).
+    override_veto_ia = False
     for nivel in repos.listar_aprobaciones(pieza_id):
-        # Aprueba los niveles PENDIENTES y, además, OVERRIDE de un DISLIKE de la Crítica IA
-        # (su nivel rechazado): "publicar a pesar de la IA" es decisión humana de coordinación.
-        # Los dislikes HUMANOS se respetan (no se voltean): el override salta la cadena, no
-        # borra la objeción de una persona.
-        pendiente = nivel.get("decision") == DECISION_PENDIENTE
-        ia_rechazada = (
-            colaboracion.es_nivel_critica_ia(nivel)
-            and nivel.get("decision") == DECISION_RECHAZADO
-        )
-        if not pendiente and not ia_rechazada:
+        if colaboracion.es_nivel_critica_ia(nivel):
+            # La Crítica IA NO la decide el override: forzar salta los OK HUMANOS, no la IA.
+            if nivel.get("decision") == DECISION_PENDIENTE:
+                # Aún no corrió: se deja pendiente y se encola al crítico (abajo). La pieza no
+                # queda publicable hasta que la IA vote.
+                ia_por_correr = True
+                continue
+            if nivel.get("decision") == DECISION_RECHAZADO:
+                # OVERRIDE de un VETO de IA = transición rechazado→aprobado, pero el CAS de
+                # `actualizar_aprobacion` solo deja pendiente→terminal (anti-carrera). Reseteamos
+                # a pendiente PRIMERO (sin guardia) para que el OK forzado prospere; sin esto el
+                # flip se perdía en silencio y la pieza quedaba `en_revision`.
+                repos.actualizar_aprobacion(nivel["id"], {"decision": DECISION_PENDIENTE})
+                nivel_decidido = repos.actualizar_aprobacion(nivel["id"], _sello_override())
+                override_veto_ia = True
+            # Ya aprobada: nada que forzar.
             continue
-        # OVERRIDE de un DISLIKE de IA = transición rechazado→aprobado, pero el CAS de
-        # `actualizar_aprobacion` solo deja pendiente→terminal (anti-carrera). Reseteamos el
-        # nivel IA a pendiente PRIMERO (sin guardia) para que el OK forzado de abajo prospere;
-        # sin esto el flip se perdía en silencio y la pieza quedaba `en_revision`.
-        if ia_rechazada:
-            repos.actualizar_aprobacion(nivel["id"], {"decision": DECISION_PENDIENTE})
-        nivel_decidido = repos.actualizar_aprobacion(
-            nivel["id"],
-            {
-                "decision": DECISION_APROBADO,
-                "decisor_id": decisor_id,
-                "decisor_nombre": decisor_nombre,
-                "comentario": "Aprobación forzada (override de la cadena)",
-                "decidido_en": ahora,
-            },
-        )
-    # El override de la Crítica IA también CIERRA su objeción: resuelve los comentarios sin
-    # resolver que dejó el crítico, para que el gate B no siga frenando la programación.
-    _resolver_comentarios_critica_ia(pieza_id)
+        # Niveles HUMANOS: el override sella los PENDIENTES (salta el "doble par de ojos"). Los
+        # dislikes HUMANOS se respetan (no se voltean): el override salta la cadena, no borra la
+        # objeción de una persona.
+        if nivel.get("decision") != DECISION_PENDIENTE:
+            continue
+        nivel_decidido = repos.actualizar_aprobacion(nivel["id"], _sello_override())
+    # Solo el override de un VETO de IA cierra su objeción (resuelve el comentario que frena el
+    # gate B). Si la IA aún no corrió, NO hay nada que resolver: la dejamos votar.
+    if override_veto_ia:
+        _resolver_comentarios_critica_ia(pieza_id)
+    # Si la Crítica IA quedó pendiente, se encola al crítico (best-effort, idempotente): forzar
+    # cierra la parte humana, la IA decide después. Mismo gate que el flujo normal de aprobación.
+    if ia_por_correr:
+        _encolar_critica_si_corresponde(pieza_id)
     sello = nivel_decidido or {
         "decisor_id": decisor_id,
         "decisor_nombre": decisor_nombre,

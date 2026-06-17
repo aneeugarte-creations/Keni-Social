@@ -222,7 +222,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // aquí solo mostramos la acción y avisamos con un pop-up de que se salta el visto bueno del equipo.
   const forzar = useMutation({
     mutationFn: () => api.forzarAprobacion(pieza.id),
-    onSuccess: tras("Aprobación forzada (cadena saltada)."),
+    onSuccess: tras("Aprobación forzada: saltados los OK del equipo."),
     onError,
   });
   // QUITAR DE ESTA RED: borra SOLO la pieza de esta red (la fila por plataforma); la idea y
@@ -276,9 +276,9 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     !!usuario?.puede_coordinar;
   const onForzar = async () => {
     const ok = await confirmar({
-      titulo: "Saltar la cadena de aprobación",
+      titulo: "Saltar los OK del equipo",
       mensaje:
-        "¿Aprobar sin el visto bueno del equipo?",
+        "¿Aprobar sin el segundo par de ojos del equipo? La crítica IA, si está activa, igual revisará la pieza antes de publicarla.",
       textoConfirmar: "Forzar aprobación",
     });
     if (ok) forzar.mutate();
