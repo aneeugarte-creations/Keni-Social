@@ -383,6 +383,63 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
   });
 });
 
+// ── Renombrar la CATEGORÍA desde la cabecera de sección (relabela, no mueve plantillas) ───────────
+
+describe("GaleriaPlantillas — renombrar categoría desde la cabecera", () => {
+  it("doble clic en la cabecera + Enter relabela vía onRenombrarEtiqueta (marca de una representante, slug)", () => {
+    const onRenombrarEtiqueta = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA, MARCADOR]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onRenombrarEtiqueta={onRenombrarEtiqueta}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByRole("heading", { name: "Última hora" }));
+    const input = screen.getByLabelText("Renombrar categoría");
+    fireEvent.change(input, { target: { value: "Lo último" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRenombrarEtiqueta).toHaveBeenCalledTimes(1);
+    expect(onRenombrarEtiqueta).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cat-1" }),
+      "ultima-hora",
+      "Lo último",
+    );
+  });
+
+  it("sin onRenombrarEtiqueta la cabecera no es editable (doble clic no abre input)", () => {
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA, MARCADOR]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByRole("heading", { name: "Última hora" }));
+    expect(screen.queryByLabelText("Renombrar categoría")).not.toBeInTheDocument();
+  });
+
+  it("Escape cancela la edición sin relabelar", () => {
+    const onRenombrarEtiqueta = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA, MARCADOR]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onRenombrarEtiqueta={onRenombrarEtiqueta}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.doubleClick(screen.getByRole("heading", { name: "Última hora" }));
+    fireEvent.keyDown(screen.getByLabelText("Renombrar categoría"), { key: "Escape" });
+    expect(onRenombrarEtiqueta).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Última hora" })).toBeInTheDocument();
+  });
+});
+
 // ── PublicacionPlantillas como panel «Diseño» del rail (sin modal) ────────────────────────────────
 
 describe("PublicacionPlantillas — modo panel del rail", () => {

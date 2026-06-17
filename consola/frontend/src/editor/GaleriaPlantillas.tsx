@@ -149,9 +149,14 @@ export function PublicacionPlantillas({
   // Drag-and-drop de reordenación: id que se arrastra y id sobre el que se soltaría (para el realce).
   const [arrastrando, setArrastrando] = useState<string | null>(null);
   const [sobre, setSobre] = useState<string | null>(null);
+  // Renombrado inline del RÓTULO desde la CABECERA de categoría: `clave` = `${marca}|${slug}` (única
+  // por sección). Relabela vía `onRenombrarEtiqueta` (no mueve plantillas: el slug es la identidad).
+  const [renCab, setRenCab] = useState<{ clave: string; valor: string } | null>(null);
 
   // Ref para rastrear si el commit ya se ejecutó (evita doble PATCH en blur después de Enter).
   const commitHecho = useRef(false);
+  // Igual que `commitHecho` pero para el renombrado desde la cabecera (Enter/blur no disparan dos veces).
+  const renCabHecho = useRef(false);
 
   const tipoEfectivo = tipoFijo ?? filtroTipo;
   const plantillasTipo = plantillas.filter((p) => (p.tipo ?? "foto") === tipoEfectivo);
@@ -236,6 +241,17 @@ export function PublicacionPlantillas({
     const n = editVal.trim();
     if (n && n !== p.nombre) onRenombrar?.(p, n);
     setEditId(null);
+  };
+
+  // Confirma el renombrado desde la CABECERA: relabela el rótulo de la categoría del grupo (vía una
+  // plantilla representante para conocer la marca). No mueve plantillas. Sin cambio real o sin handler
+  // no hace nada. `Enter`/blur no commitean dos veces (`renCabHecho`).
+  const commitCabecera = (rep: PlantillaDiseno, slug: string, etiquetaActual: string, valor: string) => {
+    if (renCabHecho.current) return;
+    renCabHecho.current = true;
+    setRenCab(null);
+    const nueva = valor.trim();
+    if (nueva && nueva !== etiquetaActual) onRenombrarEtiqueta?.(rep, slug, nueva);
   };
 
   const padX = compacto ? "px-3" : "px-4";
@@ -491,13 +507,51 @@ export function PublicacionPlantillas({
                     {s.grupos.map((grupo) => {
                       // Dentro de una sección de marca, la categoría baja un nivel (h4).
                       const Cabecera = agruparPorMarca ? "h4" : "h3";
+                      // Plantilla representante del grupo (para conocer la marca al relabelar) y clave
+                      // única de la cabecera dentro de la galería.
+                      const rep = grupo.plantillas[0];
+                      const claveCab = `${rep?.marca ?? ""}|${grupo.slug}`;
+                      const gestionCab = !!onRenombrarEtiqueta && !!rep;
                       return (
                         <section key={grupo.slug}>
-                          {s.conCabeceras && (
-                            <Cabecera className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                              {grupo.etiqueta}
-                            </Cabecera>
-                          )}
+                          {s.conCabeceras &&
+                            (gestionCab && renCab?.clave === claveCab ? (
+                              <input
+                                autoFocus
+                                aria-label="Renombrar categoría"
+                                value={renCab.valor}
+                                onChange={(e) => setRenCab({ clave: claveCab, valor: e.target.value })}
+                                onBlur={() => commitCabecera(rep, grupo.slug, grupo.etiqueta, renCab.valor)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    commitCabecera(rep, grupo.slug, grupo.etiqueta, renCab.valor);
+                                  } else if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    renCabHecho.current = true; // el blur del desmontaje no debe commitear
+                                    setRenCab(null);
+                                  }
+                                }}
+                                className="mb-2 w-full max-w-[14rem] rounded border border-primary bg-background px-1 py-0.5 text-xs font-medium uppercase tracking-wide"
+                              />
+                            ) : (
+                              <Cabecera
+                                className={`mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground ${
+                                  gestionCab ? "cursor-text hover:text-foreground" : ""
+                                }`}
+                                onDoubleClick={
+                                  gestionCab
+                                    ? () => {
+                                        renCabHecho.current = false;
+                                        setRenCab({ clave: claveCab, valor: grupo.etiqueta });
+                                      }
+                                    : undefined
+                                }
+                                title={gestionCab ? "Doble clic para renombrar la categoría" : undefined}
+                              >
+                                {grupo.etiqueta}
+                              </Cabecera>
+                            ))}
                           {dndActivo ? (
                             // Rejilla UNIFORME (filas/columnas regulares) para que arrastrar a una
                             // posición exacta sea predecible (el masonry por columnas no lo es).
