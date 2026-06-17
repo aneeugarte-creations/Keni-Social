@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { SwapTurno } from "@/types";
+import type { EventoRota, FranjaSemana, SwapTurno, TurnoRota } from "@/types";
 
-import { contarSwapsPendientes } from "./comun";
+import { contarSwapsPendientes, eventosPorTurno, type CubridorEvento } from "./comun";
 
 function swap(over: Partial<SwapTurno> = {}): SwapTurno {
   return {
@@ -64,5 +64,107 @@ describe("contarSwapsPendientes", () => {
       swap({ estado: "rechazado_admin", destinatario_id: "yo" }),
     ];
     expect(contarSwapsPendientes(swaps, "yo", true)).toBe(0);
+  });
+});
+
+function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
+  return {
+    id: "f1",
+    lunes: "2026-06-15",
+    nombre: "Mañana",
+    inicio: "08:00",
+    fin: "16:00",
+    orden: 0,
+    es_descanso: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
+function evento(over: Partial<EventoRota> = {}): EventoRota {
+  return {
+    id: "e1",
+    titulo: "Partido",
+    fecha: "2026-06-15",
+    hora: "10:00",
+    contenido: "",
+    nota: "",
+    tipo_cobertura: "transmision",
+    prioridad: "media",
+    cambiado: false,
+    actualizado: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
+function turno(over: Partial<TurnoRota> = {}): TurnoRota {
+  return {
+    id: "t1",
+    semana: "2026-06-15",
+    fecha: "2026-06-15",
+    miembro_id: "u1",
+    miembro_nombre: "Ana",
+    franja_id: "f1",
+    franja_nombre: "Mañana",
+    franja: "matutino",
+    estado: "aprobado",
+    override: false,
+    motivo: "",
+    nota_relevo: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
+describe("eventosPorTurno — puente franja → eventos que me tocan", () => {
+  const manana = franja({ id: "f1", nombre: "Mañana", inicio: "08:00", fin: "16:00", orden: 0 });
+  const tarde = franja({ id: "f2", nombre: "Tarde", inicio: "16:00", fin: "23:59", orden: 1 });
+  const franjas = [manana, tarde];
+
+  it("mete cada evento en el turno de la franja que contiene su hora, ese día", () => {
+    const turnos = [
+      turno({ id: "tA", franja_id: "f1", fecha: "2026-06-15" }),
+      turno({ id: "tB", franja_id: "f2", fecha: "2026-06-15" }),
+    ];
+    const eventos = [
+      evento({ id: "e-man", hora: "10:00", fecha: "2026-06-15" }),
+      evento({ id: "e-tar", hora: "18:00", fecha: "2026-06-15" }),
+    ];
+    const mapa = eventosPorTurno(turnos, eventos, new Map(), franjas);
+    expect(mapa.get("tA")?.map((i) => i.evento.id)).toEqual(["e-man"]);
+    expect(mapa.get("tB")?.map((i) => i.evento.id)).toEqual(["e-tar"]);
+  });
+
+  it("ordena los eventos por hora dentro del turno", () => {
+    const turnos = [turno({ id: "tA", franja_id: "f1", fecha: "2026-06-15" })];
+    const eventos = [
+      evento({ id: "tarde-man", hora: "11:30", fecha: "2026-06-15" }),
+      evento({ id: "pronto", hora: "09:00", fecha: "2026-06-15" }),
+    ];
+    const mapa = eventosPorTurno(turnos, eventos, new Map(), franjas);
+    expect(mapa.get("tA")?.map((i) => i.evento.id)).toEqual(["pronto", "tarde-man"]);
+  });
+
+  it("no mezcla días: un evento de otro día no entra en el turno", () => {
+    const turnos = [turno({ id: "tA", franja_id: "f1", fecha: "2026-06-15" })];
+    const eventos = [evento({ id: "otro-dia", hora: "10:00", fecha: "2026-06-16" })];
+    const mapa = eventosPorTurno(turnos, eventos, new Map(), franjas);
+    expect(mapa.get("tA")).toEqual([]);
+  });
+
+  it("adjunta los cubridores (titularidad) que vienen en el mapa", () => {
+    const turnos = [turno({ id: "tA", franja_id: "f1", fecha: "2026-06-15" })];
+    const eventos = [evento({ id: "e-man", hora: "10:00", fecha: "2026-06-15" })];
+    const cubridores = new Map<string, CubridorEvento[]>([
+      ["e-man", [{ id: "u9", nombre: "Bruno" }]],
+    ]);
+    const mapa = eventosPorTurno(turnos, eventos, cubridores, franjas);
+    expect(mapa.get("tA")?.[0]?.cubridores).toEqual([{ id: "u9", nombre: "Bruno" }]);
   });
 });

@@ -1,9 +1,36 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import type { TurnoRota } from "@/types";
+import type { EventoRota, TurnoRota } from "@/types";
 
+import { type ItemEventoCalendario } from "./comun";
 import { ListaMisTurnos } from "./MisTurnos";
+
+function evento(over: Partial<EventoRota> = {}): EventoRota {
+  return {
+    id: "e1",
+    titulo: "Partido",
+    fecha: "2026-06-15",
+    hora: "10:00",
+    contenido: "",
+    nota: "",
+    tipo_cobertura: "transmision",
+    prioridad: "media",
+    cambiado: false,
+    actualizado: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
+/** Mapa `turno.id -> eventos` como el que arma `eventosPorTurno`. */
+function mapaEventos(
+  entradas: Record<string, ItemEventoCalendario[]>,
+): Map<string, ItemEventoCalendario[]> {
+  return new Map(Object.entries(entradas));
+}
 
 function turno(over: Partial<TurnoRota> = {}): TurnoRota {
   return {
@@ -79,5 +106,81 @@ describe("ListaMisTurnos — tarjetas móvil-first", () => {
     // El 15 (Mañana) va antes que el 17 (Tarde).
     expect(items[0]).toHaveTextContent("Mañana");
     expect(items[1]).toHaveTextContent("Tarde");
+  });
+
+  it("sin `eventosPorTurno` no pinta el bloque de eventos (retrocompat)", () => {
+    render(<ListaMisTurnos turnos={[turno()]} />);
+    expect(screen.queryByText("En tu franja")).not.toBeInTheDocument();
+  });
+});
+
+describe("ListaMisTurnos — eventos que me tocan en mi franja", () => {
+  it("muestra «Por cubrir» con botón Coger y avisa al cogerlo", () => {
+    const onCoger = vi.fn();
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ id: "t1" })]}
+        eventosPorTurno={mapaEventos({
+          t1: [{ evento: evento({ id: "e1", titulo: "Final" }), cubridores: [] }],
+        })}
+        miId="u1"
+        onCoger={onCoger}
+      />,
+    );
+    expect(screen.getByText("Final")).toBeInTheDocument();
+    expect(screen.getByText("Por cubrir")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Coger" }));
+    expect(onCoger).toHaveBeenCalledWith("e1");
+  });
+
+  it("marca «Lo cubres tú» cuando el cubridor soy yo (sin botón Coger)", () => {
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ id: "t1" })]}
+        eventosPorTurno={mapaEventos({
+          t1: [{ evento: evento({ id: "e1" }), cubridores: [{ id: "u1", nombre: "Ana" }] }],
+        })}
+        miId="u1"
+        onCoger={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Lo cubres tú")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Coger" })).not.toBeInTheDocument();
+  });
+
+  it("muestra quién lo cubre cuando es otra persona", () => {
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ id: "t1" })]}
+        eventosPorTurno={mapaEventos({
+          t1: [{ evento: evento({ id: "e1" }), cubridores: [{ id: "u9", nombre: "Bruno" }] }],
+        })}
+        miId="u1"
+        onCoger={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Lo cubre Bruno/)).toBeInTheDocument();
+  });
+
+  it("dice «Sin eventos en esta franja» cuando el turno no tiene eventos", () => {
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ id: "t1" })]}
+        eventosPorTurno={mapaEventos({ t1: [] })}
+        miId="u1"
+      />,
+    );
+    expect(screen.getByText("Sin eventos en esta franja.")).toBeInTheDocument();
+  });
+
+  it("en un turno de DESCANSO no pinta el bloque de eventos", () => {
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ id: "t1", franja: "descanso", franja_nombre: "Descanso" })]}
+        eventosPorTurno={mapaEventos({ t1: [] })}
+        miId="u1"
+      />,
+    );
+    expect(screen.queryByText("En tu franja")).not.toBeInTheDocument();
   });
 });

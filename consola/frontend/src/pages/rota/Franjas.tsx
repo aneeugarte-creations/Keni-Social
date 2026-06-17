@@ -1,6 +1,6 @@
 // Diálogos de FRANJAS (de la semana y plantilla global). Partido de pages/Rota.tsx.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Users } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -32,9 +32,12 @@ import type {
 function CuerpoFranjasSemana({
   lunes,
   onCerrar,
+  onAsignar,
 }: {
   lunes: string;
   onCerrar: () => void;
+  /** Atajo a «Asignar turnos» (poner quién trabaja cada franja). Oculto si no se pasa. */
+  onAsignar?: () => void;
 }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
@@ -81,6 +84,16 @@ function CuerpoFranjasSemana({
             cargando={crear.isPending}
             onCrear={(cuerpo) => crear.mutate(cuerpo)}
           />
+          {onAsignar && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                ¿Quién trabaja cada franja? Asigna las personas a sus turnos.
+              </p>
+              <Button variant="outline" size="sm" onClick={onAsignar}>
+                <Users className="h-4 w-4" /> Asignar personas
+              </Button>
+            </div>
+          )}
         </div>
       )}
       <DialogFooter>
@@ -471,9 +484,12 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
 export function DialogFranjas({
   lunes,
   onCerrar,
+  onAsignar,
 }: {
   lunes: string;
   onCerrar: () => void;
+  /** Atajo a «Asignar turnos» desde «Esta semana»; oculto si no se pasa (p. ej. semana aprobada). */
+  onAsignar?: () => void;
 }) {
   const [tab, setTab] = React.useState<"semana" | "plantilla">("semana");
   return (
@@ -506,7 +522,7 @@ export function DialogFranjas({
           ))}
         </div>
         {tab === "semana" ? (
-          <CuerpoFranjasSemana lunes={lunes} onCerrar={onCerrar} />
+          <CuerpoFranjasSemana lunes={lunes} onCerrar={onCerrar} onAsignar={onAsignar} />
         ) : (
           <CuerpoPlantillaFranjas onCerrar={onCerrar} />
         )}

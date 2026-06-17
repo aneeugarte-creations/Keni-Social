@@ -48,6 +48,7 @@ import type {
   SwapTurno,
   TipoAusencia,
   TipoCoberturaEvento,
+  TurnoRota,
 } from "@/types";
 
 
@@ -597,6 +598,38 @@ export interface ItemEventoCalendario {
   evento: EventoRota;
   /** Quién COGIÓ el evento (titularidad real, coherente con el Panorama). Vacío = «Por cubrir». */
   cubridores: CubridorEvento[];
+}
+
+/**
+ * Para cada turno (persona en una franja, un día), los EVENTOS que caen en esa franja ese día
+ * con su titularidad real. Es el puente «mi franja → qué eventos me tocan»: usa el mismo
+ * bucketing hora→franja que la rejilla del calendario (`franjaIdParaHoraEvento`), así Mis
+ * turnos y el Calendario coinciden. Los eventos van ordenados por hora dentro del turno.
+ * `franjas` debe venir ordenada por `orden`. La clave del mapa es `turno.id`.
+ */
+export function eventosPorTurno(
+  turnos: TurnoRota[],
+  eventos: EventoRota[],
+  cubridoresPorEvento: Map<string, CubridorEvento[]>,
+  franjas: FranjaSemana[],
+): Map<string, ItemEventoCalendario[]> {
+  const porCelda = new Map<string, ItemEventoCalendario[]>();
+  for (const evento of eventos) {
+    const franjaId = franjaIdParaHoraEvento(evento.hora, franjas);
+    if (!franjaId) continue;
+    const clave = `${franjaId}|${evento.fecha}`;
+    const lista = porCelda.get(clave) ?? [];
+    lista.push({ evento, cubridores: cubridoresPorEvento.get(evento.id) ?? [] });
+    porCelda.set(clave, lista);
+  }
+  for (const lista of porCelda.values()) {
+    lista.sort((a, b) => (a.evento.hora || "").localeCompare(b.evento.hora || ""));
+  }
+  const m = new Map<string, ItemEventoCalendario[]>();
+  for (const t of turnos) {
+    m.set(t.id, porCelda.get(`${t.franja_id}|${t.fecha}`) ?? []);
+  }
+  return m;
 }
 
 /**

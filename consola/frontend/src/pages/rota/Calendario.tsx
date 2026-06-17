@@ -421,7 +421,18 @@ export function Calendario({
       </div>
 
       {abrirFranjas && (
-        <DialogFranjas lunes={lunes} onCerrar={() => setAbrirFranjas(false)} />
+        <DialogFranjas
+          lunes={lunes}
+          onCerrar={() => setAbrirFranjas(false)}
+          onAsignar={
+            editable
+              ? () => {
+                  setAbrirFranjas(false);
+                  setAbrirAsignar(true);
+                }
+              : undefined
+          }
+        />
       )}
 
       {cargando ? (

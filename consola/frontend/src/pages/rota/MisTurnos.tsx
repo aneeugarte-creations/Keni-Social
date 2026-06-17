@@ -1,14 +1,17 @@
 // Pestaña MIS TURNOS de la rota. Partido mecánicamente de pages/Rota.tsx.
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarDays,
+  Clock,
   Coffee,
+  Loader2,
   Sunrise,
   Sunset,
   User,
 } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -17,12 +20,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { CLAVE_TAREAS } from "@/pages/tareas/claves";
+import { agrupar } from "@/pages/tareas/tipos";
 import type {
   TurnoRota,
 } from "@/types";
 
-import { NavegadorSemana, formatearFechaCorta } from "./comun";
+import {
+  NavegadorSemana,
+  eventosPorTurno,
+  formatearFechaCorta,
+  type CubridorEvento,
+  type ItemEventoCalendario,
+} from "./comun";
 
 
 // --- Pestaña: Mis turnos ----------------------------------------------------
@@ -40,13 +52,73 @@ export function MisTurnos({
   onVerCalendario?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
+  const { usuario } = useSesion();
+  const queryClient = useQueryClient();
   const q = useQuery({
     queryKey: ["rota", "mis-turnos", lunes, marcaActiva],
     queryFn: ({ signal }) =>
       api.misTurnos({ lunes, marca: marcaActiva ?? undefined }, signal),
   });
   const datos = q.data;
-  const mios = datos?.mis_turnos ?? [];
+  const mios = React.useMemo(() => datos?.mis_turnos ?? [], [datos?.mis_turnos]);
+
+  // Eventos de la semana + sus claims (titularidad), para colgar bajo cada turno los
+  // eventos que caen en esa franja. MISMA fuente que el Calendario y el Panorama (queryKeys
+  // compartidas), así coger desde aquí se refleja al instante en las tres vistas.
+  const coberturaQ = useQuery({
+    queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.cobertura({ lunes, marca: marcaActiva ?? undefined }, signal),
+  });
+  const tareasQ = useQuery({
+    queryKey: [...CLAVE_TAREAS, "tareas", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) =>
+      api.contenido({ clase: "tarea", marca: marcaActiva ?? undefined }, signal),
+  });
+
+  // Franjas vivas de la semana, ordenadas por `orden` (las trae la propia respuesta de
+  // mis-turnos): el bucketing hora→franja necesita los rangos.
+  const franjasOrdenadas = React.useMemo(
+    () => (datos?.franjas ?? []).slice().sort((a, b) => a.orden - b.orden),
+    [datos?.franjas],
+  );
+  const eventos = React.useMemo(
+    () => coberturaQ.data?.eventos ?? [],
+    [coberturaQ.data?.eventos],
+  );
+  const tareas = React.useMemo(
+    () => tareasQ.data?.contenidos ?? [],
+    [tareasQ.data?.contenidos],
+  );
+  const cubridoresPorEvento = React.useMemo(() => {
+    const m = new Map<string, CubridorEvento[]>();
+    for (const c of agrupar(tareas, eventos).coberturas) {
+      m.set(
+        c.eventoId,
+        c.cubridores.map((t) => ({ id: t.responsable_id, nombre: t.responsable_nombre })),
+      );
+    }
+    return m;
+  }, [tareas, eventos]);
+  const eventosTurno = React.useMemo(
+    () => eventosPorTurno(mios, eventos, cubridoresPorEvento, franjasOrdenadas),
+    [mios, eventos, cubridoresPorEvento, franjasOrdenadas],
+  );
+  const eventosListos = !coberturaQ.isPending && !tareasQ.isPending;
+
+  // Coger un evento por cubrir desde mi turno (self-claim, sin rol). Invalida las tareas →
+  // las tres vistas (Mis turnos / Calendario / Panorama) lo reflejan.
+  const coger = useMutation({
+    mutationFn: (eventoId: string) => api.cubrirEvento(eventoId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success("Evento cogido: queda a tu nombre.");
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -100,7 +172,14 @@ export function MisTurnos({
               Este horario es un borrador; puede cambiar antes de aprobarse
             </p>
           )}
-          <ListaMisTurnos turnos={mios} />
+          <ListaMisTurnos
+            turnos={mios}
+            eventosPorTurno={eventosTurno}
+            eventosListos={eventosListos}
+            miId={usuario?.id ?? ""}
+            onCoger={(eventoId) => coger.mutate(eventoId)}
+            cogiendoId={coger.isPending ? coger.variables ?? null : null}
+          />
         </>
       )}
     </div>
@@ -115,7 +194,26 @@ const ICONO_FRANJA: Record<string, typeof Sunrise> = {
   descanso: Coffee,
 };
 
-export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
+export function ListaMisTurnos({
+  turnos,
+  eventosPorTurno,
+  eventosListos = true,
+  miId = "",
+  onCoger,
+  cogiendoId,
+}: {
+  turnos: TurnoRota[];
+  /** Eventos que caen en cada turno (clave = `turno.id`). Sin él no se pinta el bloque. */
+  eventosPorTurno?: Map<string, ItemEventoCalendario[]>;
+  /** `false` mientras cargan eventos/claims (muestra un esqueleto en vez de «sin eventos»). */
+  eventosListos?: boolean;
+  /** Id del usuario actual: para marcar «Lo cubres tú». */
+  miId?: string;
+  /** Coger un evento por cubrir (self-claim). Sin él, la columna es de solo lectura. */
+  onCoger?: (eventoId: string) => void;
+  /** Id del evento que se está cogiendo (deshabilita su botón). */
+  cogiendoId?: string | null;
+}) {
   // Orden cronológico (fecha, franja).
   const ordenados = React.useMemo(
     () =>
@@ -137,6 +235,7 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
         // hay (mañana/tarde) y caemos a Sunset para franjas custom (p. ej. "Cobertura nocturna").
         const esDescanso = t.franja === "descanso";
         const IconoFranja = esDescanso ? Coffee : ICONO_FRANJA[t.franja] ?? Sunset;
+        const eventosDelTurno = eventosPorTurno?.get(t.id) ?? [];
         return (
           <li key={t.id}>
             <Card>
@@ -174,6 +273,75 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
                   <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-sm">
                     <span className="font-medium">Relevo: </span>
                     {t.nota_relevo}
+                  </div>
+                )}
+                {/* Eventos que caen en esta franja ese día: «qué me toca cubrir en mi turno».
+                    Solo en franjas laborales (en descanso no hay cobertura). */}
+                {!esDescanso && eventosPorTurno !== undefined && (
+                  <div className="space-y-1.5 border-t pt-2.5">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" /> En tu franja
+                    </p>
+                    {!eventosListos ? (
+                      <Skeleton className="h-4 w-40 rounded" />
+                    ) : eventosDelTurno.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Sin eventos en esta franja.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {eventosDelTurno.map(({ evento, cubridores }) => {
+                          const loCubroYo = cubridores.some((c) => c.id === miId);
+                          const otros = cubridores.filter((c) => c.id !== miId);
+                          return (
+                            <li
+                              key={evento.id}
+                              className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+                            >
+                              <span className="tabular-nums text-muted-foreground">
+                                {evento.hora || "—"}
+                              </span>
+                              <span className="font-medium">{evento.titulo}</span>
+                              {loCubroYo ? (
+                                <Badge variant="ok" className="font-normal">
+                                  Lo cubres tú
+                                </Badge>
+                              ) : cubridores.length > 0 ? (
+                                <Badge variant="secondary" className="font-normal">
+                                  Lo cubre {cubridores.map((c) => c.nombre).join(", ")}
+                                </Badge>
+                              ) : (
+                                <>
+                                  <Badge variant="aviso" className="font-normal">
+                                    Por cubrir
+                                  </Badge>
+                                  {onCoger && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2.5 text-xs"
+                                      onClick={() => onCoger(evento.id)}
+                                      disabled={cogiendoId === evento.id}
+                                    >
+                                      {cogiendoId === evento.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        "Coger"
+                                      )}
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                              {loCubroYo && otros.length > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  · también {otros.map((c) => c.nombre).join(", ")}
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
                 )}
               </CardContent>
