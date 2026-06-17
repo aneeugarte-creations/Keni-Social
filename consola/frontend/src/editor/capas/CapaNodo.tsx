@@ -820,10 +820,14 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       // que traza el MISMO path que el render (coords locales). El degradado/sombra/borde se aplican
       // vía los props de Konva (fillLinearGradient*, shadow*, stroke*). El relleno/borde lo ejecuta
       // `fillStrokeShape`. Rect simple/redondeado mantiene el Rect nativo (cornerRadius).
+      // width/height fijan el getSelfRect del Shape: el Transformer abraza la caja [0,w]×[0,h] de la
+      // forma y aparecen sus tiradores (un Shape sin tamaño da bbox 0×0 y no se puede redimensionar).
       if (c.forma !== "rect") {
         return (
           <Shape
             {...props}
+            width={c.w}
+            height={c.h}
             {...rellenoMarco}
             {...sombraMarco}
             stroke={c.borde?.color}
