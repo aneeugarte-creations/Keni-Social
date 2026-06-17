@@ -58,6 +58,7 @@ _COLS_PIEZA = (
     "foto_encuadre",
     "fotos",
     "carrusel",
+    "hashtags_sugeridos",
     "verificar_auto_hash",
     "hora_post",
     "creado",
@@ -290,6 +291,9 @@ def _insertar_pieza(
         "foto_encuadre": foto_encuadre or "",
         "fotos": fotos or "",
         "carrusel": carrusel or "",
+        # La sugerencia de hashtags la calcula la etapa `sugerir_hashtags` después de redactar; una
+        # pieza nace sin sugerencia.
+        "hashtags_sugeridos": "[]",
         "verificar_auto_hash": verificar_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,

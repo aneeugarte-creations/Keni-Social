@@ -678,6 +678,8 @@ export interface Pieza {
   imagen: string;
   imagen_url: string;
   evergreen: boolean;
+  hashtags_sugeridos?: string[];
+  falta_hashtags?: boolean;
   copy_in_exento?: boolean;
   placa_oculta?: boolean;
   plantilla_diseno_id?: string;

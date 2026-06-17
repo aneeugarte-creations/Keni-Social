@@ -140,6 +140,15 @@ class Pieza(TypedDict):
     imagen: str
     imagen_url: str
     evergreen: bool
+    # Sugerencia de hashtags (etapa `sugerir_hashtags`, tras Redactar): lista CON '#' que el feed
+    # propone en gris para aceptar/rechazar de un clic. [] si no hay sugerencia o la pieza ya lleva
+    # hashtags. Solo se inyecta en el copy cuando un humano la acepta. Opcional: los productores
+    # legados no lo traen y el feed lo lee como [].
+    hashtags_sugeridos: NotRequired[list[str]]
+    # ¿El caption NO lleva ningún hashtag? Gate de la sugerencia en el feed (solo se ofrece cuando
+    # faltan). Derivado del contenido real (mismo criterio que `falta_hashtags` de la etapa IA).
+    # Opcional: el front lo deriva igual del `contenido`, así que un payload legado sin él no rompe.
+    falta_hashtags: NotRequired[bool]
     # Auto-avance: la pieza esta EXENTA de copy-in (imagen dramatica/autoexplicativa que no lo
     # necesita). Opcional: las piezas legadas no lo traen y el feed lo lee como False.
     copy_in_exento: NotRequired[bool]

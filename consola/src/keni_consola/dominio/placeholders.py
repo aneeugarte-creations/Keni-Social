@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from .. import marcas, repos
+from .. import marcas
 from ..tiempo import hoy_utc
 
 # Variables soportadas y su explicacion humana (para el catalogo del frontend). El ORDEN
@@ -59,23 +59,13 @@ def fecha_es(hoy: date | None = None) -> str:
     return f"{hoy.day} de {_MESES_ES[hoy.month - 1]} de {hoy.year}"
 
 
-def _hashtags_de_marca(marca: str) -> str:
-    """Hashtags del PRIMER grupo de esa marca, unidos por espacio ("" si no hay).
+def _hashtags_de_marca(_marca: str) -> str:
+    """Variable `{hashtags}` de plantilla: hoy SIEMPRE vacía (la biblioteca de grupos se retiró).
 
-    Reutiliza el catalogo de grupos de hashtags ya existente (`repos`); tolerante: si
-    no hay grupos o la marca no tiene ninguno, devuelve "". Nunca rompe la expansion.
+    Los hashtags ya no se expanden desde un catálogo de grupos: la etapa `sugerir_hashtags` los
+    propone en el feed para que un humano los acepte. Se conserva la variable por compatibilidad
+    con las plantillas existentes, resolviéndola a "".
     """
-    if not marca:
-        return ""
-    try:
-        grupos = repos.listar_grupos_hashtags()
-    except Exception:  # noqa: BLE001 -- la expansion nunca rompe por un fallo de catalogo
-        return ""
-    for grupo in grupos:
-        if grupo.get("marca") == marca:
-            tags = [t for t in grupo.get("hashtags", []) if isinstance(t, str)]
-            if tags:
-                return " ".join(tags)
     return ""
 
 

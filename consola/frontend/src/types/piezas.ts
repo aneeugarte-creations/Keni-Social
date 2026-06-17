@@ -117,34 +117,6 @@ export interface CuerpoActualizarPieza {
   espejo?: boolean;
 }
 
-// --- Hashtags ---
-
-/** Un grupo de hashtags guardado. */
-export interface GrupoHashtags {
-  id: string;
-  nombre: string;
-  /** Marca asociada (`""` si es general). */
-  marca: string;
-  marca_nombre: string;
-  hashtags: string[];
-}
-
-export interface RespuestaHashtags {
-  grupos: GrupoHashtags[];
-}
-
-export interface RespuestaGrupoHashtags {
-  grupo: GrupoHashtags;
-}
-
-/** Cuerpo para crear o editar un grupo de hashtags. */
-export interface CuerpoGrupoHashtags {
-  nombre: string;
-  /** Marca asociada (opcional). */
-  marca?: string;
-  hashtags: string[];
-}
-
 // --- Franjas (colas de publicación) ---
 
 /** Una franja horaria de la cola de publicación. */

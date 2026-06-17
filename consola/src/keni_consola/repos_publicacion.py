@@ -482,11 +482,6 @@ def listar_etiquetas(
     return db.listar_etiquetas(marca=marca, clase=clase, solo_activas=solo_activas)
 
 
-def hashtags_de_contenido(publicacion_id: str) -> list[str]:
-    """Hashtags (sin '#') de las etiquetas asignadas a un contenido. Delegado en `db.py`."""
-    return db.hashtags_de_contenido(publicacion_id)
-
-
 def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:
     return db.obtener_etiqueta(etiqueta_id)
 

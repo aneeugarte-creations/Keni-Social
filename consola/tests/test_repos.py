@@ -119,12 +119,10 @@ def test_delega_en_db_publicaciones(entorno):
 
 
 def test_delega_en_db_editorial_reutilizable(entorno):
-    # Tras cerrar el rezago (ADR 0006), franjas / grupos de hashtags / fuentes RSS viven en
-    # Postgres: escribir por repos -> leer por db (misma fuente), no por ficheros.
+    # Tras cerrar el rezago (ADR 0006), franjas / fuentes RSS viven en Postgres: escribir por
+    # repos -> leer por db (misma fuente), no por ficheros.
     f = repos.crear_franja(2, "09:00", marca="unotv", red="x")
     assert any(x["id"] == f["id"] for x in db.listar_franjas())
-    g = repos.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol"])
-    assert db.obtener_grupo_hashtags(g["id"])["nombre"] == "Deportes"
     fr = repos.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
     assert db.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
 

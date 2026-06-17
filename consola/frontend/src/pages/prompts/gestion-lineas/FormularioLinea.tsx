@@ -38,7 +38,6 @@ export function FormularioLinea({
     marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : GLOBAL,
   );
   const [keywords, setKeywords] = React.useState("");
-  const [hashtags, setHashtags] = React.useState("");
   const [ttlDias, setTtlDias] = React.useState(0);
   const [esEvergreen, setEsEvergreen] = React.useState(false);
 
@@ -49,7 +48,6 @@ export function FormularioLinea({
         clase,
         marca: marca === GLOBAL ? "" : marca,
         keywords: keywords.trim(),
-        hashtags: hashtags.trim(),
         ttl_dias: ttlDias,
         es_evergreen: esEvergreen,
       }),
@@ -131,18 +129,6 @@ export function FormularioLinea({
           value={keywords}
           onChange={(e) => setKeywords(e.target.value)}
           placeholder="liga, gol, partido, jornada"
-          rows={2}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={`linea-hashtags-${clase}`}>
-          Hashtags
-        </Label>
-        <Textarea
-          id={`linea-hashtags-${clase}`}
-          value={hashtags}
-          onChange={(e) => setHashtags(e.target.value)}
-          placeholder="Nacional, Mundial2026"
           rows={2}
         />
       </div>

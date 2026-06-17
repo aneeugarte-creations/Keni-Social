@@ -24,7 +24,6 @@ from .migraciones_columnas import (
     _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
     _COLUMNAS_EVENTO_ROTA_AMPLIADAS,
     _COLUMNAS_FUENTES_RSS_AMPLIADAS,
-    _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS,
     _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS,
     _COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS,
     _COLUMNAS_PIEZA_ROTA_AMPLIADAS,
@@ -46,7 +45,6 @@ from .migraciones_columnas import (
     _migrar_columnas_etiquetas,
     _migrar_columnas_eventos_rota,
     _migrar_columnas_fuentes_rss,
-    _migrar_columnas_grupos_hashtags,
     _migrar_columnas_noticias_algoritmo,
     _migrar_columnas_noticias_clusters,
     _migrar_columnas_noticias_items,
@@ -329,12 +327,6 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         _migrar_columnas_usuarios,
         re_aplicar_si_cambia=True,
         datos=(_COLUMNAS_USUARIOS_AMPLIADAS, _COLUMNAS_USUARIOS_RETIRADAS),
-    ),
-    Migracion(
-        "0018-columnas-grupos-hashtags",
-        _migrar_columnas_grupos_hashtags,
-        re_aplicar_si_cambia=True,
-        datos=_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS,
     ),
     Migracion(
         "0019-columnas-noticias-clusters",

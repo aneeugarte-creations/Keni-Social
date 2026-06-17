@@ -2,10 +2,10 @@
  * Estrategia de marcas: la superficie editorial POR MARCA de la Texto. Reúne
  *   - LÍNEAS de contenido (etiquetas clase `vertical`) y ORÍGENES (clase `origen` =
  *     interno / externo), cada una con sus `keywords` (CSV para auto-clasificar);
- *   - el catálogo de ETIQUETAS editoriales transversales (campaña / tipo) y los
- *     GRUPOS de HASHTAGS por marca, accesibles desde la cabecera.
+ *   - el catálogo de ETIQUETAS editoriales transversales (campaña / tipo), accesible
+ *     desde la cabecera.
  *
- * Es CRUD sobre `/api/etiquetas` (acotado por clase) y `/api/hashtags`. El filtro
+ * Es CRUD sobre `/api/etiquetas` (acotado por clase). El filtro
  * por marca lo manda SIEMPRE el switch global de la barra superior
  * (`useMarcaActiva`): no hay selector de marca propio. Aquí el equipo afina la
  * estrategia editorial de cada marca.
@@ -14,22 +14,20 @@
  * `./gestion-lineas/`.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Hash, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
 import * as React from "react";
 
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
-import { GestionHashtags } from "@/pages/piezas/GestionHashtags";
 
 import { DialogoEtiquetas } from "./gestion-lineas/DialogoEtiquetas";
 import { PanelClase } from "./gestion-lineas/PanelClase";
 
 export function GestionLineas() {
   const [etiquetasAbierto, setEtiquetasAbierto] = React.useState(false);
-  const [hashtagsAbierto, setHashtagsAbierto] = React.useState(false);
 
-  // Marcas para poblar los diálogos de etiquetas y hashtags (los paneles de
+  // Marcas para poblar el diálogo de etiquetas (los paneles de
   // líneas/orígenes traen las suyas desde /api/etiquetas).
   const catalogosQuery = useQuery({
     queryKey: ["contenido", "catalogos"],
@@ -44,9 +42,6 @@ export function GestionLineas() {
           <ItemMenu icono={Tag} onClick={() => setEtiquetasAbierto(true)}>
             Etiquetas
           </ItemMenu>
-          <ItemMenu icono={Hash} onClick={() => setHashtagsAbierto(true)}>
-            Hashtags
-          </ItemMenu>
         </MenuAcciones>
       </AccionesPagina>
 
@@ -58,11 +53,6 @@ export function GestionLineas() {
       <DialogoEtiquetas
         abierto={etiquetasAbierto}
         onCerrar={() => setEtiquetasAbierto(false)}
-        marcas={marcas}
-      />
-      <GestionHashtags
-        abierto={hashtagsAbierto}
-        onCerrar={() => setHashtagsAbierto(false)}
         marcas={marcas}
       />
     </>

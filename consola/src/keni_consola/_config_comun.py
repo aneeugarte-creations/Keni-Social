@@ -297,6 +297,12 @@ ENV_PIPELINE_VERIFICAR = "KENI_PIPELINE_VERIFICAR"
 ENV_PIPELINE_ILUSTRAR = "KENI_PIPELINE_ILUSTRAR"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Etapa de Sugerir hashtags del pipeline (`KENI_PIPELINE_SUGERIR_HASHTAGS`, toggle de etapa). Tras
+# Redactar, para un borrador SIN hashtags el pipeline propone (no inyecta) los hashtags más
+# relevantes de la biblioteca de la marca, que el feed ofrece en gris para aceptar/rechazar. Def
+# ON: la sugerencia es READ-ONLY y barata, y no toca el copy ni publica nada.
+ENV_PIPELINE_SUGERIR_HASHTAGS = "KENI_PIPELINE_SUGERIR_HASHTAGS"
+
 # Etapa de Revisar del COPY del pipeline: "Revisar" (`KENI_PIPELINE_REVISAR`, toggle de etapa).
 # ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
 # adentro" revisa el copy generado: verificación de VOZ contra los patrones medidos de
@@ -801,6 +807,7 @@ __all__ = [
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
     'ENV_PIPELINE_ILUSTRAR',
+    'ENV_PIPELINE_SUGERIR_HASHTAGS',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',

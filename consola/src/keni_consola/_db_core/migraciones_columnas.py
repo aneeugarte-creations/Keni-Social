@@ -107,6 +107,13 @@ def _migrar_columnas_pieza(con: Any) -> None:
             "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS carrusel TEXT NOT NULL DEFAULT ''"
         )
+    # `hashtags_sugeridos`: sugerencia de la etapa `sugerir_hashtags` (tras Redactar). JSON array
+    # de strings CON '#' que el feed propone en gris para aceptar/rechazar. '[]' = sin sugerencia.
+    if "hashtags_sugeridos" not in cols:
+        con.execute(
+            "ALTER TABLE pieza "
+            "ADD COLUMN IF NOT EXISTS hashtags_sugeridos TEXT NOT NULL DEFAULT '[]'"
+        )
     # `video` / `falta_video` (Ola VIDEO): asset de video y su checklist, espejo de
     # `imagen`/`falta_imagen`. Una pieza `formato='video'` necesita este asset; en piezas `foto`
     # el video es N/A (`falta_video` queda en 0). ADD COLUMN IF NOT EXISTS es no-op si ya estan.
@@ -853,8 +860,6 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("peso", "REAL NOT NULL DEFAULT 1.0"),
 )
 
-_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
-
 def _migrar_columnas_fuentes_rss(con: Any) -> None:
     """Anade a `fuentes_rss` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
     if not _COLUMNAS_FUENTES_RSS_AMPLIADAS:
@@ -865,15 +870,6 @@ def _migrar_columnas_fuentes_rss(con: Any) -> None:
     for columna, tipo in _COLUMNAS_FUENTES_RSS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS {columna} {tipo}")
-
-def _migrar_columnas_grupos_hashtags(con: Any) -> None:
-    """Anade a `grupos_hashtags` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
-    if not _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
-        return
-    columnas = _columnas_existentes(con, "grupos_hashtags")
-    for columna, tipo in _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
-        if columna not in columnas:
-            con.execute(f"ALTER TABLE grupos_hashtags ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 # COBERTURA + traducción + verificación (Ola D): columnas nuevas de `noticias_clusters`. El
 # `CREATE TABLE` ya las declara para BDs nuevas; estas migran las BDs viejas (mismo patrón
@@ -1216,7 +1212,6 @@ def _dedup_turnos_rota(con: Any) -> None:
 # deduplicacion de ITEMS ya la cubre `rss_items_vistos` (PK compuesta). Imponer UNIQUE(url)
 # rompia ese caso de uso legitimo.
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
-    ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
     ("idx_franjas_editoriales_uniq2", "franjas_editoriales (marca, red, dia_semana, hora, categoria)"),
     # GRID POR MARCA: el NOMBRE de una franja es unico por (marca, lunes) — dos marcas pueden
     # tener su propia "Mañana" la misma semana. Sustituye al viejo UNIQUE(lunes,nombre) inline

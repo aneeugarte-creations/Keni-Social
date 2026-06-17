@@ -23,6 +23,8 @@ function pub(overrides: Partial<Pieza>): Pieza {
     red_nombre: "X",
     contenido: "copy",
     copy_in: "",
+    hashtags_sugeridos: [],
+    falta_hashtags: false,
     estado: "borrador",
     revision: "",
     autor_id: "u1",

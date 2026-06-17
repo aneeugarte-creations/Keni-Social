@@ -77,7 +77,7 @@ def claude_skip_permisos() -> bool:
 # residual de Web en el flujo copy-desde-nota lo cubre el delimitador con NONCE
 # `<contenido_usuario_…>` (ver `dominio.generar.envolver_contenido_usuario`). Vetar Web SOLO
 # en los flujos de copy/RSS/autogen/verificación (que no la necesitan) exige `endurecer` por-callsite en
-# cada lanzador (`api/hashtags`, `api/verificar_fuente`, `dominio/evergreen`,
+# cada lanzador (`dominio/sugerir_hashtags`, `api/verificar_fuente`, `dominio/evergreen`,
 # `autogen_redactar`, `pipeline_contenido`, `dominio/prompts_lanzar`...): queda PENDIENTE de
 # revision humana, porque esos lanzadores son de otros modulos (no de este endurecimiento).
 # Configurable con `KENI_CLAUDE_DISALLOWED_TOOLS` (lista coma/espacio): un operador puede

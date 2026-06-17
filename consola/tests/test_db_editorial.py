@@ -17,16 +17,13 @@ from keni_consola import db
 def test_tablas_editoriales_se_crean_on_demand(entorno):
     """La primera operacion crea las tablas y devuelve vacio (no excepcion)."""
     assert db.listar_fuentes_rss() == []
-    assert db.listar_grupos_hashtags() == []
     assert db.listar_franjas() == []
     assert db.contar_fuentes_rss() == 0
-    assert db.contar_grupos_hashtags() == 0
 
 
 def test_esquema_editorial_idempotente(entorno):
     """Re-crear el esquema varias veces no falla ni duplica."""
     db.listar_fuentes_rss()
-    db.listar_grupos_hashtags()
     db.listar_franjas()
     assert db.listar_fuentes_rss() == []
 
@@ -112,26 +109,6 @@ def test_items_vistos_idempotentes_y_sin_fuente(entorno):
     assert db.claves_vistas("fuente-fantasma") == {"k1", "k2"}
     db.marcar_item("fuente-fantasma", "k1", False)
     assert db.claves_vistas("fuente-fantasma") == {"k2"}
-
-
-# --------------------------------------------------------------------------- #
-# Grupos de hashtags                                                           #
-# --------------------------------------------------------------------------- #
-
-
-def test_crud_grupos_hashtags(entorno):
-    g = db.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol", "#mundial"])
-    assert set(g) == {"id", "nombre", "marca", "hashtags"}
-    assert g["hashtags"] == ["#gol", "#mundial"]
-    assert db.obtener_grupo_hashtags(g["id"])["nombre"] == "Deportes"
-    assert db.contar_grupos_hashtags() == 1
-    edit = db.actualizar_grupo_hashtags(g["id"], {"nombre": "Deporte", "hashtags": ["#gol"]})
-    assert edit["nombre"] == "Deporte"
-    assert edit["hashtags"] == ["#gol"]
-    assert db.actualizar_grupo_hashtags("noexiste", {"nombre": "Z"}) is None
-    assert db.borrar_grupo_hashtags(g["id"]) is True
-    assert db.borrar_grupo_hashtags(g["id"]) is False
-    assert db.obtener_grupo_hashtags(g["id"]) is None
 
 
 # --------------------------------------------------------------------------- #

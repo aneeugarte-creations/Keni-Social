@@ -26,6 +26,8 @@ function pub(over: Partial<Pieza> = {}): Pieza {
     red_nombre: "X",
     contenido: "Copy.",
     copy_in: "",
+    hashtags_sugeridos: [],
+    falta_hashtags: false,
     estado: "borrador",
     revision: "",
     autor_id: "",

@@ -77,7 +77,6 @@ _TABLAS = (
     # CONTENIDO editorial reutilizable migrado de ficheros a Postgres (ADR 0006).
     "rss_items_vistos",
     "fuentes_rss",
-    "grupos_hashtags",
     "franjas_editoriales",
     # Inteligencia de plataforma (cambios de algoritmo + tendencias): noticias antes que
     # fuentes (sin FK, pero a la cabeza evita sorpresas de orden).

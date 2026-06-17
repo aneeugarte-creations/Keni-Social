@@ -84,9 +84,10 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
-  it("en la pestaña Producción muestra sus fases (Redactar/Ilustrar), sin Aprobar/Publicar ni Idear", () => {
+  it("en la pestaña Producción muestra sus fases (Redactar/Sugerir hashtags/Ilustrar), sin Aprobar/Publicar ni Idear", () => {
     renderContexto("/maquina/contexto?proceso=produccion");
     expect(screen.getByText("Redactar")).toBeInTheDocument();
+    expect(screen.getByText("Sugerir hashtags")).toBeInTheDocument();
     expect(screen.getByText("Ilustrar")).toBeInTheDocument();
     // «Aprobar» y «Publicar» ya NO son fases del flujo: el OK humano y la salida a redes
     // viven en la página de programación/feed, no en este mapa de la máquina.

@@ -53,6 +53,7 @@ _SELECT_PUBLICACION = (
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
     "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
     "cp.foto_encuadre AS foto_encuadre, cp.fotos AS fotos, cp.carrusel AS carrusel, "
+    "cp.hashtags_sugeridos AS hashtags_sugeridos, "
     "cp.verificar_auto_hash AS verificar_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, "
@@ -145,6 +146,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # CARRUSEL: slides EXTRA en crudo (JSON `[{tipo,objeto}, …]`, orden de publicación).
         # La portada del carrusel es la imagen compuesta de siempre (foto + placa).
         "carrusel": f["carrusel"] or "",
+        # Sugerencia de hashtags (etapa `sugerir_hashtags`): JSON array de strings CON '#'.
+        # '[]' por defecto; la etapa la rellena tras Redactar y `pieza_a_dict` la parsea a lista.
+        "hashtags_sugeridos": f["hashtags_sugeridos"] or "[]",
         "verificar_auto_hash": f["verificar_auto_hash"] or "",
     }
 
@@ -294,6 +298,7 @@ def _publicacion_de_filas(
             "plantilla_diseno_id": plat["plantilla_diseno_id"],
             "foto_encuadre": plat["foto_encuadre"], "fotos": plat["fotos"],
             "carrusel": plat["carrusel"],
+            "hashtags_sugeridos": plat.get("hashtags_sugeridos", "[]"),
             "verificar_auto_hash": plat["verificar_auto_hash"], "pactualizado": plat["actualizado"],
             "cid": padre["id"], "titulo": padre["titulo"], "marca": padre["marca"],
             "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
@@ -536,6 +541,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "foto_encuadre": "foto_encuadre",
     "fotos": "fotos",
     "carrusel": "carrusel",
+    "hashtags_sugeridos": "hashtags_sugeridos",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",

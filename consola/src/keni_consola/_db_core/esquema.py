@@ -407,6 +407,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- imagen compuesta de siempre). JSON array `[{"tipo":"imagen"|"video","objeto":id}, …]`
         -- en el ORDEN de publicación; "" = sin slides extra (o pieza de otro formato).
         carrusel              TEXT NOT NULL DEFAULT '',
+        -- `hashtags_sugeridos`: sugerencia de la etapa `sugerir_hashtags` (tras Redactar). JSON
+        -- array de strings CON '#' que el feed propone en gris para aceptar/rechazar de un clic.
+        -- '[]' = sin sugerencia (o la pieza ya lleva hashtags). No es parte del copy hasta que un
+        -- humano la acepta.
+        hashtags_sugeridos    TEXT NOT NULL DEFAULT '[]',
         verificar_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1090,20 +1095,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_marca ON evergreen_ideas (marca)",
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_estado ON evergreen_ideas (estado)",
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_creado ON evergreen_ideas (creado)",
-    # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
-    # es un JSON serializado de strings (igual patron que `catalogo_media.etiquetas`).
-    # `creado` preserva el orden "recientes primero".
-    """
-    CREATE TABLE IF NOT EXISTS grupos_hashtags (
-        id        TEXT PRIMARY KEY,
-        nombre    TEXT NOT NULL DEFAULT '',
-        marca     TEXT NOT NULL DEFAULT '',
-        hashtags  TEXT NOT NULL DEFAULT '[]',
-        creado    TEXT NOT NULL DEFAULT ''
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_marca ON grupos_hashtags (marca)",
-    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_creado ON grupos_hashtags (creado)",
     # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
     # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
     # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.

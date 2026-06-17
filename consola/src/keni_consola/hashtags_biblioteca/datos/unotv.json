@@ -1,0 +1,1481 @@
+{
+  "marca": "unotv",
+  "ventana": "2025-06-17_2026-06-16",
+  "umbral": 20,
+  "fuente": "metricas_cache (Metricool)",
+  "conteo_por_red": {
+    "facebook": 5,
+    "instagram": 5,
+    "tiktok": 5
+  },
+  "estadisticas_por_red": {
+    "facebook": {
+      "posts": 11996,
+      "adopcion": 0.532,
+      "mediana": 1,
+      "mediana_con_uso": 5
+    },
+    "instagram": {
+      "posts": 7868,
+      "adopcion": 0.935,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    },
+    "tiktok": {
+      "posts": 2410,
+      "adopcion": 0.94,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    }
+  },
+  "hashtags": [
+    {
+      "tag": "unotv",
+      "n": 10677
+    },
+    {
+      "tag": "portalunotv",
+      "n": 7789
+    },
+    {
+      "tag": "tiktokinforma",
+      "n": 3169
+    },
+    {
+      "tag": "mexico",
+      "n": 1638
+    },
+    {
+      "tag": "cdmx",
+      "n": 1243
+    },
+    {
+      "tag": "seguridad",
+      "n": 882
+    },
+    {
+      "tag": "video",
+      "n": 805
+    },
+    {
+      "tag": "estadosunidos",
+      "n": 683
+    },
+    {
+      "tag": "redessociales",
+      "n": 487
+    },
+    {
+      "tag": "noticias",
+      "n": 461
+    },
+    {
+      "tag": "internacional",
+      "n": 438
+    },
+    {
+      "tag": "donaldtrump",
+      "n": 427
+    },
+    {
+      "tag": "porsiteloperdiste",
+      "n": 373
+    },
+    {
+      "tag": "china",
+      "n": 344
+    },
+    {
+      "tag": "israel",
+      "n": 340
+    },
+    {
+      "tag": "puebla",
+      "n": 322
+    },
+    {
+      "tag": "salud",
+      "n": 311
+    },
+    {
+      "tag": "policía",
+      "n": 293
+    },
+    {
+      "tag": "gaza",
+      "n": 284
+    },
+    {
+      "tag": "edomex",
+      "n": 283
+    },
+    {
+      "tag": "claudiasheinbaum",
+      "n": 258
+    },
+    {
+      "tag": "justicia",
+      "n": 254
+    },
+    {
+      "tag": "ia",
+      "n": 240
+    },
+    {
+      "tag": "colombia",
+      "n": 221
+    },
+    {
+      "tag": "irán",
+      "n": 215
+    },
+    {
+      "tag": "mundial2026",
+      "n": 210
+    },
+    {
+      "tag": "brasil",
+      "n": 195
+    },
+    {
+      "tag": "accidente",
+      "n": 187
+    },
+    {
+      "tag": "venezuela",
+      "n": 173
+    },
+    {
+      "tag": "argentina",
+      "n": 167
+    },
+    {
+      "tag": "jalisco",
+      "n": 162
+    },
+    {
+      "tag": "emergencia",
+      "n": 160
+    },
+    {
+      "tag": "veracruz",
+      "n": 160
+    },
+    {
+      "tag": "michoacán",
+      "n": 156
+    },
+    {
+      "tag": "tecnología",
+      "n": 153
+    },
+    {
+      "tag": "japón",
+      "n": 150
+    },
+    {
+      "tag": "rusia",
+      "n": 146
+    },
+    {
+      "tag": "oaxaca",
+      "n": 137
+    },
+    {
+      "tag": "hospital",
+      "n": 136
+    },
+    {
+      "tag": "denuncia",
+      "n": 133
+    },
+    {
+      "tag": "ice",
+      "n": 132
+    },
+    {
+      "tag": "españa",
+      "n": 129
+    },
+    {
+      "tag": "últimahora",
+      "n": 129
+    },
+    {
+      "tag": "futbol",
+      "n": 123
+    },
+    {
+      "tag": "rescate",
+      "n": 123
+    },
+    {
+      "tag": "ucrania",
+      "n": 123
+    },
+    {
+      "tag": "ciencia",
+      "n": 121
+    },
+    {
+      "tag": "incendio",
+      "n": 116
+    },
+    {
+      "tag": "india",
+      "n": 113
+    },
+    {
+      "tag": "prevencion",
+      "n": 112
+    },
+    {
+      "tag": "perrito",
+      "n": 108
+    },
+    {
+      "tag": "sinaloa",
+      "n": 107
+    },
+    {
+      "tag": "investigación",
+      "n": 106
+    },
+    {
+      "tag": "familia",
+      "n": 105
+    },
+    {
+      "tag": "8m",
+      "n": 102
+    },
+    {
+      "tag": "musica",
+      "n": 102
+    },
+    {
+      "tag": "peru",
+      "n": 102
+    },
+    {
+      "tag": "iztapalapa",
+      "n": 99
+    },
+    {
+      "tag": "motocicleta",
+      "n": 98
+    },
+    {
+      "tag": "badbunny",
+      "n": 97
+    },
+    {
+      "tag": "metro",
+      "n": 95
+    },
+    {
+      "tag": "tránsito",
+      "n": 95
+    },
+    {
+      "tag": "guanajuato",
+      "n": 92
+    },
+    {
+      "tag": "chiapas",
+      "n": 91
+    },
+    {
+      "tag": "francia",
+      "n": 90
+    },
+    {
+      "tag": "fashion",
+      "n": 86
+    },
+    {
+      "tag": "grwm",
+      "n": 86
+    },
+    {
+      "tag": "onu",
+      "n": 86
+    },
+    {
+      "tag": "ootd",
+      "n": 86
+    },
+    {
+      "tag": "cuba",
+      "n": 85
+    },
+    {
+      "tag": "nuevoleón",
+      "n": 84
+    },
+    {
+      "tag": "saludmental",
+      "n": 83
+    },
+    {
+      "tag": "california",
+      "n": 82
+    },
+    {
+      "tag": "palestina",
+      "n": 82
+    },
+    {
+      "tag": "ecatepec",
+      "n": 80
+    },
+    {
+      "tag": "unam",
+      "n": 79
+    },
+    {
+      "tag": "bebe",
+      "n": 78
+    },
+    {
+      "tag": "guadalajara",
+      "n": 78
+    },
+    {
+      "tag": "ecuador",
+      "n": 77
+    },
+    {
+      "tag": "nasa",
+      "n": 77
+    },
+    {
+      "tag": "bts",
+      "n": 76
+    },
+    {
+      "tag": "trump",
+      "n": 75
+    },
+    {
+      "tag": "clima",
+      "n": 72
+    },
+    {
+      "tag": "imss",
+      "n": 72
+    },
+    {
+      "tag": "política",
+      "n": 72
+    },
+    {
+      "tag": "cnte",
+      "n": 71
+    },
+    {
+      "tag": "mundial",
+      "n": 71
+    },
+    {
+      "tag": "ssc",
+      "n": 71
+    },
+    {
+      "tag": "motociclista",
+      "n": 70
+    },
+    {
+      "tag": "cine",
+      "n": 69
+    },
+    {
+      "tag": "guerrero",
+      "n": 69
+    },
+    {
+      "tag": "nicolásmaduro",
+      "n": 68
+    },
+    {
+      "tag": "coreadelsur",
+      "n": 67
+    },
+    {
+      "tag": "tijuana",
+      "n": 67
+    },
+    {
+      "tag": "economia",
+      "n": 66
+    },
+    {
+      "tag": "monterrey",
+      "n": 65
+    },
+    {
+      "tag": "mujeres",
+      "n": 65
+    },
+    {
+      "tag": "policías",
+      "n": 65
+    },
+    {
+      "tag": "protesta",
+      "n": 64
+    },
+    {
+      "tag": "reinounido",
+      "n": 64
+    },
+    {
+      "tag": "debate",
+      "n": 63
+    },
+    {
+      "tag": "lluvias",
+      "n": 63
+    },
+    {
+      "tag": "navidad",
+      "n": 63
+    },
+    {
+      "tag": "migrantes",
+      "n": 62
+    },
+    {
+      "tag": "zacatecas",
+      "n": 61
+    },
+    {
+      "tag": "inundaciones",
+      "n": 60
+    },
+    {
+      "tag": "querétaro",
+      "n": 60
+    },
+    {
+      "tag": "mujer",
+      "n": 59
+    },
+    {
+      "tag": "camión",
+      "n": 58
+    },
+    {
+      "tag": "detencion",
+      "n": 58
+    },
+    {
+      "tag": "fiscalía",
+      "n": 58
+    },
+    {
+      "tag": "cancún",
+      "n": 57
+    },
+    {
+      "tag": "chihuahua",
+      "n": 57
+    },
+    {
+      "tag": "cjng",
+      "n": 56
+    },
+    {
+      "tag": "lluvia",
+      "n": 56
+    },
+    {
+      "tag": "morelos",
+      "n": 56
+    },
+    {
+      "tag": "tabasco",
+      "n": 56
+    },
+    {
+      "tag": "transportepúblico",
+      "n": 56
+    },
+    {
+      "tag": "videos",
+      "n": 56
+    },
+    {
+      "tag": "explosión",
+      "n": 55
+    },
+    {
+      "tag": "fifa",
+      "n": 55
+    },
+    {
+      "tag": "gobierno",
+      "n": 55
+    },
+    {
+      "tag": "guardianacional",
+      "n": 55
+    },
+    {
+      "tag": "acapulco",
+      "n": 54
+    },
+    {
+      "tag": "alemania",
+      "n": 54
+    },
+    {
+      "tag": "movilidad",
+      "n": 54
+    },
+    {
+      "tag": "quintanaroo",
+      "n": 54
+    },
+    {
+      "tag": "tlaxcala",
+      "n": 54
+    },
+    {
+      "tag": "italia",
+      "n": 53
+    },
+    {
+      "tag": "tráiler",
+      "n": 53
+    },
+    {
+      "tag": "chile",
+      "n": 52
+    },
+    {
+      "tag": "fgr",
+      "n": 52
+    },
+    {
+      "tag": "oms",
+      "n": 52
+    },
+    {
+      "tag": "styling",
+      "n": 52
+    },
+    {
+      "tag": "perritos",
+      "n": 51
+    },
+    {
+      "tag": "almomento",
+      "n": 50
+    },
+    {
+      "tag": "historia",
+      "n": 50
+    },
+    {
+      "tag": "niños",
+      "n": 50
+    },
+    {
+      "tag": "proteccióncivil",
+      "n": 50
+    },
+    {
+      "tag": "sonora",
+      "n": 50
+    },
+    {
+      "tag": "turismo",
+      "n": 50
+    },
+    {
+      "tag": "polemica",
+      "n": 49
+    },
+    {
+      "tag": "tamaulipas",
+      "n": 49
+    },
+    {
+      "tag": "coahuila",
+      "n": 48
+    },
+    {
+      "tag": "concierto",
+      "n": 48
+    },
+    {
+      "tag": "culiacán",
+      "n": 48
+    },
+    {
+      "tag": "vigilancia",
+      "n": 48
+    },
+    {
+      "tag": "agua",
+      "n": 47
+    },
+    {
+      "tag": "espacio",
+      "n": 47
+    },
+    {
+      "tag": "zoológico",
+      "n": 47
+    },
+    {
+      "tag": "feminicidio",
+      "n": 46
+    },
+    {
+      "tag": "indonesia",
+      "n": 46
+    },
+    {
+      "tag": "texas",
+      "n": 46
+    },
+    {
+      "tag": "uruapan",
+      "n": 46
+    },
+    {
+      "tag": "bienestar",
+      "n": 45
+    },
+    {
+      "tag": "estudiantes",
+      "n": 45
+    },
+    {
+      "tag": "niño",
+      "n": 45
+    },
+    {
+      "tag": "conductor",
+      "n": 44
+    },
+    {
+      "tag": "fuego",
+      "n": 44
+    },
+    {
+      "tag": "trabajo",
+      "n": 44
+    },
+    {
+      "tag": "bomberos",
+      "n": 43
+    },
+    {
+      "tag": "elsalvador",
+      "n": 43
+    },
+    {
+      "tag": "durango",
+      "n": 42
+    },
+    {
+      "tag": "fundaciontelmextelcel",
+      "n": 42
+    },
+    {
+      "tag": "investigaciones",
+      "n": 42
+    },
+    {
+      "tag": "perros",
+      "n": 42
+    },
+    {
+      "tag": "yucatán",
+      "n": 42
+    },
+    {
+      "tag": "carlosmanzo",
+      "n": 41
+    },
+    {
+      "tag": "drones",
+      "n": 41
+    },
+    {
+      "tag": "guatemala",
+      "n": 41
+    },
+    {
+      "tag": "jeffreyepstein",
+      "n": 41
+    },
+    {
+      "tag": "mascotas",
+      "n": 41
+    },
+    {
+      "tag": "robo",
+      "n": 41
+    },
+    {
+      "tag": "tailandia",
+      "n": 41
+    },
+    {
+      "tag": "tlalpan",
+      "n": 41
+    },
+    {
+      "tag": "toluca",
+      "n": 41
+    },
+    {
+      "tag": "derechoshumanos",
+      "n": 40
+    },
+    {
+      "tag": "hidalgo",
+      "n": 40
+    },
+    {
+      "tag": "marcha",
+      "n": 40
+    },
+    {
+      "tag": "mediooriente",
+      "n": 40
+    },
+    {
+      "tag": "papaleónxiv",
+      "n": 40
+    },
+    {
+      "tag": "avion",
+      "n": 39
+    },
+    {
+      "tag": "dinero",
+      "n": 39
+    },
+    {
+      "tag": "perro",
+      "n": 39
+    },
+    {
+      "tag": "protestas",
+      "n": 39
+    },
+    {
+      "tag": "turistas",
+      "n": 39
+    },
+    {
+      "tag": "carretera",
+      "n": 38
+    },
+    {
+      "tag": "conservación",
+      "n": 38
+    },
+    {
+      "tag": "escuela",
+      "n": 38
+    },
+    {
+      "tag": "nl",
+      "n": 38
+    },
+    {
+      "tag": "nyc",
+      "n": 38
+    },
+    {
+      "tag": "turquía",
+      "n": 38
+    },
+    {
+      "tag": "coche",
+      "n": 37
+    },
+    {
+      "tag": "coreadelnorte",
+      "n": 37
+    },
+    {
+      "tag": "faunasilvestre",
+      "n": 37
+    },
+    {
+      "tag": "influencer",
+      "n": 37
+    },
+    {
+      "tag": "nuevayork",
+      "n": 37
+    },
+    {
+      "tag": "paramédicos",
+      "n": 37
+    },
+    {
+      "tag": "pareja",
+      "n": 37
+    },
+    {
+      "tag": "precauciones",
+      "n": 37
+    },
+    {
+      "tag": "senado",
+      "n": 37
+    },
+    {
+      "tag": "australia",
+      "n": 36
+    },
+    {
+      "tag": "cerebro",
+      "n": 36
+    },
+    {
+      "tag": "fbi",
+      "n": 36
+    },
+    {
+      "tag": "robot",
+      "n": 36
+    },
+    {
+      "tag": "sarampión",
+      "n": 35
+    },
+    {
+      "tag": "army",
+      "n": 34
+    },
+    {
+      "tag": "arte",
+      "n": 34
+    },
+    {
+      "tag": "groenlandia",
+      "n": 34
+    },
+    {
+      "tag": "luna",
+      "n": 34
+    },
+    {
+      "tag": "naucalpan",
+      "n": 34
+    },
+    {
+      "tag": "patrulla",
+      "n": 34
+    },
+    {
+      "tag": "tren",
+      "n": 34
+    },
+    {
+      "tag": "alerta",
+      "n": 33
+    },
+    {
+      "tag": "cuernavaca",
+      "n": 33
+    },
+    {
+      "tag": "educacion",
+      "n": 33
+    },
+    {
+      "tag": "florida",
+      "n": 33
+    },
+    {
+      "tag": "paz",
+      "n": 33
+    },
+    {
+      "tag": "reforma",
+      "n": 33
+    },
+    {
+      "tag": "aranceles",
+      "n": 32
+    },
+    {
+      "tag": "cultura",
+      "n": 32
+    },
+    {
+      "tag": "gusanobarrenador",
+      "n": 32
+    },
+    {
+      "tag": "sismo",
+      "n": 32
+    },
+    {
+      "tag": "autobús",
+      "n": 31
+    },
+    {
+      "tag": "comida",
+      "n": 31
+    },
+    {
+      "tag": "msxxi2025",
+      "n": 31
+    },
+    {
+      "tag": "robots",
+      "n": 31
+    },
+    {
+      "tag": "aguascalientes",
+      "n": 30
+    },
+    {
+      "tag": "aicm",
+      "n": 30
+    },
+    {
+      "tag": "pipa",
+      "n": 30
+    },
+    {
+      "tag": "sanluispotosí",
+      "n": 30
+    },
+    {
+      "tag": "xochimilco",
+      "n": 30
+    },
+    {
+      "tag": "zócalo",
+      "n": 30
+    },
+    {
+      "tag": "colima",
+      "n": 29
+    },
+    {
+      "tag": "losángeles",
+      "n": 29
+    },
+    {
+      "tag": "operativo",
+      "n": 29
+    },
+    {
+      "tag": "playa",
+      "n": 29
+    },
+    {
+      "tag": "qepd",
+      "n": 29
+    },
+    {
+      "tag": "aeropuerto",
+      "n": 28
+    },
+    {
+      "tag": "bloqueo",
+      "n": 28
+    },
+    {
+      "tag": "chatgpt",
+      "n": 28
+    },
+    {
+      "tag": "deporte",
+      "n": 28
+    },
+    {
+      "tag": "diainternacionaldelamujer",
+      "n": 28
+    },
+    {
+      "tag": "filipinas",
+      "n": 28
+    },
+    {
+      "tag": "gas",
+      "n": 28
+    },
+    {
+      "tag": "inah",
+      "n": 28
+    },
+    {
+      "tag": "líbano",
+      "n": 28
+    },
+    {
+      "tag": "manifestacion",
+      "n": 28
+    },
+    {
+      "tag": "medicina",
+      "n": 28
+    },
+    {
+      "tag": "transporte",
+      "n": 28
+    },
+    {
+      "tag": "transportistas",
+      "n": 28
+    },
+    {
+      "tag": "viral",
+      "n": 28
+    },
+    {
+      "tag": "artemisii",
+      "n": 27
+    },
+    {
+      "tag": "cambioclimatico",
+      "n": 27
+    },
+    {
+      "tag": "emergencias",
+      "n": 27
+    },
+    {
+      "tag": "gato",
+      "n": 27
+    },
+    {
+      "tag": "infidelidad",
+      "n": 27
+    },
+    {
+      "tag": "inteligenciaartificial",
+      "n": 27
+    },
+    {
+      "tag": "madresbuscadoras",
+      "n": 27
+    },
+    {
+      "tag": "migracion",
+      "n": 27
+    },
+    {
+      "tag": "morelia",
+      "n": 27
+    },
+    {
+      "tag": "noruega",
+      "n": 27
+    },
+    {
+      "tag": "petróleo",
+      "n": 27
+    },
+    {
+      "tag": "prisión",
+      "n": 27
+    },
+    {
+      "tag": "semanasanta",
+      "n": 27
+    },
+    {
+      "tag": "socavon",
+      "n": 27
+    },
+    {
+      "tag": "auto",
+      "n": 26
+    },
+    {
+      "tag": "ayudahumanitaria",
+      "n": 26
+    },
+    {
+      "tag": "bloqueos",
+      "n": 26
+    },
+    {
+      "tag": "christiannodal",
+      "n": 26
+    },
+    {
+      "tag": "desaparecidos",
+      "n": 26
+    },
+    {
+      "tag": "generacionz",
+      "n": 26
+    },
+    {
+      "tag": "hongkong",
+      "n": 26
+    },
+    {
+      "tag": "reacciones",
+      "n": 26
+    },
+    {
+      "tag": "slp",
+      "n": 26
+    },
+    {
+      "tag": "taxi",
+      "n": 26
+    },
+    {
+      "tag": "volcan",
+      "n": 26
+    },
+    {
+      "tag": "marina",
+      "n": 25
+    },
+    {
+      "tag": "periodistas",
+      "n": 25
+    },
+    {
+      "tag": "scjn",
+      "n": 25
+    },
+    {
+      "tag": "sol",
+      "n": 25
+    },
+    {
+      "tag": "vehículo",
+      "n": 25
+    },
+    {
+      "tag": "canadá",
+      "n": 24
+    },
+    {
+      "tag": "caribe",
+      "n": 24
+    },
+    {
+      "tag": "cruzroja",
+      "n": 24
+    },
+    {
+      "tag": "elonmusk",
+      "n": 24
+    },
+    {
+      "tag": "europa",
+      "n": 24
+    },
+    {
+      "tag": "hamas",
+      "n": 24
+    },
+    {
+      "tag": "moto",
+      "n": 24
+    },
+    {
+      "tag": "neurotips",
+      "n": 24
+    },
+    {
+      "tag": "palacionacional",
+      "n": 24
+    },
+    {
+      "tag": "alcalde",
+      "n": 23
+    },
+    {
+      "tag": "animales",
+      "n": 23
+    },
+    {
+      "tag": "atenciónmédica",
+      "n": 23
+    },
+    {
+      "tag": "avioneta",
+      "n": 23
+    },
+    {
+      "tag": "bajacalifornia",
+      "n": 23
+    },
+    {
+      "tag": "bogota",
+      "n": 23
+    },
+    {
+      "tag": "defensa",
+      "n": 23
+    },
+    {
+      "tag": "fuga",
+      "n": 23
+    },
+    {
+      "tag": "infraestructura",
+      "n": 23
+    },
+    {
+      "tag": "ministeriopúblico",
+      "n": 23
+    },
+    {
+      "tag": "sep",
+      "n": 23
+    },
+    {
+      "tag": "abandono",
+      "n": 22
+    },
+    {
+      "tag": "apoyo",
+      "n": 22
+    },
+    {
+      "tag": "caballo",
+      "n": 22
+    },
+    {
+      "tag": "calor",
+      "n": 22
+    },
+    {
+      "tag": "elecciones",
+      "n": 22
+    },
+    {
+      "tag": "honduras",
+      "n": 22
+    },
+    {
+      "tag": "huachicol",
+      "n": 22
+    },
+    {
+      "tag": "inegi",
+      "n": 22
+    },
+    {
+      "tag": "infancia",
+      "n": 22
+    },
+    {
+      "tag": "inseguridad",
+      "n": 22
+    },
+    {
+      "tag": "kenia",
+      "n": 22
+    },
+    {
+      "tag": "lego",
+      "n": 22
+    },
+    {
+      "tag": "maltratoanimal",
+      "n": 22
+    },
+    {
+      "tag": "misterio",
+      "n": 22
+    },
+    {
+      "tag": "niña",
+      "n": 22
+    },
+    {
+      "tag": "parís",
+      "n": 22
+    },
+    {
+      "tag": "portugal",
+      "n": 22
+    },
+    {
+      "tag": "puente",
+      "n": 22
+    },
+    {
+      "tag": "punch",
+      "n": 22
+    },
+    {
+      "tag": "record",
+      "n": 22
+    },
+    {
+      "tag": "shakira",
+      "n": 22
+    },
+    {
+      "tag": "turista",
+      "n": 22
+    },
+    {
+      "tag": "visa",
+      "n": 22
+    },
+    {
+      "tag": "ébola",
+      "n": 22
+    },
+    {
+      "tag": "bicicleta",
+      "n": 21
+    },
+    {
+      "tag": "celular",
+      "n": 21
+    },
+    {
+      "tag": "chicago",
+      "n": 21
+    },
+    {
+      "tag": "ciclista",
+      "n": 21
+    },
+    {
+      "tag": "denuncias",
+      "n": 21
+    },
+    {
+      "tag": "elefante",
+      "n": 21
+    },
+    {
+      "tag": "epstein",
+      "n": 21
+    },
+    {
+      "tag": "gasolinera",
+      "n": 21
+    },
+    {
+      "tag": "hotel",
+      "n": 21
+    },
+    {
+      "tag": "iglesia",
+      "n": 21
+    },
+    {
+      "tag": "inundacion",
+      "n": 21
+    },
+    {
+      "tag": "issste",
+      "n": 21
+    },
+    {
+      "tag": "kpop",
+      "n": 21
+    },
+    {
+      "tag": "londres",
+      "n": 21
+    },
+    {
+      "tag": "madre",
+      "n": 21
+    },
+    {
+      "tag": "mercado",
+      "n": 21
+    },
+    {
+      "tag": "nieve",
+      "n": 21
+    },
+    {
+      "tag": "sheinbaum",
+      "n": 21
+    },
+    {
+      "tag": "sistemasolar",
+      "n": 21
+    },
+    {
+      "tag": "sídney",
+      "n": 21
+    },
+    {
+      "tag": "taylorswift",
+      "n": 21
+    },
+    {
+      "tag": "teotihuacán",
+      "n": 21
+    },
+    {
+      "tag": "vivienda",
+      "n": 21
+    },
+    {
+      "tag": "zapopan",
+      "n": 21
+    },
+    {
+      "tag": "casablanca",
+      "n": 20
+    },
+    {
+      "tag": "gentrificacion",
+      "n": 20
+    },
+    {
+      "tag": "missuniverso",
+      "n": 20
+    },
+    {
+      "tag": "otan",
+      "n": 20
+    },
+    {
+      "tag": "periodismo",
+      "n": 20
+    },
+    {
+      "tag": "pozarica",
+      "n": 20
+    },
+    {
+      "tag": "premionobel",
+      "n": 20
+    },
+    {
+      "tag": "roma",
+      "n": 20
+    },
+    {
+      "tag": "sanciones",
+      "n": 20
+    },
+    {
+      "tag": "seguridadvial",
+      "n": 20
+    },
+    {
+      "tag": "taxista",
+      "n": 20
+    },
+    {
+      "tag": "vaticano",
+      "n": 20
+    }
+  ]
+}

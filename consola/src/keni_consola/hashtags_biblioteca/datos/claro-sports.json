@@ -1,0 +1,1852 @@
+{
+  "marca": "claro-sports",
+  "ventana": "2025-06-17_2026-06-16",
+  "umbral": 20,
+  "fuente": "metricas_cache (Metricool)",
+  "conteo_por_red": {
+    "facebook": 1,
+    "instagram": 5,
+    "youtube": 0,
+    "tiktok": 5
+  },
+  "estadisticas_por_red": {
+    "facebook": {
+      "posts": 14290,
+      "adopcion": 0.335,
+      "mediana": 0,
+      "mediana_con_uso": 1
+    },
+    "instagram": {
+      "posts": 12317,
+      "adopcion": 0.984,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    },
+    "youtube": {
+      "posts": 8636,
+      "adopcion": 0.023,
+      "mediana": 0,
+      "mediana_con_uso": 1
+    },
+    "tiktok": {
+      "posts": 2650,
+      "adopcion": 0.999,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    }
+  },
+  "hashtags": [
+    {
+      "tag": "eldeporteaquípasa",
+      "n": 6104
+    },
+    {
+      "tag": "futbol",
+      "n": 5804
+    },
+    {
+      "tag": "aquípasa",
+      "n": 4453
+    },
+    {
+      "tag": "portalclarosports",
+      "n": 3513
+    },
+    {
+      "tag": "ligamx",
+      "n": 2634
+    },
+    {
+      "tag": "másclaroquenunca",
+      "n": 2218
+    },
+    {
+      "tag": "deportes",
+      "n": 2142
+    },
+    {
+      "tag": "mexico",
+      "n": 1724
+    },
+    {
+      "tag": "milanocortina2026",
+      "n": 1566
+    },
+    {
+      "tag": "mundial",
+      "n": 1117
+    },
+    {
+      "tag": "selecciónmexicana",
+      "n": 953
+    },
+    {
+      "tag": "américa",
+      "n": 919
+    },
+    {
+      "tag": "tiktokdeportes",
+      "n": 827
+    },
+    {
+      "tag": "mundial2026",
+      "n": 798
+    },
+    {
+      "tag": "elinviernoaquipasa",
+      "n": 790
+    },
+    {
+      "tag": "clarosports",
+      "n": 734
+    },
+    {
+      "tag": "pumas",
+      "n": 706
+    },
+    {
+      "tag": "cruzazul",
+      "n": 685
+    },
+    {
+      "tag": "f1",
+      "n": 574
+    },
+    {
+      "tag": "apertura2025",
+      "n": 559
+    },
+    {
+      "tag": "juegosolimpicos",
+      "n": 537
+    },
+    {
+      "tag": "chivas",
+      "n": 516
+    },
+    {
+      "tag": "fútbolmexicano",
+      "n": 515
+    },
+    {
+      "tag": "clarosportsenw",
+      "n": 483
+    },
+    {
+      "tag": "laliga",
+      "n": 457
+    },
+    {
+      "tag": "championsleague",
+      "n": 415
+    },
+    {
+      "tag": "realmadrid",
+      "n": 399
+    },
+    {
+      "tag": "toluca",
+      "n": 377
+    },
+    {
+      "tag": "mundialdeclubes",
+      "n": 353
+    },
+    {
+      "tag": "orgullomexicano",
+      "n": 348
+    },
+    {
+      "tag": "premierleague",
+      "n": 345
+    },
+    {
+      "tag": "nfl",
+      "n": 334
+    },
+    {
+      "tag": "winterolympics",
+      "n": 321
+    },
+    {
+      "tag": "tigres",
+      "n": 316
+    },
+    {
+      "tag": "clausura2026",
+      "n": 312
+    },
+    {
+      "tag": "leaguescup",
+      "n": 307
+    },
+    {
+      "tag": "ciclismo",
+      "n": 286
+    },
+    {
+      "tag": "messi",
+      "n": 286
+    },
+    {
+      "tag": "tenis",
+      "n": 274
+    },
+    {
+      "tag": "formula1",
+      "n": 257
+    },
+    {
+      "tag": "rayados",
+      "n": 253
+    },
+    {
+      "tag": "concachampions",
+      "n": 229
+    },
+    {
+      "tag": "mls",
+      "n": 227
+    },
+    {
+      "tag": "barcelona",
+      "n": 220
+    },
+    {
+      "tag": "checoperez",
+      "n": 218
+    },
+    {
+      "tag": "necaxa",
+      "n": 213
+    },
+    {
+      "tag": "liguilla",
+      "n": 198
+    },
+    {
+      "tag": "cristianoronaldo",
+      "n": 194
+    },
+    {
+      "tag": "monterrey",
+      "n": 193
+    },
+    {
+      "tag": "isaacdeltoro",
+      "n": 189
+    },
+    {
+      "tag": "tricolor",
+      "n": 189
+    },
+    {
+      "tag": "copaoro",
+      "n": 188
+    },
+    {
+      "tag": "beisbol",
+      "n": 186
+    },
+    {
+      "tag": "patinajeartístico",
+      "n": 174
+    },
+    {
+      "tag": "aficion",
+      "n": 171
+    },
+    {
+      "tag": "mlb",
+      "n": 165
+    },
+    {
+      "tag": "fútboleuropeo",
+      "n": 161
+    },
+    {
+      "tag": "javieraguirre",
+      "n": 161
+    },
+    {
+      "tag": "fidalgo",
+      "n": 157
+    },
+    {
+      "tag": "boxeo",
+      "n": 154
+    },
+    {
+      "tag": "brasil",
+      "n": 154
+    },
+    {
+      "tag": "pachuca",
+      "n": 151
+    },
+    {
+      "tag": "gol",
+      "n": 149
+    },
+    {
+      "tag": "futbolamericano",
+      "n": 143
+    },
+    {
+      "tag": "cr7",
+      "n": 142
+    },
+    {
+      "tag": "seriea",
+      "n": 141
+    },
+    {
+      "tag": "fútbolinternacional",
+      "n": 135
+    },
+    {
+      "tag": "ucl",
+      "n": 135
+    },
+    {
+      "tag": "jardine",
+      "n": 134
+    },
+    {
+      "tag": "intermiami",
+      "n": 133
+    },
+    {
+      "tag": "efraínjuárez",
+      "n": 131
+    },
+    {
+      "tag": "lesion",
+      "n": 131
+    },
+    {
+      "tag": "clubamerica",
+      "n": 130
+    },
+    {
+      "tag": "nba",
+      "n": 130
+    },
+    {
+      "tag": "memoochoa",
+      "n": 127
+    },
+    {
+      "tag": "ligamxfemenil",
+      "n": 126
+    },
+    {
+      "tag": "argentina",
+      "n": 125
+    },
+    {
+      "tag": "fifa",
+      "n": 125
+    },
+    {
+      "tag": "españa",
+      "n": 124
+    },
+    {
+      "tag": "polémica",
+      "n": 122
+    },
+    {
+      "tag": "asclarow",
+      "n": 121
+    },
+    {
+      "tag": "lmb",
+      "n": 119
+    },
+    {
+      "tag": "estadioazteca",
+      "n": 115
+    },
+    {
+      "tag": "femenil",
+      "n": 115
+    },
+    {
+      "tag": "portugal",
+      "n": 115
+    },
+    {
+      "tag": "mbappé",
+      "n": 114
+    },
+    {
+      "tag": "historia",
+      "n": 108
+    },
+    {
+      "tag": "usopen",
+      "n": 108
+    },
+    {
+      "tag": "keylornavas",
+      "n": 107
+    },
+    {
+      "tag": "psg",
+      "n": 107
+    },
+    {
+      "tag": "motor",
+      "n": 106
+    },
+    {
+      "tag": "seleccion",
+      "n": 105
+    },
+    {
+      "tag": "mundialsub20",
+      "n": 103
+    },
+    {
+      "tag": "raúljiménez",
+      "n": 101
+    },
+    {
+      "tag": "atlas",
+      "n": 100
+    },
+    {
+      "tag": "europaleague",
+      "n": 100
+    },
+    {
+      "tag": "lamineyamal",
+      "n": 98
+    },
+    {
+      "tag": "bundesliga",
+      "n": 97
+    },
+    {
+      "tag": "eltri",
+      "n": 97
+    },
+    {
+      "tag": "gilbertomora",
+      "n": 97
+    },
+    {
+      "tag": "leaguescup2025",
+      "n": 96
+    },
+    {
+      "tag": "santigimenez",
+      "n": 95
+    },
+    {
+      "tag": "fichajes",
+      "n": 93
+    },
+    {
+      "tag": "final",
+      "n": 93
+    },
+    {
+      "tag": "colombia",
+      "n": 92
+    },
+    {
+      "tag": "leyenda",
+      "n": 92
+    },
+    {
+      "tag": "victoria",
+      "n": 92
+    },
+    {
+      "tag": "campeon",
+      "n": 88
+    },
+    {
+      "tag": "xolos",
+      "n": 87
+    },
+    {
+      "tag": "golazo",
+      "n": 86
+    },
+    {
+      "tag": "marruecos",
+      "n": 84
+    },
+    {
+      "tag": "medalladeoro",
+      "n": 83
+    },
+    {
+      "tag": "fútbolfemenil",
+      "n": 82
+    },
+    {
+      "tag": "jugandoclaro",
+      "n": 80
+    },
+    {
+      "tag": "arsenal",
+      "n": 78
+    },
+    {
+      "tag": "fcbarcelona",
+      "n": 77
+    },
+    {
+      "tag": "alexisvega",
+      "n": 76
+    },
+    {
+      "tag": "baseball",
+      "n": 76
+    },
+    {
+      "tag": "larcamón",
+      "n": 76
+    },
+    {
+      "tag": "olympics",
+      "n": 75
+    },
+    {
+      "tag": "arbitraje",
+      "n": 74
+    },
+    {
+      "tag": "livgolf",
+      "n": 74
+    },
+    {
+      "tag": "seriemundial",
+      "n": 74
+    },
+    {
+      "tag": "eldeportepasaaquí",
+      "n": 73
+    },
+    {
+      "tag": "chelsea",
+      "n": 72
+    },
+    {
+      "tag": "juegosolímpicosdeinvierno",
+      "n": 72
+    },
+    {
+      "tag": "barca",
+      "n": 71
+    },
+    {
+      "tag": "goat",
+      "n": 71
+    },
+    {
+      "tag": "superbowl",
+      "n": 71
+    },
+    {
+      "tag": "alcaraz",
+      "n": 70
+    },
+    {
+      "tag": "basketball",
+      "n": 70
+    },
+    {
+      "tag": "epl",
+      "n": 70
+    },
+    {
+      "tag": "italia",
+      "n": 70
+    },
+    {
+      "tag": "chicharito",
+      "n": 69
+    },
+    {
+      "tag": "leyendas",
+      "n": 69
+    },
+    {
+      "tag": "mexicogp",
+      "n": 69
+    },
+    {
+      "tag": "neymar",
+      "n": 69
+    },
+    {
+      "tag": "atletismo",
+      "n": 68
+    },
+    {
+      "tag": "gilmora",
+      "n": 68
+    },
+    {
+      "tag": "figureskating",
+      "n": 67
+    },
+    {
+      "tag": "manchestercity",
+      "n": 67
+    },
+    {
+      "tag": "rumboalmundial",
+      "n": 67
+    },
+    {
+      "tag": "canelo",
+      "n": 66
+    },
+    {
+      "tag": "elclasico",
+      "n": 66
+    },
+    {
+      "tag": "gignac",
+      "n": 65
+    },
+    {
+      "tag": "obedvargas",
+      "n": 65
+    },
+    {
+      "tag": "vascoaguirre",
+      "n": 64
+    },
+    {
+      "tag": "curling",
+      "n": 63
+    },
+    {
+      "tag": "puebla",
+      "n": 63
+    },
+    {
+      "tag": "clavados",
+      "n": 62
+    },
+    {
+      "tag": "realoviedo",
+      "n": 62
+    },
+    {
+      "tag": "afcon2025",
+      "n": 61
+    },
+    {
+      "tag": "atleticodemadrid",
+      "n": 61
+    },
+    {
+      "tag": "copaafricanadenaciones",
+      "n": 61
+    },
+    {
+      "tag": "goldenmoments",
+      "n": 61
+    },
+    {
+      "tag": "golf",
+      "n": 61
+    },
+    {
+      "tag": "concacaf",
+      "n": 60
+    },
+    {
+      "tag": "campeones",
+      "n": 59
+    },
+    {
+      "tag": "clásicocapitalino",
+      "n": 59
+    },
+    {
+      "tag": "conferenceleague",
+      "n": 59
+    },
+    {
+      "tag": "donovancarrillo",
+      "n": 59
+    },
+    {
+      "tag": "edsonálvarez",
+      "n": 59
+    },
+    {
+      "tag": "europa",
+      "n": 59
+    },
+    {
+      "tag": "francia",
+      "n": 59
+    },
+    {
+      "tag": "liverpool",
+      "n": 59
+    },
+    {
+      "tag": "sergioramos",
+      "n": 58
+    },
+    {
+      "tag": "acmilan",
+      "n": 57
+    },
+    {
+      "tag": "australianopen",
+      "n": 57
+    },
+    {
+      "tag": "henrymartín",
+      "n": 57
+    },
+    {
+      "tag": "japón",
+      "n": 57
+    },
+    {
+      "tag": "marcelruiz",
+      "n": 57
+    },
+    {
+      "tag": "semifinales",
+      "n": 57
+    },
+    {
+      "tag": "afcon",
+      "n": 56
+    },
+    {
+      "tag": "mohamed",
+      "n": 56
+    },
+    {
+      "tag": "regreso",
+      "n": 56
+    },
+    {
+      "tag": "malagon",
+      "n": 55
+    },
+    {
+      "tag": "ballondor",
+      "n": 54
+    },
+    {
+      "tag": "fichaje",
+      "n": 54
+    },
+    {
+      "tag": "wimbledon",
+      "n": 54
+    },
+    {
+      "tag": "lafc",
+      "n": 53
+    },
+    {
+      "tag": "tiroconarco",
+      "n": 53
+    },
+    {
+      "tag": "uefa",
+      "n": 53
+    },
+    {
+      "tag": "ligue1",
+      "n": 52
+    },
+    {
+      "tag": "mercadodefichajes",
+      "n": 52
+    },
+    {
+      "tag": "automovilismo",
+      "n": 51
+    },
+    {
+      "tag": "guillermoochoa",
+      "n": 51
+    },
+    {
+      "tag": "mundialdeclubes2025",
+      "n": 51
+    },
+    {
+      "tag": "penal",
+      "n": 51
+    },
+    {
+      "tag": "eliminatorias",
+      "n": 50
+    },
+    {
+      "tag": "clasicojoven",
+      "n": 49
+    },
+    {
+      "tag": "refuerzo",
+      "n": 49
+    },
+    {
+      "tag": "tna",
+      "n": 49
+    },
+    {
+      "tag": "viral",
+      "n": 49
+    },
+    {
+      "tag": "balondeoro",
+      "n": 48
+    },
+    {
+      "tag": "copaoro2025",
+      "n": 48
+    },
+    {
+      "tag": "nbafinals",
+      "n": 48
+    },
+    {
+      "tag": "turcomohamed",
+      "n": 48
+    },
+    {
+      "tag": "berterame",
+      "n": 47
+    },
+    {
+      "tag": "djokovic",
+      "n": 47
+    },
+    {
+      "tag": "ecuador",
+      "n": 47
+    },
+    {
+      "tag": "sinner",
+      "n": 47
+    },
+    {
+      "tag": "atp",
+      "n": 46
+    },
+    {
+      "tag": "azteca",
+      "n": 46
+    },
+    {
+      "tag": "badbunny",
+      "n": 46
+    },
+    {
+      "tag": "cadillac",
+      "n": 46
+    },
+    {
+      "tag": "clásiconacional",
+      "n": 46
+    },
+    {
+      "tag": "deporte",
+      "n": 46
+    },
+    {
+      "tag": "senegal",
+      "n": 46
+    },
+    {
+      "tag": "derrota",
+      "n": 45
+    },
+    {
+      "tag": "lc2025",
+      "n": 45
+    },
+    {
+      "tag": "var",
+      "n": 45
+    },
+    {
+      "tag": "américafemenil",
+      "n": 44
+    },
+    {
+      "tag": "andréjardine",
+      "n": 44
+    },
+    {
+      "tag": "empate",
+      "n": 44
+    },
+    {
+      "tag": "futbolfemenino",
+      "n": 44
+    },
+    {
+      "tag": "leon",
+      "n": 44
+    },
+    {
+      "tag": "mateochávez",
+      "n": 44
+    },
+    {
+      "tag": "alemania",
+      "n": 43
+    },
+    {
+      "tag": "chuckylozano",
+      "n": 43
+    },
+    {
+      "tag": "fifaworldcup",
+      "n": 43
+    },
+    {
+      "tag": "flagfootball",
+      "n": 43
+    },
+    {
+      "tag": "football",
+      "n": 43
+    },
+    {
+      "tag": "kevinmier",
+      "n": 43
+    },
+    {
+      "tag": "luchalibre",
+      "n": 43
+    },
+    {
+      "tag": "mdc",
+      "n": 43
+    },
+    {
+      "tag": "santos",
+      "n": 43
+    },
+    {
+      "tag": "tourdefrance",
+      "n": 43
+    },
+    {
+      "tag": "alnassr",
+      "n": 42
+    },
+    {
+      "tag": "copadelrey",
+      "n": 42
+    },
+    {
+      "tag": "hockey",
+      "n": 42
+    },
+    {
+      "tag": "inglaterra",
+      "n": 42
+    },
+    {
+      "tag": "wwe",
+      "n": 42
+    },
+    {
+      "tag": "cdmx",
+      "n": 41
+    },
+    {
+      "tag": "juliánquiñones",
+      "n": 41
+    },
+    {
+      "tag": "mazatlan",
+      "n": 41
+    },
+    {
+      "tag": "rolandgarros",
+      "n": 41
+    },
+    {
+      "tag": "uruguay",
+      "n": 41
+    },
+    {
+      "tag": "canada",
+      "n": 40
+    },
+    {
+      "tag": "fifacwc",
+      "n": 40
+    },
+    {
+      "tag": "goleada",
+      "n": 40
+    },
+    {
+      "tag": "grandslam",
+      "n": 40
+    },
+    {
+      "tag": "guadalajara",
+      "n": 40
+    },
+    {
+      "tag": "manchesterunited",
+      "n": 40
+    },
+    {
+      "tag": "portero",
+      "n": 40
+    },
+    {
+      "tag": "speedskating",
+      "n": 40
+    },
+    {
+      "tag": "clásico",
+      "n": 39
+    },
+    {
+      "tag": "copadelmundo",
+      "n": 39
+    },
+    {
+      "tag": "costarica",
+      "n": 39
+    },
+    {
+      "tag": "despedida",
+      "n": 39
+    },
+    {
+      "tag": "eriklira",
+      "n": 39
+    },
+    {
+      "tag": "hormiga",
+      "n": 39
+    },
+    {
+      "tag": "lamáquina",
+      "n": 39
+    },
+    {
+      "tag": "maxverstappen",
+      "n": 39
+    },
+    {
+      "tag": "motorsport",
+      "n": 39
+    },
+    {
+      "tag": "playoffs",
+      "n": 39
+    },
+    {
+      "tag": "santiagogimenez",
+      "n": 39
+    },
+    {
+      "tag": "worldcup",
+      "n": 39
+    },
+    {
+      "tag": "bayernmunich",
+      "n": 38
+    },
+    {
+      "tag": "cuartosdefinal",
+      "n": 38
+    },
+    {
+      "tag": "fmf",
+      "n": 38
+    },
+    {
+      "tag": "irán",
+      "n": 38
+    },
+    {
+      "tag": "paulinho",
+      "n": 38
+    },
+    {
+      "tag": "saintmaximin",
+      "n": 38
+    },
+    {
+      "tag": "teamméxico",
+      "n": 38
+    },
+    {
+      "tag": "atlante",
+      "n": 37
+    },
+    {
+      "tag": "diablosrojos",
+      "n": 37
+    },
+    {
+      "tag": "fútbolafricano",
+      "n": 37
+    },
+    {
+      "tag": "hormigagonzález",
+      "n": 37
+    },
+    {
+      "tag": "ochoa",
+      "n": 37
+    },
+    {
+      "tag": "onefa",
+      "n": 37
+    },
+    {
+      "tag": "paísesbajos",
+      "n": 37
+    },
+    {
+      "tag": "debut",
+      "n": 36
+    },
+    {
+      "tag": "milan",
+      "n": 36
+    },
+    {
+      "tag": "milito",
+      "n": 36
+    },
+    {
+      "tag": "conmebol",
+      "n": 35
+    },
+    {
+      "tag": "goles",
+      "n": 35
+    },
+    {
+      "tag": "mundialsub17",
+      "n": 35
+    },
+    {
+      "tag": "peloteando",
+      "n": 35
+    },
+    {
+      "tag": "piojoherrera",
+      "n": 35
+    },
+    {
+      "tag": "wrestling",
+      "n": 35
+    },
+    {
+      "tag": "atleti",
+      "n": 34
+    },
+    {
+      "tag": "eredivisie",
+      "n": 34
+    },
+    {
+      "tag": "orbelinpineda",
+      "n": 34
+    },
+    {
+      "tag": "osmarolvera",
+      "n": 34
+    },
+    {
+      "tag": "patinajedevelocidad",
+      "n": 34
+    },
+    {
+      "tag": "pepguardiola",
+      "n": 34
+    },
+    {
+      "tag": "sorteo",
+      "n": 34
+    },
+    {
+      "tag": "zendejas",
+      "n": 34
+    },
+    {
+      "tag": "aaronramsey",
+      "n": 33
+    },
+    {
+      "tag": "allansaintmaximin",
+      "n": 33
+    },
+    {
+      "tag": "eliminados",
+      "n": 33
+    },
+    {
+      "tag": "haaland",
+      "n": 33
+    },
+    {
+      "tag": "infantino",
+      "n": 33
+    },
+    {
+      "tag": "rumboal2026",
+      "n": 33
+    },
+    {
+      "tag": "snowboard",
+      "n": 33
+    },
+    {
+      "tag": "usmnt",
+      "n": 33
+    },
+    {
+      "tag": "vamosméxico",
+      "n": 33
+    },
+    {
+      "tag": "verstappen",
+      "n": 33
+    },
+    {
+      "tag": "bayern",
+      "n": 32
+    },
+    {
+      "tag": "dembélé",
+      "n": 32
+    },
+    {
+      "tag": "estadosunidos",
+      "n": 32
+    },
+    {
+      "tag": "formulae",
+      "n": 32
+    },
+    {
+      "tag": "landonorris",
+      "n": 32
+    },
+    {
+      "tag": "llegada",
+      "n": 32
+    },
+    {
+      "tag": "noruega",
+      "n": 32
+    },
+    {
+      "tag": "oroolimpico",
+      "n": 32
+    },
+    {
+      "tag": "paraguay",
+      "n": 32
+    },
+    {
+      "tag": "sub20",
+      "n": 32
+    },
+    {
+      "tag": "sudafrica",
+      "n": 32
+    },
+    {
+      "tag": "tri",
+      "n": 32
+    },
+    {
+      "tag": "aellimassol",
+      "n": 31
+    },
+    {
+      "tag": "basquetbol",
+      "n": 31
+    },
+    {
+      "tag": "mclaren",
+      "n": 31
+    },
+    {
+      "tag": "mourinho",
+      "n": 31
+    },
+    {
+      "tag": "soccer",
+      "n": 31
+    },
+    {
+      "tag": "ufc",
+      "n": 31
+    },
+    {
+      "tag": "champions",
+      "n": 30
+    },
+    {
+      "tag": "entrenamiento",
+      "n": 30
+    },
+    {
+      "tag": "festejo",
+      "n": 30
+    },
+    {
+      "tag": "itzulia2026",
+      "n": 30
+    },
+    {
+      "tag": "mancity",
+      "n": 30
+    },
+    {
+      "tag": "miami",
+      "n": 30
+    },
+    {
+      "tag": "méxico2026",
+      "n": 30
+    },
+    {
+      "tag": "oribeperalta",
+      "n": 30
+    },
+    {
+      "tag": "superbowllx",
+      "n": 30
+    },
+    {
+      "tag": "austriangp",
+      "n": 29
+    },
+    {
+      "tag": "convocatoria",
+      "n": 29
+    },
+    {
+      "tag": "dodgers",
+      "n": 29
+    },
+    {
+      "tag": "ferrari",
+      "n": 29
+    },
+    {
+      "tag": "fulham",
+      "n": 29
+    },
+    {
+      "tag": "lesionado",
+      "n": 29
+    },
+    {
+      "tag": "miguelherrera",
+      "n": 29
+    },
+    {
+      "tag": "pogacar",
+      "n": 29
+    },
+    {
+      "tag": "remontada",
+      "n": 29
+    },
+    {
+      "tag": "renatazarazua",
+      "n": 29
+    },
+    {
+      "tag": "repechaje",
+      "n": 29
+    },
+    {
+      "tag": "tennis",
+      "n": 29
+    },
+    {
+      "tag": "bolivia",
+      "n": 28
+    },
+    {
+      "tag": "cadillacf1",
+      "n": 28
+    },
+    {
+      "tag": "clasicoregio",
+      "n": 28
+    },
+    {
+      "tag": "copaafricana",
+      "n": 28
+    },
+    {
+      "tag": "diogojota",
+      "n": 28
+    },
+    {
+      "tag": "juarez",
+      "n": 28
+    },
+    {
+      "tag": "lahormiga",
+      "n": 28
+    },
+    {
+      "tag": "mexicanoseneuropa",
+      "n": 28
+    },
+    {
+      "tag": "queretaro",
+      "n": 28
+    },
+    {
+      "tag": "salida",
+      "n": 28
+    },
+    {
+      "tag": "seriedelrey",
+      "n": 28
+    },
+    {
+      "tag": "suecia",
+      "n": 28
+    },
+    {
+      "tag": "unam",
+      "n": 28
+    },
+    {
+      "tag": "adidas",
+      "n": 27
+    },
+    {
+      "tag": "borussiadortmund",
+      "n": 27
+    },
+    {
+      "tag": "chinohuerta",
+      "n": 27
+    },
+    {
+      "tag": "jersey",
+      "n": 27
+    },
+    {
+      "tag": "laseleccionentusmanos",
+      "n": 27
+    },
+    {
+      "tag": "paralympics",
+      "n": 27
+    },
+    {
+      "tag": "playin",
+      "n": 27
+    },
+    {
+      "tag": "xabialonso",
+      "n": 27
+    },
+    {
+      "tag": "astonvilla",
+      "n": 26
+    },
+    {
+      "tag": "homenaje",
+      "n": 26
+    },
+    {
+      "tag": "joelhuiqui",
+      "n": 26
+    },
+    {
+      "tag": "johanvasquez",
+      "n": 26
+    },
+    {
+      "tag": "luisdiaz",
+      "n": 26
+    },
+    {
+      "tag": "penales",
+      "n": 26
+    },
+    {
+      "tag": "tuzos",
+      "n": 26
+    },
+    {
+      "tag": "vueltaaburgos",
+      "n": 26
+    },
+    {
+      "tag": "worldbaseballclassic",
+      "n": 26
+    },
+    {
+      "tag": "amistoso",
+      "n": 25
+    },
+    {
+      "tag": "betis",
+      "n": 25
+    },
+    {
+      "tag": "guatemala",
+      "n": 25
+    },
+    {
+      "tag": "inauguración",
+      "n": 25
+    },
+    {
+      "tag": "luischávez",
+      "n": 25
+    },
+    {
+      "tag": "maxi",
+      "n": 25
+    },
+    {
+      "tag": "respeto",
+      "n": 25
+    },
+    {
+      "tag": "tijuana",
+      "n": 25
+    },
+    {
+      "tag": "álvarofidalgo",
+      "n": 25
+    },
+    {
+      "tag": "ancelotti",
+      "n": 24
+    },
+    {
+      "tag": "coreadelsur",
+      "n": 24
+    },
+    {
+      "tag": "cuentaregresiva",
+      "n": 24
+    },
+    {
+      "tag": "doblete",
+      "n": 24
+    },
+    {
+      "tag": "fenerbahçe",
+      "n": 24
+    },
+    {
+      "tag": "guidopizarro",
+      "n": 24
+    },
+    {
+      "tag": "jamesrodríguez",
+      "n": 24
+    },
+    {
+      "tag": "nascar",
+      "n": 24
+    },
+    {
+      "tag": "qualy",
+      "n": 24
+    },
+    {
+      "tag": "racing",
+      "n": 24
+    },
+    {
+      "tag": "sub17",
+      "n": 24
+    },
+    {
+      "tag": "titular",
+      "n": 24
+    },
+    {
+      "tag": "clasicomundialdebeisbol",
+      "n": 23
+    },
+    {
+      "tag": "concacafchampionscup",
+      "n": 23
+    },
+    {
+      "tag": "diablos",
+      "n": 23
+    },
+    {
+      "tag": "egipto",
+      "n": 23
+    },
+    {
+      "tag": "estadio",
+      "n": 23
+    },
+    {
+      "tag": "fernandogago",
+      "n": 23
+    },
+    {
+      "tag": "gigantedeacero",
+      "n": 23
+    },
+    {
+      "tag": "goleador",
+      "n": 23
+    },
+    {
+      "tag": "hugosánchez",
+      "n": 23
+    },
+    {
+      "tag": "lego",
+      "n": 23
+    },
+    {
+      "tag": "mensaje",
+      "n": 23
+    },
+    {
+      "tag": "palmeiras",
+      "n": 23
+    },
+    {
+      "tag": "panini",
+      "n": 23
+    },
+    {
+      "tag": "rodrigohuescas",
+      "n": 23
+    },
+    {
+      "tag": "sabalenka",
+      "n": 23
+    },
+    {
+      "tag": "seahawks",
+      "n": 23
+    },
+    {
+      "tag": "wta",
+      "n": 23
+    },
+    {
+      "tag": "bobsleigh",
+      "n": 22
+    },
+    {
+      "tag": "campeondecampeones",
+      "n": 22
+    },
+    {
+      "tag": "carlosalcaraz",
+      "n": 22
+    },
+    {
+      "tag": "cevchampionsleague",
+      "n": 22
+    },
+    {
+      "tag": "crawford",
+      "n": 22
+    },
+    {
+      "tag": "expulsion",
+      "n": 22
+    },
+    {
+      "tag": "facup",
+      "n": 22
+    },
+    {
+      "tag": "fechafifa",
+      "n": 22
+    },
+    {
+      "tag": "griezmann",
+      "n": 22
+    },
+    {
+      "tag": "hansiflick",
+      "n": 22
+    },
+    {
+      "tag": "jorgecampos",
+      "n": 22
+    },
+    {
+      "tag": "nahuelguzman",
+      "n": 22
+    },
+    {
+      "tag": "porteros",
+      "n": 22
+    },
+    {
+      "tag": "worldgames",
+      "n": 22
+    },
+    {
+      "tag": "boletos",
+      "n": 21
+    },
+    {
+      "tag": "brianrodriguez",
+      "n": 21
+    },
+    {
+      "tag": "clasificacion",
+      "n": 21
+    },
+    {
+      "tag": "clásicotapatío",
+      "n": 21
+    },
+    {
+      "tag": "halftimeshow",
+      "n": 21
+    },
+    {
+      "tag": "iliamalinin",
+      "n": 21
+    },
+    {
+      "tag": "jjoo",
+      "n": 21
+    },
+    {
+      "tag": "lewishamilton",
+      "n": 21
+    },
+    {
+      "tag": "madrid",
+      "n": 21
+    },
+    {
+      "tag": "miamigp",
+      "n": 21
+    },
+    {
+      "tag": "modric",
+      "n": 21
+    },
+    {
+      "tag": "méxicosub20",
+      "n": 21
+    },
+    {
+      "tag": "patriots",
+      "n": 21
+    },
+    {
+      "tag": "rafamarquez",
+      "n": 21
+    },
+    {
+      "tag": "rankingatp",
+      "n": 21
+    },
+    {
+      "tag": "resultados",
+      "n": 21
+    },
+    {
+      "tag": "copalibertadores",
+      "n": 20
+    },
+    {
+      "tag": "deportemexicano",
+      "n": 20
+    },
+    {
+      "tag": "familia",
+      "n": 20
+    },
+    {
+      "tag": "halamadrid",
+      "n": 20
+    },
+    {
+      "tag": "heungminson",
+      "n": 20
+    },
+    {
+      "tag": "hungariangp",
+      "n": 20
+    },
+    {
+      "tag": "inter",
+      "n": 20
+    },
+    {
+      "tag": "invierno",
+      "n": 20
+    },
+    {
+      "tag": "laroja",
+      "n": 20
+    },
+    {
+      "tag": "luisenrique",
+      "n": 20
+    },
+    {
+      "tag": "medallero",
+      "n": 20
+    },
+    {
+      "tag": "mexicanos",
+      "n": 20
+    },
+    {
+      "tag": "nigeria",
+      "n": 20
+    },
+    {
+      "tag": "palavecino",
+      "n": 20
+    },
+    {
+      "tag": "pretemporada",
+      "n": 20
+    },
+    {
+      "tag": "realbetis",
+      "n": 20
+    },
+    {
+      "tag": "uaetour",
+      "n": 20
+    },
+    {
+      "tag": "águilas",
+      "n": 20
+    }
+  ]
+}

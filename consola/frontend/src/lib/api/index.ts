@@ -20,7 +20,6 @@ import { apiPlantillasDiseno } from "./plantillasDiseno";
 import { apiBloques } from "./bloques";
 import { apiPlantillasMarca } from "./plantillasMarca";
 import { apiRevision } from "./revision";
-import { apiHashtags } from "./hashtags";
 import { apiFuentes } from "./fuentes";
 import { apiAlgoritmos } from "./algoritmos";
 import { apiMetricool } from "./metricool";
@@ -66,7 +65,6 @@ export const api = {
   ...apiBloques,
   ...apiPlantillasMarca,
   ...apiRevision,
-  ...apiHashtags,
   ...apiFuentes,
   ...apiAlgoritmos,
   ...apiMetricool,

@@ -37,6 +37,7 @@ __all__ = [
     "ETAPA_ADMITIR",
     "ETAPA_REDACTAR",
     "ETAPA_VERIFICAR",
+    "ETAPA_SUGERIR_HASHTAGS",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
     "PROMPT_VERIFICACION_ID",
@@ -100,6 +101,7 @@ TIPO_PIPELINE = "pipeline"
 ETAPA_ADMITIR = "ADMITIR"
 ETAPA_REDACTAR = "REDACTAR"
 ETAPA_VERIFICAR = "VERIFICAR"
+ETAPA_SUGERIR_HASHTAGS = "SUGERIR_HASHTAGS"
 ETAPA_ILUSTRAR = "ILUSTRAR"
 
 # FLUJO CONTINUO: el pipeline NO tiene topes por etapa (verificaciones verificación/copies/autogen/revisados). El

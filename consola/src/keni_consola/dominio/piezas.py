@@ -25,6 +25,7 @@ constantes neutras `estados` (infra compartida): no importa de `api/`.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -41,6 +42,25 @@ def _falta_hashtags(pub: dict[str, Any]) -> bool:
     """True si el copy (caption) NO lleva ningún hashtag. Los hashtags son clave para
     monitorizar campañas y líneas de contenido; el equipo los pone en la fase de revisión."""
     return not _PAT_HASHTAG.search(str(pub.get("contenido") or ""))
+
+
+def _hashtags_sugeridos(pub: dict[str, Any]) -> list[str]:
+    """Lista de hashtags sugeridos (`pieza.hashtags_sugeridos`, JSON con '#'). [] si vacía/ilegible.
+
+    La rellena la etapa `sugerir_hashtags` cuando una pieza recién redactada no lleva hashtags; el
+    feed la muestra en gris para aceptar/rechazar. No es parte del copy hasta que un humano la acepta.
+    """
+    crudo = pub.get("hashtags_sugeridos")
+    if isinstance(crudo, (list, tuple)):
+        return [str(x) for x in crudo]
+    if isinstance(crudo, str) and crudo.strip():
+        try:
+            datos = json.loads(crudo)
+        except (ValueError, TypeError):
+            return []
+        if isinstance(datos, list):
+            return [str(x) for x in datos]
+    return []
 
 
 def _falta_copy_in(pub: dict[str, Any], formato: str) -> bool:
@@ -282,6 +302,13 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # un PNG horneado; si solo hay foto/fuente, esas. `render_pieza` decide sin componer.
         "imagen_url": _imagen_url_de(pub),
         "evergreen": bool(pub.get("evergreen")),
+        # Sugerencia de hashtags (etapa `sugerir_hashtags`, tras Redactar): lista CON '#' que el
+        # feed propone en gris para aceptar/rechazar de un clic. [] si no hay sugerencia o la pieza
+        # ya lleva hashtags. La acepta un humano: solo entonces se inyecta en el copy.
+        "hashtags_sugeridos": _hashtags_sugeridos(pub),
+        # ¿El caption no lleva ningún hashtag? Gate de la sugerencia en el feed (solo se ofrece
+        # cuando faltan). Derivado del contenido real, no de un flag almacenado.
+        "falta_hashtags": _falta_hashtags(pub),
     }
 
 

@@ -101,9 +101,6 @@ from .migraciones_columnas import (
     _COLUMNAS_FUENTES_RSS_AMPLIADAS as _COLUMNAS_FUENTES_RSS_AMPLIADAS,
 )
 from .migraciones_columnas import (
-    _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS as _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS,
-)
-from .migraciones_columnas import (
     _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS as _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS,
 )
 from .migraciones_columnas import (
@@ -185,9 +182,6 @@ from .migraciones_columnas import (
     _migrar_columnas_fuentes_rss as _migrar_columnas_fuentes_rss,
 )
 from .migraciones_columnas import (
-    _migrar_columnas_grupos_hashtags as _migrar_columnas_grupos_hashtags,
-)
-from .migraciones_columnas import (
     _migrar_columnas_noticias_algoritmo as _migrar_columnas_noticias_algoritmo,
 )
 from .migraciones_columnas import (
@@ -266,7 +260,6 @@ __all__ = [
     '_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS',
     '_COLUMNAS_EVENTO_ROTA_AMPLIADAS',
     '_COLUMNAS_FUENTES_RSS_AMPLIADAS',
-    '_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS',
     '_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS',
     '_COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS',
     '_COLUMNAS_PIEZA_ROTA_AMPLIADAS',
@@ -307,7 +300,6 @@ __all__ = [
     '_migrar_columnas_etiquetas',
     '_migrar_columnas_eventos_rota',
     '_migrar_columnas_fuentes_rss',
-    '_migrar_columnas_grupos_hashtags',
     '_migrar_columnas_noticias_algoritmo',
     '_migrar_columnas_noticias_clusters',
     '_migrar_columnas_piezas_rota',

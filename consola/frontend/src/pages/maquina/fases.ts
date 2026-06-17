@@ -130,6 +130,17 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     },
   },
   {
+    nombre: "Sugerir hashtags",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_SUGERIR_HASHTAGS", MAESTRO_PRODUCCION],
+    ayuda:
+      "Saca del historial de la marca los hashtags habituales y, al revisar la pieza, sugiere en gris los más relevantes para aceptar o rechazar de un clic. Solo cuando al copy le faltan",
+    doc: "prompt/sugerir-hashtags",
+    contextoMarca: true,
+    queue: "sugerir-hashtags",
+    etapa: "sugerir_hashtags",
+  },
+  {
     nombre: "Ilustrar",
     es_ia: true,
     claves: ["KENI_PIPELINE_ILUSTRAR", MAESTRO_PRODUCCION],
@@ -148,6 +159,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
 export const QUEUE_PRODUCCION: Record<string, string> = {
   copy: "redactar",
   autogen: "redactar",
+  "sugerir-hashtags": "sugerir-hashtags",
   imagen: "ilustrar",
 };
 

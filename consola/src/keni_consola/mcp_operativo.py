@@ -653,17 +653,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
             return {"error": _MSG_NO_INIT}
         return await cli.get("/api/noticias/cobertura")
 
-    # ---- Apoyos editoriales: hashtags, franjas, evergreen, algoritmos --- #
-
-    @mcp.tool()
-    async def keni_hashtags() -> dict:
-        """Grupos de hashtags de la casa, por marca (los que el equipo añade al copy donde
-        corresponde, p. ej. Instagram/TikTok). El copy unificado se genera SIN hashtags;
-        estos grupos son la fuente para añadirlos después."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/hashtags")
+    # ---- Apoyos editoriales: franjas, evergreen, algoritmos --- #
 
     @mcp.tool()
     async def keni_franjas() -> dict:

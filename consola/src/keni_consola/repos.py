@@ -8,7 +8,7 @@ enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
     piezas y plantillas (editoriales), `comercial` (piezas + serie temporal de
     snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las
     entidades que cerraron su rezago file->pg (ADR 0006): `fuentes_rss` + items vistos +
-    salud, `grupos_hashtags` y `franjas` editoriales.
+    salud y `franjas` editoriales.
   - FICHEROS (`ficheros.py`) ya solo respaldan el HISTORIAL DE PROMPTS (file-backed bajo
     `KENI_DATA_DIR`). Todo lo demas migro a Postgres.
 
@@ -91,7 +91,6 @@ from .repos_publicacion import (  # noqa: F401
     etiquetas_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
-    hashtags_de_contenido,
     ids_publicacion_con_copy,
     ids_contenido_con_etiqueta,
     listar_publicacion,
@@ -154,15 +153,9 @@ from .repos_editor import (  # noqa: F401
     ultima_documento_version,
 )
 from .repos_hashtags_franjas import (  # noqa: F401
-    actualizar_grupo_hashtags,
     borrar_franja,
-    borrar_grupo_hashtags,
-    contar_grupos_hashtags,
     crear_franja,
-    crear_grupo_hashtags,
     listar_franjas,
-    listar_grupos_hashtags,
-    obtener_grupo_hashtags,
 )
 from .repos_historial import (  # noqa: F401
     contar_historial_prompts,

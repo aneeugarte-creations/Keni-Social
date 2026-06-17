@@ -32,6 +32,7 @@ from ._comun import (
     marcar_fallo_etapa,
 )
 from ._avance import ejecutar_avance
+from ._sugerir_hashtags import ejecutar_sugerir_hashtags
 from ._redactar import lanzar_redactar_de_tema, temas_autogen_sin_copy, temas_para_redactar
 from ._admitir import clusters_pendientes_verificar, promover_clusters_marca
 from ._verificar import lanzar_verificar_cluster
@@ -45,6 +46,7 @@ __all__ = [
     "_ejecutar_produccion",
     "ejecutar_verificar_clusters",
     "ejecutar_redactar",
+    "ejecutar_sugerir_hashtags",
     "ejecutar_ilustrar",
     "ejecutar_avance",
     "_intervalo_segundos",
@@ -125,7 +127,7 @@ def ejecutar_produccion() -> dict[str, Any]:
     with db.lock_barrido(_LOCK_PRODUCCION) as ok:
         if not ok:
             _log.debug("producción: otro barrido en curso; se omite este.")
-            return {"lanzados": [], "artes": [], "avances": []}
+            return {"lanzados": [], "sugeridos": [], "artes": [], "avances": []}
         return _ejecutar_produccion()
 
 
@@ -305,20 +307,24 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
 def _ejecutar_produccion() -> dict[str, Any]:
     """Cuerpo de PRODUCCIÓN (ya bajo el single-flight de `ejecutar_produccion`)."""
     autor = _ref._autor_pipeline()
-    # --- Fase CD (copy) + Etapa ARTE + Etapa AVANCE. -----------------------------------------
+    # --- Fase CD (copy) + SUGERIR HASHTAGS + Etapa ARTE + Etapa AVANCE. -----------------------
     lanzados = ejecutar_redactar(autor=autor)
+    # Etapa de Sugerir hashtags (tras copy): para los borradores SIN hashtags, encola una
+    # sugerencia READ-ONLY de la biblioteca de la marca (no toca el copy). Gateada por su toggle
+    # KENI_PIPELINE_SUGERIR_HASHTAGS + máquina; si está OFF, devuelve [].
+    sugeridos = ejecutar_sugerir_hashtags()
     # Etapa de Ilustrar (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
     # toggle "Generar arte" (KENI_PIPELINE_ILUSTRAR) + máquina; si está OFF, devuelve [].
     artes = ejecutar_ilustrar()
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
     # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
-    if lanzados or artes or avances:
+    if lanzados or sugeridos or artes or avances:
         _log.info(
-            "producción: %d copy encolado(s) (CD), %d arte(s) (etapa Ilustrar), %d avance(s) (a revisión).",
-            len(lanzados), len(artes), len(avances),
+            "producción: %d copy (CD), %d sugerencia(s) de hashtags, %d arte(s) (Ilustrar), %d avance(s).",
+            len(lanzados), len(sugeridos), len(artes), len(avances),
         )
-    return {"lanzados": lanzados, "artes": artes, "avances": avances}
+    return {"lanzados": lanzados, "sugeridos": sugeridos, "artes": artes, "avances": avances}
 
 
 def _ejecutar_barrido() -> dict[str, Any]:
@@ -544,11 +550,12 @@ def _resumen_investigacion(res: dict[str, Any]) -> str:
 def _resumen_produccion(res: dict[str, Any]) -> str:
     """Resumen corto del barrido de PRODUCCIÓN para el historial (copy/arte/avances)."""
     copys = len(res.get("lanzados") or [])
+    sugeridos = len(res.get("sugeridos") or [])
     artes = len(res.get("artes") or [])
     avances = len(res.get("avances") or [])
-    if not (copys or artes or avances):
+    if not (copys or sugeridos or artes or avances):
         return "sin novedad"
-    return f"{copys} copy · {artes} arte(s) · {avances} avance(s) a revisión"
+    return f"{copys} copy · {sugeridos} hashtags · {artes} arte(s) · {avances} avance(s) a revisión"
 
 
 def _trabajo_investigacion(res: dict[str, Any]) -> bool:
@@ -559,7 +566,8 @@ def _trabajo_investigacion(res: dict[str, Any]) -> bool:
 def _trabajo_produccion(res: dict[str, Any]) -> bool:
     """¿El barrido de PRODUCCIÓN hizo algo? (señal de backoff: copy, arte o avance)."""
     return bool(res) and bool(
-        (res.get("lanzados") or []) or (res.get("artes") or []) or (res.get("avances") or [])
+        (res.get("lanzados") or []) or (res.get("sugeridos") or [])
+        or (res.get("artes") or []) or (res.get("avances") or [])
     )
 
 

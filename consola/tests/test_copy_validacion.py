@@ -83,39 +83,6 @@ def test_pieza_valida_no_tiene_motivo():
 
 
 # --------------------------------------------------------------------------- #
-# Inyección de HASHTAGS de la línea al final del copy — PURO                     #
-# --------------------------------------------------------------------------- #
-
-
-def test_inyecta_hashtags_al_final():
-    out = dom_copy._inyectar_hashtags("Texto del post", ["Nacional", "Finanzas"], red="instagram")
-    assert out == "Texto del post #Nacional #Finanzas"
-
-
-def test_inyecta_hashtags_sin_tags_no_toca():
-    assert dom_copy._inyectar_hashtags("Texto", [], red="x") == "Texto"
-
-
-def test_inyecta_hashtags_dedup_case_insensitive():
-    # «#Nacional» ya está (aunque con otro casing): no se duplica; sí se añade el que falta.
-    out = dom_copy._inyectar_hashtags("Algo #nacional aquí", ["Nacional", "Finanzas"], red="instagram")
-    assert out == "Algo #nacional aquí #Finanzas"
-
-
-def test_inyecta_hashtags_respeta_el_limite_de_la_red():
-    # En X (límite 25000) un texto casi al tope solo admite los hashtags que QUEPAN.
-    base = "a" * 24990  # 24990 chars; " #Nacional" (10) cabe (=25000), " #Finanzas" ya no
-    out = dom_copy._inyectar_hashtags(base, ["Nacional", "Finanzas"], red="x")
-    assert out == f"{base} #Nacional"
-    assert len(out) <= 25000
-
-
-def test_inyecta_hashtags_si_ninguno_cabe_deja_el_texto_igual():
-    base = "a" * 25000  # ya en el tope de X: no cabe ningún hashtag
-    assert dom_copy._inyectar_hashtags(base, ["Nacional"], red="x") == base
-
-
-# --------------------------------------------------------------------------- #
 # Creación de borradores: descarta inválidas sin romper las válidas (Postgres)  #
 # --------------------------------------------------------------------------- #
 
@@ -155,46 +122,6 @@ def test_redes_filtro_no_cuenta_como_descarte(entorno):
         redes_filtro={"instagram"}, publicacion_id=tema["id"],
     )
     assert "Copy descartado" not in (repos.obtener_publicacion(tema["id"])["notas"] or "")
-
-
-# --------------------------------------------------------------------------- #
-# Hashtags de la LÍNEA: se inyectan al final del copy de las piezas del tema     #
-# --------------------------------------------------------------------------- #
-
-
-def test_inyecta_hashtags_de_la_linea_en_el_copy(entorno):
-    # La línea asignada al tema gobierna los hashtags: se añaden al final de cada pieza.
-    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
-    linea = repos.crear_etiqueta(
-        nombre="Nacional", clase="vertical", marca=_MARCA, hashtags="Nacional, Finanzas"
-    )
-    repos.asignar_etiqueta(tema["id"], linea["id"])
-    creadas = dom_copy.crear_publicaciones_desde_piezas(
-        [{"red": "facebook", "contenido": "Cuerpo del post", "copy_in": ""}],
-        marca=_MARCA, titulo="T", verdicto="", origen="h1", publicacion_id=tema["id"],
-    )
-    assert str(creadas[0]["contenido"]) == "Cuerpo del post #Nacional #Finanzas"
-
-
-def test_no_inyecta_si_la_linea_no_tiene_hashtags(entorno):
-    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
-    linea = repos.crear_etiqueta(nombre="Sin tags", clase="vertical", marca=_MARCA, hashtags="")
-    repos.asignar_etiqueta(tema["id"], linea["id"])
-    creadas = dom_copy.crear_publicaciones_desde_piezas(
-        [{"red": "facebook", "contenido": "Cuerpo", "copy_in": ""}],
-        marca=_MARCA, titulo="T", verdicto="", origen="h1", publicacion_id=tema["id"],
-    )
-    assert str(creadas[0]["contenido"]) == "Cuerpo"
-
-
-def test_hashtags_de_contenido_junta_las_lineas_sin_duplicar(entorno):
-    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
-    a = repos.crear_etiqueta(nombre="Nacional", clase="vertical", marca=_MARCA, hashtags="Nacional")
-    b = repos.crear_etiqueta(nombre="UltimaHora", clase="campania", marca=_MARCA, hashtags="Nacional, UnoTV")
-    repos.asignar_etiqueta(tema["id"], a["id"])
-    repos.asignar_etiqueta(tema["id"], b["id"])
-    # 'Nacional' aparece en ambas líneas: una sola vez (dedup case-insensitive), orden estable.
-    assert repos.hashtags_de_contenido(tema["id"]) == ["Nacional", "UnoTV"]
 
 
 def test_normaliza_hashtags_quita_almohadilla_simbolos_y_dedup():

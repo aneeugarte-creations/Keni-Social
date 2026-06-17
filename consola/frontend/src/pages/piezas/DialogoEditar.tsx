@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
-import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
+import { SugerenciaHashtags } from "@/components/hashtags/SugerenciaHashtags";
+import { agregarHashtags } from "./hashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
 import { EditorCarruselLateral } from "@/components/media/EditorCarruselLateral";
 import { EditorImagen } from "@/components/media/EditorImagen";
@@ -39,7 +40,6 @@ import {
 import type { CuerpoActualizarPieza, Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
-import { GestionHashtags } from "./GestionHashtags";
 import { metaRed } from "./meta";
 import { etapaDePieza } from "@/pages/feed/etapa";
 
@@ -85,15 +85,6 @@ export function DialogoEditar({
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
   const guardandoRef = React.useRef(false); // hay un guardado en curso
   const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en curso
-  const [gestionHashtags, setGestionHashtags] = React.useState(false);
-
-  // Catálogo de marcas para la gestión de grupos de hashtags.
-  const opcionesQuery = useQuery({
-    queryKey: ["piezas", "opciones"],
-    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
-    enabled: pieza !== null,
-  });
-  const marcas = opcionesQuery.data?.marcas ?? [];
 
   // Plantillas del estudio por MARCA: como todo es 4:5 y se postea lo mismo a todas las redes, la
   // plantilla la dicta la marca (no la red). Distintas plantillas cubren los tipos de post
@@ -557,23 +548,16 @@ export function DialogoEditar({
           </div>
 
           {pieza && (
-            <HerramientasHashtags
+            <SugerenciaHashtags
               contenido={contenido}
-              onPublicacion={setPublicacion}
-              marca={pieza.marca}
-              onGestionar={() => setGestionHashtags(true)}
+              pieza={pieza}
+              onAceptar={(tags) => setPublicacion(agregarHashtags(contenido, tags))}
             />
           )}
         </div>
 
         {/* Sin footer: los cambios se guardan solos. Para salir: la "X" o clic fuera (ambos
             fuerzan un último guardado vía `cerrar`). */}
-
-        <GestionHashtags
-          abierto={gestionHashtags}
-          onCerrar={() => setGestionHashtags(false)}
-          marcas={marcas}
-        />
 
         {/* Selector de plantilla del estudio (miniaturas) por MARCA. Al elegir, la previa se
             actualiza EN VIVO en el lienzo (sin round-trip); se hornea al guardar. */}

@@ -81,6 +81,10 @@ PROC_IMPORT_CALENDARIO = "import-calendario"
 # parsea el verificación JSON y, vía `repos`, aprueba el nivel IA (→ se programa sola) o lo rechaza
 # con un comentario sin resolver (→ frena y queda en el feed). Solo el `pieza_id` viaja.
 PROC_CRITICA_IA = "critica-ia"
+# Sugerir hashtags (post-Redactar): `claude -p` READ-ONLY elige de la biblioteca de la marca los
+# hashtags más relevantes para un borrador SIN hashtags y los guarda en `pieza.hashtags_sugeridos`
+# (el feed los ofrece en gris para aceptar/rechazar). No toca el copy. Solo el `pieza_id` viaja.
+PROC_SUGERIR_HASHTAGS = "sugerir-hashtags"
 
 # ------------------------------------------------------------------------------------------- #
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
@@ -359,6 +363,15 @@ def construir_critica_ia(*, pieza_id: str) -> dict[str, Any]:
     return {"kind": PROC_CRITICA_IA, "pieza_id": pieza_id}
 
 
+def construir_sugerir_hashtags(*, pieza_id: str) -> dict[str, Any]:
+    """Spec del post-procesado de SUGERIR HASHTAGS: filtra la salida y la guarda en la pieza.
+
+    `pieza_id` es la pieza cuyos `hashtags_sugeridos` se proponen. El worker reconstruye el
+    callback (que toca `repos`) vía `dominio.sugerir_hashtags`; la pieza se relee fresca al aplicar.
+    """
+    return {"kind": PROC_SUGERIR_HASHTAGS, "pieza_id": pieza_id}
+
+
 def construir(
     *,
     prompt: str,
@@ -533,6 +546,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import critica_ia as dom_critica
 
         return dom_critica.construir_procesar_critica_ia(
+            pieza_id=p["pieza_id"]
+        )
+
+    if kind == PROC_SUGERIR_HASHTAGS:
+        # Import perezoso: el factory toca BD (`repos`) y la biblioteca de hashtags.
+        from . import sugerir_hashtags as dom_sugerir
+
+        return dom_sugerir.construir_procesar_sugerir_hashtags(
             pieza_id=p["pieza_id"]
         )
 

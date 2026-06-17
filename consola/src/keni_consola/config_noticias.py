@@ -45,6 +45,7 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ILUSTRAR,
+    ENV_PIPELINE_SUGERIR_HASHTAGS,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
     ENV_PIPELINE_EN_PROCESO_MAX,
@@ -801,6 +802,19 @@ def ilustrar_activo() -> bool:
     la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
     return _crudo(ENV_PIPELINE_ILUSTRAR).lower() in _VERDADEROS
+
+
+def sugerir_hashtags_activo() -> bool:
+    """True si la ETAPA de Sugerir hashtags debe proponer (`KENI_PIPELINE_SUGERIR_HASHTAGS`).
+
+    Def ON (a diferencia del resto de etapas de coste): la sugerencia es READ-ONLY, barata y NO
+    toca el copy ni publica nada —solo deja una propuesta en gris que un humano acepta o descarta—,
+    así que el piloto la quiere encendida de salida. Se apaga con un valor falsy explícito.
+    """
+    crudo = _crudo(ENV_PIPELINE_SUGERIR_HASHTAGS).strip().lower()
+    if not crudo:
+        return True
+    return crudo in _VERDADEROS
 
 
 # --------------------------------------------------------------------------- #

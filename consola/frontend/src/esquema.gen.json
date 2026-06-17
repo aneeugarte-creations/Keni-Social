@@ -2209,6 +2209,15 @@
         "evergreen": {
           "type": "boolean"
         },
+        "hashtags_sugeridos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "falta_hashtags": {
+          "type": "boolean"
+        },
         "copy_in_exento": {
           "type": "boolean"
         },

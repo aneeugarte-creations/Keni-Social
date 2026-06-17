@@ -79,6 +79,12 @@ export function etiquetaEtapa(etapa: EtapaIa, formato?: string): string {
 // `campanias._PAT_HASHTAG` del backend; aquí solo nos interesa SI hay alguno.
 const PAT_HASHTAG = /#[\p{L}\p{N}_]+/u;
 
+/** ¿El texto lleva al menos un hashtag? Fuente única del check (lo usan el feed y la
+ *  sugerencia de hashtags del editor). ESPEJO de `_falta_hashtags` del backend. */
+export function textoTieneHashtags(texto: string | null | undefined): boolean {
+  return PAT_HASHTAG.test(texto ?? "");
+}
+
 /** ¿Falta el TEXTO sobre la imagen (placa, `copy_in`)? Solo en piezas de MARCA con placa
  *  (foto/carrusel), no exentas ni con placa oculta. ESPEJO de `_falta_copy_in` del backend. */
 function faltaCopyIn(p: Pieza): boolean {
@@ -91,7 +97,7 @@ function faltaCopyIn(p: Pieza): boolean {
 
 /** ¿El copy no lleva ningún hashtag? Clave para monitorizar campañas y líneas de contenido. */
 function faltaHashtags(p: Pieza): boolean {
-  return !PAT_HASHTAG.test(p.contenido ?? "");
+  return !textoTieneHashtags(p.contenido);
 }
 
 /**

@@ -448,7 +448,7 @@ def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
 
 # Tipos de generacion que son TRABAJO DE FONDO (los lanza el propio pipeline/autogen, no una
 # persona esperando): en la cola del worker ceden el paso a los lanzamientos manuales.
-_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen"})
+_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen", "sugerir-hashtags"})
 
 
 def lanzar(

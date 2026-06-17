@@ -1,9 +1,7 @@
 /**
- * Utilidades de hashtags compartidas (compositor + gestión de grupos).
+ * Utilidades de hashtags compartidas: normalizar y añadir hashtags al copy. Las usa la
+ * sugerencia de hashtags del editor para inyectar al aceptar.
  */
-
-/** Clave de React Query para los grupos de hashtags. */
-export const CLAVE_HASHTAGS = ["hashtags"] as const;
 
 /** Normaliza un token a un hashtag válido (con `#`, sin espacios). */
 export function normalizarHashtag(valor: string): string {

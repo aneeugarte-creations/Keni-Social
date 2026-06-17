@@ -5,7 +5,7 @@
  *     (Versiones / Compilado / Publicar). Solo si la fase tiene prompt.
  *   · Contexto — el contexto editorial de la marca que la fase inyecta. En Investigación, las
  *     líneas de contenido y los orígenes que clasifican/priorizan; en Producción, la estrategia
- *     de marca (voz/tropicalización/reglas) y los hashtags. Solo si la fase es `contextoMarca`.
+ *     de marca (voz/tropicalización/reglas). Solo si la fase es `contextoMarca`.
  *   · Logs     — el HISTÓRICO real de runs paradas en esta etapa (`GET /api/pipelines?etapa=`)
  *     cuando la fase tiene `etapa`; si no, los trabajos en vivo de su cola.
  *
@@ -27,7 +27,6 @@ import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
-import { GestionHashtags } from "@/pages/piezas/GestionHashtags";
 import {
   type AccionesPublicarSubpagina,
   DetalleDocumento,
@@ -163,14 +162,6 @@ function ContextoFase({
   marca: string | null;
   onAbrirDoc: (docId: string) => void;
 }) {
-  const [hashtagsAbierto, setHashtagsAbierto] = React.useState(false);
-  // Marcas para el diálogo de hashtags (mismo origen que la gestión de líneas).
-  const catalogos = useQuery({
-    queryKey: ["contenido", "catalogos"],
-    queryFn: ({ signal }) => api.contenido({}, signal),
-    enabled: proceso === "produccion",
-  });
-
   if (proceso === "investigacion") {
     // Lo que clasifica/prioriza usa: las líneas de contenido y los orígenes de la marca.
     return (
@@ -181,7 +172,7 @@ function ContextoFase({
     );
   }
 
-  // Producción: la estrategia de marca (orden de inyección + pilares) y los hashtags.
+  // Producción: la estrategia de marca (orden de inyección + pilares).
   return (
     <div className="space-y-4">
       {marca ? (
@@ -191,14 +182,6 @@ function ContextoFase({
           Elige una marca en la barra superior para ver el contexto que inyecta esta fase.
         </p>
       )}
-      <Button variant="outline" size="sm" onClick={() => setHashtagsAbierto(true)}>
-        Gestionar hashtags
-      </Button>
-      <GestionHashtags
-        abierto={hashtagsAbierto}
-        onCerrar={() => setHashtagsAbierto(false)}
-        marcas={catalogos.data?.catalogos?.marcas ?? []}
-      />
     </div>
   );
 }

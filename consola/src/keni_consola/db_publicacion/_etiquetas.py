@@ -20,7 +20,6 @@ __all__ = [
     "obtener_etiqueta_por_nombre",
     "actualizar_etiqueta",
     "borrar_etiqueta",
-    "hashtags_de_contenido",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -138,37 +137,6 @@ def listar_etiquetas(
     finally:
         con.close()
     return [_fila_a_etiqueta(f) for f in filas]
-
-
-def hashtags_de_contenido(publicacion_id: str) -> list[str]:
-    """Hashtags (SIN '#', en orden, sin duplicar) de TODAS las etiquetas asignadas a un
-    contenido que tengan hashtags propios — contenido (verticales) y estrategia (campañas).
-
-    Para INYECTAR al final del copy de sus piezas: un único sitio (la línea/etiqueta) gobierna
-    los hashtags. Orden estable (clase, nombre) y dedup case-insensitive entre líneas.
-    """
-    if not publicacion_id:
-        return []
-    con = _conectar()
-    try:
-        filas = con.execute(
-            "SELECT e.hashtags AS hashtags FROM etiquetas e "
-            "JOIN publicacion_etiquetas ce ON ce.etiqueta_id = e.id "
-            "WHERE ce.publicacion_id = ? AND e.hashtags <> '' "
-            "ORDER BY e.clase ASC, e.nombre ASC",
-            (publicacion_id,),
-        ).fetchall()
-    finally:
-        con.close()
-    salida: list[str] = []
-    claves: set[str] = set()
-    for fila in filas:
-        for tag in str(fila["hashtags"] or "").split(","):
-            t = tag.strip()
-            if t and t.lower() not in claves:
-                claves.add(t.lower())
-                salida.append(t)
-    return salida
 
 
 def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:
