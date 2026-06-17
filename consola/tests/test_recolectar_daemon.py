@@ -569,6 +569,7 @@ def test_paso_fusionar_semantica_registra_actividad_ia(monkeypatch):
             al_ejecutar("PROMPT-HAIKU-FUSION", '{"grupos": [["c1","c2"]]}')
         return [["c1", "c2"]]
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fake_proponer)
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_macro_eventos", lambda lote, **kw: [])
     monkeypatch.setattr(recolectar_daemon, "_fusionar_grupo", lambda *a, **k: True)
     registradas: list[tuple[str, str, str, str]] = []
     monkeypatch.setattr(
@@ -598,12 +599,56 @@ def test_paso_fusionar_semantica_sin_fusiones_no_registra(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: list(recientes))
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", lambda lote, **kw: [])
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_macro_eventos", lambda lote, **kw: [])
     registradas: list[object] = []
     monkeypatch.setattr(recolectar_daemon, "_registrar_actividad_ia",
                         lambda *a, **k: registradas.append(a))
 
     assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}
     assert registradas == []
+
+
+def test_paso_fusionar_semantica_etiqueta_macro_evento(monkeypatch):
+    """Tras la fusión dura, ETIQUETA familias de macro-evento (clusters DISTINTOS del mismo gran
+    evento) SIN fundirlos: persiste `tema_macro` por familia y sella la actividad IA."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [
+        {"id": "c1", "titulo": "Meloni deja de fumar en el G7", "estado": "nuevo", "marca": "unotv"},
+        {"id": "c2", "titulo": "Trump habla de Irán en el G7", "estado": "nuevo", "marca": "unotv"},
+        {"id": "c3", "titulo": "Acuerdo comercial en el G7", "estado": "nuevo", "marca": "unotv"},
+    ]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: list(recientes))
+    # Sin fusión dura: aislamos el etiquetado de macro-evento.
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", lambda lote, **kw: [])
+
+    def _fake_macro(lote, *, ejecutor=None, al_ejecutar=None):
+        if al_ejecutar:
+            al_ejecutar("PROMPT-MACRO", '{"familias": [{"tema": "Cumbre del G7", "ids": ["c1","c2","c3"]}]}')
+        return [{"tema": "Cumbre del G7", "ids": ["c1", "c2", "c3"]}]
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_macro_eventos", _fake_macro)
+
+    etiquetados: list[tuple[list[str], str]] = []
+    monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_tema_macro",
+                        lambda ids, tema: etiquetados.append((list(ids), tema)) or len(ids))
+    registradas: list[tuple[str, str, str, str]] = []
+    monkeypatch.setattr(
+        recolectar_daemon, "_registrar_actividad_ia",
+        lambda marca, etiqueta, salida, *, prompt="":
+            registradas.append((marca, etiqueta, salida, prompt)),
+    )
+
+    recolectar_daemon.paso_fusionar_semantica()
+
+    # La familia se persiste tal cual (no se funde ningún cluster).
+    assert etiquetados == [(["c1", "c2", "c3"], "Cumbre del G7")]
+    # Y se deja constancia IA del macro-evento (con el Haiku real + resumen humano).
+    assert len(registradas) == 1
+    marca, etiqueta, salida, prompt = registradas[0]
+    assert marca == "unotv"
+    assert "Macro-evento" in etiqueta
+    assert prompt == "PROMPT-MACRO"
+    assert "Cumbre del G7" in salida
 
 
 # --------------------------------------------------------------------------- #

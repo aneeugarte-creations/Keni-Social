@@ -32,6 +32,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/fusionar-verificar": [
         "Recolectar noticias · Verificar cada grupo propuesto antes de fusionar",
     ],
+    "prompt/fusionar-macroevento": [
+        "Recolectar noticias · Etiquetar familias de macro-evento (historias distintas, mismo gran evento)",
+    ],
     "prompt/priorizar": ["Investigación · Priorizar (perfil de keywords por marca)"],
     "prompt/clasificar-marca": ["Investigación · Clasificar marca"],
     # Importación de documentos

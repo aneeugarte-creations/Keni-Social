@@ -67,6 +67,7 @@ def paso_fusionar_semantica(
 
     grupos_total = 0
     fusionadas_total = 0
+    macro_total = 0
     for marca_f, recientes in por_marca.items():
         if len(recientes) < 2:
             continue
@@ -122,10 +123,56 @@ def paso_fusionar_semantica(
                 salida,
                 prompt=haiku["prompt"],
             )
+
+        # MACRO-EVENTO (Fase A): además de FUNDIR duplicados, ETIQUETA familias de clusters
+        # DISTINTOS que cubren un mismo gran evento (cumbre, desastre, torneo…) SIN fusionarlos:
+        # cada sub-historia conserva su cluster y su corroboración real. Producción usa `tema_macro`
+        # para armar un carrusel del evento. Best-effort: un fallo de Haiku/persistencia no aborta.
+        traducir.tomar_metricas_acumuladas()  # aísla el coste del macro-evento del paso anterior
+        haiku_macro: dict[str, str] = {"prompt": "", "salida": ""}
+        try:
+            familias = fusionar_semantica.proponer_macro_eventos(
+                lote, ejecutor=ejecutor,
+                al_ejecutar=lambda p, s, _h=haiku_macro: _h.update(prompt=p, salida=s),
+            )
+        except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
+            _log.exception("recolectar_daemon: fallo proponiendo macro-eventos de una marca.")
+            familias = []
+        etiquetadas = 0
+        familias_desc: list[str] = []
+        for familia in familias:
+            tema = str(familia.get("tema") or "").strip()
+            ids = [str(i) for i in (familia.get("ids") or []) if i]
+            if not tema or len(ids) < 2:
+                continue
+            try:
+                n = repos.marcar_clusters_tema_macro(ids, tema)
+            except Exception:  # noqa: BLE001 -- persistir una etiqueta no aborta el paso
+                _log.exception("recolectar_daemon: fallo al etiquetar el macro-evento '%s'.", tema)
+                continue
+            if n:
+                etiquetadas += 1
+                familias_desc.append(f"{tema} ({n})")
+        if etiquetadas:
+            macro_total += etiquetadas
+            resumen_macro = (
+                "Historias agrupadas por macro-evento (NO fusionadas; cada una conserva su cluster):\n"
+                + "\n".join(f"• {d}" for d in familias_desc)
+            )
+            salida_macro = haiku_macro["salida"].strip()
+            salida_m = f"{salida_macro}\n\n— — —\n{resumen_macro}" if salida_macro else resumen_macro
+            _pkg._registrar_actividad_ia(
+                marca_f,
+                f"Macro-evento — {marcas.etiqueta_de(marca_f)}: {etiquetadas} familia(s)",
+                salida_m,
+                prompt=haiku_macro["prompt"],
+            )
     _comun._ultimo_fusionar = ahora_mono
     if grupos_total:
         _log.info(
             "recolectar_daemon: fusionar semántico: %d grupo(s), %d historia(s) absorbida(s).",
             grupos_total, fusionadas_total,
         )
+    if macro_total:
+        _log.info("recolectar_daemon: macro-evento: %d familia(s) etiquetada(s).", macro_total)
     return {"grupos": grupos_total, "fusionadas": fusionadas_total}

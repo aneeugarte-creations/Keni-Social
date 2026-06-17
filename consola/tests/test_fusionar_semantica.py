@@ -36,6 +36,13 @@ def _ej(grupos):
     return run
 
 
+def _ej_familias(salida):
+    """Ejecutor falso para macro-eventos: devuelve `salida` tal cual (str o dict serializable)."""
+    def run(_prompt, _carpeta):
+        return salida if isinstance(salida, str) else json.dumps(salida)
+    return run
+
+
 # --------------------------------------------------------------------------- #
 # proponer_fusiones (puro)                                                      #
 # --------------------------------------------------------------------------- #
@@ -117,6 +124,39 @@ def test_verificacion_fallida_descarta_el_grupo():
 def test_extraer_grupos_tolera_fences():
     out = fusionar_semantica._extraer_grupos('```json\n{"grupos": [["1","2"], ["3"]]}\n```')
     assert out == [["1", "2"]]  # grupos de <2 se descartan
+
+
+# --------------------------------------------------------------------------- #
+# proponer_macro_eventos (puro)                                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_proponer_macro_eventos_agrupa_familia():
+    """Tres historias DISTINTAS del mismo gran evento se etiquetan como una familia."""
+    clusters = [
+        {"id": "hotmic", "titulo": "Micrófono abierto capta a un líder en el G7"},
+        {"id": "iran", "titulo": "El G7 endurece su postura sobre Irán"},
+        {"id": "comercio", "titulo": "Acuerdo comercial en la cumbre del G7"},
+    ]
+    salida = {"familias": [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]}
+    familias = fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias(salida))
+    assert familias == [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]
+
+
+def test_proponer_macro_eventos_ignora_familia_de_uno():
+    """Una familia con un solo id válido (y los ids inexistentes se filtran) se descarta."""
+    clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
+    salida = {"familias": [
+        {"tema": "Evento de uno", "ids": ["a", "a"]},      # un solo id distinto -> fuera
+        {"tema": "Inexistentes", "ids": ["zzz", "www"]},   # ningún id válido -> fuera
+    ]}
+    assert fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias(salida)) == []
+
+
+def test_proponer_macro_eventos_json_invalido_devuelve_vacio():
+    """Salida no parseable de Haiku -> [] (best-effort)."""
+    clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
+    assert fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias("no soy json")) == []
 
 
 # --------------------------------------------------------------------------- #

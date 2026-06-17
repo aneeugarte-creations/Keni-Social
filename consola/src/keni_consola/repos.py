@@ -238,6 +238,7 @@ from .repos_noticias import (  # noqa: F401
     marcar_cluster_marca_ia,
     marcar_cluster_verificacion,
     marcar_cluster_traducido,
+    marcar_clusters_tema_macro,
     marcar_item,
     marcar_items_cluster_usados,
     marcar_noticia_algoritmo,

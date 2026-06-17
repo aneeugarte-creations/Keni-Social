@@ -1258,6 +1258,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         marca_clasificada_por_ia INTEGER NOT NULL DEFAULT 0,
         verificacion_fuente  TEXT NOT NULL DEFAULT '',
         verificar_hallazgos  TEXT NOT NULL DEFAULT '',
+        tema_macro    TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )

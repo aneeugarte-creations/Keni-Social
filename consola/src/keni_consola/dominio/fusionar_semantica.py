@@ -45,6 +45,7 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 # paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/fusionar"
 _PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
+_PROMPT_MACRO_ID = "prompt/fusionar-macroevento"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 
@@ -182,6 +183,94 @@ def _verificar_grupo(
             vistos.update(limpio)
             confirmados.append(limpio)
     return confirmados
+
+
+def _extraer_familias(texto: str) -> list[dict[str, Any]]:
+    """Extrae las familias de macro-evento del texto de Haiku. [] si falla.
+
+    Cada familia es `{"tema": "<etiqueta>", "ids": ["id1", "id2", ...]}`; descarta entradas mal
+    formadas (sin lista de ids o con tema vacío). El extractor compartido tolera fences/prosa.
+    """
+    bruto = json_llm.extraer_lista(texto, claves=("familias",))
+    if bruto is None:
+        return []
+    familias: list[dict[str, Any]] = []
+    for f in bruto:
+        if not isinstance(f, dict):
+            continue
+        tema = str(f.get("tema", "") or "").strip()
+        crudo = f.get("ids")
+        if not tema or not isinstance(crudo, list):
+            continue
+        ids = [str(x) for x in crudo if isinstance(x, (str, int))]
+        if ids:
+            familias.append({"tema": tema, "ids": ids})
+    return familias
+
+
+def proponer_macro_eventos(
+    clusters: list[dict[str, Any]],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Propone FAMILIAS de macro-evento (Haiku): historias DISTINTAS de un mismo gran evento.
+
+    A diferencia de `proponer_fusiones` (que FUNDE duplicados del mismo hecho en una historia),
+    esto solo ETIQUETA familias: clusters que cuentan hechos DISTINTOS pero pertenecen al mismo
+    gran acontecimiento (una cumbre, un desastre, un torneo, una elección). No fusiona nada; es
+    aditivo y no se solapa con el fundir.
+
+    `clusters`: dicts con al menos `{id, titulo, resumen}`. Devuelve
+    `[{"tema": "<etiqueta corta en español>", "ids": ["<cluster_id>", ...]}, ...]` con SOLO las
+    familias de 2+ ids DISTINTOS y VÁLIDOS (que existan en el input). [] ante <2 historias o
+    cualquier fallo (best-effort, igual que `proponer_fusiones`).
+
+    `al_ejecutar(prompt, salida)`: callback OPCIONAL con el PROMPT y la SALIDA reales de Haiku tras
+    la llamada (antes de parsear), para observabilidad; un fallo del callback no afecta al proceso.
+    """
+    validos = [c for c in clusters if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
+    if len(validos) < 2:
+        return []
+    ids_validos = {str(c["id"]) for c in validos}
+
+    payload = [
+        {
+            "id": str(c["id"]),
+            "titulo": json_llm.truncar_avisando(
+                str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+                campo=f"titulo de {c['id']}", log=_log,
+            )[0],
+            "resumen": json_llm.truncar_avisando(
+                str(c.get("resumen", "") or "").strip(), _MAX_CHARS_ITEM,
+                campo=f"resumen de {c['id']}", log=_log,
+            )[0],
+        }
+        for c in validos
+    ]
+    correr = ejecutor or _ejecutar_haiku
+    prompt = _construir_prompt(
+        json.dumps(payload, ensure_ascii=False), prompt_id=_PROMPT_MACRO_ID
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="keni-macroevento-") as carpeta:
+            salida = correr(prompt, carpeta)
+    except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no etiqueta nada
+        _log.warning("fusionar_semantica: falló la llamada a Haiku (macro-evento): %s", e)
+        return []
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusionar_semantica: fallo en al_ejecutar (macro-evento).", exc_info=True)
+
+    familias: list[dict[str, Any]] = []
+    for f in _extraer_familias(salida):
+        # Solo ids del input, sin repetir DENTRO de la familia, preservando orden.
+        ids = [i for i in dict.fromkeys(f["ids"]) if i in ids_validos]
+        if len(ids) >= 2:
+            familias.append({"tema": f["tema"], "ids": ids})
+    return familias
 
 
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:

@@ -195,6 +195,9 @@ def _historia_a_dict(
         "resumen": resumen,
         "marca": cluster.get("marca") or "",
         "marca_nombre": marcas.etiqueta_de(cluster["marca"]) if cluster.get("marca") else "",
+        # MACRO-EVENTO (Fase A): etiqueta de la familia de clusters de un mismo gran evento
+        # (la pone Fusionar sin fundirlos); el panel agrupa por aquí. Vacío = sin macro-evento.
+        "tema_macro": cluster.get("tema_macro") or "",
         "categoria": cluster.get("categoria") or "",
         "geo": cluster.get("geo") or "",
         "n_items": int(cluster.get("n_items") or 0),

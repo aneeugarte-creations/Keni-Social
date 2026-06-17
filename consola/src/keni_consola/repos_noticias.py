@@ -299,6 +299,10 @@ def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: s
     return db.marcar_cluster_verificacion(cluster_id, verificacion, hallazgos)
 
 
+def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
+    return db.marcar_clusters_tema_macro(ids, tema)
+
+
 def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:
     return db.contar_clusters_admision_verificacion(marca, estados)
 

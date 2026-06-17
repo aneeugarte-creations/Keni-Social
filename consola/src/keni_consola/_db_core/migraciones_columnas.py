@@ -908,6 +908,10 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # vieja -> "" (sin verificacion: aún por verificar).
     ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
+    # MACRO-EVENTO (Fase A): agrupa varios clusters distintos bajo un mismo gran evento
+    # (p. ej. "Cumbre del G7") SIN fusionarlos. "" = la historia no pertenece a ningún
+    # macro-evento. Lo escribe `marcar_clusters_tema_macro` y NO lo pisa un recalc del daemon.
+    ("tema_macro", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:

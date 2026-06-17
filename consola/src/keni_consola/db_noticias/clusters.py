@@ -50,6 +50,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "marca_clasificada_por_ia",
     "verificacion_fuente",
     "verificar_hallazgos",
+    "tema_macro",
     "creado",
     "actualizado",
 )
@@ -108,6 +109,9 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         # hallazgos; la admisión solo materializa contenido de las verificadas.
         "verificacion_fuente": fila["verificacion_fuente"] or "",
         "verificar_hallazgos": fila["verificar_hallazgos"] or "",
+        # Macro-evento (Fase A): la historia pertenece a un gran evento (p. ej. "Cumbre del
+        # G7") junto a otros clusters, SIN fusionarse con ellos. "" = sin macro-evento.
+        "tema_macro": fila["tema_macro"] or "",
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -177,6 +181,10 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # recalc (merge/fusión/rescore) sin el verificacion no borra una verificación ya hecha.
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "verificar_hallazgos": cluster.get("verificar_hallazgos") or "",
+        # Macro-evento (Fase A): valor del ALTA; en conflicto NO se pisa (está en `_NO_PISAR`),
+        # lo sella aparte `marcar_clusters_tema_macro` — como `traducido`. Así un recalc del
+        # daemon sin el tema_macro no borra una asignación a macro-evento ya hecha.
+        "tema_macro": cluster.get("tema_macro") or "",
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
@@ -188,6 +196,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
         "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
+        "tema_macro",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -467,6 +476,32 @@ def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: s
             (verificacion or "", hallazgos or "", ahora_iso(), cluster_id),
         )
         con.commit()
+    finally:
+        con.close()
+
+
+def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
+    """Asigna el MACRO-EVENTO `tema` a un lote de clusters por id (Fase A). Devuelve nº filas.
+
+    Agrupa varias HISTORIAS distintas bajo un mismo gran evento (p. ej. "Cumbre del G7") SIN
+    fusionarlas: cada cluster conserva su identidad y solo comparte `tema_macro`. Aparte del
+    upsert (la columna está en `_NO_PISAR`) para que un recalc posterior del daemon no la
+    borre — mismo patrón que `marcar_cluster_marca_ia`/`marcar_cluster_traducido`. `ids` vacío
+    -> 0 sin tocar BD. `tema` vacío desvincula los clusters del macro-evento.
+    """
+    pedidos = [i for i in dict.fromkeys(ids) if i]
+    if not pedidos:
+        return 0
+    marcadores = ",".join("?" for _ in pedidos)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET tema_macro = ?, actualizado = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE id IN ({marcadores})",
+            (tema or "", ahora_iso(), *pedidos),
+        )
+        con.commit()
+        return cur.rowcount or 0
     finally:
         con.close()
 
