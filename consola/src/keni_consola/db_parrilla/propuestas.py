@@ -221,16 +221,27 @@ def aplicar_propuesta_parrilla(
     def _franja_id_de(
         con: Any, semana: str, nombre: str, *, inicio: str = "", fin: str = ""
     ) -> str:
-        """Resuelve `nombre` de slot -> `franja_id` de `semana`. PERMISIVO: si el nombre no
-        existe en esa semana, CREA la franja (un día puede tener 3+ franjas y el documento
-        puede traer slots nuevos), usando `inicio`/`fin` si vienen o un horario por defecto.
-        `es_descanso` se infiere del nombre. No rechaza nada por plantilla."""
+        """Resuelve `nombre` de slot -> `franja_id` de `semana` DE LA MARCA. PERMISIVO: si el
+        nombre no existe en esa semana, CREA la franja (un día puede tener 3+ franjas y el
+        documento puede traer slots nuevos), usando `inicio`/`fin` si vienen o un horario por
+        defecto. `es_descanso` se infiere del nombre. No rechaza nada por plantilla.
+
+        GRID POR MARCA: resuelve/crea dentro de la `marca` de la propuesta (lee `marca` del
+        scope), para que `franja.marca == turno.marca` y la rejilla (filtrada por marca) los
+        muestre. Sin marca (legado/«Todas») NO filtra (match por nombre, como antes)."""
         if semana not in franjas_por_semana:
             # Cargamos las franjas YA existentes de la semana (sin inicializar: no imponemos la
-            # plantilla por defecto; solo creamos las que el documento realmente use).
-            filas = con.execute(
-                "SELECT id, nombre FROM rota_franjas WHERE lunes = ?", (semana,)
-            ).fetchall()
+            # plantilla por defecto; solo creamos las que el documento realmente use). Acotadas a
+            # la marca para no resolver al slot homónimo de OTRA marca.
+            if marca:
+                filas = con.execute(
+                    "SELECT id, nombre FROM rota_franjas WHERE lunes = ? AND marca = ?",
+                    (semana, marca),
+                ).fetchall()
+            else:
+                filas = con.execute(
+                    "SELECT id, nombre FROM rota_franjas WHERE lunes = ?", (semana,)
+                ).fetchall()
             franjas_por_semana[semana] = {
                 str(f["nombre"]).strip().lower(): f["id"] for f in filas
             }
@@ -242,8 +253,9 @@ def aplicar_propuesta_parrilla(
         nuevo_id = uuid.uuid4().hex[:12]
         es_descanso = "descanso" in clave
         con.execute(
-            "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO rota_franjas "
+            "(id, lunes, nombre, inicio, fin, orden, es_descanso, marca) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo_id,
                 semana,
@@ -252,6 +264,7 @@ def aplicar_propuesta_parrilla(
                 (fin or "").strip() or "23:59",
                 len(franjas_por_semana[semana]),
                 es_descanso,
+                marca or "",
             ),
         )
         franjas_por_semana[semana][clave] = nuevo_id
@@ -317,8 +330,9 @@ def aplicar_propuesta_parrilla(
                 con.execute(
                     "INSERT INTO rota_turnos "
                     "(id, semana, fecha, miembro_id, miembro_nombre, franja_id, estado, "
-                    "override, motivo, nota_relevo, creado, actualizado, origen, origen_ref) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "override, motivo, nota_relevo, creado, actualizado, origen, origen_ref, "
+                    "marca) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         tid,
                         semana,
@@ -334,6 +348,7 @@ def aplicar_propuesta_parrilla(
                         ahora,
                         origen,
                         propuesta_id,
+                        marca or "",
                     ),
                 )
                 turnos_creados.append(tid)
