@@ -139,7 +139,7 @@ function AccionRed({
   return (
     <Button
       size="sm"
-      variant={red.estado === "expired" ? "outline" : "default"}
+      variant="outline"
       className="h-7 px-2 text-xs"
       disabled={ocupada}
       onClick={onConectar}
