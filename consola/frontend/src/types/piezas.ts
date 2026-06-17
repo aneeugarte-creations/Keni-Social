@@ -117,14 +117,6 @@ export interface CuerpoActualizarPieza {
   espejo?: boolean;
 }
 
-/** Cuerpo opcional para duplicar una publicación (red/marca/título destino). */
-export interface CuerpoDuplicarPieza {
-  red?: string;
-  marca?: string;
-  titulo?: string;
-}
-
-
 // --- Hashtags ---
 
 /** Un grupo de hashtags guardado. */

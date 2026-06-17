@@ -187,8 +187,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.getByRole("button", { name: "Me gusta: no disponible" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Comentar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^editar/i })).not.toBeInTheDocument();
-    // La tarjeta completa es clicable (abre el editor).
-    expect(screen.getByRole("button", { name: /abrir para editar/i })).toBeInTheDocument();
+    // La tarjeta completa es clicable (abre la publicación); el opener ya no dice "editar".
+    expect(screen.getByRole("button", { name: /^abrir/i })).toBeInTheDocument();
   });
 
   it("«Me gusta» cuando NO toca no aprueba: avisa con un toast (falta la imagen) con acción 'Abrir'", () => {
@@ -538,7 +538,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
       vi.fn(async () => new Response("{}", { status: 200 })),
     );
     renderPost(pub({ estado: "publicado", etapa_ia: "publicada" }));
-    fireEvent.click(screen.getByRole("button", { name: /abrir para editar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^abrir/i }));
     // Inmutable: no hay diálogo de confirmación; el editor abre directo con el aviso de solo lectura.
     expect(await screen.findByText(/solo lectura/i)).toBeInTheDocument();
     expect(screen.queryByText(/se perderán las aprobaciones/i)).not.toBeInTheDocument();

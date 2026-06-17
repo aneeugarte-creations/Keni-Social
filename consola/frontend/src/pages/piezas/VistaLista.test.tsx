@@ -78,7 +78,6 @@ function renderLista(
         <VistaLista
           piezas={piezas}
           onEditar={vi.fn()}
-          onDuplicar={vi.fn()}
           onConfigurarHorarios={vi.fn()}
         />
       </MemoryRouter>
@@ -171,15 +170,45 @@ describe("VistaLista — 'Añadir a la cola' solo en piezas programadas", () => 
     fireEvent.contextMenu(screen.getAllByText("Borrador")[0].closest('[role="button"]')!);
     // El menú abre con otras acciones, pero la de encolar NO está: el camino del borrador es
     // el flujo de aprobación (que auto-programa al aprobarse), no un encolado a mano.
-    await screen.findByRole("menuitem", { name: /Duplicar/ });
+    await screen.findByRole("menuitem", { name: /Borrar/ });
     expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();
   });
 
   it("una pieza PUBLICADA NO ofrece 'Añadir a la cola' (no se re-encola)", async () => {
     renderLista([pub({ id: "p1", titulo: "Salió", estado: "publicado" })]);
     fireEvent.contextMenu(screen.getByText("Salió").closest('[role="button"]')!);
-    await screen.findByRole("menuitem", { name: /Duplicar/ });
+    await screen.findByRole("menuitem", { name: /Borrar/ });
     expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();
+  });
+});
+
+describe("VistaLista — el menú es 'Aprobar o Borrar' (sin Duplicar ni evergreen)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("un BORRADOR ofrece 'Aprobar' y 'Borrar', y NO 'Duplicar' ni evergreen", async () => {
+    renderLista([pub({ id: "p1", titulo: "Borrador", estado: "borrador" })]);
+    fireEvent.contextMenu(screen.getAllByText("Borrador")[0].closest('[role="button"]')!);
+    expect(await screen.findByRole("menuitem", { name: /Aprobar/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Borrar/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Duplicar/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /evergreen/i })).toBeNull();
+  });
+
+  it("'Aprobar' registra el OK por la cadena (POST /aprobar)", async () => {
+    const aprobar = vi
+      .spyOn(apiMod.api, "aprobarPieza")
+      .mockResolvedValue({ pieza: pub({ estado: "en_revision" }) } as never);
+    renderLista([pub({ id: "p1", titulo: "Pieza a revisar", estado: "en_revision" })]);
+    fireEvent.contextMenu(screen.getByText("Pieza a revisar").closest('[role="button"]')!);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Aprobar/ }));
+    await waitFor(() => expect(aprobar).toHaveBeenCalledWith("p1"));
+  });
+
+  it("una pieza PUBLICADA NO ofrece 'Aprobar' (ya salió)", async () => {
+    renderLista([pub({ id: "p1", titulo: "Salió", estado: "publicado" })]);
+    fireEvent.contextMenu(screen.getByText("Salió").closest('[role="button"]')!);
+    await screen.findByRole("menuitem", { name: /Borrar/ });
+    expect(screen.queryByRole("menuitem", { name: /Aprobar/ })).toBeNull();
   });
 });
 

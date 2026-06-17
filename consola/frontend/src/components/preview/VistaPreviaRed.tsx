@@ -20,7 +20,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Music2,
-  Pencil,
   Play,
   Repeat2,
   Send,
@@ -52,15 +51,21 @@ export interface VistaPreviaRedProps {
   carrusel?: string;
   /**
    * Título de la pieza (el tema). En la variante limpia da nombre accesible al área
-   * interactiva ("Abrir para editar: …") y `alt` a la imagen.
+   * interactiva ("Abrir: …") y `alt` a la imagen.
    */
   titulo?: string;
   /**
-   * Variante `"limpia"`: callback al activar la IMAGEN (clic o teclado). Cuando se pasa, SOLO la
-   * imagen abre la acción (p. ej. el editor); el copy y su "leer más" quedan fuera. Sin valor, la
-   * imagen no es interactiva.
+   * Variante `"limpia"`: callback al abrir la pieza. Lo dispara la IMAGEN (clic o teclado:
+   * role=button + Enter/Espacio). Sin valor, la imagen no es interactiva.
    */
   onAbrir?: () => void;
+  /**
+   * Variante `"limpia"`: plegado CONTROLADO del caption ("leer más"). El feed lo eleva para que el
+   * área de acciones expanda el MISMO caption que su texto. Sin `onAlternarCaption`, el caption
+   * gestiona su propio plegado.
+   */
+  captionExpandido?: boolean;
+  onAlternarCaption?: () => void;
   /**
    * `"completa"` (default): mockup fiel con su chrome social (como en "Generar copy" y el
    * diálogo de edición). `"limpia"`: feed de trabajo — conserva el logo/marca, el copy real
@@ -168,8 +173,20 @@ const TextoRed = React.forwardRef<
  * fila del enlace, así TODAS las tarjetas miden lo mismo plegadas (rejilla uniforme), tengan o no
  * "más". Re-mide al cambiar el ancho (cambio de columnas) vía `ResizeObserver`.
  */
-function CopyConLeerMas({ contenido }: { contenido: string }) {
-  const [expandido, setExpandido] = React.useState(false);
+function CopyConLeerMas({
+  contenido,
+  expandido: expandidoProp,
+  onAlternar,
+}: {
+  contenido: string;
+  /** Plegado CONTROLADO: cuando el feed pasa `onAlternar`, el estado lo lleva el padre (para que
+   *  el área de acciones expanda el mismo caption). Sin `onAlternar`, se gestiona aquí. */
+  expandido?: boolean;
+  onAlternar?: () => void;
+}) {
+  const controlado = onAlternar !== undefined;
+  const [expandidoLocal, setExpandidoLocal] = React.useState(false);
+  const expandido = controlado ? !!expandidoProp : expandidoLocal;
   const [hayMas, setHayMas] = React.useState(false);
   const ref = React.useRef<HTMLParagraphElement>(null);
   React.useLayoutEffect(() => {
@@ -186,14 +203,12 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [contenido, expandido]);
-  const alternar = () => setExpandido((v) => !v);
+  const alternar = onAlternar ?? (() => setExpandidoLocal((v) => !v));
   return (
+    // TODA el área de texto alterna leer más/menos (conveniencia de puntero, estilo red social);
+    // para su propio clic para no abrir la publicación. El control accesible es el BOTÓN
+    // "más/menos" de abajo. Los enlaces del copy paran su propio clic (tocar una URL la abre).
     <div
-      // TODA el área de texto alterna leer más/menos como CONVENIENCIA de puntero (estilo red
-      // social); el control accesible real es el BOTÓN "más/menos" de abajo (un role=button aquí
-      // daría como nombre TODO el copy y anidaría los <a> del texto dentro de un botón). Para la
-      // propagación para no abrir el editor (que vive en la imagen); los enlaces del copy ya paran
-      // su propio clic, así que tocar una URL la abre en vez de plegar.
       onClick={
         hayMas
           ? (e) => {
@@ -258,7 +273,7 @@ function CarruselLimpio({
   const ref = React.useRef<HTMLDivElement>(null);
   const [indice, setIndice] = React.useState(0);
   const total = slides.length + 1;
-  const etiquetaAbrir = titulo ? `Abrir para editar: ${titulo}` : "Abrir para editar";
+  const etiquetaAbrir = titulo ? `Abrir: ${titulo}` : "Abrir";
 
   // Índice visible derivado del scroll real (también cuando se desliza con el dedo).
   const onScroll = () => {
@@ -317,15 +332,6 @@ function CarruselLimpio({
             <PlaceholderImagen className="h-full w-full" />
           )}
           <CapaCopyIn texto={portada ? "" : copyIn} />
-          {onAbrir && (
-            <span
-              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-              aria-hidden="true"
-            >
-              <Pencil className="h-3 w-3" />
-              Editar
-            </span>
-          )}
         </div>
         {/* Slides EN CRUDO, en su orden de publicación. Las IMÁGENES abren el editor al
             hacer clic (igual que la portada); los VIDEOS no: ahí el clic controla la
@@ -375,15 +381,6 @@ function CarruselLimpio({
                   decoding="async"
                   className="h-full w-full object-cover"
                 />
-              )}
-              {clicable && (
-                <span
-                  className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                  aria-hidden="true"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Editar
-                </span>
               )}
             </div>
           );
@@ -697,6 +694,8 @@ export function VistaPreviaRed({
   carrusel,
   titulo,
   onAbrir,
+  captionExpandido,
+  onAlternarCaption,
   variante = "completa",
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
@@ -706,7 +705,7 @@ export function VistaPreviaRed({
   // 4:5 a ancho completo, SIN nada superpuesto que tape la imagen. El distintivo de
   // plataforma + formato va en la CABECERA (junto al logo de IA/autor), no aquí.
   if (variante === "limpia") {
-    const etiquetaAbrir = titulo ? `Abrir para editar: ${titulo}` : "Abrir para editar";
+    const etiquetaAbrir = titulo ? `Abrir: ${titulo}` : "Abrir";
     // CARRUSEL deslizable (piezas con slides): portada + media en crudo, scroll lateral
     // con snap (como en las redes de verdad). Sin slides, la imagen única de siempre.
     const slides = parsearCarrusel(carrusel);
@@ -721,20 +720,25 @@ export function VistaPreviaRed({
             slides={slides}
           />
           <div className="px-4 pb-1 pt-3">
-            <CopyConLeerMas contenido={contenido} />
+            <CopyConLeerMas
+              contenido={contenido}
+              expandido={captionExpandido}
+              onAlternar={onAlternarCaption}
+            />
           </div>
         </div>
       );
     }
     return (
       <div>
-        {/* SOLO la imagen abre la acción (editor): es el área interactiva de la pieza. El copy
-            de abajo gestiona su propio "leer más" y no abre nada. */}
+        {/* La imagen abre la publicación (`onAbrir`) y da el acceso por TECLADO (role=button +
+            Enter/Espacio); sin foco visible no habría entrada accesible al detalle. El copy de
+            abajo abre lo mismo al hacer clic, burbujeando a la tarjeta. */}
         <div
           className={cn(
             "relative aspect-[4/5] w-full overflow-hidden bg-muted",
             onAbrir &&
-              "group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           )}
           role={onAbrir ? "button" : undefined}
           tabIndex={onAbrir ? 0 : undefined}
@@ -759,24 +763,15 @@ export function VistaPreviaRed({
           )}
           {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
           <CapaCopyIn texto={imagen ? "" : copy_in} />
-          {/* Affordance de edición: el área interactiva se anuncia al hover/focus y, en
-              dispositivos SIN hover (táctil), queda SIEMPRE visible — es la única señal de que
-              la imagen abre el editor. Decorativo: el nombre accesible ya lo lleva el
-              contenedor. */}
-          {onAbrir && (
-            <span
-              className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-              aria-hidden="true"
-            >
-              <Pencil className="h-3 w-3" />
-              Editar
-            </span>
-          )}
         </div>
         {/* Copy (caption) bajo la imagen, idéntico para toda red: recortado a 2 líneas con "leer
             más" estilo red social, y alto reservado para que todas las tarjetas midan igual. */}
         <div className="px-4 pb-1 pt-3">
-          <CopyConLeerMas contenido={contenido} />
+          <CopyConLeerMas
+            contenido={contenido}
+            expandido={captionExpandido}
+            onAlternar={onAlternarCaption}
+          />
         </div>
       </div>
     );

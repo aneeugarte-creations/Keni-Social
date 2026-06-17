@@ -21,7 +21,6 @@ import {
   type Vista,
 } from "@/pages/feed/vistas";
 import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
-import { DialogoDuplicar } from "@/pages/piezas/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
 import { VistaCalendario, rangoVisibleCalendario } from "@/pages/piezas/VistaCalendario";
 import { VistaLista } from "@/pages/piezas/VistaLista";
@@ -82,12 +81,12 @@ export function faltaMarcaAsignada(
 }
 
 /**
- * GESTIÓN de piezas en dos modos: `lista` (paginada, con duplicar/editar) y
+ * GESTIÓN de piezas en dos modos: `lista` (paginada, con aprobar/editar) y
  * `calendario` (rejilla mensual de programadas, sin paginación ni filtro de estado).
  *
  * Lee `/api/piezas` (misma BD que `/api/publicaciones`: una publicación ES una fila
  * `pieza` de un `contenido`) y reutiliza el editor rico
- * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`).
+ * (`VistaLista`/`VistaCalendario`/`DialogoEditar`).
  *
  * MARCA, RED y LÍNEA editorial vienen TODAS de los selectores GLOBALES de la barra
  * superior (`useMarcaActiva` + `useFiltrosPublicacion`); esta página ya no tiene
@@ -153,7 +152,6 @@ function Cuerpo({
   // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
   const { red, linea } = useFiltrosPublicacion();
   const [editando, setEditando] = React.useState<Pieza | null>(null);
-  const [duplicando, setDuplicando] = React.useState<Pieza | null>(null);
 
   // `usuario` solo para avisar al editor sin marca asignada (abajo). El reparto de TAREAS
   // (coger/asignar) se mudó a su propia página (/operacion/tareas): el Feed es SOLO piezas.
@@ -392,7 +390,6 @@ function Cuerpo({
           <VistaLista
             piezas={piezas}
             onEditar={setEditando}
-            onDuplicar={setDuplicando}
             onConfigurarHorarios={onConfigurarHorarios ?? (() => {})}
           />
           {hayMas && (
@@ -416,12 +413,6 @@ function Cuerpo({
       <DialogoEditar
         pieza={editando}
         onCerrar={() => setEditando(null)}
-      />
-      <DialogoDuplicar
-        pieza={duplicando}
-        marcas={opciones.marcas}
-        redes={opciones.redes}
-        onCerrar={() => setDuplicando(null)}
       />
     </div>
   );

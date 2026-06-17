@@ -22,7 +22,7 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
     if (origClient) Object.defineProperty(HTMLElement.prototype, "clientHeight", origClient);
   });
 
-  it("recorta el copy y alterna al pulsar TODA el área de texto (no solo el enlace)", () => {
+  it("recorta el copy y alterna al pulsar el área de texto (botón «más»/«menos»)", () => {
     render(
       <VistaPreviaRed
         red="instagram"
@@ -31,12 +31,43 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
         variante="limpia"
       />,
     );
-    // Toda el área de texto es el toggle (role=button con aria-expanded); muestra "más" plegado.
+    // Sin onAbrir el único role=button es el «más/menos» (con aria-expanded); muestra "más" plegado.
     const toggle = screen.getByRole("button");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("más")).toBeInTheDocument();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("menos")).toBeInTheDocument();
+  });
+
+  it("plegado CONTROLADO: clic en el caption llama a onAlternarCaption (no gestiona su estado)", () => {
+    const onAlternar = vi.fn();
+    const { rerender } = render(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido={"línea uno\nlínea dos\nlínea tres\nlínea cuatro"}
+        variante="limpia"
+        captionExpandido={false}
+        onAlternarCaption={onAlternar}
+      />,
+    );
+    // El botón refleja el prop (plegado) y al pulsarlo NO togglea solo: avisa al padre.
+    const toggle = screen.getByRole("button");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(onAlternar).toHaveBeenCalledTimes(1);
+    // El padre decide; al pasar expandido=true, el botón pasa a "menos".
+    rerender(
+      <VistaPreviaRed
+        red="instagram"
+        marca="UnoTV"
+        contenido={"línea uno\nlínea dos\nlínea tres\nlínea cuatro"}
+        variante="limpia"
+        captionExpandido={true}
+        onAlternarCaption={onAlternar}
+      />,
+    );
     expect(screen.getByText("menos")).toBeInTheDocument();
   });
 
@@ -57,7 +88,7 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
     expect(enlace).not.toHaveAttribute("tabindex");
   });
 
-  it("con onAbrir hace la IMAGEN interactiva y deja el copy aparte", () => {
+  it("con onAbrir hace la IMAGEN interactiva (sin etiqueta «editar»)", () => {
     const onAbrir = vi.fn();
     render(
       <VistaPreviaRed
@@ -68,8 +99,8 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
         onAbrir={onAbrir}
       />,
     );
-    // Hay dos botones: la imagen (abrir) y el toggle del copy. Pulsar la imagen abre; el copy no.
-    fireEvent.click(screen.getByRole("button", { name: "Abrir para editar" }));
+    // La imagen abre la pieza y su nombre accesible ya no dice "editar", solo "Abrir".
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
     expect(onAbrir).toHaveBeenCalledTimes(1);
   });
 });
@@ -109,20 +140,20 @@ describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
     expect(container.querySelector("video")).not.toBeNull();
     // La portada abre el editor.
     fireEvent.click(
-      screen.getByRole("button", { name: "Abrir para editar: Nota de presidencia" }),
+      screen.getByRole("button", { name: "Abrir: Nota de presidencia" }),
     );
     expect(onAbrir).toHaveBeenCalledTimes(1);
     // El slide de IMAGEN (no portada) también abre el editor al hacer clic.
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Abrir para editar: Nota de presidencia (slide 2 de 3)",
+        name: "Abrir: Nota de presidencia (slide 2 de 3)",
       }),
     );
     expect(onAbrir).toHaveBeenCalledTimes(2);
     // El slide de VIDEO no es interactivo (no abre el editor): solo hay 2 botones de
     // apertura (portada + imagen), no uno por el video.
     expect(
-      screen.getAllByRole("button", { name: /Abrir para editar/ }),
+      screen.getAllByRole("button", { name: /^Abrir/ }),
     ).toHaveLength(2);
   });
 

@@ -1,4 +1,4 @@
-"""Tests de las features nuevas en /api/piezas: imagen, encolar y duplicar.
+"""Tests de las features nuevas en /api/piezas: imagen y encolar.
 
 OFFLINE. Para `encolar`, inyectamos un "ahora" fijo parcheando el `datetime` del
 modulo de piezas, de modo que el hueco calculado sea determinista.
@@ -152,58 +152,3 @@ def test_encolar_evita_hueco_ocupado(cliente, ahora_fijo):
     r = cliente.post(f"/api/piezas/{nuevo}/encolar")
     # el hueco de hoy esta tomado -> salta a la semana siguiente
     assert r.json()["pieza"]["fecha_programada"] == "2026-05-27T15:00"
-
-
-# --------------------------------------------------------------------------- #
-# Duplicar                                                                    #
-# --------------------------------------------------------------------------- #
-
-
-def test_duplicar_copia_borrador(cliente):
-    orig = _crear(
-        cliente, titulo="Original", contenido="cuerpo", imagen="img.png"
-    ).json()["pieza"]
-    # programamos el original para verificar que la copia NO hereda estado/fecha
-    cliente.put(
-        f"/api/piezas/{orig['id']}",
-        json={"estado": "en_revision"},
-    )
-    r = cliente.post(f"/api/piezas/{orig['id']}/duplicar")
-    assert r.status_code == 200
-    copia = r.json()["pieza"]
-    assert copia["id"] != orig["id"]
-    assert copia["estado"] == "borrador"
-    assert copia["fecha_programada"] == ""
-    assert copia["contenido"] == "cuerpo"
-    assert copia["imagen"] == "img.png"
-    assert copia["titulo"] == "Original"
-
-
-def test_duplicar_con_overrides(cliente):
-    orig = _crear(cliente, marca="unotv", red="x", titulo="A").json()["pieza"]
-    r = cliente.post(
-        f"/api/piezas/{orig['id']}/duplicar",
-        json={"red": "instagram", "marca": "piso-15", "titulo": "B"},
-    )
-    copia = r.json()["pieza"]
-    assert copia["red"] == "instagram"
-    assert copia["marca"] == "piso-15"
-    assert copia["titulo"] == "B"
-
-
-def test_duplicar_override_red_invalida_400(cliente):
-    orig = _crear(cliente).json()["pieza"]
-    assert cliente.post(
-        f"/api/piezas/{orig['id']}/duplicar", json={"red": "myspace"}
-    ).status_code == 400
-
-
-def test_duplicar_override_marca_invalida_400(cliente):
-    orig = _crear(cliente).json()["pieza"]
-    assert cliente.post(
-        f"/api/piezas/{orig['id']}/duplicar", json={"marca": "marca_falsa"}
-    ).status_code == 400
-
-
-def test_duplicar_404(cliente):
-    assert cliente.post("/api/piezas/noexiste/duplicar").status_code == 404

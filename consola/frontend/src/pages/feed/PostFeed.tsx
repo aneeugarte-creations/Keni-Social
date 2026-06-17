@@ -69,6 +69,9 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
+  // Plegado del caption ELEVADO aquí para que tanto su texto como el espacio libre de la fila de
+  // acciones (la "parte baja" de la tarjeta) expandan/plieguen el mismo "leer más".
+  const [captionExpandido, setCaptionExpandido] = React.useState(false);
   // El hilo se abre al FONDO de la tarjeta (fuera del viewport en tarjetas altas): al abrirlo,
   // acércalo a la vista. Llamada opcional: jsdom no implementa scrollIntoView.
   const comentariosRef = React.useRef<HTMLDivElement>(null);
@@ -516,15 +519,23 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         carrusel={pieza.carrusel}
         titulo={pieza.titulo}
         onAbrir={() => void abrirEditor()}
+        captionExpandido={captionExpandido}
+        onAlternarCaption={() => setCaptionExpandido((v) => !v)}
         variante="limpia"
       />
 
-      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). Esta
-          zona NO abre el editor (para la propagación). Like y dislike son un TOGGLE de tu
-          reacción; marcar OK / marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
+      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). El
+          espacio LIBRE de esta fila expande/pliega el caption (la "parte baja" de la tarjeta);
+          un clic en un botón/enlace hace SU acción, no expande. `stopPropagation` evita que la
+          tarjeta abra además el editor. Like y dislike son un TOGGLE de tu reacción; marcar OK /
+          marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
       <div
         className="flex flex-wrap items-center gap-2 gap-y-1 px-4 pb-2 pt-1"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button, a")) return;
+          e.stopPropagation();
+          setCaptionExpandido((v) => !v);
+        }}
       >
         <BadgeEtapa etapa={etapa} formato={pieza.formato} />
         {/* Cuándo sale/salió: la fecha de salida con CalendarClock, SIEMPRE en gris neutro (el

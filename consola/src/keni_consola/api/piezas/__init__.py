@@ -48,7 +48,6 @@ from .crud import (
     crear,
     crear_lote,
     detalle,
-    duplicar,
     listar,
     opciones,
     programar_metricool,
@@ -73,7 +72,6 @@ __all__ = [
     "borrar",
     "borrar_lote",
     "cadenas_lote",
-    "duplicar",
     "clonar",
     "programar_metricool",
     # Programación
@@ -120,7 +118,6 @@ RUTAS = [
     Route("/api/piezas", crear, methods=["POST"]),
     Route("/api/piezas/lote", crear_lote, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/encolar", encolar, methods=["POST"]),
-    Route("/api/piezas/{pieza_id}/duplicar", duplicar, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/clonar", clonar, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/integrar-foto", integrar_foto, methods=["POST"]),

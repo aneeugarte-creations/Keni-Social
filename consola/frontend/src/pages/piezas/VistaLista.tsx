@@ -2,14 +2,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   CalendarClock,
   CalendarPlus,
-  Copy,
   ImageIcon,
   Send,
   Sprout,
+  ThumbsUp,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
@@ -36,7 +35,7 @@ import type { Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
-import { formatearFechaHora, metaEstado, siguienteEstado } from "./meta";
+import { formatearFechaHora } from "./meta";
 
 /**
  * Visibilidad del kebab "⋮" según el puntero. En TÁCTIL (puntero grueso) no hay hover, así
@@ -55,28 +54,33 @@ export function kebabSegunPuntero(punteroGrueso: boolean): "siempre" | "hover" {
 function TarjetaPieza({
   pieza,
   onEditar,
-  onDuplicar,
   onConfigurarHorarios,
 }: {
   pieza: Pieza;
   onEditar: (p: Pieza) => void;
-  onDuplicar: (p: Pieza) => void;
   onConfigurarHorarios: () => void;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
-  const proximo = siguienteEstado(pieza.estado);
   const imagen = urlMedia(pieza.imagen_url || pieza.imagen);
+  // "Aprobar" solo tiene sentido en una pieza pendiente de decisión (borrador o en revisión).
+  const puedeAprobar = pieza.estado === "borrador" || pieza.estado === "en_revision";
 
-  const avanzar = useMutation({
-    mutationFn: () => {
-      if (!proximo) throw new Error("Estado final");
-      return api.actualizarPieza(pieza.id, { estado: proximo });
-    },
-    onSuccess: () => {
+  // Registra tu OK en la cadena (mismo motor que el pulgar del feed): un OK puede cerrar la
+  // cadena (queda lista/programada) o ser 1 de 2 (sigue en revisión hasta el segundo OK). El
+  // back exige que la pieza esté en revisión y "otro par de ojos"; el toast cuenta el desenlace.
+  const aprobar = useMutation({
+    mutationFn: () => api.aprobarPieza(pieza.id),
+    onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
-      if (proximo) toast.success(`Estado cambiado a "${metaEstado(proximo).nombre}"`);
+      const cerrada =
+        !!res?.pieza && ["programado", "publicado"].includes(res.pieza.estado);
+      toast.success(
+        cerrada
+          ? "Pieza aprobada: lista para publicar."
+          : "Tu OK quedó registrado; falta el de otra persona.",
+      );
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -121,18 +125,6 @@ function TarjetaPieza({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const alternarEvergreen = useMutation({
-    mutationFn: () =>
-      api.actualizarPieza(pieza.id, { evergreen: !pieza.evergreen }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
-      toast.success(
-        pieza.evergreen ? "Ya no es evergreen" : "Marcada como evergreen",
-      );
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const borrar = useMutation({
     mutationFn: () => api.eliminarPieza(pieza.id),
     onSuccess: (res) => {
@@ -143,26 +135,23 @@ function TarjetaPieza({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Acción primaria = editar. Las demás operaciones, condicionadas por estado, en el menú.
-  const acciones: EntradaMenuContextual[] = [
-    // "Editar" es la acción de click izquierdo (onPrimaria): no se duplica en el menú.
-    ...(proximo
-      ? [
-          {
-            etiqueta: `Avanzar a "${metaEstado(proximo).nombre}"`,
-            icono: ArrowRight,
-            onClick: () => avanzar.mutate(),
-            deshabilitado: avanzar.isPending,
-          },
-          { separador: true as const },
-        ]
-      : []),
-    // "Añadir a la cola" SOLO para piezas ya programadas (re-encolar). Programar
-    // una pre-aprobación (borrador/en_revisión) saltaría la revisión: el camino de esas piezas
-    // es el flujo de aprobación, que auto-programa al juntar los 2 OKs (auto_programar) con sus
-    // gates (mínimo de OKs + verificación). Así el botón no es un footgun de un clic en la pantalla
-    // diaria. Una publicada es terminal (su post ya salió): tampoco se re-encola.
-    ...(pieza.estado === "programado"
+  // Acción primaria = editar (click izquierdo, no se duplica en el menú). El menú ofrece la
+  // decisión propia del estado y "Borrar"; las acciones de cada estado son excluyentes:
+  //  - borrador/en revisión → "Aprobar" (registra tu OK en la cadena).
+  //  - programado → re-encolar / programar en Metricool. (En pre-aprobación encolar saltaría la
+  //    revisión: el camino de esas piezas es el flujo de aprobación, que auto-programa al juntar
+  //    los 2 OKs. Una publicada es terminal: su post ya salió, no se re-encola.)
+  //  - publicado → ver métricas de la marca.
+  const accionesPrimarias: EntradaMenuContextual[] = puedeAprobar
+    ? [
+        {
+          etiqueta: "Aprobar",
+          icono: ThumbsUp,
+          onClick: () => aprobar.mutate(),
+          deshabilitado: aprobar.isPending,
+        },
+      ]
+    : pieza.estado === "programado"
       ? [
           {
             etiqueta: "Añadir a la cola",
@@ -170,10 +159,6 @@ function TarjetaPieza({
             onClick: () => encolar.mutate(),
             deshabilitado: encolar.isPending,
           },
-        ]
-      : []),
-    ...(pieza.estado === "programado"
-      ? [
           {
             etiqueta: "Programar en Metricool",
             icono: Send,
@@ -181,29 +166,23 @@ function TarjetaPieza({
             deshabilitado: programarMetricool.isPending,
           },
         ]
-      : []),
-    ...(pieza.estado === "publicado"
-      ? [
-          {
-            etiqueta: "Ver métricas de la marca",
-            icono: BarChart3,
-            onClick: () =>
-              navigate("/datos/analiticas/metricas", {
-                // Marca activa (workspace) en forma canónica: el switch global la fija.
-                state: { marca: pieza.marca },
-              }),
-          },
-        ]
-      : []),
-    {
-      etiqueta: pieza.evergreen ? "Quitar de evergreens" : "Marcar como evergreen",
-      icono: Sprout,
-      onClick: () => alternarEvergreen.mutate(),
-      activo: pieza.evergreen,
-      deshabilitado: alternarEvergreen.isPending,
-    },
-    { etiqueta: "Duplicar", icono: Copy, onClick: () => onDuplicar(pieza) },
-    { separador: true },
+      : pieza.estado === "publicado"
+        ? [
+            {
+              etiqueta: "Ver métricas de la marca",
+              icono: BarChart3,
+              onClick: () =>
+                navigate("/datos/analiticas/metricas", {
+                  // Marca activa (workspace) en forma canónica: el switch global la fija.
+                  state: { marca: pieza.marca },
+                }),
+            },
+          ]
+        : [];
+
+  const acciones: EntradaMenuContextual[] = [
+    ...accionesPrimarias,
+    ...(accionesPrimarias.length ? [{ separador: true as const }] : []),
     {
       etiqueta: "Borrar",
       icono: Trash2,
@@ -336,12 +315,10 @@ const UMBRAL_VIRTUALIZAR = 40;
 export function VistaLista({
   piezas,
   onEditar,
-  onDuplicar,
   onConfigurarHorarios,
 }: {
   piezas: Pieza[];
   onEditar: (p: Pieza) => void;
-  onDuplicar: (p: Pieza) => void;
   onConfigurarHorarios: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -391,7 +368,6 @@ export function VistaLista({
         <TarjetaPieza
           pieza={p}
           onEditar={onEditar}
-          onDuplicar={onDuplicar}
           onConfigurarHorarios={onConfigurarHorarios}
         />
       </div>

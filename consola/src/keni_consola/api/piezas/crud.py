@@ -1,5 +1,5 @@
 """CRUD de piezas: alta (individual y lote), listado/paginacion, detalle, edicion,
-borrado (individual y lote), cadenas batch, duplicar/clonar y programar en Metricool.
+borrado (individual y lote), cadenas batch, clonar y programar en Metricool.
 
 El ciclo de vida editorial de cada pieza (borrador -> en_revision -> programado -> publicado),
 con validacion de marca/red/estado y maquina de transiciones del PUT. Extraido
@@ -635,63 +635,14 @@ async def cadenas_lote(request: Request) -> Response:
     return JSONResponse({"cadenas": cadenas})
 
 
-async def duplicar(request: Request) -> Response:
-    """Duplica una pieza como borrador, con overrides opcionales.
-
-    `POST /api/piezas/{id}/duplicar` con JSON opcional `{red?, marca?, titulo?}`.
-    Copia contenido/copy_in/imagen/revision/hashtags; estado=borrador, fecha_programada=''.
-    -> `{pieza}` | 404.
-    """
-    pieza_id = request.path_params["pieza_id"]
-    original = repos.obtener_pieza(pieza_id)
-    if original is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    datos = await leer_json(request)
-    marca = original["marca"]
-    red = original["red"]
-    titulo = original["titulo"]
-    if "marca" in datos:
-        nueva_marca = datos.get("marca")
-        if not isinstance(nueva_marca, str) or nueva_marca not in _MARCAS_IDS:
-            return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-        # Duplicar hacia CUALQUIER marca es legitimo: la marca es un foco, no un bloqueo.
-        marca = nueva_marca
-    if "red" in datos:
-        nueva_red = datos.get("red")
-        if not isinstance(nueva_red, str) or not redes.es_red(nueva_red):
-            return JSONResponse({"error": "Red no permitida."}, status_code=400)
-        red = nueva_red
-    if "titulo" in datos:
-        nuevo_titulo = datos.get("titulo")
-        if not isinstance(nuevo_titulo, str):
-            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
-        titulo = nuevo_titulo.strip()
-
-    copia = repos.crear_pieza(
-        marca,
-        red,
-        titulo=titulo,
-        contenido=original["contenido"],
-        copy_in=original.get("copy_in", ""),
-        estado="borrador",
-        revision=original["revision"],
-        fecha_programada="",
-        origen=original["origen"],
-        imagen=original["imagen"],
-        autor=autor_de_peticion(request),
-    )
-    return JSONResponse({"pieza": _publicacion_a_dict(copia)})
-
-
 async def clonar(request: Request) -> Response:
     """Clona el CONTENIDO de una pieza a OTRA RED de la misma idea (no crea otra idea).
 
     `POST /api/piezas/{id}/clonar` con `{red}`: copia copy/copy-in/foto/collage/
     plantilla (`_CAMPOS_ESPEJO`) a la pieza hermana de esa red —sobrescribiéndola, con el
     mismo reset de aprobaciones que una edición— o la CREA como borrador si la idea aún no
-    salía en esa red. A diferencia de `duplicar` (que crea una idea nueva), aquí la pieza
-    destino queda colgada del MISMO `contenido` padre. -> `{pieza}` (la pieza destino)
+    salía en esa red. La pieza destino queda colgada del MISMO `contenido` padre (no crea otra
+    idea). -> `{pieza}` (la pieza destino)
     | 400 (red inválida / sin padre) | 404 | 409 (la hermana ya está publicada).
     """
     pieza_id = request.path_params["pieza_id"]

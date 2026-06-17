@@ -3,7 +3,6 @@
 import { peticion, query } from "./_core";
 import type {
   CuerpoActualizarPieza,
-  CuerpoDuplicarPieza,
   FiltrosPiezas,
   OpcionesPiezas,
   RespuestaAlertas,
@@ -40,11 +39,6 @@ export const apiPiezas = {
   /** Borrado BATCH (selección múltiple de la lista): un solo round-trip, fallos parciales en `fallos`. */
   borrarPiezasLote: (ids: string[]) =>
     peticion<RespuestaBorrarLotePiezas>("/piezas/borrar-lote", { metodo: "POST", json: { ids } }),
-  duplicarPieza: (id: string, cuerpo: CuerpoDuplicarPieza = {}) =>
-    peticion<RespuestaPieza>(`/piezas/${encodeURIComponent(id)}/duplicar`, {
-      metodo: "POST",
-      json: cuerpo,
-    }),
   /** Clona el CONTENIDO (copy, copy-in, foto/collage, plantilla) a OTRA RED de la misma idea:
    *  sobrescribe la pieza hermana de esa red o la crea si la idea no salía ahí. */
   clonarPieza: (id: string, red: string) =>

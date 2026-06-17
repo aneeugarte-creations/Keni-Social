@@ -113,16 +113,6 @@ def test_lote_de_publicaciones_atribuido_al_usuario(entorno):
         assert pub["autor_id"]
 
 
-def test_duplicar_atribuye_al_usuario_que_duplica(entorno):
-    """La copia (duplicar) se atribuye a QUIEN duplica, no al autor del original."""
-    # Original creado por token (anonimo); lo duplica `ana`.
-    original = repos.crear_pieza(_MARCA, "x", titulo="Orig", contenido="C")
-    c = _cli_con_usuario("ana")
-    copia = c.post(f"/api/piezas/{original['id']}/duplicar", json={}, headers=_ORIGIN)
-    assert copia.status_code == 200
-    assert copia.json()["pieza"]["autor_nombre"] == "ana"
-
-
 # --------------------------------------------------------------------------- #
 # Historial de prompts + registro de generacion (via el flujo de generacion)   #
 # --------------------------------------------------------------------------- #
