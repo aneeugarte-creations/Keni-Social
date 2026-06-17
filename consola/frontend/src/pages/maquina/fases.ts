@@ -60,6 +60,16 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     etapa: "fusionar",
   },
   {
+    // Etiqueta familias de un mismo gran evento (historias DISTINTAS, sin fundirlas) para sacarlas
+    // como un carrusel. Corre dentro del paso de Fusionar; seguidora de su flag (solo el maestro en
+    // `claves`): no pinta switch propio, su recorrido lo gobierna Fusionar.
+    nombre: "Macro-evento",
+    es_ia: true,
+    claves: [MAESTRO_INVESTIGACION],
+    ayuda: "Agrupa historias distintas de un mismo gran evento (carrusel)",
+    doc: "prompt/fusionar-macroevento",
+  },
+  {
     nombre: "Traducir",
     es_ia: true,
     claves: [MAESTRO_INVESTIGACION],

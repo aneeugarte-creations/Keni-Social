@@ -79,6 +79,7 @@ describe("Contexto · la máquina en una página", () => {
     // Pestaña por defecto = Investigación: sus fases se leen en orden (incl. el nuevo «Cotejar»).
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
     expect(screen.getByText("Cotejar")).toBeInTheDocument();
+    expect(screen.getByText("Macro-evento")).toBeInTheDocument();
     expect(screen.getByText("Verificar")).toBeInTheDocument();
     // «Agrupar» ya NO es una fila: es un sub-paso determinista dentro de Recolectar.
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
