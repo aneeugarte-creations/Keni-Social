@@ -368,6 +368,11 @@ def _filtros_publicacion(
     desde: str | None = None,
     hasta: str | None = None,
     origen: str | None = None,
+    categoria: str | None = None,
+    tipo_contenido: str | None = None,
+    fuente: str | None = None,
+    fase: str | None = None,
+    creado_antes: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -439,6 +444,40 @@ def _filtros_publicacion(
         if hasta:
             clausulas.append("cp.fecha_programada <= ?")
             params.append(hasta)
+    # FILTROS de limpieza del feed (todos sobre el `contenido` PADRE `c`, ya en el JOIN):
+    # categoría del plan, tipo de contenido, medio de origen.
+    if categoria:
+        clausulas.append("c.categoria = ?")
+        params.append(categoria)
+    if tipo_contenido:
+        clausulas.append("c.tipo_contenido = ?")
+        params.append(tipo_contenido)
+    if fuente:
+        clausulas.append("c.fuente_nombre = ?")
+        params.append(fuente)
+    # ANTIGÜEDAD: solo lo creado ANTES del corte (ISO UTC que calcula el handler desde el
+    # preset >24h/>48h/…). Sobre `c.creado` (creación del tema), mismo eje que el keyset.
+    if creado_antes:
+        clausulas.append("c.creado <= ?")
+        params.append(creado_antes)
+    # FASE de producción (limpieza): 'incompleto' = aún en producción (le falta copy/arte/
+    # revisión y sigue en borrador) — los candidatos a barrer; 'producido' = listo, sin
+    # aprobar (no le falta nada y no salió); 'programado'/'publicado' = ya completados. Se
+    # deriva de los flags `falta_*` + `estado` (SQL puro, sin recomputar la etapa del cliente).
+    if fase == "incompleto":
+        clausulas.append(
+            "((cp.estado IS NULL OR cp.estado = 'borrador') "
+            "AND (cp.falta_copy = 1 OR cp.falta_imagen = 1 OR cp.falta_revision = 1))"
+        )
+    elif fase == "producido":
+        clausulas.append(
+            "(cp.falta_copy = 0 AND cp.falta_imagen = 0 AND cp.falta_revision = 0 "
+            "AND (cp.estado IS NULL OR cp.estado IN ('borrador', 'en_revision')))"
+        )
+    elif fase == "programado":
+        clausulas.append("cp.estado = 'programado'")
+    elif fase == "publicado":
+        clausulas.append("cp.estado = 'publicado'")
     return (" AND " + " AND ".join(clausulas) if clausulas else ""), params
 
 
@@ -452,6 +491,11 @@ def listar_piezas(
     desde: str | None = None,
     hasta: str | None = None,
     origen: str | None = None,
+    categoria: str | None = None,
+    tipo_contenido: str | None = None,
+    fuente: str | None = None,
+    fase: str | None = None,
+    creado_antes: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -468,7 +512,8 @@ def listar_piezas(
         nuevas al principio (no desplaza páginas), ideal para el feed social.
     """
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen
+        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
+        categoria, tipo_contenido, fuente, fase, creado_antes,
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -505,10 +550,16 @@ def contar_piezas(
     desde: str | None = None,
     hasta: str | None = None,
     origen: str | None = None,
+    categoria: str | None = None,
+    tipo_contenido: str | None = None,
+    fuente: str | None = None,
+    fase: str | None = None,
+    creado_antes: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen
+        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
+        categoria, tipo_contenido, fuente, fase, creado_antes,
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "

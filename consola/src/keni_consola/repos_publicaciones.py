@@ -70,6 +70,11 @@ def listar_piezas(
     desde: str | None = None,
     hasta: str | None = None,
     origen: str | None = None,
+    categoria: str | None = None,
+    tipo_contenido: str | None = None,
+    fuente: str | None = None,
+    fase: str | None = None,
+    creado_antes: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -78,6 +83,8 @@ def listar_piezas(
     # `responsable` ("la lista"): "" = piezas libres (por coger); otro valor = de ese usuario.
     # `desde`/`hasta` (ISO): rango de `fecha_programada` para el calendario (sin fecha = fuera).
     # `origen`: origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`).
+    # Limpieza del feed: `categoria`/`tipo_contenido`/`fuente` (exactos, del padre), `fase`
+    # (incompleto|producido|programado|publicado) y `creado_antes` (antigüedad, ISO UTC).
     return db.listar_piezas(
         marca=marca,
         red=red,
@@ -88,6 +95,11 @@ def listar_piezas(
         desde=desde,
         hasta=hasta,
         origen=origen,
+        categoria=categoria,
+        tipo_contenido=tipo_contenido,
+        fuente=fuente,
+        fase=fase,
+        creado_antes=creado_antes,
         limite=limite,
         desplazamiento=desplazamiento,
         cursor=cursor,
@@ -104,10 +116,17 @@ def contar_piezas(
     desde: str | None = None,
     hasta: str | None = None,
     origen: str | None = None,
+    categoria: str | None = None,
+    tipo_contenido: str | None = None,
+    fuente: str | None = None,
+    fase: str | None = None,
+    creado_antes: str | None = None,
 ) -> int:
     return db.contar_piezas(
         marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
+        categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente,
+        fase=fase, creado_antes=creado_antes,
     )
 
 

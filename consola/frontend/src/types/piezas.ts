@@ -168,6 +168,17 @@ export interface FiltrosPiezas {
   estado?: string;
   /** Origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`). */
   origen?: string;
+  /** LIMPIEZA del feed (filtros sobre el contenido padre): categoría del plan
+   *  (breaking|mx|evergreen|internacional…). */
+  categoria?: string;
+  /** Tipo de contenido: ia | galeria | fuente. */
+  tipo?: string;
+  /** Nombre del medio de origen (fuente_nombre). */
+  fuente?: string;
+  /** Fase de producción: incompleto | producido | programado | publicado. */
+  fase?: string;
+  /** Antigüedad MÍNIMA en horas (presets >24h=24, >48h=48, >1 semana=168…). */
+  antiguedad_h?: string;
   /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
   linea?: string;
   /**

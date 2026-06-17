@@ -10,7 +10,7 @@ comportamiento).
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from starlette.requests import Request
@@ -247,6 +247,24 @@ async def listar(request: Request) -> Response:
     # ORIGEN del contenido padre: la pestaña «Portal» del feed pide `?origen=portal` (los
     # auto-producidos de fuente propia, cross-marca). Transversal al estado.
     origen = qp.get("origen") or None
+    # LIMPIEZA del feed: filtros sobre el `contenido` padre para barrer/conservar por lotes.
+    #  - `categoria` (plan: breaking/mx/evergreen…), `tipo` (ia|galeria|fuente), `fuente` (medio).
+    #  - `fase`: incompleto (en producción, candidato a borrar) | producido | programado | publicado.
+    #  - `antiguedad_h`: solo lo creado hace MÁS de N horas (presets >24h/>48h/>1sem…). El corte se
+    #    calcula con la hora del SERVIDOR (UTC) para no depender del reloj del cliente.
+    categoria = qp.get("categoria") or None
+    tipo_contenido = qp.get("tipo") or None
+    fuente = qp.get("fuente") or None
+    fase = qp.get("fase") or None
+    creado_antes: str | None = None
+    antiguedad_h = qp.get("antiguedad_h")
+    if antiguedad_h:
+        try:
+            horas = int(antiguedad_h)
+        except ValueError:
+            horas = 0
+        if horas > 0:
+            creado_antes = iso_utc(datetime.now(UTC) - timedelta(hours=horas))
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
     cursor = cursor_query(request)
@@ -276,11 +294,15 @@ async def listar(request: Request) -> Response:
     pubs = repos.listar_piezas(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
+        categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
+        creado_antes=creado_antes,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_piezas(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
+        categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
+        creado_antes=creado_antes,
     )
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la

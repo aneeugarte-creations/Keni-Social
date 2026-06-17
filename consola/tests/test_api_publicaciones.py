@@ -6,6 +6,8 @@ resolucion de nombres legibles y edicion parcial.
 
 from __future__ import annotations
 
+from keni_consola import repos
+
 
 def _crear(cliente, **campos):
     base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C"}
@@ -111,6 +113,45 @@ def test_filtros(cliente):
     assert (
         len(cliente.get("/api/piezas?marca=unotv&red=x").json()["piezas"]) == 1
     )
+
+
+def test_filtro_categoria_tipo_y_fuente(cliente):
+    """Filtros de limpieza sobre el contenido padre: categoría del plan, tipo y medio de origen."""
+    pz = repos.crear_pieza("unotv", "x", titulo="Breaking", contenido="C", tipo_contenido="fuente")
+    cid = repos.obtener_pieza_fila(pz["id"])["publicacion_id"]
+    repos.actualizar_publicacion(cid, {"categoria": "breaking", "fuente_nombre": "Infobae"})
+    repos.crear_pieza("unotv", "x", titulo="Normal", contenido="C", tipo_contenido="ia")
+    assert len(cliente.get("/api/piezas?categoria=breaking").json()["piezas"]) == 1
+    assert len(cliente.get("/api/piezas?tipo=fuente").json()["piezas"]) == 1
+    assert len(cliente.get("/api/piezas?fuente=Infobae").json()["piezas"]) == 1
+    assert len(cliente.get("/api/piezas?categoria=mx").json()["piezas"]) == 0
+
+
+def test_filtro_fase(cliente):
+    """`?fase=incompleto` = en producción (le falta copy/arte/revisión, en borrador); `programado`
+    = ya en calendario. Permite barrer lo nunca terminado y conservar lo completado."""
+    inc = repos.crear_pieza("unotv", "x", titulo="Incompleta", contenido="")
+    repos.actualizar_pieza(
+        inc["id"], {"falta_copy": 1, "falta_imagen": 1, "falta_revision": 1, "estado": "borrador"}
+    )
+    prog = repos.crear_pieza("unotv", "x", titulo="Programada", contenido="C")
+    repos.actualizar_pieza(
+        prog["id"], {"falta_copy": 0, "falta_imagen": 0, "falta_revision": 0, "estado": "programado"}
+    )
+    incompletos = cliente.get("/api/piezas?fase=incompleto").json()["piezas"]
+    assert [p["titulo"] for p in incompletos] == ["Incompleta"]
+    programados = cliente.get("/api/piezas?fase=programado").json()["piezas"]
+    assert [p["titulo"] for p in programados] == ["Programada"]
+
+
+def test_filtro_antiguedad(cliente):
+    """`?antiguedad_h=24` deja solo lo creado hace MÁS de 24 h (sobre la creación del tema)."""
+    repos.crear_pieza(
+        "unotv", "x", titulo="Vieja", contenido="C", fecha_creacion="2020-01-01T00:00:00"
+    )
+    repos.crear_pieza("unotv", "x", titulo="Nueva", contenido="C")
+    viejas = cliente.get("/api/piezas?antiguedad_h=24").json()["piezas"]
+    assert [p["titulo"] for p in viejas] == ["Vieja"]
 
 
 def test_filtro_pendiente_pseudo_estado(cliente):
