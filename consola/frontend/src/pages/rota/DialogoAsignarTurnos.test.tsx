@@ -84,7 +84,7 @@ const CMS: MiembroRota[] = [{ id: "u-luis", nombre: "Luis" }];
 const DIAS = ["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"];
 
 describe("DialogoAsignarTurnos (render)", () => {
-  it("«Asignar» está deshabilitado hasta elegir persona y franja; ofrece import automático", () => {
+  it("pide persona + horario (sin selector de franja) y ofrece import automático", () => {
     // El diálogo embebe «Importar documento» (su badge sondea propuestas pendientes).
     vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -102,6 +102,10 @@ describe("DialogoAsignarTurnos (render)", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByText("Asignar turnos")).toBeInTheDocument();
+    // El horario sustituye al selector de franja: hay «Horario», ya no «Franja».
+    expect(screen.getByText("Horario")).toBeInTheDocument();
+    expect(screen.queryByText("Franja")).not.toBeInTheDocument();
+    // Sin persona ni días elegidos, «Asignar» está deshabilitado.
     expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
     // La vía automática (import) está disponible dentro del mismo diálogo.
     expect(screen.getByRole("button", { name: /Importar documento/ })).toBeInTheDocument();

@@ -66,12 +66,62 @@ function ChipDia({
  * darla por buena. Permite cruce de medianoche (no exige inicio<fin).
  */
 function esHoraValida(s: string): boolean {
+  return aMinutos24(s) !== null;
+}
+
+/** "HH:MM" → minutos desde 00:00 (00:00–23:59), con «24:00» = 1440. `null` si no parsea. */
+function aMinutos24(s: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
-  if (!m) return false;
+  if (!m) return null;
   const h = Number(m[1]);
   const mm = Number(m[2]);
-  if (h === 24) return mm === 0;
-  return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
+  if (h === 24) return mm === 0 ? 1440 : null;
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+/** Minutos en que dos rangos "HH:MM" se solapan (soporta cruce de medianoche). */
+function solapeMinutos(aIni: string, aFin: string, bIni: string, bFin: string): number {
+  const tramos = (ini: string, fin: string): [number, number][] => {
+    const i = aMinutos24(ini);
+    const f = aMinutos24(fin);
+    if (i === null || f === null || i === f) return [];
+    return i < f ? [[i, f]] : [[i, 1440], [0, f]];
+  };
+  let total = 0;
+  for (const [a1, a2] of tramos(aIni, aFin))
+    for (const [b1, b2] of tramos(bIni, bFin))
+      total += Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+  return total;
+}
+
+/**
+ * Franja (fila del calendario) donde cae un horario tecleado: la de mayor solape en horas; si
+ * ninguna solapa, la de inicio más cercano; en último caso, la primera. Así el usuario NO
+ * elige franja a mano —piensa en horas, no en franjas—: el turno se coloca solo por su hora.
+ */
+function franjaParaHorario(
+  inicio: string,
+  fin: string,
+  franjas: FranjaSemana[],
+): FranjaSemana | undefined {
+  if (franjas.length === 0) return undefined;
+  const ini = aMinutos24(inicio);
+  let mejor = franjas[0]!;
+  let mejorSolape = -1;
+  let mejorDist = Number.POSITIVE_INFINITY;
+  for (const f of franjas) {
+    const solape = solapeMinutos(inicio, fin, f.inicio, f.fin);
+    const fIni = aMinutos24(f.inicio);
+    const dist =
+      ini !== null && fIni !== null ? Math.abs(ini - fIni) : Number.POSITIVE_INFINITY;
+    if (solape > mejorSolape || (solape === mejorSolape && dist < mejorDist)) {
+      mejor = f;
+      mejorSolape = solape;
+      mejorDist = dist;
+    }
+  }
+  return mejor;
 }
 
 export interface ResumenAsignacion {
@@ -117,9 +167,10 @@ export async function asignarDiasTurno(
 
 /**
  * «Asignar turnos» del calendario de la rota: reparte la semana de un vistazo en vez de ir
- * celda por celda. Eliges PERSONA → FRANJA (Mañana/Tarde…) → QUÉ DÍAS, y crea un turno por
- * cada día seleccionado. Es el «uno trabaja de mañanas, otro de tardes»: repites el diálogo
- * por persona. La cobertura (quién cubre cada evento) sigue en Panorama; esto es CAPACIDAD.
+ * celda por celda. Eliges PERSONA → HORARIO (de–a) → QUÉ DÍAS, y crea un turno por cada día
+ * seleccionado. El usuario piensa en HORAS, no en franjas: la franja (fila del calendario) se
+ * deriva sola del horario (`franjaParaHorario`). Repites el diálogo por persona. La cobertura
+ * (quién cubre cada evento) sigue en Panorama; esto es CAPACIDAD.
  *
  * Va por día (no por el endpoint lote) a propósito: el lote es todo-o-nada y un solo choque
  * (sábado consecutivo o un día ya asignado) tumbaría el reparto entero. Por día es indulgente:
@@ -152,8 +203,7 @@ export function DialogoAsignarTurnos({
     [franjas],
   );
   const [persona, setPersona] = React.useState("");
-  const [franjaId, setFranjaId] = React.useState("");
-  // Horario del turno: arranca con el de la franja (fijo) y es editable (a medida).
+  // Horario del turno (de–a). El usuario teclea horas; la franja (fila) se deriva sola.
   const [inicio, setInicio] = React.useState("");
   const [fin, setFin] = React.useState("");
   const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set());
@@ -164,6 +214,16 @@ export function DialogoAsignarTurnos({
     if (abierto) setDiasSel(new Set());
   }, [abierto, dias]);
 
+  // Al abrir, prefija el horario con el de la primera franja laboral (p. ej. 08:00–16:00) sin
+  // pisar lo que el usuario ya haya tecleado: un punto de partida cómodo, editable.
+  React.useEffect(() => {
+    if (!abierto) return;
+    const f0 = franjasLaborales[0];
+    if (!f0) return;
+    setInicio((prev) => prev || f0.inicio);
+    setFin((prev) => prev || f0.fin);
+  }, [abierto, franjasLaborales]);
+
   const toggleDia = (fecha: string) =>
     setDiasSel((prev) => {
       const n = new Set(prev);
@@ -172,48 +232,41 @@ export function DialogoAsignarTurnos({
       return n;
     });
 
-  const franjaSel = franjasLaborales.find((f) => f.id === franjaId);
-
-  // Al elegir franja, el horario se prefija con el SUYO (fijo); el usuario lo edita si esa
-  // persona trabaja otras horas (a medida). Así «fijo o no» es un solo control, sin jerga.
-  const elegirFranja = (id: string) => {
-    setFranjaId(id);
-    const f = franjasLaborales.find((x) => x.id === id);
-    if (f) {
-      setInicio(f.inicio);
-      setFin(f.fin);
-    }
-  };
-
   const horasValidas = esHoraValida(inicio) && esHoraValida(fin);
-  // Hay override si el horario difiere del de la franja; si coincide, el turno hereda (no se
-  // congela, así editar la franja luego propaga). Sin franja elegida no aplica.
+  // La franja (fila del calendario) se deriva del horario; el turno lleva horas A MEDIDA solo
+  // si difieren de las de esa franja (si coinciden, hereda, así editar la franja luego propaga).
+  const franjaDestino = horasValidas
+    ? franjaParaHorario(inicio, fin, franjasLaborales)
+    : undefined;
   const horasAMedida =
-    !!franjaSel && horasValidas && (inicio !== franjaSel.inicio || fin !== franjaSel.fin);
+    !!franjaDestino && (inicio !== franjaDestino.inicio || fin !== franjaDestino.fin);
 
   const asignar = useMutation({
     mutationFn: async () => {
       const fechas = dias.filter((d) => diasSel.has(d));
-      const resumen = await asignarDiasTurno(
-        lunes,
-        persona,
-        franjaId,
-        fechas,
-        horasAMedida ? inicio : "",
-        horasAMedida ? fin : "",
-      );
+      const f = franjaParaHorario(inicio, fin, franjasLaborales);
+      const resumen = f
+        ? await asignarDiasTurno(
+            lunes,
+            persona,
+            f.id,
+            fechas,
+            horasAMedida ? inicio : "",
+            horasAMedida ? fin : "",
+          )
+        : { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 };
       return {
         ...resumen,
         persona_nombre: cms.find((m) => m.id === persona)?.nombre ?? "",
-        franja_nombre: franjasLaborales.find((f) => f.id === franjaId)?.nombre ?? "",
+        horario: `${inicio}–${fin}`,
       };
     },
-    onSuccess: ({ creados, yaEstaba, sabados, fallos, persona_nombre, franja_nombre }) => {
+    onSuccess: ({ creados, yaEstaba, sabados, fallos, persona_nombre, horario }) => {
       onCambio();
       const partes: string[] = [];
       if (creados)
         partes.push(
-          `${creados} día${creados === 1 ? "" : "s"} a ${persona_nombre} en ${franja_nombre}`,
+          `${creados} día${creados === 1 ? "" : "s"} a ${persona_nombre} (${horario})`,
         );
       if (yaEstaba) partes.push(`${yaEstaba} ya estaba${yaEstaba === 1 ? "" : "n"}`);
       if (sabados)
@@ -229,7 +282,8 @@ export function DialogoAsignarTurnos({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const incompleto = !persona || !franjaId || diasSel.size === 0 || !horasValidas;
+  const incompleto =
+    !persona || diasSel.size === 0 || !horasValidas || franjasLaborales.length === 0;
 
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
@@ -262,9 +316,8 @@ export function DialogoAsignarTurnos({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Reparte la semana a mano: elige quién trabaja, en qué franja y qué días. Repítelo por
-          persona (p. ej. uno a Mañana, otro a Tarde). Esto es la CAPACIDAD; quién cubre cada
-          evento se decide en Panorama.
+          Reparte la semana a mano: elige quién trabaja, su horario y qué días. Repítelo por
+          persona. Esto es la CAPACIDAD; quién cubre cada evento se decide en Panorama.
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -283,42 +336,10 @@ export function DialogoAsignarTurnos({
               </SelectContent>
             </Select>
           </div>
+          {/* Horario en horas (de–a). Es lo único que define el turno; la franja —la fila del
+              calendario— se deduce sola del horario, sin que el usuario la elija. */}
           <div className="space-y-1.5">
-            <Label>Franja</Label>
-            <Select value={franjaId} onValueChange={elegirFranja}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige…" />
-              </SelectTrigger>
-              <SelectContent>
-                {franjasLaborales.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.nombre} ({f.inicio}–{f.fin})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Horario del turno: prefijado con el de la franja (FIJO) y editable (A MEDIDA).
-            Si lo cambias, esos días llevan tus horas; si lo dejas, heredan las de la franja. */}
-        {franjaId && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Horario</Label>
-              {horasAMedida && franjaSel && (
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  onClick={() => {
-                    setInicio(franjaSel.inicio);
-                    setFin(franjaSel.fin);
-                  }}
-                >
-                  Volver al de la franja
-                </button>
-              )}
-            </div>
+            <Label>Horario</Label>
             <div className="flex items-center gap-2">
               <Input
                 value={inicio}
@@ -335,15 +356,12 @@ export function DialogoAsignarTurnos({
                 className="w-24 tabular-nums"
                 aria-label="Hora de fin"
               />
-              <span className="text-xs text-muted-foreground">
-                {horasAMedida ? "a medida" : "fijo (de la franja)"}
-              </span>
             </div>
-            {!horasValidas && (
+            {!horasValidas && (inicio || fin) && (
               <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
             )}
           </div>
-        )}
+        </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
