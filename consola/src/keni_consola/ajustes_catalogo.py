@@ -163,6 +163,15 @@ def _maestros_etapa() -> list[Ajuste]:
             grupo="maestros_produccion",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_CRITICA_IA,
+            tipo="bool",
+            etiqueta="Crítica",
+            ayuda="Añade a la cadena de aprobación un nivel de revisión IA con visión sobre la "
+            "pieza terminada (tras los OK humanos). OFF por defecto.",
+            grupo="maestros_produccion",
+            defecto=False,
+        ),
     ]
 
 

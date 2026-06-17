@@ -162,15 +162,13 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     },
   },
   {
-    // Nivel de revisión IA de la pieza terminada, gateado por `KENI_CRITICA_IA` (OFF por
-    // defecto): corre DENTRO de la cadena de aprobación (tras los OK humanos), no encola etapa
-    // propia. Seguidora del maestro de Producción: no pinta switch granular; su prompt sí se edita.
+    // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras
+    // los OK humanos), no encola etapa propia. Switch propio (`KENI_CRITICA_IA`), OFF por defecto.
     nombre: "Crítica",
     es_ia: true,
-    claves: [MAESTRO_PRODUCCION],
-    ayuda: "Revisa con visión la pieza terminada en la cadena de aprobación (gateada por KENI_CRITICA_IA, OFF por defecto)",
+    claves: ["KENI_CRITICA_IA", MAESTRO_PRODUCCION],
+    ayuda: "Revisa con visión la pieza terminada en la cadena de aprobación, antes de auto-programar",
     doc: "prompt/critica",
-    heredada: "Gateada por KENI_CRITICA_IA; corre en la cadena de aprobación.",
   },
 ];
 

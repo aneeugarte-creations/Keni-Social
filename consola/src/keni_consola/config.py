@@ -140,6 +140,7 @@ from ._config_comun import (  # noqa: F401
     ENV_CONFIG,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_COOKIE_SECURE,
+    ENV_CRITICA_IA,
     ENV_DATA_DIR,
     ENV_DATABASE_URL,
     ENV_DB_POOL,

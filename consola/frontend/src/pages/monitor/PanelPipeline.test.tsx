@@ -50,6 +50,7 @@ vi.mock("@/lib/api", () => ({
             aj("KENI_PRODUCCION", "Producción"),
             aj("KENI_PIPELINE_REDACTAR", "Redactar"),
             aj("KENI_PIPELINE_ILUSTRAR", "Ilustrar"),
+            aj("KENI_CRITICA_IA", "Crítica"),
           ],
         },
       ],
@@ -150,6 +151,14 @@ describe("PanelPipeline · solo las filas con contenido son clicables", () => {
     within(filaDe("Ilustrar")).getByRole("button").click();
     expect(onAbrir).toHaveBeenCalledTimes(2);
     expect(onAbrir.mock.calls[1][0].nombre).toBe("Ilustrar");
+
+    // Crítica tiene flag propio (KENI_CRITICA_IA): pinta su switch y su fila navega a su prompt.
+    expect(
+      screen.getByRole("switch", { name: /Crítica \(switch de la fase Crítica\)/ }),
+    ).toBeInTheDocument();
+    within(filaDe("Crítica")).getByRole("button").click();
+    expect(onAbrir).toHaveBeenCalledTimes(3);
+    expect(onAbrir.mock.calls[2][0].nombre).toBe("Crítica");
   });
 
   it("ninguna fila vacía: ya no se pintan Agrupar (Investigación) ni Revisar (Producción)", () => {

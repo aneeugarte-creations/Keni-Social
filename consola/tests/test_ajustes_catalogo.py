@@ -49,6 +49,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
+        # Crítica IA: nivel opcional de la cadena de aprobación (OFF por defecto).
+        config.ENV_CRITICA_IA,
         # Automatismos generales (barridos de mantenimiento; SOLO toggles on/off).
         config.ENV_ALERTAS_ACTIVAS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -95,6 +97,8 @@ _MAESTROS_ENV = {
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
     config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
+    # Crítica IA: nivel opcional de la cadena de aprobación (grupo `maestros_produccion`).
+    config.ENV_CRITICA_IA,
 }
 
 
