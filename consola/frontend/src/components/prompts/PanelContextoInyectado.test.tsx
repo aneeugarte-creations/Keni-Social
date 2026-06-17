@@ -1,19 +1,19 @@
 /**
- * Test de la pestaña «Contexto» del editor de un prompt: lista los editoriales que inyecta para la
- * marca elegida, y muestra estado vacío cuando el prompt no inyecta contexto.
+ * Test de la pestaña «Editorial» del editor de un prompt: lista los editoriales que inyecta para la
+ * marca ACTIVA (selector global), y muestra estado vacío cuando el prompt no inyecta contexto.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { MarcaActivaContexto, type ValorMarcaActiva } from "@/hooks/marca-activa-contexto";
+
 import { PanelContextoInyectado } from "./PanelContextoInyectado";
 
-const marcasPrompts = vi.fn();
 const contextoInyectado = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
-    marcasPrompts: (...a: unknown[]) => marcasPrompts(...a),
     contextoInyectado: (...a: unknown[]) => contextoInyectado(...a),
     // Lo usa EditorPromptOverlay si se abriera (no en este test).
     maquinaPrompts: vi.fn().mockResolvedValue({ maquinas: [] }),
@@ -21,18 +21,33 @@ vi.mock("@/lib/api", () => ({
   mensajeError: (e: unknown) => String(e),
 }));
 
-function renderPanel(docId: string) {
+function valorMarcaActiva(marca: string | null): ValorMarcaActiva {
+  return {
+    marcaActiva: marca,
+    marcaPrimaria: marca,
+    enMarcaPrimaria: true,
+    esMultiMarca: true,
+    puedeTodas: true,
+    marcasParaSwitch: [],
+    nombreActiva: null,
+    cambiarMarca: () => {},
+    volverAPrimaria: () => {},
+  };
+}
+
+function renderPanel(docId: string, marca: string | null = "unotv") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <PanelContextoInyectado docId={docId} />
+      <MarcaActivaContexto.Provider value={valorMarcaActiva(marca)}>
+        <PanelContextoInyectado docId={docId} />
+      </MarcaActivaContexto.Provider>
     </QueryClientProvider>,
   );
 }
 
 describe("PanelContextoInyectado", () => {
-  it("lista los editoriales que inyecta el prompt para la marca", async () => {
-    marcasPrompts.mockResolvedValue({ marcas: [{ id: "unotv", nombre: "UnoTV" }] });
+  it("lista los editoriales que inyecta el prompt para la marca activa", async () => {
     contextoInyectado.mockResolvedValue({
       prompt_id: "prompt/redactar",
       inyecta: true,
@@ -46,10 +61,11 @@ describe("PanelContextoInyectado", () => {
     renderPanel("prompt/redactar");
     expect(await screen.findByText("Identidad · UnoTV")).toBeInTheDocument();
     expect(screen.getByText("Voz y tono · UnoTV")).toBeInTheDocument();
+    // La marca activa global se usa SIN selector propio.
+    expect(contextoInyectado).toHaveBeenCalledWith("prompt/redactar", "unotv", expect.anything());
   });
 
   it("muestra estado vacío cuando el prompt no inyecta contexto", async () => {
-    marcasPrompts.mockResolvedValue({ marcas: [{ id: "unotv", nombre: "UnoTV" }] });
     contextoInyectado.mockResolvedValue({
       prompt_id: "prompt/idear",
       inyecta: false,
