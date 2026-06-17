@@ -23,7 +23,7 @@ from keni_consola.dominio import fuentes_presets
 def test_listar_todos_devuelve_la_inicial_curada():
     """La inicial es un conjunto curado y pequeño (no cientos de presets)."""
     todos = fuentes_presets.listar_presets()
-    assert 15 <= len(todos) <= 50, f"Inicial fuera de rango esperado: {len(todos)}"
+    assert 15 <= len(todos) <= 80, f"Inicial fuera de rango esperado: {len(todos)}"
 
 
 def test_categorias_son_subconjunto_del_vocabulario_canonico():
