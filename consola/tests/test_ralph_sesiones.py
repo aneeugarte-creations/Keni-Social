@@ -259,3 +259,19 @@ def test_construir_argv_flags_clave():
 def test_construir_argv_modelo_por_defecto_cuando_vacio():
     argv = rs.construir_argv("")
     assert argv[argv.index("--model") + 1] == rs.MODELO_DEF
+
+
+def test_construir_argv_operativo_veta_fs_y_engancha_mcp():
+    # El Ralph operativo NO toca el filesystem y usa el MCP de la app.
+    argv = rs.construir_argv("opus", rs.TIPO_OPERATIVO, mcp_config="/tmp/keni.json")
+    assert "--disallowed-tools" in argv
+    assert {"Bash", "Edit", "Write"} <= set(argv)
+    assert argv[argv.index("--mcp-config") + 1] == "/tmp/keni.json"
+    assert "--strict-mcp-config" in argv
+
+
+def test_construir_argv_dev_sin_restricciones():
+    # El Ralph de desarrollo trabaja sin sandbox sobre el repo (sin vetos ni MCP).
+    argv = rs.construir_argv("opus", rs.TIPO_DEV)
+    assert "--disallowed-tools" not in argv
+    assert "--mcp-config" not in argv

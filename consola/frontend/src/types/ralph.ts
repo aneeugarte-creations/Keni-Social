@@ -8,11 +8,19 @@ export type EstadoRalph = "idle" | "activo" | "esperando" | "error";
 /** Modelo con el que corre un Ralph. `opus` es el predeterminado del lanzador. */
 export type ModeloRalph = "opus" | "sonnet" | "haiku";
 
+/**
+ * Tipo de Ralph:
+ * - `operativo`: asistente del equipo de redes con el MCP de la app (lo ve todo el equipo).
+ * - `dev`: agente de desarrollo sobre el repo (solo superadmin).
+ */
+export type TipoRalph = "operativo" | "dev";
+
 /** Un agente Ralph en el pool. `nombre` viene del pool del back (ziggy, nova…). */
 export interface Ralph {
   id: string;
   nombre: string;
   modelo: ModeloRalph;
+  tipo: TipoRalph;
   estado: EstadoRalph;
   creado: string;
 }
@@ -40,9 +48,11 @@ export interface DeltaMensajeRalph {
 }
 
 // ── Respuestas de la API ─────────────────────────────────────────────────────
-/** `GET /api/ralph` → lista del pool + si el carril está disponible. */
+/** `GET /api/ralph` → lista del pool + si el carril está disponible + rol del usuario. */
 export interface RespuestaRalphs {
   disponible: boolean;
+  /** El usuario es superadmin: puede lanzar también Ralphs de desarrollo (tipo `dev`). */
+  superadmin: boolean;
   ralphs: Ralph[];
 }
 
@@ -60,4 +70,6 @@ export interface RespuestaOkRalph {
 export interface CuerpoSpawnRalph {
   prompt: string;
   modelo?: ModeloRalph;
+  /** Tipo de Ralph; def `operativo`. `dev` requiere superadmin (lo valida el back). */
+  tipo?: TipoRalph;
 }

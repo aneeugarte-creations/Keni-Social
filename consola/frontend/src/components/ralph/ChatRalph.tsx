@@ -66,6 +66,7 @@ export function ChatRalph({ id }: { id: string }) {
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">{ralph.nombre}</p>
           <p className="truncate text-xs text-muted-foreground">
+            {ralph.tipo === "dev" ? "Desarrollo" : "Asistente"} ·{" "}
             {ETIQUETA_ESTADO[ralph.estado]} · {ETIQUETA_MODELO[ralph.modelo]}
           </p>
         </div>

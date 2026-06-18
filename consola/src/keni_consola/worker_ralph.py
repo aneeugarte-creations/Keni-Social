@@ -83,8 +83,9 @@ async def spawn(request: Request) -> Response:
     if not isinstance(prompt, str):
         prompt = ""
     modelo = cuerpo.get("modelo") if isinstance(cuerpo.get("modelo"), str) else None
+    tipo = cuerpo.get("tipo") if isinstance(cuerpo.get("tipo"), str) else None
     try:
-        ralph = await run_in_threadpool(ralph_sesiones.gestor.spawn, prompt, modelo)
+        ralph = await run_in_threadpool(ralph_sesiones.gestor.spawn, prompt, modelo, tipo)
     except RuntimeError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
     return JSONResponse({"ralph": ralph})

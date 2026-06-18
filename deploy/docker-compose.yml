@@ -718,11 +718,16 @@ services:
       KENI_GIT_AUTHOR_EMAIL: ${KENI_GIT_AUTHOR_EMAIL:-}
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
       CLAUDE_CONFIG_DIR: /data/claude-cfg
+      # MCP de la app para los Ralph OPERATIVOS: el entrypoint hidrata KENI_MCP_BEARER desde el
+      # secreto y ralph_sesiones lo inyecta en `claude --mcp-config` apuntando a /mcp del back.
+      KENI_MCP_URL: ${KENI_MCP_URL:-http://back:8765/mcp}
+      KENI_MCP_BEARER_FILE: /run/secrets/mcp_bearer
     volumes:
       - keni-data:/data
       - keni-repo:/repo
     secrets:
       - anthropic_api_key
+      - mcp_bearer
     networks:
       # `internal` basta: el back (también en `internal`) lo alcanza por DNS y conserva egress
       # (Anthropic, GitHub push). NO se publica el puerto al host ni se enruta por Traefik.

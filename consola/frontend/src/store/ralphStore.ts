@@ -32,6 +32,8 @@ function nuevoIdMensaje(): string {
 interface EstadoRalphStore {
   /** El carril Ralph está disponible (worker-ralph arriba). */
   disponible: boolean;
+  /** El usuario es superadmin: puede lanzar también Ralphs de desarrollo (`dev`). */
+  superadmin: boolean;
   /** Pool actual de Ralphs. */
   ralphs: Ralph[];
   /** Id del Ralph cuyo chat está abierto, o `null`. */
@@ -94,6 +96,7 @@ export const useRalphStore = create<EstadoRalphStore>((set, get) => {
 
   return {
     disponible: false,
+    superadmin: false,
     ralphs: [],
     seleccionado: null,
     panelAbierto: false,
@@ -108,7 +111,12 @@ export const useRalphStore = create<EstadoRalphStore>((set, get) => {
       set({ cargando: true });
       try {
         const r = await apiRalph.ralphs();
-        set({ disponible: r.disponible, ralphs: r.ralphs, cargando: false });
+        set({
+          disponible: r.disponible,
+          superadmin: Boolean(r.superadmin),
+          ralphs: r.ralphs,
+          cargando: false,
+        });
       } catch {
         // Carril no disponible o sin permiso: la burbuja queda inerte, sin ruido.
         set({ disponible: false, cargando: false });

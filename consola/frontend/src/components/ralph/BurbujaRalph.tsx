@@ -62,7 +62,7 @@ export function BurbujaRalph() {
         {panelAbierto && <PanelRalphs />}
 
         <Tooltip
-          label={panelAbierto ? "Cerrar Ralph" : "Ralph · agentes de desarrollo"}
+          label={panelAbierto ? "Cerrar Ralph" : "Ralph · tu asistente"}
           side="left"
         >
           <button

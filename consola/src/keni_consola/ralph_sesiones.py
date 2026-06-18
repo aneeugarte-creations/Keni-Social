@@ -57,6 +57,35 @@ ESTADOS = (ESTADO_IDLE, ESTADO_ACTIVO, ESTADO_ESPERANDO, ESTADO_ERROR)
 MODELOS = ("opus", "sonnet", "haiku")
 MODELO_DEF = "opus"
 
+# Tipo de Ralph (contrato con el frontend):
+#   operativo -> asistente del equipo de redes: usa el MCP de la app (tools keni_*) para ayudar
+#                en el día a día (marcas, piezas, métricas, noticias, cola, aprobación). NO toca el
+#                filesystem ni el código. Es el que ve TODO el equipo.
+#   dev       -> agente de DESARROLLO sobre el repo (worktree, sin sandbox). Solo superadmin.
+TIPO_OPERATIVO = "operativo"
+TIPO_DEV = "dev"
+TIPOS = (TIPO_OPERATIVO, TIPO_DEV)
+TIPO_DEF = TIPO_OPERATIVO
+
+# Persona del Ralph OPERATIVO (CLAUDE.md que se escribe en su cwd). El de desarrollo hereda el
+# CLAUDE.md del repo (su worktree). Mantenlo breve: el detalle operativo lo da el MCP.
+_PERSONA_OPERATIVA = """# Ralph — asistente operativo de keni-social
+
+Eres el asistente del equipo de redes de keni-social (piloto AMX: UnoTV / Claro Sports).
+Hablas español de México, cercano y claro. Ayudas en el día a día: consultar marcas y redes,
+preparar y mover contenido, leer métricas, trabajar el pool de noticias, vigilar la cola y el
+flujo de aprobación.
+
+Tienes el MCP de la app: usa las tools `keni_*` para consultar y operar. Empieza SIEMPRE por
+`keni_contexto` para conocer marcas, redes y estados válidos antes de actuar.
+
+Reglas:
+- NO tocas el sistema de ficheros ni el código (no eres un agente de desarrollo).
+- De cara a las redes manda el criterio humano: preparas, propones y dejas en revisión; el
+  equipo decide qué se publica. No fuerces publicaciones reales.
+- Si una acción es ambigua o arriesgada, pregunta antes de ejecutarla.
+"""
+
 
 # --------------------------------------------------------------------------- #
 # Pool de nombres estilo Nolan v1 (ziggy, nova, echo, ...).                    #
@@ -193,14 +222,19 @@ class ParserRalph:
         return eventos
 
 
-def construir_argv(modelo: str) -> list[str]:
-    """argv de un `claude` interactivo multi-turno (stream-json IN/OUT) SIN sandbox.
+def construir_argv(
+    modelo: str, tipo: str = TIPO_DEF, *, mcp_config: str | None = None
+) -> list[str]:
+    """argv de un `claude` interactivo multi-turno (stream-json IN/OUT).
 
     `--input-format stream-json` mantiene stdin abierto (multi-turno); `--output-format
     stream-json --include-partial-messages --verbose` da los deltas en vivo; `-p` corre headless;
-    `--dangerously-skip-permissions` permite las tools (Bash/Write/Edit) sin aprobacion
-    interactiva (carril dev, sin sandbox). PURO (solo compone la lista)."""
-    return [
+    `--dangerously-skip-permissions` deja correr las tools sin aprobacion interactiva.
+    - `dev`: sin restriccion de tools (Bash/Write/Edit) sobre el worktree del repo.
+    - `operativo`: VETA Bash/Write/Edit (no toca el filesystem) y engancha el MCP de la app
+      (`--mcp-config` + `--strict-mcp-config`) para que use las tools `keni_*`.
+    PURO (solo compone la lista)."""
+    argv = [
         _CLAUDE,
         "-p",
         "--input-format",
@@ -213,6 +247,50 @@ def construir_argv(modelo: str) -> list[str]:
         modelo or MODELO_DEF,
         "--dangerously-skip-permissions",
     ]
+    if tipo == TIPO_OPERATIVO:
+        argv += ["--disallowed-tools", "Bash", "Edit", "Write"]
+        if mcp_config:
+            argv += ["--mcp-config", mcp_config, "--strict-mcp-config"]
+    return argv
+
+
+def _escribir_persona_operativa(destino_dir: str) -> None:
+    """Escribe el CLAUDE.md del Ralph operativo en su cwd (best-effort)."""
+    try:
+        with open(os.path.join(destino_dir, "CLAUDE.md"), "w", encoding="utf-8") as fh:
+            fh.write(_PERSONA_OPERATIVA)
+    except OSError:
+        _log.warning("Ralph operativo: no se pudo escribir CLAUDE.md en %s", destino_dir)
+
+
+def _mcp_config(destino_dir: str) -> str | None:
+    """Escribe el `--mcp-config` que engancha el MCP de la app (`/mcp`) y devuelve su ruta.
+
+    Apunta a `KENI_MCP_URL` (def `http://back:8765/mcp`) con `Authorization: Bearer
+    KENI_MCP_BEARER`. Sin bearer, el MCP no está disponible: devuelve None (el Ralph operativo
+    arranca igual, pero sin tools del MCP) en vez de fallar."""
+    url = os.environ.get("KENI_MCP_URL", "http://back:8765/mcp")
+    bearer = os.environ.get("KENI_MCP_BEARER", "")
+    if not bearer:
+        _log.warning("Ralph operativo: sin KENI_MCP_BEARER; arranca sin tools del MCP")
+        return None
+    cfg = {
+        "mcpServers": {
+            "keni": {
+                "type": "http",
+                "url": url,
+                "headers": {"Authorization": f"Bearer {bearer}"},
+            }
+        }
+    }
+    ruta = os.path.join(destino_dir, ".mcp-keni.json")
+    try:
+        with open(ruta, "w", encoding="utf-8") as fh:
+            json.dump(cfg, fh)
+    except OSError:
+        _log.warning("Ralph operativo: no se pudo escribir el mcp-config en %s", destino_dir)
+        return None
+    return ruta
 
 
 # --------------------------------------------------------------------------- #
@@ -236,6 +314,7 @@ class SesionRalph:
     nombre: str
     modelo: str
     creado: float
+    tipo: str = TIPO_DEF
     proc: subprocess.Popen | None = None
     worktree: str = ""
     rama: str = ""
@@ -253,6 +332,7 @@ class SesionRalph:
             "id": self.id,
             "nombre": self.nombre,
             "modelo": self.modelo,
+            "tipo": self.tipo,
             "estado": self.estado,
             "creado": self.creado,
         }
@@ -277,37 +357,46 @@ class GestorRalph:
 
     # -- ciclo de vida ----------------------------------------------------- #
 
-    def spawn(self, prompt: str, modelo: str | None = None) -> dict:
-        """Crea un Ralph: worktree+rama, lanza `claude` interactivo y envia el `prompt` inicial.
+    def spawn(self, prompt: str, modelo: str | None = None, tipo: str | None = None) -> dict:
+        """Crea un Ralph y lanza `claude` interactivo con el `prompt` inicial.
 
-        Devuelve la info del Ralph. Si se alcanza el tope (`KENI_MAX_RALPH`) lanza
-        `RuntimeError`. Si el worktree o el lanzamiento fallan, el Ralph queda en estado `error`
-        con `detalle` (nunca casca el listener)."""
+        `tipo` decide el entorno: `operativo` (asistente del equipo, MCP de la app, sin
+        filesystem) o `dev` (worktree del repo, sin sandbox). Devuelve la info del Ralph. Si se
+        alcanza el tope (`KENI_MAX_RALPH`) lanza `RuntimeError`. Si algo falla, el Ralph queda en
+        estado `error` con `detalle` (nunca casca el listener)."""
         from . import config
 
         modelo = modelo if modelo in MODELOS else MODELO_DEF
+        tipo = tipo if tipo in TIPOS else TIPO_DEF
         with self._lock:
             if len(self._sesiones) >= config.ralph_max():
                 raise RuntimeError("limite de Ralphs alcanzado")
             nombre = siguiente_nombre(s.nombre for s in self._sesiones.values())
             ralph_id = uuid.uuid4().hex
             sesion = SesionRalph(
-                id=ralph_id, nombre=nombre, modelo=modelo, creado=time.time()
+                id=ralph_id, nombre=nombre, modelo=modelo, tipo=tipo, creado=time.time()
             )
             self._sesiones[ralph_id] = sesion
 
-        try:
-            sesion.worktree, sesion.rama = _crear_worktree(config.dev_repo(), nombre)
-        except Exception as e:  # noqa: BLE001 -- sin repo git utilizable: arranca en dir plano
-            # /repo aún no clonado (p.ej. GitHub sin conectar) o git no disponible: el Ralph
-            # arranca igual en un directorio de trabajo plano y escribible para poder CONVERSAR;
-            # sin contexto del repo hasta que /repo exista. NO bloquea el chat.
-            _log.warning("Ralph %s: sin worktree (%s); arranca en directorio plano", nombre, e)
-            sesion.worktree, sesion.rama = _dir_trabajo_plano(nombre), ""
+        mcp_cfg: str | None = None
+        if tipo == TIPO_DEV:
+            try:
+                sesion.worktree, sesion.rama = _crear_worktree(config.dev_repo(), nombre)
+            except Exception as e:  # noqa: BLE001 -- sin repo git utilizable: arranca en dir plano
+                # /repo aún no clonado (p.ej. GitHub sin conectar) o git no disponible: el Ralph
+                # arranca igual en un directorio de trabajo plano para poder CONVERSAR; sin
+                # contexto del repo hasta que /repo exista. NO bloquea el chat.
+                _log.warning("Ralph %s: sin worktree (%s); arranca en directorio plano", nombre, e)
+                sesion.worktree, sesion.rama = _dir_trabajo_plano(nombre), ""
+        else:
+            # Operativo: dir de trabajo plano con su persona (CLAUDE.md) y el MCP de la app.
+            sesion.worktree = _dir_trabajo_plano(nombre)
+            _escribir_persona_operativa(sesion.worktree)
+            mcp_cfg = _mcp_config(sesion.worktree)
 
         try:
             sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
-                construir_argv(modelo),
+                construir_argv(modelo, tipo, mcp_config=mcp_cfg),
                 cwd=sesion.worktree,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,

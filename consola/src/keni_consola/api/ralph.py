@@ -30,18 +30,20 @@ from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
-_MSG_SOLO_ADMIN = "Solo un administrador puede operar los agentes Ralph."
-
 # Timeout del proxy a worker-ralph para las llamadas NO-stream (spawn/list/mensaje/kill).
 _TIMEOUT_PROXY = 30.0
 
 
-def _es_admin(request: Request) -> bool:
-    return permisos.es_admin(request)
+def _hay_sesion(request: Request) -> bool:
+    """True si la peticion la hace un usuario REAL con sesion (cualquier rol).
+
+    El Ralph operativo es para TODO el equipo (admins y editores), no solo admins; el token de
+    mantenimiento (sin usuario) no cuenta."""
+    return getattr(request.state, "usuario", None) is not None
 
 
-def _rechazo_no_admin() -> Response:
-    return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+def _rechazo_sin_sesion() -> Response:
+    return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
 
 
 def _llamar(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict]:
@@ -73,31 +75,43 @@ def _llamar(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict
 
 async def listar(request: Request) -> Response:
     """GET /api/ralph: lista los Ralphs vivos (admin). Degrada `disponible:false` si no hay servicio."""
-    if not _es_admin(request):
-        return _rechazo_no_admin()
+    if not _hay_sesion(request):
+        return _rechazo_sin_sesion()
+    superadmin = permisos.es_superadmin(request)
     status, payload = await run_in_threadpool(_llamar, "GET", "/control/ralph/list")
     if status != 200:
-        return JSONResponse({"disponible": False, "ralphs": []})
-    return JSONResponse({"disponible": True, "ralphs": payload.get("ralphs", [])})
+        return JSONResponse({"disponible": False, "superadmin": superadmin, "ralphs": []})
+    return JSONResponse(
+        {"disponible": True, "superadmin": superadmin, "ralphs": payload.get("ralphs", [])}
+    )
 
 
 async def spawn(request: Request) -> Response:
-    """POST /api/ralph/spawn `{prompt, modelo?}`: lanza un Ralph (admin)."""
-    if not _es_admin(request):
-        return _rechazo_no_admin()
+    """POST /api/ralph/spawn `{prompt, modelo?, tipo?}`: lanza un Ralph.
+
+    `tipo` por defecto `operativo` (asistente del equipo, MCP de la app). El tipo `dev` (agente de
+    desarrollo sobre el repo, sin sandbox) queda RESERVADO a superadmins."""
+    if not _hay_sesion(request):
+        return _rechazo_sin_sesion()
     try:
         datos = await request.json()
         cuerpo = datos if isinstance(datos, dict) else {}
     except Exception:  # noqa: BLE001 -- cuerpo ausente/no-JSON: lo tratamos como vacio
         cuerpo = {}
+    tipo = cuerpo.get("tipo") or "operativo"
+    if tipo == "dev" and not permisos.es_superadmin(request):
+        return JSONResponse(
+            {"error": "Solo un superadmin puede lanzar un Ralph de desarrollo."}, status_code=403
+        )
+    cuerpo["tipo"] = tipo
     status, payload = await run_in_threadpool(_llamar, "POST", "/control/ralph/spawn", cuerpo)
     return JSONResponse(payload, status_code=status)
 
 
 async def mensaje(request: Request) -> Response:
     """POST /api/ralph/{id}/mensaje `{texto}`: turno del humano (admin)."""
-    if not _es_admin(request):
-        return _rechazo_no_admin()
+    if not _hay_sesion(request):
+        return _rechazo_sin_sesion()
     ralph_id = request.path_params.get("ralph_id")
     try:
         datos = await request.json()
@@ -112,8 +126,8 @@ async def mensaje(request: Request) -> Response:
 
 async def kill(request: Request) -> Response:
     """POST /api/ralph/{id}/kill: mata el Ralph (admin)."""
-    if not _es_admin(request):
-        return _rechazo_no_admin()
+    if not _hay_sesion(request):
+        return _rechazo_sin_sesion()
     ralph_id = request.path_params.get("ralph_id")
     status, payload = await run_in_threadpool(_llamar, "POST", f"/control/ralph/{ralph_id}/kill")
     return JSONResponse(payload, status_code=status)
@@ -126,8 +140,8 @@ async def stream(request: Request) -> Response:
     Si worker-ralph no responde, cierra limpio (el SPA degrada). Autenticacion como sus hermanos:
     la aporta el middleware global (`/api` exige sesion); `EventSource` lleva la cookie en
     same-origin. El bearer hacia worker-ralph lo pone este proxy."""
-    if not _es_admin(request):
-        return _rechazo_no_admin()
+    if not _hay_sesion(request):
+        return _rechazo_sin_sesion()
     ralph_id = request.path_params.get("ralph_id")
 
     async def eventos() -> AsyncIterator[bytes]:
