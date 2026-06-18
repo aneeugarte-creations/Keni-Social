@@ -302,6 +302,8 @@ _PIPELINE_TOPES_INT = {
 # a diferencia de los knobs de admisión, donde 0 no tiene sentido (algo debe entrar).
 _PIPELINE_ECONOMIA_INT = {
     config.ENV_PRESUPUESTO_TOKENS_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
     config.ENV_PRESUPUESTO_MARGEN_MANUAL,
 }
 
