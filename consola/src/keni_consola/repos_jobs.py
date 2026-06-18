@@ -93,8 +93,8 @@ def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
     return db.gasto_ia_del_dia_por_proceso(dia)
 
 
-def gasto_ia_economia_por_proceso(dias: int = 7) -> dict[str, dict[str, Any]]:
-    return db.gasto_ia_economia_por_proceso(dias)
+def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
+    return db.gasto_ia_economia_por_proceso(dias, marca)
 
 
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
