@@ -15,6 +15,7 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
+import { CLAVE_PIEZAS, claveCadenaAprobacion } from "@/pages/piezas/claves";
 import type { MencionCandidato } from "@/types";
 
 // Fecha+hora en CDMX (el instante del backend es UTC).
@@ -128,6 +129,27 @@ export function Comentarios({ publicacionId }: { publicacionId: string }) {
     mutationFn: ({ id, resuelto }: { id: string; resuelto: boolean }) =>
       api.actualizarComentario(id, { resuelto }),
     onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  // «Adelante»: zanja la objeción (incluido el veto de la Crítica IA) y empuja la pieza a su
+  // próximo hueco. Refresca el feed/cadena para que el cambio de estado se vea, y avisa según
+  // si salió a su hueco o aún le falta algo.
+  const adelante = useMutation({
+    mutationFn: (id: string) => api.adelantarComentario(id),
+    onSuccess: (data) => {
+      invalidar();
+      const piezaId = data.comentario.pieza_id;
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      if (piezaId) {
+        void queryClient.invalidateQueries({ queryKey: claveCadenaAprobacion(piezaId) });
+      }
+      toast.success(
+        data.programada
+          ? "Listo: la pieza va a su próximo hueco para salir."
+          : "Hecho. Saldrá en cuanto junte lo que le falta (algún OK o un hueco libre).",
+      );
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const borrar = useMutation({
@@ -244,10 +266,14 @@ export function Comentarios({ publicacionId }: { publicacionId: string }) {
                     variant="ghost"
                     size="sm"
                     className="h-6 px-2 text-xs"
-                    onClick={() => resolver.mutate({ id: c.id, resuelto: !c.resuelto })}
-                    disabled={resolver.isPending}
+                    onClick={() =>
+                      c.resuelto
+                        ? resolver.mutate({ id: c.id, resuelto: false })
+                        : adelante.mutate(c.id)
+                    }
+                    disabled={resolver.isPending || adelante.isPending}
                   >
-                    {c.resuelto ? "Reabrir" : "Marcar resuelto"}
+                    {c.resuelto ? "Reabrir" : "Adelante"}
                   </Button>
                 </div>
               </FilaConAcciones>

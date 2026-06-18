@@ -36,6 +36,13 @@ export const apiColaboracion = {
       metodo: "PATCH",
       json: cuerpo,
     }),
+  // «Adelante»: zanja la objeción y empuja la pieza a su próximo hueco. `programada` dice si
+  // ya salió a su hueco o si aún le falta algo (otro OK, un hueco libre) para avisar honesto.
+  adelantarComentario: (id: string) =>
+    peticion<RespuestaComentario & { programada: boolean }>(
+      `/comentarios/${encodeURIComponent(id)}/adelante`,
+      { metodo: "POST" },
+    ),
   eliminarComentario: (id: string) =>
     peticion<RespuestaMensaje>(`/comentarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 

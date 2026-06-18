@@ -548,3 +548,82 @@ def test_segundo_programar_da_409_si_ya_no_esta_en_revision(entorno, monkeypatch
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
     assert r2.status_code == 409  # ya no está en revisión: el CAS no aplica
+
+
+# --------------------------------------------------------------------------- #
+# «Adelante»: botón único del hilo que zanja la objeción y empuja la pieza      #
+# --------------------------------------------------------------------------- #
+
+
+def test_adelante_sobre_veto_ia_lo_zanja_y_lo_puede_cualquiera(entorno, monkeypatch):
+    """«Adelante» (cualquiera del equipo, SIN cargo de coordinación) cierra la objeción de la
+    Crítica IA: marca su comentario resuelto y voltea el veto a aprobado, sin tocar los OK
+    humanos. Sin franja la pieza se queda `en_revision` (programada=False), pero desbloqueada."""
+    from keni_consola import config
+    from keni_consola.dominio import colaboracion, critica_ia
+
+    monkeypatch.setattr(config, "critica_ia_activa", lambda: True)
+    monkeypatch.setattr(critica_ia, "lanzar_para_publicacion", lambda *a, **k: None)
+
+    autora = _cli_usuario("ana")
+    beto = _cli_usuario("beto")
+    caro = _cli_usuario("caro")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    # Los 2 OK humanos (dos personas) dejan SOLO el nivel «Crítica IA» pendiente.
+    assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    assert caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    # La IA RECHAZA: deja dislike en su nivel + un comentario sin resolver (gate B) que frena.
+    critica_ia.aplicar_revision(
+        pub["id"],
+        {
+            "veredicto": "rechaza",
+            "comentario": "La imagen es sintética; cámbiala por una foto real.",
+            "problemas": [],
+        },
+    )
+    plat = repos.obtener_pieza_fila(pub["id"])
+    assert repos.comentarios_sin_resolver(plat["publicacion_id"], pub["id"]) >= 1
+    coment = repos.listar_comentarios(plat["publicacion_id"])[0]
+    assert coment["autor_id"] == colaboracion.DECISOR_CRITICA_ID
+
+    # Un EDITOR normal (sin cargo) pulsa «Adelante» sobre el comentario de la IA.
+    deno = _cli_usuario("deno")
+    r = deno.post(f"/api/comentarios/{coment['id']}/adelante", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["comentario"]["resuelto"] is True
+    assert "programada" in cuerpo  # el front decide el aviso según salga o no a su hueco
+    # El veto se volteó a aprobado y el gate B quedó limpio: la pieza está desbloqueada.
+    ia = colaboracion.nivel_critica_ia(repos.listar_aprobaciones(pub["id"]))
+    assert ia["decision"] == "aprobado"
+    assert repos.comentarios_sin_resolver(plat["publicacion_id"], pub["id"]) == 0
+
+
+def test_adelante_sobre_comentario_humano_solo_lo_resuelve(entorno):
+    """«Adelante» sobre un comentario humano normal lo marca resuelto (no toca la cadena); sin los
+    2 OK no programa, pero deja el hilo cerrado. Mismo botón, mismo gesto, cualquiera lo pulsa."""
+    autora = _cli_usuario("ana")
+    beto = _cli_usuario("beto")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    plat = repos.obtener_pieza_fila(pub["id"])
+    r = beto.post(
+        f"/api/publicaciones/{plat['publicacion_id']}/comentarios",
+        json={"texto": "Revisa el copy", "pieza_id": pub["id"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201, r.text
+    coment_id = r.json()["comentario"]["id"]
+
+    ra = autora.post(f"/api/comentarios/{coment_id}/adelante", headers=_ORIGIN)
+    assert ra.status_code == 200, ra.text
+    assert ra.json()["comentario"]["resuelto"] is True
+    assert ra.json()["programada"] is False
+
+
+def test_adelante_comentario_inexistente_404(entorno):
+    """Sobre un comentario que ya no existe: 404 limpio (sin tocar nada)."""
+    autora = _cli_usuario("ana")
+    r = autora.post("/api/comentarios/no-existe/adelante", headers=_ORIGIN)
+    assert r.status_code == 404

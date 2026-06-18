@@ -333,6 +333,19 @@ def _resolver_comentarios_critica_ia(pieza_id: str) -> None:
                 _log.exception("No se pudo resolver el comentario IA %s.", c.get("id"))
 
 
+def _voltear_veto_critica_ia(
+    nivel_id: str, sello: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Voltea un veto de la Crítica IA (rechazado→aprobado) con el `sello` del override.
+
+    El CAS de `actualizar_aprobacion` solo deja `pendiente→terminal` (anti-carrera): se resetea a
+    `pendiente` PRIMERO (sin guardia) para que el OK del override prospere; sin esto el flip se
+    perdería en silencio y la pieza se quedaría `en_revision`. Devuelve el nivel ya sellado.
+    """
+    repos.actualizar_aprobacion(nivel_id, {"decision": DECISION_PENDIENTE})
+    return repos.actualizar_aprobacion(nivel_id, sello)
+
+
 async def aprobar(request: Request) -> Response:
     """POST /api/aprobacion/{id}/aprobar: decide el nivel actual como aprobado (revisor != autor)."""
     return await _decidir(request, DECISION_APROBADO)
@@ -451,12 +464,8 @@ async def forzar(request: Request) -> Response:
                 ia_por_correr = True
                 continue
             if nivel.get("decision") == DECISION_RECHAZADO:
-                # OVERRIDE de un VETO de IA = transición rechazado→aprobado, pero el CAS de
-                # `actualizar_aprobacion` solo deja pendiente→terminal (anti-carrera). Reseteamos
-                # a pendiente PRIMERO (sin guardia) para que el OK forzado prospere; sin esto el
-                # flip se perdía en silencio y la pieza quedaba `en_revision`.
-                repos.actualizar_aprobacion(nivel["id"], {"decision": DECISION_PENDIENTE})
-                nivel_decidido = repos.actualizar_aprobacion(nivel["id"], _sello_override())
+                # OVERRIDE CONSCIENTE de un VETO de IA: se voltea a aprobado y se cierra su objeción.
+                nivel_decidido = _voltear_veto_critica_ia(nivel["id"], _sello_override())
                 override_veto_ia = True
             # Ya aprobada: nada que forzar.
             continue
@@ -483,6 +492,60 @@ async def forzar(request: Request) -> Response:
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return _responder_aprobada(pieza_id, actualizada)
+
+
+async def adelantar(request: Request) -> Response:
+    """POST /api/comentarios/{comentario_id}/adelante: zanja la objeción y empuja la pieza al hueco.
+
+    El botón ÚNICO «Adelante» del hilo, para CUALQUIERA del equipo (a diferencia de `forzar`, que
+    pide coordinación): dar por zanjada una objeción —la haya atendido de verdad o decida seguir
+    adelante a pesar del agente— y que la pieza avance. En un clic:
+      - marca el comentario como resuelto;
+      - si lo dejó la Crítica IA, voltea su veto (override consciente, como `forzar`, pero SIN
+        tocar los OK humanos: si faltan, la pieza no se programa y el front lo dice);
+      - AUTO-PROGRAMA la pieza a su próximo hueco si ya cumple los gates (2 OK + sin otras
+        objeciones + franja). No re-lanza al crítico: su nivel queda decidido.
+    Devuelve `{comentario, programada}`; `programada` le dice al front si la pieza salió a su hueco
+    o si aún le falta algo (otro OK, un hueco libre) para que el aviso sea honesto.
+    """
+    comentario_id = request.path_params["comentario_id"]
+    comentario = repos.obtener_comentario(comentario_id)
+    if comentario is None:
+        return JSONResponse({"error": "Ese comentario ya no existe."}, status_code=404)
+    actualizado = repos.actualizar_comentario(comentario_id, {"resuelto": True}) or comentario
+
+    pieza_id = comentario.get("pieza_id", "") or ""
+    programada = False
+    if pieza_id:
+        autor = autor_de_peticion(request) or {}
+        sello = {
+            "decision": DECISION_APROBADO,
+            "decisor_id": autor.get("id", "") or "adelante",
+            "decisor_nombre": autor.get("usuario", "") or "Adelante",
+            "comentario": "Objeción zanjada con «Adelante» (sigue adelante).",
+            "decidido_en": ahora_iso(),
+        }
+        # Si la Crítica IA vetó, voltea su nivel y cierra sus objeciones: la cadena deja de
+        # mostrar el veto y el gate B queda limpio. Los OK humanos no se tocan.
+        nivel_decidido: dict[str, Any] | None = None
+        for nivel in repos.listar_aprobaciones(pieza_id):
+            if (
+                colaboracion.es_nivel_critica_ia(nivel)
+                and nivel.get("decision") == DECISION_RECHAZADO
+            ):
+                nivel_decidido = _voltear_veto_critica_ia(nivel["id"], sello)
+        if nivel_decidido is not None:
+            _resolver_comentarios_critica_ia(pieza_id)
+            _reflejar_estado_pieza(pieza_id, nivel_decidido)
+        # Auto-programar al próximo hueco si ya cumple los gates (best-effort; nunca rompe el
+        # «resuelto» ya escrito). Idempotente: solo actúa sobre piezas `en_revision`.
+        try:
+            from .. import auto_programar
+
+            programada = auto_programar.programar_si_aprobada(pieza_id) is not None
+        except Exception:  # noqa: BLE001 — programar es secundario al «resuelto» ya registrado.
+            _log.exception("Auto-programación tras «Adelante» falló para %s.", pieza_id)
+    return JSONResponse({"comentario": actualizado, "programada": programada})
 
 
 def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
@@ -597,4 +660,5 @@ RUTAS = [
     Route("/api/aprobacion/{pieza_id}/rechazar", rechazar, methods=["POST"]),
     Route("/api/aprobacion/{pieza_id}/deshacer", deshacer, methods=["POST"]),
     Route("/api/aprobacion/{pieza_id}/programar", programar, methods=["POST"]),
+    Route("/api/comentarios/{comentario_id}/adelante", adelantar, methods=["POST"]),
 ]
