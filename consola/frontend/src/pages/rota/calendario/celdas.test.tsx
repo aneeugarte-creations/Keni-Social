@@ -132,13 +132,14 @@ describe("CeldaDeRejilla — evento UNA vez + titularidad real (coherente con Pa
     expect(screen.queryByText("Roger")).toBeNull();
   });
 
-  it("evento sin coger pero con alguien de TURNO en la franja → «Cubierto» (lo cubre el turno)", () => {
+  it("evento sin coger pero con alguien de TURNO en la franja → «Cubierto · <nombre>» (nombra quien lo cubre)", () => {
     renderCelda({
       personas: [turno({ id: "tr-roger", miembro_id: "u-roger", miembro_nombre: "Roger" })],
       eventos: [itemEvento([], { titulo: "Amistoso sin dueño" })],
     });
     expect(screen.getByText("Amistoso sin dueño")).toBeInTheDocument();
-    expect(screen.getByText("Cubierto")).toBeInTheDocument();
+    // No solo «Cubierto»: nombra a quien lo cubre por turno (Roger está de turno en la franja).
+    expect(screen.getByText("Cubierto · Roger")).toBeInTheDocument();
     expect(screen.queryByText("Sin cubrir")).toBeNull();
   });
 

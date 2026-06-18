@@ -45,18 +45,24 @@ const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || n;
 /** Chip de evento dentro de un recuadro de persona (clicable: abre edición). */
 export function ChipEventoCalendario({
   item,
-  franjaCubierta,
+  cubrenPorTurno,
   onClick,
   onCambio,
 }: {
   item: ItemEventoCalendario;
-  /** Hay alguien de TURNO en la franja de este evento ese día (lo cubre el turno). */
-  franjaCubierta: boolean;
+  /** Personas de TURNO en la franja de este evento ese día: si nadie lo cogió, son quienes lo cubren. */
+  cubrenPorTurno: { id: string; nombre: string }[];
   onClick: () => void;
   onCambio: () => void;
 }) {
   const cob = COBERTURA[item.evento.tipo_cobertura] ?? COBERTURA.transmision;
   const Icono = cob.icono;
+  // Nombres (primer nombre) de quienes cubren por turno, recortado para no desbordar el chip.
+  const nombresTurno = cubrenPorTurno.map((c) => primerNombre(c.nombre));
+  const textoTurno =
+    nombresTurno.length <= 2
+      ? nombresTurno.join(", ")
+      : `${nombresTurno.slice(0, 2).join(", ")} +${nombresTurno.length - 2}`;
   return (
     <button
       type="button"
@@ -80,8 +86,8 @@ export function ChipEventoCalendario({
       {/* Cobertura en 3 estados, de más a menos específico:
           1) Lo COGIÓ alguien (claim) → ese avatar + primer nombre (la misma titularidad que el
              Panorama; es la anulación explícita cuando quieres nombre y apellido / rol).
-          2) Nadie lo cogió pero HAY turno en su franja → «Cubierto»: lo cubre quien esté de
-             turno (las personas ya salen arriba en la celda; no las repetimos por evento).
+          2) Nadie lo cogió pero HAY turno en su franja → «Cubierto · <nombres>»: lo cubre quien
+             esté de turno ese día, nombrado para saber de un vistazo quién responde.
           3) Nadie lo cogió y NO hay turno en su franja → «Sin cubrir»: hueco real. */}
       {item.cubridores.length > 0 ? (
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -92,9 +98,9 @@ export function ChipEventoCalendario({
             </span>
           ))}
         </span>
-      ) : franjaCubierta ? (
+      ) : cubrenPorTurno.length > 0 ? (
         <span className="inline-flex w-fit items-center rounded border border-emerald-300 bg-emerald-50 px-1 text-[10px] font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-          Cubierto
+          Cubierto · {textoTurno}
         </span>
       ) : (
         <span className="inline-flex w-fit items-center rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">

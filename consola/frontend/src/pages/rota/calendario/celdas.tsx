@@ -129,7 +129,7 @@ export function CeldaDeRejilla({
             <ChipEventoCalendario
               key={item.evento.id}
               item={item}
-              franjaCubierta={personas.length > 0}
+              cubrenPorTurno={personas.map((t) => ({ id: t.miembro_id, nombre: t.miembro_nombre }))}
               onClick={() => onEditarEvento(item.evento)}
               onCambio={onCambio}
             />
