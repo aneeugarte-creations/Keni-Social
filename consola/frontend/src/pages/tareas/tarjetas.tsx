@@ -60,6 +60,9 @@ const PRIORIDAD_CLASE: Record<string, string> = {
   baja: "border-border text-muted-foreground",
 };
 
+/** Etiqueta capitalizada de una prioridad cruda ("alta" → "Alta"). */
+const etiquetaPrioridad = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
+
 /**
  * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el estado
  * se deriva de la fecha/hora del evento (su reloj maestro es la hora de inicio del partido):
@@ -109,11 +112,28 @@ export function SemaforoCobertura({
       : "bg-slate-400 dark:bg-slate-500";
 
   if (compacto) {
-    return completado ? (
-      <span title={titulo} aria-label={titulo} className="inline-flex shrink-0">
-        <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
-      </span>
-    ) : (
+    if (completado) {
+      return (
+        <span title={titulo} aria-label={titulo} className="inline-flex shrink-0">
+          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+        </span>
+      );
+    }
+    // PRE-LIVE: la cuenta atrás al pitido se ve EN la fila colapsada (no solo en el tooltip ni al
+    // desplegar), que es lo que el cubridor en vivo necesita de un vistazo bajo presión de tiempo.
+    if (preLive) {
+      return (
+        <span
+          title={texto}
+          aria-label={texto}
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300"
+        >
+          <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", dot)} aria-hidden />
+          {min}′
+        </span>
+      );
+    }
+    return (
       <span
         title={titulo}
         aria-label={titulo}
@@ -314,7 +334,7 @@ export function TarjetaEventoLibre({
         )}
         {evento.prioridad && (
           <Badge variant="outline" className={cn("font-normal", PRIORIDAD_CLASE[evento.prioridad])}>
-            {evento.prioridad}
+            {etiquetaPrioridad(evento.prioridad)}
           </Badge>
         )}
         {evento.fecha && (
@@ -547,7 +567,7 @@ export function TarjetaTarea({
         )}
         {tarea.prioridad && (
           <Badge variant="outline" className={cn("font-normal", PRIORIDAD_CLASE[tarea.prioridad])}>
-            {tarea.prioridad}
+            {etiquetaPrioridad(tarea.prioridad)}
           </Badge>
         )}
         {/* Quitar a quien cubre (yo mismo o, si soy manager, a otra persona): suelta SU rol;

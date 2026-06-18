@@ -38,10 +38,11 @@ describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
     });
   });
 
-  it("compacto en PRE-LIVE: punto con tooltip «Empieza pronto»", () => {
+  it("compacto en PRE-LIVE: la cuenta atrás se ve en la fila («30′»), no solo en hover", () => {
     conAhora(() => {
       render(<SemaforoCobertura fecha="2026-06-13" hora="18:30" compacto />);
-      expect(screen.getByTitle("Empieza pronto")).toBeInTheDocument();
+      expect(screen.getByText("30′")).toBeInTheDocument();
+      expect(screen.getByTitle("Empieza en 30 min")).toBeInTheDocument();
     });
   });
 });

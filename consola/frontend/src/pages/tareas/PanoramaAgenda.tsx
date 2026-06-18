@@ -606,6 +606,19 @@ function FilaAgenda({
  * Mañana / fecha) y ordenados por hora; lo «por cubrir» resalta en ámbar (es lo que pide
  * decisión). Cada fila se despliega para coger/reasignar. «Cargar más» trae más días.
  */
+/**
+ * Re-renderiza cada `intervaloMs` para que el semáforo de cobertura avance con el reloj
+ * (PRE-LIVE → «En vivo» → «Cubierto») sin esperar al refetch del tablero: la fase se deriva de
+ * `Date.now()` en cada render, así que basta forzar un render periódico.
+ */
+function useRelojVivo(intervaloMs = 30_000) {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), intervaloMs);
+    return () => clearInterval(id);
+  }, [intervaloMs]);
+}
+
 export function PanoramaAgenda({
   tareas,
   eventos,
@@ -617,6 +630,7 @@ export function PanoramaAgenda({
   catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
 }) {
+  useRelojVivo();
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
   const [filtro, setFiltro] = React.useState<string | null>(null); // id de persona, "__pool__", o null
   const [diasVisibles, setDiasVisibles] = React.useState(5);
