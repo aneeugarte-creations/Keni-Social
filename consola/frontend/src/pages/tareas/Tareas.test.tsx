@@ -303,6 +303,28 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getByText("Mía")).toBeInTheDocument();
   });
 
+  it("Mis tareas: una cobertura cuyo partido ya pasó cae a «Hechas», no «En marcha»", async () => {
+    renderTareas(
+      [
+        // Cobertura MÍA de un partido ya jugado (fecha pasada con hora) → hecha.
+        tarea({ id: "c-pas", titulo: "Partido jugado", evento_id: "ev-pas", responsable_id: "u1", responsable_nombre: "yo", fecha_objetivo: "2020-01-01", hora_objetivo: "19:00" }),
+        // Cobertura MÍA de un partido futuro → sigue en marcha.
+        tarea({ id: "c-fut", titulo: "Partido proximo", evento_id: "ev-fut", responsable_id: "u1", responsable_nombre: "yo", fecha_objetivo: "2099-01-01", hora_objetivo: "19:00" }),
+      ],
+      [],
+      usuario("editor", "u1"),
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
+
+    const hechas = (await screen.findByRole("heading", { name: /Hechas/ })).closest("section")!;
+    expect(within(hechas).getAllByText("Partido jugado").length).toBeGreaterThan(0);
+    expect(within(hechas).queryAllByText("Partido proximo")).toHaveLength(0);
+
+    const enMarcha = screen.getByRole("heading", { name: /En marcha/ }).closest("section")!;
+    expect(within(enMarcha).getAllByText("Partido proximo").length).toBeGreaterThan(0);
+    expect(within(enMarcha).queryAllByText("Partido jugado")).toHaveLength(0);
+  });
+
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama

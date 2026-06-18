@@ -3,13 +3,15 @@ import { ListChecks, Plus } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { hoyCDMX } from "@/lib/fecha";
+import { hoyCDMX, posicionTemporal } from "@/lib/fecha";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
@@ -124,6 +126,11 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   };
   const visibles = items.filter(cumpleLente);
 
+  // Una cobertura cuyo evento YA pasó está hecha (se cubrió): cae a «Hechas», no «En marcha» —
+  // mismo criterio temporal con el que el Panorama la saca de la carga activa.
+  const coberturaPasada = (i: Item) =>
+    i.kind === "cobertura" && posicionTemporal(i.cobertura.orden, i.cobertura.hora) === "despues";
+
   // Tres grupos para que «se organice»: lo que falta por cubrir, lo que está en marcha, lo hecho.
   const grupos: { etiqueta: string; items: Item[] }[] = [
     { etiqueta: "Por cubrir", items: visibles.filter(esPorCubrir) },
@@ -131,13 +138,15 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       etiqueta: "En marcha",
       items: visibles.filter(
         (i) =>
-          i.kind === "cobertura" ||
+          (i.kind === "cobertura" && !coberturaPasada(i)) ||
           (i.kind === "tarea" && i.tarea.responsable_id && i.tarea.estado !== "hecha"),
       ),
     },
     {
       etiqueta: "Hechas",
-      items: visibles.filter((i) => i.kind === "tarea" && i.tarea.estado === "hecha"),
+      items: visibles.filter(
+        (i) => coberturaPasada(i) || (i.kind === "tarea" && i.tarea.estado === "hecha"),
+      ),
     },
   ];
 
@@ -159,11 +168,16 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   // Lista agrupada (Por cubrir / En marcha / Hechas) que comparten «Por cubrir» y «Mis tareas».
   const listaAgrupada =
     visibles.length === 0 ? (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          No tienes nada asignado. Coge algo de «Por cubrir» en Panorama.
-        </p>
-      </div>
+      <EstadoVacio
+        icono={ListChecks}
+        titulo="No tienes nada asignado"
+        texto="Ve a Panorama y pulsa «Por cubrir» para coger trabajo del equipo."
+        accion={
+          <Button size="sm" variant="outline" onClick={() => setLente("panorama")}>
+            Ver Panorama
+          </Button>
+        }
+      />
     ) : (
       grupos.map((g) =>
         g.items.length === 0 ? null : (
@@ -209,7 +223,11 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
             cargando={tareasQuery.isFetching || eventosQuery.isFetching}
           />
         ) : cargando ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-lg" />
+            ))}
+          </div>
         ) : (
           <>
             <TabsContent value="panorama">
