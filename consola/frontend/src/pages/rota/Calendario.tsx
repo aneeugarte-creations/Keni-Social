@@ -19,6 +19,12 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -36,7 +42,7 @@ import type {
   TurnoRota,
 } from "@/types";
 
-import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo, DialogEditarEvento } from "./CalendarioPiezas";
+import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo } from "./CalendarioPiezas";
 import {
   AyudaLeyenda,
   BadgeEstadoSemana,
@@ -57,7 +63,8 @@ import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
 import { DialogFranjas } from "./Franjas";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
-import { agrupar } from "@/pages/tareas/tipos";
+import { TarjetaCobertura, TarjetaEventoLibre } from "@/pages/tareas/tarjetas";
+import { agrupar, type Cobertura } from "@/pages/tareas/tipos";
 
 
 export function Calendario({
@@ -130,8 +137,10 @@ export function Calendario({
   // convención CDMX de lib/fecha + rota-calendario).
   const dias = React.useMemo(() => diasDeSemana(lunes), [lunes]);
 
-  // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
-  const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
+  // Diálogo de cobertura: clicar un chip de evento abre su tarjeta de cobertura (la MISMA del
+  // Panorama) para coger/«Asignar a…»/soltar/editar sin salir del calendario. La edición del
+  // evento vive ahora en el kebab de esa tarjeta, no en un modal de edición aparte.
+  const [eventoCobertura, setEventoCobertura] = React.useState<EventoRota | null>(null);
   // Diálogo de franjas (unificado): un solo «Franjas» en el menú «Más» con dos pestañas
   // (esta semana / plantilla por defecto). Antes eran dos items sueltos que se confundían.
   const [abrirFranjas, setAbrirFranjas] = React.useState(false);
@@ -291,16 +300,29 @@ export function Calendario({
       ),
     [tareas],
   );
+  // Catálogos (usuarios) para las tarjetas de cobertura del diálogo del chip.
+  const catalogos = tareasQ.data?.catalogos;
+  // Una sola pasada de `agrupar`: de ella derivamos los cubridores por evento (para el chip) y
+  // la cobertura completa por evento (para la tarjeta del diálogo, igual que el Panorama).
+  const coberturas = React.useMemo(
+    () => agrupar(tareas, eventosCobertura).coberturas,
+    [tareas, eventosCobertura],
+  );
   const cubridoresPorEvento = React.useMemo(() => {
     const m = new Map<string, CubridorEvento[]>();
-    for (const c of agrupar(tareas, eventosCobertura).coberturas) {
+    for (const c of coberturas) {
       m.set(
         c.eventoId,
         c.cubridores.map((t) => ({ id: t.responsable_id, nombre: t.responsable_nombre })),
       );
     }
     return m;
-  }, [tareas, eventosCobertura]);
+  }, [coberturas]);
+  const coberturaPorEventoId = React.useMemo(() => {
+    const m = new Map<string, Cobertura>();
+    for (const c of coberturas) m.set(c.eventoId, c);
+    return m;
+  }, [coberturas]);
 
   // Cada evento UNA sola vez en su celda: franja por su HORA, día por su FECHA. Con su
   // titularidad real; sin cubridores = «Por cubrir» (lo pinta el chip). Si la semana aún no
@@ -613,7 +635,7 @@ export function Calendario({
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
                               conflictoCandidato={conflictoCandidato}
-                              onEditarEvento={(e) => setEventoSeleccionado(e)}
+                              onEditarEvento={(e) => setEventoCobertura(e)}
                               onCambio={invalidar}
                             />
                           );
@@ -628,12 +650,26 @@ export function Calendario({
         </Card>
       )}
 
-      {eventoSeleccionado && (
-        <DialogEditarEvento
-          evento={eventoSeleccionado}
-          onCerrar={() => setEventoSeleccionado(null)}
-          onCambio={invalidar}
-        />
+      {/* Diálogo de cobertura del chip: la MISMA tarjeta del Panorama (coger/«Asignar a…»/
+          soltar/editar/borrar en su kebab). Si el evento ya tiene cubridores → TarjetaCobertura;
+          si no → TarjetaEventoLibre. Ambas invalidan CLAVE_TAREAS al mutar, así `tareasQ` (misma
+          clave) se refresca y el chip se actualiza solo. */}
+      {eventoCobertura && (
+        <Dialog open onOpenChange={(o) => !o && setEventoCobertura(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{eventoCobertura.titulo}</DialogTitle>
+            </DialogHeader>
+            {coberturaPorEventoId.get(eventoCobertura.id) ? (
+              <TarjetaCobertura
+                cobertura={coberturaPorEventoId.get(eventoCobertura.id)!}
+                catalogos={catalogos}
+              />
+            ) : (
+              <TarjetaEventoLibre evento={eventoCobertura} catalogos={catalogos} />
+            )}
+          </DialogContent>
+        </Dialog>
       )}
 
       {abrirCarga && (

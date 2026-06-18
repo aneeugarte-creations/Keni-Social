@@ -62,7 +62,7 @@ export function ChipEventoCalendario({
       type="button"
       onClick={onClick}
       className={`group/chip flex flex-col gap-0.5 rounded-sm border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:ring-1 hover:ring-primary/40 ${cob.chip}`}
-      aria-label={`Editar ${item.evento.titulo}`}
+      aria-label={`Cubrir ${item.evento.titulo}`}
     >
       <span className="flex items-start gap-1">
         <Icono className="mt-0.5 h-2.5 w-2.5 shrink-0" />
