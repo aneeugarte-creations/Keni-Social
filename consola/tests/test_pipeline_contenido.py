@@ -372,6 +372,32 @@ def test_macro_evento_guarda_de_carrera_cluster_ya_absorbido(monkeypatch):
     assert reg["crear"] == []  # ninguna publicación nueva
 
 
+def test_contexto_feed_evento_lista_piezas_previas(monkeypatch):
+    """El productor recibe las piezas YA en el feed del mismo evento, para no repetir ángulos."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    piezas = [
+        {"titulo": "Mundial 2026 — Partidos", "tema_macro": "Mundial 2026"},
+        {"titulo": "Estreno de cine", "tema_macro": ""},                  # otro evento -> fuera
+        {"titulo": "Mundial 2026 — Espectáculo", "tema_macro": "Mundial 2026"},
+    ]
+    monkeypatch.setattr(_admitir.repos, "listar_publicacion", lambda **kw: list(piezas))
+    bloque = _admitir._contexto_feed_evento("unotv", "Mundial 2026")
+    assert "YA EN EL FEED" in bloque and "NO repitas" in bloque
+    assert "Mundial 2026 — Partidos" in bloque
+    assert "Mundial 2026 — Espectáculo" in bloque
+    assert "Estreno de cine" not in bloque
+
+
+def test_contexto_feed_evento_vacio_sin_evento_o_sin_piezas(monkeypatch):
+    """Sin macro-evento, o sin piezas previas, el bloque es "" (no cambia la nota)."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    assert _admitir._contexto_feed_evento("unotv", "") == ""
+    monkeypatch.setattr(_admitir.repos, "listar_publicacion", lambda **kw: [])
+    assert _admitir._contexto_feed_evento("unotv", "Mundial 2026") == ""
+
+
 def test_clusters_por_tema_macro_filtra_marca_estado_y_ordena(entorno):
     """`clusters_por_tema_macro`: misma marca + tema_macro, `solo_nuevos`, orden por score desc."""
     _inicializar_cluster("m1", titulo="A", score=0.9, estado="nuevo")

@@ -54,6 +54,11 @@ __all__ = [
 # Tope de enlaces corroborantes que se anexan a la nota de un tema promovido de un cluster.
 _MAX_ENLACES_CLUSTER = 6
 
+# Contexto del PRODUCTOR: ventana y tope de piezas YA en el feed del mismo macro-evento que se
+# le recuerdan al copy para que no repita ángulos (memoria de evento, "más IA hacia adentro").
+_DIAS_CONTEXTO_FEED = 7
+_MAX_CONTEXTO_FEED = 8
+
 
 def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str]) -> str:
     """JSON con los parámetros que la fase CD necesitará para lanzar el copy de un tema.
@@ -577,7 +582,8 @@ def crear_tema_de_cluster(
         if url and not cuerpos.get(url):
             if cuerpo := _fetch_cuerpo(url):
                 cuerpos[url] = cuerpo
-    nota = _nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
+    nota = (_nota_de_cluster(titulo, resumen, items, cuerpos)
+            + _contexto_feed_evento(marca, tema_macro))[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
     imagen = _imagen_de_cluster(items)
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
@@ -664,7 +670,8 @@ def _crear_carrusel_de_familia(
     cluster_lead, items_lead = familia_con_items[0]
     resumen_lead = (cluster_lead.get("resumen") or "").strip()
     fotos_notas_familia = _fotos_notas_de_familia(familia_con_items)
-    nota = _nota_de_familia(tema_macro, familia_con_items, cuerpos_por_cluster)[: gen_dom.MAX_TEXTO]
+    nota = (_nota_de_familia(tema_macro, familia_con_items, cuerpos_por_cluster)
+            + _contexto_feed_evento(marca, tema_macro))[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
     imagen = _imagen_de_cluster(items_lead)
     # `n_notas` = nº de SUB-HISTORIAS (≥2): habilita el output CARRUSEL (una placa por ángulo)
@@ -866,6 +873,39 @@ def _eventos_cubiertos_hoy(marca: str, *, ahora: datetime | None = None) -> set[
         if tm:
             cubiertos.add((tm, (p.get("subtema") or "").strip()))
     return cubiertos
+
+
+def _contexto_feed_evento(marca: str, tema_macro: str, *, ahora: datetime | None = None) -> str:
+    """Bloque para el PRODUCTOR: las piezas RECIENTES del mismo macro-evento ya en el feed.
+
+    Le da memoria del evento al copy para que NO repita ángulos y aporte algo más fresco —es la
+    "IA hacia adentro": el humano cubre lo creativo, la máquina recuerda lo ya publicado—. ""
+    si la historia no es de un macro-evento o no hay piezas previas. Best-effort: ante un fallo
+    de lectura devuelve "" (el copy se genera igual, solo sin la memoria)."""
+    tema_macro = (tema_macro or "").strip()
+    if not tema_macro:
+        return ""
+    momento = ahora or datetime.now(timezone.utc)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    desde = (momento - timedelta(days=_DIAS_CONTEXTO_FEED)).isoformat()
+    try:
+        piezas = repos.listar_publicacion(marca=marca, creado_desde=desde)
+    except Exception:  # noqa: BLE001 -- la memoria del evento es un extra; sin ella el copy sigue
+        _log.warning("pipeline: no se pudo leer el contexto del evento «%s» (%s)", tema_macro[:40], marca, exc_info=True)
+        return ""
+    titulos = [
+        (p.get("titulo") or "").strip()
+        for p in piezas
+        if (p.get("tema_macro") or "").strip() == tema_macro and (p.get("titulo") or "").strip()
+    ]
+    if not titulos:
+        return ""
+    lineas = "\n".join(f"• {t}" for t in titulos[:_MAX_CONTEXTO_FEED])
+    return (
+        f"\n\nYA EN EL FEED de «{tema_macro}» (NO repitas estos ángulos; aporta algo NUEVO y más "
+        f"fresco, o un enfoque distinto):\n{lineas}"
+    )
 
 
 def categoria_efectiva(cluster: dict[str, Any]) -> str:
