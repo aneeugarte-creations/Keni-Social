@@ -7,6 +7,7 @@ import {
   Loader2,
   Sunrise,
   Sunset,
+  UserPlus,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
   esFinDeSemana,
   lunesSiguiente,
 } from "@/lib/rota-calendario";
+import { hoyCDMX } from "@/lib/fecha";
 import type {
   AusenciaRota,
   EventoRota,
@@ -322,6 +324,12 @@ export function Calendario({
   const inicio = semana?.inicio ?? coberturaQ.data?.inicio ?? dias[0] ?? "";
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
+  // Eventos coverables sin nadie que los coja: el descubierto de la semana, de un vistazo en la
+  // cabecera (el dato ya se deriva en `cubridoresPorEvento`).
+  const nPorCubrir = eventosCobertura.filter(
+    (e) => (cubridoresPorEvento.get(e.id) ?? []).length === 0,
+  ).length;
+  const hoy = hoyCDMX();
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
   // en solo-lectura. La edición es inline: «Añadir turno» da de alta capacidad y el chip de
   // turno abre su menú (Editar/Duplicar/Eliminar). La COBERTURA se asigna desde el Panorama.
@@ -361,6 +369,18 @@ export function Calendario({
             >
               <Badge variant="aviso" className="gap-1 font-normal">
                 <BellRing className="h-3.5 w-3.5" /> {nCambiados}
+              </Badge>
+            </Tooltip>
+          )}
+          {nPorCubrir > 0 && (
+            <Tooltip
+              label={`${nPorCubrir} evento${nPorCubrir === 1 ? "" : "s"} sin cubrir esta semana.`}
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/50 font-normal text-amber-700 dark:text-amber-300"
+              >
+                <UserPlus className="h-3.5 w-3.5" /> {nPorCubrir} por cubrir
               </Badge>
             </Tooltip>
           )}
@@ -470,16 +490,30 @@ export function Calendario({
                   {dias.map((fecha) => {
                     const ausDia = ausenciasPorDia.get(fecha) ?? [];
                     const finde = esFinDeSemana(fecha);
+                    const esHoy = fecha === hoy;
                     return (
                       <div
                         key={fecha}
                         className={`flex flex-col gap-1 px-2 py-2 ${
-                          finde ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-background"
+                          esHoy
+                            ? "bg-keni-50/70 ring-1 ring-inset ring-keni-500/40 dark:bg-keni-900/20"
+                            : finde
+                              ? "bg-amber-50/40 dark:bg-amber-950/10"
+                              : "bg-background"
                         }`}
                       >
                         <div className="flex items-baseline justify-between">
-                          <span className="text-xs font-semibold capitalize">
+                          <span
+                            className={`text-xs font-semibold capitalize ${
+                              esHoy ? "text-keni-700 dark:text-keni-300" : ""
+                            }`}
+                          >
                             {diaCorto(fecha)}
+                            {esHoy && (
+                              <span className="ml-1 font-normal normal-case text-keni-600 dark:text-keni-300">
+                                · Hoy
+                              </span>
+                            )}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {fecha.slice(8, 10)}
