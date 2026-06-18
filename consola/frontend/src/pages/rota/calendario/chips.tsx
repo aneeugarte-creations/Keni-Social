@@ -30,6 +30,7 @@ import {
 import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
   AusenciaRota,
+  FranjaSemana,
   MiembroRota,
   TurnoRota,
 } from "@/types";
@@ -106,6 +107,7 @@ export function ChipEventoCalendario({
 export function ChipTurnoCM({
   turno,
   equipo,
+  franjas,
   ausencia,
   editable,
   onCambio,
@@ -113,6 +115,8 @@ export function ChipTurnoCM({
   turno: TurnoRota;
   /** Equipo de la rota (para que `DialogEditarTurno` pueda reasignar). */
   equipo: MiembroRota[];
+  /** Franjas vivas de la semana (para que `DialogEditarTurno` ofrezca la franja real). */
+  franjas: FranjaSemana[];
   ausencia?: AusenciaRota;
   editable: boolean;
   onCambio: () => void;
@@ -256,6 +260,7 @@ export function ChipTurnoCM({
         <DialogEditarTurno
           turno={turno}
           equipo={equipo}
+          franjas={franjas}
           onCerrar={() => setEditandoDetalles(false)}
           onGuardado={() => {
             setEditandoDetalles(false);

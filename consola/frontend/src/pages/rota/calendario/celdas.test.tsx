@@ -100,6 +100,7 @@ function renderCelda(
       lunes="2026-06-15"
       fecha="2026-06-15"
       franja={franja()}
+      franjasSemana={[franja()]}
       personas={over.personas ?? []}
       eventos={over.eventos ?? []}
       equipo={[]}

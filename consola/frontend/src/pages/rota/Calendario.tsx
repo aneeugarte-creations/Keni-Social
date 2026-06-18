@@ -596,6 +596,7 @@ export function Calendario({
                               lunes={lunes}
                               fecha={fecha}
                               franja={franja}
+                              franjasSemana={franjasSemana}
                               personas={personas}
                               eventos={eventos}
                               equipo={equipo}

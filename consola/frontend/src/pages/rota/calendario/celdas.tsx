@@ -47,6 +47,7 @@ export function CeldaDeRejilla({
   lunes,
   fecha,
   franja,
+  franjasSemana,
   personas,
   eventos,
   equipo,
@@ -61,6 +62,8 @@ export function CeldaDeRejilla({
   lunes: string;
   fecha: string;
   franja: FranjaSemana;
+  /** TODAS las franjas vivas de la semana (para que el editor de turno ofrezca la franja real). */
+  franjasSemana: FranjaSemana[];
   /** Personas de TURNO en esta franja ese día (CAPACIDAD). */
   personas: TurnoRota[];
   /** Eventos de esta franja/día, cada uno UNA vez, con su titularidad real (claims). */
@@ -98,6 +101,7 @@ export function CeldaDeRejilla({
               key={t.id}
               turno={t}
               equipo={equipo}
+              franjas={franjasSemana}
               ausencia={ausenciaDe(t.miembro_id, fecha)}
               editable={editable}
               onCambio={onCambio}

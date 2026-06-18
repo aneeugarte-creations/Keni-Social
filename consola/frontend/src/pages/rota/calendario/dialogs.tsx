@@ -47,7 +47,7 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import type {
   Publicacion,
   EventoRota,
-  FranjaTurno,
+  FranjaSemana,
   MiembroRota,
   PrioridadEvento,
   TipoCoberturaEvento,
@@ -265,20 +265,65 @@ export function DialogEditarEvento({
 }
 
 /** Diálogo para editar detalles de un turno (persona, motivo, nota de relevo). */
+/** Valores editables del diálogo de turno (estado del formulario). */
+export type EdicionTurno = {
+  fecha: string;
+  miembroId: string;
+  franjaId: string;
+  inicio: string;
+  fin: string;
+  motivo: string;
+  notaRelevo: string;
+};
+
+/** Cuerpo del PATCH de un turno: SOLO los campos que cambiaron respecto al turno actual. La
+ * franja viaja como `franja_id` (la franja viva real), no como literal legacy: así editar un
+ * turno en franja a medida no lo saca de su franja. Extraída para testear sin el Select de Radix
+ * (que dentro de un Dialog se cuelga en jsdom). */
+export function construirCuerpoEdicion(
+  turno: TurnoRota,
+  edicion: EdicionTurno,
+  override: boolean,
+) {
+  const cuerpo: {
+    fecha?: string;
+    miembro_id?: string;
+    franja_id?: string;
+    inicio?: string;
+    fin?: string;
+    motivo?: string;
+    nota_relevo?: string;
+    override?: boolean;
+  } = {};
+  if (edicion.fecha !== turno.fecha) cuerpo.fecha = edicion.fecha;
+  if (edicion.miembroId !== turno.miembro_id) cuerpo.miembro_id = edicion.miembroId;
+  if (edicion.franjaId !== turno.franja_id) cuerpo.franja_id = edicion.franjaId;
+  if (edicion.inicio !== turno.inicio) cuerpo.inicio = edicion.inicio.trim();
+  if (edicion.fin !== turno.fin) cuerpo.fin = edicion.fin.trim();
+  if (edicion.motivo !== turno.motivo) cuerpo.motivo = edicion.motivo;
+  if (edicion.notaRelevo !== turno.nota_relevo) cuerpo.nota_relevo = edicion.notaRelevo;
+  if (override) cuerpo.override = true;
+  return cuerpo;
+}
+
 export function DialogEditarTurno({
   turno,
   equipo,
+  franjas,
   onCerrar,
   onGuardado,
 }: {
   turno: TurnoRota;
   equipo: MiembroRota[];
+  /** Franjas VIVAS de la semana del turno: el desplegable ofrece estas (por `franja_id`),
+   * no las tres legacy — así un turno en franja a medida («Nocturna») no salta a otra al editar. */
+  franjas: FranjaSemana[];
   onCerrar: () => void;
   onGuardado: () => void;
 }) {
   const [fecha, setFecha] = React.useState(turno.fecha);
   const [miembroId, setMiembroId] = React.useState(turno.miembro_id);
-  const [franja, setFranja] = React.useState<FranjaTurno>(turno.franja);
+  const [franjaId, setFranjaId] = React.useState(turno.franja_id);
   // Horario efectivo del turno (sus horas a medida o las de su franja). Editable: cambiarlo
   // pone horas a medida; dejarlo igual no toca nada (sigue heredando si así estaba).
   const [inicio, setInicio] = React.useState(turno.inicio);
@@ -291,27 +336,15 @@ export function DialogEditarTurno({
   );
 
   const guardar = useMutation({
-    mutationFn: (override: boolean) => {
-      const cuerpo: {
-        fecha?: string;
-        miembro_id?: string;
-        franja?: FranjaTurno;
-        inicio?: string;
-        fin?: string;
-        motivo?: string;
-        nota_relevo?: string;
-        override?: boolean;
-      } = {};
-      if (fecha !== turno.fecha) cuerpo.fecha = fecha;
-      if (miembroId !== turno.miembro_id) cuerpo.miembro_id = miembroId;
-      if (franja !== turno.franja) cuerpo.franja = franja;
-      if (inicio !== turno.inicio) cuerpo.inicio = inicio.trim();
-      if (fin !== turno.fin) cuerpo.fin = fin.trim();
-      if (motivo !== turno.motivo) cuerpo.motivo = motivo;
-      if (notaRelevo !== turno.nota_relevo) cuerpo.nota_relevo = notaRelevo;
-      if (override) cuerpo.override = true;
-      return api.actualizarTurno(turno.id, cuerpo);
-    },
+    mutationFn: (override: boolean) =>
+      api.actualizarTurno(
+        turno.id,
+        construirCuerpoEdicion(
+          turno,
+          { fecha, miembroId, franjaId, inicio, fin, motivo, notaRelevo },
+          override,
+        ),
+      ),
     onSuccess: () => {
       toast.success("Turno actualizado.");
       onGuardado();
@@ -332,7 +365,7 @@ export function DialogEditarTurno({
   const sinCambios =
     fecha === turno.fecha &&
     miembroId === turno.miembro_id &&
-    franja === turno.franja &&
+    franjaId === turno.franja_id &&
     inicio === turno.inicio &&
     fin === turno.fin &&
     motivo === turno.motivo &&
@@ -360,14 +393,18 @@ export function DialogEditarTurno({
             </div>
             <div className="space-y-1.5">
               <Label>Franja</Label>
-              <Select value={franja} onValueChange={(v) => setFranja(v as FranjaTurno)}>
+              <Select value={franjaId} onValueChange={setFranjaId}>
                 <SelectTrigger aria-label="Franja">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="matutino">Mañana</SelectItem>
-                  <SelectItem value="vespertino">Tarde</SelectItem>
-                  <SelectItem value="descanso">Descanso</SelectItem>
+                  {[...franjas]
+                    .sort((a, b) => a.orden - b.orden)
+                    .map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.nombre}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
