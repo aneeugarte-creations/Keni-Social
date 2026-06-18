@@ -355,9 +355,9 @@ def test_borrar_ultima_passkey_apaga_mfa(entorno, monkeypatch):
 def test_admin_reset_mfa_limpia_y_login_deja_de_elevar(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    admin = auth.crear_usuario("jefe", CLAVE, "admin")
-    # El admin que resetea debe estar ENROLADO: con la maquinaria MFA activa, un admin sin
-    # passkey queda bloqueado para gestionar usuarios (hard-block). Le damos su llave.
+    # Quien resetea es SUPERADMIN (gestionar usuarios lo exige). Con clave presente y passkey
+    # propia, su login pediria segundo factor; por eso vamos directo a su sesion real abajo.
+    admin = auth.crear_usuario("jefe", CLAVE, "admin", superadmin=True)
     _credencial_falsa(admin["id"], credential_id="cred-jefe")
     victima = auth.crear_usuario("ana", CLAVE, "editor")
     _credencial_falsa(victima["id"])
