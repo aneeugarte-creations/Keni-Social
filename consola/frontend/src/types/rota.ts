@@ -342,6 +342,21 @@ export interface MisTurnosMesRota {
   aviso?: string;
 }
 
+/**
+ * Calendario mensual del EQUIPO en «Mis turnos»: los turnos de TODOS en el mes, solo
+ * jornada (franja + horario), SIN eventos ni cobertura. Lectura pura por rango de fecha.
+ */
+export interface TurnosMesRota {
+  /** Mes ISO (AAAA-MM). */
+  mes: string;
+  /** Primer y último día del mes (ISO AAAA-MM-DD, inclusive). */
+  desde: string;
+  hasta: string;
+  /** Turnos de todo el equipo en el mes, ya con franja/horario resueltos. */
+  turnos: TurnoRota[];
+  total: number;
+}
+
 // --- Cobertura DERIVADA (no persistida): para cada evento, qué turnos lo cubren
 
 /** Un turno que cubre un evento. */

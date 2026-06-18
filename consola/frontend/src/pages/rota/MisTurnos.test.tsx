@@ -1,49 +1,25 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+/**
+ * Tests del agrupado del calendario MENSUAL del EQUIPO («Mis turnos» → vista «Equipo»):
+ * por día → franja → personas, ordenado por hora y excluyendo descanso (es «quién trabaja»).
+ */
+import { describe, expect, it } from "vitest";
 
-import type { EventoRota, TurnoRota } from "@/types";
+import type { TurnoRota } from "@/types";
 
-import { type ItemEventoCalendario } from "./comun";
-import { ListaMisTurnos } from "./MisTurnos";
+import { agruparEquipoPorFecha } from "./MisTurnos";
 
-function evento(over: Partial<EventoRota> = {}): EventoRota {
+function turno(p: Partial<TurnoRota>): TurnoRota {
   return {
-    id: "e1",
-    titulo: "Partido",
-    fecha: "2026-06-15",
-    hora: "10:00",
-    contenido: "",
-    nota: "",
-    tipo_cobertura: "transmision",
-    prioridad: "media",
-    cambiado: false,
-    actualizado: "",
-    es_sabado: false,
-    marca: "",
-    marca_nombre: "",
-    ...over,
-  };
-}
-
-/** Mapa `turno.id -> eventos` como el que arma `eventosPorTurno`. */
-function mapaEventos(
-  entradas: Record<string, ItemEventoCalendario[]>,
-): Map<string, ItemEventoCalendario[]> {
-  return new Map(Object.entries(entradas));
-}
-
-function turno(over: Partial<TurnoRota> = {}): TurnoRota {
-  return {
-    id: "t1",
-    semana: "2026-06-15",
-    fecha: "2026-06-15",
-    miembro_id: "u1",
+    id: Math.random().toString(36).slice(2),
+    semana: "",
+    fecha: "2026-06-03",
+    miembro_id: "m1",
     miembro_nombre: "Ana",
-    franja_id: "f1",
+    franja_id: "f-man",
     franja_nombre: "Mañana",
     franja: "matutino",
     inicio: "08:00",
-    fin: "16:00",
+    fin: "14:00",
     horario_propio: false,
     estado: "aprobado",
     override: false,
@@ -52,138 +28,45 @@ function turno(over: Partial<TurnoRota> = {}): TurnoRota {
     es_sabado: false,
     marca: "",
     marca_nombre: "",
-    ...over,
-  };
+    ...p,
+  } as TurnoRota;
 }
 
-describe("ListaMisTurnos — tarjetas móvil-first", () => {
-  it("renderiza una lista con la franja como dato primario y la fecha", () => {
-    render(<ListaMisTurnos turnos={[turno()]} />);
-    // Lista semántica (ul/li) para una pila vertical legible en móvil.
-    expect(screen.getByRole("list")).toBeInTheDocument();
-    expect(screen.getByText("Mañana")).toBeInTheDocument();
-    // La fecha se formatea en CDMX (vía lib/fecha): 15 de junio.
-    expect(screen.getByText(/15/)).toBeInTheDocument();
-    expect(screen.getByText(/jun/i)).toBeInTheDocument();
+describe("agruparEquipoPorFecha", () => {
+  it("agrupa por día y franja, con todas las personas de cada franja", () => {
+    const m = agruparEquipoPorFecha([
+      turno({ fecha: "2026-06-03", franja_id: "f-man", miembro_id: "a", miembro_nombre: "Ana" }),
+      turno({ fecha: "2026-06-03", franja_id: "f-man", miembro_id: "b", miembro_nombre: "Beto" }),
+      turno({
+        fecha: "2026-06-03",
+        franja_id: "f-tar",
+        franja_nombre: "Tarde",
+        inicio: "14:00",
+        fin: "20:00",
+        miembro_id: "c",
+        miembro_nombre: "Caro",
+      }),
+    ]);
+    const dia = m.get("2026-06-03")!;
+    // Dos franjas, ordenadas por inicio (Mañana antes que Tarde).
+    expect(dia.map((f) => f.nombre)).toEqual(["Mañana", "Tarde"]);
+    // La franja de mañana junta a Ana y Beto (orden alfabético).
+    expect(dia[0].personas.map((p) => p.nombre)).toEqual(["Ana", "Beto"]);
+    expect(dia[1].personas.map((p) => p.nombre)).toEqual(["Caro"]);
   });
 
-  it("muestra el NOMBRE real de una franja custom (no se queda en blanco)", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ franja: "", franja_nombre: "Cobertura nocturna" })]}
-      />,
-    );
-    expect(screen.getByText("Cobertura nocturna")).toBeInTheDocument();
+  it("excluye descanso (la vista de equipo es «quién trabaja»)", () => {
+    const m = agruparEquipoPorFecha([
+      turno({ fecha: "2026-06-04", franja: "descanso", franja_nombre: "Descanso" }),
+    ]);
+    expect(m.get("2026-06-04")).toBeUndefined();
   });
 
-  it("muestra los matices del turno (sábado, override, motivo y relevo)", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[
-          turno({
-            es_sabado: true,
-            override: true,
-            motivo: "Cobertura crítica",
-            nota_relevo: "Queda pendiente subir el resumen",
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText("Sábado")).toBeInTheDocument();
-    expect(screen.getByText("Override")).toBeInTheDocument();
-    expect(screen.getByText(/Cobertura crítica/)).toBeInTheDocument();
-    expect(screen.getByText(/Queda pendiente subir el resumen/)).toBeInTheDocument();
-  });
-
-  it("ordena cronológicamente por fecha", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[
-          turno({ id: "b", fecha: "2026-06-17", franja: "vespertino", franja_nombre: "Tarde" }),
-          turno({ id: "a", fecha: "2026-06-15" }),
-        ]}
-      />,
-    );
-    const items = screen.getAllByRole("listitem");
-    expect(items).toHaveLength(2);
-    // El 15 (Mañana) va antes que el 17 (Tarde).
-    expect(items[0]).toHaveTextContent("Mañana");
-    expect(items[1]).toHaveTextContent("Tarde");
-  });
-
-  it("sin `eventosPorTurno` no pinta el bloque de eventos (retrocompat)", () => {
-    render(<ListaMisTurnos turnos={[turno()]} />);
-    expect(screen.queryByText("En tu franja")).not.toBeInTheDocument();
-  });
-});
-
-describe("ListaMisTurnos — eventos que me tocan en mi franja", () => {
-  it("muestra «Por cubrir» con botón Coger y avisa al cogerlo", () => {
-    const onCoger = vi.fn();
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ id: "t1" })]}
-        eventosPorTurno={mapaEventos({
-          t1: [{ evento: evento({ id: "e1", titulo: "Final" }), cubridores: [] }],
-        })}
-        miId="u1"
-        onCoger={onCoger}
-      />,
-    );
-    expect(screen.getByText("Final")).toBeInTheDocument();
-    expect(screen.getByText("Por cubrir")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Coger" }));
-    expect(onCoger).toHaveBeenCalledWith("e1");
-  });
-
-  it("marca «Lo cubres tú» cuando el cubridor soy yo (sin botón Coger)", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ id: "t1" })]}
-        eventosPorTurno={mapaEventos({
-          t1: [{ evento: evento({ id: "e1" }), cubridores: [{ id: "u1", nombre: "Ana" }] }],
-        })}
-        miId="u1"
-        onCoger={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("Lo cubres tú")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Coger" })).not.toBeInTheDocument();
-  });
-
-  it("muestra quién lo cubre cuando es otra persona", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ id: "t1" })]}
-        eventosPorTurno={mapaEventos({
-          t1: [{ evento: evento({ id: "e1" }), cubridores: [{ id: "u9", nombre: "Bruno" }] }],
-        })}
-        miId="u1"
-        onCoger={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/Lo cubre Bruno/)).toBeInTheDocument();
-  });
-
-  it("dice «Sin eventos en esta franja» cuando el turno no tiene eventos", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ id: "t1" })]}
-        eventosPorTurno={mapaEventos({ t1: [] })}
-        miId="u1"
-      />,
-    );
-    expect(screen.getByText("Sin eventos en esta franja.")).toBeInTheDocument();
-  });
-
-  it("en un turno de DESCANSO no pinta el bloque de eventos", () => {
-    render(
-      <ListaMisTurnos
-        turnos={[turno({ id: "t1", franja: "descanso", franja_nombre: "Descanso" })]}
-        eventosPorTurno={mapaEventos({ t1: [] })}
-        miId="u1"
-      />,
-    );
-    expect(screen.queryByText("En tu franja")).not.toBeInTheDocument();
+  it("ordena las personas alfabéticamente dentro de la franja", () => {
+    const m = agruparEquipoPorFecha([
+      turno({ franja_id: "f-man", miembro_id: "z", miembro_nombre: "Zoe" }),
+      turno({ franja_id: "f-man", miembro_id: "a", miembro_nombre: "Ada" }),
+    ]);
+    expect(m.get("2026-06-03")![0].personas.map((p) => p.nombre)).toEqual(["Ada", "Zoe"]);
   });
 });

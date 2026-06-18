@@ -87,6 +87,7 @@ from .turnos import (
     duplicar_turno,
     mis_turnos,
     mis_turnos_mes,
+    turnos_mes,
     turnos_semana,
 )
 
@@ -114,6 +115,7 @@ __all__ = [
     "despublicar_turnos",
     "mis_turnos",
     "mis_turnos_mes",
+    "turnos_mes",
     "cobertura_semana",
     "cobertura_evento",
     "copiar_semana",
@@ -159,6 +161,7 @@ RUTAS = [
     Route("/api/rota/turnos/lote/borrar", borrar_turnos_lote, methods=["POST"]),
     Route("/api/rota/turnos/aprobar", aprobar_turnos, methods=["POST"]),
     Route("/api/rota/turnos/despublicar", despublicar_turnos, methods=["POST"]),
+    Route("/api/rota/turnos/mes", turnos_mes, methods=["GET"]),
     Route("/api/rota/turnos", turnos_semana, methods=["GET"]),
     Route("/api/rota/turnos", crear_turno, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}/duplicar", duplicar_turno, methods=["POST"]),

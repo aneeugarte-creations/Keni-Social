@@ -95,12 +95,7 @@ export default function Rota() {
           <TareasBoard acciones="inline" />
         </TabsContent>
         <TabsContent value="mis-turnos">
-          <MisTurnos
-            lunes={lunes}
-            setLunes={setLunes}
-            esAdmin={esAdmin}
-            onVerCalendario={() => setPestania("calendario")}
-          />
+          <MisTurnos esAdmin={esAdmin} onVerCalendario={() => setPestania("calendario")} />
         </TabsContent>
         <TabsContent value="cambios-ausencias">
           {/* Ola "fusion real": una sola vista que mezcla cambios de turno y

@@ -1012,6 +1012,30 @@ def test_mis_turnos_mes_invalido_400(cliente):
     assert r2.status_code == 400
 
 
+def test_turnos_mes_equipo_todos_los_miembros(cliente):
+    """El calendario mensual del EQUIPO trae los turnos de TODOS en el mes (no filtra por
+    usuario) y excluye los de otros meses."""
+    equipo = _crear_equipo(2)
+    _crear_turno("2026-06-01", "2026-06-03", equipo[0], franja="matutino")
+    _crear_turno("2026-06-08", "2026-06-10", equipo[1], franja="vespertino")
+    _crear_turno(LUNES1, "2026-05-27", equipo[0], franja="matutino")  # mayo: fuera
+    r = cliente.get("/api/rota/turnos/mes?mes=2026-06")
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert datos["mes"] == "2026-06"
+    assert datos["desde"] == "2026-06-01"
+    assert datos["hasta"] == "2026-06-30"
+    miembros = {t["miembro_id"] for t in datos["turnos"]}
+    assert miembros == {equipo[0]["id"], equipo[1]["id"]}
+    fechas = sorted(t["fecha"] for t in datos["turnos"])
+    assert fechas == ["2026-06-03", "2026-06-10"]
+
+
+def test_turnos_mes_invalido_400(cliente):
+    assert cliente.get("/api/rota/turnos/mes?mes=2026-00").status_code == 400
+    assert cliente.get("/api/rota/turnos/mes?mes=xxxx").status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Cobertura DERIVADA                                                           #
 # --------------------------------------------------------------------------- #

@@ -51,6 +51,7 @@ import type {
   RespuestaSwaps,
   RespuestaTurnoRota,
   RotaSemana,
+  TurnosMesRota,
 } from "@/types";
 
 export const apiRota = {
@@ -140,6 +141,12 @@ export const apiRota = {
    */
   misTurnosMes: (params: { mes?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<MisTurnosMesRota>(`/rota/mis-turnos/mes${query(params)}`, { signal }),
+  /**
+   * Calendario MENSUAL del EQUIPO: los turnos de TODO el equipo en el mes, sin eventos ni
+   * cobertura. `mes` = "AAAA-MM" (ausente = mes actual). GRID POR MARCA: `marca` acota.
+   */
+  turnosMes: (params: { mes?: string; marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<TurnosMesRota>(`/rota/turnos/mes${query(params)}`, { signal }),
   exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string; marca?: string } = {}) =>
     descargar(`/rota/export.${formato}${query(params)}`),
 
