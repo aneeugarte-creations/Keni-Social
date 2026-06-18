@@ -84,6 +84,13 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # `api/publicaciones.py` a un PAQUETE `api/publicaciones/`; el cruce vive hoy en `contenido/_comun.py`
         # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
         ("publicaciones", "generaciones"),
+        # Seam #7 (mismo patrón, motor de auto-desarrollo): el router `sugerencias` (shell)
+        # lanza el pipeline de auto-desarrollo (discovery/construir/checkpoint) como un
+        # `claude -p` en SEGUNDO PLANO, y para ello usa la infraestructura de jobs
+        # `generaciones` (A) — encolar y mapear `ColaLlenaError` a un 429. Idéntico
+        # acoplamiento que `media`/`parrilla_import`/`publicaciones`. T-futura puede moverlo
+        # tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
+        ("sugerencias", "generaciones"),
         # Seam (shell lee señales de operación para el DOCTOR de salud): `api/estado.py`
         # (shell) absorbió los chequeos del banner (cola, presupuesto, daemons, disco…) y
         # para el de la COLA lee el snapshot de `api.actividad` (produccion) — SOLO LECTURA,
