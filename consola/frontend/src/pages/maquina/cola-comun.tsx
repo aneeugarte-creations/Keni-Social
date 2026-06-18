@@ -28,8 +28,14 @@ import { haceSegundos } from "@/lib/fecha";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import { DesgloseEconomiaProceso } from "@/pages/monitor/comun";
-import type { ColaJob, PresupuestoIA, ResultadoDia } from "@/types";
+import { DesgloseEconomiaProceso, PROC_META } from "@/pages/monitor/comun";
+import type {
+  ColaJob,
+  PresupuestoIA,
+  PresupuestoProcesoIA,
+  Proceso,
+  ResultadoDia,
+} from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. Si se
  *  pasa `href`, la tarjeta ENTERA es un enlace (el contador es el botón) con realce naranja al
@@ -195,9 +201,26 @@ export function TablaJobs({
   );
 }
 
-/** PRESUPUESTO DIARIO editable in situ (KENI_PRESUPUESTO_TOKENS_DIA, admin): input compacto
- *  que guarda al salir del campo (blur/Enter). 0 = sin límite. */
-function PresupuestoEditable({ valor }: { valor: number }) {
+/** TOPE editable in situ (admin): input compacto que guarda al salir del campo (blur/Enter).
+ *  Reutilizable para los topes de tokens (global y por motor, enteros) y el cap de coste USD
+ *  (`decimal`, step 0.01). 0 = sin límite. */
+function PresupuestoEditable({
+  valor,
+  clave,
+  etiqueta,
+  unidad = "tokens",
+  decimal = false,
+}: {
+  valor: number;
+  /** Clave de ajuste (KENI_*) que persiste el tope. */
+  clave: string;
+  /** Etiqueta del campo (p. ej. "Presupuesto diario", "Cap USD/día", "Tope diario"). */
+  etiqueta: string;
+  /** Unidad mostrada tras el input ("tokens", "USD"). */
+  unidad?: string;
+  /** `true` para importes con decimales (USD); `false` trunca a entero (tokens). */
+  decimal?: boolean;
+}) {
   const guardar = useGuardarAjuste();
   const [num, setNum] = React.useState(String(valor));
   React.useEffect(() => {
@@ -206,18 +229,18 @@ function PresupuestoEditable({ valor }: { valor: number }) {
   const guardarNumero = () => {
     const n = Number(num);
     if (num.trim() !== "" && Number.isFinite(n) && n >= 0 && n !== valor) {
-      guardar.mutate({ clave: "KENI_PRESUPUESTO_TOKENS_DIA", valor: Math.trunc(n) });
+      guardar.mutate({ clave, valor: decimal ? n : Math.trunc(n) });
     } else {
       setNum(String(valor));
     }
   };
   return (
     <label className="inline-flex items-center gap-1.5">
-      Presupuesto diario
+      {etiqueta}
       <Input
         type="number"
         min={0}
-        step="1"
+        step={decimal ? "0.01" : "1"}
         value={num}
         onChange={(e) => setNum(e.target.value)}
         onBlur={guardarNumero}
@@ -226,11 +249,102 @@ function PresupuestoEditable({ valor }: { valor: number }) {
         }}
         disabled={guardar.isPending}
         className="h-6 w-28 px-2 text-xs tabular-nums"
-        aria-label="Presupuesto diario de tokens (0 = sin límite)"
+        aria-label={`${etiqueta} (0 = sin límite)`}
       />
-      tokens
+      {unidad}
       {valor === 0 && <span className="text-muted-foreground/80">(Sin límite)</span>}
     </label>
+  );
+}
+
+/** Env var del tope diario de tokens por motor (lo persiste `useGuardarAjuste`). */
+const ENV_TOPE_MOTOR: Record<Proceso, string> = {
+  investigacion: "KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA",
+  produccion: "KENI_PRESUPUESTO_TOKENS_PRODUCCION_DIA",
+};
+
+/** Forma de gasto por motor cuando el back aún no la emite (rollout): todo a cero, sin tope. */
+const PROC_PRESUPUESTO_VACIO: PresupuestoProcesoIA = {
+  tokens_in: 0,
+  tokens_out: 0,
+  tokens: 0,
+  coste_usd: 0,
+  generaciones: 0,
+  presupuesto_tokens_dia: 0,
+  restante_tokens: null,
+  pct_usado: null,
+  nivel: "normal",
+};
+
+/** Barra de progreso del % usado (verde < 80, ámbar < 100, rojo ≥ 100). */
+function BarraPct({ pct, ancho = "w-full" }: { pct: number; ancho?: string }) {
+  return (
+    <div className={cn("h-1.5 overflow-hidden rounded-full bg-muted", ancho)}>
+      <div
+        className={cn(
+          "h-full rounded-full",
+          pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500",
+        )}
+        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+      />
+    </div>
+  );
+}
+
+/** Panel de un MOTOR (Investigación | Producción): tokens IN/OUT separados, gasto USD, su tope
+ *  diario editable (admin) y % usado + barra. Lee `presupuesto.por_proceso?.[motor]`; degrada a
+ *  ceros si el back aún no lo emite. */
+function PanelMotor({
+  motor,
+  datos,
+  esAdmin,
+}: {
+  motor: Proceso;
+  datos: PresupuestoProcesoIA | undefined;
+  esAdmin: boolean;
+}) {
+  const meta = PROC_META[motor];
+  const p = datos ?? PROC_PRESUPUESTO_VACIO;
+  const conTope = p.presupuesto_tokens_dia > 0;
+  const pct = p.pct_usado;
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <span className={cn("h-2.5 w-2.5 rounded-full", meta.barra)} aria-hidden="true" />
+        <span className={meta.texto}>{meta.etiqueta}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
+        <span>
+          IN <span className="font-medium text-foreground">{numeroCompacto(p.tokens_in)}</span>
+        </span>
+        <span>
+          OUT <span className="font-medium text-foreground">{numeroCompacto(p.tokens_out)}</span>
+        </span>
+        <span>
+          Gasto <span className="font-medium text-foreground">{costeUsd(p.coste_usd)}</span>
+        </span>
+        <span>{p.generaciones} gen.</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        {esAdmin ? (
+          <PresupuestoEditable
+            valor={p.presupuesto_tokens_dia}
+            clave={ENV_TOPE_MOTOR[motor]}
+            etiqueta="Tope diario"
+          />
+        ) : (
+          <span>
+            Tope diario{" "}
+            {conTope ? `${numeroCompacto(p.presupuesto_tokens_dia)} tokens` : "Sin límite"}
+          </span>
+        )}
+        {conTope && p.restante_tokens != null && (
+          <span>· restan {numeroCompacto(p.restante_tokens)}</span>
+        )}
+        {conTope && pct != null && <span>· {pct.toFixed(0)}% usado</span>}
+      </div>
+      {conTope && pct != null && <BarraPct pct={pct} />}
+    </div>
   );
 }
 
@@ -250,7 +364,9 @@ export function PanelPresupuesto({
 }) {
   const guardar = useGuardarAjuste();
   const conPresupuesto = presupuesto.presupuesto_tokens_dia > 0;
+  const conCapUsd = presupuesto.presupuesto_usd_dia > 0;
   const pct = presupuesto.pct_usado;
+  const pctUsd = presupuesto.pct_usado_usd;
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
@@ -262,65 +378,96 @@ export function PanelPresupuesto({
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
         </div>
       </CardHeader>
-      <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 pt-2">
-        <div className="space-y-1.5 text-sm">
-          <p>
-            Hoy:{" "}
-            <span className="font-medium tabular-nums">
-              {numeroCompacto(presupuesto.gastado.tokens)}
-            </span>{" "}
-            tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
-            {presupuesto.gastado.generaciones} generación(es) con coste
-          </p>
-          {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
-          <DesgloseEconomiaProceso res={resHoy} />
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            {esAdmin ? (
-              <PresupuestoEditable valor={presupuesto.presupuesto_tokens_dia} />
-            ) : (
-              <span>
-                Presupuesto diario{" "}
-                {conPresupuesto
-                  ? `${numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens`
-                  : "Sin límite"}
-              </span>
+      <CardContent className="space-y-3 p-4 pt-2">
+        {/* Cabecera GLOBAL: gasto de hoy, topes globales editables (tokens + cap USD) y parada. */}
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1.5 text-sm">
+            <p>
+              Hoy:{" "}
+              <span className="font-medium tabular-nums">
+                {numeroCompacto(presupuesto.gastado.tokens)}
+              </span>{" "}
+              tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
+              {presupuesto.gastado.generaciones} generación(es) con coste
+            </p>
+            {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
+            <DesgloseEconomiaProceso res={resHoy} />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {esAdmin ? (
+                <PresupuestoEditable
+                  valor={presupuesto.presupuesto_tokens_dia}
+                  clave="KENI_PRESUPUESTO_TOKENS_DIA"
+                  etiqueta="Presupuesto diario"
+                />
+              ) : (
+                <span>
+                  Presupuesto diario{" "}
+                  {conPresupuesto
+                    ? `${numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens`
+                    : "Sin límite"}
+                </span>
+              )}
+              {esAdmin ? (
+                <PresupuestoEditable
+                  valor={presupuesto.presupuesto_usd_dia}
+                  clave="KENI_PRESUPUESTO_USD_DIA"
+                  etiqueta="Cap diario"
+                  unidad="USD"
+                  decimal
+                />
+              ) : (
+                <span>
+                  Cap diario {conCapUsd ? costeUsd(presupuesto.presupuesto_usd_dia) : "Sin límite"}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {conPresupuesto && presupuesto.restante_tokens != null && (
+                <span>restan {numeroCompacto(presupuesto.restante_tokens)} tokens</span>
+              )}
+              {conPresupuesto && pct != null && <span>· {pct.toFixed(0)}% tokens</span>}
+              {conCapUsd && pctUsd != null && <span>· {pctUsd.toFixed(0)}% USD</span>}
+            </div>
+            {((conPresupuesto && pct != null) || (conCapUsd && pctUsd != null)) && (
+              <div className="space-y-1">
+                {conPresupuesto && pct != null && <BarraPct pct={pct} ancho="w-56" />}
+                {conCapUsd && pctUsd != null && <BarraPct pct={pctUsd} ancho="w-56" />}
+              </div>
             )}
-            {conPresupuesto && presupuesto.restante_tokens != null && (
-              <span>· restan {numeroCompacto(presupuesto.restante_tokens)}</span>
-            )}
-            {conPresupuesto && pct != null && <span>· {pct.toFixed(0)}% usado</span>}
           </div>
-          {conPresupuesto && pct != null && (
-            <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500",
-                )}
-                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-              />
+          {esAdmin && (
+            <div className="space-y-1 text-right">
+              <label className="flex items-center justify-end gap-2 text-sm">
+                <span
+                  className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}
+                >
+                  {presupuesto.pausada ? "Generación parada" : "Parada de emergencia"}
+                </span>
+                <Switch
+                  checked={presupuesto.pausada}
+                  disabled={guardar.isPending}
+                  onCheckedChange={(v) =>
+                    guardar.mutate({ clave: "KENI_GENERACION_PAUSADA", valor: v })
+                  }
+                  aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
+                />
+              </label>
             </div>
           )}
         </div>
-        {esAdmin && (
-          <div className="space-y-1 text-right">
-            <label className="flex items-center justify-end gap-2 text-sm">
-              <span
-                className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}
-              >
-                {presupuesto.pausada ? "Generación parada" : "Parada de emergencia"}
-              </span>
-              <Switch
-                checked={presupuesto.pausada}
-                disabled={guardar.isPending}
-                onCheckedChange={(v) =>
-                  guardar.mutate({ clave: "KENI_GENERACION_PAUSADA", valor: v })
-                }
-                aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
-              />
-            </label>
-          </div>
-        )}
+        {/* Dos motores lado a lado (apilan en móvil): tokens in/out, gasto, tope y % usado. */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <PanelMotor
+            motor="investigacion"
+            datos={presupuesto.por_proceso?.investigacion}
+            esAdmin={esAdmin}
+          />
+          <PanelMotor
+            motor="produccion"
+            datos={presupuesto.por_proceso?.produccion}
+            esAdmin={esAdmin}
+          />
+        </div>
       </CardContent>
     </Card>
   );

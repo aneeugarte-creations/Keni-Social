@@ -120,6 +120,25 @@ export interface GastoIADia {
   generaciones: number;
 }
 
+/** Economía de tokens de UN motor (investigación/producción): gasto del día desglosado in/out,
+ *  su tope diario propio y el % usado contra ese tope. */
+export interface PresupuestoProcesoIA {
+  tokens_in: number;
+  tokens_out: number;
+  /** in + out. */
+  tokens: number;
+  coste_usd: number;
+  generaciones: number;
+  /** Tope de tokens/día del motor (0 = sin límite). */
+  presupuesto_tokens_dia: number;
+  /** Tokens que restan del tope (null si tope = 0). */
+  restante_tokens: number | null;
+  /** % del tope consumido (null si tope = 0). */
+  pct_usado: number | null;
+  /** Nivel de corte del motor ("normal" | "solo_manual" | "agotado" | …). */
+  nivel: string;
+}
+
 /** Economía de tokens (`presupuesto_ia.estado()`): presupuesto diario, gasto y nivel. */
 export interface PresupuestoIA {
   /** Nivel de corte vigente: "normal" | "solo_manual" | "agotado" | "pausado". */
@@ -140,6 +159,9 @@ export interface PresupuestoIA {
   pct_usado_usd: number | null;
   /** Día UTC del acumulado (YYYY-MM-DD). */
   dia: string;
+  /** Desglose por motor (investigación/producción): gasto in/out + tope propio. Opcional para
+   *  compatibilidad con backs anteriores (durante el rollout puede no venir). */
+  por_proceso?: Partial<Record<Proceso, PresupuestoProcesoIA>>;
 }
 
 /** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en curso de ese loop). */
