@@ -64,6 +64,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/envoltorios/carrusel": [
         "Pipeline de copy · decisión de carrusel (historias que agrupan 2+ notas)",
     ],
+    "prompt/carrusel-desde-post": [
+        "Carrusel desde post · parte un post ya redactado en titulares de tarjetas (acción «Carrusel» del feed)",
+    ],
 }
 
 

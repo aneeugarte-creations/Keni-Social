@@ -32,7 +32,7 @@ PROMPT_CARRUSEL = "prompt/carrusel-desde-post"
 # Mínimo de slides para que valga la pena un carrusel (portada + al menos 2 tarjetas) y tope (el
 # mismo del pipeline: 10 nativas de IG/FB - 1 de portada).
 MIN_SLIDES = 2
-MAX_SLIDES = dom_copy.MAX_SLIDES_CARRUSEL
+MAX_SLIDES = generar.MAX_SLIDES_CARRUSEL
 
 # Estados de pieza donde `aplicar_carrusel` ESCRIBE. La acción nace de un post recién flip-eado a
 # carrusel (vuelve a `borrador`); se incluye `en_revision` por si la pieza avanzó mientras el job
