@@ -275,3 +275,88 @@ def test_construir_argv_dev_sin_restricciones():
     argv = rs.construir_argv("opus", rs.TIPO_DEV)
     assert "--disallowed-tools" not in argv
     assert "--mcp-config" not in argv
+
+
+def test_construir_argv_resume_antepone_resume():
+    # `--resume <id>` va justo tras `-p` para reanudar una sesion guardada con memoria intacta.
+    argv = rs.construir_argv("opus", resume="sess-1")
+    assert argv[:4] == ["claude", "-p", "--resume", "sess-1"]
+
+
+def test_construir_argv_sin_resume_no_lo_incluye():
+    assert "--resume" not in rs.construir_argv("opus")
+
+
+# --------------------------------------------------------------------------- #
+# Captura de session_id y texto completo del turno (reanudacion/persistencia) #
+# --------------------------------------------------------------------------- #
+
+
+def test_parser_captura_session_id_de_system_init():
+    p = rs.ParserRalph()
+    p.procesar_linea(json.dumps({"type": "system", "subtype": "init", "session_id": "sess-xyz"}))
+    assert p.session_id == "sess-xyz"
+
+
+def test_parser_fin_incluye_texto_completo_del_turno():
+    # El evento de cierre `fin` lleva el texto completo del turno en la clave extra `completo`
+    # (la usa el gestor para guardar la transcripcion; el front la ignora).
+    p = rs.ParserRalph()
+    p.procesar_linea(_delta_texto("Hola "))
+    p.procesar_linea(_delta_texto("mundo"))
+    eventos = p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
+    fin = next(e for e in eventos if e.get("fin"))
+    assert fin["completo"] == "Hola mundo"
+    assert fin["delta"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# Persistencia: round-trip a disco y restauracion como DORMIDO                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_persistencia_round_trip_restaura_dormido(tmp_path, monkeypatch):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g1 = rs.GestorRalph()
+    sesion = rs.SesionRalph(
+        id="abc",
+        nombre="ziggy",
+        modelo="opus",
+        creado=123.0,
+        tipo=rs.TIPO_OPERATIVO,
+        session_id="sess-1",
+        usuario_id="u1",
+        transcripcion=[
+            {"autor": "tu", "texto": "hola"},
+            {"autor": "ralph", "texto": "que tal"},
+        ],
+    )
+    g1._sesiones[sesion.id] = sesion
+    g1._guardar()
+
+    # Otro gestor sobre el MISMO KENI_DATA_DIR restaura la sesion al construirse.
+    g2 = rs.GestorRalph()
+    rest = g2.obtener("abc")
+    assert rest is not None
+    assert rest.estado == rs.ESTADO_DORMIDO
+    assert rest.proc is None
+    assert rest.session_id == "sess-1"
+    assert rest.usuario_id == "u1"
+    assert rest.transcripcion == sesion.transcripcion
+    # La transcripcion se siembra en `eventos` para que el SSE reproduzca el historial.
+    assert {"tipo": "mensaje", "autor": "tu", "delta": "hola"} in rest.eventos
+    assert {"tipo": "mensaje", "autor": "ralph", "delta": "que tal"} in rest.eventos
+    assert rest.eventos[-1] == {"tipo": "estado", "estado": rs.ESTADO_DORMIDO}
+    # info() informa el estado dormido al front.
+    assert rest.info()["estado"] == rs.ESTADO_DORMIDO
+
+
+def test_persistencia_omite_sesiones_sin_session_id(tmp_path, monkeypatch):
+    # Sin session_id no es resumible: no se persiste (no habria como reanudarla).
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g1 = rs.GestorRalph()
+    s = rs.SesionRalph(id="x", nombre="nova", modelo="opus", creado=1.0)
+    g1._sesiones[s.id] = s
+    g1._guardar()
+    g2 = rs.GestorRalph()
+    assert g2.obtener("x") is None

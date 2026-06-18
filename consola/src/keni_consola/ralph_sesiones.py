@@ -31,6 +31,7 @@ import os
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -47,11 +48,14 @@ _CLAUDE = "claude"
 # activo    -> generando (un turno en curso: llega texto/razonamiento o arranco).
 # esperando -> termino el turno (llego el `result`), a la espera del siguiente mensaje.
 # error     -> el proceso murio/fallo el lanzamiento o un `result` vino con error.
+# dormido   -> restaurado de disco tras un reinicio de worker-ralph, sin proceso vivo. NO es
+#              terminal: al primer mensaje se reanuda con `claude --resume` (memoria intacta).
 ESTADO_IDLE = "idle"
 ESTADO_ACTIVO = "activo"
 ESTADO_ESPERANDO = "esperando"
 ESTADO_ERROR = "error"
-ESTADOS = (ESTADO_IDLE, ESTADO_ACTIVO, ESTADO_ESPERANDO, ESTADO_ERROR)
+ESTADO_DORMIDO = "dormido"
+ESTADOS = (ESTADO_IDLE, ESTADO_ACTIVO, ESTADO_ESPERANDO, ESTADO_ERROR, ESTADO_DORMIDO)
 
 # Modelos ofrecidos por la burbuja Ralph (alias que `claude --model` entiende). opus por def.
 MODELOS = ("opus", "sonnet", "haiku")
@@ -183,6 +187,8 @@ class ParserRalph:
     estado: str = ESTADO_IDLE
     # Texto acumulado del turno en curso (para depurar/snapshot); se reinicia en cada turno.
     texto: str = ""
+    # session_id de `claude` (evento `system`/`init`): la clave para reanudar con `--resume`.
+    session_id: str = ""
 
     def procesar_linea(self, linea: str) -> list[dict]:
         crudo = (linea or "").strip()
@@ -194,6 +200,11 @@ class ParserRalph:
             return []
         if not isinstance(evento, dict):
             return []
+
+        if evento.get("type") == "system":
+            sid = evento.get("session_id")
+            if isinstance(sid, str) and sid:
+                self.session_id = sid
 
         eventos: list[dict] = []
         # Texto en vivo del asistente (modo `--include-partial-messages`).
@@ -214,16 +225,24 @@ class ParserRalph:
             if anterior == ESTADO_ACTIVO and nuevo in (ESTADO_ESPERANDO, ESTADO_ERROR):
                 # Cierra el turno: si hubo texto, corta el mensaje en curso del front (un `fin`
                 # por turno con texto, para que cada turno sea su propia burbuja al reproducir el
-                # buffer) y limpia el acumulador para el siguiente turno.
+                # buffer) y limpia el acumulador para el siguiente turno. El texto completo del
+                # turno viaja como clave extra `completo` (el front la ignora; el gestor la usa
+                # para guardar la transcripcion).
                 if self.texto:
-                    eventos.append({"tipo": "mensaje", "delta": "", "fin": True})
+                    eventos.append(
+                        {"tipo": "mensaje", "delta": "", "fin": True, "completo": self.texto}
+                    )
                 self.texto = ""
             eventos.append({"tipo": "estado", "estado": nuevo})
         return eventos
 
 
 def construir_argv(
-    modelo: str, tipo: str = TIPO_DEF, *, mcp_config: str | None = None
+    modelo: str,
+    tipo: str = TIPO_DEF,
+    *,
+    mcp_config: str | None = None,
+    resume: str | None = None,
 ) -> list[str]:
     """argv de un `claude` interactivo multi-turno (stream-json IN/OUT).
 
@@ -233,10 +252,12 @@ def construir_argv(
     - `dev`: sin restriccion de tools (Bash/Write/Edit) sobre el worktree del repo.
     - `operativo`: VETA Bash/Write/Edit (no toca el filesystem) y engancha el MCP de la app
       (`--mcp-config` + `--strict-mcp-config`) para que use las tools `keni_*`.
-    PURO (solo compone la lista)."""
-    argv = [
-        _CLAUDE,
-        "-p",
+    Con `resume`, antepone `--resume <id>` tras `-p` para reanudar una sesion guardada (memoria
+    intacta) en lugar de empezar una nueva. PURO (solo compone la lista)."""
+    argv = [_CLAUDE, "-p"]
+    if resume:
+        argv += ["--resume", resume]
+    argv += [
         "--input-format",
         "stream-json",
         "--output-format",
@@ -324,6 +345,12 @@ class SesionRalph:
     rama: str = ""
     estado: str = ESTADO_IDLE
     detalle: str = ""  # mensaje de error legible cuando estado == error
+    # session_id de `claude` (para `--resume`) y usuario que lo creo (para reconstruir el MCP).
+    session_id: str = ""
+    usuario_id: str = ""
+    # Turnos cerrados: [{"autor": "tu"|"ralph", "texto": str}]. Se persiste y se re-siembra en
+    # `eventos` al restaurar, para que el SSE reproduzca el historial tras un reinicio.
+    transcripcion: list[dict] = field(default_factory=list)
     parser: ParserRalph = field(default_factory=ParserRalph)
     eventos: list[dict] = field(default_factory=list)
     cerrado: bool = False
@@ -348,6 +375,7 @@ class GestorRalph:
     def __init__(self) -> None:
         self._sesiones: dict[str, SesionRalph] = {}
         self._lock = threading.Lock()
+        self._restaurar()
 
     # -- consulta ---------------------------------------------------------- #
 
@@ -384,11 +412,15 @@ class GestorRalph:
             nombre = siguiente_nombre(s.nombre for s in self._sesiones.values())
             ralph_id = uuid.uuid4().hex
             sesion = SesionRalph(
-                id=ralph_id, nombre=nombre, modelo=modelo, tipo=tipo, creado=time.time()
+                id=ralph_id,
+                nombre=nombre,
+                modelo=modelo,
+                tipo=tipo,
+                creado=time.time(),
+                usuario_id=usuario_id or "",
             )
             self._sesiones[ralph_id] = sesion
 
-        mcp_cfg: str | None = None
         if tipo == TIPO_DEV:
             try:
                 sesion.worktree, sesion.rama = _crear_worktree(config.dev_repo(), nombre)
@@ -399,45 +431,34 @@ class GestorRalph:
                 _log.warning("Ralph %s: sin worktree (%s); arranca en directorio plano", nombre, e)
                 sesion.worktree, sesion.rama = _dir_trabajo_plano(nombre), ""
         else:
-            # Operativo: dir de trabajo plano con su persona (CLAUDE.md) y el MCP de la app.
+            # Operativo: dir de trabajo plano; la persona (CLAUDE.md) y el MCP los escribe el
+            # lanzador al arrancar el proceso.
             sesion.worktree = _dir_trabajo_plano(nombre)
-            _escribir_persona_operativa(sesion.worktree)
-            mcp_cfg = _mcp_config(sesion.worktree, usuario_id)
 
-        try:
-            sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
-                construir_argv(modelo, tipo, mcp_config=mcp_cfg),
-                cwd=sesion.worktree,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,  # line-buffered: el lector ve cada linea NDJSON al instante
-                start_new_session=True,  # grupo propio: matar_arbol en kill
-            )
-        except FileNotFoundError:
-            self._marcar_error(sesion, "claude no disponible en este servidor")
-            return sesion.info()
-        except OSError as e:
-            self._marcar_error(sesion, f"no se pudo lanzar claude: {e}")
+        if not self._lanzar_proceso(sesion, reanudar=False):
             return sesion.info()
 
-        hilo = threading.Thread(
-            target=self._bucle_lector, args=(sesion,), name=f"ralph-{nombre}", daemon=True
-        )
-        hilo.start()
-
+        self._guardar()
         if prompt and prompt.strip():
             self.enviar(ralph_id, prompt)
         return sesion.info()
 
     def enviar(self, ralph_id: str, texto: str) -> dict:
-        """Escribe un turno del humano en el stdin del Ralph. {ok, error?}."""
+        """Escribe un turno del humano en el stdin del Ralph. {ok, error?}.
+
+        Si el proceso esta dormido (restaurado de disco) o murio, lo reanuda con `--resume`
+        ANTES de escribir: el primer mensaje tras un reinicio revive al Ralph con memoria intacta.
+        """
         sesion = self.obtener(ralph_id)
         if sesion is None:
             return {"ok": False, "error": "Ralph desconocido"}
-        if sesion.proc is None or sesion.proc.stdin is None or sesion.cerrado:
+        if sesion.proc is None or sesion.proc.poll() is not None:
+            if not self._reanudar(sesion):
+                return {"ok": False, "error": sesion.detalle or "no se pudo reanudar el Ralph"}
+        if sesion.proc is None or sesion.proc.stdin is None:
             return {"ok": False, "error": "Ralph no esta activo"}
+        sesion.transcripcion.append({"autor": "tu", "texto": texto})
+        self._guardar()
         with sesion.escritura:
             try:
                 sesion.proc.stdin.write(linea_mensaje_usuario(texto))
@@ -460,6 +481,8 @@ class GestorRalph:
         with sesion.cond:
             sesion.cerrado = True
             sesion.cond.notify_all()
+        # Ya no esta en `_sesiones`: el snapshot lo deja fuera del estado persistido (kill = descartar).
+        self._guardar()
         return {"ok": True}
 
     # -- stream ------------------------------------------------------------ #
@@ -503,8 +526,20 @@ class GestorRalph:
                 for ev in sesion.parser.procesar_linea(linea):
                     if ev.get("tipo") == "estado":
                         self._fijar_estado(sesion, ev["estado"])
+                    elif ev.get("tipo") == "mensaje" and ev.get("fin") and "completo" in ev:
+                        # Cierre de un turno del Ralph: guarda el texto completo en la
+                        # transcripcion y NO lo difunde (el front recibe solo {delta:"",fin:true}).
+                        completo = ev.pop("completo")
+                        sesion.transcripcion.append({"autor": "ralph", "texto": completo})
+                        self._emitir(sesion, ev)
+                        self._guardar()
                     else:
                         self._emitir(sesion, ev)
+                # session_id de `claude` (lo emite el evento `system`/`init`): persistelo en cuanto
+                # aparezca o cambie, para poder reanudar con `--resume` tras un reinicio.
+                if sesion.parser.session_id and sesion.parser.session_id != sesion.session_id:
+                    sesion.session_id = sesion.parser.session_id
+                    self._guardar()
         except (OSError, ValueError):
             pass
         finally:
@@ -536,6 +571,160 @@ class GestorRalph:
             sesion.eventos.append({"tipo": "estado", "estado": ESTADO_ERROR, "detalle": detalle})
             sesion.cerrado = True
             sesion.cond.notify_all()
+
+    # -- lanzamiento / reanudacion ---------------------------------------- #
+
+    def _lanzar_proceso(self, sesion: SesionRalph, *, reanudar: bool) -> bool:
+        """Lanza el proceso `claude` de la sesion y arranca su hilo lector. Devuelve True si
+        arranco; si falla deja la sesion en error y devuelve False.
+
+        Con `reanudar` y un `session_id` guardado, usa `--resume <id>` para continuar la
+        conversacion con memoria intacta. Para operativo (re)escribe la persona y el mcp-config
+        en el cwd (reconstruido con `sesion.usuario_id`)."""
+        mcp_cfg: str | None = None
+        if sesion.tipo == TIPO_OPERATIVO:
+            _escribir_persona_operativa(sesion.worktree)
+            mcp_cfg = _mcp_config(sesion.worktree, sesion.usuario_id or None)
+        resume = sesion.session_id if (reanudar and sesion.session_id) else None
+        try:
+            sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+                construir_argv(sesion.modelo, sesion.tipo, mcp_config=mcp_cfg, resume=resume),
+                cwd=sesion.worktree,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,  # line-buffered: el lector ve cada linea NDJSON al instante
+                start_new_session=True,  # grupo propio: matar_arbol en kill
+            )
+        except FileNotFoundError:
+            self._marcar_error(sesion, "claude no disponible en este servidor")
+            return False
+        except OSError as e:
+            self._marcar_error(sesion, f"no se pudo lanzar claude: {e}")
+            return False
+        hilo = threading.Thread(
+            target=self._bucle_lector, args=(sesion,), name=f"ralph-{sesion.nombre}", daemon=True
+        )
+        hilo.start()
+        return True
+
+    def _reanudar(self, sesion: SesionRalph) -> bool:
+        """Revive un Ralph dormido o muerto: relanza `claude --resume` con memoria intacta.
+
+        Resetea el lector y el flag de cierre, recrea el cwd si desaparecio (operativo) y vuelve a
+        `esperando`. Devuelve False (dejando la sesion en error) si no puede reanudarse."""
+        if sesion.proc is not None and sesion.proc.poll() is None:
+            return True
+        if not sesion.worktree or not os.path.isdir(sesion.worktree):
+            if sesion.tipo == TIPO_OPERATIVO:
+                sesion.worktree = _dir_trabajo_plano(sesion.nombre)
+            else:
+                self._marcar_error(
+                    sesion, "el worktree del Ralph ya no existe; no se puede reanudar"
+                )
+                return False
+        sesion.detalle = ""
+        sesion.parser = ParserRalph()
+        with sesion.cond:
+            sesion.cerrado = False
+        self._fijar_estado(sesion, ESTADO_ESPERANDO)
+        return self._lanzar_proceso(sesion, reanudar=True)
+
+    # -- persistencia ----------------------------------------------------- #
+
+    def _guardar(self) -> None:
+        """Persiste (JSON atomico) los Ralphs resumibles (con `session_id`). Best-effort: si la
+        IO falla, avisa y nunca casca. Toma el snapshot bajo lock y escribe fuera de el."""
+        try:
+            with self._lock:
+                registros = [_registro(s) for s in self._sesiones.values() if s.session_id]
+            ruta = _ruta_estado()
+            tmp = f"{ruta}.{uuid.uuid4().hex}.tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"sesiones": registros}, fh, ensure_ascii=False)
+            os.replace(tmp, ruta)
+        except Exception as e:  # noqa: BLE001 -- persistencia best-effort: nunca tumba el gestor
+            _log.warning("Ralph: no se pudo persistir el estado: %s", e)
+
+    def _restaurar(self) -> None:
+        """Carga el estado persistido y reconstruye las sesiones como DORMIDO (sin proceso vivo).
+
+        No arranca procesos: la reanudacion es perezosa (al primer mensaje). Siembra `eventos` con
+        la transcripcion para que un cliente que reconecte por SSE reproduzca el historial."""
+        ruta = _ruta_estado()
+        try:
+            with open(ruta, encoding="utf-8") as fh:
+                datos = json.load(fh)
+        except (OSError, ValueError):
+            return
+        registros = datos.get("sesiones") if isinstance(datos, dict) else None
+        if not isinstance(registros, list):
+            return
+        for reg in registros:
+            if not isinstance(reg, dict) or not reg.get("id"):
+                continue
+            try:
+                sesion = _desde_registro(reg)
+            except Exception as e:  # noqa: BLE001 -- un registro corrupto no tumba el arranque
+                _log.warning("Ralph: registro persistido ilegible (%s); se omite", e)
+                continue
+            self._sesiones[sesion.id] = sesion
+
+
+# --------------------------------------------------------------------------- #
+# Persistencia del estado de los Ralphs (JSON en $KENI_DATA_DIR, sobrevive reinicios).        #
+# --------------------------------------------------------------------------- #
+
+
+def _ruta_estado() -> str:
+    """Ruta del JSON con el estado de los Ralphs. Bajo `$KENI_DATA_DIR` (volumen persistente) en
+    el servidor; en el temporal del sistema si no esta definido (tests/local)."""
+    base = os.environ.get("KENI_DATA_DIR") or tempfile.gettempdir()
+    return os.path.join(base, "ralph-estado.json")
+
+
+def _registro(sesion: SesionRalph) -> dict:
+    """Vista serializable de un Ralph para persistir (sin proceso ni locks). La transcripcion se
+    copia para poder volcarla a JSON fuera del lock sin carreras."""
+    return {
+        "id": sesion.id,
+        "nombre": sesion.nombre,
+        "modelo": sesion.modelo,
+        "tipo": sesion.tipo,
+        "creado": sesion.creado,
+        "worktree": sesion.worktree,
+        "rama": sesion.rama,
+        "usuario_id": sesion.usuario_id,
+        "session_id": sesion.session_id,
+        "transcripcion": [dict(t) for t in sesion.transcripcion],
+    }
+
+
+def _desde_registro(reg: dict) -> SesionRalph:
+    """Reconstruye una SesionRalph DORMIDO desde su registro persistido, sembrando `eventos` con
+    la transcripcion (cada turno: delta + cierre) y un estado final `dormido`."""
+    transcripcion = [dict(t) for t in (reg.get("transcripcion") or []) if isinstance(t, dict)]
+    sesion = SesionRalph(
+        id=reg["id"],
+        nombre=reg.get("nombre", ""),
+        modelo=reg.get("modelo", MODELO_DEF),
+        creado=reg.get("creado", time.time()),
+        tipo=reg.get("tipo", TIPO_DEF),
+        worktree=reg.get("worktree", ""),
+        rama=reg.get("rama", ""),
+        usuario_id=reg.get("usuario_id", ""),
+        session_id=reg.get("session_id", ""),
+        transcripcion=transcripcion,
+        estado=ESTADO_DORMIDO,
+    )
+    for turno in transcripcion:
+        autor = turno.get("autor", "")
+        texto = turno.get("texto", "")
+        sesion.eventos.append({"tipo": "mensaje", "autor": autor, "delta": texto})
+        sesion.eventos.append({"tipo": "mensaje", "autor": autor, "delta": "", "fin": True})
+    sesion.eventos.append({"tipo": "estado", "estado": ESTADO_DORMIDO})
+    return sesion
 
 
 # --------------------------------------------------------------------------- #

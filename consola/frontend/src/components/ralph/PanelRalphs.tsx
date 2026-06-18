@@ -16,6 +16,7 @@ export const COLOR_ESTADO: Record<EstadoRalph, string> = {
   idle: "bg-zinc-400",
   esperando: "bg-amber-500",
   error: "bg-red-500",
+  dormido: "bg-sky-400",
 };
 
 /** Etiqueta legible del estado de un Ralph. */
@@ -24,6 +25,7 @@ export const ETIQUETA_ESTADO: Record<EstadoRalph, string> = {
   idle: "En reposo",
   esperando: "Esperándote",
   error: "Con error",
+  dormido: "Dormido · escríbele para reanudar",
 };
 
 export function PanelRalphs() {
