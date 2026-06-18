@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, mensajeError } from "@/lib/api";
+import type { TipoMarca } from "@/types";
 
 /** Una marca tal como la edita el formulario (catálogo). */
 export interface MarcaEditable {
@@ -21,6 +22,8 @@ export interface MarcaEditable {
   etiqueta: string;
   /** id_metricas (en el dashboard es el campo `marca`). */
   id_metricas: string;
+  /** 'noticias' (pasa por investigación) o 'propio' (contenido propio, sin panel de Noticias). */
+  tipo: TipoMarca;
 }
 
 function invalidarMarcas(qc: ReturnType<typeof useQueryClient>) {
@@ -50,6 +53,7 @@ export function DialogoMarca({
   const [etiqueta, setEtiqueta] = React.useState("");
   const [id, setId] = React.useState("");
   const [idMetricas, setIdMetricas] = React.useState("");
+  const [tipo, setTipo] = React.useState<TipoMarca>("noticias");
   const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
 
   React.useEffect(() => {
@@ -57,13 +61,14 @@ export function DialogoMarca({
       setEtiqueta(inicial?.etiqueta ?? "");
       setId(inicial?.id ?? "");
       setIdMetricas(inicial?.id_metricas ?? "");
+      setTipo(inicial?.tipo ?? "noticias");
       setConfirmandoBorrado(false);
     }
   }, [abierto, inicial]);
 
   const crear = useMutation({
     mutationFn: () =>
-      api.crearMarca({ etiqueta, id: id.trim() || undefined, id_metricas: idMetricas.trim() || undefined }),
+      api.crearMarca({ etiqueta, id: id.trim() || undefined, id_metricas: idMetricas.trim() || undefined, tipo }),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca creada.");
       invalidarMarcas(qc);
@@ -73,7 +78,7 @@ export function DialogoMarca({
   });
 
   const editar = useMutation({
-    mutationFn: () => api.editarMarca(inicial!.id, { etiqueta, id_metricas: idMetricas.trim() }),
+    mutationFn: () => api.editarMarca(inicial!.id, { etiqueta, id_metricas: idMetricas.trim(), tipo }),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca actualizada.");
       invalidarMarcas(qc);
@@ -144,6 +149,33 @@ export function DialogoMarca({
               placeholder="se genera del id (claro_sports)"
               disabled={ocupado}
             />
+          </div>
+          <div className="space-y-1">
+            <Label>Tipo</Label>
+            <div className="flex gap-2">
+              {(
+                [
+                  { id: "noticias", etiqueta: "Noticias" },
+                  { id: "propio", etiqueta: "Contenido propio" },
+                ] as const
+              ).map((opt) => (
+                <Button
+                  key={opt.id}
+                  type="button"
+                  variant={tipo === opt.id ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setTipo(opt.id)}
+                  disabled={ocupado}
+                >
+                  {opt.etiqueta}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {tipo === "propio"
+                ? "Contenido propio: se salta la cadena de investigación y no tiene panel de Noticias."
+                : "Noticias: pasa por la investigación (recolección, clasificación, Mesa de Noticias)."}
+            </p>
           </div>
         </div>
 

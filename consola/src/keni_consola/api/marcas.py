@@ -126,10 +126,13 @@ def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marc
             }
         )
 
+    marca_cat = _km.marca_de(id_canonico)
     return {
         "marca": mid,
         "id": id_canonico,
         "etiqueta": etiqueta,
+        # 'noticias' (pasa por investigación) o 'propio' (contenido propio): editable en el form.
+        "tipo": marca_cat.tipo if marca_cat is not None else "noticias",
         "canal_publicacion": canal,
         "postproxy": {"conectado": bool(grupo), "profile_group_id": grupo},
         "redes": redes,

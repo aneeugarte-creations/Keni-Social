@@ -79,6 +79,7 @@ def test_vista_unica_estado_mas_numeros(entorno, monkeypatch):
     assert "metricool" not in cs
     # `marca` es el id_metricas (clave Postproxy); `id` es el canónico (clave del CRUD).
     assert cs["id"] == "claro-sports"
+    assert cs["tipo"] == "noticias"  # del catálogo (editable en el form de marca)
     assert cs["canal_publicacion"] == "postproxy"
     assert cs["postproxy"] == {"conectado": True, "profile_group_id": "g1"}
     # Una fila por red del catálogo (10, sin google_business).

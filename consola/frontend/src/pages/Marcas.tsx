@@ -17,9 +17,9 @@ import { iconoPlataforma, nombrePlataforma } from "@/pages/marcas/plataformas";
 import { tiempoRelativo } from "@/pages/piezas/meta";
 import type { CanalPieza, ConteoCuenta, MarcaDashboard, RedMarca } from "@/types";
 
-/** Convierte una marca del dashboard a la forma editable del catálogo (id/etiqueta/id_metricas). */
+/** Convierte una marca del dashboard a la forma editable del catálogo (id/etiqueta/id_metricas/tipo). */
 function aEditable(m: MarcaDashboard): MarcaEditable {
-  return { id: m.id, etiqueta: m.etiqueta, id_metricas: m.marca };
+  return { id: m.id, etiqueta: m.etiqueta, id_metricas: m.marca, tipo: m.tipo };
 }
 
 const CLAVE_MARCAS = ["marcas", "dashboard"];

@@ -38,6 +38,8 @@ export interface MarcaDashboard {
   /** id canónico: clave del catálogo (editar/borrar la marca). */
   id: string;
   etiqueta: string;
+  /** 'noticias' (pasa por investigación) o 'propio' (contenido propio, sin panel de Noticias). */
+  tipo: TipoMarca;
   /** Canal por el que la marca publica sus piezas. */
   canal_publicacion: CanalPieza;
   postproxy: PostproxyMarca;
@@ -54,11 +56,15 @@ export interface RespuestaMarcas {
 
 // --- CRUD del catálogo de marcas (fuente única editable) ------------------- //
 
+/** Naturaleza editorial de una marca: noticias (investigación) o contenido propio. */
+export type TipoMarca = "noticias" | "propio";
+
 /** Una marca del catálogo editable. */
 export interface MarcaCatalogo {
   id: string;
   etiqueta: string;
   id_metricas: string;
+  tipo: TipoMarca;
 }
 
 export interface RespuestaCatalogoMarcas {
@@ -69,11 +75,13 @@ export interface CuerpoCrearMarca {
   etiqueta: string;
   id?: string;
   id_metricas?: string;
+  tipo?: TipoMarca;
 }
 
 export interface CuerpoEditarMarca {
   etiqueta?: string;
   id_metricas?: string;
+  tipo?: TipoMarca;
 }
 
 export interface RespuestaMarcaCatalogo {
