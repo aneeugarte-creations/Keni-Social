@@ -1,11 +1,21 @@
 import { Check, Radio, ShieldAlert } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { resumenCobertura } from "@/lib/cobertura";
+import { COBERTURA_TEXTO } from "@/lib/estado-color";
+import { cn } from "@/lib/utils";
 import type { EventoRota, FranjaSemana, Publicacion, TurnoRota } from "@/types";
 
 /** Cuántos segmentos pinta la barra de progreso del KPI (▰▰▰▱▱). */
 const SEGMENTOS = 8;
+
+/**
+ * Colores de los cortes del KPI desde la fuente CENTRAL de la taxonomía (`lib/estado-color`):
+ *  - VERDE para «en vivo» y «todo cubierto» (mismo lenguaje que el semáforo de las tarjetas: ámbar
+ *    queda reservado a «empieza pronto», que el KPI no muestra).
+ *  - ROJO para «sin cubrir» (el hueco que pide decisión).
+ */
+const TEXTO_VERDE = COBERTURA_TEXTO["cubierto-turno"];
+const TEXTO_ROJO = COBERTURA_TEXTO["sin-cubrir"];
 
 /**
  * CABECERA-KPI de la pestaña Cobertura: una barra compacta de «cómo va la cobertura del rango
@@ -75,7 +85,7 @@ export function KpiCobertura({
           oculta en móvil para no apretar la barra. */}
       <span className="hidden items-center gap-3 text-xs sm:flex">
         {r.enVivo > 0 && (
-          <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
+          <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_VERDE)}>
             <Radio className="h-3.5 w-3.5" aria-hidden />
             {r.enVivo} en vivo
           </span>
@@ -86,19 +96,22 @@ export function KpiCobertura({
             <button
               type="button"
               onClick={onIrASinCubrir}
-              className="inline-flex items-center gap-1 rounded font-medium text-red-700 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none dark:text-red-300"
+              className={cn(
+                "inline-flex items-center gap-1 rounded font-medium underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
+                TEXTO_ROJO,
+              )}
             >
               <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
               {r.sinCubrir} sin cubrir
             </button>
           ) : (
-            <span className="inline-flex items-center gap-1 font-medium text-red-700 dark:text-red-300">
+            <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_ROJO)}>
               <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
               {r.sinCubrir} sin cubrir
             </span>
           )
         ) : (
-          <span className="font-medium text-emerald-700 dark:text-emerald-300">Todo cubierto</span>
+          <span className={cn("font-medium", TEXTO_VERDE)}>Todo cubierto</span>
         )}
       </span>
 
@@ -113,9 +126,9 @@ export function KpiCobertura({
           ninguno (icono+texto, igual que la versión desktop, no una palabra suelta). */}
       <span className="shrink-0 text-xs sm:hidden">
         {r.sinCubrir > 0 ? (
-          <span className="font-medium text-red-700 dark:text-red-300">{r.sinCubrir} sin cubrir</span>
+          <span className={cn("font-medium", TEXTO_ROJO)}>{r.sinCubrir} sin cubrir</span>
         ) : (
-          <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
+          <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_VERDE)}>
             <Check className="h-3.5 w-3.5" aria-hidden />
             Todo cubierto
           </span>

@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import type { Semaforo } from "@/lib/cobertura";
+import { SEMAFORO_ESTILO } from "@/lib/estado-color";
 import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosPublicacion, Publicacion, EventoRota } from "@/types";
@@ -100,23 +102,24 @@ export function SemaforoCobertura({
         ? "Empieza pronto"
         : "Programado";
   const texto = preLive ? `Empieza en ${min} min` : titulo;
-  const claseBadge =
-    envivo || completado
-      ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+  // Fase del semáforo → color desde la fuente CENTRAL (taxonomía de `lib/estado-color`): en-vivo y
+  // terminado comparten el verde, empieza-en el ámbar, programado el gris/muted.
+  const fase: Semaforo = envivo
+    ? "en-vivo"
+    : completado
+      ? "terminado"
       : preLive
-        ? "border-amber-500/50 text-amber-700 dark:text-amber-300"
-        : "text-muted-foreground";
-  const dot = envivo
-    ? "bg-emerald-500"
-    : preLive
-      ? "bg-amber-500"
-      : "bg-slate-400 dark:bg-slate-500";
+        ? "empieza-en"
+        : "programado";
+  const estilo = SEMAFORO_ESTILO[fase];
+  const claseBadge = estilo.badge;
+  const dot = estilo.dot;
 
   if (compacto) {
     if (completado) {
       return (
         <span title={titulo} aria-label={titulo} className="inline-flex shrink-0">
-          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          <Check className={cn("h-4 w-4", estilo.icon)} aria-hidden />
         </span>
       );
     }
