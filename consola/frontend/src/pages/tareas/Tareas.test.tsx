@@ -329,9 +329,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // Desplegar la fila del Panorama para llegar a la tarjeta accionable.
     fireEvent.click(await screen.findByText("Grabar el saque"));
-    // Item-first: click en la tarjeta «Libre» → acción primaria = coger.
-    const libreEl3 = await screen.findByText("Libre");
-    fireEvent.click(libreEl3.closest("[role='button']")!);
+    // Item-first: click en la tarjeta «Sin cubrir» → acción primaria = coger. (Hay dos «Sin
+    // cubrir» al desplegar: el badge de la fila y el de la tarjeta; la tarjeta es el último.)
+    const sinCubrir3 = await screen.findAllByText("Sin cubrir");
+    fireEvent.click(sinCubrir3[sinCubrir3.length - 1].closest("[role='button']")!);
     await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
     expect(coger).toHaveBeenCalledWith("t9");
   });
@@ -381,17 +382,17 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama
     // Asignar está en el menú contextual (kebab="nunca"), no como botón visible.
-    const libreAdm = await screen.findByText("Libre");
-    fireEvent.contextMenu(libreAdm.closest("[role='button']")!);
+    const sinCubrirAdm = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(sinCubrirAdm[sinCubrirAdm.length - 1].closest("[role='button']")!);
     expect(await screen.findByRole("menuitem", { name: /Asignar/ })).toBeInTheDocument();
     unmount();
 
     vi.restoreAllMocks();
     renderTareas([tarea({ titulo: "Reparto" })], [], usuario("editor", "u2"));
     fireEvent.click(await screen.findByText("Reparto"));
-    const libreEd = await screen.findByText("Libre");
+    const sinCubrirEd = await screen.findAllByText("Sin cubrir");
     // El editor no tiene acciones secundarias: el menú no abre y Asignar no aparece.
-    fireEvent.contextMenu(libreEd.closest("[role='button']")!);
+    fireEvent.contextMenu(sinCubrirEd[sinCubrirEd.length - 1].closest("[role='button']")!);
     expect(screen.queryByRole("menuitem", { name: /Asignar/ })).toBeNull();
   });
 
@@ -513,9 +514,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     ]);
 
     fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
-    // Item-first: la cobertura suelta muestra badge «Libre»; click en la tarjeta = coger.
-    const libreSuelta = await screen.findByText("Libre");
-    fireEvent.click(libreSuelta.closest("[role='button']")!);
+    // Item-first: la cobertura suelta muestra badge «Sin cubrir»; click en la tarjeta = coger
+    // (el último «Sin cubrir»: el primero es el badge de la fila del Panorama).
+    const sinCubrirSuelta = await screen.findAllByText("Sin cubrir");
+    fireEvent.click(sinCubrirSuelta[sinCubrirSuelta.length - 1].closest("[role='button']")!);
     await waitFor(() => expect(coger).toHaveBeenCalledWith("t-suelta"));
   });
 

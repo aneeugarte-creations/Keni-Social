@@ -212,7 +212,7 @@ export function DialogoCrearTarea({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
+          <SelectItem value={SIN_RESPONSABLE}>Sin cubrir</SelectItem>
           {usuarios.map((u) => (
             <SelectItem key={u.id} value={u.id}>
               {u.usuario}

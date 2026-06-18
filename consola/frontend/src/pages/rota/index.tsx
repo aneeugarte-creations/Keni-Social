@@ -71,7 +71,7 @@ export default function Rota() {
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
-          <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
+          <TabsTrigger value="mis-turnos">Mi jornada</TabsTrigger>
           <TabsTrigger value="cambios-ausencias">
             Cambios y ausencias
             {pendientesCambios > 0 && (

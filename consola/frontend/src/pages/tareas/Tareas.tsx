@@ -209,7 +209,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       <EstadoVacio
         icono={ListChecks}
         titulo="No tienes nada asignado"
-        texto="Ve a Panorama y pulsa «Por cubrir» para coger trabajo del equipo."
+        texto="Ve a Panorama y pulsa «Por cubrir» para cubrir trabajo del equipo."
         accion={
           <Button size="sm" variant="outline" onClick={() => setLente("panorama")}>
             Ver Panorama

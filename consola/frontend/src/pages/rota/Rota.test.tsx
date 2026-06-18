@@ -134,9 +134,9 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     ).toBeInTheDocument();
   });
 
-  it("para el admin, «Mis turnos» abre en la vista «Equipo» (turnos de todos)", async () => {
+  it("para el admin, «Mi jornada» abre en la vista «Equipo» (turnos de todos)", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Mis turnos" }), {
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Mi jornada" }), {
       button: 0,
     });
     // El admin no está en la rota: arranca en «Equipo» (jornada de todo el equipo), no en «Yo».

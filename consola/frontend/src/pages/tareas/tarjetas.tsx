@@ -550,8 +550,8 @@ export function TarjetaTarea({
               </Badge>
             )}
             {libre ? (
-              <Badge variant="outline" className="border-dashed text-muted-foreground">
-                Libre
+              <Badge variant="outline" className="border-dashed border-amber-500/50 text-amber-700 dark:text-amber-300">
+                Sin cubrir
               </Badge>
             ) : (
               <Badge
