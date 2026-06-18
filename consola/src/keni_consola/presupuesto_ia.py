@@ -8,8 +8,11 @@ y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guard
     (Postgres, UPSERT por gen_id = idempotente ante reintentos/re-encolados). Lo escribe el
     hook de cierre del almacen de generaciones (`generaciones._almacen`), asi cubre TODOS
     los caminos (claude, imagen, procesos) sin tocar cada lanzador.
-  - PRESUPUESTO: `KENI_PRESUPUESTO_TOKENS_DIA` (tokens in+out por dia UTC; 0 = sin limite).
-    Editable EN CALIENTE via el store de ajustes (compartido back/worker/daemons por /data).
+  - PRESUPUESTO: dos topes diarios independientes, `KENI_PRESUPUESTO_TOKENS_DIA` (tokens in+out
+    por dia UTC) y `KENI_PRESUPUESTO_USD_DIA` (coste real por dia UTC, mejor proxy del gasto: un
+    token de input cacheado pesa mucho menos que uno de salida); 0 = ese tope apagado. El corte
+    efectivo es el MAS restrictivo de ambos. Editables EN CALIENTE via el store de ajustes
+    (compartido back/worker/daemons por /data).
   - CORTE AUTOMATICO en dos escalones (gradual):
       * gastado >= presupuesto            -> SOLO_MANUAL: el fondo (pipeline/autogen) se
         deja de encolar y de reclamar; lo manual del equipo sigue.
@@ -105,24 +108,41 @@ def _gasto_hoy() -> dict[str, Any]:
     return gasto
 
 
+def _escalon(gastado: float, presupuesto: float, margen: float) -> str:
+    """Escalon de corte de UN presupuesto: agotado (>= presup*margen), solo_manual (>= presup) o normal."""
+    if gastado >= presupuesto * margen:
+        return NIVEL_AGOTADO
+    if gastado >= presupuesto:
+        return NIVEL_SOLO_MANUAL
+    return NIVEL_NORMAL
+
+
 def nivel() -> str:
     """Nivel de corte VIGENTE (el kill switch manda; luego los escalones del presupuesto).
 
-    Sin presupuesto configurado (0) no hay corte automatico: solo `normal`/`pausado`.
-    Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al relajar): es la
-    señal operativa del corte; los gates por peticion no loguean (serian basura en el log).
+    Hay DOS presupuestos diarios, cada uno con sus dos escalones (solo_manual / agotado): el de
+    TOKENS (`presupuesto_tokens_dia`) y el de COSTE en USD (`presupuesto_usd_dia`, mejor proxy del
+    gasto real). El corte efectivo es el MAS restrictivo de ambos; ambos comparten `margen_manual`.
+    Cada presupuesto en 0 queda apagado; con los dos a 0 no hay corte automatico (solo
+    `normal`/`pausado`). Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al
+    relajar): es la señal operativa del corte; los gates por peticion no loguean.
     """
     if config.generacion_pausada():
         return _con_transicion(NIVEL_PAUSADO)
     presupuesto = config.presupuesto_tokens_dia()
-    if presupuesto <= 0:
+    presupuesto_usd = config.presupuesto_usd_dia()
+    if presupuesto <= 0 and presupuesto_usd <= 0:
         return _con_transicion(NIVEL_NORMAL)
-    gastado = int(_gasto_hoy().get("tokens", 0))
-    if gastado >= presupuesto * (1 + config.presupuesto_margen_manual_pct() / 100.0):
-        return _con_transicion(NIVEL_AGOTADO)
-    if gastado >= presupuesto:
-        return _con_transicion(NIVEL_SOLO_MANUAL)
-    return _con_transicion(NIVEL_NORMAL)
+    gasto = _gasto_hoy()
+    margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
+    nivel_vigente = NIVEL_NORMAL
+    if presupuesto > 0:
+        nivel_vigente = _escalon(int(gasto.get("tokens", 0)), presupuesto, margen)
+    if presupuesto_usd > 0:
+        por_usd = _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
+        if _SEVERIDAD.get(por_usd, 0) > _SEVERIDAD.get(nivel_vigente, 0):
+            nivel_vigente = por_usd
+    return _con_transicion(nivel_vigente)
 
 
 def bloqueo_admision(nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool) -> str | None:
@@ -175,23 +195,31 @@ def estado() -> dict[str, Any]:
     """Snapshot COMPLETO para el monitor/los agentes: presupuesto, gasto del dia y nivel.
 
     Forma (CONTRATO de `/api/actividad/cola`):
-      {nivel, pausada, presupuesto_tokens_dia, margen_manual_pct, gastado: {tokens,
-       tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens, pct_usado, dia}
-    `restante_tokens`/`pct_usado` son None sin presupuesto configurado (sin limite).
+      {nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
+       gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
+       pct_usado, pct_usado_usd, dia}
+    `restante_tokens`/`pct_usado` son None sin presupuesto de tokens; `pct_usado_usd` es None
+    sin presupuesto de USD (cada presupuesto en 0 = sin limite). El coste USD gastado del dia
+    viaja dentro de `gastado.coste_usd`.
     """
     gasto = _gasto_hoy()
     presupuesto = config.presupuesto_tokens_dia()
+    presupuesto_usd = config.presupuesto_usd_dia()
     gastado = int(gasto.get("tokens", 0))
+    coste = float(gasto.get("coste_usd", 0.0))
     restante = max(0, presupuesto - gastado) if presupuesto > 0 else None
     pct = round(100.0 * gastado / presupuesto, 1) if presupuesto > 0 else None
+    pct_usd = round(100.0 * coste / presupuesto_usd, 1) if presupuesto_usd > 0 else None
     return {
         "nivel": nivel(),
         "pausada": config.generacion_pausada(),
         "presupuesto_tokens_dia": presupuesto,
+        "presupuesto_usd_dia": presupuesto_usd,
         "margen_manual_pct": config.presupuesto_margen_manual_pct(),
         "gastado": gasto,
         "restante_tokens": restante,
         "pct_usado": pct,
+        "pct_usado_usd": pct_usd,
         "dia": _hoy_utc(),
     }
 

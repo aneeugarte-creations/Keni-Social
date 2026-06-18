@@ -199,7 +199,9 @@ def test_nivel_normal_sin_presupuesto(entorno):
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
     est = presupuesto_ia.estado()
     assert est["presupuesto_tokens_dia"] == 0
+    assert est["presupuesto_usd_dia"] == 0
     assert est["restante_tokens"] is None and est["pct_usado"] is None
+    assert est["pct_usado_usd"] is None
 
 
 def test_nivel_escalones(entorno, monkeypatch):
@@ -219,6 +221,48 @@ def test_nivel_escalones(entorno, monkeypatch):
     assert est["gastado"]["tokens"] == 1200
     assert est["restante_tokens"] == 0
     assert est["pct_usado"] == pytest.approx(120.0)
+
+
+def test_nivel_escalones_por_usd(entorno, monkeypatch):
+    """El presupuesto de COSTE (USD) corta igual que el de tokens: solo_manual al alcanzarlo,
+    agotado al superar el margen. Es un proxy del gasto independiente del conteo de tokens."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "10")
+    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+
+    repos.registrar_gasto_ia("g1", dia=_hoy(), tokens_in=1, tokens_out=1, coste_usd=10.0)
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL
+
+    repos.registrar_gasto_ia("g2", dia=_hoy(), tokens_in=1, tokens_out=1, coste_usd=2.0)  # 12 = +20%
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_AGOTADO
+
+    est = presupuesto_ia.estado()
+    assert est["presupuesto_usd_dia"] == pytest.approx(10.0)
+    assert est["gastado"]["coste_usd"] == pytest.approx(12.0)
+    assert est["pct_usado_usd"] == pytest.approx(120.0)
+
+
+def test_nivel_usd_y_tokens_corta_el_mas_restrictivo(entorno, monkeypatch):
+    """Con ambos topes activos rige el MAS restrictivo: USD agotado corta aunque los tokens
+    sigan holgados (y al revés)."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000000")  # tokens muy holgados
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=6.0)
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_AGOTADO
+
+
+def test_nivel_sin_usd_configurado_no_corta_por_coste(entorno, monkeypatch):
+    """Sin `KENI_PRESUPUESTO_USD_DIA` el coste NO corta: solo gobierna el presupuesto de tokens
+    (comportamiento idéntico al previo a este tope)."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=100, coste_usd=9999.0)
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # tokens holgados, USD apagado
+    est = presupuesto_ia.estado()
+    assert est["presupuesto_usd_dia"] == 0 and est["pct_usado_usd"] is None
 
 
 def test_nivel_pausado_manda(entorno, monkeypatch):

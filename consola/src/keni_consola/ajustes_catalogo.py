@@ -430,6 +430,18 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
         ),
         Ajuste(
+            clave=config.ENV_PRESUPUESTO_USD_DIA,
+            tipo="float",
+            etiqueta="Presupuesto diario de coste (USD)",
+            ayuda="Coste real (USD) de generación por día UTC; al agotarse se corta el trabajo "
+            "automático (lo manual sigue hasta el margen); 0 = sin límite. Mejor proxy del "
+            "gasto que los tokens; rige a la vez que el presupuesto de tokens (corta el más "
+            "restrictivo).",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_USD_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
             clave=config.ENV_PRESUPUESTO_MARGEN_MANUAL,
             tipo="int",
             etiqueta="Margen extra para lanzamientos manuales (%)",

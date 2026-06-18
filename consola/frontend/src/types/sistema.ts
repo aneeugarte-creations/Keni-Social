@@ -128,12 +128,16 @@ export interface PresupuestoIA {
   pausada: boolean;
   /** Presupuesto de tokens/día (0 = sin límite). */
   presupuesto_tokens_dia: number;
+  /** Presupuesto de coste (USD)/día (0 = sin límite). Corta el más restrictivo de tokens/coste. */
+  presupuesto_usd_dia: number;
   margen_manual_pct: number;
   gastado: GastoIADia;
-  /** null si no hay presupuesto configurado. */
+  /** null si no hay presupuesto de tokens configurado. */
   restante_tokens: number | null;
-  /** % del presupuesto consumido (null sin presupuesto). */
+  /** % del presupuesto de tokens consumido (null sin presupuesto de tokens). */
   pct_usado: number | null;
+  /** % del presupuesto de coste (USD) consumido (null sin presupuesto de USD). */
+  pct_usado_usd: number | null;
   /** Día UTC del acumulado (YYYY-MM-DD). */
   dia: string;
 }

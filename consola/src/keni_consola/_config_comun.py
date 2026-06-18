@@ -94,6 +94,7 @@ ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 # Economia de tokens de la generacion (la suscripcion `claude` es COMPARTIDA con el equipo):
 # presupuesto DIARIO de tokens con corte automatico + kill switch humano (`presupuesto_ia.py`).
 ENV_PRESUPUESTO_TOKENS_DIA = "KENI_PRESUPUESTO_TOKENS_DIA"
+ENV_PRESUPUESTO_USD_DIA = "KENI_PRESUPUESTO_USD_DIA"
 ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
 ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
 # Tope de INTENTOS de ejecucion de un job de la cola (anti crash-loop del re-reclamo).
@@ -528,6 +529,11 @@ WORKER_SONDEO_SEGUNDOS_DEF = 0.5
 # Presupuesto DIARIO de tokens de la generacion (in+out, dia UTC). 0 = SIN limite (defecto:
 # no cambia el comportamiento de un deploy existente; se enciende fijando un valor > 0).
 PRESUPUESTO_TOKENS_DIA_DEF = 0
+# Presupuesto DIARIO de coste en USD de la generacion (suma de `coste_usd` del dia UTC, ya
+# calculado por job con tarifas correctas). Mejor proxy del gasto real que los tokens (un
+# token de input cacheado pesa muchisimo menos que uno de salida). 0 = SIN limite (defecto:
+# no cambia el comportamiento de un deploy existente; se enciende fijando un valor > 0).
+PRESUPUESTO_USD_DIA_DEF = 0.0
 # Margen EXTRA (%) sobre el presupuesto que se concede SOLO a los lanzamientos manuales del
 # equipo cuando el fondo ya esta cortado. Al superarlo, corte TOTAL (tambien lo manual).
 PRESUPUESTO_MARGEN_MANUAL_DEF = 20
@@ -901,6 +907,7 @@ __all__ = [
     'ENV_PREFERENCIAS',
     'ENV_PRESUPUESTO_MARGEN_MANUAL',
     'ENV_PRESUPUESTO_TOKENS_DIA',
+    'ENV_PRESUPUESTO_USD_DIA',
     'ENV_GENERACION_PAUSADA',
     'ENV_JOBS_MAX_INTENTOS',
     'ENV_PROMPT_MAX_CHARS',
@@ -975,6 +982,7 @@ __all__ = [
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
     'PRESUPUESTO_TOKENS_DIA_DEF',
+    'PRESUPUESTO_USD_DIA_DEF',
     'MEDIA_GC_ANTIGUEDAD_HORAS_DEF',
     'MEDIA_GC_INTERVALO_HORAS_DEF',
     'METRICAS_HISTORICO_RETENCION_DIAS_DEF',

@@ -114,24 +114,31 @@ def _chequeos_presupuesto() -> list[dict]:
     if nivel == presupuesto_ia.NIVEL_AGOTADO:
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "error",
-            "Presupuesto de tokens AGOTADO (margen incluido): corte total de la generación.",
+            "Presupuesto de IA AGOTADO (margen incluido): corte total de la generación.",
             admin=False,
             siguiente_paso="Sube el presupuesto diario en el Monitor o espera al reinicio del día (UTC).",
         ))
     elif nivel == presupuesto_ia.NIVEL_SOLO_MANUAL:
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "aviso",
-            "Presupuesto de tokens al límite: solo siguen los lanzamientos manuales.",
+            "Presupuesto de IA al límite: solo siguen los lanzamientos manuales.",
             admin=False,
             siguiente_paso="Sube el presupuesto diario en el Monitor o deja que el fondo espere al día siguiente.",
         ))
     else:
         presupuesto = int(est.get("presupuesto_tokens_dia") or 0)
+        presupuesto_usd = float(est.get("presupuesto_usd_dia") or 0.0)
         pct = est.get("pct_usado")
+        pct_usd = est.get("pct_usado_usd")
+        partes = []
+        if presupuesto > 0 and pct is not None:
+            partes.append(f"{pct}% de los tokens")
+        if presupuesto_usd > 0 and pct_usd is not None:
+            partes.append(f"{pct_usd}% del coste (USD)")
         detalle = (
-            f"Gasto de hoy: {pct}% del presupuesto diario."
-            if presupuesto > 0 and pct is not None
-            else "Sin presupuesto diario configurado (sin límite de tokens)."
+            f"Gasto de hoy: {' y '.join(partes)} del presupuesto diario."
+            if partes
+            else "Sin presupuesto diario configurado (sin límite)."
         )
         salida.append(_chequeo(
             "maquina:presupuesto", "Presupuesto de IA", "ok", detalle, admin=False,

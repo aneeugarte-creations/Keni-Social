@@ -72,7 +72,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Economía de tokens de la generación (presupuesto_ia): kill switch + presupuesto
         # diario + margen manual. Editables en caliente desde el Monitor.
         config.ENV_GENERACION_PAUSADA,
-        config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_MARGEN_MANUAL,
+        config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_USD_DIA,
+        config.ENV_PRESUPUESTO_MARGEN_MANUAL,
         # Umbral de auto-producción del ranking de noticias (umbrales de promoción a tema)
         # + maduración y cupos de volumen (día móvil / franja horaria).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
@@ -302,9 +303,16 @@ _PIPELINE_ECONOMIA_INT = {
 }
 
 
+# El presupuesto de COSTE (USD) es float (admite céntimos), pero mismo grupo y misma semántica
+# de 0 = apagado que el de tokens.
+_PIPELINE_ECONOMIA_FLOAT = {
+    config.ENV_PRESUPUESTO_USD_DIA,
+}
+
+
 def test_pipeline_topes_en_grupo_propio(store):
-    """Los knobs de admisión (int, min >= 1) y los de economía de tokens (int, min 0 =
-    apagado) viven EXACTAMENTE en el grupo `pipeline_topes`."""
+    """Los knobs de admisión (int, min >= 1) y los de economía de tokens/coste (int/float, min
+    0 = apagado) viven EXACTAMENTE en el grupo `pipeline_topes`."""
     for clave in _PIPELINE_TOPES_INT:
         a = ajustes_catalogo.por_clave(clave)
         assert a is not None, f"falta la clave {clave}"
@@ -317,8 +325,14 @@ def test_pipeline_topes_en_grupo_propio(store):
         assert a.tipo == "int", f"{clave} debe ser int"
         assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
         assert a.minimo == 0, f"{clave} debe tener minimo 0 (0 = sin límite)"
+    for clave in _PIPELINE_ECONOMIA_FLOAT:
+        a = ajustes_catalogo.por_clave(clave)
+        assert a is not None, f"falta la clave {clave}"
+        assert a.tipo == "float", f"{clave} debe ser float"
+        assert a.grupo == "pipeline_topes", f"{clave} debe estar en grupo pipeline_topes"
+        assert a.minimo == 0, f"{clave} debe tener minimo 0 (0 = sin límite)"
     en_grupo = {a.clave for a in ajustes_catalogo.catalogo() if a.grupo == "pipeline_topes"}
-    assert en_grupo == _PIPELINE_TOPES_INT | _PIPELINE_ECONOMIA_INT
+    assert en_grupo == _PIPELINE_TOPES_INT | _PIPELINE_ECONOMIA_INT | _PIPELINE_ECONOMIA_FLOAT
 
 
 def test_generacion_pausada_es_kill_switch_de_maquina(store):

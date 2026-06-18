@@ -49,9 +49,9 @@ def _snapshot_cola_sano() -> dict:
 def _presupuesto_sano() -> dict:
     return {
         "nivel": presupuesto_ia.NIVEL_NORMAL, "pausada": False,
-        "presupuesto_tokens_dia": 0, "margen_manual_pct": 20,
-        "gastado": {"tokens": 0}, "restante_tokens": None, "pct_usado": None,
-        "dia": "2026-01-01",
+        "presupuesto_tokens_dia": 0, "presupuesto_usd_dia": 0.0, "margen_manual_pct": 20,
+        "gastado": {"tokens": 0, "coste_usd": 0.0}, "restante_tokens": None,
+        "pct_usado": None, "pct_usado_usd": None, "dia": "2026-01-01",
     }
 
 

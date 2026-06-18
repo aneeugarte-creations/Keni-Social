@@ -8,6 +8,7 @@ from ._config_comun import (
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
+    ENV_PRESUPUESTO_USD_DIA,
     ENV_PROMPT_AVISO_CHARS,
     ENV_PROMPT_MAX_CHARS,
     ENV_WORKER_EXTERNO,
@@ -16,6 +17,7 @@ from ._config_comun import (
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
+    PRESUPUESTO_USD_DIA_DEF,
     PROMPT_AVISO_CHARS_DEF,
     PROMPT_MAX_CHARS_DEF,
     WORKER_SONDEO_SEGUNDOS_DEF,
@@ -55,6 +57,24 @@ def presupuesto_tokens_dia() -> int:
     limite (el corte automatico queda apagado; el kill switch manual sigue funcionando).
     """
     return _entero(ENV_PRESUPUESTO_TOKENS_DIA, PRESUPUESTO_TOKENS_DIA_DEF, minimo=0)
+
+
+def presupuesto_usd_dia() -> float:
+    """Presupuesto DIARIO de coste en USD de generacion (`KENI_PRESUPUESTO_USD_DIA`, def 0).
+
+    Suma de `coste_usd` (ya calculado por job con tarifas correctas) de todas las generaciones
+    cerradas en el dia UTC. `0` = SIN limite (corte por USD apagado; el corte por tokens y el
+    kill switch manual siguen). Mejor proxy del gasto real que el conteo de tokens: pondera
+    input/output/cache por su tarifa en vez de sumarlos con peso igual.
+    """
+    crudo = _crudo(ENV_PRESUPUESTO_USD_DIA)
+    if not crudo:
+        return PRESUPUESTO_USD_DIA_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return PRESUPUESTO_USD_DIA_DEF
+    return max(0.0, valor)
 
 
 def presupuesto_margen_manual_pct() -> int:

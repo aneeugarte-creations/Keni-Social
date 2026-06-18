@@ -219,6 +219,7 @@ from ._config_comun import (  # noqa: F401
     ENV_PROMPT_MAX_CHARS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
+    ENV_PRESUPUESTO_USD_DIA,
     ENV_PUBLICAR_REAL,
     ENV_VERIFICACION_EN_CURSO_TTL_MIN,
     ENV_VERIFICACION_FUENTE_ESFUERZO,
@@ -290,6 +291,7 @@ from ._config_comun import (  # noqa: F401
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
+    PRESUPUESTO_USD_DIA_DEF,
     MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
     MEDIA_GC_INTERVALO_HORAS_DEF,
     METRICAS_HISTORICO_RETENCION_DIAS_DEF,
@@ -396,6 +398,7 @@ from .config_jobs import (  # noqa: F401
     max_jobs,
     presupuesto_margen_manual_pct,
     presupuesto_tokens_dia,
+    presupuesto_usd_dia,
     worker_externo,
     worker_sondeo_segundos,
 )
