@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
@@ -60,6 +61,7 @@ const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
 export default function Contexto() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
+  const { marcaActiva } = useMarcaActiva();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const param = searchParams.get("proceso");
@@ -132,6 +134,7 @@ export default function Contexto() {
                   : undefined
             }
             esAdmin={esAdmin}
+            marcaActiva={marcaActiva}
           />
         </div>
 

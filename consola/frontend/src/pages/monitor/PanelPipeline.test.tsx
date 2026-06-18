@@ -45,6 +45,9 @@ vi.mock("@/lib/api", () => ({
           ajustes: [
             aj("KENI_MAQUINA", "Máquina"),
             aj("KENI_INVESTIGACION", "Investigación"),
+            // Maestro de proceso POR MARCA (lo emite `_ajustes_por_marca`): aquí en OFF, distinto
+            // del global (ON), para comprobar que ControlesMaquina lee el de la marca activa.
+            aj("KENI_INVESTIGACION::nacion-gamer", "Nación Gamer · Investigación", false),
             aj("KENI_PIPELINE_RECOLECTAR", "Recolectar"),
             aj("KENI_PIPELINE_VERIFICAR", "Verificar"),
             aj("KENI_PRODUCCION", "Producción"),
@@ -118,6 +121,26 @@ describe("PanelPipeline · toggles independientes", () => {
     renderPanel();
     expect(
       screen.queryByRole("switch", { name: /Investigación \(switch de la fase/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("con una marca activa concreta, el maestro controla esa marca (::marca), no el global", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ControlesMaquina claveMaestro={MAESTRO_INVESTIGACION} marcaActiva="nacion-gamer" />
+      </QueryClientProvider>,
+    );
+    // El maestro mostrado es el de la marca (`KENI_INVESTIGACION::nacion-gamer`, etiqueta «Nación
+    // Gamer · Investigación»), y refleja SU estado (OFF en el mock), no el global (ON).
+    const sw = await screen.findByRole("switch", {
+      name: /Nación Gamer · Investigación \(maestro del proceso/,
+    });
+    expect(sw).toBeInTheDocument();
+    expect(sw).not.toBeChecked();
+    // El maestro GLOBAL ya no se surfacea cuando hay marca concreta.
+    expect(
+      screen.queryByRole("switch", { name: /^Investigación \(maestro del proceso/ }),
     ).not.toBeInTheDocument();
   });
 

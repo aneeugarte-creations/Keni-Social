@@ -219,10 +219,15 @@ export function FilaFasePipeline({
 export function ControlesMaquina({
   claveMaestro,
   esAdmin = true,
+  marcaActiva = null,
 }: {
   /** Maestro VIRTUAL del proceso activo (`KENI_INVESTIGACION`/`KENI_PRODUCCION`). */
   claveMaestro?: string;
   esAdmin?: boolean;
+  /** Marca activa del workspace. Con una marca CONCRETA, el maestro lee/escribe
+   *  `claveMaestro::marca` (el backend hace fan-out a las etapas de esa marca); con `null`
+   *  ("Todas"), el maestro GLOBAL. Así el on/off del proceso aplica a la marca en la que trabajas. */
+  marcaActiva?: string | null;
 }) {
   const { data } = useQuery({
     queryKey: CLAVE_AJUSTES,
@@ -236,7 +241,9 @@ export function ControlesMaquina({
   }, [data]);
   const maquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
   const maquinaOn = Boolean(maquina?.valor);
-  const maestro = esAdmin && claveMaestro ? porClave.get(claveMaestro) : undefined;
+  // Con marca concreta, el maestro de esa marca (`::marca`); en "Todas", el global.
+  const claveMaestroEf = claveMaestro && marcaActiva ? `${claveMaestro}::${marcaActiva}` : claveMaestro;
+  const maestro = esAdmin && claveMaestroEf ? porClave.get(claveMaestroEf) : undefined;
   const maestroOn = Boolean(maestro?.valor);
   if (!maestro && !maquina) return null;
   return (
