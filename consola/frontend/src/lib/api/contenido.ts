@@ -120,6 +120,7 @@ export const apiPublicacion = {
     // Título OPCIONAL: solo se manda si el equipo lo dio; si no, el backend lo deriva.
     if (cuerpo.titulo) form.set("titulo", cuerpo.titulo);
     form.set("marca", cuerpo.marca);
+    if (cuerpo.categoria) form.set("categoria", cuerpo.categoria);
     if (cuerpo.material) form.set("material", cuerpo.material);
     if (cuerpo.url) form.set("url", cuerpo.url);
     if (cuerpo.intencion) form.set("intencion", cuerpo.intencion);

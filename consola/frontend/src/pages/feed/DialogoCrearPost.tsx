@@ -36,6 +36,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -43,6 +50,20 @@ import { cn } from "@/lib/utils";
 import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 
 import { REDES_POR_FORMATO } from "./formato";
+
+// Etiquetas legibles de las categorías del plan (las claves vienen del backend, derivadas de
+// las franjas configuradas). Fallback: la propia clave capitalizada.
+const ETIQUETA_CATEGORIA: Record<string, string> = {
+  mx: "México",
+  internacional: "Internacional",
+  breaking: "Última hora",
+  entretenimiento: "Entretenimiento",
+  evergreen: "Atemporal",
+  deportes: "Deportes",
+};
+function etiquetaCategoria(c: string): string {
+  return ETIQUETA_CATEGORIA[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
+}
 
 // Primer enlace http(s) dentro del texto pegado. Sirve para enrutar a `url` (el backend lee
 // la página) y para avisar al equipo de que lo voy a leer. Heurística deliberadamente simple.
@@ -87,6 +108,10 @@ export function DialogoCrearPost({
   );
 
   const [marca, setMarca] = React.useState("");
+  // Categoría del plan (OBLIGATORIA): sin ella la pieza no casaría con ninguna franja y se
+  // quedaría sin programar tras aprobarse. Las opciones son las categorías CON franja de la
+  // marca efectiva (las que realmente encuentran hueco).
+  const [categoria, setCategoria] = React.useState("");
   // La caja única: nota, enlace o el texto de un doc. La IA lo convierte en post.
   const [texto, setTexto] = React.useState("");
   // Imagen que el equipo trae de fuera (pegada con Cmd+V o arrastrada): la foto del post.
@@ -98,6 +123,13 @@ export function DialogoCrearPost({
   // (acotadas a él): ni pisan lo que el usuario toque ni dejan seleccionado lo invisible.
   const [redesInicializadas, setRedesInicializadas] = React.useState(false);
   const archivoRef = React.useRef<HTMLInputElement>(null);
+
+  // Marca efectiva del alta (la fija activa o la elegida en "Todas") y SUS categorías con franja.
+  const marcaEfectiva = marcaFija ?? marca;
+  const categoriasMarca = React.useMemo(
+    () => opcionesQuery.data?.categorias?.[marcaEfectiva] ?? [],
+    [opcionesQuery.data, marcaEfectiva],
+  );
 
   const url = primeraUrl(texto);
 
@@ -172,12 +204,18 @@ export function DialogoCrearPost({
   React.useEffect(() => {
     if (!abierto) return;
     setMarca(marcaActiva ?? "");
+    setCategoria("");
     setTexto("");
     setRedes(new Set());
     setRedesInicializadas(false);
     setArrastrando(false);
     quitarImagen();
   }, [abierto, marcaActiva, quitarImagen]);
+  // Si la categoría elegida no existe para la marca efectiva (cambió de marca en "Todas"), se
+  // limpia: no se manda una categoría que no casa con ninguna franja de esa marca.
+  React.useEffect(() => {
+    if (categoria && !categoriasMarca.includes(categoria)) setCategoria("");
+  }, [categoriasMarca, categoria]);
   React.useEffect(() => {
     if (!abierto || redesInicializadas || redesCatalogo.length === 0) return;
     const foto = new Set<string>(REDES_POR_FORMATO.foto);
@@ -199,6 +237,7 @@ export function DialogoCrearPost({
       const material = t && t !== url ? t : undefined;
       return api.aportarMaterial({
         marca,
+        categoria,
         // Sin campo de título: el backend lo deriva (titular del enlace, 1ª línea del
         // material o, si solo hay foto, un genérico). Un rótulo menos que rellenar.
         material,
@@ -222,9 +261,11 @@ export function DialogoCrearPost({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Hay algo que aportar si hay texto o una imagen; la marca y al menos una red son obligatorias.
+  // Hay algo que aportar si hay texto o una imagen; marca, CATEGORÍA y al menos una red son
+  // obligatorias (la categoría, para que la pieza encuentre franja y se programe sola).
   const hayPublicacion = texto.trim() !== "" || imagen !== null;
-  const puedeCrear = hayPublicacion && marca !== "" && redes.size > 0 && !crear.isPending;
+  const puedeCrear =
+    hayPublicacion && marca !== "" && categoria !== "" && redes.size > 0 && !crear.isPending;
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => { if (!o) onCerrar(); }}>
@@ -255,6 +296,38 @@ export function DialogoCrearPost({
               />
             </div>
           )}
+
+          {/* Categoría del plan (OBLIGATORIA): a qué franja va la pieza. Sin ella no encontraría
+              hueco y se quedaría sin programar tras aprobarse. Opciones = categorías CON franja
+              de la marca efectiva. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="crear-post-categoria">Categoría</Label>
+            <Select
+              value={categoria}
+              onValueChange={setCategoria}
+              disabled={crear.isPending || categoriasMarca.length === 0}
+            >
+              <SelectTrigger id="crear-post-categoria" className="w-full">
+                <SelectValue
+                  placeholder={
+                    categoriasMarca.length === 0
+                      ? "Sin franjas configuradas para esta marca"
+                      : "Elige una categoría"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {categoriasMarca.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {etiquetaCategoria(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Define la franja del plan; así la pieza se programa sola al aprobarse.
+            </p>
+          </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

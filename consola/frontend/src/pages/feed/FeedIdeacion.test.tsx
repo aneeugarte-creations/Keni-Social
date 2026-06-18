@@ -18,6 +18,8 @@ const OPCIONES = {
     { id: "aprobado", nombre: "Aprobado" },
   ],
   marcas: [{ id: "unotv", nombre: "Uno TV" }],
+  // Categorías con franja por marca: pueblan el dropdown OBLIGATORIO de «Crear post».
+  categorias: { unotv: ["mx", "internacional"] },
 };
 
 const PIEZA = {
@@ -654,6 +656,12 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     fireEvent.change(within(dialogo).getByLabelText("Material"), {
       target: { value: "Una nota cruda del equipo desde la grada" },
     });
+    // Sin categoría el alta está BLOQUEADA: la categoría es obligatoria (para que la pieza
+    // encuentre franja y se programe sola).
+    expect(within(dialogo).getByRole("button", { name: "Crear post" })).toBeDisabled();
+    // Elegir categoría (Radix Select): abrir con clic en el trigger y clicar la opción.
+    fireEvent.click(within(dialogo).getByLabelText("Categoría"));
+    fireEvent.click(screen.getByRole("option", { name: "México" }));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Crear post" }));
     await waitFor(() => {
       const llamada = vi
@@ -667,6 +675,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       expect(cuerpo).toBeInstanceOf(FormData);
       expect(cuerpo.get("material")).toBe("Una nota cruda del equipo desde la grada");
       expect(cuerpo.get("marca")).toBe("unotv");
+      expect(cuerpo.get("categoria")).toBe("mx");
       expect(cuerpo.get("redes")).toBe("x");
     });
     // Al crear, el diálogo se cierra (el feed se refresca por invalidación de su query).

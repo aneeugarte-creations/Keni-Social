@@ -134,6 +134,10 @@ async def aportar(request: Request) -> Response:
         return v.strip()[:_MAX_TEXTO] if isinstance(v, str) else ""
 
     material = _texto("material")
+    # CATEGORÍA del plan (mx/internacional/entretenimiento/evergreen…): el alta «Crear post»
+    # la EXIGE para que la pieza case con una franja y se programe sola tras aprobarse. Texto
+    # libre (mismo dominio que el resto): se persiste tal cual en el contenido padre.
+    categoria = _texto("categoria")
 
     redes_objetivo = _redes_desde_form(form.get("redes"))
     if not redes_objetivo:
@@ -226,6 +230,7 @@ async def aportar(request: Request) -> Response:
         origen=ORIGEN_EQUIPO,
         # El equipo trae la imagen de fuera => tipo "galeria" (foto propia), no IA ni fuente.
         tipo_contenido="galeria",
+        categoria=categoria,
     )
 
     # Una fila por red, con la checklist "pendientes": el auto-copy rellenara `copy`

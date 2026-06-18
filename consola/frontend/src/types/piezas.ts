@@ -73,6 +73,9 @@ export interface OpcionesPiezas {
   marcas: MarcaOpcion[];
   /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
   lineas: LineaEditorialOpcion[];
+  /** Categorías del plan con franja, POR marca (id → categorías). Pueblan el dropdown
+   *  obligatorio de «Crear post» para que la pieza encuentre hueco al programarse. */
+  categorias: Record<string, string[]>;
   /**
    * Gate maestro `KENI_PUBLICAR_REAL`. Si es `false`, las piezas programadas NO salen
    * solas (el programador opera en dry-run): el SPA avisa cuando hay programadas en cola.

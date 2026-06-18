@@ -164,6 +164,26 @@ async def opciones(request: Request) -> Response:
         {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
         for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
     ]
+    # CATEGORÍAS del plan POR MARCA: las que tienen FRANJA configurada (las que SÍ encuentran
+    # hueco al programar). Las usa el alta «Crear post» para OBLIGAR a elegir una: una pieza
+    # manual sin categoría no casa con ninguna franja (todas la llevan) y se quedaría sin
+    # programar. Las franjas globales (marca='') aplican a todas las marcas.
+    franjas = repos.listar_franjas()
+    cats_globales = {
+        (f.get("categoria") or "").strip()
+        for f in franjas
+        if not (f.get("marca") or "").strip() and (f.get("categoria") or "").strip()
+    }
+    cats_por_marca: dict[str, set[str]] = {}
+    for f in franjas:
+        cat = (f.get("categoria") or "").strip()
+        m = (f.get("marca") or "").strip()
+        if cat and m:
+            cats_por_marca.setdefault(m, set()).add(cat)
+    categorias = {
+        m.id: sorted(cats_por_marca.get(m.id, set()) | cats_globales)
+        for m in marcas.catalogo()
+    }
     from ... import config
 
     return JSONResponse(
@@ -182,6 +202,8 @@ async def opciones(request: Request) -> Response:
                 for m in marcas.catalogo()
             ],
             "lineas": lineas,
+            # Categorías del plan con franja, por marca (para el dropdown obligatorio de «Crear post»).
+            "categorias": categorias,
             # Gate maestro de pieza real (KENI_PUBLICAR_REAL). OFF => las piezas
             # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.
             "publicar_real": config.publicar_real(),

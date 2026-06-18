@@ -22,7 +22,12 @@ def _crear(cliente, **campos):
 
 def test_opciones(cliente):
     datos = cliente.get("/api/piezas/opciones").json()
-    assert {"redes", "estados", "marcas"} <= set(datos)
+    assert {"redes", "estados", "marcas", "categorias"} <= set(datos)
+    # `categorias`: mapa marca -> categorías con franja (pueblan el dropdown obligatorio de
+    # «Crear post»). Sin franjas configuradas en el entorno de test el mapa puede ir vacío por
+    # marca, pero la forma (dict de listas) es estable.
+    assert isinstance(datos["categorias"], dict)
+    assert all(isinstance(v, list) for v in datos["categorias"].values())
     # redes en orden fijo con limite
     ids = [r["id"] for r in datos["redes"]]
     assert ids == ["x", "instagram", "facebook", "tiktok", "youtube"]

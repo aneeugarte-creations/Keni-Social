@@ -389,6 +389,19 @@ def test_aportar_crea_con_origen_equipo(entorno):
     assert r.json()["copy_en_proceso"] is True
 
 
+def test_aportar_persiste_la_categoria_del_plan(entorno):
+    """«Crear post» manda la categoría (obligatoria en la UI) y se guarda en el contenido padre:
+    así la pieza casa con su franja y se programa sola al aprobarse (sin categoría no habría hueco)."""
+    c = _cli()
+    r = c.post(
+        "/api/publicaciones/aportar",
+        data={"marca": "unotv", "material": "Nota del equipo.", "categoria": "mx", "redes": "x"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["categoria"] == "mx"
+
+
 def test_aportar_exige_marca(entorno):
     c = _cli()
     # Sin marca: la puerta creativa la EXIGE (sin voz no hay auto-generacion).

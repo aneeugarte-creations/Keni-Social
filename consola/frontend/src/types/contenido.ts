@@ -401,6 +401,9 @@ export interface CuerpoAportarMaterial {
   titulo?: string;
   /** Marca obligatoria (id canónico). */
   marca: string;
+  /** Categoría del plan (mx/internacional/entretenimiento/evergreen…): OBLIGATORIA en «Crear
+   *  post» para que la pieza case con una franja y se programe sola tras aprobarse. */
+  categoria?: string;
   /** Nota / idea / texto crudo -> descripción del tema. */
   material?: string;
   /** Enlace de la fuente del material -> `imagen_fuente` de cada red. */
