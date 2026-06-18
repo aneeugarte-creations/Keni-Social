@@ -30,13 +30,15 @@ _log = logging.getLogger("keni_consola.sugerir_hashtags")
 
 PROMPT_SUGERIR = "prompt/sugerir-hashtags"
 
-# Estados de pieza donde la sugerencia APLICA. No solo `borrador`: las piezas que nacen COMPLETAS
-# (video/carrusel de clips/presidencia traen ya su media) pasan SOLAS a `en_revision` tras pocos
-# minutos de reposo, antes de que el job async de hashtags termine; si solo cubriéramos borradores,
-# esas piezas se quedarían sin sugerencia para siempre. La sugerencia es no destructiva (gris, la
-# acepta un humano) y el feed ya pide «Faltan hashtags» en revisión, así que cubrir `en_revision`
-# cierra esa carrera sin tocar el avance. Fuente única (la comparte la etapa del barrido).
-ESTADOS_SUGERIBLES = ("borrador", "en_revision")
+# Estados de pieza donde la sugerencia APLICA: TODO lo editable (todo menos `publicado`), el mismo
+# rango que el editor, que muestra la sugerencia en gris hasta publicar. No basta con `borrador`:
+# una pieza que nace COMPLETA (carrusel/video con su media de fuente: macro-evento, portal, clips)
+# avanza SOLA por revisión y hasta `programado` antes de que el job async de hashtags termine; si
+# solo cubriéramos borradores se quedaría sin sugerencia y habría que teclear los hashtags a mano.
+# La sugerencia es no destructiva (gris, la acepta un humano) y `aplicar_sugerencia` reconfirma el
+# estado al escribir, así que una pieza que se publicó entre medias queda fuera. Fuente única (la
+# comparte la etapa del barrido).
+ESTADOS_SUGERIBLES = ("borrador", "en_revision", "programado")
 
 # Un hashtag en el caption: MISMO patrón que `piezas._falta_hashtags` (saber si ya hay alguno).
 _PAT_HASHTAG = re.compile(r"#\w+", re.UNICODE)

@@ -122,27 +122,26 @@ def test_seleccion_salta_si_ya_tiene_hashtags_o_sugerencia():
     assert contenidos_para_sugerir_hashtags(con_sugerencia) == []
 
 
-def test_seleccion_incluye_piezas_en_revision():
-    # Las piezas que avanzaron solas a revisión (video/carrusel completos) también se sugieren:
-    # si solo miráramos borradores, se quedarían sin hashtags para siempre.
-    en_revision = [_twin("c1", "instagram", "sin hashtags", estado="en_revision")]
-    elegidos = contenidos_para_sugerir_hashtags(en_revision)
-    assert [pid for pid, _ in elegidos] == ["c1"]
-    # Borrador + en_revision del mismo contenido caen en el mismo grupo.
+def test_seleccion_incluye_todo_lo_editable():
+    # La sugerencia se ofrece en TODO estado editable (borrador, en revisión, programado): una
+    # pieza que se completa fuera de `borrador` —el caso real que llevó a teclear los hashtags a
+    # mano— también debe recibirla. Solo `publicado` queda fuera.
+    for estado in ("borrador", "en_revision", "programado"):
+        pubs = [_twin("c1", "instagram", "sin hashtags", estado=estado)]
+        assert [pid for pid, _ in contenidos_para_sugerir_hashtags(pubs)] == ["c1"], estado
+    # Gemelas en estados editables distintos caen en el mismo grupo del contenido.
     mixto = [
         _twin("c2", "instagram", "sin hashtags", estado="en_revision"),
-        _twin("c2", "facebook", "sin hashtags", estado="borrador"),
+        _twin("c2", "facebook", "sin hashtags", estado="programado"),
+        _twin("c2", "x", "sin hashtags", estado="borrador"),
     ]
     pid, twins = contenidos_para_sugerir_hashtags(mixto)[0]
-    assert pid == "c2" and {t["red"] for t in twins} == {"instagram", "facebook"}
+    assert pid == "c2" and {t["red"] for t in twins} == {"instagram", "facebook", "x"}
 
 
-def test_seleccion_excluye_estados_no_sugeribles():
-    # Programado/publicado quedan fuera: ya no se tocan.
-    fuera = [
-        _twin("c1", "instagram", "sin hashtags", estado="programado"),
-        _twin("c2", "x", "sin hashtags", estado="publicado"),
-    ]
+def test_seleccion_excluye_publicado():
+    # Lo ya PUBLICADO no se toca (no se puede cambiar el copy que ya salió).
+    fuera = [_twin("c1", "instagram", "sin hashtags", estado="publicado")]
     assert contenidos_para_sugerir_hashtags(fuera) == []
 
 
@@ -170,17 +169,27 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     assert listas[0] == listas[1] == guardados
 
 
-def test_aplicar_sugerencia_cubre_piezas_en_revision(entorno):
-    # Una pieza que ya avanzó sola a revisión también recibe la sugerencia (cierra la carrera de
-    # video/carrusel: completos de nacimiento, avanzan antes de que el job async termine).
-    pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
-    movida = repos.transicionar_estado_pieza(ids[0], "borrador", "en_revision")
-    assert movida is not None
+def test_aplicar_sugerencia_cubre_estados_editables(entorno):
+    # Una pieza que se completa fuera de `borrador` (en revisión o ya programada) también recibe la
+    # sugerencia: era el caso real (carrusel completado a mano) donde la opción gris no aparecía.
+    pid, ids = _crear_contenido(["instagram", "x", "facebook"], "Cuerpo del post sin hashtags")
+    assert repos.transicionar_estado_pieza(ids[1], "borrador", "en_revision") is not None
+    assert repos.transicionar_estado_pieza(ids[2], "borrador", "en_revision") is not None
+    assert repos.transicionar_estado_pieza(ids[2], "en_revision", "programado") is not None
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional", "#mexico"])
-    assert guardados  # la pieza en revisión NO bloquea la aplicación
-    # Ambas piezas (la en revisión y la borrador) llevan la misma lista.
+    assert guardados  # ni revisión ni programado bloquean la aplicación
+    # Las tres piezas (borrador + en revisión + programado) llevan la MISMA lista.
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
-    assert listas[0] == listas[1] == guardados
+    assert listas[0] == listas[1] == listas[2] == guardados
+
+
+def test_aplicar_sugerencia_ignora_publicado(entorno):
+    # Lo ya PUBLICADO queda fuera: no se reescribe su sugerencia.
+    pid, ids = _crear_contenido(["instagram"], "Cuerpo del post sin hashtags")
+    repos.transicionar_estado_pieza(ids[0], "borrador", "en_revision")
+    repos.transicionar_estado_pieza(ids[0], "en_revision", "programado")
+    repos.transicionar_estado_pieza(ids[0], "programado", "publicado")
+    assert dom_sh.aplicar_sugerencia(pid, ["#mexico"]) == []
 
 
 def test_no_sugiere_si_el_contenido_ya_tiene_hashtags(entorno):
