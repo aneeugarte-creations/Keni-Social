@@ -256,8 +256,10 @@ function SeccionCambiarPassword() {
 const CLAVE_PASSKEYS = ["sesion", "mfa-credenciales"] as const;
 
 /**
- * Gestión del segundo factor con LLAVES DE ACCESO (passkeys). Solo se muestra si el servidor
- * tiene el flag `KENI_CONSOLA_MFA` ON (`me.usuario.mfa_habilitado`). Flujo:
+ * Gestión del segundo factor con LLAVES DE ACCESO (passkeys). Se muestra siempre que la
+ * maquinaria de MFA esté activa en el servidor (clave de firma presente,
+ * `me.usuario.mfa_habilitado`); es opt-in por usuario: opcional para editores y obligatorio
+ * solo para admins. Flujo:
  *   - Registrar una passkey nueva: pide opciones -> `startRegistration` (Face ID / huella /
  *     llave) -> el backend la guarda. Al registrar la PRIMERA, devuelve los códigos de
  *     recuperación (se muestran una sola vez).
@@ -355,6 +357,16 @@ function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir:
               registrar la primera llave.
             </p>
           </div>
+        )}
+
+        {/* Invitación opt-in: usuario sin llave y no obligado (editor). Enmarca el segundo
+            factor como opcional y recomendable. */}
+        {!activo && !debeInscribir && (
+          <p className="text-sm text-muted-foreground">
+            Añade verificación en dos pasos a tu cuenta (opcional pero recomendado). Usa Face ID,
+            huella o una llave de seguridad; solo tú podrás entrar aunque alguien tenga tu
+            contraseña.
+          </p>
         )}
 
         {/* Códigos de recuperación: solo tras registrar la PRIMERA llave. */}

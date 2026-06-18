@@ -130,11 +130,13 @@ def origenes_permitidos() -> frozenset[str]:
 
 
 def mfa_habilitado() -> bool:
-    """¿Esta activo el segundo factor (passkeys/WebAuthn)? (`KENI_CONSOLA_MFA`, def OFF).
+    """¿El segundo factor es OBLIGATORIO PARA TODOS? (`KENI_CONSOLA_MFA`, def OFF).
 
-    Wrapper sobre `config.mfa_habilitado()` (fuente unica). Con el flag OFF el login NO pide
-    nunca un segundo factor: comportamiento INTACTO. Lo consultan `api/auth` (elevacion del
-    login y enrolamiento) y `api/auth.me` (para que la UI muestre o no la seccion de MFA).
+    Wrapper sobre `config.mfa_habilitado()` (fuente unica). Matiz tras el rediseño de opt-in:
+    este flag YA NO decide si el MFA "existe" (eso lo decide la clave; ver
+    `mfa_maquinaria_activa`), sino si se FUERZA a TODO el equipo a tener passkey. Con el flag
+    OFF el MFA sigue disponible como OPT-IN por usuario (y obligatorio para admins por
+    `mfa_obligatorio_admin`); con el flag ON ademas se obliga a los editores.
     """
     return config.mfa_habilitado()
 
@@ -162,15 +164,14 @@ def mfa_key_presente() -> bool:
 def mfa_maquinaria_activa() -> bool:
     """¿Está OPERATIVA la maquinaria MFA (ceremonias + enrolamiento)? Fuente única de la UI/API.
 
-    True si el flag global está ON, O si el MFA de admin es obligatorio Y hay clave de firma.
-    Con esto, los endpoints de enrolamiento y `me.mfa_habilitado` reflejan la disponibilidad
-    EFECTIVA: aunque el flag global esté OFF, si los admins deben tener passkey (y hay clave),
-    la sección de "Llaves de acceso" debe estar disponible para que puedan inscribirse. Sin
-    clave NO está activa (no se puede firmar nada): no se fuerza ni se ofrece enrolar a ciegas.
+    El MFA es OPT-IN POR USUARIO: la maquinaria está activa cuando hay clave de firma
+    (`KENI_CONSOLA_MFA_KEY`), con eso CUALQUIER usuario puede inscribir su passkey desde "Mi
+    cuenta" y, si la tiene, su login la exige. El flag global solo añade obligación para
+    todos (no cambia la disponibilidad). Sin clave NO está activa (no se puede firmar nada):
+    ni se ofrece enrolar ni se eleva el login. Lo consultan los endpoints de enrolamiento, la
+    elevación del login y `me.mfa_habilitado` (visibilidad de la sección de llaves).
     """
-    if config.mfa_habilitado():
-        return True
-    return config.mfa_obligatorio_admin() and config.mfa_key_presente()
+    return config.mfa_habilitado() or config.mfa_key_presente()
 
 
 def generar_token() -> str:

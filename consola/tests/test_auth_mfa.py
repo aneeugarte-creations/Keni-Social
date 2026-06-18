@@ -98,15 +98,16 @@ def _registrar_passkey_via_api(c: TestClient, monkeypatch, *, credential_id="cre
 
 
 # --------------------------------------------------------------------------- #
-# 1) Flag OFF: el login es IDENTICO a hoy (NUNCA pide segundo factor)          #
+# 1) Sin clave (maquinaria OFF): el login es IDENTICO a hoy y no hay enrolar    #
 # --------------------------------------------------------------------------- #
 
 
-def test_flag_off_login_no_pide_mfa_aunque_usuario_tenga_passkey(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+def test_sin_clave_login_no_pide_mfa_aunque_usuario_tenga_passkey(entorno, monkeypatch):
+    """SIN clave de firma la maquinaria esta OFF: aunque una cuenta tenga passkey en BD, el
+    login entra directo (no se puede correr la ceremonia). Es el kill-switch del MFA."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     u = auth.crear_usuario("ana", CLAVE, "editor")
-    # Forzamos una passkey en BD (mfa_activo) aunque el flag este OFF.
     _credencial_falsa(u["id"])
     assert auth.obtener_usuario_por_id(u["id"])["mfa_activo"] is True
 
@@ -114,21 +115,51 @@ def test_flag_off_login_no_pide_mfa_aunque_usuario_tenga_passkey(entorno, monkey
     r = _login(c, "ana", CLAVE)
     assert r.status_code == 200
     cuerpo = r.json()
-    # Con el flag OFF, el login devuelve la sesion directamente (sin mfa_required).
     assert "mfa_required" not in cuerpo
     assert cuerpo["usuario"]["usuario"] == "ana"
     assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
 
 
-def test_flag_off_no_expone_endpoints_registro(entorno, monkeypatch):
+def test_sin_clave_no_expone_endpoints_registro(entorno, monkeypatch):
+    """SIN clave, los endpoints de enrolamiento rehusan (404): no se puede firmar el challenge."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
+    assert c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# 1b) Opt-in por usuario: con CLAVE, cualquiera activa su MFA y su login lo exige #
+# --------------------------------------------------------------------------- #
+
+
+def test_opt_in_editor_con_clave_puede_enrolar_sin_flag_global(entorno, monkeypatch):
+    """Con clave presente y el flag global OFF, un EDITOR puede inscribir su passkey (opt-in)."""
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    # registro/opciones rehusa (404) con el flag OFF.
-    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
-    assert c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).status_code == 404
+    # El enrolamiento esta DISPONIBLE para el editor (no esta forzado, pero puede activarlo).
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 200
+    assert c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).status_code == 200
+
+
+def test_opt_in_editor_con_passkey_su_login_eleva_sin_flag_global(entorno, monkeypatch):
+    """Un editor que YA activo su MFA (tiene passkey) ve su login EXIGIR el segundo factor,
+    aunque el flag global este OFF. La passkey ES la opcion de opt-in."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200 and r.json() == {"mfa_required": True}
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
 
 
 # --------------------------------------------------------------------------- #
@@ -471,24 +502,33 @@ def test_admin_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatch):
     assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
 
 
-def test_admin_obligatorio_apagado_es_valvula_de_escape(entorno, monkeypatch):
-    """`KENI_CONSOLA_MFA_ADMIN=0` apaga el forzado: admin con passkey entra SIN elevar (flag
-    global OFF). Es la valvula de escape operativa."""
+def test_admin_obligatorio_apagado_no_fuerza_pero_respeta_opt_in(entorno, monkeypatch):
+    """`KENI_CONSOLA_MFA_ADMIN=0` quita la OBLIGACION: un admin SIN passkey entra sin gracia ni
+    `debe_inscribir_mfa`. Pero el opt-in se respeta: un admin que SI activo su passkey sigue
+    pasando el segundo factor (la passkey manda). El kill-switch real es quitar la clave."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     monkeypatch.setenv("KENI_CONSOLA_MFA_ADMIN", "0")
-    jefe = auth.crear_usuario("jefe", CLAVE, "admin")
-    _credencial_falsa(jefe["id"])
+    sin_llave = auth.crear_usuario("jefe", CLAVE, "admin")
+    assert sin_llave is not None
+    con_llave = auth.crear_usuario("jefa", CLAVE, "admin")
+    _credencial_falsa(con_llave["id"])
 
-    c = _cli()
-    r = _login(c, "jefe", CLAVE)
-    assert r.status_code == 200 and "mfa_required" not in r.json()
-    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+    c1 = _cli()
+    r1 = _login(c1, "jefe", CLAVE)
+    assert r1.status_code == 200 and "mfa_required" not in r1.json()
+    assert r1.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+    assert c1.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+
+    c2 = _cli()
+    r2 = _login(c2, "jefa", CLAVE)
+    assert r2.status_code == 200 and r2.json() == {"mfa_required": True}
 
 
-def test_editor_no_le_afecta_el_mfa_de_admin(entorno, monkeypatch):
-    """El MFA obligatorio de admin NO toca a editores: con el flag global OFF entran directo y
-    el enrolamiento sigue cerrado (404), aunque haya clave."""
+def test_editor_no_obligado_pero_puede_optar(entorno, monkeypatch):
+    """El MFA obligatorio de admin NO fuerza a editores: con el flag global OFF entran directo y
+    sin `debe_inscribir_mfa`. PERO, con clave presente, el enrolamiento esta disponible para que
+    el editor lo active por su cuenta (opt-in)."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     auth.crear_usuario("ana", CLAVE, "editor")
@@ -499,8 +539,8 @@ def test_editor_no_le_afecta_el_mfa_de_admin(entorno, monkeypatch):
     cuerpo = r.json()
     assert "mfa_required" not in cuerpo
     assert cuerpo["usuario"].get("debe_inscribir_mfa") in (None, False)
-    # Enrolamiento cerrado para el editor con flag global OFF.
-    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
+    # No esta FORZADO, pero PUEDE activarlo (opt-in disponible con clave).
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 200
     assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False
 
 

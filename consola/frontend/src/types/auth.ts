@@ -281,4 +281,6 @@ export interface CuerpoActualizarUsuario {
   manager_id?: string;
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
+  /** Resetea la verificación en dos pasos: borra todas las passkeys y códigos de recuperación. */
+  mfa_reset?: boolean;
 }

@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, ShieldOff, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -131,6 +132,29 @@ export function DialogoMiembro({
     onSuccess: () => toast.success("Contraseña restablecida"),
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  // Reset de la verificación en dos pasos: borra todas las passkeys y códigos de
+  // recuperación del usuario (rescate cuando pierde sus dispositivos y queda fuera).
+  const resetearMfa = useMutation({
+    mutationFn: () => api.actualizarUsuario(usuario!.id, { mfa_reset: true }),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Verificación en dos pasos restablecida");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const pedirResetMfa = async () => {
+    if (
+      await confirmar({
+        titulo: "Resetear verificación en dos pasos",
+        mensaje: `Se eliminarán todas las llaves de acceso y los códigos de recuperación de ${nombreVisible(usuario!)}. Úsalo cuando la persona pierde sus dispositivos y queda fuera de su cuenta. Tendrá que registrar una llave nueva.`,
+        destructivo: true,
+        textoConfirmar: "Resetear",
+      })
+    )
+      resetearMfa.mutate();
+  };
 
   const [password, setPassword] = React.useState("");
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
@@ -376,6 +400,20 @@ export function DialogoMiembro({
                 Resetear
               </Button>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={resetearMfa.isPending}
+              onClick={pedirResetMfa}
+            >
+              {resetearMfa.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldOff className="h-4 w-4" />
+              )}
+              Resetear verificación en dos pasos
+            </Button>
 
             {confirmarBorrado ? (
               <div className="flex items-center justify-between gap-2">

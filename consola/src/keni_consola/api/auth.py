@@ -369,13 +369,12 @@ def _mfa_admin_aplica(autenticado: dict) -> bool:
 def _mfa_enrolamiento_disponible(usuario: dict | None) -> bool:
     """¿Puede ESTE usuario (de sesion) usar los endpoints de enrolamiento de passkeys?
 
-    True si el flag global esta ON (cualquiera puede), o si a este usuario le aplica el MFA
-    obligatorio de admin (para que el admin pueda inscribirse aunque el flag global este OFF).
-    Para un editor con el flag OFF -> False (404), comportamiento intacto.
+    MFA es OPT-IN POR USUARIO: con la maquinaria activa (hay clave de firma) CUALQUIER
+    usuario con sesion puede inscribir una passkey para SU cuenta. Sin maquinaria (sin
+    clave) no se puede correr la ceremonia -> 404. La obligacion (admin / flag global) solo
+    decide a QUIEN se le FUERZA, no quien PUEDE activarlo.
     """
-    if seguridad.mfa_habilitado():
-        return True
-    return usuario is not None and _mfa_admin_aplica(usuario)
+    return usuario is not None and seguridad.mfa_maquinaria_activa()
 
 
 async def login(request: Request) -> Response:
@@ -407,17 +406,16 @@ async def login(request: Request) -> Response:
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
     # ¿Hay que EXIGIR el segundo factor a este usuario?
-    #   - FLAG GLOBAL ON (`KENI_CONSOLA_MFA`) + tiene passkey -> ceremonia (comportamiento de hoy).
-    #   - MFA OBLIGATORIO DE ADMIN (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave de firma: un
-    #     admin queda sujeto al segundo factor AUNQUE el flag global este OFF (riesgo
-    #     account-takeover en canales de marca). Si ya tiene passkey, se le EXIGE; si aun no,
-    #     entra en GRACIA (sesion marcada para inscribir, sin bloquear). La condicion de la
-    #     clave es la red anti-lockout: sin clave no se fuerza nada (entra como hoy).
-    # Editores con el flag global OFF: ambas ramas se saltan -> sesion directa, INTACTO.
+    #   - OPT-IN POR USUARIO: si la maquinaria esta activa (hay clave) y el usuario YA tiene
+    #     passkey -> ceremonia. Da igual su rol o el flag global: quien activo su MFA, lo usa.
+    #   - MFA OBLIGATORIO DE ADMIN (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave: un admin SIN
+    #     passkey entra en GRACIA (sesion marcada para inscribir, sin bloquear el login). La
+    #     condicion de la clave es la red anti-lockout: sin clave no se fuerza ni se eleva nada.
+    # Sin maquinaria (sin clave): ambas ramas se saltan -> sesion directa, INTACTO.
     mfa_activo = bool(autenticado.get("mfa_activo"))
     admin_aplica = _mfa_admin_aplica(autenticado)
 
-    if mfa_activo and (seguridad.mfa_habilitado() or admin_aplica):
+    if mfa_activo and seguridad.mfa_maquinaria_activa():
         return _elevar_a_segundo_factor(autenticado)
 
     if admin_aplica and not mfa_activo:
