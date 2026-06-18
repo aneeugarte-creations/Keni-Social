@@ -197,6 +197,24 @@ def test_economia_contrato_global_desde_ledger(entorno):
     assert por_proceso["investigacion"]["total"]["items"] == 1
 
 
+def test_economia_filtra_por_marca(entorno):
+    """`marca` acota el desglose a sus filas; "" agrega todas; marca invalida -> 400."""
+    hoy = generaciones.ahora_iso()[:10]
+    repos.registrar_gasto_ia("mk1", dia=hoy, proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=100, tokens_out=40, coste_usd=0.01)
+    repos.registrar_gasto_ia("mk2", dia=hoy, proceso="produccion", tipo="copy",
+                             marca="claro-sports", tokens_in=10, tokens_out=5, coste_usd=0.002)
+
+    solo = _cli_token().get("/api/actividad/economia?marca=unotv").json()
+    assert solo["por_proceso"]["produccion"]["total"]["items"] == 1
+    assert solo["por_proceso"]["produccion"]["total"]["tokens"] == 140
+
+    todas = _cli_token().get("/api/actividad/economia").json()
+    assert todas["por_proceso"]["produccion"]["total"]["items"] == 2
+
+    assert _cli_token().get("/api/actividad/economia?marca=no-existe").status_code == 400
+
+
 def test_economia_clampa_dias_al_maximo(entorno):
     """`dias` se clampa al maximo razonable; default 7 cuando falta/invalido."""
     assert _cli_token().get("/api/actividad/economia?dias=9999").json()["dias"] == 31

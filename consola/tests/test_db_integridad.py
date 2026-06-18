@@ -533,3 +533,23 @@ def test_gasto_ia_economia_agrega_por_proceso_dia_y_tipo(pg):
 
     inv = eco["investigacion"]
     assert inv["total"]["items"] == 1 and inv["total"]["tokens"] == 220
+
+
+def test_gasto_ia_economia_filtra_por_marca(pg):
+    """`marca` acota el desglose a sus filas; "" devuelve el AGREGADO de todas."""
+    from keni_consola import repos
+    from keni_consola.tiempo import hoy_utc
+
+    hoy_iso = hoy_utc().isoformat()
+    repos.registrar_gasto_ia("m1", dia=hoy_iso, proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=100, tokens_out=40, coste_usd=0.01)
+    repos.registrar_gasto_ia("m2", dia=hoy_iso, proceso="produccion", tipo="copy",
+                             marca="claro-sports", tokens_in=10, tokens_out=5, coste_usd=0.002)
+
+    solo_unotv = db.gasto_ia_economia_por_proceso(3, marca="unotv")
+    assert solo_unotv["produccion"]["total"] == {
+        "items": 1, "tokens": 140, "coste_usd": pytest.approx(0.01)}
+
+    todas = db.gasto_ia_economia_por_proceso(3)
+    assert todas["produccion"]["total"]["items"] == 2
+    assert todas["produccion"]["total"]["tokens"] == 155

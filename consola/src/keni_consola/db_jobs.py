@@ -633,11 +633,12 @@ def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
     return por_proceso
 
 
-def gasto_ia_economia_por_proceso(dias: int = 7) -> dict[str, dict[str, Any]]:
-    """Desglose economico GLOBAL de los ultimos `dias` (UTC) DESDE el ledger `gasto_ia`.
+def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
+    """Desglose economico de los ultimos `dias` (UTC) DESDE el ledger `gasto_ia`.
 
     Fuente UNICA y autoritativa de la pagina Economia: el mismo ledger que la tarjeta de
-    presupuesto, SIN filtro de marca. Agrupa por `proceso` (investigacion/produccion) y, por
+    presupuesto. `marca` vacia = AGREGADO de todas las marcas; una marca concreta acota el
+    desglose a sus filas. Agrupa por `proceso` (investigacion/produccion) y, por
     cada proceso, devuelve:
       - `total`:   `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
       - `por_dia`: EXACTAMENTE `dias` entradas, de la mas ANTIGUA a la mas reciente, ZERO-FILLED
@@ -668,14 +669,19 @@ def gasto_ia_economia_por_proceso(dias: int = 7) -> dict[str, dict[str, Any]]:
         "investigacion": _acc_nuevo(),
         "produccion": _acc_nuevo(),
     }
+    where = "WHERE dia >= ?"
+    params: tuple[Any, ...] = (corte,)
+    if marca:
+        where += " AND marca = ?"
+        params = (corte, marca)
     con = _conectar()
     try:
         filas = con.execute(
             "SELECT proceso, tipo, dia, COUNT(*) AS items, "
             "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, "
             "COALESCE(SUM(coste_usd), 0) AS coste "
-            "FROM gasto_ia WHERE dia >= ? GROUP BY proceso, tipo, dia",
-            (corte,),
+            f"FROM gasto_ia {where} GROUP BY proceso, tipo, dia",
+            params,
         ).fetchall()
     finally:
         con.close()

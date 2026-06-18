@@ -5,10 +5,11 @@
  * motor (Investigación | Producción): totales (trabajos IA · tokens · coste), la serie de los
  * últimos 7 días y los desgloses por tipo de trabajo y por día.
  *
- * La economía sale de `/api/actividad/economia` (ledger `gasto_ia`, GLOBAL): es la MISMA fuente
- * para los totales, la serie y los desgloses, así que todo cuadra. El switch de marca NO afecta a
- * la economía (es global); solo el presupuesto se gestiona aparte. `?proceso=investigacion|
- * produccion` enfoca a un solo motor (columna a ancho completo).
+ * La economía sale de `/api/actividad/economia` (ledger `gasto_ia`): es la MISMA fuente para los
+ * totales, la serie y los desgloses, así que todo cuadra. Respeta el switch de marca: una marca
+ * activa acota el desglose a sus filas; "todas" muestra el AGREGADO global. El presupuesto y la
+ * parada de emergencia se gestionan aparte (globales). `?proceso=investigacion|produccion` enfoca
+ * a un solo motor (columna a ancho completo).
  */
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -292,11 +293,11 @@ export default function Economia() {
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
-  // Economía por motor (GLOBAL, ledger gasto_ia): totales + serie + desgloses que cuadran. NO
-  // depende de la marca activa.
+  // Economía por motor (ledger gasto_ia): totales + serie + desgloses que cuadran. Respeta el
+  // switch de marca: marca activa acota el desglose; "todas" muestra el AGREGADO global.
   const economia = useQuery({
-    queryKey: ["actividad", "economia", DIAS],
-    queryFn: ({ signal }) => api.economia(DIAS, signal),
+    queryKey: ["actividad", "economia", DIAS, marcaActiva ?? "todas"],
+    queryFn: ({ signal }) => api.economia({ dias: DIAS, marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_SERIE_MS,
   });
 

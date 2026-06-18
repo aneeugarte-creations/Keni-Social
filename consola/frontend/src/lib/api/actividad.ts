@@ -19,11 +19,11 @@ export const apiActividad = {
       { signal },
     ),
 
-  // Economía por motor (GLOBAL, ledger gasto_ia): total + serie por día + por tipo. Cuadra
-  // exacto con la cola; el switch de marca NO la afecta. La consume la página Economía.
-  economia: (dias = 7, signal?: AbortSignal) =>
+  // Economía por motor (ledger gasto_ia): total + serie por día + por tipo. `marca` vacía =
+  // AGREGADO de todas; una marca acota el desglose. La consume la página Economía.
+  economia: (params: { dias?: number; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<EconomiaPorProceso>(
-      `/actividad/economia${query({ dias: String(dias) })}`,
+      `/actividad/economia${query({ dias: String(params.dias ?? 7), marca: params.marca })}`,
       { signal },
     ),
 

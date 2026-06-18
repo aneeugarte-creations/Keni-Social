@@ -115,16 +115,20 @@ _ECONOMIA_DIAS_MAX = 31
 
 
 async def economia(request: Request) -> Response:
-    """GET /api/actividad/economia?dias=: desglose economico GLOBAL por proceso del ledger.
+    """GET /api/actividad/economia?dias=&marca=: desglose economico por proceso del ledger.
 
     Fuente UNICA del desglose de la pagina Economia: el ledger `gasto_ia` (el mismo de la
-    tarjeta de presupuesto), SIN filtro de marca, para que KPIs/series/tablas cuadren. `dias`
-    default 7, minimo 1, clampado a `_ECONOMIA_DIAS_MAX`.
+    tarjeta de presupuesto), para que KPIs/series/tablas cuadren. `marca` ("" = AGREGADO de
+    todas, o un id de marca valido = acota a esa marca). `dias` default 7, minimo 1, clampado a
+    `_ECONOMIA_DIAS_MAX`.
     """
     dias = _entero_query(request.query_params.get("dias"), minimo=1) or 7
     dias = min(dias, _ECONOMIA_DIAS_MAX)
+    marca = (request.query_params.get("marca") or "").strip()
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     return JSONResponse(
-        {"dias": dias, "por_proceso": repos.gasto_ia_economia_por_proceso(dias)}
+        {"dias": dias, "por_proceso": repos.gasto_ia_economia_por_proceso(dias, marca)}
     )
 
 
