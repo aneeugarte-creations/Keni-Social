@@ -36,8 +36,15 @@ log = logging.getLogger("keni_consola.notificaciones_turnos")
 # al icono de campana si no lo conoce; le damos icono propio en `CampanaNotificaciones`.
 TIPO_CAMBIO_TURNO = "cambio_turno"
 
+# Aviso al admin de que una AUSENCIA deja turnos sin cubrir (la otra cara del cruce
+# ausencia<->turno). El front cae al icono de campana si no lo conoce.
+TIPO_AUSENCIA_DESCUBIERTO = "ausencia_descubierto"
+
 # Deep-link a la pestana de cambios/ausencias (el shell de Turnos la abre por `?tab=`).
 ENLACE_CAMBIOS = "/operacion/turnos?tab=cambios-ausencias"
+
+# Deep-link al Calendario: la rejilla donde el coordinador reasigna el turno descubierto.
+ENLACE_CALENDARIO = "/operacion/turnos?tab=calendario"
 
 
 def _ids_admin() -> set[str]:
@@ -60,8 +67,10 @@ def _emitir(
     resumen: str,
     actor: dict[str, Any] | None = None,
     excluir: Iterable[str] = (),
+    tipo: str = TIPO_CAMBIO_TURNO,
+    enlace: str = ENLACE_CAMBIOS,
 ) -> int:
-    """Crea UNA notificacion `cambio_turno` por destinatario unico (salta vacios/excluidos)."""
+    """Crea UNA notificacion por destinatario unico (salta vacios/excluidos)."""
     vistos: set[str] = {x for x in excluir if x}
     creadas = 0
     for uid in destinatarios:
@@ -72,14 +81,14 @@ def _emitir(
             repos.crear_notificacion(
                 usuario_id=uid,
                 marca_id=marca_id,
-                tipo=TIPO_CAMBIO_TURNO,
+                tipo=tipo,
                 actor=actor,
                 resumen=resumen,
-                enlace=ENLACE_CAMBIOS,
+                enlace=enlace,
             )
             creadas += 1
         except Exception:  # noqa: BLE001 -- una noti fallida no frena al resto
-            log.exception("No se pudo crear notificacion de cambio de turno para %s.", uid)
+            log.exception("No se pudo crear notificacion de turno para %s.", uid)
     return creadas
 
 
@@ -166,3 +175,40 @@ def tras_cancelacion(swap: dict[str, Any], actor: dict[str, Any] | None = None) 
         )
     except Exception:  # noqa: BLE001 -- notificar nunca rompe el cancelar
         log.exception("Fallo notificando la cancelación del cambio %s.", swap.get("id"))
+
+
+def tras_ausencia_con_huecos(
+    *,
+    miembro_nombre: str,
+    n_huecos: int,
+    marcas: Iterable[str],
+    actor: dict[str, Any] | None = None,
+) -> None:
+    """Una ausencia deja `n_huecos` turnos de cobertura sin cubrir: avisa a los admin.
+
+    Persiste el aviso en la campana —una por marca afectada— en vez de fiarlo al toast
+    efimero de quien la registro: el coordinador se entera del descubierto in-app y lo
+    resuelve, en vez de toparselo el dia del partido. Al ACTOR que la registro no se le
+    auto-notifica (ya vio el aviso al guardar). Best-effort: jamas tumba el alta de la
+    ausencia.
+    """
+    if n_huecos <= 0:
+        return
+    try:
+        nombre = miembro_nombre or "Un compañero"
+        plural = "" if n_huecos == 1 else "s"
+        resumen = f"La ausencia de {nombre} deja {n_huecos} turno{plural} sin cubrir"
+        admins = _ids_admin()
+        excluir = {_actor_id(actor)}
+        for marca_id in {m or "" for m in marcas}:
+            _emitir(
+                admins,
+                marca_id=marca_id,
+                resumen=resumen,
+                actor=actor,
+                excluir=excluir,
+                tipo=TIPO_AUSENCIA_DESCUBIERTO,
+                enlace=ENLACE_CALENDARIO,
+            )
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe el registrar la ausencia
+        log.exception("Fallo notificando el hueco por ausencia de %s.", miembro_nombre)

@@ -14,6 +14,7 @@ import {
   ArrowLeftRight,
   AtSign,
   Bell,
+  CalendarOff,
   Megaphone,
   MessageSquare,
   ThumbsUp,
@@ -44,6 +45,7 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   pieza: Megaphone,
   asignacion: UserPlus,
   cambio_turno: ArrowLeftRight,
+  ausencia_descubierto: CalendarOff,
 };
 
 /** Ruta del feed: destino base al pulsar una notificación. */

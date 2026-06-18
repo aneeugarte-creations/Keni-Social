@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse, Response
 from ... import repos
 from ... import rota as dominio
 from ..._http_json import leer_json
+from ...dominio import notificaciones_turnos
 from ...estados import (
     TIPOS_AUSENCIA,
 )
@@ -37,17 +38,17 @@ def _puede_gestionar_ausencia(request: Request, miembro_id: str) -> bool:
     return usuario["id"] == miembro_id or _es_admin(request)
 
 
-def _conflictos_cobertura(miembro_id: str, desde: str, hasta: str) -> list[dict[str, str]]:
+def _turnos_descubiertos(miembro_id: str, desde: str, hasta: str) -> list[dict[str, str]]:
     """Turnos de cobertura YA asignados a `miembro_id` dentro de [desde, hasta] (inclusivo).
 
     Es la cara que faltaba del cruce ausencia<->turno: hoy se avisa al ASIGNAR un turno a
-    alguien ausente (`_violacion_ausencia`); esto avisa al REGISTRAR/editar una ausencia
-    sobre alguien que YA tiene turnos. NO bloquea (la ausencia se guarda igual): solo
-    MATERIALIZA el hueco para que el coordinador lo resuelva, en vez de descubrirlo el día
-    del partido. Excluye los descansos (no son jornada => no son hueco de cobertura).
+    alguien ausente (`_violacion_ausencia`); esto detecta los turnos que YA tiene cuando se
+    REGISTRA/edita su ausencia. NO bloquea (la ausencia se guarda igual): solo MATERIALIZA
+    el hueco para que el coordinador lo resuelva, en vez de descubrirlo el día del partido.
+    Excluye los descansos (no son jornada => no son hueco de cobertura).
 
-    Devuelve `[{fecha, franja}]` ordenado por fecha. Acota la consulta a las SEMANAS que
-    toca el rango (normalmente 1-2), no recorre toda la tabla.
+    Cada turno como `{fecha, franja, marca}`, ordenado por fecha. Acota la consulta a las
+    SEMANAS que toca el rango (normalmente 1-2), no recorre toda la tabla.
     """
     if not miembro_id:
         return []
@@ -60,7 +61,7 @@ def _conflictos_cobertura(miembro_id: str, desde: str, hasta: str) -> list[dict[
         return []
     # Lunes de cada semana que cae dentro del rango.
     lunes = d_ini - timedelta(days=d_ini.weekday())
-    conflictos: list[dict[str, str]] = []
+    descubiertos: list[dict[str, str]] = []
     while lunes <= d_fin:
         for t in repos.listar_turnos_rota(semana=lunes.isoformat()):
             if t.get("miembro_id") != miembro_id:
@@ -70,12 +71,33 @@ def _conflictos_cobertura(miembro_id: str, desde: str, hasta: str) -> list[dict[
             franja = repos.obtener_franja_semana(t.get("franja_id", "") or "")
             if franja and franja.get("es_descanso"):
                 continue  # un descanso no es cobertura
-            conflictos.append(
-                {"fecha": t["fecha"], "franja": (franja or {}).get("nombre", "") or ""}
+            descubiertos.append(
+                {
+                    "fecha": t["fecha"],
+                    "franja": (franja or {}).get("nombre", "") or "",
+                    "marca": t.get("marca", "") or "",
+                }
             )
         lunes += timedelta(days=7)
-    conflictos.sort(key=lambda c: (c["fecha"], c["franja"]))
-    return conflictos
+    descubiertos.sort(key=lambda c: (c["fecha"], c["franja"]))
+    return descubiertos
+
+
+def _avisar_huecos(
+    request: Request, miembro_id: str, nombres: dict[str, str], desde: str, hasta: str
+) -> list[dict[str, str]]:
+    """Calcula los turnos que la ausencia deja sin cubrir y, si los hay, avisa a los admin
+    en la campana. Devuelve los `conflictos` (forma pública) para la respuesta de la API.
+    """
+    descubiertos = _turnos_descubiertos(miembro_id, desde, hasta)
+    if descubiertos:
+        notificaciones_turnos.tras_ausencia_con_huecos(
+            miembro_nombre=nombres.get(miembro_id, ""),
+            n_huecos=len(descubiertos),
+            marcas={t["marca"] for t in descubiertos},
+            actor=_usuario_actual(request),
+        )
+    return [{"fecha": t["fecha"], "franja": t["franja"]} for t in descubiertos]
 
 
 def _ausencia_a_dict(ausencia: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
@@ -165,8 +187,8 @@ async def crear_ausencia(request: Request) -> Response:
     return JSONResponse(
         {
             "ausencia": _ausencia_a_dict(ausencia, nombres),
-            # Aviso (no bloqueo): turnos que esta ausencia deja descubiertos.
-            "conflictos": _conflictos_cobertura(miembro_id, desde, hasta),
+            # Aviso (no bloqueo): turnos que esta ausencia deja descubiertos (+ campana al admin).
+            "conflictos": _avisar_huecos(request, miembro_id, nombres, desde, hasta),
         },
         status_code=201,
     )
@@ -210,11 +232,12 @@ async def actualizar_ausencia(request: Request) -> Response:
     ausencia = repos.actualizar_ausencia_rota(ausencia_id, campos)
     if ausencia is None:
         return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    nombres = _nombres_equipo()
     return JSONResponse(
         {
-            "ausencia": _ausencia_a_dict(ausencia, _nombres_equipo()),
+            "ausencia": _ausencia_a_dict(ausencia, nombres),
             # Aviso (no bloqueo): turnos que el rango (quizá ampliado) deja descubiertos.
-            "conflictos": _conflictos_cobertura(actual["miembro_id"], desde, hasta),
+            "conflictos": _avisar_huecos(request, actual["miembro_id"], nombres, desde, hasta),
         }
     )
 
