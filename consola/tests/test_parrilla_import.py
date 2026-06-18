@@ -435,6 +435,14 @@ def test_ya_existe_crear_evento_normaliza_espacios_y_mayusculas():
     assert pi.calcular_conflicto(op, ctx)["ya_existe"] is True
 
 
+def test_ya_existe_crear_evento_ignora_puntuacion_y_acentos():
+    # Variaciones MENORES (punto, acentos, guion, mayúsculas) no deben duplicar: es el mismo.
+    ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs. Cabo Verde"}])
+    for titulo in ("espana vs cabo verde", "ESPAÑA VS. CABO-VERDE", "  España   vs   Cabo Verde "):
+        op = {"tipo": "crear_evento", "fecha": "2026-06-02", "hora": "10:00", "titulo": titulo}
+        assert pi.calcular_conflicto(op, ctx)["ya_existe"] is True, titulo
+
+
 def test_crear_evento_titulo_distinto_no_es_idempotente():
     ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}])
     op = {"tipo": "crear_evento", "fecha": "2026-06-02", "hora": "10:00", "titulo": "Portugal vs RD Congo"}

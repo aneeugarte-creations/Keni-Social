@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from datetime import date
 from typing import Annotated, Any, Literal, Union
 
@@ -167,12 +168,19 @@ def normaliza_franja(nombre: str) -> str:
 
 
 def _norm_titulo(titulo: str) -> str:
-    """Normaliza un título para comparar «mismo nombre»: colapsa espacios internos + casefold.
+    """Normaliza un título para comparar «mismo nombre» de forma TOLERANTE a variaciones menores.
 
-    Conservador a propósito (NO quita puntuación ni acentos): solo iguala diferencias de
-    mayúsculas y de espaciado, para no fundir como duplicados dos eventos de título distinto.
+    Ignora mayúsculas/minúsculas, acentos/diacríticos, puntuación y espaciado, para que el mismo
+    evento escrito de formas casi iguales NO se duplique:
+        "España vs. Cabo Verde" == "espana vs cabo verde" == "ESPAÑA  VS CABO-VERDE".
+    El día y la hora (que se comparan aparte y SÍ exactos) son la red que evita fundir dos
+    eventos realmente distintos que solo compartan un título parecido.
     """
-    return " ".join((titulo or "").split()).casefold()
+    # NFKD separa cada letra de su tilde; descartamos las marcas combinantes -> sin acentos.
+    base = unicodedata.normalize("NFKD", titulo or "")
+    sin_acentos = "".join(c for c in base if not unicodedata.combining(c)).casefold()
+    # Solo letras/dígitos como separadores de palabra; la puntuación pasa a espacio y se colapsa.
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", sin_acentos).split())
 
 
 def _norm_hora(hora: str | None) -> str:
