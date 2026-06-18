@@ -85,6 +85,11 @@ PROC_CRITICA_IA = "critica-ia"
 # hashtags más relevantes para un borrador SIN hashtags y los guarda en `pieza.hashtags_sugeridos`
 # (el feed los ofrece en gris para aceptar/rechazar). No toca el copy. Solo el `pieza_id` viaja.
 PROC_SUGERIR_HASHTAGS = "sugerir-hashtags"
+# Carrusel desde un post (acción MANUAL del feed): `claude -p` READ-ONLY parte el copy YA redactado
+# en titulares de slides; el post-procesado los HORNEA como placas de la marca y escribe el mismo
+# `carrusel` JSON en todas las piezas gemelas del contenido (la portada se conserva). Solo el
+# `publicacion_id` viaja: el copy va DENTRO del prompt (autocontenido), igual que sugerir-hashtags.
+PROC_CARRUSEL = "carrusel"
 
 # ------------------------------------------------------------------------------------------- #
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
@@ -413,6 +418,17 @@ def construir_sugerir_hashtags(*, publicacion_id: str) -> dict[str, Any]:
     return {"kind": PROC_SUGERIR_HASHTAGS, "publicacion_id": publicacion_id}
 
 
+def construir_carrusel(*, publicacion_id: str) -> dict[str, Any]:
+    """Spec del post-procesado de CARRUSEL DESDE UN POST: hornea los slides y los escribe al contenido.
+
+    `publicacion_id` es el contenido (no la pieza): el carrusel es GEMELO en todas sus redes de
+    formato carrusel, así que los slides se hornean UNA vez y se escriben idénticos en cada pieza.
+    El worker reconstruye el callback (que toca `repos` y el renderer de placas) vía
+    `dominio.carrusel`; el copy ya viajó DENTRO del prompt, así que no lleva más estado.
+    """
+    return {"kind": PROC_CARRUSEL, "publicacion_id": publicacion_id}
+
+
 def construir_dev_discovery(*, sugerencia_id: str) -> dict[str, Any]:
     """Spec del post-procesado del DISCOVERY (wizard L1): genera el SPEC y estima complejidad.
 
@@ -627,6 +643,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import sugerir_hashtags as dom_sugerir
 
         return dom_sugerir.construir_procesar_sugerir_hashtags(
+            publicacion_id=p["publicacion_id"]
+        )
+
+    if kind == PROC_CARRUSEL:
+        # Import perezoso: el factory toca BD (`repos`) y el renderer de placas (`dominio.copy`).
+        from . import carrusel as dom_carrusel
+
+        return dom_carrusel.construir_procesar_carrusel(
             publicacion_id=p["publicacion_id"]
         )
 

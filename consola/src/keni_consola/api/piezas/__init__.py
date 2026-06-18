@@ -29,7 +29,13 @@ from ._comun import (
     _pierde_aprobaciones,
     _publicacion_a_dict,
 )
-from .composicion import aplicar_plantilla, componer_slide, compuesta, integrar_foto
+from .composicion import (
+    aplicar_plantilla,
+    componer_slide,
+    compuesta,
+    generar_carrusel,
+    integrar_foto,
+)
 from .crud import (
     _ESTADO_NOMBRE,
     _MARCAS,
@@ -84,6 +90,7 @@ __all__ = [
     "aplicar_plantilla",
     "componer_slide",
     "compuesta",
+    "generar_carrusel",
     # Espejo
     "_propagar_espejo",
     # Helpers compartidos / consumidos por tests
@@ -123,6 +130,7 @@ RUTAS = [
     Route("/api/piezas/{pieza_id}/integrar-foto", integrar_foto, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/componer-slide", componer_slide, methods=["POST"]),
+    Route("/api/piezas/{pieza_id}/generar-carrusel", generar_carrusel, methods=["POST"]),
     Route("/api/piezas/{pieza_id}", detalle, methods=["GET"]),
     Route("/api/piezas/{pieza_id}", actualizar, methods=["PUT"]),
     Route("/api/piezas/{pieza_id}", borrar, methods=["DELETE"]),

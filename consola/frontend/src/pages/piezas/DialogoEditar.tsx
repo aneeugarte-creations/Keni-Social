@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard } from "lucide-react";
+import { Clapperboard, Loader2, Sparkles } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { parsearCarrusel, serializarCarrusel, type SlideCarrusel } from "@/lib/carrusel";
@@ -120,6 +121,65 @@ export function DialogoEditar({
     setGaleriaPlantillas(false);
   };
 
+  // Generación de CARRUSEL desde el copy: al pasar un post a carrusel sin slides (o al pulsar
+  // «Generar carrusel»), se ENCOLA un `claude -p` que parte el copy en titulares y los hornea como
+  // placas de la marca; el worker los escribe en las piezas gemelas. Lo seguimos con el mismo hook
+  // de sondeo (SSE+fallback) que el resto de trabajos de IA y recargamos la pieza al terminar.
+  const genCarrusel = useGeneracion();
+  const {
+    generacion: genCarruselReg,
+    ejecutando: generandoCarrusel,
+    cancelando: cancelandoCarrusel,
+    iniciar: iniciarGenCarrusel,
+    limpiar: limpiarGenCarrusel,
+    cancelar: cancelarGenCarrusel,
+  } = genCarrusel;
+  // El autoguardado NO debe escribir un `carrusel` vacío mientras el worker lo está rellenando
+  // (pisaría los slides que hornea). `persistir` lee este ref para omitir los slides durante la gen.
+  const generandoCarruselRef = React.useRef(false);
+  generandoCarruselRef.current = generandoCarrusel;
+
+  const lanzarCarrusel = React.useCallback(async () => {
+    if (!pieza) return;
+    try {
+      const r = await api.generarCarrusel(pieza.id);
+      iniciarGenCarrusel(r.generacion);
+    } catch (e) {
+      toast.error(mensajeError(e));
+    }
+  }, [pieza, iniciarGenCarrusel]);
+
+  // Al terminar la generación: recarga la pieza para traer los slides que horneó el worker (su
+  // fuente de verdad es la BD, no el `resultado` del registro). Procesa cada generación UNA vez.
+  const idGenCarrusel = genCarruselReg?.id;
+  const estadoGenCarrusel = genCarruselReg?.estado;
+  const procesadoGenRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!pieza || !idGenCarrusel) return;
+    if (estadoGenCarrusel !== "completado" && estadoGenCarrusel !== "error") return;
+    if (procesadoGenRef.current === idGenCarrusel) return;
+    procesadoGenRef.current = idGenCarrusel;
+    if (estadoGenCarrusel === "error") {
+      toast.error("No se pudo generar el carrusel.");
+      limpiarGenCarrusel();
+      return;
+    }
+    void api
+      .pieza(pieza.id)
+      .then((r) => {
+        const nuevos = parsearCarrusel(r.pieza.carrusel);
+        setSlides(nuevos);
+        setFormato(r.pieza.formato || "carrusel");
+        if (nuevos.length === 0) {
+          toast("La IA no vio material para un carrusel; añade los slides a mano.");
+        }
+      })
+      .catch(() => {})
+      .finally(() => limpiarGenCarrusel());
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+  }, [idGenCarrusel, estadoGenCarrusel, pieza, queryClient, limpiarGenCarrusel]);
+
   // Flip de formato (foto/video/carrusel). PATCH /api/publicaciones/{publicacion_id} con {formato}.
   // El backend ajusta las redes (3/5/2) y puede devolver un `aviso` si había redes con contenido.
   const flipFormato = useMutation({
@@ -136,6 +196,11 @@ export function DialogoEditar({
       if (data.aviso) toast(data.aviso);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      // El post pasa a CARRUSEL y aún no tiene slides: genera el carrusel desde su copy. (Si ya
+      // traía slides —p. ej. del pipeline— no se regenera: se muestran tal cual.)
+      if (nuevoFmt === "carrusel" && slides.length === 0) {
+        void lanzarCarrusel();
+      }
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -266,8 +331,10 @@ export function DialogoEditar({
       fotos: serializarFotos(fotos),
     };
     // CARRUSEL: solo se envían los slides cuando la pieza ES carrusel (en otros formatos el
-    // backend ya los limpió en el flip; reenviar el estado local viejo los resucitaría).
-    if (formato === "carrusel") {
+    // backend ya los limpió en el flip; reenviar el estado local viejo los resucitaría). MIENTRAS
+    // se genera el carrusel los OMITIMOS: el worker está rellenando ese campo y un PUT con la lista
+    // local (aún vacía) pisaría sus slides.
+    if (formato === "carrusel" && !generandoCarruselRef.current) {
       cuerpo.carrusel = serializarCarrusel(slides);
     }
     // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → verificación →
@@ -412,7 +479,7 @@ export function DialogoEditar({
                     variant={formato === valor ? "secondary" : "ghost"}
                     className="h-7 px-2.5 text-xs"
                     onClick={() => cambiarFormato(valor)}
-                    disabled={flipFormato.isPending}
+                    disabled={flipFormato.isPending || generandoCarrusel}
                     aria-pressed={formato === valor}
                   >
                     {etiqueta}
@@ -470,27 +537,79 @@ export function DialogoEditar({
             </div>
           ) : pieza?.marca && formato === "carrusel" ? (
               // CARRUSEL: el MISMO editor de placa pero PAGINADO de lado (portada + slides), como
-              // el slideshow del feed pero editable. Cada slide edita foto/titular/plantilla.
-              <EditorCarruselLateral
-                marca={pieza.marca}
-                piezaId={pieza.id}
-                plantillas={plantillas}
-                copy={contenido}
-                imagenFuente={pieza.imagen_fuente}
-                portadaFotos={fotos}
-                onPortadaFotos={setFotos}
-                portadaCopyIn={copyIn}
-                onPortadaCopyIn={setCopyIn}
-                portadaPlantillaId={plantillaId}
-                onPortadaPlantillaId={(id) => {
-                  setPlantillaId(id);
-                  setPlacaOculta(false);
-                }}
-                portadaPlacaOculta={placaOculta}
-                onPortadaPlacaOculta={setPlacaOculta}
-                slides={slides}
-                onSlides={setSlides}
-              />
+              // el slideshow del feed pero editable. Cada slide edita foto/titular/plantilla. Arriba,
+              // la barra de generación desde el copy (crear/regenerar los slides con IA).
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm">
+                  {generandoCarrusel ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <span className="text-muted-foreground">Creando el carrusel desde el copy…</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-7 px-2.5 text-xs"
+                        onClick={() => void cancelarGenCarrusel()}
+                        disabled={cancelandoCarrusel}
+                      >
+                        Cancelar
+                      </Button>
+                    </>
+                  ) : slides.length === 0 ? (
+                    <>
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">
+                        Aún no hay slides. Genera el carrusel a partir del copy del post.
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-7 px-2.5 text-xs"
+                        onClick={() => void lanzarCarrusel()}
+                      >
+                        Generar carrusel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-muted-foreground">
+                        Carrusel generado. Edita cada slide o vuelve a generarlo.
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-7 px-2.5 text-xs"
+                        onClick={() => void lanzarCarrusel()}
+                      >
+                        Regenerar
+                      </Button>
+                    </>
+                  )}
+                </div>
+                <EditorCarruselLateral
+                  marca={pieza.marca}
+                  piezaId={pieza.id}
+                  plantillas={plantillas}
+                  copy={contenido}
+                  imagenFuente={pieza.imagen_fuente}
+                  portadaFotos={fotos}
+                  onPortadaFotos={setFotos}
+                  portadaCopyIn={copyIn}
+                  onPortadaCopyIn={setCopyIn}
+                  portadaPlantillaId={plantillaId}
+                  onPortadaPlantillaId={(id) => {
+                    setPlantillaId(id);
+                    setPlacaOculta(false);
+                  }}
+                  portadaPlacaOculta={placaOculta}
+                  onPortadaPlacaOculta={setPlacaOculta}
+                  slides={slides}
+                  onSlides={setSlides}
+                />
+              </div>
             ) : pieza?.marca ? (
               // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
               // foto + reencuadre + titular in-place). El selector (galería por marca) y "solo foto"

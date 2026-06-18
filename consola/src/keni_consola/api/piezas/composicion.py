@@ -243,3 +243,24 @@ async def compuesta(request: Request) -> Response:
         media_type=mime,
         headers={"ETag": etag, "Cache-Control": cache},
     )
+
+
+async def generar_carrusel(request: Request) -> Response:
+    """ENCOLA la generación de un CARRUSEL a partir del copy YA redactado de un post. -> `{generacion}`.
+
+    `POST /api/piezas/{id}/generar-carrusel`: lanza un `claude -p` READ-ONLY que parte el copy de la
+    pieza en titulares de slides; el post-procesado los hornea como placas de la marca y los escribe
+    en todas las piezas gemelas del contenido (la portada se conserva). El feed YA flip-eó el formato
+    a carrusel antes de llamar. El SPA sondea `GET /api/generaciones/{id}` hasta el estado terminal y
+    recarga la pieza (los slides aparecen en el editor). `ColaLlenaError` se PROPAGA (el manejador
+    central de `app.py` la traduce a 429). -> `{generacion}` | 400 | 404.
+    """
+    from ...dominio import carrusel
+
+    pieza_id = request.path_params["pieza_id"]
+    try:
+        gen = carrusel.lanzar_para_pieza(pieza_id)
+    except carrusel.CarruselError as e:
+        estado = 404 if "ya no existe" in str(e) else 400
+        return JSONResponse({"error": str(e)}, status_code=estado)
+    return JSONResponse({"generacion": gen})

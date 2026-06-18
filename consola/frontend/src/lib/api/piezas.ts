@@ -8,6 +8,7 @@ import type {
   RespuestaAlertas,
   RespuestaBorrarLotePiezas,
   RespuestaColaAprobacion,
+  RespuestaGeneracion,
   RespuestaImportCalendario,
   RespuestaImportCalendarioPendiente,
   RespuestaImportPreview,
@@ -90,6 +91,17 @@ export const apiPiezas = {
       `/piezas/${encodeURIComponent(id)}/componer-slide`,
       { metodo: "POST", json: datos, timeoutMs: 120_000 },
     ),
+  /**
+   * Genera un CARRUSEL a partir del copy YA redactado del post: ENCOLA un `claude -p` que parte el
+   * copy en titulares de slides y los hornea como placas de la marca, escritos en todas las piezas
+   * gemelas (la portada se conserva). Responde al instante con `{generacion}` (estado "ejecutando");
+   * el SPA la sondea con `useGeneracion` y recarga la pieza al terminar. El feed flip-ea el formato
+   * a carrusel ANTES de llamar.
+   */
+  generarCarrusel: (id: string) =>
+    peticion<RespuestaGeneracion>(`/piezas/${encodeURIComponent(id)}/generar-carrusel`, {
+      metodo: "POST",
+    }),
 
   // --- Aprobación de PIEZAS (#9): cola de revisión + decisión + programación ---
   // Programar NO es aprobación (es programación) y NO publica de verdad: el posteo real
