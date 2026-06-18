@@ -29,10 +29,21 @@ _log = logging.getLogger("keni_consola.carrusel")
 
 PROMPT_CARRUSEL = "prompt/carrusel-desde-post"
 
-# Mínimo de slides para que valga la pena un carrusel (portada + al menos 2 tarjetas) y tope (el
-# mismo del pipeline: 10 nativas de IG/FB - 1 de portada).
-MIN_SLIDES = 2
+# Tope ABSOLUTO de slides (el mismo del pipeline: 10 nativas de IG/FB - 1 de portada).
 MAX_SLIDES = generar.MAX_SLIDES_CARRUSEL
+
+# Longitud del carrusel que elige el equipo: rango (min, max) de slides que se pide al modelo.
+# El `max` además ACOTA el parseo (un carrusel corto nunca se pasa de 5). "largo" es el defecto.
+LONGITUDES: dict[str, tuple[int, int]] = {
+    "corto": (4, 5),
+    "largo": (8, 9),
+}
+LONGITUD_DEFECTO = "largo"
+
+
+def _rango_longitud(longitud: str) -> tuple[int, int]:
+    """(min, max) de slides para la longitud elegida; cae al defecto si no es válida."""
+    return LONGITUDES.get(longitud) or LONGITUDES[LONGITUD_DEFECTO]
 
 # Estados de pieza donde `aplicar_carrusel` ESCRIBE. La acción nace de un post recién flip-eado a
 # carrusel (vuelve a `borrador`); se incluye `en_revision` por si la pieza avanzó mientras el job
@@ -82,8 +93,10 @@ def _contexto_editorial(marca: str) -> str:
     return "\n\n## Contexto editorial de la marca\n\n" + "\n\n---\n\n".join(cuerpos)
 
 
-def _componer_prompt(*, copy: str, copy_in: str, marca: str) -> str:
-    """Renderiza `prompt/carrusel-desde-post` con el copy, la portada y la voz de la marca."""
+def _componer_prompt(
+    *, copy: str, copy_in: str, marca: str, min_slides: int, max_slides: int
+) -> str:
+    """Renderiza `prompt/carrusel-desde-post` con el copy, la portada, la voz y el rango de slides."""
     from .. import libprompts
 
     cuerpo = libprompts.cuerpo_efectivo(PROMPT_CARRUSEL) or libprompts.cuerpo_inicial(PROMPT_CARRUSEL)
@@ -91,20 +104,30 @@ def _componer_prompt(*, copy: str, copy_in: str, marca: str) -> str:
         "{{MARCA}}": marcas.etiqueta_de(marca) or marca or "la marca",
         "{{COPY}}": str(copy or "").strip() or "(sin copy)",
         "{{COPY_IN}}": str(copy_in or "").strip() or "(sin titular de portada)",
-        "{{MAX_SLIDES}}": str(MAX_SLIDES),
+        "{{MIN_SLIDES}}": str(min_slides),
+        "{{MAX_SLIDES}}": str(max_slides),
     }
     for marcador, valor in sust.items():
         cuerpo = cuerpo.replace(marcador, valor)
-    return cuerpo + _contexto_editorial(marca)
+    # Inyecta el rango por CÓDIGO (no solo por placeholder del cuerpo): un equipo ya DESPLEGADO
+    # tiene la versión del prompt en su store, donde el mínimo viajaba fijo, así que sustituir
+    # {{MIN_SLIDES}} no le llegaría. Esta línea final MANDA y garantiza el rango de la longitud
+    # elegida (corto 4-5 / largo 8-9) en cualquier versión del prompt (semilla o store).
+    directiva = (
+        f"\n\nLONGITUD: genera entre {min_slides} y {max_slides} tarjetas (slides), sin contar la "
+        "portada. Es un requisito de formato; ajústate EXACTAMENTE a ese rango."
+    )
+    return cuerpo + directiva + _contexto_editorial(marca)
 
 
-def lanzar_para_pieza(pieza_id: str) -> dict[str, Any]:
+def lanzar_para_pieza(pieza_id: str, longitud: str = LONGITUD_DEFECTO) -> dict[str, Any]:
     """ENCOLA la generación del carrusel a partir del copy de una pieza. Devuelve el registro.
 
     Lee el copy + el titular de portada de la pieza, compone el prompt (autocontenido) y lanza un
     `claude -p` READ-ONLY cuyo post-procesado hornea los slides y los escribe en TODO el contenido
-    (todas las piezas gemelas). Idempotente por `carrusel:{publicacion_id}`: un doble clic devuelve
-    el run en curso. Lanza `CarruselError` si la pieza no existe o no hay copy del que partir.
+    (todas las piezas gemelas). `longitud` ∈ {corto (4-5 slides), largo (8-9)}; cae al defecto si
+    no es válida. Idempotente por `carrusel:{publicacion_id}:{longitud}` (corto y largo son runs
+    distintos). Lanza `CarruselError` si la pieza no existe o no hay copy del que partir.
     """
     pieza = repos.obtener_pieza(pieza_id)
     if pieza is None:
@@ -117,19 +140,23 @@ def lanzar_para_pieza(pieza_id: str) -> dict[str, Any]:
         raise CarruselError("La pieza no está asociada a un contenido.")
     marca = str(pieza.get("marca") or "")
     copy_in = str(pieza.get("copy_in") or "")
+    longitud = longitud if longitud in LONGITUDES else LONGITUD_DEFECTO
+    min_slides, max_slides = _rango_longitud(longitud)
 
-    procesar_spec = jobspec.construir_carrusel(publicacion_id=publicacion_id)
+    procesar_spec = jobspec.construir_carrusel(publicacion_id=publicacion_id, max_slides=max_slides)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
-    prompt = _componer_prompt(copy=copy, copy_in=copy_in, marca=marca)
+    prompt = _componer_prompt(
+        copy=copy, copy_in=copy_in, marca=marca, min_slides=min_slides, max_slides=max_slides,
+    )
     return generar.lanzar(
         tipo="carrusel",
-        titulo=f"Carrusel · {pieza.get('titulo', '') or 'post'}",
+        titulo=f"Carrusel {longitud} · {pieza.get('titulo', '') or 'post'}",
         marca=marca,
         prompt=prompt,
         procesar=procesar,
         procesar_spec=procesar_spec,
         endurecer=_endurecer(),
-        clave_idem=f"carrusel:{publicacion_id}",
+        clave_idem=f"carrusel:{publicacion_id}:{longitud}",
         publicacion_id=publicacion_id,
     )
 
@@ -139,12 +166,13 @@ def lanzar_para_pieza(pieza_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
-def _parsear_slides(salida: str) -> list[str]:
+def _parsear_slides(salida: str, max_slides: int = MAX_SLIDES) -> list[str]:
     """Extrae los `titular` de `{"slides": [{"titular": ...}]}` del JSON de la salida. [] si ilegible.
 
     El JSON del carrusel ANIDA (slides = lista de objetos), así que la extracción tolera llaves
     internas: prueba el bloque con vallas (captura GREEDY, hasta la última llave) y, si no cuela,
-    el tramo de la primera `{` a la última `}` del texto.
+    el tramo de la primera `{` a la última `}` del texto. Acota a `max_slides` (el tope de la
+    longitud elegida: un carrusel corto nunca se pasa de 5 aunque el modelo proponga más).
     """
     if not salida:
         return []
@@ -165,7 +193,7 @@ def _parsear_slides(salida: str) -> list[str]:
         if not isinstance(lista, list):
             continue
         titulares: list[str] = []
-        for s in lista[:MAX_SLIDES]:
+        for s in lista[:max_slides]:
             titular = str((s.get("titular") if isinstance(s, dict) else s) or "").strip()
             if titular:
                 titulares.append(titular)
@@ -217,11 +245,14 @@ def aplicar_carrusel(publicacion_id: str, titulares: list[str]) -> list[dict[str
     return slides
 
 
-def construir_procesar_carrusel(*, publicacion_id: str):  # noqa: ANN201
-    """Devuelve el callback `procesar(salida, metricas) -> dict` del job (corre en el worker)."""
+def construir_procesar_carrusel(*, publicacion_id: str, max_slides: int = MAX_SLIDES):  # noqa: ANN201
+    """Devuelve el callback `procesar(salida, metricas) -> dict` del job (corre en el worker).
+
+    `max_slides` acota cuántos titulares se aceptan (el tope de la longitud elegida).
+    """
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
-        titulares = _parsear_slides(salida)
+        titulares = _parsear_slides(salida, max_slides)
         slides = aplicar_carrusel(publicacion_id, titulares)
         return {"carrusel": {"slides": slides}}
 

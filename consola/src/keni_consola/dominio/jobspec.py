@@ -418,15 +418,16 @@ def construir_sugerir_hashtags(*, publicacion_id: str) -> dict[str, Any]:
     return {"kind": PROC_SUGERIR_HASHTAGS, "publicacion_id": publicacion_id}
 
 
-def construir_carrusel(*, publicacion_id: str) -> dict[str, Any]:
+def construir_carrusel(*, publicacion_id: str, max_slides: int) -> dict[str, Any]:
     """Spec del post-procesado de CARRUSEL DESDE UN POST: hornea los slides y los escribe al contenido.
 
     `publicacion_id` es el contenido (no la pieza): el carrusel es GEMELO en todas sus redes de
     formato carrusel, así que los slides se hornean UNA vez y se escriben idénticos en cada pieza.
-    El worker reconstruye el callback (que toca `repos` y el renderer de placas) vía
-    `dominio.carrusel`; el copy ya viajó DENTRO del prompt, así que no lleva más estado.
+    `max_slides` es el tope de la longitud elegida (corto 5 / largo 9): acota cuántos titulares
+    acepta el parseo. El worker reconstruye el callback (que toca `repos` y el renderer de placas)
+    vía `dominio.carrusel`; el copy ya viajó DENTRO del prompt, así que no lleva más estado.
     """
-    return {"kind": PROC_CARRUSEL, "publicacion_id": publicacion_id}
+    return {"kind": PROC_CARRUSEL, "publicacion_id": publicacion_id, "max_slides": int(max_slides)}
 
 
 def construir_dev_discovery(*, sugerencia_id: str) -> dict[str, Any]:
@@ -651,7 +652,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import carrusel as dom_carrusel
 
         return dom_carrusel.construir_procesar_carrusel(
-            publicacion_id=p["publicacion_id"]
+            publicacion_id=p["publicacion_id"], max_slides=int(p.get("max_slides") or 9),
         )
 
     if kind == PROC_DEV_DISCOVERY:

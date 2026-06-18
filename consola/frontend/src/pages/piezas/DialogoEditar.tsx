@@ -139,15 +139,18 @@ export function DialogoEditar({
   const generandoCarruselRef = React.useRef(false);
   generandoCarruselRef.current = generandoCarrusel;
 
-  const lanzarCarrusel = React.useCallback(async () => {
-    if (!pieza) return;
-    try {
-      const r = await api.generarCarrusel(pieza.id);
-      iniciarGenCarrusel(r.generacion);
-    } catch (e) {
-      toast.error(mensajeError(e));
-    }
-  }, [pieza, iniciarGenCarrusel]);
+  const lanzarCarrusel = React.useCallback(
+    async (longitud: "corto" | "largo") => {
+      if (!pieza) return;
+      try {
+        const r = await api.generarCarrusel(pieza.id, longitud);
+        iniciarGenCarrusel(r.generacion);
+      } catch (e) {
+        toast.error(mensajeError(e));
+      }
+    },
+    [pieza, iniciarGenCarrusel],
+  );
 
   // Al terminar la generación: recarga la pieza para traer los slides que horneó el worker (su
   // fuente de verdad es la BD, no el `resultado` del registro). Procesa cada generación UNA vez.
@@ -196,11 +199,8 @@ export function DialogoEditar({
       if (data.aviso) toast(data.aviso);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      // El post pasa a CARRUSEL y aún no tiene slides: genera el carrusel desde su copy. (Si ya
-      // traía slides —p. ej. del pipeline— no se regenera: se muestran tal cual.)
-      if (nuevoFmt === "carrusel" && slides.length === 0) {
-        void lanzarCarrusel();
-      }
+      // Al pasar a carrusel NO se genera solo: el equipo elige la longitud (corto/largo) en la
+      // barra del editor de carrusel. Si ya traía slides (p. ej. del pipeline) se muestran tal cual.
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -560,32 +560,59 @@ export function DialogoEditar({
                     <>
                       <Sparkles className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">
-                        Aún no hay slides. Genera el carrusel a partir del copy del post.
+                        Aún no hay slides. Genera el carrusel desde el copy:
                       </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="ml-auto h-7 px-2.5 text-xs"
-                        onClick={() => void lanzarCarrusel()}
-                      >
-                        Generar carrusel
-                      </Button>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => void lanzarCarrusel("corto")}
+                          title="Carrusel breve, entre 4 y 5 slides"
+                        >
+                          Corto · 4–5
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => void lanzarCarrusel("largo")}
+                          title="Carrusel extenso, entre 8 y 9 slides"
+                        >
+                          Largo · 8–9
+                        </Button>
+                      </div>
                     </>
                   ) : (
                     <>
                       <span className="text-muted-foreground">
                         Carrusel generado. Edita cada slide o vuelve a generarlo.
                       </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="ml-auto h-7 px-2.5 text-xs"
-                        onClick={() => void lanzarCarrusel()}
-                      >
-                        Regenerar
-                      </Button>
+                      <div className="ml-auto flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Regenerar:</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => void lanzarCarrusel("corto")}
+                          title="Rehacer en corto, entre 4 y 5 slides"
+                        >
+                          Corto
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2.5 text-xs"
+                          onClick={() => void lanzarCarrusel("largo")}
+                          title="Rehacer en largo, entre 8 y 9 slides"
+                        >
+                          Largo
+                        </Button>
+                      </div>
                     </>
                   )}
                 </div>

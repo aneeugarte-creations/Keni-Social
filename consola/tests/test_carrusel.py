@@ -46,14 +46,28 @@ def test_parseo_descarta_titulares_vacios_y_topa_en_max():
     assert len(dom_carrusel._parsear_slides(muchos)) == dom_carrusel.MAX_SLIDES
 
 
+def test_parseo_acota_al_max_de_la_longitud():
+    # Un carrusel corto (max 5) NUNCA acepta más de 5 titulares aunque el modelo proponga más.
+    muchos = json.dumps({"slides": [{"titular": f"T{i}"} for i in range(8)]})
+    assert len(dom_carrusel._parsear_slides(muchos, max_slides=5)) == 5
+
+
+def test_longitudes_y_rango():
+    assert dom_carrusel.LONGITUDES == {"corto": (4, 5), "largo": (8, 9)}
+    assert dom_carrusel._rango_longitud("corto") == (4, 5)
+    assert dom_carrusel._rango_longitud("largo") == (8, 9)
+    # Una longitud inválida cae al defecto (largo).
+    assert dom_carrusel._rango_longitud("gigante") == dom_carrusel.LONGITUDES[dom_carrusel.LONGITUD_DEFECTO]
+
+
 # --------------------------------------------------------------------------- #
 # jobspec — roundtrip del kind                                                   #
 # --------------------------------------------------------------------------- #
 
 
 def test_jobspec_carrusel_roundtrip():
-    spec = jobspec.construir_carrusel(publicacion_id="c1")
-    assert spec == {"kind": jobspec.PROC_CARRUSEL, "publicacion_id": "c1"}
+    spec = jobspec.construir_carrusel(publicacion_id="c1", max_slides=5)
+    assert spec == {"kind": jobspec.PROC_CARRUSEL, "publicacion_id": "c1", "max_slides": 5}
     # El worker reconstruye un callback ejecutable a partir del spec serializado.
     proc = jobspec.reconstruir_procesar({"procesar": spec})
     assert callable(proc)
@@ -134,18 +148,51 @@ def test_lanzar_para_pieza_compone_el_prompt_y_encola(entorno, monkeypatch):
     pid, ids = _crear_contenido(["instagram", "x"], "Un sensor cuántico rescata señales del universo")
     repos.actualizar_pieza(ids[0], {"copy_in": "UN SENSOR CUÁNTICO"})
 
-    gen = dom_carrusel.lanzar_para_pieza(ids[0])
+    gen = dom_carrusel.lanzar_para_pieza(ids[0], "largo")
     assert gen == {"id": "g1", "estado": "ejecutando"}
     assert captura["tipo"] == "carrusel"
     assert captura["marca"] == _MARCA
-    assert captura["clave_idem"] == f"carrusel:{pid}"
+    # La longitud entra en la clave de idempotencia (corto y largo son runs distintos).
+    assert captura["clave_idem"] == f"carrusel:{pid}:largo"
     assert captura["publicacion_id"] == pid
-    assert captura["procesar_spec"] == {"kind": jobspec.PROC_CARRUSEL, "publicacion_id": pid}
+    # El spec lleva el tope de la longitud (largo = 9).
+    assert captura["procesar_spec"] == {
+        "kind": jobspec.PROC_CARRUSEL, "publicacion_id": pid, "max_slides": 9,
+    }
     # El copy y el titular de portada viajan DENTRO del prompt (autocontenido).
     assert "Un sensor cuántico rescata señales del universo" in captura["prompt"]
     assert "UN SENSOR CUÁNTICO" in captura["prompt"]
+    # El rango de la longitud se inyecta por código en el prompt (largo = 8 a 9).
+    assert "entre 8 y 9 tarjetas" in captura["prompt"]
     # Run READ-ONLY: veta escritura/red.
     assert "Write" in captura["endurecer"]["disallowed_tools"]
+
+
+def test_lanzar_para_pieza_corto_acota_a_cinco(entorno, monkeypatch):
+    captura: dict = {}
+    monkeypatch.setattr(
+        dom_carrusel.generar, "lanzar",
+        lambda **kw: captura.update(kw) or {"id": "g2", "estado": "ejecutando"},
+    )
+    pid, ids = _crear_contenido(["instagram"], "Copy de prueba")
+
+    dom_carrusel.lanzar_para_pieza(ids[0], "corto")
+    assert captura["clave_idem"] == f"carrusel:{pid}:corto"
+    assert captura["procesar_spec"]["max_slides"] == 5
+    assert "entre 4 y 5 tarjetas" in captura["prompt"]
+
+
+def test_lanzar_para_pieza_longitud_invalida_cae_a_largo(entorno, monkeypatch):
+    captura: dict = {}
+    monkeypatch.setattr(
+        dom_carrusel.generar, "lanzar",
+        lambda **kw: captura.update(kw) or {"id": "g3", "estado": "ejecutando"},
+    )
+    pid, ids = _crear_contenido(["instagram"], "Copy de prueba")
+
+    dom_carrusel.lanzar_para_pieza(ids[0], "gigante")
+    assert captura["clave_idem"] == f"carrusel:{pid}:largo"
+    assert captura["procesar_spec"]["max_slides"] == 9
 
 
 def test_lanzar_para_pieza_sin_copy_lanza_error(entorno):

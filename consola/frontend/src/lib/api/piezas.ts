@@ -96,11 +96,12 @@ export const apiPiezas = {
    * copy en titulares de slides y los hornea como placas de la marca, escritos en todas las piezas
    * gemelas (la portada se conserva). Responde al instante con `{generacion}` (estado "ejecutando");
    * el SPA la sondea con `useGeneracion` y recarga la pieza al terminar. El feed flip-ea el formato
-   * a carrusel ANTES de llamar.
+   * a carrusel ANTES de llamar. `longitud` elige corto (4-5 slides) o largo (8-9).
    */
-  generarCarrusel: (id: string) =>
+  generarCarrusel: (id: string, longitud: "corto" | "largo") =>
     peticion<RespuestaGeneracion>(`/piezas/${encodeURIComponent(id)}/generar-carrusel`, {
       metodo: "POST",
+      json: { longitud },
     }),
 
   // --- Aprobación de PIEZAS (#9): cola de revisión + decisión + programación ---

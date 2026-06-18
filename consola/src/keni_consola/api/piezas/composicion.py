@@ -253,13 +253,16 @@ async def generar_carrusel(request: Request) -> Response:
     en todas las piezas gemelas del contenido (la portada se conserva). El feed YA flip-eó el formato
     a carrusel antes de llamar. El SPA sondea `GET /api/generaciones/{id}` hasta el estado terminal y
     recarga la pieza (los slides aparecen en el editor). `ColaLlenaError` se PROPAGA (el manejador
-    central de `app.py` la traduce a 429). -> `{generacion}` | 400 | 404.
+    central de `app.py` la traduce a 429). El cuerpo opcional `{longitud}` elige corto (4-5 slides)
+    o largo (8-9); ausente/ inválida = largo. -> `{generacion}` | 400 | 404.
     """
     from ...dominio import carrusel
 
     pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    longitud = datos.get("longitud") if isinstance(datos.get("longitud"), str) else ""
     try:
-        gen = carrusel.lanzar_para_pieza(pieza_id)
+        gen = carrusel.lanzar_para_pieza(pieza_id, longitud or carrusel.LONGITUD_DEFECTO)
     except carrusel.CarruselError as e:
         estado = 404 if "ya no existe" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=estado)
