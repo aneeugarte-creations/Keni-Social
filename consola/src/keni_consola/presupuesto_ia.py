@@ -59,6 +59,18 @@ _CACHE_GASTO: dict[str, Any] | None = None
 _CACHE_DIA = ""
 _CACHE_EXPIRA = 0.0
 
+# Cache paralela del gasto del dia DESGLOSADO por proceso (motor): la usan el desglose de la
+# Economia (`estado().por_proceso`) y el corte por motor (`nivel_proceso`). Mismo TTL/criterio
+# best-effort que `_gasto_hoy`.
+_CACHE_PROC_GASTO: dict[str, dict[str, Any]] | None = None
+_CACHE_PROC_DIA = ""
+_CACHE_PROC_EXPIRA = 0.0
+
+# Motores de la maquina (ADR 0011). Literales aqui para no acoplar este modulo al paquete
+# `generaciones` (que lo importa); casan con `generaciones.PROCESO_*` y las claves del ledger.
+PROCESO_INVESTIGACION = "investigacion"
+PROCESO_PRODUCCION = "produccion"
+
 # Ultimo nivel observado por ESTE proceso: cada TRANSICION deja un log WARNING (entrar en
 # corte) o INFO (volver a normal) — la señal operativa que consume la observabilidad (los
 # gates en si son silenciosos: rechazan/esperan sin loguear por peticion).
@@ -71,10 +83,14 @@ def _hoy_utc() -> str:
 
 
 def invalidar_cache() -> None:
-    """Invalida la cache del gasto y el nivel observado (cierres de generacion, y tests)."""
-    global _CACHE_EXPIRA, _ULTIMO_NIVEL
+    """Invalida la cache del gasto (global y por proceso) y el nivel observado.
+
+    La llaman el cierre de cada generacion y los tests.
+    """
+    global _CACHE_EXPIRA, _CACHE_PROC_EXPIRA, _ULTIMO_NIVEL
     with _CACHE_LOCK:
         _CACHE_EXPIRA = 0.0
+        _CACHE_PROC_EXPIRA = 0.0
         _ULTIMO_NIVEL = None
 
 
@@ -108,6 +124,59 @@ def _gasto_hoy() -> dict[str, Any]:
     return gasto
 
 
+def _gasto_vacio_por_proceso() -> dict[str, dict[str, Any]]:
+    """Desglose por proceso a CEROS (ambos motores presentes). Forma de respaldo ante blip de BD."""
+    cero = {"tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0, "generaciones": 0}
+    return {PROCESO_INVESTIGACION: dict(cero), PROCESO_PRODUCCION: dict(cero)}
+
+
+def _gasto_por_proceso_hoy() -> dict[str, dict[str, Any]]:
+    """Gasto del dia UTC actual DESGLOSADO por proceso, cacheado `_CACHE_TTL_S` segundos.
+
+    Mismo criterio best-effort que `_gasto_hoy`: ante un blip de BD devuelve el ultimo valor
+    cacheado o ceros (preferimos NO cortar por un fallo de lectura). Garantiza siempre los dos
+    motores (`investigacion`/`produccion`).
+    """
+    global _CACHE_PROC_GASTO, _CACHE_PROC_DIA, _CACHE_PROC_EXPIRA
+    dia = _hoy_utc()
+    with _CACHE_LOCK:
+        if (
+            _CACHE_PROC_GASTO is not None
+            and _CACHE_PROC_DIA == dia
+            and time.monotonic() < _CACHE_PROC_EXPIRA
+        ):
+            return _CACHE_PROC_GASTO
+    from . import repos
+
+    try:
+        gasto = repos.gasto_ia_del_dia_por_proceso(dia)
+    except Exception:  # noqa: BLE001 -- blip de BD: no cortar por un fallo de lectura
+        _log.warning("presupuesto_ia: fallo al leer el gasto por proceso del dia", exc_info=True)
+        with _CACHE_LOCK:
+            if _CACHE_PROC_GASTO is not None and _CACHE_PROC_DIA == dia:
+                return _CACHE_PROC_GASTO
+        return _gasto_vacio_por_proceso()
+    with _CACHE_LOCK:
+        _CACHE_PROC_GASTO = gasto
+        _CACHE_PROC_DIA = dia
+        _CACHE_PROC_EXPIRA = time.monotonic() + _CACHE_TTL_S
+    return gasto
+
+
+def _tope_motor(proceso: str) -> int:
+    """Tope DIARIO de tokens propio del motor (env), o 0 si no aplica / sin limite propio."""
+    if proceso == PROCESO_INVESTIGACION:
+        return config.presupuesto_tokens_investigacion_dia()
+    if proceso == PROCESO_PRODUCCION:
+        return config.presupuesto_tokens_produccion_dia()
+    return 0
+
+
+def _mas_severo(a: str, b: str) -> str:
+    """El mas restrictivo de dos niveles (por su severidad creciente)."""
+    return a if _SEVERIDAD.get(a, 0) >= _SEVERIDAD.get(b, 0) else b
+
+
 def _escalon(gastado: float, presupuesto: float, margen: float) -> str:
     """Escalon de corte de UN presupuesto: agotado (>= presup*margen), solo_manual (>= presup) o normal."""
     if gastado >= presupuesto * margen:
@@ -127,12 +196,21 @@ def nivel() -> str:
     `normal`/`pausado`). Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al
     relajar): es la señal operativa del corte; los gates por peticion no loguean.
     """
+    return _con_transicion(_nivel_global())
+
+
+def _nivel_global() -> str:
+    """Nivel de corte GLOBAL (kill switch + escalones de los caps globales), SIN log de transicion.
+
+    Lo reusan `nivel()` (que añade el log de transicion) y `nivel_proceso()` (que lo combina con
+    el tope del motor). No loguea para que el corte por motor no contamine la señal del global.
+    """
     if config.generacion_pausada():
-        return _con_transicion(NIVEL_PAUSADO)
+        return NIVEL_PAUSADO
     presupuesto = config.presupuesto_tokens_dia()
     presupuesto_usd = config.presupuesto_usd_dia()
     if presupuesto <= 0 and presupuesto_usd <= 0:
-        return _con_transicion(NIVEL_NORMAL)
+        return NIVEL_NORMAL
     gasto = _gasto_hoy()
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
     nivel_vigente = NIVEL_NORMAL
@@ -140,12 +218,32 @@ def nivel() -> str:
         nivel_vigente = _escalon(int(gasto.get("tokens", 0)), presupuesto, margen)
     if presupuesto_usd > 0:
         por_usd = _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
-        if _SEVERIDAD.get(por_usd, 0) > _SEVERIDAD.get(nivel_vigente, 0):
-            nivel_vigente = por_usd
-    return _con_transicion(nivel_vigente)
+        nivel_vigente = _mas_severo(nivel_vigente, por_usd)
+    return nivel_vigente
 
 
-def bloqueo_admision(nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool) -> str | None:
+def nivel_proceso(proceso: str) -> str:
+    """Nivel de corte EFECTIVO de un motor (investigacion|produccion): el MAS restrictivo.
+
+    Combina el nivel GLOBAL (que ya pondera el tope global de tokens y el cap global de USD, y al
+    que la pausa manda) con el escalon del TOPE PROPIO del motor (gasto de tokens del motor vs su
+    tope, mismos escalones solo_manual/agotado y el mismo `margen_manual`). El tope del motor en 0
+    no añade corte (cae al global). NO loguea transiciones (la señal de transicion es la global).
+    """
+    glob = _nivel_global()
+    if glob == NIVEL_PAUSADO:
+        return NIVEL_PAUSADO
+    tope = _tope_motor(proceso)
+    if tope <= 0:
+        return glob
+    tokens = int(_gasto_por_proceso_hoy().get(proceso, {}).get("tokens", 0))
+    margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
+    return _mas_severo(glob, _escalon(tokens, tope, margen))
+
+
+def bloqueo_admision(
+    nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool, proceso: str | None = None
+) -> str | None:
     """El nivel de corte que BLOQUEA un job con estas características, o None si pasa.
 
     FUENTE ÚNICA de la regla del presupuesto: la comparten el gate de ADMISIÓN
@@ -159,16 +257,25 @@ def bloqueo_admision(nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool) -
       - AGOTADO (presupuesto + margen): no pasa NADA que gaste tokens, ni siquiera lo manual.
       - SOLO_MANUAL (presupuesto agotado): el FONDO que gasta tokens cede; lo manual sigue.
 
-    `nivel_actual` es el nivel VIGENTE (`nivel()`), que el llamante calcula UNA vez (para no
-    repetir la lectura cacheada del gasto por cada consulta).
+    `nivel_actual` es el nivel GLOBAL VIGENTE (`nivel()`), que el llamante calcula UNA vez (para
+    no repetir la lectura cacheada del gasto por cada consulta).
+
+    `proceso` (motor del job, si se conoce en el call site): cuando viene y el job GASTA tokens,
+    el corte efectivo del job es el MAS restrictivo entre el nivel global y el del motor
+    (`nivel_proceso`), de modo que el tope propio del motor tambien corta. Sin `proceso` (o en un
+    call site que no lo conoce, p. ej. el gate de reclamo del worker, que decide antes de fijar
+    un job concreto) cae al comportamiento GLOBAL de siempre.
     """
-    if nivel_actual == NIVEL_PAUSADO:
+    nivel_efectivo = nivel_actual
+    if proceso and gasta_tokens and nivel_actual != NIVEL_PAUSADO:
+        nivel_efectivo = _mas_severo(nivel_actual, nivel_proceso(proceso))
+    if nivel_efectivo == NIVEL_PAUSADO:
         return NIVEL_PAUSADO
     if not gasta_tokens:
         return None
-    if nivel_actual == NIVEL_AGOTADO:
+    if nivel_efectivo == NIVEL_AGOTADO:
         return NIVEL_AGOTADO
-    if es_fondo and nivel_actual == NIVEL_SOLO_MANUAL:
+    if es_fondo and nivel_efectivo == NIVEL_SOLO_MANUAL:
         return NIVEL_SOLO_MANUAL
     return None
 
@@ -197,10 +304,12 @@ def estado() -> dict[str, Any]:
     Forma (CONTRATO de `/api/actividad/cola`):
       {nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
-       pct_usado, pct_usado_usd, dia}
+       pct_usado, pct_usado_usd, dia,
+       por_proceso: {investigacion: {...}, produccion: {...}}}
     `restante_tokens`/`pct_usado` son None sin presupuesto de tokens; `pct_usado_usd` es None
     sin presupuesto de USD (cada presupuesto en 0 = sin limite). El coste USD gastado del dia
-    viaja dentro de `gastado.coste_usd`.
+    viaja dentro de `gastado.coste_usd`. La parada de emergencia y `gastado` siguen GLOBALES;
+    `por_proceso` desglosa el gasto y el tope PROPIO de cada motor (ADR 0011).
     """
     gasto = _gasto_hoy()
     presupuesto = config.presupuesto_tokens_dia()
@@ -210,6 +319,7 @@ def estado() -> dict[str, Any]:
     restante = max(0, presupuesto - gastado) if presupuesto > 0 else None
     pct = round(100.0 * gastado / presupuesto, 1) if presupuesto > 0 else None
     pct_usd = round(100.0 * coste / presupuesto_usd, 1) if presupuesto_usd > 0 else None
+    gasto_proc = _gasto_por_proceso_hoy()
     return {
         "nivel": nivel(),
         "pausada": config.generacion_pausada(),
@@ -221,6 +331,32 @@ def estado() -> dict[str, Any]:
         "pct_usado": pct,
         "pct_usado_usd": pct_usd,
         "dia": _hoy_utc(),
+        "por_proceso": {
+            PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc),
+            PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc),
+        },
+    }
+
+
+def _bloque_proceso(proceso: str, gasto_proc: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + tope propio + nivel del motor."""
+    g = gasto_proc.get(proceso, {})
+    tin = int(g.get("tokens_in", 0))
+    tout = int(g.get("tokens_out", 0))
+    tokens = int(g.get("tokens", tin + tout))
+    tope = _tope_motor(proceso)
+    restante = max(0, tope - tokens) if tope > 0 else None
+    pct = round(100.0 * tokens / tope, 1) if tope > 0 else None
+    return {
+        "tokens_in": tin,
+        "tokens_out": tout,
+        "tokens": tokens,
+        "coste_usd": float(g.get("coste_usd", 0.0)),
+        "generaciones": int(g.get("generaciones", 0)),
+        "presupuesto_tokens_dia": tope,
+        "restante_tokens": restante,
+        "pct_usado": pct,
+        "nivel": nivel_proceso(proceso),
     }
 
 

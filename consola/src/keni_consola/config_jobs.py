@@ -8,6 +8,8 @@ from ._config_comun import (
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
+    ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
+    ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
     ENV_PRESUPUESTO_USD_DIA,
     ENV_PROMPT_AVISO_CHARS,
     ENV_PROMPT_MAX_CHARS,
@@ -17,6 +19,8 @@ from ._config_comun import (
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
+    PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF,
+    PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF,
     PRESUPUESTO_USD_DIA_DEF,
     PROMPT_AVISO_CHARS_DEF,
     PROMPT_MAX_CHARS_DEF,
@@ -57,6 +61,26 @@ def presupuesto_tokens_dia() -> int:
     limite (el corte automatico queda apagado; el kill switch manual sigue funcionando).
     """
     return _entero(ENV_PRESUPUESTO_TOKENS_DIA, PRESUPUESTO_TOKENS_DIA_DEF, minimo=0)
+
+
+def presupuesto_tokens_investigacion_dia() -> int:
+    """Tope DIARIO de tokens del motor de INVESTIGACION (`KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA`, def 0).
+
+    Tokens in+out del dia UTC de las generaciones de investigacion. `0` = SIN limite propio (solo
+    rigen los caps globales). El corte efectivo del motor es el MAS restrictivo de este tope, el
+    tope global de tokens y el cap global de USD (ver `presupuesto_ia.nivel_proceso`).
+    """
+    return _entero(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA, PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF, minimo=0)
+
+
+def presupuesto_tokens_produccion_dia() -> int:
+    """Tope DIARIO de tokens del motor de PRODUCCION (`KENI_PRESUPUESTO_TOKENS_PRODUCCION_DIA`, def 0).
+
+    Tokens in+out del dia UTC de las generaciones de produccion. `0` = SIN limite propio (solo
+    rigen los caps globales). El corte efectivo del motor es el MAS restrictivo de este tope, el
+    tope global de tokens y el cap global de USD (ver `presupuesto_ia.nivel_proceso`).
+    """
+    return _entero(ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA, PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF, minimo=0)
 
 
 def presupuesto_usd_dia() -> float:

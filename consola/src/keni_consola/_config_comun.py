@@ -94,6 +94,11 @@ ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 # Economia de tokens de la generacion (la suscripcion `claude` es COMPARTIDA con el equipo):
 # presupuesto DIARIO de tokens con corte automatico + kill switch humano (`presupuesto_ia.py`).
 ENV_PRESUPUESTO_TOKENS_DIA = "KENI_PRESUPUESTO_TOKENS_DIA"
+# Topes DIARIOS de tokens POR MOTOR (ADR 0011: investigacion vs produccion). Cada motor corta de
+# forma independiente con su propio tope; el corte efectivo de un motor es el MAS restrictivo
+# entre el tope global de tokens, el cap global de USD y este tope propio. 0 = SIN limite propio.
+ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA = "KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA"
+ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA = "KENI_PRESUPUESTO_TOKENS_PRODUCCION_DIA"
 ENV_PRESUPUESTO_USD_DIA = "KENI_PRESUPUESTO_USD_DIA"
 ENV_PRESUPUESTO_MARGEN_MANUAL = "KENI_PRESUPUESTO_MARGEN_MANUAL"
 ENV_GENERACION_PAUSADA = "KENI_GENERACION_PAUSADA"
@@ -529,6 +534,10 @@ WORKER_SONDEO_SEGUNDOS_DEF = 0.5
 # Presupuesto DIARIO de tokens de la generacion (in+out, dia UTC). 0 = SIN limite (defecto:
 # no cambia el comportamiento de un deploy existente; se enciende fijando un valor > 0).
 PRESUPUESTO_TOKENS_DIA_DEF = 0
+# Topes DIARIOS de tokens por motor (in+out, dia UTC). 0 = SIN limite propio (defecto: no cambia
+# el comportamiento; solo rigen los caps globales hasta que se fije un valor > 0).
+PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF = 0
+PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF = 0
 # Presupuesto DIARIO de coste en USD de la generacion (suma de `coste_usd` del dia UTC, ya
 # calculado por job con tarifas correctas). Mejor proxy del gasto real que los tokens (un
 # token de input cacheado pesa muchisimo menos que uno de salida). 0 = SIN limite (defecto:
@@ -907,6 +916,8 @@ __all__ = [
     'ENV_PREFERENCIAS',
     'ENV_PRESUPUESTO_MARGEN_MANUAL',
     'ENV_PRESUPUESTO_TOKENS_DIA',
+    'ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA',
+    'ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA',
     'ENV_PRESUPUESTO_USD_DIA',
     'ENV_GENERACION_PAUSADA',
     'ENV_JOBS_MAX_INTENTOS',
@@ -982,6 +993,8 @@ __all__ = [
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
     'PRESUPUESTO_TOKENS_DIA_DEF',
+    'PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF',
+    'PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF',
     'PRESUPUESTO_USD_DIA_DEF',
     'MEDIA_GC_ANTIGUEDAD_HORAS_DEF',
     'MEDIA_GC_INTERVALO_HORAS_DEF',

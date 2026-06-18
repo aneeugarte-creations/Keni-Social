@@ -177,6 +177,7 @@ from .repos_jobs import (  # noqa: F401
     encolados_por_dia,
     encolar_job,
     gasto_ia_del_dia,
+    gasto_ia_del_dia_por_proceso,
     gasto_ia_por_dia,
     gen_ids_jobs_pendientes,
     job_cancelado,

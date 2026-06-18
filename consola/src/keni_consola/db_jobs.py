@@ -563,6 +563,45 @@ def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
     }
 
 
+def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
+    """Gasto del dia UTC DESGLOSADO por proceso (ADR 0011): investigacion vs produccion.
+
+    Mismo dia que `gasto_ia_del_dia`, agrupado por la columna `proceso` del ledger. Por cada
+    proceso devuelve `{tokens_in, tokens_out, tokens (=in+out), coste_usd, generaciones}`.
+    GARANTIZA siempre las claves 'investigacion' y 'produccion' (a ceros si no hay filas), para
+    que el desglose de la Economia tenga ambos motores sin condicionar la UI. Otros valores de
+    `proceso` (legado/desconocido) tambien aparecen si existen filas.
+    """
+    por_proceso: dict[str, dict[str, Any]] = {
+        "investigacion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0, "generaciones": 0},
+        "produccion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0, "generaciones": 0},
+    }
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT proceso, COALESCE(SUM(tokens_in), 0) AS tin, COALESCE(SUM(tokens_out), 0) AS tout, "
+            "COALESCE(SUM(coste_usd), 0) AS coste, COUNT(*) AS n "
+            "FROM gasto_ia WHERE dia = ? GROUP BY proceso",
+            (dia,),
+        ).fetchall()
+    finally:
+        con.close()
+    for fila in filas:
+        proceso = str(fila["proceso"] or "")
+        if not proceso:
+            continue
+        tin = int(fila["tin"])
+        tout = int(fila["tout"])
+        por_proceso[proceso] = {
+            "tokens_in": tin,
+            "tokens_out": tout,
+            "tokens": tin + tout,
+            "coste_usd": float(fila["coste"]),
+            "generaciones": int(fila["n"]),
+        }
+    return por_proceso
+
+
 # --------------------------------------------------------------------------- #
 # Indice de GENERACIONES (rendimiento del listado; ver `generaciones._almacen`) #
 # --------------------------------------------------------------------------- #

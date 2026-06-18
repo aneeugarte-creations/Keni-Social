@@ -45,6 +45,7 @@ from ._comun import (
     _timeout,
     ahora_iso,
     nuevo_id,
+    proceso_de,
 )
 
 __all__ = [
@@ -326,7 +327,13 @@ def encolar_job_claude(
         raise ValueError("encolar_job_claude requiere un spec serializable")
     from .. import cola
 
-    cola.encolar(gen_id, spec)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
+    # Motor del job (ADR 0011): lo lee del registro SELLADO para que el corte por presupuesto
+    # aplique tambien el tope propio del motor (best-effort: si no se puede leer, cae al corte
+    # GLOBAL de siempre). El gasto de tokens viaja por el camino claude, asi que aqui SIEMPRE
+    # interesa el proceso.
+    reg = obtener(gen_id)
+    proceso = proceso_de(reg) if reg else None
+    cola.encolar(gen_id, spec, proceso=proceso)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
     # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p` y su TAMAÑO
     # (`prompt_chars`, economía de contexto: lo vuelca el ledger `gasto_ia` al cerrar, para
     # ver la deriva del contexto por día). El prompt se expone SOLO en el detalle

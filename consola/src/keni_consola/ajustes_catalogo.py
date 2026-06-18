@@ -430,6 +430,28 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
         ),
         Ajuste(
+            clave=config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
+            tipo="int",
+            etiqueta="Tope diario de tokens · Investigación",
+            ayuda="Tokens (entrada+salida) del motor de investigación por día UTC; al agotarse se "
+            "corta SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite propio. Rige "
+            "a la vez que los topes globales: corta el más restrictivo.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
+            tipo="int",
+            etiqueta="Tope diario de tokens · Producción",
+            ayuda="Tokens (entrada+salida) del motor de producción por día UTC; al agotarse se "
+            "corta SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite propio. Rige "
+            "a la vez que los topes globales: corta el más restrictivo.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
             clave=config.ENV_PRESUPUESTO_USD_DIA,
             tipo="float",
             etiqueta="Presupuesto diario de coste (USD)",
