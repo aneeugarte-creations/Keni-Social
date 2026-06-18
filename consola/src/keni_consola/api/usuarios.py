@@ -39,7 +39,7 @@ from starlette.routing import Route
 
 from keni_shared import marcas as marcas_catalogo
 
-from .. import auth, permisos, seguridad
+from .. import ajustes, ajustes_catalogo, auth, config, permisos, seguridad
 from .._http_json import leer_json
 from ..estados import CARGOS_USUARIO, ROL_ADMIN, ROLES_USUARIO
 from ..observabilidad import NOMBRE_LOGGER
@@ -216,7 +216,7 @@ async def crear(request: Request) -> Response:
             {"error": f"El nombre de usuario no puede superar {auth.LONGITUD_MAX_USUARIO} caracteres."},
             status_code=400,
         )
-    motivo = auth.motivo_rechazo_password(password, usuario)
+    motivo = auth.motivo_rechazo_password(password, usuario, config.password_min())
     if motivo is not None:
         return JSONResponse({"error": motivo}, status_code=400)
     if not auth.rol_valido(rol):
@@ -388,7 +388,7 @@ async def actualizar(request: Request) -> Response:
 
     if nueva_password is not None:
         motivo = auth.motivo_rechazo_password(
-            nueva_password, nuevo_usuario or objetivo["usuario"]
+            nueva_password, nuevo_usuario or objetivo["usuario"], config.password_min()
         )
         if motivo is not None:
             return JSONResponse({"error": motivo}, status_code=400)
@@ -560,9 +560,128 @@ async def borrar(request: Request) -> Response:
     return Response(status_code=204)
 
 
+# --------------------------------------------------------------------------- #
+# Configuración GLOBAL de seguridad/acceso (superadmin)                        #
+# --------------------------------------------------------------------------- #
+#
+# Política del equipo, no de una persona: vive en el panel de Usuarios (superadmin), con
+# contrato propio (NO el `/api/ajustes` de admin). Reutiliza la maquinaria de ajustes —catálogo
+# declarativo tipado (`ajustes_catalogo`) + store editable (`ajustes`), precedencia
+# STORE > ENV > DEFECTO de `config._crudo`—: togglear aquí escribe el store y los accesores
+# (`config.mfa_habilitado`/`mfa_obligatorio_admin`/`sesion_horas`/`sesion_max_horas`/
+# `password_min`) lo recogen sin más wiring. Acotado a estas claves curadas (jamás otras del
+# catálogo de la máquina). El enforcement de MFA ya lo aplica `seguridad.mfa_requerido_para`.
+_AJUSTES_SEGURIDAD: tuple[ajustes_catalogo.Ajuste, ...] = (
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_MFA,
+        tipo="bool",
+        etiqueta="Passkey obligatorio para todo el equipo",
+        ayuda="Cada cuenta debe inscribir una llave de acceso (passkey) la próxima vez que "
+        "inicie sesión, antes de poder operar. Requiere clave de firma configurada en el servidor.",
+        grupo="seguridad",
+        defecto=False,
+    ),
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_MFA_ADMIN,
+        tipo="bool",
+        etiqueta="Passkey obligatorio para administradores",
+        ayuda="Exige el segundo factor a las cuentas con rol administrador, aunque el global "
+        "esté desactivado. Recomendado: un admin publica en canales de marca.",
+        grupo="seguridad",
+        defecto=True,
+    ),
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_SESION_HORAS,
+        tipo="int",
+        etiqueta="Duración de la sesión (horas)",
+        ayuda="Ventana de inactividad: la sesión se renueva con cada uso y caduca tras estas "
+        "horas sin actividad.",
+        grupo="seguridad",
+        defecto=config.SESION_HORAS_DEF,
+        minimo=1,
+    ),
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_SESION_MAX_HORAS,
+        tipo="int",
+        etiqueta="Vida máxima de la sesión (horas)",
+        ayuda="Tope absoluto desde que se creó la sesión: pasado este límite se cierra aunque "
+        "se siga usando.",
+        grupo="seguridad",
+        defecto=config.SESION_MAX_HORAS_DEF,
+        minimo=1,
+    ),
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_PASSWORD_MIN,
+        tipo="int",
+        etiqueta="Longitud mínima de contraseña",
+        ayuda="Mínimo de caracteres para una contraseña nueva o reseteada. Suelo de 12 (NIST "
+        "800-63B); súbela para endurecer la política.",
+        grupo="seguridad",
+        defecto=config.PASSWORD_MIN_DEF,
+        minimo=config.PASSWORD_MIN_DEF,
+        maximo=128,
+    ),
+)
+_AJUSTES_SEGURIDAD_POR_CLAVE = {a.clave: a for a in _AJUSTES_SEGURIDAD}
+
+
+async def configuracion(request: Request) -> Response:
+    """GET /api/usuarios/configuracion: ajustes globales de seguridad (valor efectivo + fuente).
+
+    Solo superadmin. Devuelve `{ajustes: [...]}` con la forma del catálogo (`ajustes_catalogo.a_dict`).
+    """
+    if not _es_superadmin(request):
+        return _rechazo_no_admin()
+    return JSONResponse(
+        {"ajustes": [ajustes_catalogo.a_dict(a) for a in _AJUSTES_SEGURIDAD]}
+    )
+
+
+async def actualizar_configuracion(request: Request) -> Response:
+    """PATCH /api/usuarios/configuracion: escribe `{clave, valor}` o resetea `{clave, reset}`.
+
+    Solo superadmin y SOLO claves de `_AJUSTES_SEGURIDAD` (400 si no). Valida con el catálogo y
+    persiste en el store editable; los accesores de `config` recogen el cambio (STORE > ENV >
+    DEFECTO). `reset` borra la clave del store (vuelve a env/defecto). Devuelve el ajuste actualizado.
+    """
+    if not _es_superadmin(request):
+        return _rechazo_no_admin()
+    datos = await leer_json(request)
+    clave = datos.get("clave")
+    if not isinstance(clave, str) or clave not in _AJUSTES_SEGURIDAD_POR_CLAVE:
+        return JSONResponse({"error": "Ajuste de seguridad desconocido."}, status_code=400)
+    ajuste = _AJUSTES_SEGURIDAD_POR_CLAVE[clave]
+
+    if datos.get("reset") is True:
+        try:
+            ajustes.borrar(clave)
+        except OSError as e:
+            return JSONResponse(
+                {"error": f"No se pudo restablecer el ajuste: {e}"}, status_code=400
+            )
+        return JSONResponse({"ajuste": ajustes_catalogo.a_dict(ajuste)})
+
+    if "valor" not in datos:
+        return JSONResponse(
+            {"error": "Indica el 'valor' a guardar o usa 'reset' para restablecer."},
+            status_code=400,
+        )
+    a_guardar, error = ajustes_catalogo.validar_valor(ajuste, datos.get("valor"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    try:
+        ajustes.guardar(clave, a_guardar)
+    except OSError as e:
+        return JSONResponse({"error": f"No se pudo guardar el ajuste: {e}"}, status_code=400)
+    return JSONResponse({"ajuste": ajustes_catalogo.a_dict(ajuste)})
+
+
 RUTAS = [
     Route("/api/usuarios", listar, methods=["GET"]),
     Route("/api/usuarios", crear, methods=["POST"]),
+    # Rutas LITERALES antes que la paramétrica `{usuario_id}` (Starlette matchea en orden).
+    Route("/api/usuarios/configuracion", configuracion, methods=["GET"]),
+    Route("/api/usuarios/configuracion", actualizar_configuracion, methods=["PATCH"]),
     Route("/api/usuarios/{usuario_id}", actualizar, methods=["PATCH"]),
     Route("/api/usuarios/{usuario_id}", borrar, methods=["DELETE"]),
 ]

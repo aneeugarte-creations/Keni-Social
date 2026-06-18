@@ -81,18 +81,22 @@ def _raiz_sin_digitos(normal: str) -> str:
     return normal.rstrip("0123456789").rstrip("-_. ")
 
 
-def motivo_rechazo_password(password: object, usuario: str = "") -> str | None:
+def motivo_rechazo_password(
+    password: object, usuario: str = "", minimo: int = LONGITUD_MIN_PASSWORD
+) -> str | None:
     """Devuelve el MOTIVO (texto) por el que `password` no es aceptable, o None si lo es.
 
-    Politica NIST: longitud minima `LONGITUD_MIN_PASSWORD`, tope anti-DoS
-    `LONGITUD_MAX_PASSWORD`, y rechazo de contrasenas comunes/obvias o que coincidan con
-    el nombre de usuario. Sin reglas de composicion. El mensaje es apto para mostrar al
+    Politica NIST: longitud minima `minimo` (por defecto `LONGITUD_MIN_PASSWORD`; la API pasa
+    la politica global efectiva `config.password_min()`, que solo puede SUBIR del suelo), tope
+    anti-DoS `LONGITUD_MAX_PASSWORD`, y rechazo de contrasenas comunes/obvias o que coincidan
+    con el nombre de usuario. Sin reglas de composicion. El mensaje es apto para mostrar al
     usuario tal cual (la API lo reenvia).
     """
     if not isinstance(password, str):
         return "La contraseña debe ser texto."
-    if len(password) < LONGITUD_MIN_PASSWORD:
-        return f"La contraseña debe tener al menos {LONGITUD_MIN_PASSWORD} caracteres."
+    minimo = max(minimo, LONGITUD_MIN_PASSWORD)
+    if len(password) < minimo:
+        return f"La contraseña debe tener al menos {minimo} caracteres."
     if len(password) > LONGITUD_MAX_PASSWORD:
         return f"La contraseña no puede superar {LONGITUD_MAX_PASSWORD} caracteres."
     normal = password.strip().lower()

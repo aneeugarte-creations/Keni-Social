@@ -302,3 +302,53 @@ export interface CuerpoActualizarUsuario {
   /** Exige (o deja de exigir) segundo factor a la persona. */
   mfa_requerido?: boolean;
 }
+
+/**
+ * Un ajuste de la configuración GLOBAL de seguridad (`GET /api/usuarios/configuracion`, solo
+ * superadmin). Trae su valor EFECTIVO ya tipado y de dónde sale (`fuente`): un valor escrito por
+ * el panel (`store`), heredado del entorno (`env`) o el de fábrica (`defecto`). `min`/`max` llegan
+ * solo en numéricos y `opciones` solo en selects.
+ */
+export interface AjusteConfig {
+  clave: string;
+  tipo: "bool" | "int" | "float" | "select" | "texto";
+  /** Nombre legible del ajuste. */
+  etiqueta: string;
+  /** Texto de ayuda (qué controla). */
+  ayuda: string;
+  /** Grupo declarativo del catálogo (no se usa para el layout; se mapea por clave). */
+  grupo: string;
+  /** `true` => cambio sensible (la UI puede destacarlo). */
+  peligroso: boolean;
+  /** Valor efectivo, ya tipado según `tipo`. */
+  valor: boolean | number | string;
+  /** De dónde sale el valor: escrito en el panel, del entorno o de fábrica. */
+  fuente: "store" | "env" | "defecto";
+  /** Valor de fábrica (para mostrar a qué se vuelve al restablecer). */
+  defecto: boolean | number | string;
+  /** Mínimo permitido (solo numéricos). */
+  min?: number;
+  /** Máximo permitido (solo numéricos). */
+  max?: number;
+  /** Opciones (solo `select`). */
+  opciones?: { id: string; etiqueta: string }[];
+}
+
+/** Respuesta de `GET /api/usuarios/configuracion`. */
+export interface RespuestaConfiguracionUsuarios {
+  ajustes: AjusteConfig[];
+}
+
+/** Cuerpo de `PATCH /api/usuarios/configuracion`: escribe un valor o lo restablece. */
+export interface CuerpoConfiguracionUsuarios {
+  clave: string;
+  /** Valor a guardar (presente cuando no es un reset). */
+  valor?: unknown;
+  /** `true` => borra la clave del store y vuelve a env/defecto. */
+  reset?: boolean;
+}
+
+/** Respuesta de `PATCH /api/usuarios/configuracion`: el ajuste ya actualizado. */
+export interface RespuestaActualizarConfiguracion {
+  ajuste: AjusteConfig;
+}

@@ -3,7 +3,10 @@
 import { peticion } from "./_core";
 import type {
   CuerpoActualizarUsuario,
+  CuerpoConfiguracionUsuarios,
   CuerpoCrearUsuario,
+  RespuestaActualizarConfiguracion,
+  RespuestaConfiguracionUsuarios,
   RespuestaUsuarios,
   UsuarioAdmin,
 } from "@/types";
@@ -21,4 +24,12 @@ export const apiUsuarios = {
   eliminarUsuario: (id: string) =>
     peticion<void>(`/usuarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
+  // --- Configuración GLOBAL de seguridad (solo superadmin) ---
+  configuracionUsuarios: (signal?: AbortSignal) =>
+    peticion<RespuestaConfiguracionUsuarios>("/usuarios/configuracion", { signal }),
+  actualizarConfiguracionUsuarios: (cuerpo: CuerpoConfiguracionUsuarios) =>
+    peticion<RespuestaActualizarConfiguracion>("/usuarios/configuracion", {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
 };

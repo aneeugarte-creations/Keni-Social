@@ -1417,3 +1417,131 @@ def test_borrar_usuario_libera_sus_piezas_cogidas(entorno):
     assert liberada is not None  # la pieza NO se borra; solo se suelta
     assert liberada["responsable_id"] == ""
     assert liberada["responsable_nombre"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# Configuración GLOBAL de seguridad (GET/PATCH /api/usuarios/configuracion)    #
+# --------------------------------------------------------------------------- #
+#
+# Política del equipo, superadmin-only, persistida en el store de ajustes (aislado en tmp por
+# la fixture de conftest). Los accesores de `config` la recogen (precedencia STORE > ENV >
+# DEFECTO), así que un PATCH desde la UI cambia el comportamiento real (MFA / política de pass).
+
+_CLAVES_SEGURIDAD = {
+    "KENI_CONSOLA_MFA",
+    "KENI_CONSOLA_MFA_ADMIN",
+    "KENI_CONSOLA_SESION_HORAS",
+    "KENI_CONSOLA_SESION_MAX_HORAS",
+    "KENI_CONSOLA_PASSWORD_MIN",
+}
+
+
+def test_configuracion_get_solo_superadmin(entorno):
+    """GET /api/usuarios/configuracion: 403 para editor; 200 (con las claves de seguridad) para superadmin."""
+    _crear("jefa", CLAVE, "admin")  # superadmin por defecto
+    _crear("ed", CLAVE, "editor")
+
+    ced = _cli()
+    _login(ced, "ed", CLAVE)
+    assert ced.get("/api/usuarios/configuracion").status_code == 403
+
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.get("/api/usuarios/configuracion")
+    assert r.status_code == 200
+    claves = {a["clave"] for a in r.json()["ajustes"]}
+    assert _CLAVES_SEGURIDAD <= claves
+
+
+def test_configuracion_patch_cambia_el_comportamiento(entorno):
+    """Un PATCH escribe el store y los accesores de `config` lo reflejan (efecto real)."""
+    from keni_consola import config
+
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+
+    assert config.mfa_habilitado() is False
+    r = c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_CONSOLA_MFA", "valor": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["ajuste"]["valor"] is True and r.json()["ajuste"]["fuente"] == "store"
+    assert config.mfa_habilitado() is True
+
+    # Política de contraseña: subir el mínimo efectivo.
+    assert config.password_min() == 12
+    r2 = c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_CONSOLA_PASSWORD_MIN", "valor": 16},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200
+    assert config.password_min() == 16
+
+    # Reset: vuelve a env/defecto.
+    r3 = c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_CONSOLA_PASSWORD_MIN", "reset": True},
+        headers=_ORIGIN,
+    )
+    assert r3.status_code == 200 and r3.json()["ajuste"]["fuente"] == "defecto"
+    assert config.password_min() == 12
+
+
+def test_configuracion_rechaza_clave_y_valor_invalidos(entorno):
+    """Clave fuera de la lista curada -> 400; valor fuera de rango (min) -> 400."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    # Clave del catálogo de la máquina, pero NO de seguridad: rechazada por este endpoint.
+    r = c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_MAQUINA", "valor": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    # Mínimo de contraseña por debajo del suelo (12): fuera de rango.
+    r2 = c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_CONSOLA_PASSWORD_MIN", "valor": 8},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 400
+
+
+def test_password_min_efectivo_aplica_en_alta(entorno):
+    """Subido el mínimo global a 16, crear un usuario con contraseña de 12 se rechaza (400)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    c.patch(
+        "/api/usuarios/configuracion",
+        json={"clave": "KENI_CONSOLA_PASSWORD_MIN", "valor": 16},
+        headers=_ORIGIN,
+    )
+    # "clave-de-prueba" tiene 15 chars (< 16): rechazada.
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": "clave-de-prueba", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    # Con 16+ caracteres entra.
+    r2 = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": "clave-de-prueba-larga", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 201
+
+
+def test_motivo_rechazo_password_respeta_minimo():
+    """Unit: `motivo_rechazo_password(minimo=...)` exige el mínimo dado (suelo 12)."""
+    # 14 chars: ok con min 12, rechazada con min 16.
+    assert auth.motivo_rechazo_password("contrasena-ab", "", 12) is None
+    assert auth.motivo_rechazo_password("contrasena-ab", "", 16) is not None
+    # El suelo manda: pedir min 8 no baja de 12.
+    assert auth.motivo_rechazo_password("corta-once9", "", 8) is not None

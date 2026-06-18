@@ -523,7 +523,7 @@ async def cambiar_password(request: Request) -> Response:
     nueva = datos.get("password_nueva")
     if not isinstance(actual, str) or not actual:
         return JSONResponse({"error": "Falta la contraseña actual."}, status_code=400)
-    motivo = auth.motivo_rechazo_password(nueva, usuario.get("usuario", ""))
+    motivo = auth.motivo_rechazo_password(nueva, usuario.get("usuario", ""), config.password_min())
     if motivo is not None:
         return JSONResponse({"error": motivo}, status_code=400)
     # Tope anti-DoS en la actual (no hasheamos una entrada enorme); cuenta como incorrecta.

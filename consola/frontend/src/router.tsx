@@ -72,7 +72,11 @@ const OauthConectado = lazy(() => import("@/pages/OauthConectado"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
-const Usuarios = lazy(() => import("@/pages/Usuarios"));
+// Panel de usuarios: lista (tabla) + subpáginas a tamaño completo (alta, detalle, config global).
+const PanelUsuarios = lazy(() => import("@/pages/usuarios/PanelUsuarios"));
+const UsuarioNuevo = lazy(() => import("@/pages/usuarios/UsuarioNuevo"));
+const ConfiguracionGlobal = lazy(() => import("@/pages/usuarios/ConfiguracionGlobal"));
+const UsuarioDetalle = lazy(() => import("@/pages/usuarios/UsuarioDetalle"));
 // Sistema (admin): la infraestructura que sostiene la consola (recursos, daemons,
 // backups, latencias, S3).
 const Sistema = lazy(() => import("@/pages/sistema/Sistema"));
@@ -379,9 +383,19 @@ export const router = createBrowserRouter([
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.
       { path: "webhooks", element: <Webhooks /> },
-      // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
-      // propia pagina muestra el aviso al entrar por URL directa).
-      { path: "usuarios", element: <Usuarios /> },
+      // Gestión de usuarios: solo superadmin (el backend devuelve 403 si no, y cada
+      // página muestra el aviso al entrar por URL directa). El panel es la TABLA (índice);
+      // alta, configuración global y detalle de persona son subpáginas a tamaño completo.
+      // Las rutas literales (`nuevo`, `configuracion`) van antes que la paramétrica `:id`.
+      {
+        path: "usuarios",
+        children: [
+          { index: true, element: <PanelUsuarios /> },
+          { path: "nuevo", element: <UsuarioNuevo /> },
+          { path: "configuracion", element: <ConfiguracionGlobal /> },
+          { path: ":id", element: <UsuarioDetalle /> },
+        ],
+      },
       // Sistema: solo admin (el backend devuelve 403 si no; la página avisa al entrar por
       // URL directa). Estuvo consolidada como pestaña «Salud» del Monitor; el Monitor
       // redirige aquí los deep-links viejos (?tab=salud).

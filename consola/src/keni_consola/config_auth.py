@@ -22,6 +22,7 @@ from ._config_comun import (
     ENV_MFA_ADMIN,
     ENV_MFA_KEY,
     ENV_ORIGENES,
+    ENV_PASSWORD_MIN,
     ENV_RALPH_PORT,
     ENV_RALPH_URL,
     ENV_RP_ID,
@@ -203,6 +204,21 @@ def sesion_horas() -> int:
     """Duracion de la sesion en horas (`KENI_CONSOLA_SESION_HORAS`, def 12; >0)."""
     horas = _entero(ENV_SESION_HORAS, SESION_HORAS_DEF)
     return horas if horas > 0 else SESION_HORAS_DEF
+
+
+# Suelo DURO de la longitud minima de contrasena: NIST 800-63B manda 12, y la politica global
+# (editable en Usuarios → Configuracion global) solo puede SUBIR de aqui, nunca bajar.
+PASSWORD_MIN_DEF = 12
+
+
+def password_min() -> int:
+    """Longitud MINIMA de contrasena efectiva (`KENI_CONSOLA_PASSWORD_MIN`, def 12; suelo 12).
+
+    Politica global editable en caliente (store-aware via `_entero`/`_crudo`): un superadmin la
+    sube desde Usuarios → Configuracion global. Nunca por debajo de `PASSWORD_MIN_DEF` (12): el
+    `minimo` capa el valor para no debilitar la politica por error de configuracion.
+    """
+    return _entero(ENV_PASSWORD_MIN, PASSWORD_MIN_DEF, minimo=PASSWORD_MIN_DEF)
 
 
 def sesion_max_horas() -> int:

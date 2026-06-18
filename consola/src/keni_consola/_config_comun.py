@@ -30,6 +30,10 @@ ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
 # medido contra `creada`, la mata pasado el tope AUNQUE se siga usando. Default GENEROSO (30 d)
 # para no molestar el uso normal del piloto: solo acota sesiones renovadas indefinidamente.
 ENV_SESION_MAX_HORAS = "KENI_CONSOLA_SESION_MAX_HORAS"
+# Longitud MINIMA de contrasena (politica global, editable desde Usuarios → Configuracion
+# global). Suelo duro de 12 (NIST 800-63B); subirla endurece la politica para contrasenas
+# nuevas/reseteadas. Se lee store-aware via `_crudo`/`_entero` (STORE > ENV > defecto).
+ENV_PASSWORD_MIN = "KENI_CONSOLA_PASSWORD_MIN"
 ENV_ADMIN_USER = "KENI_CONSOLA_ADMIN_USER"
 ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 
@@ -978,6 +982,7 @@ __all__ = [
     'ENV_SCORE_PESO_VELOCIDAD',
     'ENV_SCORE_PESO_VIRALIDAD',
     'ENV_SECRETOS',
+    'ENV_PASSWORD_MIN',
     'ENV_SESION_HORAS',
     'ENV_SESION_MAX_HORAS',
     'ENV_SUGERENCIAS',
