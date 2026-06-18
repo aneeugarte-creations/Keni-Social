@@ -8,6 +8,7 @@ import {
   Clock,
   Coffee,
   Loader2,
+  Printer,
   Sunrise,
   Sunset,
   User,
@@ -147,16 +148,29 @@ function VistaMes({
   });
   const datos = q.data;
   const turnos = React.useMemo(() => datos?.mis_turnos ?? [], [datos?.mis_turnos]);
+  const hayTurnos = turnos.length > 0;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NavegadorMes mes={mes} setMes={setMes} />
-        {datos?.miembro_nombre && (
-          <Badge variant="secondary" className="font-normal">
-            <User className="mr-1 h-3.5 w-3.5" /> {datos.miembro_nombre}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {datos?.miembro_nombre && (
+            <Badge variant="secondary" className="font-normal">
+              <User className="mr-1 h-3.5 w-3.5" /> {datos.miembro_nombre}
+            </Badge>
+          )}
+          {hayTurnos && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={imprimirMes}
+              title="Imprimir o guardar como PDF"
+            >
+              <Printer className="mr-1.5 h-4 w-4" /> Imprimir / PDF
+            </Button>
+          )}
+        </div>
       </div>
 
       {q.isPending ? (
@@ -190,7 +204,17 @@ function VistaMes({
         />
       ) : (
         <>
-          <RejillaMes mes={mes} turnos={turnos} />
+          {/* `.print-mes`: lo único que sale al imprimir (ver index.css). Lleva un
+              encabezado que SOLO aparece en papel/PDF para identificar la hoja. */}
+          <div className="print-mes">
+            <div className="mb-3 hidden print:block">
+              <h2 className="text-lg font-semibold capitalize">{nombreMes(mes)}</h2>
+              <p className="text-sm text-neutral-600">
+                Mis turnos{datos?.miembro_nombre ? ` — ${datos.miembro_nombre}` : ""}
+              </p>
+            </div>
+            <RejillaMes mes={mes} turnos={turnos} />
+          </div>
           <p className="text-xs text-muted-foreground">
             Solo tus turnos del mes. Sin eventos ni cobertura.
           </p>
@@ -198,6 +222,20 @@ function VistaMes({
       )}
     </div>
   );
+}
+
+/** Imprime solo la rejilla del mes (o «Guardar como PDF»). La clase en `body` acota el
+ *  CSS de impresión a esta vista (un Ctrl+P en otra pantalla no se ve afectado). */
+function imprimirMes() {
+  document.body.classList.add("imprimiendo-mes");
+  const limpiar = () => {
+    document.body.classList.remove("imprimiendo-mes");
+    window.removeEventListener("afterprint", limpiar);
+  };
+  window.addEventListener("afterprint", limpiar);
+  // Red de seguridad por si `afterprint` no dispara en algún navegador.
+  window.setTimeout(limpiar, 2000);
+  window.print();
 }
 
 /** Navegador de mes (‹ junio de 2026 ›) con atajo «Hoy». */
@@ -259,15 +297,17 @@ function RejillaMes({ mes, turnos }: { mes: string; turnos: TurnoRota[] }) {
   }, [turnos]);
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    // Rejilla con bordes REALES (no `gap-px`, que es fondo y no se imprime): el contenedor
+    // pone arriba+izquierda y cada celda su derecha+abajo, así sale completa también en papel.
+    <div className="overflow-hidden rounded-lg border-l border-t">
+      <div className="grid grid-cols-7 bg-muted/40 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground print:bg-transparent">
         {DIAS_CABECERA.map((d) => (
-          <div key={d} className="py-2">
+          <div key={d} className="border-b border-r py-2">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-border">
+      <div className="grid grid-cols-7">
         {dias.map((fecha) => {
           const delMes = mismoMes(fecha, mes);
           const finde = esFinDeSemana(fecha);
@@ -276,7 +316,7 @@ function RejillaMes({ mes, turnos }: { mes: string; turnos: TurnoRota[] }) {
           return (
             <div
               key={fecha}
-              className={`min-h-[5.25rem] bg-background p-1.5 ${
+              className={`min-h-[5.25rem] border-b border-r bg-background p-1.5 print:min-h-[3.25rem] ${
                 !delMes ? "bg-muted/20" : finde ? "bg-muted/30" : ""
               } ${esHoy ? "ring-1 ring-inset ring-keni-500/50" : ""}`}
             >
@@ -320,7 +360,7 @@ function ChipTurnoMes({ turno, atenuado }: { turno: TurnoRota; atenuado?: boolea
   }
   return (
     <div
-      className={`rounded bg-keni-50 px-1.5 py-0.5 text-[11px] leading-tight text-keni-800 dark:bg-keni-900/30 dark:text-keni-200 ${
+      className={`rounded bg-keni-50 px-1.5 py-0.5 text-[11px] leading-tight text-keni-800 dark:bg-keni-900/30 dark:text-keni-200 print:border print:border-keni-300 ${
         atenuado ? "opacity-50" : ""
       }`}
     >

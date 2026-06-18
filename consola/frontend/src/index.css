@@ -136,3 +136,27 @@
   }
 
 }
+
+/* Impresion del calendario mensual de «Mis turnos» (boton «Imprimir / PDF»).
+   SCOPED a `body.imprimiendo-mes`: la clase solo la activa ese boton mientras imprime,
+   asi un Ctrl+P normal en cualquier otra pantalla NO se ve afectado. Deja visible solo
+   la rejilla del mes (`.print-mes`) y oculta el resto del chrome (sidebar, tabs, etc.). */
+@media print {
+  body.imprimiendo-mes * {
+    visibility: hidden;
+  }
+  body.imprimiendo-mes .print-mes,
+  body.imprimiendo-mes .print-mes * {
+    visibility: visible;
+  }
+  body.imprimiendo-mes .print-mes {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    /* Respeta los colores de las fichas si el usuario activa «graficos de fondo». */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
