@@ -370,7 +370,7 @@ AJUSTES: dict[str, list[str]] = {
     ],
     "produccion": [
         "KENI_PRODUCCION", "KENI_PIPELINE_ILUSTRAR",
-        "KENI_GENERACION_PAUSADA", "KENI_PRESUPUESTO_TOKENS_DIA", "KENI_ESFUERZO",
+        "KENI_GENERACION_PAUSADA", "KENI_ESFUERZO",
     ],
     "ingesta": ["KENI_PIPELINE_RECOLECTAR", "KENI_INGESTA_FILTRO"],
     "trends": ["KENI_TRENDS"],

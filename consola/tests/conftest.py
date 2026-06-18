@@ -209,7 +209,6 @@ def entorno(monkeypatch, tmp_path):
     # Economia de tokens (presupuesto_ia): deterministas — sin presupuesto, sin pausa, y la
     # cache del gasto del dia invalidada (es estado de MODULO; lo leido por un test previo
     # no debe contaminar al siguiente).
-    monkeypatch.delenv("KENI_PRESUPUESTO_TOKENS_DIA", raising=False)
     monkeypatch.delenv("KENI_PRESUPUESTO_MARGEN_MANUAL", raising=False)
     monkeypatch.delenv("KENI_GENERACION_PAUSADA", raising=False)
     from keni_consola import presupuesto_ia as _presupuesto_ia

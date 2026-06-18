@@ -7,7 +7,6 @@ from ._config_comun import (
     ENV_JOBS_MAX_INTENTOS,
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
-    ENV_PRESUPUESTO_TOKENS_DIA,
     ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
     ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
     ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
@@ -20,7 +19,6 @@ from ._config_comun import (
     JOBS_MAX_INTENTOS_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
-    PRESUPUESTO_TOKENS_DIA_DEF,
     PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF,
     PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF,
     PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF,
@@ -56,15 +54,6 @@ def max_jobs() -> int:
 # rafaga de jobs de fondo puede agotar los tokens de TODOS sin que nadie lo vea venir.
 # Estos knobs (editables en caliente via el store de ajustes) gobiernan el corte automatico
 # (`presupuesto_ia.py`) y la pausa manual de la generacion. Todos se leen EN CALIENTE.
-
-
-def presupuesto_tokens_dia() -> int:
-    """Presupuesto DIARIO de tokens de generacion (`KENI_PRESUPUESTO_TOKENS_DIA`, def 0).
-
-    Tokens in+out sumados de todas las generaciones cerradas en el dia UTC. `0` = SIN
-    limite (el corte automatico queda apagado; el kill switch manual sigue funcionando).
-    """
-    return _entero(ENV_PRESUPUESTO_TOKENS_DIA, PRESUPUESTO_TOKENS_DIA_DEF, minimo=0)
 
 
 def presupuesto_tokens_investigacion_in_dia() -> int:

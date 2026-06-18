@@ -8,11 +8,12 @@ y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guard
     (Postgres, UPSERT por gen_id = idempotente ante reintentos/re-encolados). Lo escribe el
     hook de cierre del almacen de generaciones (`generaciones._almacen`), asi cubre TODOS
     los caminos (claude, imagen, procesos) sin tocar cada lanzador.
-  - PRESUPUESTO: dos topes diarios independientes, `KENI_PRESUPUESTO_TOKENS_DIA` (tokens in+out
-    por dia UTC) y `KENI_PRESUPUESTO_USD_DIA` (coste real por dia UTC, mejor proxy del gasto: un
-    token de input cacheado pesa mucho menos que uno de salida); 0 = ese tope apagado. El corte
-    efectivo es el MAS restrictivo de ambos. Editables EN CALIENTE via el store de ajustes
-    (compartido back/worker/daemons por /data).
+  - PRESUPUESTO: el corte GLOBAL es el cap de COSTE en USD por dia UTC (`KENI_PRESUPUESTO_USD_DIA`,
+    mejor proxy del gasto: un token de input cacheado pesa mucho menos que uno de salida); 0 =
+    apagado. Los topes de TOKENS son POR MOTOR (entrada/salida, ADR 0011) y cortan SOLO su motor.
+    El "presupuesto global de tokens" que expone `estado()` es la SUMA informativa de esos 4 topes,
+    sin enforcement propio. Editables EN CALIENTE via el store de ajustes (compartido
+    back/worker/daemons por /data).
   - CORTE AUTOMATICO en dos escalones (gradual):
       * gastado >= presupuesto            -> SOLO_MANUAL: el fondo (pipeline/autogen) se
         deja de encolar y de reclamar; lo manual del equipo sigue.
@@ -178,6 +179,18 @@ def _topes_motor(proceso: str) -> tuple[int, int]:
     return (0, 0)
 
 
+def _suma_topes_motor() -> int:
+    """SUMA de los 4 topes por motor (investigacion in+out + produccion in+out).
+
+    Es el "presupuesto global de tokens" INFORMATIVO que expone `estado()`: NO corta a nivel global
+    (el corte global es solo USD + parada), solo agrega los topes que SI cortan por motor. 0 = todos
+    los topes apagados, sin limite de tokens.
+    """
+    inv_in, inv_out = _topes_motor(PROCESO_INVESTIGACION)
+    prod_in, prod_out = _topes_motor(PROCESO_PRODUCCION)
+    return inv_in + inv_out + prod_in + prod_out
+
+
 def _mas_severo(a: str, b: str) -> str:
     """El mas restrictivo de dos niveles (por su severidad creciente)."""
     return a if _SEVERIDAD.get(a, 0) >= _SEVERIDAD.get(b, 0) else b
@@ -193,46 +206,42 @@ def _escalon(gastado: float, presupuesto: float, margen: float) -> str:
 
 
 def nivel() -> str:
-    """Nivel de corte VIGENTE (el kill switch manda; luego los escalones del presupuesto).
+    """Nivel de corte VIGENTE (el kill switch manda; luego el escalon del cap de USD).
 
-    Hay DOS presupuestos diarios, cada uno con sus dos escalones (solo_manual / agotado): el de
-    TOKENS (`presupuesto_tokens_dia`) y el de COSTE en USD (`presupuesto_usd_dia`, mejor proxy del
-    gasto real). El corte efectivo es el MAS restrictivo de ambos; ambos comparten `margen_manual`.
-    Cada presupuesto en 0 queda apagado; con los dos a 0 no hay corte automatico (solo
-    `normal`/`pausado`). Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al
+    El corte GLOBAL tiene dos escalones (solo_manual / agotado) sobre el cap de COSTE en USD
+    (`presupuesto_usd_dia`, mejor proxy del gasto real). En 0 queda apagado: sin cap USD no hay
+    corte automatico global (solo `normal`/`pausado`); los topes de tokens por motor cortan aparte
+    via `nivel_proceso`. Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al
     relajar): es la señal operativa del corte; los gates por peticion no loguean.
     """
     return _con_transicion(_nivel_global())
 
 
 def _nivel_global() -> str:
-    """Nivel de corte GLOBAL (kill switch + escalones de los caps globales), SIN log de transicion.
+    """Nivel de corte GLOBAL (kill switch + escalones del cap global de USD), SIN log de transicion.
 
     Lo reusan `nivel()` (que añade el log de transicion) y `nivel_proceso()` (que lo combina con
     el tope del motor). No loguea para que el corte por motor no contamine la señal del global.
+
+    El corte GLOBAL es SOLO el cap de COSTE en USD (`presupuesto_usd_dia`, mejor proxy del gasto
+    real) mas la parada manual. Los topes de TOKENS son por motor (entrada/salida): cortan via
+    `nivel_proceso`, no aqui.
     """
     if config.generacion_pausada():
         return NIVEL_PAUSADO
-    presupuesto = config.presupuesto_tokens_dia()
     presupuesto_usd = config.presupuesto_usd_dia()
-    if presupuesto <= 0 and presupuesto_usd <= 0:
+    if presupuesto_usd <= 0:
         return NIVEL_NORMAL
     gasto = _gasto_hoy()
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
-    nivel_vigente = NIVEL_NORMAL
-    if presupuesto > 0:
-        nivel_vigente = _escalon(int(gasto.get("tokens", 0)), presupuesto, margen)
-    if presupuesto_usd > 0:
-        por_usd = _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
-        nivel_vigente = _mas_severo(nivel_vigente, por_usd)
-    return nivel_vigente
+    return _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
 
 
 def nivel_proceso(proceso: str) -> str:
     """Nivel de corte EFECTIVO de un motor (investigacion|produccion): el MAS restrictivo.
 
-    Combina el nivel GLOBAL (que ya pondera el tope global de tokens y el cap global de USD, y al
-    que la pausa manda) con el escalon de los TOPES PROPIOS del motor, separando ENTRADA y SALIDA:
+    Combina el nivel GLOBAL (que pondera el cap global de USD, y al que la pausa manda) con el
+    escalon de los TOPES PROPIOS del motor, separando ENTRADA y SALIDA:
     el gasto de tokens_in del motor vs su tope IN y el de tokens_out vs su tope OUT (mismos
     escalones solo_manual/agotado y el mismo `margen_manual`). Cada tope en 0 no añade corte por
     ese lado. NO loguea transiciones (la señal de transicion es la global).
@@ -318,13 +327,16 @@ def estado() -> dict[str, Any]:
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
        pct_usado, pct_usado_usd, dia,
        por_proceso: {investigacion: {...}, produccion: {...}}}
-    `restante_tokens`/`pct_usado` son None sin presupuesto de tokens; `pct_usado_usd` es None
-    sin presupuesto de USD (cada presupuesto en 0 = sin limite). El coste USD gastado del dia
-    viaja dentro de `gastado.coste_usd`. La parada de emergencia y `gastado` siguen GLOBALES;
-    `por_proceso` desglosa el gasto y los topes PROPIOS (entrada/salida) de cada motor (ADR 0011).
+    `presupuesto_tokens_dia` es INFORMATIVO: la SUMA de los 4 topes por motor (investigacion in+out
+    + produccion in+out); NO corta a nivel global (eso es solo USD + parada), solo cada motor corta
+    por su tope via `nivel_proceso`. Con los 4 topes en 0 la suma es 0 = sin limite de tokens.
+    `restante_tokens`/`pct_usado` son None si esa suma es 0; `pct_usado_usd` es None sin presupuesto
+    de USD. El coste USD gastado del dia viaja dentro de `gastado.coste_usd`. La parada de emergencia
+    y `gastado` siguen GLOBALES; `por_proceso` desglosa el gasto y los topes PROPIOS (entrada/salida)
+    de cada motor (ADR 0011).
     """
     gasto = _gasto_hoy()
-    presupuesto = config.presupuesto_tokens_dia()
+    presupuesto = _suma_topes_motor()
     presupuesto_usd = config.presupuesto_usd_dia()
     gastado = int(gasto.get("tokens", 0))
     coste = float(gasto.get("coste_usd", 0.0))

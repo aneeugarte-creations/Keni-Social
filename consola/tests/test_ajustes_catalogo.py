@@ -72,7 +72,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Economía de tokens de la generación (presupuesto_ia): kill switch + presupuesto
         # diario + margen manual. Editables en caliente desde el Monitor.
         config.ENV_GENERACION_PAUSADA,
-        config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_USD_DIA,
+        config.ENV_PRESUPUESTO_USD_DIA,
         # Topes diarios de tokens POR MOTOR, separando entrada/salida (investigación / producción).
         config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
         config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
@@ -303,7 +303,6 @@ _PIPELINE_TOPES_INT = {
 # la cola que gobiernan) pero su mínimo es 0 a propósito: 0 = «sin límite/sin tope» (apagado),
 # a diferencia de los knobs de admisión, donde 0 no tiene sentido (algo debe entrar).
 _PIPELINE_ECONOMIA_INT = {
-    config.ENV_PRESUPUESTO_TOKENS_DIA,
     config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
     config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
     config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,

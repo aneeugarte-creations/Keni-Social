@@ -92,8 +92,7 @@ ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
 ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 
 # Economia de tokens de la generacion (la suscripcion `claude` es COMPARTIDA con el equipo):
-# presupuesto DIARIO de tokens con corte automatico + kill switch humano (`presupuesto_ia.py`).
-ENV_PRESUPUESTO_TOKENS_DIA = "KENI_PRESUPUESTO_TOKENS_DIA"
+# corte DIARIO por COSTE en USD + kill switch humano (`presupuesto_ia.py`).
 # Topes DIARIOS de tokens POR MOTOR (ADR 0011: investigacion vs produccion), separando ENTRADA y
 # SALIDA. Cada motor corta de forma independiente con sus topes propios; el corte efectivo de un
 # motor es el MAS restrictivo entre su tope IN, su tope OUT y el cap global de USD. 0 = SIN limite.
@@ -532,9 +531,6 @@ VERIFICACION_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
 WORKER_SONDEO_SEGUNDOS_DEF = 0.5
-# Presupuesto DIARIO de tokens de la generacion (in+out, dia UTC). 0 = SIN limite (defecto:
-# no cambia el comportamiento de un deploy existente; se enciende fijando un valor > 0).
-PRESUPUESTO_TOKENS_DIA_DEF = 0
 # Topes DIARIOS de tokens por motor, separando ENTRADA y SALIDA (dia UTC). 0 = SIN limite (defecto:
 # no cambia el comportamiento; solo rige el cap global de USD hasta que se fije un valor > 0).
 PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF = 0
@@ -918,7 +914,6 @@ __all__ = [
     'ENV_PORT',
     'ENV_PREFERENCIAS',
     'ENV_PRESUPUESTO_MARGEN_MANUAL',
-    'ENV_PRESUPUESTO_TOKENS_DIA',
     'ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA',
     'ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA',
     'ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA',
@@ -997,7 +992,6 @@ __all__ = [
     'PROMPT_AVISO_CHARS_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
-    'PRESUPUESTO_TOKENS_DIA_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF',
     'PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF',
     'PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF',

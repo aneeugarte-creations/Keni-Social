@@ -420,16 +420,6 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
-            clave=config.ENV_PRESUPUESTO_TOKENS_DIA,
-            tipo="int",
-            etiqueta="Presupuesto diario de tokens",
-            ayuda="Tokens (entrada+salida) de generación por día UTC; al agotarse se corta el "
-            "trabajo automático (lo manual sigue hasta el margen); 0 = sin límite.",
-            grupo="pipeline_topes",
-            defecto=config.PRESUPUESTO_TOKENS_DIA_DEF,
-            minimo=0,
-        ),
-        Ajuste(
             clave=config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
             tipo="int",
             etiqueta="Tope diario de tokens de entrada · Investigación",

@@ -198,29 +198,28 @@ def test_hook_recierre_no_duplica(entorno):
 def test_nivel_normal_sin_presupuesto(entorno):
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
     est = presupuesto_ia.estado()
-    assert est["presupuesto_tokens_dia"] == 0
+    assert est["presupuesto_tokens_dia"] == 0  # suma de los 4 topes por motor, todos en 0
     assert est["presupuesto_usd_dia"] == 0
-    assert est["restante_tokens"] is None and est["pct_usado"] is None
+    assert est["restante_tokens"] is None and est["pct_usado"] is None  # suma 0 = sin limite
     assert est["pct_usado_usd"] is None
 
 
-def test_nivel_escalones(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000")
-    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
-
-    repos.registrar_gasto_ia("g1", dia=_hoy(), tokens_in=600, tokens_out=400)  # = 1000
+def test_estado_presupuesto_tokens_es_suma_de_topes_motor(entorno, monkeypatch):
+    """`presupuesto_tokens_dia` es INFORMATIVO: la SUMA de los 4 topes por motor (investigacion
+    in+out + produccion in+out). restante/pct se miden contra esa suma; NO corta a nivel global."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "400")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA", "100")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA", "300")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA", "200")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=300, tokens_out=200)  # 500 global
     presupuesto_ia.invalidar_cache()
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL
-
-    repos.registrar_gasto_ia("g2", dia=_hoy(), tokens_in=200, tokens_out=0)  # 1200 = +20%
-    presupuesto_ia.invalidar_cache()
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_AGOTADO
-
     est = presupuesto_ia.estado()
-    assert est["gastado"]["tokens"] == 1200
-    assert est["restante_tokens"] == 0
-    assert est["pct_usado"] == pytest.approx(120.0)
+    assert est["presupuesto_tokens_dia"] == 1000  # 400 + 100 + 300 + 200
+    assert est["gastado"]["tokens"] == 500
+    assert est["restante_tokens"] == 500
+    assert est["pct_usado"] == pytest.approx(50.0)
+    # Esa suma NO corta a nivel global: sin cap USD, el global es NORMAL.
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
 
 
 def test_nivel_escalones_por_usd(entorno, monkeypatch):
@@ -244,25 +243,20 @@ def test_nivel_escalones_por_usd(entorno, monkeypatch):
     assert est["pct_usado_usd"] == pytest.approx(120.0)
 
 
-def test_nivel_usd_y_tokens_corta_el_mas_restrictivo(entorno, monkeypatch):
-    """Con ambos topes activos rige el MAS restrictivo: USD agotado corta aunque los tokens
-    sigan holgados (y al revés)."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000000")  # tokens muy holgados
-    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=6.0)
+def test_nivel_global_solo_usd_no_corta_por_tokens(entorno, monkeypatch):
+    """El corte GLOBAL es SOLO el cap de USD (+ parada): un gasto de tokens ENORME sin cap USD
+    NO corta a nivel global. Al fijar el cap USD y superarlo, el global SI corta."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10_000_000, tokens_out=10_000_000,
+                             coste_usd=9999.0)
     presupuesto_ia.invalidar_cache()
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_AGOTADO
-
-
-def test_nivel_sin_usd_configurado_no_corta_por_coste(entorno, monkeypatch):
-    """Sin `KENI_PRESUPUESTO_USD_DIA` el coste NO corta: solo gobierna el presupuesto de tokens
-    (comportamiento idéntico al previo a este tope)."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=100, coste_usd=9999.0)
-    presupuesto_ia.invalidar_cache()
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # tokens holgados, USD apagado
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL  # sin cap USD: no corta
     est = presupuesto_ia.estado()
     assert est["presupuesto_usd_dia"] == 0 and est["pct_usado_usd"] is None
+
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    presupuesto_ia.invalidar_cache()
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_AGOTADO  # 9999 >> 5*1.2
 
 
 def test_nivel_pausado_manda(entorno, monkeypatch):
@@ -319,8 +313,8 @@ def test_encolar_pausado_rechaza_todo(entorno, monkeypatch):
 
 
 def test_encolar_solo_manual_corta_solo_fondo(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=0)
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=5.0)
     presupuesto_ia.invalidar_cache()
     with pytest.raises(generaciones.PresupuestoAgotadoError):
         _encolar(jobspec.PRIORIDAD_PIPELINE)
@@ -328,9 +322,9 @@ def test_encolar_solo_manual_corta_solo_fondo(entorno, monkeypatch):
 
 
 def test_encolar_agotado_corta_tambien_manual(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
     monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=120, tokens_out=0)
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=6.0)
     presupuesto_ia.invalidar_cache()
     with pytest.raises(generaciones.PresupuestoAgotadoError):
         _encolar(jobspec.PRIORIDAD_MANUAL)
@@ -338,8 +332,8 @@ def test_encolar_agotado_corta_tambien_manual(entorno, monkeypatch):
 
 def test_encolar_agotado_exime_jobs_de_proceso(entorno, monkeypatch):
     """Un job de PROCESO (render/ASR) no gasta tokens: el corte por presupuesto no lo frena."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=999, tokens_out=0)
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=999.0)
     presupuesto_ia.invalidar_cache()
     gen_id = _gen(tipo="render-video")
     spec = jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"x": 1})
@@ -372,8 +366,8 @@ def test_prioridad_breaking_adelanta_al_fondo_pero_no_al_equipo(entorno, monkeyp
     assert cola.reclamar("w")["id"] == j_break   # breaking adelanta al lote ordinario
     assert cola.reclamar("w")["id"] == j_pipe
     # Con el presupuesto agotado (solo_manual), breaking NO se encola ni se reclama: es fondo.
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=0)
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=5.0)
     presupuesto_ia.invalidar_cache()
     with pytest.raises(generaciones.PresupuestoAgotadoError):
         _encolar(jobspec.PRIORIDAD_BREAKING)
@@ -484,7 +478,9 @@ def _cli_token():
 
 
 def test_api_cola_expone_presupuesto(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000")
+    # `presupuesto_tokens_dia` expuesto = suma de los 4 topes por motor (aqui 600 + 400 = 1000).
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "600")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA", "400")
     gen_id = _gen()
     _cerrar(gen_id, tokens_in=400, tokens_out=100)
     presupuesto_ia.invalidar_cache()
@@ -652,9 +648,10 @@ def test_tope_por_motor_corta_solo_ese_motor(entorno, monkeypatch):
 
 
 def test_sin_topes_por_motor_comportamiento_global_identico(entorno, monkeypatch):
-    """Con los topes por motor en 0, el corte de cada motor es EXACTAMENTE el global (tokens)."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
-    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=0, proceso="produccion")
+    """Con los topes por motor en 0, el corte de cada motor es EXACTAMENTE el global (cap USD)."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "5")
+    repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=10, tokens_out=10, coste_usd=5.0,
+                             proceso="produccion")
     presupuesto_ia.invalidar_cache()
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL
     assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_SOLO_MANUAL
