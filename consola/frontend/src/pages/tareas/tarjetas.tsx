@@ -304,7 +304,7 @@ export function TarjetaEventoLibre({
   // Editar/Borrar el partido: acciones de coordinación (solo admin), como el resto del reparto.
   const accionesEvento: EntradaMenuContextual[] = [];
   if (esManager) {
-    accionesEvento.push({ etiqueta: "Asignar", icono: UserPlus, onClick: () => setAsignarAbierto(true) });
+    accionesEvento.push({ etiqueta: "Asignar a…", icono: UserPlus, onClick: () => setAsignarAbierto(true) });
     accionesEvento.push({ etiqueta: "Editar", icono: Pencil, onClick: () => setEditarAbierto(true) });
     accionesEvento.push({ separador: true });
     accionesEvento.push({
@@ -490,7 +490,7 @@ export function TarjetaTarea({
   if (!enCobertura) {
     if (esManager) {
       accionesTarea.push({
-        etiqueta: libre ? "Asignar" : "Reasignar",
+        etiqueta: "Asignar a…",
         icono: UserPlus,
         onClick: () => setAsignarAbierto(true),
       });
@@ -731,7 +731,7 @@ export function TarjetaCobertura({
   const accionesCobertura: EntradaMenuContextual[] = [];
   if (esManager) {
     accionesCobertura.push({
-      etiqueta: "Añadir a alguien",
+      etiqueta: "Asignar a…",
       icono: UserPlus,
       onClick: () => setAsignarAbierto(true),
     });

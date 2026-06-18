@@ -230,7 +230,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // El icono vive en la fila COMPACTA (no hay que desplegar) y solo lo ve un manager.
     await screen.findByText("Tigres vs Rayados");
-    fireEvent.click(screen.getByRole("button", { name: "Asignar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Asignar a…" }));
 
     // El diálogo deja elegir persona (y el rol viaja con el default «foto»).
     fireEvent.click(await screen.findByRole("button", { name: "luis" }));
@@ -241,7 +241,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   it("PANORAMA: un editor NO ve el icono «Asignar» de la fila", async () => {
     renderTareas([], [evento({ id: "ev-ed", titulo: "Partido editor" })], usuario("editor", "u2"));
     await screen.findByText("Partido editor");
-    expect(screen.queryByRole("button", { name: "Asignar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Asignar a…" })).toBeNull();
   });
 
   it("PANORAMA: un evento PASADO no suma al contador de la persona; uno FUTURO sí", async () => {
@@ -445,11 +445,11 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // La fila compacta (un botón) se despliega y muestra la tarjeta accionable.
     fireEvent.click(await screen.findByRole("button", { name: /Clip de Luis/ }));
-    // Reasignar está en el menú contextual; se accede con click derecho sobre la tarjeta.
+    // «Asignar a…» está en el menú contextual; se accede con click derecho sobre la tarjeta.
     const luisEls = await screen.findAllByText("luis");
     const cardHostLuis = luisEls.map(el => el.closest("[role='button']")).find(Boolean)!;
     fireEvent.contextMenu(cardHostLuis);
-    expect(await screen.findByRole("menuitem", { name: /Reasignar/ })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /Asignar a/ })).toBeInTheDocument();
   });
 
   it("MULTI-COBERTURA: varias personas cubren UN evento → una sola fila, y otra puede apuntarse", async () => {
@@ -845,6 +845,33 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(within(banda).queryByText("Urgente la próxima semana")).toBeNull();
     // …pero sigue en la página, en su cajón de día (con su badge rojo).
     expect(screen.getByText("Urgente la próxima semana")).toBeInTheDocument();
+  });
+
+  it("BANDA «URGENTE AHORA»: un partido urgente YA CUBIERTO no entra en la banda (solo los huecos)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T18:00:00Z")); // 12:00 CDMX del 14-jun
+    const hoy = hoyCDMX(); // "2026-06-14"
+
+    renderPanorama({
+      // Cobertura de HOY, prioridad alta (heredada del evento) PERO con dueño (luis la cubre).
+      tareas: [
+        tarea({
+          id: "t-cub",
+          titulo: "Clásico cubierto",
+          evento_id: "ev-hot",
+          responsable_id: "u-luis",
+          responsable_nombre: "luis",
+          fecha_objetivo: hoy,
+          hora_objetivo: "20:00",
+        }),
+      ],
+      eventos: [evento({ id: "ev-hot", titulo: "Clásico cubierto", fecha: hoy, hora: "20:00", prioridad: "alta" })],
+    });
+
+    // Alta + hoy, pero CUBIERTO → no es un hueco: no hay banda «Urgente ahora».
+    expect(screen.queryByRole("region", { name: "Urgente ahora" })).toBeNull();
+    // Sigue visible en su cajón de día (no se esconde, solo no compite en la banda roja).
+    expect(screen.getAllByText("Clásico cubierto").length).toBeGreaterThan(0);
   });
 
   it("pega un enlace, analiza, revisa los partidos propuestos y los acepta", async () => {

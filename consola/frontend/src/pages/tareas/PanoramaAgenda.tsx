@@ -194,12 +194,14 @@ function prioridadItem(i: Item): PrioridadEvento {
 }
 
 /**
- * ¿Es URGENTE-DE-AHORA (breaking)? = prioridad «alta» Y de HOY o SIN FECHA. Un partido urgente
- * de la semana que viene NO es breaking (se queda en su día con su badge rojo); solo lo de ahora
- * salta al tope. `i.orden` ya es el día («AAAA-MM-DD» o «9999-99-99» para «sin fecha»).
+ * ¿Es URGENTE-DE-AHORA (breaking)? = prioridad «alta», SIN cubrir Y de HOY o SIN FECHA. Un partido
+ * urgente de la semana que viene NO es breaking (se queda en su día con su badge rojo); y uno ya
+ * cubierto (alguien lo cogió o lo cubre su turno) tampoco salta a la banda roja: solo compiten ahí
+ * los HUECOS de hoy, que es lo que pide decisión. `i.orden` ya es el día («AAAA-MM-DD» o «9999-99-99»).
  */
 function esUrgenteAhora(i: Item, hoy: string): boolean {
   if (prioridadItem(i) !== "alta") return false;
+  if (!itemSinDueno(i)) return false;
   return i.orden === hoy || i.orden === "9999-99-99";
 }
 
@@ -398,8 +400,8 @@ function AccionesItem({
         variant="outline"
         size="icon"
         className="h-7 w-7 shrink-0"
-        aria-label="Asignar"
-        title="Asignar"
+        aria-label="Asignar a…"
+        title="Asignar a…"
         onClick={() => setAsignarAbierto(true)}
       >
         <UserPlus className="h-3.5 w-3.5" />

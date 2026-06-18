@@ -2,6 +2,7 @@
 // (calendario / mis turnos / cambios y ausencias).
 import { useMutation } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BellRing,
   CalendarDays,
   CalendarPlus,
@@ -17,7 +18,6 @@ import {
   Loader2,
   MoreHorizontal,
   Plane,
-  ShieldCheck,
   User,
   Users,
 } from "lucide-react";
@@ -220,8 +220,13 @@ export function LeyendaCobertura() {
         <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Reprogramado
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> Coordinador
-        por celda
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" /> Turno forzado
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Plane className="h-3.5 w-3.5 text-orange-600" /> Ausente
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Clock className="h-3.5 w-3.5 text-sky-600" /> Horario a medida
       </span>
     </div>
   );
