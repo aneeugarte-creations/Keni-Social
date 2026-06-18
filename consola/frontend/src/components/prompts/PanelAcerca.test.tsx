@@ -48,6 +48,15 @@ describe("PanelAcerca", () => {
     expect(screen.getByText(/No está cableado a ningún flujo/)).toBeInTheDocument();
   });
 
+  it("para clase desarrollo dice que alimenta a Ralph (no el texto de marca/no-cableado)", () => {
+    render(
+      <PanelAcerca doc={doc({ id: "editorial/desarrollo/ralph", clase: "desarrollo" })} />,
+    );
+    expect(screen.getByText(/AUTO-DESARROLLO/)).toBeInTheDocument();
+    expect(screen.getByText(/Ralph Desarrollo/)).toBeInTheDocument();
+    expect(screen.queryByText(/No está cableado a ningún flujo/)).not.toBeInTheDocument();
+  });
+
   it("redacta la descripción y dónde se inyecta el documento", () => {
     render(
       <PanelAcerca

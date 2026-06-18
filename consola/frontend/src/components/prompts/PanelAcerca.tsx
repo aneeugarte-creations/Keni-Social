@@ -40,10 +40,21 @@ export function PanelAcerca({
   const pipelines = doc.pipelines ?? [];
   const cableado = procesos.length > 0 || pipelines.length > 0 || etapas.length > 0 || !!doc.rol;
 
+  // ── Clase `desarrollo`: NO es contexto de marca; gobierna a los agentes Ralph y a las fases
+  //    del carril de auto-desarrollo. El texto genérico de "pieza editorial" no aplica. ──
+  const esDesarrollo = doc.clase === "desarrollo";
+  const usoDesarrollo = doc.id.endsWith("/ralph-operativo")
+    ? "Se inyecta como CLAUDE.md del Ralph Operativo (el asistente del equipo) cada vez que lo lanzas desde la burbuja. Editarlo cambia su comportamiento sin tocar código."
+    : doc.id.endsWith("/ralph")
+      ? "Se inyecta como instrucciones del Ralph Desarrollo cada vez que lo lanzas desde la burbuja. Editarlo cambia su comportamiento sin tocar código."
+      : "Es el prompt de una fase del carril de auto-desarrollo (kanban de Sugerencias): lo usa el motor al construir una idea.";
+
   // ── Párrafo 1: qué ES este archivo. ──
-  const queEs = esPrompt
-    ? "Es un prompt: el conjunto de instrucciones que recibe el modelo cuando genera contenido."
-    : "Es una pieza editorial: contexto de marca, voz o reglas que se inyecta en las generaciones para que el resultado suene auténtico.";
+  const queEs = esDesarrollo
+    ? "Es contexto de AUTO-DESARROLLO: gobierna a los agentes Ralph y a las fases del kanban de Sugerencias (no es contexto de marca)."
+    : esPrompt
+      ? "Es un prompt: el conjunto de instrucciones que recibe el modelo cuando genera contenido."
+      : "Es una pieza editorial: contexto de marca, voz o reglas que se inyecta en las generaciones para que el resultado suene auténtico.";
 
   // ── Párrafo 2: para qué sirve (la descripción del equipo, si la hay). ──
 
@@ -82,7 +93,9 @@ export function PanelAcerca({
         </p>
       )}
 
-      {cableado ? (
+      {esDesarrollo ? (
+        <p>{usoDesarrollo}</p>
+      ) : cableado ? (
         <p>{frasesUso.join(" ")}</p>
       ) : (
         <p className="text-muted-foreground">

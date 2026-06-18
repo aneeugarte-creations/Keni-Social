@@ -1,5 +1,5 @@
 ---
-titulo: "Ralph operativo · asistente del equipo (MCP)"
+titulo: "Ralph Operativo"
 descripcion: "Contexto base del Ralph OPERATIVO: asistente del equipo de redes con el MCP de la app (tools keni_*). No toca código ni filesystem; prepara y propone, el humano decide qué se publica."
 tipo: editorial
 clase: desarrollo

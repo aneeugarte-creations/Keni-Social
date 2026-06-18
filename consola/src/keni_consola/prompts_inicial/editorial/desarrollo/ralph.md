@@ -1,5 +1,5 @@
 ---
-titulo: "Ralph · CLAUDE.md base del agente"
+titulo: "Ralph Desarrollo"
 descripcion: "Contexto base del agente Ralph de auto-desarrollo: su alcance es el repo keni-social, permisos amplios pero NUNCA push directo a main sin checkpoint humano; trabaja en su worktree+rama y conversa con el humano."
 tipo: editorial
 clase: desarrollo
