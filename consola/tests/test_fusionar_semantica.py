@@ -188,6 +188,54 @@ def test_proponer_macro_eventos_reutiliza_tema_macro_existente():
 
 
 # --------------------------------------------------------------------------- #
+# proponer_subtemas (puro)                                                      #
+# --------------------------------------------------------------------------- #
+
+
+def _ej_subtemas(salida):
+    def run(_prompt, _carpeta):
+        return salida if isinstance(salida, str) else json.dumps(salida)
+    return run
+
+
+def test_proponer_subtemas_parte_el_evento_en_facetas():
+    """Un macro-evento se parte en subtemas DISJUNTOS; un concierto no va con los partidos."""
+    clusters = [
+        {"id": "p1", "titulo": "México vence a Sudáfrica en el debut"},
+        {"id": "p2", "titulo": "Argentina golea a Argelia"},
+        {"id": "show", "titulo": "Concierto en la inauguración del torneo"},
+    ]
+    salida = {"subtemas": [
+        {"subtema": "Partidos", "ids": ["p1", "p2"]},
+        {"subtema": "Espectáculo", "ids": ["show"]},
+    ]}
+    subtemas = fusionar_semantica.proponer_subtemas(clusters, ejecutor=_ej_subtemas(salida))
+    assert subtemas == [
+        {"subtema": "Partidos", "ids": ["p1", "p2"]},
+        {"subtema": "Espectáculo", "ids": ["show"]},
+    ]
+
+
+def test_proponer_subtemas_disjuntos_y_solo_ids_validos():
+    """Un id repetido entre subtemas se queda en el primero; los inexistentes se filtran."""
+    clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
+    salida = {"subtemas": [
+        {"subtema": "Uno", "ids": ["a", "b"]},
+        {"subtema": "Dos", "ids": ["b", "zzz"]},  # b ya usado, zzz no existe -> subtema vacío, fuera
+    ]}
+    assert fusionar_semantica.proponer_subtemas(clusters, ejecutor=_ej_subtemas(salida)) == [
+        {"subtema": "Uno", "ids": ["a", "b"]},
+    ]
+
+
+def test_proponer_subtemas_menos_de_dos_o_json_invalido():
+    uno = [{"id": "a", "titulo": "X"}]
+    assert fusionar_semantica.proponer_subtemas(uno, ejecutor=_ej_subtemas({"subtemas": []})) == []
+    dos = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
+    assert fusionar_semantica.proponer_subtemas(dos, ejecutor=_ej_subtemas("no soy json")) == []
+
+
+# --------------------------------------------------------------------------- #
 # paso_fusionar_semantica (end-to-end, Postgres)                                  #
 # --------------------------------------------------------------------------- #
 

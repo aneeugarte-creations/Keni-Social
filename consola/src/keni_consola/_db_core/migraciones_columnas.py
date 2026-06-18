@@ -912,6 +912,9 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # (p. ej. "Cumbre del G7") SIN fusionarlos. "" = la historia no pertenece a ningún
     # macro-evento. Lo escribe `marcar_clusters_tema_macro` y NO lo pisa un recalc del daemon.
     ("tema_macro", "TEXT NOT NULL DEFAULT ''"),
+    # SUBTEMA (faceta) dentro del macro-evento ("Partidos", "Espectáculo"…): un carrusel por
+    # subtema. Lo escribe `marcar_clusters_subtema` y NO lo pisa un recalc del daemon.
+    ("subtema", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:

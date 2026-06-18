@@ -273,6 +273,12 @@ def clusters_por_tema_macro(
     return db.clusters_por_tema_macro(tema_macro, marca, solo_nuevos=solo_nuevos)
 
 
+def clusters_por_subtema(
+    tema_macro: str, subtema: str, marca: str, *, solo_nuevos: bool = True
+) -> list[dict[str, Any]]:
+    return db.clusters_por_subtema(tema_macro, subtema, marca, solo_nuevos=solo_nuevos)
+
+
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
     return db.items_de_cluster(cluster_id, limite=limite)
 
@@ -307,6 +313,10 @@ def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: s
 
 def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
     return db.marcar_clusters_tema_macro(ids, tema)
+
+
+def marcar_clusters_subtema(ids: list[str], subtema: str) -> int:
+    return db.marcar_clusters_subtema(ids, subtema)
 
 
 def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:

@@ -51,6 +51,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "verificacion_fuente",
     "verificar_hallazgos",
     "tema_macro",
+    "subtema",
     "creado",
     "actualizado",
 )
@@ -112,6 +113,9 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         # Macro-evento (Fase A): la historia pertenece a un gran evento (p. ej. "Cumbre del
         # G7") junto a otros clusters, SIN fusionarse con ellos. "" = sin macro-evento.
         "tema_macro": fila["tema_macro"] or "",
+        # SUBTEMA (faceta) dentro del macro-evento: gobierna el carrusel coherente y la cadencia
+        # por subtema. "" = sin subtema asignado (aún por partir, o el evento no se partió).
+        "subtema": fila["subtema"] or "",
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -185,6 +189,9 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # lo sella aparte `marcar_clusters_tema_macro` — como `traducido`. Así un recalc del
         # daemon sin el tema_macro no borra una asignación a macro-evento ya hecha.
         "tema_macro": cluster.get("tema_macro") or "",
+        # SUBTEMA: valor del ALTA; en conflicto NO se pisa (`_NO_PISAR`), lo sella aparte
+        # `marcar_clusters_subtema` — como `tema_macro`.
+        "subtema": cluster.get("subtema") or "",
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
@@ -196,7 +203,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
         "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
-        "tema_macro",
+        "tema_macro", "subtema",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -504,6 +511,60 @@ def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
         return cur.rowcount or 0
     finally:
         con.close()
+
+
+def marcar_clusters_subtema(ids: list[str], subtema: str) -> int:
+    """Asigna el SUBTEMA `subtema` (faceta del macro-evento) a un lote de clusters. Devuelve nº filas.
+
+    Parte un macro-evento en facetas coherentes (p. ej. "Partidos", "Espectáculo") para que cada
+    carrusel sea de un tipo y la cadencia sea por subtema. Aparte del upsert (la columna está en
+    `_NO_PISAR`) para que un recalc del daemon no la borre. `ids` vacío -> 0; `subtema` vacío desvincula.
+    """
+    pedidos = [i for i in dict.fromkeys(ids) if i]
+    if not pedidos:
+        return 0
+    marcadores = ",".join("?" for _ in pedidos)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_clusters SET subtema = ?, actualizado = ? "  # noqa: S608 -- marcadores parametrizados
+            f"WHERE id IN ({marcadores})",
+            (subtema or "", ahora_iso(), *pedidos),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
+def clusters_por_subtema(
+    tema_macro: str, subtema: str, marca: str, *, solo_nuevos: bool = True
+) -> list[dict[str, Any]]:
+    """Clusters de `marca` del SUBTEMA `subtema` dentro del macro-evento `tema_macro`, rankeados.
+
+    La faceta coherente de un gran evento (p. ej. los «Partidos» del «Mundial 2026»): el carrusel
+    se arma con SOLO estos clusters, así no mezcla un concierto con un resumen de partidos.
+    `solo_nuevos` acota a las aún no promovidas (`estado='nuevo'`). Orden `score DESC,
+    ultimo_visto DESC`. `tema_macro` o `subtema` vacío -> [].
+    """
+    tema_macro = (tema_macro or "").strip()
+    subtema = (subtema or "").strip()
+    if not tema_macro or not subtema:
+        return []
+    condiciones = ["tema_macro = ?", "subtema = ?", "marca = ?"]
+    params: list[Any] = [tema_macro, subtema, marca]
+    if solo_nuevos:
+        condiciones.append("estado = 'nuevo'")
+    where = " WHERE " + " AND ".join(condiciones)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; valores parametrizados
+            f"{_SELECT_NOTICIA_CLUSTER}{where} ORDER BY score DESC, ultimo_visto DESC, id DESC",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_cluster(f) for f in filas]
 
 
 def clusters_por_tema_macro(

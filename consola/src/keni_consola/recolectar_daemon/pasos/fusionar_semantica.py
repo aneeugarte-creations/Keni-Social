@@ -32,6 +32,37 @@ def _etiqueta_canonica(ids: list[str], por_id: dict[str, dict[str, Any]], propue
     return max(sorted(conteo), key=lambda e: conteo[e])
 
 
+def _partir_en_subtemas(
+    tema: str, ids: list[str], por_id: dict[str, dict[str, Any]],
+    *, ejecutor: fusionar_semantica.Ejecutor | None,
+) -> int:
+    """Parte una familia de macro-evento en SUBTEMAS (Haiku) y los persiste. Devuelve nº etiquetados.
+
+    Cada subtema (faceta: «Partidos», «Espectáculo»…) agrupa los clusters de un tipo, para que el
+    carrusel sea coherente y la cadencia sea por subtema. Best-effort: cualquier fallo (Haiku o
+    persistencia) se loguea y devuelve lo que llevara, sin abortar el paso.
+    """
+    familia = [por_id[i] for i in ids if i in por_id]
+    if len(familia) < 2:
+        return 0
+    try:
+        grupos = fusionar_semantica.proponer_subtemas(familia, ejecutor=ejecutor)
+    except Exception:  # noqa: BLE001 -- un fallo de Haiku no aborta el etiquetado del evento
+        _log.exception("recolectar_daemon: fallo proponiendo subtemas de «%s».", tema[:60])
+        return 0
+    etiquetados = 0
+    for g in grupos:
+        subtema = str(g.get("subtema") or "").strip()
+        sub_ids = [str(i) for i in (g.get("ids") or []) if i]
+        if not subtema or not sub_ids:
+            continue
+        try:
+            etiquetados += repos.marcar_clusters_subtema(sub_ids, subtema) or 0
+        except Exception:  # noqa: BLE001 -- persistir un subtema no aborta el paso
+            _log.exception("recolectar_daemon: fallo al etiquetar el subtema «%s».", subtema[:60])
+    return etiquetados
+
+
 def paso_fusionar_semantica(
     *,
     ejecutor: fusionar_semantica.Ejecutor | None = None,
@@ -184,6 +215,10 @@ def paso_fusionar_semantica(
             if n:
                 etiquetadas += 1
                 familias_desc.append(f"{tema} ({n})")
+            # SUBTEMA (Fase A.2): parte la familia en facetas coherentes (partidos, espectáculo…)
+            # para que cada carrusel sea de un tipo y la cadencia sea por subtema, no por evento.
+            # Best-effort: un fallo no aborta el etiquetado del macro-evento.
+            _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
         if etiquetadas:
             macro_total += etiquetadas
             resumen_macro = (

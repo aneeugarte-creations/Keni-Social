@@ -46,6 +46,7 @@ _MAX_CHARS_ITEM = 240        # recorte del titulo por historia
 _PROMPT_ID = "prompt/fusionar"
 _PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
 _PROMPT_MACRO_ID = "prompt/fusionar-macroevento"
+_PROMPT_SUBTEMA_ID = "prompt/fusionar-subtema"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 
@@ -266,6 +267,90 @@ def proponer_macro_eventos(
         if len(ids) >= 2:
             familias.append({"tema": f["tema"], "ids": ids})
     return familias
+
+
+def _extraer_subtemas(texto: str) -> list[dict[str, Any]]:
+    """Extrae los subtemas de un macro-evento del texto de Haiku. [] si falla.
+
+    Cada subtema es `{"subtema": "<etiqueta>", "ids": ["id1", ...]}`; a diferencia de las
+    familias, un subtema válido puede tener UN solo id (faceta con una sola historia).
+    """
+    bruto = json_llm.extraer_lista(texto, claves=("subtemas",))
+    if bruto is None:
+        return []
+    subtemas: list[dict[str, Any]] = []
+    for s in bruto:
+        if not isinstance(s, dict):
+            continue
+        etiqueta = str(s.get("subtema", "") or "").strip()
+        crudo = s.get("ids")
+        if not etiqueta or not isinstance(crudo, list):
+            continue
+        ids = [str(x) for x in crudo if isinstance(x, (str, int))]
+        if ids:
+            subtemas.append({"subtema": etiqueta, "ids": ids})
+    return subtemas
+
+
+def proponer_subtemas(
+    clusters: list[dict[str, Any]],
+    *,
+    ejecutor: Ejecutor | None = None,
+    al_ejecutar: Callable[[str, str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Parte un MACRO-EVENTO ya etiquetado en SUBTEMAS coherentes (Haiku). PURO de repos.
+
+    `clusters`: las historias de UNA familia de macro-evento (dicts con `{id, titulo}` y
+    `subtema` opcional para reutilizar la etiqueta). Devuelve `[{"subtema": "<etiqueta>",
+    "ids": [...]}, ...]` con cada id en UN solo subtema (disjuntos, del input). Un subtema
+    puede tener un solo id. [] ante <2 historias o cualquier fallo (best-effort).
+
+    Separa el evento por FACETA (partidos, incidentes, espectáculo…) para que cada carrusel
+    sea de un tipo (un concierto no entra en el resumen de partidos) y la cadencia sea por
+    subtema, no por el evento entero.
+    """
+    validos = [c for c in clusters if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
+    if len(validos) < 2:
+        return []
+    ids_validos = {str(c["id"]) for c in validos}
+
+    payload = [
+        {
+            "id": str(c["id"]),
+            "titulo": json_llm.truncar_avisando(
+                str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
+                campo=f"titulo de {c['id']}", log=_log,
+            )[0],
+            # Subtema ACTUAL del cluster (puede estar vacío): que Haiku REUTILICE la etiqueta.
+            "subtema": str(c.get("subtema") or ""),
+        }
+        for c in validos
+    ]
+    correr = ejecutor or _ejecutar_haiku
+    prompt = _construir_prompt(
+        json.dumps(payload, ensure_ascii=False), prompt_id=_PROMPT_SUBTEMA_ID
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="keni-subtema-") as carpeta:
+            salida = correr(prompt, carpeta)
+    except Exception as e:  # noqa: BLE001 -- best-effort: cualquier fallo -> no parte nada
+        _log.warning("fusionar_semantica: falló la llamada a Haiku (subtema): %s", e)
+        return []
+    if al_ejecutar is not None:
+        try:
+            al_ejecutar(prompt, salida)
+        except Exception:  # noqa: BLE001 -- el callback (registrar actividad) es best-effort
+            _log.warning("fusionar_semantica: fallo en al_ejecutar (subtema).", exc_info=True)
+
+    vistos: set[str] = set()
+    subtemas: list[dict[str, Any]] = []
+    for s in _extraer_subtemas(salida):
+        # Solo ids del input, sin repetir entre subtemas (disjuntos), preservando orden.
+        ids = [i for i in dict.fromkeys(s["ids"]) if i in ids_validos and i not in vistos]
+        if ids:
+            vistos.update(ids)
+            subtemas.append({"subtema": s["subtema"], "ids": ids})
+    return subtemas
 
 
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:

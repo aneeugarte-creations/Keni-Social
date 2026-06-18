@@ -986,3 +986,43 @@ def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
         if (g.get("etiqueta") or "").startswith("Priorizar")
     )
     assert not gen2.get("metricas")
+
+
+def test_partir_en_subtemas_persiste_cada_faceta(monkeypatch):
+    """`_partir_en_subtemas` parte la familia (Haiku) y persiste cada subtema por sus ids."""
+    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+
+    por_id = {
+        "p1": {"id": "p1", "titulo": "México vence a Sudáfrica"},
+        "p2": {"id": "p2", "titulo": "Argentina golea a Argelia"},
+        "show": {"id": "show", "titulo": "Concierto en la inauguración"},
+    }
+    monkeypatch.setattr(
+        paso.fusionar_semantica, "proponer_subtemas",
+        lambda familia, *, ejecutor=None: [
+            {"subtema": "Partidos", "ids": ["p1", "p2"]},
+            {"subtema": "Espectáculo", "ids": ["show"]},
+        ],
+    )
+    persistidos: list[tuple[list[str], str]] = []
+    monkeypatch.setattr(
+        paso.repos, "marcar_clusters_subtema",
+        lambda ids, subtema: (persistidos.append((list(ids), subtema)), len(ids))[1],
+    )
+
+    n = paso._partir_en_subtemas("Mundial 2026", ["p1", "p2", "show"], por_id, ejecutor=None)
+
+    assert n == 3
+    assert persistidos == [(["p1", "p2"], "Partidos"), (["show"], "Espectáculo")]
+
+
+def test_partir_en_subtemas_familia_de_uno_no_llama_a_haiku(monkeypatch):
+    """Con <2 historias no hay nada que partir: ni Haiku ni persistencia."""
+    from keni_consola.recolectar_daemon.pasos import fusionar_semantica as paso
+
+    def _no_llamar(*a, **k):
+        raise AssertionError("no debería invocarse con familia de uno")
+
+    monkeypatch.setattr(paso.fusionar_semantica, "proponer_subtemas", _no_llamar)
+    n = paso._partir_en_subtemas("Mundial 2026", ["solo"], {"solo": {"id": "solo", "titulo": "X"}}, ejecutor=None)
+    assert n == 0
