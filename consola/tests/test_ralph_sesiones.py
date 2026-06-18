@@ -396,3 +396,10 @@ def test_persona_dev_se_resuelve_del_doc_editable_o_respaldo():
     # Desarrollo); si no se puede, cae al respaldo. En ambos casos trae el flujo de promoción.
     persona = rs._persona_dev()
     assert persona and "promover-main.sh" in persona
+
+
+def test_persona_operativa_se_resuelve_del_doc_editable_o_respaldo():
+    # _persona_operativa lee el doc EDITABLE `editorial/desarrollo/ralph-operativo`; si no, cae al
+    # respaldo. En ambos casos es la persona del asistente del equipo (usa el MCP, keni_contexto).
+    persona = rs._persona_operativa()
+    assert persona and "keni_contexto" in persona

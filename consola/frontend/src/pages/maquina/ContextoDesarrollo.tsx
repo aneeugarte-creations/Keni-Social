@@ -18,8 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
 import type { DocumentoTexto } from "@/types";
 
-/** Orden canónico del pipeline de desarrollo; los documentos se ordenan por su posición aquí. */
-const ORDEN_FASES = ["analyze", "plan", "build", "review", "ralph"];
+/** Orden canónico del pipeline de desarrollo; los documentos se ordenan por su posición aquí.
+ *  `ralph-operativo` va antes que `ralph` para que `ordenDoc` lo distinga (su id contiene "ralph"). */
+const ORDEN_FASES = ["analyze", "plan", "build", "review", "ralph-operativo", "ralph"];
 
 /** Posición de un documento en el pipeline (por palabra clave en id/título); al final si no casa. */
 function ordenDoc(doc: DocumentoTexto): number {

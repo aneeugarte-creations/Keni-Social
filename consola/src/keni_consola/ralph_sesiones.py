@@ -114,25 +114,35 @@ _PERSONA_DEV = (
     "código hoy, no el historial de bugs).\n"
 )
 
-# Documento EDITABLE (biblioteca de prompts, clase `desarrollo`) que gobierna la persona del
-# Ralph dev. Es el que se ve/edita en la UI: Contexto → pestaña Desarrollo → «Ralph».
+# Documentos EDITABLES (biblioteca de prompts, clase `desarrollo`) que gobiernan la persona de
+# cada Ralph. Son los que se ven/editan en la UI: Contexto → pestaña Desarrollo. Editarlos cambia
+# el comportamiento del Ralph SIN tocar código (lo recoge el siguiente Ralph que se lance).
 _DOC_PERSONA_DEV = "editorial/desarrollo/ralph"
+_DOC_PERSONA_OPERATIVA = "editorial/desarrollo/ralph-operativo"
 
 
-def _persona_dev() -> str:
-    """Persona del Ralph de desarrollo: lee el doc EDITABLE `editorial/desarrollo/ralph` (la
-    pestaña Contexto → Desarrollo de la app), de modo que editar ese documento cambia cómo se
-    comporta Ralph SIN tocar código. Si no se puede leer (libprompts/IO), cae al texto base
-    `_PERSONA_DEV`."""
+def _persona_doc(doc_id: str, respaldo: str) -> str:
+    """Lee el cuerpo del doc editable `doc_id` de la biblioteca; si no se puede (libprompts/IO),
+    devuelve `respaldo` (texto base en código). Best-effort: nunca casca."""
     try:
         from .libprompts import cuerpo_efectivo
 
-        cuerpo = cuerpo_efectivo(_DOC_PERSONA_DEV)
+        cuerpo = cuerpo_efectivo(doc_id)
         if cuerpo and cuerpo.strip():
             return cuerpo
     except Exception:  # noqa: BLE001 -- libprompts/IO best-effort: usa el respaldo
-        _log.warning("Ralph dev: no se pudo leer la persona editable; uso el respaldo", exc_info=True)
-    return _PERSONA_DEV
+        _log.warning("Ralph: no se pudo leer la persona editable %s; uso el respaldo", doc_id, exc_info=True)
+    return respaldo
+
+
+def _persona_dev() -> str:
+    """Persona del Ralph de DESARROLLO (doc editable `editorial/desarrollo/ralph`)."""
+    return _persona_doc(_DOC_PERSONA_DEV, _PERSONA_DEV)
+
+
+def _persona_operativa() -> str:
+    """Persona del Ralph OPERATIVO (doc editable `editorial/desarrollo/ralph-operativo`)."""
+    return _persona_doc(_DOC_PERSONA_OPERATIVA, _PERSONA_OPERATIVA)
 
 
 # --------------------------------------------------------------------------- #
@@ -323,10 +333,11 @@ def construir_argv(
 
 
 def _escribir_persona_operativa(destino_dir: str) -> None:
-    """Escribe el CLAUDE.md del Ralph operativo en su cwd (best-effort)."""
+    """Escribe el CLAUDE.md del Ralph operativo en su cwd (best-effort), desde el doc EDITABLE
+    `editorial/desarrollo/ralph-operativo` (UI: Contexto → Desarrollo) o su respaldo."""
     try:
         with open(os.path.join(destino_dir, "CLAUDE.md"), "w", encoding="utf-8") as fh:
-            fh.write(_PERSONA_OPERATIVA)
+            fh.write(_persona_operativa())
     except OSError:
         _log.warning("Ralph operativo: no se pudo escribir CLAUDE.md en %s", destino_dir)
 
