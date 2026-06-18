@@ -819,12 +819,15 @@ def construir_procesar_parrilla_import(*, propuesta_id: str, modo: str = "evento
 def _roster_miembros() -> dict[str, str]:
     """Roster valido id->nombre (usuarios con cobertura), MISMO criterio que la rota.
 
+    Usa el NOMBRE humano (`nombre`) con fallback al login (`usuario`), igual que `_roster`: el
+    nombre resuelto del turno y el casado con la parrilla salen del nombre real, no del login.
+
     Import perezoso de `auth` para no acoplar este modulo de dominio al arranque de auth.
     """
     from .. import auth
 
     return {
-        u["id"]: u["usuario"]
+        u["id"]: (u.get("nombre") or u["usuario"])
         for u in auth.listar_usuarios()
         if u.get("cobertura")
     }

@@ -59,8 +59,11 @@ _REINTENTOS_ENLACE = 3
 def _roster() -> dict[str, str]:
     """Roster id->nombre del equipo COMPLETO (todos los usuarios), para no limitar a quién se
     puede asignar un turno al importar. NO filtramos por `cobertura`: el documento puede
-    referenciar a cualquiera del equipo (los 16), y claude solo mapea a gente que ya existe."""
-    return {u["id"]: u["usuario"] for u in auth.listar_usuarios()}
+    referenciar a cualquiera del equipo (los 16), y claude solo mapea a gente que ya existe.
+
+    Usa el NOMBRE humano (`nombre`) con fallback al login (`usuario`): la parrilla trae nombres
+    reales ("MARIANA", "ALEJANDRA SUAREZ"), no logins, así que casa mejor por nombre."""
+    return {u["id"]: (u.get("nombre") or u["usuario"]) for u in auth.listar_usuarios()}
 
 
 def _estado_efectivo(propuesta: dict[str, Any]) -> str:
