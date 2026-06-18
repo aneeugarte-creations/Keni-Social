@@ -133,6 +133,18 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const turnosHoy = semanaHoy?.turnos ?? [];
   const franjasHoy = semanaHoy?.franjas ?? [];
 
+  // «Hechas hoy» = trabajo del día ya resuelto, como dato NEUTRO secundario del KPI (no otra barra):
+  // una cobertura cuyo partido YA pasó (mismo criterio temporal que el semáforo «Cubierto») o un
+  // encargo/recuperable de hoy en «hecha». Mide otra cosa que `cubiertos` (titularidad), por eso va
+  // aparte. Sin el filtro de persona: es un marcador estable de «cómo va el día».
+  const esDeHoy = (fecha?: string | null) => (fecha || "").slice(0, 10) === hoy;
+  const hechasHoy =
+    coberturas.filter((c) => esDeHoy(c.orden) && posicionTemporal(c.orden, c.hora) === "despues")
+      .length +
+    [...encargos, ...recuperables].filter(
+      (t) => esDeHoy(t.fecha_objetivo) && t.estado === "hecha",
+    ).length;
+
   // Lista unificada, ordenada por fecha (las sin fecha, al final).
   const conOrden = (f: string) => f || "9999-99-99";
   const items: Item[] = [
@@ -290,6 +302,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 claims={claimsCobertura}
                 turnos={turnosHoy}
                 franjas={franjasHoy}
+                hechas={hechasHoy}
                 onIrASinCubrir={() => setFiltroPanorama("__pool__")}
               />
               <PanoramaAgenda

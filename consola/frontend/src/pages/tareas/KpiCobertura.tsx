@@ -23,12 +23,16 @@ export function KpiCobertura({
   claims,
   turnos,
   franjas,
+  hechas = 0,
   onIrASinCubrir,
 }: {
   eventos: EventoRota[];
   claims: Publicacion[];
   turnos: TurnoRota[];
   franjas: FranjaSemana[];
+  /** Trabajo del día ya resuelto (partidos pasados + encargos en «hecha»). Dato NEUTRO secundario:
+   *  «· N hechas» en gris al final de la línea, no una segunda barra ni más color. */
+  hechas?: number;
   /** Si se pasa, el corte «N sin cubrir» se vuelve un botón que filtra el Panorama a «Por cubrir». */
   onIrASinCubrir?: () => void;
 }) {
@@ -36,7 +40,7 @@ export function KpiCobertura({
   if (r.total === 0) return null;
 
   const llenos = Math.round((r.cubiertos / r.total) * SEGMENTOS);
-  const etiqueta = `Cobertura de hoy: ${r.cubiertos} de ${r.total} cubiertos, ${r.enVivo} en vivo, ${r.sinCubrir} sin cubrir`;
+  const etiqueta = `Cobertura de hoy: ${r.cubiertos} de ${r.total} cubiertos, ${r.enVivo} en vivo, ${r.sinCubrir} sin cubrir${hechas > 0 ? `, ${hechas} hechas` : ""}`;
 
   return (
     <div
@@ -97,6 +101,13 @@ export function KpiCobertura({
           <span className="font-medium text-emerald-700 dark:text-emerald-300">Todo cubierto</span>
         )}
       </span>
+
+      {/* «Hechas hoy»: dato NEUTRO secundario (gris, solo texto) al final de la línea —no otra
+          barra ni color de marca—. Solo si hay alguna; preserva el «cómo va el día» sin un segundo
+          chrome de progreso. */}
+      {hechas > 0 && (
+        <span className="shrink-0 text-xs text-muted-foreground">· {hechas} hechas</span>
+      )}
 
       {/* Móvil: solo el corte que pide decisión (huecos en rojo) o «✓ Todo cubierto» si no hay
           ninguno (icono+texto, igual que la versión desktop, no una palabra suelta). */}

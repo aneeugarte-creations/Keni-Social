@@ -157,6 +157,27 @@ describe("KpiCobertura — cabecera de cobertura", () => {
     expect(irASinCubrir).toHaveBeenCalledTimes(1);
   });
 
+  it("«N hechas» se muestra como dato NEUTRO (gris, sin barra ni naranja) al final de la línea", () => {
+    fijarAhoraAntesDelSaque(ev(), 300);
+    const { container } = render(
+      <KpiCobertura eventos={[ev()]} claims={[claim()]} turnos={[]} franjas={FRANJAS} hechas={3} />,
+    );
+    // El conteo va en el aria-label del recuadro (accesible) y como texto gris en la línea.
+    const kpi = screen.getByRole("status");
+    expect(kpi).toHaveAttribute("aria-label", expect.stringContaining("3 hechas"));
+    const hechasEl = screen.getByText(/·\s*3\s*hechas/);
+    expect(hechasEl).toHaveClass("text-muted-foreground");
+    // Es texto, no una barra de progreso de marca: nada de naranja `keni-*`.
+    expect(container.querySelector(".bg-keni-500")).toBeNull();
+  });
+
+  it("sin `hechas` (o 0) NO aparece el dato «hechas»", () => {
+    fijarAhoraAntesDelSaque(ev(), 300);
+    render(<KpiCobertura eventos={[ev()]} claims={[claim()]} turnos={[]} franjas={FRANJAS} />);
+    expect(screen.queryByText(/hechas/)).toBeNull();
+    expect(screen.getByRole("status").getAttribute("aria-label")).not.toContain("hechas");
+  });
+
   it("sin `onIrASinCubrir` el corte «N sin cubrir» NO es un botón", () => {
     fijarAhoraAntesDelSaque(ev(), 300);
     render(

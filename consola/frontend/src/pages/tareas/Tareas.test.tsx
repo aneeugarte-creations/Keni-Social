@@ -293,42 +293,39 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getAllByText("Partido viejo").length).toBeGreaterThan(0);
   });
 
-  it("PANORAMA: el marcador de HOY muestra «hechos/total» del día (en vivo)", async () => {
+  it("PANORAMA: el Panorama ya NO pinta su propia barra «Avance de hoy» (vive en el KPI)", async () => {
     const hoy = hoyCDMX();
     renderTareas([
-      // Cobertura de HOY ya pasada (01:00) → hecha.
-      tarea({ id: "cA", evento_id: "evA", responsable_id: "u-luis", responsable_nombre: "luis", fecha_objetivo: hoy, hora_objetivo: "01:00" }),
-      // Cobertura de HOY futura (23:59) → pendiente.
-      tarea({ id: "cB", evento_id: "evB", responsable_id: "u-ana", responsable_nombre: "ana", fecha_objetivo: hoy, hora_objetivo: "23:59" }),
-      // Encargo de HOY hecho → cuenta como hecho.
       tarea({ id: "eC", titulo: "Encargo hecho", fecha_objetivo: hoy, estado: "hecha", responsable_id: "u-luis", responsable_nombre: "luis" }),
-      // Encargo de HOY pendiente.
       tarea({ id: "eD", titulo: "Encargo pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
     ]);
-
-    // 4 cosas hoy, 2 hechas (el partido pasado + el encargo hecho) → «2 / 4» (hechas / total).
-    const marcador = await screen.findByLabelText(/Avance de hoy/);
-    expect(marcador).toHaveTextContent(/2\s*\/\s*4/);
-    // 50% (< 90%): la barra es naranja de marca, aún no verde.
-    expect(marcador.querySelector(".bg-keni-500")).not.toBeNull();
-    expect(marcador.querySelector(".bg-emerald-500")).toBeNull();
+    // El encargo entra en la agenda, pero ya no hay marcador «Avance de hoy» (su barra naranja se
+    // retiró: el indicador único de «cómo va hoy» es el KPI «Cobertura de hoy», arriba).
+    await screen.findByText("Encargo hecho");
+    expect(screen.queryByLabelText(/Avance de hoy/)).toBeNull();
+    expect(document.querySelector(".bg-keni-500")).toBeNull();
   });
 
-  it("PANORAMA: el marcador se pone VERDE al llegar al 90% del día", async () => {
+  it("KPI: «N hechas» (gris, sin barra) resume el trabajo de hoy ya resuelto, junto a la cobertura", async () => {
     const hoy = hoyCDMX();
-    // 9 hechas + 1 pendiente = 9/10 = 90% → verde.
-    const hechas = Array.from({ length: 9 }, (_, i) =>
-      tarea({ id: `h${i}`, titulo: `Hecha ${i}`, fecha_objetivo: hoy, estado: "hecha", responsable_id: "u-luis", responsable_nombre: "luis" }),
+    renderTareas(
+      [
+        // Cobertura de HOY ya pasada (01:00) del evento de hoy → cuenta como hecha.
+        tarea({ id: "cA", evento_id: "ev-hoy", responsable_id: "u-luis", responsable_nombre: "luis", fecha_objetivo: hoy, hora_objetivo: "01:00" }),
+        // Encargo de HOY hecho → cuenta como hecha.
+        tarea({ id: "eC", titulo: "Encargo hecho", fecha_objetivo: hoy, estado: "hecha", responsable_id: "u-luis", responsable_nombre: "luis" }),
+        // Encargo de HOY pendiente → NO cuenta.
+        tarea({ id: "eD", titulo: "Encargo pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
+      ],
+      // Un evento de HOY hace que el KPI «Cobertura de hoy» (total>0) se pinte.
+      [evento({ id: "ev-hoy", titulo: "Partido de hoy", fecha: hoy, hora: "01:00" })],
     );
-    renderTareas([
-      ...hechas,
-      tarea({ id: "pend", titulo: "Pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
-    ]);
 
-    const marcador = await screen.findByLabelText(/Avance de hoy/);
-    expect(marcador).toHaveTextContent(/9\s*\/\s*10/);
-    expect(marcador.querySelector(".bg-emerald-500")).not.toBeNull(); // verde a ≥90%
-    expect(marcador.querySelector(".bg-keni-500")).toBeNull();
+    // El KPI muestra el dato secundario neutro «· 2 hechas» (el partido pasado + el encargo hecho).
+    const kpi = await screen.findByRole("status");
+    expect(kpi).toHaveTextContent(/·\s*2\s*hechas/);
+    // Es texto gris, no una barra de marca: no hay naranja en ningún sitio.
+    expect(document.querySelector(".bg-keni-500")).toBeNull();
   });
 
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {

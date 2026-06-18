@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, MoreVertical, Pencil, Plus, Target, Trash2, UserPlus, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, MoreVertical, Pencil, Plus, Trash2, UserPlus, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -753,23 +753,6 @@ export function PanoramaAgenda({
         : i.evento.hora || "99:99";
   const hoy = hoyCDMX();
 
-  // MARCADOR DE HOY: progreso del día (hechos / total), en vivo. Cuenta TODO lo de hoy del equipo
-  // —coberturas + encargos + recuperables + eventos por cubrir—, SIN el filtro de persona, para que
-  // sea un marcador estable de «cómo va el día». «Hecho» = el partido ya pasó (cobertura, mismo
-  // criterio que el semáforo «Cubierto») o la tarea está en «hecha»; un evento por cubrir o un
-  // recuperable cuentan en el total pero aún no están hechos.
-  const esDeHoy = (fecha?: string | null) => (fecha || "").slice(0, 10) === hoy;
-  const coberturasHoy = coberturas.filter((c) => esDeHoy(c.orden));
-  const tareasHoy = [...encargos, ...recuperables].filter((t) => esDeHoy(t.fecha_objetivo));
-  const eventosHoy = eventosLibres.filter((e) => esDeHoy(e.fecha));
-  const totalHoy = coberturasHoy.length + tareasHoy.length + eventosHoy.length;
-  const hechosHoy =
-    coberturasHoy.filter((c) => yaPaso(c.orden, c.hora)).length +
-    tareasHoy.filter((t) => t.estado === "hecha").length;
-  const pctHoy = totalHoy ? Math.round((hechosHoy / totalHoy) * 100) : 0;
-  // Verde cuando ya está hecha la MAYORÍA del día (≥90%): el día se da por «casi cerrado».
-  const hoyCasiListo = totalHoy > 0 && hechosHoy / totalHoy >= 0.9;
-
   // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
   // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
   const urgentes: Item[] = [];
@@ -818,35 +801,6 @@ export function PanoramaAgenda({
 
   return (
     <div className="space-y-4">
-      {/* MARCADOR de hoy: «hechos / total» del día como UNA línea sutil (no una tile con doble
-          chrome). En vivo: se rehace al cubrir/asignar/marcar hecha (invalida CLAVE_TAREAS) o
-          cuando un partido pasa. */}
-      {totalHoy > 0 && (
-        <div
-          className="flex items-center gap-2.5 px-0.5 text-xs text-muted-foreground"
-          aria-label={`Avance de hoy: ${hechosHoy} de ${totalHoy}`}
-        >
-          <Target className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-          <span className="shrink-0">Avance de hoy</span>
-          <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                hoyCasiListo ? "bg-emerald-500" : "bg-keni-500",
-              )}
-              style={{ width: `${pctHoy}%` }}
-            />
-          </div>
-          <span className="shrink-0 tabular-nums">
-            <span className={cn("font-semibold text-foreground", hoyCasiListo && "text-emerald-600")}>
-              {hechosHoy}
-            </span>
-            {" / "}
-            {totalHoy}
-          </span>
-        </div>
-      )}
-
       {/* Atajo de 5 segundos para meter algo a cubrir (todos), antes de la agenda. Solo con marca
           concreta: sin ella crearía eventos sin marca que se pierden de las vistas por marca. */}
       {marca && <AnadirRapido marca={marca} />}
