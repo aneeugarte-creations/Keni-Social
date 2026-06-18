@@ -35,7 +35,10 @@ import { EstrategiaMarca } from "@/pages/prompts/estrategia/EstrategiaMarca";
 import { PanelClase } from "@/pages/prompts/gestion-lineas/PanelClase";
 import type { ColaJob, ColaMonitor } from "@/types";
 
+/** Motores con contexto editorial por marca; las pestañas-catálogo (Herramientas / Desarrollo) son
+ *  prompts sueltos sin contexto ni logs propios. */
 type Proceso = "investigacion" | "produccion";
+type ProcesoFase = Proceso | "herramientas" | "desarrollo";
 type PestanaFase = "prompt" | "contexto" | "logs";
 
 /** Estado abierto/colapsado de la tarjeta «Acerca de» (recordado entre sesiones). */
@@ -191,17 +194,22 @@ export function DetalleFase({
   proceso,
   marca,
   cola,
-  queuePorTipo,
+  queuePorTipo = {},
+  mostrarLogs = true,
 }: {
   fase: FasePipeline;
-  /** Motor de la fase: decide qué contexto editorial se muestra. */
-  proceso: Proceso;
+  /** Proceso de la fase: en los motores decide qué contexto editorial se muestra; en las
+   *  pestañas-catálogo (Herramientas / Desarrollo) la fase es un prompt suelto sin contexto. */
+  proceso: ProcesoFase;
   /** Marca activa (la del switch global); el contexto editorial es por marca. */
   marca: string | null;
   /** Snapshot de cola para los logs en vivo de las fases sin etapa propia. */
   cola?: ColaMonitor;
   /** Mapa tipo-de-job → clave de cola, para filtrar los logs en vivo de esta fase. */
-  queuePorTipo: Record<string, string>;
+  queuePorTipo?: Record<string, string>;
+  /** Pinta la pestaña Logs (pipeline/cola). Los agentes sueltos (Herramientas / Desarrollo) no
+   *  encolan ni dejan histórico propio, así que la ocultan: solo Prompt. */
+  mostrarLogs?: boolean;
 }) {
   // Documento editorial abierto desde la pestaña Contexto (overlay, no navegación).
   const [docContexto, setDocContexto] = React.useState<string | null>(null);
@@ -216,6 +224,7 @@ export function DetalleFase({
   const tieneprompt = !!fase.doc;
   const tieneContexto = !!fase.contextoMarca;
   const inicial: PestanaFase = tieneprompt ? "prompt" : tieneContexto ? "contexto" : "logs";
+  // Sin pestaña Logs (agentes sueltos) el estado nunca debe quedar en "logs".
   const [pestana, setPestana] = React.useState<PestanaFase>(inicial);
 
   // Documento (para la tarjeta «Acerca de»). Misma queryKey que el editor → React Query dedupe.
@@ -302,7 +311,7 @@ export function DetalleFase({
           <TabsList>
             {tieneprompt ? <TabsTrigger value="prompt">Prompt</TabsTrigger> : null}
             {tieneContexto ? <TabsTrigger value="contexto">Contexto</TabsTrigger> : null}
-            <TabsTrigger value="logs">Logs</TabsTrigger>
+            {mostrarLogs ? <TabsTrigger value="logs">Logs</TabsTrigger> : null}
           </TabsList>
           {tieneprompt && acciones ? (
             <div className="flex items-center gap-2">
@@ -371,13 +380,21 @@ export function DetalleFase({
 
         {tieneContexto ? (
           <TabsContent value="contexto" className="mt-3">
-            <ContextoFase proceso={proceso} marca={marca} onAbrirDoc={setDocContexto} />
+            {/* `contextoMarca` solo lo llevan las fases de los dos motores, así que aquí el proceso es
+                siempre investigación o producción. */}
+            <ContextoFase
+              proceso={proceso as Proceso}
+              marca={marca}
+              onAbrirDoc={setDocContexto}
+            />
           </TabsContent>
         ) : null}
 
-        <TabsContent value="logs" className="mt-3">
-          <LogsFase fase={fase} marca={marca} cola={cola} queuePorTipo={queuePorTipo} />
-        </TabsContent>
+        {mostrarLogs ? (
+          <TabsContent value="logs" className="mt-3">
+            <LogsFase fase={fase} marca={marca} cola={cola} queuePorTipo={queuePorTipo} />
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <EditorPromptOverlay

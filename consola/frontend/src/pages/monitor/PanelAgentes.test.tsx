@@ -5,7 +5,8 @@
  * test fija que hay una caja por grupo, con sus agentes (columnas) dentro y solo dentro.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import type { GrupoAgentes } from "@/pages/maquina/fases";
@@ -15,7 +16,9 @@ function renderPanel(grupos: readonly GrupoAgentes[]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <PanelAgentes grupos={grupos} />
+      <MemoryRouter>
+        <PanelAgentes grupos={grupos} proceso="herramientas" />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -60,5 +63,27 @@ describe("PanelAgentes", () => {
     // <ol> de fases. La superficie es la caja, no el pipeline.
     expect(screen.queryByTestId("panel-pipeline")).not.toBeInTheDocument();
     expect(screen.getByTestId("panel-agentes")).toBeInTheDocument();
+  });
+
+  it("clicar un agente NAVEGA a su subpágina (no abre un pop-up)", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/maquina/contexto?proceso=desarrollo"]}>
+          <Routes>
+            <Route
+              path="/maquina/contexto"
+              element={<PanelAgentes grupos={GRUPOS} proceso="desarrollo" />}
+            />
+            <Route path="/maquina/contexto/:proceso/:fase" element={<p>subpágina</p>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // No hay diálogo/pop-up: la superficie es la caja, y al clicar se cambia de ruta.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Notas").closest("button")!);
+    expect(screen.getByText("subpágina")).toBeInTheDocument();
   });
 });

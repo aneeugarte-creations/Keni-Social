@@ -1,29 +1,31 @@
 /**
- * PanelAgentes — el catálogo de agentes INDEPENDIENTES (pestaña Herramientas) como CAJAS por tipo,
- * NO como un pipeline. Cada grupo (`GrupoAgentes`) es una caja en su propia línea: su título y
- * subtítulo (qué cubre el tipo) y, debajo, sus agentes como RECTÁNGULOS del MISMO tamaño (idéntico en
- * todas las cajas), que se envuelven a la siguiente fila si no caben. Entre agentes NO hay conector
- * (↓): no es una secuencia, son prompts autónomos que se lanzan a mano. La descripción de cada agente
- * vive en su subpágina. Clicar un agente abre su prompt en el overlay (solo admin).
+ * PanelAgentes — el catálogo de agentes INDEPENDIENTES (pestañas Herramientas y Desarrollo) como
+ * CAJAS por tipo, NO como un pipeline. Cada grupo (`GrupoAgentes`) es una caja en su propia línea:
+ * su título y subtítulo (qué cubre el tipo) y, debajo, sus agentes como RECTÁNGULOS del MISMO tamaño
+ * (idéntico en todas las cajas), que se envuelven a la siguiente fila si no caben. Entre agentes NO
+ * hay conector (↓): no es una secuencia, son prompts autónomos que se lanzan a mano. La descripción
+ * de cada agente vive en su subpágina. Clicar un agente ABRE SU SUBPÁGINA (Prompt · Acerca), nunca un
+ * pop-up (solo admin).
  */
 import { Bot, Cog } from "lucide-react";
-import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
-import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { cn } from "@/lib/utils";
-import type { GrupoAgentes } from "@/pages/maquina/fases";
+import { type GrupoAgentes, slugFase } from "@/pages/maquina/fases";
 
 export function PanelAgentes({
   grupos,
+  proceso,
   esAdmin = true,
 }: {
   /** Los tipos de agente, cada uno su caja. */
   grupos: readonly GrupoAgentes[];
-  /** Admin: clicar un agente abre su prompt. No-admin: cajas informativas (sin click). */
+  /** La pestaña-catálogo a la que pertenecen: gobierna la URL de la subpágina de cada agente. */
+  proceso: "herramientas" | "desarrollo";
+  /** Admin: clicar un agente abre su subpágina. No-admin: cajas informativas (sin click). */
   esAdmin?: boolean;
 }) {
-  // Doc abierto en el overlay «Editar prompt» (in-place).
-  const [docEditando, setDocEditando] = React.useState<string | null>(null);
+  const navigate = useNavigate();
 
   return (
     <section data-testid="panel-agentes">
@@ -37,7 +39,10 @@ export function PanelAgentes({
             {/* Agentes como rectángulos del MISMO tamaño (fijo), envolviendo a la siguiente fila. */}
             <div className="flex flex-wrap gap-2">
               {g.fases.map((f) => {
-                const abrir = esAdmin && f.doc ? () => setDocEditando(f.doc!) : undefined;
+                const abrir =
+                  esAdmin && f.doc
+                    ? () => navigate(`/maquina/contexto/${proceso}/${slugFase(f.nombre)}`)
+                    : undefined;
                 return (
                   <button
                     key={f.nombre}
@@ -63,12 +68,6 @@ export function PanelAgentes({
           </div>
         ))}
       </div>
-
-      <EditorPromptOverlay
-        docId={docEditando}
-        abierto={docEditando !== null}
-        onCerrar={() => setDocEditando(null)}
-      />
     </section>
   );
 }

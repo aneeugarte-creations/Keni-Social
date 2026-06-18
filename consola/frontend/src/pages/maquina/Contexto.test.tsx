@@ -1,8 +1,8 @@
 /**
  * Smoke test de la página «Contexto» (`/maquina/contexto`): el pipeline de cada motor como
- * estructura, en tres pestañas (Investigación / Producción / Herramientas). Como editor (no admin)
- * no se piden los ajustes del catálogo, así que basta con mockear la cola: comprobamos que las
- * pestañas y las fases de cada una se pintan.
+ * estructura, en cuatro pestañas (Investigación / Producción / Herramientas / Desarrollo). Como
+ * editor (no admin) no se piden los ajustes del catálogo, así que basta con mockear la cola:
+ * comprobamos que las pestañas y las fases/agentes de cada una se pintan.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
@@ -74,6 +74,7 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.getByRole("tab", { name: "Investigación" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Producción" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Herramientas" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Desarrollo" })).toBeInTheDocument();
     // Importación dejó de ser una pestaña: sus agentes viven ahora dentro de Herramientas.
     expect(screen.queryByRole("tab", { name: "Importación" })).not.toBeInTheDocument();
     // Pestaña por defecto = Investigación: sus fases se leen en orden (incl. el nuevo «Cotejar»).
@@ -116,5 +117,17 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Envoltorios")).not.toBeInTheDocument();
     // Hashtags (suggest) y el asistente de copy se retiraron (solo MCP/sin UI).
     expect(screen.queryByText("Hashtags")).not.toBeInTheDocument();
+  });
+
+  it("la pestaña Desarrollo presenta los agentes en cajas por tipo, con nombres cortos", () => {
+    renderContexto("/maquina/contexto?proceso=desarrollo");
+    // Cajas por tipo (igual que Herramientas): el carril del kanban y los Ralph.
+    expect(screen.getByRole("heading", { name: "Carril" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ralph" })).toBeInTheDocument();
+    // Nombres de 1-2 palabras (no el título largo del documento).
+    expect(screen.getByText("Analyze")).toBeInTheDocument();
+    expect(screen.getByText("Review")).toBeInTheDocument();
+    expect(screen.getByText("Operativo")).toBeInTheDocument();
+    expect(screen.queryByText("Analyze · explorar el repo")).not.toBeInTheDocument();
   });
 });

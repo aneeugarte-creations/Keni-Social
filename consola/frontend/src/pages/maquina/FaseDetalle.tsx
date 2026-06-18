@@ -1,8 +1,10 @@
 /**
- * FaseDetalle (`/maquina/contexto/:proceso/:fase`) — la subpágina de UNA fase del pipeline. Antes
- * era un panel desplegable bajo la fila; ahora es su propia página: cabecera con vuelta a Contexto
- * (en su pestaña) + icono y nombre de la fase, y debajo su detalle (Prompt · Contexto · Logs).
- * El interruptor on/off de la fase vive en la fila de la lista (Contexto), no aquí.
+ * FaseDetalle (`/maquina/contexto/:proceso/:fase`) — la subpágina de UNA fase. Para los dos MOTORES
+ * (investigación / producción) es una fase del pipeline: cabecera con vuelta a Contexto + icono y
+ * nombre, y debajo su detalle (Prompt · Contexto · Logs). Para las pestañas-catálogo (herramientas /
+ * desarrollo) es un agente suelto: mismo encabezado y SOLO su Prompt + «Acerca» (no encola ni deja
+ * histórico, así que sin Logs). Sustituye al antiguo pop-up: cada agente vive en su propia URL.
+ * El interruptor on/off de la fase (en los motores) vive en la fila de la lista (Contexto), no aquí.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Bot, Cog } from "lucide-react";
@@ -14,6 +16,7 @@ import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { DetalleFase } from "@/pages/maquina/DetalleFase";
 import {
+  agentesDe,
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
   QUEUE_INVESTIGACION,
@@ -22,23 +25,38 @@ import {
   tieneContenido,
 } from "@/pages/maquina/fases";
 
+const PROCESOS = ["investigacion", "produccion", "herramientas", "desarrollo"] as const;
+type Proceso = (typeof PROCESOS)[number];
+
 export default function FaseDetalle() {
   const navigate = useNavigate();
   const { proceso: procesoParam, fase: faseSlug } = useParams();
   const { marcaActiva } = useMarcaActiva();
-  const proceso = procesoParam === "produccion" ? "produccion" : "investigacion";
-  const fases = proceso === "produccion" ? FASES_PRODUCCION : FASES_INVESTIGACION;
+  const proceso: Proceso = PROCESOS.includes(procesoParam as Proceso)
+    ? (procesoParam as Proceso)
+    : "investigacion";
+  // Catálogo de agentes sueltos (Herramientas / Desarrollo): se lanzan a mano, sin pipeline.
+  const esCatalogo = proceso === "herramientas" || proceso === "desarrollo";
+
+  const fases = esCatalogo
+    ? agentesDe(proceso)
+    : proceso === "produccion"
+      ? FASES_PRODUCCION
+      : FASES_INVESTIGACION;
   const queuePorTipo = proceso === "produccion" ? QUEUE_PRODUCCION : QUEUE_INVESTIGACION;
   const fase = fases.find((f) => slugFase(f.nombre) === faseSlug);
 
+  // La cola solo alimenta los logs de los motores; en el catálogo no se pide.
   const cola = useQuery({
     queryKey: ["actividad", "cola", "todas"],
     queryFn: ({ signal }) => api.cola({}, signal),
     refetchInterval: INTERVALO_VIVO_MS,
+    enabled: !esCatalogo,
   });
 
-  // Fase inexistente (slug roto) o SIN contenido propio (su subpágina Prompt · Contexto · Logs no
-  // aportaría nada, p. ej. Admitir: no es IA ni tiene prompt): vuelve a la pestaña del proceso.
+  // Fase inexistente (slug roto) o, en los motores, SIN contenido propio (su subpágina no aportaría
+  // nada, p. ej. Admitir): vuelve a la pestaña del proceso. Un agente del catálogo siempre tiene
+  // prompt, así que `tieneContenido` se cumple.
   if (!fase || !tieneContenido(fase)) {
     return <Navigate to={`/maquina/contexto?proceso=${proceso}`} replace />;
   }
@@ -61,6 +79,7 @@ export default function FaseDetalle() {
           marca={marcaActiva}
           cola={cola.data}
           queuePorTipo={queuePorTipo}
+          mostrarLogs={!esCatalogo}
         />
       </div>
     </div>

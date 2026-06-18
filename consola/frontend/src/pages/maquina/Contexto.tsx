@@ -30,6 +30,7 @@ import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
+  GRUPOS_DESARROLLO,
   GRUPOS_HERRAMIENTAS,
   MAESTRO_INVESTIGACION,
   MAESTRO_PRODUCCION,
@@ -37,7 +38,6 @@ import {
   QUEUE_PRODUCCION,
   slugFase,
 } from "@/pages/maquina/fases";
-import { ContextoDesarrollo } from "@/pages/maquina/ContextoDesarrollo";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { PanelAgentes } from "@/pages/monitor/PanelAgentes";
 import {
@@ -170,15 +170,16 @@ export default function Contexto() {
         </TabsContent>
 
         {/* Herramientas: TODOS los agentes independientes (sin daemon). NO son un pipeline: se agrupan
-            en CAJAS por tipo (sin conectores); clicar abre el prompt en el editor (overlay). */}
+            en CAJAS por tipo (sin conectores); clicar abre la SUBPÁGINA del agente, sin pop-up. */}
         <TabsContent value="herramientas" className="mt-4">
-          <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} />
+          <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} proceso="herramientas" />
         </TabsContent>
 
-        {/* Desarrollo: los prompts del motor de auto-desarrollo (clase editorial `desarrollo`).
-            No es un pipeline ni un motor con interruptor; se editan como contexto editorial. */}
+        {/* Desarrollo: los prompts del motor de auto-desarrollo (clase editorial `desarrollo`). No es
+            un pipeline ni un motor con interruptor; se presenta igual que Herramientas (cajas por tipo)
+            y clicar abre la SUBPÁGINA del agente, sin pop-up. */}
         <TabsContent value="desarrollo" className="mt-4">
-          <ContextoDesarrollo />
+          <PanelAgentes grupos={GRUPOS_DESARROLLO} esAdmin={esAdmin} proceso="desarrollo" />
         </TabsContent>
       </Tabs>
     </>

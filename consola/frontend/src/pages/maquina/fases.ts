@@ -243,3 +243,38 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
     fases: [{ nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" }],
   },
 ];
+
+/**
+ * DESARROLLO — el contexto de los agentes de AUTO-DESARROLLO (clase editorial `desarrollo`). Igual
+ * que Herramientas: NO es un pipeline con interruptor, son prompts autónomos que se editan a mano,
+ * agrupados en CAJAS por tipo (el carril del kanban de Sugerencias y los Ralph que conversan con el
+ * equipo). Cada agente abre su subpágina (Prompt · Acerca); su nombre es de 1-2 palabras y la
+ * descripción larga vive dentro, en su «Acerca».
+ */
+export const GRUPOS_DESARROLLO: readonly GrupoAgentes[] = [
+  {
+    titulo: "Carril",
+    descripcion: "Las fases del kanban de auto-desarrollo, de explorar a revisar",
+    fases: [
+      { nombre: "Analyze", es_ia: true, claves: [], ayuda: "Explora el repo antes de tocar nada", doc: "editorial/desarrollo/analyze" },
+      { nombre: "Plan", es_ia: true, claves: [], ayuda: "Diseña el cambio: alcance, seams y tests", doc: "editorial/desarrollo/plan" },
+      { nombre: "Build", es_ia: true, claves: [], ayuda: "Implementa siguiendo el estilo del repo", doc: "editorial/desarrollo/build" },
+      { nombre: "Review", es_ia: true, claves: [], ayuda: "Checklist final antes de promover a main", doc: "editorial/desarrollo/review" },
+    ],
+  },
+  {
+    titulo: "Ralph",
+    descripcion: "El contexto base de los agentes Ralph que conversan con el equipo",
+    fases: [
+      { nombre: "Desarrollo", es_ia: true, claves: [], ayuda: "Ralph de auto-desarrollo: trabaja el repo en su worktree", doc: "editorial/desarrollo/ralph" },
+      { nombre: "Operativo", es_ia: true, claves: [], ayuda: "Ralph operativo: asistente del equipo de redes (MCP)", doc: "editorial/desarrollo/ralph-operativo" },
+    ],
+  },
+];
+
+/** Agentes de una pestaña-catálogo (Herramientas o Desarrollo) aplanados: para resolver su
+ *  subpágina por slug (`/maquina/contexto/:proceso/:fase`). */
+export function agentesDe(proceso: "herramientas" | "desarrollo"): readonly FasePipeline[] {
+  const grupos = proceso === "desarrollo" ? GRUPOS_DESARROLLO : GRUPOS_HERRAMIENTAS;
+  return grupos.flatMap((g) => g.fases);
+}
