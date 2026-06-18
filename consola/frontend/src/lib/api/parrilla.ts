@@ -70,8 +70,16 @@ export const apiParrilla = {
       signal,
     }),
   aplicarPropuestaParrilla: (id: string) =>
-    // `ya_existe`: cuántas operaciones se omitieron por estar ya en el calendario (no es error).
-    peticion<{ aplicada?: boolean; ya_existe?: number; mensaje?: string }>(
+    // Apply PARCIAL: aplica lo nuevo y reporta lo omitido (`ya_existe` ya estaban,
+    // `omitidas_conflicto` un turno a modificar que ya no existe). No es error.
+    peticion<{
+      aplicada?: boolean;
+      ya_existe?: number;
+      omitidas_conflicto?: number;
+      turnos_creados?: number;
+      eventos_creados?: number;
+      mensaje?: string;
+    }>(
       `/parrilla/propuestas/${encodeURIComponent(id)}/aplicar`,
       { metodo: "POST" },
     ),

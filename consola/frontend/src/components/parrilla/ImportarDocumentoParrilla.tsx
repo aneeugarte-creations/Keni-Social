@@ -306,11 +306,17 @@ function DialogImportarParrilla({
   const aplicar = useMutation({
     mutationFn: () => api.aplicarPropuestaParrilla(propuestaId!),
     onSuccess: (r) => {
-      const omitidas = r?.ya_existe ?? 0;
+      const creados = (r?.turnos_creados ?? 0) + (r?.eventos_creados ?? 0);
+      const yaEstaban = r?.ya_existe ?? 0;
+      const enConflicto = r?.omitidas_conflicto ?? 0;
+      const extra = [
+        yaEstaban > 0 ? `${yaEstaban} ya ${yaEstaban === 1 ? "estaba" : "estaban"}` : "",
+        enConflicto > 0 ? `${enConflicto} omitid${enConflicto === 1 ? "o" : "os"} por conflicto` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
       toast.success(
-        omitidas > 0
-          ? `Aplicada. ${omitidas} ${omitidas === 1 ? "ya estaba" : "ya estaban"} en el calendario; se ${omitidas === 1 ? "omitió" : "omitieron"}.`
-          : (r?.mensaje ?? "Propuesta aplicada al calendario."),
+        `Aplicada. ${creados} ${creados === 1 ? "nuevo" : "nuevos"}${extra ? `, ${extra}` : ""}.`,
       );
       // Refresca el calendario real y la lista de pendientes.
       queryClient.invalidateQueries({ queryKey: ["rota"] });

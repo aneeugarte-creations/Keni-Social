@@ -203,17 +203,16 @@ class Contexto:
       semanas tocadas + la plantilla por defecto.
     - `turnos_por_id`: id -> dict del turno (para `modificar_turno` y valores actuales). Para
       `modificar_turno` el `actual.franja` se expone como NOMBRE (resuelto via `franjas_nombre`).
-    - `turnos_por_celda`: (fecha, nombre_franja_norm) -> miembro_id ocupante (choque por slot).
-
     IDEMPOTENCIA («ya está en el calendario», sin tocar nada):
     - `turnos_existentes`: conjunto de (fecha, nombre_franja_norm, miembro_id) ya presentes. Un
-      `crear_turno` que reproduce EXACTAMENTE una de estas claves NO es conflicto ni alta: la
-      MISMA persona ya tiene ese turno (distinto de "la celda la ocupa OTRO" -> eso sí choca).
+      `crear_turno` que reproduce EXACTAMENTE una de estas claves es idempotente (la MISMA persona
+      ya tiene ese turno): se omite, ni conflicto ni alta. Una franja de tiempo lleva VARIAS
+      personas, así que dar de alta a OTRA persona en esa franja es alta normal, no choque.
     - `eventos_existentes`: conjunto de (fecha, hora_norm, titulo_norm) ya presentes. Un
       `crear_evento` con esa misma clave ya está; se omite al aplicar (no se duplica).
 
     `franjas_nombre` (id -> nombre) resuelve el `franja_id` de un turno existente a su nombre
-    (para construir `turnos_por_celda`/`turnos_existentes` y los `actual` de `modificar_turno`).
+    (para construir `turnos_existentes` y los `actual` de `modificar_turno`).
     `eventos` son los eventos VIVOS del rango (para `eventos_existentes`); opcional (vacío en el
     contexto del prompt, que no deduplica).
     """
@@ -235,9 +234,8 @@ class Contexto:
         self.turnos_por_id: dict[str, dict[str, Any]] = {
             str(t.get("id", "")): t for t in turnos if t.get("id")
         }
-        # (fecha, nombre_franja_norm) -> miembro_id que ya la ocupa (celda ocupada por slot).
-        self.turnos_por_celda: dict[tuple[str, str], str] = {}
-        # (fecha, nombre_franja_norm, miembro_id) ya presentes (idempotencia por PERSONA).
+        # (fecha, nombre_franja_norm, miembro_id) ya presentes (idempotencia por PERSONA: una
+        # franja de tiempo lleva varias personas, así que la clave incluye al miembro).
         self.turnos_existentes: set[tuple[str, str, str]] = set()
         for t in turnos:
             fecha = str(t.get("fecha", "") or "")
@@ -245,9 +243,7 @@ class Contexto:
             nombre = franjas_nombre.get(franja_id, "")
             mid = str(t.get("miembro_id", "") or "")
             if fecha and nombre and mid:
-                franja_norm = normaliza_franja(nombre)
-                self.turnos_por_celda[(fecha, franja_norm)] = mid
-                self.turnos_existentes.add((fecha, franja_norm, mid))
+                self.turnos_existentes.add((fecha, normaliza_franja(nombre), mid))
         # (fecha, hora_norm, titulo_norm) de los eventos ya en el calendario (idempotencia).
         self.eventos_existentes: set[tuple[str, str, str]] = set()
         for e in eventos or []:
@@ -403,10 +399,9 @@ def calcular_conflicto(op_dict: dict[str, Any], ctx: Contexto) -> dict[str, Any]
     PURO. Lo usa el GET de detalle para que el frontend pinte la superposicion sin re-derivar:
       - `crear_evento`: nunca conflictua; `ya_existe=True` si el MISMO (fecha, hora, título) ya
         está en el calendario (idempotente: se omite al aplicar, no se duplica).
-      - `crear_turno`: `ya_existe=True` si la MISMA persona ya tiene ese (fecha, franja) —no es
-        conflicto ni alta, ya está—. Si NO, conflicto cuando la celda (fecha, nombre_de_franja)
-        la ocupa OTRA persona (una celda persona×fecha×slot no se duplica); `ocupada_por` lleva
-        el miembro_id ocupante.
+      - `crear_turno`: `ya_existe=True` si la MISMA persona ya tiene ese (fecha, franja) —ni
+        conflicto ni alta, ya está; `ocupada_por` lleva su miembro_id—. Si NO, es alta nueva: una
+        franja de tiempo lleva VARIAS personas, así que OTRA persona en esa franja NUNCA choca.
       - `modificar_turno`: conflicto si el turno desapareció; ademas devuelve `actual` con los
         valores vivos de la fila referenciada (miembro_id/estado/override/... y `franja` como
         NOMBRE de slot).
@@ -419,15 +414,10 @@ def calcular_conflicto(op_dict: dict[str, Any], ctx: Contexto) -> dict[str, Any]
         fecha = str(op_dict.get("fecha", ""))
         franja = normaliza_franja(str(op_dict.get("franja", "")))
         miembro = str(op_dict.get("miembro_id", ""))
-        # Idempotente: la MISMA persona ya tiene ese turno -> «ya está», ni conflicto ni alta.
-        if (fecha, franja, miembro) in ctx.turnos_existentes:
-            return {"conflicto": False, "ya_existe": True, "ocupada_por": miembro}
-        ocupante = ctx.turnos_por_celda.get((fecha, franja))
-        return {
-            "conflicto": ocupante is not None,
-            "ya_existe": False,
-            "ocupada_por": ocupante or "",
-        }
+        # La MISMA persona ya tiene ese turno -> idempotente, «ya está». En otro caso es alta
+        # nueva: una franja de tiempo lleva VARIAS personas, así que OTRA persona no choca.
+        ya = (fecha, franja, miembro) in ctx.turnos_existentes
+        return {"conflicto": False, "ya_existe": ya, "ocupada_por": miembro if ya else ""}
     if tipo == "crear_evento":
         # Idempotente: mismo (fecha, hora, título) ya en el calendario -> «ya está», se omite.
         clave = (

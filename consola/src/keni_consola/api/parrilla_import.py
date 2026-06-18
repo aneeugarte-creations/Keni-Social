@@ -407,10 +407,11 @@ async def aplicar_propuesta(request: Request) -> Response:
     """POST /api/parrilla/propuestas/{id}/aplicar: re-valida contra la BD viva y aplica.
 
     Re-construye el contexto del RANGO (las semanas tocadas por las fechas; las filas pudieron
-    cambiar desde que se generó) y re-valida con el dominio puro. Si hay errores de validacion o
-    CONFLICTOS (celda ocupada / turno desaparecido), devuelve 409 SIN aplicar. Si todo cuadra,
-    aplica TODAS las operaciones en UNA transaccion (`origen='import-doc'`, inicializando las franjas
-    por defecto de cada semana nueva) y marca la propuesta `aplicada`.
+    cambiar desde que se generó) y re-valida con el dominio puro. Si hay errores de validacion
+    devuelve 409 SIN aplicar. Si no, APLICA LO NUEVO y omite el resto: lo idempotente («ya está»)
+    y lo conflictivo (un `modificar_turno` cuyo turno ya no existe) se saltan sin cortar. Aplica
+    en UNA transaccion (`origen='import-doc'`, inicializando las franjas por defecto de cada
+    semana nueva), marca la propuesta `aplicada` y devuelve el conteo de omitidas.
     """
     propuesta_id = request.path_params["propuesta_id"]
     propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
@@ -438,28 +439,21 @@ async def aplicar_propuesta(request: Request) -> Response:
             status_code=409,
         )
 
-    # Particiona contra el estado VIVO: «ya está» (idempotente) se OMITE en silencio (no
-    # duplica ni asusta); conflicto real (la celda la ocupa OTRA persona / turno desaparecido)
-    # corta con 409; el resto se aplica.
+    # Particiona contra el estado VIVO y APLICA LO NUEVO. Lo idempotente («ya está»: la MISMA
+    # persona ya tiene ese turno / el mismo evento) y lo conflictivo (un `modificar_turno` cuyo
+    # turno ya no existe) se OMITEN en silencio; nunca cortamos por ellos. Dar de alta a otra
+    # persona en una franja ya poblada es alta normal (una franja lleva varias personas).
     a_aplicar: list[dict[str, Any]] = []
-    con_conflicto: list[dict[str, Any]] = []
     n_ya_existe = 0
+    n_conflicto = 0
     for op in validas:
         info = pi.calcular_conflicto(op, ctx)
-        if info.get("conflicto"):
-            con_conflicto.append({**op, **info})
-        elif info.get("ya_existe"):
+        if info.get("ya_existe"):
             n_ya_existe += 1
+        elif info.get("conflicto"):
+            n_conflicto += 1
         else:
             a_aplicar.append(op)
-    if con_conflicto:
-        return JSONResponse(
-            {
-                "error": "Hay conflictos con el calendario actual; revísalos antes de aplicar.",
-                "conflictos": con_conflicto,
-            },
-            status_code=409,
-        )
 
     try:
         resumen = repos.aplicar_propuesta_parrilla(
@@ -474,8 +468,11 @@ async def aplicar_propuesta(request: Request) -> Response:
     except ValueError as e:
         # Una franja (slot) no resoluble para su semana: el diff entero se descartó (rollback).
         return JSONResponse({"error": str(e)}, status_code=409)
-    # `ya_existe`: cuántas operaciones se omitieron por estar ya en el calendario (no es error).
-    return JSONResponse({"aplicada": True, "ya_existe": n_ya_existe, **resumen})
+    # `ya_existe`/`omitidas_conflicto`: cuántas operaciones se omitieron (no son error): la misma
+    # persona ya estaba, o un `modificar_turno` cuyo turno ya no existe.
+    return JSONResponse(
+        {"aplicada": True, "ya_existe": n_ya_existe, "omitidas_conflicto": n_conflicto, **resumen}
+    )
 
 
 async def descartar_propuesta(request: Request) -> Response:

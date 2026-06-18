@@ -2,8 +2,8 @@
 
 Cubre: extraccion del bloque JSON de la salida de claude (fences, dict envoltorio, prefijos),
 validacion estricta contra el contexto RANGO (fecha valida SIN limite de rango, franja por
-NOMBRE de slot, miembro/turno que existen, enums), deteccion de conflictos (celda ocupada por
-slot / turno desaparecido) y la re-validacion de operaciones ya parseadas. Todo
+NOMBRE de slot, miembro/turno que existen, enums), idempotencia por persona y deteccion de
+conflictos (turno desaparecido) y la re-validacion de operaciones ya parseadas. Todo
 `dominio.parrilla_import`, ni una sola conexion a Postgres.
 """
 
@@ -351,16 +351,14 @@ def test_sin_json_devuelve_error_indice_cero():
 # --------------------------------------------------------------------------- #
 
 
-def test_conflicto_crear_turno_celda_ocupada():
-    # La celda se identifica por (fecha, NOMBRE de franja): el turno existente usa franja_id
-    # "fr-manana" que resuelve a "Mañana"; la op nueva referencia el slot por nombre.
-    # OTRA persona en la celda SÍ es conflicto (no es idempotente).
+def test_otra_persona_en_franja_ocupada_no_es_conflicto():
+    # Una franja de tiempo (Mañana/Tarde/Noche) lleva VARIAS personas: dar de alta a OTRA persona
+    # en una franja que ya ocupa u1 es alta nueva, no conflicto ni idempotencia.
     ctx = _ctx(turnos=[_turno(tid="t1", fecha="2026-06-02", franja="fr-manana", miembro="u1")])
     op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u2"}
     info = pi.calcular_conflicto(op, ctx)
-    assert info["conflicto"] is True
+    assert info["conflicto"] is False
     assert info["ya_existe"] is False
-    assert info["ocupada_por"] == "u1"
 
 
 def test_ya_existe_crear_turno_misma_persona_no_es_conflicto():
