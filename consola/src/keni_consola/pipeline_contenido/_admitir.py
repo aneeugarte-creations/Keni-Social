@@ -266,10 +266,19 @@ def clusters_para_promover(
     aptas: list[dict[str, Any]] = []
     bajo_umbral = 0
     cache_propia: dict[str, bool] = {}
+    # CADENCIA POR EVENTO: las facetas (evento, subtema) que YA salieron hoy no vuelven a
+    # auto-producirse. N subtemas activos -> N piezas, sin tope numérico fijo (sentido común).
+    cubiertos_hoy = _eventos_cubiertos_hoy(marca)
     for c in clusters:
         # EXTRANJERA SIN TRADUCIR: no se admite todavía (saldría en inglés); espera a la fase
         # Traducir, que prioriza por score. La caducidad retira las que nunca cuajan.
         if _falta_traduccion(c):
+            continue
+        # Esta faceta del evento ya tiene pieza en la jornada de hoy: la historia espera a mañana
+        # (sigue 'nuevo' en el pool, disponible para curación humana). Corta el goteo de un evento
+        # largo (Mundial 2026) sin frenar otras facetas ni otras marcas/categorías.
+        tm = (c.get("tema_macro") or "").strip()
+        if tm and (tm, (c.get("subtema") or "").strip()) in cubiertos_hoy:
             continue
         # FUENTE PROPIA (portal del cliente): NO la maneja investigación — la admite DIRECTO el
         # daemon Portal (canal aparte, sin umbral ni verificación). Aquí se omite para no admitirla
@@ -522,27 +531,31 @@ def crear_tema_de_cluster(
     # MACRO-EVENTO (Fase B): si la historia pertenece a un gran evento, toda la FAMILIA se promueve
     # como UN solo carrusel (un slide por sub-historia), no una pieza por sub-historia.
     tema_macro = (cluster.get("tema_macro") or "").strip()
-    if tema_macro:
+    subtema = (cluster.get("subtema") or "").strip()
+    # MACRO-EVENTO (Fase B): UN carrusel COHERENTE por (evento, SUBTEMA) —los partidos no se
+    # mezclan con un concierto—. Solo agrupa cuando la faceta está etiquetada; sin subtema la
+    # historia va por la ruta por-cluster (la cadencia por evento limita el goteo igual).
+    if tema_macro and subtema:
         try:
-            familia = repos.clusters_por_tema_macro(tema_macro, marca, solo_nuevos=True)
+            familia = repos.clusters_por_subtema(tema_macro, subtema, marca, solo_nuevos=True)
         except Exception:  # noqa: BLE001 -- sin familia legible, cae a la ruta por-cluster normal
             _log.warning(
-                "pipeline: no se pudo leer la familia del macro-evento «%s» (%s)",
-                tema_macro[:60], marca, exc_info=True,
+                "pipeline: no se pudo leer la familia del subtema «%s / %s» (%s)",
+                tema_macro[:40], subtema[:40], marca, exc_info=True,
             )
             familia = None
         if familia is not None:
             ids_familia = {(c.get("id") or "") for c in familia}
             if cid and cid not in ids_familia:
-                # Otra promoción de la familia ya absorbió esta sub-historia: no dupliques pieza.
+                # Otra promoción de la faceta ya absorbió esta sub-historia: no dupliques pieza.
                 _log.info(
-                    "pipeline: historia ya absorbida por su macro-evento «%s» (%s)",
-                    tema_macro[:60], marca,
+                    "pipeline: historia ya absorbida por su subtema «%s / %s» (%s)",
+                    tema_macro[:40], subtema[:40], marca,
                 )
                 return None
             if len(familia) >= 2:
                 return _crear_carrusel_de_familia(
-                    tema_macro, marca, familia, claves_vistas=claves_vistas
+                    tema_macro, subtema, marca, familia, claves_vistas=claves_vistas
                 )
             # len(familia) < 2: solo queda esta sub-historia viva -> ruta por-cluster normal.
     # Dedup: la historia ya se trabajó hace poco para esta marca -> no se crea otro tema.
@@ -624,7 +637,7 @@ def crear_tema_de_cluster(
 
 
 def _crear_carrusel_de_familia(
-    tema_macro: str, marca: str, familia: list[dict[str, Any]], *,
+    tema_macro: str, subtema: str, marca: str, familia: list[dict[str, Any]], *,
     claves_vistas: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """CI — promueve TODA la familia de un MACRO-EVENTO como UN solo tema CARRUSEL (Fase B).
@@ -665,15 +678,16 @@ def _crear_carrusel_de_familia(
     try:
         tema = repos.crear_publicacion(
             clase="contenido",
-            # El EVENTO es el título de la pieza (cada sub-historia es un slide, no un tema).
-            titulo=tema_macro[:300],
+            # La FACETA del evento es el título («Mundial 2026 — Partidos»): cada sub-historia es
+            # un slide del carrusel, todas del mismo tipo.
+            titulo=f"{tema_macro} — {subtema}"[:300],
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
             categoria=categoria_efectiva(cluster_lead),
             # El carrusel ES un (tema_macro, subtema): lo estampamos para la cadencia por evento.
             tema_macro=tema_macro,
-            subtema=(cluster_lead.get("subtema") or "").strip(),
+            subtema=subtema,
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
@@ -686,12 +700,13 @@ def _crear_carrusel_de_familia(
         )
     except Exception:  # noqa: BLE001 -- sin tema, el macro-evento no produce nada (no rompe el barrido)
         _log.warning(
-            "pipeline: no se pudo crear el carrusel del macro-evento «%s» (%s)",
-            tema_macro[:60], marca, exc_info=True,
+            "pipeline: no se pudo crear el carrusel del subtema «%s / %s» (%s)",
+            tema_macro[:40], subtema[:40], marca, exc_info=True,
         )
         return None
     _auto_etiquetar_linea(tema, tema_macro, resumen_lead)
-    if claves_vistas is not None and (clave := dedup.clave(tema_macro)):
+    # Dedup por (evento, subtema): dos FACETAS distintas del mismo evento no se deduplican entre sí.
+    if claves_vistas is not None and (clave := dedup.clave(f"{tema_macro} {subtema}")):
         claves_vistas.add(clave)
     # ABSORBE TODA la familia: cada hermano queda `usado` enlazado a esta pieza (best-effort por
     # cluster; un fallo no aborta el barrido).
@@ -708,8 +723,8 @@ def _crear_carrusel_de_familia(
                 cid_f, marca, exc_info=True,
             )
     _log.info(
-        "pipeline: macro-evento «%s» -> carrusel de %d sub-historias (%s)",
-        tema_macro[:60], len(familia), marca,
+        "pipeline: subtema «%s / %s» -> carrusel de %d sub-historias (%s)",
+        tema_macro[:40], subtema[:40], len(familia), marca,
     )
     return tema
 
@@ -823,6 +838,34 @@ def cupos_categoria_restantes(
         if hueco > 0:
             huecos[cat] = hueco
     return huecos
+
+
+def _eventos_cubiertos_hoy(marca: str, *, ahora: datetime | None = None) -> set[tuple[str, str]]:
+    """(tema_macro, subtema) que YA tienen una pieza creada en la JORNADA MX de hoy, para `marca`.
+
+    Cadencia por evento: una faceta (evento + subtema) sale como MUCHO una vez al día —los N
+    subtemas activos dan N piezas, sin tope numérico fijo—. A medianoche de México reabre. Lee
+    las piezas del día (cualquier origen/productor: pipeline, tendencias…) y agrupa por su
+    (tema_macro, subtema). FAIL-OPEN: ante un fallo devuelve set() (la cadencia es suave; no
+    bloquea producción por un contador ilegible)."""
+    from ..tiempo import inicio_dia_cdmx_iso_utc
+
+    momento = ahora or datetime.now(timezone.utc)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    try:
+        piezas = repos.listar_publicacion(
+            marca=marca, creado_desde=inicio_dia_cdmx_iso_utc(momento)
+        )
+    except Exception:  # noqa: BLE001 -- fail-open: sin lectura fiable no se bloquea la producción
+        _log.warning("pipeline: no se pudo leer la cobertura de eventos del día (%s)", marca, exc_info=True)
+        return set()
+    cubiertos: set[tuple[str, str]] = set()
+    for p in piezas:
+        tm = (p.get("tema_macro") or "").strip()
+        if tm:
+            cubiertos.add((tm, (p.get("subtema") or "").strip()))
+    return cubiertos
 
 
 def categoria_efectiva(cluster: dict[str, Any]) -> str:

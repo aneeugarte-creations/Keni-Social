@@ -80,6 +80,7 @@ def _inicializar_cluster(
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
     verificacion_fuente="", primera_fuente="",
     idioma="", traducido=0, titulo_es="", resumen_es="",
+    tema_macro="", subtema="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
@@ -106,6 +107,7 @@ def _inicializar_cluster(
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion, "primera_fuente": primera_fuente,
         "idioma": idioma, "traducido": traducido, "titulo_es": titulo_es, "resumen_es": resumen_es,
+        "tema_macro": tema_macro, "subtema": subtema,
     })
     if verificacion_fuente:
         repos.marcar_cluster_verificacion(cid, verificacion_fuente)
@@ -287,6 +289,7 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
 
     fake = SimpleNamespace(
         clusters_por_tema_macro=lambda tema, marca, *, solo_nuevos=True: list(familia),
+        clusters_por_subtema=lambda tema, subtema, marca, *, solo_nuevos=True: list(familia),
         items_de_cluster=lambda cid, *, limite=200: list(items_por_cid.get(cid, [])),
         cuerpos_de_cluster=lambda cid, *, limite=200: {},
         obtener_fuente_rss=lambda fid: {"propia": True},
@@ -301,9 +304,10 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
     return reg
 
 
-def _cluster_familia(cid, *, score, tema_macro="Mundial 2026"):
+def _cluster_familia(cid, *, score, tema_macro="Mundial 2026", subtema="Partidos"):
     return {
         "id": cid, "marca": "unotv", "titulo": f"Ángulo {cid}", "tema_macro": tema_macro,
+        "subtema": subtema,
         "resumen": f"Resumen de {cid}", "categoria": "mx", "breaking": 0,
         "verificacion_fuente": "no_verificado", "verificar_hallazgos": "",
         "primer_visto": "2026-06-01T00:00:00+00:00", "score": score,
@@ -337,9 +341,11 @@ def test_macro_evento_crea_un_solo_carrusel_y_absorbe_la_familia(monkeypatch):
     # UNA sola publicación, titulada por el EVENTO.
     assert len(reg["crear"]) == 1
     kw = reg["crear"][0]
-    assert kw["titulo"] == "Mundial 2026"
-    # La pieza queda ESTAMPADA con su macro-evento (gobierna la cadencia por evento aguas arriba).
+    # El carrusel es de UNA faceta coherente: titulado por (evento — subtema).
+    assert kw["titulo"] == "Mundial 2026 — Partidos"
+    # La pieza queda ESTAMPADA con su (evento, subtema): gobierna la cadencia aguas arriba.
     assert kw["tema_macro"] == "Mundial 2026"
+    assert kw["subtema"] == "Partidos"
     # Carrusel: n_notas = nº de sub-historias (3) en el copy_pendiente.
     pend = json.loads(kw["copy_pendiente"])
     assert pend["n_notas"] == 3
@@ -381,6 +387,22 @@ def test_clusters_por_tema_macro_filtra_marca_estado_y_ordena(entorno):
     todos = repos.clusters_por_tema_macro("Mundial 2026", "unotv", solo_nuevos=False)
     assert [c["id"] for c in todos] == ["m1", "m3", "m2"]  # incluye el usado, score desc
     assert repos.clusters_por_tema_macro("", "unotv") == []
+
+
+def test_clusters_por_subtema_filtra_evento_faceta_marca_y_ordena(entorno):
+    """`clusters_por_subtema`: mismo (tema_macro, subtema) + marca, `solo_nuevos`, score desc."""
+    _inicializar_cluster("p1", titulo="México vs Sudáfrica", score=0.9,
+                         tema_macro="Mundial 2026", subtema="Partidos")
+    _inicializar_cluster("p2", titulo="Argentina vs Argelia", score=0.7,
+                         tema_macro="Mundial 2026", subtema="Partidos")
+    _inicializar_cluster("show", titulo="Concierto inaugural", score=0.95,
+                         tema_macro="Mundial 2026", subtema="Espectáculo")
+    _inicializar_cluster("p-otra", titulo="Partido", score=0.99,
+                         tema_macro="Mundial 2026", subtema="Partidos", marca="claro-sports")
+
+    partidos = repos.clusters_por_subtema("Mundial 2026", "Partidos", "unotv", solo_nuevos=True)
+    assert [c["id"] for c in partidos] == ["p1", "p2"]  # solo esa faceta y marca, score desc
+    assert repos.clusters_por_subtema("Mundial 2026", "", "unotv") == []  # subtema vacío -> []
 
 
 # --------------------------------------------------------------------------- #
@@ -799,6 +821,30 @@ def test_promover_omite_extranjera_sin_traducir(entorno, monkeypatch):
 
     assert "en-trad" in elegidos  # ya traducida -> entra
     assert "en-crudo" not in elegidos  # extranjera sin traducir -> espera
+
+
+def test_promover_omite_faceta_de_evento_ya_cubierta_hoy(entorno, monkeypatch):
+    """Cadencia por evento: una faceta (evento, subtema) que YA tiene pieza hoy NO se vuelve a
+    auto-producir; otra faceta del MISMO evento SÍ entra (sin tope numérico, por subtema)."""
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _inicializar_cluster(
+        "partidos", titulo="México vence a Sudáfrica en el debut", score=0.9,
+        tema_macro="Mundial 2026", subtema="Partidos", verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+    _inicializar_cluster(
+        "show", titulo="Concierto en la inauguración del torneo", score=0.8,
+        tema_macro="Mundial 2026", subtema="Espectáculo", verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+    # Ya salió hoy una pieza de la faceta «Partidos» (cualquier productor cuenta).
+    repos.crear_publicacion(
+        titulo="Mundial 2026 — Partidos", marca="unotv",
+        tema_macro="Mundial 2026", subtema="Partidos",
+    )
+
+    elegidos = {c["id"] for c in pc.clusters_para_promover("unotv", maximo=5)}
+
+    assert "partidos" not in elegidos  # faceta ya cubierta hoy -> espera a mañana
+    assert "show" in elegidos  # otra faceta del mismo evento -> entra
 
 
 def test_promover_usa_titulo_es_del_cluster_traducido(entorno, monkeypatch):
