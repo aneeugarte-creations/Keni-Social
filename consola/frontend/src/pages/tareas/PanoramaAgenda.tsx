@@ -15,7 +15,7 @@ import type { CatalogosPublicacion, Publicacion, EventoRota, PrioridadEvento } f
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
-import { DialogoAnadirPersona, DialogoAsignar } from "./dialogos";
+import { DialogoAsignar } from "./dialogos";
 import { IconoEvento } from "./icono-evento";
 import { etiquetaRol, type RolCobertura } from "./roles";
 import {
@@ -611,18 +611,15 @@ export function PanoramaAgenda({
   eventos,
   catalogos,
   marca,
-  esAdmin,
 }: {
   tareas: Publicacion[];
   eventos: EventoRota[];
   catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
-  esAdmin: boolean;
 }) {
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
   const [filtro, setFiltro] = React.useState<string | null>(null); // id de persona, "__pool__", o null
   const [diasVisibles, setDiasVisibles] = React.useState(5);
-  const [anadirAbierto, setAnadirAbierto] = React.useState(false);
   const alternar = (clave: string) =>
     setAbiertas((prev) => {
       const next = new Set(prev);
@@ -849,16 +846,6 @@ export function PanoramaAgenda({
             </Badge>
           </button>
         ))}
-        {esAdmin && marca && (
-          <button
-            type="button"
-            aria-label="Añadir persona al equipo"
-            onClick={() => setAnadirAbierto(true)}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        )}
         {filtro && (
           <Button
             variant="ghost"
@@ -960,14 +947,6 @@ export function PanoramaAgenda({
             </section>
           )}
         </div>
-      )}
-
-      {marca && (
-        <DialogoAnadirPersona
-          marca={marca}
-          abierto={anadirAbierto}
-          onOpenChange={setAnadirAbierto}
-        />
       )}
     </div>
   );

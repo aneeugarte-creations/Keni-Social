@@ -428,19 +428,6 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: /Marcar hecha/ })).toBeNull();
   });
 
-  it("la barra de carga muestra «+» para añadir persona (solo admin y marca concreta)", async () => {
-    const { unmount } = renderTareas([], [], usuario("admin", "u-admin"));
-    expect(
-      await screen.findByRole("button", { name: "Añadir persona al equipo" }),
-    ).toBeInTheDocument();
-    unmount();
-
-    vi.restoreAllMocks();
-    renderTareas([], [], usuario("editor", "u1"));
-    await screen.findByRole("button", { name: "Ver solo lo por cubrir" }); // el panorama ya cargó
-    expect(screen.queryByRole("button", { name: "Añadir persona al equipo" })).toBeNull();
-  });
-
   it("RECUPERACIÓN: una cobertura soltada (sin dueño) reaparece como «Por cubrir» y se re-coge", async () => {
     const coger = vi
       .spyOn(apiMod.api, "cogerPublicacion")
@@ -583,7 +570,6 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
             ]}
             catalogos={catalogos()}
             marca="claro-sports"
-            esAdmin={false}
           />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -674,7 +660,6 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
             eventos={props.eventos ?? []}
             catalogos={catalogos()}
             marca="claro-sports"
-            esAdmin={false}
           />
         </MemoryRouter>
       </QueryClientProvider>,

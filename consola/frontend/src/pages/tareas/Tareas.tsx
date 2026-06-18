@@ -218,7 +218,6 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 eventos={eventosCoverables}
                 catalogos={catalogos}
                 marca={marca}
-                esAdmin={usuario?.rol === "admin"}
               />
             </TabsContent>
             <TabsContent value="mias" className="space-y-4">
