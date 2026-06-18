@@ -325,11 +325,15 @@ def test_admin_reset_mfa_limpia_y_login_deja_de_elevar(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     admin = auth.crear_usuario("jefe", CLAVE, "admin")
+    # El admin que resetea debe estar ENROLADO: con la maquinaria MFA activa, un admin sin
+    # passkey queda bloqueado para gestionar usuarios (hard-block). Le damos su llave.
+    _credencial_falsa(admin["id"], credential_id="cred-jefe")
     victima = auth.crear_usuario("ana", CLAVE, "editor")
     _credencial_falsa(victima["id"])
 
     c_admin = _cli()
-    _login(c_admin, "jefe", CLAVE)
+    # Con passkey, el login pediria segundo factor; vamos directo a la sesion real del admin.
+    c_admin.cookies.set(auth.COOKIE_SESION, auth.crear_sesion(admin["id"]))
     r = c_admin.patch(
         f"/api/usuarios/{victima['id']}", json={"mfa_reset": True}, headers=_ORIGIN
     )
