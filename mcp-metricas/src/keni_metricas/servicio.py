@@ -324,6 +324,8 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
             "interacciones": p.interacciones,
             "engagement_pct": p.engagement_pct,
             "url": p.url,
+            # alcance (usuarios únicos): None salvo Meta (FB/IG); ver schema.
+            "alcance": p.alcance,
             # Métricas granulares (None cuando la fuente no las trae; ver schema).
             "likes": p.likes,
             "comentarios": p.comentarios,

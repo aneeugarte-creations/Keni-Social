@@ -56,7 +56,7 @@ from .tiempo import ahora_iso, hoy_utc
 # que devuelve `keni_metricas.servicio` (campos nuevos en reporte/series/listados):
 # invalida toda la cache previa de golpe (las claves viejas dejan de leerse y la
 # purga del barrido las borra), en vez de servir el campo nuevo como 0/None.
-_VERSION_ESQUEMA = 2
+_VERSION_ESQUEMA = 3
 
 # Las entradas de rangos AD-HOC (`rango:AAAA-MM-DD_AAAA-MM-DD`, las genera el comparador
 # con fechas que se desplazan cada dia) caducan y se purgan pasado este margen: sus claves
@@ -245,6 +245,16 @@ def _refrescar(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
         fuente,
         generado_en,
     )
+    # Cada refresco del listado de piezas acumula además un punto en el histórico por pieza
+    # (`metricas_pieza_snapshots`), para que la curva del detalle crezca aunque la pieza no
+    # se siga por `id_post_metricool`. Best-effort: un fallo aquí no invalida el refresco.
+    if tipo == TIPO_PIEZAS_LISTADO:
+        try:
+            from . import metricas_pieza
+
+            metricas_pieza.registrar_snapshots_de_listado(payload.get("piezas") or [], generado_en)
+        except Exception:  # noqa: BLE001 -- el histórico es best-effort; nunca rompe el refresco
+            _log.exception("metricas_cache: fallo al acumular el histórico por pieza del listado.")
     return payload, generado_en
 
 

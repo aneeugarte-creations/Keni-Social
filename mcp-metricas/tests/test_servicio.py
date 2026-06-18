@@ -156,6 +156,18 @@ def test_listado_piezas_expone_campo_texto(muestra):
     assert all("texto" in p for p in piezas)
 
 
+def test_listado_piezas_expone_alcance(muestra):
+    # El listado SIEMPRE expone la clave `alcance` (usuarios únicos): un entero para las
+    # piezas de Meta (FB/IG), None para el resto (degradación honesta, nunca un 0 falso).
+    piezas = servicio.construir_listado_piezas("mes")
+    assert all("alcance" in p for p in piezas)
+    meta = [p for p in piezas if p["red"] in ("facebook", "instagram")]
+    assert meta, "la muestra debe incluir piezas de Meta"
+    assert all(isinstance(p["alcance"], int) for p in meta)
+    no_meta = [p for p in piezas if p["red"] not in ("facebook", "instagram")]
+    assert all(p["alcance"] is None for p in no_meta)
+
+
 def test_excepciones_reexportadas_son_las_del_dominio():
     # La Consola captura estas desde la fachada; deben ser las clases reales.
     from keni_metricas.config import ConfigInvalida as RealConfigInvalida

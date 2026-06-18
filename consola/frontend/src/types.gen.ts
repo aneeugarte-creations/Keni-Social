@@ -262,6 +262,7 @@ export interface PiezaMetrica {
   interacciones: number;
   engagement_pct: number;
   url: string | null;
+  alcance: number | null;
   likes: number | null;
   comentarios: number | null;
   compartidos: number | null;
@@ -381,6 +382,7 @@ export interface PiezaListado {
   interacciones: number;
   engagement_pct: number;
   url: string | null;
+  alcance: number | null;
   likes: number | null;
   comentarios: number | null;
   compartidos: number | null;

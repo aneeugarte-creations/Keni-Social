@@ -53,6 +53,10 @@ def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
     return db.leer_metricas_cache(clave)
 
 
+def listar_metricas_cache_por_tipo(tipos: tuple[str, ...]) -> list[dict[str, Any]]:
+    return db.listar_metricas_cache_por_tipo(tipos)
+
+
 def guardar_metricas_cache(
     clave: str,
     tipo: str,

@@ -103,6 +103,8 @@ function Publicacion({ pieza }: { pieza: PiezaMetrica }) {
       <div>
         <h3 className="mb-2 text-sm font-medium">Desglose</h3>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+          {/* Alcance único: solo Meta lo mide; "—" en el resto (degradación honesta). */}
+          <Dato etiqueta="Alcance único" valor={granular(pieza.alcance)} />
           <Dato etiqueta="Me gusta" valor={granular(pieza.likes)} />
           <Dato etiqueta="Comentarios" valor={granular(pieza.comentarios)} />
           <Dato etiqueta="Compartidos" valor={granular(pieza.compartidos)} />

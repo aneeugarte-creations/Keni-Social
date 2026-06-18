@@ -27,6 +27,7 @@ const PIEZA: PiezaMetrica = {
   interacciones: 600,
   engagement_pct: 5,
   url: "https://instagram.com/p/abc",
+  alcance: 9000,
   likes: 500,
   comentarios: 60,
   compartidos: 30,
@@ -95,6 +96,8 @@ describe("DetallePieza", () => {
     // Título + desglose granular (me gusta presentes; clics nulos -> "—").
     expect(screen.getByText("Reel viral")).toBeInTheDocument();
     expect(screen.getByText("Me gusta")).toBeInTheDocument();
+    // Alcance único (solo Meta lo mide): se pinta con su valor.
+    expect(screen.getByText("Alcance único")).toBeInTheDocument();
     // KPIs de velocidad aparecen tras cargar el histórico.
     expect(await screen.findByText("% en las primeras 24 h")).toBeInTheDocument();
     expect(screen.getByText("Mediciones")).toBeInTheDocument();

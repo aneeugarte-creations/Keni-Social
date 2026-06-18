@@ -325,6 +325,9 @@ class PiezaMetrica(TypedDict):
     engagement_pct: float
     # url: puede no existir según la fuente/plataforma.
     url: str | None
+    # alcance (usuarios únicos): null salvo Meta (FB/IG), que es la única que lo mide a
+    # nivel pieza; distinto de `visualizaciones` (impresiones, no únicas).
+    alcance: int | None
     # Desglose granular por pieza; null cuando la fuente no lo expone (no se inventa 0).
     likes: int | None
     comentarios: int | None
@@ -462,6 +465,8 @@ class PiezaListado(TypedDict):
     interacciones: int
     engagement_pct: float
     url: str | None
+    # alcance (usuarios únicos): null salvo Meta (FB/IG); ver `PiezaMetrica`.
+    alcance: int | None
     likes: int | None
     comentarios: int | None
     compartidos: int | None

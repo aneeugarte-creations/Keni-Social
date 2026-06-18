@@ -197,6 +197,10 @@ _ALIAS_TIEMPO_VIS = (
     "averageTimeWatched",
 )
 _ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClicksCount", "linkclicks")
+# Alcance (usuarios ÚNICOS) a nivel post: solo Meta lo expone. IG lo trae como `reach`;
+# FB como `impressionsUnique`/`postImpressionsUnique` (los reels FB usan este último). El
+# resto de redes no lo miden -> None (degradación honesta, no un 0 inventado).
+_ALIAS_ALCANCE = ("reach", "impressionsUnique", "postImpressionsUnique", "impressionsunique")
 _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "videoType")
 # Seguidores ganados/atribuidos a UN post: casi seguro Metricool no lo expone a
 # nivel post; se captura si algún alias lo trae, si no queda None.
@@ -911,6 +915,7 @@ class FuenteMetricool:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(reel, _ALIAS_REEL_URL),
             cuenta=cuenta_id,
+            alcance=_a_int_opt(_primero(reel, _ALIAS_ALCANCE)),
             **gran,
         )
 
@@ -964,6 +969,7 @@ class FuenteMetricool:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
             cuenta=cuenta_id,
+            alcance=_a_int_opt(_primero(post, _ALIAS_ALCANCE)),
             **gran,
         )
 

@@ -360,6 +360,13 @@ def _pieza(
         url=_URL_BASE[plat].format(cuenta=cuenta_id, pid=pid),
         # sella la marca para estratificar/normalizar top/peores por grupo marca×red.
         cuenta=cuenta_id,
+        # alcance (usuarios únicos): solo Meta lo mide; el resto AUSENTE (None), igual que
+        # el adaptador real (un 0 sería un dato falso para una red que no lo expone).
+        alcance=(
+            int(vistas * _entre(_rand(cuenta_id, rango, "pa", plat, idx), 0.55, 0.75))
+            if plat in PLATAFORMAS_CON_ALCANCE
+            else None
+        ),
         **_granulares_muestra(cuenta_id, plat, f"{rango}:{idx}", vistas, inter),
     )
 

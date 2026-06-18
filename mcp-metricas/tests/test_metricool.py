@@ -194,6 +194,7 @@ def test_mejores_piezas_mapea_posts():
                 "videoViews": 4200,
                 "avgWatchTime": 12,
                 "linkClicks": 8,
+                "reach": 4500,  # alcance (usuarios únicos): solo Meta lo trae
             },
             {
                 "id": "p2",
@@ -221,6 +222,8 @@ def test_mejores_piezas_mapea_posts():
     # Granulares: p2 solo trajo formato (carrusel); el resto None (no se inventa).
     assert piezas[0].formato == "carrusel"
     assert piezas[0].likes is None and piezas[0].comentarios is None
+    # Alcance: p2 no trajo reach -> None; p1 sí -> su valor (no se inventa un 0).
+    assert piezas[0].alcance is None
     # p1 trajo el desglose completo y se parseó a los campos del contrato.
     p1 = next(p for p in piezas if p.id == "p1")
     assert p1.likes == 200
@@ -231,6 +234,7 @@ def test_mejores_piezas_mapea_posts():
     assert p1.video_views == 4200
     assert p1.tiempo_medio_vis_s == 12
     assert p1.clics_enlace == 8
+    assert p1.alcance == 4500
     # cada pieza se sella con su marca (para estratificar top/peores por marca).
     assert all(p.cuenta == "claro_sports" for p in piezas)
 
@@ -297,6 +301,7 @@ def test_reel_facebook_cuenta_interacciones_no_la_tasa():
                 "created": "2026-05-26T10:00:00",
                 "description": "Reel FB de campaña #Chihuahua",
                 "blueReelsPlayCount": 2530,
+                "postImpressionsUnique": 2100,  # alcance único del reel FB
                 "engagement": 0.8352,  # TASA en %, NO interacciones -> NO debe usarse
                 "postVideoReactions": 16,
                 "postVideoSocialActions": 6,
@@ -315,6 +320,8 @@ def test_reel_facebook_cuenta_interacciones_no_la_tasa():
     assert reel.plataforma == Plataforma.facebook
     assert reel.formato == "reel"
     assert reel.visualizaciones == 2530
+    # alcance único del reel FB (postImpressionsUnique), distinto de las reproducciones.
+    assert reel.alcance == 2100
     # interacciones = 16 reacciones + 6 acciones sociales = 22 (NO 0 por la tasa 0.83).
     assert reel.interacciones == 22
     # engagement recalculado sobre el conteo real (22/2530), redondeado a 1 decimal.

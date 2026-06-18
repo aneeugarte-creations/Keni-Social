@@ -251,6 +251,7 @@ from .db_latidos import (  # noqa: F401
 from .db_metricas import (  # noqa: F401
     guardar_metricas_cache,
     leer_metricas_cache,
+    listar_metricas_cache_por_tipo,
     listar_snapshots_piezas,
     purgar_metricas_cache,
     purgar_snapshots_piezas,

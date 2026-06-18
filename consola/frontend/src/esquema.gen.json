@@ -871,6 +871,16 @@
             }
           ]
         },
+        "alcance": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "likes": {
           "anyOf": [
             {
@@ -982,6 +992,7 @@
         "interacciones",
         "engagement_pct",
         "url",
+        "alcance",
         "likes",
         "comentarios",
         "compartidos",
@@ -1313,6 +1324,16 @@
             }
           ]
         },
+        "alcance": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "likes": {
           "anyOf": [
             {
@@ -1434,6 +1455,7 @@
         "interacciones",
         "engagement_pct",
         "url",
+        "alcance",
         "likes",
         "comentarios",
         "compartidos",

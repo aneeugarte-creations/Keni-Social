@@ -29,6 +29,7 @@ function pieza(over: Partial<PiezaListado>): PiezaListado {
     interacciones: 50,
     engagement_pct: 5,
     url: null,
+    alcance: null,
     likes: null,
     comentarios: null,
     compartidos: null,

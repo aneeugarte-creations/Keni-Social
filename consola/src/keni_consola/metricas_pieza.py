@@ -283,6 +283,68 @@ def _registrar_historico(
         )
 
 
+def registrar_snapshots_de_listado(piezas: list[dict[str, Any]], ts: str) -> int:
+    """Acumula un punto del histórico por cada pieza del LISTADO del periodo. Devuelve nº escritos.
+
+    El histórico por pieza (`metricas_pieza_snapshots`) se alimenta con CADA refresco del
+    listado de piezas del periodo (`metricas_cache`, tipo `piezas_listado`), usando el `ts`
+    del refresco como instante. Así la curva del detalle crece para CUALQUIER pieza del
+    periodo —no solo las que la Consola sigue por `id_post_metricool`—. La clave de cada
+    snapshot es el `id` de Metricool de la pieza, el MISMO con el que el detalle lee la serie
+    (`serie_pieza`). Idempotente por `(pieza_id, ts)`; best-effort por pieza (un fallo de una
+    no aborta el resto).
+    """
+    if not ts:
+        return 0
+    escritos = 0
+    for p in piezas:
+        pieza_id = str(p.get("id") or "")
+        if not pieza_id:
+            continue
+        try:
+            if repos.registrar_snapshot_pieza(
+                pieza_id,
+                p.get("cuenta") or "",
+                p.get("red") or p.get("plataforma") or "",
+                p.get("formato") or "",
+                ts,
+                p,
+            ):
+                escritos += 1
+        except Exception:  # noqa: BLE001 -- el histórico es best-effort; nunca rompe el refresco
+            _log.exception("metricas_pieza: fallo al registrar histórico de pieza id=%s.", pieza_id)
+    return escritos
+
+
+def backfill_historico_desde_cache() -> int:
+    """Reconstruye el histórico por pieza replayando las caches del listado de piezas.
+
+    Las entradas `metricas_cache` de tipo `piezas_listado` guardan, por refresco (cada una
+    con un `generado_en` distinto), el listado de piezas del periodo con sus métricas en ESA
+    fecha: puntos históricos reales ya capturados y dispersos. Esto los vuelca a
+    `metricas_pieza_snapshots` (idempotente por `(pieza_id, ts)`), de modo que la curva del
+    detalle se llena con el pasado sin esperar a que el daemon acumule puntos nuevos. Se
+    invoca una vez al arrancar; reejecutarlo no duplica. Devuelve nº de snapshots escritos.
+    """
+    from . import metricas_cache
+
+    try:
+        filas = repos.listar_metricas_cache_por_tipo((metricas_cache.TIPO_PIEZAS_LISTADO,))
+    except Exception:  # noqa: BLE001 -- el backfill es best-effort; no debe romper el arranque
+        _log.exception("metricas_pieza: fallo al leer las caches del listado para el backfill.")
+        return 0
+    total = 0
+    for fila in filas:
+        payload = fila.get("payload") or {}
+        piezas = payload.get("piezas") if isinstance(payload, dict) else None
+        if not piezas:
+            continue
+        total += registrar_snapshots_de_listado(piezas, fila.get("generado_en") or "")
+    if total:
+        _log.info("Backfill del histórico por pieza: %d snapshot(s) reconstruidos desde la cache.", total)
+    return total
+
+
 def recalcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
     """Recalcula el rendimiento de UNA pieza SALTANDO el TTL y refresca la cache.
 

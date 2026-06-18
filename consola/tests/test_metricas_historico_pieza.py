@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from keni_consola import db, db_metricas, metricas_pieza, repos
+from keni_consola import db, db_metricas, metricas_cache, metricas_pieza, repos
 
 
 # --------------------------------------------------------------------------- #
@@ -204,6 +204,81 @@ def test_recalcular_escribe_historico_cuando_encontrado(pg, monkeypatch):
     assert p["marca"] == "unotv" and p["red"] == "instagram" and p["formato"] == "reel"
     assert p["visualizaciones"] == 500 and p["interacciones"] == 60
     assert p["engagement_pct"] == 12.0 and p["likes"] == 40
+
+
+# --------------------------------------------------------------------------- #
+# Histórico desde el LISTADO de piezas del periodo (no solo las seguidas)       #
+# --------------------------------------------------------------------------- #
+
+
+def test_registrar_snapshots_de_listado_escribe_por_pieza(pg):
+    # Cada pieza del listado con `id` escribe un snapshot (clave = id de Metricool); las
+    # piezas sin `id` se ignoran. El `ts` es el del refresco.
+    piezas = [
+        {"id": "m1", "red": "instagram", "cuenta": "unotv", "formato": "reel",
+         "visualizaciones": 100, "interacciones": 10, "alcance": 80, "engagement_pct": 10.0},
+        {"id": "m2", "red": "facebook", "cuenta": "unotv", "formato": "foto",
+         "visualizaciones": 50, "interacciones": 5, "alcance": 40, "engagement_pct": 10.0},
+        {"red": "tiktok", "visualizaciones": 9},  # sin id -> se ignora
+    ]
+    assert metricas_pieza.registrar_snapshots_de_listado(piezas, "2026-06-10T08:00:00") == 2
+    s1 = db.serie_pieza("m1")
+    assert len(s1) == 1
+    assert s1[0]["alcance"] == 80 and s1[0]["red"] == "instagram" and s1[0]["marca"] == "unotv"
+    assert s1[0]["ts"] == "2026-06-10T08:00:00"
+
+
+def test_registrar_snapshots_de_listado_idempotente_por_ts(pg):
+    p = [{"id": "x", "red": "instagram", "visualizaciones": 1}]
+    assert metricas_pieza.registrar_snapshots_de_listado(p, "2026-06-10T08:00:00") == 1
+    # Mismo (pieza_id, ts) -> no inserta de nuevo.
+    assert metricas_pieza.registrar_snapshots_de_listado(p, "2026-06-10T08:00:00") == 0
+    assert len(db.serie_pieza("x")) == 1
+
+
+def test_backfill_historico_desde_cache_reconstruye_serie(pg):
+    # Varias entradas de cache del listado (claves distintas, `generado_en` distintos) con la
+    # MISMA pieza y valores crecientes -> el backfill reconstruye su serie histórica.
+    base = {"id": "post-9", "red": "instagram", "cuenta": "unotv", "formato": "reel"}
+    repos.guardar_metricas_cache(
+        metricas_cache._clave(metricas_cache.TIPO_PIEZAS_LISTADO, "mes", None),
+        metricas_cache.TIPO_PIEZAS_LISTADO, "mes", "",
+        {"piezas": [{**base, "visualizaciones": 100, "alcance": 80}]},
+        "muestra", "2026-06-16T08:00:00",
+    )
+    repos.guardar_metricas_cache(
+        metricas_cache._clave(metricas_cache.TIPO_PIEZAS_LISTADO, "semana", None),
+        metricas_cache.TIPO_PIEZAS_LISTADO, "semana", "",
+        {"piezas": [{**base, "visualizaciones": 300, "alcance": 220}]},
+        "muestra", "2026-06-18T08:00:00",
+    )
+    assert metricas_pieza.backfill_historico_desde_cache() == 2
+    serie = db.serie_pieza("post-9")
+    assert [s["ts"] for s in serie] == ["2026-06-16T08:00:00", "2026-06-18T08:00:00"]
+    assert [s["visualizaciones"] for s in serie] == [100, 300]
+    assert serie[-1]["alcance"] == 220
+    # Reejecutar no duplica (idempotente por (pieza_id, ts)).
+    assert metricas_pieza.backfill_historico_desde_cache() == 0
+    assert len(db.serie_pieza("post-9")) == 2
+
+
+def test_refrescar_listado_acumula_historico(pg, monkeypatch):
+    # Cada refresco del listado de piezas (`metricas_cache._refrescar`) acumula además un
+    # punto en el histórico por pieza, usando el `generado_en` del refresco como `ts`.
+    payload = {
+        "fuente": "muestra",
+        "piezas": [
+            {"id": "hook-1", "red": "instagram", "cuenta": "unotv", "formato": "reel",
+             "visualizaciones": 500, "interacciones": 50, "alcance": 400, "engagement_pct": 10.0},
+        ],
+    }
+    monkeypatch.setattr(metricas_cache, "_calcular", lambda tipo, rango, marca: dict(payload))
+    monkeypatch.setattr(metricas_cache, "_ahora", lambda: "2026-06-18T09:00:00")
+    metricas_cache._refrescar(metricas_cache.TIPO_PIEZAS_LISTADO, "mes", None)
+    serie = db.serie_pieza("hook-1")
+    assert len(serie) == 1
+    assert serie[0]["ts"] == "2026-06-18T09:00:00"
+    assert serie[0]["visualizaciones"] == 500 and serie[0]["alcance"] == 400
 
 
 def test_recalcular_no_escribe_historico_si_no_encontrado(pg, monkeypatch):

@@ -33,6 +33,7 @@ function pieza(over: Partial<PiezaListado>): PiezaListado {
     interacciones: 50,
     engagement_pct: 5,
     url: "https://facebook.com/post/a",
+    alcance: 8000,
     likes: 40,
     comentarios: 5,
     compartidos: 3,

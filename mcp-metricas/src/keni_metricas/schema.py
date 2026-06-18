@@ -180,6 +180,10 @@ class Pieza(BaseModel):
     # mediana del grupo es 0 (sin baseline). Lo rellena `anotar_rendimiento_relativo`;
     # default None preserva la retrocompatibilidad de la salida.
     rendimiento_relativo: float | None = None
+    # alcance (usuarios ÚNICOS alcanzados por ESTA pieza): solo Meta (FB/IG) lo expone a
+    # nivel post (`reach`/`postImpressionsUnique`); el resto de redes no lo miden -> None
+    # (no es 0 real). Distinto de `visualizaciones` (impresiones/reproducciones, no únicas).
+    alcance: int | None = None
     # --- Métricas granulares por pieza (issue métricas granulares) -----------
     # OPCIONALES y con default None/0: degradación honesta. Si Metricool no trae
     # el campo a nivel post (la forma de `/v2/analytics/posts/{network}` NO está

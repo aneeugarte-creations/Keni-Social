@@ -291,6 +291,36 @@ def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
     }
 
 
+def listar_metricas_cache_por_tipo(tipos: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Todas las entradas de cache de los `tipos` dados: `{payload, generado_en}` por fila.
+
+    El backfill del histórico por pieza (`metricas_pieza.backfill_historico_desde_cache`)
+    recorre las entradas del listado de piezas (varias por marca×rango, cada una con un
+    `generado_en` distinto) para reconstruir los puntos históricos ya capturados. `payload`
+    sale ya deserializado; las filas con JSON corrupto se omiten (no rompen el barrido).
+    """
+    if not tipos:
+        return []
+    marcadores = ", ".join("?" for _ in tipos)
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"SELECT payload, generado_en FROM metricas_cache WHERE tipo IN ({marcadores})",
+            tuple(tipos),
+        ).fetchall()
+    finally:
+        con.close()
+    salida: list[dict[str, Any]] = []
+    for fila in filas:
+        try:
+            bruto = fila["payload"]
+            payload = bruto if isinstance(bruto, (dict, list)) else json.loads(bruto)
+        except (ValueError, TypeError):
+            continue
+        salida.append({"payload": payload, "generado_en": fila["generado_en"]})
+    return salida
+
+
 def guardar_metricas_cache(
     clave: str,
     tipo: str,

@@ -291,6 +291,15 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por la migración
             _logger.warning("No se pudo migrar al tablero de contenido.", exc_info=True)
 
+        # Reconstruye el histórico por pieza desde las caches del listado ya guardadas, para
+        # que la curva del detalle arranque con el pasado capturado. Idempotente y best-effort.
+        try:
+            from . import metricas_pieza
+
+            metricas_pieza.backfill_historico_desde_cache()
+        except Exception:  # noqa: BLE001 -- el arranque no debe romper por el backfill
+            _logger.warning("No se pudo reconstruir el histórico por pieza.", exc_info=True)
+
     rutas: list[Route] = list(api.descubrir(refresco=True))
 
     # Cualquier OTRA sub-ruta /api (no descubierta) -> 404 JSON. Va despues de las
