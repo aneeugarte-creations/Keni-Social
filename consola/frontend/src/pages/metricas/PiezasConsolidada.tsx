@@ -297,13 +297,15 @@ export function PiezasConsolidada({
 
         {/* Estadísticas del conjunto filtrado */}
         {!isPending && !isError && piezas.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <TarjetaKpi etiqueta="Piezas" valor={numeroCompleto(stats.total)} />
             <TarjetaKpi
-              etiqueta="Vistas: promedio · mediana"
-              valor={`${stats.vistasMedia == null ? "—" : numeroCompacto(stats.vistasMedia)} · ${
-                stats.vistasMediana == null ? "—" : numeroCompacto(stats.vistasMediana)
-              }`}
+              etiqueta="Vistas promedio"
+              valor={stats.vistasMedia == null ? "—" : numeroCompacto(stats.vistasMedia)}
+            />
+            <TarjetaKpi
+              etiqueta="Vistas mediana"
+              valor={stats.vistasMediana == null ? "—" : numeroCompacto(stats.vistasMediana)}
             />
             <TarjetaKpi
               etiqueta="Engagement (agregado)"

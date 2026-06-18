@@ -93,7 +93,8 @@ describe("PiezasConsolidada", () => {
     expect(screen.getByText(/Facebook · Sin línea/)).toBeInTheDocument();
     // Stats del conjunto filtrado: 2 piezas; vistas promedio (5K) y mediana (5K) presentes.
     expect(screen.getByText("Piezas")).toBeInTheDocument();
-    expect(screen.getByText("Vistas: promedio · mediana")).toBeInTheDocument();
+    expect(screen.getByText("Vistas promedio")).toBeInTheDocument();
+    expect(screen.getByText("Vistas mediana")).toBeInTheDocument();
     expect(screen.getByText("Engagement (agregado)")).toBeInTheDocument();
     expect(screen.getByText("Engagement mediana")).toBeInTheDocument();
   });
