@@ -15,8 +15,8 @@
  *  - `posicionTemporal` / `minutosHastaEvento` (lib/fecha): fase temporal e instantes CDMX.
  */
 import {
+  diaCDMX,
   minutosHastaEvento,
-  posicionTemporal,
   type PosicionTemporal,
 } from "@/lib/fecha";
 import { franjaIdParaHoraEvento } from "@/pages/rota/comun";
@@ -160,7 +160,7 @@ export function derivarCoberturaEvento(
   const desfaseMin = (ahora.getTime() - Date.now()) / 60000;
   const minRel = minutosHastaEvento(evento.fecha, evento.hora);
   const minutos = minRel == null ? null : Math.round(minRel - desfaseMin);
-  const pos = posicionTemporalAjustada(evento.fecha, evento.hora, minutos);
+  const pos = posicionTemporalAjustada(evento.fecha, evento.hora, minutos, ahora);
 
   return {
     evento,
@@ -176,16 +176,28 @@ export function derivarCoberturaEvento(
 
 /**
  * Posición temporal coherente con `minutos` (el desfase de `ahora` ya aplicado). Sin hora concreta
- * cae al cómputo por DÍA de `posicionTemporal` (no hay saque al que anclar la ventana); con hora,
- * la fase se decide por los minutos hasta el saque y la ventana «durante» (180', como el original).
+ * se sitúa por DÍA CDMX (futuro → antes, hoy → en curso todo el día, pasado → después), idéntico a
+ * `posicionTemporal`; con hora, la fase se decide por los minutos hasta el saque y la ventana
+ * «durante» (180', como el original). El día «hoy» se deriva de `ahora` para que un `ahora`
+ * inyectado (tests) sea determinista; con `ahora = new Date()` coincide con el reloj real.
  */
 function posicionTemporalAjustada(
   fecha: string | null | undefined,
   hora: string | null | undefined,
   minutos: number | null,
+  ahora: Date,
 ): PosicionTemporal | null {
   if (!fecha) return null;
-  if (minutos == null) return posicionTemporal(fecha, hora);
+  // Sin hora concreta (igual que `_aMinutos` en fecha.ts: no hay "HH:MM"): cómputo por DÍA.
+  const sinHora = !hora || !/^\d{1,2}:\d{2}/.test(String(hora).trim());
+  if (sinHora) {
+    const dia = String(fecha).slice(0, 10);
+    const hoy = diaCDMX(ahora);
+    if (dia > hoy) return "antes";
+    if (dia < hoy) return "despues";
+    return "durante";
+  }
+  if (minutos == null) return null;
   if (minutos > 0) return "antes";
   return minutos > -180 ? "durante" : "despues";
 }

@@ -218,6 +218,37 @@ describe("derivarCoberturaEvento — semáforo temporal", () => {
   });
 });
 
+describe("derivarCoberturaEvento — semáforo de eventos SIN hora (por día)", () => {
+  // El import de Excel produce eventos con `hora` vacía: se sitúan por DÍA CDMX (igual que
+  // `posicionTemporal`), no por la ventana ±180 anclada a las 00:00. «Hoy» se deriva de `ahora`.
+  const MEDIODIA = new Date(datetimeLocalAIso("2026-07-15T12:00")!); // 12:00 CDMX del 15-jul
+
+  it("sin hora, mismo día → en-vivo (cubre todo el día)", () => {
+    const e = ev({ fecha: "2026-07-15", hora: "" });
+    const d = derivarCoberturaEvento(e, [], [], FRANJAS, MEDIODIA);
+    expect(d.semaforo).toBe("en-vivo");
+  });
+
+  it("sin hora, día pasado → terminado", () => {
+    const e = ev({ fecha: "2026-07-14", hora: "" });
+    const d = derivarCoberturaEvento(e, [], [], FRANJAS, MEDIODIA);
+    expect(d.semaforo).toBe("terminado");
+  });
+
+  it("sin hora, día futuro lejano → programado", () => {
+    const e = ev({ fecha: "2026-07-16", hora: "" });
+    const d = derivarCoberturaEvento(e, [], [], FRANJAS, MEDIODIA);
+    expect(d.semaforo).toBe("programado");
+  });
+
+  it("sin hora, mañana pero a < 120 min de la medianoche → empieza-en (como el original)", () => {
+    const casiMedianoche = new Date(datetimeLocalAIso("2026-07-15T23:00")!); // 23:00 CDMX del 15-jul
+    const e = ev({ fecha: "2026-07-16", hora: "" });
+    const d = derivarCoberturaEvento(e, [], [], FRANJAS, casiMedianoche);
+    expect(d.semaforo).toBe("empieza-en");
+  });
+});
+
 describe("resumenCobertura — KPI de cabecera", () => {
   it("cuenta cubiertos (cogido + turno), huecos, pronto y en vivo", () => {
     // Ahora = 90 min antes de las 20:00 del 1-jul → los eventos de las 20:00 están en «empieza-en».
