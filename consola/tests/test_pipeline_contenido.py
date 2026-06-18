@@ -338,6 +338,8 @@ def test_macro_evento_crea_un_solo_carrusel_y_absorbe_la_familia(monkeypatch):
     assert len(reg["crear"]) == 1
     kw = reg["crear"][0]
     assert kw["titulo"] == "Mundial 2026"
+    # La pieza queda ESTAMPADA con su macro-evento (gobierna la cadencia por evento aguas arriba).
+    assert kw["tema_macro"] == "Mundial 2026"
     # Carrusel: n_notas = nº de sub-historias (3) en el copy_pendiente.
     pend = json.loads(kw["copy_pendiente"])
     assert pend["n_notas"] == 3

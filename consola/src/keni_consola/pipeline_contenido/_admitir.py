@@ -587,6 +587,9 @@ def crear_tema_de_cluster(
             # LÍNEA del plan con la que nació ('breaking' si lo era): queda EN la pieza
             # (estable frente al GC del pool); la leen el conteo del plan y los horarios.
             categoria=categoria_efectiva(cluster),
+            # MACRO-EVENTO heredado del cluster: gobierna la cadencia por evento aguas arriba.
+            tema_macro=(cluster.get("tema_macro") or "").strip(),
+            subtema=(cluster.get("subtema") or "").strip(),
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
@@ -668,6 +671,9 @@ def _crear_carrusel_de_familia(
             marca=marca,
             origen=ORIGEN_PIPELINE,
             categoria=categoria_efectiva(cluster_lead),
+            # El carrusel ES un (tema_macro, subtema): lo estampamos para la cadencia por evento.
+            tema_macro=tema_macro,
+            subtema=(cluster_lead.get("subtema") or "").strip(),
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),

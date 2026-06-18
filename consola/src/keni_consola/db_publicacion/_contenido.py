@@ -79,6 +79,11 @@ _COLS_PUBLICACION = (
     # de la historia al promover ('breaking' si lo era) o 'evergreen' al reciclar; estable
     # frente al GC del pool. La consumen el conteo del plan y los horarios por categoría.
     "categoria",
+    # MACRO-EVENTO de la pieza (copiado del cluster al promover). `tema_macro` = gran
+    # acontecimiento ("Mundial 2026"); `subtema` = faceta coherente dentro de él ("partidos").
+    # Gobiernan la cadencia por evento; "" = la pieza no pertenece a ningún macro-evento.
+    "tema_macro",
+    "subtema",
     "tipo_contenido",
     # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
     "formato",
@@ -202,6 +207,8 @@ def crear_publicacion(
     origen: str = "",
     notas: str = "",
     categoria: str = "",
+    tema_macro: str = "",
+    subtema: str = "",
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     formato: str = redes.FORMATO_FOTO,
     id_post_metricool: str = "",
@@ -230,7 +237,8 @@ def crear_publicacion(
         evento_id=evento_id, programa=programa, prioridad=prioridad, estado=estado,
         fecha_objetivo=fecha_objetivo, hora_objetivo=hora_objetivo,
         fecha_entrega=fecha_entrega, autor=autor, responsable=responsable, origen=origen,
-        notas=notas, categoria=categoria, tipo_contenido=tipo_contenido, formato=formato,
+        notas=notas, categoria=categoria, tema_macro=tema_macro, subtema=subtema,
+        tipo_contenido=tipo_contenido, formato=formato,
         id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
         verificacion_fuente=verificacion_fuente, verificar_hallazgos=verificar_hallazgos,
         copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
@@ -282,6 +290,9 @@ def _fila_publicacion_nueva(**campos: Any) -> dict[str, Any]:
         # flujo), su propia línea 'evergreen' — cualquier camino de creación cuenta en el plan.
         "categoria": (campos.get("categoria") or "").strip().lower()
         or ("evergreen" if (campos.get("flujo") or "") == "evergreen" else ""),
+        # MACRO-EVENTO copiado del cluster al promover ('' = ninguno). Gobierna la cadencia/día.
+        "tema_macro": (campos.get("tema_macro") or "").strip(),
+        "subtema": (campos.get("subtema") or "").strip(),
         "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
         # FORMATO de la pieza (foto|video): decide las redes destino (`redes.redes_de_formato`).
         # Se normaliza (vacío/desconocido -> 'foto') para no persistir valores fuera de catálogo.

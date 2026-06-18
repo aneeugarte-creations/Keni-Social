@@ -460,6 +460,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # viejos y el join dejaba de contar/programar bien). La leen el conteo del plan diario y
     # los horarios por categoría.
     "ALTER TABLE publicacion ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''",
+    # MACRO-EVENTO de la pieza, copiado del cluster al promover ('' = no pertenece a ninguno).
+    # `tema_macro` es el gran acontecimiento ("Mundial 2026"); `subtema` la faceta coherente
+    # dentro de él ("partidos", "incidentes", "espectáculo"). Juntos gobiernan la cadencia por
+    # evento (≤1 carrusel por (tema_macro, subtema) y jornada) sin tope numérico fijo.
+    "ALTER TABLE publicacion ADD COLUMN IF NOT EXISTS tema_macro TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE publicacion ADD COLUMN IF NOT EXISTS subtema TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_tema_macro ON publicacion (marca, tema_macro)",
     "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON publicacion_comentarios (publicacion_id)",
     "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON publicacion_comentarios (pieza_id)",
     # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una
