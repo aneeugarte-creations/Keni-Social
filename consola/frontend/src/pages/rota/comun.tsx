@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   BellRing,
   CalendarDays,
-  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -301,7 +300,6 @@ export function AyudaLeyenda() {
 export function MenuMasAcciones({
   esAdmin,
   semanaAprobada,
-  onAbrirAsignar,
   onCopiarAnterior,
   onAbrirFranjas,
   onAbrirCarga,
@@ -311,8 +309,6 @@ export function MenuMasAcciones({
 }: {
   esAdmin: boolean;
   semanaAprobada: boolean;
-  /** Abre «Asignar turnos» (reparto persona→franja→días + import). */
-  onAbrirAsignar: () => void;
   onCopiarAnterior: () => void;
   /** Abre el diálogo «Franjas» (pestañas: esta semana / plantilla por defecto). */
   onAbrirFranjas: () => void;
@@ -324,15 +320,8 @@ export function MenuMasAcciones({
   const items: EntradaMenuContextual[] = [];
 
   if (esAdmin) {
-    // Configurar la semana, en orden: «Asignar turnos» (quién trabaja; solo en borrador, misma
-    // puerta que el resto de la edición) y justo después «Franjas» (cómo se divide el día).
-    if (!semanaAprobada) {
-      items.push({
-        etiqueta: "Asignar turnos",
-        icono: CalendarPlus,
-        onClick: onAbrirAsignar,
-      });
-    }
+    // Configurar la semana: «Franjas» (cómo se divide el día). El reparto «Asignar turnos» es un
+    // botón primario de la cabecera, no vive ya aquí.
     items.push({
       etiqueta: "Franjas",
       icono: Clock,

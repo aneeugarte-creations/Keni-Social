@@ -1,9 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Target, Trash2, UserPlus, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, MoreVertical, Pencil, Plus, Target, Trash2, UserPlus, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import {
+  MenuContextual,
+  type EntradaMenuContextual,
+} from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -392,47 +396,42 @@ function AccionesItem({
   // Sin permisos de coordinación no se editan ni borran partidos del tablero compartido.
   if (!esManager) return null;
 
+  // Las 3 acciones de fila (asignar / editar / borrar) viven en UN kebab para no llenar la fila
+  // de botones-icono. El ⚡ (escalar) queda fuera, inline, como acción de un solo toque.
+  const itemsMenu: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Asignar a…",
+      icono: UserPlus,
+      onClick: () => setAsignarAbierto(true),
+    },
+    // Editar solo si hay evento detrás (partidos): abre el diálogo del calendario.
+    ...(evento
+      ? [{ etiqueta: "Editar", icono: Pencil, onClick: () => setEditarAbierto(true) }]
+      : []),
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      destructivo: true,
+      onClick: () => void pedirBorrar(),
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {/* Asignar (UserPlus): encarga el evento/tarea a alguien sin desplegar la fila. */}
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        aria-label="Asignar a…"
-        title="Asignar a…"
-        onClick={() => setAsignarAbierto(true)}
-      >
-        <UserPlus className="h-3.5 w-3.5" />
-      </Button>
-      {/* Lápiz: solo si hay evento detrás (partidos); abre el diálogo del calendario. */}
-      {evento && (
+      <MenuContextual items={itemsMenu} disparador="click">
         <Button
           type="button"
           variant="outline"
           size="icon"
           className="h-7 w-7 shrink-0"
-          aria-label="Editar"
-          title="Editar"
-          onClick={() => setEditarAbierto(true)}
+          aria-label="Más acciones"
+          title="Más acciones"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <MoreVertical className="h-3.5 w-3.5" />
         </Button>
-      )}
-      {/* Papelera: borra cualquier fila (con confirmación). */}
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 shrink-0 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
-        aria-label="Borrar"
-        title="Borrar"
-        disabled={borrar.isPending}
-        onClick={() => void pedirBorrar()}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
+      </MenuContextual>
       {editarAbierto && evento && (
         <DialogEditarEvento
           evento={evento}

@@ -228,9 +228,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       .mockResolvedValue({ contenido: { responsable_nombre: "luis" } } as never);
     renderTareas([], [evento({ id: "ev-asig", titulo: "Tigres vs Rayados" })], usuario("admin", "u-admin"));
 
-    // El icono vive en la fila COMPACTA (no hay que desplegar) y solo lo ve un manager.
+    // La acción vive en el kebab de la fila COMPACTA (no hay que desplegar) y solo lo ve un manager.
     await screen.findByText("Tigres vs Rayados");
-    fireEvent.click(screen.getByRole("button", { name: "Asignar a…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Asignar a…" }));
 
     // El diálogo deja elegir persona (y el rol viaja con el default «foto»).
     fireEvent.click(await screen.findByRole("button", { name: "luis" }));
@@ -238,10 +239,11 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(cubrir).toHaveBeenCalledWith("ev-asig", "u-luis", "foto");
   });
 
-  it("PANORAMA: un editor NO ve el icono «Asignar» de la fila", async () => {
+  it("PANORAMA: un editor NO ve el kebab de acciones de la fila", async () => {
     renderTareas([], [evento({ id: "ev-ed", titulo: "Partido editor" })], usuario("editor", "u2"));
     await screen.findByText("Partido editor");
-    expect(screen.queryByRole("button", { name: "Asignar a…" })).toBeNull();
+    // El editor no es manager → AccionesItem no se pinta → no hay kebab «Más acciones».
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
   });
 
   it("PANORAMA: un evento PASADO no suma al contador de la persona; uno FUTURO sí", async () => {
@@ -1069,16 +1071,17 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
   // --- Editar/Borrar EN LA PROPIA FILA (junto al ⚡), sin desplegar ---
 
-  it("la fila muestra «Editar» (lápiz) y «Borrar» (papelera) SIN desplegar (admin)", async () => {
+  it("la fila ofrece «Editar» y «Borrar» en el kebab SIN desplegar (admin)", async () => {
     renderTareas(
       [],
       [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
       usuario("admin", "u-admin"),
     );
     await screen.findByText("Cruz Azul vs América");
-    // Botones directos en la fila colapsada (nombre exacto = aria-label, no el título de la fila).
-    expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Borrar" })).toBeInTheDocument();
+    // El kebab de la fila colapsada agrupa las acciones; al abrirlo aparecen como menuitems.
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(await screen.findByRole("menuitem", { name: "Editar" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Borrar" })).toBeInTheDocument();
   });
 
   it("la papelera de la fila borra el evento por cubrir (confirma → eliminarEventoRota)", async () => {
@@ -1091,18 +1094,20 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("admin", "u-admin"),
     );
     await screen.findByText("Cruz Azul vs América");
-    fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Borrar" }));
     await waitFor(() => expect(borrar).toHaveBeenCalledWith("ev9"));
   });
 
-  it("el lápiz de la fila abre el diálogo de edición (igual que el calendario)", async () => {
+  it("el «Editar» del kebab abre el diálogo de edición (igual que el calendario)", async () => {
     renderTareas(
       [],
       [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
       usuario("admin", "u-admin"),
     );
     await screen.findByText("Cruz Azul vs América");
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Editar" }));
     expect(await screen.findByText("Editar evento")).toBeInTheDocument();
   });
 
@@ -1128,12 +1133,13 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("admin", "u-admin"),
     );
     await screen.findAllByText("Cruz Azul vs América");
-    fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Borrar" }));
     await waitFor(() => expect(borrarEv).toHaveBeenCalledWith("ev1"));
     expect(borrarCont).toHaveBeenCalledWith("t-cob");
   });
 
-  it("un ENCARGO (sin evento) muestra papelera pero NO lápiz; borra vía eliminarPublicacion", async () => {
+  it("un ENCARGO (sin evento) ofrece «Borrar» pero NO «Editar»; borra vía eliminarPublicacion", async () => {
     const borrar = vi.spyOn(apiMod.api, "eliminarPublicacion").mockResolvedValue({} as never);
     renderTareas(
       [tarea({ id: "t9", titulo: "Grabar el saque" })],
@@ -1141,19 +1147,21 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("admin", "u-admin"),
     );
     await screen.findByText("Grabar el saque");
-    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // Sin evento detrás no hay «Editar» en el menú, solo «Borrar».
+    await screen.findByRole("menuitem", { name: "Borrar" });
+    expect(screen.queryByRole("menuitem", { name: "Editar" })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Borrar" }));
     await waitFor(() => expect(borrar).toHaveBeenCalledWith("t9"));
   });
 
-  it("un EDITOR (no admin) NO ve los botones de la fila", async () => {
+  it("un EDITOR (no admin) NO ve el kebab de acciones de la fila", async () => {
     renderTareas(
       [],
       [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
       usuario("editor", "u-ed"),
     );
     await screen.findByText("Cruz Azul vs América");
-    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Borrar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
   });
 });
