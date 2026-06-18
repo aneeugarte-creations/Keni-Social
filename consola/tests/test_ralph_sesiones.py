@@ -4,8 +4,25 @@ maquina de estado. Sin subprocess real (esos caminos los cubre la integracion de
 from __future__ import annotations
 
 import json
+import os
 
 from keni_consola import ralph_sesiones as rs
+
+
+def test_base_escribible_respeta_data_dir(tmp_path, monkeypatch):
+    # En el servidor el padre de /repo es la raíz (no escribible): la base debe colgar de
+    # KENI_DATA_DIR, no del directorio del repo.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    base = rs._base_escribible("ralph-worktrees", "/repo")
+    assert base == str(tmp_path / "ralph-worktrees")
+    assert os.path.isdir(base)
+
+
+def test_dir_trabajo_plano_escribible_bajo_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    d = rs._dir_trabajo_plano("ziggy")
+    assert d.startswith(str(tmp_path))
+    assert os.path.isdir(d)
 
 
 # --------------------------------------------------------------------------- #

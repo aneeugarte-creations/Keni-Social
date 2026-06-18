@@ -1,7 +1,7 @@
 /**
- * Panel de bolitas del overlay Ralph: una bolita flotante por Ralph del pool
- * (color por estado) más el botón [＋ lanzar Ralph]. Click en una bolita abre su
- * chat; click en [＋] abre el lanzador. Estilo Nolan v1: bolitas seleccionables.
+ * Panel de bolitas del overlay Ralph: una bolita por Ralph del pool (color por estado) en
+ * una barra HORIZONTAL a la izquierda de la burbuja, más el botón [＋ lanzar Ralph]. Click en
+ * una bolita abre su chat; click en [＋] abre el lanzador. Estilo Nolan v1: bolitas seleccionables.
  */
 import { Plus } from "lucide-react";
 
@@ -33,11 +33,11 @@ export function PanelRalphs() {
   const abrirLanzador = useRalphStore((s) => s.abrirLanzador);
 
   return (
-    <div className="flex flex-col items-end gap-2">
+    <div className="flex flex-row items-center gap-2">
       {ralphs.map((r) => {
         const activa = r.id === seleccionado;
         return (
-          <Tooltip key={r.id} label={`${r.nombre} · ${ETIQUETA_ESTADO[r.estado]}`} side="left">
+          <Tooltip key={r.id} label={`${r.nombre} · ${ETIQUETA_ESTADO[r.estado]}`} side="top">
             <button
               type="button"
               onClick={() => seleccionar(activa ? null : r.id)}
@@ -55,7 +55,7 @@ export function PanelRalphs() {
         );
       })}
 
-      <Tooltip label="Lanzar Ralph" side="left">
+      <Tooltip label="Lanzar Ralph" side="top">
         <button
           type="button"
           onClick={abrirLanzador}

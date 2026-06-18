@@ -84,6 +84,9 @@ _RE_CODIGO_COMPLETO = re.compile(
 )
 # Url de device por si gh la imprime (algunas versiones solo dicen "github.com").
 _RE_URL_DEVICE = re.compile(r"https://\S*github\.com/login/device\S*")
+# En PTY, gh pregunta esto ANTES de emitir el code y ESPERA respuesta: lo aceptamos con Enter
+# (default Yes) para que el flujo continúe hasta imprimir el one-time code.
+_RE_PROMPT_GIT = re.compile(r"Authenticate Git with your GitHub credentials", re.IGNORECASE)
 
 # `gh auth status` (texto): usuario y scopes del token.
 _RE_USUARIO = re.compile(r"Logged in to \S+ (?:account|as) (\S+)", re.IGNORECASE)
@@ -278,9 +281,24 @@ def iniciar_login(*, token: str | None = None) -> dict:
         return {"error": "gh no disponible en este servidor"}
     os.close(slave_fd)  # el hijo ya tiene su copia; el padre lee/escribe por master_fd
 
-    salida = _leer_disponible(
-        master_fd, deadline=time.monotonic() + _TIMEOUT_CODIGO, hasta=_RE_CODIGO_COMPLETO
-    )
+    # Lectura en ráfagas: en PTY gh pregunta "Authenticate Git with your GitHub credentials?"
+    # ANTES del code y espera respuesta; al verlo aceptamos el default (Enter) y seguimos
+    # leyendo hasta que aparezca el one-time code o se agote el timeout.
+    salida = ""
+    git_respondido = False
+    fin = time.monotonic() + _TIMEOUT_CODIGO
+    while time.monotonic() < fin:
+        salida += _leer_disponible(
+            master_fd, deadline=min(fin, time.monotonic() + 1.0), hasta=_RE_CODIGO_COMPLETO
+        )
+        if _RE_CODIGO_COMPLETO.search(salida):
+            break
+        if not git_respondido and _RE_PROMPT_GIT.search(salida):
+            try:
+                os.write(master_fd, b"\n")  # acepta el default (Yes) y continúa el flujo
+            except OSError:
+                pass
+            git_respondido = True
     inicio = parsear_inicio(salida)
     if not inicio["codigo"]:
         # Sin code: aborta y reporta. (gh pudo morir o pedir algo inesperado.)

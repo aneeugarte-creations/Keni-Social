@@ -298,10 +298,12 @@ class GestorRalph:
 
         try:
             sesion.worktree, sesion.rama = _crear_worktree(config.dev_repo(), nombre)
-        except Exception as e:  # noqa: BLE001 -- degradacion: el Ralph nace en error, no casca
-            _log.warning("Ralph %s: no se pudo crear el worktree: %s", nombre, e)
-            self._marcar_error(sesion, f"no se pudo crear el worktree: {e}")
-            return sesion.info()
+        except Exception as e:  # noqa: BLE001 -- sin repo git utilizable: arranca en dir plano
+            # /repo aún no clonado (p.ej. GitHub sin conectar) o git no disponible: el Ralph
+            # arranca igual en un directorio de trabajo plano y escribible para poder CONVERSAR;
+            # sin contexto del repo hasta que /repo exista. NO bloquea el chat.
+            _log.warning("Ralph %s: sin worktree (%s); arranca en directorio plano", nombre, e)
+            sesion.worktree, sesion.rama = _dir_trabajo_plano(nombre), ""
 
         try:
             sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
@@ -442,15 +444,39 @@ class GestorRalph:
 # --------------------------------------------------------------------------- #
 
 
+def _base_escribible(sub: str, repo: str) -> str:
+    """Directorio base ESCRIBIBLE para worktrees/cwd. `$KENI_DATA_DIR/<sub>` en el servidor
+    (el padre de `/repo` es la raíz, no escribible por el uid no-root); junto al repo si no hay
+    `KENI_DATA_DIR` (tests/local)."""
+    raiz = os.environ.get("KENI_DATA_DIR")
+    base = (
+        os.path.join(raiz, sub)
+        if raiz
+        else os.path.join(os.path.dirname(os.path.abspath(repo)), sub)
+    )
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _dir_trabajo_plano(nombre: str) -> str:
+    """Directorio de trabajo plano y escribible para un Ralph sin repo git (fallback).
+
+    Permite CONVERSAR con el Ralph aunque `/repo` no esté clonado todavía (GitHub sin conectar)."""
+    destino = os.path.join(
+        _base_escribible("ralph-cwd", ""), f"{nombre}-{uuid.uuid4().hex[:8]}"
+    )
+    os.makedirs(destino, exist_ok=True)
+    return destino
+
+
 def _crear_worktree(repo: str, nombre: str) -> tuple[str, str]:
     """Crea un worktree+rama del `repo` para un Ralph. Devuelve (ruta_worktree, rama).
 
-    Rama `ralph/<nombre>`; worktree en `<dir_padre_del_repo>/ralph-worktrees/<nombre>-<sufijo>`.
-    Sube la excepcion si git falla (el llamante la traduce a estado error)."""
+    Rama `ralph/<nombre>`; worktree en `$KENI_DATA_DIR/ralph-worktrees/<nombre>-<sufijo>`.
+    Sube la excepcion si git falla (el llamante cae al directorio plano)."""
     rama = f"ralph/{nombre}"
     sufijo = uuid.uuid4().hex[:8]
-    base = os.path.join(os.path.dirname(os.path.abspath(repo)), "ralph-worktrees")
-    os.makedirs(base, exist_ok=True)
+    base = _base_escribible("ralph-worktrees", repo)
     destino = os.path.join(base, f"{nombre}-{sufijo}")
     subprocess.run(  # noqa: S603 -- argv lista, sin shell
         ["git", "-C", repo, "worktree", "add", "-b", rama, destino],

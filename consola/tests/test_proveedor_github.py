@@ -9,6 +9,14 @@ from __future__ import annotations
 
 from keni_consola import proveedor_github as pg
 
+
+def test_regex_prompt_git_casa_la_pregunta_de_gh():
+    # En PTY gh pregunta esto ANTES del one-time code; el login debe detectarlo para
+    # responder (Enter) y no quedarse colgado esperando un code que nunca llega.
+    assert pg._RE_PROMPT_GIT.search(
+        "? Authenticate Git with your GitHub credentials? (Y/n)"
+    )
+
 # Salida REAL de `gh auth status` con sesion activa (gh 2.x: "account <user>").
 _STATUS_LOGUEADO = """github.com
   ✓ Logged in to github.com account octocat (keyring)

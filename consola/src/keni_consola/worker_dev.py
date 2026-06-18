@@ -70,10 +70,14 @@ def _repo() -> Path:
 
 
 def _dir_worktrees() -> Path:
-    """Directorio donde viven los worktrees por sugerencia (junto al repo)."""
-    d = _repo().parent / "keni-dev-worktrees"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    """Directorio ESCRIBIBLE donde viven los worktrees por sugerencia.
+
+    `$KENI_DATA_DIR/dev-worktrees` en el servidor (el padre de `/repo` es la raíz, no escribible
+    por el uid no-root); junto al repo si no hay `KENI_DATA_DIR` (tests/local)."""
+    raiz = os.environ.get("KENI_DATA_DIR")
+    base = (Path(raiz) / "dev-worktrees") if raiz else (_repo().parent / "keni-dev-worktrees")
+    base.mkdir(parents=True, exist_ok=True)
+    return base
 
 
 def _git(*args: str, cwd: Path | None = None, timeout: int = 120) -> subprocess.CompletedProcess:
