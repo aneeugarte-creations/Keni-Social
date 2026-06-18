@@ -2,15 +2,14 @@ import { KeyRound, Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
+import { MIN_PASSWORD } from "@/lib/password";
 import { useSesion } from "@/hooks/sesion-contexto";
-
-/** Longitud mínima razonable para la nueva contraseña (validación de UI). */
-const MIN_PASSWORD = 8;
 
 /**
  * Pantalla de cambio de contraseña forzado. Se muestra a pantalla completa (sin
@@ -84,6 +83,7 @@ export function PantallaCambiarPassword() {
                 disabled={enviando}
               />
               <p className="text-xs text-muted-foreground">Mínimo {MIN_PASSWORD} caracteres.</p>
+              <MedidorPassword password={nueva} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pwd-confirmar">Repite la contraseña nueva</Label>

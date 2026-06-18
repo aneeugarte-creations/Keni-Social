@@ -3,6 +3,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +25,13 @@ import {
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { type RolUsuario } from "@/types";
 
-import { CLAVE_USUARIOS, MIN_PASSWORD, ROL_LABEL, ROLES } from "./tipos";
+import {
+  CLAVE_USUARIOS,
+  esInscripcionMfaRequerida,
+  MIN_PASSWORD,
+  ROL_LABEL,
+  ROLES,
+} from "./tipos";
 
 export function DialogoCrearUsuario({
   abierto,
@@ -61,7 +68,10 @@ export function DialogoCrearUsuario({
       reiniciar();
     },
     onError: (e) => {
-      if (e instanceof ApiError && e.status === 409) {
+      // 403 de MFA: el backend ya manda el mensaje en español (inscribe una passkey).
+      if (esInscripcionMfaRequerida(e)) {
+        toast.error(mensajeError(e));
+      } else if (e instanceof ApiError && e.status === 409) {
         toast.error("Ya existe un usuario con ese nombre de cuenta.");
       } else {
         toast.error(mensajeError(e));
@@ -126,6 +136,7 @@ export function DialogoCrearUsuario({
               autoComplete="new-password"
             />
             <p className="text-xs text-muted-foreground">Mínimo {MIN_PASSWORD} caracteres.</p>
+            <MedidorPassword password={password} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="nuevo-rol">Rol</Label>

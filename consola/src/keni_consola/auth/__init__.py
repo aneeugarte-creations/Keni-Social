@@ -28,12 +28,13 @@ from .bootstrap import (
     bootstrap_admin,
     hay_usuarios,
 )
-from .bootstrap_equipo import EQUIPO_AMX, inicializar_equipo
 from .hashing import (
     LONGITUD_MAX_PASSWORD,
     LONGITUD_MAX_USUARIO,
     LONGITUD_MIN_PASSWORD,
+    PASSWORDS_PROHIBIDAS,
     hashear_password,
+    motivo_rechazo_password,
     password_aceptable,
     rol_valido,
     verificar_password,
@@ -86,6 +87,8 @@ __all__ = [
     "hashear_password",
     "verificar_password",
     "password_aceptable",
+    "motivo_rechazo_password",
+    "PASSWORDS_PROHIBIDAS",
     "rol_valido",
     "LONGITUD_MIN_PASSWORD",
     "LONGITUD_MAX_PASSWORD",
@@ -138,8 +141,6 @@ __all__ = [
     # Bootstrap
     "hay_usuarios",
     "bootstrap_admin",
-    "inicializar_equipo",
-    "EQUIPO_AMX",
     "ENV_ADMIN_USER",
     "ENV_ADMIN_PASS",
     "ADMIN_POR_DEFECTO",

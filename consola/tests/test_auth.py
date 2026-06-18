@@ -25,8 +25,8 @@ from .conftest import TOKEN_PRUEBA, _cliente
 # Origin del propio host del TestClient (pasa el chequeo CSRF en mutaciones).
 _ORIGIN = {"Origin": "http://testserver"}
 
-# Contrasenas de PRUEBA, deliberadamente de baja entropia y evidentemente falsas (no
-# son secretos): cumplen el minimo de 8 caracteres y nada mas. `CLAVE` es la valida por
+# Contrasenas de PRUEBA, evidentemente falsas (no son secretos): cumplen la politica
+# (>=12 caracteres, no comunes, no = al usuario) sin mas. `CLAVE` es la valida por
 # defecto; `CLAVE_NUEVA` se usa donde se compara antes/despues de un cambio o reset.
 CLAVE = "clave-de-prueba"
 CLAVE_NUEVA = "clave-nueva-test"
@@ -103,164 +103,6 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_ADMIN_PASS", CLAVE)
     auth.bootstrap_admin()
     assert auth.autenticar("jefe", CLAVE) is not None
-
-
-def test_inicializar_equipo_crea_los_16(entorno):
-    """El seed deja en la BD los 16 usuarios del organigrama del cliente.
-
-    Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (la creativa
-    de Fundación sale del calendario; va a Fundacion como creativo de vertical).
-    """
-    auth.inicializar_equipo()
-    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
-    assert set(u for u, *_ in auth.EQUIPO_AMX) <= set(usuarios)
-    # 9 cubren: 3 community managers ClaroSports + 2 content managers UnoTV + el coordinador
-    # de redes + editorial de YouTube + el creativo de vertical + el redactor. La creativa
-    # de Fundación YA NO cubre.
-    cubren = [u for u in usuarios.values() if u["cobertura"]]
-    assert len(cubren) == 9
-    assert usuarios["bernardo"]["rol"] == "admin"
-    assert usuarios["bernardo"]["cargo"] == "director"
-    assert usuarios["bernardo"]["cobertura"] is False
-    assert usuarios["tezcu"]["cargo"] == "community_manager"
-    assert usuarios["tezcu"]["cobertura"] is True
-
-
-def test_inicializar_equipo_es_idempotente(entorno):
-    """Re-correr el seed no duplica ni rompe; sigue habiendo 16 + el admin de bootstrap."""
-    auth.inicializar_equipo()
-    auth.inicializar_equipo()
-    usuarios = auth.listar_usuarios()
-    bernardos = [u for u in usuarios if u["usuario"] == "bernardo"]
-    assert len(bernardos) == 1
-
-
-def test_inicializar_equipo_sincroniza_cargo_y_cobertura(entorno):
-    """Si un usuario ya existe con cargo del catalogo VIEJO, el seed lo pone al dia.
-
-    Un community manager se crea sin cargo (""); como su cargo esta en el catalogo viejo (cadena vacia),
-    el seed lo migra a `community_manager` y le asigna la cobertura/marcas del organigrama.
-    La contrasena NO se pisa.
-    """
-    auth.crear_usuario("tezcu", "Otra-Pass-Fuerte-Lol-1234", "editor")
-    auth.inicializar_equipo()
-    tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
-    assert tezcu["cargo"] == "community_manager"
-    assert tezcu["cobertura"] is True
-    assert tezcu["marcas"] == ["claro-sports"]
-    # La pass NO se ha pisado: la del crear_usuario original sigue valiendo.
-    assert auth.autenticar("tezcu", "Otra-Pass-Fuerte-Lol-1234") is not None
-
-
-def test_inicializar_equipo_asigna_marcas_del_organigrama(entorno):
-    """Cada usuario del organigrama recibe SUS verticales (N:M).
-
-    Casos clave:
-      - La dirección: las 5 marcas (claro-sports, unotv, piso-15, nacion-gamer, fundacion).
-      - La creativa de Fundación: ['fundacion'] (NO claro-sports), y `cobertura=False` (sale del calendario).
-      - Editorial de YouTube: ['claro-sports', 'piso-15', 'unotv'] (cubre 3 verticales).
-      - El creativo de vertical: ['nacion-gamer'].
-    """
-    auth.inicializar_equipo()
-    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
-
-    assert sorted(usuarios["bernardo"]["marcas"]) == sorted(
-        ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"]
-    )
-    # Correccion critica: la creativa de Fundación NO es de claro-sports.
-    assert usuarios["daiana"]["cargo"] == "creativo_vertical"
-    assert usuarios["daiana"]["cobertura"] is False
-    assert usuarios["daiana"]["marcas"] == ["fundacion"]
-    assert usuarios["yustine"]["marcas"] == ["claro-sports", "piso-15", "unotv"]
-    assert usuarios["jonathan"]["marcas"] == ["nacion-gamer"]
-
-
-def test_inicializar_equipo_marca_puede_coordinar_para_los_tres(entorno):
-    """El seed pone `puede_coordinar=True` para el coordinador de redes, fotografía/verificación y la coordinadora operativa; False para el resto.
-
-    Es el listado canonico de candidatos a coordinador (ola "coord"). Los tres se
-    sobreescriben INCONDICIONALMENTE; el resto del equipo queda con el default `False`.
-    """
-    auth.inicializar_equipo()
-    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
-    assert usuarios["elias"]["puede_coordinar"] is True
-    assert usuarios["ale"]["puede_coordinar"] is True
-    assert usuarios["mariana"]["puede_coordinar"] is True
-    for usuario in ("bernardo", "tezcu", "luis", "roger", "lalo", "angel", "diana",
-                    "maira", "daiana", "jonathan", "jose", "yustine", "laloyt"):
-        assert usuarios[usuario]["puede_coordinar"] is False
-
-
-def test_inicializar_equipo_respeta_puede_coordinar_personalizado(entorno):
-    """Si el admin marca `puede_coordinar=True` a alguien fuera del seed, NO se revierte.
-
-    Un community manager no esta en el listado canonico pero si el admin lo habilita como coordinador,
-    re-correr el seed no debe quitarselo.
-    """
-    auth.inicializar_equipo()
-    tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
-    auth.actualizar_perfil(tezcu["id"], puede_coordinar=True)
-    auth.inicializar_equipo()
-    tezcu_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
-    assert tezcu_post["puede_coordinar"] is True
-
-
-def test_inicializar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
-    """Si el coordinador de redes, fotografía/verificación o la coordinadora operativa tienen `puede_coordinar=False` por error, el seed lo restaura.
-
-    Los tres son los canonicos (`_USUARIOS_PUEDE_COORDINAR_FORZADO`): el seed los
-    sobreescribe INCONDICIONALMENTE a True tras cada deploy.
-    """
-    auth.inicializar_equipo()
-    ale = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
-    # Simula un admin que se lo quitara por error.
-    auth.actualizar_perfil(ale["id"], puede_coordinar=False)
-    asegurado = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
-    assert asegurado["puede_coordinar"] is False
-    # Re-correr el seed lo restaura.
-    auth.inicializar_equipo()
-    ale_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
-    assert ale_post["puede_coordinar"] is True
-
-
-def test_inicializar_equipo_corrige_daiana_aunque_este_editada(entorno):
-    """La correccion de la creativa de Fundación es INCONDICIONAL: sale del calendario tras este seed.
-
-    Aunque el admin la hubiera dejado mal (CM cubriendo claro-sports), el bootstrap la
-    sobreescribe a `creativo_vertical` + `cobertura=False` + ['fundacion']. Es la
-    correccion explicita que motiva esta ola.
-    """
-    auth.crear_usuario(
-        "daiana",
-        "Pass-Daiana-1234567",
-        "editor",
-        cargo="community_manager",
-        cobertura=True,
-        marcas=["claro-sports"],
-    )
-    auth.inicializar_equipo()
-    daiana = next(u for u in auth.listar_usuarios() if u["usuario"] == "daiana")
-    assert daiana["cargo"] == "creativo_vertical"
-    assert daiana["cobertura"] is False
-    assert daiana["marcas"] == ["fundacion"]
-
-
-def test_inicializar_equipo_respeta_cargos_personalizados_del_nuevo_catalogo(entorno):
-    """Si el admin ya migro el cargo a uno del catalogo NUEVO, el seed lo respeta.
-
-    Salvo la creativa de Fundación, que tiene la correccion incondicional. Para el resto, si un admin
-    cambio el cargo a un valor distinto del catalogo nuevo (p. ej. `coordinador_invitados`),
-    re-correr el seed no debe revertirlo.
-    """
-    auth.inicializar_equipo()
-    # Admin migra a la coordinadora de redes a un cargo del catalogo nuevo distinto del organigrama.
-    diana = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
-    auth.actualizar_perfil(diana["id"], cargo="coordinador_invitados")
-    # Re-correr el seed.
-    auth.inicializar_equipo()
-    diana_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
-    # El cargo del catalogo NUEVO se respeta (no se revierte a `coordinador_redes`).
-    assert diana_post["cargo"] == "coordinador_invitados"
 
 
 # --------------------------------------------------------------------------- #
@@ -499,6 +341,98 @@ def test_cambiar_password_sin_sesion_da_401(entorno):
     r = c.post(
         "/api/auth/cambiar-password",
         json={"password_actual": "x", "password_nueva": CLAVE_NUEVA},
+        headers={**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"},
+    )
+    assert r.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# 5b) Politica de contrasena (NIST: longitud + bloqueo de comunes)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_password_corta_se_rechaza(entorno):
+    """Menos de 12 caracteres -> 400 (la politica subio de 8 a 12)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": "corta-11car", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_password_comun_se_rechaza(entorno):
+    """Una contrasena comun de la lista de prohibidas (>=12 para llegar al filtro) -> 400.
+
+    'administrador' tiene 13 caracteres (pasa el minimo de longitud) pero esta en la
+    blocklist, asi que cae por ser predecible, no por corta.
+    """
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": "administrador", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "común" in r.json()["error"]
+
+
+def test_password_igual_al_usuario_se_rechaza(entorno):
+    """La contrasena no puede coincidir con el nombre de usuario (aunque sea larga)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "personagrande", "password": "personagrande", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_password_fuerte_se_acepta(entorno):
+    """Una contrasena >=12, no comun y distinta del usuario crea la cuenta (201)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": "una-clave-larga-y-decente", "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201
+
+
+# --------------------------------------------------------------------------- #
+# 5c) Editar el nombre humano PROPIO (PATCH /api/auth/me)                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_editar_mi_nombre(entorno):
+    """La persona edita su propio `nombre`; `me` lo refleja y NO toca rol ni login."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    r = c.patch("/api/auth/me", json={"nombre": "Ana Pérez"}, headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["nombre"] == "Ana Pérez"
+    me = c.get("/api/auth/me").json()["usuario"]
+    assert me["nombre"] == "Ana Pérez"
+    assert me["usuario"] == "ana"
+    assert me["rol"] == "editor"
+
+
+def test_editar_mi_nombre_sin_sesion_da_401(entorno):
+    """Por TOKEN (sin sesion) no hay cuenta propia que editar -> 401."""
+    c = _cli()
+    r = c.patch(
+        "/api/auth/me",
+        json={"nombre": "X"},
         headers={**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"},
     )
     assert r.status_code == 401
@@ -965,30 +899,6 @@ def test_crear_usuario_api_con_nombre(entorno):
     assert r.status_code == 201, r.text
     por_nombre = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert por_nombre["nuevo"]["nombre"] == "Nuevo Nombre"
-
-
-def test_inicializar_equipo_define_organigrama(entorno):
-    """El seed deja nombre + linea de reporte: el coordinador de redes reporta a la dirección; un community manager al coordinador de redes."""
-    auth.inicializar_equipo()
-    por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
-    assert por_usuario["bernardo"]["nombre"] == "Bernardo Vázquez"
-    assert por_usuario["bernardo"]["manager_id"] == ""  # raiz
-    assert por_usuario["elias"]["manager_id"] == por_usuario["bernardo"]["id"]
-    assert por_usuario["tezcu"]["manager_id"] == por_usuario["elias"]["id"]
-    # Regla de la dirección: la coordinadora operativa trabaja en Claro Sports pero REPORTA a la dirección.
-    assert por_usuario["mariana"]["manager_id"] == por_usuario["bernardo"]["id"]
-    assert por_usuario["yustine"]["manager_id"] == por_usuario["laloyt"]["id"]
-
-
-def test_inicializar_equipo_no_pisa_organigrama_editado(entorno):
-    """Idempotencia: si el admin reasigna un superior, el re-seed NO lo revierte."""
-    auth.inicializar_equipo()
-    por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
-    # El admin mueve a un community manager para que reporte a la dirección (excepcion puntual).
-    auth.actualizar_perfil(por_usuario["tezcu"]["id"], manager_id=por_usuario["bernardo"]["id"])
-    auth.inicializar_equipo()  # segunda corrida no debe revertir
-    tezcu = {u["usuario"]: u for u in auth.listar_usuarios()}["tezcu"]
-    assert tezcu["manager_id"] == por_usuario["bernardo"]["id"]
 
 
 def test_catalogo_cargos_incluye_los_nuevos(entorno):

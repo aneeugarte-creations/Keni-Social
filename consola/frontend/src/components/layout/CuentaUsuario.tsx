@@ -87,6 +87,8 @@ export function CuentaUsuario({
   }
 
   const opcionesVisibles = OPCIONES.filter((o) => !o.soloAdmin || usuario.rol === "admin");
+  // Nombre humano si lo tiene; si no, el login.
+  const nombreMostrar = usuario.nombre?.trim() || usuario.usuario;
 
   return (
     <div
@@ -98,7 +100,7 @@ export function CuentaUsuario({
         onClick={() => setAbierto((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={abierto}
-        aria-label={soloIcono ? `${usuario.usuario} · ${etiquetaRol(usuario.rol)}` : undefined}
+        aria-label={soloIcono ? `${nombreMostrar} · ${etiquetaRol(usuario.rol)}` : undefined}
         className={cn(
           "flex items-center rounded-md text-left transition-colors hover:bg-accent",
           soloIcono ? "justify-center p-1.5" : "w-full gap-2.5 px-2 py-1.5",
@@ -116,7 +118,7 @@ export function CuentaUsuario({
           <>
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate text-sm font-medium text-foreground">
-                {usuario.usuario}
+                {nombreMostrar}
               </span>
               <span className="block truncate text-xs text-muted-foreground">
                 {etiquetaRol(usuario.rol)}

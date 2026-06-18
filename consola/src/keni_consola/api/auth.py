@@ -6,6 +6,7 @@ Endpoints (todos bajo `/api/auth`, CONTRATO con el frontend):
     401 GENERICO ("Usuario o contrasena incorrectos") sin revelar si el usuario existe.
   - POST /api/auth/logout   -> 204; invalida la sesion server-side y borra la cookie.
   - GET  /api/auth/me       -> 200 {usuario:{...}} si hay sesion; 401 si no.
+  - PATCH /api/auth/me      {nombre} -> 200 {nombre}; la persona edita SU nombre humano.
   - POST /api/auth/cambiar-password {password_actual, password_nueva} -> 204
     (sirve para el cambio FORZADO al primer acceso y el voluntario; valida la actual).
 
@@ -484,6 +485,9 @@ async def me(request: Request) -> Response:
                 "debe_cambiar_password": usuario["debe_cambiar_password"],
                 "creado": usuario.get("creado", ""),
                 "ultimo_acceso": usuario.get("ultimo_acceso", ""),
+                # `nombre` (humano, organigrama): lo edita la propia persona en "Mi cuenta"
+                # (PATCH /api/auth/me). Si esta vacio la UI cae al `usuario` (login).
+                "nombre": refrescado.get("nombre", "") or usuario.get("nombre", "") or "",
                 "cargo": refrescado.get("cargo", "") or usuario.get("cargo", "") or "",
                 "cobertura": bool(refrescado.get("cobertura") or usuario.get("cobertura")),
                 "puede_coordinar": bool(
@@ -523,16 +527,9 @@ async def cambiar_password(request: Request) -> Response:
     nueva = datos.get("password_nueva")
     if not isinstance(actual, str) or not actual:
         return JSONResponse({"error": "Falta la contraseña actual."}, status_code=400)
-    if not auth.password_aceptable(nueva):
-        return JSONResponse(
-            {
-                "error": (
-                    f"La contraseña nueva debe tener entre {auth.LONGITUD_MIN_PASSWORD} "
-                    f"y {auth.LONGITUD_MAX_PASSWORD} caracteres."
-                )
-            },
-            status_code=400,
-        )
+    motivo = auth.motivo_rechazo_password(nueva, usuario.get("usuario", ""))
+    if motivo is not None:
+        return JSONResponse({"error": motivo}, status_code=400)
     # Tope anti-DoS en la actual (no hasheamos una entrada enorme); cuenta como incorrecta.
     if len(actual) > auth.LONGITUD_MAX_PASSWORD or not auth.verificar_password_actual(usuario["id"], actual):
         return JSONResponse({"error": "La contraseña actual no es correcta."}, status_code=400)
@@ -545,6 +542,38 @@ async def cambiar_password(request: Request) -> Response:
     resp = Response(status_code=204)
     _set_cookie_sesion(resp, token)
     return resp
+
+
+# Limite del nombre HUMANO (organigrama). Igual que en `api/usuarios` (el admin lo edita
+# alli); aqui la persona edita el SUYO desde "Mi cuenta".
+_LONGITUD_MAX_NOMBRE = 120
+
+
+async def actualizar_mi_perfil(request: Request) -> Response:
+    """PATCH /api/auth/me: la persona edita SU PROPIO nombre humano (organigrama).
+
+    Solo el `nombre` (lo que se pinta en las tarjetas): NUNCA el rol, el login ni las
+    marcas (eso es competencia del admin en `/api/usuarios`). Por token de bootstrap no hay
+    usuario -> 401. `nombre=""` deja la tarjeta cayendo al login.
+    """
+    usuario = getattr(request.state, "usuario", None)
+    if usuario is None:
+        return JSONResponse(
+            {"error": "Necesitas una sesión iniciada para editar tu perfil."},
+            status_code=401,
+        )
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str):
+        return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+    nombre = nombre.strip()
+    if len(nombre) > _LONGITUD_MAX_NOMBRE:
+        return JSONResponse(
+            {"error": f"El nombre no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
+            status_code=400,
+        )
+    auth.actualizar_perfil(usuario["id"], nombre=nombre)
+    return JSONResponse({"nombre": nombre})
 
 
 # --------------------------------------------------------------------------- #
@@ -869,6 +898,7 @@ RUTAS = [
     Route("/api/auth/login", login, methods=["POST"]),
     Route("/api/auth/logout", logout, methods=["POST"]),
     Route("/api/auth/me", me, methods=["GET"]),
+    Route("/api/auth/me", actualizar_mi_perfil, methods=["PATCH"]),
     Route("/api/auth/cambiar-password", cambiar_password, methods=["POST"]),
     # MFA passkeys. `login/opciones` y `verify` son PUBLICOS (cookie pre-auth); el resto exige
     # sesion completa.

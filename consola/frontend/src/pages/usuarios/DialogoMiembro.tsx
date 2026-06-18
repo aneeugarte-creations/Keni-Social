@@ -3,6 +3,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -200,7 +201,7 @@ export function DialogoMiembro({
 
           {/* Nombre de cuenta (login con el que inicia sesión) */}
           <div className="space-y-1.5">
-            <Label htmlFor="m-usuario">Usuario (inicio de sesión)</Label>
+            <Label htmlFor="m-usuario">Usuario</Label>
             <Input
               id="m-usuario"
               value={login}
@@ -361,6 +362,7 @@ export function DialogoMiembro({
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={`Mín. ${MIN_PASSWORD} caracteres`}
                 />
+                <MedidorPassword password={password} />
               </div>
               <Button
                 variant="outline"

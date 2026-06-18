@@ -59,8 +59,10 @@ interface Captura {
  * que el provider de sesión entre). `usuariosStatus` controla GET /api/usuarios
  * (200 con la lista, o 403 para el caso "sin permiso").
  */
-function stubFetch(opciones: { usuariosStatus?: number; capturas?: Captura[] } = {}) {
-  const { usuariosStatus = 200, capturas = [] } = opciones;
+function stubFetch(
+  opciones: { usuariosStatus?: number; capturas?: Captura[]; debeInscribirMfa?: boolean } = {},
+) {
+  const { usuariosStatus = 200, capturas = [], debeInscribirMfa = false } = opciones;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -70,7 +72,10 @@ function stubFetch(opciones: { usuariosStatus?: number; capturas?: Captura[] } =
       if (metodo !== "GET") capturas.push({ url: ruta, metodo, body });
 
       if (ruta.includes("/api/auth/me")) {
-        return new Response(JSON.stringify({ usuario: ADMIN }), { status: 200 });
+        return new Response(
+          JSON.stringify({ usuario: { ...ADMIN, debe_inscribir_mfa: debeInscribirMfa } }),
+          { status: 200 },
+        );
       }
       // Catalogo de marcas para el selector multi (lo expone piezas/opciones).
       if (ruta.includes("/api/piezas/opciones")) {
@@ -170,13 +175,13 @@ describe("Usuarios · administración", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /nueva persona/i }));
     fireEvent.change(screen.getByLabelText("Usuario"), { target: { value: "nuevo" } });
     fireEvent.change(screen.getByLabelText("Contraseña inicial"), {
-      target: { value: "contrasena1" },
+      target: { value: "contrasena12" },
     });
     fireEvent.click(screen.getByRole("button", { name: /crear persona/i }));
 
     await waitFor(() => {
       const alta = capturas.find((c) => c.url.endsWith("/api/usuarios") && c.metodo === "POST");
-      expect(alta?.body).toMatchObject({ usuario: "nuevo", password: "contrasena1", rol: "editor" });
+      expect(alta?.body).toMatchObject({ usuario: "nuevo", password: "contrasena12", rol: "editor" });
     });
   });
 
@@ -187,13 +192,13 @@ describe("Usuarios · administración", () => {
 
     const dialogo = await abrirPanel(/editar a ana lópez/i);
     fireEvent.change(within(dialogo).getByLabelText("Nueva contraseña"), {
-      target: { value: "nuevaclave1" },
+      target: { value: "nuevaclave12" },
     });
     fireEvent.click(within(dialogo).getByRole("button", { name: /resetear/i }));
 
     await waitFor(() => {
       const patch = capturas.find((c) => c.url.includes("/api/usuarios/u1") && c.metodo === "PATCH");
-      expect(patch?.body).toMatchObject({ password: "nuevaclave1" });
+      expect(patch?.body).toMatchObject({ password: "nuevaclave12" });
     });
   });
 
@@ -203,7 +208,7 @@ describe("Usuarios · administración", () => {
     renderUsuarios();
 
     const dialogo = await abrirPanel(/editar a ana lópez/i);
-    const campo = within(dialogo).getByLabelText("Usuario (inicio de sesión)");
+    const campo = within(dialogo).getByLabelText("Usuario");
     fireEvent.change(campo, { target: { value: "ana2" } });
     fireEvent.blur(campo);
 
@@ -255,5 +260,21 @@ describe("Usuarios · administración", () => {
     expect(
       within(dialogo).getByRole("button", { name: /no puedes eliminar tu propia cuenta/i }),
     ).toBeDisabled();
+  });
+
+  it("bloquea la gestión si el admin debe inscribir una llave de acceso", async () => {
+    stubFetch({ debeInscribirMfa: true });
+    renderUsuarios();
+
+    // Muestra la puerta con CTA a "Mi cuenta" y oculta el organigrama y "Nueva persona".
+    expect(
+      await screen.findByText(/inscribe una llave de acceso para administrar usuarios/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ir a mi cuenta/i })).toHaveAttribute(
+      "href",
+      "/mi-cuenta",
+    );
+    expect(screen.queryByText("Ana López")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Acciones" })).not.toBeInTheDocument();
   });
 });

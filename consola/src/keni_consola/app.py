@@ -268,10 +268,6 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por el bootstrap
             _logger.warning("No se pudo ejecutar el bootstrap del admin inicial.", exc_info=True)
         try:
-            auth.inicializar_equipo()
-        except Exception:  # noqa: BLE001 -- idem: no impide el arranque
-            _logger.warning("No se pudo inicializar el equipo AMX.", exc_info=True)
-        try:
             from . import bootstrap_lineas
 
             bootstrap_lineas.inicializar_lineas()

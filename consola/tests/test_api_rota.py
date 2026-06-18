@@ -146,25 +146,27 @@ def test_equipo_incluye_marcas_de_cada_miembro(cliente):
     assert por_nombre["ng"]["marcas"] == ["nacion-gamer"]
 
 
-def test_equipo_incluye_puede_coordinar_tras_inicializar(cliente):
+def test_equipo_incluye_puede_coordinar_por_miembro(cliente):
     """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
 
-    Tras `inicializar_equipo`, los tres canónicos (el coordinador de redes, fotografía/verificación y la coordinadora operativa) quedan con
-    `puede_coordinar=True`; el resto del equipo de redes queda en `False`. El frontend
-    necesita este campo para listar candidatos a coordinador por celda en el
-    calendario (sin él, el dropdown muestra "Sin candidatos").
+    El flag lo marca el admin desde `/usuarios` (no hay seed). El frontend necesita este
+    campo para listar candidatos a coordinador por celda en el calendario (sin él, el
+    dropdown muestra "Sin candidatos"). Aquí se crea un candidato y un no-candidato y se
+    comprueba que el endpoint refleja el flag fielmente.
     """
-    auth.inicializar_equipo()
+    auth.crear_usuario(
+        "coord", CLAVE, "editor", cobertura=True, puede_coordinar=True,
+        marcas=["claro-sports"],
+    )
+    auth.crear_usuario(
+        "nocoord", CLAVE, "editor", cobertura=True, puede_coordinar=False,
+        marcas=["claro-sports"],
+    )
     r = cliente.get("/api/rota/equipo?todos=1")
     assert r.status_code == 200
     por_nombre = {m["nombre"]: m for m in r.json()["equipo"]}
-    for canonico in ("elias", "ale", "mariana"):
-        assert canonico in por_nombre, f"falta {canonico} tras inicializar_equipo"
-        assert por_nombre[canonico]["puede_coordinar"] is True, (
-            f"{canonico} debe tener puede_coordinar=True tras inicializar_equipo"
-        )
-    # Un miembro no canónico debe quedar en False (sanity: no se cuela el flag).
-    assert por_nombre["bernardo"]["puede_coordinar"] is False
+    assert por_nombre["coord"]["puede_coordinar"] is True
+    assert por_nombre["nocoord"]["puede_coordinar"] is False
 
 
 # --------------------------------------------------------------------------- #

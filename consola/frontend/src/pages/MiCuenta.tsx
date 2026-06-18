@@ -17,6 +17,7 @@ import { Fingerprint, KeyRound, Loader2, ShieldOff, Trash2, User } from "lucide-
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -31,13 +32,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora as fmtFechaHoraCdmx } from "@/lib/fecha";
+import { MIN_PASSWORD } from "@/lib/password";
 import type { RolUsuario } from "@/types";
 
 /** Clave de caché del usuario actual (`me`); se refresca al cambiar la contraseña. */
 const CLAVE_ME = ["sesion", "me"] as const;
-
-/** Longitud mínima de contraseña (espejo del backend y de las demás pantallas). */
-const MIN_PASSWORD = 8;
 
 const ROL_LABEL: Record<RolUsuario, string> = {
   admin: "Administrador",
@@ -63,10 +62,39 @@ function FilaDato({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNod
 }
 
 function SeccionTuCuenta() {
+  const queryClient = useQueryClient();
+  const { refrescar } = useSesion();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_ME,
     queryFn: ({ signal }) => api.me(signal),
   });
+
+  // Nombre humano editable (se guarda al salir del campo). Se sincroniza con el `me`.
+  const nombreReal = (data?.usuario.nombre ?? "").trim();
+  const [nombre, setNombre] = React.useState("");
+  React.useEffect(() => {
+    setNombre(nombreReal);
+  }, [nombreReal]);
+
+  const guardarNombre = useMutation({
+    mutationFn: (valor: string) => api.actualizarMiPerfil(valor),
+    onSuccess: async () => {
+      toast.success("Nombre actualizado.");
+      // El avatar y el resto de la app leen el nombre de la sesión: refrescamos.
+      await refrescar();
+      void queryClient.invalidateQueries({ queryKey: CLAVE_ME });
+    },
+    onError: (e) => {
+      setNombre(nombreReal);
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const alGuardarNombre = () => {
+    const limpio = nombre.trim();
+    if (limpio === nombreReal || guardarNombre.isPending) return;
+    guardarNombre.mutate(limpio);
+  };
 
   return (
     <Card>
@@ -89,6 +117,24 @@ function SeccionTuCuenta() {
           />
         ) : (
           <>
+            <div className="space-y-1.5 rounded-lg border border-border px-3 py-2.5">
+              <Label htmlFor="cuenta-nombre" className="text-sm text-muted-foreground">
+                Nombre
+              </Label>
+              <Input
+                id="cuenta-nombre"
+                value={nombre}
+                maxLength={120}
+                placeholder={data.usuario.usuario}
+                onChange={(e) => setNombre(e.target.value)}
+                onBlur={alGuardarNombre}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                disabled={guardarNombre.isPending}
+              />
+              <p className="text-xs text-muted-foreground">Tu nombre visible en el equipo.</p>
+            </div>
             <FilaDato etiqueta="Usuario" valor={data.usuario.usuario} />
             <FilaDato etiqueta="Rol" valor={ROL_LABEL[data.usuario.rol] ?? data.usuario.rol} />
             <FilaDato etiqueta="Creada" valor={formatearFechaHora(data.usuario.creado)} />
@@ -169,6 +215,7 @@ function SeccionCambiarPassword() {
               disabled={cambiar.isPending}
             />
             <p className="text-xs text-muted-foreground">Mínimo {MIN_PASSWORD} caracteres.</p>
+            <MedidorPassword password={nueva} />
             {nueva.length > 0 && !distinta && (
               <p className="text-xs text-destructive">La nueva debe ser distinta de la actual.</p>
             )}

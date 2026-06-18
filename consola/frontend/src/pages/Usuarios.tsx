@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { ShieldAlert, UserPlus, Users } from "lucide-react";
+import { KeyRound, ShieldAlert, UserPlus, Users } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
@@ -13,6 +15,34 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import { DialogoCrearUsuario } from "./usuarios/DialogoCrearUsuario";
 import { OrganigramaArbol } from "./usuarios/OrganigramaArbol";
 import { CLAVE_OPCIONES_MARCAS, CLAVE_USUARIOS } from "./usuarios/tipos";
+
+/**
+ * Bloqueo duro: un admin SIN llave de acceso no puede gestionar usuarios cuando el MFA es
+ * obligatorio (`me.usuario.debe_inscribir_mfa`). En vez del organigrama mostramos esta puerta
+ * con un CTA a "Mi cuenta" para inscribir una passkey. Es la misma exigencia que el backend
+ * impone con su 403 (`mfa_inscripcion_requerida`); aquí la anticipamos en la UI.
+ */
+function PuertaInscripcionMfa() {
+  return (
+    <div
+      role="alert"
+      className="mx-auto max-w-md space-y-3 rounded-lg border border-amber-500/50 bg-amber-500/10 p-5 text-center"
+    >
+      <ShieldAlert className="mx-auto h-8 w-8 text-amber-600 dark:text-amber-500" aria-hidden="true" />
+      <p className="text-base font-medium">Inscribe una llave de acceso para administrar usuarios</p>
+      <p className="text-sm text-muted-foreground">
+        Como administrador, gestionar usuarios exige verificación en dos pasos. Registra una llave
+        de acceso (Face ID, huella o llave de seguridad) en tu cuenta y vuelve aquí.
+      </p>
+      <Button asChild>
+        <Link to="/mi-cuenta">
+          <KeyRound className="h-4 w-4" />
+          Ir a Mi cuenta
+        </Link>
+      </Button>
+    </div>
+  );
+}
 
 /**
  * Página del Organigrama (rediseño de "Usuarios"). Pinta el equipo como un árbol top-down
@@ -38,9 +68,12 @@ export default function Usuarios() {
   });
   const catalogoMarcas = marcasQuery.data ?? [];
 
+  // Admin sin passkey con MFA obligatorio: bloqueo duro de la gestión (oculta "Nueva persona"
+  // y la edición; muestra la puerta de inscripción).
+  const debeInscribirMfa = actual?.debe_inscribir_mfa === true;
   const esProhibido =
     query.isError && query.error instanceof ApiError && query.error.status === 403;
-  const puedeCrear = !esProhibido && !query.isError;
+  const puedeCrear = !debeInscribirMfa && !esProhibido && !query.isError;
 
   return (
     <>
@@ -56,7 +89,9 @@ export default function Usuarios() {
       )}
       <DialogoCrearUsuario abierto={crearAbierto} onAbierto={setCrearAbierto} />
 
-      {esProhibido ? (
+      {debeInscribirMfa ? (
+        <PuertaInscripcionMfa />
+      ) : esProhibido ? (
         <EstadoVacio
           icono={ShieldAlert}
           titulo="No tienes permiso"

@@ -103,6 +103,12 @@ export interface UsuarioSesion {
   id: string;
   usuario: string;
   rol: RolUsuario;
+  /**
+   * Nombre HUMANO de la persona (organigrama). Cadena vacía si aún sin asignar; la UI cae
+   * al `usuario` (login) para mostrar. Lo edita cada quien sobre su propia cuenta con
+   * `PATCH /api/auth/me`.
+   */
+  nombre?: string;
   /** `true` => hay que forzar el cambio de contraseña antes de usar la app. */
   debe_cambiar_password: boolean;
   /**
@@ -196,6 +202,11 @@ export interface CuerpoLogin {
 export interface CuerpoCambiarPassword {
   password_actual: string;
   password_nueva: string;
+}
+
+/** Respuesta de `PATCH /api/auth/me`: el nombre humano ya guardado. */
+export interface RespuestaPerfil {
+  nombre: string;
 }
 
 /** Fila del listado `GET /api/usuarios` (solo admin). */

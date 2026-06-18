@@ -25,6 +25,10 @@ export const apiAuth = {
   me: (signal?: AbortSignal) => peticion<RespuestaSesion>("/auth/me", { signal }),
   cambiarPassword: (cuerpo: CuerpoCambiarPassword) =>
     peticion<void>("/auth/cambiar-password", { metodo: "POST", json: cuerpo }),
+  // Edita SOLO el nombre humano propio (nunca rol/login/marcas). 400 si es inválido (>120
+  // caracteres o no-texto); 401 sin sesión real.
+  actualizarMiPerfil: (nombre: string) =>
+    peticion<{ nombre: string }>("/auth/me", { metodo: "PATCH", json: { nombre } }),
 
   // --- MFA (segundo factor PASSKEYS / WebAuthn; gateado por `KENI_CONSOLA_MFA`) ---
   // Ceremonia de LOGIN (usa la cookie pre-auth + challenge que el backend gestiona):

@@ -498,3 +498,52 @@ def test_editor_no_le_afecta_el_mfa_de_admin(entorno, monkeypatch):
     # Enrolamiento cerrado para el editor con flag global OFF.
     assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
     assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Hard-block: admin sin passkey no puede GESTIONAR usuarios (solo inscribirse) #
+# --------------------------------------------------------------------------- #
+
+
+def test_admin_sin_passkey_no_puede_gestionar_usuarios(entorno, monkeypatch):
+    """Admin OBLIGADO a MFA (hay clave) y aun SIN passkey: el login lo deja entrar en gracia,
+    pero crear/editar/borrar usuarios queda CERRADO (403 `mfa_inscripcion_requerida`) hasta
+    inscribir una llave. Es el "forzado" como bloqueo real, no solo aviso."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefa", CLAVE, "admin")
+
+    c = _cli()
+    r = _login(c, "jefa", CLAVE)
+    assert r.status_code == 200
+    assert r.json()["usuario"]["debe_inscribir_mfa"] is True  # entra en gracia
+
+    bloqueada = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": CLAVE, "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert bloqueada.status_code == 403
+    assert bloqueada.json()["codigo"] == "mfa_inscripcion_requerida"
+
+
+def test_admin_con_passkey_si_puede_gestionar_usuarios(entorno, monkeypatch):
+    """Tras inscribir una passkey, el admin recupera la gestion de usuarios (el hard-block
+    solo aplica MIENTRAS no haya segundo factor)."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    jefa = auth.crear_usuario("jefa", CLAVE, "admin")
+    _credencial_falsa(jefa["id"])  # ya tiene passkey -> mfa_activo
+
+    c = _cli()
+    # Con passkey, el login pide segundo factor; para el test vamos directo a la sesion real.
+    from keni_consola import auth as _auth_mod
+
+    token = _auth_mod.crear_sesion(jefa["id"])
+    c.cookies.set(_auth_mod.COOKIE_SESION, token)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": CLAVE, "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201

@@ -39,7 +39,7 @@ from starlette.routing import Route
 
 from keni_shared import marcas as marcas_catalogo
 
-from .. import auth, permisos
+from .. import auth, permisos, seguridad
 from .._http_json import leer_json
 from ..estados import CARGOS_USUARIO, ROL_ADMIN, ROLES_USUARIO
 from ..observabilidad import NOMBRE_LOGGER
@@ -47,6 +47,16 @@ from ..observabilidad import NOMBRE_LOGGER
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
+
+# Hard-block de MFA: un admin OBLIGADO a segundo factor que aun no inscribio passkey no
+# puede gestionar usuarios (crear/editar/borrar) hasta enrolar una llave. El login lo deja
+# entrar en GRACIA (para que pueda inscribirse) pero las acciones SENSIBLES se cierran: si
+# un admin sin segundo factor fuera comprometido (sesion/cookie robada), no podria crear
+# admins ni cambiar roles. Codigo estable para que el frontend lleve a "Mi cuenta".
+_MSG_MFA_INSCRIPCION = (
+    "Antes de gestionar usuarios, inscribe una llave de acceso (passkey) en Mi cuenta."
+)
+_CODIGO_MFA_INSCRIPCION = "mfa_inscripcion_requerida"
 
 # Longitud maxima del nombre HUMANO (organigrama). No es la identidad de la cuenta (esa es
 # `usuario`), solo lo que se pinta en las tarjetas; un limite holgado evita textos absurdos.
@@ -92,6 +102,30 @@ def _es_admin(request: Request) -> bool:
 def _es_token_mantenimiento(request: Request) -> bool:
     """True si la peticion se autentico SOLO por el token de mantenimiento (sin usuario)."""
     return bool(getattr(request.state, "auth_por_token", False))
+
+
+def _mfa_inscripcion_pendiente(request: Request) -> bool:
+    """True si el admin de la sesion DEBE inscribir passkey antes de poder operar (hard block).
+
+    Gateado IGUAL que el modo gracia del login (`api/auth._mfa_admin_aplica`): rol admin +
+    MFA obligatorio de admin (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave de firma
+    (`KENI_CONSOLA_MFA_KEY`) + la cuenta aun NO tiene passkey. Sin clave la maquinaria no
+    puede correr la inscripcion, asi que NO se bloquea (red anti-lockout, identica a login).
+    """
+    usuario = getattr(request.state, "usuario", None)
+    if usuario is None or usuario.get("rol") != ROL_ADMIN:
+        return False
+    if not (seguridad.mfa_obligatorio_admin() and seguridad.mfa_key_presente()):
+        return False
+    refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
+    return not bool(refrescado.get("mfa_activo"))
+
+
+def _rechazo_mfa_pendiente() -> Response:
+    return JSONResponse(
+        {"error": _MSG_MFA_INSCRIPCION, "codigo": _CODIGO_MFA_INSCRIPCION},
+        status_code=403,
+    )
 
 
 def _usuario_actual_id(request: Request) -> str | None:
@@ -147,6 +181,10 @@ async def crear(request: Request) -> Response:
             bootstrap_por_token = True
         else:
             return _rechazo_no_admin()
+    # Hard-block MFA: un admin sin passkey (en gracia) no puede dar de alta cuentas. El
+    # bootstrap por token va por su propio carril (BD vacia, sin sesion) y no aplica.
+    if not bootstrap_por_token and _mfa_inscripcion_pendiente(request):
+        return _rechazo_mfa_pendiente()
     datos = await leer_json(request)
     usuario = datos.get("usuario")
     password = datos.get("password")
@@ -174,11 +212,9 @@ async def crear(request: Request) -> Response:
             {"error": f"El nombre de usuario no puede superar {auth.LONGITUD_MAX_USUARIO} caracteres."},
             status_code=400,
         )
-    if not auth.password_aceptable(password):
-        return JSONResponse(
-            {"error": f"La contraseña debe tener al menos {auth.LONGITUD_MIN_PASSWORD} caracteres."},
-            status_code=400,
-        )
+    motivo = auth.motivo_rechazo_password(password, usuario)
+    if motivo is not None:
+        return JSONResponse({"error": motivo}, status_code=400)
     if not auth.rol_valido(rol):
         validos = " o ".join(f'"{r}"' for r in ROLES_USUARIO)
         return JSONResponse({"error": f"Rol inválido. Usa {validos}."}, status_code=400)
@@ -230,6 +266,8 @@ async def actualizar(request: Request) -> Response:
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
+    if _mfa_inscripcion_pendiente(request):
+        return _rechazo_mfa_pendiente()
     usuario_id = request.path_params["usuario_id"]
     objetivo = auth.obtener_usuario_por_id(usuario_id)
     if objetivo is None:
@@ -311,11 +349,12 @@ async def actualizar(request: Request) -> Response:
                 {"error": "No puedes degradar al último administrador."}, status_code=409
             )
 
-    if nueva_password is not None and not auth.password_aceptable(nueva_password):
-        return JSONResponse(
-            {"error": f"La contraseña debe tener al menos {auth.LONGITUD_MIN_PASSWORD} caracteres."},
-            status_code=400,
+    if nueva_password is not None:
+        motivo = auth.motivo_rechazo_password(
+            nueva_password, nuevo_usuario or objetivo["usuario"]
         )
+        if motivo is not None:
+            return JSONResponse({"error": motivo}, status_code=400)
 
     if nuevo_cargo is not None:
         if not isinstance(nuevo_cargo, str):
@@ -459,6 +498,8 @@ async def borrar(request: Request) -> Response:
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
+    if _mfa_inscripcion_pendiente(request):
+        return _rechazo_mfa_pendiente()
     usuario_id = request.path_params["usuario_id"]
     objetivo = auth.obtener_usuario_por_id(usuario_id)
     if objetivo is None:
