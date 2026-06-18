@@ -63,8 +63,8 @@ export function LanzadorRalph() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="operativo">Operativo · asistente del equipo (MCP)</SelectItem>
-              <SelectItem value="dev">Desarrollo · sobre el repo (solo tú)</SelectItem>
+              <SelectItem value="operativo">Operativo</SelectItem>
+              <SelectItem value="dev">Desarrollo</SelectItem>
             </SelectContent>
           </Select>
         )}
