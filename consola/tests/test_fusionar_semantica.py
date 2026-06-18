@@ -23,11 +23,14 @@ _AHORA = datetime.now(UTC).isoformat()
 
 @pytest.fixture(autouse=True)
 def _reset_throttle_fusionar():
-    """Resetea el throttle global de `paso_fusionar_semantica` antes/después de cada test: así una
-    pasada sellada por otro test no hace que el siguiente (sin `forzar`) salga por el throttle."""
+    """Resetea el throttle y la huella globales de `paso_fusionar_semantica` antes/después de cada
+    test: así ni una pasada sellada por otro test la hace salir por el throttle, ni una huella
+    previa la hace saltar por skip-if-unchanged."""
     _comun._ultimo_fusionar = 0.0
+    _comun._ultima_huella_fusionar = None
     yield
     _comun._ultimo_fusionar = 0.0
+    _comun._ultima_huella_fusionar = None
 
 
 def _ej(grupos):
@@ -230,6 +233,62 @@ def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
     res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))
     assert res == {"grupos": 0, "fusionadas": 0}
     assert repos.obtener_noticia_cluster("c2") is not None       # nada se fundió
+
+
+# --------------------------------------------------------------------------- #
+# Payload mínimo (solo titulares) + ejecutor no-agéntico                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_proponer_fusiones_payload_solo_id_y_titulo():
+    """El payload a Haiku lleva solo `id`+`titulo` (sin `resumen`): clasificación inline barata."""
+    clusters = [
+        {"id": "a", "titulo": "Titular A", "resumen": "Resumen largo A"},
+        {"id": "b", "titulo": "Titular B", "resumen": "Resumen largo B"},
+    ]
+    capt: dict[str, list[dict]] = {}
+
+    def ej(prompt, _carpeta):
+        items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
+        capt["items"] = items
+        return json.dumps({"grupos": []})
+
+    fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej)
+    assert capt["items"] == [{"id": "a", "titulo": "Titular A"}, {"id": "b", "titulo": "Titular B"}]
+    assert all("resumen" not in it for it in capt["items"])
+
+
+def test_proponer_macro_eventos_payload_conserva_tema_macro_sin_resumen():
+    """El payload de macro-evento mantiene `tema_macro` (lo reutiliza el modelo) pero NO `resumen`."""
+    clusters = [
+        {"id": "a", "titulo": "T A", "resumen": "R A", "tema_macro": "Mundial 2026"},
+        {"id": "b", "titulo": "T B", "resumen": "R B", "tema_macro": ""},
+    ]
+    capt: dict[str, list[dict]] = {}
+
+    def ej(prompt, _carpeta):
+        items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
+        capt["items"] = items
+        return json.dumps({"familias": []})
+
+    fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=ej)
+    assert all("resumen" not in it for it in capt["items"])
+    assert all("tema_macro" in it for it in capt["items"])
+    assert {it["id"] for it in capt["items"]} == {"a", "b"}
+
+
+def test_ejecutar_haiku_es_no_agentico(monkeypatch):
+    """El ejecutor real de la fusión acota la llamada: `max_turns=1` y `sin_tools=True`."""
+    from keni_consola.dominio import traducir
+
+    capt: dict[str, object] = {}
+    monkeypatch.setattr(
+        traducir, "_ejecutar_claude_json",
+        lambda prompt, carpeta, **kw: capt.update(kw) or '{"grupos": []}',
+    )
+    fusionar_semantica._ejecutar_haiku("P", "/tmp/x")
+    assert capt.get("max_turns") == 1
+    assert capt.get("sin_tools") is True
 
 
 def test_construir_prompt_inserta_historias_y_contrato():

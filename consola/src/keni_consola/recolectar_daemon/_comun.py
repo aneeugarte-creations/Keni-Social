@@ -40,6 +40,21 @@ _ultimo_rescore = 0.0  # time.monotonic() de la última pasada completada
 # despacio); el throttle ligero deja que la dedup semántica corra sin re-llamar en cada barrido.
 _FUSIONAR_INTERVALO_SEG = 90.0
 _ultimo_fusionar = 0.0  # time.monotonic() de la última pasada completada
+# Huella del lote candidato evaluado en la última pasada (skip-if-unchanged): si el lote no
+# cambió desde entonces, no se vuelve a llamar al LLM (no habría nada nuevo que fusionar). En
+# memoria: al reiniciar el daemon vuelve a None y se re-evalúa una vez (aceptable).
+_ultima_huella_fusionar: str | None = None
+
+
+def _huella_lote(clusters: list[dict[str, Any]]) -> str:
+    """Huella ESTABLE del conjunto candidato: ids ordenados + su marcador de cambio (`ultimo_visto`).
+
+    Cambia cuando entra un cluster nuevo, sale uno o uno recibe items nuevos (su `ultimo_visto`
+    avanza); idéntica si el lote no se movió. PURA: dos lotes equivalentes dan la misma huella
+    sin importar el orden de entrada.
+    """
+    partes = sorted(f"{c.get('id')}\t{c.get('ultimo_visto') or ''}" for c in clusters)
+    return "\n".join(partes)
 
 # Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
 # en horas; pasarla en cada tick de 30s sería escritura irrelevante en BD sin efecto).

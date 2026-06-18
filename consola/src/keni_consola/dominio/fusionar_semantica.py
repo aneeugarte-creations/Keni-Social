@@ -37,7 +37,7 @@ Ejecutor = Callable[[str, str], str]
 
 # Cotas de tamaño del prompt.
 _MAX_CLUSTERS = 40           # historias por lote que se mandan a Haiku
-_MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
+_MAX_CHARS_ITEM = 240        # recorte del titulo por historia
 
 
 # La plantilla vive en la Prompts de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
@@ -90,7 +90,7 @@ def proponer_fusiones(
 ) -> list[list[str]]:
     """Propone grupos de ids de historias del MISMO evento (Haiku). PURO de repos.
 
-    `clusters`: dicts con al menos `{id, titulo, resumen}`. Devuelve grupos VÁLIDOS y DISJUNTOS
+    `clusters`: dicts con al menos `{id, titulo}`. Devuelve grupos VÁLIDOS y DISJUNTOS
     (ids del input, sin repetir entre grupos, tamaño ≥ 2). [] ante <2 historias o cualquier fallo.
 
     `al_ejecutar(prompt, salida)`: callback OPCIONAL que se invoca con el PROMPT y la SALIDA reales
@@ -108,10 +108,6 @@ def proponer_fusiones(
             "titulo": json_llm.truncar_avisando(
                 str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
                 campo=f"titulo de {c['id']}", log=_log,
-            )[0],
-            "resumen": json_llm.truncar_avisando(
-                str(c.get("resumen", "") or "").strip(), _MAX_CHARS_ITEM,
-                campo=f"resumen de {c['id']}", log=_log,
             )[0],
         }
         for c in validos
@@ -221,7 +217,7 @@ def proponer_macro_eventos(
     gran acontecimiento (una cumbre, un desastre, un torneo, una elección). No fusiona nada; es
     aditivo y no se solapa con el fundir.
 
-    `clusters`: dicts con al menos `{id, titulo, resumen}`. Devuelve
+    `clusters`: dicts con al menos `{id, titulo}` (y `tema_macro` opcional). Devuelve
     `[{"tema": "<etiqueta corta en español>", "ids": ["<cluster_id>", ...]}, ...]` con SOLO las
     familias de 2+ ids DISTINTOS y VÁLIDOS (que existan en el input). [] ante <2 historias o
     cualquier fallo (best-effort, igual que `proponer_fusiones`).
@@ -240,10 +236,6 @@ def proponer_macro_eventos(
             "titulo": json_llm.truncar_avisando(
                 str(c.get("titulo", "")).strip(), _MAX_CHARS_ITEM,
                 campo=f"titulo de {c['id']}", log=_log,
-            )[0],
-            "resumen": json_llm.truncar_avisando(
-                str(c.get("resumen", "") or "").strip(), _MAX_CHARS_ITEM,
-                campo=f"resumen de {c['id']}", log=_log,
             )[0],
             # Etiqueta de familia ACTUAL del cluster (puede estar vacía). Se manda para que Haiku
             # REUTILICE verbatim una etiqueta ya existente en vez de inventar un sinónimo.
@@ -279,9 +271,15 @@ def proponer_macro_eventos(
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
     """Ejecutor real: el runner síncrono de `traduccion` con el modelo de la fusión.
 
-    El modelo real lo decide `config.fusion_modelo()` (def sonnet).
+    El modelo real lo decide `config.fusion_modelo()` (def sonnet). La fusión es una
+    clasificación INLINE (agrupar ids por evento): se acota a NO agéntica —`max_turns=1` y
+    `sin_tools=True` (sin `--add-dir`)— para que el modelo responda en un turno sin abrir un
+    bucle de herramientas.
     """
     from .. import config
     from .traducir import _ejecutar_claude_json
 
-    return _ejecutar_claude_json(prompt, dir_permitido, modelo=config.fusion_modelo())
+    return _ejecutar_claude_json(
+        prompt, dir_permitido, modelo=config.fusion_modelo(),
+        max_turns=1, sin_tools=True,
+    )

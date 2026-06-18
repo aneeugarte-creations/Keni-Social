@@ -266,6 +266,52 @@ def test_metricas_de_envelope_extrae_y_tolera():
     assert traducir._metricas_de_envelope("no-dict") is None
 
 
+# --------------------------------------------------------------------------- #
+# Ejecutor real: argv (acotado no-agéntico vs. comportamiento por defecto)      #
+# --------------------------------------------------------------------------- #
+
+
+class _ResClaude:
+    """Doble del resultado de `subprocess.run` (envelope JSON mínimo de `claude -p`)."""
+
+    returncode = 0
+    stdout = '{"result": "ok"}'
+    stderr = ""
+
+
+def _capturar_argv(monkeypatch):
+    """Parchea `shutil.which`/`subprocess.run` y devuelve un dict donde queda el argv capturado."""
+    capturado: dict[str, list[str]] = {}
+    monkeypatch.setattr(traducir.shutil, "which", lambda _cmd: "/usr/bin/claude")
+    monkeypatch.setattr(
+        traducir.subprocess, "run",
+        lambda argv, **_kw: capturado.update(argv=argv) or _ResClaude(),
+    )
+    return capturado
+
+
+def test_ejecutar_claude_json_no_agentico_limita_turnos_y_omite_add_dir(monkeypatch):
+    """`max_turns`/`sin_tools` acotan la llamada: `--max-turns 1` y SIN `--add-dir` (sin filesystem)."""
+    capturado = _capturar_argv(monkeypatch)
+    salida = traducir._ejecutar_claude_json(
+        "P", "/tmp/x", modelo="sonnet", max_turns=1, sin_tools=True
+    )
+    argv = capturado["argv"]
+    assert "--max-turns" in argv and argv[argv.index("--max-turns") + 1] == "1"
+    assert "--add-dir" not in argv
+    assert "/tmp/x" not in argv
+    assert salida == "ok"
+
+
+def test_ejecutar_claude_json_por_defecto_conserva_add_dir_y_sin_tope_de_turnos(monkeypatch):
+    """Sin los parámetros nuevos (otros llamantes) el argv es el de siempre: `--add-dir`, sin tope."""
+    capturado = _capturar_argv(monkeypatch)
+    traducir._ejecutar_claude_json("P", "/tmp/x", modelo="haiku")
+    argv = capturado["argv"]
+    assert "--add-dir" in argv and argv[argv.index("--add-dir") + 1] == "/tmp/x"
+    assert "--max-turns" not in argv
+
+
 def test_acumulador_de_metricas_suma_y_resetea():
     """Las llamadas SUMAN en el acumulador del hilo; `tomar_metricas_acumuladas` devuelve la
     suma y RESETEA (la siguiente toma sin llamadas es None)."""

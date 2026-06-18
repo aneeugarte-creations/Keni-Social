@@ -78,10 +78,20 @@ def paso_fusionar_semantica(
             _log.exception("recolectar_daemon: no se pudieron leer historias para fusionar.")
             return {"grupos": 0, "fusionadas": 0}
 
+    nuevos = [c for c in recientes_todas if (c.get("estado") or "nuevo") == "nuevo"]
+
+    # Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada evaluada,
+    # no hay nada nuevo que fusionar/etiquetar -> no se llama al LLM (ahorro de tokens). Un
+    # cluster nuevo o uno con items nuevos mueve la huella y re-evalúa el LOTE COMPLETO (un
+    # cluster nuevo debe poder fusionarse contra los `nuevo` ya existentes). `forzar` lo salta.
+    huella = _comun._huella_lote(nuevos)
+    if not forzar and _comun._ultima_huella_fusionar == huella:
+        _comun._ultimo_fusionar = ahora_mono
+        return {"grupos": 0, "fusionadas": 0}
+
     por_marca: dict[str, list[dict[str, Any]]] = {}
-    for c in recientes_todas:
-        if (c.get("estado") or "nuevo") == "nuevo":
-            por_marca.setdefault(c.get("marca") or "", []).append(c)
+    for c in nuevos:
+        por_marca.setdefault(c.get("marca") or "", []).append(c)
 
     grupos_total = 0
     fusionadas_total = 0
@@ -189,6 +199,7 @@ def paso_fusionar_semantica(
                 prompt=haiku_macro["prompt"],
             )
     _comun._ultimo_fusionar = ahora_mono
+    _comun._ultima_huella_fusionar = huella
     if grupos_total:
         _log.info(
             "recolectar_daemon: fusionar semántico: %d grupo(s), %d historia(s) absorbida(s).",

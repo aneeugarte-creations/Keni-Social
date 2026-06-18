@@ -23,11 +23,14 @@ _AHORA = datetime(2026, 6, 5, 12, 0, 0, tzinfo=UTC)
 
 @pytest.fixture(autouse=True)
 def _reset_throttle_fusionar():
-    """Resetea el throttle global de `paso_fusionar_semantica` antes de cada test: así una pasada
-    sellada por un test previo no hace que el siguiente (sin `forzar`) salga por el throttle."""
+    """Resetea el throttle y la huella globales de `paso_fusionar_semantica` antes/después de cada
+    test: así ni una pasada sellada por un test previo la hace salir por el throttle, ni una huella
+    previa la hace saltar por skip-if-unchanged."""
     _comun._ultimo_fusionar = 0.0
+    _comun._ultima_huella_fusionar = None
     yield
     _comun._ultimo_fusionar = 0.0
+    _comun._ultima_huella_fusionar = None
 
 _FEED_OK = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
@@ -873,6 +876,45 @@ def test_paso_fusionar_semantica_va_throttled(monkeypatch):
     recolectar_daemon.paso_fusionar_semantica(forzar=True)   # corre y sella el throttle
     assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}  # throttled
     assert len(lecturas) == 1  # la 2ª no llegó a leer la ventana
+
+
+def test_paso_fusionar_semantica_salta_si_el_lote_no_cambio(monkeypatch):
+    """Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada, NO se llama al
+    LLM (no hay nada nuevo que fusionar). Un cluster nuevo/actualizado mueve la huella y re-evalúa."""
+    monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
+    recientes = [
+        {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv", "ultimo_visto": "t1"},
+        {"id": "c2", "titulo": "B", "estado": "nuevo", "marca": "unotv", "ultimo_visto": "t1"},
+    ]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
+                        lambda ventana_h, *a, **k: [dict(c) for c in recientes])
+    llamadas = {"fusiones": 0, "macro": 0}
+
+    def _fusiones(lote, **kw):
+        llamadas["fusiones"] += 1
+        return []
+
+    def _macro(lote, **kw):
+        llamadas["macro"] += 1
+        return []
+
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fusiones)
+    monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_macro_eventos", _macro)
+
+    # 1ª pasada: lote nuevo -> evalúa (llama al LLM) y sella la huella.
+    recolectar_daemon.paso_fusionar_semantica()
+    assert (llamadas["fusiones"], llamadas["macro"]) == (1, 1)
+
+    # 2ª pasada con el MISMO lote (throttle reseteado para que no gatee él): huella idéntica -> salta.
+    _comun._ultimo_fusionar = 0.0
+    assert recolectar_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}
+    assert (llamadas["fusiones"], llamadas["macro"]) == (1, 1)  # no se volvió a llamar
+
+    # Cambia el marcador de un cluster (entró un item nuevo) -> la huella cambia -> re-evalúa.
+    recientes[0]["ultimo_visto"] = "t2"
+    _comun._ultimo_fusionar = 0.0
+    recolectar_daemon.paso_fusionar_semantica()
+    assert (llamadas["fusiones"], llamadas["macro"]) == (2, 2)
 
 
 def test_paso_fusionar_semantica_gateado_off_no_corre(monkeypatch):

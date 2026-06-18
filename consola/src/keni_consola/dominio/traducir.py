@@ -111,13 +111,25 @@ def tomar_metricas_acumuladas() -> dict[str, Any] | None:
     return acc or None
 
 
-def _ejecutar_claude_json(prompt: str, dir_permitido: str, modelo: str | None = None) -> str:
-    """Corre `claude -p <prompt> --output-format json [--model X] --add-dir <dir>`.
+def _ejecutar_claude_json(
+    prompt: str,
+    dir_permitido: str,
+    modelo: str | None = None,
+    *,
+    max_turns: int | None = None,
+    sin_tools: bool = False,
+) -> str:
+    """Corre `claude -p <prompt> --output-format json [--model X] [--add-dir <dir>] [--max-turns N]`.
 
     Síncrono, acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido
     `CLAUDE_CODE_OAUTH_TOKEN`). `modelo=None` cae al de insumos (`KENI_INSUMOS_MODELO`);
     un llamante puede fijar el suyo (la fusión usa el de `KENI_FUSION_MODELO`). No tocar
     en tests: se inyecta un ejecutor falso.
+
+    Para clasificaciones INLINE que no necesitan herramientas, el llamante acota la llamada:
+        - `max_turns`: tope de turnos de agente (p. ej. `1` fuerza una sola respuesta, sin bucle).
+        - `sin_tools=True`: omite `--add-dir`, así `claude` no recibe acceso al filesystem.
+    Por defecto (ambos sin fijar) el comportamiento es el de siempre: `--add-dir` y sin tope de turnos.
     """
     from . import stream  # import perezoso: evita ciclo importador<->dominio
 
@@ -131,10 +143,12 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str, modelo: str | None = 
         prompt,
         "--output-format",
         "json",
-        "--add-dir",
-        dir_permitido,
-        *stream.arg_skip_permisos(),
     ]
+    if not sin_tools:
+        argv += ["--add-dir", dir_permitido]
+    argv += [*stream.arg_skip_permisos()]
+    if max_turns is not None:
+        argv += ["--max-turns", str(max_turns)]
     if modelo:
         argv += ["--model", modelo]
     res = subprocess.run(  # noqa: S603 -- argv fijo, sin shell; prompt va como argumento
