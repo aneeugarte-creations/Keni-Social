@@ -5,6 +5,7 @@ import {
   Hand,
   Pencil,
   Play,
+  Plus,
   Trash2,
   UserCheck,
   UserMinus,
@@ -201,6 +202,53 @@ export function RolesCubiertos({ cubridores }: { cubridores: Publicacion[] }) {
   );
 }
 
+/** Roles de `ROLES_COBERTURA` que NADIE cubre aún en este evento (por los `formato` de sus cubridores). */
+function rolesFaltantes(cubridores: Publicacion[]): RolCobertura[] {
+  const cubiertos = new Set(rolesCubiertos(cubridores));
+  return ROLES_COBERTURA.filter((r) => !cubiertos.has(r));
+}
+
+/**
+ * Chips de ROL FALTANTE «⊕ rol» de un evento sin cubrir / con roles libres: cada rol que nadie
+ * cubre aún se ofrece como un chip outline PUNTEADO clicable — un toque lo COGE con ese rol
+ * (reusa `cubrirEvento`, sin duplicar la lógica de cubrir). Multi-cobertura idempotente: coger un
+ * rol no toca los demás. Estética del equipo (outline gris; el punteado = «hueco por cubrir»).
+ */
+export function ChipsRolFaltante({
+  cubridores,
+  onCoger,
+  disabled,
+}: {
+  cubridores: Publicacion[];
+  /** Coger ESE rol (lo conecta el padre a su `cubrirEvento(eventoId, undefined, rol)`). */
+  onCoger: (rol: RolCobertura) => void;
+  disabled?: boolean;
+}) {
+  const faltan = rolesFaltantes(cubridores);
+  if (faltan.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Roles por cubrir">
+      {faltan.map((rol) => (
+        <button
+          key={rol}
+          type="button"
+          disabled={disabled}
+          aria-label={`Coger ${etiquetaRol(rol)}`}
+          title={`Coger ${etiquetaRol(rol)}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCoger(rol);
+          }}
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent hover:text-foreground disabled:opacity-60"
+        >
+          <Plus className="h-3 w-3" aria-hidden />
+          {etiquetaRol(rol)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura SUELTA (sin dueño) que
  * conserva su `formato`. Resurge como «Por cubrir · <rol>» re-cogible (coger = retoma ESE rol).
@@ -265,13 +313,16 @@ export function TarjetaEventoLibre({
   const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
+  // Cubrir el evento. `formato` por defecto = el rol elegido en el `SelectorRol`; los chips
+  // «⊕ rol» pasan SU rol explícito (un toque coge ESE rol), idéntica acción idempotente.
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId, rol),
-    onSuccess: (res) => {
+    mutationFn: ({ responsableId, formato }: { responsableId?: string; formato?: string } = {}) =>
+      api.cubrirEvento(evento.id, responsableId, formato ?? rol),
+    onSuccess: (res, vars) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
+      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(vars?.formato ?? rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -320,7 +371,7 @@ export function TarjetaEventoLibre({
       como="div"
       kebab={sinMenu ? "nunca" : "siempre"}
       realce
-      onPrimaria={() => cubrir.mutate(undefined)}
+      onPrimaria={() => cubrir.mutate({})}
       acciones={accionesEvento}
       className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm"
     >
@@ -363,7 +414,17 @@ export function TarjetaEventoLibre({
       {evento.contenido && (
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
       )}
-      {/* Rol con que se cubre (Foto/Video/Texto/Live): el reparto es por rol. */}
+      {/* Roles por cubrir «⊕ rol»: un toque coge ESE rol (sin elegir antes en el selector). El
+          evento no tiene cubridores aún → faltan los cuatro. `data-no-primaria` para que el clic
+          en un chip no dispare también la acción primaria (cubrir con el rol del selector). */}
+      <div className="mt-3" data-no-primaria>
+        <ChipsRolFaltante
+          cubridores={[]}
+          onCoger={(r) => cubrir.mutate({ formato: r })}
+          disabled={cubrir.isPending}
+        />
+      </div>
+      {/* Rol con que se cubre desde la acción primaria (clic en la tarjeta): el reparto es por rol. */}
       <div className="mt-3">
         <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
       </div>
@@ -374,7 +435,7 @@ export function TarjetaEventoLibre({
         onOpenChange={setAsignarAbierto}
         usuarios={usuarios}
         responsableActual=""
-        onElegir={(id) => cubrir.mutate(id)}
+        onElegir={(id) => cubrir.mutate({ responsableId: id })}
         enviando={cubrir.isPending}
       />
 
@@ -681,14 +742,16 @@ export function TarjetaCobertura({
   const evento = cobertura.evento;
   const vinculadas = [...cobertura.cubridores, ...cobertura.libres];
 
+  // Cubrir el evento con un cubridor más. `formato` por defecto = el rol del selector; los chips
+  // «⊕ rol» pasan SU rol explícito. Multi-cobertura idempotente: añade ese rol sin tocar los demás.
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) =>
-      api.cubrirEvento(cobertura.eventoId, responsableId, rol),
-    onSuccess: (res) => {
+    mutationFn: ({ responsableId, formato }: { responsableId?: string; formato?: string } = {}) =>
+      api.cubrirEvento(cobertura.eventoId, responsableId, formato ?? rol),
+    onSuccess: (res, vars) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${cobertura.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
+      toast.success(`"${cobertura.titulo}" la cubre ${nombre} (${etiquetaRol(vars?.formato ?? rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -753,7 +816,7 @@ export function TarjetaCobertura({
       como="div"
       kebab={sinMenu ? "nunca" : "siempre"}
       realce
-      onPrimaria={!yaApuntado ? () => cubrir.mutate(undefined) : undefined}
+      onPrimaria={!yaApuntado ? () => cubrir.mutate({}) : undefined}
       acciones={accionesCobertura}
       className="space-y-2"
     >
@@ -776,6 +839,18 @@ export function TarjetaCobertura({
           ))}
         </div>
       )}
+      {/* Roles aún SIN cubrir del evento «⊕ rol»: un toque añade ESE rol (a mí). Distintos de los
+          `libres` (roles SOLTADOS, que ya tienen su propia tarea re-cogible): estos son roles que
+          NADIE ha tomado nunca. `data-no-primaria` para no disparar también la acción primaria. */}
+      {!yaApuntado && (
+        <div data-no-primaria>
+          <ChipsRolFaltante
+            cubridores={cobertura.cubridores}
+            onCoger={(r) => cubrir.mutate({ formato: r })}
+            disabled={cubrir.isPending}
+          />
+        </div>
+      )}
       {/* Rol con que me apunto / añaden a alguien (selector inline; la acción va al menú). */}
       {(!yaApuntado || esManager) && (
         <div className="flex flex-wrap items-center gap-2">
@@ -789,7 +864,7 @@ export function TarjetaCobertura({
         onOpenChange={setAsignarAbierto}
         usuarios={usuarios}
         responsableActual=""
-        onElegir={(id) => cubrir.mutate(id)}
+        onElegir={(id) => cubrir.mutate({ responsableId: id })}
         enviando={cubrir.isPending}
       />
 

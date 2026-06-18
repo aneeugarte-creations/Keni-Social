@@ -11,14 +11,15 @@ import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { derivarCoberturaEvento } from "@/lib/cobertura";
 import { hoyCDMX, posicionTemporal } from "@/lib/fecha";
 import { lunesSiguiente } from "@/lib/rota-calendario";
-import { franjaIdParaHoraEvento } from "@/pages/rota/comun";
 import type { RotaSemana } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
 import { IconoEvento } from "./icono-evento";
+import { KpiCobertura } from "./KpiCobertura";
 import { PanoramaAgenda } from "./PanoramaAgenda";
 import { TarjetaCobertura, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
 import { agrupar, type Item } from "./tipos";
@@ -90,9 +91,9 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const { coberturas, encargos, eventosLibres, recuperables } = agrupar(tareas, eventosCoverables);
 
   // Cobertura por TURNO (misma lógica que el calendario): el Panorama es multi-semana y no carga
-  // turnos, así que pedimos los turnos de las (pocas) semanas que tocan los eventos mostrados y
-  // marcamos cubierto el evento que cae en una franja con ≥1 turno ese día. Carga parcial → se
-  // trata como NO cubierto («Sin cubrir») hasta que llega la semana; nunca rompe la UI.
+  // turnos, así que pedimos los turnos de las (pocas) semanas que tocan los eventos mostrados. La
+  // derivación cubierto-por-turno / hueco la hace el selector canónico (`derivarCoberturaEvento`);
+  // carga parcial → se trata como NO cubierto («Sin cubrir») hasta que llega la semana.
   const semanasEventos = Array.from(
     new Set(eventosCoverables.filter((e) => e.fecha).map((e) => lunesSiguiente(e.fecha, 0))),
   );
@@ -107,15 +108,27 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   semanasTurnos.forEach((q, i) => {
     if (q.data) porLunes.set(semanasEventos[i], q.data);
   });
+  // Cobertura por turno de UN evento, vía el selector canónico y la rota de SU semana (las franjas
+  // tienen id por semana, así que el bucketing y el solape se hacen sobre la semana del evento, no
+  // mezclando semanas). Reusa `derivarCoberturaEvento`: nada de turno/franja reconstruido a mano.
+  const rotaDe = (e: { fecha: string }): RotaSemana | undefined =>
+    e.fecha ? porLunes.get(lunesSiguiente(e.fecha, 0)) : undefined;
   const cubiertosPorTurno = new Set<string>();
   for (const e of eventosCoverables) {
-    if (!e.fecha) continue;
-    const semana = porLunes.get(lunesSiguiente(e.fecha, 0));
+    const semana = rotaDe(e);
     if (!semana) continue;
-    const franjaId = franjaIdParaHoraEvento(e.hora, semana.franjas);
-    if (franjaId && semana.turnos.some((t) => t.franja_id === franjaId && t.fecha === e.fecha))
-      cubiertosPorTurno.add(e.id);
+    const d = derivarCoberturaEvento(e, [], semana.turnos, semana.franjas);
+    if (d.estado === "cubierto-turno") cubiertosPorTurno.add(e.id);
   }
+  // KPI de cabecera «Cobertura de hoy»: el resumen del selector sobre los eventos de HOY (CDMX).
+  // Todos los de hoy comparten UNA semana, así que su rota (turnos+franjas) es una sola y el
+  // `resumenCobertura` plano es exacto (los ids de franja son por semana). Sin fetches nuevos:
+  // reusa eventos, claims (tareas con `evento_id`) y la rota ya cargada.
+  const eventosHoy = eventosCoverables.filter((e) => e.fecha === hoy);
+  const claimsCobertura = tareas.filter((t) => t.evento_id);
+  const semanaHoy = porLunes.get(lunesSiguiente(hoy, 0));
+  const turnosHoy = semanaHoy?.turnos ?? [];
+  const franjasHoy = semanaHoy?.franjas ?? [];
 
   // Lista unificada, ordenada por fecha (las sin fecha, al final).
   const conOrden = (f: string) => f || "9999-99-99";
@@ -268,7 +281,13 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
           </div>
         ) : (
           <>
-            <TabsContent value="panorama">
+            <TabsContent value="panorama" className="space-y-4">
+              <KpiCobertura
+                eventos={eventosHoy}
+                claims={claimsCobertura}
+                turnos={turnosHoy}
+                franjas={franjasHoy}
+              />
               <PanoramaAgenda
                 tareas={tareas}
                 eventos={eventosCoverables}

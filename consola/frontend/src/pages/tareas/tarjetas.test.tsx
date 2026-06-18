@@ -1,7 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SemaforoCobertura } from "./tarjetas";
+import type { Publicacion } from "@/types";
+
+import { ChipsRolFaltante, SemaforoCobertura } from "./tarjetas";
+
+function cubridor(over: Partial<Publicacion> = {}): Publicacion {
+  return {
+    id: "c1",
+    clase: "tarea",
+    evento_id: "ev1",
+    responsable_id: "u1",
+    responsable_nombre: "luis",
+    formato: "foto",
+    ...over,
+  } as unknown as Publicacion;
+}
 
 describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
   // AHORA fijo = 2026-06-14 00:00 UTC = 2026-06-13 18:00 CDMX (UTC-6).
@@ -44,5 +58,44 @@ describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
       expect(screen.getByText("30′")).toBeInTheDocument();
       expect(screen.getByTitle("Empieza en 30 min")).toBeInTheDocument();
     });
+  });
+});
+
+describe("ChipsRolFaltante — coger un rol libre de un toque", () => {
+  it("sin cubridores ofrece los 4 roles como chips", () => {
+    render(<ChipsRolFaltante cubridores={[]} onCoger={() => {}} />);
+    for (const r of ["Foto", "Video", "Texto", "Live"]) {
+      expect(screen.getByRole("button", { name: `Coger ${r}` })).toBeInTheDocument();
+    }
+  });
+
+  it("con foto y video cubiertos solo ofrece texto y live", () => {
+    render(
+      <ChipsRolFaltante
+        cubridores={[cubridor({ id: "a", formato: "foto" }), cubridor({ id: "b", formato: "video" })]}
+        onCoger={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Coger Foto" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Coger Video" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Coger Texto" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Coger Live" })).toBeInTheDocument();
+  });
+
+  it("clic en un chip llama a onCoger con ESE rol", () => {
+    const onCoger = vi.fn();
+    render(<ChipsRolFaltante cubridores={[]} onCoger={onCoger} />);
+    fireEvent.click(screen.getByRole("button", { name: "Coger Texto" }));
+    expect(onCoger).toHaveBeenCalledWith("texto");
+  });
+
+  it("con los 4 roles cubiertos no pinta chips", () => {
+    const { container } = render(
+      <ChipsRolFaltante
+        cubridores={["foto", "video", "texto", "live"].map((f, i) => cubridor({ id: `r${i}`, formato: f }))}
+        onCoger={() => {}}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });
