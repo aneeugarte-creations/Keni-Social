@@ -215,6 +215,9 @@ services:
       # servicio worker-ralph por la red interna con el bearer compartido. URL fija al DNS del
       # servicio; el puerto debe coincidir con KENI_RALPH_PORT de worker-ralph (def 8771).
       KENI_RALPH_URL: ${KENI_RALPH_URL:-http://worker-ralph:8771}
+      # Listener de promoción del carril dev: el back PROXEA (admin-gated) a worker-dev para
+      # ejecutar la promoción REAL a main (fetch+rebase+push). Puerto = KENI_DEV_PORT (def 8772).
+      KENI_DEV_URL: ${KENI_DEV_URL:-http://worker-dev:8772}
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
       # El back solo ENCOLA (#130 Fase 2): NO arranca su worker in-proceso (lo hace el
       # servicio `worker`). La credencial de Claude la lleva el worker, no el back.
@@ -606,6 +609,9 @@ services:
       KENI_MAX_JOBS_DEV: ${KENI_MAX_JOBS_DEV:-2}
       # Clon git del repo sobre el que el motor crea worktrees y promueve a main.
       KENI_DEV_REPO: /repo
+      # Puerto del listener de control (interno) que ejecuta la promoción REAL a main
+      # (fetch+rebase+push de la rama de la sugerencia). El back lo alcanza vía KENI_DEV_URL.
+      KENI_DEV_PORT: ${KENI_DEV_PORT:-8772}
       # Identidad de los commits que crea el carril dev (lo hidrata el entrypoint con
       # `git config --global`). VACIAS por defecto: sin ellas git usa su default del contenedor.
       KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-}
@@ -642,8 +648,12 @@ services:
         condition: service_healthy
       files:
         condition: service_healthy
-    # Mismo criterio que el worker: el bucle no sirve HTTP, así que sondeamos /proc para
-    # comprobar que `keni_consola.worker_dev` sigue vivo (sin depender de procps/pgrep).
+    # Solo documental (Compose no publica `expose`): el listener de promoción escucha en
+    # KENI_DEV_PORT en la red interna; el back lo alcanza por DNS (KENI_DEV_URL).
+    expose:
+      - "8772"
+    # El proceso worker_dev hospeda el pool de jobs Y el listener de control (hilo daemon);
+    # sondeamos /proc para comprobar que `keni_consola.worker_dev` sigue vivo (cubre ambos).
     healthcheck:
       test:
         - "CMD-SHELL"

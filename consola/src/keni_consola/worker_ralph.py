@@ -121,12 +121,13 @@ def _evento_sse(nombre: str, datos: dict) -> str:
 
 
 async def stream(request: Request) -> Response:
-    """SSE de la conversacion de un Ralph: eventos `mensaje` (delta) y `estado`.
+    """SSE de la conversacion de un Ralph: eventos `mensaje` y `estado` (contrato del frontend).
 
     El gestor expone un generador BLOQUEANTE (`leer_stream`); lo consumimos por elementos en el
-    threadpool para no bloquear el bucle asincrono, traduciendo cada evento a un frame SSE. Los
-    `ping` del gestor se mandan como comentario SSE (`:ping`) para mantener viva la conexion.
-    Cierra limpio si el cliente desconecta o el Ralph termina."""
+    threadpool para no bloquear el bucle asincrono. Cada evento del gestor lleva un `tipo` que es
+    el NOMBRE del evento SSE; el resto de sus claves es el `data` (mensaje -> `{delta, fin?}`,
+    estado -> `{estado}`). Los `ping` del gestor se mandan como comentario SSE (`:ping`) para
+    mantener viva la conexion. Cierra limpio si el cliente desconecta o el Ralph termina."""
     if not _autorizado(request):
         return _rechazo()
     ralph_id = request.path_params.get("ralph_id")
@@ -149,7 +150,8 @@ async def stream(request: Request) -> Response:
             if tipo == "ping":
                 yield ":ping\n\n"
             else:
-                yield _evento_sse(tipo, ev)
+                datos = {k: v for k, v in ev.items() if k != "tipo"}
+                yield _evento_sse(tipo, datos)
 
     return StreamingResponse(
         eventos(),

@@ -93,6 +93,14 @@ ENV_RALPH_PORT = "KENI_RALPH_PORT"
 ENV_MAX_RALPH = "KENI_MAX_RALPH"
 ENV_DEV_REPO = "KENI_DEV_REPO"
 
+# Listener del carril DEV (worker-dev): promocion REAL a `main` de la rama de una sugerencia.
+# Solo worker-dev (imagen del worker, con git+gh) lo levanta; el `back` lo alcanza por la red
+# interna con el bearer compartido y lo proxea (admin-gated), igual que el control de `daemons`.
+#   - KENI_DEV_URL: URL base con que el `back` alcanza el listener (def `http://worker-dev:8772`).
+#   - KENI_DEV_PORT: puerto del listener (interno, nunca por Traefik). Def 8772.
+ENV_DEV_URL = "KENI_DEV_URL"
+ENV_DEV_PORT = "KENI_DEV_PORT"
+
 # Observabilidad.
 ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 
@@ -530,6 +538,8 @@ MAX_JOBS_DEF = 4
 RALPH_PORT_DEF = 8771
 MAX_RALPH_DEF = 8
 DEV_REPO_DEF = "/repo"
+# Puerto del listener de promocion del carril dev (worker-dev), interno (nunca por Traefik).
+DEV_PORT_DEF = 8772
 # Pool Postgres: arranca pequeño (la mayoria de ops son cortas) y crece hasta el MAX. El MAX
 # (12) cubre con holgura los ~4 `lock_barrido` simultaneos (cada uno retiene una conexion
 # entera) + las leases por request del threadpool del back + los daemons. Subir si Postgres

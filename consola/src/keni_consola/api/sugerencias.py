@@ -7,12 +7,48 @@ lanzamiento de jobs viven en `keni_consola.sugerencias`. Errores en español, si
 
 from __future__ import annotations
 
+import logging
+
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, sugerencias
+from .. import config, cuenta_claude, generaciones, permisos, sugerencias
 from .._http_json import leer_json
+from ..observabilidad import NOMBRE_LOGGER
+
+_logger = logging.getLogger(NOMBRE_LOGGER)
+
+# Timeout del proxy a worker-dev para la promoción (fetch+rebase+push puede tardar).
+_TIMEOUT_PROMOVER = 120.0
+
+
+def _llamar_dev(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict]:
+    """Llama al listener de promoción de worker-dev (httpx sincrono; se invoca en el threadpool).
+
+    Devuelve (status, payload). Cualquier fallo de red/timeout se traduce a 502 con un payload
+    de error legible (la promoción degrada con mensaje, nunca casca)."""
+    import httpx
+
+    base = config.dev_url().rstrip("/")
+    bearer = cuenta_claude.bearer_efectivo()
+    url = f"{base}{ruta}"
+    cabeceras = {"Authorization": f"Bearer {bearer}"}
+    try:
+        with httpx.Client(timeout=_TIMEOUT_PROMOVER) as cliente:
+            if metodo == "GET":
+                r = cliente.get(url, headers=cabeceras)
+            else:
+                r = cliente.post(url, headers=cabeceras, json=json or {})
+        try:
+            payload = r.json()
+        except ValueError:
+            payload = {"ok": False, "detalle": "respuesta no JSON de worker-dev"}
+        return r.status_code, (payload if isinstance(payload, dict) else {"ok": False, "detalle": "payload inesperado"})
+    except httpx.HTTPError as e:
+        _logger.warning("fallo al alcanzar worker-dev (%s %s): %s", metodo, ruta, e)
+        return 502, {"ok": False, "detalle": "No se pudo contactar worker-dev para promover."}
 
 
 def _catalogos() -> dict[str, list[str]]:
@@ -173,18 +209,43 @@ async def checkpoint(request: Request) -> Response:
 
 
 async def promover(request: Request) -> Response:
-    """POST /api/sugerencias/{id}/promover -> `{ok, detalle}` (checkpoint humano → main)."""
+    """POST /api/sugerencias/{id}/promover -> `{ok, detalle, rama}` (checkpoint humano → main).
+
+    ADMIN-gated: promover ejecuta un `git push` REAL a `main`. PROXEA (httpx+bearer) al listener
+    de worker-dev (`KENI_DEV_URL`), que hace fetch+rebase+push de la rama de la sugerencia dentro
+    de su worktree. Solo desde estado `revision`; si worker-dev no responde, degrada con error
+    claro y NO mueve el kanban. Tras un push OK, marca la sugerencia `hecha`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin("Solo un administrador puede promover a main.")
     sugerencia_id = request.path_params["sugerencia_id"]
-    try:
-        resultado = sugerencias.promover(sugerencia_id)
-    except sugerencias.TransicionInvalida:
+    sug = sugerencias.obtener(sugerencia_id)
+    if sug is None:
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+    if sug["estado"] != "revision":
         return JSONResponse(
             {"ok": False, "detalle": "La sugerencia no está lista para promover."},
             status_code=400,
         )
-    if resultado is None:
-        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
-    return JSONResponse(resultado)
+
+    status, payload = await run_in_threadpool(
+        _llamar_dev, "POST", "/control/dev/promover", {"sugerencia_id": sugerencia_id}
+    )
+    if status != 200 or not payload.get("ok"):
+        detalle = payload.get("detalle") or payload.get("error") or "No se pudo promover la rama a main."
+        return JSONResponse({"ok": False, "detalle": detalle}, status_code=status if status >= 400 else 502)
+
+    # Push real OK: registra la decisión humana y mueve el kanban a `hecha`.
+    try:
+        local = sugerencias.promover(sugerencia_id)
+    except sugerencias.TransicionInvalida:
+        local = None
+    return JSONResponse({
+        "ok": True,
+        "detalle": payload.get("detalle") or "Rama promovida a main.",
+        "rama": payload.get("rama", ""),
+        "sugerencia": (local or {}).get("sugerencia"),
+    })
 
 
 RUTAS = [

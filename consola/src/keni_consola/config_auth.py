@@ -11,7 +11,9 @@ from ._config_comun import (
     ENV_CONTROL_PORT,
     ENV_CONTROL_URL,
     ENV_COOKIE_SECURE,
+    ENV_DEV_PORT,
     ENV_DEV_REPO,
+    ENV_DEV_URL,
     ENV_HTTPS,
     ENV_MCP_BEARER,
     ENV_MCP_USUARIO,
@@ -28,6 +30,7 @@ from ._config_comun import (
     ENV_SESION_HORAS,
     ENV_SESION_MAX_HORAS,
     ENV_TOKEN,
+    DEV_PORT_DEF,
     DEV_REPO_DEF,
     MAX_RALPH_DEF,
     RALPH_PORT_DEF,
@@ -171,6 +174,20 @@ def ralph_max() -> int:
 def dev_repo() -> str:
     """Clon git del repo sobre el que cada Ralph crea su worktree+rama (`KENI_DEV_REPO`, def `/repo`)."""
     return _crudo(ENV_DEV_REPO) or DEV_REPO_DEF
+
+
+def dev_puerto() -> int:
+    """Puerto del listener de promocion del carril dev (`KENI_DEV_PORT`, def 8772; >0)."""
+    puerto = _entero(ENV_DEV_PORT, DEV_PORT_DEF)
+    return puerto if puerto > 0 else DEV_PORT_DEF
+
+
+def dev_url() -> str:
+    """URL base con que el `back` alcanza el listener de worker-dev (`KENI_DEV_URL`).
+
+    Def `http://worker-dev:8772` (nombre del servicio en la red interna docker). El proxy admin
+    de `api/sugerencias.py` reenvia aqui con el bearer compartido para promover a `main`."""
+    return _crudo(ENV_DEV_URL) or "http://worker-dev:8772"
 
 
 def mcp_usuario() -> str | None:

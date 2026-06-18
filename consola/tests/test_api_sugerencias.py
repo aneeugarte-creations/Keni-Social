@@ -152,11 +152,5 @@ def test_checkpoint_cancelar_descarta(cliente, monkeypatch):
     assert r.json()["sugerencia"]["estado"] == "descartada"
 
 
-def test_promover_desde_estado_invalido_400(cliente):
-    sid = cliente.post("/api/sugerencias", json={"titulo": "Idea"}).json()["sugerencia"]["id"]
-    # `nueva` no es promovible (solo desde `revision`).
-    assert cliente.post(f"/api/sugerencias/{sid}/promover", json={}).status_code == 400
-
-
-def test_promover_inexistente_404(cliente):
-    assert cliente.post("/api/sugerencias/nope/promover", json={}).status_code == 404
+# La PROMOCIÓN a main es admin-gated y proxea a worker-dev: se prueba en
+# `test_api_sugerencias_promover.py` (cerrojo de rol, proxy parcheado, transición de kanban).

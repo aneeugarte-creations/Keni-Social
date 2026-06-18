@@ -107,7 +107,8 @@ def test_parser_text_delta_emite_mensaje_y_pone_activo():
     eventos = p.procesar_linea(_delta_texto("Hola"))
     tipos = [e["tipo"] for e in eventos]
     assert "mensaje" in tipos
-    assert {"tipo": "mensaje", "texto": "Hola"} in eventos
+    # Clave `delta` (contrato del front), no `texto`: el front anexa `data.delta`.
+    assert {"tipo": "mensaje", "delta": "Hola"} in eventos
     # Primer delta tambien dispara el cambio de estado a activo.
     assert {"tipo": "estado", "estado": rs.ESTADO_ACTIVO} in eventos
     assert p.estado == rs.ESTADO_ACTIVO
@@ -129,11 +130,67 @@ def test_parser_result_ok_emite_estado_esperando():
     assert p.estado == rs.ESTADO_ESPERANDO
 
 
+def test_parser_cierre_de_turno_emite_fin_antes_del_estado():
+    # Un turno con texto, al cerrar (result ok), emite `mensaje` con fin:true ANTES del estado:
+    # el front cierra la burbuja en curso y luego pasa a esperando.
+    p = rs.ParserRalph()
+    p.procesar_linea(_delta_texto("respuesta"))  # -> activo, hubo texto
+    eventos = p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
+    assert {"tipo": "mensaje", "delta": "", "fin": True} in eventos
+    # El fin precede al cambio de estado (orden de cierre limpio).
+    assert eventos.index({"tipo": "mensaje", "delta": "", "fin": True}) < eventos.index(
+        {"tipo": "estado", "estado": rs.ESTADO_ESPERANDO}
+    )
+
+
+def test_parser_turno_sin_texto_no_emite_fin():
+    # Un turno que no produjo texto del asistente (solo herramientas) no abre burbuja: sin fin.
+    p = rs.ParserRalph()
+    p.procesar_linea(json.dumps({"type": "system", "subtype": "init"}))  # -> activo, sin texto
+    eventos = p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
+    assert all(e["tipo"] != "mensaje" for e in eventos)
+    assert {"tipo": "estado", "estado": rs.ESTADO_ESPERANDO} in eventos
+
+
+def test_parser_cierre_por_error_emite_fin_si_hubo_texto():
+    p = rs.ParserRalph()
+    p.procesar_linea(_delta_texto("a medias"))  # -> activo, con texto
+    eventos = p.procesar_linea(json.dumps({"type": "result", "is_error": True}))
+    assert {"tipo": "mensaje", "delta": "", "fin": True} in eventos
+    assert {"tipo": "estado", "estado": rs.ESTADO_ERROR} in eventos
+
+
+def test_parser_multiturno_separa_turnos_con_fin():
+    # Flujo multi-turno reproducido desde el buffer: cada turno debe ser su propia burbuja.
+    # Turno 1, turno 2 -> dos `fin` y la secuencia de estados activo/esperando por turno.
+    p = rs.ParserRalph()
+    secuencia: list[dict] = []
+    # Turno 1.
+    secuencia += p.procesar_linea(_delta_texto("turno uno"))
+    secuencia += p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
+    # Turno 2 (el humano ya escribio; claude vuelve a emitir).
+    secuencia += p.procesar_linea(_delta_texto("turno dos"))
+    secuencia += p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
+
+    fines = [e for e in secuencia if e.get("fin")]
+    assert len(fines) == 2  # un cierre por turno con texto
+    deltas = [e["delta"] for e in secuencia if e["tipo"] == "mensaje" and not e.get("fin")]
+    assert deltas == ["turno uno", "turno dos"]
+    estados = [e["estado"] for e in secuencia if e["tipo"] == "estado"]
+    assert estados == [
+        rs.ESTADO_ACTIVO,
+        rs.ESTADO_ESPERANDO,
+        rs.ESTADO_ACTIVO,
+        rs.ESTADO_ESPERANDO,
+    ]
+    assert p.estado == rs.ESTADO_ESPERANDO
+
+
 def test_parser_nuevo_turno_reinicia_texto():
     p = rs.ParserRalph()
     p.procesar_linea(_delta_texto("primero"))
+    # El cierre del turno (result) limpia el acumulador; el siguiente turno arranca en blanco.
     p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
-    # Segundo turno: al volver a activo se limpia el acumulador de texto.
     p.procesar_linea(json.dumps({"type": "system", "subtype": "init"}))
     assert p.estado == rs.ESTADO_ACTIVO
     assert p.texto == ""

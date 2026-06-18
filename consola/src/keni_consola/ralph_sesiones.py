@@ -138,8 +138,13 @@ def estado_para_evento(evento: dict, estado_actual: str) -> str:
 class ParserRalph:
     """Consume la SALIDA stream-json de un `claude` interactivo y emite eventos semanticos.
 
-    `procesar_linea(linea)` devuelve una lista de eventos (dicts) a difundir a los suscriptores:
-      - `{"tipo": "mensaje", "texto": <delta>}` por cada `text_delta` del asistente (en vivo).
+    `procesar_linea(linea)` devuelve una lista de eventos (dicts) a difundir a los suscriptores;
+    sus claves son YA las del contrato SSE del frontend (el `tipo` es solo el discriminador, que
+    el worker usa como nombre de evento `mensaje`/`estado` y NO viaja en el `data`):
+      - `{"tipo": "mensaje", "delta": <fragmento>}` por cada `text_delta` del asistente (en vivo).
+      - `{"tipo": "mensaje", "delta": "", "fin": True}` al cerrar el turno (corta el mensaje en
+        curso del front; imprescindible para que el multi-turno no funda varios turnos en una
+        burbuja al reproducir el buffer).
       - `{"tipo": "estado", "estado": <nuevo>}` cuando cambia el estado del Ralph.
     PURO respecto a I/O: el hilo lector lo alimenta linea a linea. Tolerante: lineas vacias o
     no-JSON se ignoran (degradacion robusta). El `thinking` NO se difunde (irrelevante para el
@@ -171,13 +176,18 @@ class ParserRalph:
                     t = delta.get("text")
                     if isinstance(t, str) and t:
                         self.texto += t
-                        eventos.append({"tipo": "mensaje", "texto": t})
+                        eventos.append({"tipo": "mensaje", "delta": t})
 
         nuevo = estado_para_evento(evento, self.estado)
         if nuevo != self.estado:
+            anterior = self.estado
             self.estado = nuevo
-            if nuevo == ESTADO_ACTIVO:
-                # Nuevo turno arrancando: reinicia el acumulador de texto del turno.
+            if anterior == ESTADO_ACTIVO and nuevo in (ESTADO_ESPERANDO, ESTADO_ERROR):
+                # Cierra el turno: si hubo texto, corta el mensaje en curso del front (un `fin`
+                # por turno con texto, para que cada turno sea su propia burbuja al reproducir el
+                # buffer) y limpia el acumulador para el siguiente turno.
+                if self.texto:
+                    eventos.append({"tipo": "mensaje", "delta": "", "fin": True})
                 self.texto = ""
             eventos.append({"tipo": "estado", "estado": nuevo})
         return eventos
