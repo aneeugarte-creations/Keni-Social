@@ -132,10 +132,20 @@ describe("CeldaDeRejilla — evento UNA vez + titularidad real (coherente con Pa
     expect(screen.queryByText("Roger")).toBeNull();
   });
 
-  it("un evento que nadie ha cogido sale como «Por cubrir»", () => {
+  it("evento sin coger pero con alguien de TURNO en la franja → «Cubierto» (lo cubre el turno)", () => {
+    renderCelda({
+      personas: [turno({ id: "tr-roger", miembro_id: "u-roger", miembro_nombre: "Roger" })],
+      eventos: [itemEvento([], { titulo: "Amistoso sin dueño" })],
+    });
+    expect(screen.getByText("Amistoso sin dueño")).toBeInTheDocument();
+    expect(screen.getByText("Cubierto")).toBeInTheDocument();
+    expect(screen.queryByText("Sin cubrir")).toBeNull();
+  });
+
+  it("evento sin coger y SIN turno en la franja → «Sin cubrir» (hueco real)", () => {
     renderCelda({ eventos: [itemEvento([], { titulo: "Amistoso sin dueño" })] });
     expect(screen.getByText("Amistoso sin dueño")).toBeInTheDocument();
-    expect(screen.getByText("Por cubrir")).toBeInTheDocument();
+    expect(screen.getByText("Sin cubrir")).toBeInTheDocument();
   });
 });
 

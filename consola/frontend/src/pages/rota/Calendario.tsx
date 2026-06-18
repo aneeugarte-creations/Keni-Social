@@ -324,11 +324,13 @@ export function Calendario({
   const inicio = semana?.inicio ?? coberturaQ.data?.inicio ?? dias[0] ?? "";
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
-  // Eventos coverables sin nadie que los coja: el descubierto de la semana, de un vistazo en la
-  // cabecera (el dato ya se deriva en `cubridoresPorEvento`).
-  const nPorCubrir = eventosCobertura.filter(
-    (e) => (cubridoresPorEvento.get(e.id) ?? []).length === 0,
-  ).length;
+  // «Sin cubrir» = hueco REAL: ni lo cogió nadie NI hay turno en su franja ese día. Si hay turno,
+  // lo cubre quien esté de turno (no cuenta como hueco). Mismo criterio que pinta el chip.
+  const nSinCubrir = eventosCobertura.filter((e) => {
+    if ((cubridoresPorEvento.get(e.id) ?? []).length > 0) return false;
+    const franjaId = franjaIdParaHoraEvento(e.hora, franjasSemana);
+    return !(franjaId && (personasPorCelda.get(`${franjaId}|${e.fecha}`) ?? []).length > 0);
+  }).length;
   const hoy = hoyCDMX();
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
   // en solo-lectura. La edición es inline: «Añadir turno» da de alta capacidad y el chip de
@@ -372,15 +374,15 @@ export function Calendario({
               </Badge>
             </Tooltip>
           )}
-          {nPorCubrir > 0 && (
+          {nSinCubrir > 0 && (
             <Tooltip
-              label={`${nPorCubrir} evento${nPorCubrir === 1 ? "" : "s"} sin cubrir esta semana.`}
+              label={`${nSinCubrir} evento${nSinCubrir === 1 ? "" : "s"} sin cubrir esta semana (sin nadie de turno en su franja).`}
             >
               <Badge
                 variant="outline"
                 className="gap-1 border-amber-500/50 font-normal text-amber-700 dark:text-amber-300"
               >
-                <UserPlus className="h-3.5 w-3.5" /> {nPorCubrir} por cubrir
+                <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
               </Badge>
             </Tooltip>
           )}

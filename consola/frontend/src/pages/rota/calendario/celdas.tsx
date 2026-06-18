@@ -38,10 +38,11 @@ import { ChipEventoCalendario, ChipTurnoCM } from "./chips";
 /**
  * Una celda (franja × día) de la rejilla. Dos planos separados (ya no anidados):
  *  - CAPACIDAD: quién está de turno esa franja (avatares con CRUD) + «Añadir turno».
- *  - EVENTOS: cada evento de esa franja UNA sola vez, con quién lo COGIÓ (titularidad real,
- *    la misma que el Panorama) o «Por cubrir» si nadie lo ha cogido.
- * La COBERTURA (quién cubre cada evento) se asigna desde el Panorama y aquí solo se REFLEJA
- * en los eventos. La CAPACIDAD (turnos) sí se gestiona aquí: avatares + alta con «Añadir turno».
+ *  - EVENTOS: cada evento de esa franja UNA sola vez, en 3 estados: lo COGIÓ alguien (claim,
+ *    titularidad explícita como en el Panorama) · «Cubierto» (nadie lo cogió pero hay turno en
+ *    la franja: lo cubre quien esté de turno) · «Sin cubrir» (ni claim ni turno = hueco real).
+ * La CAPACIDAD (turnos) se gestiona aquí (avatares + «Añadir turno»); coger un evento a nombre
+ * de alguien concreto se hace desde el Panorama y aquí se REFLEJA.
  */
 export function CeldaDeRejilla({
   lunes,
@@ -128,6 +129,7 @@ export function CeldaDeRejilla({
             <ChipEventoCalendario
               key={item.evento.id}
               item={item}
+              franjaCubierta={personas.length > 0}
               onClick={() => onEditarEvento(item.evento)}
               onCambio={onCambio}
             />

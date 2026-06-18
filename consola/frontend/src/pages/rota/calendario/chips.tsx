@@ -45,10 +45,13 @@ const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || n;
 /** Chip de evento dentro de un recuadro de persona (clicable: abre edición). */
 export function ChipEventoCalendario({
   item,
+  franjaCubierta,
   onClick,
   onCambio,
 }: {
   item: ItemEventoCalendario;
+  /** Hay alguien de TURNO en la franja de este evento ese día (lo cubre el turno). */
+  franjaCubierta: boolean;
   onClick: () => void;
   onCambio: () => void;
 }) {
@@ -74,9 +77,12 @@ export function ChipEventoCalendario({
           </Badge>
         )}
       </span>
-      {/* Quién lo COGIÓ: el mismo avatar + primer nombre que muestra el Panorama (titularidad
-          real, no quién está de turno), para que calendario y Panorama digan lo mismo. Si nadie
-          lo ha cogido → «Por cubrir», igual que en el tablero de Cobertura. */}
+      {/* Cobertura en 3 estados, de más a menos específico:
+          1) Lo COGIÓ alguien (claim) → ese avatar + primer nombre (la misma titularidad que el
+             Panorama; es la anulación explícita cuando quieres nombre y apellido / rol).
+          2) Nadie lo cogió pero HAY turno en su franja → «Cubierto»: lo cubre quien esté de
+             turno (las personas ya salen arriba en la celda; no las repetimos por evento).
+          3) Nadie lo cogió y NO hay turno en su franja → «Sin cubrir»: hueco real. */}
       {item.cubridores.length > 0 ? (
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           {item.cubridores.map((c) => (
@@ -86,9 +92,13 @@ export function ChipEventoCalendario({
             </span>
           ))}
         </span>
+      ) : franjaCubierta ? (
+        <span className="inline-flex w-fit items-center rounded border border-emerald-300 bg-emerald-50 px-1 text-[10px] font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+          Cubierto
+        </span>
       ) : (
         <span className="inline-flex w-fit items-center rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-          Por cubrir
+          Sin cubrir
         </span>
       )}
       {item.evento.cambiado && (
