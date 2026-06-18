@@ -184,21 +184,42 @@ def _global_de_etapa(env_flag: str) -> bool:
     return config.etapa_global_activa(env_flag)
 
 
-def _ajustes_por_marca() -> list[Ajuste]:
-    """Toggles `bool` por marca para «Investigación», «Producción» (virtuales: fan-out a sus
-    etapas) e «Ilustrar».
+# Fases EDITABLES por marca de cada proceso (ADR 0011, rev. fase×marca): cada fase tiene su
+# toggle `ENV::marca` independiente, así apagar una fase en una marca NO afecta a las demás
+# (p. ej. UnoTV apaga Crítica sin tocar el resto). Los pasos PRE-marca o cross-marca (Clasificar,
+# Cotejar, Traducir…) quedan SOLO globales: no se puede gatear por una marca que aún no existe.
+# El maestro VIRTUAL del proceso sigue como botón "enciende/apaga TODAS las fases de esta marca"
+# (fan-out vía `claves_fisicas`); estas entradas le dan el control granular por fase.
+_FASES_MARCA_INVESTIGACION: tuple[tuple[str, str], ...] = (
+    (config.ENV_PIPELINE_RECOLECTAR, "Recolectar"),
+    (config.ENV_PIPELINE_FUSIONAR, "Fusionar"),
+    (config.ENV_PRIORIZAR_PERFIL_IA, "Priorizar"),
+    (config.ENV_PIPELINE_VERIFICAR, "Verificar"),
+)
+_FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
+    (config.ENV_PIPELINE_REDACTAR, "Redactar"),
+    (config.ENV_PIPELINE_SUGERIR_HASHTAGS, "Sugerir hashtags"),
+    (config.ENV_PIPELINE_ILUSTRAR, "Ilustrar"),
+    (config.ENV_CRITICA_IA, "Crítica"),
+)
 
-    Apagar «Investigación» en una marca la excluye de la fase de pool (Recolectar→Verificar);
-    apagar «Producción» la deja sin copy automático; apagar «Ilustrar», sin imagen por IA. Se
-    generan en caliente desde el catálogo de marcas."""
+
+def _ajustes_por_marca() -> list[Ajuste]:
+    """Toggles `bool` por marca: el maestro VIRTUAL de cada proceso (fan-out a sus etapas) Y cada
+    FASE editable por separado (`ENV_FASE::marca`).
+
+    Apagar el maestro «Investigación»/«Producción» en una marca apaga TODO su proceso para esa
+    marca; apagar una fase concreta (Recolectar, Verificar, Redactar, Crítica…) la desvía SOLO en
+    esa marca, sin afectar a las demás. Se generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
+        # Maestro virtual del proceso (lo usa el control de cabecera y el "apaga todo").
         salida.append(
             Ajuste(
                 clave=config.clave_por_marca(config.ENV_INVESTIGACION, mid),
                 tipo="bool",
                 etiqueta=f"{nombre} · Investigación",
-                ayuda=f"Apaga la investigación de noticias (pool) solo para «{nombre}».",
+                ayuda=f"Apaga TODA la investigación de noticias (pool) solo para «{nombre}».",
                 grupo="automatizacion_marca_investigacion",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_RECOLECTAR),
             )
@@ -208,21 +229,34 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 clave=config.clave_por_marca(config.ENV_PRODUCCION, mid),
                 tipo="bool",
                 etiqueta=f"{nombre} · Producción",
-                ayuda=f"Apaga la producción de copy solo para «{nombre}».",
+                ayuda=f"Apaga TODA la producción de copy solo para «{nombre}».",
                 grupo="automatizacion_marca_produccion",
                 defecto=_global_de_etapa(config.ENV_PIPELINE_REDACTAR),
             )
         )
-        salida.append(
-            Ajuste(
-                clave=config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, mid),
-                tipo="bool",
-                etiqueta=f"{nombre} · Ilustrar",
-                ayuda=f"Apaga la imagen por IA solo para «{nombre}».",
-                grupo="automatizacion_marca_produccion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_ILUSTRAR),
+        # Cada fase del proceso, por separado (la divergencia por fase que permite la rev. fase×marca).
+        for flag, etapa in _FASES_MARCA_INVESTIGACION:
+            salida.append(
+                Ajuste(
+                    clave=config.clave_por_marca(flag, mid),
+                    tipo="bool",
+                    etiqueta=f"{nombre} · {etapa}",
+                    ayuda=f"Apaga la fase «{etapa}» solo para «{nombre}».",
+                    grupo="automatizacion_marca_investigacion",
+                    defecto=_global_de_etapa(flag),
+                )
             )
-        )
+        for flag, etapa in _FASES_MARCA_PRODUCCION:
+            salida.append(
+                Ajuste(
+                    clave=config.clave_por_marca(flag, mid),
+                    tipo="bool",
+                    etiqueta=f"{nombre} · {etapa}",
+                    ayuda=f"Apaga la fase «{etapa}» solo para «{nombre}».",
+                    grupo="automatizacion_marca_produccion",
+                    defecto=_global_de_etapa(flag),
+                )
+            )
     return salida
 
 

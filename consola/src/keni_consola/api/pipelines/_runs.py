@@ -76,6 +76,16 @@ def _ilustrar_off(marca: str) -> bool:
     return _etapa_off(config.ENV_PIPELINE_ILUSTRAR, marca)
 
 
+def _hashtags_off(marca: str) -> bool:
+    """Etapa Sugerir hashtags desactivada para `marca`."""
+    return _etapa_off(config.ENV_PIPELINE_SUGERIR_HASHTAGS, marca)
+
+
+def _critica_off(marca: str) -> bool:
+    """Nivel Crítica IA desactivado para `marca`."""
+    return _etapa_off(config.ENV_CRITICA_IA, marca)
+
+
 def _pieza_de(plat: dict) -> dict:
     """Forma reducida de una fila por plataforma (lista + derivación de etapas)."""
     return {
@@ -247,7 +257,7 @@ def _etapas_de_run(
     # tira la oculta conservando su ranura.
     if hashtags_ia:
         hash_estado, hash_detalle = "ok", ""
-    elif not config.sugerir_hashtags_activo():
+    elif _hashtags_off(marca):
         hash_estado, hash_detalle = _ESTADO_SALTADA, "Desactivada"
     else:
         hash_estado, hash_detalle = _ESTADO_SALTADA, ""
@@ -294,7 +304,7 @@ def _etapas_de_run(
     # --- Crítica IA: nivel opcional de la cadena de aprobación (tras los OK humanos), gateado
     # por `KENI_CRITICA_IA`. OFF -> "saltada" (Desactivada). ON -> "ok" si hay evidencia de que
     # corrió (job `critica-ia`), "pendiente" mientras no. Corre DESPUÉS de Aprobar.
-    if not config.critica_ia_activa():
+    if _critica_off(marca):
         cr_estado, cr_detalle = _ESTADO_SALTADA, "Desactivada"
     elif critica_ia:
         cr_estado, cr_detalle = "ok", ""

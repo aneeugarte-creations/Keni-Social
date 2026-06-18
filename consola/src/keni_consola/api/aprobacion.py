@@ -286,7 +286,7 @@ async def enviar_a_revision(request: Request) -> Response:
     # Cadena por defecto del feed: los dos OK humanos y, si `KENI_CRITICA_IA` esta on, el nivel
     # automatico "Crítica IA" AL FINAL (lo vota el critico con vision tras cerrar los humanos).
     etiquetas = colaboracion.cadena_simple()
-    if config.critica_ia_activa():
+    if config.etapa_activa(config.ENV_CRITICA_IA, str(actualizada.get("marca") or "")):
         etiquetas = [*etiquetas, colaboracion.ETIQUETA_CRITICA_IA]
     montar_cadena_aprobacion(pieza_id, plat or {}, etiquetas, con_cargos=False)
     return JSONResponse({"pieza": pieza_a_dict(actualizada)})

@@ -140,13 +140,15 @@ def lanzar_para_contenido(publicacion_id: str, twins: list[dict[str, Any]]) -> d
     hashtags en ninguna red (`cantidad` 0); o la marca no tiene biblioteca. Idempotente por la
     clave `sugerir-hashtags:{publicacion_id}`.
     """
-    if not config.sugerir_hashtags_activo() or not twins:
+    if not twins:
+        return None
+    marca = str(twins[0].get("marca") or "")
+    if not config.etapa_activa(config.ENV_PIPELINE_SUGERIR_HASHTAGS, marca):
         return None
     if not any(falta_hashtags(t) for t in twins):
         return None
     if any(_sugeridos_actuales(t) for t in twins):
         return None
-    marca = str(twins[0].get("marca") or "")
     redes = sorted({str(t.get("red") or "") for t in twins if t.get("red")})
     cantidad = cantidad_contenido(marca, redes)
     if cantidad <= 0:

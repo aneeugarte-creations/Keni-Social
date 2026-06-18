@@ -299,6 +299,7 @@ export function PanelPipeline({
   cola,
   esAdmin = true,
   claveMaestro,
+  marcaActiva = null,
   onAbrirFase,
 }: {
   /** Las fases del proceso, en orden de flujo. */
@@ -317,6 +318,11 @@ export function PanelPipeline({
    *  nada a la derecha; el maestro se surfacea como control único junto a las pestañas
    *  (`ControlesMaquina`), no aquí. */
   claveMaestro?: string;
+  /** Marca activa del workspace. Con una marca CONCRETA, el switch de cada fase opera sobre
+   *  `clave::marca` (su override por marca; el backend ya lo honra), así apagar una fase en una
+   *  marca NO afecta al resto. En "Todas" (`null`), el switch global. Las fases sin variante por
+   *  marca (p. ej. Clasificar, pre-marca) caen al global. */
+  marcaActiva?: string | null;
   /** Si se pasa, el click izquierdo de cada fila NAVEGA al detalle de esa fase (su subpágina
    *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
   onAbrirFase?: (fase: FasePipeline) => void;
@@ -373,7 +379,14 @@ export function PanelPipeline({
       <ol className="w-full">
         {fases.map((e, i) => {
           const claveEfectiva = efectivas[i];
-          const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
+          // Con marca concreta, el switch opera sobre la variante por marca (`clave::marca`) si
+          // existe en el catálogo; si no (fase pre-marca como Clasificar), cae al global. La
+          // ESTRUCTURA (dueña/seguidora/maestro) se sigue resolviendo por la clave global.
+          const claveSwitch =
+            claveEfectiva && marcaActiva && porClave.has(`${claveEfectiva}::${marcaActiva}`)
+              ? `${claveEfectiva}::${marcaActiva}`
+              : claveEfectiva;
+          const ajuste = claveSwitch ? porClave.get(claveSwitch) : undefined;
           // El switch de la fila es editable SOLO si la fase es la DUEÑA de su clave efectiva y esa
           // clave NO es el maestro de proceso (compartido): así Recolectar/Verificar/Redactar/Ilustrar
           // controlan cada uno SU clave y el maestro queda como control único de la cabecera. El resto

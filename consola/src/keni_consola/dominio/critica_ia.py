@@ -135,11 +135,11 @@ def lanzar_para_publicacion(pieza_id: str) -> dict[str, Any] | None:
     `critica-ia:{id}` evita un segundo run en curso; además se re-comprueba que el nivel IA
     siga pendiente (si ya fue votado o la cadena cambió, no encola).
     """
-    if not config.critica_ia_activa():
-        return None
     pub = repos.obtener_pieza(pieza_id)
     plat = repos.obtener_pieza_fila(pieza_id)
     if pub is None or plat is None:
+        return None
+    if not config.etapa_activa(config.ENV_CRITICA_IA, str(pub.get("marca") or "")):
         return None
     cadena = repos.listar_aprobaciones(pieza_id)
     if not colaboracion.humanos_aprobados_ia_pendiente(cadena):

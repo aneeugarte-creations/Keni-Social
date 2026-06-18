@@ -169,11 +169,12 @@ def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
     assert valor is True and fuente == "store"
 
 
-def test_toggles_por_marca_repartidos_por_proceso(store):
-    """Las excepciones por marca son los tres maestros CON fan-out/excepción, REPARTIDAS por
-    proceso (ADR 0011, C4): Investigación en `automatizacion_marca_investigacion`; Producción
-    y Arte en `automatizacion_marca_produccion`. Las etapas físicas de la tira (Recolectar/
-    Verificar/Redactar) son ajustes propios SIN excepción por marca: no aparecen ahí."""
+def test_toggles_por_marca_por_fase(store):
+    """Las excepciones por marca son, por proceso (ADR 0011 rev. fase×marca): el maestro VIRTUAL
+    del proceso (fan-out) MÁS cada FASE editable por separado, para que apagar una fase en una
+    marca NO afecte al resto. Investigación → `automatizacion_marca_investigacion`; Producción
+    (incl. Arte y Crítica) → `automatizacion_marca_produccion`. Los pasos pre-marca (Clasificar)
+    quedan SOLO globales: no se gatean por una marca que aún no existe."""
     def _bases(grupo: str) -> set[str]:
         return {
             a.clave.split(config.SEP_MARCA, 1)[0]
@@ -183,18 +184,20 @@ def test_toggles_por_marca_repartidos_por_proceso(store):
 
     investigacion = _bases("automatizacion_marca_investigacion")
     produccion = _bases("automatizacion_marca_produccion")
-    assert investigacion == {config.ENV_INVESTIGACION}
-    assert produccion == {config.ENV_PRODUCCION, config.ENV_PIPELINE_ILUSTRAR}
+    assert investigacion == {
+        config.ENV_INVESTIGACION,  # maestro virtual del proceso (fan-out)
+        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_FUSIONAR,
+        config.ENV_PRIORIZAR_PERFIL_IA, config.ENV_PIPELINE_VERIFICAR,
+    }
+    assert produccion == {
+        config.ENV_PRODUCCION,  # maestro virtual del proceso (fan-out)
+        config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
+        config.ENV_PIPELINE_ILUSTRAR, config.ENV_CRITICA_IA,
+    }
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()
-    # Por marca solo los virtuales + Arte; las físicas de la tira (sin fan-out) quedan fuera.
-    assert investigacion | produccion == {
-        config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ILUSTRAR
-    }
-    assert not (investigacion | produccion) & {
-        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
-        config.ENV_PIPELINE_REDACTAR,
-    }
+    # Clasificar (pre-marca) NO tiene toggle por marca.
+    assert config.ENV_CLASIFICAR_MARCA_IA not in (investigacion | produccion)
 
 
 def test_maquina_global_kill_switch(store):

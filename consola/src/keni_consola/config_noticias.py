@@ -884,8 +884,10 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PRIORIZAR_PERFIL_IA: priorizar_perfil_activo,
             ENV_PIPELINE_RECOLECTAR: recolectar_activo,
             ENV_PIPELINE_VERIFICAR: verificar_activo,
+            ENV_PIPELINE_SUGERIR_HASHTAGS: sugerir_hashtags_activo,
             ENV_PIPELINE_REDACTAR: pipeline_activo,
             ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
+            ENV_CRITICA_IA: critica_ia_activa,
         }[env_flag]
     except KeyError:
         raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None

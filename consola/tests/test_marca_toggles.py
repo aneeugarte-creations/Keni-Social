@@ -43,9 +43,13 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_INVESTIGACION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PRODUCCION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, "unotv") in claves
-    # Las etapas internas YA NO son toggles por marca (las agrupan los maestros).
-    assert config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv") not in claves
-    assert config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "unotv") not in claves
+    # Cada FASE editable es AHORA un toggle por marca (ADR 0011 rev. fase×marca): apagar una
+    # fase en una marca no afecta al resto.
+    assert config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv") in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "unotv") in claves
+    assert config.clave_por_marca(config.ENV_CRITICA_IA, "unotv") in claves
+    # Clasificar (pre-marca) NO: no se gatea por una marca que aún no existe.
+    assert config.clave_por_marca(config.ENV_CLASIFICAR_MARCA_IA, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     # Las excepciones de máquina por marca van REPARTIDAS por proceso (ADR 0011, C4):
     # Investigación en su grupo, Producción/Arte en el suyo.
@@ -69,6 +73,22 @@ def test_catalogo_expone_toggles_por_marca():
     lineas = ajustes_catalogo.por_clave(config.clave_por_marca(config.ENV_LINEAS, "unotv"))
     assert lineas is not None
     assert lineas.tipo == "texto" and lineas.grupo == "noticias_produccion_marca"
+
+
+def test_etapa_activa_critica_y_hashtags_por_marca(monkeypatch):
+    """Crítica y Sugerir hashtags honran `::marca` vía `config.etapa_activa` (antes solo global):
+    apagar la fase en una marca NO afecta a las demás."""
+    # Crítica IA: global OFF por defecto → ninguna marca la lleva.
+    _store(monkeypatch, {})
+    assert config.etapa_activa(config.ENV_CRITICA_IA, "unotv") is False
+    # Sugerir hashtags: global ON por defecto → todas, salvo override falsy por marca.
+    assert config.etapa_activa(config.ENV_PIPELINE_SUGERIR_HASHTAGS, "unotv") is True
+    _store(
+        monkeypatch,
+        {config.clave_por_marca(config.ENV_PIPELINE_SUGERIR_HASHTAGS, "unotv"): "0"},
+    )
+    assert config.etapa_activa(config.ENV_PIPELINE_SUGERIR_HASHTAGS, "unotv") is False  # excluida
+    assert config.etapa_activa(config.ENV_PIPELINE_SUGERIR_HASHTAGS, "nacion-gamer") is True  # intacta
 
 
 def test_catalogo_expone_publicacion_por_marca():

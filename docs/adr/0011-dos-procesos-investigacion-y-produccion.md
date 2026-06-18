@@ -85,6 +85,15 @@ El interruptor virtual "Generar" (que hoy escribe 5 claves de ambos mundos) se *
 los dos maestros. `etapa_activa(flag, marca)` sigue siendo la fuente única de verdad por
 etapa; los maestros son una capa de agrupación encima, no reemplazan los flags por etapa.
 
+> **Revisión (fase × marca).** El catálogo expone un toggle `::marca` **por cada fase
+> editable** (Recolectar, Fusionar, Priorizar, Verificar / Redactar, Sugerir hashtags,
+> Ilustrar, Crítica), no solo por proceso: apagar una fase en una marca (p. ej. UnoTV apaga
+> Crítica) **no afecta** al resto. El maestro virtual del proceso sigue existiendo como
+> "enciende/apaga TODAS las fases de esta marca" (fan-out vía `claves_fisicas`); las fases dan
+> el control granular. La página Contexto resuelve cada switch contra la **marca activa**
+> (`clave::marca`), cayendo al global en "Todas". Quedan SOLO globales los pasos **pre-marca**
+> (Clasificar) o cross-marca: no se puede gatear por una marca que aún no existe en el ítem.
+
 ### 5. Nomenclatura (se unifica)
 
 - **«Motor de noticias» = Investigación**; **«máquina de contenido» = Producción**. Se retira

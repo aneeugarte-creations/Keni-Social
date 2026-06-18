@@ -49,6 +49,9 @@ vi.mock("@/lib/api", () => ({
             // del global (ON), para comprobar que ControlesMaquina lee el de la marca activa.
             aj("KENI_INVESTIGACION::nacion-gamer", "Nación Gamer · Investigación", false),
             aj("KENI_PIPELINE_RECOLECTAR", "Recolectar"),
+            // Fase POR MARCA (rev. fase×marca): override de Recolectar para Nación Gamer en OFF,
+            // distinto del global (ON), para comprobar que el switch de fila lee el de la marca.
+            aj("KENI_PIPELINE_RECOLECTAR::nacion-gamer", "Nación Gamer · Recolectar", false),
             aj("KENI_PIPELINE_VERIFICAR", "Verificar"),
             aj("KENI_PRODUCCION", "Producción"),
             aj("KENI_PIPELINE_REDACTAR", "Redactar"),
@@ -71,6 +74,21 @@ function renderPanel() {
         fases={FASES_INVESTIGACION}
         queuePorTipo={{}}
         claveMaestro={MAESTRO_INVESTIGACION}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+/** PanelPipeline con una marca activa concreta: los switches de fila operan sobre `::marca`. */
+function renderPanelMarca(marca: string) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <PanelPipeline
+        fases={FASES_INVESTIGACION}
+        queuePorTipo={{}}
+        claveMaestro={MAESTRO_INVESTIGACION}
+        marcaActiva={marca}
       />
     </QueryClientProvider>,
   );
@@ -154,6 +172,16 @@ describe("PanelPipeline · toggles independientes", () => {
     ).toBeInTheDocument();
     // Las seguidoras YA NO muestran el texto «· sigue …» a la derecha.
     expect(screen.queryByText(/· sigue (al maestro|a Recolectar)/)).not.toBeInTheDocument();
+  });
+
+  it("con marca activa, el switch de cada fase opera sobre su override por marca (::marca)", async () => {
+    renderPanelMarca("nacion-gamer");
+    const sw = await screen.findByRole("switch", {
+      name: /Recolectar \(switch de la fase Recolectar\)/,
+    });
+    // El override por marca (RECOLECTAR::nacion-gamer) está OFF, distinto del global (ON):
+    // apagar Recolectar para Nación Gamer no toca a las demás marcas.
+    expect(sw).not.toBeChecked();
   });
 });
 

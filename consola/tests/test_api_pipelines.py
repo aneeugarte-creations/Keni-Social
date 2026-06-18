@@ -439,7 +439,8 @@ def test_critica_etapa_gateada_por_flag(cliente, monkeypatch):
     assert etapas["critica"]["estado"] == "saltada"
     assert etapas["critica"]["detalle"] == "Desactivada"
     # Con el flag encendido y sin job critica-ia correlacionado: pendiente (aún no corrió).
-    monkeypatch.setattr(config, "critica_ia_activa", lambda: True)
+    # Vía env: el display usa `config.etapa_activa` (flag real + override por marca), no el accesor.
+    monkeypatch.setenv("KENI_CRITICA_IA", "1")
     etapas_on = {e["clave"]: e for e in _run_por_titulo(cliente, "Tema crítica")["etapas"]}
     assert etapas_on["critica"]["estado"] == "pendiente"
 

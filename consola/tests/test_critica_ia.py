@@ -17,7 +17,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
-from keni_consola import auth, config, repos
+from keni_consola import auth, repos
 from keni_consola.dominio import colaboracion, critica_ia
 
 from .conftest import TOKEN_PRUEBA
@@ -123,8 +123,11 @@ def _crear_borrador(cli: TestClient, **campos) -> dict:
 
 
 def _activar_flag(monkeypatch, *, encolado=None):
-    """Enciende `KENI_CRITICA_IA` y (opcional) sustituye el lanzador del worker por un recorder."""
-    monkeypatch.setattr(config, "critica_ia_activa", lambda: True)
+    """Enciende `KENI_CRITICA_IA` y (opcional) sustituye el lanzador del worker por un recorder.
+
+    Se enciende vía env (no parcheando el accesor): el gate productivo es `config.etapa_activa`,
+    que lee el flag REAL (global + override `::marca`), no el accesor del barrel."""
+    monkeypatch.setenv("KENI_CRITICA_IA", "1")
     if encolado is not None:
         monkeypatch.setattr(critica_ia, "lanzar_para_publicacion", encolado)
 
@@ -155,7 +158,7 @@ def test_enviar_a_revision_anade_nivel_ia_al_final(entorno, monkeypatch):
 
 
 def test_sin_flag_la_cadena_es_de_dos_niveles(entorno, monkeypatch):
-    monkeypatch.setattr(config, "critica_ia_activa", lambda: False)
+    monkeypatch.setenv("KENI_CRITICA_IA", "0")
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)

@@ -146,6 +146,7 @@ export default function Contexto() {
             cola={cola.data}
             esAdmin={esAdmin}
             claveMaestro={MAESTRO_INVESTIGACION}
+            marcaActiva={marcaActiva}
             onAbrirFase={(fase: FasePipeline) =>
               navigate(`/maquina/contexto/investigacion/${slugFase(fase.nombre)}`)
             }
@@ -160,6 +161,7 @@ export default function Contexto() {
             cola={cola.data}
             esAdmin={esAdmin}
             claveMaestro={MAESTRO_PRODUCCION}
+            marcaActiva={marcaActiva}
             onAbrirFase={(fase: FasePipeline) =>
               navigate(`/maquina/contexto/produccion/${slugFase(fase.nombre)}`)
             }
