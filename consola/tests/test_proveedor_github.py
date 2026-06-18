@@ -10,12 +10,20 @@ from __future__ import annotations
 from keni_consola import proveedor_github as pg
 
 
-def test_regex_prompt_git_casa_la_pregunta_de_gh():
-    # En PTY gh pregunta esto ANTES del one-time code; el login debe detectarlo para
-    # responder (Enter) y no quedarse colgado esperando un code que nunca llega.
-    assert pg._RE_PROMPT_GIT.search(
-        "? Authenticate Git with your GitHub credentials? (Y/n)"
+def test_parsear_inicio_extrae_code_y_url_del_device_flow():
+    # Salida REAL de `gh auth login --web` SIN tty: imprime el one-time code y la url.
+    salida = (
+        "! First copy your one-time code: DE45-589C\n"
+        "Open this URL to continue in your web browser: https://github.com/login/device\n"
     )
+    inicio = pg.parsear_inicio(salida)
+    assert inicio["codigo"] == "DE45-589C"
+    assert inicio["url"] == "https://github.com/login/device"
+
+
+def test_codigo_completo_corta_la_lectura_con_salto():
+    # El corte de lectura exige el code SEGUIDO de espacio/salto (llegó entero).
+    assert pg._RE_CODIGO_COMPLETO.search("one-time code: DE45-589C\n")
 
 # Salida REAL de `gh auth status` con sesion activa (gh 2.x: "account <user>").
 _STATUS_LOGUEADO = """github.com

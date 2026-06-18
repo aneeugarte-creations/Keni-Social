@@ -29,6 +29,8 @@ import json
 import logging
 import os
 import re
+import select
+import signal
 import subprocess
 import threading
 import time
@@ -36,12 +38,9 @@ import uuid
 from dataclasses import dataclass, field
 
 from .cuenta_claude import (
-    _cerrar_fd,
     _cwd_neutro,
     _ejecutar,
-    _leer_disponible,
     _limpiar,
-    _matar,
     bearer_efectivo,  # reexport: el listener de control usa un unico bearer compartido
 )
 
@@ -84,9 +83,6 @@ _RE_CODIGO_COMPLETO = re.compile(
 )
 # Url de device por si gh la imprime (algunas versiones solo dicen "github.com").
 _RE_URL_DEVICE = re.compile(r"https://\S*github\.com/login/device\S*")
-# En PTY, gh pregunta esto ANTES de emitir el code y ESPERA respuesta: lo aceptamos con Enter
-# (default Yes) para que el flujo continúe hasta imprimir el one-time code.
-_RE_PROMPT_GIT = re.compile(r"Authenticate Git with your GitHub credentials", re.IGNORECASE)
 
 # `gh auth status` (texto): usuario y scopes del token.
 _RE_USUARIO = re.compile(r"Logged in to \S+ (?:account|as) (\S+)", re.IGNORECASE)
@@ -182,13 +178,14 @@ def logout() -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Login por DEVICE FLOW (PTY): iniciar (-> code+url) / confirmar / cancelar.   #
+# Login por DEVICE FLOW (sin TTY): iniciar (-> code+url) / confirmar / cancelar.#
 # --------------------------------------------------------------------------- #
 #
-# `gh auth login --web` es interactivo: necesita una TTY (de ahi el PTY), imprime el one-time
-# code, espera un Enter para arrancar y luego SONDEA solo hasta que el humano autoriza el code.
-# Lo modelamos como una SESION en memoria de vida corta:
-#   iniciar_login()      lanza gh, lee hasta ver el code, manda el Enter y devuelve {code,url}
+# `gh auth login --web` SIN tty: gh detecta entorno no interactivo, NO hace preguntas (en TTY
+# preguntaria "Authenticate Git with your GitHub credentials?" y se colgaria esperando), imprime
+# el one-time code + la url y SONDEA solo hasta que el humano autoriza el code (o caduca). Lo
+# modelamos como una SESION en memoria de vida corta:
+#   iniciar_login()      lanza gh, lee hasta ver el code y devuelve {code,url} (gh sigue vivo)
 #   confirmar_login(sid) espera a que el proceso gh cierre (el sondeo termino tras autorizar)
 #   cancelar_login(sid)  mata el proceso
 # El proceso `daemons` es de INSTANCIA UNICA, asi que el registro en memoria es seguro. Un
@@ -199,9 +196,8 @@ def logout() -> dict:
 class _SesionLogin:
     sid: str
     proc: subprocess.Popen
-    master_fd: int
     creada: float
-    buffer: str = ""  # todo lo leido del PTY (limpio de ANSI), para mostrar/depurar
+    buffer: str = ""  # todo lo leido de gh (limpio de ANSI), para mostrar/depurar
     codigo: str | None = None
     url: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -216,6 +212,47 @@ def _argv_login() -> list[str]:
     return [_GH, "auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"]
 
 
+def _matar_proc(proc: subprocess.Popen) -> None:
+    """Mata el arbol del proceso gh (best-effort) y cierra su stdout."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (OSError, ProcessLookupError):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    try:
+        if proc.stdout is not None:
+            proc.stdout.close()
+    except OSError:
+        pass
+
+
+def _leer_hasta(proc: subprocess.Popen, *, deadline: float, hasta: re.Pattern | None = None) -> str:
+    """Lee de `proc.stdout` (limpio de ANSI) hasta `deadline`, EOF, fin del proceso o —si se da
+    `hasta`— hasta que el texto acumulado case ese patron. NO bloquea: select sobre el pipe."""
+    if proc.stdout is None:
+        return ""
+    fd = proc.stdout.fileno()
+    trozos: list[str] = []
+    while time.monotonic() < deadline:
+        restante = max(0.0, deadline - time.monotonic())
+        listos, _, _ = select.select([fd], [], [], min(0.5, restante))
+        if listos:
+            try:
+                datos = os.read(fd, 4096)
+            except OSError:
+                break
+            if not datos:
+                break  # EOF: gh termino
+            trozos.append(datos.decode("utf-8", errors="replace"))
+            if hasta is not None and hasta.search(_limpiar("".join(trozos))):
+                break
+        elif proc.poll() is not None:
+            break  # gh salio y no queda salida pendiente
+    return _limpiar("".join(trozos))
+
+
 def _gc_sesiones() -> None:
     """Mata y olvida sesiones de login mas viejas que el TTL (abandonadas)."""
     ahora = time.monotonic()
@@ -226,7 +263,7 @@ def _gc_sesiones() -> None:
                 caducas.append(s)
                 _sesiones.pop(sid, None)
     for s in caducas:
-        _matar(s)
+        _matar_proc(s.proc)
 
 
 def _login_con_token(token: str) -> dict:
@@ -253,71 +290,39 @@ def _login_con_token(token: str) -> dict:
 def iniciar_login(*, token: str | None = None) -> dict:
     """Arranca el login de GitHub. Con `token` usa el fallback `--with-token`; si no, device flow.
 
-    Device flow: lanza `gh auth login --web` en un PTY, lee hasta ver el one-time code (o agotar
-    `_TIMEOUT_CODIGO`), manda el Enter para que gh empiece a SONDEAR y devuelve
-    {sesion, codigo, url, salida}. La sesion queda VIVA hasta `confirmar_login`/`cancelar_login`.
-    Si no aparece el code, mata el proceso y reporta la salida capturada.
+    Device flow (sin TTY): lanza `gh auth login --web`, lee hasta ver el one-time code (o agotar
+    `_TIMEOUT_CODIGO`) y devuelve {sesion, codigo, url, salida}. gh queda VIVO sondeando; la
+    sesion vive hasta `confirmar_login`/`cancelar_login`. Si no aparece el code, mata gh y reporta.
     """
-    import pty
-
     if token and token.strip():
         return _login_con_token(token)
 
     _gc_sesiones()
-    master_fd, slave_fd = pty.openpty()
     try:
         proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
             _argv_login(),
             cwd=_cwd_neutro(),
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # gh imprime el code por stderr: lo unimos a stdout
             text=False,
-            start_new_session=True,  # grupo propio: matar_arbol al cancelar/timeout
+            start_new_session=True,  # grupo propio: matar el arbol al cancelar/timeout
         )
     except FileNotFoundError:
-        os.close(master_fd)
-        os.close(slave_fd)
         return {"error": "gh no disponible en este servidor"}
-    os.close(slave_fd)  # el hijo ya tiene su copia; el padre lee/escribe por master_fd
 
-    # Lectura en ráfagas: en PTY gh pregunta "Authenticate Git with your GitHub credentials?"
-    # ANTES del code y espera respuesta; al verlo aceptamos el default (Enter) y seguimos
-    # leyendo hasta que aparezca el one-time code o se agote el timeout.
-    salida = ""
-    git_respondido = False
-    fin = time.monotonic() + _TIMEOUT_CODIGO
-    while time.monotonic() < fin:
-        salida += _leer_disponible(
-            master_fd, deadline=min(fin, time.monotonic() + 1.0), hasta=_RE_CODIGO_COMPLETO
-        )
-        if _RE_CODIGO_COMPLETO.search(salida):
-            break
-        if not git_respondido and _RE_PROMPT_GIT.search(salida):
-            try:
-                os.write(master_fd, b"\n")  # acepta el default (Yes) y continúa el flujo
-            except OSError:
-                pass
-            git_respondido = True
+    salida = _leer_hasta(
+        proc, deadline=time.monotonic() + _TIMEOUT_CODIGO, hasta=_RE_CODIGO_COMPLETO
+    )
     inicio = parsear_inicio(salida)
     if not inicio["codigo"]:
-        # Sin code: aborta y reporta. (gh pudo morir o pedir algo inesperado.)
-        s_tmp = _SesionLogin(sid="", proc=proc, master_fd=master_fd, creada=time.monotonic())
-        _matar(s_tmp)
+        _matar_proc(proc)
         return {"error": "no se obtuvo el one-time code de GitHub", "salida": salida.strip()}
-
-    # Manda el Enter: gh deja de esperar y arranca el sondeo del device flow mientras el humano
-    # autoriza el code en el navegador.
-    try:
-        os.write(master_fd, b"\n")
-    except OSError:
-        pass
 
     sid = uuid.uuid4().hex
     sesion = _SesionLogin(
         sid=sid,
         proc=proc,
-        master_fd=master_fd,
         creada=time.monotonic(),
         buffer=salida,
         codigo=inicio["codigo"],
@@ -341,11 +346,10 @@ def confirmar_login(sid: str) -> dict:
 
     with sesion.lock:
         deadline = time.monotonic() + _TIMEOUT_CONFIRMAR
-        cola = _leer_disponible(sesion.master_fd, deadline=deadline)
+        cola = _leer_hasta(sesion.proc, deadline=deadline)
         sesion.buffer += cola
-        try:
-            rc = sesion.proc.wait(timeout=max(0.0, deadline - time.monotonic()))
-        except subprocess.TimeoutExpired:
+        rc = sesion.proc.poll()
+        if rc is None:
             # gh sigue sondeando: deja la sesion viva para reintentar.
             return {
                 "ok": False,
@@ -355,7 +359,11 @@ def confirmar_login(sid: str) -> dict:
 
     with _sesiones_lock:
         _sesiones.pop(sid, None)
-    _cerrar_fd(sesion.master_fd)
+    try:
+        if sesion.proc.stdout is not None:
+            sesion.proc.stdout.close()
+    except OSError:
+        pass
     ok = rc == 0
     mensaje = cola.strip() or ("Cuenta de GitHub conectada." if ok else "El login termino con error.")
     return {"ok": ok, "mensaje": mensaje, "salida": cola.strip()}
@@ -367,5 +375,5 @@ def cancelar_login(sid: str) -> dict:
         sesion = _sesiones.pop(sid, None)
     if sesion is None:
         return {"ok": True}  # idempotente: ya no existia
-    _matar(sesion)
+    _matar_proc(sesion.proc)
     return {"ok": True}
