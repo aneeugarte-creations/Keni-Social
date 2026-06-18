@@ -80,9 +80,12 @@ export function PantallaInscribirMfa() {
               <Button
                 className="w-full"
                 disabled={enviando}
-                onClick={async () => {
+                onClick={() => {
+                  // La passkey ya está registrada: una recarga limpia relee `me` (sin caché,
+                  // `debe_inscribir_mfa=false`) y entra a la consola. Es a prueba de balas (no
+                  // depende de que la puerta de React transicione) para no atrapar al usuario.
                   setEnviando(true);
-                  await refrescar();
+                  window.location.reload();
                 }}
               >
                 {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

@@ -273,7 +273,17 @@ export async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {})
 
   let res: Response;
   try {
-    res = await fetch(`${BASE_API}${ruta}`, { method: metodo, headers, body, signal: controlador.signal });
+    // `cache: "no-store"`: las respuestas de la API son dinámicas y dependen de la sesión
+    // (p. ej. `GET /api/auth/me`); NUNCA deben servirse de la caché HTTP del navegador. Sin
+    // esto, un `me` cacheado deja la app con estado viejo (la puerta de inscripción MFA no
+    // transiciona tras registrar la passkey, porque relee `debe_inscribir_mfa` de la caché).
+    res = await fetch(`${BASE_API}${ruta}`, {
+      method: metodo,
+      headers,
+      body,
+      signal: controlador.signal,
+      cache: "no-store",
+    });
   } catch (e) {
     if (vencido) {
       throw new ApiError("La solicitud tardó demasiado. Vuelve a intentarlo.", 0);
