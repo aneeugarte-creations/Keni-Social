@@ -93,6 +93,18 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     setUsuario(usuario);
   }, []);
 
+  const entrarConPasskey = React.useCallback(async () => {
+    // Login passwordless: pedimos opciones públicas (el backend fija la cookie de challenge),
+    // corremos la ceremonia WebAuthn y enviamos la assertion. Si una credencial conocida casa,
+    // el backend abre la sesión real y devuelve el usuario.
+    const optionsJSON = await api.passkeyOpciones();
+    const assertion = await startAuthentication({
+      optionsJSON: optionsJSON as unknown as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+    });
+    const { usuario } = await api.passkeyVerify(assertion);
+    setUsuario(usuario);
+  }, []);
+
   const verificarConCodigo = React.useCallback(async (codigo: string) => {
     // Fallback sin passkey: un código de recuperación de un solo uso (no necesita challenge).
     const { usuario } = await api.mfaVerify({ codigo });
@@ -119,6 +131,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       cargando,
       iniciarSesion,
       verificarConPasskey,
+      entrarConPasskey,
       verificarConCodigo,
       cerrarSesion,
       refrescar,
@@ -128,6 +141,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       cargando,
       iniciarSesion,
       verificarConPasskey,
+      entrarConPasskey,
       verificarConCodigo,
       cerrarSesion,
       refrescar,

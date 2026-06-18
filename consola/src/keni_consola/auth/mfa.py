@@ -248,7 +248,10 @@ def opciones_login(
                 transports=transports or None,
             )
         )
-    opciones = generate_authentication_options(rp_id=rp_id, allow_credentials=permitir)
+    # Lista vacia -> `None` (OMITIR `allowCredentials`): login por credencial DESCUBRIBLE
+    # (passwordless). Un `allowCredentials: []` explicito lo interpretan algunos navegadores como
+    # "ninguna credencial permitida"; omitirlo es lo correcto para el flujo sin usuario.
+    opciones = generate_authentication_options(rp_id=rp_id, allow_credentials=permitir or None)
     return options_to_json(opciones), bytes_a_b64url(opciones.challenge)
 
 
@@ -285,6 +288,8 @@ def verificar_login(
     credencial: dict[str, Any],
     rp_id: str,
     origenes_esperados: list[str],
+    *,
+    require_user_verification: bool = False,
 ) -> int:
     """Verifica la assertion del navegador contra la credencial guardada; devuelve el nuevo sign_count.
 
@@ -292,10 +297,14 @@ def verificar_login(
     base64url/int). El challenge esperado viene de la cookie. Lanza la `Exception` de
     py_webauthn si la firma/origen/challenge no cuadran (la API -> 401).
 
-    Sobre sign_count: py_webauthn detecta un contador clonado (`require_user_verification`
-    aparte). Aqui pasamos `expected_sign_count` para que py_webauthn no rechace los
-    autenticadores que reportan 0 y nunca incrementan; la deteccion de regresion (posible clon)
-    la hace el llamante comparando el valor devuelto con el guardado, y lo trata como AVISO.
+    `require_user_verification`: en el 2o factor (tras la contrasena) NO se exige UV (`False`):
+    la contrasena ya fue el factor 1. En el login PASSWORDLESS (la passkey es la unica prueba)
+    se exige `True`: el autenticador DEBE haber verificado al usuario (biometria/PIN), de modo
+    que la passkey valga por dos factores (algo que tienes + algo que eres/sabes).
+
+    Sobre sign_count: py_webauthn detecta un contador clonado. Aqui pasamos `expected_sign_count`
+    para que no rechace autenticadores que reportan 0 y nunca incrementan; la deteccion de
+    regresion (posible clon) la hace el llamante comparando el valor devuelto con el guardado.
     """
     from webauthn import verify_authentication_response
 
@@ -307,7 +316,7 @@ def verificar_login(
         expected_origin=origenes_esperados or "",
         credential_public_key=b64url_a_bytes(credencial["public_key"]),
         credential_current_sign_count=int(credencial.get("sign_count", 0) or 0),
-        require_user_verification=False,
+        require_user_verification=require_user_verification,
     )
     return int(verificacion.new_sign_count)
 

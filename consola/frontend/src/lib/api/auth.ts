@@ -22,6 +22,17 @@ export const apiAuth = {
   login: (cuerpo: CuerpoLogin) =>
     peticion<RespuestaSesion | RespuestaLoginMfa>("/auth/login", { metodo: "POST", json: cuerpo }),
   logout: () => peticion<void>("/auth/logout", { metodo: "POST" }),
+
+  // --- Login PASSWORDLESS con llave de acceso (passkey) ---
+  // Atajo sin contraseña: el backend abre una ceremonia de autenticación sin sesión previa.
+  //   1) `passkeyOpciones` -> optionsJSON para `startAuthentication({optionsJSON})` (fija la
+  //      cookie de challenge). 503 si la maquinaria MFA está apagada.
+  //   2) `passkeyVerify(assertion)` con lo que devuelve el navegador -> abre la sesión y
+  //      devuelve `{usuario}`. 401 si ninguna llave casa; 429 si hay rate-limit por IP.
+  passkeyOpciones: () =>
+    peticion<OpcionesCeremoniaWebauthn>("/auth/passkey/opciones", { metodo: "POST" }),
+  passkeyVerify: (assertion: unknown) =>
+    peticion<RespuestaSesion>("/auth/passkey/verify", { metodo: "POST", json: { assertion } }),
   me: (signal?: AbortSignal) => peticion<RespuestaSesion>("/auth/me", { signal }),
   cambiarPassword: (cuerpo: CuerpoCambiarPassword) =>
     peticion<void>("/auth/cambiar-password", { metodo: "POST", json: cuerpo }),

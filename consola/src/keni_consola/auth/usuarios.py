@@ -663,6 +663,38 @@ def credencial_mfa_por_credential_id(usuario_id: str, credential_id: str) -> dic
     return None
 
 
+def credencial_mfa_global(credential_id: str) -> dict[str, Any] | None:
+    """Una passkey por su `credential_id` (UNIQUE global), SIN atarla a un usuario; None si no existe.
+
+    Para el login PASSWORDLESS (credencial descubrible): la assertion identifica la credencial por
+    su id y aqui resolvemos a QUIEN pertenece (`usuario_id`) + su clave publica, para verificar la
+    firma y abrir su sesion. La seguridad la da la verificacion criptografica de la assertion
+    contra `public_key`, no la confianza en el id que manda el cliente.
+    """
+    if not credential_id:
+        return None
+    con = db.conectar()
+    try:
+        f = con.execute(
+            "SELECT id, usuario_id, credential_id, public_key, sign_count, transports, nombre "
+            "FROM webauthn_credenciales WHERE credential_id = ?",
+            (credential_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if f is None:
+        return None
+    return {
+        "id": f["id"],
+        "usuario_id": f["usuario_id"],
+        "credential_id": f["credential_id"],
+        "public_key": f["public_key"],
+        "sign_count": int(f["sign_count"] or 0),
+        "transports": f["transports"] or "[]",
+        "nombre": f["nombre"] or "",
+    }
+
+
 def guardar_credencial_mfa(
     usuario_id: str,
     *,

@@ -67,6 +67,7 @@ function renderPost(pieza: Pieza, usuario: Partial<UsuarioSesion> = {}) {
     cargando: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
+    entrarConPasskey: vi.fn(),
     verificarConCodigo: vi.fn(),
     cerrarSesion: vi.fn(),
     refrescar: vi.fn(),

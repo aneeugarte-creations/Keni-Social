@@ -9,6 +9,8 @@ Endpoints (todos bajo `/api/auth`, CONTRATO con el frontend):
   - PATCH /api/auth/me      {nombre} -> 200 {nombre}; la persona edita SU nombre humano.
   - POST /api/auth/cambiar-password {password_actual, password_nueva} -> 204
     (sirve para el cambio FORZADO al primer acceso y el voluntario; valida la actual).
+  - POST /api/auth/passkey/opciones -> opciones WebAuthn de login DESCUBRIBLE (passwordless).
+  - POST /api/auth/passkey/verify {assertion} -> 200 {usuario}; login solo con la passkey.
 
 La barrera de credencial la aplica el middleware `SeguridadConsola`: `/api/auth/login`
 es PUBLICO (crea la sesion), el resto exige sesion o token de bootstrap. La cookie de
@@ -134,6 +136,10 @@ COOKIE_MFA_PENDIENTE = "keni_consola_mfa_pendiente"
 # Cookies de CHALLENGE WebAuthn (Fernet, atan `{challenge, usuario_id}`). Una por ceremonia.
 COOKIE_MFA_CHALLENGE_LOGIN = "keni_consola_mfa_reto_login"
 COOKIE_MFA_CHALLENGE_REGISTRO = "keni_consola_mfa_reto_registro"
+# Challenge del login PASSWORDLESS (credencial descubrible): aun NO sabemos quien es, asi que el
+# token NO ata usuario (uid=""); la assertion se verifica criptograficamente contra la clave
+# publica de la credencial que el navegador devuelva.
+COOKIE_MFA_CHALLENGE_PASSKEY = "keni_consola_mfa_reto_passkey"
 # Vida del estado pre-auth/challenge: 5 minutos para completar la ceremonia. Corta a proposito.
 _MFA_PENDIENTE_TTL_SEG = 300
 
@@ -719,6 +725,91 @@ async def mfa_verify(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# Login PASSWORDLESS por passkey (credencial descubrible, sin usuario/contrasena) #
+# --------------------------------------------------------------------------- #
+
+
+async def passkey_opciones(request: Request) -> Response:
+    """POST /api/auth/passkey/opciones: opciones WebAuthn de login SIN usuario previo (descubrible).
+
+    PUBLICO. La maquinaria MFA debe estar activa (hay clave). `allow_credentials` vacio: el
+    navegador ofrece las passkeys descubribles que el usuario tenga para este sitio. El challenge
+    se guarda en una cookie Fernet (5 min) NO atada a usuario; la identidad la prueba luego la
+    assertion. Fail-safe (503) si falta la clave de firma.
+    """
+    if not seguridad.mfa_maquinaria_activa():
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    try:
+        # Sin credenciales -> allow_credentials vacio -> login por credencial DESCUBRIBLE.
+        opciones_json, challenge = auth.opciones_login(_rp_id(), [])
+    except auth.MfaNoDisponible:  # pragma: no cover - opciones_login no firma; defensivo
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    token_reto = _emitir_token_challenge(challenge, "")
+    if token_reto is None:
+        _logger.warning("passkey/opciones: KENI_CONSOLA_MFA_KEY falta/es invalida (fail-safe).")
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    resp = Response(content=opciones_json, media_type="application/json")
+    _set_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_PASSKEY, token_reto)
+    return resp
+
+
+async def passkey_verify(request: Request) -> Response:
+    """POST /api/auth/passkey/verify: login passwordless. Verifica una assertion y ABRE la sesion.
+
+    PUBLICO. Cuerpo `{assertion: {...}}` (lo que devuelve `startAuthentication`). La credencial
+    se localiza GLOBALMENTE por su id; se verifica la firma contra su clave publica EXIGIENDO
+    user-verification (la passkey vale por dos factores: posesion + biometria/PIN). Si cuadra,
+    crea la sesion real. Aplica el limite por IP (igual que el login) contra abuso.
+    """
+    ip = _ip_cliente(request)
+    if _login_ip_bloqueada(ip):
+        return JSONResponse({"error": _MSG_LOGIN_IP_LIMITE}, status_code=429)
+    if not seguridad.mfa_maquinaria_activa():
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    challenge = _leer_token_challenge(request.cookies.get(COOKIE_MFA_CHALLENGE_PASSKEY), "")
+    if challenge is None:
+        resp = JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_PASSKEY)
+        return resp
+
+    datos = await leer_json(request)
+    assertion = datos.get("assertion")
+    if not isinstance(assertion, (dict, str)) or not assertion:
+        return JSONResponse({"error": "Falta la llave de acceso."}, status_code=400)
+
+    credential_id = auth.credential_id_de_respuesta(assertion)
+    credencial = auth.credencial_mfa_global(credential_id) if credential_id else None
+    if credencial is None:
+        _login_ip_registrar_fallo(ip)
+        return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
+
+    try:
+        nuevo_sign_count = auth.verificar_login(
+            assertion, challenge, credencial, _rp_id(), _rp_origenes(),
+            require_user_verification=True,
+        )
+    except Exception as exc:  # noqa: BLE001 - py_webauthn lanza varias; todas son KO
+        _login_ip_registrar_fallo(ip)
+        _logger.info("passkey/verify: assertion WebAuthn rechazada: %s", exc)
+        return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
+
+    if nuevo_sign_count and nuevo_sign_count < int(credencial.get("sign_count", 0) or 0):
+        _logger.warning(
+            "passkey/verify: sign_count retrocedio para la credencial %s (posible clon).",
+            credencial["id"],
+        )
+    auth.actualizar_sign_count_mfa(credencial["id"], nuevo_sign_count)
+
+    usuario = auth.obtener_usuario_por_id(credencial["usuario_id"])
+    if usuario is None:  # credencial huerfana (usuario borrado): trata como ceremonia KO
+        return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
+    resp = _respuesta_sesion_creada(usuario["id"], usuario)
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_PASSKEY)
+    return resp
+
+
+# --------------------------------------------------------------------------- #
 # MFA: enrolamiento de passkeys (requiere sesion COMPLETA)                      #
 # --------------------------------------------------------------------------- #
 
@@ -899,6 +990,9 @@ RUTAS = [
     # sesion completa.
     Route("/api/auth/mfa/login/opciones", mfa_login_opciones, methods=["POST"]),
     Route("/api/auth/mfa/verify", mfa_verify, methods=["POST"]),
+    # Login PASSWORDLESS por passkey (PUBLICOS, sin usuario/contrasena previos).
+    Route("/api/auth/passkey/opciones", passkey_opciones, methods=["POST"]),
+    Route("/api/auth/passkey/verify", passkey_verify, methods=["POST"]),
     Route("/api/auth/mfa/registro/opciones", mfa_registro_opciones, methods=["POST"]),
     Route("/api/auth/mfa/registro/verificar", mfa_registro_verificar, methods=["POST"]),
     Route("/api/auth/mfa/credenciales", mfa_credenciales, methods=["GET"]),

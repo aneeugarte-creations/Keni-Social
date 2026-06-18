@@ -18,7 +18,7 @@ const ERROR_CREDENCIALES = "Usuario o contraseña incorrectos.";
  * app continúa. Ocupa toda la pantalla (no muestra el shell hasta entrar).
  */
 export function PantallaLogin() {
-  const { iniciarSesion, verificarConPasskey, verificarConCodigo } = useSesion();
+  const { iniciarSesion, verificarConPasskey, entrarConPasskey, verificarConCodigo } = useSesion();
   const [usuario, setUsuario] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [verPassword, setVerPassword] = React.useState(false);
@@ -94,6 +94,28 @@ export function PantallaLogin() {
         if (!auto) {
           setError("Verificación cancelada. Vuelve a intentarlo con tu llave de acceso.");
         }
+      } else {
+        setError("No se pudo usar la llave de acceso. Vuelve a intentarlo.");
+      }
+    }
+  }
+
+  async function alEntrarPasswordless() {
+    if (enviando) return;
+    setEnviando(true);
+    setError(null);
+    try {
+      await entrarConPasskey();
+      // En éxito, el provider re-renderiza con la sesión y desmonta esta pantalla.
+    } catch (err) {
+      setEnviando(false);
+      if (err instanceof DOMException && err.name === "NotAllowedError") {
+        // Cancelado o sin gesto del usuario: no es un fallo real, solo un aviso suave.
+        setError("Verificación cancelada. Vuelve a intentarlo o usa tu contraseña.");
+      } else if (err instanceof ApiError && err.status === 401) {
+        setError("No reconocimos ninguna llave de acceso. Entra con tu contraseña.");
+      } else if (err instanceof ApiError) {
+        setError(err.message);
       } else {
         setError("No se pudo usar la llave de acceso. Vuelve a intentarlo.");
       }
@@ -323,6 +345,25 @@ export function PantallaLogin() {
             className="mt-3 h-11 w-full rounded-md border-neutral-900 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
           >
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
+          </Button>
+
+          {/* Atajo passwordless: la contraseña sigue siendo la base; esto entra directo con la
+              llave de acceso (Face ID, huella o teléfono) sin teclear contraseña. */}
+          <div className="flex items-center gap-3 text-xs text-neutral-400">
+            <span className="h-px flex-1 bg-neutral-200" />
+            <span className="uppercase tracking-[0.2em]">o</span>
+            <span className="h-px flex-1 bg-neutral-200" />
+          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={enviando}
+            onClick={alEntrarPasswordless}
+            className="h-11 w-full rounded-md text-xs uppercase tracking-[0.28em] text-neutral-600 hover:text-neutral-900"
+          >
+            <Fingerprint className="h-4 w-4" />
+            Entrar con llave de acceso
           </Button>
         </form>
       </div>

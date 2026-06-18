@@ -557,3 +557,75 @@ def test_superadmin_con_passkey_si_gestiona(entorno, monkeypatch):
         headers=_ORIGIN,
     )
     assert r.status_code == 201
+
+
+# --------------------------------------------------------------------------- #
+# 9) Login PASSWORDLESS por passkey (credencial descubrible, sin contraseña)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_passkey_login_abre_sesion(entorno, monkeypatch):
+    """Con clave y una passkey registrada, el login passwordless abre la sesion directamente:
+    opciones (sin usuario) -> assertion -> sesion. Mockeamos solo la verificacion criptografica."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"], credential_id="cred-1", sign_count=0)
+
+    c = _cli()
+    r_op = c.post("/api/auth/passkey/opciones", headers=_ORIGIN)
+    assert r_op.status_code == 200, r_op.text
+    assert api_auth.COOKIE_MFA_CHALLENGE_PASSKEY in c.cookies
+    # La credencial se localiza GLOBALMENTE por su id (no hay usuario previo).
+    monkeypatch.setattr(api_auth.auth, "verificar_login", lambda *a, **k: 3)
+    rv = c.post("/api/auth/passkey/verify", json={"assertion": {"id": "cred-1"}}, headers=_ORIGIN)
+    assert rv.status_code == 200, rv.text
+    assert rv.json()["usuario"]["usuario"] == "ana"
+    # La sesion real ya sirve.
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+
+
+def test_passkey_verify_exige_user_verification(entorno, monkeypatch):
+    """El verify passwordless pide user-verification a py_webauthn (la passkey vale por dos
+    factores). Comprobamos que se le pasa `require_user_verification=True`."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"], credential_id="cred-1")
+    c = _cli()
+    c.post("/api/auth/passkey/opciones", headers=_ORIGIN)
+    visto = {}
+    monkeypatch.setattr(
+        api_auth.auth,
+        "verificar_login",
+        lambda *a, **k: visto.update(k) or 1,
+    )
+    c.post("/api/auth/passkey/verify", json={"assertion": {"id": "cred-1"}}, headers=_ORIGIN)
+    assert visto.get("require_user_verification") is True
+
+
+def test_passkey_verify_credencial_desconocida_401(entorno, monkeypatch):
+    """Una assertion cuyo credential_id no existe en BD -> 401 (no abre sesion)."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("ana", CLAVE, "editor")  # sin passkey
+    c = _cli()
+    c.post("/api/auth/passkey/opciones", headers=_ORIGIN)
+    rv = c.post("/api/auth/passkey/verify", json={"assertion": {"id": "no-existe"}}, headers=_ORIGIN)
+    assert rv.status_code == 401
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
+
+
+def test_passkey_verify_sin_challenge_401(entorno, monkeypatch):
+    """Sin la cookie de challenge passwordless (no se pidieron opciones) -> 401."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"], credential_id="cred-1")
+    c = _cli()
+    rv = c.post("/api/auth/passkey/verify", json={"assertion": {"id": "cred-1"}}, headers=_ORIGIN)
+    assert rv.status_code == 401
+
+
+def test_passkey_opciones_sin_clave_503(entorno, monkeypatch):
+    """Sin clave de firma la maquinaria esta off: las opciones passwordless rehusan (503)."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    c = _cli()
+    assert c.post("/api/auth/passkey/opciones", headers=_ORIGIN).status_code == 503

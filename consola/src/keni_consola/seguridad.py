@@ -292,8 +292,17 @@ def _host_de_url(url: str) -> str | None:
 #     real. Que sean publicas NO debilita nada: un estado factor-1-only NUNCA alcanza otro `/api`
 #     (esos siguen exigiendo sesion COMPLETA). El enrolamiento (`/api/auth/mfa/registro/*`,
 #     `/api/auth/mfa/credenciales`, `/api/auth/mfa/disable`) NO es publico: exige sesion completa.
+#   - `/api/auth/passkey/opciones` y `/api/auth/passkey/verify`: login PASSWORDLESS (la passkey
+#     es la unica prueba, sin usuario/contrasena previos). `verify` exige user-verification y solo
+#     emite la sesion si la assertion cuadra criptograficamente contra la clave publica guardada.
 _RUTAS_API_PUBLICAS = frozenset(
-    {"/api/auth/login", "/api/auth/mfa/login/opciones", "/api/auth/mfa/verify"}
+    {
+        "/api/auth/login",
+        "/api/auth/mfa/login/opciones",
+        "/api/auth/mfa/verify",
+        "/api/auth/passkey/opciones",
+        "/api/auth/passkey/verify",
+    }
 )
 
 # GET de un objeto de media (`/api/media/<nombre>`) SIN credencial: los schedulers externos

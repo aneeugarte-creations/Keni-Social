@@ -103,7 +103,7 @@ describe("PuertaSesion · guard de sesión", () => {
 
     fireEvent.change(await screen.findByLabelText("Usuario"), { target: { value: "ana" } });
     fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "secreta123" } });
-    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     expect(await screen.findByText("CONTENIDO PROTEGIDO")).toBeInTheDocument();
     const login = capturas.find((c) => c.url.includes("/api/auth/login"));
@@ -116,7 +116,7 @@ describe("PuertaSesion · guard de sesión", () => {
 
     fireEvent.change(await screen.findByLabelText("Usuario"), { target: { value: "ana" } });
     fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: "mala" } });
-    fireEvent.click(screen.getByRole("button", { name: /entrar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
 
     expect(await screen.findByText("Usuario o contraseña incorrectos.")).toBeInTheDocument();
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();

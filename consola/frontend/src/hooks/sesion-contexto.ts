@@ -28,6 +28,12 @@ export interface ValorSesion {
    * WebAuthn (Face ID / huella / llave) y verifica la assertion contra el backend.
    */
   verificarConPasskey: () => Promise<void>;
+  /**
+   * Inicia sesión SIN contraseña con la LLAVE DE ACCESO (passkey passwordless): pide opciones
+   * públicas, corre la ceremonia WebAuthn y verifica la assertion; si casa, abre la sesión.
+   * Lanza `ApiError` (401 si ninguna llave es reconocida) o `DOMException` si se cancela.
+   */
+  entrarConPasskey: () => Promise<void>;
   /** Completa el login con un código de recuperación (fallback sin passkey). */
   verificarConCodigo: (codigo: string) => Promise<void>;
   /** Cierra sesión (POST /api/auth/logout) y vuelve al login. */
