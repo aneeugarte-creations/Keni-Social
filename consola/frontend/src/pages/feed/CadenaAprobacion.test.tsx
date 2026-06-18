@@ -105,4 +105,21 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.getByText(/lista para publicar/i)).toBeInTheDocument();
     expect(screen.getByText("2/2")).toBeInTheDocument();
   });
+
+  it("con la Crítica IA aprobada muestra su like (3er OK, el de la máquina), no solo el desenlace", () => {
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", decision: "aprobado", decisor_id: "leo", decisor_nombre: "Leo" }),
+        nivel({ id: "ia", nivel: 3, etiqueta: "Crítica IA", decision: "aprobado", cargo_requerido: "ia-critico", decisor_nombre: "Crítica IA" }),
+      ],
+      estado: "aprobado",
+      nivel_actual: "",
+    });
+    renderCadena(c);
+    expect(screen.getByText(/Crítica IA: aprobada/i)).toBeInTheDocument();
+    expect(screen.getByText(/lista para publicar/i)).toBeInTheDocument();
+    // El nivel IA NO cuenta como OK humano: siguen siendo 2/2.
+    expect(screen.getByText("2/2")).toBeInTheDocument();
+  });
 });

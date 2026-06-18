@@ -18,7 +18,7 @@ Notas de formato por red propias de UnoTV (lo que no cubre la ficha global de pl
 ## Instagram
 
 - Caption con contexto completo en 2-3 párrafos separados por línea en blanco; el primero es el gancho informativo. El parrafón de más de ~700 caracteres cae al cuartil peor: contexto sí, testamento no.
-- 4-5 hashtags: #PortalUnoTV #UnoTV + tema/lugar (#CDMX, #Seguridad, #Mundial2026).
+- 4-5 hashtags: #UnoTV + tema/lugar (#CDMX, #Seguridad, #Mundial2026).
 
 ## Facebook
 
@@ -29,7 +29,7 @@ Notas de formato por red propias de UnoTV (lo que no cubre la ficha global de pl
 ## TikTok
 
 - El copy es la descripción del video: una sola línea continua, sin saltos de párrafo.
-- 5 hashtags con los fijos de la casa: #PortalUnoTV #TikTokInforma #UnoTV + 2 de tema.
+- 5 hashtags con los fijos de la casa: #TikTokInforma #UnoTV + 2-3 de tema.
 - Aquí NO va la pregunta retórica (correlaciona con el cuartil peor; el dato directo manda). Naturaleza/fauna con dato duro y casos judiciales explicados son los temas top de la cuenta.
 
 ## YouTube

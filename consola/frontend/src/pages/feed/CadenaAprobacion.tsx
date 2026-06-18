@@ -61,6 +61,9 @@ export function CadenaAprobacion({
   const humanosOk = humanos.length > 0 && humanos.every((n) => n.decision === "aprobado");
   const criticaEnCurso = !!ia && humanosOk && ia.decision === "pendiente";
   const criticaRechazo = !!ia && ia.decision === "rechazado";
+  // Crítica IA aprobada = su "like" (el 3er OK, el de la máquina): se muestra explícito para que el
+  // equipo vea que la IA también dio el visto bueno, no solo el desenlace "Lista para publicar".
+  const criticaAprobada = !!ia && ia.decision === "aprobado";
   // Dos dislikes (de dos personas) rechazan la pieza; la regla vive en `aprobacion.ts`
   // (fuente única, junto a `esDislikeDecisivo`).
   const umbralDislike = umbralDislikes(cadena);
@@ -117,6 +120,12 @@ export function CadenaAprobacion({
         <p className={`mt-2 flex items-center gap-1.5 text-sm font-medium ${TEXTO_AVISO}`}>
           <Bot className="h-3.5 w-3.5" aria-hidden="true" />
           La crítica IA rechazó esta pieza; revisa el comentario.
+        </p>
+      )}
+      {criticaAprobada && (
+        <p className={`mt-2 flex items-center gap-1.5 text-sm font-medium ${TEXTO_OK}`}>
+          <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+          Crítica IA: aprobada
         </p>
       )}
 
