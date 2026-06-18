@@ -257,13 +257,12 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
     assert len(slides) == 3
 
 
-def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monkeypatch):
-    """`tipo: carrusel` SIN panel horneable (1 slide / tema único) = SUGERENCIA de formato.
+def test_procesar_copy_carrusel_sin_panel_no_flip_de_formato(entorno, monkeypatch):
+    """`tipo: carrusel` SIN panel horneable (1 slide / tema único) NO cambia el formato.
 
     El modelo eligió carrusel pero no hay panel multi-historia que hornear (menos de 2 slides,
-    sin catálogo de fotos): no se hornea ninguna placa, PERO el tema FLIP-ea a formato carrusel
-    como SUGERENCIA (las fotos las pone el equipo después) y fija las redes del carrusel (X/IG/FB). Reusa `formato`
-    (decisión del dueño): la sugerencia no se pierde aunque no se construya el carrusel."""
+    sin catálogo de fotos): no se hornea ninguna placa y el formato NO flip-ea. El post sigue
+    siendo foto; el equipo arma el carrusel a mano (acción «Carrusel» del feed)."""
     from keni_consola import redes
 
     _almacen_disco(monkeypatch)
@@ -283,21 +282,21 @@ def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monk
     )
     resultado = procesar(salida, None)
 
-    # Ningún slide horneado (no es panel), pero el formato SÍ flip-ea a carrusel (sugerencia)...
+    # Ningún slide horneado (no es panel) y el formato NO flip-ea: sigue siendo foto.
     assert llamadas == []
-    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
-    # ...y eso fija las redes del carrusel (X/IG; nunca yt/tiktok). X se conserva como en foto.
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_FOTO
+    # Las redes son las del lanzamiento (foto), sin acotar a las del carrusel.
     assert sorted(str(p["red"]) for p in resultado["piezas"]) == ["instagram", "x"]
-    # Sin panel horneado, el campo `carrusel` de la pieza queda vacío (las fotos llegan después).
+    # El campo `carrusel` de la pieza queda vacío.
     assert all(not str(p.get("carrusel") or "") for p in resultado["piezas"])
 
 
-def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno, monkeypatch):
-    """Caso biomas: el copy de un TEMA ÚNICO sugiere `tipo: carrusel` SIN clave `slides`.
+def test_procesar_copy_carrusel_de_tema_unico_sin_slides_no_flip(entorno, monkeypatch):
+    """Un TEMA ÚNICO que sugiere `tipo: carrusel` SIN clave `slides` NO cambia el formato.
 
-    No hay nada que hornear (es un explainer, no un panel multi-historia), pero la SUGERENCIA se
-    registra: el tema pasa a formato carrusel (a la espera de que el equipo suba las fotos) y fija
-    las redes del carrusel (X/IG/FB). Es el cableado que conecta el `tipo` del modelo con el formato de la pieza."""
+    No hay nada que hornear (es un explainer, no un panel multi-historia) y la sugerencia ya NO
+    flip-ea el formato: el post sigue siendo foto y el equipo decide el carrusel a mano (acción
+    «Carrusel» del feed)."""
     from keni_consola import redes
 
     _almacen_disco(monkeypatch)
@@ -316,7 +315,7 @@ def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno
     resultado = procesar(salida, None)
 
     assert llamadas == []  # nada que hornear
-    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_FOTO
     assert sorted(str(p["red"]) for p in resultado["piezas"]) == ["facebook", "instagram", "x"]
     assert all(not str(p.get("carrusel") or "") for p in resultado["piezas"])
 

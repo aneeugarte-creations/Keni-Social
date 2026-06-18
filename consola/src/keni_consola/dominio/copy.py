@@ -339,7 +339,6 @@ def crear_publicaciones_desde_piezas(
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     slides_carrusel: list[dict[str, str]] | None = None,
-    sugiere_carrusel: bool = False,
 ) -> list[dict[str, object]]:
     """Crea UNA pieza (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -372,10 +371,9 @@ def crear_publicaciones_desde_piezas(
     `imagen`/`imagen_fuente` + el `copy_in` paraguas). Degradación honesta: si NINGÚN slide
     se pudo componer (o no hay tema), todo sigue como post normal de foto.
 
-    `sugiere_carrusel` (tema ÚNICO): el modelo eligió `tipo=carrusel` PERO sin slides que hornear
-    (no es un panel multi-historia, no hay catálogo de fotos). Es una SUGERENCIA de formato: con
-    tema, el `contenido` FLIP-ea a formato carrusel (y se acota a IG/FB) y queda esperando que el
-    equipo suba las fotos en diferido; el campo `carrusel` de los borradores queda vacío por ahora.
+    El formato carrusel SOLO se fija cuando hay slides HORNEADOS. Una sugerencia de carrusel del
+    modelo sin panel horneable (tema único, sin catálogo de fotos) NO cambia el formato: el post
+    sigue siendo foto y el equipo arma el carrusel a mano (acción «Carrusel» del feed).
     """
     creadas: list[dict[str, object]] = []
     # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
@@ -387,13 +385,11 @@ def crear_publicaciones_desde_piezas(
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
         )
-    # CARRUSEL: el modelo eligió `tipo=carrusel`. DOS caminos hasta el formato carrusel:
-    #   - PANEL multi-historia (`slides_carrusel`): hornea una placa por sub-historia (titular +
-    #     su foto) y arma el `carrusel` de la pieza; los borradores llevan los slides tras la portada.
-    #   - SUGERENCIA de un tema ÚNICO (`sugiere_carrusel`, sin slides): no hay fotos que hornear, así
-    #     que el tema FLIP a formato carrusel COMO SUGERENCIA y queda esperando que el equipo suba
-    #     las fotos en diferido (o el motor de arte si su toggle está activo).
-    # En AMBOS el formato manda las redes (carrusel -> IG/FB; la pieza de X del copy unificado se omite).
+    # CARRUSEL: el modelo eligió `tipo=carrusel` y emitió un PANEL multi-historia (`slides_carrusel`):
+    # se hornea una placa por sub-historia (titular + su foto) y se arma el `carrusel` de la pieza;
+    # los borradores llevan los slides tras la portada. SOLO esto cambia el formato a carrusel (y con
+    # él las redes -> IG/FB). Una sugerencia de carrusel SIN panel horneable no flip-ea nada: el post
+    # sigue siendo foto y el equipo arma el carrusel a mano.
     carrusel_json = ""
     if slides_carrusel and publicacion_id:
         slides_horneados: list[dict[str, str]] = []
@@ -423,9 +419,10 @@ def crear_publicaciones_desde_piezas(
                 "copy: carrusel sin slides componibles; queda como sugerencia de formato — tema %s",
                 publicacion_id,
             )
-    # FLIP a formato carrusel si hay carrusel HORNEADO o el modelo lo SUGIRIÓ (tema único). Requiere
-    # tema (`publicacion_id`): el formato vive en el `contenido` padre, no en la fila por red.
-    quiere_carrusel = bool(publicacion_id) and (bool(carrusel_json) or sugiere_carrusel)
+    # FLIP a formato carrusel SOLO si hay carrusel HORNEADO (slides reales). Una sugerencia de
+    # formato sin slides ya NO flip-ea: el post sigue siendo foto hasta que el equipo arme el
+    # carrusel a mano. Requiere tema (`publicacion_id`): el formato vive en el `contenido` padre.
+    quiere_carrusel = bool(publicacion_id) and bool(carrusel_json)
     if quiere_carrusel:
         try:
             repos.actualizar_publicacion(publicacion_id, {"formato": redes.FORMATO_CARRUSEL})
@@ -611,15 +608,14 @@ def construir_procesar_copy(
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
         if avisos_voz:
             _avisar_voz(avisos_voz, publicacion_id=publicacion_id, marca=marca)
-        # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo`) Y emitió 2+ slides (un panel
-        # de una tarjeta no es panel). Cada slide resuelve su foto por NÚMERO contra el
-        # catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
-        # `tipo=carrusel` es la SUGERENCIA de formato del modelo (cualquier tema). Con 2+ slides
-        # (panel multi-historia) se resuelven a sus fotos y se hornean; sin slides (tema único) la
-        # sugerencia FLIP-ea el formato igual y las fotos llegan después.
-        sugiere_carrusel = parsed.get("tipo") == "carrusel"
+        # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo=carrusel`) Y emitió 2+ slides (un
+        # panel multi-historia; una sola tarjeta no es panel). Cada slide resuelve su foto por NÚMERO
+        # contra el catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
+        # Una sugerencia de carrusel SIN panel horneable NO cambia el formato: el post sigue siendo
+        # foto y el equipo arma el carrusel a mano (acción «Carrusel» del feed).
+        es_carrusel = parsed.get("tipo") == "carrusel"
         slides_resueltos: list[dict[str, str]] = []
-        if sugiere_carrusel:
+        if es_carrusel:
             urls = [str(f.get("imagen") or "") for f in (fotos_notas or [])]
             crudos = parsed.get("slides") or []
             if isinstance(crudos, list) and len(crudos) >= 2:
@@ -634,7 +630,7 @@ def construir_procesar_copy(
             verdicto=verdicto, origen=historial_id, autor=autor,
             publicacion_id=publicacion_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
-            slides_carrusel=slides_resueltos, sugiere_carrusel=sugiere_carrusel,
+            slides_carrusel=slides_resueltos,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
         # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper
