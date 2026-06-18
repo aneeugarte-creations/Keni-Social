@@ -73,14 +73,12 @@ from ._barrido import (
     ejecutar_avance,
     ejecutar_barrido,
     ejecutar_redactar,
-    ejecutar_sugerir_hashtags,
     ejecutar_investigacion,
     ejecutar_produccion,
     ejecutar_portal,
     ejecutar_verificar_clusters,
     iniciar_pipeline,
 )
-from ._sugerir_hashtags import contenidos_para_sugerir_hashtags
 from ._comun import (
     _BACKOFF_ETAPA_SEG,
     _DEFAULT_VERIFICACION_CRITERIOS,
@@ -277,8 +275,6 @@ __all__ = [
     "_intervalo_portal_segundos",
     "ejecutar_verificar_clusters",
     "ejecutar_redactar",
-    "ejecutar_sugerir_hashtags",
-    "contenidos_para_sugerir_hashtags",
     "ejecutar_ilustrar",
     "ejecutar_avance",
     "_intervalo_segundos",

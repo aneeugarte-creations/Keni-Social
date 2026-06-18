@@ -15,7 +15,6 @@ from keni_consola import hashtags_biblioteca as hb
 from keni_consola import repos
 from keni_consola.dominio import sugerir_hashtags as dom_sh
 from keni_consola.dominio.piezas import pieza_a_dict
-from keni_consola.pipeline_contenido import contenidos_para_sugerir_hashtags
 
 _MARCA = "unotv"
 
@@ -93,60 +92,7 @@ def test_falta_hashtags():
 
 
 # --------------------------------------------------------------------------- #
-# Selección del barrido — PURA (agrupa por contenido)                            #
-# --------------------------------------------------------------------------- #
-
-
-def _twin(
-    pid: str, red: str, contenido: str, sugeridos: list[str] | None = None,
-    estado: str = "borrador",
-) -> dict:
-    return {
-        "publicacion_id": pid, "red": red, "marca": _MARCA, "estado": estado,
-        "contenido": contenido, "hashtags_sugeridos": sugeridos or [],
-    }
-
-
-def test_seleccion_agrupa_por_contenido_una_entrada_por_publicacion():
-    pubs = [_twin("c1", "instagram", "sin hashtags"), _twin("c1", "x", "sin hashtags")]
-    elegidos = contenidos_para_sugerir_hashtags(pubs)
-    assert len(elegidos) == 1
-    pid, twins = elegidos[0]
-    assert pid == "c1" and {t["red"] for t in twins} == {"instagram", "x"}
-
-
-def test_seleccion_salta_si_ya_tiene_hashtags_o_sugerencia():
-    con_hashtag = [_twin("c1", "instagram", "lleva #mundial"), _twin("c1", "x", "lleva #mundial")]
-    assert contenidos_para_sugerir_hashtags(con_hashtag) == []
-    con_sugerencia = [_twin("c2", "instagram", "sin hashtags", sugeridos=["#mexico"])]
-    assert contenidos_para_sugerir_hashtags(con_sugerencia) == []
-
-
-def test_seleccion_incluye_todo_lo_editable():
-    # La sugerencia se ofrece en TODO estado editable (borrador, en revisión, programado): una
-    # pieza que se completa fuera de `borrador` —el caso real que llevó a teclear los hashtags a
-    # mano— también debe recibirla. Solo `publicado` queda fuera.
-    for estado in ("borrador", "en_revision", "programado"):
-        pubs = [_twin("c1", "instagram", "sin hashtags", estado=estado)]
-        assert [pid for pid, _ in contenidos_para_sugerir_hashtags(pubs)] == ["c1"], estado
-    # Gemelas en estados editables distintos caen en el mismo grupo del contenido.
-    mixto = [
-        _twin("c2", "instagram", "sin hashtags", estado="en_revision"),
-        _twin("c2", "facebook", "sin hashtags", estado="programado"),
-        _twin("c2", "x", "sin hashtags", estado="borrador"),
-    ]
-    pid, twins = contenidos_para_sugerir_hashtags(mixto)[0]
-    assert pid == "c2" and {t["red"] for t in twins} == {"instagram", "facebook", "x"}
-
-
-def test_seleccion_excluye_publicado():
-    # Lo ya PUBLICADO no se toca (no se puede cambiar el copy que ya salió).
-    fuera = [_twin("c1", "instagram", "sin hashtags", estado="publicado")]
-    assert contenidos_para_sugerir_hashtags(fuera) == []
-
-
-# --------------------------------------------------------------------------- #
-# Persistencia + gating — Postgres (fixture `entorno`)                           #
+# Persistencia + encadenado + gating — Postgres (fixture `entorno`)              #
 # --------------------------------------------------------------------------- #
 
 
@@ -169,26 +115,22 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     assert listas[0] == listas[1] == guardados
 
 
-def test_aplicar_sugerencia_cubre_estados_editables(entorno):
-    # Una pieza que se completa fuera de `borrador` (en revisión o ya programada) también recibe la
-    # sugerencia: era el caso real (carrusel completado a mano) donde la opción gris no aparecía.
-    pid, ids = _crear_contenido(["instagram", "x", "facebook"], "Cuerpo del post sin hashtags")
+def test_aplicar_sugerencia_cubre_borrador_y_revision(entorno):
+    # La sugerencia se encadena al copy (pieza en borrador), pero si una gemela ya avanzó a revisión
+    # mientras el job esperaba en la cola, también la recibe (la lista es idéntica entre redes).
+    pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     assert repos.transicionar_estado_pieza(ids[1], "borrador", "en_revision") is not None
-    assert repos.transicionar_estado_pieza(ids[2], "borrador", "en_revision") is not None
-    assert repos.transicionar_estado_pieza(ids[2], "en_revision", "programado") is not None
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional", "#mexico"])
-    assert guardados  # ni revisión ni programado bloquean la aplicación
-    # Las tres piezas (borrador + en revisión + programado) llevan la MISMA lista.
+    assert guardados  # ni borrador ni revisión bloquean la aplicación
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
-    assert listas[0] == listas[1] == listas[2] == guardados
+    assert listas[0] == listas[1] == guardados
 
 
-def test_aplicar_sugerencia_ignora_publicado(entorno):
-    # Lo ya PUBLICADO queda fuera: no se reescribe su sugerencia.
+def test_aplicar_sugerencia_ignora_programado_y_publicado(entorno):
+    # `falta_hashtags` se resuelve ANTES de programar: una pieza programada/publicada ya no se toca.
     pid, ids = _crear_contenido(["instagram"], "Cuerpo del post sin hashtags")
     repos.transicionar_estado_pieza(ids[0], "borrador", "en_revision")
     repos.transicionar_estado_pieza(ids[0], "en_revision", "programado")
-    repos.transicionar_estado_pieza(ids[0], "programado", "publicado")
     assert dom_sh.aplicar_sugerencia(pid, ["#mexico"]) == []
 
 
@@ -209,3 +151,34 @@ def test_pieza_a_dict_serializa_hashtags_sugeridos_vacio_por_defecto(entorno):
     _pid, ids = _crear_contenido(["instagram"], "Cuerpo sin hashtags")
     d = pieza_a_dict(repos.obtener_pieza(ids[0]))
     assert d["hashtags_sugeridos"] == []
+
+
+def test_copy_encadena_la_sugerencia_por_contenido(monkeypatch):
+    # El post-proceso del copy dispara la sugerencia EN CUANTO crea los borradores (un disparo por
+    # contenido, con sus gemelas como twins). Sustituye al barrido async. Piezas sin tema se ignoran.
+    from keni_consola.dominio import copy as dom_copy
+
+    llamadas: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        dom_sh, "lanzar_para_contenido",
+        lambda pid, twins: llamadas.append((pid, sorted(t["red"] for t in twins))),
+    )
+    piezas = [
+        {"publicacion_id": "c1", "red": "instagram", "contenido": "hola"},
+        {"publicacion_id": "c1", "red": "x", "contenido": "hola"},
+        {"publicacion_id": "c2", "red": "facebook", "contenido": "otro"},
+        {"publicacion_id": "", "red": "x", "contenido": "suelto"},  # sin tema: se ignora
+    ]
+    dom_copy._encolar_sugerencia_hashtags(piezas)
+    assert sorted(llamadas) == [("c1", ["instagram", "x"]), ("c2", ["facebook"])]
+
+
+def test_copy_encadenado_es_best_effort(monkeypatch):
+    # Un fallo encolando la sugerencia NUNCA rompe el post-proceso del copy (el copy ya está hecho).
+    from keni_consola.dominio import copy as dom_copy
+
+    def _explota(pid, twins):
+        raise RuntimeError("cola llena")
+
+    monkeypatch.setattr(dom_sh, "lanzar_para_contenido", _explota)
+    dom_copy._encolar_sugerencia_hashtags([{"publicacion_id": "c1", "red": "x", "contenido": "h"}])

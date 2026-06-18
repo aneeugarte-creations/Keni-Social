@@ -529,6 +529,32 @@ def _persistir_url_fuente(piezas: list[dict[str, object]], url_fuente: str) -> N
             continue
 
 
+def _encolar_sugerencia_hashtags(piezas: list[dict[str, object]]) -> None:
+    """Encola la sugerencia de hashtags de cada contenido recién redactado, EN CUANTO el copy se
+    completa: la sugerencia es PARTE de producir la pieza (vía cola), no un barrido aparte que
+    laggea. Una sugerencia READ-ONLY (`claude -p`) por tema, en gris para que un humano la acepte.
+
+    Los borradores recién creados YA son los `twins` del contenido (mismo formato que esperaba el
+    barrido). Idempotente: `lanzar_para_contenido` trae sus guards (flag, copy sin hashtags,
+    sugerencia ya calculada, biblioteca de la marca) y la clave `sugerir-hashtags:{id}`. Best-effort
+    por tema: un fallo NUNCA rompe el post-procesado (el copy ya está hecho).
+    """
+    from . import sugerir_hashtags as dom_sugerir  # tardío: evita el ciclo copy<->generar
+
+    por_contenido: dict[str, list[dict[str, object]]] = {}
+    for pub in piezas:
+        cid = str(pub.get("publicacion_id") or "").strip()
+        if cid:
+            por_contenido.setdefault(cid, []).append(pub)
+    for cid, twins in por_contenido.items():
+        try:
+            dom_sugerir.lanzar_para_contenido(cid, twins)
+        except Exception:  # noqa: BLE001 -- la sugerencia es un extra; nunca rompe el copy
+            _log.warning(
+                "copy: falló encolar la sugerencia de hashtags del tema %s", cid, exc_info=True
+            )
+
+
 # --------------------------------------------------------------------------- #
 # Callbacks de post-procesado (corren al completarse la generacion)            #
 # --------------------------------------------------------------------------- #
@@ -616,6 +642,9 @@ def construir_procesar_copy(
         # tema cuando se nida bajo uno existente).
         if url_fuente:
             _persistir_url_fuente(piezas, url_fuente)
+        # Sugerencia de hashtags ENCADENADA al copy: en cuanto los borradores existen, se encola
+        # su sugerencia (parte de producir la pieza, no un barrido async posterior).
+        _encolar_sugerencia_hashtags(piezas)
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
             "historial_id": historial_id,
