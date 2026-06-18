@@ -60,7 +60,7 @@ function LineaVacia({ texto }: { texto: string }) {
 /** Mini-tabla de desglose por TIPO de trabajo (de un motor). */
 function DesglosePorTipo({ filas }: { filas: EconomiaTipo[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Por tipo</CardTitle>
       </CardHeader>
@@ -109,7 +109,7 @@ function DesglosePorDia({ filas }: { filas: EconomiaDia[] }) {
     [filas],
   );
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Por día</CardTitle>
       </CardHeader>
@@ -200,31 +200,26 @@ function SerieEconomia({
   );
 }
 
-/** Economía de UN motor (desglose separado): totales + serie de 7 días + por tipo + por día.
- *  GLOBAL (ledger `gasto_ia`): la misma fuente para todo, así cuadra. Mismo layout y alturas
- *  mínimas para ambos motores, de modo que las dos columnas alinean aunque uno tenga menos datos. */
-function EconomiaMotor({
+/** Cabecera del motor + ámbito + KPIs (Trabajos IA · Tokens · Coste), reenfocables al día
+ *  elegido en la serie (`diaSel`); sin día elegido muestran el total del periodo. */
+function CabeceraKpis({
   motor,
   bloque,
+  diaSel,
   cargando,
 }: {
   motor: Proceso;
   bloque: EconomiaProcesoBloque | undefined;
+  diaSel: string | null;
   cargando: boolean;
 }) {
   const meta = PROC_META[motor];
   const porDia = bloque?.por_dia ?? [];
-  // Día seleccionado en la serie: reenfoca los KPIs a ese día (null = total del periodo).
-  const [diaSel, setDiaSel] = React.useState<string | null>(null);
-  const toggleDia = (dia: string) => setDiaSel((prev) => (prev === dia ? null : dia));
-
-  // KPIs: el día elegido (de la serie) o el total del periodo.
   const delDia = diaSel ? porDia.find((f) => f.dia === diaSel) : undefined;
   const items = delDia?.items ?? bloque?.total.items ?? 0;
   const tokens = delDia?.tokens ?? bloque?.total.tokens ?? 0;
   const coste = delDia?.coste_usd ?? bloque?.total.coste_usd ?? 0;
   const ambito = diaSel ? formatearDia(diaSel) : `últimos ${DIAS} días`;
-
   return (
     <section className="space-y-3">
       <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
@@ -250,31 +245,43 @@ function EconomiaMotor({
           </div>
         </>
       )}
-      <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <RotateCcw className="h-4 w-4 text-muted-foreground" />
-            Últimos {DIAS} días
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="min-h-[15rem] p-4 pt-2">
-          {cargando ? (
-            <Skeleton className="h-32 w-full" />
-          ) : porDia.length === 0 ? (
-            <LineaVacia texto="Sin actividad en la ventana" />
-          ) : (
-            <SerieEconomia
-              motor={motor}
-              filas={porDia}
-              diaSel={diaSel}
-              onToggle={toggleDia}
-            />
-          )}
-        </CardContent>
-      </Card>
-      <DesglosePorTipo filas={bloque?.por_tipo ?? []} />
-      <DesglosePorDia filas={porDia} />
     </section>
+  );
+}
+
+/** Serie de los últimos N días, clicable (cada día reenfoca los KPIs del motor). */
+function SerieCard({
+  motor,
+  bloque,
+  diaSel,
+  onToggle,
+  cargando,
+}: {
+  motor: Proceso;
+  bloque: EconomiaProcesoBloque | undefined;
+  diaSel: string | null;
+  onToggle: (dia: string) => void;
+  cargando: boolean;
+}) {
+  const porDia = bloque?.por_dia ?? [];
+  return (
+    <Card className="h-full">
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <RotateCcw className="h-4 w-4 text-muted-foreground" />
+          Últimos {DIAS} días
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-2">
+        {cargando ? (
+          <Skeleton className="h-32 w-full" />
+        ) : porDia.length === 0 ? (
+          <LineaVacia texto="Sin actividad en la ventana" />
+        ) : (
+          <SerieEconomia motor={motor} filas={porDia} diaSel={diaSel} onToggle={onToggle} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -309,6 +316,20 @@ export default function Economia() {
 
   const motores: Proceso[] = proceso ? [proceso] : MOTORES;
 
+  // Día elegido en la serie POR MOTOR (reenfoca sus KPIs); null = total del periodo.
+  const [diaSel, setDiaSel] = React.useState<Partial<Record<Proceso, string | null>>>({});
+  const toggleDia = (motor: Proceso, dia: string) =>
+    setDiaSel((prev) => ({ ...prev, [motor]: prev[motor] === dia ? null : dia }));
+
+  // Cada panel se renderiza como una FILA de 2 columnas (una por motor) que estiran a la misma
+  // altura (`items-stretch` + tarjetas `h-full`): así las dos columnas alinean panel a panel
+  // aunque un motor tenga menos datos (p. ej. Investigación vacía al filtrar por marca).
+  const filaCols = cn(
+    "grid grid-cols-1 gap-4 items-stretch",
+    motores.length > 1 && "xl:grid-cols-2 xl:gap-6",
+  );
+  const bloqueDe = (m: Proceso) => economia.data?.por_proceso?.[m];
+
   return (
     <>
       {/* Prefiltro de proceso (?proceso=): la página queda enfocada a ese motor. */}
@@ -342,18 +363,41 @@ export default function Economia() {
         )}
       </div>
 
-      {/* Economía por motor (desglose separado, GLOBAL). */}
-      <div
-        className={cn("grid grid-cols-1 gap-8", motores.length > 1 && "xl:grid-cols-2 xl:gap-6")}
-      >
-        {motores.map((m) => (
-          <EconomiaMotor
-            key={m}
-            motor={m}
-            bloque={economia.data?.por_proceso?.[m]}
-            cargando={economia.isPending}
-          />
-        ))}
+      {/* Economía por motor: cada panel en su propia fila de 2 columnas que alinean (simétrico). */}
+      <div className="space-y-4">
+        <div className={filaCols}>
+          {motores.map((m) => (
+            <CabeceraKpis
+              key={m}
+              motor={m}
+              bloque={bloqueDe(m)}
+              diaSel={diaSel[m] ?? null}
+              cargando={economia.isPending}
+            />
+          ))}
+        </div>
+        <div className={filaCols}>
+          {motores.map((m) => (
+            <SerieCard
+              key={m}
+              motor={m}
+              bloque={bloqueDe(m)}
+              diaSel={diaSel[m] ?? null}
+              onToggle={(dia) => toggleDia(m, dia)}
+              cargando={economia.isPending}
+            />
+          ))}
+        </div>
+        <div className={filaCols}>
+          {motores.map((m) => (
+            <DesglosePorTipo key={m} filas={bloqueDe(m)?.por_tipo ?? []} />
+          ))}
+        </div>
+        <div className={filaCols}>
+          {motores.map((m) => (
+            <DesglosePorDia key={m} filas={bloqueDe(m)?.por_dia ?? []} />
+          ))}
+        </div>
       </div>
     </>
   );
