@@ -794,6 +794,7 @@ def _migrar_columnas_programas(con: Any) -> None:
 #   - mfa_activo / mfa_recovery_codes (segundo factor PASSKEYS/WebAuthn, gateado por
 #     `KENI_CONSOLA_MFA`): ADITIVAS y con DEFAULT, asi una BD/usuario previos quedan SIN MFA
 #     (`mfa_activo=0`) y el login sigue siendo identico hasta que alguien enrole una passkey.
+#     `mfa_recovery_codes` es LEGADO (los recovery codes se retiraron): se mantiene a '[]'.
 #     La antigua columna TOTP `mfa_secret_cifrado` ya NO se anade (passkeys no guardan secreto
 #     en el servidor); en BDs viejas se DROPA en `_migrar_columnas_usuarios`.
 _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
@@ -1376,4 +1377,18 @@ def _migrar_renombre_entidades(con: Any) -> None:
     # 3) Índices (best-effort: evita duplicados con los que crea el DDL nuevo)
     for idx_viejo, idx_nuevo in _RENOMBRES_INDICES_ENTIDADES:
         con.execute(f"ALTER INDEX IF EXISTS {idx_viejo} RENAME TO {idx_nuevo}")  # noqa: S608 -- allowlist fija
+
+
+def _forzar_reset_password_existentes(con: Any) -> None:
+    """ONE-SHOT: marca a TODOS los usuarios existentes `debe_cambiar_password=1`.
+
+    Endurecimiento enterprise 2026-06: las contrasenas fijadas con la politica antigua no se
+    pueden auditar (solo guardamos el hash), asi que se fuerza a cada cuenta a fijar una nueva
+    (bajo la politica reforzada) en su proximo acceso. Combinado con el MFA obligatorio para
+    todos, la primera vez que cada persona vuelva a entrar cambia su contrasena Y inscribe su
+    passkey. Corre UNA sola vez por BD (journal); en una BD recien creada/tests la tabla esta
+    vacia -> no-op. Idempotente (solo toca las filas que aun esten a 0)."""
+    if not _tabla_existe(con, "usuarios"):
+        return
+    con.execute("UPDATE usuarios SET debe_cambiar_password = 1 WHERE debe_cambiar_password = 0")
 

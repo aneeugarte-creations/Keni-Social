@@ -113,11 +113,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- MFA PASSKEYS / WebAuthn (segundo factor, gateado por `KENI_CONSOLA_MFA`). ADITIVAS y
         -- con DEFAULT, de modo que un usuario legado nace SIN MFA (`mfa_activo=0`) y el login no
         -- cambia. Las CREDENCIALES (clave publica + sign_count) viven en `webauthn_credenciales`
-        -- (1:N); aqui solo el flag derivado y los recovery.
+        -- (1:N); aqui solo el flag derivado.
         --   - mfa_activo: 1 = el usuario tiene >=1 passkey (se enciende al registrar la primera
         --     y se apaga al borrar la ultima o al reset admin).
-        --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
-        --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
+        --   - mfa_recovery_codes: LEGADO. Los codigos de recuperacion se retiraron (la
+        --     recuperacion es por reset de MFA de un superadmin); la columna queda siempre '[]'.
         mfa_activo             INTEGER NOT NULL DEFAULT 0,
         mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]',
         -- `superadmin`: 1 = gestiona usuarios (`/api/usuarios`). Ortogonal al `rol`: un

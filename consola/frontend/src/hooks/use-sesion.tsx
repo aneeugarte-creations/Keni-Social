@@ -105,12 +105,6 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     setUsuario(usuario);
   }, []);
 
-  const verificarConCodigo = React.useCallback(async (codigo: string) => {
-    // Fallback sin passkey: un código de recuperación de un solo uso (no necesita challenge).
-    const { usuario } = await api.mfaVerify({ codigo });
-    setUsuario(usuario);
-  }, []);
-
   const cerrarSesion = React.useCallback(async () => {
     try {
       await api.logout();
@@ -132,7 +126,6 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,
-      verificarConCodigo,
       cerrarSesion,
       refrescar,
     }),
@@ -142,7 +135,6 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,
-      verificarConCodigo,
       cerrarSesion,
       refrescar,
     ],

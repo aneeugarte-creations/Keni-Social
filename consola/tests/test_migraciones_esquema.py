@@ -316,3 +316,28 @@ def test_resanear_traduccion_envenenada_resetea_solo_envenenados(pg):
     assert sano["traducido"]  # traducción real intacta
     assert sano["titulo_es"] == "Noticia traducida"
     assert repos.obtener_noticia_cluster("espanol")["titulo"] == "Noticia nacional"
+
+
+def test_forzar_reset_password_existentes_marca_todos(pg):
+    """0044: marca `debe_cambiar_password=1` en TODAS las cuentas existentes (endurecimiento
+    enterprise); las viejas no se pueden auditar, asi que se fuerza una contrasena nueva al
+    proximo acceso. Idempotente y aplicable sobre cuentas ya creadas."""
+    from keni_consola import auth
+    from keni_consola._db_core.migraciones_columnas import _forzar_reset_password_existentes
+
+    # Cuentas SIN obligacion de cambio (estado normal previo a la migracion).
+    auth.crear_usuario("ana", "clave-de-prueba", "editor", debe_cambiar_password=False)
+    auth.crear_usuario("jefe", "clave-de-prueba", "admin", debe_cambiar_password=False)
+    assert auth.obtener_usuario_por_id(
+        next(u["id"] for u in auth.listar_usuarios() if u["usuario"] == "ana")
+    )["debe_cambiar_password"] is False
+
+    con = motor_db.conectar_cruda()
+    try:
+        _forzar_reset_password_existentes(con)
+        con.commit()
+    finally:
+        con.close()
+
+    for u in auth.listar_usuarios():
+        assert auth.obtener_usuario_por_id(u["id"])["debe_cambiar_password"] is True

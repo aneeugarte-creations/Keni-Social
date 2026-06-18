@@ -19,7 +19,7 @@ from typing import Any
 from .. import db, motor_db
 from ..estados import ROL_ADMIN, ROL_EDITOR
 from . import _comun
-from .hashing import hash_en_falso, hashear_password, verificar_password
+from .hashing import hash_en_falso, hashear_password, necesita_rehash, verificar_password
 
 # Anti fuerza bruta: tras N fallos seguidos, el usuario queda bloqueado un rato.
 # OJO: el lockout POR CUENTA es, en si mismo, un vector de DoS (un tercero puede bloquear
@@ -539,6 +539,15 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "WHERE id = ?",
             (ahora_iso, fila["id"]),
         )
+        # REHASH-ON-LOGIN: si el hash guardado se derivo por debajo del coste objetivo (legado
+        # o `n` menor), lo RE-DERIVAMOS ahora que tenemos la contrasena en claro y verificada.
+        # Transparente para el usuario; sube el coste de las cuentas viejas sin pedir reset.
+        if necesita_rehash(fila["hash"]):
+            nuevo_salt, nuevo_hash = hashear_password(password)
+            con.execute(
+                "UPDATE usuarios SET salt = ?, hash = ? WHERE id = ?",
+                (nuevo_salt, nuevo_hash, fila["id"]),
+            )
         con.commit()
         marcas = _marcas_de_usuario(fila["id"], con=con)
         return {
@@ -591,15 +600,16 @@ def verificar_password_actual(usuario_id: str, password: str) -> bool:
 
 
 def estado_mfa(usuario_id: str) -> dict[str, Any] | None:
-    """Estado MFA crudo de un usuario: `{activo, recovery_codes, num_credenciales}`; None si no existe.
+    """Estado MFA crudo de un usuario: `{activo, num_credenciales}`; None si no existe.
 
-    Uso INTERNO de la capa MFA (la API lo usa para verificar/decidir). `activo` deriva de tener
-    >=1 passkey; `recovery_codes` es la lista HASHEADA. Nunca sale tal cual a la API.
+    Uso INTERNO de la capa MFA (la API lo usa para decidir). `activo` deriva de tener >=1
+    passkey. Los codigos de recuperacion se retiraron (la recuperacion es por reset de un
+    superadmin), asi que ya no se expone `recovery_codes`.
     """
     con = db.conectar()
     try:
         fila = con.execute(
-            "SELECT mfa_activo, mfa_recovery_codes FROM usuarios WHERE id = ?",
+            "SELECT mfa_activo FROM usuarios WHERE id = ?",
             (usuario_id,),
         ).fetchone()
         if fila is None:
@@ -613,7 +623,6 @@ def estado_mfa(usuario_id: str) -> dict[str, Any] | None:
     num = int(n["n"]) if n is not None else 0
     return {
         "activo": bool(fila["mfa_activo"]) and num > 0,
-        "recovery_codes": fila["mfa_recovery_codes"] or "[]",
         "num_credenciales": num,
     }
 
@@ -772,32 +781,6 @@ def borrar_credencial_mfa(usuario_id: str, credencial_id: str) -> bool:
             )
         con.commit()
         return True
-    finally:
-        con.close()
-
-
-def fijar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
-    """Fija la lista de recovery codes (JSON de hashes); True si existia.
-
-    Se llama UNA vez, al registrar la PRIMERA passkey (cuando se entregan los codigos en claro).
-    """
-    return actualizar_recovery_mfa(usuario_id, recovery_codes_hash_json)
-
-
-def actualizar_recovery_mfa(usuario_id: str, recovery_codes_hash_json: str) -> bool:
-    """Reescribe la lista de recovery codes (JSON de hashes); True si existia.
-
-    Se usa al CONSUMIR un codigo de recuperacion en el login (el gastado se elimina, un solo
-    uso) y al fijar los codigos al enrolar la primera passkey.
-    """
-    con = db.conectar()
-    try:
-        cur = con.execute(
-            "UPDATE usuarios SET mfa_recovery_codes = ? WHERE id = ?",
-            (recovery_codes_hash_json, usuario_id),
-        )
-        con.commit()
-        return cur.rowcount > 0
     finally:
         con.close()
 

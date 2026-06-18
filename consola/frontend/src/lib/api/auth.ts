@@ -18,7 +18,7 @@ export const apiAuth = {
   // `me` se llama al cargar la app: 200 => sesión viva; 401 => mostrar login.
   // Con MFA activo (flag `KENI_CONSOLA_MFA` ON), el login puede devolver `{mfa_required:true}`
   // en vez de `{usuario}`: el llamante debe entonces correr la ceremonia de passkey
-  // (`mfaLoginOpciones` -> `startAuthentication` -> `mfaVerify`) o un código de recuperación.
+  // (`mfaLoginOpciones` -> `startAuthentication` -> `mfaVerify`).
   login: (cuerpo: CuerpoLogin) =>
     peticion<RespuestaSesion | RespuestaLoginMfa>("/auth/login", { metodo: "POST", json: cuerpo }),
   logout: () => peticion<void>("/auth/logout", { metodo: "POST" }),
@@ -44,11 +44,10 @@ export const apiAuth = {
   // --- MFA (segundo factor PASSKEYS / WebAuthn; gateado por `KENI_CONSOLA_MFA`) ---
   // Ceremonia de LOGIN (usa la cookie pre-auth + challenge que el backend gestiona):
   //   1) `mfaLoginOpciones` -> opciones spec-JSON para `startAuthentication({optionsJSON})`.
-  //   2) `mfaVerify({assertion})` con la credencial que devuelve el navegador, O
-  //      `mfaVerify({codigo})` con un código de recuperación.
+  //   2) `mfaVerify({assertion})` con la credencial que devuelve el navegador.
   mfaLoginOpciones: () =>
     peticion<OpcionesCeremoniaWebauthn>("/auth/mfa/login/opciones", { metodo: "POST" }),
-  mfaVerify: (cuerpo: { assertion?: unknown; codigo?: string }) =>
+  mfaVerify: (cuerpo: { assertion: unknown }) =>
     peticion<RespuestaSesion>("/auth/mfa/verify", { metodo: "POST", json: cuerpo }),
   // Enrolamiento (requiere sesión completa): opciones de registro, verificar, listar, borrar.
   mfaRegistroOpciones: () =>

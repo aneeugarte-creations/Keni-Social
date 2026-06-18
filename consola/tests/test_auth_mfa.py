@@ -7,17 +7,19 @@ QUE SE CUBRE (y que NO):
   - Generacion de OPCIONES (registro y login): devuelven un challenge bien formado y siembran
     la cookie Fernet correspondiente; el challenge NO se confia desde el cliente.
   - Round-trip de la cookie de CHALLENGE (Fernet, atada al usuario + TTL).
-  - Recovery codes: un solo uso (entra una vez, falla a la segunda); fail-safe y reset admin.
+  - Obligatoriedad: global (`KENI_CONSOLA_MFA`), de admins (`KENI_CONSOLA_MFA_ADMIN`) y
+    per-usuario (`mfa_requerido`); gracia + reset admin; anti-lockout sin clave.
   - La cookie PRE-AUTH no abre endpoints protegidos.
   - Fail-safe (503) cuando falta `KENI_CONSOLA_MFA_KEY` con el flag ON.
+  - NO hay codigos de recuperacion (se retiraron): la recuperacion de cuenta es por reset de MFA
+    de un superadmin desde Usuarios.
 
   - NO se ejercita la verificacion criptografica REAL de una assertion/registration WebAuthn:
     eso exige un autenticador (Face ID / llave) que firme un challenge, imposible en CI sin
     hardware/virtual authenticator. En su lugar, MOCKEAMOS `auth.verificar_registro` /
     `auth.verificar_login` en la FRONTERA y comprobamos el FLUJO alrededor (persistencia de la
-    credencial, `mfa_activo`, entrega de recovery la primera vez, actualizacion del sign_count y
-    creacion de la sesion real). Lo que SI es real: las option builders de py_webauthn (generan
-    un challenge), el round-trip de la cookie y los recovery codes.
+    credencial, `mfa_activo`, actualizacion del sign_count y creacion de la sesion real). Lo que
+    SI es real: las option builders de py_webauthn (generan un challenge) y el round-trip de la cookie.
 
 Reusa el aislamiento de `entorno` (Postgres de pruebas; se salta si no hay) y las apps con
 TOKEN de prueba, igual que `test_auth.py`.
@@ -73,7 +75,7 @@ def _credencial_falsa(usuario_id: str, *, credential_id: str = "cred-1", sign_co
 def _registrar_passkey_via_api(c: TestClient, monkeypatch, *, credential_id="cred-1"):
     """Enrola una passkey por la API mockeando la verificacion criptografica en la frontera.
 
-    Devuelve la respuesta de `registro/verificar` (que trae los recovery la primera vez).
+    Devuelve la respuesta de `registro/verificar` (`{ok: true}`).
     """
     # Pedimos opciones (siembra la cookie de challenge real).
     r_op = c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN)
@@ -167,7 +169,7 @@ def test_opt_in_editor_con_passkey_su_login_eleva_sin_flag_global(entorno, monke
 # --------------------------------------------------------------------------- #
 
 
-def test_registro_passkey_guarda_credencial_y_entrega_recovery(entorno, monkeypatch):
+def test_registro_passkey_guarda_credencial_sin_recovery(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     u = auth.crear_usuario("ana", CLAVE, "editor")
@@ -176,9 +178,8 @@ def test_registro_passkey_guarda_credencial_y_entrega_recovery(entorno, monkeypa
 
     r = _registrar_passkey_via_api(c, monkeypatch)
     assert r.status_code == 200, r.text
-    cuerpo = r.json()
-    # La PRIMERA passkey entrega los recovery codes una sola vez.
-    assert len(cuerpo["recovery_codes"]) == auth.NUM_CODIGOS_RECUPERACION
+    # Ya NO se entregan recovery codes (se retiraron): la respuesta es solo {ok: true}.
+    assert r.json() == {"ok": True}
     # La credencial quedo persistida y el flag activo.
     estado = auth.estado_mfa(u["id"])
     assert estado["activo"] is True and estado["num_credenciales"] == 1
@@ -190,17 +191,16 @@ def test_registro_passkey_guarda_credencial_y_entrega_recovery(entorno, monkeypa
     assert cred["nombre"] == "Mi llave"
 
 
-def test_segunda_passkey_no_reentrega_recovery(entorno, monkeypatch):
+def test_segunda_passkey_tambien_sin_recovery(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     auth.crear_usuario("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)
-    _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-1")
+    r1 = _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-1")
     r2 = _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-2")
-    assert r2.status_code == 200
-    # La segunda passkey NO vuelve a entregar recovery codes.
-    assert "recovery_codes" not in r2.json()
+    assert r1.json() == {"ok": True} and r2.json() == {"ok": True}
+    assert "recovery_codes" not in r1.json() and "recovery_codes" not in r2.json()
 
 
 def test_login_eleva_y_opciones_devuelven_challenge(entorno, monkeypatch):
@@ -284,32 +284,22 @@ def test_verify_challenge_manipulado_es_401(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 3) Codigos de recuperacion: un solo uso (sin assertion)                      #
+# 3) Recovery codes RETIRADOS: la vía de `codigo` ya no existe                  #
 # --------------------------------------------------------------------------- #
 
 
-def test_recovery_code_funciona_una_sola_vez(entorno, monkeypatch):
+def test_verify_con_codigo_recuperacion_ya_no_funciona(entorno, monkeypatch):
+    """Los recovery codes se retiraron: `mfa/verify` con `{codigo}` (sin assertion) -> 400
+    (falta la llave). La recuperacion de cuenta es por reset de MFA de un superadmin."""
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    auth.crear_usuario("ana", CLAVE, "editor")
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
     c = _cli()
-    _login(c, "ana", CLAVE)
-    recovery = _registrar_passkey_via_api(c, monkeypatch).json()["recovery_codes"]
-    c.post("/api/auth/logout", headers=_ORIGIN)
-    codigo_recovery = recovery[0]
-
-    # 1er uso: entra (sin assertion, sin cookie de challenge: el recovery no la necesita).
-    c2 = _cli()
-    _login(c2, "ana", CLAVE)
-    rv = c2.post("/api/auth/mfa/verify", json={"codigo": codigo_recovery}, headers=_ORIGIN)
-    assert rv.status_code == 200, rv.text
-    c2.post("/api/auth/logout", headers=_ORIGIN)
-
-    # 2o uso del MISMO recovery: rechazado (un solo uso).
-    c3 = _cli()
-    _login(c3, "ana", CLAVE)
-    rv2 = c3.post("/api/auth/mfa/verify", json={"codigo": codigo_recovery}, headers=_ORIGIN)
-    assert rv2.status_code == 401
+    _login(c, "ana", CLAVE)  # eleva (tiene passkey)
+    rv = c.post("/api/auth/mfa/verify", json={"codigo": "ABCD-EFGH"}, headers=_ORIGIN)
+    assert rv.status_code == 400
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
 
 
 # --------------------------------------------------------------------------- #
@@ -407,7 +397,7 @@ def test_failsafe_login_rechaza_si_mfa_activo_pero_falta_clave(entorno, monkeypa
 
 
 # --------------------------------------------------------------------------- #
-# 7) Unit: round-trip de la cookie de challenge + recovery codes               #
+# 7) Unit: round-trip de la cookie de challenge                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -422,17 +412,6 @@ def test_unit_cookie_challenge_round_trip(monkeypatch):
     assert api_auth._leer_token_challenge(token, "u2") is None
     # Token corrupto -> None.
     assert api_auth._leer_token_challenge("basura", "u1") is None
-
-
-def test_unit_recovery_codes_un_solo_uso():
-    """Unit de la capa de recovery (sin BD): hash + consumo de un solo uso."""
-    codigos = auth.generar_codigos_recuperacion()
-    hash_json = auth.hashear_codigos_recuperacion(codigos)
-    ok, restantes = auth.verificar_codigo_recuperacion(codigos[0], hash_json)
-    assert ok is True
-    # Consumido: el mismo codigo ya no vale contra la lista restante.
-    ok2, _ = auth.verificar_codigo_recuperacion(codigos[0], restantes)
-    assert ok2 is False
 
 
 def test_unit_failsafe_sin_clave_no_emite_token():
@@ -508,6 +487,73 @@ def test_mfa_requerido_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatc
     r = _login(c, "ana", CLAVE)
     assert r.status_code == 200
     assert "mfa_required" not in r.json()
+    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+    me = c.get("/api/auth/me", headers=_ORIGIN)
+    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
+
+
+# --------------------------------------------------------------------------- #
+# 8b) OBLIGATORIEDAD GLOBAL (`KENI_CONSOLA_MFA`) y de ADMINS (`..._MFA_ADMIN`)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_global_obliga_a_todos(entorno, monkeypatch):
+    """`KENI_CONSOLA_MFA=1` (+ clave) obliga a CUALQUIER usuario: un editor sin passkey y sin
+    `mfa_requerido` per-usuario entra en gracia (`debe_inscribir_mfa`)."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("ana", CLAVE, "editor")  # sin mfa_requerido, sin passkey
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200 and "mfa_required" not in r.json()
+    assert r.json()["usuario"]["debe_inscribir_mfa"] is True
+    assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is True
+
+
+def test_admin_obligatorio_por_defecto_obliga_admins_no_editores(entorno, monkeypatch):
+    """Con el global OFF pero `KENI_CONSOLA_MFA_ADMIN` por defecto (ON) + clave: un ADMIN sin
+    passkey entra en gracia; un EDITOR en la misma situacion NO se fuerza."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_MFA_ADMIN", raising=False)  # default ON
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefe", CLAVE, "admin")
+    auth.crear_usuario("ed", CLAVE, "editor")
+
+    c = _cli()
+    r_admin = _login(c, "jefe", CLAVE)
+    assert r_admin.status_code == 200 and r_admin.json()["usuario"]["debe_inscribir_mfa"] is True
+
+    c2 = _cli()
+    r_ed = _login(c2, "ed", CLAVE)
+    assert r_ed.status_code == 200
+    assert r_ed.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+
+
+def test_mfa_admin_off_no_obliga_admin(entorno, monkeypatch):
+    """Valvula de escape: `KENI_CONSOLA_MFA_ADMIN=0` (+ global OFF) -> un admin sin passkey NO
+    se fuerza (el enrolamiento sigue disponible, pero no obligado)."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_ADMIN", "0")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefe", CLAVE, "admin")
+
+    c = _cli()
+    r = _login(c, "jefe", CLAVE)
+    assert r.status_code == 200
+    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+
+
+def test_global_obligatorio_sin_clave_no_hay_lockout(entorno, monkeypatch):
+    """ANTI-LOCKOUT: `KENI_CONSOLA_MFA=1` pero SIN clave de firma -> no se fuerza a nadie (no se
+    puede correr la ceremonia ni la inscripcion)."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
+    auth.crear_usuario("ana", CLAVE, "editor")
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200 and "mfa_required" not in r.json()
     assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
     me = c.get("/api/auth/me", headers=_ORIGIN)
     assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False

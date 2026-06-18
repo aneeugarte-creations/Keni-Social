@@ -104,16 +104,16 @@ def _es_token_mantenimiento(request: Request) -> bool:
 def _mfa_inscripcion_pendiente(request: Request) -> bool:
     """True si a la sesion se le EXIGE passkey y aun no la tiene (hard-block de gestion).
 
-    Per-usuario: hay clave de firma (`KENI_CONSOLA_MFA_KEY`) + la cuenta esta marcada
-    `mfa_requerido` por el admin + aun NO tiene passkey. Sin clave la maquinaria no puede
-    correr la inscripcion, asi que NO se bloquea (red anti-lockout). El login ya fuerza el
-    enrolamiento antes de operar; esto cierra la API si llega una sesion en ese estado.
+    Se le exige por cualquiera de las politicas (global, admin o per-usuario; fuente unica
+    `seguridad.mfa_requerido_para`, gateada por que haya clave de firma: red ANTI-LOCKOUT). El
+    login ya fuerza el enrolamiento antes de operar; esto cierra la API si llega una sesion en ese
+    estado (cookie robada / gracia a medias).
     """
     usuario = getattr(request.state, "usuario", None)
-    if usuario is None or not seguridad.mfa_key_presente():
+    if usuario is None:
         return False
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
-    return bool(refrescado.get("mfa_requerido")) and not bool(refrescado.get("mfa_activo"))
+    return seguridad.mfa_requerido_para(refrescado) and not bool(refrescado.get("mfa_activo"))
 
 
 def _rechazo_mfa_pendiente() -> Response:

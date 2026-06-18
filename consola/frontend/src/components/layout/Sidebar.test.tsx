@@ -152,7 +152,6 @@ function valorSesion(rol: RolUsuario, esSuperadmin = false): ValorSesion {
     iniciarSesion: async () => ({ mfaRequerido: false }),
     verificarConPasskey: async () => {},
   entrarConPasskey: async () => {},
-    verificarConCodigo: async () => {},
     cerrarSesion: async () => {},
     refrescar: async () => {},
   };

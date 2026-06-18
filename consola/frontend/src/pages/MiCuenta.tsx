@@ -14,7 +14,7 @@
  */
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, Loader2, ShieldCheck, Trash2, User } from "lucide-react";
+import { Fingerprint, KeyRound, Loader2, Trash2, User } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -290,8 +290,6 @@ function FilaCredencial({
 function SeccionLlavesAcceso() {
   const queryClient = useQueryClient();
   const [nombre, setNombre] = React.useState("");
-  // Códigos de recuperación de la PRIMERA llave: se muestran una sola vez.
-  const [recovery, setRecovery] = React.useState<string[] | null>(null);
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_CREDENCIALES,
@@ -310,12 +308,9 @@ function SeccionLlavesAcceso() {
       });
       return api.mfaRegistroVerificar(credential, nombre.trim());
     },
-    onSuccess: async (r) => {
+    onSuccess: async () => {
       toast.success("Llave de acceso registrada.");
       setNombre("");
-      if (r.recovery_codes && r.recovery_codes.length > 0) {
-        setRecovery(r.recovery_codes);
-      }
       await recargar();
     },
     onError: (e) => {
@@ -391,27 +386,6 @@ function SeccionLlavesAcceso() {
                 onBorrar={() => void alBorrar(c)}
               />
             ))}
-          </div>
-        )}
-
-        {recovery && (
-          <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <ShieldCheck className="h-4 w-4" />
-              Códigos de recuperación
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Guárdalos en un lugar seguro. <span className="font-medium">No volverán a
-              mostrarse</span>. Te permiten entrar si pierdes tus llaves.
-            </p>
-            <ul className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background p-3 font-mono text-sm">
-              {recovery.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-            <Button type="button" variant="outline" size="sm" onClick={() => setRecovery(null)}>
-              Ya los guardé
-            </Button>
           </div>
         )}
 

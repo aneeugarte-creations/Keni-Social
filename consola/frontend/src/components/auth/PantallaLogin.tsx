@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Fingerprint, KeyRound, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, Loader2, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ const ERROR_CREDENCIALES = "Usuario o contraseña incorrectos.";
  * app continúa. Ocupa toda la pantalla (no muestra el shell hasta entrar).
  */
 export function PantallaLogin() {
-  const { iniciarSesion, verificarConPasskey, entrarConPasskey, verificarConCodigo } = useSesion();
+  const { iniciarSesion, verificarConPasskey, entrarConPasskey } = useSesion();
   const [usuario, setUsuario] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [verPassword, setVerPassword] = React.useState(false);
@@ -27,18 +27,13 @@ export function PantallaLogin() {
   // Paso 2 (MFA): cuando el backend pide segundo factor, mostramos la ceremonia de passkey en
   // lugar del formulario de usuario/contraseña. La sesión NO existe hasta verificar.
   const [pidiendoMfa, setPidiendoMfa] = React.useState(false);
-  // Modo "código de recuperación": fallback cuando el usuario no tiene su passkey a mano.
-  const [usandoCodigo, setUsandoCodigo] = React.useState(false);
-  const [codigoMfa, setCodigoMfa] = React.useState("");
   // Por defecto la passkey se dispara SOLA al entrar al paso MFA: el usuario no pulsa nada.
-  // `mostrarOpciones` se enciende solo si la ceremonia falla/cancela; entonces aparecen el
-  // botón de reintento y el código de recuperación (no antes). `autoIntentado` evita
-  // re-disparar el auto en cada render.
+  // `mostrarOpciones` se enciende solo si la ceremonia falla/cancela; entonces aparece el
+  // botón de reintento (no antes). `autoIntentado` evita re-disparar el auto en cada render.
   const [mostrarOpciones, setMostrarOpciones] = React.useState(false);
   const autoIntentado = React.useRef(false);
 
   const puedeEnviar = usuario.trim().length > 0 && password.length > 0 && !enviando;
-  const puedeVerificarCodigo = codigoMfa.trim().length > 0 && !enviando;
 
   async function alEnviar(e: React.FormEvent) {
     e.preventDefault();
@@ -53,7 +48,6 @@ export function PantallaLogin() {
         autoIntentado.current = false;
         setMostrarOpciones(false);
         setPidiendoMfa(true);
-        setUsandoCodigo(false);
         setPassword("");
         setEnviando(false);
         return;
@@ -82,7 +76,7 @@ export function PantallaLogin() {
       await verificarConPasskey();
       // En éxito, el provider re-renderiza con la sesión y desmonta esta pantalla.
     } catch (err) {
-      // Fallo/cancelación: revelamos las opciones (reintentar + código de recuperación).
+      // Fallo/cancelación: revelamos el botón para reintentar la ceremonia de passkey.
       setEnviando(false);
       setMostrarOpciones(true);
       if (err instanceof ApiError) {
@@ -122,38 +116,19 @@ export function PantallaLogin() {
     }
   }
 
-  // Auto-disparo de la passkey al entrar al paso MFA: en cuanto se pide el segundo factor (y
-  // no se está usando un código), lanzamos la ceremonia sola, una sola vez.
+  // Auto-disparo de la passkey al entrar al paso MFA: en cuanto se pide el segundo factor,
+  // lanzamos la ceremonia sola, una sola vez.
   React.useEffect(() => {
-    if (pidiendoMfa && !usandoCodigo && !autoIntentado.current) {
+    if (pidiendoMfa && !autoIntentado.current) {
       autoIntentado.current = true;
       void alUsarPasskey({ auto: true });
     }
     // `alUsarPasskey` se redefine cada render pero su efecto es idempotente por `autoIntentado`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pidiendoMfa, usandoCodigo]);
-
-  async function alVerificarCodigo(e: React.FormEvent) {
-    e.preventDefault();
-    if (!puedeVerificarCodigo) return;
-    setEnviando(true);
-    setError(null);
-    try {
-      await verificarConCodigo(codigoMfa.trim());
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("No se pudo verificar el código. Vuelve a intentarlo.");
-      }
-      setEnviando(false);
-    }
-  }
+  }, [pidiendoMfa]);
 
   function volverAlLogin() {
     setPidiendoMfa(false);
-    setUsandoCodigo(false);
-    setCodigoMfa("");
     setError(null);
     setMostrarOpciones(false);
     autoIntentado.current = false;
@@ -169,92 +144,31 @@ export function PantallaLogin() {
             </div>
             <CardTitle className="text-xl">Verificación en dos pasos</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {usandoCodigo
-                ? "Introduce uno de tus códigos de recuperación."
-                : "Confirma con tu llave de acceso (Face ID, huella o tu teléfono)."}
+              Confirma con tu llave de acceso (Face ID, huella o tu teléfono).
             </p>
           </CardHeader>
           <CardContent>
-            {usandoCodigo ? (
-              <form className="space-y-4" onSubmit={alVerificarCodigo} noValidate>
-                <div className="space-y-1.5">
-                  <Label htmlFor="mfa-codigo">Código de recuperación</Label>
-                  <Input
-                    id="mfa-codigo"
-                    name="one-time-code"
-                    autoComplete="one-time-code"
-                    autoFocus
-                    value={codigoMfa}
-                    onChange={(e) => setCodigoMfa(e.target.value)}
-                    disabled={enviando}
-                  />
+            <div className="space-y-4">
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              {enviando || !mostrarOpciones ? (
+                // Por defecto: la passkey se está abriendo SOLA. Solo un indicador; el sistema
+                // muestra el diálogo nativo (Face ID / huella / teléfono).
+                <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Esperando tu llave de acceso…
                 </div>
-
-                {error && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {error}
-                  </p>
-                )}
-
-                <Button type="submit" className="w-full" disabled={!puedeVerificarCodigo}>
-                  {enviando ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4" />
-                  )}
-                  Verificar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  disabled={enviando}
-                  onClick={() => {
-                    setUsandoCodigo(false);
-                    setMostrarOpciones(true);
-                    setError(null);
-                  }}
-                >
+              ) : (
+                // Solo tras un fallo/cancelación: reintentar la ceremonia de passkey.
+                <Button type="button" className="w-full" onClick={() => alUsarPasskey()}>
+                  <Fingerprint className="h-4 w-4" />
                   Usar mi llave de acceso
                 </Button>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                {error && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {error}
-                  </p>
-                )}
-                {enviando || !mostrarOpciones ? (
-                  // Por defecto: la passkey se está abriendo SOLA. Solo un indicador; el sistema
-                  // muestra el diálogo nativo (Face ID / huella / teléfono).
-                  <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Esperando tu llave de acceso…
-                  </div>
-                ) : (
-                  // Solo tras un fallo/cancelación: reintentar o, si no hay llave a mano, código.
-                  <>
-                    <Button type="button" className="w-full" onClick={() => alUsarPasskey()}>
-                      <Fingerprint className="h-4 w-4" />
-                      Usar mi llave de acceso
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full"
-                      onClick={() => {
-                        setUsandoCodigo(true);
-                        setError(null);
-                      }}
-                    >
-                      <KeyRound className="h-4 w-4" />
-                      Usar un código de recuperación
-                    </Button>
-                  </>
-                )}
-              </div>
-            )}
+              )}
+            </div>
             <Button
               type="button"
               variant="ghost"

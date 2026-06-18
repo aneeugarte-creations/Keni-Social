@@ -70,6 +70,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, config
+from .estados import ROL_ADMIN
 from .observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -172,6 +173,32 @@ def mfa_maquinaria_activa() -> bool:
     elevación del login y `me.mfa_habilitado` (visibilidad de la sección de llaves).
     """
     return config.mfa_habilitado() or config.mfa_key_presente()
+
+
+def mfa_requerido_para(usuario: dict) -> bool:
+    """¿Se le EXIGE segundo factor (passkey) a ESTE usuario? FUENTE ÚNICA del enforcement.
+
+    Combina las tres políticas de obligación, todas GATEADAS por que haya clave de firma
+    (`mfa_key_presente`, red ANTI-LOCKOUT: sin clave no se puede inscribir ni verificar, así que
+    no se fuerza a nadie):
+
+      1. GLOBAL para TODOS — `KENI_CONSOLA_MFA` (`config.mfa_habilitado`): obliga a todo el equipo.
+      2. ADMINS — `KENI_CONSOLA_MFA_ADMIN` (`config.mfa_obligatorio_admin`, def ON): obliga a los
+         de rol admin (publican en canales de marca; un password robado sin 2º factor es ATO).
+      3. PER-USUARIO — la columna `mfa_requerido` que un superadmin marca en Usuarios.
+
+    `usuario` es la forma pública (debe traer `rol` y `mfa_requerido`). Lo consultan la elevación
+    del login (`api/auth`), `me.debe_inscribir_mfa` y el hard-block de `api/usuarios`. Devuelve
+    True = "esta cuenta debe tener passkey": si ya la tiene el login la exige; si no, entra en
+    gracia (`debe_inscribir_mfa`) y se le fuerza a inscribirla antes de operar.
+    """
+    if not config.mfa_key_presente():
+        return False
+    if config.mfa_habilitado():
+        return True
+    if usuario.get("rol") == ROL_ADMIN and config.mfa_obligatorio_admin():
+        return True
+    return bool(usuario.get("mfa_requerido"))
 
 
 def generar_token() -> str:

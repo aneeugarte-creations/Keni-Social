@@ -201,11 +201,13 @@ services:
       KENI_CONSOLA_ADMIN_USER: ${KENI_CONSOLA_ADMIN_USER}
       KENI_CONSOLA_ADMIN_PASS_FILE: /run/secrets/consola_admin_pass
       KENI_CONSOLA_SESION_HORAS: ${KENI_CONSOLA_SESION_HORAS}
-      # MFA passkeys (WebAuthn): clave Fernet que firma la cookie de challenge/pre-auth (como
-      # secreto en fichero, igual que la admin pass). Con ella la maquinaria MFA esta ACTIVA:
-      # el superadmin puede EXIGIR segundo factor por usuario desde Usuarios y su login fuerza
-      # el enrolamiento. SIN esta clave no se fuerza nada (anti-lockout). RP_ID/RP_ORIGIN deben
-      # ser el dominio publico (la passkey se ata al origen): aqui el host de Traefik.
+      # MFA passkeys (WebAuthn) OBLIGATORIO PARA TODOS (`KENI_CONSOLA_MFA=1`): cada cuenta debe
+      # tener passkey; la primera vez que cada persona vuelve a entrar inscribe su llave (gracia,
+      # sin lockout). La clave Fernet (secreto en fichero) firma la cookie de challenge/pre-auth y
+      # es OBLIGATORIA: sin ella la maquinaria no opera y NO se fuerza nada (red anti-lockout), asi
+      # que el secreto `consola_mfa_key` DEBE existir para que la obligatoriedad surta efecto.
+      # RP_ID/RP_ORIGIN = dominio publico (la passkey se ata al origen): el host de Traefik.
+      KENI_CONSOLA_MFA: "1"
       KENI_CONSOLA_MFA_KEY_FILE: /run/secrets/consola_mfa_key
       KENI_CONSOLA_RP_ID: ${KENI_HOST}
       KENI_CONSOLA_RP_ORIGIN: https://${KENI_HOST}

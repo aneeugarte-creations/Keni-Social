@@ -1,7 +1,6 @@
 """Segundo factor WEBAUTHN/FIDO2 (passkeys): construccion de opciones de registro/login,
-verificacion de las respuestas del autenticador, persistencia del CHALLENGE en una cookie
-Fernet de vida corta y codigos de recuperacion. GATEADO por `KENI_CONSOLA_MFA` (def OFF)
-desde la capa API.
+verificacion de las respuestas del autenticador y persistencia del CHALLENGE en una cookie
+Fernet de vida corta. GATEADO por `KENI_CONSOLA_MFA` (def OFF) desde la capa API.
 
 POR QUE PASSKEYS (y no TOTP): el equipo no usa apps autenticadoras. Las passkeys
 (Face ID / Touch ID / Windows Hello / llave del telefono) son el segundo factor real:
@@ -20,35 +19,27 @@ SEGURIDAD (no negociable):
   - FAIL-SAFE: si el flag MFA esta ON pero `KENI_CONSOLA_MFA_KEY` falta o es invalida,
     `cifrador()` lanza `MfaNoDisponible` y la API REHUSA la ceremonia (con un aviso logueado)
     con 503, en vez de seguir media-autenticando. Sin clave, no hay segundo factor.
-  - Los codigos de RECUPERACION se guardan HASHEADOS (scrypt, el mismo hasher que la
-    contrasena) y se comparan en tiempo constante; el codigo gastado se consume (un solo uso).
   - El sign_count se actualiza tras cada login; un contador que RETROCEDE se LOGUEA como aviso
     (posible clon) pero no tumba el login por si solo (muchos autenticadores reportan 0 y
     nunca incrementan): solo es senal, no dictamen.
 
-Este modulo NO toca la BD: la persistencia de credenciales (`webauthn_credenciales`) y de los
-recovery codes vive en `auth.usuarios`. La clave Fernet se le pasa como argumento desde la API
-(que la resuelve via `config.mfa_key()`), para que la decision fail-safe sea explicita en un
-solo sitio y para que sea facil de testear.
+RECUPERACION DE CUENTA: NO hay codigos de recuperacion (se retiraron por seguridad: eran un
+camino contrasena+codigo que evitaba la passkey). Si alguien pierde todos sus dispositivos, un
+SUPERADMIN resetea su MFA desde Usuarios (`PATCH /api/usuarios/{id}` con `mfa_reset`).
+
+Este modulo NO toca la BD: la persistencia de credenciales (`webauthn_credenciales`) vive en
+`auth.usuarios`. La clave Fernet se le pasa como argumento desde la API (que la resuelve via
+`config.mfa_key()`), para que la decision fail-safe sea explicita en un solo sitio y facil de testear.
 """
 
 from __future__ import annotations
 
-import base64
 import json
-import secrets
 from typing import Any
-
-from .hashing import hashear_password, verificar_password
 
 # Nombre que se muestra al usuario al crear/usar una passkey (Relying Party display name).
 # Lo sobrescribe la API con `config.rp_nombre()`; este es el defecto del dominio.
 NOMBRE_RP_DEFECTO = "Keni Social"
-
-# Cuantos codigos de recuperacion se generan al enrolar la PRIMERA passkey. 10 es el estandar.
-NUM_CODIGOS_RECUPERACION = 10
-# Bytes de entropia por codigo de recuperacion (5 bytes -> 8 chars base32, ~40 bits).
-_BYTES_CODIGO_RECUPERACION = 5
 
 
 class MfaNoDisponible(RuntimeError):
@@ -333,82 +324,3 @@ def credential_id_de_respuesta(respuesta_json: str | dict[str, Any]) -> str | No
         return None
     cid = datos.get("id") if isinstance(datos, dict) else None
     return cid if isinstance(cid, str) and cid else None
-
-
-# --------------------------------------------------------------------------- #
-# Codigos de recuperacion (un solo uso, guardados HASHEADOS)                     #
-# --------------------------------------------------------------------------- #
-
-
-def _formatear_codigo(crudo: str) -> str:
-    """Formatea un codigo base32 como `XXXX-XXXX` (mas legible para teclear)."""
-    crudo = crudo.upper()
-    if len(crudo) >= 8:
-        return f"{crudo[:4]}-{crudo[4:8]}"
-    return crudo
-
-
-def _normalizar_codigo(codigo: str) -> str:
-    """Normaliza un codigo de recuperacion tecleado: mayusculas, sin guiones ni espacios."""
-    return codigo.strip().upper().replace("-", "").replace(" ", "")
-
-
-def generar_codigos_recuperacion(n: int = NUM_CODIGOS_RECUPERACION) -> list[str]:
-    """Genera `n` codigos de recuperacion en CLARO (se muestran UNA vez al usuario).
-
-    Cada codigo es base32 (~40 bits) formateado `XXXX-XXXX`. El CLARO se ensena al enrolar la
-    primera passkey; lo que se PERSISTE es el hash (`hashear_codigos_recuperacion`). Sirven de
-    via de respaldo si el usuario pierde TODOS sus dispositivos con passkey.
-    """
-    codigos: list[str] = []
-    for _ in range(max(1, n)):
-        bruto = base64.b32encode(secrets.token_bytes(_BYTES_CODIGO_RECUPERACION)).decode("ascii")
-        bruto = bruto.rstrip("=")[:8]
-        codigos.append(_formatear_codigo(bruto))
-    return codigos
-
-
-def hashear_codigos_recuperacion(codigos: list[str]) -> str:
-    """Serializa a JSON la lista de codigos de recuperacion HASHEADOS (scrypt + salt).
-
-    Cada entrada es `{"salt": ..., "hash": ...}` del codigo NORMALIZADO. Es lo que se guarda en
-    `usuarios.mfa_recovery_codes`. No guarda el codigo en claro en ningun punto.
-    """
-    entradas: list[dict[str, str]] = []
-    for codigo in codigos:
-        salt_hex, hash_hex = hashear_password(_normalizar_codigo(codigo))
-        entradas.append({"salt": salt_hex, "hash": hash_hex})
-    return json.dumps(entradas)
-
-
-def verificar_codigo_recuperacion(codigo: str, recovery_json: str) -> tuple[bool, str]:
-    """Verifica un codigo de recuperacion contra la lista de hashes; lo CONSUME si acierta.
-
-    Devuelve `(ok, recovery_json_actualizado)`:
-      - `ok=True`  -> el codigo coincidia con un hash; ese hash se ELIMINA de la lista (un solo
-        uso) y `recovery_json_actualizado` es la lista restante (a re-persistir por el llamante).
-      - `ok=False` -> ningun hash coincide; la lista se devuelve INTACTA.
-    Comparacion en tiempo constante (via `verificar_password`/`hmac.compare_digest`). Entradas
-    vacias o JSON ilegible -> `(False, recovery_json)`.
-    """
-    if not isinstance(codigo, str) or not codigo.strip():
-        return False, recovery_json
-    try:
-        entradas = json.loads(recovery_json or "[]")
-    except (json.JSONDecodeError, TypeError):
-        return False, recovery_json or "[]"
-    if not isinstance(entradas, list):
-        return False, "[]"
-    normalizado = _normalizar_codigo(codigo)
-    restantes: list[dict[str, str]] = []
-    acertado = False
-    for entrada in entradas:
-        if (
-            not acertado
-            and isinstance(entrada, dict)
-            and verificar_password(normalizado, entrada.get("salt", ""), entrada.get("hash", ""))
-        ):
-            acertado = True  # consumido: NO lo re-anadimos a `restantes`
-            continue
-        restantes.append(entrada)
-    return acertado, json.dumps(restantes)

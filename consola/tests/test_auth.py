@@ -1074,10 +1074,62 @@ def test_password_no_se_guarda_en_texto_plano(entorno):
     # Ni el salt ni el hash contienen la contrasena en claro.
     assert CLAVE not in fila["salt"]
     assert CLAVE not in fila["hash"]
-    # El hash es hex de 64 bytes (128 chars), reproducible con el salt.
-    assert len(fila["hash"]) == 128
+    # El campo `hash` es VERSIONADO y auto-descriptivo: `scrypt$<n>$<r>$<p>$<digest hex>`.
+    assert fila["hash"].startswith("scrypt$")
+    assert len(fila["hash"].split("$")[-1]) == 128  # digest = 64 bytes en hex
     assert auth.verificar_password(CLAVE, fila["salt"], fila["hash"])
     assert not auth.verificar_password("otra", fila["salt"], fila["hash"])
+
+
+def _hash_legado(password: str, salt: bytes) -> str:
+    """Digest scrypt LEGADO (128 hex, N=2**14, SIN prefijo de version) como lo guardaban las
+    cuentas antes de versionar el campo `hash`."""
+    import hashlib
+
+    return hashlib.scrypt(
+        password.encode("utf-8"), salt=salt, n=2 ** 14, r=8, p=1, dklen=64,
+        maxmem=256 * 1024 * 1024,
+    ).hex()
+
+
+def test_verifica_hash_legado_y_necesita_rehash():
+    """Un hash LEGADO (128 hex, sin prefijo) sigue verificando; `necesita_rehash` lo marca, y
+    un hash nuevo (coste objetivo, versionado) NO lo necesita."""
+    salt = bytes.fromhex("00112233445566778899aabbccddeeff")
+    legado = _hash_legado(CLAVE, salt)
+    assert "$" not in legado and len(legado) == 128
+    assert auth.verificar_password(CLAVE, salt.hex(), legado)
+    assert not auth.verificar_password("otra", salt.hex(), legado)
+    assert auth.necesita_rehash(legado) is True
+    _, h_nuevo = auth.hashear_password(CLAVE)
+    assert auth.necesita_rehash(h_nuevo) is False
+
+
+def test_login_rehashea_password_legado(entorno):
+    """REHASH-ON-LOGIN: una cuenta con hash legado (N=2**14) ve su hash RE-DERIVADO al formato
+    versionado actual tras un login correcto, sin pedir cambio de contrasena."""
+    u = _crear("ana", CLAVE, "editor")
+    salt = bytes.fromhex("ffeeddccbbaa99887766554433221100")
+    con = db.conectar()
+    try:
+        con.execute(
+            "UPDATE usuarios SET salt = ?, hash = ? WHERE id = ?",
+            (salt.hex(), _hash_legado(CLAVE, salt), u["id"]),
+        )
+        con.commit()
+    finally:
+        con.close()
+    assert auth.autenticar("ana", CLAVE) is not None  # verifica contra el legado
+    con = db.conectar()
+    try:
+        fila = con.execute(
+            "SELECT salt, hash FROM usuarios WHERE id = ?", (u["id"],)
+        ).fetchone()
+    finally:
+        con.close()
+    assert fila["hash"].startswith("scrypt$")  # re-derivado al formato versionado
+    assert auth.necesita_rehash(fila["hash"]) is False
+    assert auth.verificar_password(CLAVE, fila["salt"], fila["hash"])
 
 
 def test_dos_usuarios_misma_pass_distinto_hash(entorno):

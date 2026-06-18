@@ -19,7 +19,7 @@ export interface ValorSesion {
    * Inicia sesión; el backend pone la cookie. Lanza `ApiError` (401 genérico).
    * Devuelve `{ mfaRequerido: true }` cuando el backend pide un segundo factor (MFA ON y
    * cuenta con ≥1 passkey): en ese caso NO hay sesión todavía y la UI debe correr la ceremonia
-   * de passkey (`verificarConPasskey`) o pedir un código de recuperación (`verificarConCodigo`).
+   * de passkey (`verificarConPasskey`).
    * `{ mfaRequerido: false }` => sesión iniciada (flujo de hoy).
    */
   iniciarSesion: (usuario: string, password: string) => Promise<{ mfaRequerido: boolean }>;
@@ -34,8 +34,6 @@ export interface ValorSesion {
    * Lanza `ApiError` (401 si ninguna llave es reconocida) o `DOMException` si se cancela.
    */
   entrarConPasskey: () => Promise<void>;
-  /** Completa el login con un código de recuperación (fallback sin passkey). */
-  verificarConCodigo: (codigo: string) => Promise<void>;
   /** Cierra sesión (POST /api/auth/logout) y vuelve al login. */
   cerrarSesion: () => Promise<void>;
   /** Refresca el usuario actual desde el backend (tras cambiar contraseña). */

@@ -71,7 +71,6 @@ function sesionValor(u: UsuarioSesion | null): ValorSesion {
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),
-    verificarConCodigo: vi.fn(),
     cerrarSesion: vi.fn(),
     refrescar: vi.fn(),
   };

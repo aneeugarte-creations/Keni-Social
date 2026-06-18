@@ -147,7 +147,6 @@ _MSG_MFA_NO_DISPONIBLE = (
     "El segundo factor no está disponible: falta configurar la clave de firma "
     "(KENI_CONSOLA_MFA_KEY). Avisa a un administrador."
 )
-_MSG_MFA_CODIGO_KO = "Código incorrecto o caducado."
 _MSG_MFA_PENDIENTE_KO = "Sesión de verificación caducada. Vuelve a iniciar sesión."
 # Mensaje generico de fallo de la ceremonia WebAuthn (no damos pistas sobre el porque).
 _MSG_MFA_CEREMONIA_KO = "No se pudo verificar la llave de acceso. Inténtalo de nuevo."
@@ -360,12 +359,11 @@ def _elevar_a_segundo_factor(autenticado: dict) -> Response:
 def _mfa_requerido_a(autenticado: dict) -> bool:
     """True si a ESTE usuario se le EXIGE segundo factor Y la maquinaria puede operar.
 
-    Per-usuario: el admin marca `mfa_requerido` desde Usuarios + hay clave de firma. La
-    condicion de la clave es la red ANTI-LOCKOUT: sin clave no se puede correr la ceremonia ni
-    la inscripcion, asi que NO forzamos nada (entra como hoy). El rol es irrelevante: el
-    requisito es por persona, lo gestiona el admin.
+    Delega en `seguridad.mfa_requerido_para` (fuente única), que combina las tres políticas de
+    obligación (global `KENI_CONSOLA_MFA`, admins `KENI_CONSOLA_MFA_ADMIN`, y la columna
+    per-usuario `mfa_requerido`), todas gateadas por que haya clave de firma (anti-lockout).
     """
-    return bool(autenticado.get("mfa_requerido")) and seguridad.mfa_key_presente()
+    return seguridad.mfa_requerido_para(autenticado)
 
 
 def _mfa_enrolamiento_disponible(usuario: dict | None) -> bool:
@@ -462,14 +460,11 @@ async def me(request: Request) -> Response:
     # de la rota las usan para saber a que verticales pertenece la persona.
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
     mfa_activo = bool(refrescado.get("mfa_activo"))
-    # `debe_inscribir_mfa`: a esta persona el admin le EXIGE segundo factor (`mfa_requerido`),
-    # la maquinaria opera (hay clave) y aun no tiene passkey. El frontend lo usa para FORZAR el
-    # enrolamiento en el login (pantalla obligatoria) antes de dejar usar la consola.
-    debe_inscribir_mfa = (
-        bool(refrescado.get("mfa_requerido"))
-        and seguridad.mfa_key_presente()
-        and not mfa_activo
-    )
+    # `debe_inscribir_mfa`: a esta persona se le EXIGE segundo factor (por política global, de
+    # admin o per-usuario; ver `seguridad.mfa_requerido_para`), la maquinaria opera (hay clave) y
+    # aun no tiene passkey. El frontend lo usa para FORZAR el enrolamiento (pantalla obligatoria)
+    # antes de dejar usar la consola.
+    debe_inscribir_mfa = seguridad.mfa_requerido_para(refrescado) and not mfa_activo
     return JSONResponse(
         {
             "usuario": {
@@ -642,12 +637,12 @@ async def mfa_login_opciones(request: Request) -> Response:
 
 
 async def mfa_verify(request: Request) -> Response:
-    """POST /api/auth/mfa/verify: 2o paso del login. Valida una ASSERTION WebAuthn o un recovery.
+    """POST /api/auth/mfa/verify: 2o paso del login. Valida una ASSERTION WebAuthn (passkey).
 
     PUBLICO (cookie pre-auth + cookie challenge). Cuerpo: `{assertion: {...}}` (la credencial que
-    devuelve `startAuthentication`) O `{codigo: "XXXX-XXXX"}` (un codigo de recuperacion). Si
-    cuadra, crea la sesion real, establece su cookie y borra las pre-auth/challenge. Con el flag OFF
-    no deberia recibir trafico; aun asi rehusa limpiamente.
+    devuelve `startAuthentication`). Si cuadra, crea la sesion real, establece su cookie y borra
+    las pre-auth/challenge. Con el flag OFF no deberia recibir trafico; aun asi rehusa limpiamente.
+    NO hay via de codigo de recuperacion (se retiro): la recuperacion es por reset de un superadmin.
     """
     if not seguridad.mfa_maquinaria_activa():
         return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
@@ -667,22 +662,10 @@ async def mfa_verify(request: Request) -> Response:
 
     datos = await leer_json(request)
     assertion = datos.get("assertion")
-    codigo = datos.get("codigo")
 
-    # VIA 1: codigo de RECUPERACION (un solo uso). No necesita challenge.
-    if isinstance(codigo, str) and codigo.strip():
-        ok, restantes = auth.verificar_codigo_recuperacion(codigo, estado["recovery_codes"])
-        if ok:
-            auth.actualizar_recovery_mfa(usuario_id, restantes)
-            usuario = auth.obtener_usuario_por_id(usuario_id)
-            if usuario is None:
-                return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
-            return _respuesta_sesion_creada(usuario_id, usuario)
-        return JSONResponse({"error": _MSG_MFA_CODIGO_KO}, status_code=401)
-
-    # VIA 2: assertion WebAuthn. Exige la cookie de challenge (NUNCA un challenge del cliente).
+    # Assertion WebAuthn. Exige la cookie de challenge (NUNCA un challenge del cliente).
     if not isinstance(assertion, (dict, str)) or not assertion:
-        return JSONResponse({"error": "Falta la llave de acceso o el código."}, status_code=400)
+        return JSONResponse({"error": "Falta la llave de acceso."}, status_code=400)
 
     challenge = _leer_token_challenge(
         request.cookies.get(COOKIE_MFA_CHALLENGE_LOGIN), usuario_id
@@ -851,12 +834,12 @@ async def mfa_registro_opciones(request: Request) -> Response:
 
 
 async def mfa_registro_verificar(request: Request) -> Response:
-    """POST /api/auth/mfa/registro/verificar: guarda la passkey nueva; devuelve recovery la 1a vez.
+    """POST /api/auth/mfa/registro/verificar: guarda la passkey nueva (responde `{ok: true}`).
 
     Cuerpo `{credential: {...}, nombre?}`. Verifica la respuesta de `startRegistration` contra la
     cookie de challenge, persiste la credencial (clave publica + sign_count + transports) y marca
-    `mfa_activo=1`. Si era la PRIMERA passkey, genera y devuelve los codigos de recuperacion en
-    CLARO UNA sola vez (`{recovery_codes}`). Requiere enrolamiento disponible + sesion completa.
+    `mfa_activo=1`. NO hay codigos de recuperacion (se retiraron): la recuperacion de cuenta es por
+    reset de MFA de un superadmin. Requiere enrolamiento disponible + sesion completa.
     """
     usuario = _exige_sesion(request)
     if usuario is None:
@@ -889,8 +872,6 @@ async def mfa_registro_verificar(request: Request) -> Response:
         _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
         return resp
 
-    # ¿Es la PRIMERA passkey? Lo es si el usuario aun no tenia ninguna antes de guardar esta.
-    es_primera = not auth.listar_credenciales_mfa(usuario["id"])
     guardada = auth.guardar_credencial_mfa(
         usuario["id"],
         credential_id=nueva["credential_id"],
@@ -907,12 +888,7 @@ async def mfa_registro_verificar(request: Request) -> Response:
         _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
         return resp
 
-    cuerpo: dict = {"ok": True}
-    if es_primera:
-        codigos = auth.generar_codigos_recuperacion()
-        auth.fijar_recovery_mfa(usuario["id"], auth.hashear_codigos_recuperacion(codigos))
-        cuerpo["recovery_codes"] = codigos
-    resp = JSONResponse(cuerpo)
+    resp = JSONResponse({"ok": True})
     _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_REGISTRO)
     return resp
 

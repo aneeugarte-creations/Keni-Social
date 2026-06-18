@@ -170,13 +170,9 @@ export interface RespuestaLoginMfa {
  */
 export type OpcionesCeremoniaWebauthn = Record<string, unknown>;
 
-/**
- * Respuesta de `POST /api/auth/mfa/registro/verificar`. `recovery_codes` solo llega la PRIMERA
- * vez (al registrar la primera passkey); se muestran una sola vez.
- */
+/** Respuesta de `POST /api/auth/mfa/registro/verificar`. */
 export interface RespuestaMfaRegistro {
   ok: true;
-  recovery_codes?: string[];
 }
 
 /** Una passkey en la lista de `GET /api/auth/mfa/credenciales` (sin secretos). */
@@ -296,7 +292,7 @@ export interface CuerpoActualizarUsuario {
   manager_id?: string;
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
-  /** Resetea la verificación en dos pasos: borra todas las passkeys y códigos de recuperación. */
+  /** Resetea la verificación en dos pasos: borra todas las passkeys. */
   mfa_reset?: boolean;
   /**
    * Concede o quita SUPERADMIN (acceso a gestionar usuarios). 409 si intentas quitárselo al

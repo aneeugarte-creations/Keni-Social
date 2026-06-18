@@ -36,6 +36,7 @@ from .migraciones_columnas import (
     _asegurar_marca_grid_rota,
     _backfill_gasto_ia_proceso,
     _backfill_pesos_fuente,
+    _forzar_reset_password_existentes,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_config_franjas,
@@ -459,6 +460,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # pegado en `titulo_es` (== `titulo`) cuando Haiku falló. Se devuelven a `traducido=0` para que
     # Traducir los reintente (la mesa dejaría de mostrarlos en idioma original). One-shot e idempotente.
     Migracion("0043-resanear-traduccion-envenenada", _resanear_traduccion_envenenada),
+    # SEGURIDAD (endurecimiento enterprise 2026-06): fuerza a TODOS los usuarios existentes a
+    # fijar una contrasena nueva (bajo la politica reforzada) en su proximo acceso —las viejas no
+    # se pueden auditar (solo hay hash)—. Junto al MFA obligatorio para todos, la primera vuelta a
+    # entrar de cada persona cambia contrasena + inscribe passkey. One-shot; no-op en BD vacia/tests.
+    Migracion("0044-forzar-reset-password-existentes", _forzar_reset_password_existentes),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
