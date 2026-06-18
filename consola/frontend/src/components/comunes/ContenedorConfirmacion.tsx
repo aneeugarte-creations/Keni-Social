@@ -32,15 +32,16 @@ export function ContenedorConfirmacion() {
 
   React.useEffect(() => {
     return suscribirConfirmacion((nuevo) => {
-      // Si había una confirmación sin responder, la cerramos en false para no
-      // dejar su promesa colgada (no debería pasar: el modal bloquea la UI).
-      if (pendiente.current) pendiente.current.resolver(false);
+      // Si había uno sin responder, lo cerramos en su valor de cancelación (null en
+      // modo elección, false en confirmación) para no dejar su promesa colgada (no
+      // debería pasar: el modal bloquea la UI).
+      if (pendiente.current) pendiente.current.resolver(pendiente.current.opciones ? null : false);
       pendiente.current = nuevo;
       setEstado(nuevo);
     });
   }, []);
 
-  const responder = React.useCallback((valor: boolean) => {
+  const responder = React.useCallback((valor: boolean | string | null) => {
     if (pendiente.current) {
       pendiente.current.resolver(valor);
       pendiente.current = null;
@@ -49,13 +50,15 @@ export function ContenedorConfirmacion() {
   }, []);
 
   const abierto = estado != null;
+  // Valor con el que se cancela este diálogo: null en modo elección, false en confirmación.
+  const valorCancelar = estado?.opciones ? null : false;
 
   return (
     <AlertDialog
       open={abierto}
       onOpenChange={(v) => {
         // Cerrar por Escape = cancelar. (AlertDialog no cierra por clic fuera.)
-        if (!v) responder(false);
+        if (!v) responder(valorCancelar);
       }}
     >
       <AlertDialogContent className="max-w-md">
@@ -68,20 +71,35 @@ export function ContenedorConfirmacion() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="gap-2 sm:gap-2">
-              <AlertDialogCancel onClick={() => responder(false)}>
+              <AlertDialogCancel onClick={() => responder(valorCancelar)}>
                 {estado.textoCancelar ?? "Cancelar"}
               </AlertDialogCancel>
-              <AlertDialogAction
-                className={
-                  estado.destructivo
-                    ? buttonVariants({ variant: "destructive" })
-                    : undefined
-                }
-                onClick={() => responder(true)}
-                autoFocus
-              >
-                {estado.textoConfirmar ?? "Confirmar"}
-              </AlertDialogAction>
+              {estado.opciones ? (
+                // Modo ELECCIÓN: un botón por opción (outline gris salvo destructivo).
+                estado.opciones.map((op) => (
+                  <AlertDialogAction
+                    key={op.valor}
+                    className={buttonVariants({
+                      variant: op.destructivo ? "destructive" : "outline",
+                    })}
+                    onClick={() => responder(op.valor)}
+                  >
+                    {op.etiqueta}
+                  </AlertDialogAction>
+                ))
+              ) : (
+                <AlertDialogAction
+                  className={
+                    estado.destructivo
+                      ? buttonVariants({ variant: "destructive" })
+                      : undefined
+                  }
+                  onClick={() => responder(true)}
+                  autoFocus
+                >
+                  {estado.textoConfirmar ?? "Confirmar"}
+                </AlertDialogAction>
+              )}
             </AlertDialogFooter>
           </>
         )}

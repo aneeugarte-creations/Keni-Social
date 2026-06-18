@@ -40,9 +40,32 @@ export interface OpcionesConfirmar {
   destructivo?: boolean;
 }
 
+/** Una opción del diálogo de ELECCIÓN (`elegir`): un botón que resuelve con su `valor`. */
+export interface OpcionElegir {
+  /** Valor que devuelve `elegir` si se pulsa este botón. */
+  valor: string;
+  /** Texto del botón. */
+  etiqueta: string;
+  /** Botón rojo (acción destructiva). Por defecto outline gris (estilo de la plataforma). */
+  destructivo?: boolean;
+}
+
+export interface OpcionesElegir {
+  /** Título del diálogo. */
+  titulo?: string;
+  /** Cuerpo/pregunta. */
+  mensaje: ReactNode;
+  /** Texto del botón de cancelar. Por defecto "Cancelar". */
+  textoCancelar?: string;
+  /** Los botones de elección (2+). El usuario elige uno o cancela (→ null). */
+  opciones: OpcionElegir[];
+}
+
 export interface EstadoConfirmacion extends OpcionesConfirmar {
   id: number;
-  resolver: (valor: boolean) => void;
+  /** Presente en modo ELECCIÓN (`elegir`): el diálogo muestra estos botones. */
+  opciones?: OpcionElegir[];
+  resolver: (valor: boolean | string | null) => void;
 }
 
 type Emisor = (estado: EstadoConfirmacion) => void;
@@ -81,6 +104,38 @@ export function confirmar(opciones: OpcionesConfirmar | string): Promise<boolean
       return;
     }
     _contador += 1;
-    _emitir({ ...opts, id: _contador, resolver: resolve });
+    _emitir({
+      ...opts,
+      id: _contador,
+      resolver: resolve as (valor: boolean | string | null) => void,
+    });
+  });
+}
+
+/**
+ * Pide ELEGIR entre varias opciones y resuelve con el `valor` elegido (o `null` si
+ * se cancela). Misma infra que `confirmar`, pero con N botones de acción. Útil cuando
+ * la confirmación también decide una variante (p. ej. longitud del carrusel).
+ *
+ *   const longitud = await elegir({
+ *     titulo: "Cambiar a carrusel",
+ *     mensaje: "Elige la longitud:",
+ *     opciones: [{ valor: "corto", etiqueta: "Corto" }, { valor: "largo", etiqueta: "Largo" }],
+ *   });
+ *   if (longitud) generar(longitud);
+ */
+export function elegir(opts: OpcionesElegir): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    if (!_emitir) {
+      console.warn("ContenedorConfirmacion no está montado; elegir() resolvió en null.");
+      resolve(null);
+      return;
+    }
+    _contador += 1;
+    _emitir({
+      ...opts,
+      id: _contador,
+      resolver: resolve as (valor: boolean | string | null) => void,
+    });
   });
 }

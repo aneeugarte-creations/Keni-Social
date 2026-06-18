@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
-import { confirmar } from "@/components/comunes/confirmar";
+import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { SugerenciaHashtags } from "@/components/hashtags/SugerenciaHashtags";
 import { agregarHashtags } from "./hashtags";
@@ -138,6 +138,10 @@ export function DialogoEditar({
   // (pisaría los slides que hornea). `persistir` lee este ref para omitir los slides durante la gen.
   const generandoCarruselRef = React.useRef(false);
   generandoCarruselRef.current = generandoCarrusel;
+  // Longitud elegida en el diálogo «Cambiar a carrusel»: el flip la consume al completar para
+  // GENERAR ya con ella (corto/largo). null = el flip no debe auto-generar (otro formato, o slides
+  // ya presentes).
+  const longitudPendienteRef = React.useRef<"corto" | "largo" | null>(null);
 
   const lanzarCarrusel = React.useCallback(
     async (longitud: "corto" | "largo") => {
@@ -150,6 +154,25 @@ export function DialogoEditar({
       }
     },
     [pieza, iniciarGenCarrusel],
+  );
+
+  // Botón de la barra (post YA en carrusel): pregunta la longitud en el MISMO diálogo y (re)genera.
+  // `regenerar` solo cambia el texto (ya hay slides que se reemplazan).
+  const pedirLongitudYGenerar = React.useCallback(
+    async (regenerar: boolean) => {
+      const longitud = (await elegir({
+        titulo: regenerar ? "Regenerar carrusel" : "Generar carrusel",
+        mensaje: regenerar
+          ? "Se reemplazan los slides actuales por unos nuevos a partir del copy. Elige la longitud:"
+          : "Se generará el carrusel a partir del copy del post. Elige la longitud:",
+        opciones: [
+          { valor: "corto", etiqueta: "Corto · 4–5" },
+          { valor: "largo", etiqueta: "Largo · 8–9" },
+        ],
+      })) as "corto" | "largo" | null;
+      if (longitud) void lanzarCarrusel(longitud);
+    },
+    [lanzarCarrusel],
   );
 
   // Al terminar la generación: recarga la pieza para traer los slides que horneó el worker (su
@@ -199,10 +222,16 @@ export function DialogoEditar({
       if (data.aviso) toast(data.aviso);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      // Al pasar a carrusel NO se genera solo: el equipo elige la longitud (corto/largo) en la
-      // barra del editor de carrusel. Si ya traía slides (p. ej. del pipeline) se muestran tal cual.
+      // Si el flip a carrusel vino del diálogo de «Cambiar a carrusel» (donde se eligió la
+      // longitud), genera ya con ella. La barra del editor sirve además para regenerar después.
+      const longitud = longitudPendienteRef.current;
+      longitudPendienteRef.current = null;
+      if (nuevoFmt === "carrusel" && longitud) void lanzarCarrusel(longitud);
     },
-    onError: (e) => toast.error(mensajeError(e)),
+    onError: (e) => {
+      longitudPendienteRef.current = null;
+      toast.error(mensajeError(e));
+    },
   });
 
   // Cambia el formato PIDIENDO CONFIRMACIÓN: el cambio puede ser destructivo —el backend borra
@@ -213,6 +242,24 @@ export function DialogoEditar({
   // puede detectar de forma fiable desde una sola fila.
   const cambiarFormato = async (nuevo: string) => {
     if (!pieza || nuevo === formato) return;
+    // Pasar a CARRUSEL sin slides: el mismo diálogo confirma el cambio Y pregunta la longitud
+    // (corto 4-5 / largo 8-9). Al elegir, flipea y genera ya con ella; Cancelar no hace nada.
+    if (nuevo === "carrusel" && slides.length === 0) {
+      const longitud = (await elegir({
+        titulo: "Cambiar a carrusel",
+        mensaje:
+          "Se generará el carrusel a partir del copy del post (la portada se conserva). La " +
+          "pieza volverá a borrador y se quitará la plantilla actual. Elige la longitud:",
+        opciones: [
+          { valor: "corto", etiqueta: "Corto · 4–5" },
+          { valor: "largo", etiqueta: "Largo · 8–9" },
+        ],
+      })) as "corto" | "largo" | null;
+      if (!longitud) return;
+      longitudPendienteRef.current = longitud;
+      flipFormato.mutate(nuevo);
+      return;
+    }
     const etiqueta = nuevo === "video" ? "video" : nuevo === "carrusel" ? "carrusel" : "foto";
     const pierde =
       nuevo === "video"
@@ -560,59 +607,32 @@ export function DialogoEditar({
                     <>
                       <Sparkles className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">
-                        Aún no hay slides. Genera el carrusel desde el copy:
+                        Aún no hay slides. Genera el carrusel a partir del copy del post.
                       </span>
-                      <div className="ml-auto flex items-center gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => void lanzarCarrusel("corto")}
-                          title="Carrusel breve, entre 4 y 5 slides"
-                        >
-                          Corto · 4–5
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => void lanzarCarrusel("largo")}
-                          title="Carrusel extenso, entre 8 y 9 slides"
-                        >
-                          Largo · 8–9
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-7 px-2.5 text-xs"
+                        onClick={() => void pedirLongitudYGenerar(false)}
+                      >
+                        Generar carrusel
+                      </Button>
                     </>
                   ) : (
                     <>
                       <span className="text-muted-foreground">
                         Carrusel generado. Edita cada slide o vuelve a generarlo.
                       </span>
-                      <div className="ml-auto flex items-center gap-1.5">
-                        <span className="text-xs text-muted-foreground">Regenerar:</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => void lanzarCarrusel("corto")}
-                          title="Rehacer en corto, entre 4 y 5 slides"
-                        >
-                          Corto
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => void lanzarCarrusel("largo")}
-                          title="Rehacer en largo, entre 8 y 9 slides"
-                        >
-                          Largo
-                        </Button>
-                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-7 px-2.5 text-xs"
+                        onClick={() => void pedirLongitudYGenerar(true)}
+                      >
+                        Regenerar
+                      </Button>
                     </>
                   )}
                 </div>
