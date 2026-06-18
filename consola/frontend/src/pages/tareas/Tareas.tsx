@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ListChecks, Plus } from "lucide-react";
 import * as React from "react";
 
@@ -12,6 +12,9 @@ import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-context
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { hoyCDMX, posicionTemporal } from "@/lib/fecha";
+import { lunesSiguiente } from "@/lib/rota-calendario";
+import { franjaIdParaHoraEvento } from "@/pages/rota/comun";
+import type { RotaSemana } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
@@ -86,6 +89,34 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const eventosCoverables = eventosQuery.data?.eventos ?? [];
   const { coberturas, encargos, eventosLibres, recuperables } = agrupar(tareas, eventosCoverables);
 
+  // Cobertura por TURNO (misma lógica que el calendario): el Panorama es multi-semana y no carga
+  // turnos, así que pedimos los turnos de las (pocas) semanas que tocan los eventos mostrados y
+  // marcamos cubierto el evento que cae en una franja con ≥1 turno ese día. Carga parcial → se
+  // trata como NO cubierto («Sin cubrir») hasta que llega la semana; nunca rompe la UI.
+  const semanasEventos = Array.from(
+    new Set(eventosCoverables.filter((e) => e.fecha).map((e) => lunesSiguiente(e.fecha, 0))),
+  );
+  const semanasTurnos = useQueries({
+    queries: semanasEventos.map((lunes) => ({
+      queryKey: ["rota", "turnos", lunes, marca ?? "todas"],
+      queryFn: ({ signal }: { signal?: AbortSignal }) => api.listarTurnos({ lunes, marca }, signal),
+      ...REFRESCO,
+    })),
+  });
+  const porLunes = new Map<string, RotaSemana>();
+  semanasTurnos.forEach((q, i) => {
+    if (q.data) porLunes.set(semanasEventos[i], q.data);
+  });
+  const cubiertosPorTurno = new Set<string>();
+  for (const e of eventosCoverables) {
+    if (!e.fecha) continue;
+    const semana = porLunes.get(lunesSiguiente(e.fecha, 0));
+    if (!semana) continue;
+    const franjaId = franjaIdParaHoraEvento(e.hora, semana.franjas);
+    if (franjaId && semana.turnos.some((t) => t.franja_id === franjaId && t.fecha === e.fecha))
+      cubiertosPorTurno.add(e.id);
+  }
+
   // Lista unificada, ordenada por fecha (las sin fecha, al final).
   const conOrden = (f: string) => f || "9999-99-99";
   const items: Item[] = [
@@ -106,13 +137,14 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       clave: `e-${e.id}`,
       orden: conOrden(e.fecha),
       evento: e,
+      cubiertoPorTurno: cubiertosPorTurno.has(e.id),
     })),
   ].sort((a, b) => a.orden.localeCompare(b.orden));
 
   // ¿«por cubrir»? (evento sin cubridores o encargo sin dueño). ¿«mío»? (cobertura que cubro o
   // encargo mío) — una cobertura es mía si soy UNO de sus cubridores (multi-cobertura).
   const esPorCubrir = (i: Item) =>
-    i.kind === "evento" || (i.kind === "tarea" && !i.tarea.responsable_id);
+    (i.kind === "evento" && !i.cubiertoPorTurno) || (i.kind === "tarea" && !i.tarea.responsable_id);
   const esMio = (i: Item) => {
     if (!usuario) return false;
     return i.kind === "cobertura"
@@ -133,12 +165,13 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
 
   // Tres grupos para que «se organice»: lo que falta por cubrir, lo que está en marcha, lo hecho.
   const grupos: { etiqueta: string; items: Item[] }[] = [
-    { etiqueta: "Por cubrir", items: visibles.filter(esPorCubrir) },
+    { etiqueta: "Sin cubrir", items: visibles.filter(esPorCubrir) },
     {
       etiqueta: "En marcha",
       items: visibles.filter(
         (i) =>
           (i.kind === "cobertura" && !coberturaPasada(i)) ||
+          (i.kind === "evento" && i.cubiertoPorTurno) ||
           (i.kind === "tarea" && i.tarea.responsable_id && i.tarea.estado !== "hecha"),
       ),
     },
@@ -152,7 +185,12 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
 
   const pintar = (i: Item) =>
     i.kind === "evento" ? (
-      <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
+      <TarjetaEventoLibre
+        key={i.clave}
+        evento={i.evento}
+        catalogos={catalogos}
+        cubiertoPorTurno={i.cubiertoPorTurno ?? false}
+      />
     ) : i.kind === "cobertura" ? (
       <div key={i.clave} className="rounded-lg border border-border bg-card p-3 shadow-sm">
         <div className="mb-2 flex items-center gap-2">
@@ -236,6 +274,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 eventos={eventosCoverables}
                 catalogos={catalogos}
                 marca={marca}
+                cubiertosPorTurno={cubiertosPorTurno}
               />
             </TabsContent>
             <TabsContent value="mias" className="space-y-4">

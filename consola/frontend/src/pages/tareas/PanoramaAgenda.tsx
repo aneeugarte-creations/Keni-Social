@@ -145,9 +145,10 @@ function AnadirRapido({ marca }: { marca: string }) {
   );
 }
 
-/** ¿El ítem está SIN dueño? (evento por cubrir, o encargo/cobertura-soltada sin responsable). */
+/** ¿El ítem está SIN dueño? Un evento lo está si nadie lo cogió Y no lo cubre el turno de su
+ *  franja; un encargo/cobertura-soltada, si no tiene responsable. */
 function itemSinDueno(i: Item): boolean {
-  return i.kind === "evento" || (i.kind === "tarea" && !i.tarea.responsable_id);
+  return (i.kind === "evento" && !i.cubiertoPorTurno) || (i.kind === "tarea" && !i.tarea.responsable_id);
 }
 
 /** Hora «de pared» (HH:MM) del ítem, o "" si no la tiene. */
@@ -502,7 +503,9 @@ function FilaAgenda({
   const cob = item.kind === "cobertura" ? item.cobertura : null;
   const titulo = cob ? cob.titulo : tarea ? tarea.titulo : evento!.titulo;
   const hora = cob ? cob.hora : tarea ? tarea.hora_objetivo : evento!.hora;
-  const sinDueno = item.kind === "evento" || (item.kind === "tarea" && !tarea!.responsable_id);
+  const sinDueno =
+    (item.kind === "evento" && !item.cubiertoPorTurno) ||
+    (item.kind === "tarea" && !tarea!.responsable_id);
   const esCobertura = item.kind === "cobertura" || item.kind === "evento" || Boolean(tarea?.evento_id);
 
   return (
@@ -561,9 +564,17 @@ function FilaAgenda({
               variant="outline"
               className="border-amber-500/50 text-amber-700 dark:text-amber-300"
             >
-              Por cubrir
+              Sin cubrir
             </Badge>
           </span>
+        ) : item.kind === "evento" ? (
+          // Nadie lo cogió pero hay turno en su franja: lo cubre el turno (calmado, no ámbar).
+          <Badge
+            variant="outline"
+            className="shrink-0 border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+          >
+            Cubierto por turno
+          </Badge>
         ) : cob ? (
           <span className="flex shrink-0 items-center gap-1.5">
             {/* Semáforo agregado por rol: qué roles del evento están cubiertos. */}
@@ -595,7 +606,12 @@ function FilaAgenda({
           ) : tarea ? (
             <TarjetaTarea tarea={tarea} catalogos={catalogos} sinMenu />
           ) : (
-            <TarjetaEventoLibre evento={evento!} catalogos={catalogos} sinMenu />
+            <TarjetaEventoLibre
+              evento={evento!}
+              catalogos={catalogos}
+              sinMenu
+              cubiertoPorTurno={item.kind === "evento" && Boolean(item.cubiertoPorTurno)}
+            />
           )}
         </div>
       )}
@@ -629,11 +645,14 @@ export function PanoramaAgenda({
   eventos,
   catalogos,
   marca,
+  cubiertosPorTurno,
 }: {
   tareas: Publicacion[];
   eventos: EventoRota[];
   catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
+  /** Ids de eventos que cubre el turno de su franja (no son «sin cubrir»). */
+  cubiertosPorTurno: Set<string>;
 }) {
   useRelojVivo();
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
@@ -680,7 +699,7 @@ export function PanoramaAgenda({
   // sueltos sin dueño NO llevan fecha de evento, así que siguen contando aunque venzan (son tarea
   // pendiente, no un evento ido).
   const nPorCubrir =
-    eventosLibres.filter((e) => !yaPaso(e.fecha, e.hora)).length +
+    eventosLibres.filter((e) => !yaPaso(e.fecha, e.hora) && !cubiertosPorTurno.has(e.id)).length +
     recuperables.filter((t) => !yaPaso(t.fecha_objetivo, t.hora_objetivo)).length +
     encargos.filter((t) => !t.responsable_id).length;
 
@@ -714,6 +733,7 @@ export function PanoramaAgenda({
           clave: `e-${e.id}`,
           orden: e.fecha || "9999-99-99",
           evento: e,
+          cubiertoPorTurno: cubiertosPorTurno.has(e.id),
         }))
       : []),
   ];

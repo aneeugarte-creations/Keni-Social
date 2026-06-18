@@ -247,12 +247,15 @@ export function TarjetaEventoLibre({
   evento,
   catalogos,
   sinMenu = false,
+  cubiertoPorTurno = false,
 }: {
   evento: EventoRota;
   catalogos: CatalogosPublicacion | undefined;
   /** Oculta el kebab «⋮» (las acciones siguen accesibles por click derecho/teclado). Lo usa
    *  el Panorama, donde Asignar/Editar/Borrar ya viven como iconos en la propia fila. */
   sinMenu?: boolean;
+  /** Lo cubre el turno de su franja → «Cubierto por turno» (calmado) en vez de «Sin cubrir». */
+  cubiertoPorTurno?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -324,9 +327,21 @@ export function TarjetaEventoLibre({
       <div className="flex flex-wrap items-center gap-2">
         <IconoEvento titulo={evento.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{evento.titulo}</span>
-        <Badge variant="outline" className="border-dashed text-muted-foreground">
-          Por cubrir
-        </Badge>
+        {cubiertoPorTurno ? (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+          >
+            Cubierto por turno
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="border-dashed border-amber-500/50 text-amber-700 dark:text-amber-300"
+          >
+            Sin cubrir
+          </Badge>
+        )}
         {evento.cambiado && (
           <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
             Cambió de hora

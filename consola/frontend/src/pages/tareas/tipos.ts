@@ -39,7 +39,14 @@ export type Cobertura = {
 
 /** Un ítem de la lista: un evento por cubrir, su cobertura (≥1 dueño), o un encargo suelto. */
 export type Item =
-  | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
+  | {
+      kind: "evento";
+      clave: string;
+      orden: string;
+      evento: EventoRota;
+      /** Hay alguien de turno en la franja del evento ese día → lo cubre el turno (no «sin cubrir»). */
+      cubiertoPorTurno?: boolean;
+    }
   | { kind: "cobertura"; clave: string; orden: string; cobertura: Cobertura }
   | { kind: "tarea"; clave: string; orden: string; tarea: Publicacion };
 

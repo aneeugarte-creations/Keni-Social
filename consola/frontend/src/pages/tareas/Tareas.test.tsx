@@ -11,7 +11,15 @@ import {
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import { hoyCDMX } from "@/lib/fecha";
-import type { CatalogosPublicacion, Publicacion, EventoRota, UsuarioSesion } from "@/types";
+import type {
+  CatalogosPublicacion,
+  EventoRota,
+  FranjaSemana,
+  Publicacion,
+  RotaSemana,
+  TurnoRota,
+  UsuarioSesion,
+} from "@/types";
 
 import { PanoramaAgenda } from "./PanoramaAgenda";
 import Tareas from "./Tareas";
@@ -123,12 +131,42 @@ function valorMarca(marcaActiva: string | null): ValorMarcaActiva {
   };
 }
 
-function renderTareas(tareas: Publicacion[], eventos: EventoRota[] = [], u = usuario()) {
+function semanaVacia(): RotaSemana {
+  return { lunes: "", inicio: "", fin: "", dias: [], turnos: [], franjas: [], aprobada: false, total: 0 };
+}
+
+// RotaSemana con franja Mañana (08–16) y un turno ese día: cubre por turno los eventos de mañana.
+function semanaConTurnoManana(fecha: string): RotaSemana {
+  return {
+    ...semanaVacia(),
+    franjas: [
+      {
+        id: "fr-m",
+        lunes: "",
+        nombre: "Mañana",
+        inicio: "08:00",
+        fin: "16:00",
+        orden: 0,
+        es_descanso: false,
+        marca: "claro-sports",
+      } as FranjaSemana,
+    ],
+    turnos: [{ id: "tr1", fecha, franja_id: "fr-m", miembro_id: "u-luis", miembro_nombre: "luis" } as TurnoRota],
+  };
+}
+
+function renderTareas(
+  tareas: Publicacion[],
+  eventos: EventoRota[] = [],
+  u = usuario(),
+  semana: RotaSemana = semanaVacia(),
+) {
   vi.spyOn(apiMod.api, "contenido").mockResolvedValue({
     contenidos: tareas,
     catalogos: catalogos(),
   });
   vi.spyOn(apiMod.api, "rotaEventos").mockResolvedValue({ eventos });
+  vi.spyOn(apiMod.api, "listarTurnos").mockResolvedValue(semana);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -154,7 +192,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     vi.useRealTimers();
   });
 
-  it("un EVENTO sin tarea sale como «Por cubrir» y «La cubro yo» llama a cubrirEvento", async () => {
+  it("un EVENTO sin tarea ni turno sale como «Sin cubrir» y «La cubro yo» llama a cubrirEvento", async () => {
     const cubrir = vi
       .spyOn(apiMod.api, "cubrirEvento")
       .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
@@ -168,6 +206,20 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
     // El rol por defecto (Foto) viaja como `formato`: la cobertura es por rol.
     expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "foto");
+  });
+
+  it("CUBIERTO POR TURNO: un evento sin coger pero con turno en su franja sale «Cubierto por turno», no «Sin cubrir»", async () => {
+    renderTareas(
+      [],
+      [evento({ id: "ev-cub", titulo: "Cubierto por el turno", fecha: "2026-07-01", hora: "10:00" })],
+      usuario(),
+      semanaConTurnoManana("2026-07-01"),
+    );
+    expect(await screen.findByText("Cubierto por el turno")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText("Cubierto por turno").length).toBeGreaterThan(0),
+    );
+    expect(screen.queryByText("Sin cubrir")).toBeNull();
   });
 
   it("PANORAMA: el icono «Asignar» de la fila encarga el evento sin desplegar (cubrirEvento con rol)", async () => {
@@ -362,8 +414,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(await screen.findByText("Partido por cubrir")).toBeInTheDocument();
     expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
 
-    // El evento sin dueño se marca «Por cubrir».
-    expect(screen.getAllByText("Por cubrir").length).toBeGreaterThan(0);
+    // Sin turno en su franja (semana vacía), el evento sin dueño se marca «Sin cubrir».
+    expect(screen.getAllByText("Sin cubrir").length).toBeGreaterThan(0);
 
     // La carga por persona deja filtrar; «luis» aparece como chip.
     expect(screen.getByRole("button", { name: "Ver solo lo de luis" })).toBeInTheDocument();
@@ -450,7 +502,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: /Marcar hecha/ })).toBeNull();
   });
 
-  it("RECUPERACIÓN: una cobertura soltada (sin dueño) reaparece como «Por cubrir» y se re-coge", async () => {
+  it("RECUPERACIÓN: una cobertura soltada (sin dueño) reaparece como «Sin cubrir» y se re-coge", async () => {
     const coger = vi
       .spyOn(apiMod.api, "cogerPublicacion")
       .mockResolvedValue({ contenido: {} } as never);
@@ -585,13 +637,14 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
           <PanoramaAgenda
             tareas={[]}
             eventos={[
-              // Más temprano (00:00) y YA pasado → «por cubrir», pero baja en urgencia.
+              // Más temprano (00:00) y YA pasado → «sin cubrir», pero baja en urgencia.
               evento({ id: "ev-temprano", titulo: "Empezó temprano", fecha: hoy, hora: "00:00" }),
               // En curso ahora (23:00, ventana 180') → «en vivo», debe flotar arriba.
               evento({ id: "ev-vivo", titulo: "En vivo ahora", fecha: hoy, hora: "23:00" }),
             ]}
             catalogos={catalogos()}
             marca="claro-sports"
+            cubiertosPorTurno={new Set()}
           />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -672,6 +725,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   function renderPanorama(props: {
     tareas?: Publicacion[];
     eventos?: EventoRota[];
+    cubiertosPorTurno?: Set<string>;
   }) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
@@ -682,6 +736,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
             eventos={props.eventos ?? []}
             catalogos={catalogos()}
             marca="claro-sports"
+            cubiertosPorTurno={props.cubiertosPorTurno ?? new Set()}
           />
         </MemoryRouter>
       </QueryClientProvider>,
