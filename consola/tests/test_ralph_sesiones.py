@@ -153,9 +153,10 @@ def test_parser_cierre_de_turno_emite_fin_antes_del_estado():
     p = rs.ParserRalph()
     p.procesar_linea(_delta_texto("respuesta"))  # -> activo, hubo texto
     eventos = p.procesar_linea(json.dumps({"type": "result", "subtype": "success"}))
-    assert {"tipo": "mensaje", "delta": "", "fin": True} in eventos
+    fin = next(e for e in eventos if e.get("fin"))
+    assert fin["tipo"] == "mensaje" and fin["delta"] == ""
     # El fin precede al cambio de estado (orden de cierre limpio).
-    assert eventos.index({"tipo": "mensaje", "delta": "", "fin": True}) < eventos.index(
+    assert eventos.index(fin) < eventos.index(
         {"tipo": "estado", "estado": rs.ESTADO_ESPERANDO}
     )
 
@@ -173,7 +174,8 @@ def test_parser_cierre_por_error_emite_fin_si_hubo_texto():
     p = rs.ParserRalph()
     p.procesar_linea(_delta_texto("a medias"))  # -> activo, con texto
     eventos = p.procesar_linea(json.dumps({"type": "result", "is_error": True}))
-    assert {"tipo": "mensaje", "delta": "", "fin": True} in eventos
+    fin = next(e for e in eventos if e.get("fin"))
+    assert fin["tipo"] == "mensaje" and fin["delta"] == ""
     assert {"tipo": "estado", "estado": rs.ESTADO_ERROR} in eventos
 
 
