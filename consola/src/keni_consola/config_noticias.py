@@ -17,7 +17,6 @@ from ._config_comun import (
     ENV_CLASIFICAR_MARCA_IA,
     ENV_MARCAS_ACTIVAS,
     ENV_MARCA_NOTICIAS,
-    MARCAS_ACTIVAS_DEF,
     MARCA_NOTICIAS_DEF,
     ENV_CLUSTER_BREAKING_FUENTES,
     ENV_BREAKING_EXTRA_DIA,
@@ -139,12 +138,21 @@ def clasificar_marca_ia() -> bool:
 
 
 def marcas_activas() -> list[str]:
-    """Marcas CANDIDATAS del encaje automático (`KENI_MARCAS_ACTIVAS`, CSV de ids; def piloto).
+    """Marcas de NOTICIAS candidatas del encaje automático de marca.
 
-    Orden estable y sin duplicados. NO valida contra el catálogo (lo hace quien la usa): así
-    este módulo no importa `marcas` y evita ciclos.
+    Por defecto son las marcas con `tipo='noticias'` del catálogo —el flag noticias /
+    contenido-propio que se edita en la página Marcas—: activar una marca como noticias basta
+    para que entre al encaje, sin tocar variables de entorno ni listas hardcodeadas. Las de
+    contenido propio (`tipo='propio'`) quedan fuera hasta que se activen ahí.
+
+    `KENI_MARCAS_ACTIVAS` (CSV de ids) sigue disponible como override explícito (pruebas /
+    escenarios acotados). Orden estable y sin duplicados.
     """
-    crudo = _crudo(ENV_MARCAS_ACTIVAS) or MARCAS_ACTIVAS_DEF
+    crudo = (_crudo(ENV_MARCAS_ACTIVAS) or "").strip()
+    if not crudo:
+        from keni_shared import marcas as _marcas  # perezoso: evita el ciclo config <- marcas
+
+        return _marcas.noticias()
     vistas: list[str] = []
     for parte in crudo.split(","):
         m = parte.strip()

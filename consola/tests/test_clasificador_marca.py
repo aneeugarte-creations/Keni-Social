@@ -110,13 +110,20 @@ def test_config_clasificar_marca_ia_def_off(monkeypatch):
     assert config.clasificar_marca_ia() is True
 
 
-def test_config_marcas_activas_def_piloto(monkeypatch):
+def test_marcas_activas_derivan_del_flag_noticias(monkeypatch):
+    """Sin override, las marcas activas son las de `tipo='noticias'` del catálogo (el flag
+    noticias/contenido-propio de la página Marcas), no una lista hardcodeada."""
     from keni_consola import config
+    from keni_shared import marcas
 
     monkeypatch.delenv("KENI_MARCAS_ACTIVAS", raising=False)
+    assert config.marcas_activas() == marcas.noticias()
+    # En el catálogo del piloto son unotv + claro-sports + nacion-gamer; fundación y piso-15
+    # son contenido propio (`tipo='propio'`) y NO entran hasta activarse como noticias en Marcas.
     assert config.marcas_activas() == ["unotv", "claro-sports", "nacion-gamer"]
+    assert "fundacion" not in config.marcas_activas()
     assert config.marca_noticias() == "unotv"
-    # CSV configurable, sin duplicados y con orden estable.
+    # `KENI_MARCAS_ACTIVAS` sigue como override explícito (CSV, sin duplicados, orden estable).
     monkeypatch.setenv("KENI_MARCAS_ACTIVAS", "claro-sports, unotv , claro-sports")
     assert config.marcas_activas() == ["claro-sports", "unotv"]
 
