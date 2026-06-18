@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function ContenedorConfirmacion() {
   const [estado, setEstado] = React.useState<EstadoConfirmacion | null>(null);
@@ -75,13 +76,17 @@ export function ContenedorConfirmacion() {
                 {estado.textoCancelar ?? "Cancelar"}
               </AlertDialogCancel>
               {estado.opciones ? (
-                // Modo ELECCIÓN: un botón por opción (outline gris salvo destructivo).
+                // Modo ELECCIÓN: un botón por opción (outline gris salvo destructivo). `text-foreground`
+                // explícito porque `AlertDialogAction` aplica el variant DEFAULT de base (texto claro),
+                // y `outline` no fija color de texto: sin esto el texto sale claro sobre fondo claro.
                 estado.opciones.map((op) => (
                   <AlertDialogAction
                     key={op.valor}
-                    className={buttonVariants({
-                      variant: op.destructivo ? "destructive" : "outline",
-                    })}
+                    className={
+                      op.destructivo
+                        ? buttonVariants({ variant: "destructive" })
+                        : cn(buttonVariants({ variant: "outline" }), "text-foreground")
+                    }
                     onClick={() => responder(op.valor)}
                   >
                     {op.etiqueta}
