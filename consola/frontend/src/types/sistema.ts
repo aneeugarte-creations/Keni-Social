@@ -121,7 +121,7 @@ export interface GastoIADia {
 }
 
 /** Economía de tokens de UN motor (investigación/producción): gasto del día desglosado in/out,
- *  su tope diario propio y el % usado contra ese tope. */
+ *  con un tope diario INDEPENDIENTE por dirección (IN y OUT) y el % usado contra cada tope. */
 export interface PresupuestoProcesoIA {
   tokens_in: number;
   tokens_out: number;
@@ -129,12 +129,18 @@ export interface PresupuestoProcesoIA {
   tokens: number;
   coste_usd: number;
   generaciones: number;
-  /** Tope de tokens/día del motor (0 = sin límite). */
-  presupuesto_tokens_dia: number;
-  /** Tokens que restan del tope (null si tope = 0). */
-  restante_tokens: number | null;
-  /** % del tope consumido (null si tope = 0). */
-  pct_usado: number | null;
+  /** Tope de tokens IN/día del motor (0 = sin límite). */
+  presupuesto_tokens_in_dia: number;
+  /** Tope de tokens OUT/día del motor (0 = sin límite). */
+  presupuesto_tokens_out_dia: number;
+  /** Tokens IN que restan del tope (null si tope IN = 0). */
+  restante_in: number | null;
+  /** % del tope IN consumido (null si tope IN = 0). */
+  pct_in: number | null;
+  /** Tokens OUT que restan del tope (null si tope OUT = 0). */
+  restante_out: number | null;
+  /** % del tope OUT consumido (null si tope OUT = 0). */
+  pct_out: number | null;
   /** Nivel de corte del motor ("normal" | "solo_manual" | "agotado" | …). */
   nivel: string;
 }

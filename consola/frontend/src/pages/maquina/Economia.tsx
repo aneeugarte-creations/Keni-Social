@@ -35,7 +35,7 @@ import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
-import { PROC_META, resultadoDelDia, SerieProceso } from "@/pages/monitor/comun";
+import { PROC_META, SerieProceso } from "@/pages/monitor/comun";
 import type {
   ActividadProcesoBloque,
   ActividadPorDia,
@@ -270,11 +270,7 @@ export default function Economia() {
           <Skeleton className="h-28 w-full rounded-xl" />
         ) : (
           cola.data.presupuesto && (
-            <PanelPresupuesto
-              presupuesto={cola.data.presupuesto}
-              resHoy={resultadoDelDia(serie.data, cola.data.presupuesto.dia)}
-              esAdmin={esAdmin}
-            />
+            <PanelPresupuesto presupuesto={cola.data.presupuesto} esAdmin={esAdmin} />
           )
         )}
       </div>
