@@ -319,8 +319,15 @@ function SeccionLlavesAcceso() {
       await recargar();
     },
     onError: (e) => {
-      if (e instanceof DOMException && e.name === "NotAllowedError") {
-        toast.error("Registro cancelado.");
+      if (e instanceof DOMException && e.name === "InvalidStateError") {
+        // El autenticador de ESTE equipo ya tiene una llave para el sitio (o la passkey está
+        // sincronizada y ya está presente). Para sumar OTRO dispositivo se usa el QR.
+        toast.error(
+          "Este dispositivo ya tiene una llave registrada. Para añadir tu teléfono, elige " +
+            "“usar otro dispositivo” en el diálogo y escanea el QR.",
+        );
+      } else if (e instanceof DOMException && e.name === "NotAllowedError") {
+        toast.error("Registro cancelado o agotado. Vuelve a intentarlo.");
       } else {
         toast.error(mensajeError(e));
       }
@@ -436,6 +443,13 @@ function SeccionLlavesAcceso() {
             Añadir llave de acceso
           </Button>
         </form>
+
+        <p className="text-xs text-muted-foreground">
+          ¿Registrar otro dispositivo? El navegador lo gestiona: al pulsar “Añadir llave”, elige{" "}
+          <span className="font-medium">“usar otro dispositivo / teléfono”</span> y escanea el QR
+          con él para crear ahí su llave. Si usas iCloud Llavero o Google, tu passkey se sincroniza
+          sola entre tus dispositivos del mismo ecosistema (Apple↔Apple, Google↔Google).
+        </p>
       </CardContent>
     </Card>
   );
