@@ -1,0 +1,802 @@
+{
+  "marca": "nacion-gamer",
+  "ventana": "2025-06-17_2026-06-16",
+  "umbral": 20,
+  "fuente": "metricas_cache (Metricool)",
+  "conteo_por_red": {
+    "facebook": 4,
+    "instagram": 4,
+    "tiktok": 4
+  },
+  "fijos": [],
+  "estadisticas_por_red": {
+    "facebook": {
+      "posts": 3957,
+      "adopcion": 0.776,
+      "mediana": 3,
+      "mediana_con_uso": 4
+    },
+    "instagram": {
+      "posts": 3866,
+      "adopcion": 0.792,
+      "mediana": 3,
+      "mediana_con_uso": 4
+    },
+    "tiktok": {
+      "posts": 846,
+      "adopcion": 0.92,
+      "mediana": 4,
+      "mediana_con_uso": 4
+    }
+  },
+  "hashtags": [
+    {
+      "tag": "gaming",
+      "n": 533
+    },
+    {
+      "tag": "nintendo",
+      "n": 449
+    },
+    {
+      "tag": "videojuegos",
+      "n": 321
+    },
+    {
+      "tag": "ia",
+      "n": 300
+    },
+    {
+      "tag": "xbox",
+      "n": 299
+    },
+    {
+      "tag": "pokémon",
+      "n": 296
+    },
+    {
+      "tag": "anime",
+      "n": 286
+    },
+    {
+      "tag": "netflix",
+      "n": 232
+    },
+    {
+      "tag": "playstation",
+      "n": 230
+    },
+    {
+      "tag": "naciongamer",
+      "n": 197
+    },
+    {
+      "tag": "inteligenciaartificial",
+      "n": 172
+    },
+    {
+      "tag": "fortnite",
+      "n": 167
+    },
+    {
+      "tag": "nintendoswitch2",
+      "n": 157
+    },
+    {
+      "tag": "starwars",
+      "n": 139
+    },
+    {
+      "tag": "marvel",
+      "n": 136
+    },
+    {
+      "tag": "sony",
+      "n": 130
+    },
+    {
+      "tag": "gtavi",
+      "n": 118
+    },
+    {
+      "tag": "switch2",
+      "n": 111
+    },
+    {
+      "tag": "residentevil",
+      "n": 110
+    },
+    {
+      "tag": "manga",
+      "n": 105
+    },
+    {
+      "tag": "playstation5",
+      "n": 102
+    },
+    {
+      "tag": "microsoft",
+      "n": 100
+    },
+    {
+      "tag": "lego",
+      "n": 99
+    },
+    {
+      "tag": "ubisoft",
+      "n": 96
+    },
+    {
+      "tag": "disney",
+      "n": 94
+    },
+    {
+      "tag": "primevideo",
+      "n": 91
+    },
+    {
+      "tag": "roblox",
+      "n": 89
+    },
+    {
+      "tag": "silksong",
+      "n": 83
+    },
+    {
+      "tag": "steam",
+      "n": 82
+    },
+    {
+      "tag": "residentevilrequiem",
+      "n": 81
+    },
+    {
+      "tag": "superman",
+      "n": 79
+    },
+    {
+      "tag": "capcom",
+      "n": 78
+    },
+    {
+      "tag": "onepiece",
+      "n": 78
+    },
+    {
+      "tag": "callofduty",
+      "n": 75
+    },
+    {
+      "tag": "clairobscurexpedition33",
+      "n": 75
+    },
+    {
+      "tag": "mcu",
+      "n": 74
+    },
+    {
+      "tag": "ps5",
+      "n": 74
+    },
+    {
+      "tag": "gamepass",
+      "n": 68
+    },
+    {
+      "tag": "minecraft",
+      "n": 68
+    },
+    {
+      "tag": "thelegendofzelda",
+      "n": 68
+    },
+    {
+      "tag": "nintendoswitch",
+      "n": 65
+    },
+    {
+      "tag": "otaku",
+      "n": 65
+    },
+    {
+      "tag": "pokémontcg",
+      "n": 65
+    },
+    {
+      "tag": "hollowknightsilksong",
+      "n": 61
+    },
+    {
+      "tag": "thesupermariogalaxymovie",
+      "n": 61
+    },
+    {
+      "tag": "erune",
+      "n": 60
+    },
+    {
+      "tag": "godofwar",
+      "n": 60
+    },
+    {
+      "tag": "goty",
+      "n": 60
+    },
+    {
+      "tag": "sega",
+      "n": 60
+    },
+    {
+      "tag": "cómics",
+      "n": 58
+    },
+    {
+      "tag": "strangerthings",
+      "n": 58
+    },
+    {
+      "tag": "demonslayer",
+      "n": 55
+    },
+    {
+      "tag": "zelda",
+      "n": 55
+    },
+    {
+      "tag": "gta",
+      "n": 54
+    },
+    {
+      "tag": "tokyogameshow",
+      "n": 54
+    },
+    {
+      "tag": "themandalorianandgrogu",
+      "n": 53
+    },
+    {
+      "tag": "ccxpmx",
+      "n": 52
+    },
+    {
+      "tag": "iagenerativa",
+      "n": 52
+    },
+    {
+      "tag": "kimetsunoyaiba",
+      "n": 52
+    },
+    {
+      "tag": "thegameawards",
+      "n": 52
+    },
+    {
+      "tag": "dc",
+      "n": 51
+    },
+    {
+      "tag": "tcg",
+      "n": 50
+    },
+    {
+      "tag": "spiderman",
+      "n": 48
+    },
+    {
+      "tag": "avatar",
+      "n": 47
+    },
+    {
+      "tag": "ea",
+      "n": 47
+    },
+    {
+      "tag": "halo",
+      "n": 47
+    },
+    {
+      "tag": "dragonball",
+      "n": 46
+    },
+    {
+      "tag": "juegosdevideo",
+      "n": 45
+    },
+    {
+      "tag": "avengersdoomsday",
+      "n": 44
+    },
+    {
+      "tag": "cine",
+      "n": 44
+    },
+    {
+      "tag": "fallout",
+      "n": 44
+    },
+    {
+      "tag": "grogu",
+      "n": 44
+    },
+    {
+      "tag": "thepokémoncompany",
+      "n": 44
+    },
+    {
+      "tag": "warnerbros",
+      "n": 44
+    },
+    {
+      "tag": "donaldtrump",
+      "n": 42
+    },
+    {
+      "tag": "hideokojima",
+      "n": 42
+    },
+    {
+      "tag": "cosplay",
+      "n": 41
+    },
+    {
+      "tag": "tgs",
+      "n": 41
+    },
+    {
+      "tag": "disneyplus",
+      "n": 40
+    },
+    {
+      "tag": "supermariobros",
+      "n": 40
+    },
+    {
+      "tag": "tokyogameshow2025",
+      "n": 40
+    },
+    {
+      "tag": "batman",
+      "n": 39
+    },
+    {
+      "tag": "ces2026",
+      "n": 39
+    },
+    {
+      "tag": "pokémonlegendsza",
+      "n": 39
+    },
+    {
+      "tag": "rockstar",
+      "n": 39
+    },
+    {
+      "tag": "sonic",
+      "n": 39
+    },
+    {
+      "tag": "starfox",
+      "n": 39
+    },
+    {
+      "tag": "switch",
+      "n": 39
+    },
+    {
+      "tag": "yoshi",
+      "n": 39
+    },
+    {
+      "tag": "ashasharma",
+      "n": 38
+    },
+    {
+      "tag": "jamesgunn",
+      "n": 38
+    },
+    {
+      "tag": "pikachu",
+      "n": 38
+    },
+    {
+      "tag": "southpark",
+      "n": 38
+    },
+    {
+      "tag": "trump",
+      "n": 38
+    },
+    {
+      "tag": "japón",
+      "n": 37
+    },
+    {
+      "tag": "kpopdemonhunters",
+      "n": 37
+    },
+    {
+      "tag": "portalunotv",
+      "n": 37
+    },
+    {
+      "tag": "xboxshowcase",
+      "n": 37
+    },
+    {
+      "tag": "creadorbandai",
+      "n": 36
+    },
+    {
+      "tag": "nintendodirect",
+      "n": 36
+    },
+    {
+      "tag": "stateofplay",
+      "n": 36
+    },
+    {
+      "tag": "theboys",
+      "n": 36
+    },
+    {
+      "tag": "valve",
+      "n": 36
+    },
+    {
+      "tag": "assassinscreed",
+      "n": 35
+    },
+    {
+      "tag": "crunchyroll",
+      "n": 35
+    },
+    {
+      "tag": "doblaje",
+      "n": 34
+    },
+    {
+      "tag": "hbomax",
+      "n": 34
+    },
+    {
+      "tag": "mario",
+      "n": 34
+    },
+    {
+      "tag": "supermario",
+      "n": 34
+    },
+    {
+      "tag": "cod",
+      "n": 33
+    },
+    {
+      "tag": "godzilla",
+      "n": 33
+    },
+    {
+      "tag": "terror",
+      "n": 33
+    },
+    {
+      "tag": "thelastofus",
+      "n": 33
+    },
+    {
+      "tag": "kratos",
+      "n": 32
+    },
+    {
+      "tag": "panini",
+      "n": 32
+    },
+    {
+      "tag": "streetfighter",
+      "n": 32
+    },
+    {
+      "tag": "asus",
+      "n": 31
+    },
+    {
+      "tag": "avatarfireandash",
+      "n": 31
+    },
+    {
+      "tag": "doom",
+      "n": 31
+    },
+    {
+      "tag": "battlefield6",
+      "n": 30
+    },
+    {
+      "tag": "fantasticfourfirststeps",
+      "n": 30
+    },
+    {
+      "tag": "ghostofyotei",
+      "n": 30
+    },
+    {
+      "tag": "chainsawman",
+      "n": 29
+    },
+    {
+      "tag": "epicgames",
+      "n": 29
+    },
+    {
+      "tag": "spidermanbrandnewday",
+      "n": 29
+    },
+    {
+      "tag": "teamcherry",
+      "n": 29
+    },
+    {
+      "tag": "palworld",
+      "n": 28
+    },
+    {
+      "tag": "playstationplus",
+      "n": 28
+    },
+    {
+      "tag": "bandainamco",
+      "n": 27
+    },
+    {
+      "tag": "lossimpson",
+      "n": 27
+    },
+    {
+      "tag": "avengers",
+      "n": 26
+    },
+    {
+      "tag": "dlc",
+      "n": 26
+    },
+    {
+      "tag": "grandtheftauto",
+      "n": 26
+    },
+    {
+      "tag": "harrypotter",
+      "n": 26
+    },
+    {
+      "tag": "hbo",
+      "n": 26
+    },
+    {
+      "tag": "ice",
+      "n": 26
+    },
+    {
+      "tag": "maythe4th",
+      "n": 26
+    },
+    {
+      "tag": "psplus",
+      "n": 26
+    },
+    {
+      "tag": "scifi",
+      "n": 26
+    },
+    {
+      "tag": "cuatrofantásticos",
+      "n": 25
+    },
+    {
+      "tag": "eldenring",
+      "n": 25
+    },
+    {
+      "tag": "esports",
+      "n": 25
+    },
+    {
+      "tag": "geek",
+      "n": 25
+    },
+    {
+      "tag": "hollowknight",
+      "n": 25
+    },
+    {
+      "tag": "juegosindie",
+      "n": 25
+    },
+    {
+      "tag": "mortalkombat",
+      "n": 25
+    },
+    {
+      "tag": "pcgaming",
+      "n": 25
+    },
+    {
+      "tag": "ram",
+      "n": 25
+    },
+    {
+      "tag": "rpg",
+      "n": 25
+    },
+    {
+      "tag": "silenthillf",
+      "n": 25
+    },
+    {
+      "tag": "xmen",
+      "n": 25
+    },
+    {
+      "tag": "dccómics",
+      "n": 24
+    },
+    {
+      "tag": "deathstranding2",
+      "n": 24
+    },
+    {
+      "tag": "fifa",
+      "n": 24
+    },
+    {
+      "tag": "forzahorizon6",
+      "n": 24
+    },
+    {
+      "tag": "guillermodeltoro",
+      "n": 24
+    },
+    {
+      "tag": "gundam",
+      "n": 24
+    },
+    {
+      "tag": "heman",
+      "n": 24
+    },
+    {
+      "tag": "mundial",
+      "n": 24
+    },
+    {
+      "tag": "rogxboxally",
+      "n": 24
+    },
+    {
+      "tag": "sandfall",
+      "n": 24
+    },
+    {
+      "tag": "squareenix",
+      "n": 24
+    },
+    {
+      "tag": "toystory5",
+      "n": 24
+    },
+    {
+      "tag": "animole",
+      "n": 23
+    },
+    {
+      "tag": "gearsofwar",
+      "n": 23
+    },
+    {
+      "tag": "impuestos",
+      "n": 23
+    },
+    {
+      "tag": "marvelswolverine",
+      "n": 23
+    },
+    {
+      "tag": "rockstargames",
+      "n": 23
+    },
+    {
+      "tag": "silenthill",
+      "n": 23
+    },
+    {
+      "tag": "halloween",
+      "n": 22
+    },
+    {
+      "tag": "paramount",
+      "n": 22
+    },
+    {
+      "tag": "pokopia",
+      "n": 22
+    },
+    {
+      "tag": "soulslike",
+      "n": 22
+    },
+    {
+      "tag": "tombraider",
+      "n": 22
+    },
+    {
+      "tag": "dandadan",
+      "n": 21
+    },
+    {
+      "tag": "fromsoftware",
+      "n": 21
+    },
+    {
+      "tag": "konami",
+      "n": 21
+    },
+    {
+      "tag": "liverpoolgamingfest",
+      "n": 21
+    },
+    {
+      "tag": "masterchief",
+      "n": 21
+    },
+    {
+      "tag": "rog",
+      "n": 21
+    },
+    {
+      "tag": "supergirl",
+      "n": 21
+    },
+    {
+      "tag": "taketwo",
+      "n": 21
+    },
+    {
+      "tag": "foxmccloud",
+      "n": 20
+    },
+    {
+      "tag": "frankenstein",
+      "n": 20
+    },
+    {
+      "tag": "inteligenciaartificialgenerativa",
+      "n": 20
+    },
+    {
+      "tag": "kojimaproductions",
+      "n": 20
+    },
+    {
+      "tag": "krypto",
+      "n": 20
+    },
+    {
+      "tag": "mastersoftheuniverse",
+      "n": 20
+    },
+    {
+      "tag": "ocarinaoftime",
+      "n": 20
+    },
+    {
+      "tag": "pc",
+      "n": 20
+    },
+    {
+      "tag": "pokémongo",
+      "n": 20
+    },
+    {
+      "tag": "tecnología",
+      "n": 20
+    }
+  ]
+}

@@ -15,16 +15,25 @@ _CONTEO_ESPERADO = {
     "claro-sports": {"facebook": 1, "instagram": 5, "youtube": 0, "tiktok": 5},
     "unotv": {"facebook": 5, "instagram": 5, "tiktok": 5},
     "fundacion": {"facebook": 5, "instagram": 5, "tiktok": 4},
+    "nacion-gamer": {"facebook": 4, "instagram": 4, "tiktok": 4},
 }
 
 # Marcas con biblioteca versionada (todas las del catálogo del piloto).
-_MARCAS_CON_BIBLIOTECA = ("claro-sports", "unotv", "fundacion")
+_MARCAS_CON_BIBLIOTECA = ("claro-sports", "unotv", "fundacion", "nacion-gamer")
+
+# Marcas del catálogo SIN biblioteca: no tienen historial en Metricool (no se puede generar el
+# pool de >= 20 usos). `piso-15` no produce contenido medido —no está activa—; si algún día
+# publica, su biblioteca se genera con el script oficial y se saca de aquí.
+_SIN_HISTORIAL = frozenset({"piso-15"})
 
 
 def test_toda_marca_del_catalogo_tiene_biblioteca():
-    # Una marca sin biblioteca queda MUDA en hashtags (candidatos vacíos -> la etapa no encola
-    # ni aplica nada, en cualquier formato). Era el bug de `fundacion`: marca activa sin JSON.
+    # Una marca ACTIVA sin biblioteca queda MUDA en hashtags (candidatos vacíos -> la etapa no
+    # encola ni aplica nada, en cualquier formato). Era el bug de `fundacion`: marca activa sin
+    # JSON. Las de `_SIN_HISTORIAL` no tienen historial medido del que sacar el pool: se exceptúan.
     for marca in marcas.ids():
+        if marca in _SIN_HISTORIAL:
+            continue
         assert hb.candidatos(marca), f"{marca} sin biblioteca de hashtags (datos/{marca}.json)"
 
 

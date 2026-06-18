@@ -85,6 +85,11 @@ ESTADISTICAS_RED: dict[str, dict[str, tuple[int, float, int, int]]] = {
         "instagram": (101, 1.000, 5, 5),
         "tiktok": (7, 0.857, 4, 4),
     },
+    "nacion-gamer": {
+        "facebook": (3957, 0.776, 3, 4),
+        "instagram": (3866, 0.792, 3, 4),
+        "tiktok": (846, 0.920, 4, 4),
+    },
 }
 
 # Ventana del historial usado para esta foto (para trazabilidad en el JSON).
