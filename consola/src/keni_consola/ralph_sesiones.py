@@ -90,6 +90,31 @@ Reglas:
 - Si una acción es ambigua o arriesgada, pregunta antes de ejecutarla.
 """
 
+# Slug del repo para clonar/asegurar /repo (mismo que worker_dev).
+_REPO_SLUG = "kenitech-io/keni-social"
+
+# Persona del Ralph de DESARROLLO. Se inyecta con `--append-system-prompt` (NO sobrescribe el
+# CLAUDE.md del repo, que ya está en su worktree). Le dice quién es, que su workspace YA es un
+# worktree de main y CÓMO promover de verdad (no basta un commit local).
+_PERSONA_DEV = (
+    "Eres Ralph, un ayudante de DESARROLLO que vive DENTRO de la propia app keni-social (la "
+    "Consola). Tu trabajo es arreglar BUGS y hacer cambios SIMPLES y acotados. Para cosas "
+    "COMPLEJAS o ambiciosas NO improvises: existe el sistema de Sugerencias (kanban, con "
+    "discovery→build); deriva ahí esas peticiones.\n\n"
+    "Tu workspace YA es un git worktree de `main` recién traído (tu rama propia `ralph/<nombre>` "
+    "creada desde `origin/main`). NO está vacío y NO tienes que buscar ni clonar el repo: el "
+    "código está aquí, trabaja sobre él.\n\n"
+    "Para que tus cambios lleguen a producción NO basta un commit local en main. Flujo "
+    "OBLIGATORIO:\n"
+    "1. Trabaja en tu worktree y haz commits en TU rama (`ralph/<nombre>`), no en main.\n"
+    "2. Promueve con `bash scripts/promover-main.sh` desde tu worktree: hace fetch+rebase+push a "
+    "main e imprime la limpieza. Si te rechaza: `git fetch && git rebase origin/main` y "
+    "reintenta. NUNCA hagas push directo a main a mano.\n"
+    "3. Cambio de comportamiento = tests en el MISMO commit. Comentarios limpios (qué hace el "
+    "código hoy, no el historial de bugs). Lee el `CLAUDE.md` del repo para el resto de reglas "
+    "(stack, fronteras, CI).\n"
+)
+
 
 # --------------------------------------------------------------------------- #
 # Pool de nombres estilo Nolan v1 (ziggy, nova, echo, ...).                    #
@@ -243,6 +268,7 @@ def construir_argv(
     *,
     mcp_config: str | None = None,
     resume: str | None = None,
+    system_extra: str | None = None,
 ) -> list[str]:
     """argv de un `claude` interactivo multi-turno (stream-json IN/OUT).
 
@@ -268,6 +294,8 @@ def construir_argv(
         modelo or MODELO_DEF,
         "--dangerously-skip-permissions",
     ]
+    if system_extra:
+        argv += ["--append-system-prompt", system_extra]
     if tipo == TIPO_OPERATIVO:
         argv += ["--disallowed-tools", "Bash", "Edit", "Write"]
         if mcp_config:
@@ -424,12 +452,17 @@ class GestorRalph:
         if tipo == TIPO_DEV:
             try:
                 sesion.worktree, sesion.rama = _crear_worktree(config.dev_repo(), nombre)
-            except Exception as e:  # noqa: BLE001 -- sin repo git utilizable: arranca en dir plano
-                # /repo aún no clonado (p.ej. GitHub sin conectar) o git no disponible: el Ralph
-                # arranca igual en un directorio de trabajo plano para poder CONVERSAR; sin
-                # contexto del repo hasta que /repo exista. NO bloquea el chat.
-                _log.warning("Ralph %s: sin worktree (%s); arranca en directorio plano", nombre, e)
-                sesion.worktree, sesion.rama = _dir_trabajo_plano(nombre), ""
+            except Exception as e:  # noqa: BLE001 -- sin repo no hay carril dev: error claro
+                # El Ralph de desarrollo NECESITA el repo: si no se puede clonar (GitHub sin
+                # conectar) lo dejamos en error explícito en vez de arrancar en un dir vacío que
+                # confunde al agente ("el directorio está vacío").
+                _log.warning("Ralph %s: no se pudo preparar el worktree: %s", nombre, e)
+                self._marcar_error(
+                    sesion,
+                    "no se pudo preparar el repo de desarrollo (conecta GitHub en "
+                    "Sistema → Proveedores)",
+                )
+                return sesion.info()
         else:
             # Operativo: dir de trabajo plano; la persona (CLAUDE.md) y el MCP los escribe el
             # lanzador al arrancar el proceso.
@@ -582,13 +615,19 @@ class GestorRalph:
         conversacion con memoria intacta. Para operativo (re)escribe la persona y el mcp-config
         en el cwd (reconstruido con `sesion.usuario_id`)."""
         mcp_cfg: str | None = None
+        system_extra: str | None = None
         if sesion.tipo == TIPO_OPERATIVO:
             _escribir_persona_operativa(sesion.worktree)
             mcp_cfg = _mcp_config(sesion.worktree, sesion.usuario_id or None)
+        else:
+            system_extra = _PERSONA_DEV
         resume = sesion.session_id if (reanudar and sesion.session_id) else None
         try:
             sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
-                construir_argv(sesion.modelo, sesion.tipo, mcp_config=mcp_cfg, resume=resume),
+                construir_argv(
+                    sesion.modelo, sesion.tipo, mcp_config=mcp_cfg, resume=resume,
+                    system_extra=system_extra,
+                ),
                 cwd=sesion.worktree,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -757,21 +796,58 @@ def _dir_trabajo_plano(nombre: str) -> str:
     return destino
 
 
+def _asegurar_repo_git(repo: str) -> None:
+    """Garantiza que `repo` sea un clon git utilizable; si falta, lo clona con `gh`.
+
+    Configura antes el credential-helper de gh (`gh auth setup-git`) para que `git push` funcione.
+    Sube `RuntimeError` si no se puede clonar (p.ej. GitHub sin conectar) — el llamante lo traduce
+    a un error legible en la burbuja."""
+    if os.path.isdir(os.path.join(repo, ".git")):
+        return
+    subprocess.run(  # noqa: S603 -- argv lista, sin shell
+        ["gh", "auth", "setup-git"], check=False, capture_output=True, text=True, timeout=60
+    )
+    padre = os.path.dirname(os.path.abspath(repo)) or "/"
+    os.makedirs(padre, exist_ok=True)
+    try:
+        res = subprocess.run(  # noqa: S603 -- argv lista, sin shell
+            ["gh", "repo", "clone", _REPO_SLUG, repo],
+            capture_output=True, text=True, timeout=600,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f"no se pudo clonar el repo: {e}") from e
+    if res.returncode != 0 or not os.path.isdir(os.path.join(repo, ".git")):
+        detalle = (res.stderr or res.stdout or "").strip()[:200]
+        raise RuntimeError("no se pudo clonar el repo (¿GitHub conectado?): " + (detalle or "gh"))
+
+
 def _crear_worktree(repo: str, nombre: str) -> tuple[str, str]:
     """Crea un worktree+rama del `repo` para un Ralph. Devuelve (ruta_worktree, rama).
 
-    Rama `ralph/<nombre>`; worktree en `$KENI_DATA_DIR/ralph-worktrees/<nombre>-<sufijo>`.
-    Sube la excepcion si git falla (el llamante cae al directorio plano)."""
+    Garantiza el clon (`_asegurar_repo_git`), trae `main` fresco y basa el worktree en
+    `origin/main`: el workspace del Ralph es una COPIA de main al día (rama propia
+    `ralph/<nombre>`), sin que tenga que buscar ni clonar nada. Worktree en
+    `$KENI_DATA_DIR/ralph-worktrees/<nombre>-<sufijo>`. Sube la excepcion si git/gh falla."""
+    _asegurar_repo_git(repo)
     rama = f"ralph/{nombre}"
     sufijo = uuid.uuid4().hex[:8]
     base = _base_escribible("ralph-worktrees", repo)
     destino = os.path.join(base, f"{nombre}-{sufijo}")
+    # Trae main al día; si no hay red/origin se sigue con lo local (best-effort).
     subprocess.run(  # noqa: S603 -- argv lista, sin shell
-        ["git", "-C", repo, "worktree", "add", "-b", rama, destino],
-        check=True,
-        capture_output=True,
-        text=True,
+        ["git", "-C", repo, "fetch", "origin", "main"],
+        check=False, capture_output=True, text=True, timeout=120,
     )
+    res = subprocess.run(  # noqa: S603 -- argv lista, sin shell
+        ["git", "-C", repo, "worktree", "add", "-B", rama, destino, "origin/main"],
+        capture_output=True, text=True,
+    )
+    if res.returncode != 0:
+        # Sin `origin/main` (repo recién clonado en local sin remoto resuelto): basa en HEAD.
+        subprocess.run(  # noqa: S603 -- argv lista, sin shell
+            ["git", "-C", repo, "worktree", "add", "-B", rama, destino],
+            check=True, capture_output=True, text=True,
+        )
     return destino, rama
 
 

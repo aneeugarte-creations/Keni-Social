@@ -362,3 +362,30 @@ def test_persistencia_omite_sesiones_sin_session_id(tmp_path, monkeypatch):
     g1._guardar()
     g2 = rs.GestorRalph()
     assert g2.obtener("x") is None
+
+
+def test_kill_borra_la_entrada_persistida(tmp_path, monkeypatch):
+    # Borrar el agente desde el front (kill) debe eliminar su entrada del JSON persistido.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    s = rs.SesionRalph(id="r1", nombre="ziggy", modelo="opus", creado=0.0, tipo=rs.TIPO_OPERATIVO)
+    s.session_id = "sess-1"  # con session_id -> se persiste
+    g._sesiones["r1"] = s
+    g._guardar()
+    datos = json.load(open(rs._ruta_estado(), encoding="utf-8"))
+    assert [r["id"] for r in datos["sesiones"]] == ["r1"]
+    g.kill("r1")
+    datos = json.load(open(rs._ruta_estado(), encoding="utf-8"))
+    assert datos["sesiones"] == []
+
+
+def test_construir_argv_inyecta_persona_dev():
+    argv = rs.construir_argv("opus", rs.TIPO_DEV, system_extra=rs._PERSONA_DEV)
+    assert "--append-system-prompt" in argv
+    assert "promover-main.sh" in argv[argv.index("--append-system-prompt") + 1]
+
+
+def test_persona_dev_cubre_rol_y_flujo():
+    # Sabe quién es (app + bugs/simple), deriva lo complejo a Sugerencias y conoce el promover.
+    assert "promover-main.sh" in rs._PERSONA_DEV
+    assert "Sugerencias" in rs._PERSONA_DEV
