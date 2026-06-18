@@ -1,0 +1,82 @@
+{
+  "marca": "fundacion",
+  "ventana": "2025-06-17_2026-06-16",
+  "umbral": 20,
+  "fuente": "metricas_cache (Metricool)",
+  "conteo_por_red": {
+    "facebook": 5,
+    "instagram": 5,
+    "tiktok": 4
+  },
+  "fijos": [],
+  "estadisticas_por_red": {
+    "facebook": {
+      "posts": 279,
+      "adopcion": 1.0,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    },
+    "instagram": {
+      "posts": 101,
+      "adopcion": 1.0,
+      "mediana": 5,
+      "mediana_con_uso": 5
+    },
+    "tiktok": {
+      "posts": 7,
+      "adopcion": 0.857,
+      "mediana": 4,
+      "mediana_con_uso": 4
+    }
+  },
+  "hashtags": [
+    {
+      "tag": "delacallealacancha",
+      "n": 177
+    },
+    {
+      "tag": "fundacióntelmextelcel",
+      "n": 117
+    },
+    {
+      "tag": "futbol",
+      "n": 78
+    },
+    {
+      "tag": "deporte",
+      "n": 69
+    },
+    {
+      "tag": "fútbolconcausa",
+      "n": 50
+    },
+    {
+      "tag": "deporteconcausa",
+      "n": 35
+    },
+    {
+      "tag": "torneoestatal",
+      "n": 34
+    },
+    {
+      "tag": "salud",
+      "n": 32
+    },
+    {
+      "tag": "streetsoccer",
+      "n": 31
+    },
+    {
+      "tag": "bienestar",
+      "n": 26
+    },
+    {
+      "tag": "curiosidades",
+      "n": 25
+    },
+    {
+      "tag": "fasenacional2026",
+      "n": 21
+    }
+  ]
+}

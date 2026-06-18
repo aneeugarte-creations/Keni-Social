@@ -97,9 +97,12 @@ def test_falta_hashtags():
 # --------------------------------------------------------------------------- #
 
 
-def _twin(pid: str, red: str, contenido: str, sugeridos: list[str] | None = None) -> dict:
+def _twin(
+    pid: str, red: str, contenido: str, sugeridos: list[str] | None = None,
+    estado: str = "borrador",
+) -> dict:
     return {
-        "publicacion_id": pid, "red": red, "marca": _MARCA, "estado": "borrador",
+        "publicacion_id": pid, "red": red, "marca": _MARCA, "estado": estado,
         "contenido": contenido, "hashtags_sugeridos": sugeridos or [],
     }
 
@@ -117,6 +120,30 @@ def test_seleccion_salta_si_ya_tiene_hashtags_o_sugerencia():
     assert contenidos_para_sugerir_hashtags(con_hashtag) == []
     con_sugerencia = [_twin("c2", "instagram", "sin hashtags", sugeridos=["#mexico"])]
     assert contenidos_para_sugerir_hashtags(con_sugerencia) == []
+
+
+def test_seleccion_incluye_piezas_en_revision():
+    # Las piezas que avanzaron solas a revisión (video/carrusel completos) también se sugieren:
+    # si solo miráramos borradores, se quedarían sin hashtags para siempre.
+    en_revision = [_twin("c1", "instagram", "sin hashtags", estado="en_revision")]
+    elegidos = contenidos_para_sugerir_hashtags(en_revision)
+    assert [pid for pid, _ in elegidos] == ["c1"]
+    # Borrador + en_revision del mismo contenido caen en el mismo grupo.
+    mixto = [
+        _twin("c2", "instagram", "sin hashtags", estado="en_revision"),
+        _twin("c2", "facebook", "sin hashtags", estado="borrador"),
+    ]
+    pid, twins = contenidos_para_sugerir_hashtags(mixto)[0]
+    assert pid == "c2" and {t["red"] for t in twins} == {"instagram", "facebook"}
+
+
+def test_seleccion_excluye_estados_no_sugeribles():
+    # Programado/publicado quedan fuera: ya no se tocan.
+    fuera = [
+        _twin("c1", "instagram", "sin hashtags", estado="programado"),
+        _twin("c2", "x", "sin hashtags", estado="publicado"),
+    ]
+    assert contenidos_para_sugerir_hashtags(fuera) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -139,6 +166,19 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     assert "#internacional" in guardados and "#mexico" in guardados
     assert "#noexiste123" not in guardados and len(guardados) == 5
     # GEMELO: las dos piezas del contenido llevan EXACTAMENTE la misma lista.
+    listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
+    assert listas[0] == listas[1] == guardados
+
+
+def test_aplicar_sugerencia_cubre_piezas_en_revision(entorno):
+    # Una pieza que ya avanzó sola a revisión también recibe la sugerencia (cierra la carrera de
+    # video/carrusel: completos de nacimiento, avanzan antes de que el job async termine).
+    pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
+    movida = repos.transicionar_estado_pieza(ids[0], "borrador", "en_revision")
+    assert movida is not None
+    guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional", "#mexico"])
+    assert guardados  # la pieza en revisión NO bloquea la aplicación
+    # Ambas piezas (la en revisión y la borrador) llevan la misma lista.
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
     assert listas[0] == listas[1] == guardados
 

@@ -7,17 +7,29 @@ Tests PUROS: cargan los JSON semilla versionados, sin tocar BD.
 from __future__ import annotations
 
 import keni_consola.hashtags_biblioteca as hb
+from keni_consola import marcas
 
 # Cuántos sugerir por red, según `med.sql` sobre el historial anual (mediana entre quienes
 # etiquetan; 0 donde la red apenas usa hashtags).
 _CONTEO_ESPERADO = {
     "claro-sports": {"facebook": 1, "instagram": 5, "youtube": 0, "tiktok": 5},
     "unotv": {"facebook": 5, "instagram": 5, "tiktok": 5},
+    "fundacion": {"facebook": 5, "instagram": 5, "tiktok": 4},
 }
+
+# Marcas con biblioteca versionada (todas las del catálogo del piloto).
+_MARCAS_CON_BIBLIOTECA = ("claro-sports", "unotv", "fundacion")
+
+
+def test_toda_marca_del_catalogo_tiene_biblioteca():
+    # Una marca sin biblioteca queda MUDA en hashtags (candidatos vacíos -> la etapa no encola
+    # ni aplica nada, en cualquier formato). Era el bug de `fundacion`: marca activa sin JSON.
+    for marca in marcas.ids():
+        assert hb.candidatos(marca), f"{marca} sin biblioteca de hashtags (datos/{marca}.json)"
 
 
 def test_candidatos_no_vacios_y_normalizados():
-    for marca in ("claro-sports", "unotv"):
+    for marca in _MARCAS_CON_BIBLIOTECA:
         cands = hb.candidatos(marca)
         assert cands, f"{marca} sin candidatos"
         # Todos en minúscula y SIN '#': lo que la etapa compara contra la salida de la IA.
@@ -27,7 +39,7 @@ def test_candidatos_no_vacios_y_normalizados():
 
 
 def test_hashtags_pasan_el_umbral():
-    for marca in ("claro-sports", "unotv"):
+    for marca in _MARCAS_CON_BIBLIOTECA:
         biblio = hb.biblioteca(marca)
         umbral = biblio["umbral"]
         assert umbral == 20
@@ -54,6 +66,7 @@ def test_fijos_son_la_firma_de_la_marca_y_estan_en_el_pool():
     fijos = {
         "unotv": ["unotv"],
         "claro-sports": [],
+        "fundacion": [],
     }
     for marca, esperado in fijos.items():
         assert hb.fijos(marca) == esperado, marca

@@ -30,6 +30,14 @@ _log = logging.getLogger("keni_consola.sugerir_hashtags")
 
 PROMPT_SUGERIR = "prompt/sugerir-hashtags"
 
+# Estados de pieza donde la sugerencia APLICA. No solo `borrador`: las piezas que nacen COMPLETAS
+# (video/carrusel de clips/presidencia traen ya su media) pasan SOLAS a `en_revision` tras pocos
+# minutos de reposo, antes de que el job async de hashtags termine; si solo cubriéramos borradores,
+# esas piezas se quedarían sin sugerencia para siempre. La sugerencia es no destructiva (gris, la
+# acepta un humano) y el feed ya pide «Faltan hashtags» en revisión, así que cubrir `en_revision`
+# cierra esa carrera sin tocar el avance. Fuente única (la comparte la etapa del barrido).
+ESTADOS_SUGERIBLES = ("borrador", "en_revision")
+
 # Un hashtag en el caption: MISMO patrón que `piezas._falta_hashtags` (saber si ya hay alguno).
 _PAT_HASHTAG = re.compile(r"#\w+", re.UNICODE)
 
@@ -127,10 +135,11 @@ def cantidad_contenido(marca: str, redes: list[str]) -> int:
 def lanzar_para_contenido(publicacion_id: str, twins: list[dict[str, Any]]) -> dict[str, Any] | None:
     """ENCOLA UNA sugerencia de hashtags para un contenido (todas sus piezas gemelas). None si no aplica.
 
-    `twins` son las piezas BORRADOR del contenido (mismas del barrido). No aplica si: el flag está
-    OFF; ninguna pieza existe; el copy ya lleva hashtags (`falta_hashtags` False en todas); ya hay
-    una sugerencia calculada en alguna; la marca no usa hashtags en ninguna red (`cantidad` 0); o la
-    marca no tiene biblioteca. Idempotente por la clave `sugerir-hashtags:{publicacion_id}`.
+    `twins` son las piezas SUGERIBLES del contenido (borrador o en revisión, las mismas del
+    barrido). No aplica si: el flag está OFF; ninguna pieza existe; el copy ya lleva hashtags
+    (`falta_hashtags` False en todas); ya hay una sugerencia calculada en alguna; la marca no usa
+    hashtags en ninguna red (`cantidad` 0); o la marca no tiene biblioteca. Idempotente por la
+    clave `sugerir-hashtags:{publicacion_id}`.
     """
     if not config.sugerir_hashtags_activo() or not twins:
         return None
@@ -235,21 +244,23 @@ def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
 
 
 def aplicar_sugerencia(publicacion_id: str, propuestos: list[str]) -> list[str]:
-    """Arma la sugerencia del contenido y la escribe IDÉNTICA en todas sus piezas BORRADOR (gemelas).
+    """Arma la sugerencia del contenido y la escribe IDÉNTICA en todas sus piezas SUGERIBLES (gemelas).
 
     Los hashtags son gemelos entre redes: se calcula una vez (cantidad = máximo entre las redes del
-    contenido) y se persiste el mismo JSON en cada pieza. Devuelve la lista guardada ([] si no toca).
+    contenido) y se persiste el mismo JSON en cada pieza en `ESTADOS_SUGERIBLES` (borrador o en
+    revisión: una pieza pudo avanzar sola a revisión mientras el job corría). Devuelve la lista
+    guardada ([] si no toca).
     """
     filas = repos.listar_piezas_fila(publicacion_id=publicacion_id) or []
-    borradores = [f for f in filas if str(f.get("estado") or "") == "borrador"]
-    if not borradores:
+    elegibles = [f for f in filas if str(f.get("estado") or "") in ESTADOS_SUGERIBLES]
+    if not elegibles:
         return []
-    marca = str(borradores[0].get("marca") or "")
-    redes = sorted({str(f.get("red") or "") for f in borradores if f.get("red")})
+    marca = str(elegibles[0].get("marca") or "")
+    redes = sorted({str(f.get("red") or "") for f in elegibles if f.get("red")})
     cantidad = cantidad_contenido(marca, redes)
     lista = ensamblar(propuestos, marca=marca, cantidad=cantidad)
     payload = json.dumps(lista, ensure_ascii=False)
-    for f in borradores:
+    for f in elegibles:
         repos.actualizar_pieza(str(f.get("id") or ""), {"hashtags_sugeridos": payload})
     return lista
 

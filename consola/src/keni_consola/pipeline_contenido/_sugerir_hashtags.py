@@ -33,6 +33,11 @@ _log = logging.getLogger("keni_consola.pipeline_contenido")
 # segundos, así que un backlog se drena en minutos igualmente).
 _MAX_POR_BARRIDO = 50
 
+# Estados de pieza donde la sugerencia aplica (borrador + en revisión). Fuente única en el dominio:
+# las piezas completas de nacimiento (video/carrusel) avanzan solas a revisión antes de que el job
+# async termine, así que el barrido también debe mirarlas ahí.
+_ESTADOS_SUGERIBLES = dom_sugerir.ESTADOS_SUGERIBLES
+
 
 def _ya_tiene_sugerencia(pub: dict[str, Any]) -> bool:
     """True si la pieza ya tiene una sugerencia persistida en `hashtags_sugeridos`."""
@@ -51,12 +56,13 @@ def _ya_tiene_sugerencia(pub: dict[str, Any]) -> bool:
 def contenidos_para_sugerir_hashtags(
     pubs: list[dict[str, Any]], *, maximo: int = _MAX_POR_BARRIDO
 ) -> list[tuple[str, list[dict[str, Any]]]]:
-    """Agrupa los borradores por contenido y devuelve `(publicacion_id, twins)` de los que necesitan
-    sugerencia de hashtags (PURA; reglas en el módulo). Preserva el orden de aparición del primero."""
+    """Agrupa por contenido las piezas SUGERIBLES (borrador o en revisión) y devuelve
+    `(publicacion_id, twins)` de las que necesitan sugerencia de hashtags (PURA; reglas en el
+    módulo). Preserva el orden de aparición del primero."""
     por_contenido: dict[str, list[dict[str, Any]]] = {}
     orden: list[str] = []
     for pub in pubs:
-        if pub.get("estado") != "borrador" or not str(pub.get("contenido") or "").strip():
+        if pub.get("estado") not in _ESTADOS_SUGERIBLES or not str(pub.get("contenido") or "").strip():
             continue
         pid = str(pub.get("publicacion_id") or "")
         if not pid:
@@ -87,14 +93,20 @@ def ejecutar_sugerir_hashtags() -> list[dict[str, Any]]:
     """Etapa de Sugerir hashtags del barrido (tras Redactar): encola UNA sugerencia por contenido
     al que le faltan hashtags. Gateada por `KENI_PIPELINE_SUGERIR_HASHTAGS` + máquina.
 
+    Cubre las piezas en `_ESTADOS_SUGERIBLES` (borrador + en revisión), no solo borradores: las
+    piezas que avanzan solas a revisión (video/carrusel completos de nacimiento) seguirían sin
+    sugerencia si solo barriéramos borradores.
+
     Best-effort: un fallo por contenido se loguea y se sigue. Devuelve las generaciones encoladas.
     """
     if not config.gate_maquina(config.sugerir_hashtags_activo)():
         return []
     try:
-        pubs = repos.listar_piezas(estado="borrador")
+        pubs: list[dict[str, Any]] = []
+        for estado in _ESTADOS_SUGERIBLES:
+            pubs.extend(repos.listar_piezas(estado=estado))
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa no actúa
-        _log.exception("pipeline: no se pudieron leer los borradores para sugerir hashtags.")
+        _log.exception("pipeline: no se pudieron leer las piezas para sugerir hashtags.")
         return []
     encoladas: list[dict[str, Any]] = []
     for pid, twins in contenidos_para_sugerir_hashtags(pubs):
