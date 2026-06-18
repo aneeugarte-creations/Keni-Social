@@ -130,12 +130,28 @@ export const useRalphStore = create<EstadoRalphStore>((set, get) => {
       set({ spawneando: true });
       try {
         const { ralph } = await apiRalph.spawnRalph(cuerpo);
+        // Eco del prompt inicial del lanzador como TU primer mensaje: si no, el Ralph parece
+        // responder a un mensaje invisible (su saludo contesta a este prompt).
+        const inicial = cuerpo.prompt?.trim();
         set((s) => ({
           ralphs: [...s.ralphs.filter((r) => r.id !== ralph.id), ralph],
           seleccionado: ralph.id,
           lanzadorAbierto: false,
           panelAbierto: true,
           spawneando: false,
+          conversaciones: inicial
+            ? {
+                ...s.conversaciones,
+                [ralph.id]: [
+                  {
+                    id: nuevoIdMensaje(),
+                    autor: "tu",
+                    texto: inicial,
+                    creado: new Date().toISOString(),
+                  },
+                ],
+              }
+            : s.conversaciones,
         }));
         conectar(ralph.id);
         return ralph;
