@@ -169,15 +169,38 @@ _PALABRAS_POR_MARCA: dict[str, frozenset[str]] = {
         "bad bunny", "shakira", "peso pluma", "corridos",
     }),
     # ------------------------------------------------------------------ #
-    # Fundación: causas sociales y comunidad.                              #
+    # Fundación (modo «Curiosidades», estilo Pubity): datos curiosos,      #
+    # ciencia, naturaleza y novedades, además de sus causas sociales.      #
     # ------------------------------------------------------------------ #
     "fundacion": frozenset({
+        # Causas sociales y comunidad.
         "fundacion", "donacion", "donaciones", "donativo", "voluntariado",
         "voluntarios", "comunidad", "social", "causa", "causas", "ayuda",
         "beneficencia", "filantropia", "ong", "salud", "educacion", "becas",
         "ambiente", "medio ambiente", "sostenibilidad", "sustentable", "reciclaje",
         "reforestacion", "inclusion", "discapacidad", "equidad", "pobreza",
         "damnificados", "albergue", "rescate animal", "bienestar social",
+        # Ciencia, espacio y descubrimientos.
+        "descubrimiento", "descubren", "cientifico", "cientificos", "hallazgo",
+        "estudio cientifico", "investigadores", "nasa", "astronomia", "astronauta",
+        "exploracion espacial", "universo", "galaxia", "cometa", "asteroide",
+        "telescopio", "marte", "eclipse",
+        # Naturaleza y planeta.
+        "naturaleza", "vida silvestre", "biodiversidad", "arrecife", "oceano",
+        "glaciar", "fenomeno natural", "especie nueva",
+        # Tecnología e innovación.
+        "tecnologia", "innovacion", "invento", "inteligencia artificial",
+        "avance tecnologico", "robot",
+        # Historia, arte y arqueología.
+        "arqueologia", "arqueologico", "fosil", "dinosaurio", "patrimonio",
+        "museo", "obra de arte", "civilizacion antigua",
+        # Asombro, récords y curiosidad.
+        "dato curioso", "sabias que", "curiosidad", "curiosidades", "record mundial",
+        "record guinness", "el mas antiguo", "primera vez en la historia",
+        "increible", "asombroso", "sorprendente",
+        # Buenas noticias y superación.
+        "superacion", "inspirador", "historia inspiradora", "solidaridad",
+        "buena noticia",
     }),
 }
 

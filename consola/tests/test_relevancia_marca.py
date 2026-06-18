@@ -44,6 +44,8 @@ def test_titulares_reales_casan_su_marca():
         "unotv": "Sismo de 6.1 sacude la CDMX; activan protocolo de protección civil",
         "claro-sports": "Liga MX: América vence a Chivas en el clásico nacional",
         "nacion-gamer": "Nintendo anuncia nuevo Zelda para Switch en el Direct",
+        # Fundación en modo «Curiosidades»: ciencia/naturaleza, no solo causas sociales.
+        "fundacion": "Científicos descubren un fósil de dinosaurio en la naturaleza",
     }
     for marca, titulo in casos.items():
         pal = relevancia_marca.palabras_de_marca(marca)
