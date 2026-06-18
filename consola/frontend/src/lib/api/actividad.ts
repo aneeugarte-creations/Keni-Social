@@ -5,6 +5,7 @@ import type {
   ActividadAgregados,
   ColaMonitor,
   ColaSerie,
+  EconomiaPorProceso,
   ProduccionDia,
   RespuestaPriorizarCola,
   RespuestaPurgarCola,
@@ -15,6 +16,14 @@ export const apiActividad = {
   actividadAgregados: (params: { marca?: string } = {}, signal?: AbortSignal) =>
     peticion<ActividadAgregados>(
       `/actividad/agregados${query({ marca: params.marca })}`,
+      { signal },
+    ),
+
+  // Economía por motor (GLOBAL, ledger gasto_ia): total + serie por día + por tipo. Cuadra
+  // exacto con la cola; el switch de marca NO la afecta. La consume la página Economía.
+  economia: (dias = 7, signal?: AbortSignal) =>
+    peticion<EconomiaPorProceso>(
+      `/actividad/economia${query({ dias: String(dias) })}`,
       { signal },
     ),
 

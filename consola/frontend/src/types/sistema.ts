@@ -75,6 +75,43 @@ export interface ActividadAgregados {
   por_proceso?: Record<Proceso, ActividadProcesoBloque>;
 }
 
+// --- Economía por proceso (`GET /api/actividad/economia?dias=`) ---
+//
+// Gasto GLOBAL del ledger `gasto_ia` desglosado por motor (investigación/producción) y
+// zero-filled a `dias`. NO se filtra por marca, así que cuadra EXACTO con la cola. En la
+// página Economía sustituye al cruce de `actividad/agregados` (por marca) + `cola/series`
+// (global) que no casaban entre sí.
+
+/** Gasto de un día (`YYYY-MM-DD`, zero-filled) de un motor. */
+export interface EconomiaDia {
+  dia: string;
+  items: number;
+  tokens: number;
+  coste_usd: number;
+}
+
+/** Gasto por tipo de trabajo de un motor. */
+export interface EconomiaTipo {
+  tipo: string;
+  items: number;
+  tokens: number;
+  coste_usd: number;
+}
+
+/** Economía de UN motor: total del periodo + serie por día (len == `dias`, antiguo→reciente,
+ *  zero-filled) + desglose por tipo. */
+export interface EconomiaProcesoBloque {
+  total: { items: number; tokens: number; coste_usd: number };
+  por_dia: EconomiaDia[];
+  por_tipo: EconomiaTipo[];
+}
+
+/** Respuesta de `GET /api/actividad/economia`: un bloque por motor (GLOBAL, sin marca). */
+export interface EconomiaPorProceso {
+  dias: number;
+  por_proceso: Partial<Record<Proceso, EconomiaProcesoBloque>>;
+}
+
 // --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
 
 /** Un job EN CURSO (pendiente o reclamado) enriquecido con su registro de generación. */

@@ -2,11 +2,13 @@
  * Página ECONOMÍA (`/maquina/economia`): la CONTABILIDAD de la máquina de contenido, separada de
  * la operación de la cola (`/maquina/computo`). Reúne en un solo sitio el gasto: el presupuesto
  * diario editable + la parada de emergencia (globales) y la economía de tokens DESGLOSADA por
- * motor (Investigación | Producción): totales (trabajos IA · tokens · coste), la serie de 14 días
- * y los desgloses por tipo de trabajo y por día.
+ * motor (Investigación | Producción): totales (trabajos IA · tokens · coste), la serie de los
+ * últimos 7 días y los desgloses por tipo de trabajo y por día.
  *
- * Respeta el switch GLOBAL de marca (la economía se acota a la marca activa; el presupuesto es
- * global). `?proceso=investigacion|produccion` enfoca a un solo motor (columna a ancho completo).
+ * La economía sale de `/api/actividad/economia` (ledger `gasto_ia`, GLOBAL): es la MISMA fuente
+ * para los totales, la serie y los desgloses, así que todo cuadra. El switch de marca NO afecta a
+ * la economía (es global); solo el presupuesto se gestiona aparte. `?proceso=investigacion|
+ * produccion` enfoca a un solo motor (columna a ancho completo).
  */
 import { useQuery } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -35,44 +37,47 @@ import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
-import { PROC_META, SerieProceso } from "@/pages/monitor/comun";
+import { PROC_META } from "@/pages/monitor/comun";
 import type {
-  ActividadProcesoBloque,
-  ActividadPorDia,
-  ActividadPorTipo,
-  ColaSerie,
+  EconomiaDia,
+  EconomiaProcesoBloque,
+  EconomiaTipo,
   Proceso,
 } from "@/types";
 
 /** Los dos motores de la máquina (ADR 0011), en orden de flujo. */
 const MOTORES: Proceso[] = ["investigacion", "produccion"];
 
+/** Días de la ventana de economía (la serie y los desgloses). */
+const DIAS = 7;
+
+/** Línea discreta de "sin datos": una sola fila, no una tarjeta enorme con hueco. */
+function LineaVacia({ texto }: { texto: string }) {
+  return <p className="px-6 py-3 text-sm text-muted-foreground">{texto}</p>;
+}
+
 /** Mini-tabla de desglose por TIPO de trabajo (de un motor). */
-function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
+function DesglosePorTipo({ filas }: { filas: EconomiaTipo[] }) {
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Por tipo</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Tipo</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="text-right">Tokens</TableHead>
-              <TableHead className="pr-6 text-right">Coste</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.length === 0 ? (
+        {filas.length === 0 ? (
+          <LineaVacia texto="Sin actividad por tipo" />
+        ) : (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                  Sin actividad por tipo.
-                </TableCell>
+                <TableHead className="pl-6">Tipo</TableHead>
+                <TableHead className="text-right">Items</TableHead>
+                <TableHead className="text-right">Tokens</TableHead>
+                <TableHead className="pr-6 text-right">Coste</TableHead>
               </TableRow>
-            ) : (
-              filas.map((f) => (
+            </TableHeader>
+            <TableBody>
+              {filas.map((f) => (
                 <TableRow key={f.tipo}>
                   <TableCell className="pl-6 font-medium">
                     {f.tipo ? etiquetaTipoGeneracion(f.tipo) : "—"}
@@ -87,19 +92,19 @@ function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
                     {costeUsd(f.coste_usd)}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-/** Mini-tabla de desglose por DÍA, más reciente primero (incluye tokens). */
-function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
-  const ordenadas = React.useMemo(
-    () => [...filas].sort((a, b) => b.dia.localeCompare(a.dia)),
+/** Mini-tabla de desglose por DÍA con actividad, más reciente primero. */
+function DesglosePorDia({ filas }: { filas: EconomiaDia[] }) {
+  const conActividad = React.useMemo(
+    () => filas.filter((f) => f.items > 0).sort((a, b) => b.dia.localeCompare(a.dia)),
     [filas],
   );
   return (
@@ -108,24 +113,20 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
         <CardTitle className="text-base">Por día</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Día</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="text-right">Tokens</TableHead>
-              <TableHead className="pr-6 text-right">Coste</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ordenadas.length === 0 ? (
+        {conActividad.length === 0 ? (
+          <LineaVacia texto="Sin actividad por día" />
+        ) : (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                  Sin actividad por día.
-                </TableCell>
+                <TableHead className="pl-6">Día</TableHead>
+                <TableHead className="text-right">Items</TableHead>
+                <TableHead className="text-right">Tokens</TableHead>
+                <TableHead className="pr-6 text-right">Coste</TableHead>
               </TableRow>
-            ) : (
-              ordenadas.map((f) => (
+            </TableHeader>
+            <TableBody>
+              {conActividad.map((f) => (
                 <TableRow key={f.dia}>
                   <TableCell className="pl-6 font-medium">{formatearDia(f.dia)}</TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -138,30 +139,91 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
                     {costeUsd(f.coste_usd)}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-/** Bloque «Economía (tokens)» de un motor: el DESGLOSE SEPARADO POR MOTOR (de
- *  `agregados.por_proceso[motor]`): totales + serie del proceso + por tipo + por día. */
+/** Mini-gráfico de los últimos `DIAS` días: una barra por día escalada por TOKENS. Cada fila es
+ *  clicable: togglea el día seleccionado (clic en el activo lo deselecciona) y eso reenfoca los
+ *  KPIs superiores a ese día. */
+function SerieEconomia({
+  motor,
+  filas,
+  diaSel,
+  onToggle,
+}: {
+  motor: Proceso;
+  filas: EconomiaDia[];
+  diaSel: string | null;
+  onToggle: (dia: string) => void;
+}) {
+  const maximo = Math.max(1, ...filas.map((f) => f.tokens));
+  const meta = PROC_META[motor];
+  return (
+    <div className="space-y-1.5">
+      {filas.map((f) => {
+        const activo = f.dia === diaSel;
+        return (
+          <button
+            key={f.dia}
+            type="button"
+            onClick={() => onToggle(f.dia)}
+            aria-pressed={activo}
+            className={cn(
+              "flex w-full items-center gap-3 rounded px-2 py-1 text-left text-xs transition-colors",
+              activo ? "bg-muted" : "hover:bg-muted/50",
+            )}
+          >
+            <span className="w-16 shrink-0 tabular-nums text-muted-foreground">
+              {formatearDia(f.dia)}
+            </span>
+            <div className="flex h-4 flex-1 overflow-hidden rounded bg-muted">
+              <div
+                className={cn(meta.barra, activo && "brightness-110")}
+                style={{ width: `${(f.tokens / maximo) * 100}%` }}
+                title={`${numeroCompleto(f.tokens)} tokens`}
+              />
+            </div>
+            <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
+              {numeroCompacto(f.tokens)} · {costeUsd(f.coste_usd)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Economía de UN motor (desglose separado): totales + serie de 7 días + por tipo + por día.
+ *  GLOBAL (ledger `gasto_ia`): la misma fuente para todo, así cuadra. Mismo layout y alturas
+ *  mínimas para ambos motores, de modo que las dos columnas alinean aunque uno tenga menos datos. */
 function EconomiaMotor({
   motor,
   bloque,
-  serie,
   cargando,
 }: {
   motor: Proceso;
-  bloque: ActividadProcesoBloque | undefined;
-  serie: ColaSerie | undefined;
+  bloque: EconomiaProcesoBloque | undefined;
   cargando: boolean;
 }) {
-  const total = bloque?.total;
   const meta = PROC_META[motor];
+  const porDia = bloque?.por_dia ?? [];
+  // Día seleccionado en la serie: reenfoca los KPIs a ese día (null = total del periodo).
+  const [diaSel, setDiaSel] = React.useState<string | null>(null);
+  const toggleDia = (dia: string) => setDiaSel((prev) => (prev === dia ? null : dia));
+
+  // KPIs: el día elegido (de la serie) o el total del periodo.
+  const delDia = diaSel ? porDia.find((f) => f.dia === diaSel) : undefined;
+  const items = delDia?.items ?? bloque?.total.items ?? 0;
+  const tokens = delDia?.tokens ?? bloque?.total.tokens ?? 0;
+  const coste = delDia?.coste_usd ?? bloque?.total.coste_usd ?? 0;
+  const ambito = diaSel ? formatearDia(diaSel) : `últimos ${DIAS} días`;
+
   return (
     <section className="space-y-3">
       <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
@@ -171,38 +233,46 @@ function EconomiaMotor({
       {cargando ? (
         <Skeleton className="h-24 w-full rounded-xl" />
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          <TarjetaKpi
-            variante="card"
-            etiqueta="Trabajos IA"
-            valor={numeroCompleto(total?.items ?? 0)}
-          />
-          <TarjetaKpi
-            variante="card"
-            etiqueta="Tokens"
-            valor={numeroCompacto(total?.tokens ?? 0)}
-            titulo={numeroCompleto(total?.tokens ?? 0)}
-          />
-          <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(total?.coste_usd ?? 0)} />
-        </div>
+        <>
+          <p className="text-xs text-muted-foreground">
+            Mostrando: <span className="font-medium text-foreground">{ambito}</span>
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(items)} />
+            <TarjetaKpi
+              variante="card"
+              etiqueta="Tokens"
+              valor={numeroCompacto(tokens)}
+              titulo={numeroCompleto(tokens)}
+            />
+            <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(coste)} />
+          </div>
+        </>
       )}
       <Card>
         <CardHeader className="p-4 pb-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             <RotateCcw className="h-4 w-4 text-muted-foreground" />
-            Últimos 14 días
+            Últimos {DIAS} días
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-2">
-          {serie ? (
-            <SerieProceso serie={serie} soloProceso={motor} />
-          ) : (
+        <CardContent className="min-h-[15rem] p-4 pt-2">
+          {cargando ? (
             <Skeleton className="h-32 w-full" />
+          ) : porDia.length === 0 ? (
+            <LineaVacia texto="Sin actividad en la ventana" />
+          ) : (
+            <SerieEconomia
+              motor={motor}
+              filas={porDia}
+              diaSel={diaSel}
+              onToggle={toggleDia}
+            />
           )}
         </CardContent>
       </Card>
       <DesglosePorTipo filas={bloque?.por_tipo ?? []} />
-      <DesglosePorDia filas={bloque?.por_dia ?? []} />
+      <DesglosePorDia filas={porDia} />
     </section>
   );
 }
@@ -216,21 +286,17 @@ export default function Economia() {
   const proceso: Proceso | undefined =
     crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
 
-  // Presupuesto (global) + resultado de hoy: la cola trae el presupuesto; la serie, el gasto.
+  // Presupuesto (global) + parada de emergencia: la cola trae el presupuesto.
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
-  const serie = useQuery({
-    queryKey: ["actividad", "cola", "series"],
-    queryFn: ({ signal }) => api.colaSeries(14, signal),
-    refetchInterval: INTERVALO_SERIE_MS,
-  });
-  // Agregados de actividad IA (totales + por_proceso): la economía DESGLOSADA por motor.
-  const agregados = useQuery({
-    queryKey: ["actividad", "agregados", marcaActiva ?? "todas"],
-    queryFn: ({ signal }) => api.actividadAgregados({ marca: marcaActiva ?? undefined }, signal),
+  // Economía por motor (GLOBAL, ledger gasto_ia): totales + serie + desgloses que cuadran. NO
+  // depende de la marca activa.
+  const economia = useQuery({
+    queryKey: ["actividad", "economia", DIAS],
+    queryFn: ({ signal }) => api.economia(DIAS, signal),
     refetchInterval: INTERVALO_SERIE_MS,
   });
 
@@ -275,7 +341,7 @@ export default function Economia() {
         )}
       </div>
 
-      {/* Economía por motor (desglose separado). */}
+      {/* Economía por motor (desglose separado, GLOBAL). */}
       <div
         className={cn("grid grid-cols-1 gap-8", motores.length > 1 && "xl:grid-cols-2 xl:gap-6")}
       >
@@ -283,9 +349,8 @@ export default function Economia() {
           <EconomiaMotor
             key={m}
             motor={m}
-            bloque={agregados.data?.por_proceso?.[m]}
-            serie={serie.data}
-            cargando={agregados.isPending}
+            bloque={economia.data?.por_proceso?.[m]}
+            cargando={economia.isPending}
           />
         ))}
       </div>
