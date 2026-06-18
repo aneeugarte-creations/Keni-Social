@@ -559,10 +559,9 @@ def test_adelante_sobre_veto_ia_lo_zanja_y_lo_puede_cualquiera(entorno, monkeypa
     """«Adelante» (cualquiera del equipo, SIN cargo de coordinación) cierra la objeción de la
     Crítica IA: marca su comentario resuelto y voltea el veto a aprobado, sin tocar los OK
     humanos. Sin franja la pieza se queda `en_revision` (programada=False), pero desbloqueada."""
-    from keni_consola import config
     from keni_consola.dominio import colaboracion, critica_ia
 
-    monkeypatch.setattr(config, "critica_ia_activa", lambda: True)
+    monkeypatch.setenv("KENI_CRITICA_IA", "1")
     monkeypatch.setattr(critica_ia, "lanzar_para_publicacion", lambda *a, **k: None)
 
     autora = _cli_usuario("ana")
