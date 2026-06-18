@@ -120,6 +120,16 @@ def listar_turnos_rota(
     return db.listar_turnos_rota(semana=semana, marca=marca)
 
 
+def listar_turnos_rota_rango(
+    desde: str,
+    hasta: str,
+    miembro_id: str | None = None,
+    marca: str | None = None,
+) -> list[dict[str, Any]]:
+    """Turnos con `fecha` en `[desde, hasta]` (lectura pura; calendario mensual)."""
+    return db.listar_turnos_rota_rango(desde, hasta, miembro_id=miembro_id, marca=marca)
+
+
 def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
     return db.obtener_turno_rota(turno_id)
 

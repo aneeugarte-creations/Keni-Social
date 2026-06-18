@@ -132,6 +132,7 @@ from .turnos import (
     duplicar_turno_rota,
     existe_turno_para,
     listar_turnos_rota,
+    listar_turnos_rota_rango,
     obtener_turno_rota,
 )
 
@@ -186,6 +187,7 @@ __all__ = [
     "duplicar_turno_rota",
     "existe_turno_para",
     "listar_turnos_rota",
+    "listar_turnos_rota_rango",
     "obtener_turno_rota",
     # Ausencias.
     "_COLS_AUSENCIA_ROTA",

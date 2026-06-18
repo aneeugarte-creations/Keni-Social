@@ -960,6 +960,56 @@ def test_mis_turnos_sin_sesion_avisa(cliente):
     assert r.json()["aviso"]
 
 
+def test_mis_turnos_mes_acota_a_usuario_y_mes(entorno):
+    """El calendario mensual devuelve SOLO los turnos del usuario actual dentro del mes:
+    cruza varias semanas, excluye otros meses y a otros miembros."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(2)
+    # Usuario 0: dos turnos en JUNIO (en semanas distintas) + uno en MAYO (fuera del mes).
+    _crear_turno("2026-06-01", "2026-06-03", equipo[0], franja="matutino")
+    _crear_turno("2026-06-08", "2026-06-10", equipo[0], franja="vespertino")
+    _crear_turno(LUNES1, "2026-05-27", equipo[0], franja="matutino")
+    # Usuario 1: un turno en junio (debe quedar fuera: no es el usuario de la sesión).
+    _crear_turno("2026-06-01", "2026-06-03", equipo[1], franja="matutino")
+    cli = TestClient(app)
+    cli.post(
+        "/api/auth/login",
+        json={"usuario": equipo[0]["usuario"], "password": CLAVE},
+        headers=_ORIGIN,
+    )
+    r = cli.get("/api/rota/mis-turnos/mes?mes=2026-06")
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert datos["mes"] == "2026-06"
+    assert datos["desde"] == "2026-06-01"
+    assert datos["hasta"] == "2026-06-30"
+    assert datos["miembro_id"] == equipo[0]["id"]
+    fechas = sorted(t["fecha"] for t in datos["mis_turnos"])
+    assert fechas == ["2026-06-03", "2026-06-10"]
+    assert datos["total"] == 2
+    assert all(t["miembro_id"] == equipo[0]["id"] for t in datos["mis_turnos"])
+    # El horario resuelto de la franja viaja (el front no cruza franjas): vespertino = "Tarde".
+    jun10 = next(t for t in datos["mis_turnos"] if t["fecha"] == "2026-06-10")
+    assert jun10["franja_nombre"] == "Tarde"
+    assert jun10["inicio"] and jun10["fin"]
+
+
+def test_mis_turnos_mes_sin_sesion_avisa(cliente):
+    r = cliente.get("/api/rota/mis-turnos/mes?mes=2026-06")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["mis_turnos"] == []
+    assert cuerpo["total"] == 0
+    assert cuerpo["aviso"]
+
+
+def test_mis_turnos_mes_invalido_400(cliente):
+    r = cliente.get("/api/rota/mis-turnos/mes?mes=2026-13")
+    assert r.status_code == 400
+    r2 = cliente.get("/api/rota/mis-turnos/mes?mes=junio")
+    assert r2.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Cobertura DERIVADA                                                           #
 # --------------------------------------------------------------------------- #

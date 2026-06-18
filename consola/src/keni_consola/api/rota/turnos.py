@@ -971,3 +971,88 @@ async def mis_turnos(request: Request) -> Response:
             "mis_turnos": mios,
         }
     )
+
+
+def _mes_param(request: Request) -> tuple[str, str, str] | tuple[None, None, None]:
+    """`(mes, desde, hasta)` ISO del mes pedido (`?mes=AAAA-MM`); por defecto el mes de hoy.
+
+    `desde`/`hasta` son el primer y último día del mes (ISO, inclusive). Devuelve
+    `(None, None, None)` si el formato es inválido (el handler responde 400).
+    """
+    import calendar
+    from datetime import date
+
+    crudo = (request.query_params.get("mes") or "").strip()
+    if not crudo:
+        hoy = date.today()
+        anio, mes = hoy.year, hoy.month
+    else:
+        partes = crudo.split("-")
+        if len(partes) != 2:
+            return None, None, None
+        try:
+            anio, mes = int(partes[0]), int(partes[1])
+            date(anio, mes, 1)  # valida año/mes (1..12) reales
+        except (ValueError, TypeError):
+            return None, None, None
+    ultimo = calendar.monthrange(anio, mes)[1]
+    return (
+        f"{anio:04d}-{mes:02d}",
+        f"{anio:04d}-{mes:02d}-01",
+        f"{anio:04d}-{mes:02d}-{ultimo:02d}",
+    )
+
+
+async def mis_turnos_mes(request: Request) -> Response:
+    """GET /api/rota/mis-turnos/mes[?mes=AAAA-MM&marca]: los turnos del USUARIO en el mes.
+
+    Calendario MENSUAL de «Mis turnos»: solo el horario propio (turnos), SIN eventos ni
+    cobertura. Lectura PURA sobre `rota_turnos` por rango de fecha — a diferencia de la
+    vista semanal NO siembra franjas ni prellena semanas (abrir el mes no materializa nada).
+    GRID POR MARCA: `?marca=` acota a esa rejilla; ausente = todas las marcas.
+    """
+    mes, desde, hasta = _mes_param(request)
+    if mes is None:
+        return JSONResponse({"error": "Mes inválido (usa AAAA-MM)."}, status_code=400)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    usuario = _usuario_actual(request)
+    if usuario is None:
+        return JSONResponse(
+            {
+                "mes": mes,
+                "desde": desde,
+                "hasta": hasta,
+                "miembro_id": "",
+                "miembro_nombre": "",
+                "mis_turnos": [],
+                "total": 0,
+                "aviso": "Inicia sesión para ver tu calendario de turnos.",
+            }
+        )
+    nombres = _nombres_equipo()
+    crudos = repos.listar_turnos_rota_rango(
+        desde, hasta, miembro_id=usuario["id"], marca=marca
+    )
+    # Resuelve cada franja referenciada (nombre/horario) sin sembrar: un turno existente
+    # siempre apunta a una franja real, así que basta con buscarla por id.
+    franjas_por_id: dict[str, dict[str, Any]] = {}
+    for t in crudos:
+        fid = t.get("franja_id", "") or ""
+        if fid and fid not in franjas_por_id:
+            franja = repos.obtener_franja_semana(fid)
+            if franja is not None:
+                franjas_por_id[fid] = franja
+    mios = [_turno_a_dict(t, nombres, franjas_por_id) for t in crudos]
+    return JSONResponse(
+        {
+            "mes": mes,
+            "desde": desde,
+            "hasta": hasta,
+            "miembro_id": usuario["id"],
+            "miembro_nombre": usuario["usuario"],
+            "mis_turnos": mios,
+            "total": len(mios),
+        }
+    )

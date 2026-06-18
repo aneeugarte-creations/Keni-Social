@@ -108,6 +108,63 @@ export function esFinDeSemana(fechaIso: string): boolean {
   return dia === 0 || dia === 6;
 }
 
+// --- Mes (calendario mensual de «Mis turnos») ------------------------------
+//
+// Misma convención de anclaje que la semana: un `AAAA-MM` se manipula sobre días
+// anclados a mediodía UTC; "hoy"/el mes de un instante se resuelven en zona CDMX.
+
+/** Mes (ISO AAAA-MM) de la fecha calendario CDMX que contiene el instante `d`. */
+export function mesDeFecha(d: Date): string {
+  return diaCDMX(d).slice(0, 7);
+}
+
+/** El mes `n` después (o antes, si negativo) de `mesIso` (AAAA-MM). */
+export function mesSiguiente(mesIso: string, n: number): string {
+  const [anio, mes] = mesIso.split("-").map(Number);
+  const total = anio * 12 + (mes - 1) + n; // mes 1-based -> índice 0-based
+  const a = Math.floor(total / 12);
+  const m = (total % 12) + 1;
+  return `${String(a).padStart(4, "0")}-${String(m).padStart(2, "0")}`;
+}
+
+/** `true` si la fecha (ISO AAAA-MM-DD) pertenece al mes `mesIso` (AAAA-MM). */
+export function mismoMes(fechaIso: string, mesIso: string): boolean {
+  return fechaIso.slice(0, 7) === mesIso;
+}
+
+/** Nombre legible del mes, p. ej. "junio de 2026" (locale es-MX). */
+export function nombreMes(mesIso: string): string {
+  const d = anclar(`${mesIso}-01`);
+  if (Number.isNaN(d.getTime())) return mesIso;
+  return d.toLocaleDateString("es-MX", {
+    month: "long",
+    year: "numeric",
+    timeZone: ZONA_CDMX,
+  });
+}
+
+/**
+ * Las semanas (lun→dom) que cubren el mes `mesIso`, como rejilla de calendario. Cada
+ * semana son 7 fechas ISO; las primeras/últimas pueden caer en el mes vecino (relleno
+ * para alinear la cuadrícula). Devuelve 4–6 semanas según encaje el mes.
+ */
+export function semanasDelMes(mesIso: string): string[][] {
+  const primeroIso = `${mesIso}-01`;
+  // Último día del mes = el día anterior al primero del mes siguiente.
+  const finProx = anclar(`${mesSiguiente(mesIso, 1)}-01`);
+  finProx.setUTCDate(finProx.getUTCDate() - 1);
+  const ultimoIso = isoAnclado(finProx);
+  const semanas: string[][] = [];
+  let lunes = lunesDeSemana(anclar(primeroIso));
+  // El lunes de la semana del último día del mes es <= ultimoIso, así que esto cubre el
+  // mes entero (la última semana incluye el último día y su cola del mes siguiente).
+  while (lunes <= ultimoIso) {
+    semanas.push(diasDeSemana(lunes));
+    lunes = lunesSiguiente(lunes, 1);
+  }
+  return semanas;
+}
+
 /** Rango legible "12 may – 18 may". */
 export function formatearRango(inicio: string, fin: string): string {
   if (!inicio || !fin) return "";

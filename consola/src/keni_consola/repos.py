@@ -349,6 +349,7 @@ from .repos_rota import (  # noqa: F401
     listar_programas_rota,
     listar_swaps_turno,
     listar_turnos_rota,
+    listar_turnos_rota_rango,
     obtener_ausencia_rota,
     obtener_evento_rota,
     obtener_franja_semana,

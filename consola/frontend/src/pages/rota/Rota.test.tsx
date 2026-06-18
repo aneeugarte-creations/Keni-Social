@@ -64,6 +64,7 @@ function renderRota() {
     "rotaAusencias",
     "listarCoordinacionSemana",
     "misTurnos",
+    "misTurnosMes",
   ] as const) {
     vi.spyOn(apiMod.api, m).mockResolvedValue({} as never);
   }

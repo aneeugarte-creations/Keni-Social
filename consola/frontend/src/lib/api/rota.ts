@@ -27,6 +27,7 @@ import type {
   CuerpoSetCoordinador,
   FiltrosSwaps,
   FranjaSemana,
+  MisTurnosMesRota,
   MisTurnosRota,
   RespuestaActualizarLoteTurnos,
   RespuestaAusenciaRota,
@@ -133,6 +134,12 @@ export const apiRota = {
     peticion<RotaSemana>("/rota/turnos/despublicar", { metodo: "POST", json: cuerpo }),
   misTurnos: (params: { lunes?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<MisTurnosRota>(`/rota/mis-turnos${query(params)}`, { signal }),
+  /**
+   * Calendario MENSUAL de «Mis turnos»: solo el horario propio del mes, SIN eventos ni
+   * cobertura. `mes` = "AAAA-MM" (ausente = mes actual). GRID POR MARCA: `marca` acota.
+   */
+  misTurnosMes: (params: { mes?: string; marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<MisTurnosMesRota>(`/rota/mis-turnos/mes${query(params)}`, { signal }),
   exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string; marca?: string } = {}) =>
     descargar(`/rota/export.${formato}${query(params)}`),
 

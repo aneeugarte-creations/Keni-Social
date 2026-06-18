@@ -86,6 +86,7 @@ from .turnos import (
     despublicar_turnos,
     duplicar_turno,
     mis_turnos,
+    mis_turnos_mes,
     turnos_semana,
 )
 
@@ -112,6 +113,7 @@ __all__ = [
     "aprobar_turnos",
     "despublicar_turnos",
     "mis_turnos",
+    "mis_turnos_mes",
     "cobertura_semana",
     "cobertura_evento",
     "copiar_semana",
@@ -162,6 +164,7 @@ RUTAS = [
     Route("/api/rota/turnos/{turno_id}/duplicar", duplicar_turno, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/turnos/{turno_id}", borrar_turno, methods=["DELETE"]),
+    Route("/api/rota/mis-turnos/mes", mis_turnos_mes, methods=["GET"]),
     Route("/api/rota/mis-turnos", mis_turnos, methods=["GET"]),
     # Franjas POR SEMANA ("Mundial"): cada lunes tiene sus franjas (Mañana/Tarde/Descanso
     # por defecto, configurables con N franjas y solapes permitidos).

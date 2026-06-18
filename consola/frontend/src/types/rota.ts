@@ -322,6 +322,26 @@ export interface MisTurnosRota extends RotaSemana {
   aviso?: string;
 }
 
+/**
+ * "Mi mes": los turnos del usuario actual en TODO el mes (calendario mensual de «Mis
+ * turnos»). Solo el horario propio — SIN eventos ni cobertura. Lectura pura: cruza varias
+ * semanas y NO siembra franjas (abrir el mes no materializa nada).
+ */
+export interface MisTurnosMesRota {
+  /** Mes ISO (AAAA-MM). */
+  mes: string;
+  /** Primer y último día del mes (ISO AAAA-MM-DD, inclusive). */
+  desde: string;
+  hasta: string;
+  miembro_id: string;
+  miembro_nombre: string;
+  /** Turnos del usuario en el mes, ya con franja/horario resueltos. */
+  mis_turnos: TurnoRota[];
+  total: number;
+  /** Aviso si no hay sesión (token de mantenimiento). */
+  aviso?: string;
+}
+
 // --- Cobertura DERIVADA (no persistida): para cada evento, qué turnos lo cubren
 
 /** Un turno que cubre un evento. */

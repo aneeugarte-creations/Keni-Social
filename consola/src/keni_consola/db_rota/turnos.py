@@ -174,6 +174,36 @@ def listar_turnos_rota(
     return [_fila_a_turno_rota(f) for f in filas]
 
 
+def listar_turnos_rota_rango(
+    desde: str,
+    hasta: str,
+    miembro_id: str | None = None,
+    marca: str | None = None,
+) -> list[dict[str, Any]]:
+    """Turnos cuya `fecha` cae en `[desde, hasta]` (ISO inclusive); filtros opcionales.
+
+    Lectura PURA: no siembra franjas ni prellena semanas (a diferencia de la vista
+    semanal, que pasa por `_turnos_semana`). Sirve el calendario MENSUAL de «Mis turnos»,
+    que cruza varias semanas. `miembro_id` lo acota a una persona; `marca` a esa rejilla
+    (`None` no filtra: vista "Todas").
+    """
+    sql = _SELECT_TURNO_ROTA + " WHERE fecha >= ? AND fecha <= ?"
+    params: list[Any] = [desde, hasta]
+    if miembro_id:
+        sql += " AND miembro_id = ?"
+        params.append(miembro_id)
+    if marca:
+        sql += " AND marca = ?"
+        params.append(marca)
+    sql += " ORDER BY fecha ASC, franja_id ASC, creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_turno_rota(f) for f in filas]
+
+
 def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
