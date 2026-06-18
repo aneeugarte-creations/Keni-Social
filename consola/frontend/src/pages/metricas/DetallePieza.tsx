@@ -13,7 +13,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart } from "@tremor/react";
-import { ExternalLink, Gauge } from "lucide-react";
+import { ExternalLink, Gauge, Info } from "lucide-react";
 
 import {
   Dialog,
@@ -39,6 +39,25 @@ import type { PiezaMetrica } from "@/types";
 /** Una métrica granular: muestra "—" cuando la fuente no la trae (null), no un 0 falso. */
 function granular(valor: number | null): string {
   return valor == null ? "—" : numeroCompleto(valor);
+}
+
+/** Nota de transparencia de la métrica "Vistas" (fuente Metricool), según la red.
+ *
+ * En Reels de Facebook/Instagram, Metricool cuenta reproducciones INICIALES y excluye
+ * repeticiones (loops), así que puede quedar por debajo del contador nativo de la red. Esa
+ * precisión solo aplica a Meta; en el resto de redes la definición es otra, así que el texto
+ * genérico no afirma nada falso para TikTok/YouTube/X. */
+function notaVistas(plataforma: string): string {
+  if (plataforma === "facebook" || plataforma === "instagram") {
+    return (
+      "Fuente: Metricool. En Facebook e Instagram cuenta reproducciones iniciales; no incluye " +
+      "repeticiones (loops), por lo que puede ser menor que el contador que muestra la red."
+    );
+  }
+  return (
+    "Fuente: Metricool; la definición de vistas/reproducciones varía por red y puede diferir " +
+    "del contador nativo de la plataforma."
+  );
 }
 
 /** Fecha+hora corta en CDMX de un ts ISO (UTC); vacía/no parseable → "—". */
@@ -94,7 +113,11 @@ function Publicacion({ pieza }: { pieza: PiezaMetrica }) {
 
       {/* Agregados principales. En móvil apilados (3 columnas no caben en un diálogo de 360px). */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Kpi etiqueta="Vistas" valor={numeroCompacto(pieza.visualizaciones)} />
+        <Kpi
+          etiqueta="Vistas"
+          valor={numeroCompacto(pieza.visualizaciones)}
+          info={notaVistas(pieza.plataforma)}
+        />
         <Kpi etiqueta="Interacciones" valor={numeroCompacto(pieza.interacciones)} />
         <Kpi etiqueta="Engagement" valor={porcentaje(pieza.engagement_pct)} />
       </div>
@@ -212,10 +235,31 @@ function CurvaHistorica({
   );
 }
 
-function Kpi({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+function Kpi({
+  etiqueta,
+  valor,
+  info,
+}: {
+  etiqueta: string;
+  valor: string;
+  /** Nota de transparencia opcional: pinta un icono de info con el texto en el tooltip nativo. */
+  info?: string;
+}) {
   return (
     <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
-      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+        {etiqueta}
+        {info ? (
+          <button
+            type="button"
+            title={info}
+            aria-label={info}
+            className="inline-flex text-muted-foreground/70 hover:text-muted-foreground focus-visible:text-muted-foreground"
+          >
+            <Info className="h-3 w-3" aria-hidden="true" />
+          </button>
+        ) : null}
+      </p>
       <p className="text-base font-semibold tabular-nums">{valor}</p>
     </div>
   );

@@ -98,6 +98,10 @@ describe("DetallePieza", () => {
     expect(screen.getByText("Me gusta")).toBeInTheDocument();
     // Alcance único (solo Meta lo mide): se pinta con su valor.
     expect(screen.getByText("Alcance único")).toBeInTheDocument();
+    // Transparencia de "Vistas": en Meta (instagram) la nota aclara que excluye repeticiones.
+    expect(
+      screen.getByRole("button", { name: /no incluye repeticiones \(loops\)/i }),
+    ).toBeInTheDocument();
     // KPIs de velocidad aparecen tras cargar el histórico.
     expect(await screen.findByText("% en las primeras 24 h")).toBeInTheDocument();
     expect(screen.getByText("Mediciones")).toBeInTheDocument();
@@ -116,6 +120,25 @@ describe("DetallePieza", () => {
       await screen.findByText(/sin histórico todavía/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("% en las primeras 24 h")).not.toBeInTheDocument();
+  });
+
+  it("en TikTok la nota de Vistas es genérica (no afirma el matiz de loops de Meta)", async () => {
+    vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(SIN_HISTORICO);
+    renderConProviders(
+      <DetallePieza
+        pieza={{ ...PIEZA, plataforma: "tiktok" }}
+        abierto
+        onOpenChange={() => {}}
+      />,
+    );
+
+    // Nota honesta genérica para redes no-Meta; NO afirma "repeticiones (loops)".
+    expect(
+      screen.getByRole("button", { name: /la definición de vistas\/reproducciones varía por red/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /repeticiones \(loops\)/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("no consulta el histórico mientras el modal está cerrado", () => {
