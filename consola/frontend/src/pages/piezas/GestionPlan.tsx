@@ -27,6 +27,8 @@ import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 import { CATALOGO_LINEAS, ETIQUETA_LINEA, resolverClaveLinea } from "@/lib/lineas";
 
+import { SelectorHoras } from "./SelectorHoras";
+
 /** Líneas que el editor muestra por defecto cuando la marca no tiene su conjunto guardado. */
 const LINEAS_BASE = ["mx", "internacional", "breaking", "entretenimiento", "evergreen"];
 
@@ -253,21 +255,15 @@ export function PanelPlan({
                   Sin horario: sale al instante.
                 </span>
               ) : (
-                <Input
-                  type="text"
+                <SelectorHoras
                   value={filas[linea]?.horas ?? ""}
-                  placeholder="08:45, 10:45, 12:45…"
-                  onChange={(e) =>
+                  onChange={(csv) =>
                     setFilas((prev) => ({
                       ...prev,
-                      [linea]: {
-                        ...(prev[linea] ?? { cupo: "0", horas: "" }),
-                        horas: e.target.value,
-                      },
+                      [linea]: { ...(prev[linea] ?? { cupo: "0", horas: "" }), horas: csv },
                     }))
                   }
-                  aria-label={`Horarios de ${etiqueta(linea)} (hora CDMX)`}
-                  className="font-mono text-xs"
+                  ariaLabel={`Horarios de ${etiqueta(linea)} (hora CDMX)`}
                 />
               )}
               <Button
