@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -466,15 +467,29 @@ async def usar_historia(request: Request) -> Response:
             }
         )
 
+    from ...pipeline_contenido import _admitir as _pc_ingesta
+
+    # Una historia extranjera aún sin traducir NO baja al tablero en inglés: la traducimos EN EL
+    # ACTO (y la persistimos) antes de crear la pieza, en vez de esperar al barrido del daemon.
+    if _pc_ingesta._falta_traduccion(cluster):
+        traducido = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
+        if traducido is None:
+            return JSONResponse(
+                {"error": "No se pudo traducir la historia ahora mismo. Inténtalo en unos segundos."},
+                status_code=503,
+            )
+        cluster = traducido
+
     datos = await leer_json(request)
     redes_iniciales = _redes_iniciales(datos.get("redes"))
     marca = cluster.get("marca") or ""
 
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
-    titulo = (cluster.get("titulo") or "").strip() or (items[0]["url"] if items else "")
+    # Título/resumen en español (traducido a MX si existe), nunca el original extranjero.
+    titulo = _pc_ingesta._titulo_es(cluster) or (items[0]["url"] if items else "")
     if not titulo:
         return JSONResponse({"error": "La historia no tiene título ni enlace."}, status_code=400)
-    descripcion = (cluster.get("resumen") or "").strip()
+    descripcion = _pc_ingesta._resumen_es(cluster)
     # Enlaces corroborantes en la nota, para trazar las fuentes de la historia.
     fuentes = [it.get("url") for it in items if it.get("url")][:_MAX_ENLACES_HISTORIA]
     if fuentes:
@@ -482,8 +497,6 @@ async def usar_historia(request: Request) -> Response:
 
     url_fuente = items[0].get("url_canonica") if items else ""
     fecha_fuente = cluster.get("primer_visto") or ""
-
-    from ...pipeline_contenido import _admitir as _pc_ingesta
 
     contenido = repos.crear_publicacion(
         clase="contenido",

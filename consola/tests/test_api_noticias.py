@@ -152,6 +152,37 @@ def test_usar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/nope/usar", json={}).status_code == 404
 
 
+_TITULO_ES = "Taiwán espera aprobar pronto la venta de armas de EE. UU."
+
+
+def _fake_traducir_ok(items, *, ejecutor=None):
+    return [{"id": items[0]["id"], "titulo_es": _TITULO_ES, "resumen_es": "Resumen ES", "ok": True}]
+
+
+def _fake_traducir_falla(items, *, ejecutor=None):
+    return [{"id": items[0]["id"], "titulo_es": items[0]["titulo"], "resumen_es": "", "ok": False}]
+
+
+def test_usar_item_extranjero_traduce_en_el_acto(cliente, monkeypatch):
+    # Un item en inglés se traduce EN EL ACTO antes de bajar al tablero; nunca sale en inglés.
+    monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_ok)
+    it = _inicializar(fuente_id="a", clave="k1", idioma="en",
+                      titulo="Taiwan hopes US arms sale package can be approved soon")
+    r = cliente.post(f"/api/noticias/{it['id']}/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["titulo"] == _TITULO_ES
+
+
+def test_usar_item_extranjero_falla_traduccion_503(cliente, monkeypatch):
+    # Si Haiku falla, NO se baja inglés al feed: 503 y la noticia sigue sin usar.
+    monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_falla)
+    it = _inicializar(fuente_id="a", clave="k1", idioma="en",
+                      titulo="Taiwan hopes US arms sale package can be approved soon")
+    r = cliente.post(f"/api/noticias/{it['id']}/usar", json={"generar": False})
+    assert r.status_code == 503, r.text
+    assert repos.obtener_noticia_item(it["id"])["estado"] != "usado"
+
+
 def test_descartar_marca_descartado(cliente):
     it = _inicializar(fuente_id="a", clave="k1")
     r = cliente.post(f"/api/noticias/{it['id']}/descartar")

@@ -15,7 +15,8 @@ from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
 def _inicializar_cluster(cid, *, score=0.5, marca="unotv", categoria="mx", estado="nuevo",
                      titulo="Historia de prueba", n_fuentes=2, breaking=0,
-                     ultimo_visto="2026-06-05T12:00:00+00:00", items=None):
+                     ultimo_visto="2026-06-05T12:00:00+00:00", items=None,
+                     idioma="", traducido=0, titulo_es="", resumen_es=""):
     """Crea un cluster + (opcional) sus items enlazados; devuelve el cluster persistido."""
     repos.upsert_noticia_cluster({
         "id": cid,
@@ -28,6 +29,10 @@ def _inicializar_cluster(cid, *, score=0.5, marca="unotv", categoria="mx", estad
         "n_items": len(items or []),
         "n_fuentes": n_fuentes,
         "idiomas": ["es"],
+        "idioma": idioma,
+        "traducido": traducido,
+        "titulo_es": titulo_es,
+        "resumen_es": resumen_es,
         "senal": 100,
         "score": score,
         "breaking": breaking,
@@ -379,6 +384,57 @@ def test_usar_idempotente_si_ya_usada(cliente):
 
 def test_usar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/historias/nope/usar", json={}).status_code == 404
+
+
+_TITULO_ES = "Taiwán espera aprobar pronto la venta de armas de EE. UU."
+
+
+def _fake_traducir_ok(items, *, ejecutor=None):
+    return [{"id": items[0]["id"], "titulo_es": _TITULO_ES, "resumen_es": "Resumen ES", "ok": True}]
+
+
+def _fake_traducir_falla(items, *, ejecutor=None):
+    return [{"id": items[0]["id"], "titulo_es": items[0]["titulo"], "resumen_es": "", "ok": False}]
+
+
+def test_usar_extranjera_traduce_en_el_acto(cliente, monkeypatch):
+    # Una historia en inglés sin traducir se traduce EN EL ACTO antes de bajar al tablero;
+    # nunca sale en inglés y la traducción queda persistida en el cluster.
+    monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_ok)
+    _inicializar_cluster(
+        "c1", titulo="Taiwan hopes US arms sale package can be approved soon",
+        idioma="en", traducido=0,
+    )
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["titulo"] == _TITULO_ES
+    refrescado = repos.obtener_noticia_cluster("c1")
+    assert bool(refrescado["traducido"]) is True
+    assert refrescado["titulo_es"] == _TITULO_ES
+
+
+def test_usar_extranjera_falla_traduccion_503(cliente, monkeypatch):
+    # Si Haiku falla, NO se baja inglés al feed: 503 y la historia sigue sin usar (se reintenta).
+    monkeypatch.setattr("keni_consola.dominio.traducir.traducir_items", _fake_traducir_falla)
+    _inicializar_cluster(
+        "c1", titulo="Taiwan hopes US arms sale package can be approved soon",
+        idioma="en", traducido=0,
+    )
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 503, r.text
+    assert repos.obtener_noticia_cluster("c1")["estado"] != "usado"
+
+
+def test_usar_extranjera_traducida_usa_titulo_es(cliente):
+    # Ya traducida: el contenido nace con el título en español, nunca el original en inglés.
+    _inicializar_cluster(
+        "c1", titulo="Taiwan hopes US arms sale package can be approved soon",
+        idioma="en", traducido=1, titulo_es="Taiwán espera que el paquete de armas de EE. UU. se apruebe pronto",
+        resumen_es="Resumen en español",
+    )
+    r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["titulo"] == "Taiwán espera que el paquete de armas de EE. UU. se apruebe pronto"
 
 
 def test_descartar_marca_descartada(cliente):

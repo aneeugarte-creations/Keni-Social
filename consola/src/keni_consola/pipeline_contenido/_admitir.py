@@ -176,6 +176,42 @@ def _falta_traduccion(cluster: dict[str, Any]) -> bool:
     return es_extranjero and not bool(cluster.get("traducido"))
 
 
+def traducir_par_ahora(titulo: str, resumen: str) -> tuple[str, str] | None:
+    """Traduce+tropicaliza un par título/resumen extranjero a ES MX EN EL ACTO (Haiku).
+    Devuelve `(titulo_es, resumen_es)` o None si la traducción falla. BLOQUEANTE (subproceso):
+    el llamante async debe envolverlo en un threadpool."""
+    from ..dominio import traducir as _traducir
+
+    res = _traducir.traducir_items([{"id": "x", "titulo": titulo or "", "resumen": resumen or ""}])
+    _traducir.tomar_metricas_acumuladas()
+    t = res[0] if res else None
+    if not t or not t.get("ok"):
+        return None
+    titulo_es = str(t.get("titulo_es") or "").strip()
+    if not titulo_es:
+        return None
+    return titulo_es, str(t.get("resumen_es") or "")
+
+
+def traducir_cluster_ahora(cluster: dict[str, Any]) -> dict[str, Any] | None:
+    """Traduce un cluster extranjero a ES EN EL ACTO y PERSISTE la traducción (mismo destino que
+    el paso Traducir del daemon). Devuelve el cluster ya en ES (`titulo_es`/`resumen_es`/
+    `traducido=1`) o None si Haiku falla. BLOQUEANTE: envolver en threadpool desde async."""
+    par = traducir_par_ahora(cluster.get("titulo") or "", cluster.get("resumen") or "")
+    if par is None:
+        return None
+    titulo_es, resumen_es = par
+    cid = str(cluster.get("id") or "")
+    try:
+        repos.marcar_cluster_traducido(
+            cid, titulo_es=titulo_es, resumen_es=resumen_es,
+            titulo_original=str(cluster.get("titulo") or ""),
+        )
+    except Exception:  # noqa: BLE001 -- persistir no debe tumbar el "usar"; ya está traducido en memoria
+        _log.exception("traducir_cluster_ahora: no se pudo persistir la traducción de %s", cid)
+    return {**cluster, "titulo_es": titulo_es, "resumen_es": resumen_es, "traducido": 1}
+
+
 def clusters_para_promover(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
     verificacion_estados: tuple[str, ...] = VERIFICADAS_OK,

@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -92,10 +93,40 @@ async def usar(request: Request) -> Response:
     redes_iniciales = _redes_iniciales(datos.get("redes"))
     marca = item.get("marca") or ""
 
-    titulo = (item.get("titulo") or "").strip() or (item.get("url") or "")
+    # Una noticia extranjera no baja al tablero en inglés: la traducimos EN EL ACTO a ES MX antes
+    # de crear la pieza. Si tiene HISTORIA (cluster), traducimos+persistimos ahí (Traducir opera
+    # por cluster y beneficia a toda la historia); si va suelta, traducimos su par en memoria.
+    titulo_src = (item.get("titulo") or "").strip()
+    resumen_src = (item.get("resumen") or "").strip()
+    idioma_l = (item.get("idioma") or "").strip().lower()
+    if idioma_l and not idioma_l.startswith("es"):
+        from ...pipeline_contenido import _admitir as _pc_ingesta
+
+        cid = item.get("cluster_id") or ""
+        cluster = repos.obtener_noticia_cluster(cid) if cid else None
+        if cluster is not None:
+            if _pc_ingesta._falta_traduccion(cluster):
+                cluster = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
+            if cluster is None:
+                return JSONResponse(
+                    {"error": "No se pudo traducir la noticia ahora mismo. Inténtalo en unos segundos."},
+                    status_code=503,
+                )
+            titulo_src = _pc_ingesta._titulo_es(cluster)
+            resumen_src = _pc_ingesta._resumen_es(cluster)
+        else:
+            par = await run_in_threadpool(_pc_ingesta.traducir_par_ahora, titulo_src, resumen_src)
+            if par is None:
+                return JSONResponse(
+                    {"error": "No se pudo traducir la noticia ahora mismo. Inténtalo en unos segundos."},
+                    status_code=503,
+                )
+            titulo_src, resumen_src = par
+
+    titulo = titulo_src or (item.get("url") or "")
     if not titulo:
         return JSONResponse({"error": "La noticia no tiene título ni enlace."}, status_code=400)
-    descripcion = (item.get("resumen") or "").strip()
+    descripcion = resumen_src
     if item.get("url"):
         # Deja el enlace de origen en la nota para trazar la fuente.
         descripcion = (descripcion + f"\n\nFuente: {item['url']}").strip()
