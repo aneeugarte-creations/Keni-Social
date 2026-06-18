@@ -93,8 +93,9 @@ def test_pipeline_id_enlaza_solo_piezas_del_pipeline():
 
 
 def test_pieza_sin_marca_con_imagen_subida_esta_lista():
-    # En piezas SIN marca/placa, la imagen subida (bespoke) SÍ cuenta como foto real -> lista.
-    d = pieza_a_dict(_pub(marca="", contenido="copy", copy_in="", imagen="subida.png", foto=""))
+    # En piezas SIN marca/placa, la imagen subida (bespoke) SÍ cuenta como foto real -> lista
+    # (con el copy ya con su hashtag; sin él, gatearía en `falta_hashtags`).
+    d = pieza_a_dict(_pub(marca="", contenido="copy #x", copy_in="", imagen="subida.png", foto=""))
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
@@ -105,21 +106,21 @@ def test_placa_sola_no_cuenta_como_imagen():
 
 
 def test_con_foto_real_esta_lista():
-    d = pieza_a_dict(_pub(contenido="copy", copy_in="TITULAR", imagen="placa.png", foto="bg.png"))
+    d = pieza_a_dict(_pub(contenido="copy #x", copy_in="TITULAR", imagen="placa.png", foto="bg.png"))
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
 def test_falta_copy_in_en_pieza_de_marca():
-    # Pieza de MARCA en revisión con copy + foto pero SIN texto en la imagen (placa): la acción
-    # pendiente es el copy-in. (En borrador no bloquea; es acción de la fase de revisión.)
-    d = pieza_a_dict(_pub(estado="en_revision", contenido="copy", copy_in="", foto="bg.png"))
+    # Pieza de MARCA en revisión con copy (CON hashtag) + foto pero SIN texto en la imagen (placa):
+    # la acción pendiente es el copy-in (los hashtags ya están, así no tapan al copy-in).
+    d = pieza_a_dict(_pub(estado="en_revision", contenido="copy #x", copy_in="", foto="bg.png"))
     assert d["etapa_ia"] == "falta_copy_in"
 
 
 def test_copy_in_no_aplica_sin_marca():
-    # Sin marca (imagen bespoke) no hay placa: no se exige copy-in -> lista (en pendiente, sin
-    # hashtags, no bloquea).
-    d = pieza_a_dict(_pub(marca="", contenido="copy", copy_in="", imagen="subida.png", foto=""))
+    # Sin marca (imagen bespoke) no hay placa: no se exige copy-in -> lista (con el copy ya con
+    # su hashtag).
+    d = pieza_a_dict(_pub(marca="", contenido="copy #x", copy_in="", imagen="subida.png", foto=""))
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
@@ -139,13 +140,13 @@ def test_en_revision_con_hashtags_es_lista():
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
-def test_hashtags_no_bloquean_en_borrador():
-    # En borrador (pendiente), faltar hashtags NO la saca de "lista": el avance la mueve y los
-    # hashtags se piden ya en revisión.
+def test_hashtags_gatean_en_borrador():
+    # Los hashtags GATEAN igual que copy/foto: en borrador, una pieza completa (copy+foto+placa)
+    # pero SIN hashtags NO está "lista" -> falta_hashtags. Nada sale sin hashtag.
     d = pieza_a_dict(
         _pub(estado="pendiente", contenido="Texto sin tags", copy_in="TITULAR", foto="bg.png")
     )
-    assert d["etapa_ia"] == "lista_para_revisar"
+    assert d["etapa_ia"] == "falta_hashtags"
 
 
 def test_en_revision_no_oculta_lo_que_falta():

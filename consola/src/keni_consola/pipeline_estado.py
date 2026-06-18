@@ -172,16 +172,16 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
       - estado `publicado` / `programado` -> etapa terminal (ya pasó el gate)
       - falta copy                      -> generando_copy   ("Falta copy")
       - falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
+      - sin hashtags                     -> falta_hashtags   ("Faltan hashtags")
       - EN REVISIÓN y falta la placa     -> falta_copy_in    ("Falta copy-in")
-      - EN REVISIÓN y sin hashtags       -> falta_hashtags   ("Faltan hashtags")
       - nada pendiente                   -> lista_para_revisar (te toca el like/dislike)
 
-    DOS NIVELES de "lo que falta":
-      - PRODUCCIÓN (copy + foto): la genera el pipeline y GATEA el avance a revisión. Se exige
-        siempre; sin ella la pieza no entra a la cola.
-      - REVISIÓN (placa `copy_in` + hashtags): acciones del equipo dentro de la cola. NO bloquean
-        el avance —solo se piden YA en revisión—; los hashtags son clave para monitorizar
-        campañas y líneas de contenido.
+    QUÉ GATEA el avance a revisión:
+      - PRODUCCIÓN (copy + foto + HASHTAGS): se exige SIEMPRE; sin ello la pieza no está "lista" y
+        no entra a la cola. Los hashtags gatean IGUAL que copy/foto (no sale nada sin hashtag); la
+        etapa `sugerir_hashtags` deja la sugerencia en gris para aceptarla de un clic.
+      - REVISIÓN (placa `copy_in`): acción del equipo dentro de la cola; NO bloquea el avance
+        (solo se pide YA en revisión).
 
     Backend y front comparten esta misma logica a proposito: el front PREFIERE este
     `etapa_ia` cuando viene y cae a su propia derivacion solo si no llega (degradacion).
@@ -201,13 +201,13 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
             return ETAPA_GENERANDO_ARTE
     elif pieza.get("falta_imagen", True):
         return ETAPA_GENERANDO_ARTE
-    # Acciones de la FASE DE REVISIÓN (placa + hashtags): se piden YA en revisión y no bloquean el
-    # avance (en borrador la pieza con copy+foto ya está "lista" y la mueve sola el pipeline).
-    if estado == "en_revision":
-        if pieza.get("falta_copy_in", False):
-            return ETAPA_FALTA_COPY_IN
-        if pieza.get("falta_hashtags", False):
-            return ETAPA_FALTA_HASHTAGS
+    # Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE
+    # (no solo en revisión): una pieza sin hashtags no está "lista" y no entra a la cola.
+    if pieza.get("falta_hashtags", False):
+        return ETAPA_FALTA_HASHTAGS
+    # Placa (`copy_in`): acción del equipo DENTRO de la cola; solo se pide en revisión y no gatea.
+    if estado == "en_revision" and pieza.get("falta_copy_in", False):
+        return ETAPA_FALTA_COPY_IN
     return ETAPA_LISTA_REVISAR
 
 

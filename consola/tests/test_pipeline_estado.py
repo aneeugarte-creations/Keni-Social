@@ -203,12 +203,13 @@ def test_pieza_en_revision_sin_hashtags_es_falta_hashtags():
     assert etapa == pe.ETAPA_FALTA_HASHTAGS
 
 
-def test_pieza_hashtags_no_bloquean_antes_de_revision():
-    # En borrador, faltar hashtags NO la saca de "lista": el avance la mueve y se piden YA en revisión.
+def test_pieza_sin_hashtags_gatea_desde_borrador():
+    # Los hashtags gatean IGUAL que copy/foto: un borrador completo (copy+foto) pero SIN hashtags
+    # NO está "lista" (no avanza ni sale) -> falta_hashtags, ya en borrador. Nada sale sin hashtag.
     etapa = pe.etapa_de_pieza(
         _pieza(estado="borrador", falta_copy=False, falta_imagen=False, falta_hashtags=True)
     )
-    assert etapa == pe.ETAPA_LISTA_REVISAR
+    assert etapa == pe.ETAPA_FALTA_HASHTAGS
 
 
 def test_pieza_falta_copy_in_en_la_placa():

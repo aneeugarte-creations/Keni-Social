@@ -109,12 +109,12 @@ function faltaHashtags(p: Pieza): boolean {
  *  - `publicado` / `programado` → etapa terminal
  *  - falta copy                → generando_copy ("Falta copy")
  *  - falta la FOTO real (o el vídeo) → generando_arte ("Falta imagen"/"Falta video")
+ *  - sin hashtags               → falta_hashtags ("Faltan hashtags")
  *  - EN REVISIÓN, falta la placa → falta_copy_in ("Falta copy-in")
- *  - EN REVISIÓN, sin hashtags  → falta_hashtags ("Faltan hashtags")
  *  - nada pendiente             → lista_para_revisar (te toca el like/dislike)
  *
- * DOS NIVELES: producción (copy + foto, gatea el avance) y revisión (placa + hashtags, acciones
- * del equipo que NO bloquean el avance, solo se piden ya en revisión).
+ * GATEA el avance: producción (copy + foto + HASHTAGS) — los hashtags se exigen SIEMPRE, igual que
+ * copy/foto (no sale nada sin hashtag). La placa (`copy_in`) es acción de revisión y NO gatea.
  *
  * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA, no cuenta como imagen real;
  * necesita FOTO real (`foto`, o imagen bespoke sin marca). La imagen del ARTÍCULO de origen
@@ -155,10 +155,9 @@ function etapaBruta(p: Pieza): EtapaIa {
     const hayImagenReal = !!p.foto || (!p.marca && !!p.imagen);
     if (!hayImagenReal) return "generando_arte";
   }
-  // Acciones de la FASE DE REVISIÓN (placa + hashtags): se piden YA en revisión, no bloquean el avance.
-  if (p.estado === "en_revision") {
-    if (faltaCopyIn(p)) return "falta_copy_in";
-    if (faltaHashtags(p)) return "falta_hashtags";
-  }
+  // Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE.
+  if (faltaHashtags(p)) return "falta_hashtags";
+  // Placa (`copy_in`): acción del equipo en revisión; solo se pide ahí y NO gatea el avance.
+  if (p.estado === "en_revision" && faltaCopyIn(p)) return "falta_copy_in";
   return "lista_para_revisar";
 }

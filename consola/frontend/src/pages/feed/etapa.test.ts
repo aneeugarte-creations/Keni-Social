@@ -101,19 +101,19 @@ describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () 
   });
 
   it("pieza SIN marca con imagen subida (bespoke), completa → lista_para_revisar", () => {
-    // Completa de verdad (copy + imagen propia): el pipeline la mueve sola a la cola de
-    // revisión, así que el feed la pinta directa como "Para revisar" (sin etapa intermedia).
+    // Completa de verdad (copy CON hashtags + imagen propia): el pipeline la mueve sola a la cola
+    // de revisión, así que el feed la pinta directa como "Para revisar" (sin etapa intermedia).
     expect(
       etapaDePieza(
-        pub({ estado: "borrador", marca: "", contenido: "copy", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
+        pub({ estado: "borrador", marca: "", contenido: "copy #x", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
   });
 
-  it("completa (copy + foto real) aún en borrador → lista_para_revisar (avance incondicional)", () => {
+  it("completa (copy + hashtags + foto real) aún en borrador → lista_para_revisar (avance incondicional)", () => {
     expect(
       etapaDePieza(
-        pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
+        pub({ estado: "borrador", contenido: "copy #x", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
   });
@@ -141,11 +141,16 @@ describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () 
     ).toBe("falta_hashtags");
   });
 
-  it("placa y hashtags NO bloquean en borrador (acciones de la fase de revisión)", () => {
-    // Borrador con copy+foto pero sin placa ni hashtags: sigue "lista" (el avance la mueve y se
-    // piden ya en revisión); no se sacan como pendientes antes de la cola.
+  it("los hashtags GATEAN ya en borrador (no sale nada sin hashtag); la placa no", () => {
+    // Borrador con copy+foto pero SIN hashtags: NO está "lista" -> "Faltan hashtags", igual que
+    // falta_imagen. Gatea el avance (nada sale sin hashtag).
     expect(
-      etapaDePieza(pub({ estado: "borrador", contenido: "copy sin tags", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "borrador", contenido: "copy sin tags", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined })),
+    ).toBe("falta_hashtags");
+    // La placa (`copy_in`) en cambio NO bloquea en borrador: con hashtags presentes y sin placa,
+    // sigue "lista" (la placa se pide ya en revisión).
+    expect(
+      etapaDePieza(pub({ estado: "borrador", contenido: "copy #x", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
     ).toBe("lista_para_revisar");
   });
 

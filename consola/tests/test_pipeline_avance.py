@@ -31,7 +31,8 @@ def _cli_usuario(usuario: str = "ana") -> TestClient:
 
 
 def _crear_borrador(cli: TestClient, *, con_foto: bool = True, **campos) -> dict:
-    base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C"}
+    # Copy COMPLETO = con hashtag: los hashtags gatean el avance igual que copy/foto.
+    base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C #keni"}
     base.update(campos)
     r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
@@ -67,15 +68,17 @@ def test_avance_envia_borrador_completo_y_monta_cadena(entorno, monkeypatch):
 
 
 def test_avance_no_toca_incompletas(entorno, monkeypatch):
-    """Sin foto real (o sin copy) la pieza NO está completa: se queda en borrador."""
+    """Sin foto real, sin copy o SIN HASHTAGS la pieza NO está completa: se queda en borrador."""
     _encender(monkeypatch)
     cli = _cli_usuario()
     sin_foto = _crear_borrador(cli, con_foto=False)
     sin_copy = _crear_borrador(cli, contenido="")
+    sin_hashtags = _crear_borrador(cli, contenido="C sin tags")  # copy+foto pero sin #: gateada
 
     assert _avance.ejecutar_avance() == []
     assert repos.obtener_pieza(sin_foto["id"])["estado"] == "borrador"
     assert repos.obtener_pieza(sin_copy["id"])["estado"] == "borrador"
+    assert repos.obtener_pieza(sin_hashtags["id"])["estado"] == "borrador"
 
 
 def test_avance_reenvia_devueltas_tras_el_reposo(entorno, monkeypatch):
