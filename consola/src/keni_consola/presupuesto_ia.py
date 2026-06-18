@@ -163,13 +163,19 @@ def _gasto_por_proceso_hoy() -> dict[str, dict[str, Any]]:
     return gasto
 
 
-def _tope_motor(proceso: str) -> int:
-    """Tope DIARIO de tokens propio del motor (env), o 0 si no aplica / sin limite propio."""
+def _topes_motor(proceso: str) -> tuple[int, int]:
+    """Topes DIARIOS (in, out) de tokens propios del motor (env); 0 = sin limite en ese lado."""
     if proceso == PROCESO_INVESTIGACION:
-        return config.presupuesto_tokens_investigacion_dia()
+        return (
+            config.presupuesto_tokens_investigacion_in_dia(),
+            config.presupuesto_tokens_investigacion_out_dia(),
+        )
     if proceso == PROCESO_PRODUCCION:
-        return config.presupuesto_tokens_produccion_dia()
-    return 0
+        return (
+            config.presupuesto_tokens_produccion_in_dia(),
+            config.presupuesto_tokens_produccion_out_dia(),
+        )
+    return (0, 0)
 
 
 def _mas_severo(a: str, b: str) -> str:
@@ -226,19 +232,25 @@ def nivel_proceso(proceso: str) -> str:
     """Nivel de corte EFECTIVO de un motor (investigacion|produccion): el MAS restrictivo.
 
     Combina el nivel GLOBAL (que ya pondera el tope global de tokens y el cap global de USD, y al
-    que la pausa manda) con el escalon del TOPE PROPIO del motor (gasto de tokens del motor vs su
-    tope, mismos escalones solo_manual/agotado y el mismo `margen_manual`). El tope del motor en 0
-    no añade corte (cae al global). NO loguea transiciones (la señal de transicion es la global).
+    que la pausa manda) con el escalon de los TOPES PROPIOS del motor, separando ENTRADA y SALIDA:
+    el gasto de tokens_in del motor vs su tope IN y el de tokens_out vs su tope OUT (mismos
+    escalones solo_manual/agotado y el mismo `margen_manual`). Cada tope en 0 no añade corte por
+    ese lado. NO loguea transiciones (la señal de transicion es la global).
     """
     glob = _nivel_global()
     if glob == NIVEL_PAUSADO:
         return NIVEL_PAUSADO
-    tope = _tope_motor(proceso)
-    if tope <= 0:
+    tope_in, tope_out = _topes_motor(proceso)
+    if tope_in <= 0 and tope_out <= 0:
         return glob
-    tokens = int(_gasto_por_proceso_hoy().get(proceso, {}).get("tokens", 0))
+    g = _gasto_por_proceso_hoy().get(proceso, {})
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
-    return _mas_severo(glob, _escalon(tokens, tope, margen))
+    nivel_vigente = glob
+    if tope_in > 0:
+        nivel_vigente = _mas_severo(nivel_vigente, _escalon(int(g.get("tokens_in", 0)), tope_in, margen))
+    if tope_out > 0:
+        nivel_vigente = _mas_severo(nivel_vigente, _escalon(int(g.get("tokens_out", 0)), tope_out, margen))
+    return nivel_vigente
 
 
 def bloqueo_admision(
@@ -309,7 +321,7 @@ def estado() -> dict[str, Any]:
     `restante_tokens`/`pct_usado` son None sin presupuesto de tokens; `pct_usado_usd` es None
     sin presupuesto de USD (cada presupuesto en 0 = sin limite). El coste USD gastado del dia
     viaja dentro de `gastado.coste_usd`. La parada de emergencia y `gastado` siguen GLOBALES;
-    `por_proceso` desglosa el gasto y el tope PROPIO de cada motor (ADR 0011).
+    `por_proceso` desglosa el gasto y los topes PROPIOS (entrada/salida) de cada motor (ADR 0011).
     """
     gasto = _gasto_hoy()
     presupuesto = config.presupuesto_tokens_dia()
@@ -339,23 +351,28 @@ def estado() -> dict[str, Any]:
 
 
 def _bloque_proceso(proceso: str, gasto_proc: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + tope propio + nivel del motor."""
+    """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + topes in/out + nivel del motor."""
     g = gasto_proc.get(proceso, {})
     tin = int(g.get("tokens_in", 0))
     tout = int(g.get("tokens_out", 0))
     tokens = int(g.get("tokens", tin + tout))
-    tope = _tope_motor(proceso)
-    restante = max(0, tope - tokens) if tope > 0 else None
-    pct = round(100.0 * tokens / tope, 1) if tope > 0 else None
+    tope_in, tope_out = _topes_motor(proceso)
+    restante_in = max(0, tope_in - tin) if tope_in > 0 else None
+    pct_in = round(100.0 * tin / tope_in, 1) if tope_in > 0 else None
+    restante_out = max(0, tope_out - tout) if tope_out > 0 else None
+    pct_out = round(100.0 * tout / tope_out, 1) if tope_out > 0 else None
     return {
         "tokens_in": tin,
         "tokens_out": tout,
         "tokens": tokens,
         "coste_usd": float(g.get("coste_usd", 0.0)),
         "generaciones": int(g.get("generaciones", 0)),
-        "presupuesto_tokens_dia": tope,
-        "restante_tokens": restante,
-        "pct_usado": pct,
+        "presupuesto_tokens_in_dia": tope_in,
+        "presupuesto_tokens_out_dia": tope_out,
+        "restante_in": restante_in,
+        "pct_in": pct_in,
+        "restante_out": restante_out,
+        "pct_out": pct_out,
         "nivel": nivel_proceso(proceso),
     }
 

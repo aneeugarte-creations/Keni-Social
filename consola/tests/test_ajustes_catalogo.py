@@ -73,9 +73,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # diario + margen manual. Editables en caliente desde el Monitor.
         config.ENV_GENERACION_PAUSADA,
         config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_USD_DIA,
-        # Topes diarios de tokens POR MOTOR (investigación / producción).
-        config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
-        config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
+        # Topes diarios de tokens POR MOTOR, separando entrada/salida (investigación / producción).
+        config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
+        config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
+        config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
+        config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA,
         config.ENV_PRESUPUESTO_MARGEN_MANUAL,
         # Umbral de auto-producción del ranking de noticias (umbrales de promoción a tema)
         # + maduración y cupos de volumen (día móvil / franja horaria).
@@ -302,8 +304,10 @@ _PIPELINE_TOPES_INT = {
 # a diferencia de los knobs de admisión, donde 0 no tiene sentido (algo debe entrar).
 _PIPELINE_ECONOMIA_INT = {
     config.ENV_PRESUPUESTO_TOKENS_DIA,
-    config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
-    config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
+    config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA,
     config.ENV_PRESUPUESTO_MARGEN_MANUAL,
 }
 

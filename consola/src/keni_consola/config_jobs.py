@@ -8,8 +8,10 @@ from ._config_comun import (
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
-    ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
-    ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
+    ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
+    ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
+    ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
+    ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA,
     ENV_PRESUPUESTO_USD_DIA,
     ENV_PROMPT_AVISO_CHARS,
     ENV_PROMPT_MAX_CHARS,
@@ -19,8 +21,10 @@ from ._config_comun import (
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
-    PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF,
-    PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF,
+    PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF,
+    PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF,
+    PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF,
+    PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA_DEF,
     PRESUPUESTO_USD_DIA_DEF,
     PROMPT_AVISO_CHARS_DEF,
     PROMPT_MAX_CHARS_DEF,
@@ -63,24 +67,44 @@ def presupuesto_tokens_dia() -> int:
     return _entero(ENV_PRESUPUESTO_TOKENS_DIA, PRESUPUESTO_TOKENS_DIA_DEF, minimo=0)
 
 
-def presupuesto_tokens_investigacion_dia() -> int:
-    """Tope DIARIO de tokens del motor de INVESTIGACION (`KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA`, def 0).
+def presupuesto_tokens_investigacion_in_dia() -> int:
+    """Tope DIARIO de tokens de ENTRADA del motor de INVESTIGACION (`KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA`, def 0).
 
-    Tokens in+out del dia UTC de las generaciones de investigacion. `0` = SIN limite propio (solo
-    rigen los caps globales). El corte efectivo del motor es el MAS restrictivo de este tope, el
-    tope global de tokens y el cap global de USD (ver `presupuesto_ia.nivel_proceso`).
+    Tokens de input del dia UTC de las generaciones de investigacion. `0` = SIN limite. El corte
+    efectivo del motor es el MAS restrictivo de su tope IN, su tope OUT y el cap global de USD
+    (ver `presupuesto_ia.nivel_proceso`).
     """
-    return _entero(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA, PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF, minimo=0)
+    return _entero(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF, minimo=0)
 
 
-def presupuesto_tokens_produccion_dia() -> int:
-    """Tope DIARIO de tokens del motor de PRODUCCION (`KENI_PRESUPUESTO_TOKENS_PRODUCCION_DIA`, def 0).
+def presupuesto_tokens_investigacion_out_dia() -> int:
+    """Tope DIARIO de tokens de SALIDA del motor de INVESTIGACION (`KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA`, def 0).
 
-    Tokens in+out del dia UTC de las generaciones de produccion. `0` = SIN limite propio (solo
-    rigen los caps globales). El corte efectivo del motor es el MAS restrictivo de este tope, el
-    tope global de tokens y el cap global de USD (ver `presupuesto_ia.nivel_proceso`).
+    Tokens de output del dia UTC de las generaciones de investigacion. `0` = SIN limite. El corte
+    efectivo del motor es el MAS restrictivo de su tope IN, su tope OUT y el cap global de USD
+    (ver `presupuesto_ia.nivel_proceso`).
     """
-    return _entero(ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA, PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF, minimo=0)
+    return _entero(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA, PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF, minimo=0)
+
+
+def presupuesto_tokens_produccion_in_dia() -> int:
+    """Tope DIARIO de tokens de ENTRADA del motor de PRODUCCION (`KENI_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA`, def 0).
+
+    Tokens de input del dia UTC de las generaciones de produccion. `0` = SIN limite. El corte
+    efectivo del motor es el MAS restrictivo de su tope IN, su tope OUT y el cap global de USD
+    (ver `presupuesto_ia.nivel_proceso`).
+    """
+    return _entero(ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA, PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF, minimo=0)
+
+
+def presupuesto_tokens_produccion_out_dia() -> int:
+    """Tope DIARIO de tokens de SALIDA del motor de PRODUCCION (`KENI_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA`, def 0).
+
+    Tokens de output del dia UTC de las generaciones de produccion. `0` = SIN limite. El corte
+    efectivo del motor es el MAS restrictivo de su tope IN, su tope OUT y el cap global de USD
+    (ver `presupuesto_ia.nivel_proceso`).
+    """
+    return _entero(ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA, PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA_DEF, minimo=0)
 
 
 def presupuesto_usd_dia() -> float:

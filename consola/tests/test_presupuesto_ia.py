@@ -506,50 +506,85 @@ def test_api_series_expone_gasto(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Topes POR MOTOR (ADR 0011): corte por motor + desglose `por_proceso`         #
+# Topes POR MOTOR (ADR 0011): corte por motor (IN/OUT) + desglose `por_proceso` #
 # --------------------------------------------------------------------------- #
 #
-# El corte efectivo de un motor es el MAS restrictivo entre el tope global de tokens, el cap
-# global de USD y el tope PROPIO del motor. La parada de emergencia y el resumen de gasto siguen
-# GLOBALES; los topes por motor son ADITIVOS (en 0 no cambian el comportamiento global).
+# Cada motor tiene DOS topes propios de tokens: ENTRADA y SALIDA. El corte efectivo de un motor
+# es el MAS restrictivo entre su tope IN (vs sus tokens_in), su tope OUT (vs sus tokens_out) y el
+# cap global de USD. La parada de emergencia y el resumen de gasto siguen GLOBALES; los topes por
+# motor son ADITIVOS (en 0 no cambian el comportamiento global).
 
 _GASTO_CERO = {"tokens": 0, "tokens_in": 0, "tokens_out": 0, "coste_usd": 0.0, "generaciones": 0}
 
 
-def test_nivel_proceso_tope_motor_corta_solo_ese_motor(monkeypatch):
-    """Con SOLO el tope de investigacion configurado, su gasto corta ese motor; produccion no."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA", "1000")
+def test_nivel_proceso_tope_in_corta_solo_por_input(monkeypatch):
+    """El tope IN del motor corta por su gasto de ENTRADA; sin tope OUT, la salida no influye."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "1000")
     monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
     monkeypatch.setattr(presupuesto_ia, "_gasto_hoy", lambda: dict(_GASTO_CERO))
     monkeypatch.setattr(presupuesto_ia, "_gasto_por_proceso_hoy", lambda: {
-        "investigacion": {"tokens_in": 600, "tokens_out": 500, "tokens": 1100,
+        "investigacion": {"tokens_in": 1100, "tokens_out": 9999, "tokens": 11099,
                           "coste_usd": 0.0, "generaciones": 2},
         "produccion": {"tokens_in": 10, "tokens_out": 5, "tokens": 15,
                        "coste_usd": 0.0, "generaciones": 1},
     })
-    # investigacion: 1100 >= 1000 (y < 1200 = +20%) -> solo_manual; produccion sin tope -> normal.
+    # in 1100 >= 1000 (< 1200) -> solo_manual; el out enorme NO corta (no hay tope OUT).
     assert presupuesto_ia.nivel_proceso("investigacion") == presupuesto_ia.NIVEL_SOLO_MANUAL
     assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_NORMAL
     # El GLOBAL no cambia (caps globales apagados): la parada/el resumen siguen globales.
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
 
 
-def test_nivel_proceso_sin_tope_motor_es_el_global(monkeypatch):
-    """Sin topes por motor (0), nivel_proceso de cada motor == nivel GLOBAL (idéntico al actual)."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "1000")
+def test_nivel_proceso_tope_out_corta_solo_por_output(monkeypatch):
+    """El tope OUT del motor corta por su gasto de SALIDA; sin tope IN, la entrada no influye."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA", "1000")
     monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
-    monkeypatch.setattr(presupuesto_ia, "_gasto_hoy",
-                        lambda: {**_GASTO_CERO, "tokens": 1100})
+    monkeypatch.setattr(presupuesto_ia, "_gasto_hoy", lambda: dict(_GASTO_CERO))
+    monkeypatch.setattr(presupuesto_ia, "_gasto_por_proceso_hoy", lambda: {
+        "investigacion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0,
+                          "coste_usd": 0.0, "generaciones": 0},
+        "produccion": {"tokens_in": 9999, "tokens_out": 1200, "tokens": 11199,
+                       "coste_usd": 0.0, "generaciones": 3},
+    })
+    # out 1200 >= 1000*1.2 -> agotado; el in enorme NO corta (no hay tope IN).
+    assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_AGOTADO
+    assert presupuesto_ia.nivel_proceso("investigacion") == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+
+
+def test_nivel_proceso_mas_restrictivo_entre_in_out_y_global(monkeypatch):
+    """El nivel del motor es el MAS restrictivo de su tope IN, su tope OUT y el cap global de USD."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "1000")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA", "1000")
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "10")
+    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
+    # global USD: 5 < 10 -> normal; IN 1000 == tope -> solo_manual; OUT 1200 >= 1200 -> agotado.
+    monkeypatch.setattr(presupuesto_ia, "_gasto_hoy", lambda: {**_GASTO_CERO, "coste_usd": 5.0})
+    monkeypatch.setattr(presupuesto_ia, "_gasto_por_proceso_hoy", lambda: {
+        "investigacion": {"tokens_in": 1000, "tokens_out": 1200, "tokens": 2200,
+                          "coste_usd": 5.0, "generaciones": 2},
+        "produccion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0,
+                       "coste_usd": 0.0, "generaciones": 0},
+    })
+    # OUT (agotado) manda sobre IN (solo_manual) y sobre el global (normal).
+    assert presupuesto_ia.nivel_proceso("investigacion") == presupuesto_ia.NIVEL_AGOTADO
+
+
+def test_nivel_proceso_sin_topes_motor_es_el_global(monkeypatch):
+    """Sin topes IN/OUT por motor (0), nivel_proceso de cada motor == nivel GLOBAL (reusa USD)."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "10")
+    monkeypatch.setenv("KENI_PRESUPUESTO_MARGEN_MANUAL", "20")
+    monkeypatch.setattr(presupuesto_ia, "_gasto_hoy", lambda: {**_GASTO_CERO, "coste_usd": 11.0})
     monkeypatch.setattr(presupuesto_ia, "_gasto_por_proceso_hoy",
                         presupuesto_ia._gasto_vacio_por_proceso)
-    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_SOLO_MANUAL  # 11 >= 10 (< 12)
     assert presupuesto_ia.nivel_proceso("investigacion") == presupuesto_ia.NIVEL_SOLO_MANUAL
     assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_SOLO_MANUAL
 
 
 def test_nivel_proceso_pausa_global_manda(monkeypatch):
     monkeypatch.setenv("KENI_GENERACION_PAUSADA", "1")
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_DIA", "1000")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA", "1000")
     assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_PAUSADO
 
 
@@ -574,8 +609,9 @@ def test_bloqueo_admision_con_proceso_aplica_tope_motor(monkeypatch):
 
 
 def test_estado_por_proceso_forma_y_gasto(entorno, monkeypatch):
-    """`estado().por_proceso` desglosa cada motor con la forma del contrato; `gastado` sigue global."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA", "1000")
+    """`estado().por_proceso` desglosa cada motor con la forma del contrato (in/out); `gastado` sigue global."""
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "1000")
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA", "500")
     repos.registrar_gasto_ia("i1", dia=_hoy(), tokens_in=300, tokens_out=200,
                              coste_usd=0.5, proceso="investigacion")
     repos.registrar_gasto_ia("p1", dia=_hoy(), tokens_in=10, tokens_out=5,
@@ -585,27 +621,30 @@ def test_estado_por_proceso_forma_y_gasto(entorno, monkeypatch):
     pp = est["por_proceso"]
     assert set(pp) >= {"investigacion", "produccion"}
     campos = {"tokens_in", "tokens_out", "tokens", "coste_usd", "generaciones",
-              "presupuesto_tokens_dia", "restante_tokens", "pct_usado", "nivel"}
+              "presupuesto_tokens_in_dia", "presupuesto_tokens_out_dia",
+              "restante_in", "pct_in", "restante_out", "pct_out", "nivel"}
     inv = pp["investigacion"]
     assert set(inv) == campos
     assert (inv["tokens_in"], inv["tokens_out"], inv["tokens"]) == (300, 200, 500)
     assert inv["generaciones"] == 1
-    assert inv["presupuesto_tokens_dia"] == 1000
-    assert inv["restante_tokens"] == 500
-    assert inv["pct_usado"] == pytest.approx(50.0)
+    assert inv["presupuesto_tokens_in_dia"] == 1000
+    assert inv["presupuesto_tokens_out_dia"] == 500
+    assert inv["restante_in"] == 700 and inv["pct_in"] == pytest.approx(30.0)
+    assert inv["restante_out"] == 300 and inv["pct_out"] == pytest.approx(40.0)
     prod = pp["produccion"]
     assert prod["tokens"] == 15
-    assert prod["presupuesto_tokens_dia"] == 0  # sin tope propio
-    assert prod["restante_tokens"] is None and prod["pct_usado"] is None
+    assert prod["presupuesto_tokens_in_dia"] == 0 and prod["presupuesto_tokens_out_dia"] == 0
+    assert prod["restante_in"] is None and prod["pct_in"] is None
+    assert prod["restante_out"] is None and prod["pct_out"] is None
     # El resumen GLOBAL no cambia: suma de ambos motores.
     assert est["gastado"]["tokens"] == 515
 
 
 def test_tope_por_motor_corta_solo_ese_motor(entorno, monkeypatch):
     """El tope propio de un motor lo corta sin tocar al otro ni al global."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA", "100")
-    repos.registrar_gasto_ia("i", dia=_hoy(), tokens_in=100, tokens_out=20,
-                             proceso="investigacion")  # 120 >= 100*1.2 -> agotado
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "100")
+    repos.registrar_gasto_ia("i", dia=_hoy(), tokens_in=120, tokens_out=20,
+                             proceso="investigacion")  # in 120 >= 100*1.2 -> agotado
     presupuesto_ia.invalidar_cache()
     assert presupuesto_ia.nivel_proceso("investigacion") == presupuesto_ia.NIVEL_AGOTADO
     assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_NORMAL
@@ -613,7 +652,7 @@ def test_tope_por_motor_corta_solo_ese_motor(entorno, monkeypatch):
 
 
 def test_sin_topes_por_motor_comportamiento_global_identico(entorno, monkeypatch):
-    """Con los topes por motor en 0, el corte de cada motor es EXACTAMENTE el global."""
+    """Con los topes por motor en 0, el corte de cada motor es EXACTAMENTE el global (tokens)."""
     monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_DIA", "100")
     repos.registrar_gasto_ia("g", dia=_hoy(), tokens_in=100, tokens_out=0, proceso="produccion")
     presupuesto_ia.invalidar_cache()
@@ -624,9 +663,9 @@ def test_sin_topes_por_motor_comportamiento_global_identico(entorno, monkeypatch
 
 def test_encolar_tope_motor_corta_solo_ese_motor(entorno, monkeypatch):
     """El gate de admisión, con `proceso`, corta el motor agotado y deja pasar el otro."""
-    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_DIA", "100")
-    repos.registrar_gasto_ia("i", dia=_hoy(), tokens_in=100, tokens_out=50,
-                             proceso="investigacion")  # 150 >= 120 -> agotado
+    monkeypatch.setenv("KENI_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA", "100")
+    repos.registrar_gasto_ia("i", dia=_hoy(), tokens_in=150, tokens_out=50,
+                             proceso="investigacion")  # in 150 >= 120 -> agotado
     presupuesto_ia.invalidar_cache()
     spec = jobspec.construir(
         prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=jobspec.PRIORIDAD_MANUAL

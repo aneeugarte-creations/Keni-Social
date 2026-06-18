@@ -430,25 +430,47 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
         ),
         Ajuste(
-            clave=config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_DIA,
+            clave=config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA,
             tipo="int",
-            etiqueta="Tope diario de tokens · Investigación",
-            ayuda="Tokens (entrada+salida) del motor de investigación por día UTC; al agotarse se "
-            "corta SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite propio. Rige "
-            "a la vez que los topes globales: corta el más restrictivo.",
+            etiqueta="Tope diario de tokens de entrada · Investigación",
+            ayuda="Tokens de entrada del motor de investigación por día UTC; al agotarse se corta "
+            "SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite. Rige a la vez que "
+            "el tope de salida y el cap global de coste: corta el más restrictivo.",
             grupo="pipeline_topes",
-            defecto=config.PRESUPUESTO_TOKENS_INVESTIGACION_DIA_DEF,
+            defecto=config.PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA_DEF,
             minimo=0,
         ),
         Ajuste(
-            clave=config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_DIA,
+            clave=config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA,
             tipo="int",
-            etiqueta="Tope diario de tokens · Producción",
-            ayuda="Tokens (entrada+salida) del motor de producción por día UTC; al agotarse se "
-            "corta SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite propio. Rige "
-            "a la vez que los topes globales: corta el más restrictivo.",
+            etiqueta="Tope diario de tokens de salida · Investigación",
+            ayuda="Tokens de salida del motor de investigación por día UTC; al agotarse se corta "
+            "SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite. Rige a la vez que "
+            "el tope de entrada y el cap global de coste: corta el más restrictivo.",
             grupo="pipeline_topes",
-            defecto=config.PRESUPUESTO_TOKENS_PRODUCCION_DIA_DEF,
+            defecto=config.PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA,
+            tipo="int",
+            etiqueta="Tope diario de tokens de entrada · Producción",
+            ayuda="Tokens de entrada del motor de producción por día UTC; al agotarse se corta "
+            "SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite. Rige a la vez que "
+            "el tope de salida y el cap global de coste: corta el más restrictivo.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA_DEF,
+            minimo=0,
+        ),
+        Ajuste(
+            clave=config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA,
+            tipo="int",
+            etiqueta="Tope diario de tokens de salida · Producción",
+            ayuda="Tokens de salida del motor de producción por día UTC; al agotarse se corta "
+            "SOLO ese motor (lo manual sigue hasta el margen); 0 = sin límite. Rige a la vez que "
+            "el tope de entrada y el cap global de coste: corta el más restrictivo.",
+            grupo="pipeline_topes",
+            defecto=config.PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA_DEF,
             minimo=0,
         ),
         Ajuste(
