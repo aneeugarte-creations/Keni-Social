@@ -272,11 +272,10 @@ describe("Sidebar · bloques de flujo", () => {
     expect(feed.querySelector("svg")).not.toBeNull();
   });
 
-  it("muestra un trigger de paleta (Buscar… + ⌘K) en vez del input falso 'F'", async () => {
+  it("no muestra un buscador en el sidebar", async () => {
     renderSidebar("editor", "/operacion/feed");
-    const trigger = await screen.findByRole("button", { name: /buscar páginas/i });
-    expect(trigger).toBeInTheDocument();
-    expect(trigger).toHaveTextContent("⌘K");
+    await screen.findByRole("link", { name: /feed/i });
+    expect(screen.queryByRole("button", { name: /buscar páginas/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /buscar/i })).not.toBeInTheDocument();
   });
 

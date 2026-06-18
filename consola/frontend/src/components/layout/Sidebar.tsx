@@ -1,39 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { subPestanasDe } from "@/components/layout/hub-tabs";
 import { iconoDe } from "@/components/layout/navegacion";
-import { usePaletaComandos } from "@/hooks/paleta-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-/**
- * Trigger del buscador: botón que ABRE la paleta de comandos (⌘K). Muestra
- * "Buscar…" con el hint ⌘K a la derecha.
- */
-function BuscadorSidebar() {
-  const { abrir } = usePaletaComandos();
-  return (
-    <button
-      type="button"
-      onClick={abrir}
-      aria-label="Buscar páginas"
-      aria-keyshortcuts="Meta+K Control+K"
-      className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
-      <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="flex-1 text-left">Buscar…</span>
-      <kbd className="pointer-events-none rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-        ⌘K
-      </kbd>
-    </button>
-  );
-}
 
 /** Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). */
 function clasesItem({ isActive }: { isActive: boolean }) {
@@ -175,10 +151,6 @@ export function Sidebar({
     >
       <div className="flex h-12 items-center border-b border-border px-2">
         <CuentaUsuario />
-      </div>
-
-      <div className="px-3 pt-3">
-        <BuscadorSidebar />
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
