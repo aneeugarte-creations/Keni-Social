@@ -173,6 +173,36 @@ def test_cola_series_contrato(entorno):
     assert isinstance(data["resultados"], list)
 
 
+def test_economia_contrato_global_desde_ledger(entorno):
+    """/api/actividad/economia sirve el desglose GLOBAL por proceso desde el ledger gasto_ia."""
+    # Dos marcas distintas en produccion: el desglose es GLOBAL, deben sumarse.
+    repos.registrar_gasto_ia("e1", dia=generaciones.ahora_iso()[:10], proceso="produccion",
+                             tipo="copy", marca="unotv", tokens_in=100, tokens_out=40,
+                             coste_usd=0.01)
+    repos.registrar_gasto_ia("e2", dia=generaciones.ahora_iso()[:10], proceso="produccion",
+                             tipo="copy", marca="claro-sports", tokens_in=10, tokens_out=5,
+                             coste_usd=0.002)
+    repos.registrar_gasto_ia("e3", dia=generaciones.ahora_iso()[:10], proceso="investigacion",
+                             tipo="verificacion", marca="unotv", tokens_in=200, tokens_out=20,
+                             coste_usd=0.004)
+
+    data = _cli_token().get("/api/actividad/economia?dias=7").json()
+    assert data["dias"] == 7
+    por_proceso = data["por_proceso"]
+    assert set(por_proceso) >= {"investigacion", "produccion"}
+    prod = por_proceso["produccion"]
+    assert prod["total"]["items"] == 2 and prod["total"]["tokens"] == 155
+    assert len(prod["por_dia"]) == 7  # zero-filled a la ventana pedida
+    assert prod["por_tipo"][0]["tipo"] == "copy"
+    assert por_proceso["investigacion"]["total"]["items"] == 1
+
+
+def test_economia_clampa_dias_al_maximo(entorno):
+    """`dias` se clampa al maximo razonable; default 7 cuando falta/invalido."""
+    assert _cli_token().get("/api/actividad/economia?dias=9999").json()["dias"] == 31
+    assert _cli_token().get("/api/actividad/economia").json()["dias"] == 7
+
+
 def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
     """La serie NO cuenta los marcadores de etapa (coste 0) y separa investigacion/produccion.
 

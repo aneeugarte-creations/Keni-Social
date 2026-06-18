@@ -12,7 +12,7 @@ from ._db_comun import (
     timedelta,
     uuid,
 )
-from .tiempo import ahora_iso, iso_o_vacio, iso_utc
+from .tiempo import ahora_iso, hoy_utc, iso_o_vacio, iso_utc
 
 # --------------------------------------------------------------------------- #
 # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B)                    #
@@ -600,6 +600,94 @@ def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
             "generaciones": int(fila["n"]),
         }
     return por_proceso
+
+
+def gasto_ia_economia_por_proceso(dias: int = 7) -> dict[str, dict[str, Any]]:
+    """Desglose economico GLOBAL de los ultimos `dias` (UTC) DESDE el ledger `gasto_ia`.
+
+    Fuente UNICA y autoritativa de la pagina Economia: el mismo ledger que la tarjeta de
+    presupuesto, SIN filtro de marca. Agrupa por `proceso` (investigacion/produccion) y, por
+    cada proceso, devuelve:
+      - `total`:   `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
+      - `por_dia`: EXACTAMENTE `dias` entradas, de la mas ANTIGUA a la mas reciente, ZERO-FILLED
+                   (dias sin filas -> ceros): `{dia, items, tokens, coste_usd}`.
+      - `por_tipo`:`[{tipo, items, tokens, coste_usd}]` ordenado por coste_usd desc, luego tipo.
+    GARANTIZA siempre las claves 'investigacion' y 'produccion' (a ceros, con `por_dia` de
+    longitud `dias`) aunque no haya filas. Otros valores de `proceso` solo aparecen si hay filas;
+    las filas sin `proceso` se ignoran. `dia` es `date` (migracion 0033): el corte `dia >= ?`
+    compara nativo y el `dia` agrupado se re-emite como string ISO `YYYY-MM-DD`.
+    """
+    n = max(1, int(dias))
+    hoy = hoy_utc()
+    # Eje temporal esperado, antiguo -> reciente: el corte del SELECT es su primer dia
+    # (hoy_utc - (n-1)); zero-fill = sembrar estos n dias a cero y volcar encima lo agregado.
+    dias_esperados = [(hoy - timedelta(days=n - 1 - i)).isoformat() for i in range(n)]
+    corte = dias_esperados[0]
+
+    def _acc_nuevo() -> dict[str, Any]:
+        return {
+            "items": 0,
+            "tokens": 0,
+            "coste_usd": 0.0,
+            "_por_dia": {d: {"items": 0, "tokens": 0, "coste_usd": 0.0} for d in dias_esperados},
+            "_por_tipo": {},
+        }
+
+    acumulado: dict[str, dict[str, Any]] = {
+        "investigacion": _acc_nuevo(),
+        "produccion": _acc_nuevo(),
+    }
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT proceso, tipo, dia, COUNT(*) AS items, "
+            "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, "
+            "COALESCE(SUM(coste_usd), 0) AS coste "
+            "FROM gasto_ia WHERE dia >= ? GROUP BY proceso, tipo, dia",
+            (corte,),
+        ).fetchall()
+    finally:
+        con.close()
+    for f in filas:
+        proceso = str(f["proceso"] or "")
+        if not proceso:
+            continue
+        acc = acumulado.setdefault(proceso, _acc_nuevo())
+        items = int(f["items"])
+        tokens = int(f["tokens"])
+        coste = float(f["coste"])
+        acc["items"] += items
+        acc["tokens"] += tokens
+        acc["coste_usd"] += coste
+        dia = iso_o_vacio(f["dia"])
+        celda = acc["_por_dia"].get(dia)
+        if celda is not None:
+            celda["items"] += items
+            celda["tokens"] += tokens
+            celda["coste_usd"] += coste
+        tipo = str(f["tipo"] or "")
+        t = acc["_por_tipo"].setdefault(tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0})
+        t["items"] += items
+        t["tokens"] += tokens
+        t["coste_usd"] += coste
+
+    resultado: dict[str, dict[str, Any]] = {}
+    for proceso, acc in acumulado.items():
+        por_dia = [{"dia": d, **acc["_por_dia"][d]} for d in dias_esperados]
+        por_tipo = sorted(
+            ({"tipo": tipo, **vals} for tipo, vals in acc["_por_tipo"].items()),
+            key=lambda r: (-r["coste_usd"], r["tipo"]),
+        )
+        resultado[proceso] = {
+            "total": {
+                "items": acc["items"],
+                "tokens": acc["tokens"],
+                "coste_usd": acc["coste_usd"],
+            },
+            "por_dia": por_dia,
+            "por_tipo": por_tipo,
+        }
+    return resultado
 
 
 # --------------------------------------------------------------------------- #

@@ -9,6 +9,11 @@ y el dominio `agentes`, NUNCA por HTTP) y se sirven.
 Endpoints:
   - `GET /api/actividad/agregados`
       -> `{"total": {...}, "por_tipo": [...], "por_dia": [...]}`
+  - `GET /api/actividad/economia?dias=`
+      -> desglose economico GLOBAL (sin marca) por proceso DESDE el ledger `gasto_ia` (la misma
+         fuente que el presupuesto), para que la pagina Economia cuadre:
+         `{"dias": int, "por_proceso": {"investigacion"|"produccion": {"total": {...},
+         "por_dia": [...], "por_tipo": [...]}}}`.
   - `GET /api/actividad/cola`
       -> MONITOR EN VIVO de la cola de generacion: capacidad (`max_jobs`: la cola NO tiene tope,
          R-NO-LIMIT), conteo (pendientes/reclamados/terminados/activos), `procesando` (claude -p en proceso), slots
@@ -104,6 +109,23 @@ async def agregados(request: Request) -> Response:
     for g in gens:
         g["proceso"] = generaciones.proceso_de(g)
     return JSONResponse(actividad.agregados(gens, runs))
+
+
+_ECONOMIA_DIAS_MAX = 31
+
+
+async def economia(request: Request) -> Response:
+    """GET /api/actividad/economia?dias=: desglose economico GLOBAL por proceso del ledger.
+
+    Fuente UNICA del desglose de la pagina Economia: el ledger `gasto_ia` (el mismo de la
+    tarjeta de presupuesto), SIN filtro de marca, para que KPIs/series/tablas cuadren. `dias`
+    default 7, minimo 1, clampado a `_ECONOMIA_DIAS_MAX`.
+    """
+    dias = _entero_query(request.query_params.get("dias"), minimo=1) or 7
+    dias = min(dias, _ECONOMIA_DIAS_MAX)
+    return JSONResponse(
+        {"dias": dias, "por_proceso": repos.gasto_ia_economia_por_proceso(dias)}
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -499,6 +521,7 @@ async def cola_reencolar(request: Request) -> Response:
 
 RUTAS = [
     Route("/api/actividad/agregados", agregados, methods=["GET"]),
+    Route("/api/actividad/economia", economia, methods=["GET"]),
     # Mas especificas ANTES que la generica para que Starlette case bien.
     Route("/api/actividad/cola/series", cola_series, methods=["GET"]),
     Route("/api/actividad/cola/purgar", cola_purgar, methods=["POST"]),

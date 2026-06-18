@@ -478,3 +478,58 @@ def test_gasto_ia_dia_date_roundtrip_y_serie(pg):
     assert fila and fila[0]["tokens"] == 150
     assert isinstance(fila[0]["dia"], str)  # date -> string ISO, no objeto date
     assert db.gasto_ia_del_dia("2026-06-13")["tokens"] == 150
+
+
+def test_gasto_ia_economia_garantiza_procesos_y_zero_fill(pg):
+    """Sin filas: 'investigacion' y 'produccion' presentes, a cero y por_dia de longitud `dias`."""
+    eco = db.gasto_ia_economia_por_proceso(5)
+    assert set(eco) >= {"investigacion", "produccion"}
+    for proc in ("investigacion", "produccion"):
+        bloque = eco[proc]
+        assert bloque["total"] == {"items": 0, "tokens": 0, "coste_usd": 0.0}
+        assert bloque["por_tipo"] == []
+        assert len(bloque["por_dia"]) == 5
+        assert all(d["items"] == 0 and d["tokens"] == 0 and d["coste_usd"] == 0.0
+                   for d in bloque["por_dia"])
+        # por_dia ordenado antiguo -> reciente, sin huecos.
+        fechas = [d["dia"] for d in bloque["por_dia"]]
+        assert fechas == sorted(fechas)
+
+
+def test_gasto_ia_economia_agrega_por_proceso_dia_y_tipo(pg):
+    """Agrega GLOBAL (sin marca) por proceso; zero-fill del eje; por_tipo por coste desc."""
+    from datetime import timedelta
+
+    from keni_consola import repos
+    from keni_consola.tiempo import hoy_utc
+
+    hoy = hoy_utc()
+    ayer = (hoy - timedelta(days=1)).isoformat()
+    hoy_iso = hoy.isoformat()
+    # Produccion: dos tipos en dias distintos y dos marcas (deben sumarse, GLOBAL).
+    repos.registrar_gasto_ia("p1", dia=hoy_iso, proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=100, tokens_out=40, coste_usd=0.01)
+    repos.registrar_gasto_ia("p2", dia=hoy_iso, proceso="produccion", tipo="copy",
+                             marca="claro-sports", tokens_in=10, tokens_out=5, coste_usd=0.002)
+    repos.registrar_gasto_ia("p3", dia=ayer, proceso="produccion", tipo="imagen",
+                             marca="unotv", tokens_in=0, tokens_out=0, coste_usd=0.05)
+    # Investigacion: una fila hoy.
+    repos.registrar_gasto_ia("i1", dia=hoy_iso, proceso="investigacion", tipo="verificacion",
+                             marca="unotv", tokens_in=200, tokens_out=20, coste_usd=0.004)
+
+    eco = db.gasto_ia_economia_por_proceso(3)
+
+    prod = eco["produccion"]
+    assert prod["total"] == {"items": 3, "tokens": 155, "coste_usd": pytest.approx(0.062)}
+    # por_tipo: imagen (0.05) antes que copy (0.012), ordenado por coste desc.
+    assert [t["tipo"] for t in prod["por_tipo"]] == ["imagen", "copy"]
+    assert prod["por_tipo"][1] == {"tipo": "copy", "items": 2, "tokens": 155,
+                                   "coste_usd": pytest.approx(0.012)}
+    # por_dia: longitud 3, el dia mas reciente suma las dos filas de hoy.
+    assert len(prod["por_dia"]) == 3
+    por_dia = {d["dia"]: d for d in prod["por_dia"]}
+    assert por_dia[hoy_iso]["items"] == 2 and por_dia[hoy_iso]["tokens"] == 155
+    assert por_dia[ayer]["coste_usd"] == pytest.approx(0.05)
+
+    inv = eco["investigacion"]
+    assert inv["total"]["items"] == 1 and inv["total"]["tokens"] == 220
