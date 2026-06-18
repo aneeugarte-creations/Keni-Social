@@ -54,6 +54,9 @@ id = "fundacion"
 etiqueta = "Fundación"
 id_metricas = "fundacion"
 tipo = "propio"
+# Su panel de investigación se llama "Curiosidades" (datos curiosos / novedades, estilo Pubity),
+# no "Noticias". Se activa al ponerla en tipo = "noticias" desde la consola.
+etiqueta_investigacion = "Curiosidades"
 
 [cuentas]
 # Cuenta principal del reporte de deportes (su id_metricas). Coincide con la marca

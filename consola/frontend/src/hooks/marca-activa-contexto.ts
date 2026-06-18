@@ -47,6 +47,12 @@ export interface ValorMarcaActiva {
    * Opcional: ausente se trata como noticias (default seguro); el provider siempre lo provee.
    */
   marcaActivaEsNoticias?: boolean;
+  /**
+   * Nombre del panel de investigación de la marca activa (p.ej. "Curiosidades" para una marca de
+   * datos curiosos). "Noticias" por defecto y para la vista agregada ("Todas"). Opcional: ausente
+   * se trata como "Noticias" (default seguro); el provider siempre lo provee.
+   */
+  etiquetaInvestigacion?: string;
   /** Opciones del switch, con nombre legible (las marcas del perfil, o todas si admin). */
   marcasParaSwitch: MarcaDisponible[];
   /** Nombre legible de la marca activa, o `null` para "Todas". */

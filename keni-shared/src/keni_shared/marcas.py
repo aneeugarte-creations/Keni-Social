@@ -40,7 +40,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .cliente import cargar_cliente, normalizar_tipo
+from .cliente import cargar_cliente, normalizar_etiqueta_investigacion, normalizar_tipo
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,9 @@ class Marca:
     # 'noticias' (pasa por la cadena de investigación) o 'propio' (contenido propio que se
     # salta la investigación). Defecto 'noticias' si el catálogo no lo declara.
     tipo: str = "noticias"
+    # Nombre del panel de investigación que ve el equipo para esta marca (p.ej.
+    # "Curiosidades"). Solo aplica a marcas 'noticias'; por defecto "Noticias".
+    etiqueta_investigacion: str = "Noticias"
 
 
 # --------------------------------------------------------------------------- #
@@ -86,7 +89,13 @@ def _ruta_activa() -> Path:
 def _semilla() -> tuple[Marca, ...]:
     """Catalogo semilla del paquete de cliente (`clientes/<cliente>.toml`)."""
     return tuple(
-        Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas, tipo=m.tipo)
+        Marca(
+            id=m.id,
+            etiqueta=m.etiqueta,
+            id_metricas=m.id_metricas,
+            tipo=m.tipo,
+            etiqueta_investigacion=m.etiqueta_investigacion,
+        )
         for m in cargar_cliente().marcas
     )
 
@@ -127,6 +136,9 @@ def _parsear_overlay(ruta: Path) -> tuple[Marca, ...]:
                     else mid.replace("-", "_")
                 ),
                 tipo=normalizar_tipo(m.get("tipo")),
+                etiqueta_investigacion=normalizar_etiqueta_investigacion(
+                    m.get("etiqueta_investigacion")
+                ),
             )
         )
     return tuple(marcas) if marcas else _semilla()

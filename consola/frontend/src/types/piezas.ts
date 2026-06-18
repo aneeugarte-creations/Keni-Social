@@ -8,6 +8,8 @@ import type { Veredicto } from "./comun";
  */
 export interface MarcaOpcion extends MarcaDisponible {
   tipo?: "noticias" | "propio";
+  /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
+  etiqueta_investigacion?: string;
 }
 
 /** Resultado de programar una pieza en Metricool (preview dry-run o publicación real). */

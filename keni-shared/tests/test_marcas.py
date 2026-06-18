@@ -82,5 +82,12 @@ def test_tipo_separa_noticias_de_contenido_propio():
     assert marcas.marca_de("piso-15").tipo == "propio"
 
 
+def test_etiqueta_investigacion_por_marca():
+    # El panel de investigación se llama "Noticias" por defecto, pero cada marca puede renombrarlo
+    # (la Fundación lo llama "Curiosidades" en la semilla).
+    assert marcas.marca_de("unotv").etiqueta_investigacion == "Noticias"
+    assert marcas.marca_de("fundacion").etiqueta_investigacion == "Curiosidades"
+
+
 def test_es_noticias_falso_para_marca_desconocida():
     assert not marcas.es_noticias("zzz")

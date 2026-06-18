@@ -149,7 +149,12 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
         assert r.status_code == 201, r.text
         # `tipo` por defecto 'noticias' (una marca nueva pasa por investigación salvo que se diga lo contrario).
         assert r.json()["marca"] == {
-            "id": "nueva-marca", "etiqueta": "Nueva Marca", "id_metricas": "nueva_marca", "tipo": "noticias",
+            "id": "nueva-marca",
+            "etiqueta": "Nueva Marca",
+            "id_metricas": "nueva_marca",
+            "tipo": "noticias",
+            # Nombre del panel de investigación; "Noticias" por defecto.
+            "etiqueta_investigacion": "Noticias",
         }
         # El catálogo (vivo) ya la incluye.
         assert km.es_marca("nueva-marca")
@@ -168,6 +173,17 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
         r = c.put("/api/marcas/catalogo/nueva-marca", json={"tipo": "propio"}, headers=_ORIGIN)
         assert r.status_code == 200 and r.json()["marca"]["tipo"] == "propio"
         assert not km.es_noticias("nueva-marca")
+
+        # Nombre del panel (etiqueta_investigacion): se fija y se PRESERVA en un round-trip que no lo toca.
+        r = c.put(
+            "/api/marcas/catalogo/nueva-marca",
+            json={"etiqueta_investigacion": "Curiosidades"},
+            headers=_ORIGIN,
+        )
+        assert r.status_code == 200 and r.json()["marca"]["etiqueta_investigacion"] == "Curiosidades"
+        assert km.marca_de("nueva-marca").etiqueta_investigacion == "Curiosidades"
+        r = c.put("/api/marcas/catalogo/nueva-marca", json={"etiqueta": "Otra Vez"}, headers=_ORIGIN)
+        assert r.json()["marca"]["etiqueta_investigacion"] == "Curiosidades"
 
         # Borrar.
         assert c.delete("/api/marcas/catalogo/nueva-marca", headers=_ORIGIN).status_code == 200

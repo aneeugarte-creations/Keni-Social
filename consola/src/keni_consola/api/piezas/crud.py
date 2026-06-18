@@ -172,7 +172,15 @@ async def opciones(request: Request) -> Response:
             "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PIEZA],
             # `tipo` ('noticias'|'propio'): el SPA oculta el panel de Noticias para las de
             # contenido propio (se saltan la investigación).
-            "marcas": [{"id": m.id, "nombre": m.etiqueta, "tipo": m.tipo} for m in marcas.catalogo()],
+            "marcas": [
+                {
+                    "id": m.id,
+                    "nombre": m.etiqueta,
+                    "tipo": m.tipo,
+                    "etiqueta_investigacion": m.etiqueta_investigacion,
+                }
+                for m in marcas.catalogo()
+            ],
             "lineas": lineas,
             # Gate maestro de pieza real (KENI_PUBLICAR_REAL). OFF => las piezas
             # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.

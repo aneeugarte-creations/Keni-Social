@@ -32,10 +32,13 @@ export function EncabezadoSeccion({
   refAcciones?: (el: HTMLElement | null) => void;
 }) {
   const { pathname } = useLocation();
-  const { marcaActiva, marcaActivaEsNoticias } = useMarcaActiva();
-  const pestanas = pestanasDeRuta(pathname)?.filter((p) =>
-    rutaVisibleParaMarca(p.ruta, marcaActiva, marcaActivaEsNoticias),
-  );
+  const { marcaActiva, marcaActivaEsNoticias, etiquetaInvestigacion } = useMarcaActiva();
+  const pestanas = pestanasDeRuta(pathname)
+    ?.filter((p) => rutaVisibleParaMarca(p.ruta, marcaActiva, marcaActivaEsNoticias))
+    // El panel de investigación se llama según la marca activa (p.ej. "Curiosidades"); "Noticias" por defecto.
+    .map((p) =>
+      p.ruta === "/datos/investigacion" ? { ...p, etiqueta: etiquetaInvestigacion ?? "Noticias" } : p,
+    );
   // Hub solo si quedan 2+ pestañas tras el gating por marca (si no, no hay nada que conmutar).
   const hayTabs = !!pestanas && pestanas.length >= 2;
 

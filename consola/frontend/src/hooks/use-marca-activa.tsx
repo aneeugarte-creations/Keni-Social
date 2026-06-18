@@ -126,6 +126,12 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     return catalogo.find((m) => m.id === marcaActiva)?.tipo !== "propio";
   }, [marcaActiva, catalogo]);
 
+  // Nombre del panel de investigación de la marca activa (p.ej. "Curiosidades"); "Noticias" por defecto.
+  const etiquetaInvestigacion = React.useMemo<string>(() => {
+    if (marcaActiva === null) return "Noticias";
+    return catalogo.find((m) => m.id === marcaActiva)?.etiqueta_investigacion || "Noticias";
+  }, [marcaActiva, catalogo]);
+
   const valor = React.useMemo<ValorMarcaActiva>(() => {
     const enMarcaPrimaria = marcaActiva === (marcaPrimaria ?? null);
     const esMultiMarca = marcasParaSwitch.length > 1 || (esAdmin && marcasParaSwitch.length >= 1);
@@ -136,6 +142,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
       esMultiMarca,
       puedeTodas: esAdmin,
       marcaActivaEsNoticias,
+      etiquetaInvestigacion,
       marcasParaSwitch,
       nombreActiva,
       cambiarMarca,
@@ -147,6 +154,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     marcasParaSwitch,
     esAdmin,
     marcaActivaEsNoticias,
+    etiquetaInvestigacion,
     nombreActiva,
     cambiarMarca,
     volverAPrimaria,

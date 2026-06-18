@@ -40,6 +40,8 @@ export interface MarcaDashboard {
   etiqueta: string;
   /** 'noticias' (pasa por investigación) o 'propio' (contenido propio, sin panel de Noticias). */
   tipo: TipoMarca;
+  /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
+  etiqueta_investigacion: string;
   /** Canal por el que la marca publica sus piezas. */
   canal_publicacion: CanalPieza;
   postproxy: PostproxyMarca;
@@ -65,6 +67,8 @@ export interface MarcaCatalogo {
   etiqueta: string;
   id_metricas: string;
   tipo: TipoMarca;
+  /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
+  etiqueta_investigacion: string;
 }
 
 export interface RespuestaCatalogoMarcas {
@@ -76,12 +80,14 @@ export interface CuerpoCrearMarca {
   id?: string;
   id_metricas?: string;
   tipo?: TipoMarca;
+  etiqueta_investigacion?: string;
 }
 
 export interface CuerpoEditarMarca {
   etiqueta?: string;
   id_metricas?: string;
   tipo?: TipoMarca;
+  etiqueta_investigacion?: string;
 }
 
 export interface RespuestaMarcaCatalogo {

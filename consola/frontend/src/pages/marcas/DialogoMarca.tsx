@@ -24,6 +24,8 @@ export interface MarcaEditable {
   id_metricas: string;
   /** 'noticias' (pasa por investigación) o 'propio' (contenido propio, sin panel de Noticias). */
   tipo: TipoMarca;
+  /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
+  etiqueta_investigacion: string;
 }
 
 function invalidarMarcas(qc: ReturnType<typeof useQueryClient>) {
@@ -54,6 +56,7 @@ export function DialogoMarca({
   const [id, setId] = React.useState("");
   const [idMetricas, setIdMetricas] = React.useState("");
   const [tipo, setTipo] = React.useState<TipoMarca>("noticias");
+  const [etiquetaInvestigacion, setEtiquetaInvestigacion] = React.useState("Noticias");
   const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
 
   React.useEffect(() => {
@@ -62,13 +65,20 @@ export function DialogoMarca({
       setId(inicial?.id ?? "");
       setIdMetricas(inicial?.id_metricas ?? "");
       setTipo(inicial?.tipo ?? "noticias");
+      setEtiquetaInvestigacion(inicial?.etiqueta_investigacion || "Noticias");
       setConfirmandoBorrado(false);
     }
   }, [abierto, inicial]);
 
   const crear = useMutation({
     mutationFn: () =>
-      api.crearMarca({ etiqueta, id: id.trim() || undefined, id_metricas: idMetricas.trim() || undefined, tipo }),
+      api.crearMarca({
+        etiqueta,
+        id: id.trim() || undefined,
+        id_metricas: idMetricas.trim() || undefined,
+        tipo,
+        etiqueta_investigacion: etiquetaInvestigacion.trim() || "Noticias",
+      }),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca creada.");
       invalidarMarcas(qc);
@@ -78,7 +88,13 @@ export function DialogoMarca({
   });
 
   const editar = useMutation({
-    mutationFn: () => api.editarMarca(inicial!.id, { etiqueta, id_metricas: idMetricas.trim(), tipo }),
+    mutationFn: () =>
+      api.editarMarca(inicial!.id, {
+        etiqueta,
+        id_metricas: idMetricas.trim(),
+        tipo,
+        etiqueta_investigacion: etiquetaInvestigacion.trim() || "Noticias",
+      }),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca actualizada.");
       invalidarMarcas(qc);
@@ -177,6 +193,22 @@ export function DialogoMarca({
                 : "Noticias: pasa por la investigación (recolección, clasificación, Mesa de Noticias)."}
             </p>
           </div>
+          {tipo === "noticias" && (
+            <div className="space-y-1">
+              <Label htmlFor="marca-etiqueta-investigacion">Nombre del panel</Label>
+              <Input
+                id="marca-etiqueta-investigacion"
+                value={etiquetaInvestigacion}
+                onChange={(e) => setEtiquetaInvestigacion(e.target.value)}
+                placeholder="Noticias"
+                disabled={ocupado}
+              />
+              <p className="text-xs text-muted-foreground">
+                Cómo se llama su panel de investigación (p.ej. “Curiosidades”, “Novedades”). Por
+                defecto “Noticias”.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Pie: en edición, «Borrar marca» a la izquierda (con confirmación en línea). */}

@@ -25,7 +25,7 @@ from starlette.routing import Route
 
 from keni_metricas.fuentes import postproxy as _pp_cliente
 from keni_shared import marcas as _km
-from keni_shared.cliente import normalizar_tipo
+from keni_shared.cliente import normalizar_etiqueta_investigacion, normalizar_tipo
 from keni_shared.io_atomico import escribir_atomico
 
 from .. import permisos
@@ -133,6 +133,10 @@ def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marc
         "etiqueta": etiqueta,
         # 'noticias' (pasa por investigación) o 'propio' (contenido propio): editable en el form.
         "tipo": marca_cat.tipo if marca_cat is not None else "noticias",
+        # Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto.
+        "etiqueta_investigacion": (
+            marca_cat.etiqueta_investigacion if marca_cat is not None else "Noticias"
+        ),
         "canal_publicacion": canal,
         "postproxy": {"conectado": bool(grupo), "profile_group_id": grupo},
         "redes": redes,
@@ -231,9 +235,15 @@ def _slug(texto: str, sep: str) -> str:
 
 
 def _catalogo_actual() -> list[dict]:
-    """Catálogo vigente como lista de dicts {id, etiqueta, id_metricas, tipo}."""
+    """Catálogo vigente como lista de dicts {id, etiqueta, id_metricas, tipo, etiqueta_investigacion}."""
     return [
-        {"id": m.id, "etiqueta": m.etiqueta, "id_metricas": m.id_metricas, "tipo": m.tipo}
+        {
+            "id": m.id,
+            "etiqueta": m.etiqueta,
+            "id_metricas": m.id_metricas,
+            "tipo": m.tipo,
+            "etiqueta_investigacion": m.etiqueta_investigacion,
+        }
         for m in _km.catalogo()
     ]
 
@@ -255,6 +265,8 @@ def _serializar_marcas(marcas: list[dict]) -> str:
             f'etiqueta = "{esc(m["etiqueta"])}"\n'
             f'id_metricas = "{esc(m["id_metricas"])}"\n'
             f'tipo = "{esc(normalizar_tipo(m.get("tipo")))}"\n'
+            f'etiqueta_investigacion = '
+            f'"{esc(normalizar_etiqueta_investigacion(m.get("etiqueta_investigacion")))}"\n'
         )
     return cabecera + "\n" + "\n".join(bloques)
 
@@ -312,7 +324,13 @@ async def catalogo_crear(request: Request) -> Response:
     if any(m["id_metricas"] == id_metricas for m in catalogo):
         return JSONResponse({"error": f"Ya existe una marca con id_metricas {id_metricas!r}."}, status_code=409)
 
-    nueva = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas, "tipo": normalizar_tipo(datos.get("tipo"))}
+    nueva = {
+        "id": mid,
+        "etiqueta": etiqueta,
+        "id_metricas": id_metricas,
+        "tipo": normalizar_tipo(datos.get("tipo")),
+        "etiqueta_investigacion": normalizar_etiqueta_investigacion(datos.get("etiqueta_investigacion")),
+    }
     if (err := _persistir([*catalogo, nueva])) is not None:
         return err
     return JSONResponse({"marca": nueva, "mensaje": f"Marca {etiqueta!r} creada."}, status_code=201)
@@ -348,7 +366,18 @@ async def catalogo_editar(request: Request) -> Response:
         id_metricas = cand
 
     tipo = normalizar_tipo(datos["tipo"]) if "tipo" in datos else actual.get("tipo", "noticias")
-    actualizado = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas, "tipo": tipo}
+    etiqueta_investigacion = (
+        normalizar_etiqueta_investigacion(datos["etiqueta_investigacion"])
+        if "etiqueta_investigacion" in datos
+        else actual.get("etiqueta_investigacion", "Noticias")
+    )
+    actualizado = {
+        "id": mid,
+        "etiqueta": etiqueta,
+        "id_metricas": id_metricas,
+        "tipo": tipo,
+        "etiqueta_investigacion": etiqueta_investigacion,
+    }
     nuevo = [actualizado if m["id"] == mid else m for m in catalogo]
     if (err := _persistir(nuevo)) is not None:
         return err

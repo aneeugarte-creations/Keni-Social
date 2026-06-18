@@ -19,7 +19,13 @@ import type { CanalPieza, ConteoCuenta, MarcaDashboard, RedMarca } from "@/types
 
 /** Convierte una marca del dashboard a la forma editable del catálogo (id/etiqueta/id_metricas/tipo). */
 function aEditable(m: MarcaDashboard): MarcaEditable {
-  return { id: m.id, etiqueta: m.etiqueta, id_metricas: m.marca, tipo: m.tipo };
+  return {
+    id: m.id,
+    etiqueta: m.etiqueta,
+    id_metricas: m.marca,
+    tipo: m.tipo,
+    etiqueta_investigacion: m.etiqueta_investigacion,
+  };
 }
 
 const CLAVE_MARCAS = ["marcas", "dashboard"];
