@@ -28,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { resumenCobertura } from "@/lib/cobertura";
 import {
   diaCorto,
   diasDeSemana,
@@ -348,12 +349,16 @@ export function Calendario({
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
   // «Sin cubrir» = hueco REAL: ni lo cogió nadie NI hay turno en su franja ese día. Si hay turno,
-  // lo cubre quien esté de turno (no cuenta como hueco). Mismo criterio que pinta el chip.
-  const nSinCubrir = eventosCobertura.filter((e) => {
-    if ((cubridoresPorEvento.get(e.id) ?? []).length > 0) return false;
-    const franjaId = franjaIdParaHoraEvento(e.hora, franjasSemana);
-    return !(franjaId && (personasPorCelda.get(`${franjaId}|${e.fecha}`) ?? []).length > 0);
-  }).length;
+  // lo cubre quien esté de turno (no cuenta como hueco). Lo deriva el selector canónico
+  // (`resumenCobertura` → estado `sin-cubrir`), la misma fuente que el Panorama; el calendario
+  // muestra UNA semana, así que sus `turnos`/`franjas` (ids por semana) son seguros para el
+  // bucketing plano. Mismo criterio que pinta el chip.
+  const nSinCubrir = resumenCobertura(
+    eventosCobertura,
+    tareas,
+    turnos,
+    franjasSemana,
+  ).sinCubrir;
   const hoy = hoyCDMX();
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
   // en solo-lectura. La edición es inline: «Añadir turno» da de alta capacidad y el chip de
