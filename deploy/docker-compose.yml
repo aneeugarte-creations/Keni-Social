@@ -201,6 +201,14 @@ services:
       KENI_CONSOLA_ADMIN_USER: ${KENI_CONSOLA_ADMIN_USER}
       KENI_CONSOLA_ADMIN_PASS_FILE: /run/secrets/consola_admin_pass
       KENI_CONSOLA_SESION_HORAS: ${KENI_CONSOLA_SESION_HORAS}
+      # MFA passkeys (WebAuthn): clave Fernet que firma la cookie de challenge/pre-auth (como
+      # secreto en fichero, igual que la admin pass). Con ella la maquinaria MFA esta ACTIVA:
+      # el superadmin puede EXIGIR segundo factor por usuario desde Usuarios y su login fuerza
+      # el enrolamiento. SIN esta clave no se fuerza nada (anti-lockout). RP_ID/RP_ORIGIN deben
+      # ser el dominio publico (la passkey se ata al origen): aqui el host de Traefik.
+      KENI_CONSOLA_MFA_KEY_FILE: /run/secrets/consola_mfa_key
+      KENI_CONSOLA_RP_ID: ${KENI_HOST}
+      KENI_CONSOLA_RP_ORIGIN: https://${KENI_HOST}
       # MCP operativo (servidor MCP en `/mcp` del mismo back): bearer que exige el endpoint
       # a los clientes (Claude Code) e identidad con la que opera la API por dentro. Si
       # KENI_MCP_BEARER esta vacio, `/mcp` NO se monta (apagado por defecto). KENI_MCP_USUARIO
@@ -258,6 +266,7 @@ services:
       - s3_secret_key
       - consola_token
       - consola_admin_pass
+      - consola_mfa_key
       - mcp_bearer
     networks:
       # `data` (internal) para alcanzar db/files; `internal`/`edge` conservan egress (NAT).
@@ -980,6 +989,8 @@ secrets:
     file: ./secrets/anthropic_api_key
   consola_admin_pass:
     file: ./secrets/consola_admin_pass
+  consola_mfa_key:
+    file: ./secrets/consola_mfa_key
   consola_token:
     file: ./secrets/consola_token
   mcp_bearer:
