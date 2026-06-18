@@ -209,6 +209,61 @@
     "descripcion": "Noticias de videojuegos de IGN Latinoamérica (español)."
   },
   {
+    "id": "nacion-gamer-gamespot",
+    "nombre": "GameSpot — Noticias",
+    "url": "https://www.gamespot.com/feeds/news/",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Noticias de videojuegos de GameSpot, referente global (RSS verificado; se traduce y tropicaliza a MX)."
+  },
+  {
+    "id": "nacion-gamer-eurogamer",
+    "nombre": "Eurogamer",
+    "url": "https://www.eurogamer.net/feed",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Noticias, análisis y reportajes de videojuegos de Eurogamer (RSS verificado; se traduce y tropicaliza a MX)."
+  },
+  {
+    "id": "nacion-gamer-pcgamer",
+    "nombre": "PC Gamer",
+    "url": "https://www.pcgamer.com/rss/",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Noticias y análisis de juego en PC y la industria, de PC Gamer (RSS verificado; se traduce a MX)."
+  },
+  {
+    "id": "nacion-gamer-vidaextra",
+    "nombre": "VidaExtra",
+    "url": "https://www.vidaextra.com/feedburner.xml",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "es",
+    "region": "ES",
+    "descripcion": "Videojuegos en español (grupo Webedia), noticias y guías (RSS verificado)."
+  },
+  {
+    "id": "nacion-gamer-hobbyconsolas",
+    "nombre": "Hobby Consolas",
+    "url": "https://www.hobbyconsolas.com/rss/",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "es",
+    "region": "ES",
+    "descripcion": "Videojuegos en español de Hobby Consolas, marca veterana (RSS verificado)."
+  },
+  {
     "id": "eluniversal-portada",
     "nombre": "El Universal — Portada",
     "url": "https://www.eluniversal.com.mx/arc/outboundfeeds/rss/?outputType=xml",
@@ -385,17 +440,6 @@
     "descripcion": "Buenas noticias e historias de superación (contenido completo; se traduce y tropicaliza a MX)."
   },
   {
-    "id": "fundacion-mongabay",
-    "nombre": "Mongabay — Medio ambiente",
-    "url": "https://news.mongabay.com/feed/",
-    "categoria": "internacional",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Medio ambiente",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Periodismo de conservación y medio ambiente (contenido completo; se traduce a MX)."
-  },
-  {
     "id": "fundacion-muy-interesante",
     "nombre": "Muy Interesante",
     "url": "https://muyinteresante.okdiario.com/feed/",
@@ -409,35 +453,13 @@
   {
     "id": "fundacion-xataka-mx",
     "nombre": "Xataka México",
-    "url": "https://www.xataka.com.mx/index.xml",
+    "url": "https://www.xataka.com.mx/feedburner.xml",
     "categoria": "mx",
     "marca_sugerida": "fundacion",
     "linea_sugerida": "Tecnología y educación digital",
     "idioma": "es",
     "region": "MX",
     "descripcion": "Tecnología y cultura digital en español de México (contenido completo)."
-  },
-  {
-    "id": "fundacion-positive-news",
-    "nombre": "Positive News",
-    "url": "https://www.positive.news/feed/",
-    "categoria": "internacional",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Buenas noticias",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Periodismo de soluciones y buenas noticias (contenido completo; se traduce y tropicaliza a MX)."
-  },
-  {
-    "id": "fundacion-reasons-to-be-cheerful",
-    "nombre": "Reasons to be Cheerful",
-    "url": "https://reasonstobecheerful.world/feed/",
-    "categoria": "internacional",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Buenas noticias",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Soluciones que funcionan ante problemas sociales y ambientales (contenido completo; se traduce a MX)."
   },
   {
     "id": "fundacion-yale-e360",
@@ -451,17 +473,6 @@
     "descripcion": "Periodismo de medio ambiente y clima de la Universidad de Yale (contenido completo; se traduce a MX)."
   },
   {
-    "id": "fundacion-grist",
-    "nombre": "Grist",
-    "url": "https://grist.org/feed/",
-    "categoria": "internacional",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Medio ambiente",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Clima, sostenibilidad y soluciones verdes (contenido completo; se traduce a MX)."
-  },
-  {
     "id": "fundacion-sciencedaily",
     "nombre": "ScienceDaily",
     "url": "https://www.sciencedaily.com/rss/all.xml",
@@ -473,17 +484,6 @@
     "descripcion": "Últimos avances científicos y de salud (contenido completo; se traduce a MX)."
   },
   {
-    "id": "fundacion-sciencealert",
-    "nombre": "ScienceAlert",
-    "url": "https://www.sciencealert.com/feed",
-    "categoria": "entretenimiento",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Ciencia y curiosidad",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Ciencia divulgativa en formato asombro, muy compartible (contenido completo; se traduce a MX)."
-  },
-  {
     "id": "fundacion-mit-tech-review",
     "nombre": "MIT Technology Review",
     "url": "https://www.technologyreview.com/feed/",
@@ -493,50 +493,6 @@
     "idioma": "en",
     "region": "GLOBAL",
     "descripcion": "Innovación y tecnología con criterio del MIT (contenido completo; se traduce a MX)."
-  },
-  {
-    "id": "fundacion-hipertextual",
-    "nombre": "Hipertextual",
-    "url": "https://hipertextual.com/feed",
-    "categoria": "internacional",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Tecnología y cultura digital",
-    "idioma": "es",
-    "region": "GLOBAL",
-    "descripcion": "Tecnología, ciencia y cultura digital en español (contenido completo)."
-  },
-  {
-    "id": "fundacion-smithsonian",
-    "nombre": "Smithsonian Magazine",
-    "url": "https://www.smithsonianmag.com/rss/latest_articles/",
-    "categoria": "entretenimiento",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Cultura y curiosidad",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Historia, ciencia y cultura del Smithsonian, formato asombro (contenido completo; se traduce a MX)."
-  },
-  {
-    "id": "fundacion-colossal",
-    "nombre": "Colossal",
-    "url": "https://www.thisiscolossal.com/feed/",
-    "categoria": "entretenimiento",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Arte y cultura",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Arte, diseño y cultura visual muy compartible (contenido completo; se traduce a MX)."
-  },
-  {
-    "id": "fundacion-open-culture",
-    "nombre": "Open Culture",
-    "url": "https://www.openculture.com/feed",
-    "categoria": "entretenimiento",
-    "marca_sugerida": "fundacion",
-    "linea_sugerida": "Cultura y educación",
-    "idioma": "en",
-    "region": "GLOBAL",
-    "descripcion": "Cultura y recursos educativos libres (contenido completo; se traduce a MX)."
   },
   {
     "id": "fundacion-cultura-colectiva",
