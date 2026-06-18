@@ -69,16 +69,15 @@ export function BurbujaRalph() {
             type="button"
             onClick={alClicarBurbuja}
             className={cn(
-              "relative flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-lg ring-1 ring-black/5 transition-transform hover:scale-105",
+              "relative flex h-14 w-14 items-center justify-center rounded-full transition-transform hover:scale-105",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-keni focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              panelAbierto && "ring-2 ring-keni",
             )}
             aria-label="Ralph"
           >
             <img
               src="/favicon.png"
               alt="Keni"
-              className="h-9 w-9 select-none"
+              className="h-14 w-14 select-none drop-shadow-md"
               draggable={false}
             />
             {!panelAbierto && activos > 0 && (
