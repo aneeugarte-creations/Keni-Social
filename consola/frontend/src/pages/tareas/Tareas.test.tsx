@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -192,7 +193,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     vi.useRealTimers();
   });
 
-  it("un EVENTO sin tarea ni turno sale como «Sin cubrir» y «La cubro yo» llama a cubrirEvento", async () => {
+  it("un EVENTO sin tarea ni turno sale como «Sin cubrir» y un chip «⊕ rol» lo coge con ESE rol", async () => {
     const cubrir = vi
       .spyOn(apiMod.api, "cubrirEvento")
       .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
@@ -200,12 +201,25 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // En el Panorama (por defecto) el evento es una fila compacta; se despliega para actuar.
     fireEvent.click(await screen.findByText("Cruz Azul vs América"));
-    // Item-first: click en la tarjeta (FilaConAcciones host) dispara cubrirEvento.
-    const grupo1 = screen.getByRole("group", { name: "Rol de cobertura" });
-    fireEvent.click(grupo1.closest("[role='button']")!);
+    // La ÚNICA forma de cogerse es tocar un chip «⊕ rol» (el cuerpo de la tarjeta ya NO coge).
+    fireEvent.click(await screen.findByRole("button", { name: "Coger Foto" }));
     await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
-    // El rol por defecto (Foto) viaja como `formato`: la cobertura es por rol.
+    // El rol del chip (Foto) viaja como `formato`: la cobertura es por rol.
     expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "foto");
+  });
+
+  it("el CUERPO de un evento «Sin cubrir» NO coge al hacer clic (sin doble vía): solo los chips ⊕rol", async () => {
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
+    renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
+
+    fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
+    // Clic en el cuerpo de la tarjeta (sobre un chip de rol cubierto): no debe disparar mutación.
+    const chipFoto = await screen.findByRole("button", { name: "Coger Foto" });
+    const cuerpo = chipFoto.closest("[role='group']")!.parentElement!;
+    fireEvent.click(cuerpo);
+    expect(cubrir).not.toHaveBeenCalled();
   });
 
   it("CUBIERTO POR TURNO: un evento sin coger pero con turno en su franja sale «Cubierto por turno», no «Sin cubrir»", async () => {
@@ -533,17 +547,15 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect((await screen.findAllByText("Foto · Video")).length).toBeGreaterThan(0);
   });
 
-  it("ELEGIR ROL: al cubrir un evento se manda el rol elegido en el selector", async () => {
+  it("ELEGIR ROL: el chip «⊕ Video» coge el evento con el rol Video (un toque)", async () => {
     const cubrir = vi
       .spyOn(apiMod.api, "cubrirEvento")
       .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
     renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
 
     fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
-    fireEvent.click(screen.getByRole("button", { name: "Video" })); // elegir rol Video en SelectorRol
-    // Item-first: click en el host de la tarjeta (no en el botón Video) dispara cubrirEvento con el rol elegido.
-    const grupoRol = screen.getByRole("group", { name: "Rol de cobertura" });
-    fireEvent.click(grupoRol.closest("[role='button']")!);
+    // El rol ES el chip: tocar «⊕ Video» coge ESE rol directamente (sin selector aparte).
+    fireEvent.click(await screen.findByRole("button", { name: "Coger Video" }));
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "video"));
   });
 
@@ -638,7 +650,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <PanoramaAgenda
+          <PanoramaConFiltro
             tareas={[]}
             eventos={[
               // Más temprano (00:00) y YA pasado → «sin cubrir», pero baja en urgencia.
@@ -646,8 +658,6 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
               // En curso ahora (23:00, ventana 180') → «en vivo», debe flotar arriba.
               evento({ id: "ev-vivo", titulo: "En vivo ahora", fecha: hoy, hora: "23:00" }),
             ]}
-            catalogos={catalogos()}
-            marca="claro-sports"
             cubiertosPorTurno={new Set()}
           />
         </MemoryRouter>
@@ -726,6 +736,27 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   });
 
   // Helper: renderiza el Panorama AISLADO (síncrono, sin react-query fetch) para probar el ⚡.
+  // El filtro del Panorama lo controla el board (lift para que el KPI lo active); en los tests que
+  // montan el Panorama suelto le damos un pequeño contenedor con estado real.
+  function PanoramaConFiltro(props: {
+    tareas: Publicacion[];
+    eventos: EventoRota[];
+    cubiertosPorTurno: Set<string>;
+  }) {
+    const [filtro, setFiltro] = React.useState<string | null>(null);
+    return (
+      <PanoramaAgenda
+        tareas={props.tareas}
+        eventos={props.eventos}
+        catalogos={catalogos()}
+        marca="claro-sports"
+        cubiertosPorTurno={props.cubiertosPorTurno}
+        filtro={filtro}
+        setFiltro={setFiltro}
+      />
+    );
+  }
+
   function renderPanorama(props: {
     tareas?: Publicacion[];
     eventos?: EventoRota[];
@@ -735,11 +766,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     return render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <PanoramaAgenda
+          <PanoramaConFiltro
             tareas={props.tareas ?? []}
             eventos={props.eventos ?? []}
-            catalogos={catalogos()}
-            marca="claro-sports"
             cubiertosPorTurno={props.cubiertosPorTurno ?? new Set()}
           />
         </MemoryRouter>
@@ -982,10 +1011,11 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     );
 
     fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
-    const card = screen
-      .getByRole("group", { name: "Rol de cobertura" })
-      .closest("[role='button']")!;
-    fireEvent.contextMenu(card);
+    // La tarjeta del evento «Por cubrir» ya no es click-primaria (no coge al tocarla): sus acciones
+    // de admin viven en el menú contextual. Right-click en su badge «Sin cubrir» (el de la tarjeta
+    // desplegada, el último: el primero es el de la fila compacta) abre el menú.
+    const badges = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(badges[badges.length - 1]);
     fireEvent.click(await screen.findByRole("menuitem", { name: /Editar/ }));
 
     // Aparece el diálogo de edición y «Guardar» dispara el PATCH del evento.
@@ -1010,10 +1040,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     );
 
     fireEvent.click(await screen.findByText("Cruz Azul vs América"));
-    const card = screen
-      .getByRole("group", { name: "Rol de cobertura" })
-      .closest("[role='button']")!;
-    fireEvent.contextMenu(card);
+    const badges = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(badges[badges.length - 1]);
     fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
     await waitFor(() => expect(borrar).toHaveBeenCalledWith("ev9"));
   });
@@ -1025,10 +1053,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("editor", "u-ed"),
     );
     fireEvent.click(await screen.findByText("Cruz Azul vs América"));
-    const card = screen
-      .getByRole("group", { name: "Rol de cobertura" })
-      .closest("[role='button']")!;
-    fireEvent.contextMenu(card);
+    const badges = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(badges[badges.length - 1]);
     // Sin acciones de admin no se abre menú alguno: no hay item «Editar» ni «Borrar».
     expect(screen.queryByRole("menuitem", { name: /Editar/ })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /Borrar/ })).toBeNull();

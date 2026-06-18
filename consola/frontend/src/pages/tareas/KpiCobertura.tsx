@@ -1,4 +1,4 @@
-import { Radio, ShieldAlert } from "lucide-react";
+import { Check, Radio, ShieldAlert } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { resumenCobertura } from "@/lib/cobertura";
@@ -14,25 +14,29 @@ const SEGMENTOS = 8;
  * tiene cargados.
  *
  * Estética del equipo: recuadro outline gris; el color SOLO con significado y SIEMPRE con texto
- * (daltonismo): huecos en rojo, en vivo en ámbar, cubiertos en verde. La barra de progreso es
- * cubiertos/total. En móvil cae a la versión mínima (`▰▰▰ 5/8 cubiertos`).
+ * (daltonismo): huecos en rojo, en vivo en verde (mismo lenguaje que el semáforo de las tarjetas),
+ * cubiertos en verde. La barra de progreso es cubiertos/total. En móvil cae a la versión mínima
+ * (`▰▰▰ 5/8 cubiertos`).
  */
 export function KpiCobertura({
   eventos,
   claims,
   turnos,
   franjas,
+  onIrASinCubrir,
 }: {
   eventos: EventoRota[];
   claims: Publicacion[];
   turnos: TurnoRota[];
   franjas: FranjaSemana[];
+  /** Si se pasa, el corte «N sin cubrir» se vuelve un botón que filtra el Panorama a «Por cubrir». */
+  onIrASinCubrir?: () => void;
 }) {
   const r = resumenCobertura(eventos, claims, turnos, franjas);
   if (r.total === 0) return null;
 
   const llenos = Math.round((r.cubiertos / r.total) * SEGMENTOS);
-  const etiqueta = `Cobertura: ${r.cubiertos} de ${r.total} cubiertos, ${r.enVivo} en vivo, ${r.sinCubrir} sin cubrir`;
+  const etiqueta = `Cobertura de hoy: ${r.cubiertos} de ${r.total} cubiertos, ${r.enVivo} en vivo, ${r.sinCubrir} sin cubrir`;
 
   return (
     <div
@@ -61,31 +65,49 @@ export function KpiCobertura({
         <span className="text-muted-foreground">/{r.total}</span>
       </span>
 
-      {/* Cortes con color de significado (rojo=hueco, ámbar=en vivo), SIEMPRE con icono+texto. La
-          versión larga (separadores ·) se oculta en móvil para no apretar la barra. */}
+      {/* Cortes con color de significado (rojo=hueco, verde=en vivo), SIEMPRE con icono+texto. El
+          verde de «en vivo» habla el mismo lenguaje que el semáforo de las tarjetas (ámbar queda
+          reservado a «empieza pronto», que el KPI no muestra). La versión larga (separadores ·) se
+          oculta en móvil para no apretar la barra. */}
       <span className="hidden items-center gap-3 text-xs sm:flex">
         {r.enVivo > 0 && (
-          <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300">
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
             <Radio className="h-3.5 w-3.5" aria-hidden />
             {r.enVivo} en vivo
           </span>
         )}
         {r.sinCubrir > 0 ? (
-          <span className="inline-flex items-center gap-1 font-medium text-red-700 dark:text-red-300">
-            <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-            {r.sinCubrir} sin cubrir
-          </span>
+          onIrASinCubrir ? (
+            // «N sin cubrir» como botón: filtra el Panorama a «Por cubrir» (el único hueco accionable).
+            <button
+              type="button"
+              onClick={onIrASinCubrir}
+              className="inline-flex items-center gap-1 rounded font-medium text-red-700 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none dark:text-red-300"
+            >
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+              {r.sinCubrir} sin cubrir
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1 font-medium text-red-700 dark:text-red-300">
+              <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+              {r.sinCubrir} sin cubrir
+            </span>
+          )
         ) : (
           <span className="font-medium text-emerald-700 dark:text-emerald-300">Todo cubierto</span>
         )}
       </span>
 
-      {/* Móvil: solo el corte que pide decisión (huecos en rojo) o «cubiertos» si no hay ninguno. */}
+      {/* Móvil: solo el corte que pide decisión (huecos en rojo) o «✓ Todo cubierto» si no hay
+          ninguno (icono+texto, igual que la versión desktop, no una palabra suelta). */}
       <span className="shrink-0 text-xs sm:hidden">
         {r.sinCubrir > 0 ? (
           <span className="font-medium text-red-700 dark:text-red-300">{r.sinCubrir} sin cubrir</span>
         ) : (
-          <span className="font-medium text-emerald-700 dark:text-emerald-300">cubiertos</span>
+          <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-300">
+            <Check className="h-3.5 w-3.5" aria-hidden />
+            Todo cubierto
+          </span>
         )}
       </span>
     </div>

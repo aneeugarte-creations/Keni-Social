@@ -267,21 +267,22 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
     },
   });
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-50/40 px-2.5 py-1.5 dark:bg-amber-950/10">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-amber-500/40 px-2.5 py-1.5">
       <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">
         Por cubrir
       </Badge>
       <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
       <Button
         variant="outline"
-        size="icon"
-        className="ml-auto h-7 w-7"
+        size="sm"
+        className="ml-auto h-7"
         onClick={() => coger.mutate()}
         disabled={coger.isPending}
         title="La cubro yo"
         aria-label="La cubro yo"
       >
-        <Hand className="h-3.5 w-3.5" />
+        <Hand className="mr-1 h-3.5 w-3.5" />
+        La cubro
       </Button>
     </div>
   );
@@ -310,19 +311,18 @@ export function TarjetaEventoLibre({
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
   const [editarAbierto, setEditarAbierto] = React.useState(false);
-  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
-  // Cubrir el evento. `formato` por defecto = el rol elegido en el `SelectorRol`; los chips
-  // «⊕ rol» pasan SU rol explícito (un toque coge ESE rol), idéntica acción idempotente.
+  // Cubrir el evento. La ÚNICA forma de cogerse aquí es tocar un chip «⊕ rol», que pasa SU rol
+  // explícito (un toque coge ESE rol). El «Asignar a…» del manager no manda rol → cae a «foto».
   const cubrir = useMutation({
     mutationFn: ({ responsableId, formato }: { responsableId?: string; formato?: string } = {}) =>
-      api.cubrirEvento(evento.id, responsableId, formato ?? rol),
+      api.cubrirEvento(evento.id, responsableId, formato ?? "foto"),
     onSuccess: (res, vars) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(vars?.formato ?? rol)}).`);
+      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(vars?.formato ?? "foto")}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -371,7 +371,6 @@ export function TarjetaEventoLibre({
       como="div"
       kebab={sinMenu ? "nunca" : "siempre"}
       realce
-      onPrimaria={() => cubrir.mutate({})}
       acciones={accionesEvento}
       className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm"
     >
@@ -414,19 +413,15 @@ export function TarjetaEventoLibre({
       {evento.contenido && (
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
       )}
-      {/* Roles por cubrir «⊕ rol»: un toque coge ESE rol (sin elegir antes en el selector). El
-          evento no tiene cubridores aún → faltan los cuatro. `data-no-primaria` para que el clic
-          en un chip no dispare también la acción primaria (cubrir con el rol del selector). */}
-      <div className="mt-3" data-no-primaria>
+      {/* Roles por cubrir «⊕ rol»: la ÚNICA forma de cogerse el evento (un toque coge ESE rol). El
+          cuerpo de la tarjeta NO coge nada (no dispara titularidad): el reparto es solo por chip. El
+          evento no tiene cubridores aún → faltan los cuatro. */}
+      <div className="mt-3">
         <ChipsRolFaltante
           cubridores={[]}
           onCoger={(r) => cubrir.mutate({ formato: r })}
           disabled={cubrir.isPending}
         />
-      </div>
-      {/* Rol con que se cubre desde la acción primaria (clic en la tarjeta): el reparto es por rol. */}
-      <div className="mt-3">
-        <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
       </div>
 
       <DialogoAsignar

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { datetimeLocalAIso } from "@/lib/fecha";
@@ -106,7 +106,7 @@ describe("KpiCobertura — cabecera de cobertura", () => {
     expect(screen.getAllByText(/1 sin cubrir/).length).toBeGreaterThan(0);
   });
 
-  it("«en vivo» se cuenta y se muestra (color ámbar con texto)", () => {
+  it("«en vivo» se cuenta y se muestra (color verde con texto, como el semáforo)", () => {
     const ancla = ev({ id: "base" });
     fijarAhoraAntesDelSaque(ancla, -30); // 30 min DESPUÉS del saque → en vivo
     const enVivo = ev({ id: "e-vivo" });
@@ -118,10 +118,13 @@ describe("KpiCobertura — cabecera de cobertura", () => {
         franjas={FRANJAS}
       />,
     );
-    expect(screen.getByText(/1 en vivo/)).toBeInTheDocument();
+    // El corte «en vivo» habla el mismo lenguaje que el semáforo de las tarjetas: VERDE, no ámbar.
+    const corteEnVivo = screen.getByText(/1 en vivo/);
+    expect(corteEnVivo).toHaveClass("text-emerald-700");
+    expect(corteEnVivo).not.toHaveClass("text-amber-700");
   });
 
-  it("todo cubierto y sin huecos → «Todo cubierto», sin rojo", () => {
+  it("todo cubierto y sin huecos → «Todo cubierto» (desktop y móvil), sin rojo", () => {
     fijarAhoraAntesDelSaque(ev(), 300);
     render(
       <KpiCobertura
@@ -131,7 +134,39 @@ describe("KpiCobertura — cabecera de cobertura", () => {
         franjas={FRANJAS}
       />,
     );
-    expect(screen.getByText("Todo cubierto")).toBeInTheDocument();
+    // Sale en las DOS variantes (la desktop sm:flex y la móvil sm:hidden): ambas con «Todo cubierto».
+    expect(screen.getAllByText("Todo cubierto").length).toBe(2);
     expect(screen.queryByText(/sin cubrir/)).toBeNull();
+    // La móvil ya no muestra la palabra suelta «cubiertos».
+    expect(screen.queryByText("cubiertos")).toBeNull();
+  });
+
+  it("«N sin cubrir» es un botón que filtra el Panorama a «Por cubrir»", () => {
+    fijarAhoraAntesDelSaque(ev(), 300);
+    const irASinCubrir = vi.fn();
+    render(
+      <KpiCobertura
+        eventos={[ev({ id: "e-cog" }), ev({ id: "e-hueco" })]}
+        claims={[claim({ id: "cc", evento_id: "e-cog" })]}
+        turnos={[]}
+        franjas={FRANJAS}
+        onIrASinCubrir={irASinCubrir}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /1 sin cubrir/ }));
+    expect(irASinCubrir).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin `onIrASinCubrir` el corte «N sin cubrir» NO es un botón", () => {
+    fijarAhoraAntesDelSaque(ev(), 300);
+    render(
+      <KpiCobertura
+        eventos={[ev({ id: "e-cog" }), ev({ id: "e-hueco" })]}
+        claims={[claim({ id: "cc", evento_id: "e-cog" })]}
+        turnos={[]}
+        franjas={FRANJAS}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /sin cubrir/ })).toBeNull();
   });
 });

@@ -647,6 +647,8 @@ export function PanoramaAgenda({
   catalogos,
   marca,
   cubiertosPorTurno,
+  filtro,
+  setFiltro,
 }: {
   tareas: Publicacion[];
   eventos: EventoRota[];
@@ -654,10 +656,13 @@ export function PanoramaAgenda({
   marca: string | undefined;
   /** Ids de eventos que cubre el turno de su franja (no son «sin cubrir»). */
   cubiertosPorTurno: Set<string>;
+  /** Filtro de agenda (id de persona, "__pool__" o null), CONTROLADO por el board: así el KPI de
+   *  cabecera puede activarlo («N sin cubrir» → «Por cubrir») sin duplicar el estado. */
+  filtro: string | null;
+  setFiltro: React.Dispatch<React.SetStateAction<string | null>>;
 }) {
   useRelojVivo();
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
-  const [filtro, setFiltro] = React.useState<string | null>(null); // id de persona, "__pool__", o null
   const [diasVisibles, setDiasVisibles] = React.useState(5);
   const alternar = (clave: string) =>
     setAbiertas((prev) => {

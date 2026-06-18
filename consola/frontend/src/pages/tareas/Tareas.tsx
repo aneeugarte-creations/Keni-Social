@@ -54,6 +54,9 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const [lente, setLente] = React.useState<Lente>("panorama");
   const [crearAbierto, setCrearAbierto] = React.useState(false);
+  // Filtro del Panorama (id de persona, "__pool__" o null), aquí arriba para que el KPI de cabecera
+  // pueda activar «Por cubrir» («N sin cubrir») y el Panorama lo lea controlado.
+  const [filtroPanorama, setFiltroPanorama] = React.useState<string | null>(null);
 
   const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
   // El día de HOY en CDMX (no el UTC): `new Date().toISOString()` da el día UTC, que de 18:00 a
@@ -287,6 +290,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 claims={claimsCobertura}
                 turnos={turnosHoy}
                 franjas={franjasHoy}
+                onIrASinCubrir={() => setFiltroPanorama("__pool__")}
               />
               <PanoramaAgenda
                 tareas={tareas}
@@ -294,6 +298,8 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 catalogos={catalogos}
                 marca={marca}
                 cubiertosPorTurno={cubiertosPorTurno}
+                filtro={filtroPanorama}
+                setFiltro={setFiltroPanorama}
               />
             </TabsContent>
             <TabsContent value="mias" className="space-y-4">
