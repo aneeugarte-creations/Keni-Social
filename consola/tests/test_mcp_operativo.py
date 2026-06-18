@@ -144,13 +144,34 @@ def test_cliente_renueva_sesion_tras_401(entorno):
     async def flujo():
         primera = await cli.get("/api/publicaciones")
         assert "error" not in primera, primera
-        # Invalida la sesión vigente: el siguiente request debe re-mintear y volver a pasar.
-        auth.borrar_sesion(cli._cookie)
+        # Invalida la(s) sesión(es) cacheada(s): el siguiente request re-mintea y vuelve a pasar.
+        for tok in list(cli._cookies.values()):
+            auth.borrar_sesion(tok)
         segunda = await cli.get("/api/publicaciones")
         assert "error" not in segunda, segunda
         await cli.aclose()
 
     anyio.run(flujo)
+
+
+def test_uid_efectivo_prefiere_el_usuario_de_la_peticion(entorno):
+    """El cliente impersona al usuario de `_USUARIO_PETICION` (cabecera) si viene; si no, al fijo."""
+    app = app_modulo.crear_app(token="t", bootstrap=False)
+    cli = mcp_operativo.ClienteConsola(app, "no-existe-nadie")
+    tok = mcp_operativo._USUARIO_PETICION.set("u-123")
+    try:
+        assert cli._uid_efectivo() == "u-123"
+    finally:
+        mcp_operativo._USUARIO_PETICION.reset(tok)
+    # Sin cabecera cae al usuario fijo (aquí inexistente -> None, error claro aguas abajo).
+    assert cli._uid_efectivo() is None
+
+
+def test_guard_extrae_usuario_de_cabecera():
+    """El guard lee `X-Keni-Usuario-Id` para impersonar; ausente -> None (usuario fijo)."""
+    g = mcp_operativo.GuardBearerMcp(app=None, bearer="x")
+    assert g._usuario_cabecera({"headers": [(b"x-keni-usuario-id", b"u-77")]}) == "u-77"
+    assert g._usuario_cabecera({"headers": []}) is None
 
 
 # --------------------------------------------------------------------------- #

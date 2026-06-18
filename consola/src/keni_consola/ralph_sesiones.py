@@ -263,23 +263,27 @@ def _escribir_persona_operativa(destino_dir: str) -> None:
         _log.warning("Ralph operativo: no se pudo escribir CLAUDE.md en %s", destino_dir)
 
 
-def _mcp_config(destino_dir: str) -> str | None:
+def _mcp_config(destino_dir: str, usuario_id: str | None = None) -> str | None:
     """Escribe el `--mcp-config` que engancha el MCP de la app (`/mcp`) y devuelve su ruta.
 
     Apunta a `KENI_MCP_URL` (def `http://back:8765/mcp`) con `Authorization: Bearer
-    KENI_MCP_BEARER`. Sin bearer, el MCP no está disponible: devuelve None (el Ralph operativo
-    arranca igual, pero sin tools del MCP) en vez de fallar."""
+    KENI_MCP_BEARER`. Si viene `usuario_id`, añade `X-Keni-Usuario-Id` para que el MCP actúe
+    como ESE usuario (acotado a sus permisos) en vez del usuario fijo. Sin bearer, el MCP no está
+    disponible: devuelve None (el Ralph arranca igual, sin tools del MCP) en vez de fallar."""
     url = os.environ.get("KENI_MCP_URL", "http://back:8765/mcp")
     bearer = os.environ.get("KENI_MCP_BEARER", "")
     if not bearer:
         _log.warning("Ralph operativo: sin KENI_MCP_BEARER; arranca sin tools del MCP")
         return None
+    headers = {"Authorization": f"Bearer {bearer}"}
+    if usuario_id:
+        headers["X-Keni-Usuario-Id"] = usuario_id
     cfg = {
         "mcpServers": {
             "keni": {
                 "type": "http",
                 "url": url,
-                "headers": {"Authorization": f"Bearer {bearer}"},
+                "headers": headers,
             }
         }
     }
@@ -357,7 +361,13 @@ class GestorRalph:
 
     # -- ciclo de vida ----------------------------------------------------- #
 
-    def spawn(self, prompt: str, modelo: str | None = None, tipo: str | None = None) -> dict:
+    def spawn(
+        self,
+        prompt: str,
+        modelo: str | None = None,
+        tipo: str | None = None,
+        usuario_id: str | None = None,
+    ) -> dict:
         """Crea un Ralph y lanza `claude` interactivo con el `prompt` inicial.
 
         `tipo` decide el entorno: `operativo` (asistente del equipo, MCP de la app, sin
@@ -392,7 +402,7 @@ class GestorRalph:
             # Operativo: dir de trabajo plano con su persona (CLAUDE.md) y el MCP de la app.
             sesion.worktree = _dir_trabajo_plano(nombre)
             _escribir_persona_operativa(sesion.worktree)
-            mcp_cfg = _mcp_config(sesion.worktree)
+            mcp_cfg = _mcp_config(sesion.worktree, usuario_id)
 
         try:
             sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell

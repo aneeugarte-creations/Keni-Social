@@ -38,6 +38,7 @@ import contextlib
 import logging
 import secrets
 from collections.abc import AsyncIterator
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -48,6 +49,15 @@ from . import auth, config
 from .observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
+
+# Identidad a IMPERSONAR en la petición MCP en curso (id de usuario). La pone el guard del
+# endpoint leyendo la cabecera `X-Keni-Usuario-Id` y la lee `ClienteConsola` para mintear la
+# sesión de ESE usuario (así un Ralph operativo actúa como quien lo lanzó, acotado a sus
+# permisos). Sin cabecera queda None y se cae al usuario fijo (`config.mcp_usuario()`), que es el
+# comportamiento del MCP de sesión (claude.ai/desktop). El guard del bearer es la barrera de
+# confianza: solo nuestra infra interna puede presentar el bearer, así que la cabecera es fiable.
+_HEADER_USUARIO = "x-keni-usuario-id"
+_USUARIO_PETICION: ContextVar[str | None] = ContextVar("_USUARIO_PETICION", default=None)
 
 # Base URL interna (solo da el `Host`; ASGITransport no abre socket). No tiene que
 # resolver: el transporte llama a la app en proceso. Sin esquema/host válidos httpx
@@ -99,34 +109,39 @@ class ClienteConsola:
             transport=httpx.ASGITransport(app=app), base_url=_BASE_URL, timeout=120.0
         )
         self._usuario = usuario
-        self._cookie: str | None = None
+        # Cookie de sesión CACHEADA POR id de usuario: cada identidad (la del Ralph que llama o
+        # el usuario fijo) tiene la suya, sin pisarse entre peticiones concurrentes de distintos
+        # usuarios.
+        self._cookies: dict[str, str] = {}
 
-    def _mintar_sesion(self) -> str | None:
-        """Crea (o recrea) una sesión para el usuario del MCP y devuelve su token."""
-        uid = _resolver_usuario_id(self._usuario)
-        if not uid:
-            return None
-        return auth.crear_sesion(uid)
+    def _uid_efectivo(self) -> str | None:
+        """Id del usuario a impersonar: el de la petición (cabecera) o, si no, el fijo del MCP."""
+        uid = _USUARIO_PETICION.get()
+        if uid:
+            return uid
+        return _resolver_usuario_id(self._usuario)
 
     async def _request(self, metodo: str, ruta: str, *, params=None, json=None) -> dict:
-        if self._cookie is None:
-            self._cookie = self._mintar_sesion()
-            if self._cookie is None:
-                return {"error": _MSG_SIN_USUARIO}
+        uid = self._uid_efectivo()
+        if not uid:
+            return {"error": _MSG_SIN_USUARIO}
+        cookie = self._cookies.get(uid)
+        if cookie is None:
+            cookie = auth.crear_sesion(uid)
+            self._cookies[uid] = cookie
         # Limpia params/json de valores vacíos (la API distingue "no enviado" de "vacío").
         params = {k: v for k, v in (params or {}).items() if v not in (None, "")}
         cuerpo = None if json is None else {k: v for k, v in json.items() if v not in (None, "")}
-        cookies = {auth.COOKIE_SESION: self._cookie}
+        cookies = {auth.COOKIE_SESION: cookie}
         try:
             r = await self._http.request(metodo, ruta, params=params, json=cuerpo, cookies=cookies)
             if r.status_code == 401:
-                # Sesión caducada/invalidada: re-mintea una vez y reintenta.
-                self._cookie = self._mintar_sesion()
-                if self._cookie is None:
-                    return {"error": _MSG_SIN_USUARIO}
+                # Sesión caducada/invalidada: re-mintea la de ESTE usuario una vez y reintenta.
+                cookie = auth.crear_sesion(uid)
+                self._cookies[uid] = cookie
                 r = await self._http.request(
                     metodo, ruta, params=params, json=cuerpo,
-                    cookies={auth.COOKIE_SESION: self._cookie},
+                    cookies={auth.COOKIE_SESION: cookie},
                 )
         except httpx.HTTPError as e:  # red en proceso: no debería, pero degradamos limpio
             return {"error": f"Fallo llamando a la API interna: {e}"}
@@ -194,7 +209,13 @@ class GuardBearerMcp:
         # cliente HTTP del MCP no sigue por defecto).
         if scope.get("path") == "/mcp":
             scope = {**scope, "path": "/mcp/", "raw_path": b"/mcp/"}
-        await self.app(scope, receive, send)
+        # Impersona al usuario de la cabecera (si viene) durante TODA la petición: el cliente
+        # in-proceso mintea la sesión de ese usuario. El bearer ya autenticó al llamante.
+        token = _USUARIO_PETICION.set(self._usuario_cabecera(scope))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _USUARIO_PETICION.reset(token)
 
     def _autorizado(self, scope: Scope) -> bool:
         for k, v in scope.get("headers", []):
@@ -204,6 +225,14 @@ class GuardBearerMcp:
                     presentado = valor[len("bearer "):].strip()
                     return bool(presentado) and secrets.compare_digest(presentado, self._bearer)
         return False
+
+    def _usuario_cabecera(self, scope: Scope) -> str | None:
+        """Id de usuario a impersonar de la cabecera `X-Keni-Usuario-Id` (o None)."""
+        for k, v in scope.get("headers", []):
+            if k.decode("latin-1").lower() == _HEADER_USUARIO:
+                uid = v.decode("latin-1").strip()
+                return uid or None
+        return None
 
 
 # --------------------------------------------------------------------------- #

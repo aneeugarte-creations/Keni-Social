@@ -104,6 +104,11 @@ async def spawn(request: Request) -> Response:
             {"error": "Solo un superadmin puede lanzar un Ralph de desarrollo."}, status_code=403
         )
     cuerpo["tipo"] = tipo
+    # Identidad heredada: el Ralph operativo actuará en el MCP como el usuario que lo lanza
+    # (acotado a sus permisos), no como el usuario fijo del MCP.
+    usuario = getattr(request.state, "usuario", None)
+    if isinstance(usuario, dict) and usuario.get("id"):
+        cuerpo["usuario_id"] = usuario["id"]
     status, payload = await run_in_threadpool(_llamar, "POST", "/control/ralph/spawn", cuerpo)
     return JSONResponse(payload, status_code=status)
 
