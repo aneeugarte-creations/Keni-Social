@@ -111,9 +111,28 @@ _PERSONA_DEV = (
     "main e imprime la limpieza. Si te rechaza: `git fetch && git rebase origin/main` y "
     "reintenta. NUNCA hagas push directo a main a mano.\n"
     "3. Cambio de comportamiento = tests en el MISMO commit. Comentarios limpios (qué hace el "
-    "código hoy, no el historial de bugs). Lee el `CLAUDE.md` del repo para el resto de reglas "
-    "(stack, fronteras, CI).\n"
+    "código hoy, no el historial de bugs).\n"
 )
+
+# Documento EDITABLE (biblioteca de prompts, clase `desarrollo`) que gobierna la persona del
+# Ralph dev. Es el que se ve/edita en la UI: Contexto → pestaña Desarrollo → «Ralph».
+_DOC_PERSONA_DEV = "editorial/desarrollo/ralph"
+
+
+def _persona_dev() -> str:
+    """Persona del Ralph de desarrollo: lee el doc EDITABLE `editorial/desarrollo/ralph` (la
+    pestaña Contexto → Desarrollo de la app), de modo que editar ese documento cambia cómo se
+    comporta Ralph SIN tocar código. Si no se puede leer (libprompts/IO), cae al texto base
+    `_PERSONA_DEV`."""
+    try:
+        from .libprompts import cuerpo_efectivo
+
+        cuerpo = cuerpo_efectivo(_DOC_PERSONA_DEV)
+        if cuerpo and cuerpo.strip():
+            return cuerpo
+    except Exception:  # noqa: BLE001 -- libprompts/IO best-effort: usa el respaldo
+        _log.warning("Ralph dev: no se pudo leer la persona editable; uso el respaldo", exc_info=True)
+    return _PERSONA_DEV
 
 
 # --------------------------------------------------------------------------- #
@@ -620,7 +639,7 @@ class GestorRalph:
             _escribir_persona_operativa(sesion.worktree)
             mcp_cfg = _mcp_config(sesion.worktree, sesion.usuario_id or None)
         else:
-            system_extra = _PERSONA_DEV
+            system_extra = _persona_dev()
         resume = sesion.session_id if (reanudar and sesion.session_id) else None
         try:
             sesion.proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell

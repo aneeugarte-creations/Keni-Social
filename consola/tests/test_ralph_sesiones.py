@@ -389,3 +389,10 @@ def test_persona_dev_cubre_rol_y_flujo():
     # Sabe quién es (app + bugs/simple), deriva lo complejo a Sugerencias y conoce el promover.
     assert "promover-main.sh" in rs._PERSONA_DEV
     assert "Sugerencias" in rs._PERSONA_DEV
+
+
+def test_persona_dev_se_resuelve_del_doc_editable_o_respaldo():
+    # _persona_dev lee el doc EDITABLE `editorial/desarrollo/ralph` (pestaña Contexto →
+    # Desarrollo); si no se puede, cae al respaldo. En ambos casos trae el flujo de promoción.
+    persona = rs._persona_dev()
+    assert persona and "promover-main.sh" in persona
