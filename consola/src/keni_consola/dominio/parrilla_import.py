@@ -325,6 +325,41 @@ def _dedup_exactas(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return unicas
 
 
+def _nombre_casa(buscado: str, nombre_norm: str) -> bool:
+    """True si `buscado` (ya normalizado) identifica a `nombre_norm` (ya normalizado): igual al
+    nombre completo, o a una de sus palabras, o una palabra que empiece por lo buscado (apodos:
+    «ale» -> «alejandra»). PURA."""
+    if not buscado or not nombre_norm:
+        return False
+    if buscado == nombre_norm:
+        return True
+    return any(p == buscado or p.startswith(buscado) for p in nombre_norm.split())
+
+
+def _resolver_miembro_id(miembro_id: str, miembro_nombre: str | None, ctx: Contexto) -> str:
+    """Resuelve el `miembro_id` de un turno al id REAL del roster, tolerando que el modelo
+    transcriba mal el id opaco o ponga el NOMBRE en su lugar.
+
+    Si `miembro_id` ya es válido, se respeta. Si no, intenta casar por NOMBRE (el `miembro_nombre`
+    que leyó el modelo, o el propio `miembro_id` si trae un nombre) contra los nombres del roster,
+    insensible a mayúsculas/acentos. Solo resuelve si la coincidencia es ÚNICA; si es ambigua o no
+    hay ninguna, devuelve el id tal cual (la validación decidirá). Estrictamente aditivo: solo
+    RESCATA turnos que se caerían, nunca toca uno con id ya válido. PURA.
+    """
+    if miembro_id in ctx.miembros:
+        return miembro_id
+    for buscado in (miembro_nombre, miembro_id):
+        clave = _norm_titulo(str(buscado or ""))
+        if not clave:
+            continue
+        coincidencias = {
+            mid for mid, nombre in ctx.miembros.items() if _nombre_casa(clave, _norm_titulo(nombre))
+        }
+        if len(coincidencias) == 1:
+            return next(iter(coincidencias))
+    return miembro_id
+
+
 def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
     """Valida una operacion YA tipada contra el contexto. Devuelve un mensaje de error o None.
 
@@ -366,6 +401,8 @@ def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
             return f"Hora de inicio de franja inválida: {op.franja_inicio!r} (usa HH:MM)."
         if op.franja_fin not in (None, "") and not _hora_valida(op.franja_fin or ""):
             return f"Hora de fin de franja inválida: {op.franja_fin!r} (usa HH:MM)."
+        # Rescata por NOMBRE si el modelo transcribió mal el id opaco (causa de turnos perdidos).
+        op.miembro_id = _resolver_miembro_id(op.miembro_id, op.miembro_nombre, ctx)
         if op.miembro_id not in ctx.miembros:
             return f"El miembro {op.miembro_id!r} no existe en el equipo."
         return None
@@ -528,12 +565,13 @@ def canonicalizar_franjas_turnos(
     """Reescribe la `franja` de cada `crear_turno` al NOMBRE de una franja de la PLANTILLA del
     equipo, para que el import NUNCA cree una franja con nombre de persona/rango.
 
-    Para cada turno: si su `franja` ya coincide (normalizada) con una franja de la plantilla,
-    solo se corrige el casing; si no, se ENCAJA por horario (`franja_inicio`/`franja_fin`) en la
-    franja que mas solapa. Solo se reescribe el NOMBRE de la franja: el horario trabajado que
-    emitio el modelo en `franja_inicio`/`franja_fin` se respeta tal cual (ya es HH:MM valido; no
-    lo pisamos con el canonico para no introducir un `24:00` que la re-validacion del aplicar
-    rechazaria). PURA.
+    El HORARIO MANDA: la franja se deriva del rango real trabajado (`franja_inicio`/`franja_fin`)
+    eligiendo la franja de la plantilla que MÁS solapa, no de la etiqueta que puso el modelo —que
+    a veces ancla a la persona a su franja habitual (p.ej. un 10:00-18:00 que es de Mañana pero el
+    modelo etiqueta «Tarde»)—. Solo si no hay horario usable se cae en la etiqueta del modelo,
+    corrigiendo su casing. El horario trabajado en `franja_inicio`/`franja_fin` se respeta tal
+    cual (ya es HH:MM valido; no lo pisamos con el canonico para no introducir un `24:00` que la
+    re-validacion del aplicar rechazaria). PURA.
 
     `plantilla`: `[{nombre,inicio,fin}, ...]` (franjas de tiempo del equipo). Si esta vacia, o un
     turno no es mapeable (sin horario y sin nombre conocido), ese turno se deja como vino.
@@ -544,14 +582,16 @@ def canonicalizar_franjas_turnos(
     for op in operaciones:
         if op.get("tipo") != "crear_turno":
             continue
-        objetivo = por_nombre.get(normaliza_franja(str(op.get("franja", ""))))
+        # El horario real manda sobre la etiqueta del modelo.
+        nombre = mapear_franja_por_solape(
+            plantilla,
+            str(op.get("franja_inicio") or ""),
+            str(op.get("franja_fin") or ""),
+        )
+        objetivo = por_nombre.get(normaliza_franja(nombre or "")) if nombre else None
+        # Sin horario usable: cae en la etiqueta del modelo (corrige casing si es franja real).
         if objetivo is None:
-            nombre = mapear_franja_por_solape(
-                plantilla,
-                str(op.get("franja_inicio") or ""),
-                str(op.get("franja_fin") or ""),
-            )
-            objetivo = por_nombre.get(normaliza_franja(nombre or ""))
+            objetivo = por_nombre.get(normaliza_franja(str(op.get("franja", ""))))
         if objetivo is None:
             continue
         op["franja"] = str(objetivo.get("nombre", ""))

@@ -637,20 +637,32 @@ def test_canonicaliza_turno_con_nombre_de_persona_a_la_franja_real():
     assert out[0]["franja_fin"] == "00:00"
 
 
-def test_canonicaliza_solo_corrige_casing_si_ya_es_una_franja_real():
+def test_canonicaliza_el_horario_manda_sobre_la_etiqueta_del_modelo():
+    # MARIANA jueves: COORD MAT 10AM-6PM. El modelo la etiquetó «Tarde» (su franja habitual), pero
+    # 10:00-18:00 solapa más con Mañana (6h) que con Tarde (2h): el HORARIO manda -> Mañana.
     ops = [
         {
             "tipo": "crear_turno",
-            "fecha": "2026-06-15",
-            "franja": "tarde",  # ya es una franja, solo mal casing
-            "franja_inicio": "16:00",
-            "franja_fin": "00:00",
+            "fecha": "2026-06-18",
+            "franja": "Tarde",  # etiqueta equivocada del modelo
+            "franja_inicio": "10:00",
+            "franja_fin": "18:00",
             "miembro_id": "u1",
         }
     ]
     out = pi.canonicalizar_franjas_turnos(ops, _PLANTILLA)
+    assert out[0]["franja"] == "Mañana"
+    # El horario trabajado se respeta tal cual (no se pisa con el canónico de la franja).
+    assert out[0]["franja_inicio"] == "10:00"
+    assert out[0]["franja_fin"] == "18:00"
+
+
+def test_canonicaliza_corrige_casing_cuando_no_hay_horario_usable():
+    # Sin franja_inicio/fin no hay nada que mapear por solape: cae en la etiqueta del modelo y
+    # solo corrige su casing (si ya es una franja real de la plantilla).
+    ops = [{"tipo": "crear_turno", "fecha": "2026-06-15", "franja": "tarde", "miembro_id": "u1"}]
+    out = pi.canonicalizar_franjas_turnos(ops, _PLANTILLA)
     assert out[0]["franja"] == "Tarde"
-    assert out[0]["franja_fin"] == "00:00"  # el horario trabajado no se pisa
 
 
 def test_canonicaliza_no_toca_eventos_ni_plantilla_vacia():
@@ -659,6 +671,41 @@ def test_canonicaliza_no_toca_eventos_ni_plantilla_vacia():
     turno = [{"tipo": "crear_turno", "fecha": "2026-06-15", "franja": "TEZCU", "miembro_id": "u1"}]
     # Sin plantilla no hay a qué mapear: se deja como vino (no se inventa nada).
     assert pi.canonicalizar_franjas_turnos(turno, []) == turno
+
+
+# --------------------------------------------------------------------------- #
+# Resolucion de miembro por nombre (rescata ids mal transcritos por el modelo) #
+# --------------------------------------------------------------------------- #
+
+
+def test_resuelve_miembro_por_nombre_cuando_el_id_no_existe():
+    # El modelo transcribió mal el id opaco, pero leyó bien el nombre «LUIS» -> se resuelve a u1.
+    op = {
+        "tipo": "crear_turno", "fecha": "2026-06-15", "franja": "Mañana",
+        "miembro_id": "id-inventado", "miembro_nombre": "LUIS",
+    }
+    validas, errores = pi.validar_operaciones([op], _ctx())
+    assert errores == []
+    assert validas[0]["miembro_id"] == "u1"
+
+
+def test_resuelve_miembro_cuando_el_id_trae_el_nombre():
+    # El modelo puso el NOMBRE en miembro_id (sin miembro_nombre) -> también se resuelve.
+    op = {"tipo": "crear_turno", "fecha": "2026-06-15", "franja": "Mañana", "miembro_id": "ana"}
+    validas, errores = pi.validar_operaciones([op], _ctx())
+    assert errores == []
+    assert validas[0]["miembro_id"] == "u2"
+
+
+def test_no_resuelve_a_quien_no_es_del_roster():
+    # Un nombre que no es de nadie: no se inventa -> error de validación (no se cuela un turno).
+    op = {
+        "tipo": "crear_turno", "fecha": "2026-06-15", "franja": "Mañana",
+        "miembro_id": "x", "miembro_nombre": "Pedro",
+    }
+    validas, errores = pi.validar_operaciones([op], _ctx())
+    assert validas == []
+    assert "no existe en el equipo" in errores[0]["error"]
 
 
 # --------------------------------------------------------------------------- #

@@ -427,6 +427,7 @@ def _prompt_turnos(
         '"franja": "<NOMBRE EXACTO de una franja de la lista de arriba>", '
         '"franja_inicio": "HH:MM", "franja_fin": "HH:MM", '
         '"miembro_id": "<id de miembro existente>", '
+        '"miembro_nombre": "<nombre tal como aparece en el documento, p.ej. LUIS>", '
         '"nota_relevo": "<horario real del documento, p.ej. 8AM-4PM>"?}\n'
         "]}"
     )
@@ -442,9 +443,11 @@ def _prompt_turnos(
         "Una cabecera/persona NO es una franja: NUNCA crees una franja con nombre de persona ni "
         "con un rango horario como nombre.\n\n"
         "## Miembros del equipo\n\n"
-        "Usa estos id en `miembro_id`; mapea los nombres del documento (incluidos los que vengan "
-        "dentro de una celda, p.ej. «ELÍAS 9AM-5PM») a esta lista. Si alguien no está aquí, "
-        "OMÍTELO (no inventes id):\n\n"
+        "Para cada turno pon SIEMPRE en `miembro_nombre` el nombre de la persona TAL COMO aparece "
+        "en el documento (p.ej. «LUIS», «ELÍAS», «ALE»; el nombre dentro de una celda de rol como "
+        "«ELÍAS 9AM-5PM» es ELÍAS) y en `miembro_id` el id de esta lista que le corresponda. Si "
+        "dudas del id exacto, no pasa nada: el sistema lo resuelve por el nombre. OMITE a una "
+        "persona SOLO si su nombre no corresponde a NADIE de esta lista:\n\n"
         f"{lineas_miembros}\n\n"
         "## Franjas del equipo (las ÚNICAS válidas)\n\n"
         "El campo `franja` DEBE ser EXACTAMENTE uno de estos nombres. Para cada persona y día con "
