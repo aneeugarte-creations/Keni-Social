@@ -25,13 +25,26 @@ from typing import Any
 # una categoría no debe impedir que el equipo cree fuentes en ella. 'breaking' (la cadencia más
 # agresiva) se añade en la capa API, no es de catálogo.
 CATEGORIAS_VALIDAS: tuple[str, ...] = (
+    # Redacción de noticias (marcas tipo UnoTV / Claro Sports / Nación Gamer).
     "mx",
+    "regional",
     "internacional",
     "entretenimiento",
-    "gaming",
+    "deportes",
     "futbol",
     "motor",
     "otros-deportes",
+    "gaming",
+    "negocios",
+    "tendencias",
+    # Temáticas de misión (Fundación): el contenido se clasifica por el pilar del que habla,
+    # no por geografía. Cadencia perenne (~30 min): son temas de cambio lento, no breaking.
+    "ciencia-tech",
+    "salud",
+    "medio-ambiente",
+    "cultura",
+    "educacion",
+    "impacto-social",
 )
 
 _RUTA_INICIAL = Path(__file__).resolve().parent / "fuentes_presets.json"

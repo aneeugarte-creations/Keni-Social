@@ -39,13 +39,25 @@ def test_categorias_son_subconjunto_del_vocabulario_canonico():
 def test_categorias_validas_es_estable_y_no_depende_de_la_inicial():
     """CATEGORIAS_VALIDAS es el vocabulario editorial completo, traiga lo que traiga la inicial."""
     esperadas = {
+        # Redacción de noticias.
         "mx",
+        "regional",
         "internacional",
         "entretenimiento",
-        "gaming",
+        "deportes",
         "futbol",
         "motor",
         "otros-deportes",
+        "gaming",
+        "negocios",
+        "tendencias",
+        # Temáticas de misión (Fundación).
+        "ciencia-tech",
+        "salud",
+        "medio-ambiente",
+        "cultura",
+        "educacion",
+        "impacto-social",
     }
     assert esperadas == set(fuentes_presets.CATEGORIAS_VALIDAS)
 

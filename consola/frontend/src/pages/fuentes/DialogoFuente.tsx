@@ -49,6 +49,11 @@ const CATEGORIAS_FEED: { id: string; nombre: string; cadencia: string }[] = [
   { id: "gaming", nombre: "Gaming", cadencia: "~30 min" },
   { id: "negocios", nombre: "Negocios", cadencia: "~10 min" },
   { id: "tendencias", nombre: "Tendencias", cadencia: "~10 min" },
+  { id: "salud", nombre: "Salud", cadencia: "~30 min" },
+  { id: "medio-ambiente", nombre: "Medio ambiente", cadencia: "~30 min" },
+  { id: "cultura", nombre: "Cultura", cadencia: "~30 min" },
+  { id: "educacion", nombre: "Educación", cadencia: "~30 min" },
+  { id: "impacto-social", nombre: "Impacto social", cadencia: "~30 min" },
   { id: "breaking", nombre: "Breaking (máxima cadencia)", cadencia: "~3 min" },
 ];
 
