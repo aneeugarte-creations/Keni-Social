@@ -44,9 +44,11 @@ export interface OpcionesConfirmar {
 export interface OpcionElegir {
   /** Valor que devuelve `elegir` si se pulsa este botón. */
   valor: string;
-  /** Texto del botón. */
+  /** Texto principal de la opción. */
   etiqueta: string;
-  /** Botón rojo (acción destructiva). Por defecto outline gris (estilo de la plataforma). */
+  /** Sub-etiqueta opcional (gris, a la derecha): aclara la opción sin saturar el texto. */
+  descripcion?: string;
+  /** Fila roja (acción destructiva). Por defecto neutra (estilo de la plataforma). */
   destructivo?: boolean;
 }
 

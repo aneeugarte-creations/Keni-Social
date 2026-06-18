@@ -71,28 +71,42 @@ export function ContenedorConfirmacion() {
                 {estado.mensaje}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter className="gap-2 sm:gap-2">
-              <AlertDialogCancel onClick={() => responder(valorCancelar)}>
-                {estado.textoCancelar ?? "Cancelar"}
-              </AlertDialogCancel>
-              {estado.opciones ? (
-                // Modo ELECCIÓN: un botón por opción (outline gris salvo destructivo). `text-foreground`
-                // explícito porque `AlertDialogAction` aplica el variant DEFAULT de base (texto claro),
-                // y `outline` no fija color de texto: sin esto el texto sale claro sobre fondo claro.
-                estado.opciones.map((op) => (
-                  <AlertDialogAction
-                    key={op.valor}
-                    className={
-                      op.destructivo
-                        ? buttonVariants({ variant: "destructive" })
-                        : cn(buttonVariants({ variant: "outline" }), "text-foreground")
-                    }
-                    onClick={() => responder(op.valor)}
-                  >
-                    {op.etiqueta}
-                  </AlertDialogAction>
-                ))
-              ) : (
+            {estado.opciones ? (
+              // Modo ELECCIÓN: filas seleccionables (título + sub-etiqueta gris) en el cuerpo, y
+              // SOLO «Cancelar» abajo. Así cada opción se lee como opción y el descarte como descarte,
+              // en vez de tres botones iguales en fila.
+              <>
+                <div className="flex flex-col gap-2 py-1">
+                  {estado.opciones.map((op) => (
+                    <button
+                      key={op.valor}
+                      type="button"
+                      onClick={() => responder(op.valor)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                        op.destructivo
+                          ? "border-destructive/40 text-destructive hover:bg-destructive/10"
+                          : "border-border bg-background hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      <span className="text-sm font-medium">{op.etiqueta}</span>
+                      {op.descripcion ? (
+                        <span className="text-xs text-muted-foreground">{op.descripcion}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => responder(valorCancelar)}>
+                    {estado.textoCancelar ?? "Cancelar"}
+                  </AlertDialogCancel>
+                </AlertDialogFooter>
+              </>
+            ) : (
+              <AlertDialogFooter className="gap-2 sm:gap-2">
+                <AlertDialogCancel onClick={() => responder(valorCancelar)}>
+                  {estado.textoCancelar ?? "Cancelar"}
+                </AlertDialogCancel>
                 <AlertDialogAction
                   className={
                     estado.destructivo
@@ -104,8 +118,8 @@ export function ContenedorConfirmacion() {
                 >
                   {estado.textoConfirmar ?? "Confirmar"}
                 </AlertDialogAction>
-              )}
-            </AlertDialogFooter>
+              </AlertDialogFooter>
+            )}
           </>
         )}
       </AlertDialogContent>

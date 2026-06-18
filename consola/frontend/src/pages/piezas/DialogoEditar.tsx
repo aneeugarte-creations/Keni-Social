@@ -166,8 +166,8 @@ export function DialogoEditar({
           ? "Se reemplazan los slides actuales por unos nuevos a partir del copy. Elige la longitud:"
           : "Se generará el carrusel a partir del copy del post. Elige la longitud:",
         opciones: [
-          { valor: "corto", etiqueta: "Corto · 4–5" },
-          { valor: "largo", etiqueta: "Largo · 8–9" },
+          { valor: "corto", etiqueta: "Corto", descripcion: "4–5 tarjetas" },
+          { valor: "largo", etiqueta: "Largo", descripcion: "8–9 tarjetas" },
         ],
       })) as "corto" | "largo" | null;
       if (longitud) void lanzarCarrusel(longitud);
@@ -251,8 +251,8 @@ export function DialogoEditar({
           "Se generará el carrusel a partir del copy del post (la portada se conserva). La " +
           "pieza volverá a borrador y se quitará la plantilla actual. Elige la longitud:",
         opciones: [
-          { valor: "corto", etiqueta: "Corto · 4–5" },
-          { valor: "largo", etiqueta: "Largo · 8–9" },
+          { valor: "corto", etiqueta: "Corto", descripcion: "4–5 tarjetas" },
+          { valor: "largo", etiqueta: "Largo", descripcion: "8–9 tarjetas" },
         ],
       })) as "corto" | "largo" | null;
       if (!longitud) return;
