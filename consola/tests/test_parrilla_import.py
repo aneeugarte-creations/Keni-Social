@@ -17,12 +17,13 @@ from keni_consola.dominio import parrilla_import_job as pij
 _FRANJAS_NOMBRE = {"fr-manana": "Mañana", "fr-tarde": "Tarde"}
 
 
-def _ctx(*, turnos=None) -> pi.Contexto:
+def _ctx(*, turnos=None, eventos=None) -> pi.Contexto:
     return pi.Contexto(
         miembros={"u1": "Luis", "u2": "Ana"},
         nombres_franja={"Mañana", "Tarde"},
         turnos=turnos or [],
         franjas_nombre=_FRANJAS_NOMBRE,
+        eventos=eventos or [],
     )
 
 
@@ -353,11 +354,38 @@ def test_sin_json_devuelve_error_indice_cero():
 def test_conflicto_crear_turno_celda_ocupada():
     # La celda se identifica por (fecha, NOMBRE de franja): el turno existente usa franja_id
     # "fr-manana" que resuelve a "Mañana"; la op nueva referencia el slot por nombre.
+    # OTRA persona en la celda SÍ es conflicto (no es idempotente).
     ctx = _ctx(turnos=[_turno(tid="t1", fecha="2026-06-02", franja="fr-manana", miembro="u1")])
     op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u2"}
     info = pi.calcular_conflicto(op, ctx)
     assert info["conflicto"] is True
+    assert info["ya_existe"] is False
     assert info["ocupada_por"] == "u1"
+
+
+def test_ya_existe_crear_turno_misma_persona_no_es_conflicto():
+    # La MISMA persona ya tiene ese (fecha, franja): «ya está», ni conflicto ni alta. Es lo que
+    # evita el muro de rojos al re-subir una parrilla sobre una semana ya hecha.
+    ctx = _ctx(turnos=[_turno(tid="t1", fecha="2026-06-02", franja="fr-manana", miembro="u1")])
+    op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u1"}
+    info = pi.calcular_conflicto(op, ctx)
+    assert info["ya_existe"] is True
+    assert info["conflicto"] is False
+
+
+def test_ya_existe_crear_turno_no_lo_tapa_otro_ocupante_de_la_misma_franja():
+    # La franja tiene a u1 Y a u2: aunque el mapa de celda guarde uno solo, la idempotencia mira
+    # el conjunto por PERSONA, así que u2 (que SÍ está) sale «ya está», no conflicto.
+    ctx = _ctx(
+        turnos=[
+            _turno(tid="t1", fecha="2026-06-02", franja="fr-manana", miembro="u1"),
+            _turno(tid="t2", fecha="2026-06-02", franja="fr-manana", miembro="u2"),
+        ]
+    )
+    op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u2"}
+    info = pi.calcular_conflicto(op, ctx)
+    assert info["ya_existe"] is True
+    assert info["conflicto"] is False
 
 
 def test_sin_conflicto_crear_turno_celda_libre():
@@ -365,6 +393,7 @@ def test_sin_conflicto_crear_turno_celda_libre():
     op = {"tipo": "crear_turno", "fecha": "2026-06-03", "franja": "Tarde", "miembro_id": "u2"}
     info = pi.calcular_conflicto(op, ctx)
     assert info["conflicto"] is False
+    assert info["ya_existe"] is False
 
 
 def test_conflicto_modificar_turno_desaparecido():
@@ -387,6 +416,35 @@ def test_modificar_turno_devuelve_valores_actuales():
 def test_crear_evento_nunca_conflictua():
     info = pi.calcular_conflicto({"tipo": "crear_evento", "fecha": "2026-06-02", "titulo": "X"}, _ctx())
     assert info["conflicto"] is False
+    assert info["ya_existe"] is False
+
+
+def test_ya_existe_crear_evento_mismo_fecha_hora_titulo():
+    # Mismo (fecha, hora, título) ya en el calendario -> «ya está», se omitirá al aplicar.
+    ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}])
+    op = {"tipo": "crear_evento", "fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}
+    info = pi.calcular_conflicto(op, ctx)
+    assert info["ya_existe"] is True
+    assert info["conflicto"] is False
+
+
+def test_ya_existe_crear_evento_normaliza_espacios_y_mayusculas():
+    # «mismo nombre» tolera diferencias de espaciado/mayúsculas y de espacios en la hora.
+    ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}])
+    op = {"tipo": "crear_evento", "fecha": "2026-06-02", "hora": " 10:00 ", "titulo": "  españa   VS Cabo Verde "}
+    assert pi.calcular_conflicto(op, ctx)["ya_existe"] is True
+
+
+def test_crear_evento_titulo_distinto_no_es_idempotente():
+    ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}])
+    op = {"tipo": "crear_evento", "fecha": "2026-06-02", "hora": "10:00", "titulo": "Portugal vs RD Congo"}
+    assert pi.calcular_conflicto(op, ctx)["ya_existe"] is False
+
+
+def test_crear_evento_misma_hora_distinto_dia_no_es_idempotente():
+    ctx = _ctx(eventos=[{"fecha": "2026-06-02", "hora": "10:00", "titulo": "España vs Cabo Verde"}])
+    op = {"tipo": "crear_evento", "fecha": "2026-06-09", "hora": "10:00", "titulo": "España vs Cabo Verde"}
+    assert pi.calcular_conflicto(op, ctx)["ya_existe"] is False
 
 
 # --------------------------------------------------------------------------- #

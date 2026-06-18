@@ -306,7 +306,12 @@ function DialogImportarParrilla({
   const aplicar = useMutation({
     mutationFn: () => api.aplicarPropuestaParrilla(propuestaId!),
     onSuccess: (r) => {
-      toast.success(r?.mensaje ?? "Propuesta aplicada al calendario.");
+      const omitidas = r?.ya_existe ?? 0;
+      toast.success(
+        omitidas > 0
+          ? `Aplicada. ${omitidas} ${omitidas === 1 ? "ya estaba" : "ya estaban"} en el calendario; se ${omitidas === 1 ? "omitió" : "omitieron"}.`
+          : (r?.mensaje ?? "Propuesta aplicada al calendario."),
+      );
       // Refresca el calendario real y la lista de pendientes.
       queryClient.invalidateQueries({ queryKey: ["rota"] });
       queryClient.invalidateQueries({ queryKey: ["parrilla"] });
@@ -337,6 +342,9 @@ function DialogImportarParrilla({
   const estado: EstadoPropuestaParrilla | undefined = propuesta?.estado;
   const operaciones = propuesta?.operaciones ?? [];
   const nConflictos = operaciones.filter((o) => o.conflicto).length;
+  // Operaciones que YA están en el calendario (idénticas): se omiten al aplicar, sin alarmar.
+  const nYaExisten = operaciones.filter((o) => o.ya_existe).length;
+  const nCambios = operaciones.length - nYaExisten;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
@@ -393,7 +401,14 @@ function DialogImportarParrilla({
                 {propuesta.resumen}
               </p>
             )}
-            <ResumenRango propuesta={propuesta} nOperaciones={operaciones.length} />
+            <ResumenRango propuesta={propuesta} nOperaciones={nCambios} />
+            {nYaExisten > 0 && (
+              <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                {nYaExisten === 1
+                  ? "1 coincidencia ya está en el calendario; se omitirá al aplicar (no se duplica)."
+                  : `${nYaExisten} coincidencias ya están en el calendario; se omitirán al aplicar (no se duplican).`}
+              </p>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <LeyendaPreview />
               {nConflictos > 0 && (

@@ -70,9 +70,11 @@ export const apiParrilla = {
       signal,
     }),
   aplicarPropuestaParrilla: (id: string) =>
-    peticion<RespuestaMensaje>(`/parrilla/propuestas/${encodeURIComponent(id)}/aplicar`, {
-      metodo: "POST",
-    }),
+    // `ya_existe`: cuántas operaciones se omitieron por estar ya en el calendario (no es error).
+    peticion<{ aplicada?: boolean; ya_existe?: number; mensaje?: string }>(
+      `/parrilla/propuestas/${encodeURIComponent(id)}/aplicar`,
+      { metodo: "POST" },
+    ),
   descartarPropuestaParrilla: (id: string) =>
     peticion<RespuestaMensaje>(`/parrilla/propuestas/${encodeURIComponent(id)}/descartar`, {
       metodo: "POST",

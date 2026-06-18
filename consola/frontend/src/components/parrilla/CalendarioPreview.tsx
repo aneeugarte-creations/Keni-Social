@@ -210,11 +210,19 @@ function fechaDeOperacion(op: OperacionPropuesta): string | null {
 }
 
 export function CalendarioPreview({
-  operaciones,
+  operaciones: todasLasOperaciones,
 }: {
   /** TODAS las operaciones de la propuesta (cada una con su `fecha`). */
   operaciones: OperacionPropuesta[];
 }) {
+  // Las operaciones IDEMPOTENTES («ya está en el calendario») NO se superponen: el calendario
+  // real ya las muestra en gris. Aquí solo pintamos los CAMBIOS reales (nuevo/cambio/conflicto),
+  // así una propuesta re-subida sobre una semana ya hecha no se llena de rojos falsos.
+  const operaciones = React.useMemo(
+    () => todasLasOperaciones.filter((op) => !op.ya_existe),
+    [todasLasOperaciones],
+  );
+
   // Semanas (lunes ISO) que contienen alguna operación, ordenadas ascendente.
   const semanasConCambios = React.useMemo(() => {
     const set = new Set<string>();

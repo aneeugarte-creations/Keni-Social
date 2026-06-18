@@ -203,6 +203,7 @@ def construir_contexto_validacion(
     operaciones: list[dict[str, Any]] | None,
     *,
     nombres_miembros: dict[str, str],
+    marca: str = "",
 ) -> pi.Contexto:
     """Contexto de VALIDACION/CONFLICTO (post-claude) para el RANGO de las operaciones.
 
@@ -212,6 +213,9 @@ def construir_contexto_validacion(
         plantilla por defecto (`_SLOTS_DEFECTO`), normalizados.
       - `franjas_nombre`: mapa id->nombre de todas esas franjas (resuelve el slot de un turno).
       - `turnos`: los turnos vivos de todas esas semanas (para celdas ocupadas y modificar).
+      - `eventos`: los eventos VIVOS del rango de fechas de las ops (para idempotencia de
+        `crear_evento`: mismo fecha+hora+título = «ya está»). `marca` los acota al calendario de
+        esa marca (vacío = sin filtro, propuestas legadas/«Todas»).
 
     Para las semanas SIN franjas, los nombres por defecto siguen siendo validos (el aplicar
     siembra la semana). NO persiste nada aqui (la siembra real ocurre en `aplicar_propuesta`).
@@ -227,11 +231,21 @@ def construir_contexto_validacion(
                 franjas_nombre[fid] = nombre
                 nombres_franja.add(nombre)
         turnos.extend(repos.listar_turnos_rota(semana=semana))
+    # Eventos vivos del rango [min_fecha, max_fecha] de las ops (idempotencia de crear_evento).
+    fechas = sorted(
+        f for f in (str(o.get("fecha", "") or "") for o in (operaciones or [])) if f
+    )
+    eventos: list[dict[str, Any]] = (
+        repos.listar_eventos_rota(desde=fechas[0], hasta=fechas[-1], marca=marca or None)
+        if fechas
+        else []
+    )
     return pi.Contexto(
         miembros=dict(nombres_miembros),
         nombres_franja=nombres_franja,
         turnos=turnos,
         franjas_nombre=franjas_nombre,
+        eventos=eventos,
     )
 
 

@@ -166,6 +166,21 @@ def normaliza_franja(nombre: str) -> str:
     return (nombre or "").strip().lower()
 
 
+def _norm_titulo(titulo: str) -> str:
+    """Normaliza un título para comparar «mismo nombre»: colapsa espacios internos + casefold.
+
+    Conservador a propósito (NO quita puntuación ni acentos): solo iguala diferencias de
+    mayúsculas y de espaciado, para no fundir como duplicados dos eventos de título distinto.
+    """
+    return " ".join((titulo or "").split()).casefold()
+
+
+def _norm_hora(hora: str | None) -> str:
+    """Normaliza una hora para comparar (strip; "" para None/''): un evento sin hora casa con
+    otro sin hora, y "09:00" casa con " 09:00 "."""
+    return (hora or "").strip()
+
+
 class Contexto:
     """Estado real (multi-semana) contra el que se valida una propuesta.
 
@@ -182,8 +197,17 @@ class Contexto:
       `modificar_turno` el `actual.franja` se expone como NOMBRE (resuelto via `franjas_nombre`).
     - `turnos_por_celda`: (fecha, nombre_franja_norm) -> miembro_id ocupante (choque por slot).
 
+    IDEMPOTENCIA («ya está en el calendario», sin tocar nada):
+    - `turnos_existentes`: conjunto de (fecha, nombre_franja_norm, miembro_id) ya presentes. Un
+      `crear_turno` que reproduce EXACTAMENTE una de estas claves NO es conflicto ni alta: la
+      MISMA persona ya tiene ese turno (distinto de "la celda la ocupa OTRO" -> eso sí choca).
+    - `eventos_existentes`: conjunto de (fecha, hora_norm, titulo_norm) ya presentes. Un
+      `crear_evento` con esa misma clave ya está; se omite al aplicar (no se duplica).
+
     `franjas_nombre` (id -> nombre) resuelve el `franja_id` de un turno existente a su nombre
-    (para construir `turnos_por_celda` y los valores `actual` de `modificar_turno`).
+    (para construir `turnos_por_celda`/`turnos_existentes` y los `actual` de `modificar_turno`).
+    `eventos` son los eventos VIVOS del rango (para `eventos_existentes`); opcional (vacío en el
+    contexto del prompt, que no deduplica).
     """
 
     def __init__(
@@ -193,6 +217,7 @@ class Contexto:
         nombres_franja: set[str],
         turnos: list[dict[str, Any]],
         franjas_nombre: dict[str, str] | None = None,
+        eventos: list[dict[str, Any]] | None = None,
     ) -> None:
         self.miembros = dict(miembros)
         # Nombres de franja validos, normalizados (case/space-insensitive).
@@ -204,13 +229,25 @@ class Contexto:
         }
         # (fecha, nombre_franja_norm) -> miembro_id que ya la ocupa (celda ocupada por slot).
         self.turnos_por_celda: dict[tuple[str, str], str] = {}
+        # (fecha, nombre_franja_norm, miembro_id) ya presentes (idempotencia por PERSONA).
+        self.turnos_existentes: set[tuple[str, str, str]] = set()
         for t in turnos:
             fecha = str(t.get("fecha", "") or "")
             franja_id = str(t.get("franja_id", "") or "")
             nombre = franjas_nombre.get(franja_id, "")
             mid = str(t.get("miembro_id", "") or "")
             if fecha and nombre and mid:
-                self.turnos_por_celda[(fecha, normaliza_franja(nombre))] = mid
+                franja_norm = normaliza_franja(nombre)
+                self.turnos_por_celda[(fecha, franja_norm)] = mid
+                self.turnos_existentes.add((fecha, franja_norm, mid))
+        # (fecha, hora_norm, titulo_norm) de los eventos ya en el calendario (idempotencia).
+        self.eventos_existentes: set[tuple[str, str, str]] = set()
+        for e in eventos or []:
+            fecha_e = str(e.get("fecha", "") or "")
+            if fecha_e:
+                self.eventos_existentes.add(
+                    (fecha_e, _norm_hora(e.get("hora")), _norm_titulo(str(e.get("titulo", "") or "")))
+                )
         # Guardamos el mapa id->nombre para exponer el nombre de franja del turno en `actual`.
         self._franjas_nombre = franjas_nombre
 
@@ -356,32 +393,48 @@ def calcular_conflicto(op_dict: dict[str, Any], ctx: Contexto) -> dict[str, Any]
     """Calcula el `conflicto` (bool) + datos de overlay de UNA operacion ya validada.
 
     PURO. Lo usa el GET de detalle para que el frontend pinte la superposicion sin re-derivar:
-      - `crear_evento`: nunca conflictua (un evento no ocupa celda de turno).
-      - `crear_turno`: conflicto si la celda (fecha, nombre_de_franja) ya está ocupada (una
-        celda persona×fecha×slot no se duplica). `ocupada_por` lleva el miembro_id ocupante.
+      - `crear_evento`: nunca conflictua; `ya_existe=True` si el MISMO (fecha, hora, título) ya
+        está en el calendario (idempotente: se omite al aplicar, no se duplica).
+      - `crear_turno`: `ya_existe=True` si la MISMA persona ya tiene ese (fecha, franja) —no es
+        conflicto ni alta, ya está—. Si NO, conflicto cuando la celda (fecha, nombre_de_franja)
+        la ocupa OTRA persona (una celda persona×fecha×slot no se duplica); `ocupada_por` lleva
+        el miembro_id ocupante.
       - `modificar_turno`: conflicto si el turno desapareció; ademas devuelve `actual` con los
         valores vivos de la fila referenciada (miembro_id/estado/override/... y `franja` como
         NOMBRE de slot).
 
-    Devuelve `{conflicto: bool, ...}`; la forma extra depende del tipo (la consume el front).
+    Devuelve `{conflicto: bool, ya_existe: bool, ...}`; la forma extra depende del tipo (la
+    consume el front). `ya_existe` gana sobre `conflicto`: si ya está, no molesta al usuario.
     """
     tipo = op_dict.get("tipo")
     if tipo == "crear_turno":
-        clave = (
-            str(op_dict.get("fecha", "")),
-            normaliza_franja(str(op_dict.get("franja", ""))),
-        )
-        ocupante = ctx.turnos_por_celda.get(clave)
+        fecha = str(op_dict.get("fecha", ""))
+        franja = normaliza_franja(str(op_dict.get("franja", "")))
+        miembro = str(op_dict.get("miembro_id", ""))
+        # Idempotente: la MISMA persona ya tiene ese turno -> «ya está», ni conflicto ni alta.
+        if (fecha, franja, miembro) in ctx.turnos_existentes:
+            return {"conflicto": False, "ya_existe": True, "ocupada_por": miembro}
+        ocupante = ctx.turnos_por_celda.get((fecha, franja))
         return {
             "conflicto": ocupante is not None,
+            "ya_existe": False,
             "ocupada_por": ocupante or "",
         }
+    if tipo == "crear_evento":
+        # Idempotente: mismo (fecha, hora, título) ya en el calendario -> «ya está», se omite.
+        clave = (
+            str(op_dict.get("fecha", "")),
+            _norm_hora(op_dict.get("hora")),
+            _norm_titulo(str(op_dict.get("titulo", "") or "")),
+        )
+        return {"conflicto": False, "ya_existe": clave in ctx.eventos_existentes}
     if tipo == "modificar_turno":
         actual = ctx.turnos_por_id.get(str(op_dict.get("turno_id", "")))
         if actual is None:
-            return {"conflicto": True, "actual": None}
+            return {"conflicto": True, "ya_existe": False, "actual": None}
         return {
             "conflicto": False,
+            "ya_existe": False,
             "actual": {
                 "miembro_id": actual.get("miembro_id", ""),
                 "miembro_nombre": actual.get("miembro_nombre", ""),
@@ -393,8 +446,8 @@ def calcular_conflicto(op_dict: dict[str, Any], ctx: Contexto) -> dict[str, Any]
                 "nota_relevo": actual.get("nota_relevo", ""),
             },
         }
-    # crear_evento u otros: sin concepto de celda ocupada.
-    return {"conflicto": False}
+    # crear_tarea u otros: no van al calendario, nada que deduplicar.
+    return {"conflicto": False, "ya_existe": False}
 
 
 # --------------------------------------------------------------------------- #

@@ -690,6 +690,9 @@ export interface OperacionCrearEvento {
   tipo: "crear_evento";
   /** `true` si el server detectó un conflicto con el calendario actual (rojo). */
   conflicto: boolean;
+  /** `true` si el MISMO (fecha, hora, título) ya está en el calendario: «ya está», se omite al
+   *  aplicar y NO se pinta como cambio (gris, no rojo). */
+  ya_existe?: boolean;
   /** ISO (AAAA-MM-DD). */
   fecha: string;
   hora: string;
@@ -705,6 +708,8 @@ export interface OperacionCrearTarea {
   tipo: "crear_tarea";
   /** Una tarea nunca choca con el calendario (no ocupa celda de turno). */
   conflicto: boolean;
+  /** Las tareas no van al calendario: nunca se deduplican (siempre `false`/ausente). */
+  ya_existe?: boolean;
   titulo: string;
   detalle?: string;
   prioridad?: PrioridadEvento;
@@ -716,6 +721,9 @@ export interface OperacionCrearTarea {
 export interface OperacionCrearTurno {
   tipo: "crear_turno";
   conflicto: boolean;
+  /** `true` si la MISMA persona ya tiene ese (fecha, franja): «ya está», se omite al aplicar y
+   *  NO se pinta como cambio (gris, no rojo). Distinto de `conflicto` (la celda la ocupa OTRA). */
+  ya_existe?: boolean;
   /** ISO (AAAA-MM-DD). */
   fecha: string;
   /**
@@ -744,6 +752,8 @@ export interface ActualTurnoPropuesta {
 export interface OperacionModificarTurno {
   tipo: "modificar_turno";
   conflicto: boolean;
+  /** Una modificación nunca es idempotente por sí misma (siempre `false`/ausente). */
+  ya_existe?: boolean;
   turno_id: string;
   /** Campos a cambiar (parcial). */
   cambios: Partial<CuerpoActualizarTurnoRota> & Record<string, unknown>;

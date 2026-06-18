@@ -110,16 +110,19 @@ def _propuesta_publica(propuesta: dict[str, Any], *, incluir_ops: bool = False) 
 
 
 def _operaciones_con_conflicto(
-    operaciones: list[dict[str, Any]] | None, nombres: dict[str, str]
+    operaciones: list[dict[str, Any]] | None,
+    nombres: dict[str, str],
+    marca: str = "",
 ) -> list[dict[str, Any]]:
-    """Anota cada operacion con su `conflicto` (+ datos de overlay) contra el estado VIVO.
+    """Anota cada operacion con su `conflicto`/`ya_existe` (+ datos de overlay) contra el VIVO.
 
-    Construye el contexto del RANGO desde la BD (franjas/turnos de TODAS las semanas tocadas por
-    las fechas de las operaciones) y usa el dominio puro `calcular_conflicto` para que el
-    frontend pinte nuevo/cambio/conflicto sin re-derivar.
+    Construye el contexto del RANGO desde la BD (franjas/turnos/eventos de TODAS las semanas
+    tocadas por las fechas de las operaciones; `marca` acota los eventos al calendario de esa
+    marca) y usa el dominio puro `calcular_conflicto` para que el frontend pinte
+    nuevo/cambio/conflicto/ya-está sin re-derivar.
     """
     ops = operaciones or []
-    ctx = job.construir_contexto_validacion(ops, nombres_miembros=nombres)
+    ctx = job.construir_contexto_validacion(ops, nombres_miembros=nombres, marca=marca)
     anotadas: list[dict[str, Any]] = []
     for op in ops:
         info = pi.calcular_conflicto(op, ctx)
@@ -128,13 +131,14 @@ def _operaciones_con_conflicto(
 
 
 def _rango_de_operaciones(operaciones: list[dict[str, Any]] | None) -> dict[str, Any]:
-    """Resumen `{desde, hasta, semanas, total}` del rango temporal cubierto por las operaciones.
+    """Resumen `{desde, hasta, semanas, total}` de los CAMBIOS reales de la propuesta.
 
-    `desde`/`hasta` son la fecha minima/maxima (ISO) de las ops; `semanas` los lunes ISO de las
-    semanas tocadas (ordenados); `total` el numero de operaciones. Lo consume el frontend para
-    mostrar un resumen y navegar las semanas. `desde`/`hasta` quedan "" si no hay fechas.
+    Solo cuenta operaciones que de verdad cambian algo: las idempotentes (`ya_existe`, «ya está
+    en el calendario») se EXCLUYEN para que el resumen no infle el conteo ni asuste («N cambios»
+    refleja lo que se aplicaría). `desde`/`hasta` son la fecha minima/maxima (ISO) de esas ops;
+    `semanas` los lunes ISO de las semanas tocadas. `desde`/`hasta` quedan "" si no hay cambios.
     """
-    ops = operaciones or []
+    ops = [o for o in (operaciones or []) if not o.get("ya_existe")]
     fechas = sorted(
         f for f in (str(o.get("fecha", "") or "") for o in ops) if f
     )
@@ -384,11 +388,13 @@ async def detalle_propuesta(request: Request) -> Response:
         return JSONResponse({"error": "La propuesta no existe."}, status_code=404)
     estado = _estado_efectivo(propuesta)
     ops_crudas = propuesta.get("operaciones")
-    operaciones = _operaciones_con_conflicto(ops_crudas, _roster())
+    marca = str(propuesta.get("marca") or "")
+    operaciones = _operaciones_con_conflicto(ops_crudas, _roster(), marca)
     cuerpo = _propuesta_publica(propuesta)
     cuerpo["estado"] = estado
     cuerpo["operaciones"] = operaciones
-    cuerpo["rango"] = _rango_de_operaciones(ops_crudas)
+    # El rango cuenta solo CAMBIOS reales: usa las ops anotadas (excluye las `ya_existe`).
+    cuerpo["rango"] = _rango_de_operaciones(operaciones)
     return JSONResponse(cuerpo)
 
 
@@ -418,7 +424,8 @@ async def aplicar_propuesta(request: Request) -> Response:
 
     operaciones = propuesta.get("operaciones") or []
     nombres = _roster()
-    ctx = job.construir_contexto_validacion(operaciones, nombres_miembros=nombres)
+    marca = str(propuesta.get("marca") or "")
+    ctx = job.construir_contexto_validacion(operaciones, nombres_miembros=nombres, marca=marca)
 
     # Re-valida contra el estado ACTUAL (las filas pudieron cambiar tras generar la propuesta).
     validas, errores = pi.validar_operaciones(operaciones, ctx)
@@ -431,12 +438,20 @@ async def aplicar_propuesta(request: Request) -> Response:
             status_code=409,
         )
 
-    # Conflictos (celda ocupada / turno desaparecido): no aplicamos si hay alguno.
-    conflictivas = [
-        {**op, **pi.calcular_conflicto(op, ctx)}
-        for op in validas
-    ]
-    con_conflicto = [op for op in conflictivas if op.get("conflicto")]
+    # Particiona contra el estado VIVO: «ya está» (idempotente) se OMITE en silencio (no
+    # duplica ni asusta); conflicto real (la celda la ocupa OTRA persona / turno desaparecido)
+    # corta con 409; el resto se aplica.
+    a_aplicar: list[dict[str, Any]] = []
+    con_conflicto: list[dict[str, Any]] = []
+    n_ya_existe = 0
+    for op in validas:
+        info = pi.calcular_conflicto(op, ctx)
+        if info.get("conflicto"):
+            con_conflicto.append({**op, **info})
+        elif info.get("ya_existe"):
+            n_ya_existe += 1
+        else:
+            a_aplicar.append(op)
     if con_conflicto:
         return JSONResponse(
             {
@@ -449,17 +464,18 @@ async def aplicar_propuesta(request: Request) -> Response:
     try:
         resumen = repos.aplicar_propuesta_parrilla(
             propuesta_id,
-            validas,
+            a_aplicar,
             nombres_miembros=nombres,
             origen=pi.ORIGEN,
             # Estampa la marca del workspace que importó en los eventos creados, para que la
             # lista de Tareas (filtrada por marca) los muestre. Vacío en imports legados.
-            marca=str(propuesta.get("marca") or ""),
+            marca=marca,
         )
     except ValueError as e:
         # Una franja (slot) no resoluble para su semana: el diff entero se descartó (rollback).
         return JSONResponse({"error": str(e)}, status_code=409)
-    return JSONResponse({"aplicada": True, **resumen})
+    # `ya_existe`: cuántas operaciones se omitieron por estar ya en el calendario (no es error).
+    return JSONResponse({"aplicada": True, "ya_existe": n_ya_existe, **resumen})
 
 
 async def descartar_propuesta(request: Request) -> Response:
