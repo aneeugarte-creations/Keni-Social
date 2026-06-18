@@ -693,12 +693,14 @@ class FuenteMetricool:
     ) -> MetricaPlataforma | None:
         """Agregado por red SUMANDO los posts del periodo (None si la API de posts falla).
 
-        Reúsa el MISMO parseo que las piezas (`/v2/analytics/posts/{network}`), que sí
-        funciona en todas las redes, en vez de `/v2/analytics/timelines` (vocabulario de
-        métrica distinto por red; solo daba TikTok). Así el agregado por red es consistente
-        con las piezas que ve el usuario. `alcance` queda None (no se deriva del post de
-        forma uniforme; honesto, no se inventa). Una red conectada sin posts en el rango
-        devuelve 0/0 (la UI lo muestra como "sin métricas", no como error).
+        Reúsa el MISMO parseo que las piezas (`/v2/analytics/posts/{network}` + los reels de
+        FB/IG, que viven en `/v2/analytics/reels/{network}`), en vez de
+        `/v2/analytics/timelines` (vocabulario de métrica distinto por red; solo daba TikTok).
+        Así el agregado por red es consistente con las piezas/desglose que ve el usuario: una
+        red que solo publica reels (FB/IG) aporta sus vistas+interacciones, no 0/0. `alcance`
+        queda None (no se deriva del post de forma uniforme; honesto, no se inventa). Una red
+        conectada sin actividad en el rango devuelve 0/0 (la UI lo muestra como "sin
+        métricas", no como error).
         """
         try:
             posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
@@ -706,6 +708,11 @@ class FuenteMetricool:
             log.warning("metricool: agregado posts %s/%s falló: %s", plat.value, cuenta_id, e)
             return None
         piezas = self._parsear_posts(posts, plat, cuenta_id, desde, hasta)
+        # Reels (FB/IG) viven en un endpoint aparte que `/posts` no cubre; inclúyelos —igual
+        # que `mejores_piezas`— para que el agregado por red cuadre con el desglose. Sin esto,
+        # una red que SOLO publica reels saldría 0/0 = "sin métricas" pese a tener actividad.
+        if plat in _RED_CON_REELS:
+            piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
         vis = sum(p.visualizaciones for p in piezas)
         inter = sum(p.interacciones for p in piezas)
         return MetricaPlataforma(

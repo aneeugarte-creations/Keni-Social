@@ -124,6 +124,41 @@ def test_resumen_agrega_los_posts_del_periodo_por_red():
 
 
 @respx.mock
+def test_resumen_incluye_reels_cuando_la_red_solo_publica_reels():
+    """Una red (FB/IG) que SOLO publica reels (0 posts de feed) debe aportar sus métricas.
+
+    Los reels viven en `/v2/analytics/reels/{network}`, aparte de `/posts`. Sin sumarlos, el
+    agregado por red salía 0/0 -> la cobertura la marcaba "sin métricas" pese a tener
+    actividad real (caso Piso 15: FB/IG todo reels). El resumen debe verlos, igual que el
+    desglose/mejores_piezas.
+    """
+    _mock_perfiles(_perfil(instagram="piso15_"))  # IG conectada
+    _mock_posts("instagram", [])  # sin posts de feed
+    _mock_reels(
+        "instagram",
+        [
+            {
+                "reelId": "r1",
+                "publishedAt": "2026-05-26T10:00:00",
+                "content": "Reel del periodo",
+                "views": 8000,
+                "interactions": 400,
+                "url": "https://instagram.com/reel/r1",
+            }
+        ],
+    )
+
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert resumen.visualizaciones == 8000
+    assert resumen.interacciones == 400
+    assert [m.plataforma for m in resumen.por_plataforma] == [Plataforma.instagram]
+    # Con actividad (vía reels) la red cuenta como cubierta -> la UI la pinta "con datos".
+    assert resumen.cobertura is not None and resumen.cobertura.completa
+
+
+@respx.mock
 def test_resumen_envia_autenticacion_correcta():
     """X-Mc-Auth en header; userId/blogId en query (doc oficial de Metricool)."""
     _mock_perfiles(_perfil(instagram="x"))
