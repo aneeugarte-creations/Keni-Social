@@ -63,6 +63,12 @@ def test_catalogo_expone_toggles_por_marca():
         "publicacion_marca", "noticias_produccion_marca"
     }
     assert config.clave_por_marca(config.ENV_PLAN_DIA, "unotv") in claves
+    # El conjunto de LÍNEAS por marca (texto, CSV de claves) vive en el mismo grupo que el plan:
+    # su único editor es «Plan y horarios» y por eso no se pinta en la UI genérica de ajustes.
+    assert config.clave_por_marca(config.ENV_LINEAS, "unotv") in claves
+    lineas = ajustes_catalogo.por_clave(config.clave_por_marca(config.ENV_LINEAS, "unotv"))
+    assert lineas is not None
+    assert lineas.tipo == "texto" and lineas.grupo == "noticias_produccion_marca"
 
 
 def test_catalogo_expone_publicacion_por_marca():

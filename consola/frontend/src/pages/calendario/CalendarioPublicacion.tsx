@@ -59,7 +59,9 @@ export default function CalendarioPublicacion() {
                   titulo="Plan y horarios"
                   abiertaInicial={horariosDeepLink}
                 >
-                  <PanelPlan marca={marcaActiva} />
+                  {/* key por marca: el editor es POR MARCA; remontar al cambiar evita arrastrar
+                      el conjunto de líneas/cupos de la marca anterior. */}
+                  <PanelPlan key={marcaActiva} marca={marcaActiva} />
                 </SeccionColapsable>
               )}
               {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se

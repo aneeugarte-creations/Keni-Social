@@ -247,6 +247,27 @@ def _plan_por_marca() -> list[Ajuste]:
     ]
 
 
+def _lineas_por_marca() -> list[Ajuste]:
+    """LÍNEAS del editor «Plan y horarios» por marca (`KENI_LINEAS::marca`, CSV de claves).
+
+    Define QUÉ líneas (y en qué orden) pinta el diálogo para esa marca: así Fundación lista sus
+    temáticas (salud, medio-ambiente…) y no las de UnoTV. Vacío = el editor cae a su conjunto
+    base. Es solo presentación: el volumen vive en `KENI_PLAN_DIA::marca` y los horarios en las
+    franjas. Mismo grupo que el plan (su único editor es «Plan y horarios», no la UI genérica)."""
+    return [
+        Ajuste(
+            clave=config.clave_por_marca(config.ENV_LINEAS, mid),
+            tipo="texto",
+            etiqueta=f"{nombre} · líneas del plan",
+            ayuda="Claves de categoría separadas por comas; define qué líneas pinta «Plan y "
+            "horarios» para esta marca. Vacío = líneas base.",
+            grupo="noticias_produccion_marca",
+            defecto="",
+        )
+        for mid, nombre in marcas.opciones()
+    ]
+
+
 def _publicacion_por_marca() -> list[Ajuste]:
     """Excepción de PUBLICACIÓN REAL por marca (clave `KENI_PUBLICAR_REAL::marca`). Mismo patrón
     que las etapas: con el maestro encendido, apagar una marca la deja en dry-run mientras el
@@ -687,6 +708,7 @@ def catalogo() -> list[Ajuste]:
         + _construir_catalogo()
         + _ajustes_por_marca()
         + _plan_por_marca()
+        + _lineas_por_marca()
         + _publicacion_por_marca()
     )
 
