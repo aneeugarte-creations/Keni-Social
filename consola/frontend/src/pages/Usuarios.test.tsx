@@ -194,7 +194,7 @@ describe("Usuarios · administración", () => {
     fireEvent.change(within(dialogo).getByLabelText("Nueva contraseña"), {
       target: { value: "nuevaclave12" },
     });
-    fireEvent.click(within(dialogo).getByRole("button", { name: /resetear/i }));
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^resetear$/i }));
 
     await waitFor(() => {
       const patch = capturas.find((c) => c.url.includes("/api/usuarios/u1") && c.metodo === "PATCH");
