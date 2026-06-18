@@ -442,93 +442,49 @@ def test_unit_failsafe_sin_clave_no_emite_token():
 
 
 # --------------------------------------------------------------------------- #
-# 8) MFA OBLIGATORIO PARA ADMINS (`KENI_CONSOLA_MFA_ADMIN`, def ON)            #
+# 8) MFA EXIGIDO POR EL ADMIN (per-usuario, flag `mfa_requerido`)              #
 # --------------------------------------------------------------------------- #
 #
-# A diferencia del flag global (OFF por defecto), los admins quedan sujetos al segundo factor
-# SIEMPRE que la maquinaria pueda operar (hay clave de firma), aunque el flag global este OFF.
-# La condicion de la clave es la red ANTI-LOCKOUT: sin clave NO se fuerza nada.
+# El admin marca a una persona `mfa_requerido` desde Usuarios. Con clave de firma presente,
+# su login la FUERZA a inscribir passkey (gracia + `debe_inscribir_mfa`) antes de operar; si
+# ya tiene passkey, el login exige el segundo factor. El rol es irrelevante: es por persona.
+# Sin clave NO se fuerza nada (red ANTI-LOCKOUT).
 
 
-def test_admin_con_passkey_eleva_aunque_flag_global_off(entorno, monkeypatch):
-    """Admin con passkey + clave: el login EXIGE el segundo factor aunque el flag global este OFF."""
+def test_usuario_con_passkey_eleva_con_clave(entorno, monkeypatch):
+    """Cualquier usuario con passkey + clave ve su login EXIGIR el segundo factor (da igual el rol)."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    jefe = auth.crear_usuario("jefe", CLAVE, "admin")
-    _credencial_falsa(jefe["id"])
+    u = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(u["id"])
 
     c = _cli()
-    r = _login(c, "jefe", CLAVE)
+    r = _login(c, "ana", CLAVE)
     assert r.status_code == 200 and r.json() == {"mfa_required": True}
-    # Aun NO hay sesion: hay que completar la ceremonia.
     assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
 
 
-def test_admin_sin_passkey_entra_en_gracia_y_puede_inscribir(entorno, monkeypatch):
-    """Admin sin passkey + clave: NO se bloquea (no lockout); entra marcado `debe_inscribir_mfa`
-    y puede usar el enrolamiento aunque el flag global este OFF."""
+def test_mfa_requerido_sin_passkey_entra_en_gracia(entorno, monkeypatch):
+    """Persona con `mfa_requerido` + clave y SIN passkey: no se bloquea el login (no lockout);
+    entra marcada `debe_inscribir_mfa` y el enrolamiento esta disponible para inscribirse."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    auth.crear_usuario("jefe", CLAVE, "admin")
+    auth.crear_usuario("ana", CLAVE, "editor", mfa_requerido=True)
 
     c = _cli()
-    r = _login(c, "jefe", CLAVE)
+    r = _login(c, "ana", CLAVE)
     assert r.status_code == 200
     cuerpo = r.json()
     assert "mfa_required" not in cuerpo  # NO se bloquea el login
     assert cuerpo["usuario"]["debe_inscribir_mfa"] is True
-    # La sesion ES valida (puede operar) y `me` mantiene el flag de inscripcion.
     me = c.get("/api/auth/me", headers=_ORIGIN)
-    assert me.status_code == 200
-    assert me.json()["usuario"]["debe_inscribir_mfa"] is True
-    # El enrolamiento esta disponible para el admin aunque el flag global este OFF.
+    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is True
     assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 200
 
 
-def test_admin_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatch):
-    """ANTI-LOCKOUT: admin obligatorio ON (def) pero SIN clave de firma -> el login entra como
-    hoy (sin elevar, sin marcar inscripcion). Sin clave no se puede inscribir ni verificar."""
-    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
-    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
-    auth.crear_usuario("jefe", CLAVE, "admin")
-
-    c = _cli()
-    r = _login(c, "jefe", CLAVE)
-    assert r.status_code == 200
-    cuerpo = r.json()
-    assert "mfa_required" not in cuerpo
-    assert cuerpo["usuario"].get("debe_inscribir_mfa") in (None, False)
-    me = c.get("/api/auth/me", headers=_ORIGIN)
-    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
-
-
-def test_admin_obligatorio_apagado_no_fuerza_pero_respeta_opt_in(entorno, monkeypatch):
-    """`KENI_CONSOLA_MFA_ADMIN=0` quita la OBLIGACION: un admin SIN passkey entra sin gracia ni
-    `debe_inscribir_mfa`. Pero el opt-in se respeta: un admin que SI activo su passkey sigue
-    pasando el segundo factor (la passkey manda). El kill-switch real es quitar la clave."""
-    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
-    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    monkeypatch.setenv("KENI_CONSOLA_MFA_ADMIN", "0")
-    sin_llave = auth.crear_usuario("jefe", CLAVE, "admin")
-    assert sin_llave is not None
-    con_llave = auth.crear_usuario("jefa", CLAVE, "admin")
-    _credencial_falsa(con_llave["id"])
-
-    c1 = _cli()
-    r1 = _login(c1, "jefe", CLAVE)
-    assert r1.status_code == 200 and "mfa_required" not in r1.json()
-    assert r1.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
-    assert c1.get("/api/auth/me", headers=_ORIGIN).status_code == 200
-
-    c2 = _cli()
-    r2 = _login(c2, "jefa", CLAVE)
-    assert r2.status_code == 200 and r2.json() == {"mfa_required": True}
-
-
-def test_editor_no_obligado_pero_puede_optar(entorno, monkeypatch):
-    """El MFA obligatorio de admin NO fuerza a editores: con el flag global OFF entran directo y
-    sin `debe_inscribir_mfa`. PERO, con clave presente, el enrolamiento esta disponible para que
-    el editor lo active por su cuenta (opt-in)."""
+def test_sin_mfa_requerido_no_se_fuerza(entorno, monkeypatch):
+    """Sin `mfa_requerido` no se obliga a nadie: con clave presente entra directo y sin
+    `debe_inscribir_mfa` (el enrolamiento sigue disponible, pero no forzado)."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     auth.crear_usuario("ana", CLAVE, "editor")
@@ -536,26 +492,38 @@ def test_editor_no_obligado_pero_puede_optar(entorno, monkeypatch):
     c = _cli()
     r = _login(c, "ana", CLAVE)
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert "mfa_required" not in cuerpo
-    assert cuerpo["usuario"].get("debe_inscribir_mfa") in (None, False)
-    # No esta FORZADO, pero PUEDE activarlo (opt-in disponible con clave).
-    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 200
+    assert "mfa_required" not in r.json()
+    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
     assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False
 
 
+def test_mfa_requerido_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatch):
+    """ANTI-LOCKOUT: `mfa_requerido` ON pero SIN clave de firma -> el login entra como hoy
+    (sin elevar, sin marcar inscripcion). Sin clave no se puede inscribir ni verificar."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
+    auth.crear_usuario("ana", CLAVE, "editor", mfa_requerido=True)
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200
+    assert "mfa_required" not in r.json()
+    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+    me = c.get("/api/auth/me", headers=_ORIGIN)
+    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
+
+
 # --------------------------------------------------------------------------- #
-# Hard-block: admin sin passkey no puede GESTIONAR usuarios (solo inscribirse) #
+# Hard-block: a quien se le EXIGE passkey y no la tiene no GESTIONA usuarios    #
 # --------------------------------------------------------------------------- #
 
 
-def test_admin_sin_passkey_no_puede_gestionar_usuarios(entorno, monkeypatch):
-    """Admin OBLIGADO a MFA (hay clave) y aun SIN passkey: el login lo deja entrar en gracia,
-    pero crear/editar/borrar usuarios queda CERRADO (403 `mfa_inscripcion_requerida`) hasta
-    inscribir una llave. Es el "forzado" como bloqueo real, no solo aviso."""
+def test_superadmin_con_mfa_requerido_sin_passkey_no_gestiona(entorno, monkeypatch):
+    """Superadmin con `mfa_requerido` + clave y SIN passkey: el login lo deja en gracia, pero
+    gestionar usuarios queda CERRADO (403 `mfa_inscripcion_requerida`) hasta inscribir la llave."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    auth.crear_usuario("jefa", CLAVE, "admin")
+    auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True, mfa_requerido=True)
 
     c = _cli()
     r = _login(c, "jefa", CLAVE)
@@ -571,20 +539,18 @@ def test_admin_sin_passkey_no_puede_gestionar_usuarios(entorno, monkeypatch):
     assert bloqueada.json()["codigo"] == "mfa_inscripcion_requerida"
 
 
-def test_admin_con_passkey_si_puede_gestionar_usuarios(entorno, monkeypatch):
-    """Tras inscribir una passkey, el admin recupera la gestion de usuarios (el hard-block
-    solo aplica MIENTRAS no haya segundo factor)."""
+def test_superadmin_con_passkey_si_gestiona(entorno, monkeypatch):
+    """Con passkey ya inscrita, el superadmin recupera la gestion (el hard-block solo aplica
+    MIENTRAS no haya segundo factor)."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    jefa = auth.crear_usuario("jefa", CLAVE, "admin")
+    jefa = auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True, mfa_requerido=True)
     _credencial_falsa(jefa["id"])  # ya tiene passkey -> mfa_activo
 
     c = _cli()
     # Con passkey, el login pide segundo factor; para el test vamos directo a la sesion real.
-    from keni_consola import auth as _auth_mod
-
-    token = _auth_mod.crear_sesion(jefa["id"])
-    c.cookies.set(_auth_mod.COOKIE_SESION, token)
+    token = auth.crear_sesion(jefa["id"])
+    c.cookies.set(auth.COOKIE_SESION, token)
     r = c.post(
         "/api/usuarios",
         json={"usuario": "nuevo", "password": CLAVE, "rol": "editor"},

@@ -804,6 +804,13 @@ _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("manager_id", "TEXT NOT NULL DEFAULT ''"),
     ("mfa_activo", "INTEGER NOT NULL DEFAULT 0"),
     ("mfa_recovery_codes", "TEXT NOT NULL DEFAULT '[]'"),
+    # `superadmin`: 1 = puede gestionar usuarios (`/api/usuarios`). Es ortogonal al `rol`
+    # (sigue siendo admin/editor): un superadmin conserva TODOS los poderes de admin y ademas
+    # entra a Usuarios; un admin normal NO. Solo otro superadmin puede conceder/quitar el flag.
+    ("superadmin", "INTEGER NOT NULL DEFAULT 0"),
+    # `mfa_requerido`: 1 = el admin EXIGE segundo factor a esta persona. Si no tiene passkey,
+    # su login fuerza el enrolamiento (pantalla obligatoria) antes de usar la consola.
+    ("mfa_requerido", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 # Columnas RETIRADAS de `usuarios` (se dropan si una BD vieja las tiene). `mfa_secret_cifrado`

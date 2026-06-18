@@ -1,4 +1,4 @@
-"""API Usuarios: gestion de cuentas por el admin (#130). SOLO rol admin.
+"""API Usuarios: gestion de cuentas. SOLO superadmin (un admin normal NO entra).
 
 Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
 
@@ -21,12 +21,12 @@ GUARDAS de integridad (no quedarse sin acceso de admin):
   - No borrarte a TI MISMO.
   - No dejar 0 admins via PATCH (degradar al ultimo admin a editor).
 
-Autorizacion (#150): exige una SESION de un usuario REAL con rol admin. El middleware
-deja ese usuario en `request.state.usuario`. El TOKEN de mantenimiento
-(`request.state.auth_por_token`) NO cuenta como admin: por si solo no puede listar,
-modificar ni borrar usuarios -> 403. La UNICA excepcion es el BOOTSTRAP DE RECUPERACION:
-crear el PRIMER admin cuando la BD no tiene NINGUN usuario (POST con rol admin). Es un
-arranque acotado, no poder admin general, y queda registrado como mantenimiento.
+Autorizacion (#150): exige una SESION de un usuario REAL con el flag `superadmin`. El
+middleware deja ese usuario en `request.state.usuario`. Un admin normal (sin flag) NO entra,
+y el TOKEN de mantenimiento (`request.state.auth_por_token`) tampoco: 403. La UNICA excepcion
+es el BOOTSTRAP DE RECUPERACION: crear el PRIMER admin (que nace superadmin) cuando la BD no
+tiene NINGUN usuario (POST con rol admin por token). Arranque acotado, registrado como
+mantenimiento.
 """
 
 from __future__ import annotations
@@ -46,15 +46,14 @@ from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
-_MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
+_MSG_SOLO_ADMIN = "Solo un superadministrador puede gestionar usuarios."
 
-# Hard-block de MFA: un admin OBLIGADO a segundo factor que aun no inscribio passkey no
-# puede gestionar usuarios (crear/editar/borrar) hasta enrolar una llave. El login lo deja
-# entrar en GRACIA (para que pueda inscribirse) pero las acciones SENSIBLES se cierran: si
-# un admin sin segundo factor fuera comprometido (sesion/cookie robada), no podria crear
-# admins ni cambiar roles. Codigo estable para que el frontend lleve a "Mi cuenta".
+# Hard-block de MFA: una persona a la que se le EXIGE segundo factor (`mfa_requerido`) y aun
+# no inscribio passkey no puede gestionar usuarios (crear/editar/borrar) hasta enrolar una
+# llave. El login ya la fuerza a inscribirse antes de operar; este es el cierre de defensa en
+# la API (sesion/cookie robada). Codigo estable para que el frontend lleve al enrolamiento.
 _MSG_MFA_INSCRIPCION = (
-    "Antes de gestionar usuarios, inscribe una llave de acceso (passkey) en Mi cuenta."
+    "Antes de gestionar usuarios, inscribe una llave de acceso (passkey)."
 )
 _CODIGO_MFA_INSCRIPCION = "mfa_inscripcion_requerida"
 
@@ -86,17 +85,15 @@ def _crearia_ciclo(usuario_id: str, manager_id: str) -> bool:
     return False
 
 
-def _es_admin(request: Request) -> bool:
-    """True SOLO si la peticion la hace un usuario real con rol admin (#150 + #153).
+def _es_superadmin(request: Request) -> bool:
+    """True SOLO si la peticion la hace una sesion real con el flag `superadmin`.
 
-    Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), FUENTE UNICA
-    compartida con `/api/conexiones` y `/api/rota` (#153). Ese helper es ESTRICTO (#150):
-    el token de mantenimiento (`request.state.auth_por_token`, sin usuario de sesion) NO
-    cuenta como admin. El unico camino con poder admin es una sesion de un usuario real con
-    rol admin. El arranque del PRIMER admin por token se trata aparte (la excepcion acotada
-    de `crear`), no aqui.
+    Gestionar usuarios es competencia EXCLUSIVA del superadmin (un admin normal NO entra).
+    Delega en `permisos.es_superadmin`, ESTRICTO (#150): el token de mantenimiento (sin
+    usuario de sesion) NO cuenta. El arranque del PRIMER superadmin por token se trata aparte
+    (la excepcion acotada de `crear`), no aqui.
     """
-    return permisos.es_admin(request)
+    return permisos.es_superadmin(request)
 
 
 def _es_token_mantenimiento(request: Request) -> bool:
@@ -105,20 +102,18 @@ def _es_token_mantenimiento(request: Request) -> bool:
 
 
 def _mfa_inscripcion_pendiente(request: Request) -> bool:
-    """True si el admin de la sesion DEBE inscribir passkey antes de poder operar (hard block).
+    """True si a la sesion se le EXIGE passkey y aun no la tiene (hard-block de gestion).
 
-    Gateado IGUAL que el modo gracia del login (`api/auth._mfa_admin_aplica`): rol admin +
-    MFA obligatorio de admin (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave de firma
-    (`KENI_CONSOLA_MFA_KEY`) + la cuenta aun NO tiene passkey. Sin clave la maquinaria no
-    puede correr la inscripcion, asi que NO se bloquea (red anti-lockout, identica a login).
+    Per-usuario: hay clave de firma (`KENI_CONSOLA_MFA_KEY`) + la cuenta esta marcada
+    `mfa_requerido` por el admin + aun NO tiene passkey. Sin clave la maquinaria no puede
+    correr la inscripcion, asi que NO se bloquea (red anti-lockout). El login ya fuerza el
+    enrolamiento antes de operar; esto cierra la API si llega una sesion en ese estado.
     """
     usuario = getattr(request.state, "usuario", None)
-    if usuario is None or usuario.get("rol") != ROL_ADMIN:
-        return False
-    if not (seguridad.mfa_obligatorio_admin() and seguridad.mfa_key_presente()):
+    if usuario is None or not seguridad.mfa_key_presente():
         return False
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
-    return not bool(refrescado.get("mfa_activo"))
+    return bool(refrescado.get("mfa_requerido")) and not bool(refrescado.get("mfa_activo"))
 
 
 def _rechazo_mfa_pendiente() -> Response:
@@ -144,7 +139,7 @@ async def listar(request: Request) -> Response:
     Cada fila incluye `cargo`/`cobertura`/`marcas` para la pagina de Usuarios (organigrama
     del cliente). `marcas` siempre es una lista (vacia si el usuario no tiene marcas asignadas).
     """
-    if not _es_admin(request):
+    if not _es_superadmin(request):
         return _rechazo_no_admin()
     usuarios = [
         {
@@ -158,6 +153,9 @@ async def listar(request: Request) -> Response:
             "puede_coordinar": bool(u.get("puede_coordinar")),
             "nombre": u.get("nombre", "") or "",
             "manager_id": u.get("manager_id", "") or "",
+            "superadmin": bool(u.get("superadmin")),
+            "mfa_requerido": bool(u.get("mfa_requerido")),
+            "mfa_activo": bool(u.get("mfa_activo")),
             "marcas": list(u.get("marcas") or []),
         }
         for u in auth.listar_usuarios()
@@ -175,7 +173,7 @@ async def crear(request: Request) -> Response:
     sobre una BD que YA tiene usuarios (ahi exige una sesion admin real, como el resto).
     """
     bootstrap_por_token = False
-    if not _es_admin(request):
+    if not _es_superadmin(request):
         # Unica via sin sesion admin: bootstrap del primer admin por token (BD vacia).
         if _es_token_mantenimiento(request) and not auth.hay_usuarios():
             bootstrap_por_token = True
@@ -190,6 +188,12 @@ async def crear(request: Request) -> Response:
     password = datos.get("password")
     rol = datos.get("rol")
     nombre = datos.get("nombre")
+    superadmin = datos.get("superadmin")
+    mfa_requerido = datos.get("mfa_requerido")
+    if superadmin is not None and not isinstance(superadmin, bool):
+        return JSONResponse({"error": "El campo 'superadmin' debe ser true o false."}, status_code=400)
+    if mfa_requerido is not None and not isinstance(mfa_requerido, bool):
+        return JSONResponse({"error": "El campo 'mfa_requerido' debe ser true o false."}, status_code=400)
 
     if not isinstance(usuario, str) or not usuario.strip():
         return JSONResponse({"error": "El usuario necesita un nombre."}, status_code=400)
@@ -227,7 +231,13 @@ async def crear(request: Request) -> Response:
             status_code=403,
         )
 
-    creado = auth.crear_usuario(usuario, password, rol, nombre=nombre)
+    # El primer admin por token nace SUPERADMIN (debe poder gestionar usuarios). En el alta
+    # normal, los flags `superadmin`/`mfa_requerido` los decide el superadmin que crea.
+    crea_superadmin = True if bootstrap_por_token else bool(superadmin)
+    creado = auth.crear_usuario(
+        usuario, password, rol, nombre=nombre,
+        superadmin=crea_superadmin, mfa_requerido=bool(mfa_requerido),
+    )
     if creado is None:
         return JSONResponse({"error": "Ya existe un usuario con ese nombre."}, status_code=409)
     if bootstrap_por_token:
@@ -264,7 +274,7 @@ async def actualizar(request: Request) -> Response:
       - Cargos invalidos -> 400 con la allowlist.
       - Marcas invalidas -> 400 con la lista canonica.
     """
-    if not _es_admin(request):
+    if not _es_superadmin(request):
         return _rechazo_no_admin()
     if _mfa_inscripcion_pendiente(request):
         return _rechazo_mfa_pendiente()
@@ -287,6 +297,10 @@ async def actualizar(request: Request) -> Response:
     # cuenta (borra todas las passkeys + recovery + flag). Es el equivalente al reset de
     # contrasena para cuando alguien pierde sus dispositivos. Mismo guard admin que el PATCH.
     reset_mfa = datos.get("mfa_reset")
+    # `superadmin` (gestion de usuarios) y `mfa_requerido` (exigir segundo factor): los decide
+    # el superadmin. Booleanos opcionales; `None` deja el campo intacto.
+    nuevo_superadmin = datos.get("superadmin")
+    nuevo_mfa_requerido = datos.get("mfa_requerido")
     if (
         nuevo_usuario is None
         and nuevo_rol is None
@@ -298,12 +312,15 @@ async def actualizar(request: Request) -> Response:
         and nuevo_manager_id is None
         and nuevas_marcas is None
         and reset_mfa is None
+        and nuevo_superadmin is None
+        and nuevo_mfa_requerido is None
     ):
         return JSONResponse(
             {
                 "error": (
                     "Indica un campo a modificar (usuario, rol, contraseña, cargo, cobertura, "
-                    "puede_coordinar, nombre, manager_id, marcas o mfa_reset)."
+                    "puede_coordinar, nombre, manager_id, marcas, superadmin, mfa_requerido "
+                    "o mfa_reset)."
                 )
             },
             status_code=400,
@@ -333,6 +350,26 @@ async def actualizar(request: Request) -> Response:
     if reset_mfa is not None and not isinstance(reset_mfa, bool):
         return JSONResponse(
             {"error": "El campo 'mfa_reset' debe ser true o false."}, status_code=400
+        )
+
+    if nuevo_superadmin is not None and not isinstance(nuevo_superadmin, bool):
+        return JSONResponse(
+            {"error": "El campo 'superadmin' debe ser true o false."}, status_code=400
+        )
+    if nuevo_mfa_requerido is not None and not isinstance(nuevo_mfa_requerido, bool):
+        return JSONResponse(
+            {"error": "El campo 'mfa_requerido' debe ser true o false."}, status_code=400
+        )
+    # Guarda: quitar el superadmin al ULTIMO superadmin dejaria la consola sin quien gestione
+    # usuarios (nadie podria volver a entrar a /usuarios). Igual que la guarda del ultimo admin.
+    if (
+        nuevo_superadmin is False
+        and objetivo.get("superadmin")
+        and auth.contar_superadmins() <= 1
+    ):
+        return JSONResponse(
+            {"error": "No puedes quitar el superadmin al último superadministrador."},
+            status_code=409,
         )
 
     if nuevo_rol is not None:
@@ -462,6 +499,8 @@ async def actualizar(request: Request) -> Response:
         or nuevo_nombre is not None
         or nuevo_manager_id is not None
         or nuevas_marcas is not None
+        or nuevo_superadmin is not None
+        or nuevo_mfa_requerido is not None
     ):
         auth.actualizar_perfil(
             usuario_id,
@@ -472,6 +511,8 @@ async def actualizar(request: Request) -> Response:
             ),
             nombre=nuevo_nombre if nuevo_nombre is not None else None,
             manager_id=nuevo_manager_id if nuevo_manager_id is not None else None,
+            superadmin=nuevo_superadmin if nuevo_superadmin is not None else None,
+            mfa_requerido=nuevo_mfa_requerido if nuevo_mfa_requerido is not None else None,
             marcas=list(nuevas_marcas) if nuevas_marcas is not None else None,
         )
 
@@ -486,6 +527,9 @@ async def actualizar(request: Request) -> Response:
             "puede_coordinar": bool(actualizado.get("puede_coordinar")),
             "nombre": actualizado.get("nombre", "") or "",
             "manager_id": actualizado.get("manager_id", "") or "",
+            "superadmin": bool(actualizado.get("superadmin")),
+            "mfa_requerido": bool(actualizado.get("mfa_requerido")),
+            "mfa_activo": bool(actualizado.get("mfa_activo")),
             "marcas": list(actualizado.get("marcas") or []),
         }
     )
@@ -496,7 +540,7 @@ async def borrar(request: Request) -> Response:
 
     Guardas: no borrarte a ti mismo, ni borrar al ultimo admin.
     """
-    if not _es_admin(request):
+    if not _es_superadmin(request):
         return _rechazo_no_admin()
     if _mfa_inscripcion_pendiente(request):
         return _rechazo_mfa_pendiente()

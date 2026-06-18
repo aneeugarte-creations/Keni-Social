@@ -8,20 +8,17 @@
  *      backend invalida el resto de sesiones y re-emite la de este dispositivo, así que
  *      no hay que volver a iniciar sesión.
  *
- * La gestión de OTRAS cuentas (alta, rol, reset, baja) vive en `/usuarios` y es solo
- * para admin; aquí cada quien opera únicamente sobre su propia cuenta.
+ * La gestión de OTRAS cuentas (alta, rol, reset, baja) y la verificación en dos pasos (MFA)
+ * viven en `/usuarios` y son solo de superadmin; aquí cada quien opera únicamente sobre su
+ * propia cuenta (tema, datos, nombre y contraseña).
  */
-import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, Loader2, ShieldOff, Trash2, User } from "lucide-react";
+import { KeyRound, Loader2, User } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { confirmar } from "@/components/comunes/confirmar";
-import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { SeccionApariencia } from "@/pages/configuracion/SeccionApariencia";
 import { Button } from "@/components/ui/button";
@@ -249,268 +246,14 @@ function SeccionCambiarPassword() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Sección: Llaves de acceso (passkeys / WebAuthn)                     */
-/* ------------------------------------------------------------------ */
-
-/** Clave de caché de la lista de passkeys del usuario. */
-const CLAVE_PASSKEYS = ["sesion", "mfa-credenciales"] as const;
-
-/**
- * Gestión del segundo factor con LLAVES DE ACCESO (passkeys). Se muestra siempre que la
- * maquinaria de MFA esté activa en el servidor (clave de firma presente,
- * `me.usuario.mfa_habilitado`); es opt-in por usuario: opcional para editores y obligatorio
- * solo para admins. Flujo:
- *   - Registrar una passkey nueva: pide opciones -> `startRegistration` (Face ID / huella /
- *     llave) -> el backend la guarda. Al registrar la PRIMERA, devuelve los códigos de
- *     recuperación (se muestran una sola vez).
- *   - Listar y borrar las llaves existentes.
- *   - Desactivar todo (pide la contraseña actual): borra todas las llaves + recovery.
- */
-function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir: boolean }) {
-  const queryClient = useQueryClient();
-  const { refrescar } = useSesion();
-
-  const [nombre, setNombre] = React.useState("");
-  const [recovery, setRecovery] = React.useState<string[] | null>(null);
-  const [passwordDisable, setPasswordDisable] = React.useState("");
-
-  const refrescarEstado = React.useCallback(async () => {
-    await refrescar();
-    void queryClient.invalidateQueries({ queryKey: CLAVE_ME });
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PASSKEYS });
-  }, [refrescar, queryClient]);
-
-  const listado = useQuery({
-    queryKey: CLAVE_PASSKEYS,
-    queryFn: ({ signal }) => api.mfaCredenciales(signal),
-    // Solo tiene sentido listar cuando el flag está ON (la sección ya lo garantiza).
-  });
-
-  const registrar = useMutation({
-    mutationFn: async () => {
-      // 1) Opciones (el backend establece la cookie de challenge). 2) Ceremonia en el navegador.
-      // 3) El backend verifica y guarda la credencial.
-      const optionsJSON = await api.mfaRegistroOpciones();
-      const credential = await startRegistration({
-        optionsJSON: optionsJSON as unknown as Parameters<typeof startRegistration>[0]["optionsJSON"],
-      });
-      return api.mfaRegistroVerificar(credential, nombre.trim());
-    },
-    onSuccess: async (r) => {
-      setNombre("");
-      if (r.recovery_codes && r.recovery_codes.length > 0) {
-        setRecovery(r.recovery_codes);
-      }
-      toast.success("Llave de acceso registrada.");
-      await refrescarEstado();
-    },
-    onError: (e) => {
-      if (e instanceof DOMException && e.name === "NotAllowedError") {
-        toast.error("Registro cancelado.");
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  const borrar = useMutation({
-    mutationFn: (id: string) => api.mfaBorrarCredencial(id),
-    onSuccess: async () => {
-      toast.success("Llave de acceso eliminada.");
-      await refrescarEstado();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const desactivar = useMutation({
-    mutationFn: () => api.mfaDisable(passwordDisable),
-    onSuccess: async () => {
-      setPasswordDisable("");
-      setRecovery(null);
-      toast.success("Verificación en dos pasos desactivada.");
-      await refrescarEstado();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const credenciales = listado.data?.credenciales ?? [];
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Llaves de acceso (passkeys)</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-0">
-        {/* Aviso de inscripción OBLIGATORIA (admin sin passkey). No bloquea el acceso, pero
-            empuja a registrar una llave cuanto antes (riesgo de account-takeover sin segundo
-            factor en cuentas que publican a canales de marca). */}
-        {debeInscribir && (
-          <div
-            role="alert"
-            className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
-          >
-            <p className="font-medium">Tu cuenta de administrador necesita una llave de acceso.</p>
-            <p className="mt-1 text-muted-foreground">
-              Como administrador, la verificación en dos pasos es obligatoria. Registra una llave
-              de acceso (Face ID, huella o llave de seguridad) ahora para proteger tu cuenta. Si
-              pierdes el dispositivo, podrás entrar con los códigos de recuperación que verás al
-              registrar la primera llave.
-            </p>
-          </div>
-        )}
-
-        {/* Invitación opt-in: usuario sin llave y no obligado (editor). Enmarca el segundo
-            factor como opcional y recomendable. */}
-        {!activo && !debeInscribir && (
-          <p className="text-sm text-muted-foreground">
-            Añade verificación en dos pasos a tu cuenta (opcional pero recomendado). Usa Face ID,
-            huella o una llave de seguridad; solo tú podrás entrar aunque alguien tenga tu
-            contraseña.
-          </p>
-        )}
-
-        {/* Códigos de recuperación: solo tras registrar la PRIMERA llave. */}
-        {recovery && (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Guarda estos códigos en lugar seguro. <span className="font-medium">No volverán a mostrarse</span>.
-            </p>
-            <ul className="grid grid-cols-2 gap-1 rounded-lg border border-border p-3 font-mono text-sm">
-              {recovery.map((c) => (
-                <li key={c}>{c}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Lista de llaves registradas. */}
-        {activo && credenciales.length > 0 && (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {credenciales.map((c) => {
-              const accionesLlave: EntradaMenuContextual[] = [
-                {
-                  etiqueta: "Eliminar llave",
-                  icono: Trash2,
-                  destructivo: true,
-                  deshabilitado: borrar.isPending,
-                  onClick: async () => {
-                    if (
-                      await confirmar({
-                        mensaje: `¿Eliminar la llave "${c.nombre || "Llave sin nombre"}"? Esta acción no se puede deshacer.`,
-                        destructivo: true,
-                        textoConfirmar: "Eliminar",
-                      })
-                    )
-                      borrar.mutate(c.id);
-                  },
-                },
-              ];
-              return (
-                <FilaConAcciones
-                  key={c.id}
-                  como="li"
-                  kebab="hover"
-                  acciones={accionesLlave}
-                  className="flex items-center justify-between gap-3 p-3 pr-10"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{c.nombre || "Llave sin nombre"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Creada {formatearFechaHora(c.creada)}
-                      {c.ultimo_uso ? ` · Último uso ${formatearFechaHora(c.ultimo_uso)}` : ""}
-                    </p>
-                  </div>
-                </FilaConAcciones>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* Registrar una llave nueva. */}
-        <form
-          className="max-w-sm space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!registrar.isPending) registrar.mutate();
-          }}
-          noValidate
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="mfa-nombre-llave">Nombre de la llave</Label>
-            <Input
-              id="mfa-nombre-llave"
-              placeholder="Opcional: iPhone, laptop…"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              disabled={registrar.isPending}
-            />
-          </div>
-          <Button type="submit" disabled={registrar.isPending}>
-            {registrar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Fingerprint className="h-4 w-4" />
-            )}
-            {activo ? "Añadir otra llave" : "Registrar llave de acceso"}
-          </Button>
-        </form>
-
-        {/* Desactivar todo el segundo factor (pide la contraseña). */}
-        {activo && (
-          <form
-            className="max-w-sm space-y-3 border-t border-border pt-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (passwordDisable.length > 0 && !desactivar.isPending) desactivar.mutate();
-            }}
-            noValidate
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="mfa-disable-pass">Contraseña actual</Label>
-              <Input
-                id="mfa-disable-pass"
-                type="password"
-                autoComplete="current-password"
-                value={passwordDisable}
-                onChange={(e) => setPasswordDisable(e.target.value)}
-                disabled={desactivar.isPending}
-              />
-            </div>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={passwordDisable.length === 0 || desactivar.isPending}
-            >
-              {desactivar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShieldOff className="h-4 w-4" />
-              )}
-              Desactivar verificación en dos pasos
-            </Button>
-          </form>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
 
 function PublicacionMiCuenta() {
-  // Un solo `me` decide qué pintar; la sección de MFA solo aparece si el flag del servidor
-  // (`mfa_habilitado`) está ON. Con el flag OFF, la UI no muestra nada de MFA.
-  const { data } = useQuery({ queryKey: CLAVE_ME, queryFn: ({ signal }) => api.me(signal) });
-  const mfaHabilitado = !!data?.usuario.mfa_habilitado;
-  const mfaActivo = !!data?.usuario.mfa_activo;
-  const debeInscribir = !!data?.usuario.debe_inscribir_mfa;
   return (
     <div className="space-y-6">
       <SeccionTuCuenta />
       <SeccionCambiarPassword />
-      {mfaHabilitado && <SeccionMfa activo={mfaActivo} debeInscribir={debeInscribir} />}
     </div>
   );
 }

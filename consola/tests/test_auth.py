@@ -50,7 +50,13 @@ def _login(c: TestClient, usuario: str, password: str):
 
 
 def _crear(usuario: str, password: str, rol: str = "editor", **kw):
-    """Crea un usuario directo en la BD (forma de dominio), sin pasar por la API."""
+    """Crea un usuario directo en la BD (forma de dominio), sin pasar por la API.
+
+    En estos tests un "admin" es la cuenta privilegiada que gestiona usuarios: nace
+    SUPERADMIN salvo que el test pida lo contrario (`superadmin=...`). Gestionar usuarios
+    (`/api/usuarios`) exige el flag superadmin; un admin normal recibe 403.
+    """
+    kw.setdefault("superadmin", rol == "admin")
     return auth.crear_usuario(usuario, password, rol, **kw)
 
 
@@ -457,6 +463,7 @@ def test_listar_usuarios_como_admin(entorno):
         assert set(u) == {
             "id", "usuario", "rol", "creado", "ultimo_acceso",
             "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id", "marcas",
+            "superadmin", "mfa_requerido", "mfa_activo",
         }
 
 
@@ -466,6 +473,62 @@ def test_editor_no_puede_listar_usuarios_403(entorno):
     _login(c, "ed", CLAVE)
     r = c.get("/api/usuarios")
     assert r.status_code == 403
+
+
+def test_admin_normal_no_gestiona_usuarios_403(entorno):
+    """Un admin SIN el flag superadmin NO entra a /api/usuarios (gestion = solo superadmin)."""
+    _crear("jefe", CLAVE, "admin", superadmin=False)
+    c = _cli()
+    _login(c, "jefe", CLAVE)
+    assert c.get("/api/usuarios").status_code == 403
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "x", "password": CLAVE, "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 403
+
+
+def test_superadmin_concede_flags_a_otra_cuenta(entorno):
+    """El superadmin marca a otra cuenta como superadmin y le exige MFA; el PATCH lo refleja
+    y la cuenta promovida ya puede gestionar usuarios."""
+    _crear("jefa", CLAVE, "admin")  # superadmin por defecto del helper
+    objetivo = _crear("leo", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{objetivo['id']}",
+        json={"superadmin": True, "mfa_requerido": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["superadmin"] is True and r.json()["mfa_requerido"] is True
+    c2 = _cli()
+    _login(c2, "leo", CLAVE)
+    assert c2.get("/api/usuarios").status_code == 200
+
+
+def test_no_se_puede_quitar_superadmin_al_ultimo(entorno):
+    """Guarda anti-lockout: no se quita el flag al ULTIMO superadmin (nadie gestionaria usuarios)."""
+    jefa = _crear("jefa", CLAVE, "admin")  # unico superadmin del entorno
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{jefa['id']}", json={"superadmin": False}, headers=_ORIGIN
+    )
+    assert r.status_code == 409
+
+
+def test_me_incluye_es_superadmin(entorno):
+    """`me` expone `es_superadmin` (bool plano): True solo con el flag, no por ser admin."""
+    _crear("jefa", CLAVE, "admin")  # superadmin
+    _crear("ed", CLAVE, "admin", superadmin=False)  # admin normal, sin gestion de usuarios
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    assert c.get("/api/auth/me").json()["usuario"]["es_superadmin"] is True
+    c2 = _cli()
+    _login(c2, "ed", CLAVE)
+    assert c2.get("/api/auth/me").json()["usuario"]["es_superadmin"] is False
 
 
 def test_crear_usuario_como_admin_201(entorno):

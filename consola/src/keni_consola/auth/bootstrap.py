@@ -70,7 +70,11 @@ def bootstrap_admin() -> None:
             _logger.warning(mensaje)
         return
 
-    creado = crear_usuario(usuario, password, ROL_ADMIN, debe_cambiar_password=True)
+    # El admin de bootstrap nace SUPERADMIN: es el unico capaz de entrar a Usuarios y dar de
+    # alta/gestionar al resto (sin esto, una BD recien arrancada no tendria quien administre).
+    creado = crear_usuario(
+        usuario, password, ROL_ADMIN, debe_cambiar_password=True, superadmin=True
+    )
     if creado is None:
         # Carrera improbable (otro proceso lo creo entre el check y el insert): no-op.
         return

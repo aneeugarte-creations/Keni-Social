@@ -43,6 +43,7 @@ BLOQUEO_MINUTOS = 5
 _COLUMNAS_USUARIO_PUBLICAS = (
     "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
     "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id", "mfa_activo",
+    "superadmin", "mfa_requerido",
 )
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
@@ -80,6 +81,9 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         # `mfa_activo` (segundo factor PASSKEYS): bool, = "tiene >=1 passkey". La UI lo usa
         # para mostrar el estado y el login para decidir si eleva. NUNCA salen claves ni recovery.
         "mfa_activo": bool(fila["mfa_activo"]),
+        # `superadmin`: gestiona usuarios. `mfa_requerido`: el admin le exige segundo factor.
+        "superadmin": bool(fila["superadmin"]),
+        "mfa_requerido": bool(fila["mfa_requerido"]),
         "marcas": marcas,
     }
 
@@ -178,6 +182,8 @@ def crear_usuario(
     puede_coordinar: bool = False,
     nombre: str = "",
     manager_id: str = "",
+    superadmin: bool = False,
+    mfa_requerido: bool = False,
     marcas: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
@@ -207,20 +213,22 @@ def crear_usuario(
         "puede_coordinar": bool(puede_coordinar),
         "nombre": nombre,
         "manager_id": manager_id,
+        "superadmin": 1 if superadmin else 0,
+        "mfa_requerido": 1 if mfa_requerido else 0,
     }
     con = db.conectar()
     try:
         con.execute(
             "INSERT INTO usuarios (id, usuario, rol, salt, hash, debe_cambiar_password, "
             "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-            "puede_coordinar, nombre, manager_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "puede_coordinar, nombre, manager_id, superadmin, mfa_requerido) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo["id"], nuevo["usuario"], nuevo["rol"], nuevo["salt"], nuevo["hash"],
                 nuevo["debe_cambiar_password"], nuevo["intentos_fallidos"],
                 nuevo["bloqueo_hasta"], nuevo["creado"], nuevo["ultimo_acceso"],
                 nuevo["cargo"], nuevo["cobertura"], nuevo["puede_coordinar"],
-                nuevo["nombre"], nuevo["manager_id"],
+                nuevo["nombre"], nuevo["manager_id"], nuevo["superadmin"], nuevo["mfa_requerido"],
             ),
         )
         # Marcas del organigrama (N:M): crearlas en la misma conexion para que el
@@ -248,8 +256,10 @@ def crear_usuario(
         "puede_coordinar": bool(nuevo["puede_coordinar"]),
         "nombre": nuevo["nombre"],
         "manager_id": nuevo["manager_id"],
-        # Un usuario nuevo nace SIN segundo factor: lo enrola luego desde "Mi cuenta".
+        # Un usuario nuevo nace SIN segundo factor: lo enrola en el login si se le exige.
         "mfa_activo": False,
+        "superadmin": bool(nuevo["superadmin"]),
+        "mfa_requerido": bool(nuevo["mfa_requerido"]),
         "marcas": marcas_norm,
     }
 
@@ -295,10 +305,12 @@ def actualizar_perfil(
     puede_coordinar: bool | None = None,
     nombre: str | None = None,
     manager_id: str | None = None,
+    superadmin: bool | None = None,
+    mfa_requerido: bool | None = None,
     marcas: list[str] | None = None,
 ) -> bool:
-    """Actualiza `cargo`, `cobertura`, `puede_coordinar`, `nombre`, `manager_id` y/o
-    `marcas`; True si existia.
+    """Actualiza `cargo`, `cobertura`, `puede_coordinar`, `nombre`, `manager_id`,
+    `superadmin`, `mfa_requerido` y/o `marcas`; True si existia.
 
     NO aplica guardas (lo hace la API contra `CARGOS_USUARIO`, el catalogo de marcas y la
     validacion del organigrama: superior existente, distinto de uno mismo y sin ciclos).
@@ -325,6 +337,12 @@ def actualizar_perfil(
     if manager_id is not None:
         campos.append("manager_id = ?")
         valores.append(manager_id)
+    if superadmin is not None:
+        campos.append("superadmin = ?")
+        valores.append(1 if superadmin else 0)
+    if mfa_requerido is not None:
+        campos.append("mfa_requerido = ?")
+        valores.append(1 if mfa_requerido else 0)
     # Sin campos directos ni marcas -> simple existencia.
     if not campos and marcas is None:
         return obtener_usuario_por_id(usuario_id) is not None
@@ -356,7 +374,7 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
         "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-        "puede_coordinar, nombre, manager_id, mfa_activo "
+        "puede_coordinar, nombre, manager_id, mfa_activo, superadmin, mfa_requerido "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -373,6 +391,18 @@ def contar_admins() -> int:
     try:
         fila = con.execute(
             "SELECT COUNT(*) AS n FROM usuarios WHERE rol = ?", (ROL_ADMIN,)
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def contar_superadmins() -> int:
+    """Numero de superadmins (para la guarda 'no te quedes sin quien gestione usuarios')."""
+    con = db.conectar()
+    try:
+        fila = con.execute(
+            "SELECT COUNT(*) AS n FROM usuarios WHERE superadmin = 1"
         ).fetchone()
     finally:
         con.close()
@@ -523,8 +553,12 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "puede_coordinar": bool(fila["puede_coordinar"]),
             "nombre": fila["nombre"],
             "manager_id": fila["manager_id"],
-            # Para que el login decida si ELEVA al segundo factor (passkey) tras la contrasena.
+            # Para que el login decida si ELEVA al segundo factor (passkey) tras la contrasena,
+            # o si lo FUERZA a inscribir una llave (`mfa_requerido`). `superadmin` viaja por
+            # consistencia con la forma publica.
             "mfa_activo": bool(fila["mfa_activo"]),
+            "superadmin": bool(fila["superadmin"]),
+            "mfa_requerido": bool(fila["mfa_requerido"]),
             "marcas": marcas,
         }
     finally:

@@ -72,6 +72,21 @@ def es_admin(request: Request) -> bool:
     return usuario.get("rol") == ROL_ADMIN
 
 
+def es_superadmin(request: Request) -> bool:
+    """True SOLO si la sesion es de un usuario real con el flag `superadmin`.
+
+    El superadmin es el UNICO que gestiona usuarios (`/api/usuarios`): es ortogonal al `rol`
+    (sigue siendo admin/editor y conserva todos los poderes de admin via `es_admin`), pero el
+    flag AÑADE el acceso a Usuarios. Un admin normal (sin flag) NO entra. ESTRICTO igual que
+    `es_admin`: el token de mantenimiento (sin usuario de sesion) NO es superadmin. El flag se
+    arrastra en la sesion (`auth.sesiones.sesion_valida`).
+    """
+    usuario = getattr(request.state, "usuario", None)
+    if not isinstance(usuario, dict):
+        return False
+    return bool(usuario.get("superadmin"))
+
+
 def rechazo_solo_admin(mensaje: str = MSG_SOLO_ADMIN) -> Response:
     """Respuesta 403 estandar (`{"error": ...}`) para un acceso que exige rol admin."""
     return JSONResponse({"error": mensaje}, status_code=403)

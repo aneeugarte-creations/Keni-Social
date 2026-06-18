@@ -33,7 +33,6 @@ from starlette.routing import Route
 
 from .. import auth, config, permisos, seguridad
 from .._http_json import leer_json
-from ..estados import ROL_ADMIN
 from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -311,9 +310,9 @@ def _respuesta_sesion_creada(
 ) -> Response:
     """Crea la sesion real, establece su cookie y borra la pre-auth; devuelve la respuesta 200.
 
-    `debe_inscribir_mfa` (flujo de GRACIA): True cuando es un admin OBLIGADO a tener segundo
-    factor que aun NO tiene passkey. NO bloqueamos el login (no hay lockout): abrimos la sesion
-    pero marcamos al cliente para que la UI lo lleve a inscribir una llave de acceso ya.
+    `debe_inscribir_mfa` (flujo de GRACIA): True cuando a esta persona el admin le EXIGE
+    segundo factor (`mfa_requerido`) y aun NO tiene passkey. NO bloqueamos el login (no hay
+    lockout): abrimos la sesion pero marcamos al cliente para que la UI FUERCE la inscripcion.
     """
     token = auth.crear_sesion(usuario_id)
     cuerpo = {
@@ -352,18 +351,15 @@ def _elevar_a_segundo_factor(autenticado: dict) -> Response:
     return resp
 
 
-def _mfa_admin_aplica(autenticado: dict) -> bool:
-    """True si a ESTE usuario le aplica el MFA OBLIGATORIO de admin Y la maquinaria puede operar.
+def _mfa_requerido_a(autenticado: dict) -> bool:
+    """True si a ESTE usuario se le EXIGE segundo factor Y la maquinaria puede operar.
 
-    Es admin + `KENI_CONSOLA_MFA_ADMIN` (def ON) + hay clave de firma. La condicion de la clave
-    es la red de seguridad ANTI-LOCKOUT: sin clave no se puede correr la ceremonia ni la
-    inscripcion, asi que NO forzamos nada (el admin entra como hoy). NO afecta a editores.
+    Per-usuario: el admin marca `mfa_requerido` desde Usuarios + hay clave de firma. La
+    condicion de la clave es la red ANTI-LOCKOUT: sin clave no se puede correr la ceremonia ni
+    la inscripcion, asi que NO forzamos nada (entra como hoy). El rol es irrelevante: el
+    requisito es por persona, lo gestiona el admin.
     """
-    return (
-        autenticado.get("rol") == ROL_ADMIN
-        and seguridad.mfa_obligatorio_admin()
-        and seguridad.mfa_key_presente()
-    )
+    return bool(autenticado.get("mfa_requerido")) and seguridad.mfa_key_presente()
 
 
 def _mfa_enrolamiento_disponible(usuario: dict | None) -> bool:
@@ -406,23 +402,22 @@ async def login(request: Request) -> Response:
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
     # ¿Hay que EXIGIR el segundo factor a este usuario?
-    #   - OPT-IN POR USUARIO: si la maquinaria esta activa (hay clave) y el usuario YA tiene
-    #     passkey -> ceremonia. Da igual su rol o el flag global: quien activo su MFA, lo usa.
-    #   - MFA OBLIGATORIO DE ADMIN (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave: un admin SIN
-    #     passkey entra en GRACIA (sesion marcada para inscribir, sin bloquear el login). La
-    #     condicion de la clave es la red anti-lockout: sin clave no se fuerza ni se eleva nada.
-    # Sin maquinaria (sin clave): ambas ramas se saltan -> sesion directa, INTACTO.
+    #   - Si la maquinaria esta activa (hay clave) y el usuario YA tiene passkey -> ceremonia.
+    #   - EXIGIDO POR EL ADMIN (`mfa_requerido`) + hay clave: si aun NO tiene passkey, entra en
+    #     GRACIA (sesion marcada `debe_inscribir_mfa`); el frontend lo fuerza a inscribir una
+    #     llave antes de usar la consola. La clave es la red anti-lockout: sin clave no se eleva
+    #     ni se fuerza nada. Sin maquinaria (sin clave): sesion directa, INTACTO.
     mfa_activo = bool(autenticado.get("mfa_activo"))
-    admin_aplica = _mfa_admin_aplica(autenticado)
+    requiere_mfa = _mfa_requerido_a(autenticado)
 
     if mfa_activo and seguridad.mfa_maquinaria_activa():
         return _elevar_a_segundo_factor(autenticado)
 
-    if admin_aplica and not mfa_activo:
-        # GRACIA: admin obligado a MFA pero aun SIN passkey. No lo bloqueamos: abrimos sesion
-        # y marcamos `debe_inscribir_mfa` para que la UI lo lleve a inscribir una llave ya.
+    if requiere_mfa and not mfa_activo:
+        # GRACIA: se le exige MFA pero aun SIN passkey. No bloqueamos el login: abrimos sesion
+        # y marcamos `debe_inscribir_mfa` para que la UI lo fuerce a inscribir una llave ya.
         _logger.info(
-            "Admin sin passkey entra en modo gracia (debe inscribir MFA). usuario=%s",
+            "Usuario con MFA exigido y sin passkey entra en gracia (debe inscribir). usuario=%s",
             autenticado["usuario"],
         )
         return _respuesta_sesion_creada(
@@ -461,12 +456,11 @@ async def me(request: Request) -> Response:
     # de la rota las usan para saber a que verticales pertenece la persona.
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
     mfa_activo = bool(refrescado.get("mfa_activo"))
-    # `debe_inscribir_mfa`: admin OBLIGADO a segundo factor (def ON) que aun no tiene passkey y
-    # con la maquinaria operativa (hay clave). La UI lo usa para empujar la inscripcion. No es
-    # un bloqueo de API (no lockout): es el "forzado" a nivel de experiencia.
+    # `debe_inscribir_mfa`: a esta persona el admin le EXIGE segundo factor (`mfa_requerido`),
+    # la maquinaria opera (hay clave) y aun no tiene passkey. El frontend lo usa para FORZAR el
+    # enrolamiento en el login (pantalla obligatoria) antes de dejar usar la consola.
     debe_inscribir_mfa = (
-        usuario["rol"] == ROL_ADMIN
-        and seguridad.mfa_obligatorio_admin()
+        bool(refrescado.get("mfa_requerido"))
         and seguridad.mfa_key_presente()
         and not mfa_activo
     )
@@ -480,6 +474,9 @@ async def me(request: Request) -> Response:
                 # gatee acciones de admin (publicar a producción, aprobar solicitudes) sin
                 # re-derivar el rol. Fuente única: `permisos.es_admin`.
                 "es_admin": permisos.es_admin(request),
+                # `es_superadmin`: UNICO con acceso a Usuarios (gestion de cuentas). Un admin
+                # normal NO. El frontend gatea el panel y el enlace del menu con esto.
+                "es_superadmin": permisos.es_superadmin(request),
                 "debe_cambiar_password": usuario["debe_cambiar_password"],
                 "creado": usuario.get("creado", ""),
                 "ultimo_acceso": usuario.get("ultimo_acceso", ""),

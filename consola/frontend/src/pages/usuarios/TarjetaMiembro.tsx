@@ -88,6 +88,11 @@ export function TarjetaMiembro({
             Admin
           </Badge>
         )}
+        {usuario.superadmin && (
+          <Badge variant="default" className="h-5 shrink-0 px-1.5 text-[10px] font-medium">
+            Superadmin
+          </Badge>
+        )}
       </span>
     </button>
   );

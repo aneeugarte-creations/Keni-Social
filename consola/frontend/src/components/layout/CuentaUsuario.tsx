@@ -22,6 +22,8 @@ interface OpcionMenu {
   icono: typeof UserCog;
   /** Si es `true`, solo se muestra para el rol admin. */
   soloAdmin?: boolean;
+  /** Si es `true`, solo se muestra para superadmin (gestión de usuarios). */
+  soloSuperadmin?: boolean;
 }
 
 /**
@@ -32,14 +34,14 @@ const OPCIONES: OpcionMenu[] = [
   { ruta: "/sugerencias", etiqueta: "Feedback", icono: Lightbulb },
   { ruta: "/webhooks", etiqueta: "Webhooks", icono: Webhook, soloAdmin: true },
   { ruta: "/marcas", etiqueta: "Marcas", icono: LayoutGrid, soloAdmin: true },
-  { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloAdmin: true },
+  { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloSuperadmin: true },
   { ruta: "/sistema", etiqueta: "Sistema", icono: ServerCog, soloAdmin: true },
 ];
 
 /**
  * Bloque de cuenta del sidebar (estilo selector de cuenta de Vercel): avatar con
  * degradado, nombre del usuario actual y su rol. Al pulsarlo abre un menú con
- * los Ajustes (Mi cuenta, Configuración, Sugerencias y -para admin- Usuarios)
+ * los Ajustes (Mi cuenta, Sugerencias, opciones de admin y -solo superadmin- Usuarios)
  * y la acción "Cerrar sesión" (POST /api/auth/logout → vuelve al login). El
  * usuario sale del contexto de sesión; si todavía no hay (carga), no pinta nada.
  *
@@ -86,7 +88,11 @@ export function CuentaUsuario({
     // No reseteamos `cerrando`: la pantalla de login reemplaza este árbol.
   }
 
-  const opcionesVisibles = OPCIONES.filter((o) => !o.soloAdmin || usuario.rol === "admin");
+  const esSuperadmin = usuario.es_superadmin === true;
+  const opcionesVisibles = OPCIONES.filter(
+    (o) =>
+      (!o.soloAdmin || usuario.rol === "admin") && (!o.soloSuperadmin || esSuperadmin),
+  );
   // Nombre humano si lo tiene; si no, el login.
   const nombreMostrar = usuario.nombre?.trim() || usuario.usuario;
 

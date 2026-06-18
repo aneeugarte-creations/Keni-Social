@@ -60,7 +60,7 @@ def test_cambiar_password_invalida_otras_sesiones_y_reemite_la_actual(entorno):
 
 
 def test_reset_de_admin_expulsa_la_sesion_del_objetivo(entorno):
-    auth.crear_usuario("jefa", CLAVE, "admin")
+    auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)
     auth.crear_usuario("leo", CLAVE, "editor")
     ce = _cli()
     assert _login(ce, "leo", CLAVE).status_code == 200
@@ -82,7 +82,7 @@ def test_reset_de_admin_expulsa_la_sesion_del_objetivo(entorno):
 
 
 def test_debe_cambiar_password_bloquea_otras_rutas_en_el_servidor(entorno):
-    auth.crear_usuario("nueva", CLAVE, "admin", debe_cambiar_password=True)
+    auth.crear_usuario("nueva", CLAVE, "admin", debe_cambiar_password=True, superadmin=True)
     c = _cli()
     assert _login(c, "nueva", CLAVE).status_code == 200
 
@@ -125,9 +125,9 @@ def test_login_rechaza_password_gigante_sin_hashear(entorno):
 
 
 def test_crear_usuario_rechaza_password_y_nombre_gigantes(entorno):
-    # #150: la gestion de usuarios exige un admin REAL (el token ya no es admin), asi que
-    # creamos un admin y entramos por sesion para probar la validacion de tamano.
-    auth.crear_usuario("jefa", CLAVE, "admin")
+    # #150: la gestion de usuarios exige un superadmin REAL (el token ya no es admin), asi que
+    # creamos un superadmin y entramos por sesion para probar la validacion de tamano.
+    auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)
     c = _cli()
     assert _login(c, "jefa", CLAVE).status_code == 200
     larga = "x" * (auth.LONGITUD_MAX_PASSWORD + 1)

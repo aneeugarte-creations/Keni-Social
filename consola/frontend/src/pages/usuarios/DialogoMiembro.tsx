@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
 import {
   descendientes,
@@ -363,6 +364,47 @@ export function DialogoMiembro({
               />
               Puede coordinar
             </label>
+          </div>
+
+          {/* Seguridad y permisos: acceso de superadmin y exigencia de segundo factor. */}
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-sm font-medium">Seguridad y permisos</p>
+
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="m-superadmin" className="text-sm font-normal">
+                  Superadmin
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Único rol que puede gestionar usuarios.
+                </p>
+              </div>
+              <Switch
+                id="m-superadmin"
+                aria-label="Superadmin"
+                checked={Boolean(usuario.superadmin)}
+                onCheckedChange={(v) => guardar.mutate({ superadmin: v })}
+              />
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="m-mfa-requerido" className="text-sm font-normal">
+                  Requerir verificación en dos pasos (MFA)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {usuario.mfa_activo ? "Llave registrada." : "Sin llave aún."}
+                  {" "}
+                  Si se exige y no tiene llave, deberá inscribir una al iniciar sesión.
+                </p>
+              </div>
+              <Switch
+                id="m-mfa-requerido"
+                aria-label="Requerir verificación en dos pasos"
+                checked={Boolean(usuario.mfa_requerido)}
+                onCheckedChange={(v) => guardar.mutate({ mfa_requerido: v })}
+              />
+            </div>
           </div>
 
           <p className="text-xs text-muted-foreground">

@@ -119,7 +119,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
         --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
         mfa_activo             INTEGER NOT NULL DEFAULT 0,
-        mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]'
+        mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]',
+        -- `superadmin`: 1 = gestiona usuarios (`/api/usuarios`). Ortogonal al `rol`: un
+        -- superadmin conserva los poderes de admin y ademas entra a Usuarios; un admin
+        -- normal NO. `mfa_requerido`: 1 = el admin exige segundo factor a esta persona
+        -- (su login fuerza el enrolamiento si aun no tiene passkey).
+        superadmin             INTEGER NOT NULL DEFAULT 0,
+        mfa_requerido          INTEGER NOT NULL DEFAULT 0
     )
     """,
     # Passkeys (WebAuthn/FIDO2): una credencial publica por dispositivo enrolado. Un usuario

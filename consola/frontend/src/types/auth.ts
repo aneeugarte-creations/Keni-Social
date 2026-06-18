@@ -150,6 +150,11 @@ export interface UsuarioSesion {
    * cae al rol clásico (`rol === "admin"`). Ver `useEsAdmin`.
    */
   es_admin?: boolean;
+  /**
+   * `true` => SUPERADMIN: único rol que puede gestionar usuarios (`/api/usuarios`). El enlace
+   * del menú y la página de Usuarios se gatean por este flag; un admin normal no los ve.
+   */
+  es_superadmin?: boolean;
 }
 
 /** Respuesta de `POST /api/auth/login` cuando el usuario necesita el segundo factor (MFA). */
@@ -240,6 +245,12 @@ export interface UsuarioAdmin {
    * Siempre llega (lista vacía si no tiene marcas asignadas). Ola `feat/roles-marcas`.
    */
   marcas?: string[];
+  /** `true` => SUPERADMIN: puede gestionar usuarios (concede/quita el acceso a `/api/usuarios`). */
+  superadmin?: boolean;
+  /** `true` => el admin le EXIGE segundo factor: deberá inscribir una passkey en el login. */
+  mfa_requerido?: boolean;
+  /** `true` => esta cuenta ya tiene ≥1 llave de acceso registrada. */
+  mfa_activo?: boolean;
 }
 
 /** Respuesta de `GET /api/usuarios`: el backend envuelve la lista en `{ usuarios }`. */
@@ -254,6 +265,10 @@ export interface CuerpoCrearUsuario {
   rol: RolUsuario;
   /** Nombre humano opcional (organigrama). Si se omite, queda vacío. */
   nombre?: string;
+  /** `true` => alta como SUPERADMIN (acceso a gestionar usuarios). */
+  superadmin?: boolean;
+  /** `true` => exige segundo factor: deberá inscribir una passkey en su primer login. */
+  mfa_requerido?: boolean;
 }
 
 /**
@@ -283,4 +298,11 @@ export interface CuerpoActualizarUsuario {
   marcas?: string[];
   /** Resetea la verificación en dos pasos: borra todas las passkeys y códigos de recuperación. */
   mfa_reset?: boolean;
+  /**
+   * Concede o quita SUPERADMIN (acceso a gestionar usuarios). 409 si intentas quitárselo al
+   * último superadmin.
+   */
+  superadmin?: boolean;
+  /** Exige (o deja de exigir) segundo factor a la persona. */
+  mfa_requerido?: boolean;
 }

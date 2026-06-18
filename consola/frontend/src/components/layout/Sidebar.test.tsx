@@ -145,9 +145,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function valorSesion(rol: RolUsuario): ValorSesion {
+function valorSesion(rol: RolUsuario, esSuperadmin = false): ValorSesion {
   return {
-    usuario: { id: "u1", usuario: "x", rol, debe_cambiar_password: false },
+    usuario: { id: "u1", usuario: "x", rol, debe_cambiar_password: false, es_superadmin: esSuperadmin },
     cargando: false,
     iniciarSesion: async () => ({ mfaRequerido: false }),
     verificarConPasskey: async () => {},
@@ -207,9 +207,9 @@ function renderSidebar(
 }
 
 /** Render del menú del avatar (donde ahora viven los ajustes). */
-function renderAvatarMenu(rol: RolUsuario) {
+function renderAvatarMenu(rol: RolUsuario, esSuperadmin = false) {
   return render(
-    <SesionContexto.Provider value={valorSesion(rol)}>
+    <SesionContexto.Provider value={valorSesion(rol, esSuperadmin)}>
       <MemoryRouter>
         <CuentaUsuario />
       </MemoryRouter>
@@ -373,10 +373,16 @@ describe("apps-scope · helpers", () => {
 });
 
 describe("Avatar · visibilidad de Usuarios por rol", () => {
-  it("muestra 'Usuarios' al abrir el menú cuando el rol es admin", () => {
-    renderAvatarMenu("admin");
+  it("muestra 'Usuarios' al abrir el menú cuando es superadmin", () => {
+    renderAvatarMenu("admin", true);
     fireEvent.click(screen.getByRole("button", { name: /x.*administrador/i }));
     expect(screen.getByRole("menuitem", { name: /usuarios/i })).toBeInTheDocument();
+  });
+
+  it("oculta 'Usuarios' del menú a un admin normal (sin superadmin)", () => {
+    renderAvatarMenu("admin");
+    fireEvent.click(screen.getByRole("button", { name: /x.*administrador/i }));
+    expect(screen.queryByRole("menuitem", { name: /usuarios/i })).not.toBeInTheDocument();
   });
 
   it("oculta 'Usuarios' del menú cuando el rol es editor", () => {

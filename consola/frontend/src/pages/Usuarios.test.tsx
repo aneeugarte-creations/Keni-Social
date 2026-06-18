@@ -7,7 +7,13 @@ import { SesionProvider } from "@/hooks/use-sesion";
 
 import Usuarios from "./Usuarios";
 
-const ADMIN = { id: "u0", usuario: "admin", rol: "admin", debe_cambiar_password: false };
+const ADMIN = {
+  id: "u0",
+  usuario: "admin",
+  rol: "admin",
+  debe_cambiar_password: false,
+  es_superadmin: true,
+};
 
 const USUARIOS = [
   {
@@ -60,9 +66,9 @@ interface Captura {
  * (200 con la lista, o 403 para el caso "sin permiso").
  */
 function stubFetch(
-  opciones: { usuariosStatus?: number; capturas?: Captura[]; debeInscribirMfa?: boolean } = {},
+  opciones: { usuariosStatus?: number; capturas?: Captura[]; esSuperadmin?: boolean } = {},
 ) {
-  const { usuariosStatus = 200, capturas = [], debeInscribirMfa = false } = opciones;
+  const { usuariosStatus = 200, capturas = [], esSuperadmin = true } = opciones;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -73,7 +79,7 @@ function stubFetch(
 
       if (ruta.includes("/api/auth/me")) {
         return new Response(
-          JSON.stringify({ usuario: { ...ADMIN, debe_inscribir_mfa: debeInscribirMfa } }),
+          JSON.stringify({ usuario: { ...ADMIN, es_superadmin: esSuperadmin } }),
           { status: 200 },
         );
       }
@@ -262,18 +268,11 @@ describe("Usuarios · administración", () => {
     ).toBeDisabled();
   });
 
-  it("bloquea la gestión si el admin debe inscribir una llave de acceso", async () => {
-    stubFetch({ debeInscribirMfa: true });
+  it("niega el acceso a quien no es superadmin (sin listar ni Nueva persona)", async () => {
+    stubFetch({ esSuperadmin: false });
     renderUsuarios();
 
-    // Muestra la puerta con CTA a "Mi cuenta" y oculta el organigrama y "Nueva persona".
-    expect(
-      await screen.findByText(/inscribe una llave de acceso para administrar usuarios/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ir a mi cuenta/i })).toHaveAttribute(
-      "href",
-      "/mi-cuenta",
-    );
+    expect(await screen.findByText("No tienes permiso")).toBeInTheDocument();
     expect(screen.queryByText("Ana López")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Acciones" })).not.toBeInTheDocument();
   });
