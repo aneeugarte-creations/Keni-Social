@@ -91,51 +91,56 @@ function AnadirRapido({ marca }: { marca: string }) {
   return (
     <form
       onSubmit={enviar}
-      className="flex items-center gap-1.5 rounded-lg border border-border bg-card p-1.5 shadow-sm"
+      className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card p-1.5 shadow-sm"
     >
-      {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. */}
+      {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. En móvil
+          ocupa toda la fila (los controles bajan debajo) para no asfixiarse a 3-4 letras. */}
       <Input
         value={titulo}
         onChange={(e) => setTitulo(e.target.value)}
         placeholder="¿Qué hay que cubrir?"
         aria-label="¿Qué hay que cubrir?"
-        className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
+        className="w-full min-w-0 border-0 bg-transparent shadow-none focus-visible:ring-0 sm:flex-1"
       />
-      <Input
-        type="time"
-        value={hora}
-        onChange={(e) => setHora(e.target.value)}
-        aria-label="Hora (opcional)"
-        className="w-[7rem] shrink-0 border-0 bg-transparent shadow-none focus-visible:ring-0"
-      />
-      {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en rojo sutil. */}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className={cn(
-          "shrink-0",
-          urgente && "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
-        )}
-        aria-label="Urgente"
-        aria-pressed={urgente}
-        title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
-        onClick={() => setUrgente((v) => !v)}
-      >
-        <Zap className="mr-1 h-4 w-4" />
-        Urgente
-      </Button>
-      <Button
-        type="submit"
-        variant="outline"
-        size="sm"
-        className="shrink-0"
-        aria-label="Añadir a Por cubrir"
-        disabled={!titulo.trim() || crear.isPending}
-      >
-        <Plus className="mr-1 h-4 w-4" />
-        {crear.isPending ? "Añadiendo…" : "Añadir"}
-      </Button>
+      {/* Hora + acciones: su propia fila en móvil (`w-full`), comparten fila con el campo en sm+. */}
+      <div className="flex w-full items-center gap-1.5 sm:w-auto">
+        <Input
+          type="time"
+          value={hora}
+          onChange={(e) => setHora(e.target.value)}
+          aria-label="Hora (opcional)"
+          className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 sm:w-[7rem] sm:flex-none"
+        />
+        {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en rojo sutil.
+            El texto se oculta en móvil (queda el icono) para no apretar la fila de acciones. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            "shrink-0",
+            urgente && "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+          )}
+          aria-label="Urgente"
+          aria-pressed={urgente}
+          title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
+          onClick={() => setUrgente((v) => !v)}
+        >
+          <Zap className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">Urgente</span>
+        </Button>
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          aria-label="Añadir a Por cubrir"
+          disabled={!titulo.trim() || crear.isPending}
+        >
+          <Plus className="h-4 w-4 sm:mr-1" />
+          <span className="hidden sm:inline">{crear.isPending ? "Añadiendo…" : "Añadir"}</span>
+        </Button>
+      </div>
     </form>
   );
 }
