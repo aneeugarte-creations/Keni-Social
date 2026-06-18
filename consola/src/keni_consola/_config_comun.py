@@ -81,6 +81,18 @@ ENV_CONTROL_PORT = "KENI_CONTROL_PORT"
 # `http://daemons:8770`.
 ENV_CONTROL_URL = "KENI_CONTROL_URL"
 
+# Agentes Ralph (sesiones `claude` PERSISTENTES multi-turno en el servicio worker-ralph).
+# Solo worker-ralph (imagen del worker, con `claude`) levanta el listener; el `back` lo
+# alcanza por la red interna con el bearer compartido y lo proxea (admin-gated).
+#   - KENI_RALPH_URL: URL base con que el `back` alcanza el listener (def `http://worker-ralph:8771`).
+#   - KENI_RALPH_PORT: puerto del listener (interno, nunca por Traefik). Def 8771.
+#   - KENI_MAX_RALPH: tope de Ralphs vivos a la vez (pool de nombres). Def 8.
+#   - KENI_DEV_REPO: clon git del repo sobre el que cada Ralph crea su worktree+rama. Def `/repo`.
+ENV_RALPH_URL = "KENI_RALPH_URL"
+ENV_RALPH_PORT = "KENI_RALPH_PORT"
+ENV_MAX_RALPH = "KENI_MAX_RALPH"
+ENV_DEV_REPO = "KENI_DEV_REPO"
+
 # Observabilidad.
 ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 
@@ -514,6 +526,10 @@ SESION_MAX_HORAS_DEF = 720
 ADMIN_USER_DEF = "admin"
 LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
+# Agentes Ralph: puerto del listener de worker-ralph, tope de Ralphs vivos y clon git base.
+RALPH_PORT_DEF = 8771
+MAX_RALPH_DEF = 8
+DEV_REPO_DEF = "/repo"
 # Pool Postgres: arranca pequeño (la mayoria de ops son cortas) y crece hasta el MAX. El MAX
 # (12) cubre con holgura los ~4 `lock_barrido` simultaneos (cada uno retiene una conexion
 # entera) + las leases por request del threadpool del back + los daemons. Subir si Postgres

@@ -919,3 +919,40 @@ export interface RespuestaCuentaAccion {
   mensaje?: string;
   salida?: string;
 }
+
+// ── Proveedor GitHub (panel admin: auth de `gh` del servidor, gemelo de la cuenta de Claude) ──
+//
+// El motor de auto-desarrollo empuja a GitHub con la credencial `gh` del servidor (volumen
+// compartido `/data/gh`). Esta sección la gestiona desde el panel: estado de la sesión y
+// conectar/desconectar vía device flow de `gh` (one-time code + URL; gh hace polling solo, no
+// hay que pegar el código de vuelta). El back proxea al control del proceso `daemons`; ver
+// `api/sistema/github.py`.
+
+/** Estado de autenticación de `gh` (`gh auth status`). */
+export interface GithubAuth {
+  /** ¿Hay sesión iniciada? */
+  logueado: boolean;
+  /** Usuario de GitHub conectado, si lo hay. */
+  usuario?: string | null;
+  /** Scopes del token (`gh auth status` los lista). */
+  scopes?: string[];
+}
+
+/** Respuesta de `GET /api/sistema/github`. */
+export interface RespuestaGithub {
+  /** `false` si la gestión de GitHub no está configurada en este servidor. */
+  disponible: boolean;
+  auth: GithubAuth;
+}
+
+/** Respuesta de `POST /api/sistema/github/login/iniciar` (device flow de `gh`). */
+export interface RespuestaGithubLoginIniciar {
+  /** Id de la sesión de login viva (se pasa a confirmar/cancelar). */
+  sesion: string;
+  /** One-time code que el usuario teclea en GitHub. */
+  codigo: string;
+  /** URL a abrir para introducir el código (https://github.com/login/device). */
+  url: string;
+  /** Salida capturada del CLI (diagnóstico). */
+  salida: string;
+}

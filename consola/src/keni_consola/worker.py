@@ -392,7 +392,10 @@ def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None 
         prioridad_minima = jobspec.PRIORIDAD_MANUAL if solo_manual else None
         try:
             job = cola.reclamar(
-                worker_id, prioridad_minima=prioridad_minima, solo_proceso=solo_proceso
+                worker_id,
+                prioridad_minima=prioridad_minima,
+                solo_proceso=solo_proceso,
+                carriles={jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO},
             )
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
             _log.exception("worker: fallo al reclamar un job de la cola")

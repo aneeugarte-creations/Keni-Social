@@ -110,6 +110,21 @@ PROC_IMAGEN = "imagen"
 # aqui; si lo esta, despacha al ejecutor; si no, sigue el camino `claude` de siempre.
 KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_IMAGEN})
 
+# ------------------------------------------------------------------------------------------- #
+# Jobs de AUTO-DESARROLLO (carril `dev`): los reclama SOLO `worker_dev`, no el worker de        #
+# contenido. Corren `claude -p` SIN sandbox sobre un clon git del repo (worktree por           #
+# sugerencia). DISCOVERY genera el SPEC (wizard L1); FASE ejecuta una etapa del pipeline L2     #
+# (analyze|plan|build|review). El post-procesado actualiza la fila `sugerencias`.               #
+PROC_DEV_DISCOVERY = "dev-discovery"
+PROC_DEV_FASE = "dev-fase"
+
+# CARRILES de la cola: separan POOLS de workers. `inferencia` (def) y `proceso` (CPU-bound,
+# render/ASR) los reclama el worker de contenido; `dev` lo reclama SOLO `worker_dev` (no
+# sandbox). El carril viaja a NIVEL RAIZ del spec (`spec["carril"]`) o se DERIVA (ver `carril`).
+CARRIL_INFERENCIA = "inferencia"
+CARRIL_PROCESO = "proceso"
+CARRIL_DEV = "dev"
+
 # Registro de EJECUTORES por kind de proceso. Valor = "modulo:funcion" (path importable),
 # resuelto por import PEREZOSO en `resolver_ejecutor_proceso` (asi `jobspec` no importa los
 # motores al cargar: el back/CI no necesita ffmpeg/whisper para importar este modulo). Cada
@@ -132,6 +147,27 @@ def es_kind_proceso(spec: dict[str, Any]) -> bool:
     (ese es el post-procesado del camino claude). El worker usa esto para elegir el dispatch.
     """
     return isinstance(spec, dict) and spec.get("kind") in KINDS_PROCESO
+
+
+def carril(spec: dict[str, Any]) -> str:
+    """Carril de cola del spec: qué POOL de workers puede reclamarlo.
+
+    - Si el spec trae un `carril` EXPLICITO a nivel raiz (lo ponen los jobs de desarrollo:
+      `carril="dev"`), se respeta tal cual.
+    - Si no, se DERIVA: un job de PROCESO (kind raiz en `KINDS_PROCESO`) es `proceso`; el
+      resto (jobs `claude` de contenido) es `inferencia`.
+
+    Asi `worker_dev` reclama solo `dev` y el worker de contenido reclama `inferencia`+`proceso`
+    (excluyendo `dev`), sin que un job de desarrollo nunca caiga en el pool de contenido.
+    """
+    if not isinstance(spec, dict):
+        return CARRIL_INFERENCIA
+    explicito = spec.get("carril")
+    if isinstance(explicito, str) and explicito:
+        return explicito
+    if spec.get("kind") in KINDS_PROCESO:
+        return CARRIL_PROCESO
+    return CARRIL_INFERENCIA
 
 
 def resolver_ejecutor_proceso(kind: str):  # noqa: ANN201 -- Callable[[str, dict], None]
@@ -377,6 +413,34 @@ def construir_sugerir_hashtags(*, publicacion_id: str) -> dict[str, Any]:
     return {"kind": PROC_SUGERIR_HASHTAGS, "publicacion_id": publicacion_id}
 
 
+def construir_dev_discovery(*, sugerencia_id: str) -> dict[str, Any]:
+    """Spec del post-procesado del DISCOVERY (wizard L1): genera el SPEC y estima complejidad.
+
+    `sugerencia_id` es la fila `sugerencias` a actualizar. El worker corre `claude -p` (SIN
+    sandbox) sobre el clon del repo; el post-procesado parsea la salida (SPEC markdown +
+    complejidad) y deja la sugerencia en `en_cola` lista para construir.
+    """
+    return {"kind": PROC_DEV_DISCOVERY, "sugerencia_id": sugerencia_id}
+
+
+def construir_dev_fase(
+    *, sugerencia_id: str, fase: str, modelo: str = ""
+) -> dict[str, Any]:
+    """Spec del post-procesado de UNA fase del pipeline de desarrollo (analyze|plan|build|review).
+
+    `sugerencia_id` es la fila a actualizar; `fase` la etapa que se ejecuta; `modelo` el modelo
+    de `claude` para ESE run (sonnet en analyze/plan/review, opus en build; lo decide
+    `dominio.desarrollo.modelo_de`). El worker lee `modelo` para pasar `--model`. El
+    post-procesado parsea la salida (plan / resumen de diff) y actualiza la fila.
+    """
+    return {
+        "kind": PROC_DEV_FASE,
+        "sugerencia_id": sugerencia_id,
+        "fase": fase,
+        "modelo": modelo or "",
+    }
+
+
 def construir(
     *,
     prompt: str,
@@ -386,6 +450,7 @@ def construir(
     prefetch_s3: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
     prioridad: int = PRIORIDAD_MANUAL,
+    carril: str = CARRIL_INFERENCIA,
 ) -> dict[str, Any]:
     """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal).
 
@@ -395,6 +460,8 @@ def construir(
     `prefetch_s3` (opcional): `{clave, destino}` para que el WORKER baje un objeto de S3 a la
     ruta `destino` ANTES de correr claude (solo lo pone la importacion de parrilla: el doc viaja
     por S3, no por un disco compartido entre back y worker).
+    `carril` (def `inferencia`): el POOL de workers que puede reclamar el job. Los jobs de
+    auto-desarrollo lo ponen a `dev` para que SOLO `worker_dev` los reclame (ver `carril`).
     """
     return {
         "version": VERSION,
@@ -405,6 +472,7 @@ def construir(
         "procesar": procesar,
         "endurecer": endurecer or None,
         "prioridad": int(prioridad),
+        "carril": carril or CARRIL_INFERENCIA,
     }
 
 
@@ -560,6 +628,22 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return dom_sugerir.construir_procesar_sugerir_hashtags(
             publicacion_id=p["publicacion_id"]
+        )
+
+    if kind == PROC_DEV_DISCOVERY:
+        # Import perezoso: el factory toca BD (`sugerencias`/`db_sugerencias`); `sugerencias`
+        # vive en el paquete raiz (no en `dominio`), por eso el import sube un nivel.
+        from .. import sugerencias as dom_sugerencias
+
+        return dom_sugerencias.construir_procesar_dev_discovery(
+            sugerencia_id=p["sugerencia_id"]
+        )
+
+    if kind == PROC_DEV_FASE:
+        from .. import sugerencias as dom_sugerencias
+
+        return dom_sugerencias.construir_procesar_dev_fase(
+            sugerencia_id=p["sugerencia_id"], fase=p.get("fase", ""),
         )
 
     if kind == PROC_VERIFICACION_FUENTE:

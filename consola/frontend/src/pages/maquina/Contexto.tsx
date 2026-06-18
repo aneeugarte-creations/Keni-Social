@@ -36,6 +36,7 @@ import {
   QUEUE_PRODUCCION,
   slugFase,
 } from "@/pages/maquina/fases";
+import { ContextoDesarrollo } from "@/pages/maquina/ContextoDesarrollo";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { PanelAgentes } from "@/pages/monitor/PanelAgentes";
 import {
@@ -44,8 +45,13 @@ import {
   PanelPipeline,
 } from "@/pages/monitor/PanelPipeline";
 
-type Proceso = "investigacion" | "produccion" | "herramientas";
-const PROCESOS: readonly Proceso[] = ["investigacion", "produccion", "herramientas"];
+type Proceso = "investigacion" | "produccion" | "herramientas" | "desarrollo";
+const PROCESOS: readonly Proceso[] = [
+  "investigacion",
+  "produccion",
+  "herramientas",
+  "desarrollo",
+];
 
 // Grupos del catálogo que gobiernan CÓMO se produce (jobs, limpieza, alertas): se ajustan desde el
 // drawer del propio Contexto (la misma página que vigila sus efectos).
@@ -115,6 +121,7 @@ export default function Contexto() {
             <TabsTrigger value="investigacion">Investigación</TabsTrigger>
             <TabsTrigger value="produccion">Producción</TabsTrigger>
             <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
+            <TabsTrigger value="desarrollo">Desarrollo</TabsTrigger>
           </TabsList>
           <ControlesMaquina
             claveMaestro={
@@ -161,6 +168,12 @@ export default function Contexto() {
             en CAJAS por tipo (sin conectores); clicar abre el prompt en el editor (overlay). */}
         <TabsContent value="herramientas" className="mt-4">
           <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} />
+        </TabsContent>
+
+        {/* Desarrollo: los prompts del motor de auto-desarrollo (clase editorial `desarrollo`).
+            No es un pipeline ni un motor con interruptor; se editan como contexto editorial. */}
+        <TabsContent value="desarrollo" className="mt-4">
+          <ContextoDesarrollo />
         </TabsContent>
       </Tabs>
     </>

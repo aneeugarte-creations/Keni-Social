@@ -49,10 +49,11 @@ def reclamar_job(
     prioridad_minima: int | None = None,
     solo_proceso: bool | None = None,
     kinds_proceso: tuple[str, ...] = (),
+    carriles: set[str] | None = None,
 ) -> dict[str, Any] | None:
     return db.reclamar_job(
         worker, prioridad_minima=prioridad_minima,
-        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso,
+        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso, carriles=carriles,
     )
 
 

@@ -34,6 +34,9 @@ modulos_backend = [
   "artes",
   "alertas",
   "sugerencias",
+  # api/ralph.py: proxy admin-gated hacia worker-ralph (sesiones claude persistentes de
+  # los agentes Ralph). Overlay global transversal del shell (la burbuja), hermano de sistema.
+  "ralph",
   "notificaciones",
   "carpetas",
   "proyectos",

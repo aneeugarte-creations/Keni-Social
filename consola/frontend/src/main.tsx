@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
 
 import { PuertaSesion } from "@/components/auth/PuertaSesion";
+import { BurbujaRalph } from "@/components/ralph";
 import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { Toaster } from "@/components/ui/sonner";
@@ -67,6 +68,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                   <RouterProvider router={router} />
                 </FiltrosPublicacionProvider>
               </MarcaActivaProvider>
+              <BurbujaRalph />
             </PuertaSesion>
           </SesionProvider>
         </FronteraError>

@@ -1126,6 +1126,37 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_marca ON evergreen_ideas (marca)",
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_estado ON evergreen_ideas (estado)",
     "CREATE INDEX IF NOT EXISTS idx_evergreen_ideas_creado ON evergreen_ideas (creado)",
+    # KANBAN DE AUTO-DESARROLLO: ideas/mejoras/bugs del equipo que recorren el motor de
+    # auto-desarrollo (nueva → discovery → en_cola → building → revisión → hecha; building →
+    # fallida; * → descartada). `categoria` es la admisión (idea|producto|mejora|bug); el resto
+    # de campos los va rellenando el motor: `complejidad` (simple|standard|complex) decide los
+    # checkpoints, `spec`/`plan` guardan el discovery y la fase plan, `fase` es la etapa en curso
+    # (analyze|plan|build|review), `gen_id` enlaza a la generación viva, `rama`/`worktree` el dev
+    # git creado en el server, `diff_resumen`/`coste_usd` el resultado. `creada` ordena el listado.
+    """
+    CREATE TABLE IF NOT EXISTS sugerencias (
+        id            TEXT PRIMARY KEY,
+        titulo        TEXT NOT NULL DEFAULT '',
+        detalle       TEXT NOT NULL DEFAULT '',
+        categoria     TEXT NOT NULL DEFAULT 'idea',
+        autor         TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'nueva',
+        complejidad   TEXT NOT NULL DEFAULT '',
+        spec          TEXT NOT NULL DEFAULT '',
+        plan          TEXT NOT NULL DEFAULT '',
+        fase          TEXT NOT NULL DEFAULT '',
+        gen_id        TEXT NOT NULL DEFAULT '',
+        rama          TEXT NOT NULL DEFAULT '',
+        worktree      TEXT NOT NULL DEFAULT '',
+        diff_resumen  TEXT NOT NULL DEFAULT '',
+        coste_usd     DOUBLE PRECISION NOT NULL DEFAULT 0,
+        creada        TEXT NOT NULL DEFAULT '',
+        actualizada   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_estado ON sugerencias (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_categoria ON sugerencias (categoria)",
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_creada ON sugerencias (creada)",
     # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
     # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
     # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.

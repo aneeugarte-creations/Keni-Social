@@ -189,6 +189,13 @@ from .repos_jobs import (  # noqa: F401
     registrar_gasto_ia,
     terminar_job,
 )
+from .db_sugerencias import (  # noqa: F401
+    actualizar_sugerencia,
+    borrar_sugerencia,
+    crear_sugerencia,
+    listar_sugerencias,
+    obtener_sugerencia,
+)
 from .repos_metricas import (  # noqa: F401
     guardar_metricas_cache,
     leer_metricas_cache,

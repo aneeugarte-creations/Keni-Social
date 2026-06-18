@@ -12,4 +12,15 @@ for var in ANTHROPIC_API_KEY; do
     export "$var=$(cat "$fichero")"
   fi
 done
+
+# Identidad de git para el carril de AUTO-DESARROLLO (worker-dev / worker-ralph): si vienen
+# KENI_GIT_AUTHOR_NAME / KENI_GIT_AUTHOR_EMAIL, las fija como config global de git. Idempotente
+# (cada arranque escribe el mismo valor); inocuo en worker/daemons (vars ausentes -> no hace nada).
+if [ -n "${KENI_GIT_AUTHOR_NAME:-}" ]; then
+  git config --global user.name "$KENI_GIT_AUTHOR_NAME"
+fi
+if [ -n "${KENI_GIT_AUTHOR_EMAIL:-}" ]; then
+  git config --global user.email "$KENI_GIT_AUTHOR_EMAIL"
+fi
+
 exec "$@"

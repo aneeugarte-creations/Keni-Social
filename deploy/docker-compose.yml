@@ -211,6 +211,10 @@ services:
       # de control del daemons (quien tiene `claude`) por la red interna. ACTIVO por defecto:
       # el bearer que comparten back y daemons se auto-persiste en /data (sin configurar nada).
       KENI_CONTROL_URL: http://daemons:8770
+      # Listener de Ralph (sesiones `claude` persistentes): el back PROXEA (admin-gated) al
+      # servicio worker-ralph por la red interna con el bearer compartido. URL fija al DNS del
+      # servicio; el puerto debe coincidir con KENI_RALPH_PORT de worker-ralph (def 8771).
+      KENI_RALPH_URL: ${KENI_RALPH_URL:-http://worker-ralph:8771}
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
       # El back solo ENCOLA (#130 Fase 2): NO arranca su worker in-proceso (lo hace el
       # servicio `worker`). La credencial de Claude la lleva el worker, no el back.
@@ -575,6 +579,164 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  worker-dev:
+    # Worker de AUTO-DESARROLLO (carril `dev` de la cola). Gemelo del `worker` de contenido pero
+    # corre `python -m keni_consola.worker_dev`: reclama SOLO los jobs cuyo `jobspec.carril == "dev"`
+    # (el worker de contenido los EXCLUYE) y ejecuta `claude -p` SIN sandbox (Bash/Write/Edit
+    # permitidos por diseño) sobre un CLON git del repo en /repo, donde crea worktrees+ramas y
+    # promueve a `main` SOLO tras checkpoint humano. Misma imagen que el worker (trae Node+claude+
+    # git+gh); NO publica puertos ni va por Traefik. La credencial gh viaja por /data/gh (volumen
+    # compartido), conectada desde la UI; el clon /repo es un volumen persistente propio.
+    build:
+      context: ..
+      dockerfile: deploy/worker/Dockerfile
+    image: keni-social/worker:${WORKER_VERSION:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "keni_consola.worker_dev"]
+    labels:
+      - autoheal=true  # autoheal lo reinicia si el bucle queda unhealthy/colgado
+    environment:
+      XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
+      IS_SANDBOX: "1"
+      OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
+      # Cupo de hilos del carril dev (jobs `claude -p` de desarrollo EN PARALELO). Def 2:
+      # menos que el worker de contenido (cada job dev es pesado: clona/compila/testea).
+      KENI_MAX_JOBS_DEV: ${KENI_MAX_JOBS_DEV:-2}
+      # Clon git del repo sobre el que el motor crea worktrees y promueve a main.
+      KENI_DEV_REPO: /repo
+      # Identidad de los commits que crea el carril dev (lo hidrata el entrypoint con
+      # `git config --global`). VACIAS por defecto: sin ellas git usa su default del contenedor.
+      KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-}
+      KENI_GIT_AUTHOR_EMAIL: ${KENI_GIT_AUTHOR_EMAIL:-}
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      # Config/credenciales de `claude` en el volumen COMPARTIDO /data (igual que el worker):
+      # el login del panel escribe aquí y el carril dev lo usa sin reiniciar.
+      CLAUDE_CONFIG_DIR: /data/claude-cfg
+      # Cola compartida (Postgres) + media (S3/Garage), igual que el worker de contenido.
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
+      S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+    volumes:
+      # Estado compartido con el back/worker (credenciales claude+gh, ajustes) + el clon git.
+      - keni-data:/data
+      - keni-repo:/repo
+    secrets:
+      - postgres_password
+      - s3_access_key
+      - s3_secret_key
+      - anthropic_api_key
+    networks:
+      # `data` para alcanzar db/files; `internal` conserva egress (Anthropic, GitHub push).
+      - internal
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+    # Mismo criterio que el worker: el bucle no sirve HTTP, así que sondeamos /proc para
+    # comprobar que `keni_consola.worker_dev` sigue vivo (sin depender de procps/pgrep).
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,glob,sys;
+          sys.exit(0 if any('keni_consola.worker_dev' in open(p).read().replace(chr(0),' ')
+          for p in glob.glob('/proc/[0-9]*/cmdline')) else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Apagado limpio: como el worker, deja de reclamar y re-encola lo capturado.
+    stop_grace_period: 30s
+    # Carril dev más liviano que el worker de contenido (def 2 jobs vs 6). Overridable por .env.
+    mem_limit: ${WORKER_DEV_MEM_LIMIT:-8g}
+    cpus: ${WORKER_DEV_CPUS:-3.0}
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  worker-ralph:
+    # Listener de AGENTES RALPH (sesiones `claude` persistentes multi-turno). Corre
+    # `python -m keni_consola.worker_ralph`: un Starlette mínimo en uvicorn (KENI_RALPH_PORT, def
+    # 8771) en la red INTERNA docker — NUNCA por Traefik. El back lo PROXEA (admin-gated) con el
+    # bearer compartido. Cada Ralph trabaja sobre su propio worktree+rama del clon /repo, SIN
+    # sandbox. Misma imagen que el worker (Node+claude+git+gh); credencial gh por /data/gh.
+    build:
+      context: ..
+      dockerfile: deploy/worker/Dockerfile
+    image: keni-social/worker:${WORKER_VERSION:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "keni_consola.worker_ralph"]
+    labels:
+      - autoheal=true  # autoheal lo reinicia si el listener queda unhealthy/colgado
+    environment:
+      XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
+      IS_SANDBOX: "1"
+      # Puerto del listener (interno). El back lo alcanza vía KENI_RALPH_URL (def :8771).
+      KENI_RALPH_PORT: ${KENI_RALPH_PORT:-8771}
+      # Tope de Ralphs vivos a la vez (pool de nombres estilo Nolan v1).
+      KENI_MAX_RALPH: ${KENI_MAX_RALPH:-8}
+      # Clon git compartido con worker-dev: cada Ralph crea ahí su worktree+rama.
+      KENI_DEV_REPO: /repo
+      # Identidad de los commits de los Ralph (lo hidrata el entrypoint con `git config --global`).
+      KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-}
+      KENI_GIT_AUTHOR_EMAIL: ${KENI_GIT_AUTHOR_EMAIL:-}
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      CLAUDE_CONFIG_DIR: /data/claude-cfg
+    volumes:
+      - keni-data:/data
+      - keni-repo:/repo
+    secrets:
+      - anthropic_api_key
+    networks:
+      # `internal` basta: el back (también en `internal`) lo alcanza por DNS y conserva egress
+      # (Anthropic, GitHub push). NO se publica el puerto al host ni se enruta por Traefik.
+      - internal
+    # Solo documental (Compose no publica `expose`): el listener escucha en KENI_RALPH_PORT y
+    # es alcanzable SOLO dentro de la red interna docker.
+    expose:
+      - "${KENI_RALPH_PORT:-8771}"
+    # El listener SÍ sirve HTTP: sondeamos su propia ruta /control/healthz (sin bearer) con el
+    # python que ya trae la imagen (sin depender de curl/wget).
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('KENI_RALPH_PORT','8771')+'/control/healthz',timeout=3)"
+          || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    mem_limit: ${WORKER_RALPH_MEM_LIMIT:-8g}
+    cpus: ${WORKER_RALPH_CPUS:-3.0}
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   mcp:
     build:
       context: ..
@@ -785,6 +947,10 @@ networks:
 volumes:
   traefik-acme:
   keni-data:
+  # Clon git PERSISTENTE del repo para el carril de auto-desarrollo (worker-dev + worker-ralph):
+  # en /repo crean worktrees+ramas y promueven a main tras checkpoint humano. Se siembra una vez
+  # (clone si está vacío); ver deploy.sh. uid 10001 (keni) debe poder escribirlo (chown en deploy.sh).
+  keni-repo:
   pgdata:
   garage-meta:
   garage-data:

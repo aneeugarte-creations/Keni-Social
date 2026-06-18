@@ -174,6 +174,7 @@ def reclamar_job(
     prioridad_minima: int | None = None,
     solo_proceso: bool | None = None,
     kinds_proceso: tuple[str, ...] = (),
+    carriles: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
@@ -194,6 +195,11 @@ def reclamar_job(
       - `solo_proceso=False` -> solo jobs de inferencia (el carril de `claude`, que un video largo
         ya no puede acaparar: head-of-line eliminado).
       - `solo_proceso=None`  -> cualquiera (back-compat: el pool unico de antes).
+
+    POOL DE WORKERS (`carriles`): si viene, solo se clavan jobs cuyo carril (replica de
+    `jobspec.carril` en SQL: `carril` raiz explicito, o derivado a 'proceso'/'inferencia')
+    esté en el conjunto. `worker_dev` pasa {'dev'}; el worker de contenido {'inferencia',
+    'proceso'} (excluye dev). None = cualquier carril.
 
     RE-RECLAMO DE JOBS SIN DUEÑO: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
@@ -240,6 +246,30 @@ def reclamar_job(
         # `COALESCE(spec->>'kind','')`: los jobs de inferencia no llevan kind raiz (NULL -> '').
         filtro_kind = f"AND COALESCE(spec->>'kind', '') {op} ({marcadores}) "
         params_kind = tuple(kinds_proceso)
+    # CARRIL (POOL de workers): filtra por el carril del spec, replicando `jobspec.carril` en SQL:
+    # un `carril` raiz EXPLICITO (lo ponen los jobs de desarrollo: 'dev') manda; si no, se DERIVA
+    # ('proceso' si el kind raiz es de proceso, 'inferencia' en otro caso). `worker_dev` pasa
+    # {'dev'}; el worker de contenido pasa {'inferencia','proceso'} (excluye dev).
+    filtro_carril = ""
+    params_carril: tuple[str, ...] = ()
+    if carriles:
+        carril_vals = tuple(sorted(carriles))
+        car_marc = ", ".join("?" for _ in carril_vals)
+        if kinds_proceso:
+            kind_marc = ", ".join("?" for _ in kinds_proceso)
+            expr_carril = (
+                "CASE WHEN COALESCE(spec->>'carril', '') <> '' THEN spec->>'carril' "
+                f"WHEN COALESCE(spec->>'kind', '') IN ({kind_marc}) THEN 'proceso' "
+                "ELSE 'inferencia' END"
+            )
+            params_carril = (*kinds_proceso, *carril_vals)
+        else:
+            expr_carril = (
+                "CASE WHEN COALESCE(spec->>'carril', '') <> '' THEN spec->>'carril' "
+                "ELSE 'inferencia' END"
+            )
+            params_carril = carril_vals
+        filtro_carril = f"AND ({expr_carril}) IN ({car_marc}) "
     con = _conectar()
     try:
         # Acotamos los saltos: descartamos jobs sin dueño ya-terminados (terminando su job) y
@@ -248,10 +278,11 @@ def reclamar_job(
             fila = con.execute(
                 "SELECT id, gen_id, spec, estado, intentos FROM jobs "
                 "WHERE (estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?)) "
-                + filtro_prioridad + filtro_kind +
+                + filtro_prioridad + filtro_kind + filtro_carril +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
                 "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE, JOB_RECLAMADO, limite_suelto, *params_prio, *params_kind),
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_suelto,
+                 *params_prio, *params_kind, *params_carril),
             ).fetchone()
             if fila is None:
                 con.commit()

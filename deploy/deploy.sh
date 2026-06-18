@@ -17,6 +17,7 @@ cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ENVFILE="${1:-.env}"
 DC="docker compose --env-file $ENVFILE"
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
+REPO_VOL="keni-social_keni-repo"  # clon git del carril de auto-desarrollo (worker-dev/worker-ralph)
 
 # Lee una clave del .env (primera ocurrencia, sin comillas envolventes).
 leer_env() {
@@ -175,8 +176,36 @@ fi
 if [ "$BACK_CAMBIO" = 1 ] || [ "$WORKER_CAMBIO" = 1 ]; then
   echo "==> [3/6] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
   docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
+  # El carril de auto-desarrollo (worker-dev/worker-ralph, uid 10001) escribe en /repo: el volumen
+  # keni-repo nace root, así que hay que cederlo al uid del contenedor (idempotente). Crea el
+  # volumen si no existe todavía.
+  echo "==> [3b/6] chown del volumen keni-repo (clon git del carril dev) a uid 10001"
+  docker volume create "$REPO_VOL" >/dev/null 2>&1 || true
+  docker run --rm -v "$REPO_VOL":/d alpine chown -R 10001:10001 /d
 else
   echo "==> [3/6] back/worker sin cambios — se omite chown del volumen"
+fi
+
+# SIEMBRA del clon git en /repo (best-effort, idempotente): si el volumen keni-repo está VACÍO y
+# gh ya tiene credencial en /data/gh, clona kenitech-io/keni-social. NO aborta el deploy si falla
+# (p.ej. GitHub aún sin conectar desde la UI): en ese caso el carril dev queda inerte hasta que se
+# conecte el proveedor y se siembre el clon (manual o por el propio worker-dev). Corre como uid
+# 10001 (dueño de /repo y /data) para que la credencial gh y los permisos cuadren.
+if docker image inspect "keni-social/worker:$WORKER_VERSION" >/dev/null 2>&1; then
+  echo "==> [3c/6] siembra idempotente del clon git en keni-repo (best-effort; no aborta el deploy)"
+  docker run --rm --user 10001:10001 \
+    -e XDG_CONFIG_HOME=/data -e GH_PROMPT_DISABLED=1 \
+    -v "$REPO_VOL":/repo -v "$VOL":/data \
+    --entrypoint sh "keni-social/worker:$WORKER_VERSION" -c '
+      if [ -n "$(ls -A /repo 2>/dev/null)" ]; then
+        echo "    /repo ya tiene contenido — no se reclona"
+      elif gh auth status >/dev/null 2>&1; then
+        echo "    clonando kenitech-io/keni-social en /repo (vía gh)"
+        gh repo clone kenitech-io/keni-social /repo
+      else
+        echo "    gh sin credencial en /data/gh todavía — se sembrará al conectar GitHub (carril dev inerte)"
+      fi
+    ' || echo "==> AVISO: siembra de /repo no completada (no bloquea el deploy)" >&2
 fi
 
 if [ "$BACK_CAMBIO" = 1 ]; then
@@ -236,9 +265,12 @@ else
   # worker: healthcheck por escaneo de /proc (compose). Ambos son imagenes NUESTRAS con
   # foto :previa, asi que un fallo suyo tambien debe disparar el rollback (antes solo se
   # verificaban back/front y un daemons/worker roto pasaba en verde).
+  # worker-dev / worker-ralph: imagenes NUESTRAS (misma tag WORKER_VERSION), asi que un fallo
+  # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
   if espera_sano back 180 && espera_sano front 120 \
-      && espera_sano daemons 150 && espera_sano worker 120; then
-    echo "==> salud OK (back, front, daemons y worker healthy)"
+      && espera_sano daemons 150 && espera_sano worker 120 \
+      && espera_sano worker-dev 120 && espera_sano worker-ralph 120; then
+    echo "==> salud OK (back, front, daemons, worker, worker-dev y worker-ralph healthy)"
     # db y files: si NO estan sanos el problema es de CONFIG/estado (sus imagenes son
     # upstream y no entran en el rollback :previa), asi que NO se intenta rollback —
     # pero el pipeline DEBE quedar rojo para que un operador mire (p.ej. un cambio de

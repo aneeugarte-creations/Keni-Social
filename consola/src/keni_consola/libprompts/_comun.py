@@ -38,7 +38,9 @@ __all__ = [
 TIPOS = ("prompt", "editorial")
 
 # Clase de un documento EDITORIAL (organiza la linea editorial y gobierna el auto-adjunto).
-CLASES = ("marca", "voz", "plataforma", "tropicalizacion", "reglas")
+# `desarrollo` agrupa el contexto de auto-desarrollo de la consola (no es linea editorial de
+# marca ni pilar: no entra en el auto-adjunto de copy; alimenta el carril dev y al agente Ralph).
+CLASES = ("marca", "voz", "plataforma", "tropicalizacion", "reglas", "desarrollo")
 
 # Tipo de SALIDA de un PROMPT: "" / "documento" = texto markdown (no crea artefactos);
 # "piezas" = copy por red que se parsea y crea borradores en Parrilla (selector de redes).

@@ -209,6 +209,13 @@ from .db_idear import (  # noqa: F401
     obtener_evergreen_idea,
     quitar_etiqueta,
 )
+from .db_sugerencias import (  # noqa: F401
+    actualizar_sugerencia,
+    borrar_sugerencia,
+    crear_sugerencia,
+    listar_sugerencias,
+    obtener_sugerencia,
+)
 from .db_jobs import (  # noqa: F401
     JOB_PENDIENTE,
     JOB_RECLAMADO,

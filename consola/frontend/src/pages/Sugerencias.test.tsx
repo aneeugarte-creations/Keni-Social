@@ -13,15 +13,24 @@ const SUGERENCIAS = [
     detalle: "Un resumen semanal",
     categoria: "mejora",
     estado: "nueva",
+    complejidad: "",
+    fase: "",
+    spec: "",
+    plan: "",
+    gen_id: "",
+    rama: "",
+    diff_resumen: "",
+    coste_usd: 0,
     autor: "Ana",
     creada: "2026-05-20T10:00:00",
+    actualizada: "2026-05-20T10:00:00",
   },
 ];
 
 const RESP_SUGERENCIAS = {
   sugerencias: SUGERENCIAS,
   categorias: ["idea", "producto", "mejora", "bug"],
-  estados: ["nueva", "en-estudio", "hecha", "descartada"],
+  estados: ["nueva", "discovery", "en_cola", "building", "revision", "hecha"],
 };
 
 /** Stub de fetch que enruta /api/sugerencias. Captura POSTs/PATCH/DELETE. */
@@ -54,7 +63,7 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Sugerencias · buzón", () => {
+describe("Sugerencias · kanban", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -62,35 +71,34 @@ describe("Sugerencias · buzón", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lista las sugerencias del buzón", async () => {
+  it("pinta las sugerencias en el tablero kanban", async () => {
     stubFetch();
     renderConProviders(<Sugerencias />);
 
     expect(await screen.findByText("Exportar métricas a Slack")).toBeInTheDocument();
-    expect(screen.getByText("Feedback")).toBeInTheDocument();
+    expect(screen.getByText("Sugerencias")).toBeInTheDocument();
+    // Columnas del flujo de desarrollo (Nolan v2).
+    expect(screen.getByText("Discovery")).toBeInTheDocument();
+    expect(screen.getByText("Building")).toBeInTheDocument();
   });
 
-  it("no muestra ningún panel ni botón de auto-desarrollo", async () => {
-    stubFetch();
-    renderConProviders(<Sugerencias />);
-
-    expect(await screen.findByText("Exportar métricas a Slack")).toBeInTheDocument();
-    expect(screen.queryByText(/auto-desarrollo/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /implementar con ia/i })).not.toBeInTheDocument();
-  });
-
-  it("envía una nueva sugerencia con el formulario", async () => {
+  it("crea una idea desde el diálogo de alta", async () => {
     const capturas: { url: string; body: unknown }[] = [];
     stubFetch(capturas);
     renderConProviders(<Sugerencias />);
 
+    await screen.findByText("Exportar métricas a Slack");
+    fireEvent.click(screen.getByRole("button", { name: /nueva idea/i }));
+
     fireEvent.change(await screen.findByLabelText("Título"), {
       target: { value: "Nueva idea" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /enviar sugerencia/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear idea/i }));
 
     await waitFor(() => {
-      const alta = capturas.find((c) => c.url.includes("/api/sugerencias"));
+      const alta = capturas.find(
+        (c) => c.url.includes("/api/sugerencias") && (c.body as { titulo?: string })?.titulo,
+      );
       expect(alta?.body).toMatchObject({ titulo: "Nueva idea" });
     });
   });

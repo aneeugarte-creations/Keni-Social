@@ -11,6 +11,8 @@ import type {
   RespuestaCuentaAccion,
   RespuestaDaemons,
   RespuestaDoctor,
+  RespuestaGithub,
+  RespuestaGithubLoginIniciar,
   RespuestaLoginIniciar,
   RespuestaProbarS3,
   RespuestaRecursos,
@@ -88,4 +90,29 @@ export const apiSistema = {
     }),
   cuentaLogout: () =>
     peticion<RespuestaCuentaAccion>("/sistema/cuenta/logout", { metodo: "POST" }),
+
+  // --- Proveedor GitHub del servidor (gh, proxy admin al control del daemons) ---
+  githubEstado: (signal?: AbortSignal) =>
+    peticion<RespuestaGithub>("/sistema/github", { signal }),
+  githubLoginIniciar: () =>
+    peticion<RespuestaGithubLoginIniciar>("/sistema/github/login/iniciar", {
+      metodo: "POST",
+      json: {},
+      // El back lanza `gh auth login` y espera a que imprima el código de dispositivo: techo amplio.
+      timeoutMs: 120_000,
+    }),
+  githubLoginConfirmar: (sesion: string) =>
+    peticion<RespuestaCuentaAccion>("/sistema/github/login/confirmar", {
+      metodo: "POST",
+      json: { sesion },
+      // `gh` hace polling hasta que el usuario autoriza en GitHub: espera el cierre del proceso.
+      timeoutMs: 300_000,
+    }),
+  githubLoginCancelar: (sesion: string) =>
+    peticion<{ ok: boolean }>("/sistema/github/login/cancelar", {
+      metodo: "POST",
+      json: { sesion },
+    }),
+  githubLogout: () =>
+    peticion<RespuestaCuentaAccion>("/sistema/github/logout", { metodo: "POST" }),
 };

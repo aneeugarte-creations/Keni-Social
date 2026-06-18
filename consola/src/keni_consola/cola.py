@@ -101,6 +101,7 @@ def reclamar(
     *,
     prioridad_minima: int | None = None,
     solo_proceso: bool | None = None,
+    carriles: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """Clava UN job pendiente (concurrente-seguro) y devuelve `{id, gen_id, spec}` o None.
 
@@ -117,11 +118,17 @@ def reclamar(
     que un video largo no acapare un slot del copy manual prioritario (head-of-line). True =
     solo CPU-bound; False = solo inferencia; None = cualquiera. La lista de kinds CPU-bound sale
     de `jobspec.KINDS_PROCESO` (aqui, para no acoplar la persistencia al dominio).
+
+    `carriles` (POOL de workers): si viene, SOLO se clavan jobs cuyo `jobspec.carril(spec)` esté
+    en el conjunto. El worker de contenido pasa `{"inferencia","proceso"}` (excluye `dev`) y
+    `worker_dev` pasa `{"dev"}`. None = cualquier carril (retrocompatible). La derivación del
+    carril de los specs SIN carril explícito necesita los kinds de proceso, que se pasan abajo.
     """
-    kinds_proceso = () if solo_proceso is None else tuple(jobspec.KINDS_PROCESO)
+    necesita_kinds = solo_proceso is not None or carriles is not None
+    kinds_proceso = tuple(jobspec.KINDS_PROCESO) if necesita_kinds else ()
     fila = repos.reclamar_job(
         worker, prioridad_minima=prioridad_minima,
-        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso,
+        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso, carriles=carriles,
     )
     if fila is None:
         return None

@@ -12,6 +12,7 @@ import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
 
 import { AvisosDoctor } from "./Doctor";
 import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
+import { SeccionGitHub } from "./SeccionGitHub";
 import { SeccionDaemons } from "./SeccionDaemons";
 import { SeccionNavegadorS3 } from "./NavegadorS3";
 import { SeccionBackups } from "./SeccionBackups";
@@ -83,6 +84,7 @@ export default function Sistema() {
               audiencia. Metricool se gestiona aquí (antes vivía en el «⋮» de Analíticas). */}
           <TabsContent value="proveedores" className="space-y-6">
             <SeccionCuentaClaude />
+            <SeccionGitHub />
             <SeccionMetricool />
             <SeccionPostproxy />
           </TabsContent>

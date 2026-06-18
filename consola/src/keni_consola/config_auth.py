@@ -11,19 +11,26 @@ from ._config_comun import (
     ENV_CONTROL_PORT,
     ENV_CONTROL_URL,
     ENV_COOKIE_SECURE,
+    ENV_DEV_REPO,
     ENV_HTTPS,
     ENV_MCP_BEARER,
     ENV_MCP_USUARIO,
+    ENV_MAX_RALPH,
     ENV_MFA,
     ENV_MFA_ADMIN,
     ENV_MFA_KEY,
     ENV_ORIGENES,
+    ENV_RALPH_PORT,
+    ENV_RALPH_URL,
     ENV_RP_ID,
     ENV_RP_NOMBRE,
     ENV_RP_ORIGIN,
     ENV_SESION_HORAS,
     ENV_SESION_MAX_HORAS,
     ENV_TOKEN,
+    DEV_REPO_DEF,
+    MAX_RALPH_DEF,
+    RALPH_PORT_DEF,
     SESION_HORAS_DEF,
     SESION_MAX_HORAS_DEF,
     _crudo,
@@ -139,6 +146,31 @@ def control_url() -> str:
 
     Def `http://daemons:8770` (nombre del servicio en la red interna docker)."""
     return _crudo(ENV_CONTROL_URL) or "http://daemons:8770"
+
+
+def ralph_url() -> str:
+    """URL base con que el `back` alcanza el listener de worker-ralph (`KENI_RALPH_URL`).
+
+    Def `http://worker-ralph:8771` (nombre del servicio en la red interna docker). El proxy
+    admin de `api/ralph.py` reenvia aqui con el bearer compartido."""
+    return _crudo(ENV_RALPH_URL) or "http://worker-ralph:8771"
+
+
+def ralph_puerto() -> int:
+    """Puerto del listener de worker-ralph (`KENI_RALPH_PORT`, def 8771; >0)."""
+    puerto = _entero(ENV_RALPH_PORT, RALPH_PORT_DEF)
+    return puerto if puerto > 0 else RALPH_PORT_DEF
+
+
+def ralph_max() -> int:
+    """Tope de Ralphs vivos a la vez (`KENI_MAX_RALPH`, def 8; >0)."""
+    maximo = _entero(ENV_MAX_RALPH, MAX_RALPH_DEF)
+    return maximo if maximo > 0 else MAX_RALPH_DEF
+
+
+def dev_repo() -> str:
+    """Clon git del repo sobre el que cada Ralph crea su worktree+rama (`KENI_DEV_REPO`, def `/repo`)."""
+    return _crudo(ENV_DEV_REPO) or DEV_REPO_DEF
 
 
 def mcp_usuario() -> str | None:

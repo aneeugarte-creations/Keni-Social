@@ -19,6 +19,14 @@ Rutas (bajo `/control/cuenta`, contrato con el proxy del back en `api/sistema/cu
   - POST /control/cuenta/login/cancelar-> {ok}
   - POST /control/cuenta/logout        -> {ok, mensaje}
   - GET  /control/healthz              -> {ok:true}  (sonda, sin bearer)
+
+Rutas GitHub (bajo `/control/github`, contrato con `api/sistema/github.py`), gemelas de las
+de cuenta y delegando en `proveedor_github` (mismo listener, mismo bearer):
+  - GET  /control/github/estado          -> {auth:{logueado, usuario?, scopes?}}
+  - POST /control/github/login/iniciar   -> {sesion, codigo, url, salida}  (device flow gh)
+  - POST /control/github/login/confirmar -> {ok, mensaje}  (espera el cierre del sondeo gh)
+  - POST /control/github/login/cancelar  -> {ok}
+  - POST /control/github/logout          -> {ok, mensaje}
 """
 
 from __future__ import annotations
@@ -33,7 +41,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from . import config, cuenta_claude
+from . import config, cuenta_claude, proveedor_github
 
 _log = logging.getLogger("keni_consola.control")
 
@@ -118,8 +126,53 @@ async def logout(request: Request) -> Response:
     return JSONResponse(res, status_code=200 if res.get("ok") else 502)
 
 
+async def github_estado(request: Request) -> Response:
+    if not _autorizado(request):
+        return _rechazo()
+    auth = await run_in_threadpool(proveedor_github.estado)
+    return JSONResponse({"auth": auth})
+
+
+async def github_login_iniciar(request: Request) -> Response:
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    token = cuerpo.get("token") or None
+    res = await run_in_threadpool(proveedor_github.iniciar_login, token=token)
+    status = 200 if (res.get("codigo") or res.get("ok")) else 502
+    return JSONResponse(res, status_code=status)
+
+
+async def github_login_confirmar(request: Request) -> Response:
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    sid = cuerpo.get("sesion")
+    if not isinstance(sid, str):
+        return JSONResponse({"ok": False, "mensaje": "falta sesion"}, status_code=400)
+    res = await run_in_threadpool(proveedor_github.confirmar_login, sid)
+    return JSONResponse(res, status_code=200 if res.get("ok") else 502)
+
+
+async def github_login_cancelar(request: Request) -> Response:
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    sid = cuerpo.get("sesion")
+    if not isinstance(sid, str):
+        return JSONResponse({"ok": False, "mensaje": "falta sesion"}, status_code=400)
+    return JSONResponse(await run_in_threadpool(proveedor_github.cancelar_login, sid))
+
+
+async def github_logout(request: Request) -> Response:
+    if not _autorizado(request):
+        return _rechazo()
+    res = await run_in_threadpool(proveedor_github.logout)
+    return JSONResponse(res, status_code=200 if res.get("ok") else 502)
+
+
 def crear_app_control() -> Starlette:
-    """App Starlette del listener de control (rutas de cuenta + healthz)."""
+    """App Starlette del listener de control (rutas de cuenta + github + healthz)."""
     return Starlette(
         routes=[
             Route("/control/healthz", healthz, methods=["GET"]),
@@ -128,6 +181,13 @@ def crear_app_control() -> Starlette:
             Route("/control/cuenta/login/codigo", login_codigo, methods=["POST"]),
             Route("/control/cuenta/login/cancelar", login_cancelar, methods=["POST"]),
             Route("/control/cuenta/logout", logout, methods=["POST"]),
+            # GitHub: las mas especificas (/github/login/...) van ANTES que /github/logout
+            # y /github/estado (Starlette casa por orden).
+            Route("/control/github/login/iniciar", github_login_iniciar, methods=["POST"]),
+            Route("/control/github/login/confirmar", github_login_confirmar, methods=["POST"]),
+            Route("/control/github/login/cancelar", github_login_cancelar, methods=["POST"]),
+            Route("/control/github/logout", github_logout, methods=["POST"]),
+            Route("/control/github/estado", github_estado, methods=["GET"]),
         ]
     )
 

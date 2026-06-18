@@ -1,20 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Inbox, Lightbulb, Loader2, Plus, Trash2 } from "lucide-react";
+import { Lightbulb, Loader2, Plus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { confirmar } from "@/components/comunes/confirmar";
-import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Markdown } from "@/components/ui/Markdown";
 import {
   Select,
   SelectContent,
@@ -25,45 +26,29 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFecha as fmtFechaCdmx } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { Sugerencia } from "@/types";
+import type { EstadoSugerencia, Sugerencia } from "@/types";
 
-const CLAVE_SUGERENCIAS = ["sugerencias"] as const;
+import { DetalleSugerencia } from "./sugerencias/DetalleSugerencia";
+import {
+  CATEGORIA_LABEL,
+  CLAVE_SUGERENCIAS,
+  COLUMNAS,
+  COMPLEJIDAD_LABEL,
+  COMPLEJIDAD_VARIANTE,
+  ESTADO_LABEL,
+  ESTADO_VARIANTE,
+  ESTADOS_ARCHIVO,
+  etiqueta,
+} from "./sugerencias/columnas";
 
-const CATEGORIA_LABEL: Record<string, string> = {
-  idea: "Idea",
-  producto: "Producto",
-  mejora: "Mejora",
-  bug: "Bug",
-};
-
-const ESTADO_LABEL: Record<string, string> = {
-  nueva: "Nueva",
-  "en-estudio": "En estudio",
-  hecha: "Hecha",
-  descartada: "Descartada",
-};
-
-type VarianteBadge = "secondary" | "aviso" | "ok" | "error" | "outline" | "destructive";
-
-const ESTADO_VARIANTE: Record<string, VarianteBadge> = {
-  nueva: "secondary",
-  "en-estudio": "aviso",
-  hecha: "ok",
-  descartada: "error",
-};
-
-function etiqueta(mapa: Record<string, string>, clave: string): string {
-  return mapa[clave] ?? clave;
-}
-
-// Fecha en CDMX (el instante "creada" del backend es UTC); ver `@/lib/fecha`.
-const formatearFecha = (iso: string): string => fmtFechaCdmx(iso);
+const MIME_ARRASTRE = "text/plain";
 
 /**
- * Buzón de sugerencias: panel izquierdo para enviar una idea; panel derecho con
- * el listado, su estado (editable) y borrado. Todo local, vía /api/sugerencias.
+ * Panel de Sugerencias como KANBAN de auto-desarrollo (estilo Nolan v2):
+ * Ideas → Discovery → En cola → Building → Revisión → Hecho, con una zona aparte
+ * para piezas Fallidas/Descartadas. Arrastre HTML5 nativo entre columnas; click en
+ * una tarjeta abre el detalle (spec/plan, stream en vivo y acciones del flujo).
  */
 export default function Sugerencias() {
   const query = useQuery({
@@ -71,31 +56,255 @@ export default function Sugerencias() {
     queryFn: ({ signal }) => api.sugerencias(signal),
   });
 
+  const [nuevaAbierta, setNuevaAbierta] = React.useState(false);
+  const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
+
   const sugerencias = query.data?.sugerencias ?? [];
   const categorias = query.data?.categorias ?? Object.keys(CATEGORIA_LABEL);
-  const estados = query.data?.estados ?? Object.keys(ESTADO_LABEL);
+  const seleccion = sugerencias.find((s) => s.id === seleccionId) ?? null;
 
   return (
     <>
-      <TituloPagina titulo="Feedback" icono={Lightbulb} />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <NuevaSugerencia categorias={categorias} />
-        <ListaSugerencias
-          sugerencias={sugerencias}
-          estados={estados}
-          cargando={query.isPending}
-          error={query.isError ? mensajeError(query.error) : null}
-          onReintentar={() => void query.refetch()}
-          reintentando={query.isFetching}
-        />
+      <div className="flex items-center justify-between gap-3">
+        <TituloPagina titulo="Sugerencias" icono={Lightbulb} />
+        <Button onClick={() => setNuevaAbierta(true)}>
+          <Plus className="h-4 w-4" />
+          Nueva idea
+        </Button>
       </div>
+
+      <div className="mt-6">
+        {query.isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar las sugerencias"
+            mensaje={mensajeError(query.error)}
+            onReintentar={() => void query.refetch()}
+            cargando={query.isFetching}
+          />
+        ) : query.isPending ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-64 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <Tablero sugerencias={sugerencias} onAbrir={(s) => setSeleccionId(s.id)} />
+        )}
+      </div>
+
+      <NuevaIdea
+        abierta={nuevaAbierta}
+        onCerrar={() => setNuevaAbierta(false)}
+        categorias={categorias}
+      />
+      <DetalleSugerencia sugerencia={seleccion} onClose={() => setSeleccionId(null)} />
     </>
   );
 }
 
-// --- Alta (panel izquierdo) ------------------------------------------------
+// --- Tablero kanban --------------------------------------------------------
 
-function NuevaSugerencia({ categorias }: { categorias: string[] }) {
+function Tablero({
+  sugerencias,
+  onAbrir,
+}: {
+  sugerencias: Sugerencia[];
+  onAbrir: (s: Sugerencia) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [sobreColumna, setSobreColumna] = React.useState<string | null>(null);
+
+  const mover = useMutation({
+    mutationFn: async ({ s, destino }: { s: Sugerencia; destino: EstadoSugerencia }) => {
+      // Cada columna dispara la acción adecuada del flujo; las demás transiciones
+      // son un PATCH directo del estado (override manual). No se usa el valor de retorno.
+      if (destino === "discovery") {
+        await api.discoverySugerencia(s.id);
+      } else if (destino === "en_cola") {
+        await api.construirSugerencia(s.id);
+      } else {
+        await api.actualizarSugerencia(s.id, { estado: destino });
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const soltar = (destino: EstadoSugerencia, ev: React.DragEvent) => {
+    ev.preventDefault();
+    setSobreColumna(null);
+    const id = ev.dataTransfer.getData(MIME_ARRASTRE);
+    const s = sugerencias.find((x) => x.id === id);
+    if (!s || s.estado === destino) return;
+    mover.mutate({ s, destino });
+  };
+
+  const archivadas = sugerencias.filter((s) =>
+    ESTADOS_ARCHIVO.includes(s.estado as EstadoSugerencia),
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        {COLUMNAS.map((col) => {
+          const items = sugerencias.filter((s) => s.estado === col.estado);
+          return (
+            <Columna
+              key={col.estado}
+              titulo={col.titulo}
+              total={items.length}
+              activa={sobreColumna === col.estado}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setSobreColumna(col.estado);
+              }}
+              onDragLeave={() => setSobreColumna((c) => (c === col.estado ? null : c))}
+              onDrop={(e) => soltar(col.estado, e)}
+            >
+              {items.map((s) => (
+                <Tarjeta key={s.id} sugerencia={s} onAbrir={() => onAbrir(s)} />
+              ))}
+            </Columna>
+          );
+        })}
+      </div>
+
+      {archivadas.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            Fallidas y descartadas
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {archivadas.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onAbrir(s)}
+                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-left text-xs opacity-70 transition hover:opacity-100"
+              >
+                <Badge
+                  variant={ESTADO_VARIANTE[s.estado] ?? "secondary"}
+                  className="font-normal"
+                >
+                  {etiqueta(ESTADO_LABEL, s.estado)}
+                </Badge>
+                <span className="max-w-[16rem] truncate font-medium">{s.titulo}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Columna({
+  titulo,
+  total,
+  activa,
+  children,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  titulo: string;
+  total: number;
+  activa: boolean;
+  children: React.ReactNode;
+  onDragOver: React.DragEventHandler;
+  onDragLeave: React.DragEventHandler;
+  onDrop: React.DragEventHandler;
+}) {
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={cn(
+        "flex min-h-[16rem] flex-col gap-2 rounded-lg border border-dashed bg-muted/20 p-2 transition-colors",
+        activa && "border-keni-300 bg-keni-50/40 ring-1 ring-keni-300",
+      )}
+    >
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {titulo}
+        </span>
+        <Badge variant="outline" className="text-[10px] tabular-nums">
+          {total}
+        </Badge>
+      </div>
+      <div className="flex flex-1 flex-col gap-2">{children}</div>
+    </div>
+  );
+}
+
+function Tarjeta({
+  sugerencia,
+  onAbrir,
+}: {
+  sugerencia: Sugerencia;
+  onAbrir: () => void;
+}) {
+  const enVivo = !!sugerencia.gen_id && sugerencia.estado === "building";
+  return (
+    <div
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData(MIME_ARRASTRE, sugerencia.id)}
+      role="button"
+      tabIndex={0}
+      onClick={onAbrir}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onAbrir();
+        }
+      }}
+      className="cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+    >
+      <p className="text-sm font-medium leading-snug">{sugerencia.titulo}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline" className="text-[10px] font-normal">
+          {etiqueta(CATEGORIA_LABEL, sugerencia.categoria)}
+        </Badge>
+        {sugerencia.complejidad && (
+          <Badge
+            variant={COMPLEJIDAD_VARIANTE[sugerencia.complejidad] ?? "outline"}
+            className="text-[10px] font-normal"
+          >
+            {etiqueta(COMPLEJIDAD_LABEL, sugerencia.complejidad)}
+          </Badge>
+        )}
+        {enVivo && (
+          <span className="flex items-center gap-1 text-[10px] text-sky-600">
+            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            en vivo
+          </span>
+        )}
+      </div>
+      {(sugerencia.autor || sugerencia.fase) && (
+        <p className="truncate text-[11px] text-muted-foreground">
+          {[sugerencia.autor, sugerencia.fase && `fase: ${sugerencia.fase}`]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// --- Alta de idea ----------------------------------------------------------
+
+function NuevaIdea({
+  abierta,
+  onCerrar,
+  categorias,
+}: {
+  abierta: boolean;
+  onCerrar: () => void;
+  categorias: string[];
+}) {
   const queryClient = useQueryClient();
   const [titulo, setTitulo] = React.useState("");
   const [detalle, setDetalle] = React.useState("");
@@ -112,10 +321,11 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
-      toast.success("Sugerencia enviada. ¡Gracias!");
+      toast.success("Idea creada");
       setTitulo("");
       setDetalle("");
       setAutor("");
+      onCerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -123,244 +333,76 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
   const puedeEnviar = titulo.trim().length > 0 && !crear.isPending;
 
   return (
-    <Card className="h-fit">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Lightbulb className="h-4 w-4" />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="sugerencia-titulo">Título</Label>
-          <Input
-            id="sugerencia-titulo"
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Ej. Exportar métricas a Slack"
-            maxLength={200}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="sugerencia-detalle">
-            Detalle
-          </Label>
-          <Textarea
-            id="sugerencia-detalle"
-            value={detalle}
-            onChange={(e) => setDetalle(e.target.value)}
-            placeholder="Describe el problema, tu idea…"
-            rows={5}
-            maxLength={8000}
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+    <Dialog open={abierta} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nueva idea</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="sugerencia-categoria">Categoría</Label>
-            <Select value={categoria} onValueChange={setCategoria}>
-              <SelectTrigger id="sugerencia-categoria">
-                <SelectValue placeholder="Categoría" />
-              </SelectTrigger>
-              <SelectContent>
-                {categorias.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {etiqueta(CATEGORIA_LABEL, c)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="sugerencia-autor">
-              Tu nombre
-            </Label>
+            <Label htmlFor="idea-titulo">Título</Label>
             <Input
-              id="sugerencia-autor"
-              value={autor}
-              onChange={(e) => setAutor(e.target.value)}
-              placeholder="Opcional: tu nombre"
-              maxLength={120}
+              id="idea-titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ej. Exportar métricas a Slack"
+              maxLength={200}
+              autoFocus
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="idea-detalle">Detalle</Label>
+            <Textarea
+              id="idea-detalle"
+              value={detalle}
+              onChange={(e) => setDetalle(e.target.value)}
+              placeholder="Describe el problema, tu idea…"
+              rows={5}
+              maxLength={8000}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="idea-categoria">Categoría</Label>
+              <Select value={categoria} onValueChange={setCategoria}>
+                <SelectTrigger id="idea-categoria">
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categorias.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {etiqueta(CATEGORIA_LABEL, c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="idea-autor">Tu nombre</Label>
+              <Input
+                id="idea-autor"
+                value={autor}
+                onChange={(e) => setAutor(e.target.value)}
+                placeholder="Opcional"
+                maxLength={120}
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex justify-end">
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar}>
+            Cancelar
+          </Button>
           <Button onClick={() => crear.mutate()} disabled={!puedeEnviar}>
             {crear.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            Enviar sugerencia
+            Crear idea
           </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// --- Listado (panel derecho) -----------------------------------------------
-
-function ListaSugerencias({
-  sugerencias,
-  estados,
-  cargando,
-  error,
-  onReintentar,
-  reintentando,
-}: {
-  sugerencias: Sugerencia[];
-  estados: string[];
-  cargando: boolean;
-  error: string | null;
-  onReintentar: () => void;
-  reintentando: boolean;
-}) {
-  if (cargando) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-28 w-full rounded-md" />
-        ))}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <BloqueError
-        titulo="No se pudieron cargar las sugerencias"
-        mensaje={error}
-        onReintentar={onReintentar}
-        cargando={reintentando}
-      />
-    );
-  }
-
-  if (sugerencias.length === 0) {
-    return (
-      <EstadoVacio
-        icono={Inbox}
-        titulo="El buzón está vacío"
-        texto="Envía la primera sugerencia con el formulario de la izquierda."
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {sugerencias.map((s) => (
-        <TarjetaSugerencia key={s.id} sugerencia={s} estados={estados} />
-      ))}
-    </div>
-  );
-}
-
-function TarjetaSugerencia({
-  sugerencia,
-  estados,
-}: {
-  sugerencia: Sugerencia;
-  estados: string[];
-}) {
-  const queryClient = useQueryClient();
-
-  const invalidar = () =>
-    void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
-
-  const cambiarEstado = useMutation({
-    mutationFn: (estado: string) => api.actualizarSugerencia(sugerencia.id, { estado }),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Estado actualizado");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const borrar = useMutation({
-    mutationFn: () => api.eliminarSugerencia(sugerencia.id),
-    onSuccess: (res) => {
-      invalidar();
-      toast.success(res?.mensaje ?? "Sugerencia borrada");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const fecha = formatearFecha(sugerencia.creada);
-
-  const acciones: EntradaMenuContextual[] = [
-    {
-      etiqueta: "Borrar",
-      icono: Trash2,
-      onClick: async () => {
-        if (
-          await confirmar({
-            mensaje: `¿Borrar la sugerencia “${sugerencia.titulo}”? Esta acción no se puede deshacer.`,
-            destructivo: true,
-            textoConfirmar: "Borrar",
-          })
-        )
-          borrar.mutate();
-      },
-      destructivo: true,
-      deshabilitado: borrar.isPending,
-    },
-  ];
-
-  return (
-    <FilaConAcciones
-      como="div"
-      acciones={acciones}
-      etiquetaAcciones={`Acciones de “${sugerencia.titulo}”`}
-      kebab="nunca"
-      realce
-      className={cn(
-        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
-        sugerencia.estado === "descartada" && "opacity-60",
-      )}
-    >
-      <div className="space-y-3 p-4 pr-10">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium leading-snug">{sugerencia.titulo}</span>
-              <Badge variant="outline" className="font-normal">
-                {etiqueta(CATEGORIA_LABEL, sugerencia.categoria)}
-              </Badge>
-              <Badge
-                variant={ESTADO_VARIANTE[sugerencia.estado] ?? "secondary"}
-                className="font-normal"
-              >
-                {etiqueta(ESTADO_LABEL, sugerencia.estado)}
-              </Badge>
-            </div>
-            {(sugerencia.autor || fecha) && (
-              <p className="text-xs text-muted-foreground">
-                {[sugerencia.autor, fecha].filter(Boolean).join(" · ")}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Select
-              value={sugerencia.estado}
-              onValueChange={(v) => cambiarEstado.mutate(v)}
-              disabled={cambiarEstado.isPending}
-            >
-              <SelectTrigger className="h-8 w-[8.5rem]" aria-label="Cambiar estado">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {estados.map((e) => (
-                  <SelectItem key={e} value={e}>
-                    {etiqueta(ESTADO_LABEL, e)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        {sugerencia.detalle && (
-          <Markdown className="text-muted-foreground">{sugerencia.detalle}</Markdown>
-        )}
-      </div>
-    </FilaConAcciones>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,8 +1,7 @@
-"""Concurrencia de stores JSON/JSONL: `bloqueo_archivo` evita perdidas en RMW (#115).
+"""Concurrencia de creación de sugerencias: N hilos crean a la vez y no se pierde ninguna.
 
-Sin el lock por-ruta, N hilos que leen-modifican-escriben el mismo fichero se pisan
-(last-write-wins) y se pierden entradas. Estos tests lanzan escrituras concurrentes y
-verifican que NO se pierde ninguna.
+Las sugerencias viven en Postgres (cada INSERT es independiente); este test verifica que la
+creación concurrente conserva todas las filas. Requiere el Postgres de pruebas (`entorno`).
 
 DISENO ANTI-CUELGUE: todo acotado en el tiempo -> `Barrier(timeout)`, `join(timeout)` y
 asercion de que ningun hilo quedo vivo. `pytest-timeout` es el backstop final. Nada
@@ -41,8 +40,7 @@ def _en_paralelo(trabajo: Callable[[int], None], n: int = 25) -> None:
 
 
 @pytest.mark.timeout(30)
-def test_sugerencias_crear_concurrente_no_pierde(tmp_path, monkeypatch):
-    monkeypatch.setenv("KENI_CONSOLA_SUGERENCIAS", str(tmp_path / "sug.json"))
+def test_sugerencias_crear_concurrente_no_pierde(entorno):
     _en_paralelo(lambda i: sug.crear(f"idea {i}"), n=25)
     titulos = {s["titulo"] for s in sug.listar()}
     faltan = [f"idea {i}" for i in range(25) if f"idea {i}" not in titulos]

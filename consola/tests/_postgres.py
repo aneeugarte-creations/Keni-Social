@@ -90,6 +90,9 @@ _TABLAS = (
     # Taller Evergreen: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
     # las ideas se acumulan entre tests del mismo worker y rompen el aislamiento.
     "evergreen_ideas",
+    # Kanban de auto-desarrollo: sugerencias del equipo. Sin truncar, se acumulan entre tests
+    # del mismo worker y rompen el aislamiento del listado.
+    "sugerencias",
     # Insumos del día (cajones): ítems antes que lotes. Sin esto, los ítems se acumulan entre
     # tests del mismo worker (misma fecha+cajón) y rompen el aislamiento del listado por día.
     "insumos_item",

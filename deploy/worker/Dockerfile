@@ -31,11 +31,18 @@ ENV PYTHONUNBUFFERED=1 \
 #     comportamiento de stream-json ya validado. Sube a conciencia y valida aparte.
 ARG CLAUDE_CODE_VERSION=2.1.173
 
-# curl: script de nodesource. git: lo usan algunas skills. Node 20 + Claude Code CLI:
-# AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola VIDEO)
-# — el worker tambien ejecuta los jobs de proceso `render-video` (filtergraph: scale/crop/pad,
-# overlay, xstack/vstack, subtitles=ASS). NOTA: la dependencia ASR (faster-whisper/torch) NO se
-# bakea aqui (pesado, rompe el build): es OPCIONAL y se instala en el servidor cuando se active
+# VERSION PINEADA de la CLI de GitHub (`gh`). La usa el carril de AUTO-DESARROLLO (worker-dev /
+# worker-ralph) para el login por device-flow (panel Sistema -> Proveedores) y el push a `main`.
+# Se instala desde el `.deb` OFICIAL de la release (no por el repo apt, cuyo paquete es movil):
+# build REPRODUCIBLE y pineado. Sube a conciencia. Overridable por build-arg.
+ARG GH_VERSION=2.62.0
+
+# curl: script de nodesource + descarga del .deb de gh. git: lo usan algunas skills y el carril
+# dev (worktrees/promocion). gh: CLI de GitHub para el carril de auto-desarrollo. Node 20 + Claude
+# Code CLI: AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola
+# VIDEO) — el worker tambien ejecuta los jobs de proceso `render-video` (filtergraph: scale/crop/
+# pad, overlay, xstack/vstack, subtitles=ASS). NOTA: la dependencia ASR (faster-whisper/torch) NO
+# se bakea aqui (pesado, rompe el build): es OPCIONAL y se instala en el servidor cuando se active
 # la transcripcion (import perezoso en motores/transcripcion; degrada con error claro si falta).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates git ffmpeg \
@@ -43,6 +50,10 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends nodejs \
  && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
  && npm cache clean --force \
+ && GH_ARCH="$(dpkg --print-architecture)" \
+ && curl -fsSL -o /tmp/gh.deb "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${GH_ARCH}.deb" \
+ && apt-get install -y --no-install-recommends /tmp/gh.deb \
+ && rm -f /tmp/gh.deb \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
