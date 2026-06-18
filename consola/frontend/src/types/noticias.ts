@@ -179,6 +179,9 @@ export interface Historia {
   verificacion?: "corroborada" | "unica_fuente" | "dudosa";
   /** true si el título/resumen ya fueron traducidos al ES por el daemon (Ola D). */
   traducido?: boolean;
+  /** Extranjera aún sin traducir: la mesa la muestra con un placeholder "Traduciendo…" en
+   * `titulo` (nunca el original) hasta que el daemon la pase a ES (cada ~30 s, por score). */
+  traduciendo?: boolean;
   /** Título en el idioma original, antes de la traducción (solo si `traducido`). */
   titulo_original?: string;
   /** Código de idioma del cluster antes de traducir (p. ej. 'en', 'pt'). */

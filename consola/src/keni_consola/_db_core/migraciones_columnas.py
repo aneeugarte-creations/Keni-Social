@@ -1023,6 +1023,21 @@ def _backfill_gasto_ia_proceso(con: Any) -> None:
     )
 
 
+def _resanear_traduccion_envenenada(con: Any) -> None:
+    """Resanea clusters ENVENENADOS por el bug de traducción: los que quedaron `traducido=1` con el
+    título extranjero pegado en `titulo_es` (idéntico al `titulo` original) porque Haiku falló y el
+    fallback persistía el original como si fuera la traducción. Los devuelve a `traducido=0` (y limpia
+    `titulo_es`/`resumen_es`) para que la fase Traducir los reintente y la mesa deje de mostrarlos en
+    idioma extranjero. One-shot e idempotente: tras correr ya son `traducido=0` y no vuelven a casar."""
+    if not _tabla_existe(con, "noticias_clusters"):
+        return
+    con.execute(
+        "UPDATE noticias_clusters SET traducido = 0, titulo_es = '', resumen_es = '' "
+        "WHERE traducido = 1 AND idioma <> '' AND substr(idioma, 1, 2) <> 'es' "
+        "AND titulo_es = titulo"
+    )
+
+
 # ETAPAS CON NOMBRE DE VERBO (Fase 2): los MARCADORES de etapa persistidos en el índice de
 # generaciones (`generaciones_indice.payload->>'etiqueta'`, jsonb) nacieron con los prefijos
 # viejos. El código ya ESCRIBE los verbos nuevos y los LECTORES (Actividad IA / Pipelines) casan

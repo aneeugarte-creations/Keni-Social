@@ -90,4 +90,9 @@ describe("TarjetaHistoria · badges de Investigación", () => {
     renderTarjeta(historia({ tema_macro: "Cumbre del G7" }));
     expect(screen.queryByTestId("badge-tema-macro")).toBeNull();
   });
+
+  it("una extranjera sin traducir muestra «Traduciendo…» en vez del titular en idioma original", () => {
+    renderTarjeta(historia({ traduciendo: true, titulo: "Traduciendo…" }));
+    expect(screen.getByTestId("btn-detalle").textContent).toMatch(/Traduciendo/);
+  });
 });

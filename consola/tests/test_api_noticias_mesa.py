@@ -13,13 +13,14 @@ from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
 
 def _inicializar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
-             titulo="Historia de prueba"):
+             titulo="Historia de prueba", idioma="", traducido=0, titulo_es=""):
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": titulo, "resumen": "Resumen", "marca": marca,
         "categoria": categoria, "clave": f"t:{cid}", "n_items": 1, "n_fuentes": 2,
         "senal": 100, "score": score, "breaking": breaking,
         "primer_visto": "2026-06-01T00:00:00+00:00",
         "ultimo_visto": "2026-06-05T12:00:00+00:00", "estado": estado,
+        "idioma": idioma, "traducido": traducido, "titulo_es": titulo_es,
     })
     return repos.obtener_noticia_cluster(cid)
 
@@ -81,6 +82,30 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     # Cada historia trae el contrato Historia (umbral + estado de pieza incluidos).
     h = por_linea["mx"]["historias"][0]
     assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
+
+
+def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatch):
+    """La mesa se ve SIEMPRE en español: una historia extranjera sin traducir SÍ aparece, pero con
+    un placeholder "Traduciendo…" (nunca su titular en idioma original) y `traduciendo=True`. La
+    traducida se muestra en español (titulo_es) y la nativa en español, normales."""
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:5")
+    _inicializar("es-nativa", score=0.9, categoria="mx", titulo="Noticia nacional", idioma="es")
+    _inicializar("en-cruda", score=0.8, categoria="mx", titulo="Foreign breaking",
+                 idioma="en", traducido=0)
+    _inicializar("en-trad", score=0.7, categoria="mx", titulo="Foreign two",
+                 idioma="en", traducido=1, titulo_es="Noticia traducida")
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    linea = {ln["linea"]: ln for ln in datos["lineas"]}["mx"]
+    por_id = {h["id"]: h for h in linea["historias"]}
+    assert set(por_id) == {"es-nativa", "en-cruda", "en-trad"}  # todas visibles
+    # Extranjera sin traducir: placeholder, nunca el titular en idioma original.
+    assert por_id["en-cruda"]["traduciendo"] is True
+    assert por_id["en-cruda"]["titulo"] == "Traduciendo…"
+    assert por_id["en-cruda"]["titulo_original"] == "Foreign breaking"
+    # Traducida y nativa: en español y SIN marca de traduciendo.
+    assert por_id["en-trad"]["titulo"] == "Noticia traducida"
+    assert por_id["en-trad"]["traduciendo"] is False
+    assert por_id["es-nativa"]["traduciendo"] is False
 
 
 def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):

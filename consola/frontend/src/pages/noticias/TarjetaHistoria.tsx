@@ -217,7 +217,14 @@ export function TarjetaHistoria({
                   aria-label={`Abrir detalle de «${historia.titulo || "sin título"}»`}
                   data-testid="btn-detalle"
                 >
-                  {historia.titulo || "(sin título)"}
+                  {historia.traduciendo ? (
+                    <span className="inline-flex items-center gap-1 italic text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      {historia.titulo || "Traduciendo…"}
+                    </span>
+                  ) : (
+                    historia.titulo || "(sin título)"
+                  )}
                 </button>
               </p>
             </div>

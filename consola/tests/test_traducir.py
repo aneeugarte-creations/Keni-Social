@@ -104,6 +104,8 @@ def test_traduccion_correcta():
     assert "[ES]" in t1["titulo_es"]
     assert "titulo_es" in t1
     assert "resumen_es" in t1
+    # Traducción REAL -> `ok=True` (el daemon la persistirá como `traducido`).
+    assert all(r["ok"] is True for r in resultado)
 
 
 # --------------------------------------------------------------------------- #
@@ -119,12 +121,15 @@ def test_fallo_ejecutor_devuelve_originales():
     assert len(resultado) == 1
     assert resultado[0]["titulo_es"] == "Original title"
     assert resultado[0]["resumen_es"] == "Original summary"
+    # Fallback al original -> `ok=False`: el daemon NO lo persiste, reintenta luego.
+    assert resultado[0]["ok"] is False
 
 
 def test_json_invalido_devuelve_originales():
     items = [{"id": "x2", "titulo": "Hello", "resumen": "World"}]
     resultado = traducir.traducir_items(items, ejecutor=_ejecutor_json_invalido)
     assert resultado[0]["titulo_es"] == "Hello"
+    assert resultado[0]["ok"] is False
 
 
 def test_respuesta_parcial_rellena_con_originales(caplog):
@@ -141,9 +146,12 @@ def test_respuesta_parcial_rellena_con_originales(caplog):
     b_res = next(r for r in resultado if r["id"] == "b")
     # El primer ítem fue traducido.
     assert a_res["titulo_es"] == "[ES] primero"
-    # El segundo ítem no llegó en la respuesta -> devuelve original (fallback razonable)…
+    assert a_res["ok"] is True
+    # El segundo ítem no llegó en la respuesta -> devuelve original (fallback razonable) con
+    # `ok=False`, para que el daemon no lo dé por traducido y reintente.
     assert b_res["titulo_es"] == "B title"
     assert b_res["resumen_es"] == "B summary"
+    assert b_res["ok"] is False
     # …pero NO silencioso: queda un WARN con el id y la cuenta de ítems sin traducir.
     avisos = [r.message for r in caplog.records if "sin traducción" in r.message]
     assert avisos and "1 de 2" in avisos[0] and "b" in avisos[0]

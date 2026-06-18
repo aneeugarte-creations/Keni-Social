@@ -45,12 +45,18 @@ def paso_traducir(*, ejecutor: traducir.Ejecutor | None = None) -> dict[str, Any
     traducidos = 0
     for cid, original in originales.items():
         t = por_id.get(cid)
-        if not t:
+        # Solo se persiste una traducción REAL (`ok`): un fallo de Haiku NO marca el cluster
+        # `traducido=1` con el título extranjero (lo dejaría en idioma original para siempre).
+        # Sin marcar, vuelve a ser candidato en el próximo barrido (reintento).
+        if not t or not t.get("ok"):
+            continue
+        titulo_es = str(t.get("titulo_es") or "").strip()
+        if not titulo_es:
             continue
         try:
             repos.marcar_cluster_traducido(
                 cid,
-                titulo_es=str(t.get("titulo_es") or original.get("titulo") or ""),
+                titulo_es=titulo_es,
                 resumen_es=str(t.get("resumen_es") or ""),
                 titulo_original=str(original.get("titulo") or ""),
             )

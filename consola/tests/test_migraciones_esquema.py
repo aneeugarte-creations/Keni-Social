@@ -273,3 +273,46 @@ def test_recuperar_campanias_renombra_cuando_solo_existe_la_vieja(pg):
         con.execute("DROP TABLE IF EXISTS comercial_campanias")
         con.commit()
         con.close()
+
+
+def test_resanear_traduccion_envenenada_resetea_solo_envenenados(pg):
+    """0043: devuelve a `traducido=0` los clusters que el bug dejó con el título extranjero pegado
+    en `titulo_es` (== `titulo`), sin tocar las traducciones reales ni el español nativo."""
+    from keni_consola import repos
+    from keni_consola._db_core.migraciones_columnas import _resanear_traduccion_envenenada
+
+    db.listar_swaps_turno()  # asegura el esquema
+
+    def _sembrar(cid, titulo, idioma):
+        repos.upsert_noticia_cluster({
+            "id": cid, "titulo": titulo, "resumen": "Body", "marca": "unotv",
+            "categoria": "mx", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": 1,
+            "senal": 1, "score": 0.5, "ultimo_visto": "2026-06-05T12:00:00+00:00",
+            "estado": "nuevo", "idioma": idioma,
+        })
+
+    # Envenenado: `titulo_es` == `titulo` (extranjero) por el fallback del bug.
+    _sembrar("poison", "Foreign breaking", "en")
+    repos.marcar_cluster_traducido("poison", titulo_es="Foreign breaking", resumen_es="Body",
+                                   titulo_original="Foreign breaking")
+    # Traducción REAL: `titulo_es` en español, distinto del original.
+    _sembrar("sano", "Other foreign", "en")
+    repos.marcar_cluster_traducido("sano", titulo_es="Noticia traducida", resumen_es="Cuerpo",
+                                   titulo_original="Other foreign")
+    # Español nativo: nunca se traduce; la migración no debe tocarlo.
+    _sembrar("espanol", "Noticia nacional", "es")
+
+    con = motor_db.conectar_cruda()
+    try:
+        _resanear_traduccion_envenenada(con)
+        con.commit()
+    finally:
+        con.close()
+
+    poison = repos.obtener_noticia_cluster("poison")
+    assert not poison["traducido"]  # reseteado -> Traducir lo reintentará
+    assert poison["titulo_es"] == ""
+    sano = repos.obtener_noticia_cluster("sano")
+    assert sano["traducido"]  # traducción real intacta
+    assert sano["titulo_es"] == "Noticia traducida"
+    assert repos.obtener_noticia_cluster("espanol")["titulo"] == "Noticia nacional"

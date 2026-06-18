@@ -189,6 +189,16 @@ def _historia_a_dict(
         titulo = titulo_original
         resumen = resumen_original
 
+    # La mesa se ve SIEMPRE en español: una historia EXTRANJERA aún sin traducir NUNCA muestra su
+    # titular en idioma original. Se marca `traduciendo` y se sirve un placeholder hasta que la
+    # fase Traducir (cada barrido, ~30 s, por prioridad de score) la pase a ES. Mismo criterio
+    # que Admitir (`_falta_traduccion`). El original sigue disponible en `titulo_original`.
+    idioma_l = (cluster.get("idioma") or "").strip().lower()
+    traduciendo = bool(idioma_l) and not idioma_l.startswith("es") and not traducido
+    if traduciendo:
+        titulo = "Traduciendo…"
+        resumen = ""
+
     return {
         "id": cluster["id"],
         "titulo": titulo,
@@ -221,6 +231,9 @@ def _historia_a_dict(
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
         "traducido": traducido,
+        # Extranjera aún sin traducir: la UI muestra la fila con un indicador "Traduciendo…" en
+        # vez del titular en idioma original (que va en `titulo_original`).
+        "traduciendo": traduciendo,
         "idioma": cluster.get("idioma") or "",
         "titulo_original": titulo_original,
         "primer_visto": cluster.get("primer_visto") or "",

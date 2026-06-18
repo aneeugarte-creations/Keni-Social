@@ -219,9 +219,11 @@ def traducir_items(
         ejecutor: función `(prompt, dir_permitido) -> str` inyectable (para tests). Si es
             None se usa el subproceso real.
 
-    Devuelve: `[{id, titulo_es, resumen_es}]`. En cualquier fallo (subproceso, timeout,
-    JSON inválido, ítem no encontrado en la respuesta) devuelve los originales como
-    `titulo_es`/`resumen_es` (best-effort, sin romper el Radar).
+    Devuelve: `[{id, titulo_es, resumen_es, ok}]`. `ok=True` solo cuando hubo traducción
+    REAL; ante cualquier fallo (subproceso, timeout, JSON inválido, ítem ausente o sin
+    `titulo_es`) devuelve el original como `titulo_es`/`resumen_es` pero con `ok=False`,
+    para que el llamante (el daemon) NO lo persista como traducción y reintente, sin
+    envenenar el cluster con texto extranjero marcado `traducido=1`.
     """
     if not items:
         return []
@@ -254,6 +256,7 @@ def traducir_items(
                 "id": str(it.get("id", "")),
                 "titulo_es": str(it.get("titulo", "")),
                 "resumen_es": str(it.get("resumen", "") or ""),
+                "ok": False,
             }
             for it in items
         ]
@@ -283,20 +286,25 @@ def traducir_items(
     for item in items:
         item_id = str(item.get("id", ""))
         trad = por_id.get(item_id)
-        if trad and isinstance(trad.get("titulo_es"), str):
+        titulo_es = str(trad["titulo_es"]).strip() if trad and isinstance(trad.get("titulo_es"), str) else ""
+        if titulo_es:
             resultado.append({
                 "id": item_id,
-                "titulo_es": str(trad["titulo_es"]).strip() or str(item.get("titulo", "")),
+                "titulo_es": titulo_es,
                 "resumen_es": str(trad.get("resumen_es", "") or "").strip(),
+                "ok": True,
             })
         else:
-            # Ítem ausente (o sin `titulo_es`) en la respuesta -> conserva el original. El
-            # fallback es razonable, pero NO silencioso: el prompt pide TODOS los ítems.
+            # Ítem ausente (o sin `titulo_es`) en la respuesta -> conserva el original como
+            # best-effort, pero con `ok=False`: el daemon NO lo marca `traducido` y reintenta
+            # en el próximo barrido (no se queda con texto extranjero pegado). NO silencioso:
+            # el prompt pide TODOS los ítems y abajo queda un WARN con los faltantes.
             sin_traducir.append(item_id)
             resultado.append({
                 "id": item_id,
                 "titulo_es": str(item.get("titulo", "")),
                 "resumen_es": str(item.get("resumen", "") or ""),
+                "ok": False,
             })
     if sin_traducir:
         _log.warning(

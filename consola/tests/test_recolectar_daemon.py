@@ -454,6 +454,24 @@ def test_paso_traducir_marca_clusters_y_guarda_es(monkeypatch):
     assert por_id["c2"]["resumen_es"] == "ES Body two"
 
 
+def test_paso_traducir_no_persiste_si_falla(monkeypatch):
+    """Si Haiku falla, el cluster NO se marca `traducido` con el título extranjero: queda intacto
+    para reintentarse en el próximo barrido (no se envenena con texto en idioma original)."""
+    candidatos = [{"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en"}]
+    monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
+                        lambda ventana_h, **kw: list(candidatos))
+    guardados = []
+    monkeypatch.setattr(recolectar_daemon.repos, "marcar_cluster_traducido",
+                        lambda cid, **kw: guardados.append(cid))
+
+    def _ejecutor_falla(_prompt, _dir):
+        raise RuntimeError("haiku caído")
+
+    resumen = recolectar_daemon.paso_traducir(ejecutor=_ejecutor_falla)
+    assert resumen == {"traducidos": 0, "candidatos": 1}
+    assert guardados == []  # nada persistido -> sigue siendo candidato (reintento)
+
+
 def test_paso_traducir_sin_candidatos_no_hace_nada(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_extranjeros_sin_traducir",
                         lambda ventana_h, **kw: [])

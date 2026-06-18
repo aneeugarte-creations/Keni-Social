@@ -64,6 +64,7 @@ from .migraciones_columnas import (
     _recuperar_campanias_de_comercial,
     _migrar_renombre_entidades,
     _renombrar_comercial_campanias_a_campanias,
+    _resanear_traduccion_envenenada,
 )
 from .migraciones_integridad import (
     _COLUMNAS_FECHA_NATIVA,
@@ -454,6 +455,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # RENDIMIENTO: indice compuesto `(estado, marca)` en `pieza` para el filtro caliente del
     # feed/colas (BDs existentes; las nuevas lo traen del DDL). One-shot e idempotente.
     Migracion("0042-indice-pieza-estado-marca", _migrar_indice_pieza_estado_marca),
+    # SANEO DE DATOS: clusters que el bug de traducción dejó `traducido=1` con el título extranjero
+    # pegado en `titulo_es` (== `titulo`) cuando Haiku falló. Se devuelven a `traducido=0` para que
+    # Traducir los reintente (la mesa dejaría de mostrarlos en idioma original). One-shot e idempotente.
+    Migracion("0043-resanear-traduccion-envenenada", _resanear_traduccion_envenenada),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
