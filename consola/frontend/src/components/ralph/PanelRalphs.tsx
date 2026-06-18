@@ -60,7 +60,7 @@ export function PanelRalphs() {
           type="button"
           onClick={abrirLanzador}
           className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-keni/60 text-keni shadow-sm transition-colors hover:bg-keni/10",
+            "flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-keni/60 bg-white text-keni shadow-sm transition-colors hover:bg-keni/10",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-keni focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           )}
           aria-label="Lanzar Ralph"
