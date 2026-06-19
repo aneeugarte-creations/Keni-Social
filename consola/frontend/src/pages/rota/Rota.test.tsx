@@ -17,19 +17,19 @@ vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
 
-function usuario(): UsuarioSesion {
+function usuario(rol: UsuarioSesion["rol"] = "admin"): UsuarioSesion {
   return {
     id: "u1",
     usuario: "yo",
-    rol: "admin",
+    rol,
     debe_cambiar_password: false,
     marcas: ["claro-sports"],
   };
 }
 
-function sesionValor(): ValorSesion {
+function sesionValor(rol: UsuarioSesion["rol"] = "admin"): ValorSesion {
   return {
-    usuario: usuario(),
+    usuario: usuario(rol),
     cargando: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
@@ -63,9 +63,12 @@ type OpcionesRender = {
   cobertura?: unknown;
   contenido?: unknown;
   listarTurnos?: unknown;
+  /** Rol del usuario montado (por defecto `admin`). El modo «Mes» del Calendario arranca en
+   *  «Equipo» para el admin y en «Yo» para un editor (que sí está en la rota). */
+  rol?: UsuarioSesion["rol"];
 };
 
-function renderRota(opts: OpcionesRender = {}) {
+function renderRota(opts: OpcionesRender = {}, tab?: string) {
   // El Calendario de Turnos dispara varias consultas de rota; las dejamos vacías (sus
   // lecturas están guardadas con `?? []`) para centrarnos en la pestaña «Cobertura».
   for (const m of [
@@ -96,17 +99,23 @@ function renderRota(opts: OpcionesRender = {}) {
     vi.spyOn(apiMod.api, "contenido").mockResolvedValue(opts.contenido as never);
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const entradas = tab ? [`/?tab=${tab}`] : ["/"];
   return render(
     <QueryClientProvider client={client}>
-      <SesionContexto.Provider value={sesionValor()}>
+      <SesionContexto.Provider value={sesionValor(opts.rol)}>
         <MarcaActivaContexto.Provider value={valorMarca()}>
-          <MemoryRouter>
+          <MemoryRouter initialEntries={entradas}>
             <Rota />
           </MemoryRouter>
         </MarcaActivaContexto.Provider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
+}
+
+/** Atajo: monta la página con un `?tab=` inicial (deep-links / compat legacy). */
+function renderRotaConTab(tab: string, opts: OpcionesRender = {}) {
+  return renderRota(opts, tab);
 }
 
 describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»", () => {
@@ -140,6 +149,58 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
 
+  it("tiene 3 pestañas (Calendario, Cobertura, Cambios) y «Mi jornada» ya NO es una", async () => {
+    renderRota();
+    // El colapso 4→3: «Mi jornada» se fundió en el modo «Mes» del Calendario.
+    await screen.findByRole("tab", { name: "Calendario" });
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(3);
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Calendario",
+      "Cobertura",
+      expect.stringContaining("Cambios y ausencias"),
+    ]);
+    expect(screen.queryByRole("tab", { name: "Mi jornada" })).toBeNull();
+  });
+
+  it("el Calendario abre en modo «Semana» y ofrece el conmutador Semana|Mes", async () => {
+    renderRota();
+    await screen.findByRole("tab", { name: "Calendario" });
+    // Conmutador con PALABRAS (no iconos crípticos): «Semana» activo por defecto.
+    expect(
+      await screen.findByRole("button", { name: "Semana", pressed: true }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Mes", pressed: false }),
+    ).toBeInTheDocument();
+  });
+
+  it("conmutar a «Mes» muestra la vista mensual de jornada (Yo/Equipo + Imprimir)", async () => {
+    renderRota();
+    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
+    // El modo «Mes» = la antigua «Mi jornada»: su selector de ámbito y su Imprimir/PDF.
+    expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yo" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Imprimir \/ PDF/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("deep-link legacy ?tab=mis-turnos cae en el Calendario en modo «Mes»", async () => {
+    renderRotaConTab("mis-turnos");
+    // No hay pestaña «Mi jornada»: el Calendario queda activo y abierto en «Mes».
+    expect(await screen.findByRole("tab", { name: "Calendario" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(
+      await screen.findByRole("button", { name: "Mes", pressed: true }),
+    ).toBeInTheDocument();
+    // Y la vista mensual de jornada ya está montada (su ámbito Yo/Equipo).
+    expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
+  });
+
   it("al abrir «Cobertura» aparece el tablero (Panorama + «Añadir» inline)", async () => {
     renderRota();
     // Radix Tabs activa en pointer-down (patrón de la suite).
@@ -153,16 +214,30 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     ).toBeInTheDocument();
   });
 
-  it("para el admin, «Mi jornada» abre en la vista «Equipo» (turnos de todos)", async () => {
+  it("para el admin, el modo «Mes» del Calendario abre en «Equipo» (turnos de todos)", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Mi jornada" }), {
-      button: 0,
-    });
+    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El admin no está en la rota: arranca en «Equipo» (jornada de todo el equipo), no en «Yo».
     expect(
-      await screen.findByRole("button", { name: /Equipo/, pressed: true }),
+      await screen.findByRole("button", { name: "Equipo", pressed: true }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Yo$/, pressed: false })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Yo", pressed: false }),
+    ).toBeInTheDocument();
+  });
+
+  it("para un editor, el modo «Mes» del Calendario abre en «Yo» (su propia jornada)", async () => {
+    renderRota({ rol: "editor" });
+    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
+    // El editor sí está en la rota: arranca en «Yo» (su jornada), no en «Equipo».
+    expect(
+      await screen.findByRole("button", { name: "Yo", pressed: true }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Equipo", pressed: false }),
+    ).toBeInTheDocument();
   });
 
   it("en el Calendario, clicar el chip de un evento abre su tarjeta de COBERTURA (no la edición)", async () => {

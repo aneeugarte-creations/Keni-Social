@@ -17,13 +17,21 @@ import type { FiltrosSwaps } from "@/types";
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { contarSwapsPendientes } from "./comun";
-import { MisTurnos } from "./MisTurnos";
 
 
 // ===========================================================================
 
-/** Valores válidos de pestaña (orden = el de la barra). */
-const PESTANAS = ["calendario", "cobertura", "mis-turnos", "cambios-ausencias"];
+/** Valores válidos de pestaña (orden = el de la barra). «Mi jornada» dejó de ser pestaña: es
+ *  el modo «Mes» del Calendario; el valor legacy `mis-turnos` se normaliza abajo. */
+const PESTANAS = ["calendario", "cobertura", "cambios-ausencias"];
+
+/** El deep-link legacy a la antigua pestaña «Mi jornada» (`?tab=mis-turnos`) cae en el
+ *  Calendario abierto en su modo «Mes» (la misma vista mensual de jornada). */
+function normalizarTab(tab: string | null): { pestania: string; vistaCalendario: "semana" | "mes" } {
+  if (tab === "mis-turnos") return { pestania: "calendario", vistaCalendario: "mes" };
+  if (tab && PESTANAS.includes(tab)) return { pestania: tab, vistaCalendario: "semana" };
+  return { pestania: "calendario", vistaCalendario: "semana" };
+}
 
 export default function Rota() {
   const { usuario } = useSesion();
@@ -51,17 +59,24 @@ export default function Rota() {
   const [lunes, setLunes] = React.useState(() => lunesDeSemana(new Date()));
   // Pestaña activa (controlada). Aquí el Calendario es solo turnos + su cobertura derivada.
   //
-  // La inicial puede venir por `?tab=` (deep-link desde la campana de notificaciones de
-  // un cambio de turno); si el valor no es válido, cae a "calendario".
+  // La inicial puede venir por `?tab=` (deep-link desde la campana de notificaciones de un
+  // cambio de turno); si el valor no es válido, cae a "calendario". El valor legacy
+  // `mis-turnos` (antigua pestaña «Mi jornada») se normaliza a Calendario en modo «Mes».
   const [params] = useSearchParams();
   const tabParam = params.get("tab");
-  const [pestania, setPestania] = React.useState(() =>
-    tabParam && PESTANAS.includes(tabParam) ? tabParam : "calendario",
+  const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam).pestania);
+  // Modo de apertura del Calendario para los deep-links legacy a «Mi jornada».
+  const [vistaCalendario, setVistaCalendario] = React.useState<"semana" | "mes">(
+    () => normalizarTab(tabParam).vistaCalendario,
   );
   // Si el `?tab=` cambia con la página ya montada (clic en la campana estando en Turnos),
-  // sincroniza la pestaña activa.
+  // sincroniza la pestaña activa (y el modo del Calendario para el deep-link legacy).
   React.useEffect(() => {
-    if (tabParam && PESTANAS.includes(tabParam)) setPestania(tabParam);
+    const { pestania: p, vistaCalendario: v } = normalizarTab(tabParam);
+    if (tabParam) {
+      setPestania(p);
+      setVistaCalendario(v);
+    }
   }, [tabParam]);
 
   return (
@@ -71,7 +86,6 @@ export default function Rota() {
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
-          <TabsTrigger value="mis-turnos">Mi jornada</TabsTrigger>
           <TabsTrigger value="cambios-ausencias">
             Cambios y ausencias
             {pendientesCambios > 0 && (
@@ -86,16 +100,22 @@ export default function Rota() {
         </TabsList>
 
         <TabsContent value="calendario">
-          <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
+          {/* `key`={vistaCalendario}: un deep-link legacy a «Mi jornada» (?tab=mis-turnos) que
+              llegue con la página ya montada fuerza el remonte del Calendario en modo «Mes»
+              (su `vistaInicial` solo se lee al montar). El uso normal no cambia este valor. */}
+          <Calendario
+            key={vistaCalendario}
+            lunes={lunes}
+            setLunes={setLunes}
+            esAdmin={esAdmin}
+            vistaInicial={vistaCalendario}
+          />
         </TabsContent>
         {/* «Cobertura»: el tablero de Tareas (Panorama/Por cubrir/Mis tareas) embebido,
             con el botón «Añadir» inline para no colgar acciones en la barra de Turnos.
             El Calendario de arriba queda intacto; son planos hermanos (capacidad vs cobertura). */}
         <TabsContent value="cobertura">
           <TareasBoard acciones="inline" />
-        </TabsContent>
-        <TabsContent value="mis-turnos">
-          <MisTurnos esAdmin={esAdmin} onVerCalendario={() => setPestania("calendario")} />
         </TabsContent>
         <TabsContent value="cambios-ausencias">
           {/* Ola "fusion real": una sola vista que mezcla cambios de turno y

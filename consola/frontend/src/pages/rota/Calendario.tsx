@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { resumenCobertura } from "@/lib/cobertura";
@@ -62,21 +63,33 @@ import {
 } from "./comun";
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
 import { DialogFranjas } from "./Franjas";
+import { VistaMensualTurnos } from "./MisTurnos";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { TarjetaCobertura, TarjetaEventoLibre } from "@/pages/tareas/tarjetas";
 import { agrupar, type Cobertura } from "@/pages/tareas/tipos";
 
 
+/** Modo de vista del Calendario: la rejilla SEMANAL (franjas×días) o el calendario MENSUAL
+ *  de jornada (la antigua «Mi jornada», con su Yo/Equipo e imprimir/PDF). */
+type VistaCalendario = "semana" | "mes";
+
 export function Calendario({
   lunes,
   setLunes,
   esAdmin,
+  vistaInicial = "semana",
 }: {
   lunes: string;
   setLunes: (l: string) => void;
   esAdmin: boolean;
+  /** Modo de apertura. Por defecto «Semana» (rejilla actual); «mes» lo usan los deep-links
+   *  legacy a la antigua pestaña «Mi jornada». */
+  vistaInicial?: VistaCalendario;
 }) {
+  // Conmutador Semana|Mes: la rejilla semanal vive aquí; el modo «Mes» reutiliza la vista
+  // mensual de jornada. Su valor inicial puede venir de un deep-link legacy (?tab=mis-turnos).
+  const [vista, setVista] = React.useState<VistaCalendario>(vistaInicial);
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
   // GRID POR MARCA: la marca activa entra en las queryKeys (refresca al cambiar de workspace)
@@ -372,14 +385,39 @@ export function Calendario({
   const error =
     coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error;
 
+  // Conmutador Semana|Mes (palabras, outline gris): visible en ambos modos.
+  const conmutadorVista = (
+    <ToggleGroup
+      ariaLabel="Vista del calendario"
+      valor={vista}
+      onCambio={setVista}
+      opciones={[
+        { valor: "semana", etiqueta: "Semana" },
+        { valor: "mes", etiqueta: "Mes" },
+      ]}
+    />
+  );
+
+  // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
+  // imprimir/PDF intactos. El conmutador queda arriba; el vacío de «Yo» salta a «Semana».
+  if (vista === "mes") {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
+        <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {/* Cabecera SLIM (ola "cabecera-slim"): NavegadorSemana + ayuda a la izquierda; a la
-          derecha el estado de la semana, el aviso de reprogramaciones, la accion primaria
-          (Aprobar/Despublicar) y un menu "Mas" con el resto. La leyenda dejo de vivir
-          siempre visible bajo la cabecera; se ofrece bajo demanda con el icono "?". */}
+      {/* Cabecera SLIM (ola "cabecera-slim"): conmutador Semana|Mes + NavegadorSemana + ayuda a
+          la izquierda; a la derecha el estado de la semana, el aviso de reprogramaciones, la
+          accion primaria (Aprobar/Despublicar) y un menu "Mas" con el resto. La leyenda dejo de
+          vivir siempre visible bajo la cabecera; se ofrece bajo demanda con el icono "?". */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {conmutadorVista}
           <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
           <AyudaLeyenda />
         </div>

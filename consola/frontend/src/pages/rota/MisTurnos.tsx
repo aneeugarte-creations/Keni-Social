@@ -1,8 +1,9 @@
-// Pestaña MIS TURNOS de la rota: dos calendarios MENSUALES de pura jornada (turnos), sin
-// eventos ni cobertura, con un selector de ámbito arriba:
+// Vista MENSUAL de la rota (modo «Mes» del Calendario): dos calendarios mensuales de pura
+// jornada (turnos), sin eventos ni cobertura, con un selector de ámbito arriba:
 //   • «Equipo» — la jornada de TODO el equipo en el mes (quién trabaja cada franja).
 //   • «Yo»     — solo el horario propio del usuario en el mes.
-// El plano de eventos/«coger» vive en la pestaña «Cobertura»; aquí NO se mezcla.
+// El plano de eventos/«coger» vive en la pestaña «Cobertura»; aquí NO se mezcla. La rejilla
+// SEMANAL es el modo «Semana» del mismo Calendario.
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -19,6 +20,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -35,16 +37,16 @@ import type { TurnoRota } from "@/types";
 
 type Ambito = "equipo" | "yo";
 
-// --- Pestaña: Mis turnos ----------------------------------------------------
+// --- Vista mensual (modo «Mes» del Calendario) ------------------------------
 
-export function MisTurnos({
+export function VistaMensualTurnos({
   esAdmin = false,
-  onVerCalendario,
+  onVerSemana,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
-  /** Salto a la pestaña Calendario (lo ofrece el vacío de «Yo» a quien gestiona). */
-  onVerCalendario?: () => void;
+  /** Salta a la rejilla SEMANAL del mismo Calendario (lo ofrece el vacío de «Yo» a quien gestiona). */
+  onVerSemana?: () => void;
 }) {
   const [ambito, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
@@ -68,13 +70,13 @@ export function MisTurnos({
       {ambito === "equipo" ? (
         <VistaMesEquipo mes={mes} />
       ) : (
-        <VistaMesYo mes={mes} esAdmin={esAdmin} onVerCalendario={onVerCalendario} />
+        <VistaMesYo mes={mes} esAdmin={esAdmin} onVerSemana={onVerSemana} />
       )}
     </div>
   );
 }
 
-/** Conmutador Equipo/Yo, al estilo de la plataforma (segmentado sobrio). */
+/** Conmutador Equipo/Yo, al estilo de la plataforma (segmentado sobrio con palabras). */
 function SelectorAmbito({
   ambito,
   setAmbito,
@@ -83,28 +85,31 @@ function SelectorAmbito({
   setAmbito: (a: Ambito) => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border p-0.5">
-      {(
-        [
-          ["equipo", "Equipo", Users],
-          ["yo", "Yo", User],
-        ] as const
-      ).map(([valor, etiqueta, Icono]) => (
-        <button
-          key={valor}
-          type="button"
-          onClick={() => setAmbito(valor)}
-          aria-pressed={ambito === valor}
-          className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-sm font-medium transition-colors ${
-            ambito === valor
-              ? "bg-muted text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Icono className="h-3.5 w-3.5" /> {etiqueta}
-        </button>
-      ))}
-    </div>
+    <ToggleGroup
+      ariaLabel="Ámbito de la jornada"
+      valor={ambito}
+      onCambio={setAmbito}
+      opciones={[
+        {
+          valor: "equipo",
+          ariaLabel: "Equipo",
+          etiqueta: (
+            <>
+              <Users className="h-3.5 w-3.5" /> Equipo
+            </>
+          ),
+        },
+        {
+          valor: "yo",
+          ariaLabel: "Yo",
+          etiqueta: (
+            <>
+              <User className="h-3.5 w-3.5" /> Yo
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -238,11 +243,11 @@ function EncabezadoImpresion({ mes, subtitulo }: { mes: string; subtitulo: strin
 function VistaMesYo({
   mes,
   esAdmin = false,
-  onVerCalendario,
+  onVerSemana,
 }: {
   mes: string;
   esAdmin?: boolean;
-  onVerCalendario?: () => void;
+  onVerSemana?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
@@ -277,9 +282,9 @@ function VistaMesYo({
             : "Aquí verás tu horario del mes en cuanto se publique."
         }
         accion={
-          esAdmin && onVerCalendario ? (
-            <Button variant="outline" size="sm" onClick={onVerCalendario}>
-              Ver el calendario del equipo
+          esAdmin && onVerSemana ? (
+            <Button variant="outline" size="sm" onClick={onVerSemana}>
+              Ver la semana del equipo
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           ) : undefined
