@@ -257,7 +257,8 @@ def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
 
 
 def test_mesa_sin_grupos_no_trae_barra(cliente):
-    # UnoTV no usa grupos: la mesa no trae barra (el front mantiene el layout por plan).
+    # UnoTV no usa grupos: el back NO emite `grupos`/`historias_grupo` (manda el plan en `lineas`).
+    # El front deriva de ahí los chips planos de navegación (sin desplegable), conservando el plan.
     bootstrap_lineas.inicializar_lineas()
     _inicializar("c1", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()

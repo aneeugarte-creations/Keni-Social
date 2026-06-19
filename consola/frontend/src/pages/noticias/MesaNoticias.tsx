@@ -219,11 +219,11 @@ function MenuLineas({
 }
 
 /**
- * Navegación temática de la Mesa (marcas con grupos, p. ej. Claro Sports): chip "Todas" + uno por
- * grupo en el orden editorial que manda el back. Pulsar un grupo lo filtra y despliega sus LÍNEAS
- * (2º nivel) en un menú que cae bajo el chip; elegir una línea afina el filtro y deja un indicador
- * con la línea activa. El menú se cierra al pulsar fuera o con Escape (sin backdrop: los chips
- * siguen clicables para saltar de grupo).
+ * Navegación por chips de la Mesa (todas las marcas): chip "Todas" + uno por categoría. Una
+ * categoría con líneas (marca con grupos, p. ej. Claro Sports) las despliega en un menú que cae
+ * bajo el chip; elegir una línea afina el filtro y deja un indicador con la línea activa. Un chip
+ * SIN líneas (marca plana, p. ej. UnoTV/Fundación) solo filtra, sin desplegable. El menú se cierra
+ * al pulsar fuera o con Escape (sin backdrop: los chips siguen clicables para saltar de categoría).
  */
 export function NavGruposLineas({
   grupos,
@@ -265,7 +265,14 @@ export function NavGruposLineas({
     };
   }, [menu]);
 
-  const abrirGrupo = (g: string, e: React.MouseEvent<HTMLButtonElement>) => {
+  // Pulsar un chip: si despliega líneas (marca con grupos) abre/cierra su menú; si es un chip plano
+  // (marca sin grupos) solo filtra por esa categoría, sin desplegable.
+  const onChip = (g: string, tieneLineas: boolean, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!tieneLineas) {
+      setMenu(null);
+      onSelGrupo(g);
+      return;
+    }
     if (menu === g) {
       setMenu(null); // segundo clic en el grupo abierto: solo cierra el menú (mantiene el filtro)
       return;
@@ -301,17 +308,20 @@ export function NavGruposLineas({
               onSelGrupo("");
             }}
           />
-          {grupos.map((g) => (
-            <ChipGrupo
-              key={g.grupo}
-              etiqueta={g.grupo}
-              n={g.en_pool}
-              activo={grupoSel === g.grupo}
-              abierto={menu === g.grupo}
-              despliega
-              onClick={(e) => abrirGrupo(g.grupo, e)}
-            />
-          ))}
+          {grupos.map((g) => {
+            const tieneLineas = (g.lineas?.length ?? 0) > 0;
+            return (
+              <ChipGrupo
+                key={g.grupo}
+                etiqueta={g.grupo}
+                n={g.en_pool}
+                activo={grupoSel === g.grupo}
+                abierto={menu === g.grupo}
+                despliega={tieneLineas}
+                onClick={(e) => onChip(g.grupo, tieneLineas, e)}
+              />
+            );
+          })}
         </div>
         {grupoMenu && (
           <MenuLineas
@@ -357,6 +367,31 @@ export function historiasDelGrupo(
   return historias.filter(
     (h) => (!grupoSel || h.grupo === grupoSel) && (!lineaSel || h.linea === lineaSel),
   );
+}
+
+/**
+ * Para una marca SIN grupos (UnoTV, Fundación…), deriva los chips de navegación de las LÍNEAS del
+ * plan: cada línea (+ «Fuera del plan» si tiene candidatas) es un chip PLANO (sin desplegable), y
+ * cada candidata se etiqueta con su línea para que el filtro funcione igual que con los grupos.
+ * Así la barra de chips es la misma en todas las marcas; la muestra de progreso del plan
+ * (`BarraPlanDia`) se mantiene aparte. Un chip aparece si la línea tiene cupo o candidatas.
+ */
+export function chipsDeLineas(
+  lineas: MesaLinea[],
+  fuera: { en_pool: number; historias: Historia[] },
+): { chips: GrupoMesa[]; browse: Historia[] } {
+  const chips: GrupoMesa[] = [];
+  const browse: Historia[] = [];
+  for (const l of lineas) {
+    const etiqueta = l.etiqueta || etiquetaLinea(l.linea);
+    if (l.en_pool > 0 || l.cupo > 0) chips.push({ grupo: etiqueta, en_pool: l.en_pool });
+    for (const h of l.historias) browse.push({ ...h, grupo: etiqueta });
+  }
+  if (fuera.en_pool > 0) {
+    chips.push({ grupo: "Fuera del plan", en_pool: fuera.en_pool });
+    for (const h of fuera.historias) browse.push({ ...h, grupo: "Fuera del plan" });
+  }
+  return { chips, browse };
 }
 
 // ── Agrupamiento por macro-evento ──────────────────────────────────────────────
@@ -528,18 +563,25 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
 
   const data = query.data;
 
-  // Modo NAVEGACIÓN POR GRUPO (marcas con grupos, p. ej. Claro Sports): barra de categorías + la
-  // lista filtrada por la seleccionada. Sustituye al layout por plan (que para estas marcas no
-  // aplica): el back manda la barra ordenada en `grupos` y la lista en `historias_grupo`.
+  // NAVEGACIÓN POR CHIPS (todas las marcas): barra de categorías + lista filtrada. Los chips son los
+  // GRUPOS si la marca los usa (Claro Sports: con desplegable de líneas) o las LÍNEAS del plan
+  // directamente si no (UnoTV/Fundación: chips planos, sin desplegable). La muestra de progreso del
+  // plan (`BarraPlanDia`) se mantiene encima en ambos casos.
   const grupos = data.grupos ?? [];
-  if (grupos.length > 0) {
-    const browse = data.historias_grupo ?? [];
-    const total = grupos.reduce((acc, g) => acc + g.en_pool, 0);
+  const { chips, browse } =
+    grupos.length > 0
+      ? { chips: grupos, browse: data.historias_grupo ?? [] }
+      : data.plan
+        ? chipsDeLineas(data.lineas, data.fuera_de_plan)
+        : { chips: [] as GrupoMesa[], browse: [] as Historia[] };
+  if (chips.length > 0) {
+    const total = chips.reduce((acc, g) => acc + g.en_pool, 0);
     const visibles = historiasDelGrupo(browse, grupoSel, lineaSel);
     return (
       <div className="space-y-4" data-testid="mesa-grupos">
+        {data.plan && <BarraPlanDia data={data} nombre={nombre} />}
         <NavGruposLineas
-          grupos={grupos}
+          grupos={chips}
           total={total}
           grupoSel={grupoSel}
           lineaSel={lineaSel}

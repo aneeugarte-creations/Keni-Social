@@ -10,9 +10,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { GrupoMesa, Historia } from "@/types";
+import type { GrupoMesa, Historia, MesaLinea } from "@/types";
 
-import { agruparPorMacro, historiasDelGrupo, NavGruposLineas } from "./MesaNoticias";
+import {
+  agruparPorMacro,
+  chipsDeLineas,
+  historiasDelGrupo,
+  NavGruposLineas,
+} from "./MesaNoticias";
 
 function historia(id: string, overrides: Partial<Historia> = {}): Historia {
   return {
@@ -195,5 +200,72 @@ describe("NavGruposLineas", () => {
     expect(screen.getByTestId("filtro-linea").textContent).toContain("Mundial");
     fireEvent.click(screen.getByLabelText("Quitar filtro de línea"));
     expect(onSelLinea).toHaveBeenCalledWith("Fútbol", "");
+  });
+
+  it("un chip SIN líneas (marca plana) solo filtra, sin desplegable", () => {
+    const onSelGrupo = vi.fn();
+    const planos: GrupoMesa[] = [
+      { grupo: "Nacional", en_pool: 6 },
+      { grupo: "Internacional", en_pool: 2 },
+    ];
+    render(
+      <NavGruposLineas
+        grupos={planos}
+        total={8}
+        grupoSel=""
+        lineaSel=""
+        onSelGrupo={onSelGrupo}
+        onSelLinea={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
+    expect(onSelGrupo).toHaveBeenCalledWith("Nacional");
+    // No hay 2º nivel: ningún menú se despliega.
+    expect(screen.queryByTestId("menu-lineas-Nacional")).toBeNull();
+  });
+});
+
+describe("chipsDeLineas", () => {
+  const linea = (
+    clave: string,
+    etiqueta: string,
+    en_pool: number,
+    cupo: number,
+    historias: Historia[] = [],
+  ): MesaLinea => ({
+    linea: clave,
+    etiqueta,
+    cupo,
+    generados: 0,
+    publicados: 0,
+    restante: cupo,
+    en_pool,
+    historias,
+  });
+
+  it("deriva un chip por línea con cupo o candidatas y etiqueta cada historia con su línea", () => {
+    const { chips, browse } = chipsDeLineas(
+      [
+        linea("breaking", "Última hora", 9, 2, [historia("a")]),
+        linea("nac", "Nacional", 6, 4, [historia("b"), historia("c")]),
+        linea("int", "Internacional", 2, 4, [historia("d")]),
+        linea("evergreen", "Evergreen", 0, 1, []), // sin candidatas pero con cupo: aparece igual
+        linea("vacia", "Vacía", 0, 0, []), // sin cupo ni candidatas: NO aparece
+      ],
+      { en_pool: 1, historias: [historia("e")] },
+    );
+    expect(chips.map((c) => c.grupo)).toEqual([
+      "Última hora",
+      "Nacional",
+      "Internacional",
+      "Evergreen",
+      "Fuera del plan",
+    ]);
+    expect(chips.map((c) => c.en_pool)).toEqual([9, 6, 2, 0, 1]);
+    // Sin sub-líneas: chips planos (sin desplegable).
+    expect(chips.every((c) => c.lineas === undefined)).toBe(true);
+    // Cada historia queda etiquetada con su línea -> el filtro por chip funciona.
+    expect(historiasDelGrupo(browse, "Nacional").map((h) => h.id)).toEqual(["b", "c"]);
+    expect(historiasDelGrupo(browse, "Fuera del plan").map((h) => h.id)).toEqual(["e"]);
   });
 });
