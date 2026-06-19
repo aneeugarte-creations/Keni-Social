@@ -383,8 +383,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect((await screen.findAllByText("Mía")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("De Ana").length).toBeGreaterThan(0);
 
-    // Radix Tabs activa en pointer-down (no en click) — patrón del resto de la suite.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
+    // El segmento «Todo | Mis tareas» es un ToggleGroup (botón aria-pressed), no Tabs: click.
+    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
     await waitFor(() => expect(screen.queryByText("De Ana")).toBeNull());
     expect(screen.getByText("Mía")).toBeInTheDocument();
   });
@@ -400,7 +400,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       [],
       usuario("editor", "u1"),
     );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
 
     const hechas = (await screen.findByRole("heading", { name: /Hechas/ })).closest("section")!;
     expect(within(hechas).getAllByText("Partido jugado").length).toBeGreaterThan(0);
@@ -420,7 +420,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       [],
       usuario("editor", "u1"),
     );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
     // Card plana: título + MI rol; SIN el «Cubren:» del Panorama (no hay anidamiento de tarjetas).
     expect(await screen.findByText("La Copa en tus manos")).toBeInTheDocument();
     expect(screen.getByText("Live")).toBeInTheDocument();

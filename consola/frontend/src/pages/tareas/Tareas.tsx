@@ -6,7 +6,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
@@ -28,13 +28,11 @@ import { agrupar, type Item } from "./tipos";
 // se vea sin recargar (igual que el reparto del feed que esto sustituye).
 const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
 
-/** Lente sobre la MISMA lista: el panorama (agenda de equipo) o lo mío. «Por cubrir» NO es una
- * lente: ya vive como el chip ámbar dentro de Panorama (que filtra a lo pendiente, por día). */
+/** Segmento «Todo | Mis tareas» sobre la MISMA lista (antes dos sub-pestañas): «Todo» es la agenda
+ * de equipo; «Mis tareas» es lo mío agrupado. «Por cubrir» NO es un segmento: vive como el chip
+ * ámbar dentro de «Todo» (filtra a lo pendiente, por día). El valor interno «panorama» se conserva
+ * para no tocar la lógica de la agenda; solo la etiqueta visible pasa a «Todo». */
 type Lente = "panorama" | "mias";
-const LENTES: { id: Lente; etiqueta: string }[] = [
-  { id: "panorama", etiqueta: "Panorama" },
-  { id: "mias", etiqueta: "Mis tareas" },
-];
 
 /**
  * TABLERO de Tareas del equipo (ClaroSports): la lista compartida que sustituye al WhatsApp.
@@ -237,10 +235,10 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       <EstadoVacio
         icono={ListChecks}
         titulo="No tienes nada asignado"
-        texto="Ve a Panorama y pulsa «Por cubrir» para cubrir trabajo del equipo."
+        texto="Ve a «Todo» y pulsa «Por cubrir» para cubrir trabajo del equipo."
         accion={
           <Button size="sm" variant="outline" onClick={() => setLente("panorama")}>
-            Ver Panorama
+            Ver todo
           </Button>
         }
       />
@@ -269,15 +267,17 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
     <>
       {acciones === "barra" && <AccionesPagina>{botonAnadir}</AccionesPagina>}
 
-      <Tabs value={lente} onValueChange={(v) => setLente(v as Lente)} className="space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
-          <TabsList>
-            {LENTES.map((l) => (
-              <TabsTrigger key={l.id} value={l.id}>
-                {l.etiqueta}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <ToggleGroup
+            ariaLabel="Vista de cobertura"
+            valor={lente}
+            onCambio={setLente}
+            opciones={[
+              { valor: "panorama", etiqueta: "Todo" },
+              { valor: "mias", etiqueta: "Mis tareas" },
+            ]}
+          />
           {acciones === "inline" && botonAnadir}
         </div>
 
@@ -296,15 +296,21 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
           </div>
         ) : (
           <>
-            <TabsContent value="panorama" className="space-y-4">
-              <KpiCobertura
-                eventos={eventosHoy}
-                claims={claimsCobertura}
-                turnos={turnosHoy}
-                franjas={franjasHoy}
-                hechas={hechasHoy}
-                onIrASinCubrir={() => setFiltroPanorama("__pool__")}
-              />
+            {/* KPI «Cobertura de hoy» UNA sola vez, persistente sobre ambos modos (Todo / Mis
+                tareas): su cálculo es de equipo y no depende del segmento. Pulsar «N sin cubrir»
+                vuelve a «Todo» y filtra a «Por cubrir» (coherente desde cualquiera de los dos). */}
+            <KpiCobertura
+              eventos={eventosHoy}
+              claims={claimsCobertura}
+              turnos={turnosHoy}
+              franjas={franjasHoy}
+              hechas={hechasHoy}
+              onIrASinCubrir={() => {
+                setLente("panorama");
+                setFiltroPanorama("__pool__");
+              }}
+            />
+            {lente === "panorama" ? (
               <PanoramaAgenda
                 tareas={tareas}
                 eventos={eventosCoverables}
@@ -314,13 +320,12 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 filtro={filtroPanorama}
                 setFiltro={setFiltroPanorama}
               />
-            </TabsContent>
-            <TabsContent value="mias" className="space-y-4">
-              {listaAgrupada}
-            </TabsContent>
+            ) : (
+              listaAgrupada
+            )}
           </>
         )}
-      </Tabs>
+      </div>
 
       <DialogoCrearTarea
         abierto={crearAbierto}
