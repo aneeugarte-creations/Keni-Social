@@ -814,7 +814,6 @@ export function TarjetaCobertura({
       como="div"
       kebab={sinMenu ? "nunca" : "siempre"}
       realce
-      onPrimaria={!yaApuntado ? () => cubrir.mutate({}) : undefined}
       acciones={accionesCobertura}
       className="space-y-2"
     >
@@ -837,23 +836,16 @@ export function TarjetaCobertura({
           ))}
         </div>
       )}
-      {/* Roles aún SIN cubrir del evento «⊕ rol»: un toque añade ESE rol (a mí). Distintos de los
-          `libres` (roles SOLTADOS, que ya tienen su propia tarea re-cogible): estos son roles que
-          NADIE ha tomado nunca. `data-no-primaria` para no disparar también la acción primaria. */}
+      {/* Roles aún SIN cubrir del evento «⊕ rol»: un toque añade ESE rol (a mí). Cubrirse es SOLO
+          por estos chips (o, para el manager, dentro de «Asignar a…»): el cuerpo de la tarjeta no
+          coge. Distintos de los `libres` (roles SOLTADOS, con su propia tarea re-cogible): estos
+          nunca los tomó nadie. */}
       {!yaApuntado && (
-        <div data-no-primaria>
-          <ChipsRolFaltante
-            cubridores={cobertura.cubridores}
-            onCoger={(r) => cubrir.mutate({ formato: r })}
-            disabled={cubrir.isPending}
-          />
-        </div>
-      )}
-      {/* Rol con que me apunto / añaden a alguien (selector inline; la acción va al menú). */}
-      {(!yaApuntado || esManager) && (
-        <div className="flex flex-wrap items-center gap-2">
-          <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
-        </div>
+        <ChipsRolFaltante
+          cubridores={cobertura.cubridores}
+          onCoger={(r) => cubrir.mutate({ formato: r })}
+          disabled={cubrir.isPending}
+        />
       )}
 
       <DialogoAsignar
@@ -864,6 +856,12 @@ export function TarjetaCobertura({
         responsableActual=""
         onElegir={(id) => cubrir.mutate({ responsableId: id })}
         enviando={cubrir.isPending}
+        extra={
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Rol con que se cubre</p>
+            <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
+          </div>
+        }
       />
 
       {editarAbierto && evento && (

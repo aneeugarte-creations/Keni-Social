@@ -489,10 +489,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getAllByText("Cruz Azul vs América")).toHaveLength(titulosAntes);
     expect(screen.getAllByText("luis").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ana").length).toBeGreaterThan(0);
-    // Item-first: click en el host de TarjetaCobertura (acción primaria = Apuntarme).
-    const grupoApuntar = screen.getByRole("group", { name: "Rol de cobertura" });
-    fireEvent.click(grupoApuntar.closest("[role='button']")!);
-    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined, "foto"));
+    // Apuntarse es SOLO por chip ⊕rol (el cuerpo ya no coge): luis y ana cubren «foto», así que
+    // quedan libres video/texto/live; coger «Video» apunta al usuario con ESE rol.
+    fireEvent.click(screen.getByRole("button", { name: "Coger Video" }));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined, "video"));
   });
 
   it("SEMÁFORO: la cobertura se pinta sola por fecha/hora, sin botones de estado", async () => {
@@ -1084,8 +1084,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     const filaBtn = titulos.map((t) => t.closest("button")).find(Boolean)!;
     fireEvent.click(filaBtn);
 
-    const card = screen.getByText("Cubren:").closest("[role='button']")!;
-    fireEvent.contextMenu(card);
+    // El cuerpo de la tarjeta de cobertura ya no es «click-primario»: el menú (Borrar) se abre por
+    // click derecho, que burbujea al onContextMenu del host. Lo disparamos sobre «Cubren:».
+    fireEvent.contextMenu(screen.getByText("Cubren:"));
     fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
 
     await waitFor(() => expect(borrarEv).toHaveBeenCalledWith("ev1"));
