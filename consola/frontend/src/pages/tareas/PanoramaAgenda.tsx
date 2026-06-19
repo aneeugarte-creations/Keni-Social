@@ -732,15 +732,19 @@ export function PanoramaAgenda({
         orden: t.fecha_objetivo || "9999-99-99",
         tarea: t,
       })),
-    // Eventos por cubrir (0 cubridores): solo sin filtro o con el pool.
+    // Eventos por cubrir (0 cubridores): solo sin filtro o con el pool. En el POOL «Por cubrir» se
+    // excluyen los cubiertos-por-turno (no son huecos), igual que hace su contador `nPorCubrir`: así
+    // la lista cuadra con el número. Sin filtro siguen saliendo (con su badge «Cubierto por turno»).
     ...(!filtro || soloPool
-      ? eventosLibres.map((e) => ({
-          kind: "evento" as const,
-          clave: `e-${e.id}`,
-          orden: e.fecha || "9999-99-99",
-          evento: e,
-          cubiertoPorTurno: cubiertosPorTurno.has(e.id),
-        }))
+      ? eventosLibres
+          .filter((e) => !soloPool || !cubiertosPorTurno.has(e.id))
+          .map((e) => ({
+            kind: "evento" as const,
+            clave: `e-${e.id}`,
+            orden: e.fecha || "9999-99-99",
+            evento: e,
+            cubiertoPorTurno: cubiertosPorTurno.has(e.id),
+          }))
       : []),
   ];
 

@@ -236,6 +236,26 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByText("Sin cubrir")).toBeNull();
   });
 
+  it("POOL «Por cubrir»: un evento cubierto-por-turno NO sale en el pool (la lista cuadra con el contador)", async () => {
+    renderTareas(
+      [],
+      [evento({ id: "ev-cub", titulo: "Cubierto por el turno", fecha: "2026-07-01", hora: "10:00" })],
+      usuario(),
+      semanaConTurnoManana("2026-07-01"),
+    );
+    // Sin filtrar: el evento se ve con su badge «Cubierto por turno» (no es un hueco, pero está).
+    await screen.findByText("Cubierto por el turno");
+    await waitFor(() =>
+      expect(screen.getAllByText("Cubierto por turno").length).toBeGreaterThan(0),
+    );
+    // El chip «Por cubrir» NO lo cuenta (0); al filtrar al pool desaparece: la lista cuadra con el
+    // número (antes el contador lo excluía pero la lista lo mostraba igual → no cuadraban).
+    const chipPool = screen.getByRole("button", { name: "Ver solo lo por cubrir" });
+    expect(within(chipPool).getByText("0")).toBeInTheDocument();
+    fireEvent.click(chipPool);
+    await waitFor(() => expect(screen.queryByText("Cubierto por el turno")).toBeNull());
+  });
+
   it("PANORAMA: el icono «Asignar» de la fila encarga el evento sin desplegar (cubrirEvento con rol)", async () => {
     const cubrir = vi
       .spyOn(apiMod.api, "cubrirEvento")
