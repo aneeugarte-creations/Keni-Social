@@ -206,7 +206,24 @@ _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "vid
 # nivel post; se captura si algún alias lo trae, si no queda None.
 _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
 
-# --- REELS (endpoint SEPARADO `/v2/analytics/reels/{network}`) -----------------
+# --- PUENTE scheduler -> analítica ---------------------------------------------
+# El `id_post` que la Consola guarda (`pieza.id_post_metricool`) es el id del SCHEDULER
+# de Metricool (`POST /v2/scheduler/posts` -> `id`), un espacio de ids DISTINTO al de la
+# analítica: `/v2/analytics/posts/{network}` indexa cada post por su id NATIVO de la red
+# (FB: `pageId_storyId`; IG: media id, con la URL `/p/{shortcode}/`), nunca por el id del
+# scheduler. Por eso un match directo del id del scheduler contra la analítica nunca casa.
+# El puente es `GET /v2/scheduler/posts/{id}`: su `providers[].id`/`publicUrl` dan el id
+# nativo (o la URL pública) con el que SÍ se casa la analítica.
+ENDPOINT_SCHEDULER_POST = "/v2/scheduler/posts"
+
+# Shortcode de Instagram dentro de una URL `/p/{shortcode}/` o `/reel/{shortcode}/`
+# (publicUrl del scheduler o `url`/`reelUrl` del registro de analítica): es la clave de
+# enlace estable para IG (su id nativo de media no aparece tal cual en la analítica, pero la
+# URL sí lleva el shortcode).
+_RE_SHORTCODE_IG = re.compile(r"/(?:p|reel)/([^/?#]+)")
+# storyId de Facebook dentro de `.../posts/{storyId}` (publicUrl del scheduler) o como
+# sufijo `pageId_storyId` del `postId` de analítica.
+_RE_STORY_FB = re.compile(r"/posts/(\d+)")
 # Metricool sirve los Reels de Facebook/Instagram en un endpoint APARTE de `/posts`;
 # `/posts/{network}` NO los incluye. Sin esto, todo el contenido en VÍDEO vertical
 # (lo que más cross-postea un medio) quedaba invisible: solo se veían en TikTok. La
@@ -373,6 +390,78 @@ def _formato_opt(v) -> str | None:
     if clave.startswith("FEED_"):
         clave = clave[len("FEED_"):]
     return _FORMATO_NORMAL.get(clave, crudo.lower() or None)
+
+
+def _shortcode_ig(url: str | None) -> str | None:
+    """Shortcode de una URL de Instagram `/p/{shortcode}/`, o None si no lo lleva."""
+    if not url:
+        return None
+    m = _RE_SHORTCODE_IG.search(str(url))
+    return m.group(1) if m else None
+
+
+def _story_fb(valor: str | None) -> str | None:
+    """storyId de Facebook: el `{storyId}` de `.../posts/{storyId}` o el sufijo de `pageId_storyId`.
+
+    Acepta tanto una publicUrl (`facebook.com/<page>/posts/<storyId>`) como un id nativo
+    crudo (`pageId_storyId` o `storyId` pelado). Devuelve el storyId comparable con el
+    sufijo del `postId` de la analítica de Facebook, o None si no se reconoce.
+    """
+    if not valor:
+        return None
+    s = str(valor)
+    m = _RE_STORY_FB.search(s)
+    if m:
+        return m.group(1)
+    cola = s.rsplit("_", 1)[-1]
+    return cola if cola.isdigit() else None
+
+
+def _claves_enlace_post(post: dict, plat: Plataforma) -> set[str]:
+    """Claves de enlace de un post de analítica para casarlo con un id del scheduler.
+
+    Devuelve el conjunto de identificadores con los que un post PUEDE casarse: sus alias de
+    id directos, y —según la red— el shortcode de IG (de su `url`) o el storyId de FB (sufijo
+    de su `postId`). Así el matcher cubre los tres caminos de enlace sin recorrer la lista más
+    de una vez.
+    """
+    claves = {
+        str(v) for alias in (*_ALIAS_ID, *_ALIAS_REEL_ID)
+        if (v := post.get(alias)) not in (None, "")
+    }
+    url = _primero(post, _ALIAS_URL) or _primero(post, _ALIAS_REEL_URL)
+    if plat is Plataforma.instagram:
+        sc = _shortcode_ig(url)
+        if sc:
+            claves.add(sc)
+    elif plat is Plataforma.facebook:
+        sid = _story_fb(str(post.get("postId") or "")) or _story_fb(url)
+        if sid:
+            claves.add(sid)
+    return claves
+
+
+def _objetivos_de_enlace(id_post: str, nativo: str | None, url_publica: str | None,
+                         plat: Plataforma) -> set[str]:
+    """Conjunto de ids que identifican al post buscado (para casarlo con la analítica).
+
+    Incluye SIEMPRE el `id_post` crudo (cubre ids ya nativos / Postproxy, y el camino sin
+    puente). Si el scheduler resolvió el id nativo/URL pública, añade el id nativo, el
+    storyId de FB y el shortcode de IG, que son las claves con las que la analítica indexa.
+    """
+    objetivos = {str(id_post)}
+    if nativo:
+        objetivos.add(str(nativo))
+        if plat is Plataforma.facebook and (sid := _story_fb(nativo)):
+            objetivos.add(sid)
+        if plat is Plataforma.instagram and (sc := _shortcode_ig(nativo)):
+            objetivos.add(sc)
+    if url_publica:
+        if plat is Plataforma.facebook and (sid := _story_fb(url_publica)):
+            objetivos.add(sid)
+        if plat is Plataforma.instagram and (sc := _shortcode_ig(url_publica)):
+            objetivos.add(sc)
+    return objetivos
 
 
 def _fecha(v) -> date | None:
@@ -1069,61 +1158,140 @@ class FuenteMetricool:
             **gran,
         )
 
+    def _resolver_post_scheduler(
+        self, cuenta_id: str, id_post: str
+    ) -> tuple[str | None, str | None]:
+        """Resuelve un id del SCHEDULER -> `(id_nativo, url_publica)` del post publicado.
+
+        `GET /v2/scheduler/posts/{id}` devuelve `providers[].id`/`publicUrl` con el id nativo
+        de la red (FB) o la URL pública (`/p/{shortcode}/` en IG), que SÍ casan con la
+        analítica. Best-effort: si la API falla o el post aún no tiene provider publicado,
+        devuelve `(None, None)` y el llamante cae al match directo por id.
+        """
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}{ENDPOINT_SCHEDULER_POST}/{id_post}",
+                params=self._params_base(cuenta_id),
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 -- el puente es best-effort; degrada al match directo
+            log.warning("metricool: scheduler %s/%s no resolvió: %s", cuenta_id, id_post, e)
+            return None, None
+        cuerpo = datos.get("data") if isinstance(datos.get("data"), dict) else datos
+        for prov in (cuerpo.get("providers") or []) if isinstance(cuerpo, dict) else []:
+            if not isinstance(prov, dict):
+                continue
+            nativo = prov.get("id")
+            url = prov.get("publicUrl") or prov.get("url")
+            if nativo or url:
+                return (str(nativo) if nativo else None), (str(url) if url else None)
+        return None, None
+
+    def _metrica_de_record(
+        self, post: dict, plat: Plataforma, id_post: str, *, es_reel: bool
+    ) -> MetricaPieza:
+        """Construye `MetricaPieza` (encontrado=True) desde un post/reel de analítica.
+
+        Conserva el `id_post` con el que la Consola sigue la pieza (el del scheduler), no el
+        id nativo: así la cache/histórico siguen indexados por la clave que guarda la Consola.
+        Reúsa el mismo parseo de vis/interacciones/granulares que las piezas del periodo.
+        """
+        if es_reel:
+            vis = _entero(_primero(post, _ALIAS_REEL_VIS, 0))
+            gran = {
+                "likes": _a_int_opt(_primero(post, _ALIAS_REEL_LIKES)),
+                "comentarios": _a_int_opt(_primero(post, _ALIAS_COMENTARIOS)),
+                "compartidos": _a_int_opt(_primero(post, _ALIAS_COMPARTIDOS)),
+                "guardados": _a_int_opt(_primero(post, _ALIAS_GUARDADOS)),
+                "video_views": _a_int_opt(_primero(post, _ALIAS_REEL_VIS)),
+                "tiempo_medio_vis_s": _a_int_opt(_primero(post, _ALIAS_REEL_TIEMPO)),
+                "clics_enlace": None,
+                "formato": "reel",
+            }
+            inter = _interacciones_reel(post, gran)
+            url = _primero(post, _ALIAS_REEL_URL)
+        else:
+            vis = _entero(_primero(post, _ALIAS_VIS, 0))
+            gran = self._granulares(post)
+            inter = _interacciones_efectivas(_entero(_primero(post, _ALIAS_INT, 0)), gran)
+            url = _primero(post, _ALIAS_URL)
+        return MetricaPieza(
+            id_post=str(id_post),
+            plataforma=plat,
+            encontrado=True,
+            visualizaciones=vis,
+            interacciones=inter,
+            engagement_pct=engagement_pct(inter, vis),
+            url=url,
+            publicado=_fecha(_primero(post, _ALIAS_FECHA)),
+            fuente=self.nombre,
+            **gran,
+            # Seguidores atribuidos al post: casi seguro Metricool no lo da a
+            # nivel post; None salvo que algún alias lo traiga.
+            seguidores_netos_atribuidos=_a_int_opt(_primero(post, _ALIAS_SEG_POST)),
+        )
+
     def metricas_de_post(
         self, cuenta_id: str, plat: Plataforma, id_post: str, *, dias: int = 90
     ) -> MetricaPieza | None:
         """Rendimiento de UN post concreto (por `id_post` de Metricool) o None si no aparece.
 
-        Busca el post en `/v2/analytics/posts/{network}` dentro de una ventana de los
-        ultimos `dias` (un post programado desde la Consola es reciente) y casa por id
-        contra cualquiera de los alias de id (`_ALIAS_ID`). Degrada a None si la API
-        falla o el id no aparece todavia (Metricool tarda en consolidar): el llamante
-        marca `encontrado=False` en vez de inventar ceros (misma honestidad que el resto).
+        El `id_post` que guarda la Consola es el id del SCHEDULER de Metricool, un espacio de
+        ids DISTINTO al de la analítica (que indexa por id nativo de la red). Por eso se enlaza
+        en dos pasos: (1) se buscan los posts —y los reels FB/IG, en su endpoint aparte— de la
+        ventana de los últimos `dias`; (2) se casan contra el conjunto de OBJETIVOS de enlace:
+        el id crudo (cubre ids ya nativos/Postproxy) y, resolviendo el id del scheduler vía
+        `/v2/scheduler/posts/{id}`, el id nativo de FB (storyId) y el shortcode de IG. Degrada
+        a None si la API falla o el post no aparece todavía (Metricool tarda en consolidar): el
+        llamante marca `encontrado=False` en vez de inventar ceros.
         """
         if not id_post or plat not in _RED_METRICOOL:
             return None
         hasta = date.today()
         desde = hasta - timedelta(days=max(dias, 1))
         try:
-            datos = get_json(
-                self._cli,
-                f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
-                params={
-                    **self._params_base(cuenta_id),
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
-                },
-                headers=self._headers(cuenta_id),
-            )
+            posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
         except Exception as e:  # noqa: BLE001 -- degrada sin romper, como el resto
             log.warning("metricool: post %s/%s/%s fallo: %s", plat.value, cuenta_id, id_post, e)
             return None
-        objetivo = str(id_post)
-        for post in datos.get("data") or []:
+
+        # Paso 1: match DIRECTO por id crudo (cubre ids ya nativos / Postproxy y evita el
+        # golpe al scheduler cuando el id ya casa). Camino barato y el que prueban los tests.
+        objetivos = {str(id_post)}
+        encontrado = self._casar_post(posts, plat, objetivos, id_post, es_reel=False)
+        if encontrado is not None:
+            return encontrado
+
+        # Paso 2: PUENTE scheduler -> nativo. Amplía los objetivos con el id nativo/URL del
+        # post publicado y reintenta el match (posts + reels FB/IG, su endpoint aparte).
+        nativo, url_publica = self._resolver_post_scheduler(cuenta_id, id_post)
+        if nativo or url_publica:
+            objetivos = _objetivos_de_enlace(id_post, nativo, url_publica, plat)
+            encontrado = self._casar_post(posts, plat, objetivos, id_post, es_reel=False)
+            if encontrado is not None:
+                return encontrado
+        if plat in _RED_CON_REELS:
+            try:
+                reels = self._fetch_reels(cuenta_id, plat, desde, hasta)
+            except Exception as e:  # noqa: BLE001 -- sin reels: degrada al None final
+                log.warning("metricool: reels %s/%s/%s fallo: %s", plat.value, cuenta_id, id_post, e)
+                reels = []
+            encontrado = self._casar_post(reels, plat, objetivos, id_post, es_reel=True)
+            if encontrado is not None:
+                return encontrado
+        return None
+
+    def _casar_post(
+        self, registros: list[dict], plat: Plataforma, objetivos: set[str],
+        id_post: str, *, es_reel: bool,
+    ) -> MetricaPieza | None:
+        """Devuelve la `MetricaPieza` del primer registro cuyas claves cruzan con `objetivos`."""
+        for post in registros:
             if not isinstance(post, dict):
                 continue
-            ids = {str(_primero(post, (alias,), "")) for alias in _ALIAS_ID}
-            if objetivo not in ids:
-                continue
-            vis = _entero(_primero(post, _ALIAS_VIS, 0))
-            inter = _entero(_primero(post, _ALIAS_INT, 0))
-            gran = self._granulares(post)
-            inter = _interacciones_efectivas(inter, gran)
-            return MetricaPieza(
-                id_post=objetivo,
-                plataforma=plat,
-                encontrado=True,
-                visualizaciones=vis,
-                interacciones=inter,
-                engagement_pct=engagement_pct(inter, vis),
-                url=_primero(post, _ALIAS_URL),
-                publicado=_fecha(_primero(post, _ALIAS_FECHA)),
-                fuente=self.nombre,
-                **gran,
-                # Seguidores atribuidos al post: casi seguro Metricool no lo da a
-                # nivel post; None salvo que algún alias lo traiga.
-                seguidores_netos_atribuidos=_a_int_opt(_primero(post, _ALIAS_SEG_POST)),
-            )
+            if _claves_enlace_post(post, plat) & objetivos:
+                return self._metrica_de_record(post, plat, id_post, es_reel=es_reel)
         return None
 
     def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:

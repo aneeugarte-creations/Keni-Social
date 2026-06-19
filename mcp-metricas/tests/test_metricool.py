@@ -545,6 +545,123 @@ def test_interacciones_toma_el_maximo_si_el_agregado_es_diminuto():
     assert piezas[0].engagement_pct > 0
 
 
+@respx.mock
+def test_metricas_de_post_enlaza_ig_por_shortcode_via_scheduler():
+    """El `id_post` que guarda la Consola es el id del SCHEDULER, no el nativo de la analítica.
+    Si no casa directo, se resuelve `/v2/scheduler/posts/{id}` -> publicUrl `/p/{shortcode}/` y
+    se casa el post de IG por su `url` (mismo shortcode)."""
+    sched = {
+        "data": {
+            "id": "339203260",
+            "providers": [
+                {"network": "instagram", "id": "https://www.instagram.com/p/DZq7XRFnM0w/",
+                 "status": "PUBLISHED", "publicUrl": "https://www.instagram.com/p/DZq7XRFnM0w/"}
+            ],
+        }
+    }
+    posts = {
+        "data": [
+            {"postId": "3921_otro", "publishedAt": "2026-05-20T12:00:00", "views": 100,
+             "interactions": 2, "url": "https://www.instagram.com/p/OTRO00000/"},
+            {"postId": "3921962622292592646_1506644617", "publishedAt": "2026-05-20T12:00:00",
+             "views": 5149, "interactions": 51, "likes": 44,
+             "url": "https://www.instagram.com/p/DZq7XRFnM0w/"},
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    respx.get(f"{BASE}/v2/scheduler/posts/339203260").mock(
+        return_value=httpx.Response(200, json=sched)
+    )
+    with httpx.Client() as cli:
+        m = _fuente(cli).metricas_de_post("claro_sports", Plataforma.instagram, "339203260")
+
+    assert m is not None and m.encontrado
+    assert m.visualizaciones == 5149
+    assert m.interacciones == 51
+    assert m.likes == 44
+    # El id_post conservado es el del scheduler (la clave con la que la Consola sigue la pieza),
+    # no el nativo de la analítica.
+    assert m.id_post == "339203260"
+
+
+@respx.mock
+def test_metricas_de_post_enlaza_fb_por_storyid_via_scheduler():
+    """Facebook: el scheduler resuelve a un storyId (`.../posts/{storyId}`) que casa con el
+    SUFIJO del `postId` de analítica (`pageId_storyId`)."""
+    sched = {
+        "data": {
+            "id": "338332813",
+            "providers": [
+                {"network": "facebook", "id": "1015043144230015", "status": "PUBLISHED",
+                 "publicUrl": "https://facebook.com/379462481121421/posts/1015043144230015"}
+            ],
+        }
+    }
+    posts = {
+        "data": [
+            {"postId": "148786388488561_1015043144230015", "timestamp": 1779000000000,
+             "impressions": 13400, "reactions": 27, "comments": 1, "shares": 5,
+             "mediaType": "feed_image"}
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/facebook").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    respx.get(f"{BASE}/v2/scheduler/posts/338332813").mock(
+        return_value=httpx.Response(200, json=sched)
+    )
+    marcas_fb = {
+        "claro_sports": {**MARCAS["claro_sports"], "plataformas": [Plataforma.facebook]}
+    }
+    with httpx.Client() as cli:
+        fuente = FuenteMetricool(marcas=marcas_fb, cliente=cli)
+        m = fuente.metricas_de_post("claro_sports", Plataforma.facebook, "338332813")
+
+    assert m is not None and m.encontrado
+    assert m.visualizaciones == 13400
+    assert m.interacciones == 33  # 27+1+5 derivado del desglose
+    assert m.id_post == "338332813"
+
+
+@respx.mock
+def test_metricas_de_post_match_directo_no_llama_al_scheduler():
+    """Si el id casa DIRECTO (id ya nativo / Postproxy), NO se golpea el scheduler: el puente
+    es solo el fallback. La ruta del scheduler queda sin mockear a propósito; si se llamara,
+    respx lanzaría por ruta no registrada."""
+    posts = {
+        "data": [
+            {"id": "nativo-1", "publishedAt": "2026-05-20T12:00:00", "views": 700,
+             "interactions": 10, "likes": 8}
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        m = _fuente(cli).metricas_de_post("claro_sports", Plataforma.instagram, "nativo-1")
+
+    assert m is not None and m.encontrado and m.visualizaciones == 700
+
+
+@respx.mock
+def test_metricas_de_post_no_encontrado_si_scheduler_no_resuelve():
+    """Si el id no casa directo y el scheduler no devuelve provider, degrada a None (el
+    llamante marca encontrado=False): nunca inventa métricas."""
+    posts = {"data": [{"id": "otro", "publishedAt": "2026-05-20T12:00:00", "views": 1, "interactions": 0}]}
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    respx.get(f"{BASE}/v2/scheduler/posts/999").mock(
+        return_value=httpx.Response(200, json={"data": {"id": "999", "providers": []}})
+    )
+    with httpx.Client() as cli:
+        m = _fuente(cli).metricas_de_post("claro_sports", Plataforma.instagram, "999")
+
+    assert m is None
+
+
 def test_fecha_parsea_objeto_publishedAt_y_no_fabrica():
     """_fecha extrae el `dateTime` del OBJETO publishedAt de Metricool, acepta ISO/epoch,
     y devuelve None (sin fabricar) cuando no hay fecha reconocible."""

@@ -47,6 +47,22 @@ def main() -> int:
     # arranca SIEMPRE via `db.arrancar_persistencia`, fuera del bloque bootstrap).
     crear_app(bootstrap=False)
 
+    # Backfill del histórico por pieza ANTES de arrancar el refresco de métricas (que en su
+    # primer barrido PURGA las caches del listado de esquema viejo). El backfill vive en el
+    # bloque bootstrap de `crear_app` (lo corre el `back`), pero aquí `bootstrap=False`: sin
+    # esto, una subida de `_VERSION_ESQUEMA` purgaría las caches antiguas antes de volcarlas a
+    # snapshots y se perdería el histórico retroactivo. Idempotente y best-effort.
+    try:
+        from . import metricas_pieza
+
+        metricas_pieza.backfill_historico_desde_cache()
+    except Exception:  # noqa: BLE001 -- el arranque de los daemons no debe romper por el backfill
+        import logging
+
+        logging.getLogger("keni_consola.daemons").warning(
+            "No se pudo reconstruir el histórico por pieza al arrancar los daemons.", exc_info=True
+        )
+
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
     from .recolectar_daemon import iniciar_ingesta
