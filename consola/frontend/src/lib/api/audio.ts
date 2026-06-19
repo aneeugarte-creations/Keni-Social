@@ -53,6 +53,8 @@ export type TipoArtefacto =
   | "resumen"
   | "preguntas"
   | "ideas"
+  | "clips"
+  | "capitulado"
   | "corregido";
 export type FormatoArtefacto = "srt" | "txt" | "md";
 export type EstadoArtefacto = "generando" | "listo" | "error";
@@ -76,7 +78,13 @@ export interface ArtefactoAudio {
 }
 
 /** Tratamientos de Claude que se pueden lanzar a mano sobre un audio. */
-export type TratamientoClaude = "limpio" | "resumen" | "preguntas" | "ideas";
+export type TratamientoClaude =
+  | "limpio"
+  | "resumen"
+  | "preguntas"
+  | "ideas"
+  | "clips"
+  | "capitulado";
 
 const enc = encodeURIComponent;
 

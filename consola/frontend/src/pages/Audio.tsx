@@ -20,11 +20,13 @@ import {
   FileText,
   HelpCircle,
   Lightbulb,
+  ListOrdered,
   Loader2,
   Pause,
   Play,
   Plus,
   RefreshCw,
+  Scissors,
   SpellCheck,
   Trash2,
   Upload,
@@ -76,6 +78,8 @@ const TRATAMIENTOS_SUBIDA: { tipo: TipoArtefacto; etiqueta: string }[] = [
   { tipo: "resumen", etiqueta: "Resumen" },
   { tipo: "preguntas", etiqueta: "Preguntas" },
   { tipo: "ideas", etiqueta: "Ideas" },
+  { tipo: "clips", etiqueta: "Clips" },
+  { tipo: "capitulado", etiqueta: "Capítulos" },
 ];
 
 // Tratamientos de Claude que se pueden añadir a mano a un audio ya transcrito. `desc` explica qué
@@ -103,7 +107,19 @@ const TRATAMIENTOS_CLAUDE: {
     tipo: "ideas",
     etiqueta: "Ideas",
     Icono: Lightbulb,
-    desc: "Extrae las ideas clave para reutilizarlas como contenido.",
+    desc: "Extrae ideas de todo tipo (software, contenido, negocio) agrupadas por categoría.",
+  },
+  {
+    tipo: "clips",
+    etiqueta: "Clips",
+    Icono: Scissors,
+    desc: "Detecta los momentos clipeables y su hook, con el minuto para recortarlos.",
+  },
+  {
+    tipo: "capitulado",
+    etiqueta: "Capítulos",
+    Icono: ListOrdered,
+    desc: "Genera los capítulos de YouTube (SEO) listos para pegar en la descripción.",
   },
 ];
 
@@ -115,6 +131,8 @@ const ICONO_ARTEFACTO: Record<TipoArtefacto, typeof Eraser> = {
   resumen: FileText,
   preguntas: HelpCircle,
   ideas: Lightbulb,
+  clips: Scissors,
+  capitulado: ListOrdered,
   corregido: SpellCheck,
 };
 
@@ -559,6 +577,8 @@ const TITULO_ARTEFACTO: Record<TipoArtefacto, string> = {
   resumen: "Resumen",
   preguntas: "Preguntas",
   ideas: "Ideas",
+  clips: "Clips",
+  capitulado: "Capítulos",
   corregido: "Corregido",
 };
 

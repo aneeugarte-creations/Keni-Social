@@ -198,7 +198,9 @@ def borrar_audio_transcripcion(transcripcion_id: str) -> bool:
 
 # Tipos de artefacto. 'srt' (subtitulos, por defecto, solo lectura) y 'texto' (plano) los genera el
 # motor; el resto son tratamientos de Claude. 'corregido' es seguimiento de 'preguntas'.
-TIPOS_ARTEFACTO = ("srt", "texto", "limpio", "resumen", "preguntas", "ideas", "corregido")
+TIPOS_ARTEFACTO = (
+    "srt", "texto", "limpio", "resumen", "preguntas", "ideas", "clips", "capitulado", "corregido",
+)
 # generando (job de Claude en curso) -> listo | error. Los srt/texto nacen 'listo'.
 ESTADOS_ARTEFACTO = ("generando", "listo", "error")
 

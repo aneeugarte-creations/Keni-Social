@@ -58,7 +58,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/audio/resumir": ["Audio · Resumir la transcripción"],
     "prompt/audio/aclarar": ["Audio · Aclarar (preguntas sobre los fragmentos dudosos)"],
     "prompt/audio/corregir": ["Audio · Corregir la transcripción con las respuestas del equipo"],
-    "prompt/audio/ideas": ["Audio · Extraer ideas de contenido de la transcripción"],
+    "prompt/audio/ideas": ["Audio · Extraer ideas de todo tipo (software/contenido/negocio) de la transcripción"],
+    "prompt/audio/clips": ["Audio · Extraer clips y hooks (momentos clipeables con su minuto)"],
+    "prompt/audio/capitulado": ["Audio · Capítulos de YouTube (SEO) a partir de la transcripción"],
     # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
     # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).
     "prompt/envoltorios/redes": [

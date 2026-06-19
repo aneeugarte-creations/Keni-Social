@@ -214,6 +214,22 @@ def test_fuente_del_tratamiento_segun_origen():
     bloque, oid, ver = fuente(tr, "corregido", preg)
     assert "hola mundo" in bloque and oid == "a-preg" and ver == "2026-04-04"
 
+    # 'clips' y 'capitulado' NECESITAN tiempos: parten de la transcripción aunque hereden de un
+    # artefacto de texto (limpio), no de su contenido sin timestamps.
+    for tipo in ("clips", "capitulado"):
+        bloque, oid, ver = fuente(tr, tipo, limpio)
+        assert "hola mundo" in bloque, tipo
+        assert "[00:00]" in bloque, tipo  # con la marca de tiempo del segmento
+        assert oid == "a-lim" and ver == "2026-03-03"
+
+
+def test_tratamientos_clips_y_capitulado_registrados():
+    # Los tres extractores están en el registro con su prompt y formato.
+    t = audio_artefactos.TRATAMIENTOS
+    assert t["ideas"] == ("prompt/audio/ideas", "md", "Ideas")
+    assert t["clips"] == ("prompt/audio/clips", "md", "Clips")
+    assert t["capitulado"] == ("prompt/audio/capitulado", "txt", "Capítulos")
+
 
 def test_crear_artefacto_hereda_del_origen(cliente, monkeypatch):
     """Sin `origen_id` parte del SRT (base); con `origen_id` parte de ese artefacto; uno inválido -> 400."""

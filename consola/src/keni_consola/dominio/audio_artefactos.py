@@ -27,8 +27,15 @@ TRATAMIENTOS: dict[str, tuple[str, str, str]] = {
     "resumen": ("prompt/audio/resumir", "md", "Resumen"),
     "preguntas": ("prompt/audio/aclarar", "md", "Preguntas"),
     "ideas": ("prompt/audio/ideas", "md", "Ideas"),
+    "clips": ("prompt/audio/clips", "md", "Clips"),
+    "capitulado": ("prompt/audio/capitulado", "txt", "Capítulos"),
     "corregido": ("prompt/audio/corregir", "txt", "Corregido"),
 }
+
+# Tratamientos que SIEMPRE parten de la transcripción con timestamps (no del texto de su fuente):
+# necesitan los tiempos para localizar momentos ('clips') o anclar capítulos ('capitulado'), igual
+# que 'corregido' los necesita para citar el fragmento.
+_REQUIEREN_TIEMPOS = frozenset({"corregido", "clips", "capitulado"})
 
 
 def _mmss(ms: Any) -> str:
@@ -71,14 +78,15 @@ def _fuente_del_tratamiento(
 ) -> tuple[str, str, str]:
     """Texto de entrada + herencia (`origen_id`, `origen_version`) de un tratamiento.
 
-    Regla: 'corregido' y la fuente base (sin origen, o el propio SRT) parten de la transcripción con
-    timestamps; cualquier otro artefacto parte de su `contenido` (encadenar tratamientos). La versión
-    es la `actualizado` de la fuente al generar, para detectar después si la fuente cambió.
+    Regla: los tratamientos que requieren tiempos ('corregido'/'clips'/'capitulado') y la fuente base
+    (sin origen, o el propio SRT) parten de la transcripción con timestamps; cualquier otro artefacto
+    parte de su `contenido` (encadenar tratamientos). La versión es la `actualizado` de la fuente al
+    generar, para detectar después si la fuente cambió.
     """
     if origen is None:
         return bloque_de_transcripcion(transcripcion), "", transcripcion.get("actualizado", "") or ""
     version = origen.get("actualizado", "") or ""
-    if tipo == "corregido" or origen.get("tipo") == "srt":
+    if tipo in _REQUIEREN_TIEMPOS or origen.get("tipo") == "srt":
         return bloque_de_transcripcion(transcripcion), origen.get("id", "") or "", version
     return origen.get("contenido", "") or "", origen.get("id", "") or "", version
 
