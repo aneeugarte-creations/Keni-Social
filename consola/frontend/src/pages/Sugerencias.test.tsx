@@ -29,6 +29,8 @@ const SUGERENCIAS = [
 
 const RESP_SUGERENCIAS = {
   sugerencias: SUGERENCIAS,
+  // El kanban (Tablero) con sus columnas solo lo ve el superadmin; el equipo ve solo SUS ideas.
+  superadmin: true,
   categorias: ["idea", "producto", "mejora", "bug"],
   estados: ["nueva", "discovery", "en_cola", "building", "revision", "hecha"],
   // superadmin: la página pinta el tablero kanban completo (el resto del equipo ve solo MIS ideas).
