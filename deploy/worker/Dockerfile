@@ -15,7 +15,6 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # Mismo estado que el back: secretos.toml (0600), media, etc. cuelgan de /data.
     XDG_CONFIG_HOME=/data
@@ -69,7 +68,10 @@ COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
 # Extras de persistencia HOSTED (#130): [postgres] (psycopg) para leer la cola compartida y
 # [s3] (boto3) porque el post-procesado de imagen importa al media (bucket en hosted).
-RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]"
+# Cache de pip en un mount de BuildKit (no viaja a la imagen): un cambio de fuente que invalide
+# esta capa reutiliza los wheels ya bajados en vez de re-descargar todo el árbol de dependencias.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]"
 
 # Renderer Node de la plantilla de marca (auto-genera la placa al crear copy en el worker).
 # @napi-rs/canvas trae binarios prebuilt (sin Cairo); node_modules no viaja (.dockerignore);

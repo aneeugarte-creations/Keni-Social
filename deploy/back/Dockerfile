@@ -10,7 +10,6 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # Todo el estado de la app (consola.db SQLite, secretos.toml 0600, media,
     # tareas.json) cuelga de XDG_CONFIG_HOME -> volumen montado en /data.
@@ -44,7 +43,11 @@ COPY consola/ ./consola/
 # Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API (#141).
 # Extras de persistencia HOSTED (#130): [postgres] (psycopg) y [s3] (boto3), porque en el
 # back las vars DATABASE_URL/S3_* estan cableadas y db.py/almacen_media.py las consumen.
-RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]" \
+# Cache de descargas/wheels de pip en un mount de BuildKit (NO viaja a la imagen): cuando un
+# cambio de fuente invalida esta capa, pip reutiliza los wheels ya bajados en vez de re-descargar
+# y recompilar todo el árbol de dependencias.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]" \
  && pip install "uvicorn[standard]>=0.31.1"
 
 # Renderer Node de la plantilla de marca: instala SOLO sus deps de runtime (@napi-rs/canvas
@@ -79,7 +82,10 @@ VOLUME ["/data"]
 # tardar >>20s en ligar :8765. Con un start-period corto, esos fallos de arranque marcaban
 # el back "unhealthy", el sidecar autoheal lo REINICIABA a medio bootear, y nunca llegaba a
 # sano -> espera_sano del deploy expiraba -> rollback espurio con el codigo perfectamente OK.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+# start-interval (5s): durante el start-period se sondea cada 5s (no cada 30s), así el back se
+# marca `healthy` en cuanto liga :8765 y el deploy no espera al siguiente tick de 30s. Tras
+# quedar sano vuelve al interval de 30s normal. Solo adelanta la detección; nunca la retrasa.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=5s --retries=3 \
   CMD curl -fsS http://localhost:8765/healthz >/dev/null || exit 1
 
 # --factory: `crear_app()` resuelve token (KENI_CONSOLA_TOKEN) y bootstrapea el

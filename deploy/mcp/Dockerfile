@@ -7,7 +7,6 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
@@ -16,7 +15,9 @@ WORKDIR /app
 # añádela a ese hash; si no, un cambio en ella no reconstruiría la imagen (deploy perdido).
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
-RUN pip install ./keni-shared ./mcp-metricas
+# Cache de pip en mount de BuildKit (no viaja a la imagen): reusa wheels ya bajados al reinstalar.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install ./keni-shared ./mcp-metricas
 
 # HARDENING: el MCP NO corre como root (mismo patron que back/worker, #130). El v1 es
 # SOLO lectura y arranca con la fuente `muestra`, asi que no necesita un volumen de estado;

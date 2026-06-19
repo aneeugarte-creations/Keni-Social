@@ -16,7 +16,6 @@
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     # Mismo estado que el back/worker: media en disco si no hay S3, y el modelo whisper en /data.
     XDG_CONFIG_HOME=/data
@@ -36,7 +35,8 @@ RUN apt-get update \
 # import al final hace FALLAR el build si las deps quedan incompletas (en vez de desplegar una imagen
 # que arranca pero no transcribe).
 ARG FASTER_WHISPER_VERSION=1.1.0
-RUN pip install "faster-whisper==${FASTER_WHISPER_VERSION}" "requests>=2" \
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install "faster-whisper==${FASTER_WHISPER_VERSION}" "requests>=2" \
  && python -c "from faster_whisper import WhisperModel"
 
 WORKDIR /app
@@ -51,7 +51,9 @@ COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
 # [asr] trae faster-whisper (ya instalado arriba como wheel; pip lo da por satisfecho), [postgres]
 # (psycopg) para leer la cola y [s3] (boto3) para bajar el audio del bucket.
-RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[asr,postgres,s3]"
+# Cache de pip en mount de BuildKit (no viaja a la imagen): reusa wheels ya bajados al reinstalar.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install ./keni-shared "./mcp-metricas[deck]" "./consola[asr,postgres,s3]"
 
 # HARDENING: NO corre como root. Mismo uid que back/worker (10001) para compartir el volumen
 # keni-data sin problemas de permisos (ahí cachea el modelo y, sin S3, la media).
