@@ -72,6 +72,7 @@ const etiquetaPrioridad = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
  *   · gris  «Programado»     → aún falta mucho
  *   · ámbar «Empieza en X min» → PRE-LIVE: el pitido está cerca (≤ 2 h) → la antesala, a moverse
  *   · verde «En vivo»        → mientras transcurre el evento (punto verde)
+ *   · gris  «Hoy»            → es HOY pero SIN hora concreta: no es «en vivo» (no hay saque al que anclar)
  *   · tick  «Terminado»      → ya pasó (completado → ✓). NO «Cubierto»: esa palabra es solo para
  *                              quien cubre (cogido / cubierto-por-turno), no para «el evento acabó».
  *
@@ -89,11 +90,18 @@ export function SemaforoCobertura({
   compacto?: boolean;
 }) {
   const pos = posicionTemporal(fecha, hora);
+  // Sin hora concreta no hay «saque» al que anclar una fase: `posicionTemporal` sitúa el evento por
+  // DÍA (hoy → «durante» todo el día), así que un evento de HOY sin hora saldría verde «En vivo» sin
+  // serlo. Se trata aparte como «Hoy» neutro (gris); tampoco cuenta como PRE-LIVE (su `minutosHasta`
+  // ancla a las 00:00). Pasado/futuro sin hora siguen bien (Terminado/Programado por día).
+  const sinHora = !hora || !/^\d{1,2}:\d{2}/.test(String(hora).trim());
   const completado = pos === "despues";
-  const envivo = pos === "durante";
+  const envivo = pos === "durante" && !sinHora;
+  const hoySinHora = pos === "durante" && sinHora;
   // PRE-LIVE: aún no empieza (pos "antes") pero el pitido está a ≤ 2 h → cuenta atrás en ámbar.
   const min = minutosHastaEvento(fecha, hora);
-  const preLive = pos === "antes" && min != null && min > 0 && min <= UMBRAL_PRELIVE_MIN;
+  const preLive =
+    pos === "antes" && !sinHora && min != null && min > 0 && min <= UMBRAL_PRELIVE_MIN;
   // `titulo`: estado corto (tooltip del punto compacto). `texto`: etiqueta del badge (con la cuenta).
   const titulo = envivo
     ? "En vivo"
@@ -101,7 +109,9 @@ export function SemaforoCobertura({
       ? "Terminado"
       : preLive
         ? "Empieza pronto"
-        : "Programado";
+        : hoySinHora
+          ? "Hoy"
+          : "Programado";
   const texto = preLive ? `Empieza en ${min} min` : titulo;
   // Fase del semáforo → color desde la fuente CENTRAL (taxonomía de `lib/estado-color`): en-vivo y
   // terminado comparten el verde, empieza-en el ámbar, programado el gris/muted.

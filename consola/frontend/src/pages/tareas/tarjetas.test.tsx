@@ -52,6 +52,23 @@ describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
     });
   });
 
+  it("SIN hora: HOY es «Hoy» (neutro), NO verde «En vivo»; futuro «Programado», pasado «Terminado»", () => {
+    conAhora(() => {
+      // Hoy en CDMX (13 jun) sin hora: el import de Excel deja hora="". No hay saque → «Hoy», no «En vivo».
+      const a = render(<SemaforoCobertura fecha="2026-06-13" hora="" />);
+      expect(screen.getByText("Hoy")).toBeInTheDocument();
+      expect(screen.queryByText("En vivo")).toBeNull();
+      a.unmount();
+      // Futuro sin hora → «Programado» (no pre-live, aunque su minutosHasta ancle a 00:00).
+      const b = render(<SemaforoCobertura fecha="2026-06-20" hora="" />);
+      expect(screen.getByText("Programado")).toBeInTheDocument();
+      b.unmount();
+      // Día ya pasado sin hora → «Terminado».
+      render(<SemaforoCobertura fecha="2026-06-10" hora="" />);
+      expect(screen.getByText("Terminado")).toBeInTheDocument();
+    });
+  });
+
   it("compacto en PRE-LIVE: la cuenta atrás se ve en la fila («30′»), no solo en hover", () => {
     conAhora(() => {
       render(<SemaforoCobertura fecha="2026-06-13" hora="18:30" compacto />);
