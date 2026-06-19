@@ -334,6 +334,10 @@ export default function DetalleSugerenciaPagina() {
   const estado = sugerencia.estado;
   const enRevision = estado === "revision";
   const esDescartada = estado === "descartada";
+  // El stream EN VIVO solo mientras hay una generación corriendo (discovery/building). Si no,
+  // su `gen_id` apunta a una generación TERMINADA cuyo output ya está guardado en spec/plan/diff:
+  // mostrarlo duplicaría el spec. Acabada la generación, mandan los bloques guardados.
+  const generando = estado === "discovery" || estado === "building";
 
   const ocupado =
     discovery.isPending ||
@@ -416,7 +420,7 @@ export default function DetalleSugerenciaPagina() {
             </div>
           )}
 
-          {sugerencia.gen_id && <StreamGeneracion genId={sugerencia.gen_id} />}
+          {sugerencia.gen_id && generando && <StreamGeneracion genId={sugerencia.gen_id} />}
 
           <BloqueMarkdown titulo="Spec (discovery)" texto={sugerencia.spec} />
           <BloqueMarkdown titulo="Plan" texto={sugerencia.plan} />
