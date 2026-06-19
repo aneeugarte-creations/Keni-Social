@@ -256,22 +256,6 @@ export interface RespuestaMesa {
   historias_grupo?: Historia[];
 }
 
-/** Una sección candidata: un tema recurrente en el pool que ninguna línea clasifica. */
-export interface SugerenciaSeccion {
-  /** El término recurrente (palabra o bigrama) propuesto como sección nueva. */
-  termino: string;
-  /** Cuántas historias distintas (sin sección) lo mencionan. */
-  n: number;
-  /** Titulares de ejemplo, para reconocer el tema de un vistazo. */
-  ejemplos: string[];
-}
-
-/** Respuesta de `GET /api/noticias/sugerencias-secciones?marca=`. */
-export interface RespuestaSugerenciasSecciones {
-  marca: string;
-  sugerencias: SugerenciaSeccion[];
-}
-
 /**
  * Un artículo ingerido del archivo persistente (`noticias_items`).
  * Todos los campos de texto son '' si el feed no los entregó.
