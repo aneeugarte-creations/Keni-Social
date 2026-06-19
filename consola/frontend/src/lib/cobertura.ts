@@ -19,14 +19,20 @@ import {
   minutosHastaEvento,
   type PosicionTemporal,
 } from "@/lib/fecha";
-import { franjaIdParaHoraEvento } from "@/pages/rota/comun";
+import { ausenciaTocaDia, franjaIdParaHoraEvento } from "@/pages/rota/comun";
 import {
   ROLES_COBERTURA,
   rolesCubiertos,
   type RolCobertura,
 } from "@/pages/tareas/roles";
 import { agrupar, type Cobertura } from "@/pages/tareas/tipos";
-import type { EventoRota, FranjaSemana, Publicacion, TurnoRota } from "@/types";
+import type {
+  AusenciaRota,
+  EventoRota,
+  FranjaSemana,
+  Publicacion,
+  TurnoRota,
+} from "@/types";
 
 /**
  * Umbral (minutos) de la fase PRE-LIVE del semáforo: cuando falta ≤ esto para el saque, el evento
@@ -98,17 +104,25 @@ function semaforoDesde(pos: PosicionTemporal | null, minutos: number | null): Se
  * EXACTAMENTE las dos copias actuales: comparan `turno.franja_id === franjaId && turno.fecha ===
  * evento.fecha` sin un filtro extra de `es_descanso` (la franja de descanso solo sale como FALLBACK
  * del bucketing cuando ninguna franja laboral contiene la hora; ver `franjaIdParaHoraEvento`).
+ *
+ * Una persona AUSENTE ese día (vacaciones/descanso/baja/otro) NO cuenta como capacidad aunque
+ * tenga turno en la franja: su turno no cubre el evento. Sin este filtro, alguien de vacaciones
+ * aparece como «cubierto por turno» y el hueco real queda oculto.
  */
 function turnosQueCubren(
   evento: EventoRota,
   turnos: TurnoRota[],
   franjas: FranjaSemana[],
+  ausencias: AusenciaRota[] = [],
 ): CubridorPorTurno[] {
   if (!evento.fecha) return [];
+  const fecha = evento.fecha;
   const franjaId = franjaIdParaHoraEvento(evento.hora, franjas);
   if (!franjaId) return [];
+  const ausente = (miembroId: string) =>
+    ausencias.some((a) => a.miembro_id === miembroId && ausenciaTocaDia(a, fecha));
   return turnos
-    .filter((t) => t.franja_id === franjaId && t.fecha === evento.fecha)
+    .filter((t) => t.franja_id === franjaId && t.fecha === fecha && !ausente(t.miembro_id))
     .map((t) => ({
       turnoId: t.id,
       miembroId: t.miembro_id,
@@ -141,6 +155,7 @@ export function derivarCoberturaEvento(
   turnos: TurnoRota[],
   franjas: FranjaSemana[],
   ahora: Date = new Date(),
+  ausencias: AusenciaRota[] = [],
 ): CoberturaEventoDerivada {
   // Claims de ESTE evento, repartidos en cubridores/libres por `agrupar` (misma fuente que el
   // Panorama). `agrupar` resuelve la cobertura sobre TODAS las tareas; filtramos a este evento.
@@ -149,7 +164,7 @@ export function derivarCoberturaEvento(
   const cobertura = coberturas.find((c) => c.eventoId === evento.id);
   const cubridores = cobertura?.cubridores ?? [];
 
-  const porTurno = turnosQueCubren(evento, turnos, franjas);
+  const porTurno = turnosQueCubren(evento, turnos, franjas, ausencias);
 
   // Precedencia: cogido > cubierto-turno > sin-cubrir (idéntica al chip y al Panorama).
   const estado: EstadoCobertura =
@@ -226,10 +241,11 @@ export function resumenCobertura(
   turnos: TurnoRota[],
   franjas: FranjaSemana[],
   ahora: Date = new Date(),
+  ausencias: AusenciaRota[] = [],
 ): ResumenCobertura {
   const r: ResumenCobertura = { total: 0, cubiertos: 0, pronto: 0, enVivo: 0, sinCubrir: 0 };
   for (const evento of eventos) {
-    const d = derivarCoberturaEvento(evento, claims, turnos, franjas, ahora);
+    const d = derivarCoberturaEvento(evento, claims, turnos, franjas, ahora, ausencias);
     r.total += 1;
     if (d.estado === "sin-cubrir") r.sinCubrir += 1;
     else r.cubiertos += 1;

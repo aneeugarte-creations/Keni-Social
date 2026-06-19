@@ -143,6 +143,7 @@ export function Hoy({ onVerAgenda }: { onVerAgenda: () => void }) {
             claims={t.claimsCobertura}
             turnos={t.turnosHoy}
             franjas={t.franjasHoy}
+            ausencias={t.ausencias}
             hechas={t.hechasHoy}
             onIrASinCubrir={onVerAgenda}
           />

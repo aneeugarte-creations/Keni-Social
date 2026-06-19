@@ -380,6 +380,8 @@ export function Calendario({
     tareas,
     turnos,
     franjasSemana,
+    undefined,
+    ausenciasSemana,
   ).sinCubrir;
   const hoy = hoyCDMX();
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista

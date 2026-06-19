@@ -41,7 +41,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
 
   const {
     cargando, hayError, sinDatos, reintentar, error, isFetching,
-    catalogos, tareas, eventosCoverables, cubiertosPorTurno,
+    catalogos, tareas, eventosCoverables, cubiertosPorTurno, ausencias,
     eventosHoy, claimsCobertura, turnosHoy, franjasHoy, hechasHoy,
     items, esPorCubrir, esMio,
   } = useTablero(marca, usuario?.id ?? null);
@@ -156,6 +156,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
               claims={claimsCobertura}
               turnos={turnosHoy}
               franjas={franjasHoy}
+              ausencias={ausencias}
               hechas={hechasHoy}
               onIrASinCubrir={() => {
                 setLente("panorama");

@@ -34,6 +34,13 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
     queryFn: ({ signal }) => api.rotaEventos({ desde: hoy, marca }, signal),
     ...REFRESCO,
   });
+  // Ausencias (vacaciones/descanso/baja): una persona ausente NO cubre por turno. Global (sin
+  // marca), suplementaria: si falla, la cobertura simplemente no resta (no tumba el tablero).
+  const ausenciasQuery = useQuery({
+    queryKey: ["rota", "ausencias"],
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+    ...REFRESCO,
+  });
 
   const tareas = tareasQuery.data?.contenidos ?? [];
   const catalogos = tareasQuery.data?.catalogos;
@@ -43,9 +50,11 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
   const reintentar = () => {
     void tareasQuery.refetch();
     void eventosQuery.refetch();
+    void ausenciasQuery.refetch();
   };
 
   const eventosCoverables = eventosQuery.data?.eventos ?? [];
+  const ausencias = ausenciasQuery.data?.ausencias ?? [];
   const { coberturas, encargos, eventosLibres, recuperables } = agrupar(tareas, eventosCoverables);
 
   const semanasEventos = Array.from(
@@ -68,7 +77,7 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
   for (const e of eventosLibres) {
     const semana = rotaDe(e);
     if (!semana) continue;
-    const d = derivarCoberturaEvento(e, [], semana.turnos, semana.franjas);
+    const d = derivarCoberturaEvento(e, [], semana.turnos, semana.franjas, undefined, ausencias);
     if (d.estado === "cubierto-turno") cubiertosPorTurno.add(e.id);
   }
 
@@ -122,7 +131,7 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
     hoy, cargando, hayError, sinDatos, reintentar,
     error: tareasQuery.error ?? eventosQuery.error,
     isFetching: tareasQuery.isFetching || eventosQuery.isFetching,
-    catalogos, tareas, eventosCoverables, cubiertosPorTurno,
+    catalogos, tareas, eventosCoverables, cubiertosPorTurno, ausencias,
     eventosHoy, claimsCobertura, turnosHoy, franjasHoy, hechasHoy,
     items, esPorCubrir, esMio,
   };

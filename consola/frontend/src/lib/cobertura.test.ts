@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { EventoRota, FranjaSemana, Publicacion, TurnoRota } from "@/types";
+import type {
+  AusenciaRota,
+  EventoRota,
+  FranjaSemana,
+  Publicacion,
+  TurnoRota,
+} from "@/types";
 
 import { datetimeLocalAIso } from "@/lib/fecha";
 import { derivarCoberturaEvento, resumenCobertura } from "./cobertura";
@@ -64,6 +70,20 @@ function turno(over: Partial<TurnoRota> = {}): TurnoRota {
     franja_nombre: "Tarde",
     ...over,
   } as unknown as TurnoRota;
+}
+
+/** Una ausencia (rango inclusivo) de una persona. Por defecto: ana (u9), 2026-07-01, vacaciones. */
+function ausencia(over: Partial<AusenciaRota> = {}): AusenciaRota {
+  return {
+    id: "a1",
+    miembro_id: "u9",
+    miembro_nombre: "ana",
+    tipo: "vacaciones",
+    desde: "2026-07-01",
+    hasta: "2026-07-01",
+    motivo: "",
+    ...over,
+  } as unknown as AusenciaRota;
 }
 
 // Franjas estándar de la semana del evento de prueba: una laboral (cubre 20:00) + descanso.
@@ -277,6 +297,48 @@ describe("resumenCobertura — KPI de cabecera", () => {
 
   it("evento sin cubrir cuenta como hueco", () => {
     const r = resumenCobertura([ev()], [], [], FRANJAS);
+    expect(r.total).toBe(1);
+    expect(r.cubiertos).toBe(0);
+    expect(r.sinCubrir).toBe(1);
+  });
+});
+
+describe("derivarCoberturaEvento — ausencias restan capacidad", () => {
+  it("la persona de turno está AUSENTE ese día → su turno no cubre → sin-cubrir", () => {
+    const e = ev();
+    // ana (u9) tiene turno en f-tarde el 1-jul, pero está de vacaciones ese día.
+    const d = derivarCoberturaEvento(e, [], [turno()], FRANJAS, undefined, [ausencia()]);
+    expect(d.estado).toBe("sin-cubrir");
+    expect(d.porTurno).toHaveLength(0);
+  });
+
+  it("la ausencia es de OTRO día → el turno sigue cubriendo → cubierto-turno", () => {
+    const e = ev();
+    const d = derivarCoberturaEvento(e, [], [turno()], FRANJAS, undefined, [
+      ausencia({ desde: "2026-07-02", hasta: "2026-07-05" }),
+    ]);
+    expect(d.estado).toBe("cubierto-turno");
+    expect(d.porTurno).toHaveLength(1);
+  });
+
+  it("la ausencia es de OTRA persona → el turno de la presente cubre → cubierto-turno", () => {
+    const e = ev();
+    const d = derivarCoberturaEvento(e, [], [turno()], FRANJAS, undefined, [
+      ausencia({ miembro_id: "uX", miembro_nombre: "otro" }),
+    ]);
+    expect(d.estado).toBe("cubierto-turno");
+    expect(d.porTurno).toHaveLength(1);
+  });
+
+  it("ausente PERO con claim propio → cogido (la titularidad no la borra la ausencia)", () => {
+    const e = ev();
+    // El claim es de u1 (luis); la ausencia de u9 (ana) solo afecta la cobertura POR TURNO.
+    const d = derivarCoberturaEvento(e, [claim()], [turno()], FRANJAS, undefined, [ausencia()]);
+    expect(d.estado).toBe("cogido");
+  });
+
+  it("resumenCobertura: evento cubierto solo por un ausente cuenta como hueco", () => {
+    const r = resumenCobertura([ev()], [], [turno()], FRANJAS, undefined, [ausencia()]);
     expect(r.total).toBe(1);
     expect(r.cubiertos).toBe(0);
     expect(r.sinCubrir).toBe(1);

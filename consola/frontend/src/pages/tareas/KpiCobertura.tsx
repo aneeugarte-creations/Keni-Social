@@ -3,7 +3,13 @@ import { Check, Radio, ShieldAlert } from "lucide-react";
 import { resumenCobertura } from "@/lib/cobertura";
 import { COBERTURA_TEXTO } from "@/lib/estado-color";
 import { cn } from "@/lib/utils";
-import type { EventoRota, FranjaSemana, Publicacion, TurnoRota } from "@/types";
+import type {
+  AusenciaRota,
+  EventoRota,
+  FranjaSemana,
+  Publicacion,
+  TurnoRota,
+} from "@/types";
 
 /** Cuántos segmentos pinta la barra de progreso del KPI (▰▰▰▱▱). */
 const SEGMENTOS = 8;
@@ -33,6 +39,7 @@ export function KpiCobertura({
   claims,
   turnos,
   franjas,
+  ausencias = [],
   hechas = 0,
   onIrASinCubrir,
 }: {
@@ -40,13 +47,15 @@ export function KpiCobertura({
   claims: Publicacion[];
   turnos: TurnoRota[];
   franjas: FranjaSemana[];
+  /** Ausencias activas: una persona ausente no cuenta como cobertura por turno. */
+  ausencias?: AusenciaRota[];
   /** Trabajo del día ya resuelto (partidos pasados + encargos en «hecha»). Dato NEUTRO secundario:
    *  «· N hechas» en gris al final de la línea, no una segunda barra ni más color. */
   hechas?: number;
   /** Si se pasa, el corte «N sin cubrir» se vuelve un botón que filtra el Panorama a «Por cubrir». */
   onIrASinCubrir?: () => void;
 }) {
-  const r = resumenCobertura(eventos, claims, turnos, franjas);
+  const r = resumenCobertura(eventos, claims, turnos, franjas, undefined, ausencias);
   if (r.total === 0) return null;
 
   const llenos = Math.round((r.cubiertos / r.total) * SEGMENTOS);
