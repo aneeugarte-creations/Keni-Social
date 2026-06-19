@@ -57,6 +57,11 @@ def main() -> int:
     pa = libprompts.migrar_parrilla_v1()
     if pa:
         print("Texto: parrilla re-sembrada (contrato de salida a codigo) y publicada.")
+    # ideas de audio: re-siembra la version ampliada (todo tipo, por categoria) y la publica (el
+    # store conserva la vieja porque importar_inicial no pisa lo ya sembrado). One-shot.
+    ia = libprompts.migrar_ideas_audio_v1()
+    if ia:
+        print("Texto: ideas de audio re-sembrado (todo tipo) y publicado.")
     # Titulos de una palabra agrupados por etapa: renombra los prompts del sistema (in place, solo si
     # el titulo casa con el viejo conocido) y re-publica. One-shot.
     tp = libprompts.migrar_titulos_prompts()

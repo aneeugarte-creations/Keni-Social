@@ -31,7 +31,7 @@ __all__ = [
     "limpiar_editoriales_duplicados",
     "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
-    "migrar_parrilla_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
+    "migrar_parrilla_v1", "migrar_ideas_audio_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
     "migrar_descripciones_prompt",
 ]
 
@@ -177,6 +177,7 @@ _SENTINELA_REFORMATO = ".reformato-prompts-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
 _SENTINELA_PARRILLA = ".parrilla-contrato-v1"
+_SENTINELA_IDEAS_AUDIO = ".ideas-audio-v1"
 
 # TÍTULOS de una palabra agrupados por etapa: los prompts del sistema pasan a un título de UNA
 # palabra (la carpeta da el contexto de etapa: `recibir/Notas`, `importar/Parrilla`, …). El store en
@@ -693,6 +694,41 @@ def migrar_redactar_v1() -> int:
             if sha:
                 db.crear_texto_publicacion(
                     doc_id="prompt/redactar", sha=sha, autor="", nota="redactar simplificado + contrato"
+                )
+        except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_ideas_audio_v1() -> int:
+    """Re-siembra `prompt/audio/ideas` (ampliado a TODO tipo) en el store y lo publica.
+
+    El prompt de ideas de audio pasó de «ideas de contenido» a ideas de TODO tipo (software/
+    contenido/negocio/operación) agrupadas por categoría. `importar_inicial` no pisa lo ya sembrado,
+    así que un store que ya tenía la versión vieja la conserva. Esto lo pone al día desde la inicial
+    nueva y lo publica (espejo de `migrar_redactar_v1`). ONE-SHOT por sentinela. Best-effort (la
+    publicación necesita BD). Devuelve 1 si lo migró, 0 si no.
+    """
+    from .. import db
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_IDEAS_AUDIO
+    if sentinela.exists():
+        return 0
+    n = 0
+    ruta = destino_raiz / "prompt" / "audio" / "ideas.md"
+    ruta_inicial = dir_inicial() / "prompt" / "audio" / "ideas.md"
+    if ruta.is_file() and ruta_inicial.is_file():
+        try:
+            escribir_atomico(ruta, ruta_inicial.read_text(encoding="utf-8"))
+            n = 1
+            sha = fijar_version("prompt/audio/ideas", nota="ideas de audio: todo tipo")
+            if sha:
+                db.crear_texto_publicacion(
+                    doc_id="prompt/audio/ideas", sha=sha, autor="", nota="ideas de audio: todo tipo"
                 )
         except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
             pass
