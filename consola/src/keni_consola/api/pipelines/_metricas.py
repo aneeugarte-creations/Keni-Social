@@ -11,7 +11,12 @@ from __future__ import annotations
 from ... import actividad
 from ...pipeline_contenido import TIPO_ACTIVIDAD
 from ..actividad import _es_marcador_pipeline
-from ._comun import _METRICAS_CERO, _PREFIJO_POOL_EDITORIAL, _PREFIJO_POOL_FUSION
+from ._comun import (
+    _METRICAS_CERO,
+    _PREFIJO_POOL_EDITORIAL,
+    _PREFIJO_POOL_FUSION,
+    _TIPOS_ACCION_SUELTA,
+)
 
 
 def _sumar_gen(acc: dict, g: dict) -> None:
@@ -48,6 +53,10 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for g in gens:
         if _es_marcador_pipeline(g):
+            continue
+        # Las acciones manuales sobre el post (convertir en carrusel) NO suman a la run: salen
+        # como su propia fila suelta en el feed; sumarlas aquí las contaría dos veces.
+        if (g.get("tipo") or "") in _TIPOS_ACCION_SUELTA:
             continue
         cid = (g.get("publicacion_id") or "") or cid_por_gen.get(g.get("id") or "", "")
         if cid not in ids_runs:

@@ -97,6 +97,9 @@ TIPOS = (
     # Jobs de PROCESO (no-claude) del motor de video (Ola VIDEO): render con ffmpeg y
     # transcripcion ASR. Se cuelgan de Actividad IA igual que el resto de generaciones.
     "render-video", "transcribir",
+    # Convertir un post YA hecho del feed en CARRUSEL: genera las placas (slides) desde su copy
+    # y las escribe en las piezas gemelas. Acción manual del equipo; sale en Actividad.
+    "carrusel",
 )
 
 # PROCESO de la maquina (ADR 0011): la frontera entre los DOS loops. INVESTIGACION es el motor

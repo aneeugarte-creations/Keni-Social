@@ -126,6 +126,9 @@ _URL_RESULTADO_POR_TIPO = {
     # el resultado del lote. Sin `resultado_url`, el SPA cae a ese visor (ver Actividad.tsx).
     "investigacion": "/datos/investigacion/agentes",
     "import-calendario": "/operacion/feed",
+    # El carrusel se hornea en las piezas del post: enlaza a la Lista del Feed, donde el post
+    # vive y se abre el editor para ver las placas (slides) generadas.
+    "carrusel": "/operacion/feed/lista",
 }
 
 

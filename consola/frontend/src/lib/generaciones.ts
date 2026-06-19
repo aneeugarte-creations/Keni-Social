@@ -22,6 +22,7 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   "import-calendario": "Importar calendario",
   "render-video": "Render de video",
   transcribir: "Transcripción",
+  carrusel: "Carrusel",
 };
 
 /**

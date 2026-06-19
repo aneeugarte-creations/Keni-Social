@@ -33,6 +33,12 @@ _TIPO_SUGERIR_HASHTAGS = "sugerir-hashtags"
 _TIPOS_TRABAJO_PIPELINE = frozenset(
     {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS}
 )
+# Tipos de generación que son una ACCIÓN MANUAL del equipo sobre un post YA hecho (no trabajo
+# del pipeline): convertir un post del feed en carrusel. SIEMPRE se listan como actividad suelta
+# —su propia fila en el feed de Producción— aunque su post sea una run, porque es un evento que
+# el equipo dispara y quiere ver en Actividad, no un coste que se diluya dentro de la run. Su
+# coste tampoco suma a la run (viajaría duplicado): vive en su fila.
+_TIPOS_ACCION_SUELTA = frozenset({"carrusel"})
 
 # Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa
 # no se ejecuta y se pinta "Saltada" (no bloquea el estado global ni cuenta como fallo).

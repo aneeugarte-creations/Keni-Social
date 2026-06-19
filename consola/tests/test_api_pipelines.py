@@ -617,6 +617,38 @@ def test_run_suma_metricas_de_sus_generaciones(cliente):
     assert det["metricas"] == run["metricas"]
 
 
+def test_carrusel_de_un_post_sale_suelto_aunque_su_post_sea_run(cliente):
+    """Convertir un post (que ES una run) en carrusel es una ACCIÓN MANUAL del equipo: sale como
+    su PROPIA fila suelta en el feed (`clase='actividad'`, `tipo='carrusel'`), NO se pliega en la
+    run como el copy/arte. Su coste vive en su fila y NO suma a la run (no se cuenta dos veces)."""
+    tema = _tema_pipeline("Post que se vuelve carrusel")
+    _gen_suelta(
+        "Carrusel largo · Post que se vuelve carrusel",
+        tipo="carrusel",
+        publicacion_id=tema["id"],
+        metricas={"tokens_in": 500, "tokens_out": 499, "total_cost_usd": 0.03,
+                  "duration_ms": 2000},
+    )
+    body = cliente.get("/api/pipelines").json()
+    por_titulo = {x["titulo"]: x for x in body["pipelines"]}
+    # La conversión a carrusel SÍ aparece como actividad suelta (su propia fila).
+    suelta = por_titulo["Carrusel largo · Post que se vuelve carrusel"]
+    assert suelta["clase"] == "actividad"
+    assert suelta["tipo"] == "carrusel"
+    assert suelta["metricas"]["tokens"] == 999
+    # ...y su coste NO se duplica dentro de la run de su post (la run no lo absorbe).
+    run = por_titulo["Post que se vuelve carrusel"]
+    assert run["clase"] == "run"
+    assert run["metricas"]["tokens"] == 0
+    assert run["metricas"]["items"] == 0
+    # El sumatorio del feed cuenta el carrusel UNA sola vez (run 0 + suelta 999).
+    assert body["totales"]["tokens"] == 999
+    assert body["totales"]["items"] == 1
+    # El filtro por tipo lo localiza como trabajo suelto.
+    solo = cliente.get("/api/pipelines?tipo=carrusel").json()["pipelines"]
+    assert {x["titulo"] for x in solo} == {"Carrusel largo · Post que se vuelve carrusel"}
+
+
 def test_sugerir_hashtags_se_pliega_en_su_run_como_etapa(cliente):
     """La generación `sugerir-hashtags` NO sale como tarjeta suelta: vive DENTRO de la run de su
     tema como etapa entre Redactar e Ilustrar, en "ok" por la evidencia de que corrió. Y aunque su
