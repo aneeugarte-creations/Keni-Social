@@ -1,11 +1,13 @@
-// Vista MENSUAL de la rota (modo «Mes» del Calendario): dos calendarios mensuales de pura
-// jornada (turnos), sin eventos ni cobertura, con un selector de ámbito arriba:
+// Vista MENSUAL de la rota (modo «Mes» del Calendario): dos calendarios mensuales de jornada
+// (turnos) con un selector de ámbito arriba:
 //   • «Equipo» — la jornada de TODO el equipo en el mes (quién trabaja cada franja).
 //   • «Yo»     — solo el horario propio del usuario en el mes.
-// El plano de eventos/«coger» vive en la pestaña «Cobertura»; aquí NO se mezcla. La rejilla
-// SEMANAL es el modo «Semana» del mismo Calendario.
+// Sobre esa jornada se SUPERPONE, por día, un indicador compacto de eventos + cobertura (cuántos
+// eventos hay y cuántos están sin cubrir), derivado en `useTableroMes`. Pulsar un día con eventos
+// abre el «Resumen del día» (detalle de cobertura). La rejilla SEMANAL es el modo «Semana».
 import { useQuery } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowRight,
   CalendarDays,
   ChevronLeft,
@@ -24,6 +26,7 @@ import { ToggleGroup } from "@/components/ui/toggle-group";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { COBERTURA_TEXTO } from "@/lib/estado-color";
 import { hoyCDMX } from "@/lib/fecha";
 import {
   esFinDeSemana,
@@ -33,7 +36,11 @@ import {
   nombreMes,
   semanasDelMes,
 } from "@/lib/rota-calendario";
+import { cn } from "@/lib/utils";
 import type { TurnoRota } from "@/types";
+
+import { ResumenDia } from "./ResumenDia";
+import { type ResumenDiaCobertura, useTableroMes } from "./useTableroMes";
 
 type Ambito = "equipo" | "yo";
 
@@ -48,8 +55,16 @@ export function VistaMensualTurnos({
   /** Salta a la rejilla SEMANAL del mismo Calendario (lo ofrece el vacío de «Yo» a quien gestiona). */
   onVerSemana?: () => void;
 }) {
+  const { marcaActiva } = useMarcaActiva();
+  const { usuario } = useSesion();
   const [ambito, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
+  const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
+
+  // Cobertura del mes (eventos + estado por día) superpuesta sobre la jornada. Hook propio a
+  // escala de mes; NO toca `useTablero` (infra del cockpit).
+  const { porDia } = useTableroMes(mes, marcaActiva ?? undefined);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -68,9 +83,24 @@ export function VistaMensualTurnos({
       </div>
 
       {ambito === "equipo" ? (
-        <VistaMesEquipo mes={mes} />
+        <VistaMesEquipo mes={mes} cobertura={porDia} onAbrirDia={setDiaResumen} />
       ) : (
-        <VistaMesYo mes={mes} esAdmin={esAdmin} onVerSemana={onVerSemana} />
+        <VistaMesYo
+          mes={mes}
+          esAdmin={esAdmin}
+          onVerSemana={onVerSemana}
+          cobertura={porDia}
+          onAbrirDia={setDiaResumen}
+        />
+      )}
+
+      {diaResumen && (
+        <ResumenDia
+          fecha={diaResumen}
+          marca={marcaActiva ?? undefined}
+          usuarioId={usuario?.id ?? null}
+          onClose={() => setDiaResumen(null)}
+        />
       )}
     </div>
   );
@@ -177,13 +207,20 @@ const DIAS_CABECERA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
  * Cuadrícula del mes lun→dom. El contenido de cada día lo decide `renderDia` (las dos
  * vistas comparten el armazón: cabecera, hoy, finde y días del mes vecino atenuados).
  * Bordes REALES (no `gap-px`, que es fondo y no se imprime) para que salga completa en papel.
+ *
+ * `cobertura` (opcional) superpone el indicador de eventos/cobertura del día; pulsarlo abre el
+ * «Resumen del día» vía `onAbrirDia`.
  */
 function RejillaMensual({
   mes,
   renderDia,
+  cobertura,
+  onAbrirDia,
 }: {
   mes: string;
   renderDia: (fecha: string, delMes: boolean) => React.ReactNode;
+  cobertura?: Map<string, ResumenDiaCobertura>;
+  onAbrirDia?: (fecha: string) => void;
 }) {
   const hoy = hoyCDMX();
   const dias = React.useMemo(() => semanasDelMes(mes).flat(), [mes]);
@@ -201,6 +238,7 @@ function RejillaMensual({
           const delMes = mismoMes(fecha, mes);
           const finde = esFinDeSemana(fecha);
           const esHoy = fecha === hoy;
+          const resumen = delMes ? cobertura?.get(fecha) : undefined;
           return (
             <div
               key={fecha}
@@ -219,6 +257,13 @@ function RejillaMensual({
               >
                 {Number(fecha.slice(8, 10))}
               </div>
+              {resumen && (
+                <IndicadorCobertura
+                  fecha={fecha}
+                  resumen={resumen}
+                  onAbrir={onAbrirDia}
+                />
+              )}
               <div className="space-y-1">{renderDia(fecha, delMes)}</div>
             </div>
           );
@@ -226,6 +271,70 @@ function RejillaMensual({
       </div>
     </div>
   );
+}
+
+/**
+ * Indicador compacto de la jornada de un día: nº de eventos y, si hay huecos, nº SIN CUBRIR en
+ * AMARILLO (la convención central de `estado-color`, NO rojo). Distingue de un vistazo «todo
+ * cubierto» (gris, sin amarillo) de «con huecos» (amarillo) de «sin eventos» (no se renderiza).
+ * Si hay eventos y `onAbrir`, es un botón que abre el «Resumen del día»; si no, es informativo.
+ * Una ausencia que toca el día se marca con un triángulo ámbar al lado.
+ */
+function IndicadorCobertura({
+  fecha,
+  resumen,
+  onAbrir,
+}: {
+  fecha: string;
+  resumen: ResumenDiaCobertura;
+  onAbrir?: (fecha: string) => void;
+}) {
+  const { nEventos, nSinCubrir, hayAusencia } = resumen;
+  const contenido = (
+    <>
+      {nEventos > 0 ? (
+        <span className="tabular-nums">
+          {nEventos} ev
+          {nSinCubrir > 0 && (
+            <>
+              {" · "}
+              <span className={cn("font-medium", COBERTURA_TEXTO["sin-cubrir"])}>
+                {nSinCubrir} sin cubrir
+              </span>
+            </>
+          )}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">Sin eventos</span>
+      )}
+      {hayAusencia && (
+        <AlertTriangle
+          className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400"
+          aria-hidden
+        />
+      )}
+    </>
+  );
+
+  const clases =
+    "mb-1 flex w-full items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] leading-tight";
+
+  if (nEventos > 0 && onAbrir) {
+    return (
+      <button
+        type="button"
+        onClick={() => onAbrir(fecha)}
+        title={`Ver el resumen del día (${nEventos} eventos${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""})`}
+        className={cn(
+          clases,
+          "text-left text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring print:hover:bg-card",
+        )}
+      >
+        {contenido}
+      </button>
+    );
+  }
+  return <div className={cn(clases, "text-muted-foreground")}>{contenido}</div>;
 }
 
 /** Encabezado que SOLO aparece al imprimir, para identificar la hoja (mes + subtítulo). */
@@ -244,10 +353,14 @@ function VistaMesYo({
   mes,
   esAdmin = false,
   onVerSemana,
+  cobertura,
+  onAbrirDia,
 }: {
   mes: string;
   esAdmin?: boolean;
   onVerSemana?: () => void;
+  cobertura?: Map<string, ResumenDiaCobertura>;
+  onAbrirDia?: (fecha: string) => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
@@ -301,6 +414,8 @@ function VistaMesYo({
         />
         <RejillaMensual
           mes={mes}
+          cobertura={cobertura}
+          onAbrirDia={onAbrirDia}
           renderDia={(fecha, delMes) =>
             (porFecha.get(fecha) ?? []).map((t) => (
               <ChipTurnoMes key={t.id} turno={t} atenuado={!delMes} />
@@ -309,7 +424,7 @@ function VistaMesYo({
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Solo tus turnos del mes. Sin eventos ni cobertura.
+        Tus turnos del mes con los eventos y huecos de cada día. Pulsa un día para ver su resumen.
       </p>
     </>
   );
@@ -365,7 +480,15 @@ type FranjaConPersonas = {
   personas: { id: string; nombre: string }[];
 };
 
-function VistaMesEquipo({ mes }: { mes: string }) {
+function VistaMesEquipo({
+  mes,
+  cobertura,
+  onAbrirDia,
+}: {
+  mes: string;
+  cobertura?: Map<string, ResumenDiaCobertura>;
+  onAbrirDia?: (fecha: string) => void;
+}) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
   const q = useQuery({
@@ -402,6 +525,8 @@ function VistaMesEquipo({ mes }: { mes: string }) {
         <EncabezadoImpresion mes={mes} subtitulo="Turnos del equipo" />
         <RejillaMensual
           mes={mes}
+          cobertura={cobertura}
+          onAbrirDia={onAbrirDia}
           renderDia={(fecha, delMes) =>
             (porFecha.get(fecha) ?? []).map((fr) => (
               <ChipFranjaEquipo
@@ -415,7 +540,8 @@ function VistaMesEquipo({ mes }: { mes: string }) {
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Jornada de todo el equipo. Sin eventos ni cobertura.
+        Jornada de todo el equipo con los eventos y huecos de cada día. Pulsa un día para ver su
+        resumen.
       </p>
     </>
   );
