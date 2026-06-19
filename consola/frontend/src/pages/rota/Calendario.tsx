@@ -113,11 +113,12 @@ export function Calendario({
   // La cobertura se acota a la marca activa (multi-tenant por `rota_eventos.marca`); la
   // marca entra en la queryKey para refrescar al cambiar de workspace. `null` ("Todas",
   // admin) = sin filtro -> `marca` ausente en la query.
+  // La rejilla (capacidad + cobertura + ausencias) se pinta tanto en «Calendario» como en
+  // «Gestión» (junto al panel de asignar), así que cobertura/tareas/ausencias cargan en ambos.
   const coberturaQ = useQuery({
     queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
     queryFn: ({ signal }) =>
       api.cobertura({ lunes, marca: marcaActiva ?? undefined }, signal),
-    enabled: modo === "calendario",
   });
   // Tareas de cobertura (clase='tarea' con evento_id): la TITULARIDAD real, quién COGIÓ
   // cada evento. Es la MISMA fuente que el Panorama (mismo queryKey → cache compartida y se
@@ -126,7 +127,6 @@ export function Calendario({
     queryKey: [...CLAVE_TAREAS, "tareas", marcaActiva ?? "todas"],
     queryFn: ({ signal }) =>
       api.contenido({ clase: "tarea", marca: marcaActiva ?? undefined }, signal),
-    enabled: modo === "calendario",
   });
   const turnosQ = useQuery({
     queryKey: claveTurnos,
@@ -140,7 +140,6 @@ export function Calendario({
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
-    enabled: modo === "calendario",
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -434,17 +433,41 @@ export function Calendario({
     />
   );
 
-  // Panel «Gestión» (admin): controles de la SEMANA, sin rejilla. Reutiliza las mutaciones y
-  // diálogos de esta misma instancia; la edición de celdas vive en la pestaña «Calendario».
-  if (modo === "gestion") {
+  // «Gestión» (admin) comparte el MISMO render que «Calendario» (abajo): la rejilla viva, pero con
+  // cabecera de gestión (asignar/aprobar/despublicar/franjas/…) y, al asignar, el panel de reparto
+  // como columna lateral junto a la rejilla para repartir mirando el calendario en vivo. Ramas por
+  // `esGestion` dentro del return común.
+  const esGestion = modo === "gestion";
+
+  // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
+  // imprimir/PDF intactos. El conmutador queda arriba; el vacío de «Yo» salta a «Semana».
+  if (vista === "mes") {
     return (
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
+        <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Cabecera. En «Gestión» son los controles de la semana (asignar/aprobar/despublicar +
+          menú «Más»); en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
+          La leyenda del calendario se ofrece bajo demanda con el icono "?". */}
+      {esGestion ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
           <div className="flex flex-wrap items-center gap-2">
             <BadgeEstadoSemana aprobada={Boolean(semana?.aprobada)} hayTurnos={turnos.length > 0} />
+            {/* Abre/cierra el panel de reparto como columna lateral (no un modal): la rejilla queda
+                a la vista para repartir mirando el calendario en vivo. */}
             {!semana?.aprobada && (
-              <Button variant="outline" onClick={() => setAbrirAsignar(true)}>
+              <Button
+                variant="outline"
+                onClick={() => setAbrirAsignar((v) => !v)}
+                aria-pressed={abrirAsignar}
+              >
                 <CalendarPlus className="h-4 w-4" /> Asignar turnos
               </Button>
             )}
@@ -498,96 +521,58 @@ export function Calendario({
             />
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Reparte y publica los turnos de la semana. La rejilla y la edición de celdas están en la
-          pestaña «Calendario».
-        </p>
-
-        {abrirFranjas && (
-          <DialogFranjas
-            lunes={lunes}
-            onCerrar={() => setAbrirFranjas(false)}
-            onAsignar={
-              editable
-                ? () => {
-                    setAbrirFranjas(false);
-                    setAbrirAsignar(true);
-                  }
-                : undefined
-            }
-          />
-        )}
-        {abrirCarga && <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />}
-        <DialogoAsignarTurnos
-          abierto={abrirAsignar}
-          onOpenChange={setAbrirAsignar}
-          lunes={lunes}
-          dias={dias}
-          franjas={franjasSemana}
-          cms={cms}
-          marca={marcaActiva ?? ""}
-          onCambio={invalidar}
-        />
-      </div>
-    );
-  }
-
-  // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
-  // imprimir/PDF intactos. El conmutador queda arriba; el vacío de «Yo» salta a «Semana».
-  if (vista === "mes") {
-    return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
-        <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Cabecera SLIM (ola "cabecera-slim"): conmutador Semana|Mes + NavegadorSemana + ayuda a
-          la izquierda; a la derecha el estado de la semana, el aviso de reprogramaciones, la
-          accion primaria (Aprobar/Despublicar) y un menu "Mas" con el resto. La leyenda dejo de
-          vivir siempre visible bajo la cabecera; se ofrece bajo demanda con el icono "?". */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {conmutadorVista}
-          <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
-          <AyudaLeyenda />
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Bandeja de propuestas: aceptar una promueve a evento «Por cubrir» (acción de
-              coordinador) → solo admin. El estado de la semana (Borrador/Publicada) vive en Gestión. */}
-          {esAdmin && <PropuestasCalendario propuestas={propuestas} />}
-          {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
-          {esAdmin && nCambiados > 0 && (
-            <Tooltip
-              label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
-                nCambiados === 1 ? "" : "s"
-              } sin aviso.`}
-            >
-              <Badge variant="aviso" className="gap-1 font-normal">
-                <BellRing className="h-3.5 w-3.5" /> {nCambiados}
-              </Badge>
-            </Tooltip>
-          )}
-          {nSinCubrir > 0 && (
-            <Tooltip
-              label={`${nSinCubrir} evento${nSinCubrir === 1 ? "" : "s"} sin cubrir esta semana (sin nadie de turno en su franja).`}
-            >
-              <Badge
-                variant="outline"
-                className="gap-1 border-yellow-500/50 font-normal text-yellow-700 dark:text-yellow-300"
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            {conmutadorVista}
+            <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+            <AyudaLeyenda />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Bandeja de propuestas: aceptar una promueve a evento «Por cubrir» (acción de
+                coordinador) → solo admin. El estado de la semana (Borrador/Publicada) vive en Gestión. */}
+            {esAdmin && <PropuestasCalendario propuestas={propuestas} />}
+            {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
+            {esAdmin && nCambiados > 0 && (
+              <Tooltip
+                label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
+                  nCambiados === 1 ? "" : "s"
+                } sin aviso.`}
               >
-                <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
-              </Badge>
-            </Tooltip>
-          )}
-          {/* Asignar/Aprobar/Despublicar/Franjas/Copiar/Carga/Export viven ahora en la pestaña
-              «Gestión» (admin); el Calendario es consulta + edición de celdas. */}
+                <Badge variant="aviso" className="gap-1 font-normal">
+                  <BellRing className="h-3.5 w-3.5" /> {nCambiados}
+                </Badge>
+              </Tooltip>
+            )}
+            {nSinCubrir > 0 && (
+              <Tooltip
+                label={`${nSinCubrir} evento${nSinCubrir === 1 ? "" : "s"} sin cubrir esta semana (sin nadie de turno en su franja).`}
+              >
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-yellow-500/50 font-normal text-yellow-700 dark:text-yellow-300"
+                >
+                  <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
+                </Badge>
+              </Tooltip>
+            )}
+            {/* Asignar/Aprobar/Despublicar/Franjas/Copiar/Carga/Export viven en la pestaña
+                «Gestión» (admin); el Calendario es consulta + edición de celdas. */}
+          </div>
         </div>
-      </div>
+      )}
+      {esGestion && (
+        <p className="text-sm text-muted-foreground">
+          Reparte los turnos y míralos aparecer en la rejilla al instante. ¿Un error? Quita a la
+          persona desde la × de su recuadro en la celda.
+        </p>
+      )}
 
+      {/* Split: la rejilla ocupa el ancho (flex-1) y, en Gestión con el panel abierto, el reparto
+          se acomoda a la derecha SIN tapar la rejilla (la columna lateral). Cerrado, la rejilla
+          vuelve a ancho completo. En «Calendario» no hay panel: es solo la rejilla. */}
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
       ) : error ? (
@@ -791,6 +776,43 @@ export function Calendario({
             </div>
           </CardContent>
         </Card>
+      )}
+        </div>
+        {/* Panel de reparto como columna lateral (solo Gestión). Cerrado no pinta nada (la rejilla
+            recupera el ancho); abierto, comparte la misma instancia/estado que la rejilla, así cada
+            turno asignado aparece al instante (invalida `["rota"]`). */}
+        {esGestion && (
+          <DialogoAsignarTurnos
+            incrustado
+            abierto={abrirAsignar}
+            onOpenChange={setAbrirAsignar}
+            lunes={lunes}
+            dias={dias}
+            franjas={franjasSemana}
+            cms={cms}
+            marca={marcaActiva ?? ""}
+            onCambio={invalidar}
+          />
+        )}
+      </div>
+
+      {/* Modales solo de «Gestión»: editar franjas y ver la carga del equipo. */}
+      {esGestion && abrirFranjas && (
+        <DialogFranjas
+          lunes={lunes}
+          onCerrar={() => setAbrirFranjas(false)}
+          onAsignar={
+            editable
+              ? () => {
+                  setAbrirFranjas(false);
+                  setAbrirAsignar(true);
+                }
+              : undefined
+          }
+        />
+      )}
+      {esGestion && abrirCarga && (
+        <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
       )}
 
       {/* Diálogo de cobertura del chip: la MISMA tarjeta del Panorama (coger/«Asignar a…»/

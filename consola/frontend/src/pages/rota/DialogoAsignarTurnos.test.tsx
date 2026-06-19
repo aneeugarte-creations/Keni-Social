@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
@@ -243,5 +243,43 @@ describe("DialogoAsignarTurnos (render)", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Ana" })); // deja solo a Luis
     fireEvent.click(screen.getByRole("checkbox", { name: /15$/ })); // un día
     expect(screen.getByRole("button", { name: "Asignar 1 turno" })).toBeInTheDocument();
+  });
+
+  it("incrustado: columna lateral (aside), no modal; cerrado no pinta nada", () => {
+    // En «Gestión» el reparto va junto a la rejilla viva: un <aside> (rol complementary), NO un
+    // modal que la tape. Cerrado no renderiza nada para que la rejilla recupere el ancho.
+    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onOpenChange = vi.fn();
+    const props = {
+      incrustado: true as const,
+      onOpenChange,
+      lunes: "2026-06-15",
+      dias: DIAS,
+      franjas: FRANJAS,
+      cms: CMS,
+      marca: "claro-sports",
+      onCambio: vi.fn(),
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <DialogoAsignarTurnos abierto={false} {...props} />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText("Personas")).not.toBeInTheDocument();
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <DialogoAsignarTurnos abierto {...props} />
+      </QueryClientProvider>,
+    );
+    const panel = screen.getByRole("complementary", { name: "Asignar turnos" });
+    expect(within(panel).getByText("Personas")).toBeInTheDocument();
+    expect(within(panel).getByText("Horario")).toBeInTheDocument();
+    // No es un modal: nada de role=dialog que cubra la rejilla.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Su propio botón de cerrar devuelve el ancho a la rejilla.
+    fireEvent.click(within(panel).getByRole("button", { name: "Cerrar" }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

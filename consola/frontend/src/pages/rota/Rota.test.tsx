@@ -536,6 +536,23 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
   });
 
+  it("en «Gestión», «Asignar turnos» abre el reparto como columna lateral (no un modal)", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    const toggle = await screen.findByRole("button", { name: "Asignar turnos" });
+    // Cerrado: ni columna lateral ni modal sobre la rejilla.
+    expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // Abre: el reparto aparece junto a la rejilla (un <aside>, NO un role=dialog que la tape).
+    fireEvent.click(toggle);
+    const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
+    expect(within(panel).getByText("Horario")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // Cierra desde la cabecera: la rejilla recupera el ancho (el panel desaparece).
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
+  });
+
   it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {
     renderRotaConTab("gestion", { rol: "editor" });
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
