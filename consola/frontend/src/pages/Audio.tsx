@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Download,
   Eraser,
+  Eye,
   FileText,
   HelpCircle,
   Lightbulb,
@@ -949,43 +950,50 @@ function Lector({
           </div>
         ) : null}
         {acciones || puedeBorrar ? (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {esIdeasListo ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => aSugerencias.mutate(artefacto!.id)}
-                disabled={aSugerencias.isPending}
-                className="gap-1.5"
-              >
-                {aSugerencias.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Lightbulb className="h-3.5 w-3.5" />
-                )}
-                A Sugerencias
-              </Button>
+              <Tooltip label="Enviar a Sugerencias" side="bottom">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => aSugerencias.mutate(artefacto!.id)}
+                  disabled={aSugerencias.isPending}
+                >
+                  {aSugerencias.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Lightbulb className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </Tooltip>
             ) : null}
             {acciones && editable ? (
-              <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
-                {editando ? "Vista" : "Editar"}
-              </Button>
+              <Tooltip label={editando ? "Vista" : "Editar"} side="bottom">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditando((v) => !v)}>
+                  {editando ? <Eye className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                </Button>
+              </Tooltip>
             ) : null}
             {acciones ? (
-              <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
-                <Download className="h-3.5 w-3.5" /> Descargar
-              </Button>
+              <Tooltip label="Descargar" side="bottom">
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={descargar}>
+                  <Download className="h-3.5 w-3.5" />
+                </Button>
+              </Tooltip>
             ) : null}
             {puedeBorrar ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onBorrar}
-                disabled={borrar.isPending}
-                className="gap-1.5 text-destructive hover:text-destructive"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Borrar
-              </Button>
+              <Tooltip label="Borrar" side="bottom">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={onBorrar}
+                  disabled={borrar.isPending}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </Tooltip>
             ) : null}
           </div>
         ) : null}
@@ -1107,6 +1115,12 @@ function ssToSec(t: string): number {
   return partes.reduce((acc, n) => acc * 60 + n, 0);
 }
 
+// Segundos -> "mm:ss".
+function fmtSeg(s: number): string {
+  const t = Math.max(0, Math.floor(s));
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 
 interface PreguntaItem {
   t: string;
@@ -1186,28 +1200,74 @@ function FormularioPreguntas({
     return () => clearTimeout(id);
   }, [resp, artefacto.id, artefacto.respuestas]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reproductor de snippets: un solo <audio> del media; cada play salta a su franja y se detiene al
-  // final de la ventana (~8 s desde un poco antes del timestamp).
+  // Reproductor de snippets: un solo <audio>; cada play SALTA a la franja [inicio, fin] de su duda y
+  // se detiene al final. El inicio es la marca de tiempo; el fin va a la siguiente duda (si está
+  // cerca) o a una ventana por defecto. La franja se busca tras cargar los metadatos (si no, el
+  // navegador la ignora y arranca en 0).
+  const inicios = React.useMemo(
+    () => preguntas.map((q) => (tieneTiempo(q.t) ? ssToSec(q.t) : null)),
+    [preguntas],
+  );
+  const ventana = React.useCallback(
+    (i: number): [number, number] | null => {
+      const ini = inicios[i];
+      if (ini == null) return null;
+      const sig = inicios[i + 1];
+      let fin = ini + 14;
+      if (sig != null && sig > ini && sig - ini <= 30) fin = sig;
+      if (fin - ini < 5) fin = ini + 5;
+      return [ini, fin];
+    },
+    [inicios],
+  );
+
   const audioRef = React.useRef<HTMLAudioElement>(null);
   const finRef = React.useRef(0);
   const [sonando, setSonando] = React.useState<number | null>(null);
-  React.useEffect(() => setSonando(null), [artefacto.id]);
+  const [pos, setPos] = React.useState(0);
+  React.useEffect(() => {
+    setSonando(null);
+    setPos(0);
+  }, [artefacto.id]);
 
-  const reproducir = (i: number, inicioSeg: number) => {
+  const reproducir = (i: number) => {
     const el = audioRef.current;
-    if (!el) return;
+    const v = ventana(i);
+    if (!el || !v) return;
     if (sonando === i) {
       el.pause();
       setSonando(null);
       return;
     }
-    finRef.current = inicioSeg + 8;
-    el.currentTime = Math.max(0, inicioSeg - 0.5);
-    void el.play().then(() => setSonando(i)).catch(() => setSonando(null));
+    const [ini, fin] = v;
+    finRef.current = fin;
+    const arrancar = () => {
+      try {
+        el.currentTime = ini;
+      } catch {
+        /* aún no se puede buscar */
+      }
+      setPos(ini);
+      setSonando(i);
+      void el.play().catch(() => setSonando(null));
+    };
+    if (el.readyState >= 1) {
+      arrancar();
+    } else {
+      el.preload = "auto";
+      const onMeta = () => {
+        el.removeEventListener("loadedmetadata", onMeta);
+        arrancar();
+      };
+      el.addEventListener("loadedmetadata", onMeta);
+      el.load();
+    }
   };
   const alAvanzar = () => {
     const el = audioRef.current;
-    if (el && el.currentTime >= finRef.current) {
+    if (!el) return;
+    setPos(el.currentTime);
+    if (el.currentTime >= finRef.current) {
       el.pause();
       setSonando(null);
     }
@@ -1247,42 +1307,61 @@ function FormularioPreguntas({
       <audio
         ref={audioRef}
         src={audio.media_url || undefined}
-        preload="none"
+        preload="metadata"
         onTimeUpdate={alAvanzar}
         onEnded={() => setSonando(null)}
         className="hidden"
       />
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {preguntas.map((q, i) => {
-          const conTiempo = tieneTiempo(q.t) && !!audio.media_url;
+          const v = ventana(i);
+          const reproducible = !!v && !!audio.media_url;
+          const playing = sonando === i;
+          const [ini, fin] = v ?? [0, 0];
+          const pct =
+            playing && fin > ini ? Math.min(100, Math.max(0, ((pos - ini) / (fin - ini)) * 100)) : 0;
           return (
-            <div key={i} className="rounded-md border border-border/70 bg-background p-3">
-              <div className="flex items-baseline gap-2">
-                {conTiempo ? (
+            <div key={i} className="rounded-md border border-border/70 bg-muted/30 p-3">
+              <div className="flex items-start gap-2">
+                {reproducible ? (
                   <Button
-                    size="sm"
+                    size="icon"
                     variant="outline"
-                    className="h-6 shrink-0 gap-1 px-1.5 font-mono text-xs"
-                    title="Escuchar este fragmento"
-                    onClick={() => reproducir(i, ssToSec(q.t))}
+                    className="h-7 w-7 shrink-0 bg-background"
+                    title={`Escuchar ${fmtSeg(ini)}–${fmtSeg(fin)}`}
+                    onClick={() => reproducir(i)}
                   >
-                    {sonando === i ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                    {q.t}
+                    {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                   </Button>
                 ) : (
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                  <span className="mt-0.5 shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                     {q.t || "—"}
                   </span>
                 )}
-                <p className="text-xs">
-                  <span className="text-muted-foreground">{q.frase}</span> — {q.pregunta}
-                </p>
+                <div className="min-w-0 flex-1">
+                  {reproducible ? (
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                        {playing ? `${fmtSeg(pos)} / ${fmtSeg(fin)}` : `${fmtSeg(ini)}–${fmtSeg(fin)}`}
+                      </span>
+                      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-[width] duration-200"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  <p className="text-xs">
+                    <span className="text-muted-foreground">{q.frase}</span> — {q.pregunta}
+                  </p>
+                </div>
               </div>
               <Textarea
                 value={resp[i] ?? ""}
                 onChange={(e) => setResp((s) => ({ ...s, [i]: e.target.value }))}
                 rows={1}
-                className="mt-2 min-h-9"
+                className="mt-2 min-h-9 bg-background"
                 placeholder="Tu respuesta…"
               />
             </div>

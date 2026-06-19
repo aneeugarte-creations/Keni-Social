@@ -131,6 +131,21 @@ def test_servir_imagen_subida(cliente):
     assert "immutable" in cache and "max-age=31536000" in cache
 
 
+def test_servir_soporta_rango(cliente):
+    """GET con `Range: bytes=ini-fin` devuelve 206 con solo ese tramo (para seek de audio/vídeo)."""
+    nombre = cliente.post(
+        "/api/media/video", files={"archivo": ("clip.mp4", b"0123456789", "video/mp4")}
+    ).json()["id"]
+    # Sin rango: 200 + Accept-Ranges (el reproductor sabe que puede buscar).
+    r = cliente.get(f"/api/media/{nombre}")
+    assert r.status_code == 200 and r.headers["accept-ranges"] == "bytes"
+    # Con rango: 206 + el tramo pedido + Content-Range.
+    r = cliente.get(f"/api/media/{nombre}", headers={"Range": "bytes=3-6"})
+    assert r.status_code == 206
+    assert r.content == b"3456"
+    assert r.headers["content-range"] == "bytes 3-6/10"
+
+
 def test_servir_inexistente_404(cliente):
     assert cliente.get("/api/media/noexiste.png").status_code == 404
 

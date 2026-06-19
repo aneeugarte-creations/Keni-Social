@@ -111,9 +111,44 @@ async def servir(request: Request) -> Response:
     datos = media.leer_media(nombre)
     if datos is None:
         return JSONResponse({"error": "Esa imagen no existe."}, status_code=404)
-    return Response(
-        datos, media_type=media.mime_de(nombre), headers={"Cache-Control": _CACHE_MEDIA}
-    )
+    return _respuesta_media(datos, media.mime_de(nombre), request.headers.get("range"))
+
+
+def _respuesta_media(datos: bytes, mime: str, rango: str | None) -> Response:
+    """Sirve bytes de media con soporte de RANGO (HTTP Range) para audio/vídeo seekable.
+
+    Sin `Range`: 200 con todo el cuerpo (+ `Accept-Ranges: bytes` para que el reproductor sepa que
+    puede buscar). Con `Range: bytes=ini-fin`: 206 con solo ese tramo (`Content-Range`). Así el
+    `<audio>` puede SALTAR a un segundo concreto sin descargar todo y empezar donde toca.
+    """
+    total = len(datos)
+    cabeceras = {"Accept-Ranges": "bytes", "Cache-Control": _CACHE_MEDIA}
+    if rango and rango.startswith("bytes=") and total:
+        tramo = rango[len("bytes=") :].split(",", 1)[0].strip()
+        ini_s, _, fin_s = tramo.partition("-")
+        try:
+            if not ini_s:  # sufijo: últimos N bytes
+                ini, fin = max(0, total - int(fin_s)), total - 1
+            else:
+                ini = int(ini_s)
+                fin = int(fin_s) if fin_s else total - 1
+        except ValueError:
+            ini, fin = 0, total - 1
+        ini = max(0, ini)
+        fin = min(fin, total - 1)
+        if ini <= fin:
+            cuerpo = datos[ini : fin + 1]
+            return Response(
+                cuerpo,
+                status_code=206,
+                media_type=mime,
+                headers={
+                    **cabeceras,
+                    "Content-Range": f"bytes {ini}-{fin}/{total}",
+                    "Content-Length": str(len(cuerpo)),
+                },
+            )
+    return Response(datos, media_type=mime, headers=cabeceras)
 
 
 def lanzar_generacion_imagen(
