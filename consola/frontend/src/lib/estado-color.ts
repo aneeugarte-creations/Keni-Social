@@ -7,8 +7,8 @@
  * hablen el MISMO lenguaje de color y la taxonomía evolucione en un solo sitio.
  *
  * TAXONOMÍA (color SOLO con significado, SIEMPRE acompañado de texto/icono; outline gris por defecto):
- *  - ROJO   → `sin-cubrir`: hueco real, pide decisión.
- *  - ÁMBAR  → `empieza-en`: PRE-LIVE, el saque está cerca → a moverse.
+ *  - AMARILLO (yellow) → `sin-cubrir`: hueco real, pide decisión.
+ *  - ÁMBAR (amber)     → `empieza-en`: PRE-LIVE, el saque está cerca → a moverse.
  *  - VERDE  → `en-vivo` / cobertura tomada / terminado-OK: en marcha o resuelto.
  *  - GRIS   (`text-muted-foreground` / slate) → `programado`: aún falta, neutro.
  *  - OUTLINE gris → estado por defecto (borrador), sin color de significado.
@@ -64,11 +64,11 @@ export const SEMAFORO_ESTILO: Record<Semaforo, EstiloSemaforo> = {
 /**
  * Texto de color por ESTADO de cobertura (`EstadoCobertura`), para los CORTES del KPI (solo texto,
  * con `dark:`). Replica `KpiCobertura`:
- *  - `sin-cubrir`    → rojo (hueco real, pide decisión).
+ *  - `sin-cubrir`    → amarillo (hueco real, pide decisión).
  *  - `cubierto-turno`/`cogido` → verde (resuelto / en marcha; el KPI los agrega como «cubiertos»).
  */
 export const COBERTURA_TEXTO: Record<EstadoCobertura, string> = {
-  "sin-cubrir": "text-red-700 dark:text-red-300",
+  "sin-cubrir": "text-yellow-700 dark:text-yellow-300",
   "cubierto-turno": "text-emerald-700 dark:text-emerald-300",
   cogido: "text-emerald-700 dark:text-emerald-300",
 };
@@ -78,9 +78,10 @@ export const COBERTURA_TEXTO: Record<EstadoCobertura, string> = {
  * calendario de la rota. Es la píldora compacta de cobertura del chip de evento. Replica EXACTAMENTE
  * las clases que el chip pintaba inline:
  *  - `cubierto-turno`/`cogido` → verde relleno («Cubierto · <nombres>»: lo cubre quien está de turno).
- *  - `sin-cubrir`              → ROJO relleno suave («Sin cubrir»: hueco real). Mismo rojo (con
- *    significado «pide decisión») que el KPI: el estado «sin cubrir» habla UN solo color en toda la
- *    app. El ámbar queda reservado a `empieza-en` (PRE-LIVE), un eje distinto (tiempo, no cobertura).
+ *  - `sin-cubrir`              → AMARILLO relleno suave («Sin cubrir»: hueco real). Mismo amarillo
+ *    (con significado «pide decisión») que el KPI: el estado «sin cubrir» habla UN solo color en
+ *    toda la app. Es `yellow`, NO `amber`: el ámbar queda reservado a `empieza-en` (PRE-LIVE), un
+ *    eje distinto (tiempo, no cobertura).
  */
 export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
   "cubierto-turno":
@@ -88,7 +89,7 @@ export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
   cogido:
     "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
   "sin-cubrir":
-    "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300",
+    "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
 };
 
 // FASE 2 (preparado, SIN consumidor todavía — no se añaden entradas para no dejar código muerto que

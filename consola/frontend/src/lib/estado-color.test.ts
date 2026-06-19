@@ -51,8 +51,8 @@ describe("SEMAFORO_ESTILO — color por fase temporal", () => {
 });
 
 describe("COBERTURA_TEXTO — color del corte del KPI por estado de cobertura", () => {
-  it("rojo para sin-cubrir (hueco que pide decisión)", () => {
-    expect(COBERTURA_TEXTO["sin-cubrir"]).toBe("text-red-700 dark:text-red-300");
+  it("amarillo para sin-cubrir (hueco que pide decisión)", () => {
+    expect(COBERTURA_TEXTO["sin-cubrir"]).toBe("text-yellow-700 dark:text-yellow-300");
   });
 
   it("verde para cubierto-turno y cogido (resuelto / en marcha)", () => {
@@ -78,9 +78,9 @@ describe("COBERTURA_BADGE — píldora rellena de cobertura del chip del calenda
     expect(COBERTURA_BADGE.cogido).toBe(COBERTURA_BADGE["cubierto-turno"]);
   });
 
-  it("rojo relleno suave para sin-cubrir (mismo rojo que el KPI: «sin cubrir» es UN color)", () => {
+  it("amarillo relleno suave para sin-cubrir (mismo amarillo que el KPI: «sin cubrir» es UN color)", () => {
     expect(COBERTURA_BADGE["sin-cubrir"]).toBe(
-      "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300",
+      "border-yellow-300 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300",
     );
   });
 

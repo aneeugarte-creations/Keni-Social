@@ -116,7 +116,7 @@ function AnadirRapido({ marca }: { marca: string }) {
           aria-label="Hora (opcional)"
           className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 sm:w-[7rem] sm:flex-none"
         />
-        {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en rojo sutil.
+        {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en amarillo sutil.
             El texto se oculta en móvil (queda el icono) para no apretar la fila de acciones. */}
         <Button
           type="button"
@@ -124,7 +124,7 @@ function AnadirRapido({ marca }: { marca: string }) {
           size="sm"
           className={cn(
             "shrink-0",
-            urgente && "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+            urgente && "border-yellow-500/50 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
           )}
           aria-label="Urgente"
           aria-pressed={urgente}
@@ -200,8 +200,8 @@ function prioridadItem(i: Item): PrioridadEvento {
 
 /**
  * ¿Es URGENTE-DE-AHORA (breaking)? = prioridad «alta», SIN cubrir Y de HOY o SIN FECHA. Un partido
- * urgente de la semana que viene NO es breaking (se queda en su día con su badge rojo); y uno ya
- * cubierto (alguien lo cogió o lo cubre su turno) tampoco salta a la banda roja: solo compiten ahí
+ * urgente de la semana que viene NO es breaking (se queda en su día con su badge amarillo); y uno ya
+ * cubierto (alguien lo cogió o lo cubre su turno) tampoco salta a la banda amarilla: solo compiten ahí
  * los HUECOS de hoy, que es lo que pide decisión. `i.orden` ya es el día («AAAA-MM-DD» o «9999-99-99»).
  */
 function esUrgenteAhora(i: Item, hoy: string): boolean {
@@ -271,7 +271,7 @@ function AccionUrgente({ item }: { item: Item }) {
       className={cn(
         "h-7 w-7 shrink-0",
         esUrgente &&
-          "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+          "border-yellow-500/50 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
       )}
       aria-label={esUrgente ? "Quitar urgente" : "Marcar urgente"}
       aria-pressed={esUrgente}
@@ -497,7 +497,8 @@ function FilaAgenda({
   abierta: boolean;
   onToggle: () => void;
   catalogos: CatalogosPublicacion | undefined;
-  /** En la banda «Urgente ahora»: acento ROJO en la fila (breaking), no el ámbar de «por cubrir». */
+  /** En la banda «Urgente ahora»: acento amarillo MÁS marcado en la fila (breaking), por encima del
+   *  amarillo suave de «por cubrir». */
   urgente?: boolean;
 }) {
   const tarea = item.kind === "tarea" ? item.tarea : null;
@@ -515,9 +516,9 @@ function FilaAgenda({
       className={cn(
         "rounded-md border",
         urgente
-          ? "border-red-500/50 bg-red-50/50 dark:bg-red-950/20"
+          ? "border-yellow-500/60 bg-yellow-50/60 dark:bg-yellow-950/20"
           : sinDueno
-            ? "border-dashed border-red-400/40 bg-red-50/30 dark:bg-red-950/10"
+            ? "border-dashed border-yellow-400/50 bg-yellow-50/40 dark:bg-yellow-950/10"
             : "border-border bg-card",
       )}
     >
@@ -564,13 +565,13 @@ function FilaAgenda({
             )}
             <Badge
               variant="outline"
-              className="border-red-500/50 text-red-700 dark:text-red-300"
+              className="border-yellow-500/50 text-yellow-700 dark:text-yellow-300"
             >
               Sin cubrir
             </Badge>
           </span>
         ) : item.kind === "evento" ? (
-          // Nadie lo cogió pero hay turno en su franja: lo cubre el turno (calmado, no ámbar).
+          // Nadie lo cogió pero hay turno en su franja: lo cubre el turno (calmado, no amarillo).
           <Badge
             variant="outline"
             className="shrink-0 border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
@@ -626,7 +627,7 @@ function FilaAgenda({
  *
  * Arriba, la carga por persona (avatar + conteo) que además FILTRA la agenda, y una banda con
  * lo último que ha cogido el equipo. Debajo, los partidos/encargos agrupados por día (Hoy /
- * Mañana / fecha) y ordenados por hora; lo «por cubrir» resalta en ámbar (es lo que pide
+ * Mañana / fecha) y ordenados por hora; lo «por cubrir» resalta en amarillo (es lo que pide
  * decisión). Cada fila se despliega para coger/reasignar. «Cargar más» trae más días.
  */
 export function PanoramaAgenda({
@@ -746,7 +747,7 @@ export function PanoramaAgenda({
   const hoy = hoyCDMX();
 
   // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
-  // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
+  // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge amarillo).
   const urgentes: Item[] = [];
   const enAgenda: Item[] = [];
   for (const it of items) (esUrgenteAhora(it, hoy) ? urgentes : enAgenda).push(it);
@@ -806,11 +807,11 @@ export function PanoramaAgenda({
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
             filtro === "__pool__"
-              ? "border-amber-500 bg-amber-100/60 dark:bg-amber-950/30"
-              : "border-amber-500/40 hover:bg-accent",
+              ? "border-yellow-500 bg-yellow-100/60 dark:bg-yellow-950/30"
+              : "border-yellow-500/40 hover:bg-accent",
           )}
         >
-          <Hand className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          <Hand className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
           Por cubrir
           <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
             {nPorCubrir}
@@ -854,9 +855,9 @@ export function PanoramaAgenda({
       {urgentes.length > 0 && (
         <section
           aria-label="Urgente ahora"
-          className="space-y-1.5 rounded-lg border border-red-500/50 bg-red-50/60 p-2.5 shadow-sm dark:bg-red-950/20"
+          className="space-y-1.5 rounded-lg border border-yellow-500/60 bg-yellow-50/70 p-2.5 shadow-sm dark:bg-yellow-950/25"
         >
-          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-yellow-700 dark:text-yellow-300">
             <Zap className="h-3.5 w-3.5" />
             Urgente ahora
             <span className="tabular-nums">({urgentes.length})</span>

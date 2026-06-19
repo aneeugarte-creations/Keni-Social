@@ -446,7 +446,7 @@ export function Calendario({
             >
               <Badge
                 variant="outline"
-                className="gap-1 border-red-500/50 font-normal text-red-700 dark:text-red-300"
+                className="gap-1 border-yellow-500/50 font-normal text-yellow-700 dark:text-yellow-300"
               >
                 <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
               </Badge>

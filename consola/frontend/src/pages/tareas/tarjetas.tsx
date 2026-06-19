@@ -281,8 +281,8 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
     },
   });
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-amber-500/40 px-2.5 py-1.5">
-      <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-yellow-500/40 px-2.5 py-1.5">
+      <Badge variant="outline" className="border-yellow-500/50 text-yellow-700 dark:text-yellow-300">
         Por cubrir
       </Badge>
       <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
@@ -401,7 +401,7 @@ export function TarjetaEventoLibre({
         ) : (
           <Badge
             variant="outline"
-            className="border-dashed border-red-500/50 text-red-700 dark:text-red-300"
+            className="border-dashed border-yellow-500/50 text-yellow-700 dark:text-yellow-300"
           >
             Sin cubrir
           </Badge>
@@ -620,7 +620,7 @@ export function TarjetaTarea({
               </Badge>
             )}
             {libre ? (
-              <Badge variant="outline" className="border-dashed border-red-500/50 text-red-700 dark:text-red-300">
+              <Badge variant="outline" className="border-dashed border-yellow-500/50 text-yellow-700 dark:text-yellow-300">
                 Sin cubrir
               </Badge>
             ) : (
