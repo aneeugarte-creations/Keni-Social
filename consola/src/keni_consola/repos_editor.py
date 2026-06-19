@@ -313,6 +313,7 @@ def crear_audio_transcripcion(
     resumen: str = "",
     error: str = "",
     tratamientos: str = "",
+    autor_id: str = "",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -320,7 +321,8 @@ def crear_audio_transcripcion(
     return db.crear_audio_transcripcion(
         marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado=estado,
         duracion_ms=duracion_ms, segmentos=segmentos, texto=texto, resumen=resumen,
-        error=error, tratamientos=tratamientos, id=id, creado=creado, actualizado=actualizado,
+        error=error, tratamientos=tratamientos, autor_id=autor_id,
+        id=id, creado=creado, actualizado=actualizado,
     )
 
 
