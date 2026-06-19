@@ -485,8 +485,9 @@ function AvataresApilados({ cubridores }: { cubridores: Publicacion[] }) {
 /**
  * Una FILA del agenda: compacta (hora · título · estado · dueño/es-o-«por cubrir»). Al desplegar
  * muestra la(s) tarjeta(s) real(es) para coger/apuntarse/reasignar/avanzar sin salir del panorama.
+ * Exportada: la reusa la home «Hoy» para sus bloques «Por cubrir hoy» / «Lo mío hoy».
  */
-function FilaAgenda({
+export function FilaAgenda({
   item,
   abierta,
   onToggle,

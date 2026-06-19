@@ -16,21 +16,22 @@ import type { FiltrosSwaps } from "@/types";
 
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
+import { Hoy } from "./Hoy";
 import { contarSwapsPendientes } from "./comun";
 
 
 // ===========================================================================
 
-/** Valores válidos de pestaña (orden = el de la barra). «Mi jornada» dejó de ser pestaña: es
- *  el modo «Mes» del Calendario; el valor legacy `mis-turnos` se normaliza abajo. */
-const PESTANAS = ["calendario", "cobertura", "cambios-ausencias"];
+/** Valores válidos de pestaña (orden = el de la barra). «Hoy» es la home (default). «Mi jornada»
+ *  dejó de ser pestaña: es el modo «Mes» del Calendario; el legacy `mis-turnos` se normaliza abajo. */
+const PESTANAS = ["hoy", "calendario", "cobertura", "cambios-ausencias"];
 
 /** El deep-link legacy a la antigua pestaña «Mi jornada» (`?tab=mis-turnos`) cae en el
  *  Calendario abierto en su modo «Mes» (la misma vista mensual de jornada). */
 function normalizarTab(tab: string | null): { pestania: string; vistaCalendario: "semana" | "mes" } {
   if (tab === "mis-turnos") return { pestania: "calendario", vistaCalendario: "mes" };
   if (tab && PESTANAS.includes(tab)) return { pestania: tab, vistaCalendario: "semana" };
-  return { pestania: "calendario", vistaCalendario: "semana" };
+  return { pestania: "hoy", vistaCalendario: "semana" };
 }
 
 export default function Rota() {
@@ -60,8 +61,8 @@ export default function Rota() {
   // Pestaña activa (controlada). Aquí el Calendario es solo turnos + su cobertura derivada.
   //
   // La inicial puede venir por `?tab=` (deep-link desde la campana de notificaciones de un
-  // cambio de turno); si el valor no es válido, cae a "calendario". El valor legacy
-  // `mis-turnos` (antigua pestaña «Mi jornada») se normaliza a Calendario en modo «Mes».
+  // cambio de turno); si no hay `?tab=` o el valor no es válido, cae a «Hoy» (la home). El valor
+  // legacy `mis-turnos` (antigua pestaña «Mi jornada») se normaliza a Calendario en modo «Mes».
   const [params] = useSearchParams();
   const tabParam = params.get("tab");
   const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam).pestania);
@@ -84,6 +85,7 @@ export default function Rota() {
       <TituloPagina titulo="Turnos" icono={CalendarClock} />
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
+          <TabsTrigger value="hoy">Hoy</TabsTrigger>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
           <TabsTrigger value="cambios-ausencias">
@@ -99,6 +101,11 @@ export default function Rota() {
           </TabsTrigger>
         </TabsList>
 
+        {/* «Hoy»: home del trabajador (próximo turno + por-cubrir-hoy + lo-mío-hoy). «Ver toda
+            la agenda» y el «N sin cubrir» del KPI saltan a «Cobertura». */}
+        <TabsContent value="hoy">
+          <Hoy onVerAgenda={() => setPestania("cobertura")} />
+        </TabsContent>
         <TabsContent value="calendario">
           {/* `key`={vistaCalendario}: un deep-link legacy a «Mi jornada» (?tab=mis-turnos) que
               llegue con la página ya montada fuerza el remonte del Calendario en modo «Mes»

@@ -64,6 +64,8 @@ type OpcionesRender = {
   cobertura?: unknown;
   contenido?: unknown;
   listarTurnos?: unknown;
+  misTurnosMes?: unknown;
+  rotaEventos?: unknown;
   /** Rol del usuario montado (por defecto `admin`). El modo «Mes» del Calendario arranca en
    *  «Equipo» para el admin y en «Yo» para un editor (que sí está en la rota). */
   rol?: UsuarioSesion["rol"];
@@ -98,6 +100,10 @@ function renderRota(opts: OpcionesRender = {}, tab?: string) {
     vi.spyOn(apiMod.api, "listarTurnos").mockResolvedValue(opts.listarTurnos as never);
   if (opts.contenido !== undefined)
     vi.spyOn(apiMod.api, "contenido").mockResolvedValue(opts.contenido as never);
+  if (opts.misTurnosMes !== undefined)
+    vi.spyOn(apiMod.api, "misTurnosMes").mockResolvedValue(opts.misTurnosMes as never);
+  if (opts.rotaEventos !== undefined)
+    vi.spyOn(apiMod.api, "rotaEventos").mockResolvedValue(opts.rotaEventos as never);
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const entradas = tab ? [`/?tab=${tab}`] : ["/"];
@@ -129,6 +135,8 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // lunes 15 jun 2026 (CDMX)
     renderRota();
+    // «Hoy» es el default; el Calendario monta su rejilla (y pide los turnos) al activar su pestaña.
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     // El Calendario pide los turnos de la semana por defecto: el lunes de HOY (no el siguiente).
     await vi.waitFor(() =>
       expect(
@@ -139,24 +147,29 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     );
   });
 
-  it("muestra la pestaña «Cobertura» junto a «Calendario», con el Calendario por defecto", async () => {
+  it("abre en «Hoy» por defecto, con Calendario y Cobertura disponibles", async () => {
     renderRota();
-    expect(await screen.findByRole("tab", { name: "Calendario" })).toHaveAttribute(
+    expect(await screen.findByRole("tab", { name: "Hoy" })).toHaveAttribute(
       "data-state",
       "active",
     );
+    expect(screen.getByRole("tab", { name: "Calendario" })).toHaveAttribute(
+      "data-state",
+      "inactive",
+    );
     expect(screen.getByRole("tab", { name: "Cobertura" })).toBeInTheDocument();
-    // No se rompe la barra de Turnos: el «Añadir» de Tareas NO está visible aún (otra pestaña).
+    // «Hoy» no pinta el «Añadir» del tablero (ese vive en «Cobertura»).
     expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
 
-  it("tiene 3 pestañas (Calendario, Cobertura, Cambios) y «Mi jornada» ya NO es una", async () => {
+  it("tiene 4 pestañas (Hoy, Calendario, Cobertura, Cambios) y «Mi jornada» ya NO es una", async () => {
     renderRota();
-    // El colapso 4→3: «Mi jornada» se fundió en el modo «Mes» del Calendario.
-    await screen.findByRole("tab", { name: "Calendario" });
+    // «Hoy» es la home; «Mi jornada» sigue fundida en el modo «Mes» del Calendario.
+    await screen.findByRole("tab", { name: "Hoy" });
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(3);
+    expect(tabs).toHaveLength(4);
     expect(tabs.map((t) => t.textContent)).toEqual([
+      "Hoy",
       "Calendario",
       "Cobertura",
       expect.stringContaining("Cambios y ausencias"),
@@ -166,7 +179,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("el Calendario abre en modo «Semana» y ofrece el conmutador Semana|Mes", async () => {
     renderRota();
-    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     // Conmutador con PALABRAS (no iconos crípticos): «Semana» activo por defecto.
     expect(
       await screen.findByRole("button", { name: "Semana", pressed: true }),
@@ -178,7 +191,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("conmutar a «Mes» muestra la vista mensual de jornada (Yo/Equipo + Imprimir)", async () => {
     renderRota();
-    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El modo «Mes» = la antigua «Mi jornada»: su selector de ámbito y su Imprimir/PDF.
     expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
@@ -217,7 +230,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("para el admin, el modo «Mes» del Calendario abre en «Equipo» (turnos de todos)", async () => {
     renderRota();
-    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El admin no está en la rota: arranca en «Equipo» (jornada de todo el equipo), no en «Yo».
     expect(
@@ -230,7 +243,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("para un editor, el modo «Mes» del Calendario abre en «Yo» (su propia jornada)", async () => {
     renderRota({ rol: "editor" });
-    await screen.findByRole("tab", { name: "Calendario" });
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El editor sí está en la rota: arranca en «Yo» (su jornada), no en «Equipo».
     expect(
@@ -282,6 +295,8 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
       contenido: { contenidos: [], catalogos: { usuarios: [] } },
     });
 
+    // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     // El chip de evento es clicable (su aria-label arranca por «Cubrir …»).
     const chip = await screen.findByRole("button", { name: /España vs Cabo Verde/ });
     fireEvent.click(chip);
@@ -337,6 +352,8 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
       .spyOn(apiMod.api, "cubrirEvento")
       .mockResolvedValue({ contenido: { responsable_nombre: "ana" } } as never);
 
+    // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
     // Abrir el chip → su diálogo de cobertura, y desde el menú elegir «Asignar a…».
     fireEvent.click(await screen.findByRole("button", { name: /España vs Cabo Verde/ }));
     const dialogo = await screen.findByRole("dialog");
@@ -375,5 +392,72 @@ describe("interaccionEnCapaHija (guarda del diálogo de cobertura)", () => {
   it("deja cerrar el padre ante una interacción fuera de cualquier capa hija", () => {
     expect(interaccionEnCapaHija(document.createElement("div"))).toBe(false);
     expect(interaccionEnCapaHija(null)).toBe(false);
+  });
+});
+
+describe("Turnos — home «Hoy»", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("HERO: muestra tu turno de hoy (franja + horario)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({
+      misTurnosMes: {
+        mis_turnos: [
+          { id: "tn1", fecha: "2026-06-15", franja_nombre: "Matutina", inicio: "08:00", fin: "14:00", miembro_nombre: "yo" },
+        ],
+        miembro_nombre: "yo",
+      },
+    });
+    expect(await screen.findByText("Matutina")).toBeInTheDocument();
+    expect(screen.getByText("08:00–14:00")).toBeInTheDocument();
+    expect(screen.getByText("Tu turno hoy")).toBeInTheDocument();
+  });
+
+  it("HERO vacío: si hoy no hay turno, dice «Hoy libras»", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({ misTurnosMes: { mis_turnos: [] } });
+    expect(await screen.findByText(/Hoy libras/)).toBeInTheDocument();
+  });
+
+  it("POR CUBRIR HOY: un evento de hoy sin dueño ni turno sale «Sin cubrir»", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({
+      rotaEventos: {
+        eventos: [
+          { id: "ev1", titulo: "Rueda de prensa", fecha: "2026-06-15", hora: "12:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
+        ],
+      },
+      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
+    });
+    expect(await screen.findByText("Rueda de prensa")).toBeInTheDocument();
+    expect(screen.getByText("Por cubrir hoy")).toBeInTheDocument();
+    expect(screen.getAllByText("Sin cubrir").length).toBeGreaterThan(0);
+  });
+
+  it("LO MÍO HOY: una cobertura del usuario, de hoy, aparece bajo «Lo mío hoy»", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({
+      rotaEventos: {
+        eventos: [
+          { id: "ev2", titulo: "Partido España", fecha: "2026-06-15", hora: "20:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
+        ],
+      },
+      contenido: {
+        contenidos: [
+          { id: "t1", clase: "tarea", evento_id: "ev2", titulo: "Partido España", responsable_id: "u1", responsable_nombre: "yo", fecha_objetivo: "2026-06-15", hora_objetivo: "20:00", estado: "pendiente", formato: "video" },
+        ],
+        catalogos: { usuarios: [{ id: "u1", usuario: "yo" }] },
+      },
+      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
+    });
+    const seccion = (await screen.findByRole("heading", { name: /Lo mío hoy/ })).closest("section")!;
+    expect(within(seccion).getByText("Partido España")).toBeInTheDocument();
   });
 });
