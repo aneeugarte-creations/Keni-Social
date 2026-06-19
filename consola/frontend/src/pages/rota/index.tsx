@@ -140,9 +140,12 @@ export default function Rota() {
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden
           decisión (huecos sin cubrir, cambios/ausencias, conflictos), y debajo la rejilla de la
           SEMANA con su panel de reparto (asignar/franjas/copiar/carga/export). Ambos comparten
-          `lunes` con el Calendario. */}
+          `lunes` con el Calendario.
+          Gestión CABE en una pantalla: columna de alto acotado a la altura útil bajo la barra de
+          sección (`overflow-hidden` corta el scroll de PÁGINA); el «Necesita tu decisión» va arriba
+          a su alto natural y la rejilla+panel rellenan el resto con scroll INTERNO. */}
       {pestaniaEfectiva === "gestion" && (
-        <div className="space-y-4">
+        <div className="flex h-[calc(100dvh-11rem)] flex-col gap-4 overflow-hidden">
           <PanelCoordinacion
             lunes={lunes}
             marcaActiva={marcaActiva}
@@ -150,7 +153,9 @@ export default function Rota() {
             usuarioId={usuario?.id ?? ""}
             onIr={setPestania}
           />
-          <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+          <div className="min-h-0 flex-1">
+            <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+          </div>
         </div>
       )}
 

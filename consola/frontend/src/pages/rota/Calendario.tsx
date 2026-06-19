@@ -431,7 +431,10 @@ export function Calendario({
   }
 
   return (
-    <div className="space-y-4">
+    // En «Gestión» el componente RELLENA el alto que le da su contenedor (columna acotada al
+    // viewport, sin scroll de página): cabecera arriba y la rejilla+panel ocupando el resto con
+    // scroll interno. En «Calendario» es flujo normal (`space-y-4`, la rejilla pone su propio alto).
+    <div className={esGestion ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}>
       {/* Cabecera. En «Gestión», el navegador de semana + el toggle del panel de reparto + el
           menú «Más»; en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
           La leyenda del calendario se ofrece bajo demanda con el icono "?". */}
@@ -501,18 +504,11 @@ export function Calendario({
           </div>
         </div>
       )}
-      {esGestion && (
-        <p className="text-sm text-muted-foreground">
-          Reparte los turnos y míralos aparecer en la rejilla al instante. ¿Un error? Quita a la
-          persona desde la × de su recuadro en la celda.
-        </p>
-      )}
-
       {/* Split: la rejilla ocupa el ancho (flex-1) y, en Gestión con el panel abierto, el reparto
           se acomoda a la derecha SIN tapar la rejilla (la columna lateral). Cerrado, la rejilla
           vuelve a ancho completo. En «Calendario» no hay panel: es solo la rejilla. */}
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
+      <div className={esGestion ? "flex min-h-0 flex-1 gap-4" : "flex items-start gap-4"}>
+        <div className={esGestion ? "flex min-h-0 min-w-0 flex-1 flex-col" : "min-w-0 flex-1"}>
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
       ) : error ? (
@@ -531,14 +527,17 @@ export function Calendario({
           }
         />
       ) : (
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva.
-                Altura FIJA `calc(100dvh-14rem)` (no `max-h`) para que la rejilla LLENE el alto
-                disponible: las franjas laborales crecen (`grow`) y reparten el hueco sobrante en
-                vez de dejar un vacío debajo. Si la semana es densa el contenido desborda y este
-                contenedor hace scroll interno. `min-w-[56rem]` mantiene legibilidad horizontal. */}
-            <div className="overflow-auto" style={{ height: "calc(100dvh - 14rem)" }}>
+        <Card className={esGestion ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "overflow-hidden"}>
+          <CardContent className={esGestion ? "flex min-h-0 flex-1 flex-col p-0" : "p-0"}>
+            {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva. En «Calendario»
+                la altura es FIJA `calc(100dvh-14rem)` (no `max-h`) para LLENAR el alto disponible;
+                en «Gestión» rellena (`flex-1`) el hueco de la columna acotada. Las franjas laborales
+                crecen (`grow`) y reparten el sobrante; si la semana es densa, scroll interno aquí.
+                `min-w-[56rem]` mantiene legibilidad horizontal. */}
+            <div
+              className={esGestion ? "min-h-0 flex-1 overflow-auto" : "overflow-auto"}
+              style={esGestion ? undefined : { height: "calc(100dvh - 14rem)" }}
+            >
               <div className="flex min-h-full min-w-[56rem] flex-col">
                 {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
                 <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
@@ -728,7 +727,7 @@ export function Calendario({
         {esGestion && abrirAsignar && (
           <aside
             aria-label="Asignar turnos"
-            className="sticky top-4 flex max-h-[calc(100dvh-7rem)] w-[26rem] shrink-0 flex-col gap-4 self-start overflow-y-auto"
+            className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col gap-4 overflow-y-auto"
           >
             <DialogoAsignarTurnos
               incrustado
