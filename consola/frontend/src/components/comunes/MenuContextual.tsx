@@ -127,7 +127,11 @@ export function MenuFlotante({
       role="menu"
       aria-label={etiqueta}
       onKeyDown={alTeclearMenu}
-      className="fixed z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
+      // `pointer-events-auto`: el menú se portaliza a <body>. Dentro de un diálogo modal de Radix,
+      // el <body> queda en `pointer-events: none` (solo la capa activa recibe clicks); sin esto, los
+      // ítems del kebab abierto sobre un modal (p. ej. «Asignar a…» en el calendario) no serían
+      // clicables. Fuera de un modal no cambia nada (es el valor por defecto).
+      className="pointer-events-auto fixed z-50 min-w-[12rem] overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
       style={{ left: ajustada.x, top: ajustada.y }}
     >
       {items.map((entrada, i) => {
