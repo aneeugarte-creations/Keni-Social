@@ -788,9 +788,13 @@ function Lector({
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {transcrito ? (
           <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-xs text-muted-foreground">
-              Desde «{fuente ? fuente.titulo || TITULO_ARTEFACTO[fuente.tipo] : "la transcripción"}»:
-            </span>
+            {/* Solo cuando la fuente NO es el artefacto abierto (p. ej. viendo «Texto plano» o
+                «Preguntas», que no son fuente y derivan del SRT): así no se ve «SRT desde SRT». */}
+            {fuente && fuente.id !== artefacto?.id ? (
+              <span className="mr-1 text-xs text-muted-foreground">
+                Desde «{fuente.titulo || TITULO_ARTEFACTO[fuente.tipo]}»:
+              </span>
+            ) : null}
             {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => {
               // 'preguntas' NO se deshabilita ni relanza: si ya hay un cajón, su botón lo ABRE.
               const esPreguntas = tipo === "preguntas";
