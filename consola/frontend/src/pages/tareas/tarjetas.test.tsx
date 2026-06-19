@@ -42,13 +42,13 @@ describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
     });
   });
 
-  it("durante la ventana → «En vivo»; ya pasó → «Cubierto»", () => {
+  it("durante la ventana → «En vivo»; ya pasó → «Terminado»", () => {
     conAhora(() => {
       const { unmount } = render(<SemaforoCobertura fecha="2026-06-13" hora="17:00" />);
       expect(screen.getByText("En vivo")).toBeInTheDocument();
       unmount();
       render(<SemaforoCobertura fecha="2026-06-12" hora="20:00" />);
-      expect(screen.getByText("Cubierto")).toBeInTheDocument();
+      expect(screen.getByText("Terminado")).toBeInTheDocument();
     });
   });
 

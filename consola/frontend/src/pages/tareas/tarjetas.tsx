@@ -72,7 +72,8 @@ const etiquetaPrioridad = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
  *   · gris  «Programado»     → aún falta mucho
  *   · ámbar «Empieza en X min» → PRE-LIVE: el pitido está cerca (≤ 2 h) → la antesala, a moverse
  *   · verde «En vivo»        → mientras transcurre el evento (punto verde)
- *   · tick  «Cubierto»       → ya pasó (completado → ✓)
+ *   · tick  «Terminado»      → ya pasó (completado → ✓). NO «Cubierto»: esa palabra es solo para
+ *                              quien cubre (cogido / cubierto-por-turno), no para «el evento acabó».
  *
  * Por defecto se pinta como ETIQUETA con texto (siempre visible, no se confunde con el color del
  * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown:
@@ -97,7 +98,7 @@ export function SemaforoCobertura({
   const titulo = envivo
     ? "En vivo"
     : completado
-      ? "Cubierto"
+      ? "Terminado"
       : preLive
         ? "Empieza pronto"
         : "Programado";
@@ -390,7 +391,7 @@ export function TarjetaEventoLibre({
         ) : (
           <Badge
             variant="outline"
-            className="border-dashed border-amber-500/50 text-amber-700 dark:text-amber-300"
+            className="border-dashed border-red-500/50 text-red-700 dark:text-red-300"
           >
             Sin cubrir
           </Badge>
@@ -609,7 +610,7 @@ export function TarjetaTarea({
               </Badge>
             )}
             {libre ? (
-              <Badge variant="outline" className="border-dashed border-amber-500/50 text-amber-700 dark:text-amber-300">
+              <Badge variant="outline" className="border-dashed border-red-500/50 text-red-700 dark:text-red-300">
                 Sin cubrir
               </Badge>
             ) : (

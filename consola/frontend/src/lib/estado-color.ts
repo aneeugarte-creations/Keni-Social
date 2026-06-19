@@ -78,8 +78,9 @@ export const COBERTURA_TEXTO: Record<EstadoCobertura, string> = {
  * calendario de la rota. Es la píldora compacta de cobertura del chip de evento. Replica EXACTAMENTE
  * las clases que el chip pintaba inline:
  *  - `cubierto-turno`/`cogido` → verde relleno («Cubierto · <nombres>»: lo cubre quien está de turno).
- *  - `sin-cubrir`              → ÁMBAR relleno («Sin cubrir»: hueco real). El chip usa ámbar (no el
- *    rojo del KPI) para esta píldora; se conserva su lenguaje tal cual.
+ *  - `sin-cubrir`              → ROJO relleno suave («Sin cubrir»: hueco real). Mismo rojo (con
+ *    significado «pide decisión») que el KPI: el estado «sin cubrir» habla UN solo color en toda la
+ *    app. El ámbar queda reservado a `empieza-en` (PRE-LIVE), un eje distinto (tiempo, no cobertura).
  */
 export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
   "cubierto-turno":
@@ -87,7 +88,7 @@ export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
   cogido:
     "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
   "sin-cubrir":
-    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+    "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300",
 };
 
 // FASE 2 (preparado, SIN consumidor todavía — no se añaden entradas para no dejar código muerto que

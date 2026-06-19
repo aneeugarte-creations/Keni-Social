@@ -516,7 +516,7 @@ function FilaAgenda({
         urgente
           ? "border-red-500/50 bg-red-50/50 dark:bg-red-950/20"
           : sinDueno
-            ? "border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10"
+            ? "border-dashed border-red-400/40 bg-red-50/30 dark:bg-red-950/10"
             : "border-border bg-card",
       )}
     >
@@ -563,7 +563,7 @@ function FilaAgenda({
             )}
             <Badge
               variant="outline"
-              className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+              className="border-red-500/50 text-red-700 dark:text-red-300"
             >
               Sin cubrir
             </Badge>

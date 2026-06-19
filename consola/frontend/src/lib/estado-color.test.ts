@@ -78,9 +78,9 @@ describe("COBERTURA_BADGE — píldora rellena de cobertura del chip del calenda
     expect(COBERTURA_BADGE.cogido).toBe(COBERTURA_BADGE["cubierto-turno"]);
   });
 
-  it("ámbar relleno para sin-cubrir (el chip usa ámbar, no el rojo del KPI)", () => {
+  it("rojo relleno suave para sin-cubrir (mismo rojo que el KPI: «sin cubrir» es UN color)", () => {
     expect(COBERTURA_BADGE["sin-cubrir"]).toBe(
-      "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+      "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300",
     );
   });
 

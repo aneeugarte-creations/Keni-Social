@@ -496,7 +496,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   });
 
   it("SEMÁFORO: la cobertura se pinta sola por fecha/hora, sin botones de estado", async () => {
-    // Evento YA jugado (fecha pasada) → semáforo verde «Cubierto». El equipo no marca
+    // Evento YA jugado (fecha pasada) → semáforo verde «Terminado». El equipo no marca
     // estados a mano (les hace perder tiempo): no hay «Empezar» ni «Marcar hecha».
     renderTareas([
       tarea({
@@ -510,8 +510,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       }),
     ]);
     fireEvent.click(await screen.findByRole("button", { name: /Final ya jugada/ }));
-    // Verde «Cubierto» (en la fila colapsada y en la tarjeta del cubridor), sin botones de avance.
-    expect((await screen.findAllByTitle("Cubierto")).length).toBeGreaterThan(0);
+    // Verde «Terminado» (en la fila colapsada y en la tarjeta del cubridor), sin botones de avance.
+    expect((await screen.findAllByTitle("Terminado")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Empezar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Marcar hecha/ })).toBeNull();
   });
