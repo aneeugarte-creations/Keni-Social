@@ -18,11 +18,16 @@
 # --------------------------------------------------------------------------- #
 FROM debian:bookworm-slim AS whisper-build
 ARG WHISPER_CPP_VERSION=v1.8.3
+# `-DCMAKE_C_FLAGS=-w -DCMAKE_CXX_FLAGS=-w` silencian los warnings del compilador en el código de
+# whisper.cpp (sobre todo el falso positivo `-Wmaybe-uninitialized` de GCC en los intrínsecos
+# AVX-512: miles de líneas de ruido en el log del build, ajenas a nuestro código). No afecta al
+# binario resultante, solo a la verbosidad del build.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git build-essential cmake ca-certificates \
  && git clone --depth 1 --branch "${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp /src \
  && cmake -S /src -B /src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
       -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON \
+      -DCMAKE_C_FLAGS=-w -DCMAKE_CXX_FLAGS=-w \
  && cmake --build /src/build -j --config Release --target whisper-cli \
  && cp /src/build/bin/whisper-cli /usr/local/bin/whisper-cli \
  && /usr/local/bin/whisper-cli --help >/dev/null
