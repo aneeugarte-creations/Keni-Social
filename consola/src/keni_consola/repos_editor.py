@@ -327,9 +327,9 @@ def crear_audio_transcripcion(
 
 
 def listar_audio_transcripciones(
-    *, marca: str | None = None, estado: str | None = None
+    *, marca: str | None = None, estado: str | None = None, visible_para: str | None = None
 ) -> list[dict[str, Any]]:
-    return db.listar_audio_transcripciones(marca=marca, estado=estado)
+    return db.listar_audio_transcripciones(marca=marca, estado=estado, visible_para=visible_para)
 
 
 def obtener_audio_transcripcion(transcripcion_id: str) -> dict[str, Any] | None:
