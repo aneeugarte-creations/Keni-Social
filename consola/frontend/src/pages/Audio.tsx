@@ -788,13 +788,8 @@ function Lector({
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {transcrito ? (
           <div className="flex flex-wrap items-center gap-1">
-            {/* Solo cuando la fuente NO es el artefacto abierto (p. ej. viendo «Texto plano» o
-                «Preguntas», que no son fuente y derivan del SRT): así no se ve «SRT desde SRT». */}
-            {fuente && fuente.id !== artefacto?.id ? (
-              <span className="mr-1 text-xs text-muted-foreground">
-                Desde «{fuente.titulo || TITULO_ARTEFACTO[fuente.tipo]}»:
-              </span>
-            ) : null}
+            {/* Sin rótulo de fuente: la herencia se ve en una sola parte, el «Derivado de «X»» del
+                artefacto. Los tratamientos parten del artefacto abierto (texto/preguntas → SRT). */}
             {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => {
               // 'preguntas' NO se deshabilita ni relanza: si ya hay un cajón, su botón lo ABRE.
               const esPreguntas = tipo === "preguntas";
