@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Rss } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -27,11 +27,6 @@ import type { FuenteRss, MarcaDisponible } from "@/types";
 
 import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
 
-/**
- * Categorías canónicas de feed (espejo del catálogo de presets + breaking). La categoría
- * manda la CADENCIA de sondeo del motor de ingesta — un feed de deportes se sondea cada
- * ~3 min, uno de gaming cada ~30 — y alimenta la cobertura/huecos de Salud.
- */
 // Relevancia editorial de la fuente (pondera la corroboración del ranking). El back la
 // expone como tier potente/normal/baja; aquí se habla SIEMPRE de Alta/Media/Baja.
 const RELEVANCIAS: { id: string; peso: number; nombre: string }[] = [
@@ -40,22 +35,12 @@ const RELEVANCIAS: { id: string; peso: number; nombre: string }[] = [
   { id: "baja", peso: 0.5, nombre: "Baja" },
 ];
 
-const CATEGORIAS_FEED: { id: string; nombre: string; cadencia: string }[] = [
-  { id: "mx", nombre: "México (nacional)", cadencia: "~10 min" },
-  { id: "regional", nombre: "Regional (estados)", cadencia: "~10 min" },
-  { id: "internacional", nombre: "Internacional", cadencia: "~10 min" },
-  { id: "deportes", nombre: "Deportes", cadencia: "~3 min" },
-  { id: "ciencia-tech", nombre: "Ciencia y tecnología", cadencia: "~30 min" },
-  { id: "gaming", nombre: "Gaming", cadencia: "~30 min" },
-  { id: "negocios", nombre: "Negocios", cadencia: "~10 min" },
-  { id: "tendencias", nombre: "Tendencias", cadencia: "~10 min" },
-  { id: "salud", nombre: "Salud", cadencia: "~30 min" },
-  { id: "medio-ambiente", nombre: "Medio ambiente", cadencia: "~30 min" },
-  { id: "cultura", nombre: "Cultura", cadencia: "~30 min" },
-  { id: "educacion", nombre: "Educación", cadencia: "~30 min" },
-  { id: "impacto-social", nombre: "Impacto social", cadencia: "~30 min" },
-  { id: "breaking", nombre: "Breaking (máxima cadencia)", cadencia: "~3 min" },
-];
+/** Etiqueta de cadencia de una línea (el feed la hereda de su línea). */
+const CADENCIA_ETIQUETA: Record<string, string> = {
+  rapida: "~3 min",
+  normal: "~10 min",
+  evergreen: "~30 min",
+};
 
 /** Diálogo de alta / edición de un feed. */
 export function DialogoFuente({
@@ -111,7 +96,15 @@ function FormularioFuente({
     marcas.find((m) => m.id === marcaParam(marca))?.nombre ?? "Compartida (todas las marcas)";
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
   const [propia, setPropia] = React.useState(fuente?.propia ?? false);
-  const [categoria, setCategoria] = React.useState(fuente?.categoria ?? "");
+  // LÍNEA editorial de la que cuelga el feed (catch-all "" = General). La cadencia se hereda.
+  const [lineaId, setLineaId] = React.useState(fuente?.linea_id ?? "");
+  // Líneas de la marca del feed (clase `vertical`, activas): de aquí cuelga el feed.
+  const lineasQuery = useQuery({
+    queryKey: ["etiquetas", "vertical", marcaParam(marca) ?? ""],
+    queryFn: ({ signal }) =>
+      api.etiquetas({ marca: marcaParam(marca) ?? "", clase: "vertical", activas: true }, signal),
+  });
+  const lineas = lineasQuery.data?.etiquetas ?? [];
   // Relevancia. Alta nueva: "" = el back decide por el medio; al editar, la del feed.
   const [tier, setTier] = React.useState(fuente?.tier ?? "");
 
@@ -126,7 +119,7 @@ function FormularioFuente({
           marca: marcaVal,
           activo,
           propia,
-          categoria,
+          linea_id: lineaId,
           ...(pesoVal != null ? { peso: pesoVal } : {}),
         });
       }
@@ -135,7 +128,7 @@ function FormularioFuente({
         url: url.trim(),
         marca: marcaVal || undefined,
         propia: propia || undefined,
-        categoria: categoria || undefined,
+        linea_id: lineaId || undefined,
         // Sin relevancia elegida, el back la asigna por el medio.
         ...(pesoVal != null ? { peso: pesoVal } : {}),
       });
@@ -185,19 +178,21 @@ function FormularioFuente({
           <p className="text-sm text-muted-foreground pt-1.5">{nombreMarcaFuente}</p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="fuente-categoria">Categoría</Label>
+          <Label htmlFor="fuente-linea">Línea</Label>
           <Select
-            value={categoria || "__sin__"}
-            onValueChange={(v) => setCategoria(v === "__sin__" ? "" : v)}
+            value={lineaId || "__sin__"}
+            onValueChange={(v) => setLineaId(v === "__sin__" ? "" : v)}
           >
-            <SelectTrigger id="fuente-categoria" aria-label="Categoría del feed">
-              <SelectValue placeholder="Sin categoría" />
+            <SelectTrigger id="fuente-linea" aria-label="Línea del feed">
+              <SelectValue placeholder="General" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__sin__">Sin categoría (cadencia normal)</SelectItem>
-              {CATEGORIAS_FEED.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nombre} · {c.cadencia}
+              <SelectItem value="__sin__">General (cadencia normal)</SelectItem>
+              {lineas.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.grupo ? `${l.grupo} · ` : ""}
+                  {l.nombre}
+                  {CADENCIA_ETIQUETA[l.cadencia] ? ` · ${CADENCIA_ETIQUETA[l.cadencia]}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>

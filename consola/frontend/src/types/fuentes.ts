@@ -241,9 +241,11 @@ export interface FuenteRss {
   /** `true` si es un sitio de MARCA PROPIA: su imagen original es reutilizable, así que las
    *  piezas generadas desde sus items nacen con la imagen del artículo (`tipo_contenido='fuente'`). */
   propia: boolean;
-  /** Categoría del feed (mx | regional | internacional | deportes | ciencia-tech | gaming |
-   *  negocios | tendencias | breaking | ""): manda la CADENCIA de sondeo del motor. */
+  /** Categoría del feed (slug legado): vínculo editorial reemplazado por `linea_id`. */
   categoria: string;
+  /** LÍNEA editorial (id de etiqueta `vertical`) de la que cuelga el feed; `""` = catch-all
+   *  "General". La cadencia de sondeo se deriva de la línea. */
+  linea_id: string;
   /** Peso editorial de la fuente: pondera la corroboración del ranking (potente 2.0 /
    *  normal 1.0 / baja 0.5). */
   peso: number;
@@ -273,8 +275,10 @@ export interface CuerpoCrearFuenteRss {
   redes_def?: string[];
   /** `true` si es un sitio de marca propia (su imagen original es reutilizable). */
   propia?: boolean;
-  /** Categoría del feed (opcional): manda la cadencia de sondeo del motor. */
+  /** Categoría del feed (slug legado, opcional). */
   categoria?: string;
+  /** Línea editorial (id de etiqueta `vertical`) de la que cuelga el feed; `""` = General. */
+  linea_id?: string;
   /** Peso editorial (opcional; sin él, el back usa el seed por host). */
   peso?: number;
 }
@@ -290,6 +294,7 @@ export interface CuerpoActualizarFuenteRss {
   redes_def?: string[];
   propia?: boolean;
   categoria?: string;
+  linea_id?: string;
   peso?: number;
 }
 

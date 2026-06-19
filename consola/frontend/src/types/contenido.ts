@@ -107,6 +107,10 @@ export interface Etiqueta {
   ttl_dias: number;
   /** True = línea evergreen reutilizable en fines de semana; nunca caduca. */
   es_evergreen: boolean;
+  /** Grupo de líneas (clase `vertical`), p. ej. "Fútbol". `""` = línea plana (sin grupo). */
+  grupo: string;
+  /** Cadencia de sondeo de las fuentes de esta línea: "rapida" | "normal" | "evergreen". */
+  cadencia: string;
 }
 
 /** Forma reducida de una etiqueta en los catálogos del tablero (chips/selector). */
@@ -135,6 +139,10 @@ export interface CuerpoCrearEtiqueta {
   ttl_dias?: number;
   /** True = línea evergreen, nunca caduca. */
   es_evergreen?: boolean;
+  /** Grupo de líneas ('' = plana). */
+  grupo?: string;
+  /** Cadencia de sondeo de sus fuentes: "rapida" | "normal" | "evergreen". */
+  cadencia?: string;
 }
 
 export interface CuerpoActualizarEtiqueta {
@@ -148,6 +156,10 @@ export interface CuerpoActualizarEtiqueta {
   ttl_dias?: number;
   /** True = línea evergreen, nunca caduca. */
   es_evergreen?: boolean;
+  /** Grupo de líneas ('' = plana). */
+  grupo?: string;
+  /** Cadencia de sondeo de sus fuentes: "rapida" | "normal" | "evergreen". */
+  cadencia?: string;
 }
 
 export interface RespuestaEtiqueta {
