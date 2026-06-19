@@ -2,7 +2,7 @@
  * Cabecera del editor de placa inline: título "Imagen" + selector nativo de plantilla (quitar
  * plantilla / publicar solo la foto · elegir plantilla del estudio).
  */
-import { ImagePlus, LayoutTemplate, Slash } from "lucide-react";
+import { Download, ImagePlus, LayoutTemplate, Slash } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -13,12 +13,15 @@ export interface CabeceraPlacaProps {
   onAlternarSinPlantilla: () => void;
   /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
   onAbrirGaleria?: () => void;
+  /** Descarga el render completo (foto + plantilla + texto) tal cual se ve, para postear a mano. */
+  onDescargar?: () => void;
 }
 
 export function CabeceraPlaca({
   sinPlantilla,
   onAlternarSinPlantilla,
   onAbrirGaleria,
+  onDescargar,
 }: CabeceraPlacaProps) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -58,6 +61,20 @@ export function CabeceraPlaca({
             title="Elegir plantilla"
           >
             <LayoutTemplate className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {/* Descarga el render completo (foto + plantilla + texto) tal cual se ve, para postear a
+            mano donde Metricool no llega (p. ej. X). */}
+        {onDescargar && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onDescargar}
+            title="Descargar imagen para postear"
+          >
+            <Download className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>

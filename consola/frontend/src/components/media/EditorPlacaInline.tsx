@@ -22,6 +22,7 @@ import { useMutation } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
 import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
@@ -486,12 +487,64 @@ export function EditorPlacaInline({
   const faltan = nHuecos - huecosLlenos;
   const esCollage = nHuecos > 1;
 
+  // Descarga del render COMPLETO tal cual se ve en el lienzo (foto + plantilla + texto horneado):
+  // exporta el `<canvas>` a PNG (WYSIWYG, sin round-trip al servidor) y dispara la descarga. Luego
+  // ofrece copiar el copy del post al portapapeles, para pegarlo donde se publique a mano (p. ej. X,
+  // que Metricool no cubre). El lienzo se compone con imágenes `crossOrigin`, así que no se contamina.
+  const descargar = React.useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let blob: Blob | null = null;
+    try {
+      blob = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), "image/png"));
+    } catch {
+      blob = null;
+    }
+    if (!blob) {
+      toast.error("No se pudo generar la imagen. Inténtalo de nuevo.");
+      return;
+    }
+    const base =
+      (marca || "publicacion")
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 50) || "publicacion";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${base}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Imagen descargada.");
+    const texto = (copy || "").trim();
+    if (!texto) return;
+    const copiar = await confirmar({
+      titulo: "¿Copiar el copy al portapapeles?",
+      mensaje: "Pega el texto del post junto a la imagen donde vayas a publicar.",
+      textoConfirmar: "Copiar copy",
+      textoCancelar: "No, gracias",
+    });
+    if (!copiar) return;
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success("Copy copiado al portapapeles.");
+    } catch {
+      toast.error("No se pudo copiar el copy.");
+    }
+  }, [copy, marca]);
+
   return (
     <div className="space-y-2.5">
       <CabeceraPlaca
         sinPlantilla={sinPlantilla}
         onAlternarSinPlantilla={onAlternarSinPlantilla}
         onAbrirGaleria={onAbrirGaleria}
+        onDescargar={() => void descargar()}
       />
 
       <LienzoPlaca
