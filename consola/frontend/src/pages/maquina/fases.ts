@@ -250,7 +250,9 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
       { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Resume la transcripción: idea central, puntos clave y citas", doc: "prompt/audio/resumir" },
       { nombre: "Aclarar", es_ia: true, claves: [], ayuda: "Detecta fragmentos dudosos y pregunta al equipo para corregirlos", doc: "prompt/audio/aclarar" },
       { nombre: "Corregir", es_ia: true, claves: [], ayuda: "Aplica las respuestas del equipo a la transcripción", doc: "prompt/audio/corregir" },
-      { nombre: "Ideas", es_ia: true, claves: [], ayuda: "Extrae ideas de contenido accionables de la transcripción", doc: "prompt/audio/ideas" },
+      { nombre: "Ideas", es_ia: true, claves: [], ayuda: "Extrae ideas de todo tipo (software, contenido, negocio, operación) agrupadas por categoría", doc: "prompt/audio/ideas" },
+      { nombre: "Clips", es_ia: true, claves: [], ayuda: "Detecta los momentos clipeables y su hook, con el minuto para recortarlos", doc: "prompt/audio/clips" },
+      { nombre: "Capítulos", es_ia: true, claves: [], ayuda: "Genera los capítulos de YouTube (SEO) listos para pegar en la descripción", doc: "prompt/audio/capitulado" },
     ],
   },
 ];
