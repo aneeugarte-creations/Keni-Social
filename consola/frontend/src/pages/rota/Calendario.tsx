@@ -699,7 +699,17 @@ export function Calendario({
           clave) se refresca y el chip se actualiza solo. */}
       {eventoCobertura && (
         <Dialog open onOpenChange={(o) => !o && setEventoCobertura(null)}>
-          <DialogContent>
+          <DialogContent
+            // El menú de acciones de la tarjeta («Asignar a…»/«Editar»/«Borrar») y el diálogo de
+            // confirmación de borrado se portalizan a <body>, FUERA de este diálogo. Sin esto,
+            // pulsar un ítem del menú contaría como «click fuera» y cerraría este diálogo modal
+            // antes de que su acción abriera su sub-diálogo → «Asignar a…» parecía no hacer nada.
+            // Los sub-diálogos (Asignar/Editar) son descendientes React y Radix ya los anida bien.
+            onInteractOutside={(e) => {
+              const t = e.detail.originalEvent.target as HTMLElement | null;
+              if (t?.closest('[role="menu"],[role="alertdialog"]')) e.preventDefault();
+            }}
+          >
             <DialogHeader>
               <DialogTitle>{eventoCobertura.titulo}</DialogTitle>
             </DialogHeader>

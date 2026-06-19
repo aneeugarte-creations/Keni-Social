@@ -294,4 +294,57 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
       within(dialogo).getByRole("button", { name: "Más acciones" }),
     ).toBeInTheDocument();
   });
+
+  it("Calendario → «Asignar a…» del chip abre el diálogo de asignar y encarga a la persona", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({
+      cobertura: {
+        eventos: [
+          {
+            id: "ev-int",
+            titulo: "España vs Cabo Verde",
+            fecha: "2026-06-16",
+            hora: "10:00",
+            tipo_cobertura: "transmision",
+            prioridad: "media",
+            cambiado: false,
+          },
+        ],
+      },
+      listarTurnos: {
+        turnos: [],
+        aprobada: false,
+        franjas: [
+          {
+            id: "f-manana",
+            lunes: "2026-06-15",
+            nombre: "Mañana",
+            inicio: "08:00",
+            fin: "14:00",
+            orden: 0,
+            es_descanso: false,
+            marca: "claro-sports",
+            marca_nombre: "Claro Sports",
+          },
+        ],
+      },
+      // Con una persona en el catálogo: el «Asignar a…» del manager debe poder encargársela.
+      contenido: { contenidos: [], catalogos: { usuarios: [{ id: "u-ana", usuario: "ana" }] } },
+    });
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "ana" } } as never);
+
+    // Abrir el chip → su diálogo de cobertura, y desde el menú elegir «Asignar a…».
+    fireEvent.click(await screen.findByRole("button", { name: /España vs Cabo Verde/ }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Asignar a…" }));
+
+    // El sub-diálogo de asignar aparece (el diálogo del chip NO se cierra al pulsar el menú):
+    // elegir a la persona la encarga del evento (rol por defecto «foto»).
+    fireEvent.click(await screen.findByRole("button", { name: "ana" }));
+    await vi.waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev-int", "u-ana", "foto"));
+  });
 });
