@@ -420,11 +420,6 @@ PROMOVER_MADURACION_MIN_DEF = 45
 ENV_CUPO_DIA = "KENI_CUPO_DIA"
 CUPO_DIA_DEF = 16
 ENV_PLAN_DIA = "KENI_PLAN_DIA"
-# Conjunto de LÍNEAS que el editor «Plan y horarios» pinta para una marca (orden incluido),
-# como CSV de claves de categoría (p. ej. "salud,medio-ambiente,impacto-social"). Solo lo
-# consume el frontend para decidir QUÉ filas mostrar; el volumen y los horarios siguen viviendo
-# en `KENI_PLAN_DIA::marca` y en las franjas. Vacío = el editor cae a su conjunto base.
-ENV_LINEAS = "KENI_LINEAS"
 
 
 def promover_maduracion_min() -> int:

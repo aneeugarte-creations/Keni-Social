@@ -1,14 +1,12 @@
 /**
- * Líneas del plan editorial — catálogo y etiquetas compartidas.
+ * Rótulos legibles de los SLUGS de categoría del pool de NOTICIAS (mx, internacional, breaking…).
  *
- * La taxonomía de líneas (categorías del plan diario: mx, internacional, breaking…) se usa
- * en Programación (plan + horarios), en el Monitor y en la Mesa de redacción de Noticias.
- * Vive aquí para que las superficies digan lo mismo. El conjunto de líneas que ve CADA marca
- * es editable («Plan y horarios»); esto es solo el catálogo de sugerencias y sus etiquetas.
+ * El Plan, la programación y las métricas hablan ya en LÍNEAS reales (etiquetas vertical); este
+ * mapa solo traduce el slug de categoría que arrastra una HISTORIA del pool (pre-pieza, capa de
+ * ingesta) a un nombre legible para la Mesa de Noticias y el Detalle. No es el catálogo del plan.
  */
 
-/** Catálogo de líneas conocidas (clave = categoría, etiqueta = nombre legible). Las que tienen
- *  feeds se auto-rellenan; «evergreen»/«breaking» son líneas de publicación sin feed. */
+/** Catálogo de slugs de categoría conocidos (clave = slug, etiqueta = nombre legible). */
 export const CATALOGO_LINEAS: { clave: string; etiqueta: string }[] = [
   { clave: "mx", etiqueta: "Nacional" },
   { clave: "internacional", etiqueta: "Internacional" },
@@ -40,24 +38,4 @@ export const ETIQUETA_LINEA: Record<string, string> = Object.fromEntries(
 export function etiquetaLinea(linea: string): string {
   if (!linea) return "Sin línea";
   return ETIQUETA_LINEA[linea] ?? linea.charAt(0).toUpperCase() + linea.slice(1);
-}
-
-/** Normaliza un texto libre a clave de línea (minúsculas, sin acentos, guiones). */
-export function slugLinea(texto: string): string {
-  return texto
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/** Resuelve un texto del usuario (etiqueta o clave) a una clave de línea del catálogo o slug. */
-export function resolverClaveLinea(texto: string): string {
-  const t = texto.trim();
-  if (!t) return "";
-  const porEtiqueta = CATALOGO_LINEAS.find((l) => l.etiqueta.toLowerCase() === t.toLowerCase());
-  if (porEtiqueta) return porEtiqueta.clave;
-  return slugLinea(t);
 }
