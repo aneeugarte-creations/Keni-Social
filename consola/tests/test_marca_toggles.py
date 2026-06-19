@@ -64,7 +64,7 @@ def test_catalogo_expone_toggles_por_marca():
     assert toggles and all(a.tipo == "bool" for a in toggles)
     assert planes and all(a.tipo == "texto" for a in planes)
     assert {a.grupo for a in por_marca} == grupos_marca_maquina | {
-        "publicacion_marca", "noticias_produccion_marca"
+        "publicacion_marca", "noticias_produccion_marca", "presupuesto_marca"
     }
     assert config.clave_por_marca(config.ENV_PLAN_DIA, "unotv") in claves
 

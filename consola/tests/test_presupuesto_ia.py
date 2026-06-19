@@ -668,7 +668,7 @@ def test_bloqueo_admision_con_proceso_aplica_tope_motor(monkeypatch):
     N, AG = presupuesto_ia.NIVEL_NORMAL, presupuesto_ia.NIVEL_AGOTADO
     monkeypatch.setattr(
         presupuesto_ia, "nivel_proceso",
-        lambda p: AG if p == "investigacion" else N,
+        lambda p, marca="": AG if p == "investigacion" else N,
     )
     # Global NORMAL pero el motor 'investigacion' AGOTADO por su tope propio: corta manual y fondo.
     assert B(N, gasta_tokens=True, es_fondo=True, proceso="investigacion") == AG
