@@ -47,6 +47,7 @@ export function EditorCarruselLateral({
   slides,
   onSlides,
   disabled = false,
+  onGuardarPortada,
 }: {
   marca: string;
   piezaId: string;
@@ -68,6 +69,9 @@ export function EditorCarruselLateral({
   slides: SlideCarrusel[];
   onSlides: (s: SlideCarrusel[]) => void;
   disabled?: boolean;
+  /** Fuerza el guardado de la pieza (la portada se sirve del estado GUARDADO): se llama antes de
+   *  descargar para que `/compuesta` no devuelva un render anterior a la última edición. */
+  onGuardarPortada?: () => Promise<void>;
 }) {
   const total = slides.length + 1;
   const [activo, setActivo] = React.useState(0);
@@ -209,6 +213,16 @@ export function EditorCarruselLateral({
     setDescargando(true);
     const base = slugNombre(marca);
     try {
+      // La portada se sirve del estado GUARDADO: fuerza el guardado primero para que `/compuesta`
+      // refleje la última edición (no la versión anterior al autoguardado debounced). Best-effort:
+      // si falla, la autosave previa suele bastar, así que seguimos con la descarga igualmente.
+      if (onGuardarPortada) {
+        try {
+          await onGuardarPortada();
+        } catch {
+          /* la autosave previa suele cubrirlo; no abortamos la descarga */
+        }
+      }
       // Portada (archivo 1). Cache-bust para no reusar un render viejo del navegador.
       await descargarUrlConAuth(`/api/piezas/${piezaId}/compuesta?d=${Date.now()}`, `${base}-1`);
       // Slides extra (archivos 2..N): re-hornea imágenes, baja el video tal cual.
@@ -240,7 +254,7 @@ export function EditorCarruselLateral({
     } finally {
       setDescargando(false);
     }
-  }, [marca, piezaId, copy]);
+  }, [marca, piezaId, copy, onGuardarPortada]);
 
   // --- Receta del slide activo para el editor de placa --- //
   const esPortada = activo === 0;

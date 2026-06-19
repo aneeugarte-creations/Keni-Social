@@ -125,6 +125,34 @@ describe("EditorCarruselLateral", () => {
     });
   });
 
+  it("'Carrusel' fuerza el guardado de la portada ANTES de pedir su composite", async () => {
+    const orden: string[] = [];
+    const onGuardarPortada = vi.fn(async () => {
+      orden.push("guardar");
+    });
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/compuesta")) orden.push("compuesta");
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["x"]) });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(
+      <EditorCarruselLateral
+        {...BASE}
+        slides={[]}
+        onSlides={vi.fn()}
+        onGuardarPortada={onGuardarPortada}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Descargar carrusel" }));
+
+    await waitFor(() => expect(onGuardarPortada).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(orden).toEqual(["guardar", "compuesta"]));
+  });
+
   it("editar el titular de un slide extra lo RE-HORNEA (debounced) y fija el nuevo objeto", async () => {
     vi.useFakeTimers();
     const componer = vi

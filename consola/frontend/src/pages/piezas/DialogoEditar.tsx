@@ -655,6 +655,9 @@ export function DialogoEditar({
                   onPortadaPlacaOculta={setPlacaOculta}
                   slides={slides}
                   onSlides={setSlides}
+                  // Antes de descargar, fuerza el guardado: la portada se sirve del estado guardado
+                  // (`/compuesta`), así el archivo refleja la última edición y no la previa al autosave.
+                  onGuardarPortada={persistir}
                 />
               </div>
             ) : pieza?.marca ? (
