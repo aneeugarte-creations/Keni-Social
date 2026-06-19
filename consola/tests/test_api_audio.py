@@ -319,3 +319,61 @@ def test_corregir_desde_preguntas(cliente, monkeypatch):
     )
     assert r.status_code == 201
     assert r.json()["artefacto"]["tipo"] == "corregido"
+
+
+# --------------------------------------------------------------------------- #
+# Ideas -> Sugerencias                                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_parsear_ideas_clasifica_por_seccion():
+    """`parsear_ideas`: una sugerencia por viñeta; la categoría sale del encabezado (función pura)."""
+    md = (
+        "## Producto / software\n- **Idea:** Automatizar el deploy\n"
+        "## Negocio\n- Vender cursos de IA\n"
+        "## Bug\n- Crash al subir audios largos\n"
+    )
+    items = audio_artefactos.parsear_ideas(md)
+    por_titulo = {i["titulo"]: i["categoria"] for i in items}
+    assert por_titulo["Automatizar el deploy"] == "producto"  # sin la etiqueta «Idea:» ni markdown
+    assert por_titulo["Vender cursos de IA"] == "idea"
+    assert por_titulo["Crash al subir audios largos"] == "bug"
+
+
+def test_a_sugerencias_crea_una_por_idea(cliente, monkeypatch):
+    from keni_consola import sugerencias
+
+    _mock_subida_y_cola(monkeypatch, {})
+    tid = _crear(cliente).json()["transcripcion"]["id"]
+    art = repos.crear_audio_artefacto(
+        transcripcion_id=tid, tipo="ideas", titulo="Ideas", formato="md", estado="listo",
+        contenido="## Producto / software\n- Exportar a Slack\n## Contenido\n- Serie sobre el clásico",
+    )
+    r = cliente.post(f"/api/audio/artefactos/{art['id']}/a-sugerencias")
+    assert r.status_code == 200
+    assert r.json()["creadas"] == 2
+    sugs = sugerencias.listar()
+    assert {s["categoria"] for s in sugs} == {"producto", "idea"}
+    # El detalle referencia el audio de origen.
+    assert all("De audio:" in s["detalle"] for s in sugs)
+
+
+def test_a_sugerencias_solo_ideas(cliente, monkeypatch):
+    _mock_subida_y_cola(monkeypatch, {})
+    tid = _crear(cliente).json()["transcripcion"]["id"]
+    art = repos.crear_audio_artefacto(
+        transcripcion_id=tid, tipo="resumen", titulo="Resumen", formato="md", estado="listo",
+        contenido="- algo",
+    )
+    assert cliente.post(f"/api/audio/artefactos/{art['id']}/a-sugerencias").status_code == 400
+
+
+def test_a_sugerencias_sin_ideas_400(cliente, monkeypatch):
+    _mock_subida_y_cola(monkeypatch, {})
+    tid = _crear(cliente).json()["transcripcion"]["id"]
+    art = repos.crear_audio_artefacto(
+        transcripcion_id=tid, tipo="ideas", titulo="Ideas", formato="md", estado="listo",
+        contenido="(sin ideas claras en este audio)",
+    )
+    # Una sola línea sin viñetas: el parser no saca ideas -> 400.
+    assert cliente.post(f"/api/audio/artefactos/{art['id']}/a-sugerencias").status_code == 400

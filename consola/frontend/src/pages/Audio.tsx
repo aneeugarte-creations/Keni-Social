@@ -36,6 +36,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -287,7 +288,6 @@ export default function Audio() {
                     cargando={arts.isLoading}
                     artefactoId={artefactoId}
                     onSeleccionar={setArtefactoId}
-                    onCambio={refetchArtefactos}
                   />
                 </div>
               ) : (
@@ -589,7 +589,6 @@ function PanelArtefactos({
   cargando,
   artefactoId,
   onSeleccionar,
-  onCambio,
 }: {
   className?: string;
   audio: TranscripcionAudio | null;
@@ -597,7 +596,6 @@ function PanelArtefactos({
   cargando: boolean;
   artefactoId: string | null;
   onSeleccionar: (id: string) => void;
-  onCambio: () => void;
 }) {
   const qc = useQueryClient();
   const reintentar = useMutation({
@@ -608,12 +606,6 @@ function PanelArtefactos({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const borrar = useMutation({
-    mutationFn: (id: string) => api.audio.eliminarArtefacto(id),
-    onSuccess: () => onCambio(),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   if (!audio) {
     return (
       <div className={cn("flex min-w-0 flex-col gap-2", className)}>
@@ -672,16 +664,6 @@ function PanelArtefactos({
                     <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
                   )}
                 </button>
-                {a.tipo !== "srt" && a.estado !== "generando" ? (
-                  <button
-                    type="button"
-                    title="Eliminar artefacto"
-                    onClick={() => borrar.mutate(a.id)}
-                    className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
               </div>
             );
           })}
@@ -790,10 +772,49 @@ function Lector({
     URL.revokeObjectURL(url);
   };
 
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.audio.eliminarArtefacto(id),
+    onSuccess: () => {
+      onCambio();
+      toast.success("Artefacto borrado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const aSugerencias = useMutation({
+    mutationFn: (id: string) => api.audio.ideasASugerencias(id),
+    onSuccess: (r) =>
+      toast.success(
+        r.creadas
+          ? `${r.creadas} idea${r.creadas === 1 ? "" : "s"} enviada${r.creadas === 1 ? "" : "s"} a Sugerencias`
+          : "No se encontraron ideas para enviar",
+      ),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const onBorrar = async () => {
+    if (!artefacto) return;
+    const nombre = artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo] || artefacto.tipo;
+    if (
+      await confirmar({
+        titulo: "Borrar artefacto",
+        mensaje: `¿Borrar «${nombre}»? No se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    ) {
+      borrar.mutate(artefacto.id);
+    }
+  };
+
   const transcrito = !!audio && (audio.estado === "transcrito" || audio.estado === "editado");
   // 'preguntas' es un cajón-formulario: sin barra de Editar/Descargar.
   const acciones =
     !!artefacto && artefacto.estado === "listo" && artefacto.tipo !== "preguntas";
+  // El SRT (base canónica) no se borra; el resto sí, desde la barra (con confirmación).
+  const puedeBorrar = !!artefacto && artefacto.estado === "listo" && artefacto.tipo !== "srt";
+  // Las ideas de audio se pueden volcar al kanban de Sugerencias.
+  const esIdeasListo = !!artefacto && artefacto.tipo === "ideas" && artefacto.estado === "listo";
   // Herencia del artefacto abierto (si es un tratamiento): de qué deriva.
   const origen =
     artefacto && artefacto.origen_id
@@ -845,16 +866,45 @@ function Lector({
             })}
           </div>
         ) : null}
-        {acciones ? (
+        {acciones || puedeBorrar ? (
           <div className="ml-auto flex items-center gap-2">
-            {editable ? (
+            {esIdeasListo ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => aSugerencias.mutate(artefacto!.id)}
+                disabled={aSugerencias.isPending}
+                className="gap-1.5"
+              >
+                {aSugerencias.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Lightbulb className="h-3.5 w-3.5" />
+                )}
+                A Sugerencias
+              </Button>
+            ) : null}
+            {acciones && editable ? (
               <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
                 {editando ? "Vista" : "Editar"}
               </Button>
             ) : null}
-            <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
-              <Download className="h-3.5 w-3.5" /> Descargar
-            </Button>
+            {acciones ? (
+              <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
+                <Download className="h-3.5 w-3.5" /> Descargar
+              </Button>
+            ) : null}
+            {puedeBorrar ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onBorrar}
+                disabled={borrar.isPending}
+                className="gap-1.5 text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Borrar
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </div>

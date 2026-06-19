@@ -36,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, generaciones, marcas, media, repos
+from .. import db, generaciones, marcas, media, permisos, repos
 from .._http_json import leer_json
 from ..dominio import audio_artefactos, jobspec
 
@@ -378,6 +378,38 @@ async def borrar_artefacto(request: Request) -> Response:
     return Response(status_code=204)
 
 
+async def a_sugerencias(request: Request) -> Response:
+    """POST /api/audio/artefactos/{id}/a-sugerencias: vuelca las ideas del artefacto al kanban.
+
+    Crea una sugerencia por idea (autor = la sesión, para que la vea quien la manda). Solo sobre un
+    artefacto de 'ideas' ya listo. Devuelve `{creadas: N}`.
+    """
+    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+    if art is None:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    if art["tipo"] != "ideas":
+        return JSONResponse(
+            {"error": "Solo se pueden enviar a Sugerencias los artefactos de ideas."},
+            status_code=400,
+        )
+    if art["estado"] != "listo":
+        return JSONResponse({"error": "Las ideas aún se están generando."}, status_code=400)
+    if not audio_artefactos.parsear_ideas(art.get("contenido") or ""):
+        return JSONResponse({"error": "No se encontraron ideas en el artefacto."}, status_code=400)
+
+    fila = repos.obtener_audio_transcripcion(art["transcripcion_id"])
+    nombre = (fila or {}).get("nombre") or "audio"
+    usuario = permisos.usuario_actual(request) or {}
+    autor = str(usuario.get("nombre") or usuario.get("usuario") or "")
+    autor_id = str(usuario["id"]) if usuario.get("id") else ""
+    # El handoff produccion→shell (ideas del audio → kanban de sugerencias) vive en el DOMINIO,
+    # no en el router (mismo patrón que historial→piezas): el lint de fronteras no lo dispara.
+    creadas = audio_artefactos.volcar_ideas_en_sugerencias(
+        art, autor=autor, autor_id=autor_id, nombre_audio=nombre
+    )
+    return JSONResponse({"creadas": creadas})
+
+
 async def guardar_respuestas(request: Request) -> Response:
     """PUT /api/audio/artefactos/{id}/respuestas (`{respuestas:{...}}`): guarda las respuestas del cajón.
 
@@ -448,6 +480,7 @@ RUTAS = [
     Route("/api/audio/artefactos/{artefacto_id}", obtener_artefacto, methods=["GET"]),
     Route("/api/audio/artefactos/{artefacto_id}", actualizar_artefacto, methods=["PUT"]),
     Route("/api/audio/artefactos/{artefacto_id}", borrar_artefacto, methods=["DELETE"]),
+    Route("/api/audio/artefactos/{artefacto_id}/a-sugerencias", a_sugerencias, methods=["POST"]),
     Route("/api/audio/artefactos/{artefacto_id}/respuestas", guardar_respuestas, methods=["PUT"]),
     Route("/api/audio/artefactos/{artefacto_id}/corregir", corregir_artefacto, methods=["POST"]),
 ]
