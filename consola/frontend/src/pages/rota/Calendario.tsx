@@ -68,6 +68,7 @@ import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { TarjetaCobertura, TarjetaEventoLibre } from "@/pages/tareas/tarjetas";
 import { agrupar, type Cobertura } from "@/pages/tareas/tipos";
+import { interaccionEnCapaHija } from "./coberturaDialogo";
 
 
 /** Modo de vista del Calendario: la rejilla SEMANAL (franjas×días) o el calendario MENSUAL
@@ -700,14 +701,11 @@ export function Calendario({
       {eventoCobertura && (
         <Dialog open onOpenChange={(o) => !o && setEventoCobertura(null)}>
           <DialogContent
-            // El menú de acciones de la tarjeta («Asignar a…»/«Editar»/«Borrar») y el diálogo de
-            // confirmación de borrado se portalizan a <body>, FUERA de este diálogo. Sin esto,
-            // pulsar un ítem del menú contaría como «click fuera» y cerraría este diálogo modal
-            // antes de que su acción abriera su sub-diálogo → «Asignar a…» parecía no hacer nada.
-            // Los sub-diálogos (Asignar/Editar) son descendientes React y Radix ya los anida bien.
+            // El kebab, el sub-diálogo «Asignar a…»/«Editar» y la confirmación de borrado se
+            // portalizan a <body>: una interacción que venga de ellos no debe cerrar este diálogo.
             onInteractOutside={(e) => {
               const t = e.detail.originalEvent.target as HTMLElement | null;
-              if (t?.closest('[role="menu"],[role="alertdialog"]')) e.preventDefault();
+              if (interaccionEnCapaHija(t)) e.preventDefault();
             }}
           >
             <DialogHeader>

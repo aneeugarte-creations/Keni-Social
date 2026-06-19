@@ -12,6 +12,7 @@ import * as apiMod from "@/lib/api";
 import type { UsuarioSesion } from "@/types";
 
 import Rota from "./index";
+import { interaccionEnCapaHija } from "./coberturaDialogo";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
@@ -348,5 +349,31 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     fireEvent.click(await screen.findByRole("button", { name: "Video" }));
     fireEvent.click(screen.getByRole("button", { name: "ana" }));
     await vi.waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev-int", "u-ana", "video"));
+  });
+});
+
+// El diálogo de cobertura es modal y sus acciones (kebab, «Asignar a…»/«Editar», borrar) se
+// portalizan FUERA de su contenido. La guarda decide qué interacciones externas NO lo cierran.
+// jsdom no dispara el onInteractOutside real de Radix con fireEvent, así que fijamos la guarda
+// directamente: sin «role=dialog» en el filtro, abrir «Asignar a…» cerraba el padre y la
+// asignación «no funcionaba» desde el calendario.
+describe("interaccionEnCapaHija (guarda del diálogo de cobertura)", () => {
+  function dentroDe(rol: string): HTMLElement {
+    const capa = document.createElement("div");
+    capa.setAttribute("role", rol);
+    const hijo = document.createElement("button");
+    capa.appendChild(hijo);
+    return hijo;
+  }
+
+  it("mantiene el padre abierto ante el menú, el sub-diálogo y la confirmación de borrado", () => {
+    expect(interaccionEnCapaHija(dentroDe("menu"))).toBe(true);
+    expect(interaccionEnCapaHija(dentroDe("dialog"))).toBe(true);
+    expect(interaccionEnCapaHija(dentroDe("alertdialog"))).toBe(true);
+  });
+
+  it("deja cerrar el padre ante una interacción fuera de cualquier capa hija", () => {
+    expect(interaccionEnCapaHija(document.createElement("div"))).toBe(false);
+    expect(interaccionEnCapaHija(null)).toBe(false);
   });
 });
