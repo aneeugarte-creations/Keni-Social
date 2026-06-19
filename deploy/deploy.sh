@@ -87,9 +87,10 @@ hash_entradas() {  # $1 = prefijo de path a EXCLUIR (o "") ; $2.. = paths -> 12 
 FRONT_VERSION="$(hash_entradas "" consola/frontend deploy/front)"
 BACK_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/back)"
 WORKER_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/worker)"
+TRANSCRIPTOR_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/transcriptor)"
 MCP_VERSION="$(hash_entradas "" keni-shared mcp-metricas deploy/mcp)"
-export FRONT_VERSION BACK_VERSION WORKER_VERSION MCP_VERSION
-echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION mcp=$MCP_VERSION"
+export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION
+echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION transcriptor=$TRANSCRIPTOR_VERSION mcp=$MCP_VERSION"
 
 # Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
 # ./secrets/<n> en /run/secrets; si no existieran al instanciar contenedores, Compose
@@ -163,6 +164,7 @@ echo "==> [1/6] build SELECTIVO (solo imagenes cuyo contenido cambió)"
 construir front  "keni-social/front:$FRONT_VERSION"
 construir back   "keni-social/back:$BACK_VERSION"
 construir worker "keni-social/worker:$WORKER_VERSION"
+construir transcriptor "keni-social/transcriptor:$TRANSCRIPTOR_VERSION"
 construir mcp    "keni-social/mcp:$MCP_VERSION"
 
 # Pasos de ESQUEMA/ESTADO: SOLO cuando cambió el código del back/worker (comparten `consola/`).
@@ -245,7 +247,7 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
   id="$(docker inspect --format '{{.Image}}' "$cont" 2>/dev/null || true)"
   if [ -n "$id" ]; then docker tag "$id" "keni-social/$1:previa"; fi
 }
-foto_previa front; foto_previa back; foto_previa worker; foto_previa mcp
+foto_previa front; foto_previa back; foto_previa worker; foto_previa transcriptor; foto_previa mcp
 
 echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
 $DC up -d
@@ -284,8 +286,9 @@ else
   # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
   if espera_sano back 300 && espera_sano front 120 \
       && espera_sano daemons 150 && espera_sano worker 120 \
+      && espera_sano transcriptor 120 \
       && espera_sano worker-dev 120 && espera_sano worker-ralph 120; then
-    echo "==> salud OK (back, front, daemons, worker, worker-dev y worker-ralph healthy)"
+    echo "==> salud OK (back, front, daemons, worker, transcriptor, worker-dev y worker-ralph healthy)"
     # db y files: si NO estan sanos el problema es de CONFIG/estado (sus imagenes son
     # upstream y no entran en el rollback :previa), asi que NO se intenta rollback —
     # pero el pipeline DEBE quedar rojo para que un operador mire (p.ej. un cambio de
@@ -297,13 +300,14 @@ else
   else
     printf '\033[31m==> VERIFICACION FALLIDA: rollback a las imagenes :previa\033[0m\n' >&2
     FRONT_NUEVA="$FRONT_VERSION"; BACK_NUEVA="$BACK_VERSION"
-    WORKER_NUEVA="$WORKER_VERSION"; MCP_NUEVA="$MCP_VERSION"
+    WORKER_NUEVA="$WORKER_VERSION"; MCP_NUEVA="$MCP_VERSION"; TRANSCRIPTOR_NUEVA="$TRANSCRIPTOR_VERSION"
     hay_previa() { docker image inspect "keni-social/$1:previa" >/dev/null 2>&1; }
     hay_previa front  && FRONT_VERSION=previa
     hay_previa back   && BACK_VERSION=previa
     hay_previa worker && WORKER_VERSION=previa
+    hay_previa transcriptor && TRANSCRIPTOR_VERSION=previa
     hay_previa mcp    && MCP_VERSION=previa
-    export FRONT_VERSION BACK_VERSION WORKER_VERSION MCP_VERSION
+    export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION
     $DC up -d || true
     $DC ps || true
     # RE-VERIFICA que la foto :previa SÍ levanta sana. Antes el rollback hacía `up` y salía
@@ -320,6 +324,7 @@ else
     [ "$FRONT_VERSION" = previa ]  && docker rmi "keni-social/front:$FRONT_NUEVA"   >/dev/null 2>&1 || true
     [ "$BACK_VERSION" = previa ]   && docker rmi "keni-social/back:$BACK_NUEVA"     >/dev/null 2>&1 || true
     [ "$WORKER_VERSION" = previa ] && docker rmi "keni-social/worker:$WORKER_NUEVA" >/dev/null 2>&1 || true
+    [ "$TRANSCRIPTOR_VERSION" = previa ] && docker rmi "keni-social/transcriptor:$TRANSCRIPTOR_NUEVA" >/dev/null 2>&1 || true
     [ "$MCP_VERSION" = previa ]    && docker rmi "keni-social/mcp:$MCP_NUEVA"       >/dev/null 2>&1 || true
     exit 1
   fi

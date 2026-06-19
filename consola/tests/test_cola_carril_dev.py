@@ -72,3 +72,49 @@ def test_carriles_none_reclama_cualquiera(entorno):
     job = cola.reclamar("w-any")
     assert job is not None
     assert job["gen_id"] == g_dev
+
+
+# --------------------------------------------------------------------------- #
+# Carril TRANSCRIPCION: servicio dedicado (whisper.cpp), fuera del worker general #
+# --------------------------------------------------------------------------- #
+
+
+def test_carril_routing_transcripcion_es_puro():
+    """`jobspec.carril()`: transcripción -> 'transcripcion'; otros procesos -> 'proceso'. SIN BD."""
+    tr = jobspec.construir_proceso(jobspec.PROC_TRANSCRIBIR_AUDIO, {"media_id": "audios/x.m4a"})
+    sub = jobspec.construir_proceso(jobspec.PROC_TRANSCRIBIR, {"media_id": "videos/x.mp4"})
+    render = jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"composicion_id": "c1"})
+    imagen = jobspec.construir_proceso(jobspec.PROC_IMAGEN, {})
+    assert jobspec.carril(tr) == jobspec.CARRIL_TRANSCRIPCION
+    assert jobspec.carril(sub) == jobspec.CARRIL_TRANSCRIPCION
+    assert jobspec.carril(render) == jobspec.CARRIL_PROCESO
+    assert jobspec.carril(imagen) == jobspec.CARRIL_PROCESO
+    assert jobspec.carril(
+        jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
+    ) == jobspec.CARRIL_INFERENCIA
+
+
+def test_transcripcion_va_al_transcriptor_no_al_worker(entorno):
+    """El worker de contenido (inferencia+proceso) IGNORA la transcripción; la clava el transcriptor."""
+    g_tr = _gen("transcribir-audio")
+    g_render = _gen("render-video")
+    cola.encolar(
+        g_tr,
+        jobspec.construir_proceso(
+            jobspec.PROC_TRANSCRIBIR_AUDIO, {"transcripcion_id": "t1", "media_id": "audios/x.m4a"}
+        ),
+    )
+    cola.encolar(
+        g_render,
+        jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"composicion_id": "c1"}),
+    )
+
+    # El worker de contenido reclama inferencia+proceso: ve el render, NUNCA la transcripción.
+    carriles_contenido = {jobspec.CARRIL_INFERENCIA, jobspec.CARRIL_PROCESO}
+    job = cola.reclamar("w-cont", carriles=carriles_contenido)
+    assert job is not None and job["gen_id"] == g_render
+    assert cola.reclamar("w-cont", carriles=carriles_contenido) is None
+
+    # El transcriptor reclama solo el carril `transcripcion`: ve la transcripción.
+    job_tr = cola.reclamar("w-trans", carriles={jobspec.CARRIL_TRANSCRIPCION})
+    assert job_tr is not None and job_tr["gen_id"] == g_tr

@@ -121,6 +121,12 @@ KINDS_PROCESO = frozenset(
     {PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_TRANSCRIBIR_AUDIO, PROC_IMAGEN}
 )
 
+# KINDS de TRANSCRIPCION (ASR con whisper.cpp): subconjunto de KINDS_PROCESO que NO corre en el
+# worker de contenido, sino en su SERVICIO DEDICADO (`transcriptor`, `worker_transcripcion`). Asi el
+# binario whisper-cli + el modelo (~1.6 GB) NO contaminan la imagen del worker general: viven en una
+# imagen propia y lean. Siguen siendo jobs de proceso (mismo dispatch); solo cambia QUE pool los reclama.
+KINDS_TRANSCRIPCION = frozenset({PROC_TRANSCRIBIR, PROC_TRANSCRIBIR_AUDIO})
+
 # ------------------------------------------------------------------------------------------- #
 # Jobs de AUTO-DESARROLLO (carril `dev`): los reclama SOLO `worker_dev`, no el worker de        #
 # contenido. Corren `claude -p` SIN sandbox sobre un clon git del repo (worktree por           #
@@ -130,10 +136,12 @@ PROC_DEV_DISCOVERY = "dev-discovery"
 PROC_DEV_FASE = "dev-fase"
 
 # CARRILES de la cola: separan POOLS de workers. `inferencia` (def) y `proceso` (CPU-bound,
-# render/ASR) los reclama el worker de contenido; `dev` lo reclama SOLO `worker_dev` (no
-# sandbox). El carril viaja a NIVEL RAIZ del spec (`spec["carril"]`) o se DERIVA (ver `carril`).
+# render/imagen) los reclama el worker de contenido; `transcripcion` (ASR whisper.cpp) lo reclama
+# SOLO el servicio `transcriptor`; `dev` lo reclama SOLO `worker_dev` (no sandbox). El carril viaja
+# a NIVEL RAIZ del spec (`spec["carril"]`) o se DERIVA (ver `carril`).
 CARRIL_INFERENCIA = "inferencia"
 CARRIL_PROCESO = "proceso"
+CARRIL_TRANSCRIPCION = "transcripcion"
 CARRIL_DEV = "dev"
 
 # Registro de EJECUTORES por kind de proceso. Valor = "modulo:funcion" (path importable),
@@ -166,18 +174,21 @@ def carril(spec: dict[str, Any]) -> str:
 
     - Si el spec trae un `carril` EXPLICITO a nivel raiz (lo ponen los jobs de desarrollo:
       `carril="dev"`), se respeta tal cual.
-    - Si no, se DERIVA: un job de PROCESO (kind raiz en `KINDS_PROCESO`) es `proceso`; el
-      resto (jobs `claude` de contenido) es `inferencia`.
+    - Si no, se DERIVA por `kind`: TRANSCRIPCION (whisper) -> `transcripcion`; otro PROCESO
+      (render/imagen) -> `proceso`; el resto (jobs `claude` de contenido) -> `inferencia`.
 
-    Asi `worker_dev` reclama solo `dev` y el worker de contenido reclama `inferencia`+`proceso`
-    (excluyendo `dev`), sin que un job de desarrollo nunca caiga en el pool de contenido.
+    Asi cada pool reclama solo lo suyo: `transcriptor` -> `transcripcion`, `worker_dev` -> `dev`,
+    y el worker de contenido -> `inferencia`+`proceso` (sin transcripcion ni dev).
     """
     if not isinstance(spec, dict):
         return CARRIL_INFERENCIA
     explicito = spec.get("carril")
     if isinstance(explicito, str) and explicito:
         return explicito
-    if spec.get("kind") in KINDS_PROCESO:
+    kind = spec.get("kind")
+    if kind in KINDS_TRANSCRIPCION:
+        return CARRIL_TRANSCRIPCION
+    if kind in KINDS_PROCESO:
         return CARRIL_PROCESO
     return CARRIL_INFERENCIA
 

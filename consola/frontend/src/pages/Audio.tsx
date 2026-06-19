@@ -44,6 +44,9 @@ import type {
 
 const EN_PROCESO: EstadoTranscripcion[] = ["pendiente", "transcribiendo"];
 
+// Extensiones de SOLO audio: se reproducen con `<audio>` (barra fina), no con `<video>` (caja negra).
+const RE_AUDIO = /\.(mp3|m4a|aac|wav|ogg|oga|flac|weba)$/i;
+
 const ETIQUETA_ESTADO: Record<EstadoTranscripcion, string> = {
   pendiente: "En cola",
   transcribiendo: "Transcribiendo…",
@@ -147,19 +150,19 @@ export default function Audio() {
       {vacioTotal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <Button
-            size="lg"
+            variant="outline"
             onClick={abrirSelector}
             disabled={subir.isPending || !marca}
-            className="h-auto gap-3 rounded-2xl px-10 py-7 text-base shadow-sm"
+            className="gap-2"
           >
             {subir.isPending ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Upload className="h-6 w-6" />
+              <Upload className="h-4 w-4" />
             )}
             Subir audio o vídeo
           </Button>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {marca ? "Se extrae la voz y se transcribe con timestamps" : "Selecciona una marca primero"}
           </p>
         </div>
@@ -167,6 +170,8 @@ export default function Audio() {
         <div className="grid flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
           <aside className="flex flex-col gap-3">
             <Button
+              variant="outline"
+              size="sm"
               onClick={abrirSelector}
               disabled={subir.isPending || !marca}
               className="w-full gap-2"
@@ -379,9 +384,13 @@ function Editor({
         </div>
       </div>
 
-      {/* Reproductor del original */}
+      {/* Reproductor del original: pista de audio si es audio; vídeo solo si es vídeo. */}
       {t.media_url ? (
-        <video controls src={urlMedia(t.media_url)} className="max-h-56 w-full rounded-lg bg-black" />
+        RE_AUDIO.test(t.media_id) ? (
+          <audio controls src={urlMedia(t.media_url)} className="w-full" />
+        ) : (
+          <video controls src={urlMedia(t.media_url)} className="max-h-56 w-full rounded-lg bg-black" />
+        )
       ) : null}
 
       {/* Estado del ASR */}

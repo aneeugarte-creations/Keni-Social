@@ -593,6 +593,81 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  transcriptor:
+    # Servicio DEDICADO de transcripción ASR (gestor audio→texto). Reclama SOLO el carril
+    # `transcripcion` de la cola (`python -m keni_consola.worker_transcripcion`): jobs de whisper.cpp
+    # (whisper-cli + modelo v3 turbo). Imagen LEAN propia (ffmpeg + whisper-cli, SIN Node/claude/gh):
+    # el binario + el modelo (~1.6 GB) NO contaminan la imagen del worker general. Comparte la cola
+    # (Postgres) y la media (S3/Garage) con el resto; el worker de contenido EXCLUYE este carril.
+    build:
+      context: ..
+      dockerfile: deploy/transcriptor/Dockerfile
+    image: keni-social/transcriptor:${TRANSCRIPTOR_VERSION:-latest}
+    restart: unless-stopped
+    labels:
+      - autoheal=true
+    environment:
+      XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
+      # Hilos de transcripción concurrente. whisper.cpp ya paraleliza UNA transcripción sobre los
+      # cores, así que 1 satura la CPU; súbelo solo si das más cores. Def 1 (conservador en la caja).
+      KENI_MAX_JOBS_TRANSCRIPCION: ${KENI_MAX_JOBS_TRANSCRIPCION:-1}
+      # Modelo whisper v3 turbo: el entrypoint lo descarga UNA vez al volumen /data (persistente).
+      KENI_WHISPER_MODEL: /data/models/ggml-large-v3-turbo.bin
+      # Cola compartida (Postgres) + media (S3/Garage): lee la cola y baja el audio del bucket.
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY_FILE: /run/secrets/s3_access_key
+      S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+    volumes:
+      # Mismo volumen que el back/worker: media en disco si no hay S3, y el modelo whisper en /data.
+      - keni-data:/data
+    secrets:
+      - postgres_password
+      - s3_access_key
+      - s3_secret_key
+    networks:
+      # `data` para alcanzar db/files; `internal` conserva el egress (descarga del modelo en HF).
+      - internal
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+    # No sirve HTTP: el heartbeat comprueba que el bucle (`keni_consola.worker_transcripcion`) vive.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          python -c "import os,glob,sys;
+          sys.exit(0 if any('keni_consola.worker_transcripcion' in open(p).read().replace(chr(0),' ')
+          for p in glob.glob('/proc/[0-9]*/cmdline')) else 1)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Margen amplio: el primer arranque DESCARGA el modelo (~1.6 GB) en segundo plano; el bucle ya
+      # está vivo desde el inicio, así que el healthcheck no depende de que la descarga acabe.
+      start_period: 60s
+    stop_grace_period: 30s
+    # whisper.cpp carga el modelo (~1.6 GB) por invocación + memoria de trabajo: ~3 GiB por job.
+    mem_limit: ${TRANSCRIPTOR_MEM_LIMIT:-6g}
+    cpus: ${TRANSCRIPTOR_CPUS:-4}
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   worker-dev:
     # Worker de AUTO-DESARROLLO (carril `dev` de la cola). Gemelo del `worker` de contenido pero
     # corre `python -m keni_consola.worker_dev`: reclama SOLO los jobs cuyo `jobspec.carril == "dev"`
