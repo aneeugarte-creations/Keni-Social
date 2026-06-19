@@ -201,16 +201,11 @@ export default function Audio() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 gap-3">
-          {/* IZQUIERDA: doble panel (audios · artefactos), colapsable con el chevron al pie,
-              igual que el lector de contexto. Colapsado deja el lector a ancho completo. */}
-          <aside className={cn("flex shrink-0 flex-col", panelesAbiertos ? "w-[28rem]" : "w-auto")}>
-            <div
-              className={cn(
-                "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
-                panelesAbiertos ? "p-2" : "items-center justify-center p-1",
-              )}
-            >
-              {panelesAbiertos ? (
+          {/* IZQUIERDA: doble panel (audios · artefactos). Colapsado se RETIRA por completo (deja el
+              lector a ancho total); se reabre con el chevron de la barra del lector. */}
+          {panelesAbiertos ? (
+            <aside className="flex w-[28rem] shrink-0 flex-col">
+              <div className="flex h-full min-h-0 flex-col rounded-md border border-border bg-card p-2">
                 <div className="flex min-h-0 flex-1 gap-2">
                   <PanelAudios
                     className="w-1/2"
@@ -233,28 +228,26 @@ export default function Audio() {
                     onSeleccionar={setArtefactoId}
                   />
                 </div>
-              ) : null}
-              <Button
-                size="icon"
-                variant="ghost"
-                className={cn("h-8 w-8 shrink-0 self-center", panelesAbiertos && "mt-2")}
-                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
-                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
-                onClick={() => setPanelesAbiertos((v) => !v)}
-              >
-                {panelesAbiertos ? (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="mt-2 h-8 w-8 shrink-0 self-center"
+                  aria-label="Colapsar paneles"
+                  title="Colapsar (leer a ancho completo)"
+                  onClick={() => setPanelesAbiertos(false)}
+                >
                   <ChevronLeft className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </aside>
+                </Button>
+              </div>
+            </aside>
+          ) : null}
 
           {/* DERECHA: barra superior (tratamientos + acciones) sobre el lector del artefacto. */}
           <Lector
             audio={audio}
             artefacto={artefacto}
+            panelesAbiertos={panelesAbiertos}
+            onExpandir={() => setPanelesAbiertos(true)}
             onSeleccionarArtefacto={setArtefactoId}
             onCambio={refetchArtefactos}
           />
@@ -447,11 +440,15 @@ function PanelArtefactos({
 function Lector({
   audio,
   artefacto,
+  panelesAbiertos,
+  onExpandir,
   onSeleccionarArtefacto,
   onCambio,
 }: {
   audio: TranscripcionAudio | null;
   artefacto: ArtefactoAudio | null;
+  panelesAbiertos: boolean;
+  onExpandir: () => void;
   onSeleccionarArtefacto: (id: string) => void;
   onCambio: () => void;
 }) {
@@ -500,8 +497,21 @@ function Lector({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-2">
-      {/* Barra superior: tratamientos a la izquierda, acciones del artefacto a la derecha. */}
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+      {/* Barra superior: chevron para reabrir paneles (si colapsados) + tratamientos a la izquierda;
+          acciones del artefacto a la derecha. */}
+      <div className="flex min-h-9 flex-wrap items-center gap-2">
+        {!panelesAbiertos ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 shrink-0"
+            aria-label="Mostrar paneles"
+            title="Mostrar paneles"
+            onClick={onExpandir}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        ) : null}
         {transcrito ? (
           <div className="flex flex-wrap items-center gap-1">
             <span className="mr-1 text-xs text-muted-foreground">Añadir:</span>
@@ -523,11 +533,9 @@ function Lector({
               </Button>
             ))}
           </div>
-        ) : (
-          <div />
-        )}
+        ) : null}
         {acciones ? (
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             {editable ? (
               <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
                 {editando ? "Vista" : "Editar"}
