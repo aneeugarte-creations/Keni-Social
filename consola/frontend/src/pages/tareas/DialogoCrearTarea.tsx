@@ -25,6 +25,10 @@ import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
+import {
+  SelectorRecurrencia,
+  type ValorRecurrencia,
+} from "@/pages/rota/SelectorRecurrencia";
 import type { CatalogosPublicacion, OperacionCrearEvento, OperacionCrearTarea } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
@@ -71,6 +75,8 @@ export function DialogoCrearTarea({
   const [contenido, setPublicacion] = React.useState("");
   const [prioridad, setPrioridad] = React.useState("media");
   const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
+  // Recurrencia del evento (null = evento suelto). Solo aplica al modo «evento».
+  const [recurrencia, setRecurrencia] = React.useState<ValorRecurrencia | null>(null);
   // Import inteligente.
   const [pegado, setPegado] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
@@ -99,6 +105,7 @@ export function DialogoCrearTarea({
     setPublicacion("");
     setPrioridad("media");
     setResponsable(SIN_RESPONSABLE);
+    setRecurrencia(null);
     setPegado("");
     setArchivo(null);
     setArrastrando(false);
@@ -148,7 +155,7 @@ export function DialogoCrearTarea({
   const crear = useMutation({
     mutationFn: async () => {
       if (modo === "evento") {
-        await api.crearEventoRota({
+        return api.crearEventoRota({
           titulo: titulo.trim(),
           fecha,
           hora: hora || undefined,
@@ -156,8 +163,10 @@ export function DialogoCrearTarea({
           prioridad: prioridad as never,
           tipo_cobertura: "transmision",
           marca: marca || undefined,
+          // Recurrencia: con días, el backend materializa una serie hasta `repetir_hasta`.
+          dias_semana: recurrencia?.dias_semana,
+          repetir_hasta: recurrencia?.repetir_hasta,
         });
-        return;
       }
       await api.crearPublicacion({
         clase: "tarea",
@@ -168,20 +177,28 @@ export function DialogoCrearTarea({
         responsable_id: responsable === SIN_RESPONSABLE ? undefined : responsable,
         marca: marca || undefined,
       });
+      return undefined;
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success(
-        modo === "evento"
-          ? `"${titulo.trim()}" añadido: está en «Por cubrir».`
-          : `"${titulo.trim()}" creado.`,
-      );
+      const tituloLimpio = titulo.trim();
+      if (modo === "tarea") {
+        toast.success(`"${tituloLimpio}" creado.`);
+      } else if (res && "total" in res && res.total > 1) {
+        toast.success(`Serie creada: ${res.total} eventos hasta el ${formatearFecha(recurrencia!.repetir_hasta)}.`);
+      } else {
+        toast.success(`"${tituloLimpio}" añadido: está en «Por cubrir».`);
+      }
       cerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const incompletoManual = !titulo.trim() || (modo === "evento" && !fecha);
+  // En «personalizado» exige ≥1 día; un patrón sin días no es una recurrencia válida.
+  const recurrenciaIncompleta =
+    modo === "evento" && recurrencia !== null && recurrencia.dias_semana.length === 0;
+  const incompletoManual =
+    !titulo.trim() || (modo === "evento" && !fecha) || recurrenciaIncompleta;
   const nadaQueAnalizar = !archivo && !pegado.trim();
   const enRevision = propuestaId !== null;
 
@@ -494,6 +511,10 @@ export function DialogoCrearTarea({
                   rows={2}
                 />
               </div>
+
+              {modo === "evento" && (
+                <SelectorRecurrencia fechaBase={fecha} onChange={setRecurrencia} />
+              )}
             </div>
 
             <DialogFooter>

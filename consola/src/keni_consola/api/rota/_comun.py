@@ -137,6 +137,8 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
         # Multi-tenant por marca.
         "marca": marca_id,
         "marca_nombre": marcas.etiqueta_de(marca_id) if marca_id else "",
+        # Recurrencia: agrupa las ocurrencias de un evento recurrente ("" = evento suelto).
+        "serie_id": evento.get("serie_id", ""),
     }
 
 

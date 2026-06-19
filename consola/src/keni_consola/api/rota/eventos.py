@@ -9,11 +9,15 @@ from starlette.responses import JSONResponse, Response
 from ... import marcas, repos
 from ... import rota as dominio
 from ..._http_json import leer_json
+from ...dominio import recurrencia
 from ...estados import (
     PRIORIDADES_EVENTO,
     TIPOS_COBERTURA,
 )
 from ._comun import _equipo_dict, _evento_a_dict
+
+# Alcance de una edición/borrado sobre una serie recurrente.
+_ALCANCES_SERIE = ("este", "siguientes", "serie")
 
 
 async def equipo(request: Request) -> Response:
@@ -137,16 +141,57 @@ async def crear_evento(request: Request) -> Response:
     marca_val = str(datos.get("marca") or "").strip()
     if marca_val and not marcas.es_marca(marca_val):
         return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
-    evento = repos.crear_evento_rota(
-        titulo.strip(),
-        fecha=fecha.strip(),
-        hora=str(datos.get("hora", "")).strip(),
-        contenido=str(datos.get("contenido", "")).strip(),
-        nota=str(datos.get("nota", "")).strip(),
-        tipo_cobertura=tipo_cobertura,
-        prioridad=prioridad,
-        marca=marca_val,
-    )
+
+    comunes = {
+        "hora": str(datos.get("hora", "")).strip(),
+        "contenido": str(datos.get("contenido", "")).strip(),
+        "nota": str(datos.get("nota", "")).strip(),
+        "tipo_cobertura": tipo_cobertura,
+        "prioridad": prioridad,
+        "marca": marca_val,
+    }
+
+    # Recurrencia (opcional): `dias_semana` (0=lun..6=dom) + `repetir_hasta` (ISO, inclusive).
+    # Con días válidos se MATERIALIZA una serie (un evento por ocurrencia); sin ellos, evento suelto.
+    dias = recurrencia.normalizar_dias_semana(datos.get("dias_semana"))
+    pidio_recurrencia = isinstance(datos.get("dias_semana"), list) and len(datos["dias_semana"]) > 0
+    if pidio_recurrencia and not dias:
+        return JSONResponse(
+            {"error": "Días de la semana inválidos (usa 0=lunes … 6=domingo)."}, status_code=400
+        )
+    if dias:
+        repetir_hasta = str(datos.get("repetir_hasta", "")).strip()
+        if not repetir_hasta:
+            return JSONResponse(
+                {"error": "Indica hasta cuándo se repite el evento."}, status_code=400
+            )
+        if dominio.lunes_de_semana_iso(repetir_hasta) == "":
+            return JSONResponse(
+                {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}, status_code=400
+            )
+        if repetir_hasta < fecha.strip():
+            return JSONResponse(
+                {"error": "La fecha de fin debe ser igual o posterior a la del evento."},
+                status_code=400,
+            )
+        fechas = recurrencia.fechas_recurrencia(fecha.strip(), dias, repetir_hasta)
+        serie = repos.crear_serie_eventos(
+            titulo.strip(),
+            fechas=fechas,
+            dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
+            repetir_hasta=repetir_hasta,
+            **comunes,
+        )
+        return JSONResponse(
+            {
+                "eventos": [_evento_a_dict(e) for e in serie["eventos"]],
+                "serie_id": serie["serie_id"],
+                "total": len(serie["eventos"]),
+            },
+            status_code=201,
+        )
+
+    evento = repos.crear_evento_rota(titulo.strip(), fecha=fecha.strip(), **comunes)
     return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
 
 
@@ -193,11 +238,32 @@ async def actualizar_evento(request: Request) -> Response:
 
 
 async def borrar_evento(request: Request) -> Response:
-    """DELETE /api/rota/eventos/{id}: borra el evento y los turnos que lo referencian."""
+    """DELETE /api/rota/eventos/{id}: borra un evento.
+
+    `?alcance=este` (por defecto) borra solo este evento. En una serie recurrente,
+    `?alcance=siguientes` borra este y los posteriores de la serie, y `?alcance=serie`
+    la borra entera. Un evento sin serie ignora el alcance (siempre borra solo ese).
+    """
     evento_id = request.path_params["evento_id"]
+    alcance = (request.query_params.get("alcance") or "este").strip().lower()
+    if alcance not in _ALCANCES_SERIE:
+        return JSONResponse(
+            {"error": 'Alcance inválido. Usa "este", "siguientes" o "serie".'}, status_code=400
+        )
+
+    if alcance != "este":
+        evento = repos.obtener_evento_rota(evento_id)
+        if evento is None:
+            return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
+        serie_id = evento.get("serie_id") or ""
+        if serie_id:
+            desde = evento["fecha"] if alcance == "siguientes" else None
+            n = repos.borrar_serie_eventos(serie_id, desde=desde)
+            return JSONResponse({"mensaje": f"{n} eventos eliminados.", "eliminados": n})
+
     if not repos.borrar_evento_rota(evento_id):
         return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Evento eliminado."})
+    return JSONResponse({"mensaje": "Evento eliminado.", "eliminados": 1})
 
 
 async def duplicar_evento(request: Request) -> Response:

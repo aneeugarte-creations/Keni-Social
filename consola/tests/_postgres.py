@@ -48,6 +48,7 @@ _TABLAS = (
     "rota_piezas",
     "rota_programas",
     "rota_eventos",
+    "rota_evento_series",
     "rota_swaps_turno",
     "rota_coordinacion",
     "rota_config_franjas",

@@ -30,7 +30,7 @@ import type { Semaforo } from "@/lib/cobertura";
 import { SEMAFORO_ESTILO } from "@/lib/estado-color";
 import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosPublicacion, Publicacion, EventoRota } from "@/types";
+import type { AlcanceSerie, CatalogosPublicacion, Publicacion, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
@@ -39,7 +39,7 @@ import { IconoEvento } from "./icono-evento";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
 
-import { confirmar } from "@/components/comunes/confirmar";
+import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { DialogEditarEvento } from "@/pages/rota/calendario/dialogs";
@@ -347,10 +347,12 @@ export function TarjetaEventoLibre({
   });
   // Borrar el evento por cubrir: no tiene cobertura aún (0 tareas), así que basta el evento.
   const borrar = useMutation({
-    mutationFn: () => api.eliminarEventoRota(evento.id),
-    onSuccess: () => {
+    mutationFn: (alcance?: AlcanceSerie) =>
+      alcance ? api.eliminarEventoRota(evento.id, alcance) : api.eliminarEventoRota(evento.id),
+    onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success(`"${evento.titulo}" borrado.`);
+      const n = res?.eliminados ?? 1;
+      toast.success(n > 1 ? `${n} eventos borrados.` : `"${evento.titulo}" borrado.`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -358,6 +360,20 @@ export function TarjetaEventoLibre({
     },
   });
   const pedirBorrar = async () => {
+    // Evento recurrente: el usuario elige el alcance (este / siguientes / toda la serie).
+    if (evento.serie_id) {
+      const alcance = await elegir({
+        titulo: "Borrar evento recurrente",
+        mensaje: `"${evento.titulo}" se repite. ¿Qué quieres borrar?`,
+        opciones: [
+          { valor: "este", etiqueta: "Solo este" },
+          { valor: "siguientes", etiqueta: "Este y los siguientes" },
+          { valor: "serie", etiqueta: "Toda la serie", destructivo: true },
+        ],
+      });
+      if (alcance) borrar.mutate(alcance as AlcanceSerie);
+      return;
+    }
     if (
       await confirmar({
         mensaje: `¿Borrar "${evento.titulo}"? Desaparece de la lista para todos.`,
@@ -365,7 +381,7 @@ export function TarjetaEventoLibre({
         textoConfirmar: "Borrar",
       })
     )
-      borrar.mutate();
+      borrar.mutate(undefined);
   };
 
   // Editar/Borrar el partido: acciones de coordinación (solo admin), como el resto del reparto.

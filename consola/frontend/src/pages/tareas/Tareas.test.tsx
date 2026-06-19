@@ -4,7 +4,7 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { confirmar } from "@/components/comunes/confirmar";
+import { confirmar, elegir } from "@/components/comunes/confirmar";
 import {
   MarcaActivaContexto,
   type ValorMarcaActiva,
@@ -30,9 +30,11 @@ vi.mock("sonner", () => ({
 }));
 
 // El borrado pasa por la confirmación propia de la app; en tests la resolvemos siempre en `true`
-// (el `<ContenedorConfirmacion />` no está montado, así que sin mock resolvería `false`).
+// (el `<ContenedorConfirmacion />` no está montado, así que sin mock resolvería `false`). `elegir`
+// (alcance de una serie recurrente) lo configura cada test que lo ejerza.
 vi.mock("@/components/comunes/confirmar", () => ({
   confirmar: vi.fn().mockResolvedValue(true),
+  elegir: vi.fn().mockResolvedValue(null),
 }));
 
 function tarea(over: Partial<Publicacion> = {}): Publicacion {
@@ -80,6 +82,7 @@ function evento(over: Partial<EventoRota> = {}): EventoRota {
     es_sabado: false,
     marca: "claro-sports",
     marca_nombre: "Claro Sports",
+    serie_id: "",
     ...over,
   };
 }
@@ -1080,6 +1083,26 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     fireEvent.contextMenu(badges[badges.length - 1]);
     fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
     await waitFor(() => expect(borrar).toHaveBeenCalledWith("ev9"));
+  });
+
+  it("BORRAR un evento RECURRENTE pregunta el alcance y lo pasa a eliminarEventoRota", async () => {
+    const borrar = vi
+      .spyOn(apiMod.api, "eliminarEventoRota")
+      .mockResolvedValue({ mensaje: "ok", eliminados: 5 } as never);
+    // El evento pertenece a una serie → se ofrece elegir el alcance; el usuario elige «toda la serie».
+    vi.mocked(elegir).mockResolvedValueOnce("serie");
+    renderTareas(
+      [],
+      [evento({ id: "ev9", titulo: "Peloteando", serie_id: "serie-1" })],
+      usuario("admin", "u-admin"),
+    );
+
+    fireEvent.click(await screen.findByText("Peloteando"));
+    const badges = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(badges[badges.length - 1]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
+    await waitFor(() => expect(elegir).toHaveBeenCalled());
+    await waitFor(() => expect(borrar).toHaveBeenCalledWith("ev9", "serie"));
   });
 
   it("un EDITOR (no admin) NO ve Editar/Borrar del evento", async () => {

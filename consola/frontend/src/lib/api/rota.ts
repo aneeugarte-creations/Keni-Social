@@ -2,6 +2,7 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion, query, queryEventos, descargar } from "./_core";
 import type {
+  AlcanceSerie,
   CoordinacionTurno,
   CuerpoActualizarAusenciaRota,
   CuerpoActualizarEventoRota,
@@ -39,6 +40,7 @@ import type {
   RespuestaConfigFranjas,
   RespuestaCoordinacionSemana,
   RespuestaCopiarSemana,
+  RespuestaCrearEventoRota,
   RespuestaCrearTurnosLote,
   RespuestaEquipoRota,
   RespuestaEventoRota,
@@ -79,15 +81,22 @@ export const apiRota = {
     } = {},
     signal?: AbortSignal,
   ) => peticion<RespuestaEventosRota>(`/rota/eventos${queryEventos(params)}`, { signal }),
+  // Crea un evento suelto o, si el cuerpo trae `dias_semana` + `repetir_hasta`, una SERIE
+  // recurrente (respuesta `{eventos, serie_id, total}`). El llamante distingue por la forma.
   crearEventoRota: (cuerpo: CuerpoCrearEventoRota) =>
-    peticion<RespuestaEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaCrearEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
   actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota) =>
     peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}`, {
       metodo: "PATCH",
       json: cuerpo,
     }),
-  eliminarEventoRota: (id: string) =>
-    peticion<RespuestaMensaje>(`/rota/eventos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  // `alcance` (solo útil en una serie): "este" (def.) borra el evento; "siguientes" borra este
+  // y los posteriores de la serie; "serie" la borra entera.
+  eliminarEventoRota: (id: string, alcance?: AlcanceSerie) =>
+    peticion<RespuestaMensaje & { eliminados?: number }>(
+      `/rota/eventos/${encodeURIComponent(id)}${alcance ? `?alcance=${alcance}` : ""}`,
+      { metodo: "DELETE" },
+    ),
   duplicarEventoRota: (id: string, cuerpo: CuerpoDuplicarEventoRota = {}) =>
     peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}/duplicar`, {
       metodo: "POST",

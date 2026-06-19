@@ -192,11 +192,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado         TEXT NOT NULL DEFAULT '',
         origen         TEXT NOT NULL DEFAULT '',
         origen_ref     TEXT NOT NULL DEFAULT '',
-        marca          TEXT NOT NULL DEFAULT ''
+        marca          TEXT NOT NULL DEFAULT '',
+        serie_id       TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_marca ON rota_eventos (marca)",
+    # `serie_id`: agrupa las ocurrencias MATERIALIZADAS de un evento recurrente (una fila por
+    # día). "" = evento suelto. La regla (días de semana + fecha fin) vive en `rota_evento_series`;
+    # las ocurrencias son eventos reales e independientes (cada uno con su propia cobertura).
+    "CREATE INDEX IF NOT EXISTS idx_rota_eventos_serie ON rota_eventos (serie_id)",
+    # Regla de una serie recurrente. Una serie nace al crear un evento con recurrencia y se
+    # MATERIALIZA en N filas de `rota_eventos` (mismo `serie_id`). Aquí se guarda el patrón para
+    # poder mostrarlo/editarlo y, más adelante, extender en horizonte rodante (daemon).
+    #   - dias_semana:   CSV de 0..6 (0=lunes..6=domingo), p. ej. "0,1,2,3,4" = días laborables.
+    #   - repetir_hasta: ISO fin (inclusive). "" = sin fin (reservado para el horizonte rodante).
+    """
+    CREATE TABLE IF NOT EXISTS rota_evento_series (
+        id            TEXT PRIMARY KEY,
+        dias_semana   TEXT NOT NULL DEFAULT '',
+        repetir_hasta TEXT NOT NULL DEFAULT '',
+        fecha_base    TEXT NOT NULL DEFAULT '',
+        marca         TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
     # `es_descanso`: marca una franja como "no laboral" (turno planificado de descanso).
     # Una persona con turno en franja Descanso esta planificada para no trabajar ese dia
     # (distinto de "olvido de asignacion").

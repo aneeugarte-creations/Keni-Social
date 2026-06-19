@@ -35,8 +35,10 @@ _COLS_EVENTO_ROTA = (
     "actualizado",
     "creado",
     "marca",
+    "serie_id",
 )
 _SELECT_EVENTO_ROTA = f"SELECT {', '.join(_COLS_EVENTO_ROTA)} FROM rota_eventos"
+_COLS_SERIE_EVENTO = ("id", "dias_semana", "repetir_hasta", "fecha_base", "marca", "creado")
 _CAMPOS_EDITABLES_EVENTO_ROTA = (
     "titulo",
     "fecha",
@@ -57,7 +59,39 @@ def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
     evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
     evento["marca"] = fila["marca"] or ""
+    evento["serie_id"] = fila["serie_id"] or ""
     return evento
+
+
+def _nueva_fila_evento(
+    titulo: str,
+    *,
+    fecha: str,
+    hora: str,
+    contenido: str,
+    nota: str,
+    tipo_cobertura: str,
+    prioridad: str,
+    marca: str,
+    serie_id: str,
+    ahora: str,
+) -> dict[str, Any]:
+    """Construye la fila de un evento NUEVO (id propio, `cambiado=0`, `actualizado`=`creado`)."""
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "titulo": titulo,
+        "fecha": fecha or "",
+        "hora": hora or "",
+        "contenido": contenido or "",
+        "nota": nota or "",
+        "tipo_cobertura": tipo_cobertura if tipo_cobertura in TIPOS_COBERTURA else TIPO_COBERTURA_TRANSMISION,
+        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_EVENTO_DEFECTO,
+        "cambiado": 0,
+        "actualizado": ahora,
+        "creado": ahora,
+        "marca": marca or "",
+        "serie_id": serie_id or "",
+    }
 
 
 # --- Eventos / transmisiones --------------------------------------------------
@@ -73,30 +107,29 @@ def crear_evento_rota(
     tipo_cobertura: str = TIPO_COBERTURA_TRANSMISION,
     prioridad: str = PRIORIDAD_EVENTO_DEFECTO,
     marca: str = "",
+    serie_id: str = "",
 ) -> dict[str, Any]:
     """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API).
 
     Nace `cambiado=0` (sin reprogramar) y con `actualizado`=`creado` (alta = primera version).
     `marca` es el id canonico de la marca a la que pertenece el evento ("" = sin marca asignada).
+    `serie_id` agrupa las ocurrencias de un evento recurrente ("" = evento suelto).
     """
-    ahora = ahora_iso()
-    fila = {
-        "id": uuid.uuid4().hex[:12],
-        "titulo": titulo,
-        "fecha": fecha or "",
-        "hora": hora or "",
-        "contenido": contenido or "",
-        "nota": nota or "",
-        "tipo_cobertura": tipo_cobertura if tipo_cobertura in TIPOS_COBERTURA else TIPO_COBERTURA_TRANSMISION,
-        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_EVENTO_DEFECTO,
-        "cambiado": 0,
-        "actualizado": ahora,
-        "creado": ahora,
-        "marca": marca or "",
-    }
+    fila = _nueva_fila_evento(
+        titulo,
+        fecha=fecha,
+        hora=hora,
+        contenido=contenido,
+        nota=nota,
+        tipo_cobertura=tipo_cobertura,
+        prioridad=prioridad,
+        marca=marca,
+        serie_id=serie_id,
+        ahora=ahora_iso(),
+    )
+    marcadores = ", ".join("?" for _ in _COLS_EVENTO_ROTA)
     con = _conectar()
     try:
-        marcadores = ", ".join("?" for _ in _COLS_EVENTO_ROTA)
         con.execute(
             f"INSERT INTO rota_eventos ({', '.join(_COLS_EVENTO_ROTA)}) VALUES ({marcadores})",
             tuple(fila[col] for col in _COLS_EVENTO_ROTA),
@@ -106,6 +139,71 @@ def crear_evento_rota(
         con.close()
     fila["cambiado"] = bool(fila["cambiado"])
     return fila
+
+
+def crear_serie_eventos(
+    titulo: str,
+    *,
+    fechas: list[str],
+    hora: str = "",
+    contenido: str = "",
+    nota: str = "",
+    tipo_cobertura: str = TIPO_COBERTURA_TRANSMISION,
+    prioridad: str = PRIORIDAD_EVENTO_DEFECTO,
+    marca: str = "",
+    dias_semana_csv: str = "",
+    repetir_hasta: str = "",
+) -> dict[str, Any]:
+    """Materializa una serie recurrente: una fila `rota_eventos` por fecha, todas con el mismo
+    `serie_id`, mas la regla en `rota_evento_series`. Todo en UNA transaccion.
+
+    `fechas` son las ocurrencias ya expandidas (las calcula `dominio.recurrencia`, no este modulo).
+    Devuelve `{"serie_id": str, "eventos": [evento, ...]}` en el orden de `fechas`. No valida.
+    """
+    ahora = ahora_iso()
+    serie_id = uuid.uuid4().hex[:12]
+    filas = [
+        _nueva_fila_evento(
+            titulo,
+            fecha=fecha,
+            hora=hora,
+            contenido=contenido,
+            nota=nota,
+            tipo_cobertura=tipo_cobertura,
+            prioridad=prioridad,
+            marca=marca,
+            serie_id=serie_id,
+            ahora=ahora,
+        )
+        for fecha in fechas
+    ]
+    serie = {
+        "id": serie_id,
+        "dias_semana": dias_semana_csv or "",
+        "repetir_hasta": repetir_hasta or "",
+        "fecha_base": fechas[0] if fechas else "",
+        "marca": marca or "",
+        "creado": ahora,
+    }
+    marcadores_ev = ", ".join("?" for _ in _COLS_EVENTO_ROTA)
+    marcadores_se = ", ".join("?" for _ in _COLS_SERIE_EVENTO)
+    insert_ev = f"INSERT INTO rota_eventos ({', '.join(_COLS_EVENTO_ROTA)}) VALUES ({marcadores_ev})"
+    con = _conectar()
+    try:
+        con.execute(
+            f"INSERT INTO rota_evento_series ({', '.join(_COLS_SERIE_EVENTO)}) VALUES ({marcadores_se})",
+            tuple(serie[col] for col in _COLS_SERIE_EVENTO),
+        )
+        # La conexion expone `execute`: insertamos una ocurrencia por sentencia, todas en la
+        # misma transaccion (commit unico al final). Una serie son <= ~366 ocurrencias.
+        for fila in filas:
+            con.execute(insert_ev, tuple(fila[col] for col in _COLS_EVENTO_ROTA))
+        con.commit()
+    finally:
+        con.close()
+    for fila in filas:
+        fila["cambiado"] = bool(fila["cambiado"])
+    return {"serie_id": serie_id, "eventos": filas}
 
 
 def listar_eventos_rota(
@@ -228,5 +326,45 @@ def borrar_evento_rota(evento_id: str) -> bool:
         cur = con.execute("DELETE FROM rota_eventos WHERE id = ?", (evento_id,))
         con.commit()
         return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def obtener_serie_evento(serie_id: str) -> dict[str, Any] | None:
+    """Devuelve la regla de la serie (`rota_evento_series`) o None si no existe."""
+    if not serie_id:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"SELECT {', '.join(_COLS_SERIE_EVENTO)} FROM rota_evento_series WHERE id = ?",
+            (serie_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return {col: fila[col] for col in _COLS_SERIE_EVENTO} if fila is not None else None
+
+
+def borrar_serie_eventos(serie_id: str, *, desde: str | None = None) -> int:
+    """Borra las ocurrencias de una serie; devuelve cuantas filas se borraron.
+
+    `desde=None` borra TODA la serie (y su regla); `desde='AAAA-MM-DD'` borra solo las
+    ocurrencias con `fecha >= desde` (alcance "este y los siguientes") y conserva la regla
+    (la serie sigue viva hacia atras). Sin serie_id no borra nada.
+    """
+    if not serie_id:
+        return 0
+    con = _conectar()
+    try:
+        if desde:
+            cur = con.execute(
+                "DELETE FROM rota_eventos WHERE serie_id = ? AND fecha >= ?",
+                (serie_id, desde),
+            )
+        else:
+            cur = con.execute("DELETE FROM rota_eventos WHERE serie_id = ?", (serie_id,))
+            con.execute("DELETE FROM rota_evento_series WHERE id = ?", (serie_id,))
+        con.commit()
+        return cur.rowcount
     finally:
         con.close()

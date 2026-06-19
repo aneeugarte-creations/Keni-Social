@@ -57,6 +57,7 @@ function evento(over: Partial<EventoRota> = {}): EventoRota {
     es_sabado: false,
     marca: "",
     marca_nombre: "",
+    serie_id: "",
     ...over,
   };
 }

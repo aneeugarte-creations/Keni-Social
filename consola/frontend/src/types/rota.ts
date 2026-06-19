@@ -56,6 +56,8 @@ export interface EventoRota {
   marca: string;
   /** Nombre legible de la marca (derivado del catálogo; "" si sin marca). */
   marca_nombre: string;
+  /** Agrupa las ocurrencias de un evento recurrente ("" = evento suelto). */
+  serie_id: string;
 }
 
 export interface RespuestaEventosRota {
@@ -65,6 +67,19 @@ export interface RespuestaEventosRota {
 export interface RespuestaEventoRota {
   evento: EventoRota;
 }
+
+/** Respuesta de crear una SERIE recurrente: las ocurrencias materializadas + su id de serie. */
+export interface RespuestaSerieEventosRota {
+  eventos: EventoRota[];
+  serie_id: string;
+  total: number;
+}
+
+/** Crear devuelve un evento suelto (`{evento}`) o una serie (`{eventos, serie_id, total}`). */
+export type RespuestaCrearEventoRota = RespuestaEventoRota | RespuestaSerieEventosRota;
+
+/** Alcance de un borrado/edición sobre una serie recurrente. */
+export type AlcanceSerie = "este" | "siguientes" | "serie";
 
 /**
  * Filtros de la lista de Eventos (pestaña /rota → Eventos). Todo opcional; los
@@ -93,6 +108,14 @@ export interface CuerpoCrearEventoRota {
   prioridad?: PrioridadEvento;
   /** Id canónico de marca del evento ("" o ausente = sin marca). */
   marca?: string;
+  /**
+   * Recurrencia (opcional). Días de la semana en que se repite (0=lunes … 6=domingo); con
+   * días, el backend MATERIALIZA una serie (un evento por ocurrencia) hasta `repetir_hasta`.
+   * Ausente o vacío = evento suelto.
+   */
+  dias_semana?: number[];
+  /** Fin de la recurrencia (ISO AAAA-MM-DD, inclusive). Requerido si hay `dias_semana`. */
+  repetir_hasta?: string;
 }
 
 /**

@@ -409,6 +409,8 @@ _COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("origen", "TEXT NOT NULL DEFAULT ''"),
     ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
     ("marca", "TEXT NOT NULL DEFAULT ''"),
+    # serie_id: agrupa las ocurrencias de un evento recurrente; legado -> "" (evento suelto).
+    ("serie_id", "TEXT NOT NULL DEFAULT ''"),
 )
 
 # Columnas que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL declarativo ya

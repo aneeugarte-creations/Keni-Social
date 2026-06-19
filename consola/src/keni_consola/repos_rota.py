@@ -68,6 +68,41 @@ def borrar_evento_rota(evento_id: str) -> bool:
     return db.borrar_evento_rota(evento_id)
 
 
+def crear_serie_eventos(
+    titulo: str,
+    *,
+    fechas: list[str],
+    hora: str = "",
+    contenido: str = "",
+    nota: str = "",
+    tipo_cobertura: str = "transmision",
+    prioridad: str = "media",
+    marca: str = "",
+    dias_semana_csv: str = "",
+    repetir_hasta: str = "",
+) -> dict[str, Any]:
+    return db.crear_serie_eventos(
+        titulo,
+        fechas=fechas,
+        hora=hora,
+        contenido=contenido,
+        nota=nota,
+        tipo_cobertura=tipo_cobertura,
+        prioridad=prioridad,
+        marca=marca,
+        dias_semana_csv=dias_semana_csv,
+        repetir_hasta=repetir_hasta,
+    )
+
+
+def obtener_serie_evento(serie_id: str) -> dict[str, Any] | None:
+    return db.obtener_serie_evento(serie_id)
+
+
+def borrar_serie_eventos(serie_id: str, *, desde: str | None = None) -> int:
+    return db.borrar_serie_eventos(serie_id, desde=desde)
+
+
 def crear_turno_rota(
     semana: str,
     fecha: str,

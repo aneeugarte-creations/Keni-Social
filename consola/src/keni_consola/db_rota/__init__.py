@@ -72,9 +72,12 @@ from .eventos import (
     _fila_a_evento_rota,
     actualizar_evento_rota,
     borrar_evento_rota,
+    borrar_serie_eventos,
     crear_evento_rota,
+    crear_serie_eventos,
     listar_eventos_rota,
     obtener_evento_rota,
+    obtener_serie_evento,
 )
 from .franjas_semana import (
     _COLS_FRANJA_SEMANA,
@@ -166,9 +169,12 @@ __all__ = [
     "_fila_a_evento_rota",
     "actualizar_evento_rota",
     "borrar_evento_rota",
+    "borrar_serie_eventos",
     "crear_evento_rota",
+    "crear_serie_eventos",
     "listar_eventos_rota",
     "obtener_evento_rota",
+    "obtener_serie_evento",
     # Turnos (+ asignacion flexible).
     "_CAMPOS_EDITABLES_TURNO_ROTA",
     "_COLS_TURNO_ROTA",

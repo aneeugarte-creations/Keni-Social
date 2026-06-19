@@ -214,6 +214,112 @@ def test_borrar_evento_no_arrastra_turnos(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Eventos RECURRENTES (serie materializada: una fila por ocurrencia)           #
+# --------------------------------------------------------------------------- #
+#
+# LUNES1 = 2026-05-25 (lunes). La semana 25..31 may = L M X J V S D.
+_MIE = "2026-05-27"  # miércoles de esa semana
+_VIE = "2026-05-29"  # viernes de esa semana
+
+
+def _crear_serie(cli, **campos) -> dict:
+    """POST /api/rota/eventos con recurrencia; devuelve el cuerpo {eventos, serie_id, total}."""
+    base = {
+        "titulo": "Peloteando",
+        "fecha": LUNES1,
+        "dias_semana": [0, 1, 2, 3, 4],
+        "repetir_hasta": _VIE,
+    }
+    base.update(campos)
+    r = cli.post("/api/rota/eventos", json=base)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_crear_evento_suelto_devuelve_evento_con_serie_vacia(cliente):
+    """Sin recurrencia el contrato no cambia: {evento} con serie_id="" (evento suelto)."""
+    ev = _crear_evento(cliente)
+    assert ev["serie_id"] == ""
+
+
+def test_crear_serie_laborables_materializa_una_fila_por_dia(cliente):
+    cuerpo = _crear_serie(cliente)
+    assert cuerpo["total"] == 5  # L M X J V
+    assert len(cuerpo["eventos"]) == 5
+    assert cuerpo["serie_id"]
+    fechas = [e["fecha"] for e in cuerpo["eventos"]]
+    assert fechas == ["2026-05-25", "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29"]
+    # Todas las ocurrencias comparten el mismo serie_id (no vacío).
+    assert {e["serie_id"] for e in cuerpo["eventos"]} == {cuerpo["serie_id"]}
+    # Y aparecen en el listado del calendario con su serie_id.
+    listados = cliente.get("/api/rota/eventos").json()["eventos"]
+    de_la_serie = [e for e in listados if e["serie_id"] == cuerpo["serie_id"]]
+    assert len(de_la_serie) == 5
+
+
+def test_crear_serie_sin_repetir_hasta_400(cliente):
+    r = cliente.post(
+        "/api/rota/eventos",
+        json={"titulo": "X", "fecha": LUNES1, "dias_semana": [0, 2, 4]},
+    )
+    assert r.status_code == 400
+
+
+def test_crear_serie_dias_invalidos_400(cliente):
+    r = cliente.post(
+        "/api/rota/eventos",
+        json={"titulo": "X", "fecha": LUNES1, "dias_semana": [9], "repetir_hasta": _VIE},
+    )
+    assert r.status_code == 400
+
+
+def test_crear_serie_fin_anterior_a_la_base_400(cliente):
+    r = cliente.post(
+        "/api/rota/eventos",
+        json={"titulo": "X", "fecha": _VIE, "dias_semana": [0], "repetir_hasta": LUNES1},
+    )
+    assert r.status_code == 400
+
+
+def test_borrar_alcance_serie_borra_todas_las_ocurrencias(cliente):
+    cuerpo = _crear_serie(cliente)
+    sid = cuerpo["serie_id"]
+    medio = cuerpo["eventos"][2]  # miércoles
+    d = cliente.delete(f"/api/rota/eventos/{medio['id']}?alcance=serie")
+    assert d.status_code == 200
+    assert d.json()["eliminados"] == 5
+    listados = cliente.get("/api/rota/eventos").json()["eventos"]
+    assert [e for e in listados if e["serie_id"] == sid] == []
+
+
+def test_borrar_alcance_siguientes_conserva_las_anteriores(cliente):
+    cuerpo = _crear_serie(cliente)
+    sid = cuerpo["serie_id"]
+    miercoles = next(e for e in cuerpo["eventos"] if e["fecha"] == _MIE)
+    d = cliente.delete(f"/api/rota/eventos/{miercoles['id']}?alcance=siguientes")
+    assert d.status_code == 200
+    assert d.json()["eliminados"] == 3  # X J V
+    quedan = sorted(
+        e["fecha"] for e in cliente.get("/api/rota/eventos").json()["eventos"] if e["serie_id"] == sid
+    )
+    assert quedan == ["2026-05-25", "2026-05-26"]  # L M
+
+
+def test_borrar_alcance_invalido_400(cliente):
+    ev = _crear_evento(cliente)
+    r = cliente.delete(f"/api/rota/eventos/{ev['id']}?alcance=humo")
+    assert r.status_code == 400
+
+
+def test_borrar_alcance_serie_en_evento_suelto_borra_solo_ese(cliente):
+    """Un evento sin serie ignora el alcance: borra solo ese (no falla)."""
+    ev = _crear_evento(cliente)
+    d = cliente.delete(f"/api/rota/eventos/{ev['id']}?alcance=serie")
+    assert d.status_code == 200
+    assert cliente.get("/api/rota/eventos").json()["eventos"] == []
+
+
+# --------------------------------------------------------------------------- #
 # Cobertura + prioridad + reprogramaciones (ola B, #144)                       #
 # --------------------------------------------------------------------------- #
 
