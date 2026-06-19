@@ -166,6 +166,36 @@ KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
         "Televisión": "estreno, serie de netflix, hbo max, disney plus, masterchef, exatlon, telenovela",
         "Virales": "viral, se viraliza, redes sociales, polemica en redes",
     },
+    # Fundación: sus feeds son MIXTOS (divulgación, buenas noticias) y vienen con slugs gruesos
+    # (entretenimiento/internacional/mx) que no mapean a estas líneas; el clasificador léxico
+    # asigna la línea fina por CONTENIDO de cada nota. Catálogo de arranque; el equipo lo refina
+    # desde la UI de Líneas. Tokens distintivos para minimizar el cruce (gana la línea con más
+    # coincidencias; empate -> la primera del orden, Ciencia/Tech).
+    "fundacion": {
+        "Ciencia/Tech": "ciencia, cientifico, cientificos, cientifica, investigacion, estudio, "
+        "descubrimiento, hallazgo, fisica, quimica, biologia, astronomia, espacio, nasa, universo, "
+        "galaxia, telescopio, tecnologia, inteligencia artificial, robot, algoritmo, software, "
+        "innovacion, ingenieria, fosil, dinosaurio, arqueologia, arqueologico, adn, genetica, "
+        "particula, cuantica",
+        "Salud": "salud, medico, medicos, medicina, enfermedad, enfermedades, virus, vacuna, "
+        "vacunas, cancer, diabetes, obesidad, salud mental, depresion, ansiedad, nutricion, dieta, "
+        "alimentacion, ejercicio, bienestar, hospital, paciente, pacientes, sintoma, sintomas, "
+        "tratamiento, terapia, farmaco, cerebro, corazon, sueno, longevidad",
+        "Medio ambiente": "medio ambiente, ambiental, clima, climatico, cambio climatico, "
+        "calentamiento, sostenible, sostenibilidad, sustentable, ecologia, ecosistema, "
+        "biodiversidad, especie, especies, contaminacion, emisiones, carbono, reciclaje, "
+        "energia renovable, renovable, solar, eolica, bosque, bosques, deforestacion, oceano, "
+        "oceanos, arrecife, fauna, naturaleza, residuos, plastico",
+        "Cultura": "cultura, cultural, arte, artista, museo, exposicion, pintura, escultura, "
+        "musica, concierto, festival, cine, pelicula, libro, literatura, novela, escritor, poesia, "
+        "teatro, danza, patrimonio, historia, historico, civilizacion, tradicion, gastronomia",
+        "Educación": "educacion, educativo, escuela, escuelas, maestro, maestros, docente, alumno, "
+        "alumnos, estudiante, estudiantes, universidad, aprendizaje, ensenanza, beca, becas, aula, "
+        "pedagogia, alfabetizacion, capacitacion",
+        "Impacto social": "impacto social, comunidad, comunidades, solidaridad, voluntario, "
+        "voluntariado, donacion, donaciones, ong, beneficencia, pobreza, desigualdad, inclusion, "
+        "derechos humanos, vulnerable, vulnerables, refugiados, migrantes, discapacidad, equidad",
+    },
 }
 
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.

@@ -1412,6 +1412,32 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     assert [c["id"] for c in elegidos] == ["brx"]
 
 
+def test_clusters_para_promover_fundacion_clasifica_por_contenido(entorno, monkeypatch):
+    """Fundación: sus feeds vienen con slugs gruesos (entretenimiento/internacional) que NO
+    mapean a sus líneas, así que la línea del plan se decide por CONTENIDO (keywords). Una
+    candidata de divulgación compite por el cupo de la línea que le toca por su texto
+    (Ciencia/Tech), no por el slug del feed.
+    """
+    from keni_consola import bootstrap_lineas
+
+    bootstrap_lineas.inicializar_lineas()
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
+    # El encaje de marca no es lo que se prueba aquí (la categoría sí): se desactiva su umbral.
+    monkeypatch.setenv("KENI_PROMOVER_MIN_MARCA", "0")
+    _inicializar_cluster(
+        "sci", marca="fundacion", categoria="entretenimiento", score=0.9,
+        titulo="Científicos descubren un fósil clave de la evolución",
+        resumen="Un equipo de investigación presenta el hallazgo",
+        verificacion_fuente=pc.VERIFICACION_VERIFICADO,
+    )
+
+    elegidos = pc.clusters_para_promover(
+        "fundacion", maximo=5, cupos_categoria={ciencia["id"]: 1}
+    )
+
+    assert [c["id"] for c in elegidos] == ["sci"]
+
+
 def test_temas_para_copy_incluye_verificacion_saltada(entorno):
     """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})

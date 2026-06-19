@@ -102,6 +102,32 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
 
 
+def test_mesa_fundacion_clasifica_candidatas_por_contenido(cliente, monkeypatch):
+    """Fundación: sus feeds vienen con slugs gruesos (entretenimiento/internacional) que NO
+    mapean a sus líneas; la mesa reparte cada candidata a su línea del plan por CONTENIDO
+    (keywords), no por el slug del feed. Así un feed mixto (divulgación) no cae entero a
+    «Fuera del plan»."""
+    bootstrap_lineas.inicializar_lineas()
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")["id"]
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")["id"]
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{ciencia}:1,{salud}:1")
+    # Feed «entretenimiento» (Muy Interesante) pero CONTENIDO de ciencia / salud.
+    _inicializar("sci", score=0.9, marca="fundacion", categoria="entretenimiento",
+                 titulo="Científicos descubren un fósil que reescribe la evolución")
+    _inicializar("med", score=0.8, marca="fundacion", categoria="internacional",
+                 titulo="Una nueva vacuna reduce el cáncer en pacientes")
+    # Sin línea reconocible por contenido: se queda fuera del plan.
+    _inicializar("nada", score=0.7, marca="fundacion", categoria="entretenimiento",
+                 titulo="El equipo gana el partido en el último minuto")
+
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "fundacion"}).json()
+    por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
+    assert [h["id"] for h in por_linea[ciencia]["historias"]] == ["sci"]
+    assert [h["id"] for h in por_linea[salud]["historias"]] == ["med"]
+    assert datos["fuera_de_plan"]["en_pool"] == 1
+    assert datos["fuera_de_plan"]["historias"][0]["id"] == "nada"
+
+
 def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatch):
     """La mesa se ve SIEMPRE en español: una historia extranjera sin traducir SÍ aparece, pero con
     un placeholder "Traduciendo…" (nunca su titular en idioma original) y `traduciendo=True`. La

@@ -40,6 +40,7 @@ __all__ = [
     "clusters_para_promover",
     "clusters_pendientes_verificar",
     "categoria_efectiva",
+    "linea_de_cluster",
     "cupo_produccion_restante",
     "cupos_categoria_restantes",
     "promover_clusters_marca",
@@ -939,13 +940,37 @@ def categoria_efectiva(cluster: dict[str, Any]) -> str:
     return str(cluster.get("categoria") or "").strip().lower()
 
 
+def linea_de_cluster(
+    marca: str, cluster: dict[str, Any], lineas: list[dict[str, Any]]
+) -> str:
+    """LÍNEA (id de etiqueta vertical) con la que un cluster compite en el plan. PURA (recibe
+    las líneas ya leídas).
+
+    'breaking' si lo es; si el SLUG de su feed cae en una línea, esa; si no, la línea por
+    CONTENIDO (keywords de `lineas`, clasificador léxico) — así un feed MIXTO (divulgación,
+    buenas noticias) reparte cada nota a su línea en vez de caer entera a una sola. '' si nada
+    casa. `lineas` son las etiquetas vertical de la marca; con la lista vacía no hay fallback por
+    contenido y se queda con el slug (el comportamiento anterior)."""
+    from .. import bootstrap_lineas
+    from ..dominio import clasificador_lineas
+
+    cat = bootstrap_lineas.linea_id_de_slug(marca, categoria_efectiva(cluster))
+    if cat:
+        return cat
+    texto = f"{_titulo_es(cluster)}\n{_resumen_es(cluster)}"
+    return clasificador_lineas.clasificar(texto, lineas) or ""
+
+
 def _categoria_plan(marca: str, cluster: dict[str, Any]) -> str:
     """Clave de PLAN/PROGRAMACIÓN de una historia: su LÍNEA (id de etiqueta vertical), con
-    'breaking' como señal y '' = genérico. Re-clava el motor del slug de feed a la línea
-    (que es con lo que el equipo planifica y programa). Best-effort: '' si no resuelve."""
-    from .. import bootstrap_lineas
-
-    return bootstrap_lineas.linea_id_de_slug(marca, categoria_efectiva(cluster))
+    'breaking' como señal y '' = genérico. Re-clava el slug de feed a la línea (que es con lo
+    que el equipo planifica y programa); si el feed no casa ninguna línea, clasifica por
+    CONTENIDO contra las líneas de la marca. Best-effort: '' si no resuelve."""
+    try:
+        lineas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    except Exception:  # noqa: BLE001 -- sin líneas legibles, cae al slug puro
+        lineas = []
+    return linea_de_cluster(marca, cluster, lineas)
 
 
 def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:

@@ -385,21 +385,22 @@ async def mesa(request: Request) -> Response:
     clusters, _total = repos.listar_noticia_clusters(
         marca=marca, estado="nuevo", limite=_MESA_MUESTRA
     )
-    # Reparto por LÍNEA (el pool ya viene ordenado por score: cada lista queda rankeada). La
-    # historia se reparte por la línea de su feed (id), el mismo eje con que se clava el plan.
-    from ... import bootstrap_lineas
-
+    # Líneas (vertical) de la marca: el reparto al plan y la barra de grupos las reusan.
+    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    grupos_orden = _grupos_ordenados(vert_etiquetas)
+    # Reparto por LÍNEA (el pool ya viene ordenado por score: cada lista queda rankeada). Una
+    # historia compite por la línea de su feed (id); si el slug del feed no cae en una línea del
+    # plan, se clasifica por CONTENIDO (keywords) — así un feed mixto (divulgación) reparte cada
+    # nota a su línea. Las marcas con grupos clasifican aparte (abajo) y aquí no reclasifican.
     por_linea_pool: dict[str, list[dict[str, Any]]] = {}
     for c in clusters:
-        cat = bootstrap_lineas.linea_id_de_slug(marca, _pc_ingesta.categoria_efectiva(c))
+        cat = _pc_ingesta.linea_de_cluster(marca, c, [] if grupos_orden else vert_etiquetas)
         destino = cat if cat in plan else "__fuera__"
         por_linea_pool.setdefault(destino, []).append(c)
 
     # Barra de GRUPOS (navegación temática): solo marcas con grupos definidos (p. ej. Claro
     # Sports). Clasifica cada candidata en su LÍNEA por léxico (keywords) y la cuelga de su GRUPO.
     # El resto de marcas (sin grupos, p. ej. UnoTV) conserva el layout por plan y se salta el coste.
-    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
-    grupos_orden = _grupos_ordenados(vert_etiquetas)
     grupo_por_cluster: dict[str, str] = {}
     conteo_grupo: dict[str, int] = dict.fromkeys(grupos_orden, 0)
     if grupos_orden:
