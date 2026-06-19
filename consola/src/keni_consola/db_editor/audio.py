@@ -27,13 +27,16 @@ _COLS_AUDIO_TRANSCRIPCIONES = (
     "error",
     "gen_id",
     "tratamientos",
+    "autor_id",
     "creado",
     "actualizado",
 )
 _SELECT_AUDIO_TRANSCRIPCIONES = (
     f"SELECT {', '.join(_COLS_AUDIO_TRANSCRIPCIONES)} FROM audio_transcripciones"
 )
+# `marca` editable: permite mover un audio entre PERSONAL ('') y una marca.
 _CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES: tuple[str, ...] = (
+    "marca",
     "nombre",
     "idioma",
     "estado",
@@ -44,6 +47,7 @@ _CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES: tuple[str, ...] = (
     "error",
     "gen_id",
     "tratamientos",
+    "autor_id",
 )
 
 
@@ -72,11 +76,15 @@ def crear_audio_transcripcion(
     error: str = "",
     gen_id: str = "",
     tratamientos: str = "",
+    autor_id: str = "",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
 ) -> dict[str, Any]:
-    """Crea una transcripcion de audio y la devuelve. NO valida media_id (lo hace la API)."""
+    """Crea una transcripcion de audio y la devuelve. NO valida media_id (lo hace la API).
+
+    `marca`='' => audio PERSONAL (privado de `autor_id`); `marca`<>'' => de marca (colaborativo).
+    """
     ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
@@ -92,6 +100,7 @@ def crear_audio_transcripcion(
         "error": error or "",
         "gen_id": gen_id or "",
         "tratamientos": tratamientos or "",
+        "autor_id": autor_id or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -110,9 +119,13 @@ def crear_audio_transcripcion(
 
 
 def listar_audio_transcripciones(
-    *, marca: str | None = None, estado: str | None = None
+    *, marca: str | None = None, estado: str | None = None, visible_para: str | None = None
 ) -> list[dict[str, Any]]:
-    """Transcripciones de audio, filtros combinables (AND). Mas recientes primero."""
+    """Transcripciones de audio, filtros combinables (AND). Mas recientes primero.
+
+    `visible_para` (id de usuario) acota la VISIBILIDAD: incluye los audios de marca (colaborativos)
+    y SOLO los personales (`marca`='') de ese usuario. Sin `visible_para`, solo los de marca.
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
@@ -121,6 +134,11 @@ def listar_audio_transcripciones(
     if estado:
         clausulas.append("estado = ?")
         params.append(estado)
+    if visible_para:
+        clausulas.append("(marca <> '' OR autor_id = ?)")
+        params.append(visible_para)
+    else:
+        clausulas.append("marca <> ''")
     sql = _SELECT_AUDIO_TRANSCRIPCIONES
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)

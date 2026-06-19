@@ -78,7 +78,8 @@ def test_crear_cola_llena_no_deja_huerfano(cliente, monkeypatch):
     assert repos.listar_audio_transcripciones() == []
 
 
-def test_crear_sin_marca_400(cliente, monkeypatch):
+def test_crear_sin_marca_ni_sesion_400(cliente, monkeypatch):
+    """Sin marca y sin sesión (token de bootstrap): no se puede saber de quién es el personal -> 400."""
     _mock_subida_y_cola(monkeypatch, {})
     r = cliente.post(
         "/api/audio/transcripciones",
@@ -86,6 +87,54 @@ def test_crear_sin_marca_400(cliente, monkeypatch):
         data={"marca": ""},
     )
     assert r.status_code == 400
+
+
+def _mock_autor(monkeypatch, uid="u-mike", nombre="Mike"):
+    from keni_consola import seguridad
+
+    monkeypatch.setattr(seguridad, "autor_de_peticion", lambda request: {"id": uid, "usuario": nombre})
+
+
+def test_crear_personal_y_visibilidad(cliente, monkeypatch):
+    """Audio PERSONAL (sin marca) con sesión: es del autor; solo lo ve él, no otros."""
+    _mock_subida_y_cola(monkeypatch, {})
+    _mock_autor(monkeypatch, uid="u-mike")
+
+    r = cliente.post(
+        "/api/audio/transcripciones",
+        files={"archivo": ("mio.mp3", b"bytes", "audio/mpeg")},
+        data={"marca": ""},
+    )
+    assert r.status_code == 201
+    t = r.json()["transcripcion"]
+    assert t["es_personal"] is True and t["marca"] == "" and t["autor_id"] == "u-mike"
+    assert t["marca_nombre"] == "Personal"
+
+    # Mike lo ve.
+    lista = cliente.get("/api/audio/transcripciones").json()["transcripciones"]
+    assert t["id"] in [x["id"] for x in lista]
+    # Otra persona NO lo ve (es personal de Mike).
+    _mock_autor(monkeypatch, uid="u-otro")
+    lista2 = cliente.get("/api/audio/transcripciones").json()["transcripciones"]
+    assert t["id"] not in [x["id"] for x in lista2]
+
+
+def test_mover_audio_personal_a_marca(cliente, monkeypatch):
+    """PUT marca mueve el ámbito: personal -> de marca (colaborativo)."""
+    _mock_subida_y_cola(monkeypatch, {})
+    _mock_autor(monkeypatch, uid="u-mike")
+    tid = cliente.post(
+        "/api/audio/transcripciones",
+        files={"archivo": ("mio.mp3", b"bytes", "audio/mpeg")},
+        data={"marca": ""},
+    ).json()["transcripcion"]["id"]
+
+    r = cliente.put(f"/api/audio/transcripciones/{tid}", json={"marca": _MARCA})
+    assert r.status_code == 200
+    assert r.json()["transcripcion"]["es_personal"] is False
+    assert r.json()["transcripcion"]["marca"] == _MARCA
+    # Marca inválida -> 400.
+    assert cliente.put(f"/api/audio/transcripciones/{tid}", json={"marca": "no-existe"}).status_code == 400
 
 
 def test_crear_sin_archivo_400(cliente):

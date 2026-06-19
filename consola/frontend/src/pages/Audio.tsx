@@ -23,6 +23,7 @@ import {
   ListOrdered,
   Loader2,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -63,14 +64,6 @@ import type {
 } from "@/lib/api/audio";
 
 const EN_PROCESO: EstadoTranscripcion[] = ["pendiente", "transcribiendo"];
-
-const ETIQUETA_ESTADO: Record<EstadoTranscripcion, string> = {
-  pendiente: "En cola",
-  transcribiendo: "Transcribiendo…",
-  transcrito: "Transcrito",
-  editado: "Editado",
-  error: "Error",
-};
 
 // Tratamientos elegibles al subir (además del SRT, que va siempre).
 const TRATAMIENTOS_SUBIDA: { tipo: TipoArtefacto; etiqueta: string }[] = [
@@ -187,10 +180,10 @@ export default function Audio() {
   }, [audioId, artefactos, artefactoId]);
 
   const subir = useMutation({
-    mutationFn: async (v: { archivo: File; tratamientos: TipoArtefacto[] }) => {
+    mutationFn: async (v: { archivo: File; tratamientos: TipoArtefacto[]; marca: string }) => {
       const form = new FormData();
       form.append("archivo", v.archivo);
-      form.append("marca", marca);
+      form.append("marca", v.marca); // "" => personal
       form.append("nombre", v.archivo.name);
       v.tratamientos.forEach((t) => form.append("tratamientos", t));
       return api.audio.crear(form);
@@ -217,6 +210,13 @@ export default function Audio() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const actualizarAudio = useMutation({
+    mutationFn: (v: { id: string; cambios: { nombre?: string; marca?: string } }) =>
+      api.audio.guardar(v.id, v.cambios),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] }),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const refetchArtefactos = () =>
     qc.invalidateQueries({ queryKey: ["audio", "artefactos", audioId] });
 
@@ -232,7 +232,6 @@ export default function Audio() {
             variant="outline"
             size="sm"
             onClick={() => setDialogo(true)}
-            disabled={!marca}
             className="gap-2"
           >
             <Upload className="h-4 w-4" /> Subir
@@ -242,17 +241,12 @@ export default function Audio() {
 
       {vacioTotal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => setDialogo(true)}
-            disabled={!marca}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={() => setDialogo(true)} className="gap-2">
             <Upload className="h-4 w-4" />
             Subir audio o vídeo
           </Button>
           <p className="text-xs text-muted-foreground">
-            {marca ? "Se extrae la voz y se transcribe con timestamps" : "Selecciona una marca primero"}
+            Se extrae la voz y se transcribe con timestamps
           </p>
         </div>
       ) : (
@@ -267,6 +261,20 @@ export default function Audio() {
                 panelesAbiertos ? "p-2" : "p-1",
               )}
             >
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn("h-8 w-8 shrink-0", panelesAbiertos ? "mb-2 self-end" : "self-center")}
+                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
+                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
+                onClick={() => setPanelesAbiertos((v) => !v)}
+              >
+                {panelesAbiertos ? (
+                  <ChevronLeft className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
               {panelesAbiertos ? (
                 <div className="flex min-h-0 flex-1 gap-2">
                   <PanelAudios
@@ -279,6 +287,7 @@ export default function Audio() {
                       setArtefactoId(null);
                     }}
                     onEliminar={(id) => eliminarAudio.mutate(id)}
+                    onActualizar={(id, cambios) => actualizarAudio.mutate({ id, cambios })}
                   />
                   <div className="w-px shrink-0 bg-border" />
                   <PanelArtefactos
@@ -303,20 +312,6 @@ export default function Audio() {
                   onSeleccionarArtefacto={setArtefactoId}
                 />
               )}
-              <Button
-                size="icon"
-                variant="ghost"
-                className={cn("h-8 w-8 shrink-0 self-center", panelesAbiertos && "mt-2")}
-                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
-                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
-                onClick={() => setPanelesAbiertos((v) => !v)}
-              >
-                {panelesAbiertos ? (
-                  <ChevronLeft className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </Button>
             </div>
           </aside>
 
@@ -335,7 +330,10 @@ export default function Audio() {
         abierto={dialogo}
         onAbierto={setDialogo}
         subiendo={subir.isPending}
-        onSubir={(archivo, tratamientos) => subir.mutate({ archivo, tratamientos })}
+        marcaDefecto={marca}
+        onSubir={(archivo, tratamientos, marcaSel) =>
+          subir.mutate({ archivo, tratamientos, marca: marcaSel })
+        }
       />
     </div>
   );
@@ -433,16 +431,6 @@ function ProgresoVivo({
   );
 }
 
-function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
-  const variante =
-    estado === "error" ? "destructive" : estado === "transcrito" || estado === "editado" ? "secondary" : "outline";
-  return (
-    <Badge variant={variante} className="px-1.5 py-0 text-xs font-normal">
-      {ETIQUETA_ESTADO[estado]}
-    </Badge>
-  );
-}
-
 // Raíl estrecho del panel colapsado: iconos de audio (arriba) y, debajo, los artefactos del audio
 // activo. Sigue navegable —clicar selecciona— igual que el raíl de versiones del lector de contexto.
 function RailColapsado({
@@ -521,6 +509,7 @@ function PanelAudios({
   audioId,
   onSeleccionar,
   onEliminar,
+  onActualizar,
 }: {
   className?: string;
   lista: TranscripcionAudio[];
@@ -528,6 +517,7 @@ function PanelAudios({
   audioId: string | null;
   onSeleccionar: (id: string) => void;
   onEliminar: (id: string) => void;
+  onActualizar: (id: string, cambios: { nombre?: string; marca?: string }) => void;
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
@@ -536,36 +526,128 @@ function PanelAudios({
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
         <div className="flex flex-col gap-1 overflow-y-auto">
-          {lista.map((t) => {
-            const activo = t.id === audioId;
-            return (
-              <div
-                key={t.id}
-                className={`group flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
-                  activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
-                }`}
-              >
-                <button type="button" onClick={() => onSeleccionar(t.id)} className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                  <span className="w-full truncate font-medium">{t.nombre || "Sin título"}</span>
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <EstadoBadge estado={t.estado} />
-                    {t.duracion_ms > 0 ? <span>{fmtDur(t.duracion_ms)}</span> : null}
-                    {t.marca_nombre ? <span className="truncate">· {t.marca_nombre}</span> : null}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  title="Eliminar"
-                  onClick={() => onEliminar(t.id)}
-                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            );
-          })}
+          {lista.map((t) => (
+            <FilaAudio
+              key={t.id}
+              t={t}
+              activo={t.id === audioId}
+              onSeleccionar={onSeleccionar}
+              onEliminar={onEliminar}
+              onActualizar={onActualizar}
+            />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Fila de un audio: nombre EDITABLE, meta (duración · ámbito) con selector Personal/marca, y borrar.
+// Sin etiqueta de estado «Transcrito» (ruido): solo se anota mientras transcribe o si falla.
+function FilaAudio({
+  t,
+  activo,
+  onSeleccionar,
+  onEliminar,
+  onActualizar,
+}: {
+  t: TranscripcionAudio;
+  activo: boolean;
+  onSeleccionar: (id: string) => void;
+  onEliminar: (id: string) => void;
+  onActualizar: (id: string, cambios: { nombre?: string; marca?: string }) => void;
+}) {
+  const { marcasParaSwitch } = useMarcaActiva();
+  // Asegura que la marca actual SIEMPRE sea una opción (aunque no esté entre las del usuario).
+  const marcasOpts =
+    !t.marca || marcasParaSwitch.some((m) => m.id === t.marca)
+      ? marcasParaSwitch
+      : [{ id: t.marca, nombre: t.marca_nombre || t.marca }, ...marcasParaSwitch];
+  const [editando, setEditando] = React.useState(false);
+  const [nombre, setNombre] = React.useState(t.nombre);
+  React.useEffect(() => setNombre(t.nombre), [t.nombre]);
+
+  const confirmarNombre = () => {
+    setEditando(false);
+    const n = nombre.trim();
+    if (n && n !== t.nombre) onActualizar(t.id, { nombre: n });
+    else setNombre(t.nombre);
+  };
+
+  const enProceso = EN_PROCESO.includes(t.estado);
+
+  return (
+    <div
+      className={`group rounded-md border px-2 py-1.5 text-xs ${
+        activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
+      }`}
+    >
+      <div className="flex items-center gap-1">
+        {editando ? (
+          <input
+            autoFocus
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            onBlur={confirmarNombre}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmarNombre();
+              if (e.key === "Escape") {
+                setNombre(t.nombre);
+                setEditando(false);
+              }
+            }}
+            className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5 text-xs"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSeleccionar(t.id)}
+            className="min-w-0 flex-1 truncate text-left font-medium"
+          >
+            {t.nombre || "Sin título"}
+          </button>
+        )}
+        <button
+          type="button"
+          title="Renombrar"
+          onClick={() => setEditando(true)}
+          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
+        >
+          <Pencil className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          title="Eliminar"
+          onClick={() => onEliminar(t.id)}
+          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-0.5 flex items-center gap-2 text-muted-foreground">
+        {enProceso ? (
+          <span className="inline-flex items-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Transcribiendo…
+          </span>
+        ) : t.estado === "error" ? (
+          <span className="text-destructive">Error</span>
+        ) : t.duracion_ms > 0 ? (
+          <span>{fmtDur(t.duracion_ms)}</span>
+        ) : null}
+        <select
+          value={t.marca}
+          onChange={(e) => onActualizar(t.id, { marca: e.target.value })}
+          title="Personal o de una marca"
+          className="ml-auto max-w-[8rem] cursor-pointer truncate rounded bg-transparent text-xs text-muted-foreground hover:text-foreground focus:outline-none"
+        >
+          <option value="">Personal</option>
+          {marcasOpts.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.nombre}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }
@@ -1228,21 +1310,27 @@ function DialogoSubida({
   abierto,
   onAbierto,
   subiendo,
+  marcaDefecto,
   onSubir,
 }: {
   abierto: boolean;
   onAbierto: (v: boolean) => void;
   subiendo: boolean;
-  onSubir: (archivo: File, tratamientos: TipoArtefacto[]) => void;
+  marcaDefecto: string;
+  onSubir: (archivo: File, tratamientos: TipoArtefacto[], marca: string) => void;
 }) {
+  const { marcasParaSwitch } = useMarcaActiva();
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [sel, setSel] = React.useState<Record<string, boolean>>({});
+  const [ambito, setAmbito] = React.useState<string>(marcaDefecto);
   React.useEffect(() => {
-    if (!abierto) {
+    if (abierto) {
+      setAmbito(marcaDefecto);
+    } else {
       setArchivo(null);
       setSel({});
     }
-  }, [abierto]);
+  }, [abierto, marcaDefecto]);
 
   const tratamientos = TRATAMIENTOS_SUBIDA.filter((t) => sel[t.tipo]).map((t) => t.tipo);
 
@@ -1263,6 +1351,21 @@ function DialogoSubida({
             <p className="mt-1 text-xs text-muted-foreground">Se extrae la voz y se transcribe con timestamps (SRT por defecto).</p>
           </div>
           <div>
+            <p className="mb-1.5 text-sm font-medium">Ámbito</p>
+            <select
+              value={ambito}
+              onChange={(e) => setAmbito(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            >
+              <option value="">Personal (solo para ti)</option>
+              {marcasParaSwitch.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre} (en colaboración)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <p className="mb-2 text-sm font-medium">Crear además:</p>
             <div className="grid grid-cols-2 gap-2">
               {TRATAMIENTOS_SUBIDA.map((t) => (
@@ -1281,7 +1384,11 @@ function DialogoSubida({
           <Button variant="ghost" onClick={() => onAbierto(false)}>
             Cancelar
           </Button>
-          <Button disabled={!archivo || subiendo} onClick={() => archivo && onSubir(archivo, tratamientos)} className="gap-2">
+          <Button
+            disabled={!archivo || subiendo}
+            onClick={() => archivo && onSubir(archivo, tratamientos, ambito)}
+            className="gap-2"
+          >
             {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Transcribir
           </Button>

@@ -27,8 +27,13 @@ export type EstadoTranscripcion =
 /** Un audio subido + su transcripción base (los artefactos cuelgan de él). */
 export interface TranscripcionAudio {
   id: string;
+  /** Marca del audio; "" => PERSONAL (privado de `autor_id`). */
   marca: string;
   marca_nombre: string;
+  /** `true` si es personal (sin marca). */
+  es_personal: boolean;
+  /** Dueño cuando es personal. */
+  autor_id: string;
   nombre: string;
   media_id: string;
   media_url: string;
@@ -119,10 +124,12 @@ export const apiAudio = {
         metodo: "POST",
         form,
       }),
-    /** Edita el audio base (nombre/idioma/estado/segmentos/texto). */
+    /** Edita el audio base (nombre/marca(ámbito)/idioma/estado/segmentos/texto). `marca:""` = personal. */
     guardar: (
       id: string,
-      cambios: Partial<Pick<TranscripcionAudio, "texto" | "nombre" | "idioma" | "estado">> & {
+      cambios: Partial<
+        Pick<TranscripcionAudio, "texto" | "nombre" | "marca" | "idioma" | "estado">
+      > & {
         segmentos?: SegmentoAudio[];
       },
     ) =>

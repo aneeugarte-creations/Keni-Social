@@ -36,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, generaciones, marcas, media, permisos, repos
+from .. import db, generaciones, marcas, media, permisos, repos, seguridad
 from .._http_json import leer_json
 from ..dominio import audio_artefactos, jobspec
 
@@ -53,10 +53,13 @@ TRATAMIENTOS_SUBIDA = ("texto", "limpio", "resumen", "preguntas", "ideas")
 # --------------------------------------------------------------------------- #
 
 
-def _validar_marca(marca: object) -> tuple[str | None, str | None]:
-    """Valida la marca de una transcripción. Devuelve (marca_normalizada, error_o_None)."""
+def _validar_ambito(marca: object) -> tuple[str | None, str | None]:
+    """Normaliza el ámbito de un audio. '' (o ausente) => PERSONAL; si hay marca, valida.
+
+    Devuelve (marca_normalizada, error_o_None). `marca_normalizada` es '' para personal.
+    """
     if not isinstance(marca, str) or not marca.strip():
-        return None, "Falta la marca."
+        return "", None
     marca = marca.strip()
     if not marcas.es_marca(marca):
         return None, "Marca no permitida."
@@ -78,12 +81,15 @@ def _transcripcion_a_dict(item: dict) -> dict:
     media_id = item.get("media_id") or ""
     crudo = item.get("tratamientos") or ""
     tratamientos = [t for t in crudo.split(",") if t] if isinstance(crudo, str) else []
+    marca = item.get("marca") or ""
     return {
         **item,
         "segmentos": _segmentos_de(item),
         "tratamientos": tratamientos,
         "media_url": f"/api/media/{media_id}" if media_id else "",
-        "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
+        # `marca`='' => PERSONAL (privado del autor); con marca => colaborativo.
+        "es_personal": not marca,
+        "marca_nombre": marcas.etiqueta_de(marca) if marca else "Personal",
     }
 
 
@@ -119,12 +125,15 @@ def _artefacto_a_dict(art: dict) -> dict:
 
 
 async def listar_transcripciones(request: Request) -> Response:
-    """GET /api/audio/transcripciones?marca=&estado=: lista de audios (recientes primero)."""
+    """GET /api/audio/transcripciones?marca=&estado=: audios de marca + los personales del usuario."""
     marca = request.query_params.get("marca") or None
     if marca is not None and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     estado = request.query_params.get("estado") or None
-    filas = repos.listar_audio_transcripciones(marca=marca, estado=estado)
+    autor = seguridad.autor_de_peticion(request)
+    filas = repos.listar_audio_transcripciones(
+        marca=marca, estado=estado, visible_para=(autor or {}).get("id"),
+    )
     return JSONResponse({"transcripciones": [_transcripcion_a_dict(f) for f in filas]})
 
 
@@ -141,9 +150,17 @@ async def crear_transcripcion(request: Request) -> Response:
     archivo = form.get("archivo")
     if not isinstance(archivo, UploadFile):
         return JSONResponse({"error": "No se recibió ningún archivo."}, status_code=400)
-    marca, err = _validar_marca(form.get("marca"))
+    marca, err = _validar_ambito(form.get("marca"))
     if err:
         return JSONResponse({"error": err}, status_code=400)
+    # Personal (sin marca): requiere sesión, es su dueño. De marca: colaborativo (autor = creador).
+    autor = seguridad.autor_de_peticion(request)
+    autor_id = (autor or {}).get("id") or ""
+    if not marca and not autor_id:
+        return JSONResponse(
+            {"error": "Inicia sesión para subir audios personales, o elige una marca."},
+            status_code=400,
+        )
     idioma = form.get("idioma")
     idioma = idioma.strip() if isinstance(idioma, str) and idioma.strip() else "es-MX"
     nombre = form.get("nombre")
@@ -162,7 +179,7 @@ async def crear_transcripcion(request: Request) -> Response:
 
     fila = repos.crear_audio_transcripcion(
         marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente",
-        tratamientos=",".join(tratamientos),
+        tratamientos=",".join(tratamientos), autor_id=autor_id,
     )
     gen = _encolar_asr(fila, idioma, tratamientos)
     if isinstance(gen, Response):
@@ -206,7 +223,7 @@ async def obtener_transcripcion(request: Request) -> Response:
 
 
 async def actualizar_transcripcion(request: Request) -> Response:
-    """PUT /api/audio/transcripciones/{id}: edita nombre/idioma/estado y, si se quiere, segmentos/texto."""
+    """PUT /api/audio/transcripciones/{id}: edita nombre/marca(ámbito)/idioma/estado/segmentos/texto."""
     transcripcion_id = request.path_params["transcripcion_id"]
     if repos.obtener_audio_transcripcion(transcripcion_id) is None:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
@@ -227,6 +244,19 @@ async def actualizar_transcripcion(request: Request) -> Response:
         if datos["estado"] not in db.ESTADOS_AUDIO_TRANSCRIPCION:
             return JSONResponse({"error": "Estado de transcripción no válido."}, status_code=400)
         cambios["estado"] = datos["estado"]
+    if "marca" in datos:
+        # Mover el audio entre PERSONAL ('') y una marca. Al hacerlo personal, su dueño es quien edita.
+        marca, err = _validar_ambito(datos["marca"])
+        if err:
+            return JSONResponse({"error": err}, status_code=400)
+        cambios["marca"] = marca
+        if not marca:
+            autor = seguridad.autor_de_peticion(request)
+            if not (autor or {}).get("id"):
+                return JSONResponse(
+                    {"error": "Inicia sesión para hacer un audio personal."}, status_code=400
+                )
+            cambios["autor_id"] = autor["id"]
     if not cambios:
         return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
 

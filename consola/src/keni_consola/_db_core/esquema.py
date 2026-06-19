@@ -1477,6 +1477,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # van a crear mientras se transcribe (antes de que existan sus filas en `audio_artefactos`).
     "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS gen_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS tratamientos TEXT NOT NULL DEFAULT ''",
+    # ÁMBITO del audio: `marca`='' => PERSONAL (privado de su `autor_id`); `marca`<>'' => de MARCA
+    # (colaborativo, lo ve el equipo). `autor_id` es el dueño cuando es personal.
+    "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS autor_id TEXT NOT NULL DEFAULT ''",
     # ARTEFACTOS de un audio: cada audio (fila `audio_transcripciones`) produce VARIOS artefactos
     # independientes — `srt` (subtítulos, por defecto), `texto` plano, y los tratamientos de Claude
     # (`limpio`, `resumen`, `preguntas`, `ideas`, `corregido`). `contenido` es el texto del artefacto;
