@@ -38,16 +38,13 @@ _log = logging.getLogger(__name__)
 #   cadencia -> ritmo de sondeo de sus fuentes: 'rapida' (~3 min) | 'normal' (~10 min) |
 #               'evergreen' (~30 min, temas de cambio lento).
 LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
+    # UnoTV publica por estas LÍNEAS reales (las dio la dirección). «Última hora» (breaking) y
+    # «Evergreen» son señales del motor, no líneas. Las etiquetas viejas que sobraban se retiran
+    # (ver `_LINEAS_RETIRADAS`).
     "unotv": [
-        ("Virales",                   2,  False, "", "normal"),
-        ("Internacional",             1,  False, "", "normal"),
-        ("Nacional",                  1,  False, "", "normal"),
-        ("Presidencia",               1,  False, "", "normal"),
-        ("Comercial",                 1,  False, "", "normal"),
-        ("Reportero/Corresponsales",  1,  False, "", "normal"),
-        ("Ciencia/Tech",              0,  True,  "", "evergreen"),
-        ("Geek/Pop",                  0,  True,  "", "evergreen"),
-        ("Eventos",                   1,  False, "", "normal"),
+        ("Nacional",        1, False, "", "normal"),
+        ("Internacional",   1, False, "", "normal"),
+        ("Entretenimiento", 1, False, "", "normal"),
     ],
     # Claro Sports (dadas por el equipo). Fútbol = una línea por competición; las
     # competiciones extra "relevantes en México" se añaden cuando el equipo las confirme.
@@ -110,6 +107,17 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
 
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.
 ORIGENES_GLOBALES: list[str] = ["Interno", "Externo"]
+
+# LÍNEAS (clase 'vertical') que se RETIRAN por marca: etiquetas viejas que no son líneas reales
+# del plan. Se desactivan (activo=0), no se borran: salen del editor «Plan y horarios», del
+# selector de feeds y del catálogo, pero su historial de métricas se conserva. UnoTV publica solo
+# por Nacional/Internacional/Entretenimiento (+ Última hora/Evergreen, que son señales del motor).
+_LINEAS_RETIRADAS: dict[str, list[str]] = {
+    "unotv": [
+        "Virales", "Presidencia", "Comercial", "Reportero/Corresponsales",
+        "Ciencia/Tech", "Geek/Pop", "Eventos", "Green",
+    ],
+}
 
 
 def _crear_si_falta(
@@ -195,6 +203,30 @@ def inicializar_lineas() -> int:
     return creadas
 
 
+def retirar_lineas_obsoletas() -> int:
+    """Desactiva (activo=0) las líneas viejas que no son del plan (`_LINEAS_RETIRADAS`). Devuelve
+    cuántas tocó.
+
+    Reversible y no destructivo: la etiqueta y su historial de métricas se conservan; solo deja de
+    aparecer en «Plan y horarios», el selector de feeds y el catálogo (todos filtran `activas`).
+    Idempotente (una etiqueta ya inactiva se salta). Best-effort.
+    """
+    retiradas = 0
+    for marca, nombres in _LINEAS_RETIRADAS.items():
+        for nombre in nombres:
+            try:
+                et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+                if et is None or not et.get("activo", True):
+                    continue
+                repos.actualizar_etiqueta(et["id"], {"activo": False})
+                retiradas += 1
+            except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto
+                _log.warning("retirar líneas: fallo en %s/%s", marca, nombre, exc_info=True)
+    if retiradas:
+        _log.info("retirar líneas obsoletas: %d desactivadas", retiradas)
+    return retiradas
+
+
 # Mapeo categoria(slug de feed) -> nombre de LÍNEA por marca, para el backfill de `linea_id`.
 # Solo los casos 1:1 con confianza; lo no mapeado queda en catch-all "General" (linea_id='').
 # Claro Sports NO está: sus feeds son GRUESOS (futbol/motor/otros-deportes) y sus líneas FINAS
@@ -205,7 +237,6 @@ _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
         "mx": "Nacional",
         "internacional": "Internacional",
         "entretenimiento": "Entretenimiento",
-        "ciencia-tech": "Ciencia/Tech",
     },
     "nacion-gamer": {
         "gaming": "Gaming",

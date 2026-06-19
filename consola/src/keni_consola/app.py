@@ -271,6 +271,8 @@ def crear_app(
             from . import bootstrap_lineas
 
             bootstrap_lineas.inicializar_lineas()
+            # Retira las etiquetas viejas que no son líneas del plan (desactiva; reversible).
+            bootstrap_lineas.retirar_lineas_obsoletas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron inicializar las líneas/orígenes.", exc_info=True)
         try:

@@ -347,7 +347,7 @@ export function VistaCalendario({
     enabled: Boolean(marca),
   });
   const slotsPorDiaCdmx = React.useMemo(() => {
-    const mapa = new Map<number, { hora: string; categoria: string }[]>();
+    const mapa = new Map<number, { hora: string; categoria: string; etiqueta: string }[]>();
     if (!marca) return mapa;
     const vistos = new Set<string>();
     for (const f of franjasQuery.data?.franjas ?? []) {
@@ -359,7 +359,7 @@ export function VistaCalendario({
       if (vistos.has(clave)) continue;
       vistos.add(clave);
       const lista = mapa.get(diaCdmxN) ?? [];
-      lista.push({ hora, categoria: f.categoria });
+      lista.push({ hora, categoria: f.categoria, etiqueta: f.etiqueta ?? "" });
       mapa.set(diaCdmxN, lista);
     }
     for (const lista of mapa.values()) lista.sort((a, b) => a.hora.localeCompare(b.hora));
@@ -368,7 +368,7 @@ export function VistaCalendario({
 
   /** Huecos LIBRES del plan para un día concreto (slots sin pieza a esa misma hora CDMX). */
   const huecosDe = React.useCallback(
-    (dia: Date): { hora: string; categoria: string }[] => {
+    (dia: Date): { hora: string; categoria: string; etiqueta: string }[] => {
       // Con la rejilla filtrada por red/línea, `porDia` es un subconjunto: un slot ocupado por
       // una pieza filtrada fuera saldría como hueco LIBRE (doble-reserva). No los pintamos.
       if (!mostrarHuecosPlan) return [];
@@ -547,7 +547,7 @@ function VistaMes({
   hoy,
   onAbrirDia,
 }: {
-  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
+  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
   ancla: Date;
   porDia: Map<string, Pieza[]>;
   hoy: string;
@@ -636,10 +636,10 @@ function VistaMes({
                   <div
                     key={`${h.hora}-${h.categoria}`}
                     className="truncate border-l-2 border-dashed border-border pl-1 text-[9px] leading-tight text-muted-foreground/80"
-                    title={`Hueco del plan: ${ETIQUETA_LINEA[h.categoria] ?? h.categoria} a las ${h.hora}`}
+                    title={`Hueco del plan: ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
                   >
                     <span className="tabular-nums">{h.hora}</span>{" "}
-                    {LINEA_CORTA[h.categoria] ?? h.categoria}
+                    {h.etiqueta || LINEA_CORTA[h.categoria] || h.categoria}
                   </div>
                 ))}
               </div>
@@ -662,14 +662,15 @@ const LINEA_CORTA: Record<string, string> = {
 };
 
 /** Chip fantasma de UN hueco libre del plan (hora CDMX + línea). */
-function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string } }) {
+function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string; etiqueta: string } }) {
+  const nombre = hueco.etiqueta || ETIQUETA_LINEA[hueco.categoria] || hueco.categoria;
   return (
     <div
       className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-      title={`Hueco del plan: ${ETIQUETA_LINEA[hueco.categoria] ?? hueco.categoria} a las ${hueco.hora}`}
+      title={`Hueco del plan: ${nombre} a las ${hueco.hora}`}
     >
       <span className="tabular-nums">{hueco.hora}</span>
-      <span className="truncate">{ETIQUETA_LINEA[hueco.categoria] ?? hueco.categoria}</span>
+      <span className="truncate">{nombre}</span>
     </div>
   );
 }
@@ -678,9 +679,9 @@ function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string } }) {
  *  cada pieza aparece EN su posición del plan, no apilada arriba. */
 function entradasDelDia(
   items: Pieza[],
-  huecos: { hora: string; categoria: string }[],
+  huecos: { hora: string; categoria: string; etiqueta: string }[],
 ): ({ tipo: "pieza"; hora: string; p: Pieza } | {
-  tipo: "hueco"; hora: string; h: { hora: string; categoria: string };
+  tipo: "hueco"; hora: string; h: { hora: string; categoria: string; etiqueta: string };
 })[] {
   return [
     ...items.map((p) => ({
@@ -718,7 +719,7 @@ function VistaSemana({
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
   ocupado: boolean;
-  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
+  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
 }) {
   return (
     // MÓVIL: mismo tratamiento que la vista MES — la semana scrollea en horizontal.
@@ -808,7 +809,7 @@ function VistaDia({
   onVolver,
   ocupado,
 }: {
-  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
+  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
   diaClave: string;
   porDia: Map<string, Pieza[]>;
   onAbrir: (p: Pieza) => void;

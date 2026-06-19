@@ -146,8 +146,10 @@ export interface Franja {
   dia_semana: number;
   /** Hora en formato "HH:MM" (UTC: el backend almacena instantes en UTC). */
   hora: string;
-  /** Línea del plan a la que sirve ('' = franja genérica). */
+  /** Línea del plan a la que sirve: id de etiqueta vertical ('' = franja genérica). */
   categoria: string;
+  /** Nombre legible de esa línea (o "Última hora"/"Evergreen"); '' si es genérica. */
+  etiqueta?: string;
 }
 
 export interface RespuestaFranjas {

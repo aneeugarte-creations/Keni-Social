@@ -41,8 +41,19 @@ _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
-def _franja_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
-    """Serializa una franja resolviendo nombres legibles de marca y red."""
+def _label_linea(categoria: str, lineas: dict[str, str]) -> str:
+    """Nombre legible de la línea de una franja: id -> su nombre; señales con su rótulo; '' = genérica."""
+    if categoria == "breaking":
+        return "Última hora"
+    if categoria == "evergreen":
+        return "Evergreen"
+    if not categoria:
+        return ""
+    return lineas.get(categoria, categoria)
+
+
+def _franja_a_dict(franja: dict[str, Any], etiqueta: str = "") -> dict[str, Any]:
+    """Serializa una franja resolviendo nombres legibles de marca, red y LÍNEA."""
     return {
         "id": franja["id"],
         "marca": franja["marca"],
@@ -51,9 +62,10 @@ def _franja_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
         "red_nombre": redes.nombre_por_id(franja["red"]) if franja["red"] else "",
         "dia_semana": franja["dia_semana"],
         "hora": franja["hora"],
-        # Categoría del plan a la que sirve la franja ('' = genérica). Los horarios del plan
-        # editorial (internacional/mx/entretenimiento/evergreen…) son franjas con categoría.
+        # LÍNEA del plan a la que sirve la franja (id de etiqueta vertical; '' = genérica).
         "categoria": franja.get("categoria", ""),
+        # Nombre legible de esa línea (o "Última hora"/"Evergreen"); '' si es genérica.
+        "etiqueta": etiqueta,
     }
 
 
@@ -63,9 +75,13 @@ def _franja_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
 
 
 async def listar(request: Request) -> Response:
-    """Listado de franjas."""
+    """Listado de franjas (con el nombre legible de su línea)."""
     franjas = repos.listar_franjas()
-    return JSONResponse({"franjas": [_franja_a_dict(f) for f in franjas]})
+    # Mapa id de línea -> nombre (una lectura) para rotular sin N consultas.
+    lineas = {e["id"]: e["nombre"] for e in repos.listar_etiquetas(clase="vertical")}
+    return JSONResponse(
+        {"franjas": [_franja_a_dict(f, _label_linea(f.get("categoria", ""), lineas)) for f in franjas]}
+    )
 
 
 async def crear(request: Request) -> Response:

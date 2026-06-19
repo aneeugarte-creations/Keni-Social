@@ -45,9 +45,9 @@ def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
     # Claro: la competición cuelga del grupo "Fútbol" y sondea rápido.
     liga = repos.obtener_etiqueta_por_nombre("Liga MX", "vertical", "claro-sports")
     assert liga is not None and liga["grupo"] == "Fútbol" and liga["cadencia"] == "rapida"
-    # UnoTV: Ciencia/Tech es de cambio lento (evergreen), sin grupo.
-    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "unotv")
-    assert ciencia is not None and ciencia["grupo"] == "" and ciencia["cadencia"] == "evergreen"
+    # UnoTV: solo sus líneas reales (Nacional/Internacional/Entretenimiento), planas y normales.
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    assert nacional is not None and nacional["grupo"] == "" and nacional["cadencia"] == "normal"
     # Fundación: sus pilares de misión quedan sembrados (antes vacía).
     salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
     assert salud is not None and salud["cadencia"] == "evergreen"
@@ -164,3 +164,20 @@ def test_migrar_plan_y_franjas_a_lineas(entorno):
     antes = ajustes.obtener("KENI_PLAN_DIA::unotv")
     assert bootstrap_lineas.migrar_plan_y_franjas_a_lineas() == 0
     assert ajustes.obtener("KENI_PLAN_DIA::unotv") == antes
+
+
+def test_retirar_lineas_obsoletas_desactiva_pero_conserva(entorno):
+    bootstrap_lineas.inicializar_lineas()
+    # Una etiqueta vieja que ya no es línea del plan (creada como activa).
+    com = repos.crear_etiqueta(nombre="Comercial", clase="vertical", marca="unotv")
+    assert com["activo"] is True
+    n = bootstrap_lineas.retirar_lineas_obsoletas()
+    assert n >= 1
+    # Desactivada (no borrada): sigue existiendo pero activo=False.
+    leida = repos.obtener_etiqueta_por_nombre("Comercial", "vertical", "unotv")
+    assert leida is not None and leida["activo"] is False
+    # Una línea real de UnoTV sigue activa.
+    nac = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    assert nac is not None and nac["activo"] is True
+    # Idempotente: una segunda pasada no toca nada (ya inactiva).
+    assert bootstrap_lineas.retirar_lineas_obsoletas() == 0
