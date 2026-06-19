@@ -3,11 +3,11 @@
 Cubre:
   - PURO: `segmentos_a_ass` (cabecera valida, estilo, tags \\k karaoke con duraciones en cs).
   - Ejecutor con el MOTOR COMPARTIDO (`keni_consola.transcripcion.transcribir_datos`) y `media`
-    MONKEYPATCHEADOS: deps ausentes (whisper-cli/modelo) -> error claro; happy-path -> escribe en
+    MONKEYPATCHEADOS: motor ausente (extra asr) -> error claro; happy-path -> escribe en
     video_subtitulos estado='transcrito'.
 
 El mapeo del JSON de whisper.cpp a segmentos vive ahora en el motor compartido
-(`keni_consola.transcripcion.parsear_whispercpp`, cubierto en `test_transcripcion.py`).
+(`keni_consola.transcripcion.mapear_segmentos`, cubierto en `test_transcripcion.py`).
 
 Los tests PUROS no necesitan modelo, ffmpeg ni Postgres. Los del ejecutor que tocan
 `video_subtitulos` usan la fixture `entorno` (Postgres de pruebas; se saltan sin el).
@@ -99,7 +99,7 @@ def test_segmentos_a_ass_escapa_llaves():
 
 
 def test_ejecutor_deps_ausentes_marca_error(entorno, monkeypatch):
-    """Sin whisper-cli/modelo, el motor compartido lanza error claro y el ejecutor lo reporta."""
+    """Sin el motor (extra asr), el motor compartido lanza error claro y el ejecutor lo reporta."""
     c = repos.crear_video_composicion(marca=_MARCA)
     s = repos.crear_video_subtitulo(composicion_id=c["id"])
 
@@ -107,7 +107,7 @@ def test_ejecutor_deps_ausentes_marca_error(entorno, monkeypatch):
 
     def _falla(*a, **k):
         raise transcripcion_raiz.TranscripcionError(
-            "Falta whisper-cli o ffmpeg para transcribir en local."
+            "Falta el motor de transcripción en este servicio."
         )
 
     monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _falla)
@@ -120,7 +120,7 @@ def test_ejecutor_deps_ausentes_marca_error(entorno, monkeypatch):
     )
     transcripcion.ejecutar_transcripcion("g2", {"subtitulo_id": s["id"], "media_id": "videos/x.mp4"})
     assert capturas[-1]["estado"] == generaciones.ESTADO_ERROR
-    assert "whisper-cli" in capturas[-1]["error"]
+    assert "motor de transcripción" in capturas[-1]["error"]
     # El subtitulo NO avanzo de estado.
     assert repos.obtener_video_subtitulo(s["id"])["estado"] == "pendiente"
 

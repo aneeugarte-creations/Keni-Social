@@ -1,10 +1,10 @@
 """Motor de TRANSCRIPCION del gestor de AUDIO (audio→texto).
 
 Ejecutor del job de proceso `transcribir-audio`: transcribe un audio/video subido con el MOTOR
-COMPARTIDO `keni_consola.transcripcion` (whisper.cpp `whisper-cli` + modelo `v3 turbo`, JSON con
-timestamps) y persiste el resultado en `audio_transcripciones`. Mismo camino LOCAL, gratuito y BAJO
-DEMANDA que el ASR de subtitulos de video; la unica degradacion es por DISPONIBILIDAD de deps
-(whisper-cli/ffmpeg/modelo), que el motor compartido reporta con un error claro en espanol.
+COMPARTIDO `keni_consola.transcripcion` (faster-whisper + modelo `v3 turbo`, con timestamps) y
+persiste el resultado en `audio_transcripciones`. Mismo camino, gratuito y BAJO DEMANDA que el ASR
+de subtitulos de video; la unica degradacion es por DISPONIBILIDAD del motor (el extra `asr`), que
+el motor compartido reporta con un error claro en espanol.
 
 Sobre la transcripcion bruta, el equipo trabaja con AGENTES de Claude (limpiar/resumir/aclarar/
 corregir) desde la API `api/audio.py` — eso NO vive aqui: este modulo solo produce el borrador con
@@ -73,7 +73,7 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
             )
             return
 
-        # 2) Transcribir con el motor compartido (whisper-cli + v3 turbo, JSON con timestamps).
+        # 2) Transcribir con el motor compartido (faster-whisper + v3 turbo, con timestamps).
         generaciones.actualizar(
             gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "transcribiendo"}
         )

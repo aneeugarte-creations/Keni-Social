@@ -5,10 +5,10 @@ word-level para QUEMARLOS en el video como ASS karaoke. El resultado SIEMPRE que
 'transcrito' (borrador): el principio del producto es que la correccion ortografica humana pasa
 ANTES de quemar (estado 'editado'/'listo' los pone la edicion humana, NO este motor).
 
-El ASR lo provee el MOTOR COMPARTIDO `keni_consola.transcripcion` (whisper.cpp `whisper-cli` +
-modelo `v3 turbo`): el mismo camino local que el flujo clip-a-copy y que el gestor de audio. Este
-modulo solo PIDE los segmentos word-level (`transcribir_datos(..., word_level=True)`) y los
-convierte en ASS karaoke; las funciones PURAS `segmentos_a_ass`/`ESTILO_ASS_DEFECTO` viven aqui.
+El ASR lo provee el MOTOR COMPARTIDO `keni_consola.transcripcion` (faster-whisper + modelo
+`v3 turbo`): el mismo camino que el flujo clip-a-copy y que el gestor de audio. Este modulo solo
+PIDE los segmentos word-level (`transcribir_datos(..., word_level=True)`) y los convierte en ASS
+karaoke; las funciones PURAS `segmentos_a_ass`/`ESTILO_ASS_DEFECTO` viven aqui.
 
 CONTRATO (no cambiar la firma): `ejecutar_transcripcion(gen_id: str, spec: dict) -> None`.
 
@@ -22,12 +22,12 @@ CONTRATO (no cambiar la firma): `ejecutar_transcripcion(gen_id: str, spec: dict)
 
 El ASR es LOCAL, gratuito y BAJO DEMANDA (lo dispara un humano, no un daemon, y no consume
 tokens), asi que NO tiene kill-switch ni gateo por maquina: el worker ejecuta lo que se encolo.
-La unica degradacion que queda es por DISPONIBILIDAD: si faltan `whisper-cli`/`ffmpeg`/modelo (p.
-ej. en el perfil hosted), `transcribir_datos` lanza un error claro en espanol y se reporta.
+La unica degradacion que queda es por DISPONIBILIDAD: si falta el motor (extra `asr`),
+`transcribir_datos` lanza un error claro en espanol y se reporta.
 
 Pasos:
   1. Bajar el media (`media.leer_objeto`).
-  2. Transcribir con el motor compartido (whisper-cli, JSON con timestamps), WORD-LEVEL para
+  2. Transcribir con el motor compartido (faster-whisper, con timestamps), WORD-LEVEL para
      karaoke -> segmentos `[{inicio_ms, fin_ms, texto, palabras:[...]}]`.
   3. Escribir en `video_subtitulos`: `segmentos` (JSON word-level), `ass` (ASS karaoke),
      `estado='transcrito'`, `transcrito_en=ahora`. Via `repos.actualizar_video_subtitulo`.
@@ -209,7 +209,7 @@ def ejecutar_transcripcion(gen_id: str, spec: dict) -> None:
             _terminar_error(gen_id, f"No se encontro el media {media_id} en el almacen.")
             return
 
-        # 2) Transcribir WORD-LEVEL con el motor compartido (whisper-cli + v3 turbo, JSON con
+        # 2) Transcribir WORD-LEVEL con el motor compartido (faster-whisper + v3 turbo, con
         #    timestamps). `transcribir_datos` lanza `TranscripcionError` (es) si faltan deps.
         generaciones.actualizar(
             gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "transcribiendo"}

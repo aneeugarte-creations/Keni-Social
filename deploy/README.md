@@ -49,17 +49,18 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   (ADR 0001): el worker **no** usa la API de Claude. *Reiniciar el back NO mata los jobs en
   curso del worker* (es otro contenedor). En **local / un solo proceso** no hace falta el
   servicio: el back arranca el worker **en proceso** (un hilo), y la UX no cambia.
-- **Transcripción ASR en un servicio DEDICADO (`transcriptor`).** La transcripción (clip→copy,
-  subtítulos de vídeo y el gestor de audio→texto) usa whisper.cpp (`whisper-cli` + modelo
-  `v3 turbo`). Para NO contaminar la imagen del worker general con un binario C++ y un modelo de
-  ~1.6 GB, vive en su **propio servicio** (`deploy/transcriptor/`, imagen LEAN: ffmpeg +
-  `whisper-cli`, sin Node/claude/gh) que reclama SOLO el carril `transcripcion` de la cola
-  (`python -m keni_consola.worker_transcripcion`). El worker de contenido EXCLUYE ese carril. El
-  binario `whisper-cli` va compilado en la imagen (etapa builder estática) y el modelo
-  `ggml-large-v3-turbo.bin` lo descarga el entrypoint UNA vez al volumen `/data`
-  (`KENI_WHISPER_MODEL`, en segundo plano para no bloquear la cola; persiste entre reinicios). En
-  el **perfil local** la transcripción corre en proceso con el `whisper-cli` + modelo del equipo
-  (brew). Si faltara el binario/modelo, `keni_consola.transcripcion` degrada con un error claro.
+- **Transcripción ASR en un servicio DEDICADO (`transcriptor`).** La transcripción (subtítulos de
+  vídeo y el gestor de audio→texto) usa **faster-whisper** (whisper sobre CTranslate2, modelo
+  `large-v3-turbo` = v3 turbo). Para NO contaminar la imagen del worker general, vive en su
+  **propio servicio** (`deploy/transcriptor/`, imagen LEAN sin Node/claude/gh) que reclama SOLO el
+  carril `transcripcion` de la cola (`python -m keni_consola.worker_transcripcion`). El worker de
+  contenido EXCLUYE ese carril. **No compila ni re-descarga lo que ya tiene**: el motor es un WHEEL
+  de Python (`faster-whisper`, en su propia capa de Docker — un cambio de código NO lo reinstala),
+  y el modelo (~1.6 GB) se descarga UNA vez al cache persistente `/data/models` (`KENI_WHISPER_DIR`,
+  volumen keni-data) y se reutiliza siempre (además queda cargado en memoria entre transcripciones).
+  El binario `keni-consola[asr]` lo instala el transcriptor; el back/worker no transcriben, así que
+  si una superficie llama al motor sin el extra, `keni_consola.transcripcion` degrada con un error
+  claro en español.
 - **Expuesto públicamente tras auth (login multiusuario + CSRF; token interino OPCIONAL).**
   La barrera **principal** de `/api` es el **login multiusuario** user/pass + roles (#130):
   sesión server-side (cookie `keni_consola_sesion`, HttpOnly+SameSite=Strict). El admin

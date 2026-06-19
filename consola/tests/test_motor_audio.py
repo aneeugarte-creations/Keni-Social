@@ -36,12 +36,12 @@ def test_ejecutor_audio_falta_transcripcion_id_error(monkeypatch):
 
 
 def test_ejecutor_audio_deps_ausentes_marca_error(entorno, monkeypatch):
-    """Sin whisper-cli/modelo, el motor compartido lanza error; el ejecutor lo refleja en la fila."""
+    """Sin el motor (extra asr), el motor compartido lanza error; el ejecutor lo refleja en la fila."""
     fila = repos.crear_audio_transcripcion(marca=_MARCA, media_id="audios/x.mp4")
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
 
     def _falla(*a, **k):
-        raise transcripcion_raiz.TranscripcionError("Falta whisper-cli o ffmpeg para transcribir.")
+        raise transcripcion_raiz.TranscripcionError("Falta el motor de transcripción en este servicio.")
 
     monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _falla)
 
@@ -55,11 +55,11 @@ def test_ejecutor_audio_deps_ausentes_marca_error(entorno, monkeypatch):
         "g2", {"transcripcion_id": fila["id"], "media_id": "audios/x.mp4"}
     )
     assert capturas[-1]["estado"] == generaciones.ESTADO_ERROR
-    assert "whisper-cli" in capturas[-1]["error"]
+    assert "motor de transcripción" in capturas[-1]["error"]
     # La fila queda en 'error' con el motivo.
     actualizada = repos.obtener_audio_transcripcion(fila["id"])
     assert actualizada["estado"] == "error"
-    assert "whisper-cli" in actualizada["error"]
+    assert "motor de transcripción" in actualizada["error"]
 
 
 def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):

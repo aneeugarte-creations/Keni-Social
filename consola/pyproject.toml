@@ -64,6 +64,12 @@ dependencies = [
 #   - s3:       cliente S3 para `almacen_media.py`/`migracion.py` cuando hay `S3_*`.
 postgres = ["psycopg[binary]>=3.1", "psycopg_pool>=3.1"]
 s3 = ["boto3>=1.34"]
+#   - asr: motor de transcripcion (gestor audio→texto). `faster-whisper` ES whisper (mismos pesos
+#          OpenAI, modelo v3 turbo) corriendo sobre CTranslate2: se instala como WHEEL precompilado
+#          (sin compilar nada, a diferencia de whisper.cpp), trae su propio decodificador de audio
+#          (av/ffmpeg embebido) y DESCARGA el modelo UNA vez a un cache persistente. Solo lo instala
+#          el servicio `transcriptor` (deploy/transcriptor/Dockerfile); el back/worker no transcriben.
+asr = ["faster-whisper>=1.1.0"]
 # pytest-timeout: backstop ANTI-CUELGUE de los tests de concurrencia/procesos (#116/#137)
 # que usan @pytest.mark.timeout(...). Sin el, esa marca es un no-op silencioso (el test
 # podria colgarse indefinidamente si una espera no se libera). Con el, el wall-timeout mata

@@ -595,10 +595,10 @@ services:
 
   transcriptor:
     # Servicio DEDICADO de transcripción ASR (gestor audio→texto). Reclama SOLO el carril
-    # `transcripcion` de la cola (`python -m keni_consola.worker_transcripcion`): jobs de whisper.cpp
-    # (whisper-cli + modelo v3 turbo). Imagen LEAN propia (ffmpeg + whisper-cli, SIN Node/claude/gh):
-    # el binario + el modelo (~1.6 GB) NO contaminan la imagen del worker general. Comparte la cola
-    # (Postgres) y la media (S3/Garage) con el resto; el worker de contenido EXCLUYE este carril.
+    # `transcripcion` de la cola (`python -m keni_consola.worker_transcripcion`): jobs de faster-whisper
+    # (whisper sobre CTranslate2, modelo v3 turbo). Imagen LEAN propia (SIN Node/claude/gh ni compilar
+    # nada): el motor (wheel) + el modelo (~1.6 GB) NO contaminan la imagen del worker general. Comparte
+    # la cola (Postgres) y la media (S3/Garage) con el resto; el worker de contenido EXCLUYE este carril.
     build:
       context: ..
       dockerfile: deploy/transcriptor/Dockerfile
@@ -610,11 +610,12 @@ services:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data
       KENI_CONSOLA_AJUSTES: /data/ajustes.toml
-      # Hilos de transcripción concurrente. whisper.cpp ya paraleliza UNA transcripción sobre los
-      # cores, así que 1 satura la CPU; súbelo solo si das más cores. Def 1 (conservador en la caja).
+      # Hilos de transcripción concurrente. whisper ya paraleliza UNA transcripción sobre los cores,
+      # así que 1 satura la CPU; súbelo solo si das más cores. Def 1 (conservador en la caja).
       KENI_MAX_JOBS_TRANSCRIPCION: ${KENI_MAX_JOBS_TRANSCRIPCION:-1}
-      # Modelo whisper v3 turbo: el entrypoint lo descarga UNA vez al volumen /data (persistente).
-      KENI_WHISPER_MODEL: /data/models/ggml-large-v3-turbo.bin
+      # Cache PERSISTENTE del modelo whisper v3 turbo: faster-whisper lo descarga UNA vez aquí
+      # (volumen keni-data) y lo reutiliza siempre; no lo re-baja en reinicios/deploys.
+      KENI_WHISPER_DIR: /data/models
       # Cola compartida (Postgres) + media (S3/Garage): lee la cola y baja el audio del bucket.
       DATABASE_URL: ${DATABASE_URL}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -656,7 +657,7 @@ services:
       # está vivo desde el inicio, así que el healthcheck no depende de que la descarga acabe.
       start_period: 60s
     stop_grace_period: 30s
-    # whisper.cpp carga el modelo (~1.6 GB) por invocación + memoria de trabajo: ~3 GiB por job.
+    # faster-whisper carga el modelo (~1.6 GB) en memoria + memoria de trabajo: ~3 GiB por job.
     mem_limit: ${TRANSCRIPTOR_MEM_LIMIT:-6g}
     cpus: ${TRANSCRIPTOR_CPUS:-4}
     security_opt:

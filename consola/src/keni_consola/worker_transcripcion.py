@@ -1,10 +1,11 @@
-"""WORKER de TRANSCRIPCION (ASR whisper.cpp): carril `transcripcion` de la cola.
+"""WORKER de TRANSCRIPCION (ASR faster-whisper): carril `transcripcion` de la cola.
 
-Servicio DEDICADO (imagen lean con `whisper-cli` + `ffmpeg`, SIN Node/claude/gh): reclama SOLO los
-jobs cuyo `jobspec.carril(spec) == "transcripcion"` (`PROC_TRANSCRIBIR` / `PROC_TRANSCRIBIR_AUDIO`) y
-los despacha por el camino de PROCESO (`worker.procesar_job` -> `_procesar_job_proceso` -> el motor
-whisper.cpp). Así el binario + el modelo (~1.6 GB) NO contaminan la imagen del worker de contenido:
-viven en una imagen propia (`deploy/transcriptor/`). El worker de contenido EXCLUYE este carril.
+Servicio DEDICADO (imagen lean, SIN Node/claude/gh): reclama SOLO los jobs cuyo
+`jobspec.carril(spec) == "transcripcion"` (`PROC_TRANSCRIBIR` / `PROC_TRANSCRIBIR_AUDIO`) y los
+despacha por el camino de PROCESO (`worker.procesar_job` -> `_procesar_job_proceso` -> el motor
+`keni_consola.transcripcion`, faster-whisper). Así el motor (wheel) + el modelo (~1.6 GB) NO
+contaminan la imagen del worker de contenido: viven en una imagen propia (`deploy/transcriptor/`).
+El worker de contenido EXCLUYE este carril.
 
 Son jobs de PROCESO: NO gastan tokens de la suscripción claude (exentos del corte por presupuesto);
 solo el kill switch PAUSADO los detiene, igual que el carril `proceso` del worker de contenido.
@@ -20,7 +21,7 @@ import signal
 import threading
 import uuid
 
-from . import cola, config, presupuesto_ia, worker
+from . import cola, config, presupuesto_ia, transcripcion, worker
 from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.worker_transcripcion")
@@ -92,6 +93,18 @@ def main() -> int:
     from . import repos
 
     repos.arrancar_persistencia()
+
+    # PRE-CALENTADO del modelo en SEGUNDO PLANO: lo descarga (la 1ª vez, al cache persistente /data)
+    # y lo carga en memoria sin bloquear el arranque, para que la primera transcripción no espere.
+    # Best-effort: si falla (deps/disco/red), se reintentará cuando llegue el primer job real.
+    def _precalentar() -> None:
+        try:
+            transcripcion._cargar_modelo()
+            _log.info("worker_transcripcion: modelo whisper pre-cargado.")
+        except Exception:  # noqa: BLE001 -- el warm-up nunca debe tumbar el servicio
+            _log.warning("worker_transcripcion: no se pudo pre-cargar el modelo (se reintenta)", exc_info=True)
+
+    threading.Thread(target=_precalentar, name="warm-whisper", daemon=True).start()
 
     parar = threading.Event()
     hilos = [

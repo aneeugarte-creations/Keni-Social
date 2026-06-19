@@ -102,9 +102,9 @@ PROC_CARRUSEL = "carrusel"
 # lee los params).
 PROC_RENDER_VIDEO = "render-video"
 PROC_TRANSCRIBIR = "transcribir"
-# Transcripcion del GESTOR DE AUDIO (audio→texto): mismo motor whisper.cpp (v3 turbo) que el ASR
-# de subtitulos, pero persiste en `audio_transcripciones` (no en `video_subtitulos`). Local,
-# gratuito y bajo demanda, igual que el resto de procesos.
+# Transcripcion del GESTOR DE AUDIO (audio→texto): mismo motor faster-whisper (v3 turbo) que el ASR
+# de subtitulos, pero persiste en `audio_transcripciones` (no en `video_subtitulos`). Gratuito y
+# bajo demanda, igual que el resto de procesos.
 PROC_TRANSCRIBIR_AUDIO = "transcribir-audio"
 # Generacion de ARTE (imagen) del auto-pipeline: un job de PROCESO. La llamada HTTP al
 # proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
@@ -121,10 +121,10 @@ KINDS_PROCESO = frozenset(
     {PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_TRANSCRIBIR_AUDIO, PROC_IMAGEN}
 )
 
-# KINDS de TRANSCRIPCION (ASR con whisper.cpp): subconjunto de KINDS_PROCESO que NO corre en el
+# KINDS de TRANSCRIPCION (ASR con faster-whisper): subconjunto de KINDS_PROCESO que NO corre en el
 # worker de contenido, sino en su SERVICIO DEDICADO (`transcriptor`, `worker_transcripcion`). Asi el
-# binario whisper-cli + el modelo (~1.6 GB) NO contaminan la imagen del worker general: viven en una
-# imagen propia y lean. Siguen siendo jobs de proceso (mismo dispatch); solo cambia QUE pool los reclama.
+# motor (wheel) + el modelo (~1.6 GB) NO contaminan la imagen del worker general: viven en una imagen
+# propia y lean. Siguen siendo jobs de proceso (mismo dispatch); solo cambia QUE pool los reclama.
 KINDS_TRANSCRIPCION = frozenset({PROC_TRANSCRIBIR, PROC_TRANSCRIBIR_AUDIO})
 
 # ------------------------------------------------------------------------------------------- #
@@ -136,7 +136,7 @@ PROC_DEV_DISCOVERY = "dev-discovery"
 PROC_DEV_FASE = "dev-fase"
 
 # CARRILES de la cola: separan POOLS de workers. `inferencia` (def) y `proceso` (CPU-bound,
-# render/imagen) los reclama el worker de contenido; `transcripcion` (ASR whisper.cpp) lo reclama
+# render/imagen) los reclama el worker de contenido; `transcripcion` (ASR faster-whisper) lo reclama
 # SOLO el servicio `transcriptor`; `dev` lo reclama SOLO `worker_dev` (no sandbox). El carril viaja
 # a NIVEL RAIZ del spec (`spec["carril"]`) o se DERIVA (ver `carril`).
 CARRIL_INFERENCIA = "inferencia"

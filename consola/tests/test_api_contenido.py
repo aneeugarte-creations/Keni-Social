@@ -599,9 +599,12 @@ def test_aportar_con_clip_transcribe_en_local(entorno, monkeypatch):
     """El clip de vídeo/audio se transcribe EN LOCAL (mock) y el texto entra como material."""
     from keni_consola import transcripcion
 
-    # Mock del transcriptor LOCAL: nunca toca whisper/ffmpeg reales.
+    # Mock del motor de transcripcion: nunca carga faster-whisper ni el modelo reales.
     monkeypatch.setattr(
-        transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "Hoy ganamos tres a cero."
+        transcripcion, "_TRANSCRIPTOR_JSON",
+        lambda datos, *, ext, idioma="es", word_level=False: {
+            "texto": "Hoy ganamos tres a cero.", "segmentos": []
+        },
     )
 
     c = _cli()
@@ -624,7 +627,10 @@ def test_aportar_clip_se_concatena_al_material(entorno, monkeypatch):
     """Si hay material escrito Y clip, la transcripción se anexa (no lo pisa)."""
     from keni_consola import transcripcion
 
-    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "lo que se dijo")
+    monkeypatch.setattr(
+        transcripcion, "_TRANSCRIPTOR_JSON",
+        lambda datos, *, ext, idioma="es", word_level=False: {"texto": "lo que se dijo", "segmentos": []},
+    )
 
     c = _cli()
     r = c.post(
@@ -656,7 +662,10 @@ def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
     """Un clip que transcribe a vacío crea la pieza igualmente (sin material del clip)."""
     from keni_consola import transcripcion
 
-    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "")
+    monkeypatch.setattr(
+        transcripcion, "_TRANSCRIPTOR_JSON",
+        lambda datos, *, ext, idioma="es", word_level=False: {"texto": "", "segmentos": []},
+    )
 
     c = _cli()
     r = c.post(
