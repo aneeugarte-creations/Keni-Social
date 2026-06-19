@@ -1,8 +1,9 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
@@ -357,31 +358,19 @@ function Cuerpo({
         <PanelFiltrosLimpieza valor={limpieza} onCambio={setLimpieza} piezas={piezas} />
       )}
       {calendarioTruncado && (
-        <div
-          role="alert"
-          className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            <strong>Calendario incompleto.</strong> En este rango hay {totalRangoCalendario}{" "}
-            piezas y se muestran las primeras {piezas.length}. Acota por marca, red o
-            línea, o navega a una ventana más corta para verlas todas.
-          </span>
-        </div>
+        <Aviso role="alert" className="mb-3">
+          <strong>Calendario incompleto.</strong> En este rango hay {totalRangoCalendario}{" "}
+          piezas y se muestran las primeras {piezas.length}. Acota por marca, red o
+          línea, o navega a una ventana más corta para verlas todas.
+        </Aviso>
       )}
       {hayProgramadasSinSalir && (
-        <div
-          role="alert"
-          className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
-        >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            <strong>Publicación automática desactivada.</strong> Hay piezas programadas que{" "}
-            <strong>no saldrán solas</strong>: con el posteo real apagado el sistema solo las
-            previsualiza. Actívalo en el servidor (<code>KENI_PUBLICAR_REAL</code>) o publícalas a
-            mano antes de su hora.
-          </span>
-        </div>
+        <Aviso role="alert" className="mb-3">
+          <strong>Publicación automática desactivada.</strong> Hay piezas programadas que{" "}
+          <strong>no saldrán solas</strong>: con el posteo real apagado el sistema solo las
+          previsualiza. Actívalo en el servidor (<code>KENI_PUBLICAR_REAL</code>) o publícalas a
+          mano antes de su hora.
+        </Aviso>
       )}
       {query.isPending ? (
         <div className="space-y-3">

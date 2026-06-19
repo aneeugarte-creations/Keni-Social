@@ -17,13 +17,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { Semaforo } from "@/lib/cobertura";
@@ -505,7 +498,6 @@ export function TarjetaTarea({
   const libre = !tarea.responsable_id;
   const esMia = Boolean(usuario && tarea.responsable_id === usuario.id);
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
-  const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const usuarios = catalogos?.usuarios ?? [];
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -558,12 +550,15 @@ export function TarjetaTarea({
   const borrar = useMutation({
     mutationFn: () => api.eliminarPublicacion(tarea.id),
     onSuccess: () => {
-      setConfirmarBorrado(false);
       void invalidar();
       toast.success("Tarea borrada.");
     },
     onError: conError,
   });
+  const pedirBorrar = async () => {
+    if (await confirmar({ mensaje: `¿Borrar "${tarea.titulo}"?`, destructivo: true, textoConfirmar: "Borrar" }))
+      borrar.mutate();
+  };
 
   const avance = SIGUIENTE[tarea.estado];
   const esCobertura = Boolean(tarea.evento_id);
@@ -598,7 +593,7 @@ export function TarjetaTarea({
         etiqueta: "Borrar",
         icono: Trash2,
         destructivo: true,
-        onClick: () => setConfirmarBorrado(true),
+        onClick: () => void pedirBorrar(),
       });
     }
   }
@@ -725,22 +720,6 @@ export function TarjetaTarea({
         onElegir={(id) => asignar.mutate(id)}
         enviando={asignar.isPending}
       />
-
-      <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Borrar "{tarea.titulo}"</DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmarBorrado(false)} disabled={borrar.isPending}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
-              {borrar.isPending ? "Borrando…" : "Borrar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </FilaConAcciones>
   );
 }

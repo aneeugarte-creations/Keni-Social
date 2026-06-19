@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/table";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const REFETCH_INTERVAL_MS = 45_000;
 const CLAVE_SALUD = (marcaActiva: string | null) =>
@@ -88,39 +90,33 @@ export function SaludFeeds() {
     return `${Math.floor(h / 24)} día${Math.floor(h / 24) !== 1 ? "s" : ""}`;
   }
 
-  /** Etiqueta, variante, SEVERIDAD (0 = peor) y tinte de fila para el estado de un feed. */
+  /** Etiqueta, variante de Badge, SEVERIDAD (0 = peor) y tinte de fila para el estado de un feed. */
   function estadoFeed(feed: (typeof feeds)[number]): {
     label: string;
-    className: string;
+    variant: BadgeProps["variant"];
+    className?: string;
     severidad: number;
     fila: string;
   } {
     if (feed.desactivado_auto === 1) {
-      return {
-        label: "Auto-desactivado", className: "border-red-400 text-red-600",
-        severidad: 0, fila: "bg-red-50/40",
-      };
+      return { label: "Auto-desactivado", variant: "error", severidad: 0, fila: "bg-red-50/40" };
     }
     const slaMin = 180; // KENI_FEED_SLA_MIN por defecto
     if (feed.activo && feed.errores_seguidos > 0) {
-      return {
-        label: "Con error", className: "border-amber-400 text-amber-600",
-        severidad: 1, fila: "bg-amber-50/40",
-      };
+      return { label: "Con error", variant: "error", severidad: 1, fila: "bg-amber-50/40" };
     }
     if (feed.activo && feed.frescura_min !== null && feed.frescura_min > slaMin) {
-      return {
-        label: "Stale", className: "border-amber-400 text-amber-600",
-        severidad: 2, fila: "bg-amber-50/30",
-      };
+      return { label: "Stale", variant: "aviso", severidad: 2, fila: "bg-amber-50/30" };
     }
     if (!feed.activo) {
       return {
-        label: "Inactivo", className: "text-muted-foreground", severidad: 3, fila: "opacity-60",
+        label: "Inactivo", variant: "outline", className: "text-muted-foreground",
+        severidad: 3, fila: "opacity-60",
       };
     }
     return {
-      label: "Activo", className: "border-emerald-500 text-emerald-700 dark:text-emerald-300",
+      label: "Activo", variant: "outline",
+      className: "border-emerald-500 text-emerald-700 dark:text-emerald-300",
       severidad: 4, fila: "",
     };
   }
@@ -229,7 +225,7 @@ export function SaludFeeds() {
                     </TableCell>
                     <TableCell className="text-right text-xs">{frescuraTexto(feed.frescura_min)}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={`text-xs ${est.className}`}>
+                      <Badge variant={est.variant} className={cn("text-xs", est.className)}>
                         {est.label}
                       </Badge>
                     </TableCell>

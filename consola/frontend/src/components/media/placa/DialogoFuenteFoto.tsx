@@ -5,6 +5,7 @@
  */
 import { Library, Loader2, Upload } from "lucide-react";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { Button } from "@/components/ui/button";
 import {
@@ -119,11 +120,7 @@ export function DialogoFuenteFoto({
               </Button>
             </div>
           </div>
-          {avisoGenerar && (
-            <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-              {avisoGenerar}
-            </p>
-          )}
+          {avisoGenerar && <Aviso icono={false}>{avisoGenerar}</Aviso>}
         </div>
       </DialogContent>
     </Dialog>

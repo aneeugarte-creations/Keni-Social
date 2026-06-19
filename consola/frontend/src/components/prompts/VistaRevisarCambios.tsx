@@ -16,6 +16,7 @@
 import { ArrowLeft, Rocket, Send } from "lucide-react";
 import * as React from "react";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { DiffProsa } from "@/components/prompts/DiffProsa";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -133,11 +134,11 @@ export function VistaRevisarCambios({
         {esPublicar ? (
           <footer className="shrink-0 border-t border-border bg-background px-4 py-4 sm:px-6">
             <div className="mx-auto w-full max-w-3xl space-y-3">
-              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              <Aviso icono={false}>
                 {esAdmin
                   ? "Al publicar, esta versión servirá todas las generaciones."
                   : "Si un admin la aprueba, servirá todas las generaciones. Hasta entonces, sin cambios."}
-              </p>
+              </Aviso>
               <div className="space-y-1.5">
                 <Label htmlFor="nota-revisar">
                   Nota del cambio <span className="text-destructive">*</span>

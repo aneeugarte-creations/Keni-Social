@@ -29,6 +29,7 @@ import { PanelAcerca } from "@/components/prompts/PanelAcerca";
 import { DialogPublicar } from "@/components/prompts/DialogPublicar";
 import { LectorProsa } from "@/components/prompts/LectorProsa";
 import { PanelVersiones } from "@/components/prompts/PanelVersiones";
+import { Aviso } from "@/components/comunes/Aviso";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuFlotante } from "@/components/comunes/MenuContextual";
 import { EditorWysiwyg } from "@/components/editor/EditorWysiwyg";
@@ -489,33 +490,34 @@ export function DetalleDocumento({
       {/* Conflicto de edición (otro editor guardó debajo): el autosave queda en pausa, pero tu
           borrador local sigue intacto. Decides tú: sobrescribir con lo tuyo o descartar y recargar. */}
       {conflicto ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span className="min-w-[12rem] flex-1">
-            Alguien más editó este documento. Tus cambios siguen aquí sin guardarse. Elige cómo
-            resolver:
+        <Aviso className="flex-wrap items-center">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="min-w-[12rem] flex-1">
+              Alguien más editó este documento. Tus cambios siguen aquí sin guardarse. Elige cómo
+              resolver:
+            </span>
+            <Button
+              size="sm"
+              variant="brand"
+              className="h-7"
+              disabled={resolviendoConflicto}
+              onClick={() => void sobrescribirConLoMio()}
+              title="Vuelve a leer la versión del servidor y guarda lo tuyo encima"
+            >
+              {resolviendoConflicto ? "Guardando…" : "Sobrescribir con lo mío"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7"
+              disabled={resolviendoConflicto}
+              onClick={recargarDesdeServidor}
+              title="Descarta lo que escribiste y carga la versión de los demás"
+            >
+              Descartar lo mío y recargar
+            </Button>
           </span>
-          <Button
-            size="sm"
-            variant="brand"
-            className="h-7"
-            disabled={resolviendoConflicto}
-            onClick={() => void sobrescribirConLoMio()}
-            title="Vuelve a leer la versión del servidor y guarda lo tuyo encima"
-          >
-            {resolviendoConflicto ? "Guardando…" : "Sobrescribir con lo mío"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7"
-            disabled={resolviendoConflicto}
-            onClick={recargarDesdeServidor}
-            title="Descarta lo que escribiste y carga la versión de los demás"
-          >
-            Descartar lo mío y recargar
-          </Button>
-        </div>
+        </Aviso>
       ) : null}
 
       {/* ───────── «Acerca de»: tarjeta a ancho completo, bajo el título y sobre el editor ─────────

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, RotateCcw, Settings, ShieldAlert } from "lucide-react";
+import { RotateCcw, Settings, ShieldAlert } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -389,14 +390,11 @@ export default function ConfiguracionGlobal() {
       ) : (
         <div className="mx-auto max-w-2xl space-y-4 pb-10">
           {actual?.mfa_habilitado === false && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-              <p className="text-muted-foreground">
-                La maquinaria de llaves de acceso (passkeys) no está activa en el servidor (falta
-                la clave de firma). Aunque exijas passkey aquí, la obligatoriedad no surtirá efecto
-                hasta configurarla.
-              </p>
-            </div>
+            <Aviso>
+              La maquinaria de llaves de acceso (passkeys) no está activa en el servidor (falta
+              la clave de firma). Aunque exijas passkey aquí, la obligatoriedad no surtirá efecto
+              hasta configurarla.
+            </Aviso>
           )}
 
           {SECCIONES.map((seccion) => {

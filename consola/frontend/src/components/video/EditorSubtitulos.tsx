@@ -17,6 +17,7 @@ import { Captions, CheckCircle2, Loader2, Save, Sparkles } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { Button } from "@/components/ui/button";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
@@ -202,12 +203,9 @@ export function EditorSubtitulos({
       {tieneSegmentos ? (
         <>
           {restaurado && (
-            <p
-              role="status"
-              className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-300"
-            >
+            <Aviso role="status" icono={false} className="font-medium">
               Cambios sin guardar de tu sesión anterior.
-            </p>
+            </Aviso>
           )}
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
             Corrige ortografía. Los cambios se usan al marcar como listos.

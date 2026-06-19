@@ -10,7 +10,9 @@ import { cn } from "@/lib/utils";
 import { useRalphStore } from "@/store/ralphStore";
 import type { EstadoRalph } from "@/types/ralph";
 
-/** Color de fondo de una bolita según el estado del Ralph. */
+/** Color de fondo de una bolita según el estado del Ralph. Solid dot (inicial en blanco sobre el
+ *  círculo), no el badge tintado de `ChipEstado`: misma familia semántica (verde=activo, ámbar=
+ *  esperando, rojo=error, cielo=dormido, gris=reposo), expresada como relleno 500 en vez de /15+700. */
 export const COLOR_ESTADO: Record<EstadoRalph, string> = {
   activo: "bg-emerald-500",
   idle: "bg-zinc-400",

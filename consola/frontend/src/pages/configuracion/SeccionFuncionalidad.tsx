@@ -3,16 +3,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -53,7 +45,6 @@ export function FilaAjuste({
   bloqueado?: boolean;
   notaBloqueo?: string;
 }) {
-  const [confirmar, setConfirmar] = React.useState(false);
   const [num, setNum] = React.useState(String(ajuste.valor));
   React.useEffect(() => {
     setNum(String(ajuste.valor));
@@ -81,10 +72,18 @@ export function FilaAjuste({
   if (ajuste.tipo === "bool") {
     // Si está bloqueado por su maestro, se ve apagado pase lo que pase (el daemon no corre).
     const activo = bloqueado ? false : Boolean(ajuste.valor);
-    const onToggle = (valor: boolean) => {
+    const onToggle = async (valor: boolean) => {
       // Encender un flag PELIGROSO (publicación real) pide confirmación explícita.
       if (valor && ajuste.peligroso) {
-        setConfirmar(true);
+        if (
+          await confirmar({
+            titulo: "Activar publicación real",
+            mensaje: "Esto publicará realmente en las redes. ¿Estás seguro?",
+            destructivo: true,
+            textoConfirmar: "Sí, publicar de verdad",
+          })
+        )
+          onGuardar({ clave: ajuste.clave, valor: true });
         return;
       }
       onGuardar({ clave: ajuste.clave, valor });
@@ -99,34 +98,10 @@ export function FilaAjuste({
         {cabecera}
         <Switch
           checked={activo}
-          onCheckedChange={onToggle}
+          onCheckedChange={(v) => void onToggle(v)}
           disabled={guardando || bloqueado}
           aria-label={ajuste.etiqueta}
         />
-        <Dialog open={confirmar} onOpenChange={setConfirmar}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Activar publicación real</DialogTitle>
-              <DialogDescription>
-                Esto publicará realmente en las redes. ¿Estás seguro?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmar(false)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  onGuardar({ clave: ajuste.clave, valor: true });
-                  setConfirmar(false);
-                }}
-              >
-                Sí, publicar de verdad
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     );
   }

@@ -21,14 +21,8 @@ import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { ImagenMedia } from "@/components/comunes/ImagenMedia";
+import { confirmar } from "@/components/comunes/confirmar";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -63,7 +57,6 @@ function TarjetaPieza({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const imagen = urlMedia(pieza.imagen_url || pieza.imagen);
   // "Aprobar" solo tiene sentido en una pieza pendiente de decisión (borrador o en revisión).
   const puedeAprobar = pieza.estado === "borrador" || pieza.estado === "en_revision";
@@ -129,7 +122,6 @@ function TarjetaPieza({
   const borrar = useMutation({
     mutationFn: () => api.eliminarPieza(pieza.id),
     onSuccess: (res) => {
-      setConfirmarBorrado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       toast.success(res?.mensaje ?? "Publicación borrada.");
     },
@@ -187,7 +179,18 @@ function TarjetaPieza({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => setConfirmarBorrado(true),
+      onClick: async () => {
+        if (
+          await confirmar({
+            titulo: `Borrar “${pieza.titulo}”`,
+            mensaje: "Esta acción no se puede deshacer.",
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
+        ) {
+          borrar.mutate();
+        }
+      },
       destructivo: true,
     },
   ];
@@ -279,25 +282,6 @@ function TarjetaPieza({
         </div>
       </FilaConAcciones>
 
-      <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Borrar “{pieza.titulo}”</DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmarBorrado(false)}
-              disabled={borrar.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
-              {borrar.isPending ? "Borrando…" : "Borrar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
@@ -325,7 +309,6 @@ export function VistaLista({
 }) {
   const queryClient = useQueryClient();
   const [seleccionadas, setSeleccionadas] = React.useState<Set<string>>(() => new Set());
-  const [confirmar, setConfirmar] = React.useState(false);
 
   // --- Virtualización de filas (listas largas) ---------------------------------------
   // El scroll de la app vive en el <main> del AppShell (no en window): lo localizamos
@@ -407,7 +390,6 @@ export function VistaLista({
       return { total: ids.length, borradas: res.borradas, fallos: res.fallos };
     },
     onSuccess: ({ total, borradas, fallos }) => {
-      setConfirmar(false);
       setSeleccionadas(new Set());
       void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       if (fallos.length === 0) {
@@ -453,7 +435,18 @@ export function VistaLista({
             <Button
               variant="destructive"
               size="sm"
-              onClick={() => setConfirmar(true)}
+              onClick={async () => {
+                if (
+                  await confirmar({
+                    titulo: `Borrar ${n} ${n === 1 ? "publicación" : "piezas"}`,
+                    mensaje: "Esta acción no se puede deshacer.",
+                    destructivo: true,
+                    textoConfirmar: `Borrar ${n}`,
+                  })
+                ) {
+                  borrarLote.mutate([...seleccionadas]);
+                }
+              }}
               disabled={borrarLote.isPending}
             >
               <Trash2 className="mr-1 h-4 w-4" />
@@ -497,31 +490,6 @@ export function VistaLista({
         </div>
       )}
 
-      <Dialog open={confirmar} onOpenChange={(o) => !o && setConfirmar(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Borrar {n} {n === 1 ? "publicación" : "piezas"}
-            </DialogTitle>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmar(false)}
-              disabled={borrarLote.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => borrarLote.mutate([...seleccionadas])}
-              disabled={borrarLote.isPending}
-            >
-              {borrarLote.isPending ? "Borrando…" : `Borrar ${n}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

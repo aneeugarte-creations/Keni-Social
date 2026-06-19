@@ -3,16 +3,9 @@ import { Check, Info, Loader2, Save, ShieldCheck, Trash2, X } from "lucide-react
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -42,7 +35,6 @@ export function SeccionPostproxy() {
 function SeccionPostproxyAdmin() {
   const queryClient = useQueryClient();
   const [apiKey, setApiKey] = React.useState("");
-  const [confirmarQuitar, setConfirmarQuitar] = React.useState(false);
   const [resultadoPrueba, setResultadoPrueba] = React.useState<{ ok: boolean; mensaje: string } | null>(
     null,
   );
@@ -82,11 +74,22 @@ function SeccionPostproxyAdmin() {
       toast.success(res?.mensaje ?? "Conexión de Postproxy eliminada.");
       setApiKey("");
       setResultadoPrueba(null);
-      setConfirmarQuitar(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_POSTPROXY });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const pedirQuitar = async () => {
+    if (
+      await confirmar({
+        titulo: "Quitar conexión de Postproxy",
+        mensaje:
+          "Se eliminará la API key global de Postproxy. Las redes ya conectadas dejarán de poder publicar hasta que vuelvas a configurarla. ¿Quieres continuar?",
+        destructivo: true,
+        textoConfirmar: "Quitar",
+      })
+    )
+      quitar.mutate();
+  };
 
   const configurado = data?.configurado ?? false;
   const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
@@ -170,7 +173,7 @@ function SeccionPostproxyAdmin() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setConfirmarQuitar(true)}
+                onClick={() => void pedirQuitar()}
                 disabled={ocupado}
               >
                 <Trash2 className="h-4 w-4" /> Quitar
@@ -179,26 +182,6 @@ function SeccionPostproxyAdmin() {
           )}
         </div>
       </div>
-
-      <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Quitar conexión de Postproxy</DialogTitle>
-            <DialogDescription>
-              Se eliminará la API key global de Postproxy. Las redes ya conectadas dejarán de poder
-              publicar hasta que vuelvas a configurarla. ¿Quieres continuar?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmarQuitar(false)} disabled={quitar.isPending}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={() => quitar.mutate()} disabled={quitar.isPending}>
-              {quitar.isPending ? "Quitando…" : "Quitar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </SeccionColapsable>
   );
 }

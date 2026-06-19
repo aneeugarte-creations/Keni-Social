@@ -472,7 +472,8 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
                       )}
                       {!ocultarAds && p.es_inorganico && (
                         <Badge
-                          className="shrink-0 border-transparent bg-amber-100 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
+                          variant="aviso"
+                          className="shrink-0 text-[10px]"
                           title="Incluida en Meta Ads"
                         >
                           Ads

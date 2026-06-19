@@ -8,7 +8,7 @@
  * Es un cajón de Claro Sports: visible con esa marca activa o en "Todas".
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clapperboard, Film, Images, Loader2, Send } from "lucide-react";
+import { Clapperboard, Film, Images, Loader2, Send } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,32 +24,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
-import type { Clip } from "@/types";
+
+import { BadgeEstadoPieza } from "./BadgeEstadoPieza";
 
 // Marca del cajón: los clips son de Claro Sports (mismo criterio que los feeds deportivos).
 const MARCA_CAJON = "claro-sports";
 
 const CLAVE_CLIPS = ["clips", "lista"] as const;
-
-function BadgeEstadoPieza({ clip }: { clip: Clip }) {
-  if (clip.estado_pieza === "generando") {
-    return (
-      <Badge variant="aviso" className="gap-1" title="La IA redacta el copy; la pieza saldrá al terminar.">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Generando…
-      </Badge>
-    );
-  }
-  if (clip.estado_pieza === "lista") {
-    return (
-      <Badge variant="ok" className="gap-1">
-        <CheckCircle2 className="h-3 w-3" />
-        En el feed
-      </Badge>
-    );
-  }
-  return <Badge variant="secondary">Sin pieza</Badge>;
-}
 
 export default function CajonClips() {
   const queryClient = useQueryClient();
@@ -196,7 +177,10 @@ export default function CajonClips() {
                         {c.formato === "video" ? "Video" : "Carrusel"}
                       </Badge>
                     )}
-                    <BadgeEstadoPieza clip={c} />
+                    <BadgeEstadoPieza
+                      estado={c.estado_pieza}
+                      tituloGenerando="La IA redacta el copy; la pieza saldrá al terminar."
+                    />
                   </div>
                 </FilaConAcciones>
               ))}

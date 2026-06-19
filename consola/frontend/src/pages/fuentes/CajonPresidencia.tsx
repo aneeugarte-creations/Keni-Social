@@ -8,14 +8,13 @@
  * Es un cajón de UnoTV (como Portal/Corresponsales): visible con esa marca activa o en "Todas".
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Crown, Loader2, Send } from "lucide-react";
+import { Crown, Loader2, Send } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,32 +23,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
-import type { NotaPresidencia } from "@/types";
+
+import { BadgeEstadoPieza } from "./BadgeEstadoPieza";
 
 // Marca del cajón: las notas de presidencia son de UnoTV (mismo criterio que Portal/SMS).
 const MARCA_CAJON = "unotv";
 
 const CLAVE_NOTAS = ["presidencia", "notas"] as const;
-
-function BadgeEstadoPieza({ nota }: { nota: NotaPresidencia }) {
-  if (nota.estado_pieza === "generando") {
-    return (
-      <Badge variant="aviso" className="gap-1" title="Redactando copy automático...">
-        <Loader2 className="h-3 w-3 animate-spin" />
-        Generando…
-      </Badge>
-    );
-  }
-  if (nota.estado_pieza === "lista") {
-    return (
-      <Badge variant="ok" className="gap-1">
-        <CheckCircle2 className="h-3 w-3" />
-        En el feed
-      </Badge>
-    );
-  }
-  return <Badge variant="secondary">Sin pieza</Badge>;
-}
 
 export default function CajonPresidencia() {
   const queryClient = useQueryClient();
@@ -189,7 +169,10 @@ export default function CajonPresidencia() {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <BadgeEstadoPieza nota={n} />
+                    <BadgeEstadoPieza
+                      estado={n.estado_pieza}
+                      tituloGenerando="Redactando copy automático..."
+                    />
                   </div>
                 </FilaConAcciones>
               ))}

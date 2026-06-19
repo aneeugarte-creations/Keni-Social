@@ -4,16 +4,9 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,7 +42,6 @@ function SeccionImagenAdmin() {
 
   const [apiKey, setApiKey] = React.useState("");
   const [proveedor, setProveedor] = React.useState(PROVEEDORES[0].id);
-  const [confirmarQuitar, setConfirmarQuitar] = React.useState(false);
   // Resultado de la última prueba (color verde/rojo según `ok`).
   const [resultadoPrueba, setResultadoPrueba] = React.useState<{ ok: boolean; mensaje: string } | null>(
     null,
@@ -90,11 +82,21 @@ function SeccionImagenAdmin() {
       toast.success(res?.mensaje ?? "Clave eliminada.");
       setApiKey("");
       setResultadoPrueba(null);
-      setConfirmarQuitar(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const pedirQuitar = async () => {
+    if (
+      await confirmar({
+        titulo: "Quitar la clave de imagen",
+        mensaje: "«Generar con IA» no estará disponible hasta que configures una nueva.",
+        destructivo: true,
+        textoConfirmar: "Quitar",
+      })
+    )
+      quitar.mutate();
+  };
 
   // Selector de modelo: el cambio persiste de inmediato (PUT) y refresca el estado.
   const guardarModelo = useMutation({
@@ -249,7 +251,7 @@ function SeccionImagenAdmin() {
                       etiqueta: "Quitar",
                       icono: Trash2,
                       destructivo: true,
-                      onClick: () => setConfirmarQuitar(true),
+                      onClick: () => void pedirQuitar(),
                       deshabilitado: ocupado,
                     },
                   ]}
@@ -263,33 +265,6 @@ function SeccionImagenAdmin() {
             </div>
           </>
         )}
-
-      <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Quitar la clave de imagen</DialogTitle>
-            <DialogDescription>
-              «Generar con IA» no estará disponible hasta que configures una nueva.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmarQuitar(false)}
-              disabled={quitar.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => quitar.mutate()}
-              disabled={quitar.isPending}
-            >
-              {quitar.isPending ? "Quitando…" : "Quitar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </SeccionColapsable>
   );
 }

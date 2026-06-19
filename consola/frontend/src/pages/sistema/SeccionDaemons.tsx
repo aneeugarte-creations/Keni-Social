@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ChipEstadoDaemon } from "@/components/comunes/ChipEstado";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,6 @@ import {
 } from "@/components/ui/table";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
-import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import type { ClaseDaemon, EstadoDaemon, LatidoDaemon, Proceso } from "@/types";
 
@@ -34,37 +34,6 @@ const PESO_ESTADO: Record<EstadoDaemon, number> = {
   en_espera: 3,
   inactivo: 4,
 };
-
-const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
-  ok: "OK",
-  error: "Error",
-  // «Inactivo» se pinta como lo que ES: el gate del daemon está apagado por su ajuste
-  // (mismo lenguaje que el 409 de «Barrer ahora»), no un fallo.
-  inactivo: "Apagado por ajuste",
-  atrasado: "Atrasado",
-  // Su interruptor propio está ON pero la máquina está apagada: no corre, pero no es un fallo.
-  en_espera: "En espera (máquina apagada)",
-};
-
-/** Chip de estado de daemon con color semántico (verde/rojo/gris/ámbar). Exportado para que
- *  las tarjetas de agente IA de la página Agentes pinten el mismo estado con el mismo color. */
-export function ChipEstadoDaemon({ estado }: { estado: EstadoDaemon }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border-transparent",
-        estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-        estado === "error" && "bg-red-500/15 text-red-600 dark:text-red-400",
-        estado === "atrasado" && "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-        estado === "en_espera" && "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-        estado === "inactivo" && "bg-muted text-muted-foreground",
-      )}
-    >
-      {ETIQUETA_ESTADO[estado]}
-    </Badge>
-  );
-}
 
 /** Intervalo legible ("90 s", "15 min", "4 h"). Exportado para las tarjetas de agente IA. */
 export function formatoIntervalo(seg: number): string {

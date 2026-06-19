@@ -12,7 +12,6 @@
  */
 import { useMutation } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   ImagePlus,
   Library,
   Loader2,
@@ -25,6 +24,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -292,13 +292,10 @@ export function EditorImagen({
           </FilaConAcciones>
 
           {aspectoFueraDeEstandar && tamRed && red && (
-            <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                La relación de aspecto no es la {tamRed.ratio} estándar de {nombreRed(red)}: se
-                recortará. {piezaId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
-              </span>
-            </p>
+            <Aviso>
+              La relación de aspecto no es la {tamRed.ratio} estándar de {nombreRed(red)}: se
+              recortará. {piezaId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
+            </Aviso>
           )}
 
           {/* Cambiar de fondo desde la propia preview. */}
@@ -389,11 +386,7 @@ function FuenteFondo({
           {generandoIA ? "Generando…" : "Generar con IA"}
         </Button>
       </div>
-      {avisoGenerar && (
-        <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-          {avisoGenerar}
-        </p>
-      )}
+      {avisoGenerar && <Aviso icono={false}>{avisoGenerar}</Aviso>}
     </div>
   );
 }

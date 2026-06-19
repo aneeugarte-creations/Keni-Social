@@ -15,17 +15,10 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -58,7 +51,6 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
   const [userToken, setUserToken] = React.useState("");
   const [userId, setUserId] = React.useState(marca.user_id_pista ?? "");
   const [blogId, setBlogId] = React.useState(marca.blog_id ?? "");
-  const [confirmarQuitar, setConfirmarQuitar] = React.useState(false);
   // Marcas descubiertas vía /perfiles (desplegable). Se limpian al cambiar el token.
   const [perfiles, setPerfiles] = React.useState<PerfilMetricool[]>([]);
   const [resultadoPrueba, setResultadoPrueba] = React.useState<{
@@ -131,11 +123,21 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
       setUserToken("");
       setPerfiles([]);
       setResultadoPrueba(null);
-      setConfirmarQuitar(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const pedirQuitar = async () => {
+    if (
+      await confirmar({
+        titulo: `Desconectar ${marca.etiqueta}`,
+        mensaje: `Se eliminará la credencial de Metricool guardada para esta marca. Podrás volver a conectarla pegando un token nuevo. ¿Quieres continuar?`,
+        destructivo: true,
+        textoConfirmar: "Quitar",
+      })
+    )
+      quitar.mutate();
+  };
 
   const ocupado =
     guardar.isPending || probar.isPending || quitar.isPending || buscarMarcas.isPending;
@@ -280,7 +282,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
                 etiqueta: "Quitar",
                 icono: Trash2,
                 destructivo: true,
-                onClick: () => setConfirmarQuitar(true),
+                onClick: () => void pedirQuitar(),
                 deshabilitado: ocupado,
               },
             ]}
@@ -293,33 +295,6 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
         )}
       </div>
 
-      <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Desconectar {marca.etiqueta}</DialogTitle>
-            <DialogDescription>
-              Se eliminará la credencial de Metricool guardada para esta marca. Podrás volver a
-              conectarla pegando un token nuevo. ¿Quieres continuar?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmarQuitar(false)}
-              disabled={quitar.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => quitar.mutate()}
-              disabled={quitar.isPending}
-            >
-              {quitar.isPending ? "Quitando…" : "Quitar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

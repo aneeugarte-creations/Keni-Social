@@ -62,19 +62,11 @@ export function TarjetaNoticia({
         <Badge variant="outline">{noticia.plataforma_nombre || noticia.plataforma}</Badge>
         <Badge variant={nivel.variante}>{nivel.texto}</Badge>
         {noticia.es_cambio && (
-          <Badge
-            variant="outline"
-            className="border-amber-500/40 text-amber-700 dark:text-amber-300"
-            title="Candidato a la ficha editorial"
-          >
+          <Badge variant="aviso" title="Candidato a la ficha editorial">
             Cambio de algoritmo
           </Badge>
         )}
-        {noticia.tipo === "oficial" && (
-          <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
-            Oficial
-          </Badge>
-        )}
+        {noticia.tipo === "oficial" && <Badge variant="info">Oficial</Badge>}
         {noticia.aplicada && (
           <Badge variant="ok" title="Ya propuesta a la Texto">
             En texto

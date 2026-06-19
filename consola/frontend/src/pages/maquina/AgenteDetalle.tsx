@@ -30,6 +30,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ChipEstadoDaemon } from "@/components/comunes/ChipEstado";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
@@ -50,18 +51,11 @@ import { duracion } from "@/lib/formato";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { FilaAjuste, useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import type { ClaseDaemon, EstadoDaemon, LatidoDaemon } from "@/types";
+import type { ClaseDaemon, LatidoDaemon } from "@/types";
 
 // Cuántos barridos pedir al log (el back acota a su cota dura por daemon).
 const LIMITE_BARRIDOS = 50;
 
-const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
-  ok: "OK",
-  error: "Error",
-  inactivo: "Apagado por ajuste",
-  atrasado: "Atrasado",
-  en_espera: "En espera (máquina apagada)",
-};
 const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
   ia: "IA",
   maquina: "Máquina",
@@ -74,25 +68,6 @@ function formatoIntervalo(seg: number): string {
   if (seg < 90) return `${Math.round(seg)} s`;
   if (seg < 5400) return `${Math.round(seg / 60)} min`;
   return `${Math.round(seg / 3600)} h`;
-}
-
-/** Chip de estado con color semántico (verde/rojo/gris/ámbar). */
-function ChipEstado({ estado }: { estado: EstadoDaemon }) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border-transparent",
-        estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-        estado === "error" && "bg-red-500/15 text-red-600 dark:text-red-400",
-        estado === "atrasado" && "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-        estado === "en_espera" && "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-        estado === "inactivo" && "bg-muted text-muted-foreground",
-      )}
-    >
-      {ETIQUETA_ESTADO[estado]}
-    </Badge>
-  );
 }
 
 /** Dato de cabecera (etiqueta + valor) con icono opcional. */
@@ -483,7 +458,7 @@ export default function AgenteDetalle() {
                 {latido.motor}
               </Badge>
             )}
-            <ChipEstado estado={latido.estado} />
+            <ChipEstadoDaemon estado={latido.estado} />
             {latido.barrido_solicitado !== "" && (
               <Badge
                 variant="outline"

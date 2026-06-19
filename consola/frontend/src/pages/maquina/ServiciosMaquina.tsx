@@ -7,12 +7,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
+import { ChipEstadoDaemon } from "@/components/comunes/ChipEstado";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { FASES_INVESTIGACION, FASES_PRODUCCION } from "@/pages/maquina/fases";
 import { FilaFasePipeline } from "@/pages/monitor/PanelPipeline";
-import { ChipEstadoDaemon, formatoIntervalo } from "@/pages/sistema/SeccionDaemons";
+import { formatoIntervalo } from "@/pages/sistema/SeccionDaemons";
 import { INTERVALO_RECURSOS_MS } from "@/pages/sistema/lib";
 import type { Proceso } from "@/types";
 

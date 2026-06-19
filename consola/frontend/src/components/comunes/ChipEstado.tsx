@@ -10,6 +10,7 @@
 import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { EstadoDaemon } from "@/types";
 
 type Aspecto = { variant: BadgeProps["variant"]; clase?: string; texto: string };
 
@@ -69,6 +70,29 @@ export function ChipNivelPresupuesto({ nivel, className }: { nivel: string; clas
   const a = NIVEL_PRESUPUESTO[nivel] ?? { ...DESCONOCIDO, texto: nivel || "—" };
   return (
     <Badge variant={a.variant} className={cn("border", a.clase, className)}>
+      {a.texto}
+    </Badge>
+  );
+}
+
+// Estado de un DAEMON (`latidos.estado`): mismo principio que arriba, otro dominio. Lo comparten
+// el panel Sistema (donde se observan los servicios) y los cockpits de la Máquina (Agentes /
+// Servicios), para que el mismo estado se llame y pinte IGUAL en ambos. Cae a las variantes
+// semánticas de Badge (ok/error/aviso/info); «inactivo» (gate apagado) es un neutro gris.
+const ESTADO_DAEMON: Record<EstadoDaemon, Aspecto> = {
+  ok: { variant: "ok", texto: "OK" },
+  error: { variant: "error", texto: "Error" },
+  atrasado: { variant: "aviso", texto: "Atrasado" },
+  // Su interruptor propio está ON pero la máquina está apagada: no corre, pero no es un fallo.
+  en_espera: { variant: "info", texto: "En espera (máquina apagada)" },
+  // El gate del daemon está apagado por su ajuste (mismo lenguaje que el 409 de «Barrer ahora»).
+  inactivo: { variant: "outline", clase: "bg-muted text-muted-foreground", texto: "Apagado por ajuste" },
+};
+
+export function ChipEstadoDaemon({ estado, className }: { estado: EstadoDaemon; className?: string }) {
+  const a = ESTADO_DAEMON[estado];
+  return (
+    <Badge variant={a.variant} className={cn(a.clase, className)}>
       {a.texto}
     </Badge>
   );

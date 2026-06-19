@@ -14,6 +14,7 @@ import { ChevronDown, Save } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
+import { ChipEstado } from "@/components/comunes/ChipEstado";
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
 import { PanelContextoInyectado } from "@/components/prompts/PanelContextoInyectado";
 import { Badge } from "@/components/ui/badge";
@@ -46,14 +47,6 @@ function rutaDoc(docId: string): string {
 
 /** Estado abierto/colapsado de la tarjeta «Acerca de» (recordado entre sesiones). */
 const CLAVE_ACERCA = "keni.fase.acerca-abierto";
-
-const VARIANTE_ESTADO: Record<string, "ok" | "aviso" | "error" | "secondary"> = {
-  ok: "ok",
-  en_curso: "secondary",
-  pendiente: "secondary",
-  revisar: "aviso",
-  fallo: "error",
-};
 
 /** Una fila de log de la cola viva: el trabajo de la fase con su marca y estado. */
 function FilaCola({ job }: { job: ColaJob }) {
@@ -102,9 +95,7 @@ function LogsFase({
               {r.marca_nombre ? <span className="text-muted-foreground"> · {r.marca_nombre}</span> : null}
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <Badge variant={VARIANTE_ESTADO[r.estado_global] ?? "secondary"} className="text-[11px]">
-                {r.estado_global}
-              </Badge>
+              <ChipEstado estado={r.estado_global} className="text-[11px]" />
               <span className="tabular-nums text-muted-foreground">
                 {tiempoRelativo(r.actualizado) || r.actualizado?.slice(0, 10)}
               </span>

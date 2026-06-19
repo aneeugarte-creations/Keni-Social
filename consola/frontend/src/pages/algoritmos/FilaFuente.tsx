@@ -49,20 +49,16 @@ export function FilaFuente({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {fuente.ultimo_error ? (
-              <CircleX className="h-3.5 w-3.5 shrink-0 text-rose-500" aria-hidden="true" />
+              <CircleX className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden="true" />
             ) : (
               <CircleCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden="true" />
             )}
             <p className="truncate text-sm font-medium">{fuente.nombre}</p>
             <Badge variant="outline">{fuente.plataforma_nombre || fuente.plataforma}</Badge>
-            {fuente.tipo === "oficial" && (
-              <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
-                Oficial
-              </Badge>
-            )}
+            {fuente.tipo === "oficial" && <Badge variant="info">Oficial</Badge>}
           </div>
           {fuente.ultimo_error ? (
-            <p className="truncate text-xs text-rose-600 dark:text-rose-400">{fuente.ultimo_error}</p>
+            <p className="truncate text-xs text-red-600 dark:text-red-400">{fuente.ultimo_error}</p>
           ) : (
             <p className="truncate text-xs text-muted-foreground">
               {fuente.ultimo_conteo} noticia(s)

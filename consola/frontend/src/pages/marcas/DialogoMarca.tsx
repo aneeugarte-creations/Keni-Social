@@ -3,6 +3,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,7 +58,6 @@ export function DialogoMarca({
   const [idMetricas, setIdMetricas] = React.useState("");
   const [tipo, setTipo] = React.useState<TipoMarca>("noticias");
   const [etiquetaInvestigacion, setEtiquetaInvestigacion] = React.useState("Noticias");
-  const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
 
   React.useEffect(() => {
     if (abierto) {
@@ -66,7 +66,6 @@ export function DialogoMarca({
       setIdMetricas(inicial?.id_metricas ?? "");
       setTipo(inicial?.tipo ?? "noticias");
       setEtiquetaInvestigacion(inicial?.etiqueta_investigacion || "Noticias");
-      setConfirmandoBorrado(false);
     }
   }, [abierto, inicial]);
 
@@ -112,6 +111,17 @@ export function DialogoMarca({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const pedirBorrar = async () => {
+    if (
+      await confirmar({
+        titulo: "Borrar marca",
+        mensaje: `¿Borrar “${inicial?.etiqueta}”? Desaparece del catálogo y de los selectores. El contenido y las credenciales ya existentes no se borran (quedan inertes).`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    )
+      borrar.mutate();
+  };
 
   const ocupado = crear.isPending || editar.isPending || borrar.isPending;
   const valido = etiqueta.trim() !== "";
@@ -211,47 +221,30 @@ export function DialogoMarca({
           )}
         </div>
 
-        {/* Pie: en edición, «Borrar marca» a la izquierda (con confirmación en línea). */}
-        {confirmandoBorrado ? (
-          <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-            <p className="text-sm text-muted-foreground">
-              ¿Borrar “{inicial?.etiqueta}”? Desaparece del catálogo y de los selectores. El
-              contenido y las credenciales ya existentes no se borran (quedan inertes).
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmandoBorrado(false)} disabled={borrar.isPending}>
-                Cancelar
+        {/* Pie: en edición, «Borrar marca» a la izquierda (la confirmación va por `confirmar()`). */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div>
+            {esEditar && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => void pedirBorrar()}
+                disabled={ocupado}
+              >
+                <Trash2 className="h-4 w-4" /> Borrar marca
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
-                {borrar.isPending ? "Borrando…" : "Sí, borrar"}
-              </Button>
-            </div>
+            )}
           </div>
-        ) : (
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div>
-              {esEditar && (
-                <Button
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setConfirmandoBorrado(true)}
-                  disabled={ocupado}
-                >
-                  <Trash2 className="h-4 w-4" /> Borrar marca
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
-                Cancelar
-              </Button>
-              <Button onClick={() => (esEditar ? editar.mutate() : crear.mutate())} disabled={ocupado || !valido}>
-                {crear.isPending || editar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {esEditar ? "Guardar" : "Crear"}
-              </Button>
-            </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+              Cancelar
+            </Button>
+            <Button onClick={() => (esEditar ? editar.mutate() : crear.mutate())} disabled={ocupado || !valido}>
+              {crear.isPending || editar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {esEditar ? "Guardar" : "Crear"}
+            </Button>
           </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );

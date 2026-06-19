@@ -14,6 +14,7 @@ import { ChevronDown, ChevronRight, CircleCheck, OctagonX, TriangleAlert } from 
 import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { INTERVALO_SERIE_MS } from "@/lib/refresco";
@@ -159,21 +160,19 @@ export function ZonaEstado({ esAdmin, marca }: { esAdmin: boolean; marca?: strin
  *  pudo preguntar. */
 function AvisoDoctorCaido({ doctor }: { doctor: ReturnType<typeof useDoctor> }) {
   return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 px-3.5 py-2.5 text-sm"
-    >
-      <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
-      <span className="min-w-0 flex-1">No se pudo leer el estado de la máquina.</span>
-      <button
-        type="button"
-        onClick={() => void doctor.refetch()}
-        disabled={doctor.isFetching}
-        className="shrink-0 text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
-      >
-        {doctor.isFetching ? "Reintentando…" : "Reintentar"}
-      </button>
-    </div>
+    <Aviso role="alert" className="flex-wrap items-center gap-2.5">
+      <span className="flex flex-wrap items-center gap-2.5">
+        <span className="min-w-0 flex-1">No se pudo leer el estado de la máquina.</span>
+        <button
+          type="button"
+          onClick={() => void doctor.refetch()}
+          disabled={doctor.isFetching}
+          className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          {doctor.isFetching ? "Reintentando…" : "Reintentar"}
+        </button>
+      </span>
+    </Aviso>
   );
 }
 

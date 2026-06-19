@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import type { Pieza } from "@/types";
@@ -11,6 +12,12 @@ import { VistaLista, kebabSegunPuntero } from "./VistaLista";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
+
+// El borrado (individual y en lote) pasa por el helper `confirmar()`; lo mockeamos a
+// "true" para ejercitar el camino confirmado sin montar el AlertDialog raíz.
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: vi.fn(() => Promise.resolve(true)),
 }));
 
 /** Una `Pieza` mínima viable (los campos que VistaLista/Tarjeta leen). */
@@ -97,6 +104,7 @@ function renderLista(
 
 describe("VistaLista — selección múltiple y borrado en masa", () => {
   afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => vi.mocked(confirmar).mockResolvedValue(true));
 
   it("sin selección no muestra la barra de borrado en masa", () => {
     renderLista([pub()]);
@@ -124,10 +132,8 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Uno"/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Tres"/ }));
 
-    // Abre el diálogo de confirmación desde la barra y confirma dentro de él.
+    // La barra de borrado pasa por confirmar() (mockeado a true): borra directo.
     fireEvent.click(screen.getByRole("button", { name: /^Borrar 2$/ }));
-    const dialogo = await screen.findByRole("dialog");
-    fireEvent.click(within(dialogo).getByRole("button", { name: /^Borrar 2$/ }));
 
     // UN solo round-trip con las ids seleccionadas (no un DELETE por pieza).
     await waitFor(() => expect(borrar).toHaveBeenCalledTimes(1));
@@ -144,8 +150,6 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Uno"/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar "Tres"/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Borrar 2$/ }));
-    const dialogo = await screen.findByRole("dialog");
-    fireEvent.click(within(dialogo).getByRole("button", { name: /^Borrar 2$/ }));
 
     const { toast } = await import("sonner");
     await waitFor(() =>
