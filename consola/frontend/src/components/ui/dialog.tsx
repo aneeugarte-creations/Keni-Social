@@ -61,7 +61,15 @@ DialogHeader.displayName = "DialogHeader";
 function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+      className={cn(
+        // Pie ANCLADO al fondo del diálogo: si el contenido es alto y el diálogo hace scroll, las
+        // acciones (Guardar/Cancelar…) quedan SIEMPRE visibles, nunca cortadas al final. El fondo
+        // tapa el contenido que pasa por debajo y el borde superior lo separa del cuerpo. En un
+        // diálogo que no hace scroll solo añade esa línea separadora; no depende del padding del
+        // contenedor (sin sangrados negativos), así que es seguro en cualquier diálogo.
+        "sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-end sm:space-x-2",
+        className,
+      )}
       {...props}
     />
   );

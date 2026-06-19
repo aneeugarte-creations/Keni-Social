@@ -242,7 +242,7 @@ export function DialogoCrearTarea({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => (o ? onOpenChange(o) : cerrar())}>
-      <DialogContent className="gap-3">
+      <DialogContent className="gap-2.5">
         <DialogHeader>
           <DialogTitle>Añadir a la lista</DialogTitle>
         </DialogHeader>
@@ -376,13 +376,13 @@ export function DialogoCrearTarea({
                 if (texto) setPegado(texto.trim());
               }}
               className={cn(
-                "space-y-2 rounded-lg border border-dashed p-3 transition-colors",
+                "space-y-1.5 rounded-lg border border-dashed p-2.5 transition-colors",
                 arrastrando ? "border-foreground/40 bg-muted" : "border-border",
               )}
             >
               <div className="flex items-center gap-1.5 text-sm font-medium">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Pega un enlace, suelta un documento o PDF, o escribe una frase y lo creo solo
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                Pega un enlace, sube un documento o escribe una frase
               </div>
               <Textarea
                 value={pegado}
@@ -433,11 +433,11 @@ export function DialogoCrearTarea({
               </div>
             </div>
 
-            <div className="relative py-1 text-center text-xs text-muted-foreground">
+            <div className="relative text-center text-xs text-muted-foreground">
               — o escríbelo a mano —
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="space-y-1.5">
                 <Label htmlFor="tarea-titulo">
                   {modo === "evento" ? "Qué evento" : "Qué hay que hacer"}
