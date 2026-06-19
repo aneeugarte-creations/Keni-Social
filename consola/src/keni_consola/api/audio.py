@@ -74,11 +74,14 @@ def _segmentos_de(item: dict) -> list[dict]:
 
 
 def _transcripcion_a_dict(item: dict) -> dict:
-    """Serializa un audio: `segmentos` como objeto, URL de media y nombre de marca."""
+    """Serializa un audio: `segmentos`/`tratamientos` como listas, URL de media y nombre de marca."""
     media_id = item.get("media_id") or ""
+    crudo = item.get("tratamientos") or ""
+    tratamientos = [t for t in crudo.split(",") if t] if isinstance(crudo, str) else []
     return {
         **item,
         "segmentos": _segmentos_de(item),
+        "tratamientos": tratamientos,
         "media_url": f"/api/media/{media_id}" if media_id else "",
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
     }
@@ -148,13 +151,16 @@ async def crear_transcripcion(request: Request) -> Response:
         return JSONResponse({"error": "No se pudo guardar el archivo."}, status_code=500)
 
     fila = repos.crear_audio_transcripcion(
-        marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente"
+        marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente",
+        tratamientos=",".join(tratamientos),
     )
     gen = _encolar_asr(fila, idioma, tratamientos)
     if isinstance(gen, Response):
         # No se pudo encolar (cola llena): NO dejar una fila huérfana en 'pendiente' sin job.
         repos.borrar_audio_transcripcion(fila["id"])
         return gen
+    # Liga el job del motor (whisper) para seguir su progreso en vivo desde la página.
+    fila = repos.actualizar_audio_transcripcion(fila["id"], {"gen_id": gen["id"]}) or fila
     return JSONResponse(
         {"transcripcion": _transcripcion_a_dict(fila), "gen_id": gen["id"]}, status_code=201
     )
@@ -237,6 +243,7 @@ async def retranscribir(request: Request) -> Response:
     gen = _encolar_asr(fila, fila.get("idioma") or "es-MX", [])
     if isinstance(gen, Response):
         return gen
+    repos.actualizar_audio_transcripcion(transcripcion_id, {"gen_id": gen["id"]})
     return JSONResponse({"gen_id": gen["id"]})
 
 

@@ -25,6 +25,8 @@ _COLS_AUDIO_TRANSCRIPCIONES = (
     "texto",
     "resumen",
     "error",
+    "gen_id",
+    "tratamientos",
     "creado",
     "actualizado",
 )
@@ -40,6 +42,8 @@ _CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES: tuple[str, ...] = (
     "texto",
     "resumen",
     "error",
+    "gen_id",
+    "tratamientos",
 )
 
 
@@ -66,6 +70,8 @@ def crear_audio_transcripcion(
     texto: str = "",
     resumen: str = "",
     error: str = "",
+    gen_id: str = "",
+    tratamientos: str = "",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -84,6 +90,8 @@ def crear_audio_transcripcion(
         "texto": texto or "",
         "resumen": resumen or "",
         "error": error or "",
+        "gen_id": gen_id or "",
+        "tratamientos": tratamientos or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

@@ -26,8 +26,10 @@ import {
   SpellCheck,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
@@ -327,6 +329,89 @@ function Vacio({ texto }: { texto: string }) {
   );
 }
 
+// Orden canónico en que se pintan los documentos de un audio.
+const ORDEN_ARTEFACTO: TipoArtefacto[] = [
+  "srt",
+  "texto",
+  "limpio",
+  "resumen",
+  "preguntas",
+  "ideas",
+  "corregido",
+];
+
+const FASE_LEGIBLE: Record<string, string> = {
+  "extrayendo audio": "Extrayendo la pista de voz…",
+  transcribiendo: "Transcribiendo el audio…",
+  "generando artefactos": "Creando los documentos…",
+  razonando: "Razonando…",
+  generando: "Escribiendo…",
+};
+
+// Vista VIVA y DESECHABLE de un job: confirma que está corriendo (no pillado). Para whisper muestra
+// la fase del motor; para claude streamea el texto token a token. Enlaza a Actividad IA.
+function ProgresoVivo({
+  genId,
+  modo,
+  onCerrar,
+}: {
+  genId: string;
+  modo: "whisper" | "claude";
+  onCerrar?: () => void;
+}) {
+  const q = useQuery({
+    queryKey: ["audio", "gen", genId],
+    queryFn: ({ signal }) => api.generacion(genId, signal),
+    enabled: !!genId,
+    refetchInterval: (query) => {
+      const est = query.state.data?.generacion?.estado;
+      return est === "completado" || est === "error" ? false : 1200;
+    },
+  });
+  const g = q.data?.generacion;
+  const corriendo = !g || (g.estado !== "completado" && g.estado !== "error");
+  const fase = g?.fase ? FASE_LEGIBLE[g.fase] ?? g.fase : "En cola…";
+  const salida = g?.salida ?? "";
+
+  return (
+    <div className="flex min-h-0 flex-col gap-1.5 rounded-md border border-border/70 bg-muted/20 p-2.5">
+      <div className="flex items-center gap-2">
+        {corriendo ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+        ) : g?.estado === "error" ? (
+          <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
+        ) : (
+          <Check className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {g?.estado === "error" ? g.error || "Falló." : fase}
+        </span>
+        <Link
+          to={`/maquina/actividad/generacion/${encodeURIComponent(genId)}`}
+          className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Ver en Actividad
+        </Link>
+        {onCerrar ? (
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Ocultar progreso"
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+      {modo === "claude" && salida ? (
+        <pre className="max-h-40 min-h-0 overflow-auto whitespace-pre-wrap rounded border border-border/60 bg-background p-2 font-mono text-xs text-muted-foreground">
+          {salida}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
   const variante =
     estado === "error" ? "destructive" : estado === "transcrito" || estado === "editado" ? "secondary" : "outline";
@@ -507,14 +592,20 @@ function PanelArtefactos({
       </div>
     );
   }
+  // Mientras corre el lote (transcribiendo o con algún artefacto generándose), PINTA también los
+  // documentos que se van a crear (SRT + tratamientos elegidos) aunque aún no exista su fila.
+  const enLote =
+    EN_PROCESO.includes(audio.estado) || artefactos.some((a) => a.estado === "generando");
+  const tiposReales = new Set(artefactos.map((a) => a.tipo));
+  const planeados = enLote
+    ? ORDEN_ARTEFACTO.filter(
+        (t) => (t === "srt" || audio.tratamientos.includes(t)) && !tiposReales.has(t),
+      )
+    : [];
+
   return (
     <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
       <span className="px-1 text-label">Artefactos</span>
-      {EN_PROCESO.includes(audio.estado) ? (
-        <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribiendo…
-        </div>
-      ) : null}
       {audio.estado === "error" ? (
         <div className="flex flex-col gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
           <span>{audio.error || "No se pudo transcribir."}</span>
@@ -524,7 +615,7 @@ function PanelArtefactos({
         </div>
       ) : null}
 
-      {cargando ? (
+      {cargando && !artefactos.length && !planeados.length ? (
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
         <div className="flex flex-col gap-1 overflow-y-auto">
@@ -548,6 +639,23 @@ function PanelArtefactos({
                   <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
                 )}
               </button>
+            );
+          })}
+          {/* Documentos planificados (aún sin fila): por crear cuando termine la transcripción. */}
+          {planeados.map((t) => {
+            const transcribiendo = t === "srt" && EN_PROCESO.includes(audio.estado);
+            return (
+              <div
+                key={`plan:${t}`}
+                className="flex items-center justify-between gap-1.5 rounded-md border border-dashed border-border/70 px-2 py-1.5 text-xs text-muted-foreground"
+              >
+                <span className="truncate">{TITULO_ARTEFACTO[t]}</span>
+                {transcribiendo ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                ) : (
+                  <span className="shrink-0 text-xs">en cola</span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -578,6 +686,10 @@ function Lector({
     setTexto(artefacto?.contenido ?? "");
     setEditando(false);
   }, [artefacto?.id, artefacto?.contenido]);
+
+  // Progreso vivo (desechable): se puede ocultar; reaparece al cambiar de audio.
+  const [verProgreso, setVerProgreso] = React.useState(true);
+  React.useEffect(() => setVerProgreso(true), [audio?.id]);
 
   // Fuente de un tratamiento NUEVO: el artefacto abierto o, si ninguno, el SRT (base canónica).
   const srt = artefactos.find((a) => a.tipo === "srt") ?? null;
@@ -698,12 +810,31 @@ function Lector({
         {!audio ? (
           <Vacio texto="Elige un audio de la lista." />
         ) : EN_PROCESO.includes(audio.estado) ? (
-          <Vacio texto="Transcribiendo… los artefactos aparecerán aquí." />
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {audio.gen_id && verProgreso ? (
+              <ProgresoVivo
+                genId={audio.gen_id}
+                modo="whisper"
+                onCerrar={() => setVerProgreso(false)}
+              />
+            ) : null}
+            <Vacio texto="Transcribiendo… los documentos aparecerán aquí." />
+          </div>
         ) : !artefacto ? (
           <Vacio texto="Elige un artefacto." />
         ) : artefacto.estado === "generando" ? (
-          <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {artefacto.gen_id && verProgreso ? (
+              <ProgresoVivo
+                genId={artefacto.gen_id}
+                modo="claude"
+                onCerrar={() => setVerProgreso(false)}
+              />
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
+              </div>
+            )}
           </div>
         ) : artefacto.estado === "error" ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">

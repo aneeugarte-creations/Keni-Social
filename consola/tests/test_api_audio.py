@@ -50,6 +50,10 @@ def test_crear_sube_crea_y_encola_con_tratamientos(cliente, monkeypatch):
     t = r.json()["transcripcion"]
     assert r.json()["gen_id"] == "gen-asr-1"
     assert t["estado"] == "pendiente" and t["media_id"] == "audios/abc.mp3"
+    # La fila liga el job del motor (progreso en vivo) y recuerda los tratamientos elegidos
+    # (para pintar los documentos por crear mientras se transcribe).
+    assert t["gen_id"] == "gen-asr-1"
+    assert t["tratamientos"] == ["resumen", "ideas"]
 
     assert capturado["kind"] == jobspec.PROC_TRANSCRIBIR_AUDIO
     assert capturado["params"]["transcripcion_id"] == t["id"]

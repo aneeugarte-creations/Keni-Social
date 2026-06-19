@@ -38,6 +38,10 @@ export interface TranscripcionAudio {
   segmentos: SegmentoAudio[];
   texto: string;
   error: string;
+  /** Job del motor (whisper) en curso, para seguir su progreso en vivo. */
+  gen_id: string;
+  /** Tratamientos elegidos al subir (para pintar los documentos que se van a crear). */
+  tratamientos: TipoArtefacto[];
   creado: string;
   actualizado: string;
 }

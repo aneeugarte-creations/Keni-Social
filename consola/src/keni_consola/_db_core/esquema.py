@@ -1453,12 +1453,19 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         texto        TEXT NOT NULL DEFAULT '',
         resumen      TEXT NOT NULL DEFAULT '',
         error        TEXT NOT NULL DEFAULT '',
+        gen_id       TEXT NOT NULL DEFAULT '',
+        tratamientos TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_marca ON audio_transcripciones (marca)",
     "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_estado ON audio_transcripciones (estado)",
+    # `gen_id`: job del MOTOR (whisper) en curso, para seguir su progreso en vivo. `tratamientos`:
+    # los tratamientos elegidos al subir (lista separada por comas), para PINTAR los documentos que se
+    # van a crear mientras se transcribe (antes de que existan sus filas en `audio_artefactos`).
+    "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS gen_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS tratamientos TEXT NOT NULL DEFAULT ''",
     # ARTEFACTOS de un audio: cada audio (fila `audio_transcripciones`) produce VARIOS artefactos
     # independientes — `srt` (subtítulos, por defecto), `texto` plano, y los tratamientos de Claude
     # (`limpio`, `resumen`, `preguntas`, `ideas`, `corregido`). `contenido` es el texto del artefacto;
