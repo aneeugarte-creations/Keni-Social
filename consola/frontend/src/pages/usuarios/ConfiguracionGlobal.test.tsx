@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { SesionProvider } from "@/hooks/use-sesion";
 
 import ConfiguracionGlobal from "./ConfiguracionGlobal";
@@ -27,6 +28,17 @@ const AJUSTES = [
     valor: false,
     fuente: "defecto",
     defecto: false,
+  },
+  {
+    clave: "KENI_CONSOLA_MFA_ADMIN",
+    tipo: "bool",
+    etiqueta: "Passkey obligatorio para administradores",
+    ayuda: "Obliga a los administradores.",
+    grupo: "seguridad",
+    peligroso: false,
+    valor: true,
+    fuente: "defecto",
+    defecto: true,
   },
   {
     clave: "KENI_CONSOLA_SESION_HORAS",
@@ -55,6 +67,11 @@ const AJUSTES = [
   },
 ];
 
+const USUARIOS = [
+  { id: "u0", usuario: "admin", rol: "admin", nombre: "Admin", superadmin: true, mfa_activo: true },
+  { id: "u1", usuario: "ana", rol: "editor", nombre: "Ana López", mfa_activo: false },
+];
+
 interface Captura {
   url: string;
   metodo: string;
@@ -80,6 +97,9 @@ function stubFetch(capturas: Captura[]) {
         }
         return new Response(JSON.stringify({ ajustes: AJUSTES }), { status: 200 });
       }
+      if (ruta.includes("/api/usuarios")) {
+        return new Response(JSON.stringify({ usuarios: USUARIOS }), { status: 200 });
+      }
       return new Response("{}", { status: 200 });
     }),
   );
@@ -92,6 +112,7 @@ function renderConfig() {
       <SesionProvider>
         <MemoryRouter>
           <ConfiguracionGlobal />
+          <ContenedorConfirmacion />
         </MemoryRouter>
       </SesionProvider>
     </QueryClientProvider>,
@@ -118,7 +139,24 @@ describe("ConfiguracionGlobal", () => {
     expect(screen.getByText("Contraseñas")).toBeInTheDocument();
   });
 
-  it("cambiar un control dispara el PATCH del ajuste", async () => {
+  it("cambiar un valor numérico dispara el PATCH del ajuste (sin confirmación)", async () => {
+    const capturas: Captura[] = [];
+    stubFetch(capturas);
+    renderConfig();
+
+    const input = await screen.findByLabelText("Duración de la sesión (horas)");
+    fireEvent.change(input, { target: { value: "24" } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      const patch = capturas.find(
+        (c) => c.url.includes("/api/usuarios/configuracion") && c.metodo === "PATCH",
+      );
+      expect(patch?.body).toMatchObject({ clave: "KENI_CONSOLA_SESION_HORAS", valor: 24 });
+    });
+  });
+
+  it("el flag global pide confirmación y solo PATCHea al confirmar", async () => {
     const capturas: Captura[] = [];
     stubFetch(capturas);
     renderConfig();
@@ -128,11 +166,46 @@ describe("ConfiguracionGlobal", () => {
     });
     fireEvent.click(sw);
 
+    // Aparece la confirmación; aún no se ha PATCHeado nada.
+    const confirmar = await screen.findByRole("button", { name: "Activar para todos" });
+    expect(
+      capturas.find(
+        (c) => c.url.includes("/api/usuarios/configuracion") && c.metodo === "PATCH",
+      ),
+    ).toBeUndefined();
+
+    fireEvent.click(confirmar);
+
     await waitFor(() => {
       const patch = capturas.find(
         (c) => c.url.includes("/api/usuarios/configuracion") && c.metodo === "PATCH",
       );
       expect(patch?.body).toMatchObject({ clave: "KENI_CONSOLA_MFA", valor: true });
     });
+  });
+
+  it("cancelar la confirmación del flag global NO PATCHea", async () => {
+    const capturas: Captura[] = [];
+    stubFetch(capturas);
+    renderConfig();
+
+    const sw = await screen.findByRole("switch", {
+      name: "Passkey obligatorio para todo el equipo",
+    });
+    fireEvent.click(sw);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Activar para todos" })).not.toBeInTheDocument(),
+    );
+    expect(
+      capturas.find(
+        (c) =>
+          c.url.includes("/api/usuarios/configuracion") &&
+          c.metodo === "PATCH" &&
+          (c.body as { clave?: string })?.clave === "KENI_CONSOLA_MFA",
+      ),
+    ).toBeUndefined();
   });
 });

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
-import { type AjusteConfig } from "@/types";
+import { nombreVisible } from "@/lib/organigrama";
+import { type AjusteConfig, type UsuarioAdmin } from "@/types";
 
 import {
   CLAVE_CONFIG_USUARIOS,
@@ -25,14 +27,19 @@ import {
   CLAVE_PASSWORD_MIN,
   CLAVE_SESION_HORAS,
   CLAVE_SESION_MAX_HORAS,
+  CLAVE_USUARIOS,
 } from "./tipos";
 
 /** Secciones de la página: cada una agrupa un conjunto explícito de claves (no usa `grupo`). */
-const SECCIONES: { titulo: string; descripcion: string; claves: string[] }[] = [
+const SECCIONES: { titulo: string; descripcion: string; claves: string[]; nota?: string }[] = [
   {
     titulo: "Acceso",
     descripcion: "Obligatoriedad del segundo factor (passkey).",
     claves: [CLAVE_MFA, CLAVE_MFA_ADMIN],
+    nota:
+      "Con «passkey obligatorio para todo el equipo» activo, TODAS las cuentas quedan obligadas " +
+      "y no se puede eximir a nadie por separado (el interruptor individual de cada persona se " +
+      "muestra exigido). Desactívalo para gestionar la exigencia persona a persona.",
   },
   {
     titulo: "Sesión",
@@ -45,6 +52,50 @@ const SECCIONES: { titulo: string; descripcion: string; claves: string[] }[] = [
     claves: [CLAVE_PASSWORD_MIN],
   },
 ];
+
+/** ¿A esta persona se le exige passkey por una política DISTINTA del flag global? (rol admin con
+ * el flag de admins, o exigencia individual). Si no, su exigencia la decide SOLO el flag global,
+ * así que activarlo/desactivarlo le AFECTA. */
+function afectadoPorGlobal(u: UsuarioAdmin, mfaAdminActivo: boolean): boolean {
+  const forzadoPorRol = u.rol === "admin" && mfaAdminActivo;
+  return !forzadoPorRol && !u.mfa_requerido;
+}
+
+/** Mensaje (ReactNode) del diálogo de confirmación del flag global: lista de afectados.
+ * Solo `<span>` (válido dentro del `<p>` de AlertDialogDescription). */
+function mensajeAfectados(activar: boolean, afectados: UsuarioAdmin[]): React.ReactNode {
+  if (afectados.length === 0) {
+    return (
+      <span>
+        Todo el equipo ya tiene la passkey exigida (por rol de administrador o de forma
+        individual): este cambio no altera a nadie.
+      </span>
+    );
+  }
+  const n = afectados.length;
+  const personas = n === 1 ? "1 persona" : `${n} personas`;
+  return (
+    <span className="block space-y-2 text-left">
+      <span className="block">
+        {activar
+          ? `Quedarán obligadas a tener una llave de acceso (passkey) ${personas}. Las que aún no tengan una deberán inscribirla en su próximo inicio de sesión:`
+          : `Dejará de exigirse la passkey a ${personas} (los administradores y quienes la tengan exigida individualmente seguirán obligados):`}
+      </span>
+      <span className="block max-h-48 divide-y overflow-auto rounded-md border">
+        {afectados.map((u) => (
+          <span key={u.id} className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-sm">
+            <span className="truncate">
+              {nombreVisible(u)} <span className="text-muted-foreground">@{u.usuario}</span>
+            </span>
+            {activar && !u.mfa_activo && (
+              <span className="shrink-0 text-xs text-amber-600 dark:text-amber-500">sin llave</span>
+            )}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
 
 /** Etiqueta + estilo del origen del valor (de dónde sale lo que se aplica hoy). */
 function FuenteBadge({ fuente }: { fuente: AjusteConfig["fuente"] }) {
@@ -199,6 +250,14 @@ export default function ConfiguracionGlobal() {
     enabled: esSuperadmin,
   });
 
+  // Equipo: para confirmar el flag global con la lista de personas a las que afecta el cambio.
+  const usuariosQuery = useQuery({
+    queryKey: CLAVE_USUARIOS,
+    queryFn: ({ signal }) => api.usuarios(signal),
+    enabled: esSuperadmin,
+  });
+  const usuarios = usuariosQuery.data?.usuarios ?? [];
+
   const guardar = useMutation({
     mutationFn: (cuerpo: { clave: string; valor?: unknown; reset?: boolean }) =>
       api.actualizarConfiguracionUsuarios(cuerpo),
@@ -209,14 +268,32 @@ export default function ConfiguracionGlobal() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const onGuardar = (clave: string, valor: unknown) => guardar.mutate({ clave, valor });
-  const onReset = (clave: string) => guardar.mutate({ clave, reset: true });
-
   const porClave = React.useMemo(() => {
     const mapa = new Map<string, AjusteConfig>();
     for (const a of query.data?.ajustes ?? []) mapa.set(a.clave, a);
     return mapa;
   }, [query.data]);
+
+  const onGuardar = async (clave: string, valor: unknown) => {
+    // El flag GLOBAL afecta a todo el equipo: confirmamos con la lista de afectados antes de
+    // aplicarlo (un toggle silencioso fuerza a media plantilla a inscribir passkey sin avisar).
+    if (clave === CLAVE_MFA && typeof valor === "boolean") {
+      const mfaAdminActivo = porClave.get(CLAVE_MFA_ADMIN)?.valor === true;
+      const afectados = usuarios
+        .filter((u) => afectadoPorGlobal(u, mfaAdminActivo))
+        .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
+      const ok = await confirmar({
+        titulo: valor
+          ? "Exigir passkey a todo el equipo"
+          : "Dejar de exigir passkey a todo el equipo",
+        mensaje: mensajeAfectados(valor, afectados),
+        textoConfirmar: valor ? "Activar para todos" : "Desactivar",
+      });
+      if (!ok) return;
+    }
+    guardar.mutate({ clave, valor });
+  };
+  const onReset = (clave: string) => guardar.mutate({ clave, reset: true });
 
   if (!cargando && !esSuperadmin) {
     return (
@@ -251,8 +328,8 @@ export default function ConfiguracionGlobal() {
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
               <p className="text-muted-foreground">
-                La maquinaria de verificación en dos pasos no está activa en el servidor (falta la
-                clave de firma). Aunque exijas passkey aquí, la obligatoriedad no surtirá efecto
+                La maquinaria de llaves de acceso (passkeys) no está activa en el servidor (falta
+                la clave de firma). Aunque exijas passkey aquí, la obligatoriedad no surtirá efecto
                 hasta configurarla.
               </p>
             </div>
@@ -288,6 +365,9 @@ export default function ConfiguracionGlobal() {
                         ocupado={guardar.isPending}
                       />
                     ),
+                  )}
+                  {seccion.nota && (
+                    <p className="text-xs text-muted-foreground">{seccion.nota}</p>
                   )}
                 </CardContent>
               </Card>

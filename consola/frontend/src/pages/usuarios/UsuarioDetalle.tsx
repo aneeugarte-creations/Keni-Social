@@ -49,6 +49,8 @@ import { formatearFecha } from "./lib";
 import { SelectorMarcas } from "./SelectorMarcas";
 import {
   CLAVE_CONFIG_USUARIOS,
+  CLAVE_MFA,
+  CLAVE_MFA_ADMIN,
   CLAVE_OPCIONES_MARCAS,
   CLAVE_PASSWORD_MIN,
   CLAVE_USUARIOS,
@@ -121,6 +123,16 @@ export default function UsuarioDetalle() {
     const ajuste = configQuery.data?.find((a) => a.clave === CLAVE_PASSWORD_MIN);
     return typeof ajuste?.valor === "number" ? ajuste.valor : MIN_PASSWORD;
   }, [configQuery.data]);
+  // Políticas globales: si una EXIGE passkey a esta persona, su toggle individual se muestra
+  // exigido y bloqueado (no se puede eximir a alguien a quien la política global ya obliga).
+  const mfaGlobal = React.useMemo(
+    () => configQuery.data?.find((a) => a.clave === CLAVE_MFA)?.valor === true,
+    [configQuery.data],
+  );
+  const mfaAdmin = React.useMemo(
+    () => configQuery.data?.find((a) => a.clave === CLAVE_MFA_ADMIN)?.valor === true,
+    [configQuery.data],
+  );
 
   const usuarios = query.data?.usuarios ?? [];
   const porId = React.useMemo(() => indexarPorId(usuarios), [usuarios]);
@@ -269,6 +281,17 @@ export default function UsuarioDetalle() {
   const cargoActual = (usuario.cargo ?? "") as CargoUsuario;
   const superiorActual = (usuario.manager_id ?? "") || SIN_SUPERIOR;
   const rolActual = usuario.superadmin ? ROL_SUPERADMIN : usuario.rol;
+
+  // ¿Una política GLOBAL ya exige passkey a esta persona? Si sí, su toggle individual se muestra
+  // exigido y bloqueado (coherencia: no se puede eximir a quien la política obliga).
+  const forzadoPorGlobal = mfaGlobal;
+  const forzadoPorAdmin = !mfaGlobal && usuario.rol === "admin" && mfaAdmin;
+  const forzadoPorPolitica = forzadoPorGlobal || forzadoPorAdmin;
+  const notaPasskey = forzadoPorGlobal
+    ? "Exigido por la política global (passkey para todo el equipo)."
+    : forzadoPorAdmin
+      ? "Exigido por la política para administradores."
+      : null;
 
   // Candidatos a superior: todos menos uno mismo y sus descendientes (evita ciclos).
   const prohibidos = descendientes(usuario.id, hijos);
@@ -461,12 +484,14 @@ export default function UsuarioDetalle() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {usuario.mfa_activo ? "Llave registrada." : "Sin llave aún."}
+                  {notaPasskey ? ` ${notaPasskey}` : ""}
                 </p>
               </div>
               <Switch
                 id="d-passkey"
                 aria-label="Requerir llave de acceso"
-                checked={Boolean(usuario.mfa_requerido)}
+                checked={forzadoPorPolitica || Boolean(usuario.mfa_requerido)}
+                disabled={forzadoPorPolitica}
                 onCheckedChange={(v) => guardar.mutate({ mfa_requerido: v })}
               />
             </div>
