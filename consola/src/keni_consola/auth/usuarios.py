@@ -785,6 +785,24 @@ def borrar_credencial_mfa(usuario_id: str, credencial_id: str) -> bool:
         con.close()
 
 
+def renombrar_credencial_mfa(usuario_id: str, credencial_id: str, nombre: str) -> bool:
+    """Renombra UNA passkey del usuario (etiqueta legible); True si existia.
+
+    Ata el cambio al `usuario_id` (un usuario solo renombra las suyas). No toca la clave publica,
+    el contador ni ningun flag: solo la etiqueta que el usuario ve en su lista.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE webauthn_credenciales SET nombre = ? WHERE id = ? AND usuario_id = ?",
+            (nombre, credencial_id, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def desactivar_mfa(usuario_id: str) -> bool:
     """Borra TODAS las passkeys + recovery y apaga `mfa_activo`; True si existia.
 

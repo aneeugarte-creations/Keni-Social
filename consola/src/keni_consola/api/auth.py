@@ -932,6 +932,26 @@ async def mfa_credencial_borrar(request: Request) -> Response:
     return Response(status_code=204)
 
 
+async def mfa_credencial_renombrar(request: Request) -> Response:
+    """PATCH /api/auth/mfa/credenciales/{id}: renombra UNA passkey del propio usuario (204).
+
+    Cuerpo `{nombre}` (etiqueta legible; "" la vacía). Solo toca la etiqueta. Requiere sesión
+    completa; 404 si esa credencial no es suya / no existe.
+    """
+    usuario = _exige_sesion(request)
+    if usuario is None:
+        return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str):
+        return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+    nombre = nombre.strip()[:80]
+    cred_id = request.path_params.get("id", "")
+    if not auth.renombrar_credencial_mfa(usuario["id"], cred_id, nombre):
+        return JSONResponse({"error": "Esa llave de acceso no existe."}, status_code=404)
+    return Response(status_code=204)
+
+
 async def mfa_disable(request: Request) -> Response:
     """POST /api/auth/mfa/disable: apaga el MFA del propio usuario (exige su contrasena actual).
 
@@ -972,6 +992,7 @@ RUTAS = [
     Route("/api/auth/mfa/registro/opciones", mfa_registro_opciones, methods=["POST"]),
     Route("/api/auth/mfa/registro/verificar", mfa_registro_verificar, methods=["POST"]),
     Route("/api/auth/mfa/credenciales", mfa_credenciales, methods=["GET"]),
+    Route("/api/auth/mfa/credenciales/{id}", mfa_credencial_renombrar, methods=["PATCH"]),
     Route("/api/auth/mfa/credenciales/{id}", mfa_credencial_borrar, methods=["DELETE"]),
     Route("/api/auth/mfa/disable", mfa_disable, methods=["POST"]),
 ]

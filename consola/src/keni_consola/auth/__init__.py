@@ -76,6 +76,7 @@ from .usuarios import (
     listar_usuarios,
     obtener_usuario_por_id,
     reemplazar_marcas_de_usuario,
+    renombrar_credencial_mfa,
     verificar_password_actual,
 )
 
@@ -125,6 +126,7 @@ __all__ = [
     "guardar_credencial_mfa",
     "actualizar_sign_count_mfa",
     "borrar_credencial_mfa",
+    "renombrar_credencial_mfa",
     "desactivar_mfa",
     # Sesiones
     "COOKIE_SESION",

@@ -59,6 +59,11 @@ export const apiAuth = {
     }),
   mfaCredenciales: (signal?: AbortSignal) =>
     peticion<RespuestaMfaCredenciales>("/auth/mfa/credenciales", { signal }),
+  mfaRenombrarCredencial: (id: string, nombre: string) =>
+    peticion<void>(`/auth/mfa/credenciales/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: { nombre },
+    }),
   mfaBorrarCredencial: (id: string) =>
     peticion<void>(`/auth/mfa/credenciales/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   mfaDisable: (passwordActual: string) =>

@@ -342,6 +342,34 @@ def test_borrar_ultima_passkey_apaga_mfa(entorno, monkeypatch):
     assert auth.obtener_usuario_por_id(u["id"])["mfa_activo"] is False
 
 
+def test_renombrar_passkey(entorno, monkeypatch):
+    """CRUD completo de las llaves: el usuario RENOMBRA su propia passkey (PATCH); 404 si no es suya."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    _registrar_passkey_via_api(c, monkeypatch, credential_id="cred-1")
+    cred_id = c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).json()["credenciales"][0]["id"]
+
+    r = c.patch(
+        f"/api/auth/mfa/credenciales/{cred_id}",
+        json={"nombre": "iPhone de Ana"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 204
+    cred = c.get("/api/auth/mfa/credenciales", headers=_ORIGIN).json()["credenciales"][0]
+    assert cred["nombre"] == "iPhone de Ana"
+
+    # Credencial inexistente -> 404 (no se renombra nada ajeno).
+    assert (
+        c.patch(
+            "/api/auth/mfa/credenciales/no-existe", json={"nombre": "x"}, headers=_ORIGIN
+        ).status_code
+        == 404
+    )
+
+
 def test_admin_reset_mfa_limpia_y_login_deja_de_elevar(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
