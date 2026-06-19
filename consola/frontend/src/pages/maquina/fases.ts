@@ -250,6 +250,7 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
       { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Resume la transcripción: idea central, puntos clave y citas", doc: "prompt/audio/resumir" },
       { nombre: "Aclarar", es_ia: true, claves: [], ayuda: "Detecta fragmentos dudosos y pregunta al equipo para corregirlos", doc: "prompt/audio/aclarar" },
       { nombre: "Corregir", es_ia: true, claves: [], ayuda: "Aplica las respuestas del equipo a la transcripción", doc: "prompt/audio/corregir" },
+      { nombre: "Ideas", es_ia: true, claves: [], ayuda: "Extrae ideas de contenido accionables de la transcripción", doc: "prompt/audio/ideas" },
     ],
   },
 ];

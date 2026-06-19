@@ -1,51 +1,59 @@
 /**
- * Gestor de Audio — audio→texto integral.
+ * Gestor de Audio — audio→texto integral, por ARTEFACTOS.
  *
- * Sube cualquier audio o vídeo, extrae la pista de voz y la transcribe EN LOCAL con whisper.cpp
- * (modelo v3 turbo) generando segmentos con timestamps. Sobre esa transcripción, el equipo trabaja
- * con AGENTES de Claude: «Limpiar» (quita silencios/loops/repeticiones/muletillas), «Resumir»,
- * «Aclarar» (pregunta por los fragmentos dudosos) y «Corregir» (aplica las respuestas del equipo).
+ * Subes un audio o vídeo y eliges qué crear: el SRT va siempre; además puedes pedir texto plano y
+ * los tratamientos de Claude (limpio, resumen, preguntas, ideas). Cada uno es un ARTEFACTO
+ * independiente que aparece en su lista y se genera en segundo plano.
  *
- * El humano decide qué se guarda: el resultado de un agente se PREVISUALIZA y solo al «Aceptar» se
- * persiste en la transcripción. Mismo principio que el resto del producto: poca IA de cara afuera,
- * mucha IA hacia adentro; nada se da por bueno sin criterio humano.
+ * UI de 3 paneles: audios · artefactos del audio · contenido del artefacto. Los dos paneles
+ * izquierdos se colapsan para leer a ancho completo (como el lector de contexto). El contenido es
+ * editable (salvo el SRT crudo) y los artefactos markdown se renderizan.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines,
   Check,
+  Download,
   Eraser,
   FileText,
   HelpCircle,
+  Lightbulb,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
   RefreshCw,
   SpellCheck,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import * as React from "react";
-
 import { toast } from "sonner";
 
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Markdown } from "@/components/ui/Markdown";
 import { Textarea } from "@/components/ui/textarea";
-import { useGeneracion } from "@/hooks/use-generacion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, mensajeError, urlMedia } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import type {
+  ArtefactoAudio,
   EstadoTranscripcion,
-  OperacionAgente,
-  SegmentoAudio,
+  TipoArtefacto,
   TranscripcionAudio,
+  TratamientoClaude,
 } from "@/lib/api/audio";
 
 const EN_PROCESO: EstadoTranscripcion[] = ["pendiente", "transcribiendo"];
-
-// Extensiones de SOLO audio: se reproducen con `<audio>` (barra fina), no con `<video>` (caja negra).
-const RE_AUDIO = /\.(mp3|m4a|aac|wav|ogg|oga|flac|weba)$/i;
 
 const ETIQUETA_ESTADO: Record<EstadoTranscripcion, string> = {
   pendiente: "En cola",
@@ -55,18 +63,28 @@ const ETIQUETA_ESTADO: Record<EstadoTranscripcion, string> = {
   error: "Error",
 };
 
-const AGENTES: { op: OperacionAgente; etiqueta: string; Icono: typeof Eraser; ayuda: string }[] = [
-  { op: "limpiar", etiqueta: "Limpiar", Icono: Eraser, ayuda: "Quita silencios, loops, frases repetidas y muletillas" },
-  { op: "resumir", etiqueta: "Resumir", Icono: FileText, ayuda: "Idea central, puntos clave y citas" },
-  { op: "aclarar", etiqueta: "Aclarar", Icono: HelpCircle, ayuda: "Pregunta por los fragmentos que no se entienden" },
-  { op: "corregir", etiqueta: "Corregir", Icono: SpellCheck, ayuda: "Aplica las respuestas del equipo a la transcripción" },
+// Tratamientos elegibles al subir (además del SRT, que va siempre).
+const TRATAMIENTOS_SUBIDA: { tipo: TipoArtefacto; etiqueta: string }[] = [
+  { tipo: "texto", etiqueta: "Texto plano" },
+  { tipo: "limpio", etiqueta: "Limpiar" },
+  { tipo: "resumen", etiqueta: "Resumen" },
+  { tipo: "preguntas", etiqueta: "Preguntas" },
+  { tipo: "ideas", etiqueta: "Ideas" },
 ];
 
-function fmtTiempo(ms: number): string {
+// Tratamientos de Claude que se pueden añadir a mano a un audio ya transcrito.
+const TRATAMIENTOS_CLAUDE: { tipo: TratamientoClaude; etiqueta: string; Icono: typeof Eraser }[] = [
+  { tipo: "limpio", etiqueta: "Limpiar", Icono: Eraser },
+  { tipo: "resumen", etiqueta: "Resumen", Icono: FileText },
+  { tipo: "preguntas", etiqueta: "Preguntas", Icono: HelpCircle },
+  { tipo: "ideas", etiqueta: "Ideas", Icono: Lightbulb },
+];
+
+const EXT_ARTEFACTO: Record<string, string> = { srt: "srt", md: "md", txt: "txt" };
+
+function fmtDur(ms: number): string {
   const total = Math.max(0, Math.floor((ms || 0) / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 export default function Audio() {
@@ -74,92 +92,106 @@ export default function Audio() {
   const marca = marcaActiva ?? marcaPrimaria ?? "";
   const qc = useQueryClient();
 
-  const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
+  const [audioId, setAudioId] = React.useState<string | null>(null);
+  const [artefactoId, setArtefactoId] = React.useState<string | null>(null);
+  const [panelesAbiertos, setPanelesAbiertos] = React.useState(true);
+  const [dialogo, setDialogo] = React.useState(false);
 
-  // Lista de transcripciones de la marca activa. Se resondea mientras haya alguna en proceso.
-  const lista = useQuery({
-    queryKey: ["audio", "transcripciones", marca],
-    queryFn: ({ signal }) => api.audio.transcripciones({ marca: marca || undefined }, signal),
+  // Lista de audios (todos: la herramienta no filtra por marca activa).
+  const audios = useQuery({
+    queryKey: ["audio", "transcripciones"],
+    queryFn: ({ signal }) => api.audio.transcripciones({}, signal),
     refetchInterval: (q) =>
       (q.state.data?.transcripciones ?? []).some((t) => EN_PROCESO.includes(t.estado)) ? 2500 : false,
   });
-  const transcripciones = lista.data?.transcripciones ?? [];
+  const lista = audios.data?.transcripciones ?? [];
+  const audio = lista.find((t) => t.id === audioId) ?? null;
 
-  // Detalle de la transcripción seleccionada; se resondea mientras el ASR esté en curso.
-  const detalle = useQuery({
-    queryKey: ["audio", "transcripcion", seleccionId],
-    queryFn: ({ signal }) => api.audio.transcripcion(seleccionId as string, signal),
-    enabled: seleccionId !== null,
-    refetchInterval: (q) => (EN_PROCESO.includes(q.state.data?.transcripcion.estado as EstadoTranscripcion) ? 2000 : false),
+  // Artefactos del audio seleccionado; se resondea mientras el ASR corre o haya artefactos generándose.
+  const arts = useQuery({
+    queryKey: ["audio", "artefactos", audioId],
+    queryFn: ({ signal }) => api.audio.artefactos(audioId as string, signal),
+    enabled: audioId !== null,
+    refetchInterval: (q) => {
+      const generando = (q.state.data?.artefactos ?? []).some((a) => a.estado === "generando");
+      const enAsr = audio ? EN_PROCESO.includes(audio.estado) : false;
+      return generando || enAsr ? 2500 : false;
+    },
   });
-  const actual = detalle.data?.transcripcion ?? null;
+  const artefactos = arts.data?.artefactos ?? [];
+  const artefacto = artefactos.find((a) => a.id === artefactoId) ?? null;
+
+  // Al cambiar de audio, selecciona su primer artefacto (SRT) en cuanto carguen.
+  React.useEffect(() => {
+    if (audioId === null) return;
+    if (artefactos.length && !artefactos.some((a) => a.id === artefactoId)) {
+      setArtefactoId(artefactos[0].id);
+    }
+  }, [audioId, artefactos, artefactoId]);
 
   const subir = useMutation({
-    mutationFn: async (archivo: File) => {
+    mutationFn: async (v: { archivo: File; tratamientos: TipoArtefacto[] }) => {
       const form = new FormData();
-      form.append("archivo", archivo);
+      form.append("archivo", v.archivo);
       form.append("marca", marca);
-      form.append("nombre", archivo.name);
+      form.append("nombre", v.archivo.name);
+      v.tratamientos.forEach((t) => form.append("tratamientos", t));
       return api.audio.crear(form);
     },
     onSuccess: (r) => {
-      setSeleccionId(r.transcripcion.id);
+      setDialogo(false);
+      setAudioId(r.transcripcion.id);
+      setArtefactoId(null);
       qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
       toast.success("Audio subido. Transcribiendo…");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const eliminar = useMutation({
+  const eliminarAudio = useMutation({
     mutationFn: (id: string) => api.audio.eliminar(id),
     onSuccess: (_d, id) => {
-      if (seleccionId === id) setSeleccionId(null);
+      if (audioId === id) {
+        setAudioId(null);
+        setArtefactoId(null);
+      }
       qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const abrirSelector = () => {
-    if (!marca) {
-      toast.error("Selecciona una marca antes de subir audio.");
-      return;
-    }
-    inputRef.current?.click();
-  };
-  const onArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (f) subir.mutate(f);
-  };
+  const refetchArtefactos = () =>
+    qc.invalidateQueries({ queryKey: ["audio", "artefactos", audioId] });
 
-  // Estado VACÍO total (sin transcripciones y sin selección): un único botón central grande.
-  const vacioTotal = !lista.isLoading && transcripciones.length === 0 && seleccionId === null;
+  const vacioTotal = !audios.isLoading && lista.length === 0;
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
-      <input
-        ref={inputRef}
-        type="file"
-        accept="audio/*,video/*"
-        className="sr-only"
-        onChange={onArchivo}
-      />
-      <TituloPagina titulo="Audio" icono={AudioLines} />
+      <div className="flex items-center justify-between">
+        <TituloPagina titulo="Audio" icono={AudioLines} />
+        {!vacioTotal ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPanelesAbiertos((v) => !v)}
+            className="gap-2"
+            title={panelesAbiertos ? "Colapsar paneles (leer a ancho completo)" : "Mostrar paneles"}
+          >
+            {panelesAbiertos ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+            {panelesAbiertos ? "Lectura" : "Paneles"}
+          </Button>
+        ) : null}
+      </div>
 
       {vacioTotal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
           <Button
             variant="outline"
-            onClick={abrirSelector}
-            disabled={subir.isPending || !marca}
+            onClick={() => setDialogo(true)}
+            disabled={!marca}
             className="gap-2"
           >
-            {subir.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
+            <Upload className="h-4 w-4" />
             Subir audio o vídeo
           </Button>
           <p className="text-xs text-muted-foreground">
@@ -167,120 +199,63 @@ export default function Audio() {
           </p>
         </div>
       ) : (
-        <div className="grid flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
-          <aside className="flex flex-col gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={abrirSelector}
-              disabled={subir.isPending || !marca}
-              className="w-full gap-2"
-            >
-              {subir.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              Subir audio o vídeo
-            </Button>
-
-            <ListaTranscripciones
-              transcripciones={transcripciones}
-              cargando={lista.isLoading}
-              seleccionId={seleccionId}
-              onSeleccionar={setSeleccionId}
-              onEliminar={(id) => eliminar.mutate(id)}
-            />
-          </aside>
+        <div
+          className={`grid flex-1 gap-4 ${
+            panelesAbiertos ? "lg:grid-cols-[15rem_15rem_1fr]" : "grid-cols-1"
+          }`}
+        >
+          {panelesAbiertos ? (
+            <>
+              <PanelAudios
+                lista={lista}
+                cargando={audios.isLoading}
+                audioId={audioId}
+                onSeleccionar={(id) => {
+                  setAudioId(id);
+                  setArtefactoId(null);
+                }}
+                onSubir={() => setDialogo(true)}
+                onEliminar={(id) => eliminarAudio.mutate(id)}
+                puedeSubir={!!marca}
+              />
+              <PanelArtefactos
+                audio={audio}
+                artefactos={artefactos}
+                cargando={arts.isLoading}
+                artefactoId={artefactoId}
+                onSeleccionar={setArtefactoId}
+                onCambio={refetchArtefactos}
+              />
+            </>
+          ) : null}
 
           <section className="min-w-0">
-            {seleccionId === null ? (
-              <Vacio />
-            ) : actual ? (
-              <Editor
-                transcripcion={actual}
-                onCambio={() => {
-                  qc.invalidateQueries({ queryKey: ["audio", "transcripcion", seleccionId] });
-                  qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
-                }}
-              />
+            {artefacto ? (
+              <VistaArtefacto artefacto={artefacto} onCambio={refetchArtefactos} />
+            ) : audio ? (
+              <Vacio texto={EN_PROCESO.includes(audio.estado) ? "Transcribiendo… los artefactos aparecerán aquí." : "Elige un artefacto."} />
             ) : (
-              <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando…
-              </div>
+              <Vacio texto="Elige un audio de la lista." />
             )}
           </section>
         </div>
       )}
+
+      <DialogoSubida
+        abierto={dialogo}
+        onAbierto={setDialogo}
+        subiendo={subir.isPending}
+        onSubir={(archivo, tratamientos) => subir.mutate({ archivo, tratamientos })}
+      />
     </div>
   );
 }
 
-function Vacio() {
+function Vacio({ texto }: { texto: string }) {
   return (
     <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
       <AudioLines className="h-8 w-8 opacity-40" />
-      <p>Elige una transcripción de la lista.</p>
-    </div>
-  );
-}
-
-function ListaTranscripciones({
-  transcripciones,
-  cargando,
-  seleccionId,
-  onSeleccionar,
-  onEliminar,
-}: {
-  transcripciones: TranscripcionAudio[];
-  cargando: boolean;
-  seleccionId: string | null;
-  onSeleccionar: (id: string) => void;
-  onEliminar: (id: string) => void;
-}) {
-  if (cargando) {
-    return (
-      <div className="flex h-20 items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando…
-      </div>
-    );
-  }
-  if (transcripciones.length === 0) {
-    return <p className="px-1 text-xs text-muted-foreground">Aún no hay transcripciones.</p>;
-  }
-  return (
-    <div className="flex flex-col gap-1.5">
-      {transcripciones.map((t) => {
-        const activa = t.id === seleccionId;
-        return (
-          <div
-            key={t.id}
-            className={`group flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm ${
-              activa ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => onSeleccionar(t.id)}
-              className="flex min-w-0 flex-1 flex-col items-start"
-            >
-              <span className="w-full truncate font-medium">{t.nombre || "Sin título"}</span>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <EstadoBadge estado={t.estado} />
-                {t.duracion_ms > 0 ? <span>{fmtTiempo(t.duracion_ms)}</span> : null}
-              </span>
-            </button>
-            <button
-              type="button"
-              title="Eliminar"
-              onClick={() => onEliminar(t.id)}
-              className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        );
-      })}
+      <p>{texto}</p>
     </div>
   );
 }
@@ -295,297 +270,376 @@ function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
   );
 }
 
-function Editor({
-  transcripcion,
+function PanelAudios({
+  lista,
+  cargando,
+  audioId,
+  onSeleccionar,
+  onSubir,
+  onEliminar,
+  puedeSubir,
+}: {
+  lista: TranscripcionAudio[];
+  cargando: boolean;
+  audioId: string | null;
+  onSeleccionar: (id: string) => void;
+  onSubir: () => void;
+  onEliminar: (id: string) => void;
+  puedeSubir: boolean;
+}) {
+  return (
+    <aside className="flex min-w-0 flex-col gap-2">
+      <Button variant="outline" size="sm" onClick={onSubir} disabled={!puedeSubir} className="w-full gap-2">
+        <Upload className="h-4 w-4" /> Subir
+      </Button>
+      {cargando ? (
+        <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
+      ) : (
+        <div className="flex flex-col gap-1.5 overflow-y-auto">
+          {lista.map((t) => {
+            const activo = t.id === audioId;
+            return (
+              <div
+                key={t.id}
+                className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-sm ${
+                  activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
+                }`}
+              >
+                <button type="button" onClick={() => onSeleccionar(t.id)} className="flex min-w-0 flex-1 flex-col items-start">
+                  <span className="w-full truncate font-medium">{t.nombre || "Sin título"}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <EstadoBadge estado={t.estado} />
+                    {t.duracion_ms > 0 ? <span>{fmtDur(t.duracion_ms)}</span> : null}
+                    {t.marca_nombre ? <span className="truncate">· {t.marca_nombre}</span> : null}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  title="Eliminar"
+                  onClick={() => onEliminar(t.id)}
+                  className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+const TITULO_ARTEFACTO: Record<TipoArtefacto, string> = {
+  srt: "Subtítulos (SRT)",
+  texto: "Texto plano",
+  limpio: "Limpio",
+  resumen: "Resumen",
+  preguntas: "Preguntas",
+  ideas: "Ideas",
+  corregido: "Corregido",
+};
+
+function PanelArtefactos({
+  audio,
+  artefactos,
+  cargando,
+  artefactoId,
+  onSeleccionar,
   onCambio,
 }: {
-  transcripcion: TranscripcionAudio;
+  audio: TranscripcionAudio | null;
+  artefactos: ArtefactoAudio[];
+  cargando: boolean;
+  artefactoId: string | null;
+  onSeleccionar: (id: string) => void;
   onCambio: () => void;
 }) {
-  const t = transcripcion;
-  const enProceso = EN_PROCESO.includes(t.estado);
-
-  // Edición local de los segmentos (timestamps fijos; el texto es editable por el humano).
-  const [segmentos, setSegmentos] = React.useState<SegmentoAudio[]>(t.segmentos);
-  React.useEffect(() => setSegmentos(t.segmentos), [t.id, t.segmentos]);
-  const sucio = React.useMemo(
-    () => JSON.stringify(segmentos) !== JSON.stringify(t.segmentos),
-    [segmentos, t.segmentos],
-  );
-
-  // Seguimiento EN VIVO del agente de Claude en curso (stream token a token).
-  const agente = useGeneracion(`audio-agente:${t.id}`);
-  const [opEnCurso, setOpEnCurso] = React.useState<OperacionAgente | null>(null);
-  const [respuestas, setRespuestas] = React.useState("");
-
-  const resultadoTexto =
-    agente.generacion?.resultado?.documento ?? agente.generacion?.salida ?? "";
-
-  const guardar = useMutation({
-    mutationFn: (cambios: Parameters<typeof api.audio.guardar>[1]) => api.audio.guardar(t.id, cambios),
-    onSuccess: () => onCambio(),
+  const qc = useQueryClient();
+  const crear = useMutation({
+    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo),
+    onSuccess: (r) => {
+      onCambio();
+      onSeleccionar(r.artefacto.id);
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
-
-  const retranscribir = useMutation({
-    mutationFn: () => api.audio.retranscribir(t.id),
+  const reintentar = useMutation({
+    mutationFn: () => api.audio.retranscribir(audio!.id),
     onSuccess: () => {
-      toast.success("Reintentando la transcripción…");
-      onCambio();
+      qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
+      toast.success("Reintentando…");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const lanzarAgente = async (op: OperacionAgente) => {
-    setOpEnCurso(op);
-    agente.limpiar();
-    try {
-      const resp = op === "corregir" ? respuestas.split("\n").map((s) => s.trim()).filter(Boolean) : undefined;
-      const { gen_id } = await api.audio.agente(t.id, op, resp);
-      const r = await api.generacion(gen_id);
-      agente.iniciar(r.generacion);
-    } catch (e) {
-      toast.error(mensajeError(e));
-      setOpEnCurso(null);
-    }
-  };
-
-  const aceptarResultado = async () => {
-    if (opEnCurso === "resumir") {
-      await guardar.mutateAsync({ resumen: resultadoTexto });
-      toast.success("Resumen guardado.");
-    } else if (opEnCurso === "limpiar" || opEnCurso === "corregir") {
-      await guardar.mutateAsync({ texto: resultadoTexto, estado: "editado" });
-      toast.success("Texto actualizado.");
-    }
-    descartarResultado();
-  };
-
-  const descartarResultado = () => {
-    agente.limpiar();
-    setOpEnCurso(null);
-    setRespuestas("");
-  };
-
-  const agentesDeshabilitados = enProceso || agente.ejecutando || guardar.isPending;
-  const hayResultado = !agente.ejecutando && opEnCurso !== null && resultadoTexto.trim() !== "";
-
+  if (!audio) {
+    return <aside className="hidden lg:block" />;
+  }
+  const transcrito = audio.estado === "transcrito" || audio.estado === "editado";
   return (
-    <div className="flex flex-col gap-4">
-      {/* Cabecera */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-lg font-semibold">{t.nombre || "Sin título"}</span>
-          <EstadoBadge estado={t.estado} />
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {t.marca_nombre} · {t.idioma}
-          {t.duracion_ms > 0 ? ` · ${fmtTiempo(t.duracion_ms)}` : ""}
-        </div>
-      </div>
-
-      {/* Reproductor del original: pista de audio si es audio; vídeo solo si es vídeo. */}
-      {t.media_url ? (
-        RE_AUDIO.test(t.media_id) ? (
-          <audio controls src={urlMedia(t.media_url)} className="w-full" />
-        ) : (
-          <video controls src={urlMedia(t.media_url)} className="max-h-56 w-full rounded-lg bg-black" />
-        )
-      ) : null}
-
-      {/* Estado del ASR */}
-      {enProceso ? (
-        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Extrayendo la voz y transcribiendo con whisper (v3 turbo)…
+    <aside className="flex min-w-0 flex-col gap-2">
+      {EN_PROCESO.includes(audio.estado) ? (
+        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribiendo…
         </div>
       ) : null}
-      {t.estado === "error" ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <span className="min-w-0">{t.error || "No se pudo transcribir."}</span>
-          <Button size="sm" variant="outline" onClick={() => retranscribir.mutate()} disabled={retranscribir.isPending}>
+      {audio.estado === "error" ? (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+          <span>{audio.error || "No se pudo transcribir."}</span>
+          <Button size="sm" variant="outline" onClick={() => reintentar.mutate()} disabled={reintentar.isPending}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reintentar
           </Button>
         </div>
       ) : null}
 
-      {/* Barra de agentes */}
-      {(t.estado === "transcrito" || t.estado === "editado") && segmentos.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {AGENTES.map(({ op, etiqueta, Icono, ayuda }) => (
+      {cargando ? (
+        <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {artefactos.map((a) => {
+            const activo = a.id === artefactoId;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => onSeleccionar(a.id)}
+                className={`flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2 text-left text-sm ${
+                  activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
+                }`}
+              >
+                <span className="truncate font-medium">{a.titulo || TITULO_ARTEFACTO[a.tipo] || a.tipo}</span>
+                {a.estado === "generando" ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                ) : a.estado === "error" ? (
+                  <Badge variant="destructive" className="px-1.5 py-0 text-[10px] font-normal">Error</Badge>
+                ) : (
+                  <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{a.formato}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {transcrito ? (
+        <div className="mt-1 flex flex-wrap gap-1.5 border-t border-border/60 pt-2">
+          <span className="w-full px-1 text-[11px] text-muted-foreground">Añadir tratamiento</span>
+          {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono }) => (
             <Button
-              key={op}
+              key={tipo}
               size="sm"
-              variant="outline"
-              title={ayuda}
-              disabled={agentesDeshabilitados}
-              onClick={() => lanzarAgente(op)}
+              variant="ghost"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={crear.isPending}
+              onClick={() => crear.mutate(tipo)}
             >
-              {agente.ejecutando && opEnCurso === op ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              {crear.isPending && crear.variables === tipo ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Icono className="mr-1.5 h-3.5 w-3.5" />
+                <Icono className="h-3 w-3" />
               )}
               {etiqueta}
             </Button>
           ))}
         </div>
       ) : null}
+    </aside>
+  );
+}
 
-      {/* Panel del agente en curso / resultado */}
-      {opEnCurso !== null ? (
-        <PanelAgente
-          operacion={opEnCurso}
-          ejecutando={agente.ejecutando}
-          texto={resultadoTexto}
-          respuestas={respuestas}
-          onRespuestas={setRespuestas}
-          puedeAceptar={hayResultado && opEnCurso !== "aclarar"}
-          guardando={guardar.isPending}
-          onAceptar={aceptarResultado}
-          onCorregirConRespuestas={() => lanzarAgente("corregir")}
-          onCerrar={descartarResultado}
-        />
-      ) : null}
+function VistaArtefacto({ artefacto, onCambio }: { artefacto: ArtefactoAudio; onCambio: () => void }) {
+  const editable = artefacto.tipo !== "srt";
+  const esMd = artefacto.formato === "md";
+  const [editando, setEditando] = React.useState(false);
+  const [texto, setTexto] = React.useState(artefacto.contenido);
+  React.useEffect(() => {
+    setTexto(artefacto.contenido);
+    setEditando(false);
+  }, [artefacto.id, artefacto.contenido]);
 
-      {/* Resumen guardado */}
-      {t.resumen && opEnCurso === null ? (
-        <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-          <h3 className="mb-1 text-sm font-semibold">Resumen</h3>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{t.resumen}</p>
+  const guardar = useMutation({
+    mutationFn: () => api.audio.guardarArtefacto(artefacto.id, { contenido: texto }),
+    onSuccess: () => {
+      setEditando(false);
+      onCambio();
+      toast.success("Guardado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const descargar = () => {
+    const ext = EXT_ARTEFACTO[artefacto.formato] || "txt";
+    const blob = new Blob([artefacto.contenido], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(artefacto.titulo || artefacto.tipo).replace(/\s+/g, "-").toLowerCase()}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (artefacto.estado === "generando") {
+    return (
+      <div className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
+      </div>
+    );
+  }
+  if (artefacto.estado === "error") {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        {artefacto.error || "Este tratamiento falló."}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}</h2>
+        <div className="flex items-center gap-2">
+          {editable ? (
+            <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
+              {editando ? "Vista" : "Editar"}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
+            <Download className="h-3.5 w-3.5" /> Descargar
+          </Button>
         </div>
-      ) : null}
+      </div>
 
-      {/* Texto trabajado (resultado aceptado de limpiar/corregir) */}
-      {t.texto && opEnCurso === null ? (
-        <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-          <h3 className="mb-1 text-sm font-semibold">Texto trabajado</h3>
-          <p className="whitespace-pre-wrap text-sm">{t.texto}</p>
-        </div>
-      ) : null}
-
-      {/* Editor de segmentos con timestamps */}
-      {segmentos.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Transcripción ({segmentos.length} segmentos)</h3>
-            {sucio ? (
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setSegmentos(t.segmentos)}>
-                  Descartar
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={guardar.isPending}
-                  onClick={() =>
-                    guardar.mutate({
-                      segmentos,
-                      texto: segmentos.map((s) => s.texto).join(" "),
-                      estado: "editado",
-                    })
-                  }
-                >
-                  <Check className="mr-1.5 h-3.5 w-3.5" /> Guardar correcciones
-                </Button>
-              </div>
-            ) : null}
+      {editando && editable ? (
+        <div className="flex flex-1 flex-col gap-2">
+          <Textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            className="min-h-[16rem] flex-1 font-mono text-sm"
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setTexto(artefacto.contenido)}>
+              Descartar
+            </Button>
+            <Button size="sm" disabled={guardar.isPending || texto === artefacto.contenido} onClick={() => guardar.mutate()}>
+              <Check className="mr-1.5 h-3.5 w-3.5" /> Guardar
+            </Button>
           </div>
-          <div className="flex flex-col divide-y divide-border/60 rounded-lg border border-border/70">
-            {segmentos.map((s, i) => (
-              <div key={i} className="flex gap-2 px-2.5 py-1.5">
-                <span className="mt-1.5 shrink-0 font-mono text-xs text-muted-foreground">
-                  {fmtTiempo(s.inicio_ms)}
-                </span>
-                <Textarea
-                  value={s.texto}
-                  rows={1}
-                  onChange={(e) =>
-                    setSegmentos((prev) => prev.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)))
-                  }
-                  className="min-h-0 resize-none border-0 bg-transparent px-1 py-1 text-sm focus-visible:ring-0"
-                />
-              </div>
-            ))}
-          </div>
         </div>
-      ) : !enProceso && t.estado !== "error" ? (
-        <p className="text-sm text-muted-foreground">La transcripción no tiene segmentos (audio sin voz).</p>
-      ) : null}
+      ) : esMd ? (
+        <div className="flex-1 overflow-y-auto rounded-lg border border-border/70 bg-card p-4">
+          <Markdown>{artefacto.contenido || "_(vacío)_"}</Markdown>
+        </div>
+      ) : (
+        <pre className="flex-1 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-card p-4 font-mono text-sm">
+          {artefacto.contenido || "(vacío)"}
+        </pre>
+      )}
+
+      {artefacto.tipo === "preguntas" ? <PanelCorregir artefacto={artefacto} onCambio={onCambio} /> : null}
     </div>
   );
 }
 
-function PanelAgente({
-  operacion,
-  ejecutando,
-  texto,
-  respuestas,
-  onRespuestas,
-  puedeAceptar,
-  guardando,
-  onAceptar,
-  onCorregirConRespuestas,
-  onCerrar,
-}: {
-  operacion: OperacionAgente;
-  ejecutando: boolean;
-  texto: string;
-  respuestas: string;
-  onRespuestas: (v: string) => void;
-  puedeAceptar: boolean;
-  guardando: boolean;
-  onAceptar: () => void;
-  onCorregirConRespuestas: () => void;
-  onCerrar: () => void;
-}) {
-  const titulo = AGENTES.find((a) => a.op === operacion)?.etiqueta ?? operacion;
+function PanelCorregir({ artefacto, onCambio }: { artefacto: ArtefactoAudio; onCambio: () => void }) {
+  const [respuestas, setRespuestas] = React.useState("");
+  const corregir = useMutation({
+    mutationFn: () =>
+      api.audio.corregir(
+        artefacto.id,
+        respuestas.split("\n").map((s) => s.trim()).filter(Boolean),
+      ),
+    onSuccess: () => {
+      setRespuestas("");
+      onCambio();
+      toast.success("Aplicando correcciones… verás el artefacto «Corregido».");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
   return (
-    <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-          {ejecutando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 text-primary" />}
-          {titulo}
-        </h3>
-        <button type="button" onClick={onCerrar} className="rounded p-1 text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+      <label className="text-xs font-medium text-muted-foreground">
+        Responde a las dudas (una por línea) y genera el «Corregido»:
+      </label>
+      <Textarea
+        value={respuestas}
+        onChange={(e) => setRespuestas(e.target.value)}
+        rows={3}
+        className="mt-1.5"
+        placeholder="Ej.: El apellido correcto es Mbappé&#10;Ganó el América"
+      />
+      <div className="mt-2 flex justify-end">
+        <Button size="sm" disabled={!respuestas.trim() || corregir.isPending} onClick={() => corregir.mutate()}>
+          <SpellCheck className="mr-1.5 h-3.5 w-3.5" /> Corregir con estas respuestas
+        </Button>
       </div>
+    </div>
+  );
+}
 
-      <p className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded bg-background/60 p-2 text-sm">
-        {texto || (ejecutando ? "Pensando…" : "Sin resultado.")}
-      </p>
+function DialogoSubida({
+  abierto,
+  onAbierto,
+  subiendo,
+  onSubir,
+}: {
+  abierto: boolean;
+  onAbierto: (v: boolean) => void;
+  subiendo: boolean;
+  onSubir: (archivo: File, tratamientos: TipoArtefacto[]) => void;
+}) {
+  const [archivo, setArchivo] = React.useState<File | null>(null);
+  const [sel, setSel] = React.useState<Record<string, boolean>>({});
+  React.useEffect(() => {
+    if (!abierto) {
+      setArchivo(null);
+      setSel({});
+    }
+  }, [abierto]);
 
-      {/* «Aclarar» genera preguntas: el equipo responde y dispara «Corregir». */}
-      {operacion === "aclarar" && !ejecutando && texto ? (
-        <div className="mt-2 flex flex-col gap-2">
-          <label className="text-xs font-medium text-muted-foreground">
-            Responde a las dudas (una por línea) y aplícalas:
-          </label>
-          <Textarea
-            value={respuestas}
-            onChange={(e) => onRespuestas(e.target.value)}
-            rows={3}
-            placeholder="Ej.: El apellido correcto es Mbappé&#10;Ganó el América"
-          />
-          <div className="flex justify-end">
-            <Button size="sm" disabled={!respuestas.trim()} onClick={onCorregirConRespuestas}>
-              <SpellCheck className="mr-1.5 h-3.5 w-3.5" /> Corregir con estas respuestas
-            </Button>
+  const tratamientos = TRATAMIENTOS_SUBIDA.filter((t) => sel[t.tipo]).map((t) => t.tipo);
+
+  return (
+    <Dialog open={abierto} onOpenChange={onAbierto}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Subir audio o vídeo</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div>
+            <input
+              type="file"
+              accept="audio/*,video/*"
+              onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Se extrae la voz y se transcribe con timestamps (SRT por defecto).</p>
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Crear además:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {TRATAMIENTOS_SUBIDA.map((t) => (
+                <label key={t.tipo} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={!!sel[t.tipo]}
+                    onCheckedChange={(c) => setSel((s) => ({ ...s, [t.tipo]: c }))}
+                  />
+                  {t.etiqueta}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
-      ) : null}
-
-      {puedeAceptar ? (
-        <div className="mt-2 flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={onCerrar}>
-            Descartar
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onAbierto(false)}>
+            Cancelar
           </Button>
-          <Button size="sm" disabled={guardando} onClick={onAceptar}>
-            <Check className="mr-1.5 h-3.5 w-3.5" />
-            {operacion === "resumir" ? "Guardar resumen" : "Aceptar y reemplazar texto"}
+          <Button disabled={!archivo || subiendo} onClick={() => archivo && onSubir(archivo, tratamientos)} className="gap-2">
+            {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Transcribir
           </Button>
-        </div>
-      ) : null}
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

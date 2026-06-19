@@ -117,7 +117,12 @@ from .repos_publicacion import (  # noqa: F401
     verificacion_fuente_por_publicacion,
 )
 from .repos_editor import (  # noqa: F401
+    actualizar_audio_artefacto,
     actualizar_audio_transcripcion,
+    borrar_audio_artefacto,
+    crear_audio_artefacto,
+    listar_audio_artefactos,
+    obtener_audio_artefacto,
     actualizar_bloque,
     actualizar_marca_activo,
     actualizar_media_catalogo,

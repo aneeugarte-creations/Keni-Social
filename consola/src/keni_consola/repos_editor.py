@@ -343,6 +343,34 @@ def borrar_audio_transcripcion(transcripcion_id: str) -> bool:
     return db.borrar_audio_transcripcion(transcripcion_id)
 
 
+def crear_audio_artefacto(
+    *, transcripcion_id: str, tipo: str, titulo: str = "", contenido: str = "",
+    formato: str = "txt", estado: str = "listo", gen_id: str = "", error: str = "",
+    id: str = "", creado: str = "", actualizado: str = "",
+) -> dict[str, Any]:
+    return db.crear_audio_artefacto(
+        transcripcion_id=transcripcion_id, tipo=tipo, titulo=titulo, contenido=contenido,
+        formato=formato, estado=estado, gen_id=gen_id, error=error, id=id, creado=creado,
+        actualizado=actualizado,
+    )
+
+
+def listar_audio_artefactos(transcripcion_id: str) -> list[dict[str, Any]]:
+    return db.listar_audio_artefactos(transcripcion_id)
+
+
+def obtener_audio_artefacto(artefacto_id: str) -> dict[str, Any] | None:
+    return db.obtener_audio_artefacto(artefacto_id)
+
+
+def actualizar_audio_artefacto(artefacto_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_audio_artefacto(artefacto_id, campos)
+
+
+def borrar_audio_artefacto(artefacto_id: str) -> bool:
+    return db.borrar_audio_artefacto(artefacto_id)
+
+
 # --------------------------------------------------------------------------- #
 # Bloques (almacén de capas reutilizables)                                       #
 # --------------------------------------------------------------------------- #

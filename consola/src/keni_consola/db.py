@@ -154,6 +154,14 @@ from .db_publicacion import (  # noqa: F401
 )
 from .db_editor import (  # noqa: F401
     ESTADOS_AUDIO_TRANSCRIPCION,
+    ESTADOS_ARTEFACTO,
+    TIPOS_ARTEFACTO,
+    _fila_a_audio_artefacto,
+    actualizar_audio_artefacto,
+    borrar_audio_artefacto,
+    crear_audio_artefacto,
+    listar_audio_artefactos,
+    obtener_audio_artefacto,
     ESTADOS_VIDEO_COMPOSICION,
     ESTADOS_VIDEO_SUBTITULO,
     actualizar_audio_transcripcion,

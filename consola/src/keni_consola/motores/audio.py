@@ -99,6 +99,16 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
                 "error": "",
             },
         )
+
+        # 4) Artefactos: SRT (siempre) + texto plano (si se pidió), síncronos; y los tratamientos de
+        #    Claude pedidos (limpio/resumen/preguntas/ideas), que se generan en 2º plano (un job por
+        #    artefacto que el worker rellena). El SRT/texto no dependen de Claude.
+        tratamientos = [t for t in (spec.get("tratamientos") or []) if isinstance(t, str)]
+        generaciones.actualizar(
+            gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "generando artefactos"}
+        )
+        _crear_artefactos(transcripcion_id, segmentos, texto, tratamientos)
+
         generaciones.actualizar(
             gen_id,
             {
@@ -114,6 +124,42 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
     except Exception as e:  # noqa: BLE001 -- red de seguridad: nunca dejar el job sin terminal
         _log.exception("audio.ejecutar_transcripcion_audio: fallo inesperado (gen %s)", gen_id)
         _terminar_error(gen_id, transcripcion_id, f"Error inesperado al transcribir: {e}")
+
+
+def _crear_artefactos(
+    transcripcion_id: str, segmentos: list, texto: str, tratamientos: list[str]
+) -> None:
+    """Crea el SRT (siempre) y el texto plano (si se pidió) y lanza los tratamientos de Claude.
+
+    El SRT y el texto son síncronos (no necesitan Claude). Cada tratamiento de Claude
+    (limpio/resumen/preguntas/ideas) se lanza como su propia generación que el worker rellena; si
+    uno falla al lanzarse (cola/presupuesto), su artefacto queda en 'error' y los demás siguen.
+    """
+    from ..dominio import audio_artefactos  # noqa: PLC0415 -- import perezoso (evita ciclo)
+
+    try:
+        repos.crear_audio_artefacto(
+            transcripcion_id=transcripcion_id, tipo="srt", titulo="Subtítulos (SRT)",
+            contenido=asr.srt_de_segmentos(segmentos), formato="srt", estado="listo",
+        )
+        if "texto" in tratamientos:
+            repos.crear_audio_artefacto(
+                transcripcion_id=transcripcion_id, tipo="texto", titulo="Texto plano",
+                contenido=texto, formato="txt", estado="listo",
+            )
+    except Exception:  # noqa: BLE001 -- un fallo creando SRT/texto no debe tumbar la transcripción
+        _log.exception("audio: no se pudieron crear los artefactos base de %s", transcripcion_id)
+
+    fila = repos.obtener_audio_transcripcion(transcripcion_id)
+    if fila is None:
+        return
+    for tipo in tratamientos:
+        if tipo not in audio_artefactos.TRATAMIENTOS:
+            continue
+        try:
+            audio_artefactos.lanzar_tratamiento(fila, tipo)
+        except Exception:  # noqa: BLE001 -- un tratamiento que no arranca no frena a los demás
+            _log.exception("audio: no se pudo lanzar el tratamiento %s de %s", tipo, transcripcion_id)
 
 
 def _terminar_error(gen_id: str, transcripcion_id: str, mensaje: str) -> None:

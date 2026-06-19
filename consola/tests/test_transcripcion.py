@@ -126,6 +126,26 @@ def test_mapear_segmentos_descarta_vacios():
     assert transcripcion.mapear_segmentos([{"start": 0, "end": 0, "text": "  ", "words": []}]) == []
 
 
+# --- PURO: srt_de_segmentos ---------------------------------------------------
+
+
+def test_srt_de_segmentos():
+    segs = [
+        {"inicio_ms": 0, "fin_ms": 1500, "texto": "Hola mundo"},
+        {"inicio_ms": 2000, "fin_ms": 2400, "texto": "adiós"},
+    ]
+    srt = transcripcion.srt_de_segmentos(segs)
+    assert srt == (
+        "1\n00:00:00,000 --> 00:00:01,500\nHola mundo\n\n"
+        "2\n00:00:02,000 --> 00:00:02,400\nadiós\n"
+    )
+
+
+def test_srt_de_segmentos_descarta_vacios_y_vacio():
+    assert transcripcion.srt_de_segmentos([{"inicio_ms": 0, "fin_ms": 0, "texto": "  "}]) == ""
+    assert transcripcion.srt_de_segmentos([]) == ""
+
+
 # --- transcribir_datos (delega en el inyectable _TRANSCRIPTOR_JSON) ----------
 
 

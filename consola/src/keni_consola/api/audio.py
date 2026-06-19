@@ -1,30 +1,26 @@
 """API HTTP del GESTOR DE AUDIO (audio→texto) — Estudio de Audio.
 
-Superficie REST del gestor integral de transcripciones: subir un audio/vídeo, transcribirlo en
-local con whisper.cpp (v3 turbo, timestamps) y trabajar el texto con agentes de Claude
-(limpiar/resumir/aclarar/corregir). Capa fina entre el frontend y la base: NO transcribe ni corre
-los agentes (eso lo ejecutan el motor `motores/audio` y el worker via la cola); solo CRUD de
-`audio_transcripciones` y ENCOLADO de jobs.
+Sube un audio/vídeo, lo transcribe (faster-whisper, v3 turbo, con timestamps) y produce ARTEFACTOS:
+`srt` por defecto + los tratamientos elegidos (texto plano, y los de Claude: limpio/resumen/
+preguntas/ideas). Capa fina entre el frontend y la base: NO transcribe ni corre los agentes (eso lo
+hacen el servicio `transcriptor` y el worker via la cola); solo CRUD de `audio_transcripciones` /
+`audio_artefactos` y ENCOLADO de jobs.
 
 QUE VIVE AQUI
 =============
-  - `GET    /api/audio/transcripciones?marca=&estado=`        lista (filtros combinables).
-  - `POST   /api/audio/transcripciones`  (multipart)          sube + crea + encola el ASR.
-  - `GET    /api/audio/transcripciones/{id}`                  detalle (404 si no existe).
-  - `PUT    /api/audio/transcripciones/{id}`                  edita segmentos/texto/estado/resumen.
-  - `DELETE /api/audio/transcripciones/{id}`                  borra la transcripción.
-  - `POST   /api/audio/transcripciones/{id}/transcribir`      reintenta el ASR (re-encola).
-  - `POST   /api/audio/transcripciones/{id}/agente`           lanza un agente de Claude (-> gen_id).
-
-CONTRATO
-========
-  - El ASR se encola con `generaciones.encolar_job_proceso(kind=PROC_TRANSCRIBIR_AUDIO, ...)`:
-    local, gratuito y BAJO DEMANDA (sin kill-switch ni gateo). El resultado lo escribe el motor en
-    la fila; el frontend sondea la generación para ver el progreso/texto.
-  - Los agentes (`/agente`) se lanzan con `dominio.prompts_lanzar.lanzar(prompt_id=prompt/audio/...,
-    marca=..., bloque_contexto=<transcripción>)`: devuelven un `gen_id`; el frontend sondea la
-    generación, ve el resultado y decide aceptar (PUT) o, en 'aclarar', responder y 'corregir'.
-  - Multi-tenant por marca: la marca se valida contra el catálogo único (`consola.marcas`).
+  - `GET    /api/audio/transcripciones?marca=&estado=`              lista de audios.
+  - `POST   /api/audio/transcripciones`  (multipart)               sube + crea + encola el ASR
+                                                                    (con los `tratamientos` elegidos).
+  - `GET    /api/audio/transcripciones/{id}`                        detalle del audio (base ASR).
+  - `PUT    /api/audio/transcripciones/{id}`                        edita nombre/idioma/estado/segmentos/texto.
+  - `DELETE /api/audio/transcripciones/{id}`                        borra el audio y sus artefactos.
+  - `POST   /api/audio/transcripciones/{id}/transcribir`           reintenta el ASR.
+  - `GET    /api/audio/transcripciones/{id}/artefactos`            lista de artefactos del audio.
+  - `POST   /api/audio/transcripciones/{id}/artefacto`            crea un tratamiento de Claude (-> artefacto).
+  - `GET    /api/audio/artefactos/{id}`                            un artefacto.
+  - `PUT    /api/audio/artefactos/{id}`                            edita el contenido (no el SRT crudo).
+  - `DELETE /api/audio/artefactos/{id}`                            borra un artefacto.
+  - `POST   /api/audio/artefactos/{id}/corregir`                   aplica respuestas (sobre 'preguntas') -> 'corregido'.
 
 SEGURIDAD: errores en español como JSON `{"error": ...}` sin tracebacks; SQL parametrizado en
 `repos`/`db`. El NOMBRE del objeto de media lo genera el servidor (sha256), nunca el cliente.
@@ -42,18 +38,18 @@ from starlette.routing import Route
 
 from .. import db, generaciones, marcas, media, repos
 from .._http_json import leer_json
-from ..dominio import jobspec, prompts_lanzar
-from ..libprompts import PromptsError
-from ..seguridad import autor_de_peticion
+from ..dominio import audio_artefactos, jobspec
 
 _log = logging.getLogger("keni_consola.audio")
 
-# Agentes de Claude disponibles sobre una transcripción -> prompt de librería `prompt/audio/<op>`.
-OPERACIONES_AGENTE = ("limpiar", "resumir", "aclarar", "corregir")
+# Tratamientos elegibles al subir (además del SRT, que va siempre). 'texto' lo genera el motor; el
+# resto son de Claude (`audio_artefactos.TRATAMIENTOS`). 'corregido' NO se elige al subir (es un
+# seguimiento de 'preguntas' con las respuestas del equipo).
+TRATAMIENTOS_SUBIDA = ("texto", "limpio", "resumen", "preguntas", "ideas")
 
 
 # --------------------------------------------------------------------------- #
-# Helpers comunes                                                              #
+# Helpers                                                                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -78,7 +74,7 @@ def _segmentos_de(item: dict) -> list[dict]:
 
 
 def _transcripcion_a_dict(item: dict) -> dict:
-    """Serializa una transcripción: `segmentos` como objeto, URL de media y nombre de marca."""
+    """Serializa un audio: `segmentos` como objeto, URL de media y nombre de marca."""
     media_id = item.get("media_id") or ""
     return {
         **item,
@@ -88,30 +84,29 @@ def _transcripcion_a_dict(item: dict) -> dict:
     }
 
 
-def _mmss(ms: object) -> str:
-    """Formatea milisegundos como `mm:ss` para el bloque de contexto de los agentes."""
-    try:
-        total = max(0, int(ms)) // 1000
-    except (TypeError, ValueError):
-        total = 0
-    return f"{total // 60:02d}:{total % 60:02d}"
+def _artefacto_a_dict(art: dict) -> dict:
+    """Serializa un artefacto. Reconcilia 'generando' con su generación: si el job falló, 'error'.
 
-
-def _bloque_transcripcion(item: dict) -> str:
-    """Texto de la transcripción con timestamps por segmento, para que el agente los referencie."""
-    segs = _segmentos_de(item)
-    if segs:
-        return "\n".join(f"[{_mmss(s.get('inicio_ms', 0))}] {s.get('texto', '')}".rstrip() for s in segs)
-    return item.get("texto") or ""
+    El post-procesado escribe el artefacto SOLO al completar el job; si el job de Claude FALLA, el
+    artefacto se quedaría 'generando'. Al leerlo, si su generación ya está en error, lo reflejamos
+    (y lo persistimos) para que el frontend deje de sondear y muestre el fallo.
+    """
+    if art.get("estado") == "generando" and art.get("gen_id"):
+        g = generaciones.obtener(art["gen_id"])
+        if g is not None and g.get("estado") == generaciones.ESTADO_ERROR:
+            mensaje = g.get("error") or "El tratamiento falló."
+            repos.actualizar_audio_artefacto(art["id"], {"estado": "error", "error": mensaje})
+            art = {**art, "estado": "error", "error": mensaje}
+    return art
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/audio/transcripciones                                              #
+# Audios (transcripciones)                                                      #
 # --------------------------------------------------------------------------- #
 
 
 async def listar_transcripciones(request: Request) -> Response:
-    """GET /api/audio/transcripciones?marca=&estado=: lista (filtros combinables, recientes 1º)."""
+    """GET /api/audio/transcripciones?marca=&estado=: lista de audios (recientes primero)."""
     marca = request.query_params.get("marca") or None
     if marca is not None and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
@@ -120,16 +115,11 @@ async def listar_transcripciones(request: Request) -> Response:
     return JSONResponse({"transcripciones": [_transcripcion_a_dict(f) for f in filas]})
 
 
-# --------------------------------------------------------------------------- #
-# POST /api/audio/transcripciones  (multipart: sube + crea + encola ASR)      #
-# --------------------------------------------------------------------------- #
-
-
 async def crear_transcripcion(request: Request) -> Response:
-    """POST /api/audio/transcripciones (multipart `archivo`, `marca`, opc. `idioma`/`nombre`).
+    """POST /api/audio/transcripciones (multipart `archivo`, `marca`, opc. `idioma`/`nombre`/`tratamientos`).
 
-    Sube el audio/vídeo (content-addressed bajo `audios/`), crea la fila (estado 'pendiente') y
-    encola el ASR. -> `{transcripcion, gen_id}` | 400/429.
+    Sube el audio/vídeo, crea la fila (estado 'pendiente') y encola el ASR con los `tratamientos`
+    elegidos (además del SRT, que el motor crea siempre). -> `{transcripcion, gen_id}` | 400/429.
     """
     try:
         form = await request.form()
@@ -147,6 +137,8 @@ async def crear_transcripcion(request: Request) -> Response:
     nombre = nombre.strip() if isinstance(nombre, str) and nombre.strip() else (
         getattr(archivo, "filename", None) or "audio"
     )
+    # `tratamientos`: campos repetidos del multipart, filtrados a los válidos al subir.
+    tratamientos = [t for t in form.getlist("tratamientos") if t in TRATAMIENTOS_SUBIDA]
 
     try:
         media_id = await media.guardar_audio_subida(archivo)
@@ -158,15 +150,17 @@ async def crear_transcripcion(request: Request) -> Response:
     fila = repos.crear_audio_transcripcion(
         marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente"
     )
-    gen = _encolar_asr(fila, idioma)
+    gen = _encolar_asr(fila, idioma, tratamientos)
     if isinstance(gen, Response):
+        # No se pudo encolar (cola llena): NO dejar una fila huérfana en 'pendiente' sin job.
+        repos.borrar_audio_transcripcion(fila["id"])
         return gen
     return JSONResponse(
         {"transcripcion": _transcripcion_a_dict(fila), "gen_id": gen["id"]}, status_code=201
     )
 
 
-def _encolar_asr(fila: dict, idioma: str) -> dict | Response:
+def _encolar_asr(fila: dict, idioma: str, tratamientos: list[str]) -> dict | Response:
     """Encola el job de transcripción del motor de audio. Devuelve el registro o un 429."""
     try:
         return generaciones.encolar_job_proceso(
@@ -175,6 +169,7 @@ def _encolar_asr(fila: dict, idioma: str) -> dict | Response:
                 "transcripcion_id": fila["id"],
                 "media_id": fila["media_id"],
                 "idioma": idioma,
+                "tratamientos": tratamientos,
             },
             marca=fila["marca"],
             etiqueta="Transcripción de audio",
@@ -186,13 +181,8 @@ def _encolar_asr(fila: dict, idioma: str) -> dict | Response:
         )
 
 
-# --------------------------------------------------------------------------- #
-# GET / PUT / DELETE /api/audio/transcripciones/{id}                          #
-# --------------------------------------------------------------------------- #
-
-
 async def obtener_transcripcion(request: Request) -> Response:
-    """GET /api/audio/transcripciones/{id}: detalle (404 si no existe)."""
+    """GET /api/audio/transcripciones/{id}: detalle del audio (404 si no existe)."""
     fila = repos.obtener_audio_transcripcion(request.path_params["transcripcion_id"])
     if fila is None:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
@@ -200,11 +190,7 @@ async def obtener_transcripcion(request: Request) -> Response:
 
 
 async def actualizar_transcripcion(request: Request) -> Response:
-    """PUT /api/audio/transcripciones/{id}: edita segmentos/texto/estado/resumen/nombre/idioma.
-
-    La corrección humana y la aceptación del resultado de un agente entran por aquí. `segmentos`
-    puede llegar como lista (se serializa a JSON). Estado típico tras editar: 'editado'.
-    """
+    """PUT /api/audio/transcripciones/{id}: edita nombre/idioma/estado y, si se quiere, segmentos/texto."""
     transcripcion_id = request.path_params["transcripcion_id"]
     if repos.obtener_audio_transcripcion(transcripcion_id) is None:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
@@ -216,7 +202,7 @@ async def actualizar_transcripcion(request: Request) -> Response:
         if not isinstance(segs, (list, str)):
             return JSONResponse({"error": "`segmentos` debe ser una lista."}, status_code=400)
         cambios["segmentos"] = segs if isinstance(segs, str) else json.dumps(segs, ensure_ascii=False)
-    for campo in ("texto", "resumen", "nombre", "idioma"):
+    for campo in ("texto", "nombre", "idioma"):
         if campo in datos:
             if not isinstance(datos[campo], str):
                 return JSONResponse({"error": f"`{campo}` debe ser texto."}, status_code=400)
@@ -233,16 +219,11 @@ async def actualizar_transcripcion(request: Request) -> Response:
 
 
 async def borrar_transcripcion(request: Request) -> Response:
-    """DELETE /api/audio/transcripciones/{id}: borra la fila (204). El media (dedup) se conserva."""
+    """DELETE /api/audio/transcripciones/{id}: borra el audio y sus artefactos (204)."""
     ok = repos.borrar_audio_transcripcion(request.path_params["transcripcion_id"])
     if not ok:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
     return Response(status_code=204)
-
-
-# --------------------------------------------------------------------------- #
-# POST /api/audio/transcripciones/{id}/transcribir  (reintento del ASR)       #
-# --------------------------------------------------------------------------- #
 
 
 async def retranscribir(request: Request) -> Response:
@@ -253,63 +234,111 @@ async def retranscribir(request: Request) -> Response:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
     if not fila.get("media_id"):
         return JSONResponse({"error": "La transcripción no tiene un audio asociado."}, status_code=400)
-    gen = _encolar_asr(fila, fila.get("idioma") or "es-MX")
+    gen = _encolar_asr(fila, fila.get("idioma") or "es-MX", [])
     if isinstance(gen, Response):
         return gen
     return JSONResponse({"gen_id": gen["id"]})
 
 
 # --------------------------------------------------------------------------- #
-# POST /api/audio/transcripciones/{id}/agente  (agentes de Claude)            #
+# Artefactos                                                                    #
 # --------------------------------------------------------------------------- #
 
 
-async def lanzar_agente(request: Request) -> Response:
-    """POST /api/audio/transcripciones/{id}/agente: lanza un agente sobre la transcripción.
+async def listar_artefactos(request: Request) -> Response:
+    """GET /api/audio/transcripciones/{id}/artefactos: artefactos del audio (srt primero)."""
+    transcripcion_id = request.path_params["transcripcion_id"]
+    if repos.obtener_audio_transcripcion(transcripcion_id) is None:
+        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
+    arts = repos.listar_audio_artefactos(transcripcion_id)
+    return JSONResponse({"artefactos": [_artefacto_a_dict(a) for a in arts]})
 
-    Cuerpo: `operacion` ∈ {limpiar, resumir, aclarar, corregir}; `respuestas` (opcional, lista de
-    strings) para 'corregir' (respuestas del equipo a las dudas de 'aclarar'). Compone la
-    transcripción (con timestamps) como contexto y lanza `prompt/audio/<operacion>`. -> `{gen_id}`.
+
+async def crear_artefacto(request: Request) -> Response:
+    """POST /api/audio/transcripciones/{id}/artefacto (`{tipo}`): lanza un tratamiento de Claude.
+
+    `tipo` ∈ {limpio, resumen, preguntas, ideas}. Devuelve el artefacto (estado 'generando') que el
+    worker rellenará. El SRT y el texto plano se crean al transcribir, no aquí.
     """
     transcripcion_id = request.path_params["transcripcion_id"]
     fila = repos.obtener_audio_transcripcion(transcripcion_id)
     if fila is None:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
-
     datos = await leer_json(request)
-    operacion = datos.get("operacion")
-    if operacion not in OPERACIONES_AGENTE:
+    tipo = datos.get("tipo")
+    if tipo not in audio_artefactos.TRATAMIENTOS or tipo == "corregido":
         return JSONResponse(
-            {"error": f"Operación no válida (usa: {', '.join(OPERACIONES_AGENTE)})."},
+            {"error": "Tipo de tratamiento no válido (limpio, resumen, preguntas o ideas)."},
             status_code=400,
         )
-    if not fila.get("marca"):
-        return JSONResponse({"error": "Asigna una marca a la transcripción primero."}, status_code=400)
-
-    bloque = _bloque_transcripcion(fila)
-    if not bloque.strip():
-        return JSONResponse({"error": "La transcripción aún no tiene texto."}, status_code=400)
-    respuestas = datos.get("respuestas")
-    if operacion == "corregir" and isinstance(respuestas, list) and respuestas:
-        dudas = "\n".join(f"- {r}" for r in respuestas if isinstance(r, str) and r.strip())
-        if dudas:
-            bloque = f"{bloque}\n\n## Respuestas del equipo a las dudas\n{dudas}"
-
     try:
-        gen = prompts_lanzar.lanzar(
-            prompt_id=f"prompt/audio/{operacion}",
-            marca=fila["marca"],
-            bloque_contexto=bloque,
-            autor=autor_de_peticion(request) or {},
-        )
-    except PromptsError as e:
+        r = audio_artefactos.lanzar_tratamiento(fila, tipo)
+    except audio_artefactos.AudioArtefactoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    except generaciones.ColaLlenaError:
-        return JSONResponse(
-            {"error": "La cola de generación está saturada; reintenta en un momento."},
-            status_code=429,
-        )
-    return JSONResponse({"gen_id": gen["id"], "operacion": operacion})
+    return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)
+
+
+async def obtener_artefacto(request: Request) -> Response:
+    """GET /api/audio/artefactos/{id}: un artefacto (404 si no existe)."""
+    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+    if art is None:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    return JSONResponse({"artefacto": _artefacto_a_dict(art)})
+
+
+async def actualizar_artefacto(request: Request) -> Response:
+    """PUT /api/audio/artefactos/{id}: edita `contenido`/`titulo`. El SRT crudo NO es editable."""
+    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+    if art is None:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    if art["tipo"] == "srt":
+        return JSONResponse({"error": "El SRT no es editable."}, status_code=400)
+    datos = await leer_json(request)
+    cambios: dict[str, object] = {}
+    for campo in ("contenido", "titulo"):
+        if campo in datos:
+            if not isinstance(datos[campo], str):
+                return JSONResponse({"error": f"`{campo}` debe ser texto."}, status_code=400)
+            cambios[campo] = datos[campo]
+    if not cambios:
+        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
+    # Al editar a mano, el artefacto queda 'listo' (por si venía de un error o a medias).
+    cambios["estado"] = "listo"
+    actualizado = repos.actualizar_audio_artefacto(art["id"], cambios)
+    return JSONResponse({"artefacto": _artefacto_a_dict(actualizado)})
+
+
+async def borrar_artefacto(request: Request) -> Response:
+    """DELETE /api/audio/artefactos/{id}: borra un artefacto (204)."""
+    ok = repos.borrar_audio_artefacto(request.path_params["artefacto_id"])
+    if not ok:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    return Response(status_code=204)
+
+
+async def corregir_artefacto(request: Request) -> Response:
+    """POST /api/audio/artefactos/{id}/corregir (`{respuestas:[...]}`): aplica respuestas -> 'corregido'.
+
+    `{id}` es un artefacto de 'preguntas'. Lanza un tratamiento 'corregido' sobre su transcripción con
+    las respuestas del equipo. Devuelve el nuevo artefacto (estado 'generando').
+    """
+    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+    if art is None:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    fila = repos.obtener_audio_transcripcion(art["transcripcion_id"])
+    if fila is None:
+        return JSONResponse({"error": "El audio de ese artefacto ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    respuestas = datos.get("respuestas")
+    if not isinstance(respuestas, list) or not any(
+        isinstance(r, str) and r.strip() for r in respuestas
+    ):
+        return JSONResponse({"error": "Faltan las respuestas a las dudas."}, status_code=400)
+    try:
+        r = audio_artefactos.lanzar_tratamiento(fila, "corregido", respuestas=respuestas)
+    except audio_artefactos.AudioArtefactoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)
 
 
 RUTAS = [
@@ -319,13 +348,16 @@ RUTAS = [
     Route("/api/audio/transcripciones/{transcripcion_id}", actualizar_transcripcion, methods=["PUT"]),
     Route("/api/audio/transcripciones/{transcripcion_id}", borrar_transcripcion, methods=["DELETE"]),
     Route(
-        "/api/audio/transcripciones/{transcripcion_id}/transcribir",
-        retranscribir,
-        methods=["POST"],
+        "/api/audio/transcripciones/{transcripcion_id}/transcribir", retranscribir, methods=["POST"]
     ),
     Route(
-        "/api/audio/transcripciones/{transcripcion_id}/agente",
-        lanzar_agente,
-        methods=["POST"],
+        "/api/audio/transcripciones/{transcripcion_id}/artefactos", listar_artefactos, methods=["GET"]
     ),
+    Route(
+        "/api/audio/transcripciones/{transcripcion_id}/artefacto", crear_artefacto, methods=["POST"]
+    ),
+    Route("/api/audio/artefactos/{artefacto_id}", obtener_artefacto, methods=["GET"]),
+    Route("/api/audio/artefactos/{artefacto_id}", actualizar_artefacto, methods=["PUT"]),
+    Route("/api/audio/artefactos/{artefacto_id}", borrar_artefacto, methods=["DELETE"]),
+    Route("/api/audio/artefactos/{artefacto_id}/corregir", corregir_artefacto, methods=["POST"]),
 ]

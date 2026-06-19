@@ -57,6 +57,10 @@ PROC_VERIFICACION_FUENTE = "verificacion-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/piezas.
 PROC_PROMPT = "prompt"
+# Artefacto del GESTOR DE AUDIO: un tratamiento de Claude (limpio/resumen/preguntas/ideas/corregido)
+# cuya salida se ESCRIBE en su fila `audio_artefactos` (estado 'listo'). Asi el artefacto se genera
+# en segundo plano y aparece en la lista cuando termina, sin depender del frontend.
+PROC_AUDIO_ARTEFACTO = "audio-artefacto"
 # Importacion de PARRILLA desde documento: parsea el JSON de claude, re-construye el contexto
 # de la semana desde la BD, valida con `dominio.parrilla_import` y guarda las operaciones +
 # resumen en la fila `parrilla_propuesta` (estado pendiente | error). NO toca el calendario.
@@ -346,6 +350,11 @@ def construir_prompt_lib() -> dict[str, Any]:
     return {"kind": PROC_PROMPT}
 
 
+def construir_audio_artefacto(artefacto_id: str) -> dict[str, Any]:
+    """Spec del post-procesado de un tratamiento de audio: escribe la salida en su artefacto."""
+    return {"kind": PROC_AUDIO_ARTEFACTO, "artefacto_id": artefacto_id}
+
+
 def construir_parrilla_import(*, propuesta_id: str, modo: str = "eventos") -> dict[str, Any]:
     """Spec del post-procesado de la IMPORTACION de parrilla (#parrilla-import).
 
@@ -612,6 +621,11 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         def procesar(_salida: str, _metricas: object) -> dict[str, object]:
             return {}
         return procesar
+
+    if kind == PROC_AUDIO_ARTEFACTO:
+        from . import audio_artefactos as dom_audio_art
+
+        return dom_audio_art.construir_procesar_audio_artefacto(p["artefacto_id"])
 
     if kind == PROC_PARRILLA_IMPORT:
         # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.

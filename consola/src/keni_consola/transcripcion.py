@@ -235,6 +235,37 @@ def mapear_segmentos(segmentos_fw: Any, *, word_level: bool = False) -> list[dic
     return salida
 
 
+def _srt_tiempo(ms: Any) -> str:
+    """Formatea milisegundos como tiempo SRT `HH:MM:SS,mmm`."""
+    try:
+        ms = max(0, int(ms))
+    except (TypeError, ValueError):
+        ms = 0
+    h, resto = divmod(ms, 3_600_000)
+    m, resto = divmod(resto, 60_000)
+    s, mmm = divmod(resto, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{mmm:03d}"
+
+
+def srt_de_segmentos(segmentos: list[dict[str, Any]]) -> str:
+    """Construye un SRT (SubRip) desde los segmentos `[{inicio_ms,fin_ms,texto}]`. FUNCION PURA.
+
+    Numera los bloques desde 1, descarta los segmentos sin texto, y usa el formato de tiempo SRT
+    `HH:MM:SS,mmm --> HH:MM:SS,mmm`. Devuelve "" si no hay segmentos con texto.
+    """
+    bloques: list[str] = []
+    n = 1
+    for seg in segmentos:
+        texto = (seg.get("texto") or "").strip()
+        if not texto:
+            continue
+        ini = int(seg.get("inicio_ms", 0) or 0)
+        fin = max(ini, int(seg.get("fin_ms", ini) or ini))
+        bloques.append(f"{n}\n{_srt_tiempo(ini)} --> {_srt_tiempo(fin)}\n{texto}")
+        n += 1
+    return ("\n\n".join(bloques) + "\n") if bloques else ""
+
+
 def _transcribir_faster(
     datos: bytes, *, ext: str, idioma: str = _IDIOMA, word_level: bool = False
 ) -> dict[str, Any]:

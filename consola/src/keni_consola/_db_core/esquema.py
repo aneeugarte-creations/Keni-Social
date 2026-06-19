@@ -1439,6 +1439,27 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_marca ON audio_transcripciones (marca)",
     "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_estado ON audio_transcripciones (estado)",
+    # ARTEFACTOS de un audio: cada audio (fila `audio_transcripciones`) produce VARIOS artefactos
+    # independientes — `srt` (subtítulos, por defecto), `texto` plano, y los tratamientos de Claude
+    # (`limpio`, `resumen`, `preguntas`, `ideas`, `corregido`). `contenido` es el texto del artefacto;
+    # `formato` ∈ {srt, txt, md} (el front renderiza los `md`); `estado` ∈ {generando, listo, error};
+    # `gen_id` liga al job de Claude que lo produjo (los `srt`/`texto` se generan en el motor, sin gen).
+    """
+    CREATE TABLE IF NOT EXISTS audio_artefactos (
+        id              TEXT PRIMARY KEY,
+        transcripcion_id TEXT NOT NULL DEFAULT '',
+        tipo            TEXT NOT NULL DEFAULT '',
+        titulo          TEXT NOT NULL DEFAULT '',
+        contenido       TEXT NOT NULL DEFAULT '',
+        formato         TEXT NOT NULL DEFAULT 'txt',
+        estado          TEXT NOT NULL DEFAULT 'listo',
+        gen_id          TEXT NOT NULL DEFAULT '',
+        error           TEXT NOT NULL DEFAULT '',
+        creado          TEXT NOT NULL DEFAULT '',
+        actualizado     TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audio_artefactos_transcripcion ON audio_artefactos (transcripcion_id)",
     # PIEZAS de la Prompts de Texto (rediseno "version publicada"): cada fila es un
     # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;

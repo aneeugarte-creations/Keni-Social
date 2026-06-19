@@ -92,6 +92,46 @@ def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
     assert g["resultado"]["transcripcion_id"] == fila["id"]
     assert g["resultado"]["segmentos"] == 2
 
+    # Sin tratamientos pedidos, el motor crea SOLO el artefacto SRT (siempre).
+    arts = repos.listar_audio_artefactos(fila["id"])
+    assert [a["tipo"] for a in arts] == ["srt"]
+    srt = arts[0]
+    assert srt["formato"] == "srt" and srt["estado"] == "listo"
+    assert "00:00:00,000 --> 00:00:01,500" in srt["contenido"]
+
+
+def test_ejecutor_audio_tratamientos_crea_texto_y_lanza_claude(entorno, monkeypatch):
+    """Con tratamientos pedidos: crea SRT + texto (síncronos) y LANZA los de Claude."""
+    fila = repos.crear_audio_transcripcion(marca=_MARCA, media_id="audios/x.mp4", idioma="es-MX")
+    monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
+    monkeypatch.setattr(
+        transcripcion_raiz, "transcribir_datos",
+        lambda datos, *, ext, idioma, word_level: {
+            "texto": "hola", "segmentos": _segmentos_canonicos()
+        },
+    )
+
+    from keni_consola.dominio import audio_artefactos
+    lanzados: list[str] = []
+
+    def _fake_lanzar(transcripcion, tipo, **k):
+        lanzados.append(tipo)
+        return {"artefacto": {"id": "a-" + tipo}, "gen": {"id": "g-" + tipo}}
+
+    monkeypatch.setattr(audio_artefactos, "lanzar_tratamiento", _fake_lanzar)
+
+    audio.ejecutar_transcripcion_audio(
+        "g5",
+        {
+            "transcripcion_id": fila["id"], "media_id": "audios/x.mp4", "idioma": "es-MX",
+            "tratamientos": ["texto", "resumen", "ideas"],
+        },
+    )
+
+    tipos = sorted(a["tipo"] for a in repos.listar_audio_artefactos(fila["id"]))
+    assert tipos == ["srt", "texto"]  # los síncronos; los de Claude los crea el launcher (mockeado)
+    assert sorted(lanzados) == ["ideas", "resumen"]  # 'texto' NO va por el launcher
+
 
 def test_ejecutor_audio_media_inexistente_error(entorno, monkeypatch):
     fila = repos.crear_audio_transcripcion(marca=_MARCA, media_id="audios/x.mp4")
