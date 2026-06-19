@@ -306,6 +306,42 @@ def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(clie
     assert datos["kpis"]["visualizaciones"] == 1000
 
 
+def test_comparativa_piezas_cuenta_inorganico_en_ambos_periodos(cliente, monkeypatch):
+    """La comparativa de "Piezas" enfrenta dos totales del mismo tipo: si el conteo actual
+    incluye los boosts (inorgánico), el del periodo anterior también. Sin esto, una campaña
+    con boosts en ambos periodos mostraría un crecimiento de piezas falso (actual con boost
+    contra anterior sin él)."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
+
+    def _listado_falso(rango, marca=None):
+        # Una pieza orgánica con el hashtag en CADA periodo (actual y anterior).
+        return [{
+            "id": f"ig-{rango}", "red": "instagram", "titulo": "Reportaje",
+            "texto": f"{cuerpo} #Chihuahua", "publicado": "2026-06-01", "url": "",
+            "formato": "reel", "engagement_pct": 5.0, "interacciones": 100,
+            "visualizaciones": 1000, "cuenta": "claro_sports",
+        }]
+
+    def _ads_falso(rango, marca=None):
+        # Un boost del mismo contenido en CADA periodo: ambos casan con su pieza orgánica.
+        return [{
+            "nombre": f'Publicación: "{cuerpo}"', "red": "facebook", "impresiones": 5000,
+            "gasto": 300.0, "clics": 100, "moneda": "MXN", "inicio": "2026-06-01",
+            "es_post_impulsado": True, "caption": cuerpo, "cuenta": "claro_sports",
+        }]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    monkeypatch.setattr(campanias.servicio, "construir_ads", _ads_falso)
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
+
+    # Actual: 1 orgánica + 1 boost = 2 piezas. Anterior: igual (2), no 1.
+    assert datos["kpis"]["piezas"] == 2
+    assert datos["comparativa"]["piezas"]["actual"] == 2
+    assert datos["comparativa"]["piezas"]["anterior"] == 2
+    assert datos["comparativa"]["piezas"]["delta"] == 0
+
+
 def test_analitica_campania_inexistente_es_404(cliente):
     r = cliente.get("/api/campanias/nada/analitica")
     assert r.status_code == 404

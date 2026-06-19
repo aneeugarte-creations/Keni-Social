@@ -478,14 +478,22 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     # inorgánicas), no como columna de otra fila: el contenido impulsado en una red donde no
     # hubo post orgánico (p.ej. una pauta de FB de un reel de IG) es una publicación más. Las
     # campañas de pago con nombre propio NO entran aquí (viven en la sección Ads del
-    # dashboard, a nivel marca). Degrada a vacío si no hay Ads conectado.
-    ads_crudos = await asyncio.gather(*(_ads_cacheado(rango, idm) for idm in ids_metricas))
-    ads = [a for lista in ads_crudos for a in lista]
+    # dashboard, a nivel marca). Degrada a vacío si no hay Ads conectado. Se piden los Ads de
+    # ambos periodos a la vez para que el conteo de piezas del periodo anterior incluya también
+    # sus boosts: así la comparativa de "Piezas" enfrenta dos totales del mismo tipo (orgánico
+    # + inorgánico), no un total con boosts contra otro sin ellos.
+    ads_actual, ads_prev = await asyncio.gather(
+        asyncio.gather(*(_ads_cacheado(rango, idm) for idm in ids_metricas)),
+        asyncio.gather(*(_ads_cacheado(rango_prev, idm) for idm in ids_metricas)),
+    )
+    ads = [a for lista in ads_actual for a in lista]
     boosts = _boosts_de_campania(ads, piezas)
+    boosts_prev = _boosts_de_campania([a for lista in ads_prev for a in lista], piezas_prev)
     filas_inorg = [_fila_inorganica(b) for b in boosts]
     # Los inorgánicos cuentan como piezas (el equipo los cuenta), pero NO suman a las
     # visualizaciones orgánicas (no las tenemos): su alcance vive en `inorganico` y la columna.
     actual["piezas"] += len(filas_inorg)
+    anterior["piezas"] += len(boosts_prev)
     inorganico = {
         "visualizaciones": sum(int(b.get("impresiones") or 0) for b in boosts),
         "gasto": round(sum(float(b.get("gasto") or 0.0) for b in boosts), 2),
