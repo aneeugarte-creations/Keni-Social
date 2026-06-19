@@ -1,20 +1,22 @@
 """Inicializacion idempotente de LÍNEAS de contenido (etiquetas clase 'vertical') y ORÍGENES
 (clase 'origen') por marca.
 
-- Las LÍNEAS las dicta el equipo. Solo UnoTV está definida (la dio la dirección): virales,
-  internacional, nacional, presidencia, comercial, reportero/corresponsales, ciencia/tech,
-  geek/pop, eventos. El RESTO de marcas se deja VACÍO a propósito: el equipo las creará
-  desde la pestaña de Líneas cuando toque (no se inventan aquí).
+- Las LÍNEAS las dicta el equipo. UnoTV, Claro Sports, Nación Gamer y Fundación están
+  definidas (las dio la dirección); el resto de marcas se deja VACÍO a propósito hasta que el
+  equipo las cree desde la pestaña de Líneas.
 - Los ORÍGENES son GLOBALES (marca=''): "Interno" y "Externo".
-- Las `keywords` (para el auto-etiquetado) se dejan VACÍAS: las rellena el equipo desde la
-  UI por línea. Sin keywords, una pieza queda "sin línea" (aviso), nunca se descarta.
+- Las `keywords` (auto-etiquetado léxico, `dominio.clasificador_lineas`) se SIEMBRAN para las
+  líneas de Claro Sports (catálogo curado en `KEYWORDS_POR_LINEA`, editable por el equipo desde
+  la UI); para el resto nacen vacías. Una línea sin keywords no casa ninguna pieza (queda "sin
+  línea", aviso, nunca se descarta). La siembra es guarded: solo rellena una línea cuyo campo
+  siga vacío (nunca pisa lo que el equipo edite).
 
 Frescura (TTL) por línea editorial:
 - `ttl_dias=0` significa sin caducidad / evergreen.
 - `es_evergreen=True` marca líneas evergreen reutilizables en fines de semana.
-- Los valores por defecto se aplican SOLO al crear la etiqueta (nunca sobreescriben
-  ediciones del equipo). Para UnoTV se aplica además una actualización guarded de
-  backfill que solo toca filas que aún estén en los defaults (0/0).
+- Al crear se aplican tal cual. Para una línea YA existente, `_reconciliar_linea` reconcilia
+  guarded (ttl/grupo/cadencia/keywords): lleva la taxonomía nueva a las líneas sembradas sin
+  pisar lo que el equipo haya editado a mano.
 
 Idempotente: solo crea lo que no exista ya (por nombre+clase+marca); NUNCA pisa lo que el
 equipo edite (nombres, keywords). Pensada para correr en el bootstrap del arranque.
@@ -34,7 +36,8 @@ _log = logging.getLogger(__name__)
 # Formato: (nombre, ttl_dias, es_evergreen, grupo, cadencia)
 #   ttl_dias=0 -> sin caducidad
 #   es_evergreen=True -> evergreen, reutilizable en fines de semana
-#   grupo -> agrupación de líneas ('' = línea plana, sin grupo). Solo Claro la usa.
+#   grupo -> agrupación de líneas ('' = línea plana, sin grupo). Solo Claro la usa: es el
+#            nivel de la BARRA de navegación de Noticias (un chip por grupo distinto).
 #   cadencia -> ritmo de sondeo de sus fuentes: 'rapida' (~3 min) | 'normal' (~10 min) |
 #               'evergreen' (~30 min, temas de cambio lento).
 LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
@@ -46,9 +49,10 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
         ("Internacional",   1, False, "", "normal"),
         ("Entretenimiento", 1, False, "", "normal"),
     ],
-    # Claro Sports (dadas por el equipo). Fútbol = una línea por competición; las
-    # competiciones extra "relevantes en México" se añaden cuando el equipo las confirme.
-    # El feed se cuelga del GRUPO (Fútbol/Otros deportes/…) y la pieza recibe la línea fina.
+    # Claro Sports: una LÍNEA fina por competición/disciplina, agrupadas por GRUPO. El grupo es
+    # el nivel de la barra de navegación de Noticias (Fútbol · Motor · Olímpicos · NFL · Boxeo ·
+    # NBA · Béisbol · Otros Deportes · Actualidad). El feed se cuelga del grupo y el clasificador
+    # léxico (keywords en `KEYWORDS_POR_LINEA`) asigna la línea fina a cada pieza.
     "claro-sports": [
         # Fútbol — una línea por competición (sondeo rápido: deporte en vivo)
         ("Liga MX",              0, False, "Fútbol", "rapida"),
@@ -68,26 +72,32 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
         ("Mundial de Clubes",    0, False, "Fútbol", "rapida"),
         ("Liga MX Femenil",      0, False, "Fútbol", "rapida"),
         ("Selección de México",  0, False, "Fútbol", "rapida"),
-        # Olímpicos (separados): de cambio lento salvo durante los juegos
+        # Olímpicos: de cambio lento salvo durante los juegos.
         ("Olímpicos Verano",     0, False, "Olímpicos", "evergreen"),
         ("Olímpicos Invierno",   0, False, "Olímpicos", "evergreen"),
-        # Otros deportes (rápido; Golf es de ritmo lento)
-        ("NFL",           0, False, "Otros deportes", "rapida"),
-        ("NBA",           0, False, "Otros deportes", "rapida"),
-        ("MLB",           0, False, "Otros deportes", "rapida"),
-        ("LMB",           0, False, "Otros deportes", "rapida"),
-        ("F1 Checo",      0, False, "Otros deportes", "rapida"),
-        ("F1 (no Checo)", 0, False, "Otros deportes", "rapida"),
-        ("NASCAR",        0, False, "Otros deportes", "rapida"),
-        ("Fórmula E",     0, False, "Otros deportes", "rapida"),
+        # Motor: F1 (Checo) es el buque insignia; NASCAR/Fórmula E cuelgan del mismo grupo.
+        ("F1 Checo",      0, False, "Motor", "rapida"),
+        ("F1 (no Checo)", 0, False, "Motor", "rapida"),
+        ("NASCAR",        0, False, "Motor", "rapida"),
+        ("Fórmula E",     0, False, "Motor", "rapida"),
+        # Deportes de EE. UU.: cada uno con su propio chip en la barra.
+        ("NFL",           0, False, "NFL", "rapida"),
+        ("NBA",           0, False, "NBA", "rapida"),
+        ("MLB",           0, False, "Béisbol", "rapida"),
+        ("LMB",           0, False, "Béisbol", "rapida"),
+        # Boxeo: vertical propia (motor de volumen mexicano: Canelo).
+        ("Boxeo",         0, False, "Boxeo", "rapida"),
+        # Otros deportes: cola larga bajo un solo chip (Golf es de ritmo lento).
+        ("Tenis",         0, False, "Otros deportes", "rapida"),
         ("Ciclismo",      0, False, "Otros deportes", "rapida"),
+        ("UFC",           0, False, "Otros deportes", "rapida"),
         ("TNA",           0, False, "Otros deportes", "rapida"),
         ("Golf",          0, False, "Otros deportes", "evergreen"),
-        # Transversales (no deportivas: ritmo normal)
-        ("Televisión",   0, False, "Transversal", "normal"),
-        ("Portal web",   0, False, "Transversal", "normal"),
-        ("Comercial",    0, False, "Transversal", "normal"),
-        ("Virales",      0, False, "Transversal", "normal"),
+        # Actualidad: no deportivas (entretenimiento, virales, parrilla de TV, comercial).
+        ("Televisión",   0, False, "Actualidad", "normal"),
+        ("Portal web",   0, False, "Actualidad", "normal"),
+        ("Comercial",    0, False, "Actualidad", "normal"),
+        ("Virales",      0, False, "Actualidad", "normal"),
     ],
     # Nación Gamer (noticias de videojuegos). El equipo sumará el resto de líneas.
     "nacion-gamer": [
@@ -103,6 +113,59 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
         ("Educación",        0, True, "", "evergreen"),
         ("Impacto social",   0, True, "", "evergreen"),
     ],
+}
+
+# Palabras clave (CSV) por LÍNEA para el clasificador léxico (`dominio.clasificador_lineas`):
+# casan como palabra contra título+resumen normalizado (sin acentos, minúsculas). Catálogo de
+# arranque para Claro Sports; el equipo lo refina desde la UI de Líneas. Tokens distintivos para
+# minimizar el cruce entre líneas (gana la línea con más coincidencias). SOLO Claro trae
+# catálogo; «Portal web»/«Comercial» se dejan sin keywords (operativas, no son destino de
+# clasificación de noticias). La siembra es guarded: solo rellena una línea con keywords vacías.
+KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
+    "claro-sports": {
+        # — Fútbol —
+        "Liga MX": "liga mx, club america, chivas, guadalajara, cruz azul, pumas, tigres, rayados, monterrey, toluca, santos laguna, pachuca, atlas, leon, necaxa, queretaro, mazatlan, fc juarez, xolos, tijuana, puebla, atletico de san luis, apertura, clausura, liguilla",
+        "Premier League": "premier league, manchester city, manchester united, liverpool, chelsea, arsenal, tottenham, newcastle",
+        "LaLiga (España)": "laliga, la liga, real madrid, barcelona, barca, atletico de madrid, sevilla, villarreal, real betis",
+        "Mundial": "mundial 2026, copa del mundo, world cup, repechaje mundial, sede mundialista",
+        "Eurocopa": "eurocopa, euro 2028, campeonato europeo de naciones",
+        "Concacaf": "concacaf, liga de naciones concacaf, copa oro, concachampions, gold cup",
+        "Copa América": "copa america, conmebol copa america",
+        "Champions League": "champions league, uefa champions, liga de campeones",
+        "Europa League": "europa league, uefa europa, conference league",
+        "Leagues Cup": "leagues cup",
+        "MLS": "mls, major league soccer, inter miami",
+        "Bundesliga": "bundesliga, bayern munich, borussia dortmund, bayer leverkusen, rb leipzig",
+        "Serie A": "serie a, juventus, inter de milan, ac milan, napoli, as roma, lazio",
+        "Copa Libertadores": "copa libertadores, conmebol libertadores, copa sudamericana",
+        "Mundial de Clubes": "mundial de clubes, club world cup",
+        "Liga MX Femenil": "liga mx femenil, futbol femenil",
+        "Selección de México": "seleccion mexicana, seleccion de mexico, el tri, tricolor",
+        # — Olímpicos —
+        "Olímpicos Verano": "juegos olimpicos, olimpiadas, paris 2024, los angeles 2028, medalla olimpica, clavados, tiro con arco, halterofilia, marcha atletica",
+        "Olímpicos Invierno": "juegos olimpicos de invierno, milano cortina, milan cortina 2026, esqui, patinaje artistico, snowboard, biatlon",
+        # — Motor —
+        "F1 Checo": "checo perez, sergio perez, cadillac f1",
+        "F1 (no Checo)": "formula 1, formula uno, gran premio, verstappen, lewis hamilton, escuderia ferrari, mclaren, red bull racing, pole position",
+        "NASCAR": "nascar, nascar mexico",
+        "Fórmula E": "formula e, formula electrica",
+        # — Deportes de EE. UU. —
+        "NFL": "nfl, super bowl, super tazon, touchdown, quarterback, dallas cowboys, kansas city chiefs, futbol americano",
+        "NBA": "nba, lakers, celtics, golden state warriors, lebron james, stephen curry, baloncesto, basquetbol, playoffs nba",
+        "MLB": "mlb, grandes ligas, new york yankees, dodgers, world series, serie mundial",
+        "LMB": "lmb, liga mexicana de beisbol, diablos rojos, sultanes de monterrey, pericos de puebla",
+        # — Boxeo —
+        "Boxeo": "boxeo, canelo, canelo alvarez, saul alvarez, box, pelea de box, nocaut, knockout, cmb, campeon mundial de boxeo, marco verde, pugilismo",
+        # — Otros deportes —
+        "Tenis": "tenis, atp, wta, grand slam, roland garros, wimbledon, us open, australian open, carlos alcaraz, jannik sinner, novak djokovic, sabalenka",
+        "Ciclismo": "ciclismo, tour de francia, giro de italia, vuelta a espana, isaac del toro, uci, peloton, contrarreloj",
+        "UFC": "ufc, mma, artes marciales mixtas, octagono, pelea ufc",
+        "TNA": "tna, lucha libre, wrestling, wwe, aaa lucha",
+        "Golf": "golf, pga, masters de augusta, lpga, ryder cup",
+        # — Actualidad —
+        "Televisión": "estreno, serie de netflix, hbo max, disney plus, masterchef, exatlon, telenovela",
+        "Virales": "viral, se viraliza, redes sociales, polemica en redes",
+    },
 }
 
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.
@@ -122,16 +185,19 @@ _LINEAS_RETIRADAS: dict[str, list[str]] = {
 
 def _crear_si_falta(
     *, nombre: str, clase: str, marca: str, ttl_dias: int = 0, es_evergreen: bool = False,
-    grupo: str = "", cadencia: str = "normal",
+    grupo: str = "", cadencia: str = "normal", keywords: str = "",
 ) -> bool:
-    """Crea la etiqueta (sin keywords) si no existe (nombre+clase+marca). True si la creó."""
+    """Crea la etiqueta si no existe (nombre+clase+marca). True si la creó.
+
+    `keywords` (CSV) siembra el clasificador léxico; '' deja la línea sin auto-etiquetado.
+    """
     if repos.existe_etiqueta_nombre(nombre, clase, marca):
         return False
     repos.crear_etiqueta(
         nombre=nombre,
         clase=clase,
         marca=marca,
-        keywords="",
+        keywords=keywords,
         ttl_dias=ttl_dias,
         es_evergreen=es_evergreen,
         grupo=grupo,
@@ -140,26 +206,45 @@ def _crear_si_falta(
     return True
 
 
-def _backfill_ttl_si_defaults(
-    *, nombre: str, clase: str, marca: str, ttl_dias: int, es_evergreen: bool,
-    grupo: str = "", cadencia: str = "normal",
-) -> bool:
-    """Backfilla ttl_dias/es_evergreen/grupo/cadencia en una línea existente SOLO si aún está en
-    sus defaults (ttl 0 / es_evergreen False / grupo '' / cadencia 'normal').
+def _grupos_gestionados(marca: str) -> set[str]:
+    """Grupos que el bootstrap administra para `marca` (los del seed + el legacy 'Transversal').
 
-    Guarded: nunca sobreescribe si el equipo ya editó los valores. True si actualizó.
+    La reconciliación de `grupo` solo re-mapea una línea cuyo grupo ACTUAL esté en este conjunto:
+    así la taxonomía nueva llega a las líneas ya sembradas, pero NUNCA pisa un grupo que el equipo
+    haya puesto a mano.
     """
-    et = repos.obtener_etiqueta_por_nombre(nombre, clase, marca)
+    seed = {g for (_n, _t, _e, g, _c) in LINEAS_POR_MARCA.get(marca, [])}
+    return seed | {"", "Transversal"}
+
+
+def _reconciliar_linea(
+    *, nombre: str, marca: str, ttl_dias: int, es_evergreen: bool,
+    grupo: str = "", cadencia: str = "normal", keywords: str = "",
+) -> bool:
+    """Reconcilia una línea YA existente con su definición del seed. Guarded. True si tocó algo.
+
+    Cuatro ejes, cada uno con su guarda (nunca pisa una edición del equipo):
+      - ttl/es_evergreen: solo si la línea sigue en defaults (ttl 0 / es_evergreen False).
+      - grupo: re-mapea a la taxonomía canónica del seed SOLO si el grupo actual lo administra el
+        bootstrap (`_grupos_gestionados`); un grupo puesto a mano se respeta. Lleva el re-grupado
+        (p. ej. Transversal->Actualidad, Otros deportes->Motor/NFL/…) a líneas ya sembradas.
+      - cadencia: solo si sigue en 'normal'.
+      - keywords: siembra el catálogo SOLO si la línea aún no tiene keywords.
+    """
+    et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
     if et is None:
         return False
     cambios: dict[str, Any] = {}
     if et.get("ttl_dias", 0) == 0 and not et.get("es_evergreen", False) and (ttl_dias != 0 or es_evergreen):
         cambios["ttl_dias"] = ttl_dias
         cambios["es_evergreen"] = es_evergreen
-    if not (et.get("grupo") or "") and grupo:
+    actual_grupo = et.get("grupo") or ""
+    if actual_grupo != grupo and actual_grupo in _grupos_gestionados(marca):
         cambios["grupo"] = grupo
     if (et.get("cadencia") or "normal") == "normal" and cadencia != "normal":
         cambios["cadencia"] = cadencia
+    if keywords and not (et.get("keywords") or "").strip():
+        cambios["keywords"] = keywords
     if cambios:
         repos.actualizar_etiqueta(et["id"], cambios)
         return True
@@ -176,18 +261,19 @@ def inicializar_lineas() -> int:
     actualizadas = 0
     for marca, lineas in LINEAS_POR_MARCA.items():
         for nombre, ttl_dias, es_evergreen, grupo, cadencia in lineas:
+            kw = KEYWORDS_POR_LINEA.get(marca, {}).get(nombre, "")
             try:
                 if _crear_si_falta(
                     nombre=nombre, clase="vertical", marca=marca, ttl_dias=ttl_dias,
-                    es_evergreen=es_evergreen, grupo=grupo, cadencia=cadencia,
+                    es_evergreen=es_evergreen, grupo=grupo, cadencia=cadencia, keywords=kw,
                 ):
                     creadas += 1
                 else:
-                    # Línea ya existe: backfill guarded (solo si aún en defaults)
-                    if _backfill_ttl_si_defaults(
-                        nombre=nombre, clase="vertical", marca=marca,
+                    # Línea ya existe: reconcilia guarded (taxonomía + keywords si faltan).
+                    if _reconciliar_linea(
+                        nombre=nombre, marca=marca,
                         ttl_dias=ttl_dias, es_evergreen=es_evergreen,
-                        grupo=grupo, cadencia=cadencia,
+                        grupo=grupo, cadencia=cadencia, keywords=kw,
                     ):
                         actualizadas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto

@@ -56,6 +56,62 @@ def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
     assert gaming is not None
 
 
+def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
+    bootstrap_lineas.inicializar_lineas()
+
+    def g(nombre: str) -> dict:
+        et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", "claro-sports")
+        assert et is not None, nombre
+        return et
+
+    # Re-grupado a los CHIPS de la barra de navegación (antes todo era "Otros deportes").
+    assert g("F1 Checo")["grupo"] == "Motor"
+    assert g("F1 (no Checo)")["grupo"] == "Motor"
+    assert g("NFL")["grupo"] == "NFL"
+    assert g("NBA")["grupo"] == "NBA"
+    assert g("MLB")["grupo"] == "Béisbol"
+    assert g("LMB")["grupo"] == "Béisbol"
+    # Transversal pasó a llamarse Actualidad.
+    assert g("Televisión")["grupo"] == "Actualidad"
+    # Líneas NUEVAS sembradas con su grupo y sus keywords.
+    boxeo = g("Boxeo")
+    assert boxeo["grupo"] == "Boxeo" and "canelo" in boxeo["keywords"]
+    assert g("Tenis")["grupo"] == "Otros deportes" and "tenis" in g("Tenis")["keywords"]
+    assert g("UFC")["grupo"] == "Otros deportes"
+
+
+def test_reconcilia_regrupa_y_siembra_keywords_guarded(entorno):
+    # Línea con la taxonomía VIEJA (NFL bajo "Otros deportes", sin keywords) y otra con grupo +
+    # keywords puestos a mano (el equipo): la reconciliación debe re-grupar la primera y sembrar
+    # sus keywords, pero NUNCA pisar las ediciones a mano de la segunda.
+    repos.crear_etiqueta(
+        nombre="NFL", clase="vertical", marca="claro-sports",
+        grupo="Otros deportes", cadencia="rapida",
+    )
+    repos.crear_etiqueta(
+        nombre="Boxeo", clase="vertical", marca="claro-sports",
+        grupo="Mi grupo a mano", keywords="mis, keywords", cadencia="rapida",
+    )
+    bootstrap_lineas.inicializar_lineas()
+    nfl = repos.obtener_etiqueta_por_nombre("NFL", "vertical", "claro-sports")
+    assert nfl["grupo"] == "NFL"  # re-grupado (grupo gestionado por el bootstrap)
+    assert "nfl" in nfl["keywords"]  # keywords sembradas (estaban vacías)
+    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")
+    assert boxeo["grupo"] == "Mi grupo a mano"  # grupo a mano: intacto
+    assert boxeo["keywords"] == "mis, keywords"  # keywords a mano: intactas
+
+
+def test_clasificador_asigna_linea_claro_por_keywords_sembradas(entorno):
+    from keni_consola.dominio import clasificador_lineas
+
+    bootstrap_lineas.inicializar_lineas()
+    res = clasificador_lineas.clasificar_pieza(
+        "Canelo Álvarez ya tendría pactada su próxima pelea de box", "", "claro-sports",
+    )
+    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")
+    assert res["vertical"] == boxeo["id"]
+
+
 def test_vincular_fuentes_a_lineas_mapea_por_marca(entorno):
     bootstrap_lineas.inicializar_lineas()
     # Feed de UnoTV con slug 'mx' -> debe quedar enganchado a la línea "Nacional".
