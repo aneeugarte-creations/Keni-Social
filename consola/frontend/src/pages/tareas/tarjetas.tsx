@@ -888,3 +888,59 @@ export function TarjetaCobertura({
     </FilaConAcciones>
   );
 }
+
+/**
+ * Tarjeta COMPACTA de una cobertura para la lente «Mis tareas»: el evento + MIS roles en él, en una
+ * sola card PLANA — sin la sub-card por persona ni el «Cubren:» del Panorama, y sin repetir mi
+ * nombre/avatar (ya es mi lista) ni la prioridad «media». Cada rol mío trae su semáforo y un «×»
+ * para soltarlo. La gestión completa (otros cubridores, asignar, editar el partido) vive en el
+ * Panorama; aquí se prioriza «de un vistazo, qué cubro yo».
+ */
+export function TarjetaCoberturaMia({ cobertura }: { cobertura: Cobertura }) {
+  const queryClient = useQueryClient();
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const mios = cobertura.cubridores.filter((t) => usuario && t.responsable_id === usuario.id);
+  const soltar = useMutation({
+    mutationFn: (id: string) => api.soltarPublicacion(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`Te quitaste de "${cobertura.titulo}". El partido sigue: vuelve como «Por cubrir».`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+      <div className="flex items-center gap-2">
+        <IconoEvento titulo={cobertura.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium">{cobertura.titulo}</span>
+        {/* Prioridad solo si es «alta» (la «media» no aporta): un badge rojo sobrio. */}
+        {cobertura.prioridad === "alta" && (
+          <Badge variant="outline" className="border-red-500/50 font-normal text-red-700 dark:text-red-300">
+            Urgente
+          </Badge>
+        )}
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {mios.map((t) => (
+          <div key={t.id} className="flex items-center gap-2 text-sm">
+            <SemaforoCobertura fecha={t.fecha_objetivo} hora={t.hora_objetivo} />
+            <span className="text-muted-foreground">{etiquetaRol(t.formato)}</span>
+            <button
+              type="button"
+              aria-label="Soltar (dejar de cubrir)"
+              title="Soltar (dejar de cubrir)"
+              disabled={soltar.isPending}
+              onClick={() => soltar.mutate(t.id)}
+              className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

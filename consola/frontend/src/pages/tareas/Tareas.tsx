@@ -19,10 +19,9 @@ import type { RotaSemana } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
-import { IconoEvento } from "./icono-evento";
 import { KpiCobertura } from "./KpiCobertura";
 import { PanoramaAgenda } from "./PanoramaAgenda";
-import { TarjetaCobertura, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
+import { TarjetaCoberturaMia, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
 import { agrupar, type Item } from "./tipos";
 
 // El tablero es COMPARTIDO: late al mismo pulso para que el claim/asignación de un compañero
@@ -227,13 +226,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
         cubiertoPorTurno={i.cubiertoPorTurno ?? false}
       />
     ) : i.kind === "cobertura" ? (
-      <div key={i.clave} className="rounded-lg border border-border bg-card p-3 shadow-sm">
-        <div className="mb-2 flex items-center gap-2">
-          <IconoEvento titulo={i.cobertura.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="font-medium">{i.cobertura.titulo}</span>
-        </div>
-        <TarjetaCobertura cobertura={i.cobertura} catalogos={catalogos} />
-      </div>
+      <TarjetaCoberturaMia key={i.clave} cobertura={i.cobertura} />
     ) : (
       <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
     );

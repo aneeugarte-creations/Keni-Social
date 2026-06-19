@@ -411,6 +411,25 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(within(enMarcha).queryAllByText("Partido jugado")).toHaveLength(0);
   });
 
+  it("Mis tareas: la cobertura se ve PLANA (sin «Cubren:» ni sub-card): título + mi rol + soltar", async () => {
+    const soltar = vi.spyOn(apiMod.api, "soltarPublicacion").mockResolvedValue({ contenido: {} } as never);
+    renderTareas(
+      [
+        tarea({ id: "c-mia", titulo: "La Copa en tus manos", evento_id: "ev-copa", responsable_id: "u1", responsable_nombre: "ane", formato: "live", fecha_objetivo: "2099-01-01", hora_objetivo: "20:00" }),
+      ],
+      [],
+      usuario("editor", "u1"),
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
+    // Card plana: título + MI rol; SIN el «Cubren:» del Panorama (no hay anidamiento de tarjetas).
+    expect(await screen.findByText("La Copa en tus manos")).toBeInTheDocument();
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.queryByText("Cubren:")).toBeNull();
+    // El «×» suelta mi cobertura (el partido sigue, vuelve como «Por cubrir»).
+    fireEvent.click(screen.getByRole("button", { name: "Soltar (dejar de cubrir)" }));
+    await waitFor(() => expect(soltar).toHaveBeenCalledWith("c-mia"));
+  });
+
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama
