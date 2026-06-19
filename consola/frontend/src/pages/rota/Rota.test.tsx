@@ -342,9 +342,11 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     fireEvent.click(within(dialogo).getByRole("button", { name: "Más acciones" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Asignar a…" }));
 
-    // El sub-diálogo de asignar aparece (el diálogo del chip NO se cierra al pulsar el menú):
-    // elegir a la persona la encarga del evento (rol por defecto «foto»).
-    fireEvent.click(await screen.findByRole("button", { name: "ana" }));
-    await vi.waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev-int", "u-ana", "foto"));
+    // El sub-diálogo de asignar aparece (el diálogo del chip NO se cierra al pulsar el menú) y
+    // deja elegir el ROL con que se encarga: elegir «Video» + persona la encarga con ESE rol
+    // (antes caía siempre a «foto», sin selector).
+    fireEvent.click(await screen.findByRole("button", { name: "Video" }));
+    fireEvent.click(screen.getByRole("button", { name: "ana" }));
+    await vi.waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev-int", "u-ana", "video"));
   });
 });

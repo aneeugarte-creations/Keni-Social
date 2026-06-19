@@ -325,10 +325,12 @@ export function TarjetaEventoLibre({
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
   const [editarAbierto, setEditarAbierto] = React.useState(false);
+  // Rol con que el manager encarga el evento desde «Asignar a…» (selector dentro del diálogo).
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
-  // Cubrir el evento. La ÚNICA forma de cogerse aquí es tocar un chip «⊕ rol», que pasa SU rol
-  // explícito (un toque coge ESE rol). El «Asignar a…» del manager no manda rol → cae a «foto».
+  // Cubrir el evento. Uno se coge tocando un chip «⊕ rol» (pasa SU rol explícito); el manager lo
+  // encarga desde «Asignar a…» eligiendo persona Y rol en el diálogo (por defecto «foto»).
   const cubrir = useMutation({
     mutationFn: ({ responsableId, formato }: { responsableId?: string; formato?: string } = {}) =>
       api.cubrirEvento(evento.id, responsableId, formato ?? "foto"),
@@ -444,8 +446,14 @@ export function TarjetaEventoLibre({
         onOpenChange={setAsignarAbierto}
         usuarios={usuarios}
         responsableActual=""
-        onElegir={(id) => cubrir.mutate({ responsableId: id })}
+        onElegir={(id) => cubrir.mutate({ responsableId: id, formato: rol })}
         enviando={cubrir.isPending}
+        extra={
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Rol con que se cubre</p>
+            <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
+          </div>
+        }
       />
 
       {editarAbierto && (
