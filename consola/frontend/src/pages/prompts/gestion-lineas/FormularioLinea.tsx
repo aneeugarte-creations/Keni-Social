@@ -114,7 +114,7 @@ export function FormularioLinea({
               onCheckedChange={setEsEvergreen}
             />
             <Label htmlFor={`linea-evergreen-${clase}`} className="flex items-center gap-1 cursor-pointer">
-              <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
+              <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               Evergreen
             </Label>
           </div>

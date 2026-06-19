@@ -120,7 +120,7 @@ export function SaludFeeds() {
       };
     }
     return {
-      label: "Activo", className: "border-evergreen-500 text-evergreen-700",
+      label: "Activo", className: "border-emerald-500 text-emerald-700 dark:text-emerald-300",
       severidad: 4, fila: "",
     };
   }
@@ -136,7 +136,7 @@ export function SaludFeeds() {
       {/* Chips de resumen */}
       {resumen && (
         <div className="flex flex-wrap items-center gap-2" data-testid="salud-resumen">
-          <Badge variant="outline" className="gap-1 text-xs border-evergreen-500 text-evergreen-700">
+          <Badge variant="outline" className="gap-1 text-xs border-emerald-500 text-emerald-700 dark:text-emerald-300">
             <Radio className="h-3 w-3" />
             {resumen.activos} activo{resumen.activos !== 1 ? "s" : ""}
           </Badge>

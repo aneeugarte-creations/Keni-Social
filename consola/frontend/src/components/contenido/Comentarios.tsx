@@ -177,7 +177,6 @@ export function Comentarios({ publicacionId }: { publicacionId: string }) {
             aria-label="Escribe un comentario"
             placeholder="Escribe un comentario…"
             rows={2}
-            className="text-sm"
           />
           {/* Menú flotante de menciones: aparece al escribir `@…`. `onMouseDown` (no click)
               para no perder el foco/selección del textarea antes de insertar. */}

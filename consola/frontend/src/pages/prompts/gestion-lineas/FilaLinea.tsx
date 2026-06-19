@@ -130,7 +130,7 @@ export function FilaLinea({
                 onCheckedChange={setEsEvergreen}
               />
               <Label htmlFor={`edit-evergreen-${etiqueta.id}`} className="flex items-center gap-1 cursor-pointer">
-                <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
+                <Leaf className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 Evergreen
               </Label>
             </div>
@@ -214,7 +214,7 @@ export function FilaLinea({
           {etiqueta.marca_nombre || "Global"}
         </Badge>
         {clase === "vertical" && etiqueta.es_evergreen && (
-          <Badge variant="secondary" className="gap-1 font-normal text-evergreen-700">
+          <Badge variant="secondary" className="gap-1 font-normal text-emerald-700 dark:text-emerald-300">
             <Leaf className="h-3 w-3" />
             Evergreen
           </Badge>

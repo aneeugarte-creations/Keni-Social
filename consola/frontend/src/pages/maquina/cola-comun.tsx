@@ -242,7 +242,7 @@ function PresupuestoEditable({
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
         disabled={guardar.isPending}
-        className="h-6 w-28 px-2 text-xs tabular-nums"
+        className="h-6 w-28 px-2 text-base tabular-nums md:text-xs"
         aria-label={`${etiqueta} (0 = sin límite)`}
       />
       {unidad}

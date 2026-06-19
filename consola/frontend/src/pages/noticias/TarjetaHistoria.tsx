@@ -268,7 +268,7 @@ export function TarjetaHistoria({
                     >
                       <Badge
                         variant="outline"
-                        className="gap-1 text-xs border-evergreen-500 text-evergreen-700"
+                        className="gap-1 text-xs border-emerald-500 text-emerald-700 dark:text-emerald-300"
                         data-testid="badge-sale-sola"
                       >
                         <Sparkles className="h-3 w-3" />

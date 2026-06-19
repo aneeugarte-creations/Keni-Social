@@ -12,8 +12,11 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground",
         destructive: "border-transparent bg-destructive text-destructive-foreground",
         outline: "text-foreground",
-        // Variantes semanticas para los estados del doctor.
+        // Variantes SEMÁNTICAS de estado (vocabulario único: ok=verde, info=cielo,
+        // aviso=ámbar, error=rojo). Pares 700/300 para claro/oscuro. Las consumen el
+        // doctor de Sistema y `ChipEstado` (badge único de estados de trabajo).
         ok: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+        info: "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300",
         aviso: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300",
         error: "border-transparent bg-red-500/15 text-red-700 dark:text-red-300",
       },
