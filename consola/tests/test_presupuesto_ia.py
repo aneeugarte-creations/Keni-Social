@@ -313,12 +313,28 @@ def test_estado_por_marca_acota_gasto_y_controles(entorno):
     assert est_unotv["gastado"]["coste_usd"] == pytest.approx(4.0)  # solo unotv
     assert est_unotv["presupuesto_usd_dia"] == pytest.approx(8.0)  # cap propio de la marca
     assert est_unotv["pct_usado_usd"] == pytest.approx(50.0)
-    # En vista de marca los topes de tokens por motor (globales) no se re-emiten como propios.
+    # En vista de marca los topes por motor son los PROPIOS de la marca; aquí ninguno fijado -> 0.
     assert est_unotv["por_proceso"]["produccion"]["presupuesto_tokens_in_dia"] == 0
 
     est_global = presupuesto_ia.estado()
     assert est_global["marca"] == ""
     assert est_global["gastado"]["coste_usd"] == pytest.approx(5.0)  # unotv + claro-sports
+
+
+def test_tope_tokens_por_marca_corta_su_motor(entorno):
+    """Un tope de tokens por motor PROPIO de la marca corta SOLO ese motor de esa marca."""
+    ajustes.guardar("KENI_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA::unotv", "100")
+    repos.registrar_gasto_ia("u1", dia=_hoy(), proceso="produccion", tipo="copy", marca="unotv",
+                             tokens_in=10, tokens_out=100, coste_usd=0.0)
+    presupuesto_ia.invalidar_cache()
+    # El tope OUT de la marca (100) se alcanza con su gasto OUT (100): corta producción de unotv.
+    assert presupuesto_ia.nivel_proceso("produccion", "unotv") == presupuesto_ia.NIVEL_SOLO_MANUAL
+    # Otra marca y el global, intactos (es un tope PROPIO de unotv).
+    assert presupuesto_ia.nivel_proceso("produccion", "claro-sports") == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.nivel_proceso("produccion") == presupuesto_ia.NIVEL_NORMAL
+    # estado(marca) muestra el tope propio del motor y su % consumido.
+    bloque = presupuesto_ia.estado("unotv")["por_proceso"]["produccion"]
+    assert bloque["presupuesto_tokens_out_dia"] == 100 and bloque["pct_out"] == pytest.approx(100.0)
 
 
 def test_encolar_parada_marca_corta_su_trabajo_no_otras(entorno):

@@ -301,6 +301,15 @@ def _publicacion_por_marca() -> list[Ajuste]:
     ]
 
 
+# Topes de tokens por motor (env, etiqueta) que se ofrecen TAMBIÉN por marca, separando IN/OUT.
+_TOPES_TOKENS_MARCA: tuple[tuple[str, str], ...] = (
+    (config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, "tokens entrada · Investigación"),
+    (config.ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA, "tokens salida · Investigación"),
+    (config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA, "tokens entrada · Producción"),
+    (config.ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA, "tokens salida · Producción"),
+)
+
+
 def _presupuesto_por_marca() -> list[Ajuste]:
     """Presupuesto diario de coste (USD) y PARADA DE EMERGENCIA por marca (`KENI_*::marca`).
 
@@ -335,6 +344,21 @@ def _presupuesto_por_marca() -> list[Ajuste]:
                 defecto=False,
             )
         )
+        # Topes de tokens por motor (IN/OUT) PROPIOS de la marca: 0 = sin tope (solo el global).
+        for env, etapa in _TOPES_TOKENS_MARCA:
+            salida.append(
+                Ajuste(
+                    clave=config.clave_por_marca(env, mid),
+                    tipo="int",
+                    etiqueta=f"{nombre} · {etapa}",
+                    ayuda=f"Tope de tokens de «{nombre}» por día UTC en {etapa.lower()}; al agotarse "
+                    "corta ese motor de la marca (lo manual sigue hasta el margen); 0 = sin tope "
+                    "propio. Corta el más restrictivo entre marca y global.",
+                    grupo="presupuesto_marca",
+                    defecto=0,
+                    minimo=0,
+                )
+            )
     return salida
 
 

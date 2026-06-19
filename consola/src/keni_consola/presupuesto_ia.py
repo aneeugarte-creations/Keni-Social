@@ -175,7 +175,7 @@ def _gasto_por_proceso_hoy(marca: str = "") -> dict[str, dict[str, Any]]:
 
 
 def _topes_motor(proceso: str) -> tuple[int, int]:
-    """Topes DIARIOS (in, out) de tokens propios del motor (env); 0 = sin limite en ese lado."""
+    """Topes DIARIOS GLOBALES (in, out) de tokens del motor (env); 0 = sin limite en ese lado."""
     if proceso == PROCESO_INVESTIGACION:
         return (
             config.presupuesto_tokens_investigacion_in_dia(),
@@ -185,6 +185,26 @@ def _topes_motor(proceso: str) -> tuple[int, int]:
         return (
             config.presupuesto_tokens_produccion_in_dia(),
             config.presupuesto_tokens_produccion_out_dia(),
+        )
+    return (0, 0)
+
+
+def _topes_motor_marca(proceso: str, marca: str) -> tuple[int, int]:
+    """Topes DIARIOS (in, out) de tokens PROPIOS de una marca para el motor; 0 = sin tope de marca.
+
+    Análogo por-marca de `_topes_motor`: independientes del global, el corte toma el MÁS
+    restrictivo entre marca y global (ver `nivel_proceso`)."""
+    if not marca:
+        return (0, 0)
+    if proceso == PROCESO_INVESTIGACION:
+        return (
+            config.presupuesto_tokens_investigacion_in_dia_marca(marca),
+            config.presupuesto_tokens_investigacion_out_dia_marca(marca),
+        )
+    if proceso == PROCESO_PRODUCCION:
+        return (
+            config.presupuesto_tokens_produccion_in_dia_marca(marca),
+            config.presupuesto_tokens_produccion_out_dia_marca(marca),
         )
     return (0, 0)
 
@@ -264,24 +284,33 @@ def _nivel_global(marca: str = "") -> str:
 def nivel_proceso(proceso: str, marca: str = "") -> str:
     """Nivel de corte EFECTIVO de un motor (investigacion|produccion): el MAS restrictivo.
 
-    Combina el nivel GLOBAL —ya ponderado con el cap/parada de `marca` si viene— con el escalon de
-    los TOPES PROPIOS del motor (globales, ADR 0011), separando ENTRADA y SALIDA: el gasto de
-    tokens_in del motor vs su tope IN y el de tokens_out vs su tope OUT (mismos escalones y
-    `margen_manual`). Cada tope en 0 no añade corte por ese lado. NO loguea transiciones.
+    Combina el nivel GLOBAL —ya ponderado con el cap/parada de `marca` si viene— con los TOPES de
+    tokens del motor, separando ENTRADA y SALIDA. Los topes son de DOS niveles, ambos cortan (el
+    más restrictivo): los GLOBALES (ADR 0011, gasto global del motor) y, si viene `marca`, los
+    PROPIOS de la marca (gasto del motor SOLO de esa marca). Cada tope en 0 no añade corte por ese
+    lado. NO loguea transiciones.
     """
     glob = _nivel_global(marca)
     if glob == NIVEL_PAUSADO:
         return NIVEL_PAUSADO
-    tope_in, tope_out = _topes_motor(proceso)
-    if tope_in <= 0 and tope_out <= 0:
-        return glob
-    g = _gasto_por_proceso_hoy().get(proceso, {})
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
     nivel_vigente = glob
-    if tope_in > 0:
-        nivel_vigente = _mas_severo(nivel_vigente, _escalon(int(g.get("tokens_in", 0)), tope_in, margen))
-    if tope_out > 0:
-        nivel_vigente = _mas_severo(nivel_vigente, _escalon(int(g.get("tokens_out", 0)), tope_out, margen))
+
+    def _aplica(topes: tuple[int, int], gasto: dict[str, Any]) -> None:
+        nonlocal nivel_vigente
+        tope_in, tope_out = topes
+        if tope_in > 0:
+            nivel_vigente = _mas_severo(
+                nivel_vigente, _escalon(int(gasto.get("tokens_in", 0)), tope_in, margen)
+            )
+        if tope_out > 0:
+            nivel_vigente = _mas_severo(
+                nivel_vigente, _escalon(int(gasto.get("tokens_out", 0)), tope_out, margen)
+            )
+
+    _aplica(_topes_motor(proceso), _gasto_por_proceso_hoy().get(proceso, {}))
+    if marca:
+        _aplica(_topes_motor_marca(proceso, marca), _gasto_por_proceso_hoy(marca).get(proceso, {}))
     return nivel_vigente
 
 
@@ -362,17 +391,21 @@ def estado(marca: str = "") -> dict[str, Any]:
        por_proceso: {investigacion: {...}, produccion: {...}}}
 
     `marca` ("" = GLOBAL; un id = vista POR MARCA): con marca, `gastado`/`por_proceso` traen el
-    gasto SOLO de esa marca, `pausada`/`presupuesto_usd_dia` son los controles PROPIOS de la marca
-    (su parada y su cap USD) y `nivel` es el efectivo de la marca (el mas restrictivo con el
-    global). Los topes de TOKENS por motor son globales (ADR 0011): en la vista de marca NO se
-    re-emiten como tope propio (van a 0 en `por_proceso`); el presupuesto de tokens de marca es 0.
+    gasto SOLO de esa marca y los controles son los PROPIOS de la marca (su parada, su cap USD y
+    sus topes de tokens por motor IN/OUT); `nivel` es el efectivo de la marca (el mas restrictivo
+    con el global).
 
-    `presupuesto_tokens_dia` (vista global) es INFORMATIVO: la SUMA de los 4 topes por motor; NO
-    corta a nivel global (eso es solo USD + parada). `restante_tokens`/`pct_usado` son None si esa
-    suma es 0; `pct_usado_usd` es None sin cap de USD.
+    `presupuesto_tokens_dia` es INFORMATIVO: la SUMA de los 4 topes por motor del ámbito (globales,
+    o de la marca en vista de marca); NO corta a nivel global (eso es solo USD + parada).
+    `restante_tokens`/`pct_usado` son None si esa suma es 0; `pct_usado_usd` es None sin cap de USD.
     """
     gasto = _gasto_hoy(marca)
-    presupuesto = 0 if marca else _suma_topes_motor()
+    if marca:
+        inv = _topes_motor_marca(PROCESO_INVESTIGACION, marca)
+        prod = _topes_motor_marca(PROCESO_PRODUCCION, marca)
+        presupuesto = inv[0] + inv[1] + prod[0] + prod[1]
+    else:
+        presupuesto = _suma_topes_motor()
     presupuesto_usd = config.presupuesto_usd_dia_marca(marca) if marca else config.presupuesto_usd_dia()
     gastado = int(gasto.get("tokens", 0))
     coste = float(gasto.get("coste_usd", 0.0))
@@ -404,14 +437,14 @@ def _bloque_proceso(
 ) -> dict[str, Any]:
     """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + topes in/out + nivel del motor.
 
-    Los topes de tokens por motor son GLOBALES (ADR 0011); en la vista POR MARCA no son propios de
-    la marca, asi que se omiten (topes 0, restante/pct None) y solo se muestra el gasto de la marca.
+    Los topes son los del ÁMBITO: en vista global los del motor (ADR 0011); en vista POR MARCA los
+    PROPIOS de la marca (`KENI_PRESUPUESTO_TOKENS_<MOTOR>_<IN|OUT>_DIA::<marca>`), con su gasto y %.
     """
     g = gasto_proc.get(proceso, {})
     tin = int(g.get("tokens_in", 0))
     tout = int(g.get("tokens_out", 0))
     tokens = int(g.get("tokens", tin + tout))
-    tope_in, tope_out = (0, 0) if marca else _topes_motor(proceso)
+    tope_in, tope_out = _topes_motor_marca(proceso, marca) if marca else _topes_motor(proceso)
     restante_in = max(0, tope_in - tin) if tope_in > 0 else None
     pct_in = round(100.0 * tin / tope_in, 1) if tope_in > 0 else None
     restante_out = max(0, tope_out - tout) if tope_out > 0 else None

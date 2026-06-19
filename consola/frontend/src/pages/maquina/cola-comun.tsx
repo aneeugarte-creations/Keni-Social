@@ -334,14 +334,19 @@ function PanelMotor({
   motor,
   datos,
   esAdmin,
+  marca,
 }: {
   motor: Proceso;
   datos: PresupuestoProcesoIA | undefined;
   esAdmin: boolean;
+  /** Ámbito de marca: con marca, los topes se editan con la clave por-marca (`KENI_*::<marca>`). */
+  marca?: string;
 }) {
   const meta = PROC_META[motor];
   const p = datos ?? PROC_PRESUPUESTO_VACIO;
-  const claves = ENV_TOPE_MOTOR[motor];
+  const base = ENV_TOPE_MOTOR[motor];
+  // Con ámbito de marca, el tope es el PROPIO de la marca (clave con sufijo `::<marca>`).
+  const claves = marca ? { in: `${base.in}::${marca}`, out: `${base.out}::${marca}` } : base;
   return (
     <div className="space-y-2 rounded-lg border p-3">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -460,18 +465,21 @@ export function PanelPresupuesto({
           {conCapUsd && pctUsd != null && <span>· {pctUsd.toFixed(0)}% gasto</span>}
           {conCapUsd && pctUsd != null && <BarraPct pct={pctUsd} ancho="w-56" />}
         </div>
-        {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección. Los
-            topes son GLOBALES (ADR 0011): en la vista de marca van como gasto sin tope editable. */}
+        {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección,
+            editable por admin. El tope es del ÁMBITO: global en "todas", propio de la marca cuando
+            hay marca activa (clave `KENI_*::<marca>`). */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <PanelMotor
             motor="investigacion"
             datos={presupuesto.por_proceso?.investigacion}
-            esAdmin={esAdmin && !marca}
+            esAdmin={esAdmin}
+            marca={marca}
           />
           <PanelMotor
             motor="produccion"
             datos={presupuesto.por_proceso?.produccion}
-            esAdmin={esAdmin && !marca}
+            esAdmin={esAdmin}
+            marca={marca}
           />
         </div>
       </CardContent>

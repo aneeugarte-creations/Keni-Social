@@ -207,6 +207,38 @@ def generacion_pausada_marca(marca: str) -> bool:
     return _crudo(clave_por_marca(ENV_GENERACION_PAUSADA, marca)).lower() in _VERDADEROS
 
 
+def _tope_tokens_dia_marca(env: str, marca: str) -> int:
+    """Tope de tokens/día PROPIO de una marca para un env de tope (`<ENV>::<marca>`, def 0).
+
+    `0`/ausente = la marca no añade tope por ese lado (solo aplica el global). Es el análogo
+    por-marca de los topes por motor; el corte toma el MÁS restrictivo entre marca y global."""
+    from .config_produccion import clave_por_marca
+
+    if not marca:
+        return 0
+    return _entero(clave_por_marca(env, marca), 0, minimo=0)
+
+
+def presupuesto_tokens_investigacion_in_dia_marca(marca: str) -> int:
+    """Tope de tokens de ENTRADA/día de Investigación PROPIO de una marca (def 0 = sin tope)."""
+    return _tope_tokens_dia_marca(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_IN_DIA, marca)
+
+
+def presupuesto_tokens_investigacion_out_dia_marca(marca: str) -> int:
+    """Tope de tokens de SALIDA/día de Investigación PROPIO de una marca (def 0 = sin tope)."""
+    return _tope_tokens_dia_marca(ENV_PRESUPUESTO_TOKENS_INVESTIGACION_OUT_DIA, marca)
+
+
+def presupuesto_tokens_produccion_in_dia_marca(marca: str) -> int:
+    """Tope de tokens de ENTRADA/día de Producción PROPIO de una marca (def 0 = sin tope)."""
+    return _tope_tokens_dia_marca(ENV_PRESUPUESTO_TOKENS_PRODUCCION_IN_DIA, marca)
+
+
+def presupuesto_tokens_produccion_out_dia_marca(marca: str) -> int:
+    """Tope de tokens de SALIDA/día de Producción PROPIO de una marca (def 0 = sin tope)."""
+    return _tope_tokens_dia_marca(ENV_PRESUPUESTO_TOKENS_PRODUCCION_OUT_DIA, marca)
+
+
 
 # --------------------------------------------------------------------------- #
 # Accesores: cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B)       #
