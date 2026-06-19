@@ -157,6 +157,49 @@ def test_categoria_usa_sus_horarios_del_plan(cliente, ahora_fijo):
     assert actualizada["fecha_programada"] == "2026-05-20T14:45"
 
 
+def test_slug_de_categoria_se_traduce_a_linea_del_plan(cliente, ahora_fijo):
+    """El plan guarda sus franjas con el ID de la LÍNEA; la pieza trae el SLUG editorial.
+
+    `calcular_hueco_para` traduce slug -> id de línea, así que una pieza 'internacional' cae en la
+    franja de la línea Internacional (su id), NO en la genérica. SIN la traducción, el slug no
+    casaría con el id y la pieza caería en la genérica de las 12:00.
+    """
+    from keni_consola import bootstrap_lineas
+
+    bootstrap_lineas.inicializar_lineas()  # siembra las líneas (vertical) de unotv
+    et = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    assert et is not None, "la línea Internacional debe existir tras inicializar_lineas"
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "12:00", "marca": "unotv"})  # genérica
+    cliente.post(
+        "/api/franjas",
+        json={"dia_semana": 2, "hora": "14:45", "marca": "unotv", "categoria": et["id"]},
+    )
+    pid = _crear_aprobada(cliente)
+    _vincular_cluster(pid, categoria="internacional")
+    actualizada = auto_programar.programar_si_aprobada(pid)
+    assert actualizada is not None
+    assert actualizada["fecha_programada"] == "2026-05-20T14:45"
+
+
+def test_sin_categoria_sin_genericas_cae_al_plan(cliente, ahora_fijo):
+    """Marca de una línea sin franjas genéricas: una pieza sin categoría usa el plan, no se queda
+    sin programar. (Antes `franjas_aplicables` devolvía [] y la pieza no salía nunca.)"""
+    from keni_consola import bootstrap_lineas
+
+    bootstrap_lineas.inicializar_lineas()
+    et = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    assert et is not None
+    # ÚNICA franja de la marca, con categoría de línea (no hay genérica).
+    cliente.post(
+        "/api/franjas",
+        json={"dia_semana": 2, "hora": "14:45", "marca": "unotv", "categoria": et["id"]},
+    )
+    pid = _crear_aprobada(cliente)  # sin cluster -> categoría ''
+    actualizada = auto_programar.programar_si_aprobada(pid)
+    assert actualizada is not None
+    assert actualizada["fecha_programada"] == "2026-05-20T14:45"
+
+
 def test_redes_de_un_tema_comparten_hora(cliente, ahora_fijo):
     """El hueco se ocupa POR (marca, red): piezas del mismo tema en redes distintas salen a
     la MISMA hora (espejo del índice de unicidad de slot por marca+red+fecha)."""

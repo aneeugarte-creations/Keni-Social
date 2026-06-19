@@ -133,6 +133,30 @@ def test_aplicables_sin_categoria_solo_genericas():
     assert ids == ["gen"]
 
 
+def test_aplicables_sin_categoria_sin_genericas_cae_al_plan():
+    """Sin franjas genéricas, una pieza sin categoría cae al PLAN del nivel (no se queda sin franja).
+
+    Caso de una marca de UNA sola línea (o con piezas sin clasificar): todas sus franjas tienen
+    categoría de línea; antes una pieza sin categoría devolvía [] y no programaba nunca.
+    """
+    franjas = [
+        _f("gaming1", "nacion-gamer", "", 0, "16:00", "gaming"),
+        _f("gaming2", "nacion-gamer", "", 0, "21:00", "gaming"),
+    ]
+    ids = {f["id"] for f in af.franjas_aplicables(franjas, "nacion-gamer", "instagram")}
+    assert ids == {"gaming1", "gaming2"}
+
+
+def test_aplicables_categoria_sin_horario_ni_genericas_cae_al_plan():
+    """Una categoría sin horario propio y sin genéricas también cae al PLAN del nivel."""
+    franjas = [
+        _f("gaming1", "nacion-gamer", "", 0, "16:00", "gaming"),
+        _f("gaming2", "nacion-gamer", "", 0, "21:00", "gaming"),
+    ]
+    ids = {f["id"] for f in af.franjas_aplicables(franjas, "nacion-gamer", "instagram", "mx")}
+    assert ids == {"gaming1", "gaming2"}
+
+
 def test_crear_franja_con_categoria(cliente):
     r = cliente.post(
         "/api/franjas",

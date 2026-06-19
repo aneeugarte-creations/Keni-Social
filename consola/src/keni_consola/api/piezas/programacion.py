@@ -104,6 +104,13 @@ def calcular_hueco_para(
         ):
             ocupados_mr.add(fecha)
     categoria = categoria_de_pieza(pub)
+    # La pieza trae un SLUG editorial ('gaming', 'mx', 'internacional'…); el plan por línea
+    # guarda sus franjas con el id de la LÍNEA (etiqueta vertical). Traducimos slug -> id de
+    # línea para que el plan case; idempotente: un id ya-de-línea y las señales '', 'breaking',
+    # 'evergreen' se devuelven sin tocar. Import perezoso: `bootstrap_lineas` toca repos/ajustes.
+    from ...bootstrap_lineas import linea_id_de_slug
+
+    categoria = linea_id_de_slug(pub["marca"], categoria) or categoria
     # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
     # margen corto), en el primer minuto libre de su (marca, red).
     if categoria == "breaking":

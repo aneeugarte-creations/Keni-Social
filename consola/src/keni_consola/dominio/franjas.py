@@ -43,8 +43,11 @@ def franjas_aplicables(
     CATEGORÍA (plan editorial): dentro del nivel ganador, una pieza con categoría busca
     primero las franjas de SU categoría (los horarios del plan: internacional a sus horas,
     mx a las suyas…) y cae a las GENÉRICAS (categoria='') si su categoría no tiene horario.
-    Una pieza sin categoría solo usa las genéricas: los horarios de una categoría son de esa
-    categoría. Devuelve la lista ganadora (puede estar vacía si no aplica ninguna).
+    Una pieza sin categoría usa las genéricas. ÚLTIMO recurso, cuando la marca NO tiene franjas
+    genéricas: una pieza sin categoría (o cuya categoría no tiene horario propio) cae al PLAN
+    COMPLETO del nivel en vez de quedarse sin franja — así una marca de una sola línea, o con
+    piezas sin clasificar, programa en su plan en lugar de no programar nunca. Devuelve la lista
+    ganadora (puede estar vacía si no aplica ninguna franja al nivel).
     """
     especificas = [f for f in franjas if f["marca"] == marca and f["red"] == red]
     nivel = especificas or [
@@ -56,9 +59,9 @@ def franjas_aplicables(
     ]
     genericas = [f for f in nivel if not (f.get("categoria") or "")]
     if not categoria:
-        return genericas
+        return genericas or nivel
     de_categoria = [f for f in nivel if (f.get("categoria") or "") == categoria]
-    return de_categoria or genericas
+    return de_categoria or genericas or nivel
 
 
 def _candidato(ahora: datetime, dia_semana: int, hora: str) -> datetime:
