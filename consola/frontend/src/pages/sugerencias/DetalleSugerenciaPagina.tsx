@@ -348,7 +348,7 @@ export default function DetalleSugerenciaPagina() {
     borrar.isPending;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
         {volver}
         {!editando && (
@@ -459,7 +459,10 @@ export default function DetalleSugerenciaPagina() {
                   Lanzar discovery
                 </Button>
               )}
-              {(estado === "nueva" || estado === "discovery" || estado === "fallida") && (
+              {(estado === "nueva" ||
+                estado === "discovery" ||
+                estado === "en_cola" ||
+                estado === "fallida") && (
                 <Button onClick={() => construir.mutate()} disabled={ocupado}>
                   {construir.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

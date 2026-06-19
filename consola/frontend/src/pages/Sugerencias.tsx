@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Hammer, Lightbulb, Plus, X } from "lucide-react";
+import { CheckCircle2, Hammer, Lightbulb, Plus, X } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -189,7 +189,8 @@ function Tablero({
       // son un PATCH directo del estado (override manual). No se usa el valor de retorno.
       if (destino === "discovery") {
         await api.discoverySugerencia(s.id);
-      } else if (destino === "en_cola") {
+      } else if (destino === "building") {
+        // Soltar en Building = construir: encola el pipeline (no un simple cambio de estado).
         await api.construirSugerencia(s.id);
       } else {
         await api.actualizarSugerencia(s.id, { estado: destino });
@@ -215,13 +216,14 @@ function Tablero({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const soltar = (destino: EstadoSugerencia, ev: React.DragEvent) => {
+  const soltar = (col: (typeof COLUMNAS)[number], ev: React.DragEvent) => {
     ev.preventDefault();
     setSobreColumna(null);
     const id = ev.dataTransfer.getData(MIME_ARRASTRE);
     const s = sugerencias.find((x) => x.id === id);
-    if (!s || s.estado === destino) return;
-    mover.mutate({ s, destino });
+    // Soltar dentro de la MISMA columna (su estado ya está incluido) no hace nada.
+    if (!s || col.incluye.includes(s.estado as EstadoSugerencia)) return;
+    mover.mutate({ s, destino: col.estado });
   };
 
   const archivadas = sugerencias.filter((s) =>
@@ -230,9 +232,11 @@ function Tablero({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {COLUMNAS.map((col) => {
-          const items = sugerencias.filter((s) => s.estado === col.estado);
+          const items = sugerencias.filter((s) =>
+            col.incluye.includes(s.estado as EstadoSugerencia),
+          );
           return (
             <Columna
               key={col.estado}
@@ -244,7 +248,7 @@ function Tablero({
                 setSobreColumna(col.estado);
               }}
               onDragLeave={() => setSobreColumna((c) => (c === col.estado ? null : c))}
-              onDrop={(e) => soltar(col.estado, e)}
+              onDrop={(e) => soltar(col, e)}
             >
               {items.map((s) => (
                 <Tarjeta
@@ -342,7 +346,10 @@ function Tarjeta({
 }) {
   const estado = sugerencia.estado;
   const enVivo = !!sugerencia.gen_id && estado === "building";
-  const puedeConstruir = estado === "nueva" || estado === "discovery" || estado === "fallida";
+  const enDiscovery = estado === "discovery";
+  const specListo = estado === "en_cola"; // discovery terminado: spec listo para construir
+  const puedeConstruir =
+    estado === "nueva" || estado === "discovery" || estado === "en_cola" || estado === "fallida";
   const puedeDescartar = estado !== "descartada";
   // Las acciones rápidas no deben disparar el click de la tarjeta ni el arrastre.
   const sinPropagar = (fn: () => void) => (e: React.MouseEvent) => {
@@ -377,6 +384,18 @@ function Tarjeta({
           >
             {etiqueta(COMPLEJIDAD_LABEL, sugerencia.complejidad)}
           </Badge>
+        )}
+        {enDiscovery && (
+          <span className="flex items-center gap-1 text-[10px] text-sky-600">
+            <Spinner className="h-3 w-3" aria-hidden="true" />
+            en curso
+          </span>
+        )}
+        {specListo && (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-600">
+            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+            spec listo
+          </span>
         )}
         {enVivo && (
           <span className="flex items-center gap-1 text-[10px] text-sky-600">
