@@ -13,13 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -27,12 +20,13 @@ import { diaCorto } from "@/lib/rota-calendario";
 import type { FranjaSemana, MiembroRota } from "@/types";
 
 /**
- * Pastilla de un día (selección múltiple). El estado SELECCIONADO es inconfundible —
- * relleno sólido + check— frente al no-seleccionado —contorno y texto apagado—: con los
- * grises de plataforma (secondary ~95% vs background ~98%) un toggle sutil era invisible y
- * el usuario no veía qué días quedaban marcados.
+ * Pastilla de selección múltiple (un día o una persona). El estado SELECCIONADO es inconfundible
+ * —relleno sólido + check— frente al no-seleccionado —contorno y texto apagado—: con los grises
+ * de plataforma (secondary ~95% vs background ~98%) un toggle sutil era invisible y el usuario no
+ * veía qué quedaba marcado. Personas y días usan la misma pastilla para que el diálogo sea
+ * coherente: ambos son multi-selección por toque.
  */
-function ChipDia({
+function ChipToggle({
   activo,
   onClick,
   children,
@@ -165,16 +159,54 @@ export async function asignarDiasTurno(
   return r;
 }
 
+export interface ResumenReparto extends ResumenAsignacion {
+  /** Personas a las que se les creó al menos un turno (para el toast «… para N personas»). */
+  personasConCreados: number;
+}
+
+/**
+ * Aplica el MISMO horario+días a VARIAS personas, una por una, agregando el resultado. Mantiene
+ * la indulgencia de `asignarDiasTurno` a dos niveles: ni un día que choca tumba a su persona, ni
+ * una persona con todo ocupado tumba al resto. El reparto por lote (todo-o-nada) se descarta a
+ * propósito: un solo choque perdería todo lo demás.
+ */
+export async function asignarPersonasDiasTurno(
+  lunes: string,
+  miembroIds: string[],
+  franjaId: string,
+  fechas: string[],
+  inicio = "",
+  fin = "",
+): Promise<ResumenReparto> {
+  const r: ResumenReparto = {
+    creados: 0,
+    yaEstaba: 0,
+    sabados: 0,
+    fallos: 0,
+    personasConCreados: 0,
+  };
+  for (const miembroId of miembroIds) {
+    const p = await asignarDiasTurno(lunes, miembroId, franjaId, fechas, inicio, fin);
+    r.creados += p.creados;
+    r.yaEstaba += p.yaEstaba;
+    r.sabados += p.sabados;
+    r.fallos += p.fallos;
+    if (p.creados > 0) r.personasConCreados++;
+  }
+  return r;
+}
+
 /**
  * «Asignar turnos» del calendario de la rota: reparte la semana de un vistazo en vez de ir
- * celda por celda. Eliges PERSONA → HORARIO (de–a) → QUÉ DÍAS, y crea un turno por cada día
- * seleccionado. El usuario piensa en HORAS, no en franjas: la franja (fila del calendario) se
- * deriva sola del horario (`franjaParaHorario`). Repites el diálogo por persona. La cobertura
- * (quién cubre cada evento) sigue en Panorama; esto es CAPACIDAD.
+ * celda por celda. Eliges PERSONAS → HORARIO (de–a) → QUÉ DÍAS, y crea un turno por cada par
+ * persona×día. El usuario piensa en HORAS, no en franjas: la franja (fila del calendario) se
+ * deriva sola del horario (`franjaParaHorario`). La cobertura (quién cubre cada evento) sigue
+ * en Panorama; esto es CAPACIDAD.
  *
- * Va por día (no por el endpoint lote) a propósito: el lote es todo-o-nada y un solo choque
- * (sábado consecutivo o un día ya asignado) tumbaría el reparto entero. Por día es indulgente:
- * asigna lo que puede, cuenta los que ya estaban y avisa de los sábados que piden override.
+ * Va persona-a-persona y día-a-día (no por el endpoint lote) a propósito: el lote es todo-o-nada
+ * y un solo choque (sábado consecutivo o un día ya asignado) tumbaría el reparto entero. Así es
+ * indulgente: asigna lo que puede, cuenta los que ya estaban y avisa de los sábados que piden
+ * override, sin que un choque arrastre al resto de personas ni de días.
  */
 export function DialogoAsignarTurnos({
   abierto,
@@ -205,16 +237,19 @@ export function DialogoAsignarTurnos({
     () => franjas.filter((f) => !f.es_descanso),
     [franjas],
   );
-  const [persona, setPersona] = React.useState("");
+  const [personasSel, setPersonasSel] = React.useState<Set<string>>(() => new Set());
   // Horario del turno (de–a). El usuario teclea horas; la franja (fila) se deriva sola.
   const [inicio, setInicio] = React.useState("");
   const [fin, setFin] = React.useState("");
   const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set());
 
-  // Al abrir (o al cambiar de semana) arranca sin días: el usuario ELIGE los que quiere
-  // (clic = añade). Los atajos «L–V» / «Toda la semana» cubren los casos masivos de un toque.
+  // Al abrir (o al cambiar de semana) arranca sin personas ni días: el usuario ELIGE quién y
+  // qué (clic = añade). Los atajos «L–V» / «Toda la semana» cubren los casos masivos de un toque.
   React.useEffect(() => {
-    if (abierto) setDiasSel(new Set());
+    if (abierto) {
+      setPersonasSel(new Set());
+      setDiasSel(new Set());
+    }
   }, [abierto, dias]);
 
   // Al abrir, prefija el horario con el de la primera franja laboral (p. ej. 08:00–16:00) sin
@@ -235,6 +270,14 @@ export function DialogoAsignarTurnos({
       return n;
     });
 
+  const togglePersona = (id: string) =>
+    setPersonasSel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
   const horasValidas = esHoraValida(inicio) && esHoraValida(fin);
   // La franja (fila del calendario) se deriva del horario; el turno lleva horas A MEDIDA solo
   // si difieren de las de esa franja (si coinciden, hereda, así editar la franja luego propaga).
@@ -247,30 +290,30 @@ export function DialogoAsignarTurnos({
   const asignar = useMutation({
     mutationFn: async () => {
       const fechas = dias.filter((d) => diasSel.has(d));
+      const miembroIds = cms.filter((m) => personasSel.has(m.id)).map((m) => m.id);
       const f = franjaParaHorario(inicio, fin, franjasLaborales);
       const resumen = f
-        ? await asignarDiasTurno(
+        ? await asignarPersonasDiasTurno(
             lunes,
-            persona,
+            miembroIds,
             f.id,
             fechas,
             horasAMedida ? inicio : "",
             horasAMedida ? fin : "",
           )
-        : { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 };
-      return {
-        ...resumen,
-        persona_nombre: cms.find((m) => m.id === persona)?.nombre ?? "",
-        horario: `${inicio}–${fin}`,
-      };
+        : { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0, personasConCreados: 0 };
+      return { ...resumen, horario: `${inicio}–${fin}` };
     },
-    onSuccess: ({ creados, yaEstaba, sabados, fallos, persona_nombre, horario }) => {
+    onSuccess: ({ creados, yaEstaba, sabados, fallos, personasConCreados, horario }) => {
       onCambio();
       const partes: string[] = [];
-      if (creados)
+      if (creados) {
+        const personasTxt =
+          personasConCreados === 1 ? "1 persona" : `${personasConCreados} personas`;
         partes.push(
-          `${creados} día${creados === 1 ? "" : "s"} a ${persona_nombre} (${horario})`,
+          `${creados} turno${creados === 1 ? "" : "s"} para ${personasTxt} (${horario})`,
         );
+      }
       if (yaEstaba) partes.push(`${yaEstaba} ya estaba${yaEstaba === 1 ? "" : "n"}`);
       if (sabados)
         partes.push(
@@ -286,7 +329,12 @@ export function DialogoAsignarTurnos({
   });
 
   const incompleto =
-    !persona || diasSel.size === 0 || !horasValidas || franjasLaborales.length === 0;
+    personasSel.size === 0 ||
+    diasSel.size === 0 ||
+    !horasValidas ||
+    franjasLaborales.length === 0;
+  // Turnos que se intentarán crear: el mismo horario+días aplicado a cada persona marcada.
+  const totalTurnos = personasSel.size * diasSel.size;
 
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
@@ -320,51 +368,78 @@ export function DialogoAsignarTurnos({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Reparte la semana a mano: elige quién trabaja, su horario y qué días. Repítelo por
-          persona. Esto es la CAPACIDAD; quién cubre cada evento se decide en Panorama.
+          Reparte la semana a mano: elige quién trabaja, su horario y qué días. Puedes marcar
+          varias personas y aplicarles el mismo turno de una vez. Esto es la CAPACIDAD; quién
+          cubre cada evento se decide en Panorama.
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>Persona</Label>
-            <Select value={persona} onValueChange={setPersona}>
-              <SelectTrigger>
-                <SelectValue placeholder="Elige…" />
-              </SelectTrigger>
-              <SelectContent>
-                {cms.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Horario en horas (de–a). Es lo único que define el turno; la franja —la fila del
-              calendario— se deduce sola del horario, sin que el usuario la elija. */}
-          <div className="space-y-1.5">
-            <Label>Horario</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
-                placeholder="08:00"
-                className="w-24 tabular-nums"
-                aria-label="Hora de inicio"
-              />
-              <span className="text-muted-foreground">–</span>
-              <Input
-                value={fin}
-                onChange={(e) => setFin(e.target.value)}
-                placeholder="16:00"
-                className="w-24 tabular-nums"
-                aria-label="Hora de fin"
-              />
+        {/* Personas en pastillas multi-selección (mismo patrón que los Días): marca a quien
+            trabaja ese horario y el reparto aplica el MISMO turno a todas. */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-baseline gap-1.5">
+              Personas
+              {personasSel.size > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  {personasSel.size} elegida{personasSel.size === 1 ? "" : "s"}
+                </span>
+              )}
+            </Label>
+            <div className="flex items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:underline"
+                onClick={() => setPersonasSel(new Set(cms.map((m) => m.id)))}
+              >
+                Todas
+              </button>
+              <span className="text-muted-foreground/40">·</span>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:underline"
+                onClick={() => setPersonasSel(new Set())}
+              >
+                Ninguna
+              </button>
             </div>
-            {!horasValidas && (inicio || fin) && (
-              <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
-            )}
           </div>
+          <div className="flex flex-wrap gap-1.5">
+            {cms.map((m) => (
+              <ChipToggle
+                key={m.id}
+                activo={personasSel.has(m.id)}
+                onClick={() => togglePersona(m.id)}
+              >
+                {m.nombre}
+              </ChipToggle>
+            ))}
+          </div>
+        </div>
+
+        {/* Horario en horas (de–a). Es lo único que define el turno; la franja —la fila del
+            calendario— se deduce sola del horario, sin que el usuario la elija. */}
+        <div className="space-y-1.5">
+          <Label>Horario</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={inicio}
+              onChange={(e) => setInicio(e.target.value)}
+              placeholder="08:00"
+              className="w-24 tabular-nums"
+              aria-label="Hora de inicio"
+            />
+            <span className="text-muted-foreground">–</span>
+            <Input
+              value={fin}
+              onChange={(e) => setFin(e.target.value)}
+              placeholder="16:00"
+              className="w-24 tabular-nums"
+              aria-label="Hora de fin"
+            />
+          </div>
+          {!horasValidas && (inicio || fin) && (
+            <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -405,9 +480,9 @@ export function DialogoAsignarTurnos({
           </div>
           <div className="flex flex-wrap gap-1.5">
             {dias.map((fecha) => (
-              <ChipDia key={fecha} activo={diasSel.has(fecha)} onClick={() => toggleDia(fecha)}>
+              <ChipToggle key={fecha} activo={diasSel.has(fecha)} onClick={() => toggleDia(fecha)}>
                 <span className="capitalize">{diaCorto(fecha)}</span> {fecha.slice(8, 10)}
-              </ChipDia>
+              </ChipToggle>
             ))}
           </div>
         </div>
@@ -428,8 +503,8 @@ export function DialogoAsignarTurnos({
             )}
             {asignar.isPending
               ? "Asignando…"
-              : diasSel.size > 0
-                ? `Asignar ${diasSel.size} día${diasSel.size === 1 ? "" : "s"}`
+              : totalTurnos > 0
+                ? `Asignar ${totalTurnos} turno${totalTurnos === 1 ? "" : "s"}`
                 : "Asignar"}
           </Button>
         </DialogFooter>

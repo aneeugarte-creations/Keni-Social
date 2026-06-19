@@ -6,7 +6,11 @@ import * as apiMod from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import type { FranjaSemana, MiembroRota } from "@/types";
 
-import { DialogoAsignarTurnos, asignarDiasTurno } from "./DialogoAsignarTurnos";
+import {
+  DialogoAsignarTurnos,
+  asignarDiasTurno,
+  asignarPersonasDiasTurno,
+} from "./DialogoAsignarTurnos";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
@@ -67,6 +71,76 @@ describe("asignarDiasTurno — reparte un turno por día y clasifica el resultad
   });
 });
 
+// Multi-persona: el mismo horario+días se aplica a varias personas. Como `asignarDiasTurno`, se
+// prueba aparte del componente (los chips de persona ya no son Selects de Radix, pero la
+// agregación es la lógica clave a fijar: que un choque de una persona NO arrastre a las demás).
+describe("asignarPersonasDiasTurno — aplica a varias personas y agrega el resultado", () => {
+  it("suma creados/yaEstaba/sábados/fallos de cada persona; cuenta las que recibieron creados", async () => {
+    // Luis: 2 fechas → ambas creadas. Ana: 2 fechas → 1 ya estaba (409) + 1 sábado (409, override).
+    const crear = vi
+      .spyOn(apiMod.api, "crearTurno")
+      .mockResolvedValueOnce({} as never) // Luis · día 1 creado
+      .mockResolvedValueOnce({} as never) // Luis · día 2 creado
+      .mockRejectedValueOnce(new ApiError("dup", 409, { id: "x" })) // Ana · día 1 ya estaba
+      .mockRejectedValueOnce(new ApiError("sáb", 409, { requiere_override: true })); // Ana · día 2 sábado
+    const r = await asignarPersonasDiasTurno(
+      "2026-06-15",
+      ["u-luis", "u-ana"],
+      "f-manana",
+      ["2026-06-15", "2026-06-16"],
+    );
+    expect(crear).toHaveBeenCalledTimes(4);
+    // Solo Luis recibió creados ⇒ personasConCreados = 1, aunque se procesaron 2 personas.
+    expect(r).toEqual({
+      creados: 2,
+      yaEstaba: 1,
+      sabados: 1,
+      fallos: 0,
+      personasConCreados: 1,
+    });
+  });
+
+  it("propaga el horario a medida a cada persona; sin personas no llama a la API", async () => {
+    const crear = vi.spyOn(apiMod.api, "crearTurno").mockResolvedValue({} as never);
+    await asignarPersonasDiasTurno(
+      "2026-06-15",
+      ["u-luis", "u-ana"],
+      "f-manana",
+      ["2026-06-15"],
+      "07:00",
+      "15:00",
+    );
+    expect(crear).toHaveBeenCalledTimes(2);
+    expect(crear).toHaveBeenNthCalledWith(1, {
+      lunes: "2026-06-15",
+      fecha: "2026-06-15",
+      miembro_id: "u-luis",
+      franja_id: "f-manana",
+      inicio: "07:00",
+      fin: "15:00",
+    });
+    expect(crear).toHaveBeenNthCalledWith(2, {
+      lunes: "2026-06-15",
+      fecha: "2026-06-15",
+      miembro_id: "u-ana",
+      franja_id: "f-manana",
+      inicio: "07:00",
+      fin: "15:00",
+    });
+
+    crear.mockClear();
+    const vacio = await asignarPersonasDiasTurno("2026-06-15", [], "f-manana", ["2026-06-15"]);
+    expect(crear).not.toHaveBeenCalled();
+    expect(vacio).toEqual({
+      creados: 0,
+      yaEstaba: 0,
+      sabados: 0,
+      fallos: 0,
+      personasConCreados: 0,
+    });
+  });
+});
+
 const FRANJAS: FranjaSemana[] = [
   {
     id: "f-manana",
@@ -80,11 +154,14 @@ const FRANJAS: FranjaSemana[] = [
     marca_nombre: "",
   },
 ];
-const CMS: MiembroRota[] = [{ id: "u-luis", nombre: "Luis" }];
+const CMS: MiembroRota[] = [
+  { id: "u-luis", nombre: "Luis" },
+  { id: "u-ana", nombre: "Ana" },
+];
 const DIAS = ["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"];
 
 describe("DialogoAsignarTurnos (render)", () => {
-  it("pide persona + horario (sin selector de franja) y ofrece import automático", () => {
+  it("pide personas + horario (sin selector de franja) y ofrece import automático", () => {
     // El diálogo embebe «Importar documento» (su badge sondea propuestas pendientes).
     vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -103,6 +180,10 @@ describe("DialogoAsignarTurnos (render)", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByText("Asignar turnos")).toBeInTheDocument();
+    // Persona pasó de Select a pastillas multi-selección: hay «Personas» y un chip por CM.
+    expect(screen.getByText("Personas")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Luis" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Ana" })).toBeInTheDocument();
     // El horario sustituye al selector de franja: hay «Horario», ya no «Franja».
     expect(screen.getByText("Horario")).toBeInTheDocument();
     expect(screen.queryByText("Franja")).not.toBeInTheDocument();
@@ -112,10 +193,10 @@ describe("DialogoAsignarTurnos (render)", () => {
     expect(screen.getByRole("button", { name: /Importar documento/ })).toBeInTheDocument();
   });
 
-  it("arranca sin días marcados; los atajos y cada chip mueven el conteo del botón", () => {
-    // Los chips de día y los atajos son <button> planos (no Selects de Radix), así que sí
-    // se pueden ejercitar en jsdom. El botón «Asignar» lleva el conteo: es el aviso que
-    // hacía falta para que «elijo 6 y solo pone 2» no pase desapercibido.
+  it("arranca vacío; personas × días mueven el conteo de turnos del botón", () => {
+    // Los chips de persona/día y los atajos son <button> planos (no Selects de Radix), así que
+    // sí se pueden ejercitar en jsdom. El botón «Asignar» lleva el conteo de turnos
+    // (personas × días): el aviso para que «elijo 2 personas y 3 días» se vea como 6 turnos.
     vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
@@ -132,26 +213,35 @@ describe("DialogoAsignarTurnos (render)", () => {
         />
       </QueryClientProvider>,
     );
-    // Arranca vacío: 7 chips, ninguno marcado, y el botón sin conteo.
+    // Arranca vacío: 2 personas + 7 días = 9 chips, ninguno marcado, y el botón sin conteo.
     const chips = screen.getAllByRole("checkbox");
-    expect(chips).toHaveLength(7);
+    expect(chips).toHaveLength(9);
     chips.forEach((c) => expect(c).toHaveAttribute("aria-checked", "false"));
     expect(screen.getByRole("button", { name: "Asignar" })).toBeInTheDocument();
 
-    // «Toda la semana» marca los 7 y el botón lo refleja.
+    // Solo días (sin persona) NO produce conteo: hace falta al menos una persona.
     fireEvent.click(screen.getByRole("button", { name: "Toda la semana" }));
-    expect(screen.getByRole("button", { name: "Asignar 7 días" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
 
-    // «L–V» deja 5.
+    // 1 persona × 7 días = 7 turnos.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    expect(screen.getByRole("button", { name: "Asignar 7 turnos" })).toBeEnabled();
+
+    // 2 personas × 7 días = 14 turnos.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ana" }));
+    expect(screen.getByRole("button", { name: "Asignar 14 turnos" })).toBeInTheDocument();
+
+    // «L–V» deja 5 días → 2 × 5 = 10 turnos.
     fireEvent.click(screen.getByRole("button", { name: "L–V" }));
-    expect(screen.getByRole("button", { name: "Asignar 5 días" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Asignar 10 turnos" })).toBeInTheDocument();
 
-    // Destildar un día baja a 4 (singular/plural correctos al llegar a 1).
-    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
-    expect(screen.getByRole("button", { name: "Asignar 4 días" })).toBeInTheDocument();
-
-    // «Ninguno» limpia y el conteo desaparece.
+    // «Todas» de personas no cambia nada (ya están las 2). «Ninguno» de días limpia el conteo.
     fireEvent.click(screen.getByRole("button", { name: "Ninguno" }));
-    expect(screen.getByRole("button", { name: "Asignar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
+
+    // Una persona × un día = 1 turno (singular correcto).
+    fireEvent.click(screen.getByRole("checkbox", { name: "Ana" })); // deja solo a Luis
+    fireEvent.click(screen.getByRole("checkbox", { name: /15$/ })); // un día
+    expect(screen.getByRole("button", { name: "Asignar 1 turno" })).toBeInTheDocument();
   });
 });
