@@ -86,8 +86,19 @@ function LineaVacia({ texto }: { texto: string }) {
   return <p className="px-6 py-3 text-sm text-muted-foreground">{texto}</p>;
 }
 
-/** Tres celdas numéricas (items · tokens · coste) reutilizadas por todas las filas. */
+/** Tres celdas numéricas (items · tokens · coste) reutilizadas por todas las filas. Una fila SIN
+ *  actividad (items 0) muestra «—» en vez de ceros: así las tablas paralelas mantienen TODAS sus
+ *  entradas (mismo nº de filas) sin huecos ni asimetrías. */
 function CeldasGasto({ celda }: { celda: EconomiaCelda }) {
+  if (celda.items === 0) {
+    return (
+      <>
+        <TableCell className="text-right text-muted-foreground">—</TableCell>
+        <TableCell className="text-right text-muted-foreground">—</TableCell>
+        <TableCell className="pr-6 text-right text-muted-foreground">—</TableCell>
+      </>
+    );
+  }
   return (
     <>
       <TableCell className="text-right tabular-nums">{numeroCompleto(celda.items)}</TableCell>
@@ -160,36 +171,49 @@ function useDesplegables() {
   return { abierto, toggle };
 }
 
-/** Tabla POR DÍA (más reciente primero): cada día despliega su desglose por ETAPA del pipeline. */
-function TablaPorDia({ filas }: { filas: EconomiaDia[] }) {
-  const conActividad = React.useMemo(
-    () => filas.filter((f) => f.items > 0).sort((a, b) => b.dia.localeCompare(a.dia)),
-    [filas],
-  );
+/** Celda de la primera columna SIN desplegable (filas vacías o sub-filas): sangrada como las que
+ *  sí lo llevan, para que la columna no «baile» entre filas con y sin chevron. */
+function CeldaSimple({ etiqueta, sangria = "pl-9" }: { etiqueta: string; sangria?: string }) {
+  return <TableCell className={cn(sangria, "font-medium text-muted-foreground")}>{etiqueta}</TableCell>;
+}
+
+/** Tabla POR DÍA (más reciente primero). Muestra EXACTAMENTE los días de `diasVisibles` (la unión
+ *  de días con actividad en CUALQUIER pestaña): así las tablas paralelas tienen las MISMAS filas, sin
+ *  huecos ni asimetrías. Un día sin actividad en ESTA pestaña va con «—» y sin desplegable; uno con
+ *  actividad despliega su desglose por ETAPA del pipeline. */
+function TablaPorDia({ filas, diasVisibles }: { filas: EconomiaDia[]; diasVisibles: string[] }) {
+  const porDia = React.useMemo(() => new Map(filas.map((f) => [f.dia, f])), [filas]);
   const { abierto, toggle } = useDesplegables();
+  const CELDA_DIA_CERO: EconomiaDia = { dia: "", items: 0, tokens: 0, coste_usd: 0, por_etapa: [] };
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Por día</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {conActividad.length === 0 ? (
-          <LineaVacia texto="Sin actividad por día" />
+        {diasVisibles.length === 0 ? (
+          <LineaVacia texto="Sin actividad en la ventana" />
         ) : (
           <Table>
             <CabeceraGasto primera="Día" />
             <TableBody>
-              {conActividad.map((f) => {
+              {diasVisibles.map((dia) => {
+                const f = porDia.get(dia) ?? { ...CELDA_DIA_CERO, dia };
                 const open = abierto.has(f.dia);
+                const vacio = f.items === 0;
                 return (
                   <React.Fragment key={f.dia}>
                     <TableRow>
-                      <CeldaDesplegable
-                        abierto={open}
-                        etiqueta={formatearDia(f.dia)}
-                        onToggle={() => toggle(f.dia)}
-                        aria={`Desglose por etapa de ${formatearDia(f.dia)}`}
-                      />
+                      {vacio ? (
+                        <CeldaSimple etiqueta={formatearDia(f.dia)} />
+                      ) : (
+                        <CeldaDesplegable
+                          abierto={open}
+                          etiqueta={formatearDia(f.dia)}
+                          onToggle={() => toggle(f.dia)}
+                          aria={`Desglose por etapa de ${formatearDia(f.dia)}`}
+                        />
+                      )}
                       <CeldasGasto celda={f} />
                     </TableRow>
                     {open &&
@@ -264,15 +288,18 @@ function TablaPorEtapa({ filas }: { filas: EconomiaEtapaConDias[] }) {
   );
 }
 
-/** Una pestaña: cabecera con su color + KPIs del periodo + tablas Por día / Por etapa (apiladas). */
+/** Una pestaña: cabecera con su color + KPIs del periodo + tablas Por día / Por etapa (apiladas).
+ *  `diasVisibles` (común a las 4 pestañas) hace que las tablas Por día sean simétricas. */
 function ColumnaPestana({
   pestana,
   bloque,
   cargando,
+  diasVisibles,
 }: {
   pestana: PestanaEconomia;
   bloque: EconomiaProcesoBloque | undefined;
   cargando: boolean;
+  diasVisibles: string[];
 }) {
   const meta = META[pestana];
   const total = bloque?.total ?? CELDA_CERO;
@@ -302,7 +329,7 @@ function ColumnaPestana({
         <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
         <div className="space-y-4">
-          <TablaPorDia filas={bloque?.por_dia ?? []} />
+          <TablaPorDia filas={bloque?.por_dia ?? []} diasVisibles={diasVisibles} />
           <TablaPorEtapa filas={bloque?.por_etapa ?? []} />
         </div>
       )}
@@ -362,6 +389,18 @@ export default function Economia() {
     );
   }, [economia.data]);
 
+  // Días VISIBLES en las tablas Por día: la UNIÓN de días con actividad en CUALQUIER pestaña,
+  // recientes primero. Común a las 4 tablas -> mismas filas, simétricas y sin huecos (los días
+  // sin gasto en una pestaña salen con «—»). Vacío si no hubo actividad en toda la ventana.
+  const diasVisibles = React.useMemo<string[]>(() => {
+    const pp = economia.data?.por_proceso;
+    if (!pp) return [];
+    const activos = new Set<string>();
+    for (const p of PESTANAS)
+      for (const d of pp[p]?.por_dia ?? []) if (d.items > 0) activos.add(d.dia);
+    return [...activos].sort((a, b) => b.localeCompare(a));
+  }, [economia.data]);
+
   const parejas: readonly (readonly PestanaEconomia[])[] = foco ? [[foco]] : PAREJAS;
 
   return (
@@ -400,28 +439,16 @@ export default function Economia() {
         )}
       </div>
 
-      {/* Agregado de TODAS las pestañas + selector de ventana (un solo selector, no 3 filtros). */}
-      <Card className="mb-6">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
-          <div className="flex flex-wrap items-center gap-6">
-            <div>
-              <p className="text-xs text-muted-foreground">Trabajos IA</p>
-              <p className="text-2xl font-semibold tabular-nums">{numeroCompleto(agregado.items)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Tokens</p>
-              <p className="text-2xl font-semibold tabular-nums" title={numeroCompleto(agregado.tokens)}>
-                {numeroCompacto(agregado.tokens)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Coste</p>
-              <p className="text-2xl font-semibold tabular-nums">{costeUsd(agregado.coste_usd)}</p>
-            </div>
-            <p className="self-end text-xs text-muted-foreground">
-              Total de las 4 pestañas · {etiquetaVentana.toLowerCase()}
-            </p>
-          </div>
+      {/* Agregado de TODAS las pestañas (mismas tarjetas KPI que cada pestaña) + selector de ventana
+          (un solo selector, no 3 filtros). */}
+      <section className="mb-6 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">
+            Total{" "}
+            <span className="font-normal text-muted-foreground">
+              · 4 pestañas · {etiquetaVentana.toLowerCase()}
+            </span>
+          </h2>
           <Select value={String(dias)} onValueChange={(v) => setDias(Number(v))}>
             <SelectTrigger className="w-36 shrink-0" aria-label="Ventana de tiempo">
               <SelectValue />
@@ -434,8 +461,18 @@ export default function Economia() {
               ))}
             </SelectContent>
           </Select>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(agregado.items)} />
+          <TarjetaKpi
+            variante="card"
+            etiqueta="Tokens"
+            valor={numeroCompacto(agregado.tokens)}
+            titulo={numeroCompleto(agregado.tokens)}
+          />
+          <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(agregado.coste_usd)} />
+        </div>
+      </section>
 
       {economia.isError ? (
         <BloqueError
@@ -455,6 +492,7 @@ export default function Economia() {
                   pestana={p}
                   bloque={bloqueDe(p)}
                   cargando={economia.isPending}
+                  diasVisibles={diasVisibles}
                 />
               ))}
             </div>
