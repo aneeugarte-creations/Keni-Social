@@ -99,6 +99,7 @@ export interface RedCobertura {
   alcance: number | null;
   interacciones: number | null;
   engagement_pct: number | null;
+  stories: number | null;
   motivo: string | null;
 }
 /**

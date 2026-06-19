@@ -160,6 +160,9 @@ function FilaRed({ r }: { r: RedCobertura }) {
       <TableCell className="text-right tabular-nums">
         {r.engagement_pct == null ? "—" : porcentaje(r.engagement_pct)}
       </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {r.stories == null ? "—" : numeroCompleto(r.stories)}
+      </TableCell>
       <TableCell className="pr-6 text-sm text-muted-foreground">{r.motivo ?? "—"}</TableCell>
     </TableRow>
   );
@@ -218,6 +221,7 @@ function BloqueMarca({
             >
               Engagement
             </CabeceraOrdenable>
+            <TableHead className="text-right">Stories</TableHead>
             <TableHead className="pr-6">Motivo</TableHead>
           </TableRow>
         </TableHeader>

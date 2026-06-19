@@ -60,6 +60,11 @@ class MetricaPlataforma(BaseModel):
     alcance: int | None = None
     interacciones: int
     engagement_pct: float
+    # stories: nº de stories publicadas en el periodo (solo FB/IG, que tienen el formato).
+    # Es VOLUMEN de actividad, no rendimiento: Metricool casi no expone métricas de story
+    # (FB ninguna; IG con impresiones/alcance deprecados por Meta), así que NO se suma a
+    # visualizaciones/interacciones. None = la red no maneja stories (no aplica).
+    stories: int | None = None
 
 
 def agregar_alcance(por_plataforma: list[MetricaPlataforma]) -> int | None:

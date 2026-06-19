@@ -217,6 +217,10 @@ _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
 #                postImpressionsUnique, engagement, postVideoReactions, reelUrl/videoUrl.
 # Redes con endpoint de reels (las demás no lo tienen):
 _RED_CON_REELS: frozenset[Plataforma] = frozenset({Plataforma.facebook, Plataforma.instagram})
+# Redes con endpoint de stories (`/v2/analytics/stories/{network}`). Solo se usa para CONTAR
+# stories del periodo (volumen): Metricool casi no expone su rendimiento (FB ninguna métrica;
+# IG con impresiones/alcance deprecados por Meta), así que no entran en vis/interacciones.
+_RED_CON_STORIES: frozenset[Plataforma] = frozenset({Plataforma.facebook, Plataforma.instagram})
 _ALIAS_REEL_ID = ("reelId", "id", "videoId", "postId")
 # El caption del reel: `content` (IG) / `description` (FB) van PRIMERO (son el cuerpo
 # real con los hashtags); el resto son defensivos.
@@ -499,6 +503,10 @@ class FuenteMetricool:
                 cobertura.omitidas.append(plat)
                 cobertura.motivo[plat.value] = MotivoOmision.error_api
                 continue
+            # 3) Stories (FB/IG): solo CONTAR las publicadas en el periodo (volumen). No se
+            #    suman a vis/interacciones (Metricool casi no da su rendimiento; ver schema).
+            if plat in _RED_CON_STORIES:
+                m.stories = self._contar_stories(cuenta_id, plat, desde, hasta)
             por_plataforma.append(m)
             cobertura.ok.append(plat)
 
@@ -870,6 +878,40 @@ class FuenteMetricool:
             headers=self._headers(cuenta_id),
         )
         return [r for r in (datos.get("data") or []) if isinstance(r, dict)]
+
+    def _contar_stories(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> int | None:
+        """Nº de stories publicadas en el periodo (None si la API de stories falla).
+
+        Solo VOLUMEN de actividad: cuenta las stories de `/v2/analytics/stories/{network}`
+        cuya fecha real cae en [desde, hasta] (filtro defensivo, como los posts). NO lee su
+        rendimiento: Metricool casi no lo expone (FB ninguna métrica; IG con impresiones/
+        alcance deprecados por Meta). None = no se pudo leer; 0 = leído, sin stories.
+        """
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/stories/{_RED_METRICOOL[plat]}",
+                params={
+                    **self._params_base(cuenta_id),
+                    "from": desde.isoformat() + "T00:00:00",
+                    "to": hasta.isoformat() + "T23:59:59",
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — sin stories no rompemos el resumen (None)
+            log.warning("metricool: stories %s/%s falló: %s", plat.value, cuenta_id, e)
+            return None
+        n = 0
+        for s in datos.get("data") or []:
+            if not isinstance(s, dict):
+                continue
+            fecha = _fecha(_primero(s, _ALIAS_FECHA))
+            # Sin fecha legible: se confía en el filtro from/to de la API (no se descarta).
+            if fecha is None or desde <= fecha <= hasta:
+                n += 1
+        return n
 
     def _reels_plataforma(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date

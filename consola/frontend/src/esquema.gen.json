@@ -298,6 +298,16 @@
             }
           ]
         },
+        "stories": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "motivo": {
           "anyOf": [
             {
@@ -317,6 +327,7 @@
         "alcance",
         "interacciones",
         "engagement_pct",
+        "stories",
         "motivo"
       ]
     },

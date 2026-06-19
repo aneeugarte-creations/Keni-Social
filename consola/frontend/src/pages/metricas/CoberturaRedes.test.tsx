@@ -29,6 +29,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: 110000,
         interacciones: 8000,
         engagement_pct: 6.7,
+        stories: 12,
         motivo: "Respondió con métricas en el rango.",
       },
       {
@@ -38,6 +39,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: null,
         interacciones: null,
         engagement_pct: null,
+        stories: 5,
         motivo: "Conectada, pero sin métricas en el periodo.",
       },
       {
@@ -47,6 +49,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: null,
         interacciones: null,
         engagement_pct: null,
+        stories: null,
         motivo: "No se pudo leer la red en Metricool.",
       },
       {
@@ -56,6 +59,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: null,
         interacciones: null,
         engagement_pct: null,
+        stories: null,
         motivo: "La marca no tiene esta red dada de alta en Metricool.",
       },
       {
@@ -65,6 +69,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: null,
         interacciones: null,
         engagement_pct: null,
+        stories: null,
         motivo: "Red no contratada en el piloto.",
       },
     ],
@@ -80,6 +85,7 @@ const MARCAS: MarcaCobertura[] = [
         alcance: 28000,
         interacciones: 900,
         engagement_pct: 3.0,
+        stories: null,
         motivo: "Respondió con métricas en el rango.",
       },
     ],

@@ -281,6 +281,38 @@ def _mock_reels(net: str, reels: list[dict]) -> None:
     )
 
 
+def _mock_stories(net: str, stories: list[dict]) -> None:
+    """Mockea `/v2/analytics/stories/{net}` con una lista de stories."""
+    respx.get(f"{BASE}/v2/analytics/stories/{net}").mock(
+        return_value=httpx.Response(200, json={"data": stories})
+    )
+
+
+@respx.mock
+def test_resumen_cuenta_stories_del_periodo_por_red():
+    """El resumen cuenta las stories (FB/IG) del periodo como VOLUMEN, sin sumarlas a
+    vis/interacciones. Una story fuera de rango no se cuenta (filtro defensivo)."""
+    _mock_perfiles(_perfil(instagram="piso15_"))  # IG conectada
+    _mock_posts("instagram", [])
+    _mock_reels("instagram", [])
+    _mock_stories(
+        "instagram",
+        [
+            {"postId": "s1", "type": "IMAGE", "publishedAt": "2026-05-22T10:00:00"},
+            {"postId": "s2", "type": "VIDEO", "publishedAt": "2026-05-24T10:00:00"},
+            {"postId": "viejo", "type": "IMAGE", "publishedAt": "2020-01-01T10:00:00"},
+        ],
+    )
+
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    ig = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.instagram)
+    assert ig.stories == 2  # las dos del periodo; la de 2020 se descarta
+    # Stories es volumen, NO rendimiento: no infla vis/interacciones.
+    assert ig.visualizaciones == 0 and ig.interacciones == 0
+
+
 @respx.mock
 def test_mejores_piezas_incluye_reels_de_instagram():
     """Los Reels viven en `/v2/analytics/reels/{network}` (endpoint APARTE de /posts).

@@ -317,6 +317,7 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                             "alcance": p.get("alcance"),
                             "interacciones": inter,
                             "engagement_pct": p.get("engagement_pct", 0.0),
+                            "stories": p.get("stories"),
                             "motivo": None,
                         }
                     )
@@ -331,6 +332,9 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                             "alcance": None,
                             "interacciones": None,
                             "engagement_pct": None,
+                            # Stories es VOLUMEN (no rendimiento): se muestra aunque la red no
+                            # tenga vis/interacciones de posts/reels en el periodo.
+                            "stories": p.get("stories"),
                             "motivo": _MOTIVO_COBERTURA["sin_metricas"],
                         }
                     )
@@ -351,6 +355,7 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                         "alcance": None,
                         "interacciones": None,
                         "engagement_pct": None,
+                        "stories": None,
                         "motivo": motivo,
                     }
                 )

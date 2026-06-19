@@ -124,6 +124,9 @@ class RedCobertura(TypedDict):
     alcance: int | None
     interacciones: int | None
     engagement_pct: float | None
+    # stories: nº de stories publicadas en el periodo (volumen, solo FB/IG). None = la red no
+    # maneja stories o no se pudo leer. NO es rendimiento (Metricool casi no lo expone).
+    stories: int | None
     motivo: str | None
 
 
