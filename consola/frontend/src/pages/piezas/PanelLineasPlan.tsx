@@ -4,11 +4,9 @@
  * se oculta solo si la marca no tiene plan o no hay marca activa.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Target } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
-import { ETIQUETA_LINEA } from "@/lib/lineas";
+import { colorLinea, ETIQUETA_LINEA } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
 
 // Re-export por compatibilidad: la tabla canónica vive en `lib/lineas.ts` (la comparten
@@ -25,72 +23,60 @@ export function PanelLineasPlan({ marca }: { marca: string }) {
   const lineas = produccion.data?.por_categoria ?? [];
   if (!produccion.data || lineas.length === 0) return null;
   return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Target className="h-4 w-4 text-emerald-600" />
-          Producción del día por línea
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-2">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {lineas.map((l) => {
-            const completo = l.objetivo != null && l.generados >= l.objetivo;
-            const exceso = l.objetivo != null && l.generados > l.objetivo;
-            return (
-              <div key={l.categoria} className="rounded-lg border border-border/60 p-3">
-                <div className="text-xs text-muted-foreground">
+    <section aria-label="Producción del día por línea">
+      <h2 className="mb-4 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        Producción del día
+      </h2>
+      {/* Tipografía como protagonista: cada línea es una columna de estadística sin caja. El
+          único color es un punto que identifica la línea; número y barra van en neutro para no
+          chocar con ese punto. */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
+        {lineas.map((l) => {
+          const col = colorLinea(l.categoria);
+          return (
+            <div key={l.categoria}>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  className={cn("h-2 w-2 shrink-0 rounded-full", col.punto)}
+                  aria-hidden="true"
+                />
+                <span className="truncate">
                   {l.etiqueta ||
                     ETIQUETA_LINEA[l.categoria] ||
                     l.categoria.charAt(0).toUpperCase() + l.categoria.slice(1)}
-                </div>
-                <div
-                  className={cn(
-                    "mt-1 text-lg font-semibold tabular-nums",
-                    exceso ? "text-amber-600" : completo ? "text-emerald-600" : undefined,
-                  )}
-                >
-                  {l.generados}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {l.objetivo != null ? ` / ${l.objetivo}` : " (fuera de plan)"}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
-                  {l.publicados} publicado{l.publicados === 1 ? "" : "s"}
-                </div>
-                {l.objetivo != null && (
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="relative h-full">
-                      <div
-                        className={cn(
-                          "absolute inset-y-0 left-0 rounded-full",
-                          exceso ? "bg-amber-500/40" : completo ? "bg-emerald-500/40" : "bg-sky-500/40",
-                        )}
-                        style={{
-                          width: `${Math.min(100, (l.generados / Math.max(1, l.objetivo)) * 100)}%`,
-                        }}
-                      />
-                      <div
-                        className={cn(
-                          "absolute inset-y-0 left-0 rounded-full",
-                          exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
-                        )}
-                        style={{
-                          width: `${Math.min(100, (l.publicados / Math.max(1, l.objetivo)) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
+                </span>
               </div>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Generados · publicados / objetivo (ventana móvil 24h).
-        </p>
-      </CardContent>
-    </Card>
+              <div className="mt-1 text-2xl font-semibold leading-none tabular-nums text-foreground">
+                {l.generados}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {l.objetivo != null ? ` / ${l.objetivo}` : " · fuera de plan"}
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                {l.publicados} publicado{l.publicados === 1 ? "" : "s"}
+              </div>
+              {l.objetivo != null && (
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+                  <div className="relative h-full">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-foreground/20"
+                      style={{
+                        width: `${Math.min(100, (l.generados / Math.max(1, l.objetivo)) * 100)}%`,
+                      }}
+                    />
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-foreground"
+                      style={{
+                        width: `${Math.min(100, (l.publicados / Math.max(1, l.objetivo)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
-

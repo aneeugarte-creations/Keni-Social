@@ -89,7 +89,7 @@ export default function CalendarioPublicacion() {
       {/* El pulso del plan diario por línea (generados · publicados / objetivo): vive aquí,
           junto a la parrilla que alimenta. Solo con marca activa y plan configurado. */}
       {marcaActiva && (
-        <div className="mb-4">
+        <div className="mb-8 border-b border-border pb-6">
           <PanelLineasPlan marca={marcaActiva} />
         </div>
       )}

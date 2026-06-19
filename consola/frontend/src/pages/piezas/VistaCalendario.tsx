@@ -15,9 +15,9 @@ import { toast } from "sonner";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
+import { colorLinea } from "@/lib/lineas";
 import { ETIQUETA_LINEA } from "@/pages/piezas/PanelLineasPlan";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
@@ -265,7 +265,7 @@ export function VistaCalendario({
    */
   mostrarHuecosPlan?: boolean;
 }) {
-  const [vista, setVista] = React.useState<Vista>("mes");
+  const [vista, setVista] = React.useState<Vista>("semana");
   // Ancla CONTROLADA-O-NO: si el padre la eleva (para acotar la query por rango), manda la
   // suya; si no, el calendario usa su estado local (no cambia el uso standalone ni los tests).
   const [anclaLocal, setAnclaLocal] = React.useState(() => new Date());
@@ -435,8 +435,8 @@ export function VistaCalendario({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="space-y-3 py-4">
+    <>
+      <div className="space-y-3">
         {programadas.length === 0 && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <CalendarOff className="h-4 w-4 shrink-0" />
@@ -456,7 +456,7 @@ export function VistaCalendario({
                 `TabsTrigger`): pista gris `bg-muted` con pastilla activa blanca + sombra,
                 en lugar de la pastilla negra (`bg-primary`) que rompía con el resto. */}
             <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1">
-              {(["mes", "semana"] as const).map((v) => (
+              {(["semana", "mes"] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
@@ -526,7 +526,7 @@ export function VistaCalendario({
             ocupado={ocupado}
           />
         )}
-      </CardContent>
+      </div>
       <DialogoReprogramar
         pieza={reprogramarPub}
         ocupado={reprogramar.isPending}
@@ -535,7 +535,7 @@ export function VistaCalendario({
         }}
         onCerrar={() => setReprogramarPub(null)}
       />
-    </Card>
+    </>
   );
 }
 
@@ -563,11 +563,11 @@ function VistaMes({
     // MÓVIL: 7 columnas no caben en 360-430px; la cuadrícula conserva un ancho mínimo legible
     // y scrollea en HORIZONTAL dentro de su contenedor (el `main` global clampa el eje X).
     <div
-      className="overflow-x-auto rounded-md border border-border"
+      className="overflow-x-auto rounded-xl border border-border"
       style={{ height: "calc(100dvh - 20rem)", minHeight: "22rem" }}
     >
     <div
-      className="grid h-full min-w-[560px] grid-cols-7 gap-px bg-border"
+      className="grid h-full min-w-[560px] grid-cols-7 gap-px bg-border/60"
       style={{ gridTemplateRows: "auto repeat(6, minmax(0, 1fr))" }}
     >
       {DIAS_SEMANA.map((d) => (
@@ -582,8 +582,6 @@ function VistaMes({
         const clave = claveDia(dia);
         const delMes = dia.getMonth() === mesActual;
         const esHoy = clave === hoy;
-        // Fin de semana: mismo tinte ámbar suave que la rejilla de Turnos / la parrilla.
-        const finde = dia.getDay() === 0 || dia.getDay() === 6;
         const items = porDia.get(clave) ?? [];
         const porRed = conteoPorRed(items);
         return (
@@ -593,8 +591,7 @@ function VistaMes({
             onClick={() => onAbrirDia(dia)}
             className={cn(
               "min-h-0 space-y-1 overflow-hidden bg-card p-1.5 text-left transition-colors hover:bg-accent/30",
-              delMes && finde && "bg-amber-50/40 dark:bg-amber-950/10",
-              !delMes && "bg-muted/30 text-muted-foreground",
+              !delMes && "bg-muted/20 text-muted-foreground",
             )}
           >
             <div className="flex items-center justify-between">
@@ -607,7 +604,7 @@ function VistaMes({
                 {dia.getDate()}
               </span>
               {items.length > 0 && (
-                <span className="rounded-full bg-amber-500/15 px-1.5 text-[10px] font-medium tabular-nums text-amber-800 dark:text-amber-200">
+                <span className="rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
                   {items.length}
                 </span>
               )}
@@ -632,16 +629,25 @@ function VistaMes({
             {/* Huecos LIBRES del plan, compactos (hora + línea abreviada, CDMX). */}
             {delMes && (
               <div className="space-y-px">
-                {huecosDe(dia).map((h) => (
-                  <div
-                    key={`${h.hora}-${h.categoria}`}
-                    className="truncate border-l-2 border-dashed border-border pl-1 text-[9px] leading-tight text-muted-foreground/80"
-                    title={`Hueco del plan: ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
-                  >
-                    <span className="tabular-nums">{h.hora}</span>{" "}
-                    {h.etiqueta || LINEA_CORTA[h.categoria] || h.categoria}
-                  </div>
-                ))}
+                {huecosDe(dia).map((h) => {
+                  const col = colorLinea(h.categoria);
+                  return (
+                    <div
+                      key={`${h.hora}-${h.categoria}`}
+                      className="flex items-center gap-1 truncate text-[9px] leading-tight text-muted-foreground/80"
+                      title={`Hueco del plan: ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
+                    >
+                      <span
+                        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)}
+                        aria-hidden="true"
+                      />
+                      <span className="tabular-nums">{h.hora}</span>
+                      <span className="truncate">
+                        {h.etiqueta || LINEA_CORTA[h.categoria] || h.categoria}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </button>
@@ -664,11 +670,13 @@ const LINEA_CORTA: Record<string, string> = {
 /** Chip fantasma de UN hueco libre del plan (hora CDMX + línea). */
 function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string; etiqueta: string } }) {
   const nombre = hueco.etiqueta || ETIQUETA_LINEA[hueco.categoria] || hueco.categoria;
+  const col = colorLinea(hueco.categoria);
   return (
     <div
       className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
       title={`Hueco del plan: ${nombre} a las ${hueco.hora}`}
     >
+      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)} aria-hidden="true" />
       <span className="tabular-nums">{hueco.hora}</span>
       <span className="truncate">{nombre}</span>
     </div>
@@ -723,13 +731,11 @@ function VistaSemana({
 }) {
   return (
     // MÓVIL: mismo tratamiento que la vista MES — la semana scrollea en horizontal.
-    <div className="overflow-x-auto rounded-md border border-border">
-    <div className="grid min-w-[640px] grid-cols-7 gap-px bg-border">
+    <div className="overflow-x-auto rounded-xl border border-border">
+    <div className="grid min-w-[640px] grid-cols-7 gap-px bg-border/60">
       {dias.map((dia, i) => {
         const clave = claveDia(dia);
         const esHoy = clave === hoy;
-        // Fin de semana: mismo tinte ámbar suave que la rejilla de Turnos / la parrilla.
-        const finde = dia.getDay() === 0 || dia.getDay() === 6;
         const items = porDia.get(clave) ?? [];
         return (
           <div
@@ -747,7 +753,6 @@ function VistaSemana({
             }}
             className={cn(
               "flex min-h-[18rem] flex-col bg-card transition-colors",
-              finde && "bg-amber-50/40 dark:bg-amber-950/10",
               colActiva === clave && "bg-primary/10",
             )}
           >
