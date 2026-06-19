@@ -606,19 +606,20 @@ def test_paso_fusionar_semantica_registra_actividad_ia(monkeypatch):
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_fusiones", _fake_proponer)
     monkeypatch.setattr(recolectar_daemon.fusionar_semantica, "proponer_macro_eventos", lambda lote, **kw: [])
     monkeypatch.setattr(recolectar_daemon, "_fusionar_grupo", lambda *a, **k: True)
-    registradas: list[tuple[str, str, str, str]] = []
+    registradas: list[tuple[str, str, str, str, str]] = []
     monkeypatch.setattr(
         recolectar_daemon, "_registrar_actividad_ia",
-        lambda marca, etiqueta, salida, *, prompt="":
-            registradas.append((marca, etiqueta, salida, prompt)),
+        lambda marca, etiqueta, salida, *, prompt="", etapa="":
+            registradas.append((marca, etiqueta, salida, prompt, etapa)),
     )
 
     resumen = recolectar_daemon.paso_fusionar_semantica()
     assert resumen == {"grupos": 1, "fusionadas": 1}
     assert len(registradas) == 1
-    marca, etiqueta, salida, prompt = registradas[0]
+    marca, etiqueta, salida, prompt, etapa = registradas[0]
     assert marca == "unotv"
     assert "Fusionar historias" in etiqueta
+    assert etapa == "Fusionar"  # ETAPA explícita para el desglose por etapa de la economía
     assert prompt == "PROMPT-HAIKU-FUSION"  # el prompt REAL de Haiku
     assert '{"grupos"' in salida  # la salida REAL de Haiku
     assert "Remontada épica" in salida  # + el resumen humano de qué se unió
@@ -666,11 +667,11 @@ def test_paso_fusionar_semantica_etiqueta_macro_evento(monkeypatch):
     etiquetados: list[tuple[list[str], str]] = []
     monkeypatch.setattr(recolectar_daemon.repos, "marcar_clusters_tema_macro",
                         lambda ids, tema: etiquetados.append((list(ids), tema)) or len(ids))
-    registradas: list[tuple[str, str, str, str]] = []
+    registradas: list[tuple[str, str, str, str, str]] = []
     monkeypatch.setattr(
         recolectar_daemon, "_registrar_actividad_ia",
-        lambda marca, etiqueta, salida, *, prompt="":
-            registradas.append((marca, etiqueta, salida, prompt)),
+        lambda marca, etiqueta, salida, *, prompt="", etapa="":
+            registradas.append((marca, etiqueta, salida, prompt, etapa)),
     )
 
     recolectar_daemon.paso_fusionar_semantica()
@@ -679,9 +680,10 @@ def test_paso_fusionar_semantica_etiqueta_macro_evento(monkeypatch):
     assert etiquetados == [(["c1", "c2", "c3"], "Cumbre del G7")]
     # Y se deja constancia IA del macro-evento (con el Haiku real + resumen humano).
     assert len(registradas) == 1
-    marca, etiqueta, salida, prompt = registradas[0]
+    marca, etiqueta, salida, prompt, etapa = registradas[0]
     assert marca == "unotv"
     assert "Macro-evento" in etiqueta
+    assert etapa == "Macro-evento"  # ETAPA explícita para el desglose por etapa de la economía
     assert prompt == "PROMPT-MACRO"
     assert "Cumbre del G7" in salida
 
