@@ -427,7 +427,7 @@ describe("Turnos — home «Hoy»", () => {
     expect(await screen.findByText(/Hoy libras/)).toBeInTheDocument();
   });
 
-  it("POR CUBRIR HOY: un evento de hoy sin dueño ni turno sale «Sin cubrir»", async () => {
+  it("POR CUBRIR HOY: un evento de hoy sin dueño ni turno se cuenta en el aviso de huecos", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
     renderRota({
@@ -438,9 +438,9 @@ describe("Turnos — home «Hoy»", () => {
       },
       listarTurnos: { turnos: [], aprobada: false, franjas: [] },
     });
-    expect(await screen.findByText("Rueda de prensa")).toBeInTheDocument();
-    expect(screen.getByText("Por cubrir hoy")).toBeInTheDocument();
-    expect(screen.getAllByText("Sin cubrir").length).toBeGreaterThan(0);
+    // «Hoy» ya no LISTA los huecos (eso vive en «Cobertura»): solo muestra el conteo como aviso.
+    expect(await screen.findByText(/1 por cubrir hoy/i)).toBeInTheDocument();
+    expect(screen.queryByText("Rueda de prensa")).not.toBeInTheDocument();
   });
 
   it("LO MÍO HOY: una cobertura del usuario, de hoy, aparece bajo «Lo mío hoy»", async () => {

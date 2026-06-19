@@ -9,21 +9,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { COBERTURA_TEXTO } from "@/lib/estado-color";
 import { mesDeFecha } from "@/lib/rota-calendario";
-import { KpiCobertura } from "@/pages/tareas/KpiCobertura";
+import { cn } from "@/lib/utils";
 import { FilaAgenda } from "@/pages/tareas/PanoramaAgenda";
 import type { Item } from "@/pages/tareas/tipos";
 import { useTablero } from "@/pages/tareas/useTablero";
 
 /**
- * HOME «Hoy» de Turnos: lo primero que ve el trabajador, para responder «¿cuándo entro y qué
- * cubro?» sin navegar. Tres bloques + cierre:
+ * HOME «Hoy» de Turnos: la vista PERSONAL del trabajador, para responder «¿cuándo entro y qué
+ * llevo hoy?» sin navegar ni mezclarse con el tablero del equipo. Dos bloques + cierre:
  *  1) Tu próximo turno (hero): de `misTurnosMes`, el turno de HOY o el siguiente del mes.
- *  2) Por cubrir hoy: los huecos del día (sin dueño, sin turno) — desplegar la fila para coger.
- *  3) Lo mío hoy: lo que cubro/llevo hoy.
- *  +) KPI «Cobertura de hoy» como cierre y enlace a la agenda completa.
- * Reusa `useTablero` (UNA derivación de cobertura) y `FilaAgenda` (que ya oculta las acciones de
- * admin al no-admin vía `AccionesItem`/`AccionUrgente`): «Hoy» no añade nada exclusivo de admin.
+ *  2) Lo mío hoy: lo que cubro/llevo hoy.
+ *  +) Aviso compacto de cuántos huecos quedan por cubrir hoy, con salto a «Cobertura».
+ * El KPI del equipo y la LISTA de huecos para coger viven en «Cobertura» (y el KPI también en el
+ * panel de coordinación de «Gestión»), no aquí: «Hoy» es TU día, no el del equipo. Reusa
+ * `useTablero` (UNA derivación de cobertura) y `FilaAgenda`.
  */
 export function Hoy({ onVerAgenda }: { onVerAgenda: () => void }) {
   const { marcaActiva } = useMarcaActiva();
@@ -112,20 +113,7 @@ export function Hoy({ onVerAgenda }: { onVerAgenda: () => void }) {
         </div>
       ) : (
         <>
-          {/* 2) POR CUBRIR HOY */}
-          <section className="space-y-2">
-            <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-              <Hand className="h-3.5 w-3.5" /> Por cubrir hoy
-              <span className="tabular-nums">({porCubrirHoy.length})</span>
-            </h2>
-            {porCubrirHoy.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nada pendiente. Todo lo de hoy tiene quien lo cubra.</p>
-            ) : (
-              <div className="space-y-2">{porCubrirHoy.map(fila)}</div>
-            )}
-          </section>
-
-          {/* 3) LO MÍO HOY */}
+          {/* LO MÍO HOY: lo que cubres/llevas hoy (lo único exclusivamente tuyo). */}
           <section className="space-y-2">
             <h2 className="text-sm font-medium text-muted-foreground">
               Lo mío hoy <span className="tabular-nums">({mioHoy.length})</span>
@@ -137,17 +125,19 @@ export function Hoy({ onVerAgenda }: { onVerAgenda: () => void }) {
             )}
           </section>
 
-          {/* +) KPI de cierre + enlace a la agenda completa */}
-          <KpiCobertura
-            eventos={t.eventosHoy}
-            claims={t.claimsCobertura}
-            turnos={t.turnosHoy}
-            franjas={t.franjasHoy}
-            ausencias={t.ausencias}
-            hechas={t.hechasHoy}
-            onIrASinCubrir={onVerAgenda}
-          />
-          <div className="flex justify-end">
+          {/* Cierre: «Hoy» es tu día. El KPI del equipo y la lista de huecos para coger viven en
+              «Cobertura»; aquí solo el aviso de cuántos quedan por cubrir hoy y el salto allí. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+            {porCubrirHoy.length > 0 ? (
+              <span className="flex items-center gap-1.5 text-sm">
+                <Hand className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <span className={cn("font-medium", COBERTURA_TEXTO["sin-cubrir"])}>
+                  {`${porCubrirHoy.length} por cubrir hoy`}
+                </span>
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">Todo lo de hoy tiene quien lo cubra.</span>
+            )}
             <Button variant="ghost" size="sm" onClick={onVerAgenda}>
               Ver toda la agenda →
             </Button>
