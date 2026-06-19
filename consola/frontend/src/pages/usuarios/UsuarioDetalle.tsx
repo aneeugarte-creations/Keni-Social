@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, Loader2, ShieldAlert, ShieldOff, Trash2, UserCog } from "lucide-react";
+import { Info, KeyRound, Loader2, ShieldAlert, ShieldOff, Trash2, UserCog } from "lucide-react";
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -40,6 +40,7 @@ import {
 import {
   CARGOS_ORDENADOS,
   type CargoUsuario,
+  type CredencialPasskey,
   ETIQUETA_CARGO,
   etiquetaCargo,
   type RolUsuario,
@@ -130,6 +131,15 @@ export default function UsuarioDetalle() {
     [configQuery.data],
   );
 
+  // Llaves de acceso (passkeys) registradas por ESTA persona: el superadmin las ve para borrar
+  // una concreta (rescate cuando no puede usarla en un equipo). La lista no trae secretos.
+  const passkeysQuery = useQuery({
+    queryKey: ["usuario-passkeys", id],
+    queryFn: ({ signal }) => api.usuarioPasskeys(id, signal),
+    enabled: esSuperadmin && Boolean(id),
+    select: (data) => data.credenciales,
+  });
+
   const usuarios = query.data?.usuarios ?? [];
   const porId = React.useMemo(() => indexarPorId(usuarios), [usuarios]);
   const hijos = React.useMemo(() => hijosPorManager(usuarios), [usuarios]);
@@ -193,8 +203,22 @@ export default function UsuarioDetalle() {
   const resetearMfa = useMutation({
     mutationFn: () => api.actualizarUsuario(usuario!.id, { mfa_reset: true }),
     onSuccess: () => {
+      void passkeysQuery.refetch();
       invalidar();
       toast.success("Llaves de acceso restablecidas");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Borrado de UNA llave concreta (no todas): para cuando una persona perdió un dispositivo o no
+  // puede usar esa passkey en un equipo, pero conserva otra. Si era la última, el backend apaga
+  // `mfa_activo`.
+  const borrarLlave = useMutation({
+    mutationFn: (credId: string) => api.borrarPasskeyUsuario(usuario!.id, credId),
+    onSuccess: () => {
+      void passkeysQuery.refetch();
+      invalidar();
+      toast.success("Llave de acceso eliminada");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -210,6 +234,19 @@ export default function UsuarioDetalle() {
       })
     )
       resetearMfa.mutate();
+  };
+
+  const pedirBorrarLlave = async (cred: CredencialPasskey) => {
+    const etiqueta = cred.nombre?.trim() || "esta llave de acceso";
+    if (
+      await confirmar({
+        titulo: "Eliminar llave de acceso",
+        mensaje: `Se eliminará «${etiqueta}» de ${usuario ? nombreVisible(usuario) : "esta persona"}. Si es la única, dejará de pedírsele la passkey al iniciar sesión.`,
+        destructivo: true,
+        textoConfirmar: "Eliminar",
+      })
+    )
+      borrarLlave.mutate(cred.id);
   };
 
   const pedirEliminar = async () => {
@@ -278,12 +315,12 @@ export default function UsuarioDetalle() {
   const superiorActual = (usuario.manager_id ?? "") || SIN_SUPERIOR;
   const rolActual = usuario.superadmin ? ROL_SUPERADMIN : usuario.rol;
 
-  // La política de admins bloquea el toggle de un administrador (no se le puede eximir mientras
-  // esté activa). A los demás, su flag individual manda y siempre es editable.
-  const forzadoPorPolitica = usuario.rol === "admin" && mfaAdmin;
-  const notaPasskey = forzadoPorPolitica
-    ? "Exigido por la política para administradores."
-    : null;
+  // El flag individual MANDA siempre (también para admins): un superadmin puede eximir a quien no
+  // pueda usar passkey en su equipo. A los admins se les recuerda que tenerla es lo recomendado.
+  const notaPasskey =
+    usuario.rol === "admin" && mfaAdmin
+      ? "Recomendado para administradores; puedes eximir a esta persona si no puede usar passkey."
+      : null;
 
   // Candidatos a superior: todos menos uno mismo y sus descendientes (evita ciclos).
   const prohibidos = descendientes(usuario.id, hijos);
@@ -482,8 +519,7 @@ export default function UsuarioDetalle() {
               <Switch
                 id="d-passkey"
                 aria-label="Requerir llave de acceso"
-                checked={forzadoPorPolitica || Boolean(usuario.mfa_requerido)}
-                disabled={forzadoPorPolitica}
+                checked={Boolean(usuario.mfa_requerido)}
                 onCheckedChange={(v) => guardar.mutate({ mfa_requerido: v })}
               />
             </div>
@@ -492,6 +528,76 @@ export default function UsuarioDetalle() {
               Alta: {formatearFecha(usuario.creado)} · Último acceso:{" "}
               {formatearFecha(usuario.ultimo_acceso)}
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Llaves de acceso (passkeys) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4" aria-hidden />
+              Llaves de acceso
+            </CardTitle>
+            <CardDescription>
+              Passkeys con las que esta persona inicia sesión (Face ID, huella, Windows Hello o su
+              teléfono). No se pueden crear por ella —la llave se genera en su dispositivo—; aquí
+              solo se ven y se eliminan.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {passkeysQuery.isPending ? (
+              <Skeleton className="h-12 w-full rounded-md" />
+            ) : (passkeysQuery.data?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin llaves de acceso registradas.</p>
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {passkeysQuery.data!.map((cred) => (
+                  <li
+                    key={cred.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm">
+                        {cred.nombre?.trim() || "Llave sin nombre"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Alta: {formatearFecha(cred.creada)}
+                        {cred.ultimo_uso
+                          ? ` · Último uso: ${formatearFecha(cred.ultimo_uso)}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      disabled={borrarLlave.isPending}
+                      onClick={() => void pedirBorrarLlave(cred)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Para que el inicio de sesión DEJE de pedir la passkey hay que eliminar sus llaves;
+              quitar «Requerir llave de acceso» solo evita que se le obligue a registrar una nueva.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={resetearMfa.isPending || (passkeysQuery.data?.length ?? 0) === 0}
+              onClick={pedirResetMfa}
+            >
+              {resetearMfa.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldOff className="h-4 w-4" />
+              )}
+              Eliminar todas las llaves
+            </Button>
           </CardContent>
         </Card>
 
@@ -528,20 +634,6 @@ export default function UsuarioDetalle() {
                 Resetear
               </Button>
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resetearMfa.isPending}
-              onClick={pedirResetMfa}
-            >
-              {resetearMfa.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShieldOff className="h-4 w-4" />
-              )}
-              Resetear las llaves de acceso
-            </Button>
 
             <div>
               <Button

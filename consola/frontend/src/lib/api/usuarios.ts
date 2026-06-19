@@ -7,6 +7,7 @@ import type {
   CuerpoCrearUsuario,
   RespuestaActualizarConfiguracion,
   RespuestaConfiguracionUsuarios,
+  RespuestaMfaCredenciales,
   RespuestaUsuarios,
   UsuarioAdmin,
 } from "@/types";
@@ -23,6 +24,19 @@ export const apiUsuarios = {
     }),
   eliminarUsuario: (id: string) =>
     peticion<void>(`/usuarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Llaves de acceso (passkeys) de OTRA persona (solo superadmin) ---
+  // Lista las llaves de una cuenta (sin secretos) y borra una concreta: rescate cuando alguien
+  // pierde un dispositivo o no puede usar su passkey en un equipo. Crear una por otro NO existe
+  // (la clave privada vive en el dispositivo del propio usuario); el reset total va por el PATCH
+  // de usuario (`mfa_reset`).
+  usuarioPasskeys: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaMfaCredenciales>(`/usuarios/${encodeURIComponent(id)}/passkeys`, { signal }),
+  borrarPasskeyUsuario: (id: string, credId: string) =>
+    peticion<void>(
+      `/usuarios/${encodeURIComponent(id)}/passkeys/${encodeURIComponent(credId)}`,
+      { metodo: "DELETE" },
+    ),
 
   // --- Configuración GLOBAL de seguridad (solo superadmin) ---
   configuracionUsuarios: (signal?: AbortSignal) =>

@@ -508,6 +508,29 @@ def test_superadmin_concede_flags_a_otra_cuenta(entorno):
     assert c2.get("/api/usuarios").status_code == 200
 
 
+def test_promover_a_admin_marca_mfa_requerido(entorno):
+    """Promover a un editor a admin MARCA `mfa_requerido` (predeterminado de admins), salvo que el
+    mismo PATCH lo fije: así un admin no queda sin segundo factor por la puerta de atrás. Eximir va
+    aparte (`mfa_requerido=false`)."""
+    _crear("jefa", CLAVE, "admin")
+    leo = _crear("leo", CLAVE, "editor")  # nace sin exigencia
+    mia = _crear("mia", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+
+    # Promover sin tocar mfa_requerido -> queda exigido (política de admins ON por defecto).
+    r = c.patch(f"/api/usuarios/{leo['id']}", json={"rol": "admin"}, headers=_ORIGIN)
+    assert r.status_code == 200 and r.json()["mfa_requerido"] is True
+
+    # Promover EXIMIENDO en el mismo PATCH -> manda lo explícito (admin sin exigencia).
+    r2 = c.patch(
+        f"/api/usuarios/{mia['id']}",
+        json={"rol": "admin", "mfa_requerido": False},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200 and r2.json()["mfa_requerido"] is False
+
+
 def test_no_se_puede_quitar_superadmin_al_ultimo(entorno):
     """Guarda anti-lockout: no se quita el flag al ULTIMO superadmin (nadie gestionaria usuarios)."""
     jefa = _crear("jefa", CLAVE, "admin")  # unico superadmin del entorno
@@ -1485,6 +1508,53 @@ def test_alta_hereda_passkey_global(entorno):
         == 201
     )
     assert _mfa_req("caro") is False
+
+
+def test_alta_admin_hereda_politica_admin(entorno):
+    """Una cuenta ADMIN nueva HEREDA la política de admins (`KENI_CONSOLA_MFA_ADMIN`, def ON): nace
+    exigida. Un editor sigue heredando el global (no esta política). Con la política OFF, el admin
+    nuevo ya no nace exigido (y luego se puede eximir/exigir per-usuario)."""
+    from keni_consola import ajustes
+
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+
+    def _mfa_req(usuario: str) -> bool:
+        return next(u for u in auth.listar_usuarios() if u["usuario"] == usuario)["mfa_requerido"]
+
+    # Global OFF para aislar la política de admins: un ADMIN nuevo nace exigido; un EDITOR no.
+    ajustes.guardar("KENI_CONSOLA_MFA", "0")
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "adminx", "password": CLAVE, "rol": "admin"},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("adminx") is True
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "edx", "password": CLAVE, "rol": "editor"},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("edx") is False
+
+    # Política de admins OFF: el admin nuevo NO nace exigido.
+    ajustes.guardar("KENI_CONSOLA_MFA_ADMIN", "0")
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "adminy", "password": CLAVE, "rol": "admin"},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("adminy") is False
 
 
 def test_configuracion_get_solo_superadmin(entorno):

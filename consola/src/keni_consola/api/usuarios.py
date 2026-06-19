@@ -234,10 +234,17 @@ async def crear(request: Request) -> Response:
     # El primer admin por token nace SUPERADMIN (debe poder gestionar usuarios). En el alta
     # normal, los flags `superadmin`/`mfa_requerido` los decide el superadmin que crea.
     crea_superadmin = True if bootstrap_por_token else bool(superadmin)
-    # HERENCIA del modelo global: si no se indica `mfa_requerido` explícito, la cuenta nueva
-    # HEREDA el «passkey obligatorio para todo el equipo» vigente (`config.mfa_habilitado`), para
-    # que las altas queden cubiertas sin re-aplicar la acción masiva. Un valor explícito manda.
-    mfa_req = bool(mfa_requerido) if mfa_requerido is not None else config.mfa_habilitado()
+    # HERENCIA del predeterminado: si no se indica `mfa_requerido` explícito, la cuenta nueva lo
+    # HEREDA según su rol. Un ADMIN (o superadmin) nace exigido si la política de admins está
+    # activa (`config.mfa_obligatorio_admin`, def ON); un EDITOR hereda el «passkey para todo el
+    # equipo» vigente (`config.mfa_habilitado`). Así las altas quedan cubiertas sin re-aplicar la
+    # acción masiva; el enforcement real lo decide luego la columna (se puede eximir). Explícito manda.
+    es_admin_nuevo = crea_superadmin or rol == ROL_ADMIN
+    mfa_req = (
+        bool(mfa_requerido)
+        if mfa_requerido is not None
+        else (config.mfa_obligatorio_admin() if es_admin_nuevo else config.mfa_habilitado())
+    )
     creado = auth.crear_usuario(
         usuario, password, rol, nombre=nombre,
         superadmin=crea_superadmin, mfa_requerido=mfa_req,
@@ -478,6 +485,17 @@ async def actualizar(request: Request) -> Response:
                 status_code=400,
             )
 
+    # Promover a admin MARCA la exigencia de passkey (predeterminado de admins), salvo que el
+    # mismo PATCH la fije explícitamente: así un admin nuevo no queda sin segundo factor por la
+    # puerta de atrás. Para EXIMIR a un admin, manda `mfa_requerido=false` (en este PATCH o luego).
+    if (
+        nuevo_rol == ROL_ADMIN
+        and objetivo["rol"] != ROL_ADMIN
+        and nuevo_mfa_requerido is None
+        and config.mfa_obligatorio_admin()
+    ):
+        nuevo_mfa_requerido = True
+
     if nuevo_usuario is not None and nuevo_usuario != objetivo["usuario"]:
         cambiado = auth.cambiar_usuario(usuario_id, nuevo_usuario)
         if cambiado is None:
@@ -565,6 +583,61 @@ async def borrar(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# Llaves de acceso (passkeys) de OTRA persona, gestionadas por el superadmin    #
+# --------------------------------------------------------------------------- #
+#
+# El propio usuario gestiona SUS llaves en "Mi cuenta" (`/api/auth/mfa/credenciales*`). Aquí el
+# SUPERADMIN ve y borra las de CUALQUIER cuenta: rescate cuando alguien pierde un dispositivo o no
+# puede usar su passkey en un equipo concreto (p.ej. un PC sin permiso de llavero). NO hay "crear
+# una passkey por otra persona": una passkey se genera EN el dispositivo del propio usuario (su
+# clave privada nunca sale de ahí), así que el superadmin solo puede LISTAR, BORRAR una llave
+# concreta o resetear todas (`mfa_reset` en el PATCH). Recuperar el acceso = borrar la llave que
+# estorba (o todas) y, si hace falta, eximir a la persona (`mfa_requerido=false`).
+
+
+async def passkeys_de_usuario(request: Request) -> Response:
+    """GET /api/usuarios/{id}/passkeys: las llaves de acceso (passkeys) de una persona, SIN secretos.
+
+    Solo superadmin. Devuelve `{credenciales: [{id, nombre, creada, ultimo_uso}]}` (nunca la
+    `public_key`): la lista que el panel de Usuarios muestra para borrar una llave concreta.
+    """
+    if not _es_superadmin(request):
+        return _rechazo_no_admin()
+    usuario_id = request.path_params["usuario_id"]
+    if auth.obtener_usuario_por_id(usuario_id) is None:
+        return JSONResponse({"error": "El usuario no existe."}, status_code=404)
+    credenciales = [
+        {
+            "id": c["id"],
+            "nombre": c["nombre"],
+            "creada": c["creada"],
+            "ultimo_uso": c["ultimo_uso"],
+        }
+        for c in auth.listar_credenciales_mfa(usuario_id)
+    ]
+    return JSONResponse({"credenciales": credenciales})
+
+
+async def borrar_passkey_de_usuario(request: Request) -> Response:
+    """DELETE /api/usuarios/{id}/passkeys/{credencial_id}: borra UNA llave de acceso de la persona (204).
+
+    Solo superadmin. Si era la ÚLTIMA, `borrar_credencial_mfa` apaga `mfa_activo`. 404 si esa llave
+    no existe o no es de esa persona. Es la versión por-llave del reset total (`mfa_reset`).
+    """
+    if not _es_superadmin(request):
+        return _rechazo_no_admin()
+    if _mfa_inscripcion_pendiente(request):
+        return _rechazo_mfa_pendiente()
+    usuario_id = request.path_params["usuario_id"]
+    if auth.obtener_usuario_por_id(usuario_id) is None:
+        return JSONResponse({"error": "El usuario no existe."}, status_code=404)
+    credencial_id = request.path_params.get("credencial_id", "")
+    if not auth.borrar_credencial_mfa(usuario_id, credencial_id):
+        return JSONResponse({"error": "Esa llave de acceso no existe."}, status_code=404)
+    return Response(status_code=204)
+
+
+# --------------------------------------------------------------------------- #
 # Configuración GLOBAL de seguridad/acceso (superadmin)                        #
 # --------------------------------------------------------------------------- #
 #
@@ -593,8 +666,9 @@ _AJUSTES_SEGURIDAD: tuple[ajustes_catalogo.Ajuste, ...] = (
         clave=config.ENV_MFA_ADMIN,
         tipo="bool",
         etiqueta="Passkey obligatorio para administradores",
-        ayuda="Exige la llave de acceso a las cuentas con rol administrador (publican en canales "
-        "de marca). A los administradores no se les puede eximir mientras esté activo.",
+        ayuda="Predeterminado de las cuentas admin (publican en canales de marca): un admin nuevo "
+        "nace exigido y al promover a alguien a admin se le marca. Puedes eximir a un admin "
+        "concreto desde su ficha si no puede usar passkey en su equipo.",
         grupo="seguridad",
         defecto=True,
     ),
@@ -690,6 +764,14 @@ RUTAS = [
     # Rutas LITERALES antes que la paramétrica `{usuario_id}` (Starlette matchea en orden).
     Route("/api/usuarios/configuracion", configuracion, methods=["GET"]),
     Route("/api/usuarios/configuracion", actualizar_configuracion, methods=["PATCH"]),
+    # Llaves de acceso de OTRA persona (superadmin): listar / borrar una concreta. Van ANTES de
+    # las paramétricas de 2 segmentos (no colisionan, pero las agrupamos junto a /configuracion).
+    Route("/api/usuarios/{usuario_id}/passkeys", passkeys_de_usuario, methods=["GET"]),
+    Route(
+        "/api/usuarios/{usuario_id}/passkeys/{credencial_id}",
+        borrar_passkey_de_usuario,
+        methods=["DELETE"],
+    ),
     Route("/api/usuarios/{usuario_id}", actualizar, methods=["PATCH"]),
     Route("/api/usuarios/{usuario_id}", borrar, methods=["DELETE"]),
 ]

@@ -261,12 +261,13 @@ def mfa_obligatorio_admin() -> bool:
     """¿El segundo factor es OBLIGATORIO para los admins? (`KENI_CONSOLA_MFA_ADMIN`, def ON).
 
     Default ON (a diferencia del flag global `mfa_habilitado`, que es OFF): un admin publica en
-    canales de marca, así que un password robado SIN segundo factor es account-takeover. Con
-    esto activo y SI la maquinaria puede operar (hay `mfa_key()`), los admins quedan sujetos al
-    factor: con passkey, el login la EXIGE; sin passkey, se les marca para inscribirla (gracia,
-    sin lockout). Se apaga con un valor falsy (`0/false/no/off`) como válvula de escape operativa.
-    NO afecta a editores. Sin clave de firma NO se fuerza nada (lo decide `api/auth`): no hay
-    lockout. Default ON = ausente o cualquier valor no-falsy.
+    canales de marca, así que un password robado SIN segundo factor es account-takeover. NO es un
+    override de runtime: es el PREDETERMINADO de las cuentas admin. Con esto activo, un admin NUEVO
+    nace con `mfa_requerido=1` (ver `api/usuarios.crear`) y al promover a alguien a admin se le
+    marca; el enforcement real lo decide después la columna per-usuario (`seguridad.mfa_requerido_para`),
+    de modo que un superadmin puede EXIMIR a un admin concreto que no pueda usar passkey. Se apaga
+    con un valor falsy (`0/false/no/off`): los admins nuevos dejan de nacer exigidos. NO afecta a
+    editores. Default ON = ausente o cualquier valor no-falsy.
     """
     # OJO: `_FALSOS` incluye "" (cadena vacia = ausente), comodo para los flags Default OFF que
     # leen `in _VERDADEROS`. Para este flag Default ON hay que GUARDAR el caso ausente ANTES de

@@ -70,7 +70,6 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import auth, config
-from .estados import ROL_ADMIN
 from .observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -178,28 +177,23 @@ def mfa_maquinaria_activa() -> bool:
 def mfa_requerido_para(usuario: dict) -> bool:
     """¿Se le EXIGE segundo factor (passkey) a ESTE usuario? FUENTE ÚNICA del enforcement.
 
-    GATEADO por que haya clave de firma (`mfa_key_presente`, red ANTI-LOCKOUT: sin clave no se
-    puede inscribir ni verificar, así que no se fuerza a nadie). Combina:
+    El enforcement depende SOLO de la columna per-usuario `mfa_requerido`, GATEADO por que haya
+    clave de firma (`mfa_key_presente`, red ANTI-LOCKOUT: sin clave no se puede inscribir ni
+    verificar, así que no se fuerza a nadie).
 
-      1. ADMINS — `KENI_CONSOLA_MFA_ADMIN` (`config.mfa_obligatorio_admin`, def ON): obliga a los
-         de rol admin (publican en canales de marca; un password robado sin 2º factor es ATO).
-      2. PER-USUARIO — la columna `mfa_requerido` que un superadmin marca en Usuarios.
+    Ni el flag GLOBAL (`KENI_CONSOLA_MFA`) ni el de ADMINS (`KENI_CONSOLA_MFA_ADMIN`) son ya
+    overrides de runtime: ambos son PREDETERMINADOS + ACCIONES MASIVAS que MARCAN `mfa_requerido`
+    al crear cuentas (un admin nuevo nace exigido si la política de admins está activa; ver
+    `api/usuarios.crear`) y que la UI puede aplicar en bloque a las cuentas existentes. A partir de
+    ahí MANDA el flag individual: un superadmin puede eximir a una persona concreta —incluido un
+    admin que no pueda usar passkey en su equipo— y esa exención se respeta.
 
-    El flag GLOBAL `KENI_CONSOLA_MFA` ya NO es un override de runtime: «passkey obligatorio para
-    todo el equipo» es una ACCIÓN MASIVA en la UI que MARCA `mfa_requerido` en cada cuenta, y a
-    partir de ahí MANDA el flag individual (se puede eximir a alguien). Así el enforcement depende
-    solo de la columna per-usuario y de la política de admins.
-
-    `usuario` es la forma pública (debe traer `rol` y `mfa_requerido`). Lo consultan la elevación
-    del login (`api/auth`), `me.debe_inscribir_mfa` y el hard-block de `api/usuarios`. Devuelve
-    True = "esta cuenta debe tener passkey": si ya la tiene el login la exige; si no, entra en
-    gracia (`debe_inscribir_mfa`) y se le fuerza a inscribirla antes de operar.
+    `usuario` es la forma pública (debe traer `mfa_requerido`). Lo consultan la elevación del login
+    (`api/auth`), `me.debe_inscribir_mfa` y el hard-block de `api/usuarios`. Devuelve True = "esta
+    cuenta debe tener passkey": si ya la tiene el login la exige; si no, entra en gracia
+    (`debe_inscribir_mfa`) y se le fuerza a inscribirla antes de operar.
     """
-    if not config.mfa_key_presente():
-        return False
-    if usuario.get("rol") == ROL_ADMIN and config.mfa_obligatorio_admin():
-        return True
-    return bool(usuario.get("mfa_requerido"))
+    return config.mfa_key_presente() and bool(usuario.get("mfa_requerido"))
 
 
 def generar_token() -> str:

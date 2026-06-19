@@ -540,13 +540,14 @@ def test_flag_global_ya_no_fuerza_en_runtime(entorno, monkeypatch):
     assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False
 
 
-def test_admin_obligatorio_por_defecto_obliga_admins_no_editores(entorno, monkeypatch):
-    """Con el global OFF pero `KENI_CONSOLA_MFA_ADMIN` por defecto (ON) + clave: un ADMIN sin
-    passkey entra en gracia; un EDITOR en la misma situacion NO se fuerza."""
+def test_admin_exigido_por_columna_entra_en_gracia(entorno, monkeypatch):
+    """El enforcement es PER-COLUMNA (`mfa_requerido`), no por rol: un admin con la columna
+    marcada y sin passkey entra en gracia; un editor sin la columna NO se fuerza. (Que un admin
+    NUEVO nazca con la columna marcada lo cubre `test_auth.test_alta_admin_hereda_politica_admin`.)"""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
     monkeypatch.delenv("KENI_CONSOLA_MFA_ADMIN", raising=False)  # default ON
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    auth.crear_usuario("jefe", CLAVE, "admin")
+    auth.crear_usuario("jefe", CLAVE, "admin", mfa_requerido=True)
     auth.crear_usuario("ed", CLAVE, "editor")
 
     c = _cli()
@@ -559,13 +560,14 @@ def test_admin_obligatorio_por_defecto_obliga_admins_no_editores(entorno, monkey
     assert r_ed.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
 
 
-def test_mfa_admin_off_no_obliga_admin(entorno, monkeypatch):
-    """Valvula de escape: `KENI_CONSOLA_MFA_ADMIN=0` (+ global OFF) -> un admin sin passkey NO
-    se fuerza (el enrolamiento sigue disponible, pero no obligado)."""
+def test_admin_exento_no_se_fuerza_aunque_politica_admin_on(entorno, monkeypatch):
+    """EXENCIÓN per-usuario: un ADMIN con `mfa_requerido=False` NO se fuerza, aunque la política de
+    admins (`KENI_CONSOLA_MFA_ADMIN`) esté ON y haya clave. Es el rescate para un admin que no puede
+    usar passkey en su equipo: el flag individual MANDA sobre la política, ya no es un force de runtime."""
     monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
-    monkeypatch.setenv("KENI_CONSOLA_MFA_ADMIN", "0")
+    monkeypatch.delenv("KENI_CONSOLA_MFA_ADMIN", raising=False)  # default ON
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
-    auth.crear_usuario("jefe", CLAVE, "admin")
+    auth.crear_usuario("jefe", CLAVE, "admin", mfa_requerido=False)  # exento
 
     c = _cli()
     r = _login(c, "jefe", CLAVE)
@@ -617,6 +619,66 @@ def test_superadmin_con_passkey_si_gestiona(entorno, monkeypatch):
         headers=_ORIGIN,
     )
     assert r.status_code == 201
+
+
+# --------------------------------------------------------------------------- #
+# 8c) El SUPERADMIN ve y borra las passkeys de OTRA persona (rescate)          #
+# --------------------------------------------------------------------------- #
+
+
+def _sesion_superadmin(c: TestClient) -> str:
+    """Crea un superadmin SIN MFA y abre su sesión real en el cliente; devuelve su id."""
+    jefa = auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)
+    c.cookies.set(auth.COOKIE_SESION, auth.crear_sesion(jefa["id"]))
+    return jefa["id"]
+
+
+def test_superadmin_lista_y_borra_passkey_de_usuario(entorno, monkeypatch):
+    """El superadmin LISTA las passkeys de otra cuenta (sin secretos) y BORRA una concreta; al
+    quitar la última se apaga `mfa_activo` (rescate: la persona ya no puede usar su llave)."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    ana = auth.crear_usuario("ana", CLAVE, "editor")
+    _credencial_falsa(ana["id"], credential_id="cred-ana")
+
+    c = _cli()
+    _sesion_superadmin(c)
+
+    r = c.get(f"/api/usuarios/{ana['id']}/passkeys")
+    assert r.status_code == 200, r.text
+    llaves = r.json()["credenciales"]
+    assert len(llaves) == 1
+    assert set(llaves[0]) == {"id", "nombre", "creada", "ultimo_uso"}  # nunca public_key
+
+    cred_id = llaves[0]["id"]
+    rd = c.delete(f"/api/usuarios/{ana['id']}/passkeys/{cred_id}", headers=_ORIGIN)
+    assert rd.status_code == 204
+    assert c.get(f"/api/usuarios/{ana['id']}/passkeys").json()["credenciales"] == []
+    assert auth.estado_mfa(ana["id"])["activo"] is False
+
+
+def test_passkeys_de_usuario_solo_superadmin(entorno, monkeypatch):
+    """Las llaves de otra persona son cosa del superadmin: un editor con sesión recibe 403."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)  # debe existir un superadmin
+    ana = auth.crear_usuario("ana", CLAVE, "editor")
+    ed = auth.crear_usuario("ed", CLAVE, "editor")
+
+    c = _cli()
+    c.cookies.set(auth.COOKIE_SESION, auth.crear_sesion(ed["id"]))
+    assert c.get(f"/api/usuarios/{ana['id']}/passkeys").status_code == 403
+    assert (
+        c.delete(f"/api/usuarios/{ana['id']}/passkeys/x", headers=_ORIGIN).status_code == 403
+    )
+
+
+def test_borrar_passkey_inexistente_404(entorno, monkeypatch):
+    """Borrar una llave que no existe (o no es de esa persona) -> 404, no 204."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    ana = auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _sesion_superadmin(c)
+    r = c.delete(f"/api/usuarios/{ana['id']}/passkeys/no-existe", headers=_ORIGIN)
+    assert r.status_code == 404
 
 
 # --------------------------------------------------------------------------- #
