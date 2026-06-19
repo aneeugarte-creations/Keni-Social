@@ -461,3 +461,24 @@ describe("Turnos — home «Hoy»", () => {
     expect(within(seccion).getByText("Partido España")).toBeInTheDocument();
   });
 });
+
+describe("Turnos — Calendario: gating de coordinador", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("el trabajador (no-admin) NO ve el menú ⋯ de coordinador", async () => {
+    renderRota({ rol: "editor" });
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    // Calendario montado (conmutador visible) y SIN el menú ⋯ (Carga/Export son de coordinador).
+    await screen.findByRole("button", { name: "Semana", pressed: true });
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+  });
+
+  it("el admin SÍ conserva el menú ⋯ (Franjas/Copiar/Carga/Export)", async () => {
+    renderRota(); // admin por defecto
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    expect(await screen.findByRole("button", { name: "Más acciones" })).toBeInTheDocument();
+  });
+});

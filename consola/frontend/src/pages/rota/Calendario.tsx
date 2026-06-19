@@ -430,7 +430,8 @@ export function Calendario({
             aprobada={Boolean(semana?.aprobada)}
             hayTurnos={turnos.length > 0}
           />
-          {nCambiados > 0 && (
+          {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
+          {esAdmin && nCambiados > 0 && (
             <Tooltip
               label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
                 nCambiados === 1 ? "" : "s"
@@ -501,16 +502,20 @@ export function Calendario({
           )}
           {/* «Importar documento» ya no es un botón suelto aquí: vive dentro de «Asignar
               turnos» como su vía automática (ver DialogoAsignarTurnos). */}
-          <MenuMasAcciones
-            esAdmin={esAdmin}
-            semanaAprobada={Boolean(semana?.aprobada)}
-            copiarPendiente={copiarAnterior.isPending}
-            onCopiarAnterior={() => copiarAnterior.mutate()}
-            onAbrirFranjas={() => setAbrirFranjas(true)}
-            onAbrirCarga={() => setAbrirCarga(true)}
-            onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
-            onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
-          />
+          {/* Menú «⋯» solo de coordinador (Franjas/Copiar/Carga/Export): oculto al trabajador.
+              Para el no-admin solo ofrecía Carga del equipo + Export, ambas de coordinador. */}
+          {esAdmin && (
+            <MenuMasAcciones
+              esAdmin={esAdmin}
+              semanaAprobada={Boolean(semana?.aprobada)}
+              copiarPendiente={copiarAnterior.isPending}
+              onCopiarAnterior={() => copiarAnterior.mutate()}
+              onAbrirFranjas={() => setAbrirFranjas(true)}
+              onAbrirCarga={() => setAbrirCarga(true)}
+              onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
+              onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
+            />
+          )}
         </div>
       </div>
 
