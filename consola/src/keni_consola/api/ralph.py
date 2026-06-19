@@ -47,6 +47,15 @@ def _rechazo_sin_sesion() -> Response:
     return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
 
 
+def _usuario_id(request: Request) -> str | None:
+    """Id del usuario de la sesion (o None). Lo inyectamos hacia worker-ralph para que cada
+    persona solo liste y opere SUS Ralphs (control de propiedad); nunca lo aporta el cliente."""
+    usuario = getattr(request.state, "usuario", None)
+    if isinstance(usuario, dict) and usuario.get("id"):
+        return str(usuario["id"])
+    return None
+
+
 def _llamar(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict]:
     """Llama al listener de worker-ralph (httpx sincrono; se invoca en el threadpool).
 
@@ -80,10 +89,10 @@ async def listar(request: Request) -> Response:
         return _rechazo_sin_sesion()
     superadmin = permisos.es_superadmin(request)
     # Cada persona ve SOLO sus propios Ralphs: pasamos su id para que worker-ralph filtre.
-    usuario = getattr(request.state, "usuario", None)
+    uid = _usuario_id(request)
     ruta = "/control/ralph/list"
-    if isinstance(usuario, dict) and usuario.get("id"):
-        ruta += f"?usuario_id={quote(str(usuario['id']))}"
+    if uid:
+        ruta += f"?usuario_id={quote(uid)}"
     status, payload = await run_in_threadpool(_llamar, "GET", ruta)
     if status != 200:
         return JSONResponse({"disponible": False, "superadmin": superadmin, "ralphs": []})
@@ -129,6 +138,8 @@ async def mensaje(request: Request) -> Response:
         cuerpo = datos if isinstance(datos, dict) else {}
     except Exception:  # noqa: BLE001 -- cuerpo ausente/no-JSON: lo tratamos como vacio
         cuerpo = {}
+    # Identidad de la sesion (no la del cliente): solo el dueño escribe a su Ralph.
+    cuerpo["usuario_id"] = _usuario_id(request)
     status, payload = await run_in_threadpool(
         _llamar, "POST", f"/control/ralph/{ralph_id}/mensaje", cuerpo
     )
@@ -140,7 +151,11 @@ async def kill(request: Request) -> Response:
     if not _hay_sesion(request):
         return _rechazo_sin_sesion()
     ralph_id = request.path_params.get("ralph_id")
-    status, payload = await run_in_threadpool(_llamar, "POST", f"/control/ralph/{ralph_id}/kill")
+    # Identidad de la sesion (no la del cliente): solo el dueño mata su Ralph.
+    cuerpo = {"usuario_id": _usuario_id(request)}
+    status, payload = await run_in_threadpool(
+        _llamar, "POST", f"/control/ralph/{ralph_id}/kill", cuerpo
+    )
     return JSONResponse(payload, status_code=status)
 
 
@@ -154,6 +169,8 @@ async def stream(request: Request) -> Response:
     if not _hay_sesion(request):
         return _rechazo_sin_sesion()
     ralph_id = request.path_params.get("ralph_id")
+    # Identidad de la sesion (no la del cliente): solo el dueño lee el stream de su Ralph.
+    uid = _usuario_id(request)
 
     async def eventos() -> AsyncIterator[bytes]:
         import httpx
@@ -161,6 +178,8 @@ async def stream(request: Request) -> Response:
         base = config.ralph_url().rstrip("/")
         bearer = cuenta_claude.bearer_efectivo()
         url = f"{base}/control/ralph/{ralph_id}/stream"
+        if uid:
+            url += f"?usuario_id={quote(uid)}"
         cabeceras = {"Authorization": f"Bearer {bearer}", "Accept": "text/event-stream"}
         try:
             async with httpx.AsyncClient(timeout=None) as cliente:

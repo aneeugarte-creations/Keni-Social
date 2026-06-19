@@ -401,6 +401,51 @@ def test_listar_sin_usuario_devuelve_todos(tmp_path, monkeypatch):
     assert {r["id"] for r in g.listar()} == {"a", "b"}
 
 
+def test_obtener_respeta_propiedad(tmp_path, monkeypatch):
+    # Control de propiedad: con `usuario_id`, un Ralph ajeno es indistinguible de inexistente.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    g._sesiones["a"] = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    assert g.obtener("a", "u1") is not None  # el dueño lo ve
+    assert g.obtener("a", "u2") is None  # ajeno: como si no existiera
+    assert g.obtener("a") is not None  # sin filtro (uso interno): lo ve
+    assert g.obtener("desconocido", "u1") is None
+
+
+def test_enviar_a_ralph_ajeno_se_rechaza(tmp_path, monkeypatch):
+    # Solo el dueño escribe a su Ralph: un id ajeno se trata como desconocido (no escribe).
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    g._sesiones["a"] = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    res = g.enviar("a", "hola", usuario_id="u2")
+    assert res == {"ok": False, "error": "Ralph desconocido"}
+
+
+def test_kill_de_ralph_ajeno_es_noop(tmp_path, monkeypatch):
+    # Solo el dueño mata su Ralph: un kill ajeno es un no-op idempotente (no lo elimina).
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    g._sesiones["a"] = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    assert g.kill("a", usuario_id="u2") == {"ok": True}
+    assert g.obtener("a") is not None  # sigue vivo: no era suyo
+    assert g.kill("a", usuario_id="u1") == {"ok": True}
+    assert g.obtener("a") is None  # el dueño sí lo mata
+
+
+def test_leer_stream_de_ralph_ajeno_no_cede_nada(tmp_path, monkeypatch):
+    # Solo el dueño lee el stream: para un ajeno el generador se agota sin ceder eventos.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    s = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    s.eventos.append({"tipo": "estado", "estado": rs.ESTADO_ESPERANDO})
+    s.cerrado = True  # cerrado: el del dueño termina tras reproducir el buffer (no bloquea)
+    g._sesiones["a"] = s
+    assert list(g.leer_stream("a", usuario_id="u2")) == []
+    assert list(g.leer_stream("a", usuario_id="u1")) == [
+        {"tipo": "estado", "estado": rs.ESTADO_ESPERANDO}
+    ]
+
+
 def test_desde_registro_propaga_creado_del_turno():
     # La hora de cada turno (cuando el registro la trae) viaja en el primer evento, donde el
     # front abre la burbuja del mensaje.

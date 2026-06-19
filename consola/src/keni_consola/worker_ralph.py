@@ -111,7 +111,9 @@ async def mensaje(request: Request) -> Response:
     texto = cuerpo.get("texto")
     if not isinstance(texto, str) or not texto.strip():
         return JSONResponse({"ok": False, "error": "falta texto"}, status_code=400)
-    res = await run_in_threadpool(ralph_sesiones.gestor.enviar, ralph_id, texto)
+    # `usuario_id` (lo inyecta el back desde la sesion): solo el dueño escribe al Ralph.
+    usuario_id = cuerpo.get("usuario_id") if isinstance(cuerpo.get("usuario_id"), str) else None
+    res = await run_in_threadpool(ralph_sesiones.gestor.enviar, ralph_id, texto, usuario_id)
     return JSONResponse(res, status_code=200 if res.get("ok") else 404)
 
 
@@ -119,7 +121,10 @@ async def kill(request: Request) -> Response:
     if not _autorizado(request):
         return _rechazo()
     ralph_id = request.path_params.get("ralph_id")
-    return JSONResponse(await run_in_threadpool(ralph_sesiones.gestor.kill, ralph_id))
+    cuerpo = await _cuerpo(request)
+    # `usuario_id` (lo inyecta el back desde la sesion): solo el dueño mata el Ralph.
+    usuario_id = cuerpo.get("usuario_id") if isinstance(cuerpo.get("usuario_id"), str) else None
+    return JSONResponse(await run_in_threadpool(ralph_sesiones.gestor.kill, ralph_id, usuario_id))
 
 
 def _evento_sse(nombre: str, datos: dict) -> str:
@@ -138,13 +143,15 @@ async def stream(request: Request) -> Response:
     if not _autorizado(request):
         return _rechazo()
     ralph_id = request.path_params.get("ralph_id")
-    if ralph_sesiones.gestor.obtener(ralph_id) is None:
+    # `usuario_id` (lo inyecta el back desde la sesion): solo el dueño lee el stream del Ralph.
+    usuario_id = request.query_params.get("usuario_id")
+    if ralph_sesiones.gestor.obtener(ralph_id, usuario_id) is None:
         return JSONResponse({"error": "Ralph desconocido"}, status_code=404)
 
     async def eventos() -> AsyncIterator[str]:
         import functools
 
-        gen = ralph_sesiones.gestor.leer_stream(ralph_id)
+        gen = ralph_sesiones.gestor.leer_stream(ralph_id, usuario_id)
         fin = object()
         siguiente = functools.partial(next, gen, fin)
         while True:

@@ -464,9 +464,17 @@ class GestorRalph:
             sesiones = [s for s in sesiones if s.usuario_id == usuario_id]
         return [s.info() for s in sesiones]
 
-    def obtener(self, ralph_id: str) -> SesionRalph | None:
+    def obtener(self, ralph_id: str, usuario_id: str | None = None) -> SesionRalph | None:
+        """La sesion `ralph_id`, o None si no existe. Con `usuario_id`, ademas None si el Ralph
+        es de OTRO usuario (control de propiedad: cada persona solo opera los suyos). El None por
+        ajenidad es indistinguible del de inexistencia: no se filtra si un id ajeno existe."""
         with self._lock:
-            return self._sesiones.get(ralph_id)
+            sesion = self._sesiones.get(ralph_id)
+        if sesion is None:
+            return None
+        if usuario_id is not None and sesion.usuario_id != usuario_id:
+            return None
+        return sesion
 
     # -- ciclo de vida ----------------------------------------------------- #
 
@@ -529,13 +537,14 @@ class GestorRalph:
             self.enviar(ralph_id, prompt)
         return sesion.info()
 
-    def enviar(self, ralph_id: str, texto: str) -> dict:
+    def enviar(self, ralph_id: str, texto: str, usuario_id: str | None = None) -> dict:
         """Escribe un turno del humano en el stdin del Ralph. {ok, error?}.
 
-        Si el proceso esta dormido (restaurado de disco) o murio, lo reanuda con `--resume`
-        ANTES de escribir: el primer mensaje tras un reinicio revive al Ralph con memoria intacta.
-        """
-        sesion = self.obtener(ralph_id)
+        Con `usuario_id`, solo el DUEÑO del Ralph puede escribirle (un Ralph ajeno se trata como
+        desconocido). Si el proceso esta dormido (restaurado de disco) o murio, lo reanuda con
+        `--resume` ANTES de escribir: el primer mensaje tras un reinicio revive al Ralph con
+        memoria intacta."""
+        sesion = self.obtener(ralph_id, usuario_id)
         if sesion is None:
             return {"ok": False, "error": "Ralph desconocido"}
         if sesion.proc is None or sesion.proc.poll() is not None:
@@ -556,12 +565,16 @@ class GestorRalph:
         self._fijar_estado(sesion, ESTADO_ACTIVO)
         return {"ok": True}
 
-    def kill(self, ralph_id: str) -> dict:
-        """Mata el Ralph (arbol de proceso) y limpia su worktree. Idempotente. {ok}."""
+    def kill(self, ralph_id: str, usuario_id: str | None = None) -> dict:
+        """Mata el Ralph (arbol de proceso) y limpia su worktree. Idempotente. {ok}.
+
+        Con `usuario_id`, solo el DUEÑO puede matarlo: un Ralph inexistente o ajeno es un no-op
+        que tambien devuelve {ok:true} (idempotente y sin filtrar la existencia de ids ajenos)."""
         with self._lock:
-            sesion = self._sesiones.pop(ralph_id, None)
-        if sesion is None:
-            return {"ok": True}
+            sesion = self._sesiones.get(ralph_id)
+            if sesion is None or (usuario_id is not None and sesion.usuario_id != usuario_id):
+                return {"ok": True}
+            del self._sesiones[ralph_id]
         _matar_proceso(sesion.proc)
         _borrar_worktree(sesion.worktree)
         with sesion.cond:
@@ -573,13 +586,15 @@ class GestorRalph:
 
     # -- stream ------------------------------------------------------------ #
 
-    def leer_stream(self, ralph_id: str):
+    def leer_stream(self, ralph_id: str, usuario_id: str | None = None):
         """Generador BLOQUEANTE de eventos de un Ralph: reproduce el buffer y sigue en vivo.
 
-        Reproduce desde el inicio (para que el SSE del back reconecte sin huecos) y luego cede
-        cada evento nuevo segun llega. Emite `{"tipo": "ping"}` cada `_HEARTBEAT_SEG` sin
-        novedades (heartbeat) y termina cuando el Ralph se cierra (kill o EOF del proceso)."""
-        sesion = self.obtener(ralph_id)
+        Con `usuario_id`, solo el DUEÑO puede leer el stream (un Ralph ajeno se trata como
+        inexistente: el generador no cede nada). Reproduce desde el inicio (para que el SSE del
+        back reconecte sin huecos) y luego cede cada evento nuevo segun llega. Emite
+        `{"tipo": "ping"}` cada `_HEARTBEAT_SEG` sin novedades (heartbeat) y termina cuando el
+        Ralph se cierra (kill o EOF del proceso)."""
+        sesion = self.obtener(ralph_id, usuario_id)
         if sesion is None:
             return
         idx = 0
