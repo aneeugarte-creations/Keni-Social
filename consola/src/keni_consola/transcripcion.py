@@ -159,8 +159,17 @@ def _cargar_modelo() -> Any:
         modelo = os.environ.get(ENV_MODELO) or _MODELO_DEF
         compute = os.environ.get(ENV_COMPUTE) or _COMPUTE_DEF
         dir_cache = os.environ.get(ENV_DIR) or None
+        # CTranslate2 no respeta el límite de cpus del cgroup (ve os.cpu_count del host): sin esto
+        # lanzaría hilos para TODOS los cores del host y el cgroup lo estrangularía. `KENI_WHISPER_
+        # CPU_THREADS` fija los hilos al cupo real del contenedor (0 = auto). Más hilos = más rápido.
         try:
-            m = WhisperModel(modelo, device="cpu", compute_type=compute, download_root=dir_cache)
+            hilos = int(os.environ.get("KENI_WHISPER_CPU_THREADS", "0"))
+        except (TypeError, ValueError):
+            hilos = 0
+        try:
+            m = WhisperModel(
+                modelo, device="cpu", compute_type=compute, download_root=dir_cache, cpu_threads=hilos
+            )
         except Exception as e:  # noqa: BLE001 -- descarga/disco/modelo: mensaje claro al usuario
             _log.warning("transcripcion: no se pudo cargar el modelo whisper '%s': %s", modelo, e)
             raise TranscripcionError(

@@ -31,8 +31,13 @@ RUN apt-get update \
 # MOTOR ASR en su PROPIA capa, ANTES de copiar la app: así un cambio de código de la consola NO
 # reinstala faster-whisper/CTranslate2 (Docker reutiliza esta capa cacheada). Wheel precompilado:
 # no compila nada. La version se fija para builds reproducibles; el extra `asr` de consola la exige.
+# `requests`: faster-whisper 1.1.0 lo IMPORTA directo (utils.py) pero NO lo declara, y huggingface_hub
+# 1.x ya no lo arrastra (migró a httpx); sin él `import faster_whisper` revienta. La VERIFICACION de
+# import al final hace FALLAR el build si las deps quedan incompletas (en vez de desplegar una imagen
+# que arranca pero no transcribe).
 ARG FASTER_WHISPER_VERSION=1.1.0
-RUN pip install "faster-whisper==${FASTER_WHISPER_VERSION}"
+RUN pip install "faster-whisper==${FASTER_WHISPER_VERSION}" "requests>=2" \
+ && python -c "from faster_whisper import WhisperModel"
 
 WORKDIR /app
 

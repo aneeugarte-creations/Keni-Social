@@ -613,6 +613,10 @@ services:
       # Hilos de transcripción concurrente. whisper ya paraleliza UNA transcripción sobre los cores,
       # así que 1 satura la CPU; súbelo solo si das más cores. Def 1 (conservador en la caja).
       KENI_MAX_JOBS_TRANSCRIPCION: ${KENI_MAX_JOBS_TRANSCRIPCION:-1}
+      # Hilos de CPU que usa CTranslate2 por transcripción. DEBE casar con el `cpus` de abajo (el
+      # cgroup): CTranslate2 ve los 12 cores del host, no el límite, así que sin esto lanzaría 12
+      # hilos y el cgroup los estrangularía a `cpus`. Igualar hilos≈cpus es lo que acelera el ASR.
+      KENI_WHISPER_CPU_THREADS: ${KENI_WHISPER_CPU_THREADS:-8}
       # Cache PERSISTENTE del modelo whisper v3 turbo: faster-whisper lo descarga UNA vez aquí
       # (volumen keni-data) y lo reutiliza siempre; no lo re-baja en reinicios/deploys.
       KENI_WHISPER_DIR: /data/models
@@ -659,7 +663,10 @@ services:
     stop_grace_period: 30s
     # faster-whisper carga el modelo (~1.6 GB) en memoria + memoria de trabajo: ~3 GiB por job.
     mem_limit: ${TRANSCRIPTOR_MEM_LIMIT:-6g}
-    cpus: ${TRANSCRIPTOR_CPUS:-4}
+    # La transcripción es CPU-bound y a RÁFAGAS (no sostenida): le damos 8 de los 12 cores del host
+    # (el worker de contenido es I/O-bound sobre la API de claude, casi no usa CPU). DEBE casar con
+    # KENI_WHISPER_CPU_THREADS de arriba. Con 4 cores el ASR iba muy lento (era el cuello de botella).
+    cpus: ${TRANSCRIPTOR_CPUS:-8}
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024

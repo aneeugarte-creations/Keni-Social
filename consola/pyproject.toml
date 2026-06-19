@@ -69,7 +69,10 @@ s3 = ["boto3>=1.34"]
 #          (sin compilar nada, a diferencia de whisper.cpp), trae su propio decodificador de audio
 #          (av/ffmpeg embebido) y DESCARGA el modelo UNA vez a un cache persistente. Solo lo instala
 #          el servicio `transcriptor` (deploy/transcriptor/Dockerfile); el back/worker no transcriben.
-asr = ["faster-whisper>=1.1.0"]
+#          `requests`: faster-whisper 1.1.0 hace `import requests` directo (utils.py) pero NO lo declara;
+#          se apoyaba en que huggingface_hub lo arrastrara, y hf_hub 1.x ya no (migró a httpx). Sin esta
+#          línea, `import faster_whisper` revienta con ModuleNotFoundError: requests. Lo fijamos explícito.
+asr = ["faster-whisper>=1.1.0", "requests>=2"]
 # pytest-timeout: backstop ANTI-CUELGUE de los tests de concurrencia/procesos (#116/#137)
 # que usan @pytest.mark.timeout(...). Sin el, esa marca es un no-op silencioso (el test
 # podria colgarse indefinidamente si una espera no se libera). Con el, el wall-timeout mata
