@@ -1,13 +1,12 @@
 // «Panel de coordinación» (admin): reúne en UN sitio las señales de la semana visible que piden la
 // decisión de un coordinador y que hoy viven repartidas por varias pestañas (huecos sin cubrir,
-// semana en borrador, cambios/ausencias pendientes, conflictos de turno). Es ADITIVO y de solo
+// cambios/ausencias pendientes, conflictos de turno). Es ADITIVO y de solo
 // lectura: reusa los mismos endpoints y derivaciones que el resto de Turnos; no añade backend ni
 // chrome nuevo (outline gris de plataforma, color solo con significado: amarillo = pide decisión).
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeftRight, ArrowRight, CheckCircle2, FileEdit, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -30,8 +29,6 @@ import { conflictosDeLaSemana } from "./ResumenDia";
 export interface SenalesCoordinacion {
   /** Huecos reales de la semana: eventos ni cogidos ni cubiertos por turno (sin-cubrir). */
   sinCubrir: number;
-  /** `true` si la semana NO está publicada (sigue en borrador y hay turnos que publicar). */
-  semanaEnBorrador: boolean;
   /** Cambios de turno que esperan la acción del coordinador (`propuesto` a mí / `aceptado` a aprobar). */
   cambiosPendientes: number;
   /** Conflictos de la semana: solapes de turno por persona + personas de turno ausentes ese día. */
@@ -43,8 +40,6 @@ export interface SenalesCoordinacion {
  * fetch ni React) para poder testearla aislada. Cada señal reusa la MISMA fuente que su vista:
  *  - `sinCubrir`: `resumenCobertura` (selector canónico `lib/cobertura`) sobre los eventos+claims+
  *    turnos+franjas+ausencias de la semana, idéntico al «N sin cubrir» del Calendario.
- *  - `semanaEnBorrador`: `aprobada` de la rota de la semana (lo expone `api.listarTurnos`), con
- *    turnos que publicar.
  *  - `cambiosPendientes`: `contarSwapsPendientes`, el mismo contador del badge de «Cambios y ausencias».
  *  - `conflictos`: `conflictosDeLaSemana` (agrega `conflictosDelDia` del «Resumen del día»).
  */
@@ -56,7 +51,6 @@ export function derivarPanelCoordinacion(
   franjas: FranjaSemana[],
   ausencias: AusenciaRota[],
   swaps: SwapTurno[],
-  aprobada: boolean,
   usuarioId: string,
   esAdmin: boolean,
 ): SenalesCoordinacion {
@@ -80,7 +74,6 @@ export function derivarPanelCoordinacion(
 
   return {
     sinCubrir,
-    semanaEnBorrador: !aprobada && turnos.length > 0,
     cambiosPendientes: contarSwapsPendientes(swaps, usuarioId, esAdmin),
     conflictos,
   };
@@ -178,7 +171,6 @@ export function PanelCoordinacion({
         semana?.franjas ?? [],
         ausenciasQ.data?.ausencias ?? [],
         swapsQ.data?.swaps ?? [],
-        Boolean(semana?.aprobada),
         usuarioId,
         esAdmin,
       ),
@@ -188,7 +180,6 @@ export function PanelCoordinacion({
       tareasQ.data?.contenidos,
       semana?.turnos,
       semana?.franjas,
-      semana?.aprobada,
       ausenciasQ.data?.ausencias,
       swapsQ.data?.swaps,
       usuarioId,
@@ -209,9 +200,8 @@ export function PanelCoordinacion({
     );
   }
 
-  const { sinCubrir, semanaEnBorrador, cambiosPendientes, conflictos } = senales;
-  const todoEnOrden =
-    sinCubrir === 0 && !semanaEnBorrador && cambiosPendientes === 0 && conflictos === 0;
+  const { sinCubrir, cambiosPendientes, conflictos } = senales;
+  const todoEnOrden = sinCubrir === 0 && cambiosPendientes === 0 && conflictos === 0;
 
   return (
     <section aria-label="Panel de coordinación" className="space-y-2">
@@ -237,21 +227,6 @@ export function PanelCoordinacion({
                 <Button variant="ghost" size="sm" onClick={() => onIr("cobertura")}>
                   Ver cobertura <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
-              }
-            />
-          )}
-          {semanaEnBorrador && (
-            <Fila
-              destacar
-              icono={<FileEdit className="h-4 w-4 text-yellow-700 dark:text-yellow-300" />}
-              texto={<span>La semana está en borrador, sin publicar al equipo</span>}
-              accion={
-                <Badge
-                  variant="outline"
-                  className="border-yellow-300 font-normal text-yellow-700 dark:border-yellow-800 dark:text-yellow-300"
-                >
-                  Aprobar abajo
-                </Badge>
               }
             />
           )}

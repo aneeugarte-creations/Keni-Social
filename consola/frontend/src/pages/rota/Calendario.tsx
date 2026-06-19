@@ -3,10 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
-  CalendarOff,
   CalendarPlus,
-  CheckCircle2,
-  Loader2,
   Sunrise,
   Sunset,
   UserPlus,
@@ -16,7 +13,6 @@ import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,7 +46,6 @@ import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo } from "./CalendarioPieza
 import { ChipEventoCalendario } from "./calendario/chips";
 import {
   AyudaLeyenda,
-  BadgeEstadoSemana,
   ChipAusenciaDia,
   MasAusencias,
   MenuMasAcciones,
@@ -95,7 +90,7 @@ export function Calendario({
    *  legacy a la antigua pestaña «Mi jornada». */
   vistaInicial?: VistaCalendario;
   /** "calendario" = rejilla de consulta (edición inline de celdas para admin). "gestion" = panel
-   *  admin de la semana (asignar/aprobar/despublicar/franjas/copiar/carga/export). Lo monta
+   *  admin de la semana (asignar/franjas/copiar/carga/export). Lo monta
    *  index.tsx en su pestaña admin-only; comparte `lunes`/`marcaActiva` y la misma queryKey de turnos. */
   modo?: "calendario" | "gestion";
 }) {
@@ -179,33 +174,14 @@ export function Calendario({
   // Resumen "Carga del equipo": antes vivía como panel colapsable bajo el calendario;
   // ahora se abre bajo demanda desde el menú "Más" (popup), para no alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
-  // «Asignar turnos»: reparte la semana (persona → franja → días) desde la cabecera, sin ir
-  // celda por celda. Solo admin + semana en borrador (mismo gating que el resto de edición).
-  const [abrirAsignar, setAbrirAsignar] = React.useState(false);
+  // «Asignar turnos»: reparte la semana (persona → franja → días) sin ir celda por celda. En
+  // «Gestión» el panel arranca ABIERTO (columna lateral): repartir es la acción principal de esa
+  // pestaña, no hace falta un clic previo. El botón de la cabecera solo lo oculta/muestra.
+  const [abrirAsignar, setAbrirAsignar] = React.useState(modo === "gestion");
 
-  // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
-  // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
-  // GRID POR MARCA: aprobar/despublicar/copiar mutan UNA rejilla -> exigen marca concreta.
-  // En "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
+  // Copiar la semana anterior. GRID POR MARCA: muta UNA rejilla -> exige marca concreta; en
+  // "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
   const marcaRejilla = marcaActiva ?? "";
-  const aprobar = useMutation({
-    mutationFn: () => api.aprobarTurnos({ lunes, marca: marcaRejilla }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(claveTurnos, res);
-      toast.success(res.mensaje ?? "Turnos publicados al equipo.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const despublicar = useMutation({
-    mutationFn: () => api.despublicarTurnos({ lunes, marca: marcaRejilla }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(claveTurnos, res);
-      toast.success(res.mensaje ?? "Semana despublicada: vuelve a borrador.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const copiarAnterior = useMutation({
     mutationFn: () =>
       api.copiarSemana({
@@ -408,10 +384,11 @@ export function Calendario({
     ausenciasSemana,
   ).sinCubrir;
   const hoy = hoyCDMX();
-  // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
-  // en solo-lectura. La edición es inline: «Añadir turno» da de alta capacidad y el chip de
-  // turno abre su menú (Editar/Duplicar/Eliminar). La COBERTURA se asigna desde el Panorama.
-  const editable = esAdmin && !semana?.aprobada;
+  // `editable` = admin (la edición de la rota es solo-coordinador; sin paso de aprobación, lo
+  // asignado ya lo ve el equipo). Los CMs no admin ven la vista en solo-lectura. La edición es
+  // inline: «Añadir turno» da de alta capacidad y el chip de turno abre su menú
+  // (Editar/Duplicar/Eliminar). La COBERTURA se asigna desde el Panorama.
+  const editable = esAdmin;
   const cargando =
     coberturaQ.isPending ||
     turnosQ.isPending ||
@@ -434,9 +411,9 @@ export function Calendario({
   );
 
   // «Gestión» (admin) comparte el MISMO render que «Calendario» (abajo): la rejilla viva, pero con
-  // cabecera de gestión (asignar/aprobar/despublicar/franjas/…) y, al asignar, el panel de reparto
-  // como columna lateral junto a la rejilla para repartir mirando el calendario en vivo. Ramas por
-  // `esGestion` dentro del return común.
+  // cabecera de gestión (asignar/franjas/copiar/carga/export) y el panel de reparto como columna
+  // lateral junto a la rejilla para repartir mirando el calendario en vivo. Ramas por `esGestion`
+  // dentro del return común.
   const esGestion = modo === "gestion";
 
   // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
@@ -452,66 +429,26 @@ export function Calendario({
 
   return (
     <div className="space-y-4">
-      {/* Cabecera. En «Gestión» son los controles de la semana (asignar/aprobar/despublicar +
-          menú «Más»); en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
+      {/* Cabecera. En «Gestión», el navegador de semana + el toggle del panel de reparto + el
+          menú «Más»; en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
           La leyenda del calendario se ofrece bajo demanda con el icono "?". */}
       {esGestion ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
           <div className="flex flex-wrap items-center gap-2">
-            <BadgeEstadoSemana aprobada={Boolean(semana?.aprobada)} hayTurnos={turnos.length > 0} />
-            {/* Abre/cierra el panel de reparto como columna lateral (no un modal): la rejilla queda
-                a la vista para repartir mirando el calendario en vivo. */}
-            {!semana?.aprobada && (
-              <Button
-                variant="outline"
-                onClick={() => setAbrirAsignar((v) => !v)}
-                aria-pressed={abrirAsignar}
-              >
-                <CalendarPlus className="h-4 w-4" /> Asignar turnos
-              </Button>
-            )}
-            {!semana?.aprobada && (
-              <Button
-                variant="secondary"
-                onClick={() => aprobar.mutate()}
-                disabled={aprobar.isPending || turnos.length === 0}
-              >
-                {aprobar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                Aprobar y publicar
-              </Button>
-            )}
-            {semana?.aprobada && (
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (
-                    await confirmar({
-                      mensaje: "La semana volverá a ser editable. ¿Despublicar los turnos?",
-                      destructivo: true,
-                      textoConfirmar: "Despublicar",
-                    })
-                  )
-                    despublicar.mutate();
-                }}
-                disabled={despublicar.isPending}
-                title="Volver a borrador para editar"
-              >
-                {despublicar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CalendarOff className="h-4 w-4" />
-                )}
-                Despublicar
-              </Button>
-            )}
+            {/* Oculta/muestra el panel de reparto (columna lateral, no un modal). Arranca abierto:
+                lo asignado ya lo ve el equipo (sin paso de aprobación), así que repartir es la
+                acción directa de esta pestaña. */}
+            <Button
+              variant="outline"
+              onClick={() => setAbrirAsignar((v) => !v)}
+              aria-pressed={abrirAsignar}
+            >
+              <CalendarPlus className="h-4 w-4" /> Asignar turnos
+            </Button>
             <MenuMasAcciones
               esAdmin={esAdmin}
-              semanaAprobada={Boolean(semana?.aprobada)}
+              semanaAprobada={false}
               copiarPendiente={copiarAnterior.isPending}
               onCopiarAnterior={() => copiarAnterior.mutate()}
               onAbrirFranjas={() => setAbrirFranjas(true)}

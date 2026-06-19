@@ -525,7 +525,7 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(within(nav).getAllByRole("button")).toHaveLength(4);
   });
 
-  it("«Gestión» reúne Asignar/Aprobar; el header del Calendario ya no los tiene", async () => {
+  it("«Gestión» tiene «Asignar turnos»; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     await screen.findByRole("button", { name: "Semana", pressed: true });
@@ -533,24 +533,24 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
     expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
+    // Sin paso de aprobación: lo asignado ya lo ve el equipo, no hay «Aprobar y publicar» ni «Despublicar».
+    expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Despublicar" })).toBeNull();
   });
 
-  it("en «Gestión», «Asignar turnos» abre el reparto como columna lateral (no un modal)", async () => {
+  it("en «Gestión», el panel de reparto arranca abierto (columna lateral, no un modal)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    const toggle = await screen.findByRole("button", { name: "Asignar turnos" });
-    // Cerrado: ni columna lateral ni modal sobre la rejilla.
-    expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    // Abre: el reparto aparece junto a la rejilla (un <aside>, NO un role=dialog que la tape).
-    fireEvent.click(toggle);
+    // Abierto SIN clic previo: el reparto está junto a la rejilla (un <aside>, NO un role=dialog que la tape).
     const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
     expect(within(panel).getByText("Horario")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
-    // Cierra desde la cabecera: la rejilla recupera el ancho (el panel desaparece).
+    // El botón de la cabecera solo lo oculta/muestra.
+    const toggle = screen.getByRole("button", { name: "Asignar turnos" });
     fireEvent.click(toggle);
     expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
+    fireEvent.click(toggle);
+    expect(await screen.findByRole("complementary", { name: "Asignar turnos" })).toBeInTheDocument();
   });
 
   it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {

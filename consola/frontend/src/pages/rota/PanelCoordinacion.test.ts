@@ -119,11 +119,11 @@ const FRANJAS: FranjaSemana[] = [
 ];
 
 describe("derivarPanelCoordinacion — agrega las señales de coordinación de la semana", () => {
-  it("semana limpia y publicada → todas las señales en 0/false", () => {
+  it("semana limpia → todas las señales en 0", () => {
     const s = derivarPanelCoordinacion(
-      LUNES, [], [], [], FRANJAS, [], [], true, "yo", true,
+      LUNES, [], [], [], FRANJAS, [], [], "yo", true,
     );
-    expect(s).toEqual({ sinCubrir: 0, semanaEnBorrador: false, cambiosPendientes: 0, conflictos: 0 });
+    expect(s).toEqual({ sinCubrir: 0, cambiosPendientes: 0, conflictos: 0 });
   });
 
   it("sinCubrir = huecos reales de la semana (ni cogidos ni cubiertos por turno)", () => {
@@ -136,7 +136,6 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
       FRANJAS,
       [],
       [],
-      true,
       "yo",
       true,
     );
@@ -146,14 +145,14 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
 
   it("un evento sin nadie de turno en su franja cuenta como hueco", () => {
     const s = derivarPanelCoordinacion(
-      LUNES, [ev()], [], [], FRANJAS, [], [], true, "yo", true,
+      LUNES, [ev()], [], [], FRANJAS, [], [], "yo", true,
     );
     expect(s.sinCubrir).toBe(1);
   });
 
   it("un claim con responsable saca el evento de los huecos (cogido)", () => {
     const s = derivarPanelCoordinacion(
-      LUNES, [ev()], [claim()], [], FRANJAS, [], [], true, "yo", true,
+      LUNES, [ev()], [claim()], [], FRANJAS, [], [], "yo", true,
     );
     expect(s.sinCubrir).toBe(0);
   });
@@ -167,30 +166,10 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
       FRANJAS,
       [],
       [],
-      true,
       "yo",
       true,
     );
     expect(s.sinCubrir).toBe(0);
-  });
-
-  it("semanaEnBorrador: hay turnos y la rota NO está aprobada", () => {
-    const conTurnos = derivarPanelCoordinacion(
-      LUNES, [], [], [turno()], FRANJAS, [], [], false, "yo", true,
-    );
-    expect(conTurnos.semanaEnBorrador).toBe(true);
-
-    // Sin turnos no hay nada que publicar → no es «borrador pendiente».
-    const sinTurnos = derivarPanelCoordinacion(
-      LUNES, [], [], [], FRANJAS, [], [], false, "yo", true,
-    );
-    expect(sinTurnos.semanaEnBorrador).toBe(false);
-
-    // Aprobada → no es borrador aunque haya turnos.
-    const aprobada = derivarPanelCoordinacion(
-      LUNES, [], [], [turno()], FRANJAS, [], [], true, "yo", true,
-    );
-    expect(aprobada.semanaEnBorrador).toBe(false);
   });
 
   it("cambiosPendientes = swaps que esperan mi acción (mismo criterio que el badge)", () => {
@@ -199,10 +178,10 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
       swap({ id: "b", estado: "aceptado", destinatario_id: "otro" }), // espera aprobación admin
       swap({ id: "c", estado: "propuesto", destinatario_id: "otro" }), // no es para mí
     ];
-    const admin = derivarPanelCoordinacion(LUNES, [], [], [], FRANJAS, [], swaps, true, "yo", true);
+    const admin = derivarPanelCoordinacion(LUNES, [], [], [], FRANJAS, [], swaps, "yo", true);
     expect(admin.cambiosPendientes).toBe(2); // propuesto-a-mí + aceptado-a-aprobar
 
-    const editor = derivarPanelCoordinacion(LUNES, [], [], [], FRANJAS, [], swaps, true, "yo", false);
+    const editor = derivarPanelCoordinacion(LUNES, [], [], [], FRANJAS, [], swaps, "yo", false);
     expect(editor.cambiosPendientes).toBe(1); // solo el propuesto dirigido a mí
   });
 
@@ -220,7 +199,7 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
       franja({ id: "f-solapa", nombre: "Solapa", inicio: "12:00", fin: "18:00", orden: 2 }), // solapa con Mañana 08–14
     ];
     const s = derivarPanelCoordinacion(
-      LUNES, [], [], turnos, franjas, [ausencia()], [], true, "yo", true,
+      LUNES, [], [], turnos, franjas, [ausencia()], [], "yo", true,
     );
     // 1 solape (Luis lun 29) + 1 ausente con turno (ana 1-jul) = 2.
     expect(s.conflictos).toBe(2);
@@ -228,7 +207,7 @@ describe("derivarPanelCoordinacion — agrega las señales de coordinación de l
 
   it("un ausente que NO está de turno no cuenta como conflicto", () => {
     const s = derivarPanelCoordinacion(
-      LUNES, [], [], [], FRANJAS, [ausencia()], [], true, "yo", true,
+      LUNES, [], [], [], FRANJAS, [ausencia()], [], "yo", true,
     );
     expect(s.conflictos).toBe(0);
   });

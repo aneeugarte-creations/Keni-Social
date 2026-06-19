@@ -23,12 +23,10 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
-import { Tooltip } from "@/components/ui/tooltip";
 import {
   MenuContextual,
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { ZONA_CDMX } from "@/lib/fecha";
@@ -376,30 +374,6 @@ export function MenuMasAcciones({
         <MoreHorizontal className="h-4 w-4" />
       </Button>
     </MenuContextual>
-  );
-}
-
-/**
- * Badge de estado de la semana con tooltip que explica al usuario el significado
- * (Borrador = no visible para el equipo; Publicada = el equipo ya la ve).
- */
-export function BadgeEstadoSemana({ aprobada, hayTurnos }: { aprobada: boolean; hayTurnos: boolean }) {
-  if (aprobada) {
-    return (
-      <Tooltip label="Visible para el equipo">
-        <Badge variant="ok" className="font-normal">
-          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicada
-        </Badge>
-      </Tooltip>
-    );
-  }
-  if (!hayTurnos) return null;
-  return (
-    <Tooltip label="Por aprobar y publicar">
-      <Badge variant="secondary" className="font-normal">
-        Borrador
-      </Badge>
-    </Tooltip>
   );
 }
 

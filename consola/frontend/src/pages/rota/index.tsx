@@ -138,9 +138,9 @@ export default function Rota() {
       {pestaniaEfectiva === "cobertura" && <TareasBoard acciones="inline" />}
 
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden
-          decisión (huecos sin cubrir, semana en borrador, cambios/ausencias, conflictos), y debajo
-          el panel de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/export). Ambos
-          comparten `lunes` con el Calendario. */}
+          decisión (huecos sin cubrir, cambios/ausencias, conflictos), y debajo la rejilla de la
+          SEMANA con su panel de reparto (asignar/franjas/copiar/carga/export). Ambos comparten
+          `lunes` con el Calendario. */}
       {pestaniaEfectiva === "gestion" && (
         <div className="space-y-4">
           <PanelCoordinacion
