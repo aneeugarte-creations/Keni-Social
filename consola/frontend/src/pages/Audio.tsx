@@ -330,7 +330,7 @@ function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
   const variante =
     estado === "error" ? "destructive" : estado === "transcrito" || estado === "editado" ? "secondary" : "outline";
   return (
-    <Badge variant={variante} className="px-1.5 py-0 text-[10px] font-normal">
+    <Badge variant={variante} className="px-1.5 py-0 text-xs font-normal">
       {ETIQUETA_ESTADO[estado]}
     </Badge>
   );
@@ -424,23 +424,21 @@ function PanelAudios({
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
-      <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Audios
-      </span>
+      <span className="px-1 text-label">Audios</span>
       {cargando ? (
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
-        <div className="flex flex-col gap-1.5 overflow-y-auto">
+        <div className="flex flex-col gap-1 overflow-y-auto">
           {lista.map((t) => {
             const activo = t.id === audioId;
             return (
               <div
                 key={t.id}
-                className={`group flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-sm ${
+                className={`group flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
                   activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
                 }`}
               >
-                <button type="button" onClick={() => onSeleccionar(t.id)} className="flex min-w-0 flex-1 flex-col items-start">
+                <button type="button" onClick={() => onSeleccionar(t.id)} className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                   <span className="w-full truncate font-medium">{t.nombre || "Sin título"}</span>
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <EstadoBadge estado={t.estado} />
@@ -454,7 +452,7 @@ function PanelAudios({
                   onClick={() => onEliminar(t.id)}
                   className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             );
@@ -503,25 +501,21 @@ function PanelArtefactos({
   if (!audio) {
     return (
       <div className={cn("flex min-w-0 flex-col gap-2", className)}>
-        <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Artefactos
-        </span>
+        <span className="px-1 text-label">Artefactos</span>
         <p className="px-1 text-xs text-muted-foreground">Elige un audio.</p>
       </div>
     );
   }
   return (
     <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
-      <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        Artefactos
-      </span>
+      <span className="px-1 text-label">Artefactos</span>
       {EN_PROCESO.includes(audio.estado) ? (
-        <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-md border border-border/70 bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribiendo…
         </div>
       ) : null}
       {audio.estado === "error" ? (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
+        <div className="flex flex-col gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
           <span>{audio.error || "No se pudo transcribir."}</span>
           <Button size="sm" variant="outline" onClick={() => reintentar.mutate()} disabled={reintentar.isPending}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reintentar
@@ -532,7 +526,7 @@ function PanelArtefactos({
       {cargando ? (
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
-        <div className="flex flex-col gap-1.5 overflow-y-auto">
+        <div className="flex flex-col gap-1 overflow-y-auto">
           {artefactos.map((a) => {
             const activo = a.id === artefactoId;
             return (
@@ -540,7 +534,7 @@ function PanelArtefactos({
                 key={a.id}
                 type="button"
                 onClick={() => onSeleccionar(a.id)}
-                className={`flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-2 text-left text-sm ${
+                className={`flex items-center justify-between gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs ${
                   activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
                 }`}
               >
@@ -548,9 +542,9 @@ function PanelArtefactos({
                 {a.estado === "generando" ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
                 ) : a.estado === "error" ? (
-                  <Badge variant="destructive" className="px-1.5 py-0 text-[10px] font-normal">Error</Badge>
+                  <Badge variant="destructive" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
                 ) : (
-                  <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{a.formato}</span>
+                  <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
                 )}
               </button>
             );
@@ -674,7 +668,7 @@ function Lector({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <h2 className="text-lg font-semibold">
+            <h2 className="text-sm font-semibold">
               {artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}
             </h2>
             {editando && editable ? (
@@ -682,7 +676,7 @@ function Lector({
                 <Textarea
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
-                  className="min-h-[16rem] flex-1 font-mono text-sm"
+                  className="min-h-[16rem] flex-1 font-mono text-base md:text-xs"
                 />
                 <div className="flex justify-end gap-2">
                   <Button size="sm" variant="ghost" onClick={() => setTexto(artefacto.contenido)}>
@@ -698,11 +692,11 @@ function Lector({
                 </div>
               </div>
             ) : esMd ? (
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/70 bg-background p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border/70 bg-background p-3">
                 <Markdown>{artefacto.contenido || "_(vacío)_"}</Markdown>
               </div>
             ) : (
-              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-background p-4 font-mono text-sm">
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-md border border-border/70 bg-background p-3 font-mono text-xs">
                 {artefacto.contenido || "(vacío)"}
               </pre>
             )}
