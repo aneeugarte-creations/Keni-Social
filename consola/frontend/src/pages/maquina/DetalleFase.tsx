@@ -1,23 +1,21 @@
 /**
- * DetalleFase — el panel inline que se despliega bajo una fila del pipeline en la página
- * «Contexto». Reúne, para UNA fase, todo lo suyo en tres pestañas:
- *   · Prompt   — el documento de la Prompts que alimenta la fase, en el editor completo
+ * DetalleFase — el detalle de UNA fase del pipeline (o de un prompt suelto), en pestañas:
+ *   · Prompt   — el documento maestro que alimenta la fase, en el editor completo
  *     (Versiones / Compilado / Publicar). Solo si la fase tiene prompt.
- *   · Contexto — el contexto editorial de la marca que la fase inyecta. En Investigación, las
- *     líneas de contenido y los orígenes que clasifican/priorizan; en Producción, la estrategia
- *     de marca (voz/tropicalización/reglas). Solo si la fase es `contextoMarca`.
+ *   · Acompaña — TODO lo que el prompt maestro arrastra: sus sub-prompts (fragmentos que inyecta,
+ *     p. ej. los envoltorios de red) y el editorial por marca que inyecta. Cada elemento ABRE SU
+ *     PROPIA SUBPÁGINA (`/maquina/contexto/doc/<id>`), con el mismo control que el maestro; sin
+ *     pop-ups. En Investigación el editorial son las líneas/orígenes (CRUD inline, sin subpágina).
  *   · Logs     — el HISTÓRICO real de runs paradas en esta etapa (`GET /api/pipelines?etapa=`)
  *     cuando la fase tiene `etapa`; si no, los trabajos en vivo de su cola.
- *
- * No navega a otras páginas: abrir un documento del contexto usa el overlay (mismo editor, en un
- * diálogo) y los hashtags su propio diálogo.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
-import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
+import { PanelContextoInyectado } from "@/components/prompts/PanelContextoInyectado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,7 +37,12 @@ import type { ColaJob, ColaMonitor } from "@/types";
  *  prompts sueltos sin contexto ni logs propios. */
 type Proceso = "investigacion" | "produccion";
 type ProcesoFase = Proceso | "herramientas" | "desarrollo";
-type PestanaFase = "prompt" | "contexto" | "logs";
+type PestanaFase = "prompt" | "acompana" | "logs";
+
+/** Ruta de la subpágina de UN documento (editorial o sub-prompt) que acompaña al maestro. */
+function rutaDoc(docId: string): string {
+  return `/maquina/contexto/doc/${docId}`;
+}
 
 /** Estado abierto/colapsado de la tarjeta «Acerca de» (recordado entre sesiones). */
 const CLAVE_ACERCA = "keni.fase.acerca-abierto";
@@ -155,18 +158,24 @@ function LogsFase({
   );
 }
 
-/** Contexto editorial que inyecta la fase, según el motor. */
-function ContextoFase({
+/** El editorial por marca que inyecta la fase, según el motor. Cada documento abre su subpágina. */
+function EditorialFase({
+  fase,
   proceso,
   marca,
+  inyectaEditorial,
   onAbrirDoc,
 }: {
-  proceso: Proceso;
+  fase: FasePipeline;
+  proceso: ProcesoFase;
   marca: string | null;
+  /** El prompt inyecta editorial (lo dice `contextoInyectado`); habilita la lista para fases sin
+   *  vista de marca propia. */
+  inyectaEditorial: boolean;
   onAbrirDoc: (docId: string) => void;
 }) {
-  if (proceso === "investigacion") {
-    // Lo que clasifica/prioriza usa: las líneas de contenido y los orígenes de la marca.
+  if (proceso === "investigacion" && fase.contextoMarca) {
+    // Lo que clasifica/prioriza usa: las líneas de contenido y los orígenes de la marca (CRUD inline).
     return (
       <div className="grid gap-6 lg:grid-cols-2">
         <PanelClase clase="vertical" />
@@ -175,16 +184,86 @@ function ContextoFase({
     );
   }
 
-  // Producción: la estrategia de marca (orden de inyección + pilares).
+  if (proceso === "produccion" && fase.contextoMarca) {
+    // Producción: la estrategia de marca (orden de inyección + pilares); cada pilar → su subpágina.
+    return marca ? (
+      <EstrategiaMarca marca={marca} onAbrirDoc={onAbrirDoc} />
+    ) : (
+      <p className="text-sm text-muted-foreground">
+        Elige una marca en la barra superior para ver el editorial que inyecta esta fase.
+      </p>
+    );
+  }
+
+  // Cualquier otro prompt que inyecte editorial: la lista de adjuntos para la marca activa; cada
+  // uno abre su subpágina (no overlay).
+  if (inyectaEditorial && fase.doc) {
+    return <PanelContextoInyectado docId={fase.doc} onAbrirDoc={onAbrirDoc} />;
+  }
+
+  return null;
+}
+
+/** Pestaña «Acompaña»: el prompt maestro y todo lo que arrastra — sus sub-prompts y su editorial
+ *  por marca — en secciones por tipo; cada elemento abre su propia subpágina. */
+function AcompanaFase({
+  fase,
+  proceso,
+  marca,
+  inyectaEditorial,
+  onAbrirDoc,
+}: {
+  fase: FasePipeline;
+  proceso: ProcesoFase;
+  marca: string | null;
+  inyectaEditorial: boolean;
+  onAbrirDoc: (docId: string) => void;
+}) {
+  const subPrompts = fase.subPrompts ?? [];
+  const mostrarEditorial = !!fase.contextoMarca || inyectaEditorial;
+
   return (
-    <div className="space-y-4">
-      {marca ? (
-        <EstrategiaMarca marca={marca} onAbrirDoc={onAbrirDoc} />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Elige una marca en la barra superior para ver el contexto que inyecta esta fase.
-        </p>
-      )}
+    <div className="space-y-6">
+      {subPrompts.length > 0 ? (
+        <section>
+          <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Sub-prompts
+          </h4>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Fragmentos que este prompt compone dentro del suyo según el caso (p. ej. los envoltorios
+            de red). No se lanzan por separado; cada uno se edita en su subpágina.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {subPrompts.map((sp) => (
+              <Button
+                key={sp.doc}
+                type="button"
+                variant="outline"
+                size="sm"
+                title={sp.ayuda}
+                onClick={() => onAbrirDoc(sp.doc)}
+              >
+                {sp.nombre}
+              </Button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {mostrarEditorial ? (
+        <section>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Editorial
+          </h4>
+          <EditorialFase
+            fase={fase}
+            proceso={proceso}
+            marca={marca}
+            inyectaEditorial={inyectaEditorial}
+            onAbrirDoc={onAbrirDoc}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -211,8 +290,13 @@ export function DetalleFase({
    *  encolan ni dejan histórico propio, así que la ocultan: solo Prompt. */
   mostrarLogs?: boolean;
 }) {
-  // Documento editorial abierto desde la pestaña Contexto (overlay, no navegación).
-  const [docContexto, setDocContexto] = React.useState<string | null>(null);
+  const navigate = useNavigate();
+  // Abrir un sub-prompt o editorial NAVEGA a su subpágina (con el mismo control que el maestro);
+  // ya no hay overlay.
+  const abrirDoc = React.useCallback(
+    (docId: string) => navigate(rutaDoc(docId)),
+    [navigate],
+  );
 
   // El flujo de la máquina alimenta la pestaña «Uso» del editor de prompt.
   const maquinaQuery = useQuery({
@@ -222,8 +306,17 @@ export function DetalleFase({
   });
 
   const tieneprompt = !!fase.doc;
-  const tieneContexto = !!fase.contextoMarca;
-  const inicial: PestanaFase = tieneprompt ? "prompt" : tieneContexto ? "contexto" : "logs";
+  // ¿El prompt inyecta editorial? (independiente de marca; decide la pestaña «Acompaña» y su lista
+  // para fases sin vista de marca propia). Misma queryKey que el editor → React Query dedupe.
+  const inyectaQuery = useQuery({
+    queryKey: ["prompts-contexto-inyecta", fase.doc],
+    queryFn: ({ signal }) => api.contextoInyectado(fase.doc as string, undefined, signal),
+    enabled: tieneprompt && !fase.contextoMarca,
+  });
+  const inyectaEditorial = inyectaQuery.data?.inyecta === true;
+  const tieneAcompana =
+    (fase.subPrompts?.length ?? 0) > 0 || !!fase.contextoMarca || inyectaEditorial;
+  const inicial: PestanaFase = tieneprompt ? "prompt" : tieneAcompana ? "acompana" : "logs";
   // Sin pestaña Logs (agentes sueltos) el estado nunca debe quedar en "logs".
   const [pestana, setPestana] = React.useState<PestanaFase>(inicial);
 
@@ -310,7 +403,7 @@ export function DetalleFase({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <TabsList>
             {tieneprompt ? <TabsTrigger value="prompt">Prompt</TabsTrigger> : null}
-            {tieneContexto ? <TabsTrigger value="contexto">Contexto</TabsTrigger> : null}
+            {tieneAcompana ? <TabsTrigger value="acompana">Acompaña</TabsTrigger> : null}
             {mostrarLogs ? <TabsTrigger value="logs">Logs</TabsTrigger> : null}
           </TabsList>
           {tieneprompt && acciones ? (
@@ -348,44 +441,17 @@ export function DetalleFase({
               ocultarCabecera
               onAccionesPublicar={reportarAcciones}
             />
-            {/* Sub-prompts que esta fase INYECTA en su prompt (no son etapas ni se lanzan solos):
-                p. ej. los envoltorios de red dentro de Redactar. Se editan en el overlay. */}
-            {fase.subPrompts && fase.subPrompts.length > 0 ? (
-              <Card className="mt-4 p-3">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Sub-prompts inyectados
-                </p>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Fragmentos que esta fase compone dentro de su prompt según el caso. No se lanzan
-                  por separado; edítalos aquí.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {fase.subPrompts.map((sp) => (
-                    <Button
-                      key={sp.doc}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      title={sp.ayuda}
-                      onClick={() => setDocContexto(sp.doc)}
-                    >
-                      {sp.nombre}
-                    </Button>
-                  ))}
-                </div>
-              </Card>
-            ) : null}
           </TabsContent>
         ) : null}
 
-        {tieneContexto ? (
-          <TabsContent value="contexto" className="mt-3">
-            {/* `contextoMarca` solo lo llevan las fases de los dos motores, así que aquí el proceso es
-                siempre investigación o producción. */}
-            <ContextoFase
-              proceso={proceso as Proceso}
+        {tieneAcompana ? (
+          <TabsContent value="acompana" className="mt-3">
+            <AcompanaFase
+              fase={fase}
+              proceso={proceso}
               marca={marca}
-              onAbrirDoc={setDocContexto}
+              inyectaEditorial={inyectaEditorial}
+              onAbrirDoc={abrirDoc}
             />
           </TabsContent>
         ) : null}
@@ -396,12 +462,6 @@ export function DetalleFase({
           </TabsContent>
         ) : null}
       </Tabs>
-
-      <EditorPromptOverlay
-        docId={docContexto}
-        abierto={docContexto !== null}
-        onCerrar={() => setDocContexto(null)}
-      />
     </div>
   );
 }

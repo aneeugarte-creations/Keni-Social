@@ -1,9 +1,10 @@
 /**
- * Test de la pestaña «Editorial» del editor de un prompt: lista los editoriales que inyecta para la
- * marca ACTIVA (selector global), y muestra estado vacío cuando el prompt no inyecta contexto.
+ * Test de la lista de editoriales que inyecta un prompt (sección «Editorial» de la pestaña
+ * «Acompaña»): lista los editoriales para la marca ACTIVA (selector global), muestra estado vacío
+ * cuando el prompt no inyecta, y clicar una fila llama a `onAbrirDoc` (abre su subpágina).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MarcaActivaContexto, type ValorMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -15,8 +16,6 @@ const contextoInyectado = vi.fn();
 vi.mock("@/lib/api", () => ({
   api: {
     contextoInyectado: (...a: unknown[]) => contextoInyectado(...a),
-    // Lo usa EditorPromptOverlay si se abriera (no en este test).
-    maquinaPrompts: vi.fn().mockResolvedValue({ maquinas: [] }),
   },
   mensajeError: (e: unknown) => String(e),
 }));
@@ -37,13 +36,15 @@ function valorMarcaActiva(marca: string | null): ValorMarcaActiva {
 
 function renderPanel(docId: string, marca: string | null = "unotv") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const onAbrirDoc = vi.fn();
+  const utils = render(
     <QueryClientProvider client={qc}>
       <MarcaActivaContexto.Provider value={valorMarcaActiva(marca)}>
-        <PanelContextoInyectado docId={docId} />
+        <PanelContextoInyectado docId={docId} onAbrirDoc={onAbrirDoc} />
       </MarcaActivaContexto.Provider>
     </QueryClientProvider>,
   );
+  return { ...utils, onAbrirDoc };
 }
 
 describe("PanelContextoInyectado", () => {
@@ -77,5 +78,20 @@ describe("PanelContextoInyectado", () => {
     await waitFor(() =>
       expect(screen.getByText("Este prompt no inyecta contexto editorial.")).toBeInTheDocument(),
     );
+  });
+
+  it("clicar una fila llama a onAbrirDoc con el id del editorial (abre su subpágina)", async () => {
+    contextoInyectado.mockResolvedValue({
+      prompt_id: "prompt/redactar",
+      inyecta: true,
+      pipeline: "redactar",
+      marca: "unotv",
+      adjuntos: [
+        { id: "editorial/rrss/unotv/voz", titulo: "Voz y tono · UnoTV", clase: "voz", prioridad: 0 },
+      ],
+    });
+    const { onAbrirDoc } = renderPanel("prompt/redactar");
+    fireEvent.click(await screen.findByText("Voz y tono · UnoTV"));
+    expect(onAbrirDoc).toHaveBeenCalledWith("editorial/rrss/unotv/voz");
   });
 });

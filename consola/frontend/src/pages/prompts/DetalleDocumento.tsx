@@ -26,7 +26,6 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
-import { PanelContextoInyectado } from "@/components/prompts/PanelContextoInyectado";
 import { DialogPublicar } from "@/components/prompts/DialogPublicar";
 import { LectorProsa } from "@/components/prompts/LectorProsa";
 import { PanelVersiones } from "@/components/prompts/PanelVersiones";
@@ -363,22 +362,9 @@ export function DetalleDocumento({
       /* almacenamiento no disponible: el estado vive solo en memoria */
     }
   }, [panelAbierto]);
-  // Pestaña del panel lateral (solo prompts, solo con el panel expandido): «Versiones» (historial) o
-  // «Editorial» (los editoriales que el prompt inyecta). Al cambiar de doc se vuelve a Versiones.
-  const [pestanaPanel, setPestanaPanel] = React.useState<"versiones" | "editorial">("versiones");
-  React.useEffect(() => setPestanaPanel("versiones"), [docId]);
-
-  // ¿El prompt inyecta editorial? El booleano `inyecta` es independiente de la marca (lo decide el
-  // pipeline del prompt), así que se consulta SIN marca: solo entonces tiene sentido la pestaña
-  // «Editorial». Si no inyecta, ni se pinta la pestaña ni se ofrece como destino.
-  const inyectaQuery = useQuery({
-    queryKey: ["prompts-contexto-inyecta", docId],
-    queryFn: ({ signal }) => api.contextoInyectado(docId, undefined, signal),
-    enabled: esPrompt,
-  });
-  const inyectaEditorial = inyectaQuery.data?.inyecta === true;
-  // Si el prompt no inyecta (o aún no se sabe), la pestaña «Editorial» no existe: cae a Versiones.
-  const pestanaActiva = pestanaPanel === "editorial" && !inyectaEditorial ? "versiones" : pestanaPanel;
+  // El panel lateral es SIEMPRE el historial de versiones. El editorial que el prompt inyecta ya no
+  // vive aquí: tiene su propia pestaña «Acompaña» en la subpágina de la fase, donde cada documento
+  // abre su subpágina.
 
   if (docQuery.isPending || !borrador) {
     return (
@@ -570,60 +556,30 @@ export function DetalleDocumento({
               panelAbierto ? "p-3" : "p-1",
             )}
           >
-            {/* Pestañas Versiones | Editorial: solo en prompts y solo con el panel expandido (colapsado
-                es un raíl de iconos, sin sitio para pestañas). La pestaña «Editorial» solo aparece si el
-                prompt INYECTA editorial; si no, se muestra únicamente «Versiones» (sin pestaña vacía). */}
-            {panelAbierto && esPrompt ? (
-              <div role="tablist" aria-label="Panel lateral" className="mb-2 flex items-center gap-1">
-                {(inyectaEditorial ? (["versiones", "editorial"] as const) : (["versiones"] as const)).map(
-                  (p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      role="tab"
-                      aria-selected={pestanaActiva === p}
-                      onClick={() => setPestanaPanel(p)}
-                      className={cn(
-                        "rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
-                        pestanaActiva === p
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {p === "versiones" ? "Versiones" : "Editorial"}
-                    </button>
-                  ),
-                )}
-              </div>
-            ) : null}
-            {panelAbierto && esPrompt && pestanaActiva === "editorial" ? (
-              <div className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}>
-                <PanelContextoInyectado docId={borrador.id} />
-              </div>
-            ) : (
-              <PanelVersiones
-                className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}
-                docId={borrador.id}
-                produccionSha={produccion?.sha ?? null}
-                sinPublicar={sinPublicar}
-                esAdmin={esAdmin}
-                colapsado={!panelAbierto}
-                onPublicar={() => setPublicarAbierto(true)}
-                onVerVersion={setPreviewSha}
-                versionActiva={previewSha}
-                onBorradorActualizado={() => {
-                  // Vuelve a editar el borrador (cierra cualquier preview de versión).
-                  setPreviewSha(null);
-                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
-                  sincronizado.current = null;
-                  qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
-                  qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
-                  if (borrador.tipo !== "prompt") {
-                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
-                  }
-                }}
-              />
-            )}
+            {/* El panel lateral es el historial de Versiones (sin pestañas: el editorial inyectado
+                vive ahora en la pestaña «Acompaña» de la subpágina de la fase). */}
+            <PanelVersiones
+              className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}
+              docId={borrador.id}
+              produccionSha={produccion?.sha ?? null}
+              sinPublicar={sinPublicar}
+              esAdmin={esAdmin}
+              colapsado={!panelAbierto}
+              onPublicar={() => setPublicarAbierto(true)}
+              onVerVersion={setPreviewSha}
+              versionActiva={previewSha}
+              onBorradorActualizado={() => {
+                // Vuelve a editar el borrador (cierra cualquier preview de versión).
+                setPreviewSha(null);
+                // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
+                sincronizado.current = null;
+                qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
+                qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
+                if (borrador.tipo !== "prompt") {
+                  qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                }
+              }}
+            />
             {/* Toggle al PIE, dentro del cajón blanco: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
             <Button
               size="icon"

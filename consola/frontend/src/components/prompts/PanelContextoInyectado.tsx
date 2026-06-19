@@ -1,22 +1,28 @@
 /**
- * Pestaña «Editorial» del editor de un prompt: los documentos EDITORIALES que ese prompt INYECTA.
+ * Lista de los documentos EDITORIALES que un prompt INYECTA, para la pestaña «Acompaña» de la
+ * subpágina de una fase.
  *
  * La inyección es por marca + pipeline (el mismo compositor que la generación real). La marca la da
  * el selector GLOBAL (`useMarcaActiva`); esta vista no tiene selector propio. Cada fila es un enlace
- * LÓGICO (soft link) al doc canónico: abre el editorial en un overlay; no se duplica nada. Un prompt
- * que no lleva contexto editorial muestra un estado vacío.
+ * LÓGICO (soft link) al doc canónico: clicar ABRE SU SUBPÁGINA (`onAbrirDoc`), no un overlay; no se
+ * duplica nada. Un prompt que no lleva contexto editorial muestra un estado vacío.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
-import * as React from "react";
 
-import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 
-export function PanelContextoInyectado({ docId }: { docId: string }) {
+export function PanelContextoInyectado({
+  docId,
+  onAbrirDoc,
+}: {
+  docId: string;
+  /** Abre el documento editorial: su subpágina (`/maquina/contexto/doc/<id>`). */
+  onAbrirDoc: (docId: string) => void;
+}) {
   // Marca del selector GLOBAL; con "Todas" activa (`marcaActiva == null`) cae a la marca primaria.
   const { marcaActiva, marcaPrimaria } = useMarcaActiva();
   const marca = marcaActiva ?? marcaPrimaria ?? "";
@@ -26,9 +32,6 @@ export function PanelContextoInyectado({ docId }: { docId: string }) {
     queryFn: ({ signal }) => api.contextoInyectado(docId, marca, signal),
   });
   const datos = contextoQuery.data;
-
-  // Editorial abierto en overlay (enlace lógico al doc canónico; no se duplica).
-  const [editorialAbierto, setEditorialAbierto] = React.useState<string | null>(null);
 
   const adjuntos = datos?.adjuntos ?? [];
 
@@ -54,7 +57,7 @@ export function PanelContextoInyectado({ docId }: { docId: string }) {
             <li key={a.id}>
               <button
                 type="button"
-                onClick={() => setEditorialAbierto(a.id)}
+                onClick={() => onAbrirDoc(a.id)}
                 className="flex w-full items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-left text-sm transition-colors hover:border-input hover:bg-accent"
                 title={`Abrir ${a.titulo}`}
               >
@@ -70,12 +73,6 @@ export function PanelContextoInyectado({ docId }: { docId: string }) {
           ))}
         </ul>
       )}
-
-      <EditorPromptOverlay
-        docId={editorialAbierto}
-        abierto={!!editorialAbierto}
-        onCerrar={() => setEditorialAbierto(null)}
-      />
     </div>
   );
 }
