@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
+from urllib.parse import quote
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -78,7 +79,12 @@ async def listar(request: Request) -> Response:
     if not _hay_sesion(request):
         return _rechazo_sin_sesion()
     superadmin = permisos.es_superadmin(request)
-    status, payload = await run_in_threadpool(_llamar, "GET", "/control/ralph/list")
+    # Cada persona ve SOLO sus propios Ralphs: pasamos su id para que worker-ralph filtre.
+    usuario = getattr(request.state, "usuario", None)
+    ruta = "/control/ralph/list"
+    if isinstance(usuario, dict) and usuario.get("id"):
+        ruta += f"?usuario_id={quote(str(usuario['id']))}"
+    status, payload = await run_in_threadpool(_llamar, "GET", ruta)
     if status != 200:
         return JSONResponse({"disponible": False, "superadmin": superadmin, "ralphs": []})
     return JSONResponse(

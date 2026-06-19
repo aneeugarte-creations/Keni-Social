@@ -4,7 +4,7 @@
  * acumula token a token desde su stream SSE (gestionado por el store). El render del
  * texto del Ralph reusa `Markdown`; el del humano va en texto plano.
  */
-import { Loader2, Send, Trash2, X } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, Send, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -16,6 +16,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ETIQUETA_MODELO, useRalphStore } from "@/store/ralphStore";
 
+/** Hora corta (HH:MM) de un mensaje, en la zona del navegador; "" si la fecha no es válida. */
+function horaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 export function ChatRalph({ id }: { id: string }) {
   const ralph = useRalphStore((s) => s.ralphs.find((r) => r.id === id));
   const mensajes = useRalphStore((s) => s.conversaciones[id]);
@@ -26,6 +33,7 @@ export function ChatRalph({ id }: { id: string }) {
 
   const [texto, setTexto] = React.useState("");
   const [matando, setMatando] = React.useState(false);
+  const [expandido, setExpandido] = React.useState(false);
   const finRef = React.useRef<HTMLDivElement | null>(null);
 
   // Autoscroll al fondo cuando llegan deltas o cambia el indicador de escritura.
@@ -59,8 +67,24 @@ export function ChatRalph({ id }: { id: string }) {
   const conversacion = mensajes ?? [];
 
   return (
-    <div className="flex h-[480px] max-h-[calc(100vh-7rem)] w-[380px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl">
-      {/* Cabecera: nombre + estado + modelo, matar y cerrar. */}
+    <>
+      {/* En pantalla completa, un velo cubre la app; clic fuera del panel lo contrae. */}
+      {expandido && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={() => setExpandido(false)}
+          aria-hidden
+        />
+      )}
+      <div
+        className={cn(
+          "flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl",
+          expandido
+            ? "fixed inset-3 z-50 sm:inset-8"
+            : "h-[480px] max-h-[calc(100vh-7rem)] w-[380px] max-w-[calc(100vw-3rem)]",
+        )}
+      >
+      {/* Cabecera: nombre + estado + modelo, expandir, matar y cerrar. */}
       <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", COLOR_ESTADO[ralph.estado])} />
         <div className="min-w-0">
@@ -71,6 +95,17 @@ export function ChatRalph({ id }: { id: string }) {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <Tooltip label={expandido ? "Salir de pantalla completa" : "Pantalla completa"} side="top">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setExpandido((v) => !v)}
+              aria-label={expandido ? "Salir de pantalla completa" : "Pantalla completa"}
+            >
+              {expandido ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+          </Tooltip>
           <Tooltip label="Detener Ralph" side="top">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onMatar} disabled={matando}>
               {matando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -91,24 +126,37 @@ export function ChatRalph({ id }: { id: string }) {
             Aún no hay mensajes. Escríbele a {ralph.nombre}.
           </p>
         )}
-        {conversacion.map((m) => (
-          <div key={m.id} className={cn("flex", m.autor === "tu" ? "justify-end" : "justify-start")}>
-            <div
-              className={cn(
-                "max-w-[85%] rounded-lg px-3 py-2 text-sm",
-                m.autor === "tu"
-                  ? "bg-keni text-white"
-                  : "bg-muted text-foreground",
-              )}
-            >
-              {m.autor === "tu" ? (
-                <p className="whitespace-pre-wrap break-words">{m.texto}</p>
-              ) : (
-                <Markdown>{m.texto}</Markdown>
-              )}
+        {conversacion.map((m) => {
+          const hora = horaCorta(m.creado);
+          return (
+            <div key={m.id} className={cn("flex", m.autor === "tu" ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                  m.autor === "tu"
+                    ? "bg-keni text-white"
+                    : "bg-muted text-foreground",
+                )}
+              >
+                {m.autor === "tu" ? (
+                  <p className="whitespace-pre-wrap break-words">{m.texto}</p>
+                ) : (
+                  <Markdown>{m.texto}</Markdown>
+                )}
+                {hora && (
+                  <p
+                    className={cn(
+                      "mt-1 text-right text-[10px] leading-none",
+                      m.autor === "tu" ? "text-white/70" : "text-muted-foreground",
+                    )}
+                  >
+                    {hora}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {escribiendo && (
           <div className="flex justify-start">
             <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -146,6 +194,7 @@ export function ChatRalph({ id }: { id: string }) {
           <Send className="h-4 w-4" />
         </Button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

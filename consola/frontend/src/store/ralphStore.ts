@@ -213,7 +213,8 @@ export const useRalphStore = create<EstadoRalphStore>((set, get) => {
             id: nuevoIdMensaje(),
             autor,
             texto: delta.delta,
-            creado: new Date().toISOString(),
+            // En vivo, la hora es la de llegada; al reproducir el historial, la real del turno.
+            creado: delta.creado ?? new Date().toISOString(),
           };
           nuevaConv = [...conv, msg];
           nuevoEnCurso = msg.id;

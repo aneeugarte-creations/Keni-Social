@@ -14,7 +14,7 @@ export type ModeloRalph = "opus" | "sonnet" | "haiku";
 
 /**
  * Tipo de Ralph:
- * - `operativo`: asistente del equipo de redes con el MCP de la app (lo ve todo el equipo).
+ * - `operativo`: asistente del equipo de redes con el MCP de la app (cada persona ve solo los suyos).
  * - `dev`: agente de desarrollo sobre el repo (solo superadmin).
  */
 export type TipoRalph = "operativo" | "dev";
@@ -49,6 +49,8 @@ export interface DeltaMensajeRalph {
   delta: string;
   /** `true` cuando el mensaje actual queda cerrado (corta el "escribiendo…"). */
   fin?: boolean;
+  /** Hora del turno (ISO-8601) cuando el back reproduce el historial; ausente en vivo. */
+  creado?: string;
 }
 
 // ── Respuestas de la API ─────────────────────────────────────────────────────

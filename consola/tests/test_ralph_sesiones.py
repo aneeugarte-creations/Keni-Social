@@ -379,6 +379,60 @@ def test_kill_borra_la_entrada_persistida(tmp_path, monkeypatch):
     assert datos["sesiones"] == []
 
 
+def test_listar_filtra_por_usuario(tmp_path, monkeypatch):
+    # Cada persona ve SOLO sus Ralphs: con `usuario_id`, la lista filtra por dueño.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    g._sesiones["a"] = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    g._sesiones["b"] = rs.SesionRalph(id="b", nombre="nova", modelo="opus", creado=0.0, usuario_id="u2")
+    ids_u1 = {r["id"] for r in g.listar("u1")}
+    assert ids_u1 == {"a"}
+    assert {r["id"] for r in g.listar("u2")} == {"b"}
+    # Un usuario sin Ralphs no ve ninguno (ni los ajenos).
+    assert g.listar("otro") == []
+
+
+def test_listar_sin_usuario_devuelve_todos(tmp_path, monkeypatch):
+    # Sin `usuario_id` (uso interno/mantenimiento) la lista los trae todos.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    g = rs.GestorRalph()
+    g._sesiones["a"] = rs.SesionRalph(id="a", nombre="ziggy", modelo="opus", creado=0.0, usuario_id="u1")
+    g._sesiones["b"] = rs.SesionRalph(id="b", nombre="nova", modelo="opus", creado=0.0, usuario_id="u2")
+    assert {r["id"] for r in g.listar()} == {"a", "b"}
+
+
+def test_desde_registro_propaga_creado_del_turno():
+    # La hora de cada turno (cuando el registro la trae) viaja en el primer evento, donde el
+    # front abre la burbuja del mensaje.
+    reg = {
+        "id": "z",
+        "nombre": "ziggy",
+        "transcripcion": [{"autor": "tu", "texto": "hola", "creado": "2026-06-19T10:00:00+00:00"}],
+    }
+    sesion = rs._desde_registro(reg)
+    evento = next(e for e in sesion.eventos if e.get("delta") == "hola")
+    assert evento["creado"] == "2026-06-19T10:00:00+00:00"
+
+
+def test_desde_registro_sin_creado_no_inyecta_la_clave():
+    # Turnos antiguos sin `creado` se siembran como antes (sin la clave): el front cae a la hora
+    # de llegada. Protege el contrato del evento para los datos ya persistidos.
+    reg = {"id": "z", "nombre": "ziggy", "transcripcion": [{"autor": "tu", "texto": "hola"}]}
+    sesion = rs._desde_registro(reg)
+    evento = next(e for e in sesion.eventos if e.get("delta") == "hola")
+    assert "creado" not in evento
+
+
+def test_regla_idioma_operativo_fuerza_espanol():
+    # El Ralph operativo SIEMPRE responde en español, aunque le escriban en inglés.
+    assert "español" in rs._REGLA_IDIOMA_OPERATIVO
+    assert "SIEMPRE" in rs._REGLA_IDIOMA_OPERATIVO
+    # Se inyecta como --append-system-prompt (más difícil de ignorar que el CLAUDE.md del cwd).
+    argv = rs.construir_argv("opus", rs.TIPO_OPERATIVO, system_extra=rs._REGLA_IDIOMA_OPERATIVO)
+    assert "--append-system-prompt" in argv
+    assert rs._REGLA_IDIOMA_OPERATIVO in argv
+
+
 def test_construir_argv_inyecta_persona_dev():
     argv = rs.construir_argv("opus", rs.TIPO_DEV, system_extra=rs._PERSONA_DEV)
     assert "--append-system-prompt" in argv

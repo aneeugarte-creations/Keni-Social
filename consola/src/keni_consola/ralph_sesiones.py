@@ -25,6 +25,7 @@ sistema (Popen, git worktree, hilos) y no se testea con un `claude` real.
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -40,6 +41,13 @@ from dataclasses import dataclass, field
 _log = logging.getLogger("keni_consola.ralph_sesiones")
 
 _CLAUDE = "claude"
+
+
+def _ahora_iso() -> str:
+    """Instante actual en ISO-8601 con zona UTC (la hora de un turno de la conversacion).
+
+    El front lo formatea a la hora local del navegador al pintar cada mensaje."""
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 # --------------------------------------------------------------------------- #
 # Estados de un Ralph (maquina simple, contrato con el frontend).             #
@@ -64,7 +72,8 @@ MODELO_DEF = "opus"
 # Tipo de Ralph (contrato con el frontend):
 #   operativo -> asistente del equipo de redes: usa el MCP de la app (tools keni_*) para ayudar
 #                en el día a día (marcas, piezas, métricas, noticias, cola, aprobación). NO toca el
-#                filesystem ni el código. Es el que ve TODO el equipo.
+#                filesystem ni el código. Cada persona ve SOLO los suyos (la lista filtra por
+#                usuario), no los de sus compañeros.
 #   dev       -> agente de DESARROLLO sobre el repo (worktree, sin sandbox). Solo superadmin.
 TIPO_OPERATIVO = "operativo"
 TIPO_DEV = "dev"
@@ -76,9 +85,10 @@ TIPO_DEF = TIPO_OPERATIVO
 _PERSONA_OPERATIVA = """# Ralph — asistente operativo de keni-social
 
 Eres el asistente del equipo de redes de keni-social (piloto AMX: UnoTV / Claro Sports).
-Hablas español de México, cercano y claro. Ayudas en el día a día: consultar marcas y redes,
-preparar y mover contenido, leer métricas, trabajar el pool de noticias, vigilar la cola y el
-flujo de aprobación.
+Respondes SIEMPRE en español de México, cercano y claro, en TODOS tus turnos, aunque el
+usuario, una nota o el contexto vengan en inglés: nunca cambias de idioma. Ayudas en el día a
+día: consultar marcas y redes, preparar y mover contenido, leer métricas, trabajar el pool de
+noticias, vigilar la cola y el flujo de aprobación.
 
 Tienes el MCP de la app: usa las tools `keni_*` para consultar y operar. Empieza SIEMPRE por
 `keni_contexto` para conocer marcas, redes y estados válidos antes de actuar.
@@ -89,6 +99,14 @@ Reglas:
   equipo decide qué se publica. No fuerces publicaciones reales.
 - Si una acción es ambigua o arriesgada, pregunta antes de ejecutarla.
 """
+
+# Regla de idioma del Ralph OPERATIVO, inyectada con `--append-system-prompt` (más difícil de
+# ignorar que el CLAUDE.md de su cwd, y vale aunque el doc editable se haya editado). El asistente
+# de cara al equipo SIEMPRE responde en español, aunque le escriban o le peguen contexto en inglés.
+_REGLA_IDIOMA_OPERATIVO = (
+    "Responde SIEMPRE en español de México, en TODOS tus turnos, aunque el usuario, una nota o "
+    "el contexto vengan en inglés. No cambies de idioma bajo ninguna circunstancia."
+)
 
 # Slug del repo para clonar/asegurar /repo (mismo que worker_dev).
 _REPO_SLUG = "kenitech-io/keni-social"
@@ -437,9 +455,14 @@ class GestorRalph:
 
     # -- consulta ---------------------------------------------------------- #
 
-    def listar(self) -> list[dict]:
+    def listar(self, usuario_id: str | None = None) -> list[dict]:
+        """Vista de los Ralphs vivos. Con `usuario_id`, solo los de ESE usuario (cada persona ve
+        únicamente sus propios asistentes); sin él, todos (uso interno/mantenimiento)."""
         with self._lock:
-            return [s.info() for s in self._sesiones.values()]
+            sesiones = list(self._sesiones.values())
+        if usuario_id is not None:
+            sesiones = [s for s in sesiones if s.usuario_id == usuario_id]
+        return [s.info() for s in sesiones]
 
     def obtener(self, ralph_id: str) -> SesionRalph | None:
         with self._lock:
@@ -520,7 +543,7 @@ class GestorRalph:
                 return {"ok": False, "error": sesion.detalle or "no se pudo reanudar el Ralph"}
         if sesion.proc is None or sesion.proc.stdin is None:
             return {"ok": False, "error": "Ralph no esta activo"}
-        sesion.transcripcion.append({"autor": "tu", "texto": texto})
+        sesion.transcripcion.append({"autor": "tu", "texto": texto, "creado": _ahora_iso()})
         self._guardar()
         with sesion.escritura:
             try:
@@ -593,7 +616,9 @@ class GestorRalph:
                         # Cierre de un turno del Ralph: guarda el texto completo en la
                         # transcripcion y NO lo difunde (el front recibe solo {delta:"",fin:true}).
                         completo = ev.pop("completo")
-                        sesion.transcripcion.append({"autor": "ralph", "texto": completo})
+                        sesion.transcripcion.append(
+                            {"autor": "ralph", "texto": completo, "creado": _ahora_iso()}
+                        )
                         self._emitir(sesion, ev)
                         self._guardar()
                     else:
@@ -649,6 +674,7 @@ class GestorRalph:
         if sesion.tipo == TIPO_OPERATIVO:
             _escribir_persona_operativa(sesion.worktree)
             mcp_cfg = _mcp_config(sesion.worktree, sesion.usuario_id or None)
+            system_extra = _REGLA_IDIOMA_OPERATIVO
         else:
             system_extra = _persona_dev()
         resume = sesion.session_id if (reanudar and sesion.session_id) else None
@@ -790,7 +816,13 @@ def _desde_registro(reg: dict) -> SesionRalph:
     for turno in transcripcion:
         autor = turno.get("autor", "")
         texto = turno.get("texto", "")
-        sesion.eventos.append({"tipo": "mensaje", "autor": autor, "delta": texto})
+        # La hora del turno (si el registro la trae) viaja en el primer evento, donde el front
+        # abre la burbuja del mensaje. Los turnos antiguos sin `creado` se siembran como antes.
+        evento = {"tipo": "mensaje", "autor": autor, "delta": texto}
+        creado = turno.get("creado")
+        if creado:
+            evento["creado"] = creado
+        sesion.eventos.append(evento)
         sesion.eventos.append({"tipo": "mensaje", "autor": autor, "delta": "", "fin": True})
     sesion.eventos.append({"tipo": "estado", "estado": ESTADO_DORMIDO})
     return sesion

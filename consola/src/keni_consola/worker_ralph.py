@@ -97,7 +97,10 @@ async def spawn(request: Request) -> Response:
 async def listar(request: Request) -> Response:
     if not _autorizado(request):
         return _rechazo()
-    return JSONResponse({"ralphs": await run_in_threadpool(ralph_sesiones.gestor.listar)})
+    # `usuario_id` (query, opcional): el back lo pasa para que cada persona vea SOLO sus Ralphs.
+    usuario_id = request.query_params.get("usuario_id")
+    ralphs = await run_in_threadpool(ralph_sesiones.gestor.listar, usuario_id)
+    return JSONResponse({"ralphs": ralphs})
 
 
 async def mensaje(request: Request) -> Response:
