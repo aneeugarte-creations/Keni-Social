@@ -30,7 +30,7 @@ export interface PestanaSeccion {
 // eslint-disable-next-line react-refresh/only-export-components
 export function clasesPestanaSeccion(activo: boolean): string {
   return cn(
-    "-mb-px flex items-center gap-2 border-b-2 px-3 text-sm transition-colors",
+    "-mb-px flex items-center gap-2 border-b px-3 text-sm transition-colors",
     activo
       ? "border-foreground font-medium text-foreground"
       : "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground",
