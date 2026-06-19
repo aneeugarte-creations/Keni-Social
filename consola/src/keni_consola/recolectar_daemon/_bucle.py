@@ -22,10 +22,20 @@ _TICK_SEG = 30.0
 
 
 def _intervalo_feed(feed: dict[str, Any]) -> int:
-    """Intervalo (segundos) de un feed: su `intervalo_min` (>0) o el default por categoría."""
+    """Intervalo (segundos) de un feed: su `intervalo_min` (>0), si no la cadencia de su LÍNEA,
+    y como último recurso el legado por `categoria`.
+
+    La línea dicta el ritmo (el feed la hereda); el fallback por `categoria` cubre feeds aún sin
+    línea asociada (catch-all / pre-migración).
+    """
     propio = int(feed.get("intervalo_min") or 0)
     if propio > 0:
         return propio
+    linea_id = str(feed.get("linea_id") or "")
+    if linea_id:
+        et = db.obtener_etiqueta(linea_id)
+        if et is not None:
+            return config.intervalo_de_cadencia(str(et.get("cadencia") or "normal"))
     return config.ingesta_intervalo_categoria(str(feed.get("categoria") or ""))
 
 

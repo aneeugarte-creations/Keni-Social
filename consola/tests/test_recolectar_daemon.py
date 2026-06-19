@@ -97,6 +97,16 @@ def test_intervalo_feed_cae_a_default_por_categoria():
     )
 
 
+def test_intervalo_feed_usa_cadencia_de_la_linea(monkeypatch):
+    # Con línea asociada, el ritmo lo dicta la CADENCIA de la línea, no el slug `categoria`.
+    from keni_consola.recolectar_daemon import _bucle
+
+    monkeypatch.setattr(_bucle.db, "obtener_etiqueta", lambda _id: {"cadencia": "evergreen"})
+    assert recolectar_daemon._intervalo_feed({"linea_id": "L1", "categoria": "futbol"}) == (
+        config.INGESTA_INTERVALO_EVERGREEN_DEF
+    )
+
+
 # --------------------------------------------------------------------------- #
 # ejecutar_barrido (con fakes; sin red ni BD)                                  #
 # --------------------------------------------------------------------------- #

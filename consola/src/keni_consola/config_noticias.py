@@ -33,7 +33,7 @@ from ._config_comun import (
     ENV_INGESTA_INTERVALO_GAMING,
     ENV_INGESTA_INTERVALO_INTERNACIONAL,
     ENV_INGESTA_INTERVALO_MX,
-    ENV_INGESTA_INTERVALO_PERENNE,
+    ENV_INGESTA_INTERVALO_EVERGREEN,
     ENV_INGESTA_MAX_ERRORES,
     ENV_INGESTA_MAX_ITEMS,
     ENV_INGESTA_WORKERS,
@@ -83,7 +83,7 @@ from ._config_comun import (
     INGESTA_INTERVALO_GAMING_DEF,
     INGESTA_INTERVALO_INTERNACIONAL_DEF,
     INGESTA_INTERVALO_MX_DEF,
-    INGESTA_INTERVALO_PERENNE_DEF,
+    INGESTA_INTERVALO_EVERGREEN_DEF,
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
@@ -213,13 +213,13 @@ _INGESTA_INTERVALOS: dict[str, tuple[str, int]] = {
     "mx": (ENV_INGESTA_INTERVALO_MX, INGESTA_INTERVALO_MX_DEF),
     "internacional": (ENV_INGESTA_INTERVALO_INTERNACIONAL, INGESTA_INTERVALO_INTERNACIONAL_DEF),
     "gaming": (ENV_INGESTA_INTERVALO_GAMING, INGESTA_INTERVALO_GAMING_DEF),
-    # Temas perennes (~30 min): ciencia y tecnología + temáticas de misión de la Fundación.
-    "ciencia-tech": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
-    "salud": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
-    "medio-ambiente": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
-    "cultura": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
-    "educacion": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
-    "impacto-social": (ENV_INGESTA_INTERVALO_PERENNE, INGESTA_INTERVALO_PERENNE_DEF),
+    # Cadencia EVERGREEN (~30 min): ciencia y tecnología + temáticas de misión de la Fundación.
+    "ciencia-tech": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+    "salud": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+    "medio-ambiente": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+    "cultura": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+    "educacion": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+    "impacto-social": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
 }
 
 
@@ -234,6 +234,28 @@ def ingesta_intervalo_categoria(categoria: str) -> int:
     env, defecto = _INGESTA_INTERVALOS.get(
         (categoria or "").strip().lower(),
         (ENV_INGESTA_INTERVALO_DEFECTO, INGESTA_INTERVALO_DEFECTO_DEF),
+    )
+    return _entero(env, defecto, minimo=1)
+
+
+# Cadencia de una LÍNEA -> env var + defecto (segundos). La línea dicta el ritmo de sus
+# fuentes; reusa los mismos knobs que las categorías (deporte/general/evergreen).
+_INTERVALOS_CADENCIA: dict[str, tuple[str, int]] = {
+    "rapida": (ENV_INGESTA_INTERVALO_DEPORTES, INGESTA_INTERVALO_DEPORTES_DEF),
+    "normal": (ENV_INGESTA_INTERVALO_DEFECTO, INGESTA_INTERVALO_DEFECTO_DEF),
+    "evergreen": (ENV_INGESTA_INTERVALO_EVERGREEN, INGESTA_INTERVALO_EVERGREEN_DEF),
+}
+
+
+def intervalo_de_cadencia(cadencia: str) -> int:
+    """Cadencia (segundos) de sondeo de las fuentes de una LÍNEA según su `cadencia`.
+
+    'rapida' ~180s (deporte en vivo), 'normal' ~600s (noticia general), 'evergreen' ~1800s
+    (cambio lento). Una cadencia desconocida (o '') cae a 'normal'. Configurable por env, min 1s.
+    """
+    env, defecto = _INTERVALOS_CADENCIA.get(
+        (cadencia or "").strip().lower(),
+        _INTERVALOS_CADENCIA["normal"],
     )
     return _entero(env, defecto, minimo=1)
 

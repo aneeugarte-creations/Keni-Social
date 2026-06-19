@@ -472,6 +472,7 @@ from .config_noticias import (  # noqa: F401
     ingesta_batch,
     ingesta_filtro_activo,
     ingesta_intervalo_categoria,
+    intervalo_de_cadencia,
     ingesta_max_errores,
     ingesta_max_items,
     ingesta_workers,
