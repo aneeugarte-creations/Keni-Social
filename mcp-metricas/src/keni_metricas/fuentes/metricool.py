@@ -407,6 +407,42 @@ def _fecha(v) -> date | None:
     return None
 
 
+# Tope de seguridad de posts a procesar de `/v2/analytics/posts/{network}`. La API ignora
+# `from`/`to` en YouTube y devuelve el CANAL ENTERO (Claro Sports: ~10k ítems desde 2013
+# por cada lectura mensual), sin paginación ni `limit` en su swagger. El acotado por rango
+# (`_acotar_posts_por_rango`) ya recorta la inmensa mayoría; este tope es la última red por
+# si los datos no vinieran ordenados y no se pudiera cortar.
+_MAX_POSTS = 2000
+
+
+def _acotar_posts_por_rango(posts: list[dict], desde: date) -> list[dict]:
+    """Recorta una lista de posts ordenada por fecha DESC a los del rango, sin descargar
+    más allá de lo necesario.
+
+    Metricool devuelve los posts más nuevos primero (confirmado en todas las redes del
+    piloto). Cuando se acumulan posts CONSECUTIVOS anteriores a `desde` se asume que el
+    resto también lo es y se corta: evita arrastrar miles de ítems históricos que el filtro
+    defensivo de `_parsear_posts` descartaría igual. El corte es DEFENSIVO: solo actúa si los
+    posts vienen realmente en orden DESC; ante una fecha que rompe ese orden (sube tras haber
+    bajado) NO recorta y devuelve la lista entera, para no perder nunca piezas en rango. El
+    margen evita cortar por un puñado de posts sin fecha o desordenados intercalados."""
+    margen = 0
+    for i, post in enumerate(posts):
+        f = _fecha(_primero(post, _ALIAS_FECHA))
+        if f is None:
+            continue
+        if f >= desde:
+            # Una pieza dentro/encima del rango tras haber visto anteriores: el orden DESC no
+            # se cumple, abortar el recorte (devuelve todo; el filtro defensivo se encarga).
+            if margen:
+                return posts
+            continue
+        margen += 1
+        if margen > 16:
+            return posts[: i + 1]
+    return posts
+
+
 class FuenteMetricool:
     """Implementa `FuenteMetricas` leyendo de la API REST de Metricool.
 
@@ -835,7 +871,18 @@ class FuenteMetricool:
             },
             headers=self._headers(cuenta_id),
         )
-        return [p for p in (datos.get("data") or []) if isinstance(p, dict)]
+        crudos = [p for p in (datos.get("data") or []) if isinstance(p, dict)]
+        # La API ignora `from`/`to` en YouTube y devuelve el canal entero (~10k ítems);
+        # acota a los del rango aprovechando el orden DESC antes de seguir.
+        posts = _acotar_posts_por_rango(crudos, desde)
+        if len(posts) > _MAX_POSTS:
+            log.warning(
+                "metricool: posts %s/%s devolvió %d ítems (rango %s..%s); se truncan a %d "
+                "(la API no acota por fecha ni pagina; ver _MAX_POSTS)",
+                plat.value, cuenta_id, len(posts), desde, hasta, _MAX_POSTS,
+            )
+            posts = posts[:_MAX_POSTS]
+        return posts
 
     def _parsear_posts(
         self, posts: list[dict], plat: Plataforma, cuenta_id: str, desde: date, hasta: date

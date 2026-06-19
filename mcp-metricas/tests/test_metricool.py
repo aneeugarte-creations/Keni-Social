@@ -18,7 +18,12 @@ import respx
 
 from keni_metricas.config import Config, MetricoolConfig, construir_fuente
 from keni_metricas.fuentes.base import FuenteMetricas
-from keni_metricas.fuentes.metricool import BASE, FuenteMetricool, _fecha
+from keni_metricas.fuentes.metricool import (
+    BASE,
+    FuenteMetricool,
+    _acotar_posts_por_rango,
+    _fecha,
+)
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.schema import MotivoOmision, Plataforma, ResumenMetricas
 
@@ -928,3 +933,53 @@ def test_campanias_ads_respeta_proveedores_por_marca():
 
     providers = [c.request.url.params.get("providers[]") for c in ruta.calls]
     assert providers == ["facebookads"]  # tiktokads NI se consulta
+
+
+def _post_yt(id_: str, fecha: str) -> dict:
+    """Un post de YouTube (forma de `/v2/analytics/posts/youtube`): solo fecha relevante."""
+    return {
+        "videoId": id_,
+        "publishedAt": {"dateTime": fecha + "T10:00:00", "timezone": "UTC"},
+        "views": 100,
+        "interactions": 10,
+        "watchUrl": f"https://youtu.be/{id_}",
+    }
+
+
+def test_acotar_posts_corta_la_cola_historica_descendente():
+    """Lista DESC con miles de posts antiguos -> se corta al salir del rango, sin recorrerla
+    entera ni perder los del rango (réplica del YouTube de Claro Sports: la API ignora
+    `from`/`to` y devuelve el canal completo desde 2013)."""
+    en_rango = [_post_yt(f"r{i}", "2026-05-20") for i in range(5)]
+    historicos = [_post_yt(f"h{i}", "2014-01-01") for i in range(9000)]
+    acotados = _acotar_posts_por_rango(en_rango + historicos, date(2026, 5, 1))
+    # Conserva los 5 del rango + el margen de tolerancia; jamás los 9005 enteros.
+    assert all(p["videoId"].startswith("r") for p in acotados[:5])
+    assert len(acotados) < 100
+
+
+def test_acotar_posts_no_recorta_si_el_orden_no_es_descendente():
+    """Defensivo: si una pieza en rango aparece DESPUÉS de una anterior (orden roto), NO se
+    recorta —se devuelve todo y el filtro de `_parsear_posts` decide— para no perder piezas."""
+    posts = [
+        _post_yt("viejo", "2014-01-01"),
+        _post_yt("nuevo", "2026-05-20"),  # en rango, pero tras uno fuera: orden roto
+    ]
+    assert _acotar_posts_por_rango(posts, date(2026, 5, 1)) == posts
+
+
+@respx.mock
+def test_fetch_posts_acota_el_canal_entero_de_youtube_al_rango():
+    """`_fetch_posts` no propaga el canal histórico completo: la API devuelve miles de posts
+    DESC desde 2013 (ignora `from`/`to`) y solo bajan los del rango a parsearse."""
+    marcas = {"claro_sports": {**MARCAS["claro_sports"], "plataformas": [Plataforma.youtube]}}
+    enorme = [_post_yt(f"r{i}", "2026-05-15") for i in range(3)] + [
+        _post_yt(f"h{i}", "2013-12-11") for i in range(9000)
+    ]
+    _mock_posts("youtube", enorme)
+    with httpx.Client() as cli:
+        posts = FuenteMetricool(marcas=marcas, cliente=cli)._fetch_posts(
+            "claro_sports", Plataforma.youtube, date(2026, 5, 1), date(2026, 5, 31)
+        )
+    assert len(posts) < 100  # acotado, no los 9003
+    assert sum(1 for p in posts if p["videoId"].startswith("r")) == 3
