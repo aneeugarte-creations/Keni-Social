@@ -293,6 +293,8 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
         items_de_cluster=lambda cid, *, limite=200: list(items_por_cid.get(cid, [])),
         cuerpos_de_cluster=lambda cid, *, limite=200: {},
         obtener_fuente_rss=lambda fid: {"propia": True},
+        # El contexto «ya en el feed del evento» (no repetir ángulos) no aplica en estos tests.
+        listar_publicacion=lambda **kw: [],
         crear_publicacion=crear_publicacion,
         actualizar_noticia_cluster=actualizar_noticia_cluster,
         marcar_items_cluster_usados=marcar_items_cluster_usados,
@@ -1221,11 +1223,18 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
 
 
 def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
-    """Con plan, cada categoría se lleva SUS mejores historias y las demás no compiten."""
+    """Con plan, cada LÍNEA se lleva SUS mejores historias y las demás no compiten."""
+    from keni_consola import bootstrap_lineas
+
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,internacional:1")
+    # El plan se clava por LÍNEA (id de etiqueta vertical): los feeds 'mx'/'internacional' se
+    # re-clavan a sus líneas Nacional/Internacional; la deportiva ('futbol') cae fuera del plan.
+    bootstrap_lineas.inicializar_lineas()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    internacional = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,{internacional['id']}:1")
     ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
     _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx", verificacion_fuente=ver)
     _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx", verificacion_fuente=ver)

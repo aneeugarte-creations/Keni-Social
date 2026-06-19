@@ -126,6 +126,9 @@ def _parchear_comun(monkeypatch, *, feeds, fetcher):
     """
     monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "0")
     monkeypatch.setattr(recolectar_daemon.db, "lock_barrido", _lock_concedido)
+    # Sin BD: el intervalo de un feed con LÍNEA consulta su etiqueta; lo dejamos sin resolver para
+    # que caiga a la cadencia por categoría (legado), sin tocar Postgres.
+    monkeypatch.setattr(recolectar_daemon.db, "obtener_etiqueta", lambda _id: None)
     monkeypatch.setattr(recolectar_daemon.repos, "feeds_vencidos", lambda ahora, lim: list(feeds))
     # La descarga real de http_feed es el único punto de red: lo sustituimos por el fetcher.
     monkeypatch.setattr(ingesta.http_feed, "_DESCARGADOR", fetcher)
