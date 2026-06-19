@@ -95,33 +95,40 @@ def invalidar_cache() -> None:
         _ULTIMO_NIVEL = None
 
 
-def _gasto_hoy() -> dict[str, Any]:
+def _gasto_hoy(marca: str = "") -> dict[str, Any]:
     """Gasto agregado del dia UTC actual, cacheado `_CACHE_TTL_S` segundos.
 
-    Best-effort: si Postgres no responde, devuelve el ultimo valor cacheado (aunque este
-    caducado) o un gasto vacio. PREFERIMOS NO CORTAR ante un blip de la BD: el presupuesto
-    es un guardian de economia, no un cinturon de seguridad funcional; un falso corte
-    pararia la maquina entera por un parpadeo.
+    `marca` ("" = GLOBAL, agregado de todas; un id = solo esa marca, para el corte POR MARCA). El
+    camino GLOBAL (la mayoria de lecturas: gate del worker, nivel global) usa la cache; una marca
+    concreta se lee SIN cache (lecturas acotadas, sobre todo de la UI y de la admision de esa
+    marca): asi no multiplicamos la cache por marca ni arriesgamos servir el gasto de otra.
+
+    Best-effort: si Postgres no responde, devuelve el ultimo valor cacheado (global) o un gasto
+    vacio. PREFERIMOS NO CORTAR ante un blip de la BD: el presupuesto es un guardian de economia,
+    no un cinturon de seguridad funcional; un falso corte pararia la maquina entera por un parpadeo.
     """
     global _CACHE_GASTO, _CACHE_DIA, _CACHE_EXPIRA
     dia = _hoy_utc()
-    with _CACHE_LOCK:
-        if _CACHE_GASTO is not None and _CACHE_DIA == dia and time.monotonic() < _CACHE_EXPIRA:
-            return _CACHE_GASTO
+    if not marca:
+        with _CACHE_LOCK:
+            if _CACHE_GASTO is not None and _CACHE_DIA == dia and time.monotonic() < _CACHE_EXPIRA:
+                return _CACHE_GASTO
     from . import repos
 
     try:
-        gasto = repos.gasto_ia_del_dia(dia)
+        gasto = repos.gasto_ia_del_dia(dia, marca)
     except Exception:  # noqa: BLE001 -- blip de BD: no cortar por un fallo de lectura
         _log.warning("presupuesto_ia: fallo al leer el gasto del dia", exc_info=True)
-        with _CACHE_LOCK:
-            if _CACHE_GASTO is not None and _CACHE_DIA == dia:
-                return _CACHE_GASTO
+        if not marca:
+            with _CACHE_LOCK:
+                if _CACHE_GASTO is not None and _CACHE_DIA == dia:
+                    return _CACHE_GASTO
         return {"tokens": 0, "tokens_in": 0, "tokens_out": 0, "coste_usd": 0.0, "generaciones": 0}
-    with _CACHE_LOCK:
-        _CACHE_GASTO = gasto
-        _CACHE_DIA = dia
-        _CACHE_EXPIRA = time.monotonic() + _CACHE_TTL_S
+    if not marca:
+        with _CACHE_LOCK:
+            _CACHE_GASTO = gasto
+            _CACHE_DIA = dia
+            _CACHE_EXPIRA = time.monotonic() + _CACHE_TTL_S
     return gasto
 
 
@@ -131,36 +138,39 @@ def _gasto_vacio_por_proceso() -> dict[str, dict[str, Any]]:
     return {PROCESO_INVESTIGACION: dict(cero), PROCESO_PRODUCCION: dict(cero)}
 
 
-def _gasto_por_proceso_hoy() -> dict[str, dict[str, Any]]:
+def _gasto_por_proceso_hoy(marca: str = "") -> dict[str, dict[str, Any]]:
     """Gasto del dia UTC actual DESGLOSADO por proceso, cacheado `_CACHE_TTL_S` segundos.
 
-    Mismo criterio best-effort que `_gasto_hoy`: ante un blip de BD devuelve el ultimo valor
-    cacheado o ceros (preferimos NO cortar por un fallo de lectura). Garantiza siempre los dos
-    motores (`investigacion`/`produccion`).
+    Mismo criterio best-effort y mismo trato de `marca` que `_gasto_hoy`: el camino GLOBAL ("")
+    usa la cache; una marca concreta se lee sin cache. Garantiza siempre los dos motores
+    (`investigacion`/`produccion`).
     """
     global _CACHE_PROC_GASTO, _CACHE_PROC_DIA, _CACHE_PROC_EXPIRA
     dia = _hoy_utc()
-    with _CACHE_LOCK:
-        if (
-            _CACHE_PROC_GASTO is not None
-            and _CACHE_PROC_DIA == dia
-            and time.monotonic() < _CACHE_PROC_EXPIRA
-        ):
-            return _CACHE_PROC_GASTO
+    if not marca:
+        with _CACHE_LOCK:
+            if (
+                _CACHE_PROC_GASTO is not None
+                and _CACHE_PROC_DIA == dia
+                and time.monotonic() < _CACHE_PROC_EXPIRA
+            ):
+                return _CACHE_PROC_GASTO
     from . import repos
 
     try:
-        gasto = repos.gasto_ia_del_dia_por_proceso(dia)
+        gasto = repos.gasto_ia_del_dia_por_proceso(dia, marca)
     except Exception:  # noqa: BLE001 -- blip de BD: no cortar por un fallo de lectura
         _log.warning("presupuesto_ia: fallo al leer el gasto por proceso del dia", exc_info=True)
-        with _CACHE_LOCK:
-            if _CACHE_PROC_GASTO is not None and _CACHE_PROC_DIA == dia:
-                return _CACHE_PROC_GASTO
+        if not marca:
+            with _CACHE_LOCK:
+                if _CACHE_PROC_GASTO is not None and _CACHE_PROC_DIA == dia:
+                    return _CACHE_PROC_GASTO
         return _gasto_vacio_por_proceso()
-    with _CACHE_LOCK:
-        _CACHE_PROC_GASTO = gasto
-        _CACHE_PROC_DIA = dia
-        _CACHE_PROC_EXPIRA = time.monotonic() + _CACHE_TTL_S
+    if not marca:
+        with _CACHE_LOCK:
+            _CACHE_PROC_GASTO = gasto
+            _CACHE_PROC_DIA = dia
+            _CACHE_PROC_EXPIRA = time.monotonic() + _CACHE_TTL_S
     return gasto
 
 
@@ -205,48 +215,61 @@ def _escalon(gastado: float, presupuesto: float, margen: float) -> str:
     return NIVEL_NORMAL
 
 
-def nivel() -> str:
+def nivel(marca: str = "") -> str:
     """Nivel de corte VIGENTE (el kill switch manda; luego el escalon del cap de USD).
 
     El corte GLOBAL tiene dos escalones (solo_manual / agotado) sobre el cap de COSTE en USD
     (`presupuesto_usd_dia`, mejor proxy del gasto real). En 0 queda apagado: sin cap USD no hay
     corte automatico global (solo `normal`/`pausado`); los topes de tokens por motor cortan aparte
-    via `nivel_proceso`. Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al
-    relajar): es la señal operativa del corte; los gates por peticion no loguean.
+    via `nivel_proceso`. `marca` ("" = global) añade el corte PROPIO de esa marca (su parada de
+    emergencia y su cap USD), tomando el MAS restrictivo con el global. La TRANSICION solo se
+    loguea para el corte GLOBAL (una marca no debe contaminar la señal operativa global).
     """
+    if marca:
+        return _nivel_global(marca)
     return _con_transicion(_nivel_global())
 
 
-def _nivel_global() -> str:
-    """Nivel de corte GLOBAL (kill switch + escalones del cap global de USD), SIN log de transicion.
+def _nivel_global(marca: str = "") -> str:
+    """Nivel de corte GLOBAL (kill switch + escalones del cap de USD), SIN log de transicion.
 
     Lo reusan `nivel()` (que añade el log de transicion) y `nivel_proceso()` (que lo combina con
     el tope del motor). No loguea para que el corte por motor no contamine la señal del global.
 
-    El corte GLOBAL es SOLO el cap de COSTE en USD (`presupuesto_usd_dia`, mejor proxy del gasto
-    real) mas la parada manual. Los topes de TOKENS son por motor (entrada/salida): cortan via
-    `nivel_proceso`, no aqui.
+    El corte es el cap de COSTE en USD (`presupuesto_usd_dia`) mas la parada manual. `marca`
+    ("" = solo global) añade el corte PROPIO de la marca: su parada de emergencia
+    (`generacion_pausada_marca`) pausa esa marca igual que la global, y su cap USD
+    (`presupuesto_usd_dia_marca`) corta segun el gasto SOLO de esa marca. El nivel devuelto es el
+    MAS restrictivo entre global y marca. Los topes de TOKENS por motor cortan via `nivel_proceso`.
     """
-    if config.generacion_pausada():
+    if config.generacion_pausada() or (marca and config.generacion_pausada_marca(marca)):
         return NIVEL_PAUSADO
-    presupuesto_usd = config.presupuesto_usd_dia()
-    if presupuesto_usd <= 0:
-        return NIVEL_NORMAL
-    gasto = _gasto_hoy()
     margen = 1 + config.presupuesto_margen_manual_pct() / 100.0
-    return _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
+    nivel_vigente = NIVEL_NORMAL
+    presupuesto_usd = config.presupuesto_usd_dia()
+    if presupuesto_usd > 0:
+        gasto = _gasto_hoy()
+        nivel_vigente = _escalon(float(gasto.get("coste_usd", 0.0)), presupuesto_usd, margen)
+    if marca:
+        presupuesto_marca = config.presupuesto_usd_dia_marca(marca)
+        if presupuesto_marca > 0:
+            gasto_marca = _gasto_hoy(marca)
+            nivel_vigente = _mas_severo(
+                nivel_vigente,
+                _escalon(float(gasto_marca.get("coste_usd", 0.0)), presupuesto_marca, margen),
+            )
+    return nivel_vigente
 
 
-def nivel_proceso(proceso: str) -> str:
+def nivel_proceso(proceso: str, marca: str = "") -> str:
     """Nivel de corte EFECTIVO de un motor (investigacion|produccion): el MAS restrictivo.
 
-    Combina el nivel GLOBAL (que pondera el cap global de USD, y al que la pausa manda) con el
-    escalon de los TOPES PROPIOS del motor, separando ENTRADA y SALIDA:
-    el gasto de tokens_in del motor vs su tope IN y el de tokens_out vs su tope OUT (mismos
-    escalones solo_manual/agotado y el mismo `margen_manual`). Cada tope en 0 no añade corte por
-    ese lado. NO loguea transiciones (la señal de transicion es la global).
+    Combina el nivel GLOBAL —ya ponderado con el cap/parada de `marca` si viene— con el escalon de
+    los TOPES PROPIOS del motor (globales, ADR 0011), separando ENTRADA y SALIDA: el gasto de
+    tokens_in del motor vs su tope IN y el de tokens_out vs su tope OUT (mismos escalones y
+    `margen_manual`). Cada tope en 0 no añade corte por ese lado. NO loguea transiciones.
     """
-    glob = _nivel_global()
+    glob = _nivel_global(marca)
     if glob == NIVEL_PAUSADO:
         return NIVEL_PAUSADO
     tope_in, tope_out = _topes_motor(proceso)
@@ -263,7 +286,12 @@ def nivel_proceso(proceso: str) -> str:
 
 
 def bloqueo_admision(
-    nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool, proceso: str | None = None
+    nivel_actual: str,
+    *,
+    gasta_tokens: bool,
+    es_fondo: bool,
+    proceso: str | None = None,
+    marca: str | None = None,
 ) -> str | None:
     """El nivel de corte que BLOQUEA un job con estas características, o None si pasa.
 
@@ -286,10 +314,15 @@ def bloqueo_admision(
     (`nivel_proceso`), de modo que el tope propio del motor tambien corta. Sin `proceso` (o en un
     call site que no lo conoce, p. ej. el gate de reclamo del worker, que decide antes de fijar
     un job concreto) cae al comportamiento GLOBAL de siempre.
+
+    `marca` (marca del job, si se conoce): cuando viene, el corte efectivo añade el control PROPIO
+    de esa marca (su parada de emergencia y su cap USD), de nuevo tomando el MAS restrictivo. Así
+    la parada/tope de una marca corta su trabajo (fondo y manual) sin tocar al resto. El llamante
+    pasa `nivel_actual = nivel(marca)` para que la parte global ya venga ponderada con la marca.
     """
     nivel_efectivo = nivel_actual
-    if proceso and gasta_tokens and nivel_actual != NIVEL_PAUSADO:
-        nivel_efectivo = _mas_severo(nivel_actual, nivel_proceso(proceso))
+    if gasta_tokens and nivel_actual != NIVEL_PAUSADO and (proceso or marca):
+        nivel_efectivo = _mas_severo(nivel_actual, nivel_proceso(proceso or "", marca or ""))
     if nivel_efectivo == NIVEL_PAUSADO:
         return NIVEL_PAUSADO
     if not gasta_tokens:
@@ -319,34 +352,38 @@ def _con_transicion(nuevo: str) -> str:
     return nuevo
 
 
-def estado() -> dict[str, Any]:
+def estado(marca: str = "") -> dict[str, Any]:
     """Snapshot COMPLETO para el monitor/los agentes: presupuesto, gasto del dia y nivel.
 
     Forma (CONTRATO de `/api/actividad/cola`):
-      {nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
+      {marca, nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
        pct_usado, pct_usado_usd, dia,
        por_proceso: {investigacion: {...}, produccion: {...}}}
-    `presupuesto_tokens_dia` es INFORMATIVO: la SUMA de los 4 topes por motor (investigacion in+out
-    + produccion in+out); NO corta a nivel global (eso es solo USD + parada), solo cada motor corta
-    por su tope via `nivel_proceso`. Con los 4 topes en 0 la suma es 0 = sin limite de tokens.
-    `restante_tokens`/`pct_usado` son None si esa suma es 0; `pct_usado_usd` es None sin presupuesto
-    de USD. El coste USD gastado del dia viaja dentro de `gastado.coste_usd`. La parada de emergencia
-    y `gastado` siguen GLOBALES; `por_proceso` desglosa el gasto y los topes PROPIOS (entrada/salida)
-    de cada motor (ADR 0011).
+
+    `marca` ("" = GLOBAL; un id = vista POR MARCA): con marca, `gastado`/`por_proceso` traen el
+    gasto SOLO de esa marca, `pausada`/`presupuesto_usd_dia` son los controles PROPIOS de la marca
+    (su parada y su cap USD) y `nivel` es el efectivo de la marca (el mas restrictivo con el
+    global). Los topes de TOKENS por motor son globales (ADR 0011): en la vista de marca NO se
+    re-emiten como tope propio (van a 0 en `por_proceso`); el presupuesto de tokens de marca es 0.
+
+    `presupuesto_tokens_dia` (vista global) es INFORMATIVO: la SUMA de los 4 topes por motor; NO
+    corta a nivel global (eso es solo USD + parada). `restante_tokens`/`pct_usado` son None si esa
+    suma es 0; `pct_usado_usd` es None sin cap de USD.
     """
-    gasto = _gasto_hoy()
-    presupuesto = _suma_topes_motor()
-    presupuesto_usd = config.presupuesto_usd_dia()
+    gasto = _gasto_hoy(marca)
+    presupuesto = 0 if marca else _suma_topes_motor()
+    presupuesto_usd = config.presupuesto_usd_dia_marca(marca) if marca else config.presupuesto_usd_dia()
     gastado = int(gasto.get("tokens", 0))
     coste = float(gasto.get("coste_usd", 0.0))
     restante = max(0, presupuesto - gastado) if presupuesto > 0 else None
     pct = round(100.0 * gastado / presupuesto, 1) if presupuesto > 0 else None
     pct_usd = round(100.0 * coste / presupuesto_usd, 1) if presupuesto_usd > 0 else None
-    gasto_proc = _gasto_por_proceso_hoy()
+    gasto_proc = _gasto_por_proceso_hoy(marca)
     return {
-        "nivel": nivel(),
-        "pausada": config.generacion_pausada(),
+        "marca": marca,
+        "nivel": nivel(marca),
+        "pausada": config.generacion_pausada_marca(marca) if marca else config.generacion_pausada(),
         "presupuesto_tokens_dia": presupuesto,
         "presupuesto_usd_dia": presupuesto_usd,
         "margen_manual_pct": config.presupuesto_margen_manual_pct(),
@@ -356,19 +393,25 @@ def estado() -> dict[str, Any]:
         "pct_usado_usd": pct_usd,
         "dia": _hoy_utc(),
         "por_proceso": {
-            PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc),
-            PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc),
+            PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc, marca),
+            PROCESO_PRODUCCION: _bloque_proceso(PROCESO_PRODUCCION, gasto_proc, marca),
         },
     }
 
 
-def _bloque_proceso(proceso: str, gasto_proc: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + topes in/out + nivel del motor."""
+def _bloque_proceso(
+    proceso: str, gasto_proc: dict[str, dict[str, Any]], marca: str = ""
+) -> dict[str, Any]:
+    """Bloque `por_proceso[<motor>]` de `estado()`: gasto desglosado + topes in/out + nivel del motor.
+
+    Los topes de tokens por motor son GLOBALES (ADR 0011); en la vista POR MARCA no son propios de
+    la marca, asi que se omiten (topes 0, restante/pct None) y solo se muestra el gasto de la marca.
+    """
     g = gasto_proc.get(proceso, {})
     tin = int(g.get("tokens_in", 0))
     tout = int(g.get("tokens_out", 0))
     tokens = int(g.get("tokens", tin + tout))
-    tope_in, tope_out = _topes_motor(proceso)
+    tope_in, tope_out = (0, 0) if marca else _topes_motor(proceso)
     restante_in = max(0, tope_in - tin) if tope_in > 0 else None
     pct_in = round(100.0 * tin / tope_in, 1) if tope_in > 0 else None
     restante_out = max(0, tope_out - tout) if tope_out > 0 else None
@@ -385,7 +428,7 @@ def _bloque_proceso(proceso: str, gasto_proc: dict[str, dict[str, Any]]) -> dict
         "pct_in": pct_in,
         "restante_out": restante_out,
         "pct_out": pct_out,
-        "nivel": nivel_proceso(proceso),
+        "nivel": nivel_proceso(proceso, marca),
     }
 
 

@@ -82,34 +82,48 @@ export interface ActividadAgregados {
 // página Economía sustituye al cruce de `actividad/agregados` (por marca) + `cola/series`
 // (global) que no casaban entre sí.
 
-/** Gasto de un día (`YYYY-MM-DD`, zero-filled) de un motor. */
-export interface EconomiaDia {
-  dia: string;
+/** Celda de gasto (items · tokens · coste) compartida por días y etapas. */
+export interface EconomiaCelda {
   items: number;
   tokens: number;
   coste_usd: number;
 }
 
-/** Gasto por tipo de trabajo de un motor. */
-export interface EconomiaTipo {
+/** Gasto de una ETAPA (prompt; `tipo` del ledger) dentro de un día o de una pestaña. */
+export interface EconomiaEtapa extends EconomiaCelda {
   tipo: string;
-  items: number;
-  tokens: number;
-  coste_usd: number;
 }
 
-/** Economía de UN motor: total del periodo + serie por día (len == `dias`, antiguo→reciente,
- *  zero-filled) + desglose por tipo. */
+/** Gasto de un día (`YYYY-MM-DD`, zero-filled), con su desglose por ETAPA (prompt) ese día. */
+export interface EconomiaDia extends EconomiaCelda {
+  dia: string;
+  /** Desglose por etapa/prompt de ESE día (ordenado por coste desc). Para el colapsable. */
+  por_etapa: EconomiaEtapa[];
+}
+
+/** Gasto de una ETAPA del periodo, con su desglose por DÍA (zero-filled, len == `dias`). */
+export interface EconomiaEtapaConDias extends EconomiaEtapa {
+  /** Desglose por día de ESA etapa (antiguo→reciente). Para el colapsable de la tabla por etapa. */
+  por_dia: (EconomiaCelda & { dia: string })[];
+}
+
+/** Economía de UNA pestaña de Contexto: total del periodo + serie por día (con su desglose por
+ *  etapa) + desglose por etapa (con su serie por día). */
 export interface EconomiaProcesoBloque {
-  total: { items: number; tokens: number; coste_usd: number };
+  total: EconomiaCelda;
   por_dia: EconomiaDia[];
-  por_tipo: EconomiaTipo[];
+  por_etapa: EconomiaEtapaConDias[];
 }
 
-/** Respuesta de `GET /api/actividad/economia`: un bloque por motor (GLOBAL, sin marca). */
+/** Pestaña de Contexto que agrupa el gasto en la página Economía: los dos motores (ADR 0011) más
+ *  Herramientas (agentes sueltos) y Desarrollo (auto-desarrollo). */
+export type PestanaEconomia = "investigacion" | "produccion" | "herramientas" | "desarrollo";
+
+/** Respuesta de `GET /api/actividad/economia`: un bloque por pestaña de Contexto. `marca` vacía =
+ *  AGREGADO de todas; una marca acota el desglose a sus filas. */
 export interface EconomiaPorProceso {
   dias: number;
-  por_proceso: Partial<Record<Proceso, EconomiaProcesoBloque>>;
+  por_proceso: Partial<Record<PestanaEconomia, EconomiaProcesoBloque>>;
 }
 
 // --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
@@ -184,6 +198,8 @@ export interface PresupuestoProcesoIA {
 
 /** Economía de tokens (`presupuesto_ia.estado()`): presupuesto diario, gasto y nivel. */
 export interface PresupuestoIA {
+  /** Ámbito del snapshot: "" = GLOBAL (todas las marcas); un id = controles PROPIOS de esa marca. */
+  marca?: string;
   /** Nivel de corte vigente: "normal" | "solo_manual" | "agotado" | "pausado". */
   nivel: string;
   /** Kill switch humano (KENI_GENERACION_PAUSADA, editable en caliente). */

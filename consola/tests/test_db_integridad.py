@@ -480,24 +480,24 @@ def test_gasto_ia_dia_date_roundtrip_y_serie(pg):
     assert db.gasto_ia_del_dia("2026-06-13")["tokens"] == 150
 
 
-def test_gasto_ia_economia_garantiza_procesos_y_zero_fill(pg):
-    """Sin filas: 'investigacion' y 'produccion' presentes, a cero y por_dia de longitud `dias`."""
+def test_gasto_ia_economia_garantiza_las_4_pestanas_y_zero_fill(pg):
+    """Sin filas: las 4 pestañas de Contexto presentes, a cero y por_dia de longitud `dias`."""
     eco = db.gasto_ia_economia_por_proceso(5)
-    assert set(eco) >= {"investigacion", "produccion"}
-    for proc in ("investigacion", "produccion"):
-        bloque = eco[proc]
+    assert set(eco) == {"investigacion", "produccion", "herramientas", "desarrollo"}
+    for pestana in eco:
+        bloque = eco[pestana]
         assert bloque["total"] == {"items": 0, "tokens": 0, "coste_usd": 0.0}
-        assert bloque["por_tipo"] == []
+        assert bloque["por_etapa"] == []
         assert len(bloque["por_dia"]) == 5
         assert all(d["items"] == 0 and d["tokens"] == 0 and d["coste_usd"] == 0.0
-                   for d in bloque["por_dia"])
+                   and d["por_etapa"] == [] for d in bloque["por_dia"])
         # por_dia ordenado antiguo -> reciente, sin huecos.
         fechas = [d["dia"] for d in bloque["por_dia"]]
         assert fechas == sorted(fechas)
 
 
-def test_gasto_ia_economia_agrega_por_proceso_dia_y_tipo(pg):
-    """Agrega GLOBAL (sin marca) por proceso; zero-fill del eje; por_tipo por coste desc."""
+def test_gasto_ia_economia_agrega_por_pestana_dia_y_etapa(pg):
+    """Agrega GLOBAL (sin marca) por pestaña; zero-fill del eje; por_etapa por coste desc + cruces."""
     from datetime import timedelta
 
     from keni_consola import repos
@@ -521,18 +521,55 @@ def test_gasto_ia_economia_agrega_por_proceso_dia_y_tipo(pg):
 
     prod = eco["produccion"]
     assert prod["total"] == {"items": 3, "tokens": 155, "coste_usd": pytest.approx(0.062)}
-    # por_tipo: imagen (0.05) antes que copy (0.012), ordenado por coste desc.
-    assert [t["tipo"] for t in prod["por_tipo"]] == ["imagen", "copy"]
-    assert prod["por_tipo"][1] == {"tipo": "copy", "items": 2, "tokens": 155,
-                                   "coste_usd": pytest.approx(0.012)}
+    # por_etapa: imagen (0.05) antes que copy (0.012), ordenado por coste desc.
+    assert [t["tipo"] for t in prod["por_etapa"]] == ["imagen", "copy"]
+    etapa_copy = next(t for t in prod["por_etapa"] if t["tipo"] == "copy")
+    assert etapa_copy["items"] == 2 and etapa_copy["tokens"] == 155
+    assert etapa_copy["coste_usd"] == pytest.approx(0.012)
+    # Cruce por_etapa[].por_dia: la etapa copy tiene su serie de 3 dias (zero-filled), con sus
+    # 2 items en HOY.
+    copy_por_dia = {d["dia"]: d for d in etapa_copy["por_dia"]}
+    assert len(etapa_copy["por_dia"]) == 3 and copy_por_dia[hoy_iso]["items"] == 2
+    assert copy_por_dia[ayer]["items"] == 0
     # por_dia: longitud 3, el dia mas reciente suma las dos filas de hoy.
     assert len(prod["por_dia"]) == 3
     por_dia = {d["dia"]: d for d in prod["por_dia"]}
     assert por_dia[hoy_iso]["items"] == 2 and por_dia[hoy_iso]["tokens"] == 155
     assert por_dia[ayer]["coste_usd"] == pytest.approx(0.05)
+    # Cruce por_dia[].por_etapa: el desglose por etapa de HOY trae copy (2 items); el de AYER, imagen.
+    assert [e["tipo"] for e in por_dia[hoy_iso]["por_etapa"]] == ["copy"]
+    assert por_dia[hoy_iso]["por_etapa"][0]["items"] == 2
+    assert [e["tipo"] for e in por_dia[ayer]["por_etapa"]] == ["imagen"]
 
     inv = eco["investigacion"]
     assert inv["total"]["items"] == 1 and inv["total"]["tokens"] == 220
+
+
+def test_gasto_ia_economia_reclasifica_herramientas_y_desarrollo(pg):
+    """dev-fase/dev-discovery -> Desarrollo; transcribir/idear/import -> Herramientas; el resto cae
+    a su motor sellado (la ambiguedad de `pipeline` la resuelve la columna `proceso`)."""
+    from keni_consola import repos
+    from keni_consola.tiempo import hoy_utc
+
+    hoy_iso = hoy_utc().isoformat()
+    # Aunque se sellen como 'produccion' en el ledger, la economia los reclasifica por su tipo.
+    repos.registrar_gasto_ia("d1", dia=hoy_iso, proceso="produccion", tipo="dev-fase",
+                             marca="", tokens_in=100, tokens_out=50, coste_usd=0.02)
+    repos.registrar_gasto_ia("h1", dia=hoy_iso, proceso="produccion", tipo="transcribir",
+                             marca="unotv", tokens_in=10, tokens_out=5, coste_usd=0.001)
+    repos.registrar_gasto_ia("h2", dia=hoy_iso, proceso="produccion", tipo="evergreen-ideas",
+                             marca="unotv", tokens_in=20, tokens_out=10, coste_usd=0.003)
+    repos.registrar_gasto_ia("c1", dia=hoy_iso, proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=30, tokens_out=10, coste_usd=0.004)
+    # `pipeline` ambiguo: el sello de proceso decide (investigacion = verificar).
+    repos.registrar_gasto_ia("v1", dia=hoy_iso, proceso="investigacion", tipo="pipeline",
+                             marca="unotv", tokens_in=200, tokens_out=20, coste_usd=0.005)
+
+    eco = db.gasto_ia_economia_por_proceso(2)
+    assert eco["desarrollo"]["total"]["items"] == 1 and eco["desarrollo"]["total"]["tokens"] == 150
+    assert eco["herramientas"]["total"]["items"] == 2  # transcribir + evergreen-ideas
+    assert eco["produccion"]["total"]["items"] == 1  # solo copy
+    assert eco["investigacion"]["total"]["items"] == 1  # el pipeline sellado investigacion
 
 
 def test_gasto_ia_economia_filtra_por_marca(pg):

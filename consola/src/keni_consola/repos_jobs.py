@@ -87,12 +87,12 @@ def registrar_gasto_ia(gen_id: str, **kwargs: Any) -> None:
     return db.registrar_gasto_ia(gen_id, **kwargs)
 
 
-def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
-    return db.gasto_ia_del_dia(dia)
+def gasto_ia_del_dia(dia: str, marca: str = "") -> dict[str, Any]:
+    return db.gasto_ia_del_dia(dia, marca)
 
 
-def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
-    return db.gasto_ia_del_dia_por_proceso(dia)
+def gasto_ia_del_dia_por_proceso(dia: str, marca: str = "") -> dict[str, dict[str, Any]]:
+    return db.gasto_ia_del_dia_por_proceso(dia, marca)
 
 
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:

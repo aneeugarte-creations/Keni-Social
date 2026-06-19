@@ -569,18 +569,24 @@ def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
     return {"por_imagen": por_imagen, "muestras": len(costes), "modelo": modelo or ""}
 
 
-def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
+def gasto_ia_del_dia(dia: str, marca: str = "") -> dict[str, Any]:
     """Gasto AGREGADO de un dia UTC: `{tokens, tokens_in, tokens_out, coste_usd, generaciones}`.
 
     Es la lectura del corte automatico (`presupuesto_ia.nivel()`): tokens = in + out del dia.
+    `marca` ("" = TODAS, agregado global; un id acota a esa marca) para el corte POR MARCA.
     """
+    where = "WHERE dia = ?"
+    params: tuple[Any, ...] = (dia,)
+    if marca:
+        where += " AND marca = ?"
+        params = (dia, marca)
     con = _conectar()
     try:
         fila = con.execute(
             "SELECT COALESCE(SUM(tokens_in), 0) AS tin, COALESCE(SUM(tokens_out), 0) AS tout, "
             "COALESCE(SUM(coste_usd), 0) AS coste, COUNT(*) AS n "
-            "FROM gasto_ia WHERE dia = ?",
-            (dia,),
+            f"FROM gasto_ia {where}",
+            params,
         ).fetchone()
     finally:
         con.close()
@@ -595,7 +601,7 @@ def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
     }
 
 
-def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
+def gasto_ia_del_dia_por_proceso(dia: str, marca: str = "") -> dict[str, dict[str, Any]]:
     """Gasto del dia UTC DESGLOSADO por proceso (ADR 0011): investigacion vs produccion.
 
     Mismo dia que `gasto_ia_del_dia`, agrupado por la columna `proceso` del ledger. Por cada
@@ -603,18 +609,24 @@ def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
     GARANTIZA siempre las claves 'investigacion' y 'produccion' (a ceros si no hay filas), para
     que el desglose de la Economia tenga ambos motores sin condicionar la UI. Otros valores de
     `proceso` (legado/desconocido) tambien aparecen si existen filas.
+    `marca` ("" = TODAS; un id acota a esa marca) para el corte por motor POR MARCA.
     """
     por_proceso: dict[str, dict[str, Any]] = {
         "investigacion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0, "generaciones": 0},
         "produccion": {"tokens_in": 0, "tokens_out": 0, "tokens": 0, "coste_usd": 0.0, "generaciones": 0},
     }
+    where = "WHERE dia = ?"
+    params: tuple[Any, ...] = (dia,)
+    if marca:
+        where += " AND marca = ?"
+        params = (dia, marca)
     con = _conectar()
     try:
         filas = con.execute(
             "SELECT proceso, COALESCE(SUM(tokens_in), 0) AS tin, COALESCE(SUM(tokens_out), 0) AS tout, "
             "COALESCE(SUM(coste_usd), 0) AS coste, COUNT(*) AS n "
-            "FROM gasto_ia WHERE dia = ? GROUP BY proceso",
-            (dia,),
+            f"FROM gasto_ia {where} GROUP BY proceso",
+            params,
         ).fetchall()
     finally:
         con.close()
@@ -634,21 +646,60 @@ def gasto_ia_del_dia_por_proceso(dia: str) -> dict[str, dict[str, Any]]:
     return por_proceso
 
 
-def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
-    """Desglose economico de los ultimos `dias` (UTC) DESDE el ledger `gasto_ia`.
+# Pestañas de la página Contexto: las 4 que agrupan TODO el gasto de prompts. La economía
+# reclasifica cada fila del ledger en una de ellas al leer (espejo de las pestañas de `fases.ts`).
+PESTANA_INVESTIGACION = "investigacion"
+PESTANA_PRODUCCION = "produccion"
+PESTANA_HERRAMIENTAS = "herramientas"
+PESTANA_DESARROLLO = "desarrollo"
+PESTANAS_ECONOMIA = (
+    PESTANA_INVESTIGACION,
+    PESTANA_PRODUCCION,
+    PESTANA_HERRAMIENTAS,
+    PESTANA_DESARROLLO,
+)
+# `tipo` -> Desarrollo (pipeline de auto-desarrollo: fases del carril + discovery).
+_TIPOS_DESARROLLO = frozenset({"dev-fase", "dev-discovery"})
+# `tipo` -> Herramientas (agentes sueltos de la pestaña: Recibir/Importar/Ideación/Audio).
+_TIPOS_HERRAMIENTAS = frozenset(
+    {"insumos", "import-calendario", "parrilla-import", "evergreen-ideas", "transcribir"}
+)
 
-    Fuente UNICA y autoritativa de la pagina Economia: el mismo ledger que la tarjeta de
-    presupuesto. `marca` vacia = AGREGADO de todas las marcas; una marca concreta acota el
-    desglose a sus filas. Agrupa por `proceso` (investigacion/produccion) y, por
-    cada proceso, devuelve:
-      - `total`:   `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
-      - `por_dia`: EXACTAMENTE `dias` entradas, de la mas ANTIGUA a la mas reciente, ZERO-FILLED
-                   (dias sin filas -> ceros): `{dia, items, tokens, coste_usd}`.
-      - `por_tipo`:`[{tipo, items, tokens, coste_usd}]` ordenado por coste_usd desc, luego tipo.
-    GARANTIZA siempre las claves 'investigacion' y 'produccion' (a ceros, con `por_dia` de
-    longitud `dias`) aunque no haya filas. Otros valores de `proceso` solo aparecen si hay filas;
-    las filas sin `proceso` se ignoran. `dia` es `date` (migracion 0033): el corte `dia >= ?`
-    compara nativo y el `dia` agrupado se re-emite como string ISO `YYYY-MM-DD`.
+
+def pestana_economia(proceso: str, tipo: str) -> str:
+    """Pestaña de Contexto (1 de las 4) a la que pertenece una fila de gasto del ledger.
+
+    Desarrollo y Herramientas se reconocen por su `tipo` (inequívoco); el resto cae a su MOTOR
+    según la columna `proceso` sellada (investigacion|produccion), que ya resuelve la ambigüedad
+    de los tipos compartidos como `pipeline` (verificación de fuente vs redacción). Default
+    produccion ante un proceso desconocido o vacío.
+    """
+    if tipo in _TIPOS_DESARROLLO:
+        return PESTANA_DESARROLLO
+    if tipo in _TIPOS_HERRAMIENTAS:
+        return PESTANA_HERRAMIENTAS
+    if proceso == PESTANA_INVESTIGACION:
+        return PESTANA_INVESTIGACION
+    return PESTANA_PRODUCCION
+
+
+def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
+    """Desglose económico de los últimos `dias` (UTC) DESDE el ledger `gasto_ia`, AGRUPADO en las
+    4 PESTAÑAS de Contexto (investigacion/produccion/herramientas/desarrollo).
+
+    Fuente ÚNICA y autoritativa de la página Economía: el mismo ledger que la tarjeta de
+    presupuesto. `marca` vacía = AGREGADO de todas las marcas; una marca concreta acota el
+    desglose a sus filas. Cada fila se reclasifica con `pestana_economia(proceso, tipo)`. Por cada
+    pestaña devuelve:
+      - `total`:    `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
+      - `por_dia`:  EXACTAMENTE `dias` entradas, antiguo→reciente, ZERO-FILLED; cada una
+                    `{dia, items, tokens, coste_usd, por_etapa:[{tipo, items, tokens, coste_usd}]}`
+                    (el desglose por ETAPA/prompt de ESE día, ordenado por coste desc).
+      - `por_etapa`:`[{tipo, items, tokens, coste_usd, por_dia:[{dia, items, tokens, coste_usd}]}]`
+                    ordenado por coste desc; el `por_dia` interno va zero-filled (longitud `dias`).
+    GARANTIZA siempre las 4 claves (a ceros, con `por_dia` de longitud `dias`) aunque no haya filas.
+    `dia` es `date` (migración 0033): el corte `dia >= ?` compara nativo y el `dia` agrupado se
+    re-emite como string ISO `YYYY-MM-DD`.
     """
     n = max(1, int(dias))
     hoy = hoy_utc()
@@ -662,14 +713,16 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
             "items": 0,
             "tokens": 0,
             "coste_usd": 0.0,
-            "_por_dia": {d: {"items": 0, "tokens": 0, "coste_usd": 0.0} for d in dias_esperados},
-            "_por_tipo": {},
+            # dia -> {items, tokens, coste_usd, _etapas: {tipo -> {items, tokens, coste_usd}}}
+            "_por_dia": {
+                d: {"items": 0, "tokens": 0, "coste_usd": 0.0, "_etapas": {}}
+                for d in dias_esperados
+            },
+            # tipo(etapa) -> {items, tokens, coste_usd, _dias: {dia -> {items, tokens, coste_usd}}}
+            "_por_etapa": {},
         }
 
-    acumulado: dict[str, dict[str, Any]] = {
-        "investigacion": _acc_nuevo(),
-        "produccion": _acc_nuevo(),
-    }
+    acumulado: dict[str, dict[str, Any]] = {p: _acc_nuevo() for p in PESTANAS_ECONOMIA}
     where = "WHERE dia >= ?"
     params: tuple[Any, ...] = (corte,)
     if marca:
@@ -686,44 +739,78 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
         ).fetchall()
     finally:
         con.close()
+
+    def _bump(celda: dict[str, Any], items: int, tokens: int, coste: float) -> None:
+        celda["items"] += items
+        celda["tokens"] += tokens
+        celda["coste_usd"] += coste
+
     for f in filas:
-        proceso = str(f["proceso"] or "")
-        if not proceso:
-            continue
-        acc = acumulado.setdefault(proceso, _acc_nuevo())
         items = int(f["items"])
         tokens = int(f["tokens"])
         coste = float(f["coste"])
-        acc["items"] += items
-        acc["tokens"] += tokens
-        acc["coste_usd"] += coste
-        dia = iso_o_vacio(f["dia"])
-        celda = acc["_por_dia"].get(dia)
-        if celda is not None:
-            celda["items"] += items
-            celda["tokens"] += tokens
-            celda["coste_usd"] += coste
         tipo = str(f["tipo"] or "")
-        t = acc["_por_tipo"].setdefault(tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0})
-        t["items"] += items
-        t["tokens"] += tokens
-        t["coste_usd"] += coste
+        acc = acumulado[pestana_economia(str(f["proceso"] or ""), tipo)]
+        _bump(acc, items, tokens, coste)
+        dia = iso_o_vacio(f["dia"])
+        celda_dia = acc["_por_dia"].get(dia)
+        if celda_dia is not None:
+            _bump(celda_dia, items, tokens, coste)
+            _bump(
+                celda_dia["_etapas"].setdefault(tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0}),
+                items, tokens, coste,
+            )
+        etapa = acc["_por_etapa"].setdefault(
+            tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0, "_dias": {}}
+        )
+        _bump(etapa, items, tokens, coste)
+        if dia in acc["_por_dia"]:
+            _bump(
+                etapa["_dias"].setdefault(dia, {"items": 0, "tokens": 0, "coste_usd": 0.0}),
+                items, tokens, coste,
+            )
+
+    def _orden_etapa(r: dict[str, Any]) -> tuple[float, str]:
+        return (-r["coste_usd"], r["tipo"])
 
     resultado: dict[str, dict[str, Any]] = {}
-    for proceso, acc in acumulado.items():
-        por_dia = [{"dia": d, **acc["_por_dia"][d]} for d in dias_esperados]
-        por_tipo = sorted(
-            ({"tipo": tipo, **vals} for tipo, vals in acc["_por_tipo"].items()),
-            key=lambda r: (-r["coste_usd"], r["tipo"]),
+    for pestana, acc in acumulado.items():
+        por_dia = []
+        for d in dias_esperados:
+            celda = acc["_por_dia"][d]
+            por_dia.append({
+                "dia": d,
+                "items": celda["items"],
+                "tokens": celda["tokens"],
+                "coste_usd": celda["coste_usd"],
+                "por_etapa": sorted(
+                    ({"tipo": t, **v} for t, v in celda["_etapas"].items()), key=_orden_etapa
+                ),
+            })
+        por_etapa = sorted(
+            (
+                {
+                    "tipo": tipo,
+                    "items": v["items"],
+                    "tokens": v["tokens"],
+                    "coste_usd": v["coste_usd"],
+                    "por_dia": [
+                        {"dia": d, **v["_dias"].get(d, {"items": 0, "tokens": 0, "coste_usd": 0.0})}
+                        for d in dias_esperados
+                    ],
+                }
+                for tipo, v in acc["_por_etapa"].items()
+            ),
+            key=_orden_etapa,
         )
-        resultado[proceso] = {
+        resultado[pestana] = {
             "total": {
                 "items": acc["items"],
                 "tokens": acc["tokens"],
                 "coste_usd": acc["coste_usd"],
             },
             "por_dia": por_dia,
-            "por_tipo": por_tipo,
+            "por_etapa": por_etapa,
         }
     return resultado
 

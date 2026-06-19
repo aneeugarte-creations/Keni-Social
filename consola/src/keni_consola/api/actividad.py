@@ -341,7 +341,9 @@ async def cola(request: Request) -> Response:
             # Economia de tokens (presupuesto_ia): presupuesto diario, gasto del dia UTC,
             # nivel de corte vigente (normal/solo_manual/agotado/pausado) y kill switch.
             # CONTRATO de visibilidad para humanos (Monitor) y agentes (observabilidad).
-            "presupuesto": presupuesto_ia.estado(),
+            # Respeta el switch de marca: con marca activa, el presupuesto/parada PROPIOS de esa
+            # marca; "" = el control GLOBAL.
+            "presupuesto": presupuesto_ia.estado(marca),
         }
     )
 

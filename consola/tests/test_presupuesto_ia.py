@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import cola, generaciones, presupuesto_ia, repos
+from keni_consola import ajustes, cola, generaciones, presupuesto_ia, repos
 from keni_consola.dominio import jobspec
 from keni_consola.tiempo import ahora_iso
 
@@ -263,6 +263,81 @@ def test_nivel_pausado_manda(entorno, monkeypatch):
     monkeypatch.setenv("KENI_GENERACION_PAUSADA", "1")
     assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_PAUSADO
     assert presupuesto_ia.estado()["pausada"] is True
+
+
+# --------------------------------------------------------------------------- #
+# Presupuesto + parada de emergencia POR MARCA (enforced)                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_nivel_por_marca_su_cap_no_afecta_a_otras(entorno):
+    """El cap USD propio de una marca corta SOLO su trabajo; el global y las otras marcas siguen."""
+    ajustes.guardar("KENI_PRESUPUESTO_USD_DIA::unotv", "5")
+    repos.registrar_gasto_ia("u1", dia=_hoy(), proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=1, tokens_out=1, coste_usd=5.0)
+    presupuesto_ia.invalidar_cache()
+    # Sin cap global: el global sigue NORMAL; la marca unotv alcanza su cap -> solo_manual.
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_SOLO_MANUAL
+    assert presupuesto_ia.nivel("claro-sports") == presupuesto_ia.NIVEL_NORMAL
+
+
+def test_parada_de_emergencia_por_marca(entorno):
+    """La parada de una marca la pausa SOLO a ella; el global y las otras marcas no se tocan."""
+    ajustes.guardar("KENI_GENERACION_PAUSADA::unotv", "1")
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+    assert presupuesto_ia.nivel() == presupuesto_ia.NIVEL_NORMAL
+    assert presupuesto_ia.nivel("claro-sports") == presupuesto_ia.NIVEL_NORMAL
+    # estado(marca) refleja la parada PROPIA de la marca; el global, no.
+    assert presupuesto_ia.estado("unotv")["pausada"] is True
+    assert presupuesto_ia.estado()["pausada"] is False
+
+
+def test_parada_global_manda_sobre_la_marca(entorno, monkeypatch):
+    """La parada GLOBAL corta TODAS las marcas (el más restrictivo entre global y marca)."""
+    monkeypatch.setenv("KENI_GENERACION_PAUSADA", "1")
+    assert presupuesto_ia.nivel("unotv") == presupuesto_ia.NIVEL_PAUSADO
+
+
+def test_estado_por_marca_acota_gasto_y_controles(entorno):
+    """estado(marca) trae el gasto y los controles PROPIOS de la marca; estado() agrega todo."""
+    ajustes.guardar("KENI_PRESUPUESTO_USD_DIA::unotv", "8")
+    repos.registrar_gasto_ia("u1", dia=_hoy(), proceso="produccion", tipo="copy",
+                             marca="unotv", tokens_in=100, tokens_out=40, coste_usd=4.0)
+    repos.registrar_gasto_ia("c1", dia=_hoy(), proceso="produccion", tipo="copy",
+                             marca="claro-sports", tokens_in=10, tokens_out=5, coste_usd=1.0)
+    presupuesto_ia.invalidar_cache()
+
+    est_unotv = presupuesto_ia.estado("unotv")
+    assert est_unotv["marca"] == "unotv"
+    assert est_unotv["gastado"]["coste_usd"] == pytest.approx(4.0)  # solo unotv
+    assert est_unotv["presupuesto_usd_dia"] == pytest.approx(8.0)  # cap propio de la marca
+    assert est_unotv["pct_usado_usd"] == pytest.approx(50.0)
+    # En vista de marca los topes de tokens por motor (globales) no se re-emiten como propios.
+    assert est_unotv["por_proceso"]["produccion"]["presupuesto_tokens_in_dia"] == 0
+
+    est_global = presupuesto_ia.estado()
+    assert est_global["marca"] == ""
+    assert est_global["gastado"]["coste_usd"] == pytest.approx(5.0)  # unotv + claro-sports
+
+
+def test_encolar_parada_marca_corta_su_trabajo_no_otras(entorno):
+    """La parada de una marca rechaza el encolado de SU trabajo (fondo y manual); otras pasan."""
+    ajustes.guardar("KENI_GENERACION_PAUSADA::unotv", "1")
+
+    def _encolar_marca(marca: str, prioridad: int) -> str:
+        gen_id = generaciones.crear({"tipo": "copy", "marca": marca, "etiqueta": "X"})["id"]
+        spec = jobspec.construir(
+            prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=prioridad
+        )
+        return cola.encolar(gen_id, spec, proceso="produccion", marca=marca)
+
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar_marca("unotv", jobspec.PRIORIDAD_MANUAL)
+    with pytest.raises(generaciones.GeneracionPausadaError):
+        _encolar_marca("unotv", jobspec.PRIORIDAD_PIPELINE)
+    # Otra marca no se ve afectada por la parada de unotv.
+    assert _encolar_marca("claro-sports", jobspec.PRIORIDAD_PIPELINE)
 
 
 # --------------------------------------------------------------------------- #

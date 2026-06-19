@@ -22,7 +22,9 @@ from .dominio import jobspec, runner
 _log = logging.getLogger("keni_consola.cola")
 
 
-def encolar(gen_id: str, spec: dict[str, Any], *, proceso: str | None = None) -> str:
+def encolar(
+    gen_id: str, spec: dict[str, Any], *, proceso: str | None = None, marca: str | None = None
+) -> str:
     """Encola el job de `gen_id` con su `spec` (dict). Devuelve el job id. NO bloquea.
 
     LA COLA NO TIENE TOPE (R-NO-LIMIT): la admision NUNCA rechaza por tamano de cola. Un pico de
@@ -40,6 +42,11 @@ def encolar(gen_id: str, spec: dict[str, Any], *, proceso: str | None = None) ->
     `proceso` (motor del job, si el llamante lo conoce): cuando viene, el corte por presupuesto
     aplica TAMBIEN el tope propio del motor (el mas restrictivo, ver `presupuesto_ia`). Sin el,
     cae al corte GLOBAL de siempre.
+
+    `marca` (marca del job, si el llamante la conoce): cuando viene, el corte aplica TAMBIEN el
+    control PROPIO de esa marca (su parada de emergencia y su cap USD), de nuevo el mas restrictivo
+    con el global. Asi una parada/tope de marca rechaza el encolado de SU trabajo (fondo y manual)
+    sin tocar al resto. Sin marca, solo aplica el control global.
     """
     # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline.
     # Asi los seams inyectables de encolado no cambian de firma y `reclamar_job` puede ordenar
@@ -58,7 +65,11 @@ def encolar(gen_id: str, spec: dict[str, Any], *, proceso: str | None = None) ->
     # ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
     gasta_tokens = not jobspec.es_kind_proceso(spec)
     bloqueo = presupuesto_ia.bloqueo_admision(
-        presupuesto_ia.nivel(), gasta_tokens=gasta_tokens, es_fondo=es_fondo, proceso=proceso
+        presupuesto_ia.nivel(marca or ""),
+        gasta_tokens=gasta_tokens,
+        es_fondo=es_fondo,
+        proceso=proceso,
+        marca=marca,
     )
     if bloqueo == presupuesto_ia.NIVEL_PAUSADO:
         raise runner.GeneracionPausadaError(

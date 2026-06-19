@@ -414,6 +414,7 @@ from .config_hosted import (  # noqa: F401
 )
 from .config_jobs import (  # noqa: F401
     generacion_pausada,
+    generacion_pausada_marca,
     jobs_max_intentos,
     prompt_aviso_chars,
     prompt_max_chars,
@@ -424,6 +425,7 @@ from .config_jobs import (  # noqa: F401
     presupuesto_tokens_produccion_in_dia,
     presupuesto_tokens_produccion_out_dia,
     presupuesto_usd_dia,
+    presupuesto_usd_dia_marca,
     worker_externo,
     worker_sondeo_segundos,
 )

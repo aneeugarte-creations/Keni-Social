@@ -333,7 +333,10 @@ def encolar_job_claude(
     # interesa el proceso.
     reg = obtener(gen_id)
     proceso = proceso_de(reg) if reg else None
-    cola.encolar(gen_id, spec, proceso=proceso)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
+    marca = (reg.get("marca") or "") if reg else ""
+    # SIEMPRE encola (sin tope); solo el corte de presupuesto/pausa —global y de la marca— rechaza
+    # (ColaLlenaError -> 429). `marca` deja que la parada/tope PROPIO de la marca corte su trabajo.
+    cola.encolar(gen_id, spec, proceso=proceso, marca=marca)
     # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p` y su TAMAÑO
     # (`prompt_chars`, economía de contexto: lo vuelca el ledger `gasto_ia` al cerrar, para
     # ver la deriva del contexto por día). El prompt se expone SOLO en el detalle
@@ -381,7 +384,10 @@ def encolar_job_proceso(
     spec = jobspec.construir_proceso(kind, params or {})
     from .. import cola
 
-    cola.encolar(reg["id"], spec)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
+    # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429). Un job de
+    # proceso no gasta tokens (exento del cap USD), pero la parada de emergencia de su marca SI lo
+    # corta, igual que la global: por eso pasamos `marca`.
+    cola.encolar(reg["id"], spec, marca=marca or "")
     return reg
 
 

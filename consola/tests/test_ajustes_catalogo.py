@@ -222,7 +222,7 @@ def test_grupos_estables(store):
         "maquina_global", "maestros_investigacion", "maestros_produccion",
         "automatizacion_marca_investigacion", "automatizacion_marca_produccion",
         "pipeline_topes",
-        "pieza", "publicacion_marca", "automatismos_generales",
+        "pieza", "publicacion_marca", "presupuesto_marca", "automatismos_generales",
         "noticias_entrada", "noticias_rendimiento",
         "noticias_produccion", "noticias_produccion_marca",
         "noticias_tecnico",

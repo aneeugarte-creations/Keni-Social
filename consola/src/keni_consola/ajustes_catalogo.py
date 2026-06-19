@@ -46,6 +46,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("pipeline_topes", "Admisión del flujo"),
     ("pieza", "Publicación"),
     ("publicacion_marca", "Excepciones por marca"),
+    ("presupuesto_marca", "Presupuesto por marca"),
     ("automatismos_generales", "Automatismos"),
     ("noticias_entrada", "Qué entra al pool"),
     ("noticias_rendimiento", "Rendimiento en redes"),
@@ -298,6 +299,43 @@ def _publicacion_por_marca() -> list[Ajuste]:
         )
         for mid, nombre in marcas.opciones()
     ]
+
+
+def _presupuesto_por_marca() -> list[Ajuste]:
+    """Presupuesto diario de coste (USD) y PARADA DE EMERGENCIA por marca (`KENI_*::marca`).
+
+    Mismo patrón de override por-marca que las etapas: son INDEPENDIENTES del control global y el
+    corte de un job de la marca toma el MÁS restrictivo entre su control de marca y el global (ver
+    `presupuesto_ia`). El cap USD `0` = la marca no añade tope (solo aplica el global); la parada,
+    apagada por defecto. Se generan en caliente desde el catálogo de marcas (añadir una marca añade
+    sus controles sin tocar código)."""
+    salida: list[Ajuste] = []
+    for mid, nombre in marcas.opciones():
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_PRESUPUESTO_USD_DIA, mid),
+                tipo="float",
+                etiqueta=f"{nombre} · presupuesto (USD/día)",
+                ayuda=f"Coste real (USD) de generación de «{nombre}» por día UTC; al agotarse se "
+                "corta su trabajo automático (lo manual sigue hasta el margen); 0 = sin tope "
+                "propio (solo aplica el cap global). Corta el más restrictivo entre marca y global.",
+                grupo="presupuesto_marca",
+                defecto=0.0,
+                minimo=0,
+            )
+        )
+        salida.append(
+            Ajuste(
+                clave=config.clave_por_marca(config.ENV_GENERACION_PAUSADA, mid),
+                tipo="bool",
+                etiqueta=f"{nombre} · parada de emergencia",
+                ayuda=f"Corta TODA la generación de «{nombre}» (fondo y manual) sin tocar al resto; "
+                "ortogonal al kill switch global (basta con que uno de los dos esté activo).",
+                grupo="presupuesto_marca",
+                defecto=False,
+            )
+        )
+    return salida
 
 
 @dataclass(frozen=True)
@@ -722,6 +760,7 @@ def catalogo() -> list[Ajuste]:
         + _ajustes_por_marca()
         + _plan_por_marca()
         + _publicacion_por_marca()
+        + _presupuesto_por_marca()
     )
 
 

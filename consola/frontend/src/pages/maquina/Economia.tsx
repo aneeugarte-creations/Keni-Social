@@ -1,24 +1,25 @@
 /**
  * Página ECONOMÍA (`/maquina/economia`): la CONTABILIDAD de la máquina de contenido, separada de
- * la operación de la cola (`/maquina/computo`). Reúne en un solo sitio el gasto: el presupuesto
- * diario editable + la parada de emergencia (globales) y la economía de tokens DESGLOSADA por
- * motor (Investigación | Producción): totales (trabajos IA · tokens · coste), la serie de los
- * últimos 7 días y los desgloses por tipo de trabajo y por día.
+ * la operación de la cola (`/maquina/computo`). Reúne el gasto: el presupuesto + la parada de
+ * emergencia (POR MARCA si hay marca activa; GLOBAL en "todas") y la economía de tokens agrupada
+ * en las 4 PESTAÑAS de Contexto (Investigación · Producción · Herramientas · Desarrollo), cada una
+ * con sus KPIs (trabajos IA · tokens · coste), una tabla por DÍA (desplegable a su desglose por
+ * etapa/prompt) y otra por ETAPA (desplegable a su serie por día).
  *
- * La economía sale de `/api/actividad/economia` (ledger `gasto_ia`): es la MISMA fuente para los
- * totales, la serie y los desgloses, así que todo cuadra. Respeta el switch de marca: una marca
- * activa acota el desglose a sus filas; "todas" muestra el AGREGADO global. El presupuesto y la
- * parada de emergencia se gestionan aparte (globales). `?proceso=investigacion|produccion` enfoca
- * a un solo motor (columna a ancho completo).
+ * Todo sale de `/api/actividad/economia` (ledger `gasto_ia`): la MISMA fuente para totales y
+ * desgloses, así que cuadra. Respeta el switch de marca: una marca activa acota el desglose a sus
+ * filas; "todas" muestra el AGREGADO global. El presupuesto se sirve por separado (la cola, que ya
+ * respeta el switch de marca). `?proceso=` enfoca a una sola pestaña; la ventana (Día/7/30) la fija
+ * el propio usuario.
  */
 import { useQuery } from "@tanstack/react-query";
-import { RotateCcw } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import * as React from "react";
-import { Button } from "@/components/ui/button";
 import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -40,74 +41,127 @@ import { cn } from "@/lib/utils";
 import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
 import { PROC_META } from "@/pages/monitor/comun";
 import type {
+  EconomiaCelda,
   EconomiaDia,
+  EconomiaEtapaConDias,
   EconomiaProcesoBloque,
-  EconomiaTipo,
-  Proceso,
+  PestanaEconomia,
 } from "@/types";
 
-/** Los dos motores de la máquina (ADR 0011), en orden de flujo. */
-const MOTORES: Proceso[] = ["investigacion", "produccion"];
+/** Las 4 pestañas de Contexto, en orden de flujo, con su etiqueta y color. Reusa la meta de los
+ *  dos motores (ADR 0011) y añade Herramientas y Desarrollo. */
+const PESTANAS: readonly PestanaEconomia[] = [
+  "investigacion",
+  "produccion",
+  "herramientas",
+  "desarrollo",
+];
+const META: Record<PestanaEconomia, { etiqueta: string; barra: string; texto: string }> = {
+  investigacion: PROC_META.investigacion,
+  produccion: PROC_META.produccion,
+  herramientas: { etiqueta: "Herramientas", barra: "bg-violet-500/70", texto: "text-violet-600" },
+  desarrollo: { etiqueta: "Desarrollo", barra: "bg-amber-500/70", texto: "text-amber-600" },
+};
 
-/** Días de la ventana de economía (la serie y los desgloses). */
-const DIAS = 7;
+/** Las ventanas de tiempo seleccionables (días que pide la economía). */
+const VENTANAS: readonly { dias: number; etiqueta: string }[] = [
+  { dias: 1, etiqueta: "Día" },
+  { dias: 7, etiqueta: "7 días" },
+  { dias: 30, etiqueta: "30 días" },
+];
+const VENTANA_DEFECTO = 7;
+
+/** Etiqueta legible de una etapa (= `tipo` del ledger); "—" si viene vacía. */
+function etiquetaEtapa(tipo: string): string {
+  return tipo ? etiquetaTipoGeneracion(tipo) : "—";
+}
 
 /** Línea discreta de "sin datos": una sola fila, no una tarjeta enorme con hueco. */
 function LineaVacia({ texto }: { texto: string }) {
   return <p className="px-6 py-3 text-sm text-muted-foreground">{texto}</p>;
 }
 
-/** Mini-tabla de desglose por TIPO de trabajo (de un motor). */
-function DesglosePorTipo({ filas }: { filas: EconomiaTipo[] }) {
+/** Tres celdas numéricas (items · tokens · coste) reutilizadas por todas las filas. */
+function CeldasGasto({ celda }: { celda: EconomiaCelda }) {
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Por tipo</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {filas.length === 0 ? (
-          <LineaVacia texto="Sin actividad por tipo" />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-6">Tipo</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Tokens</TableHead>
-                <TableHead className="pr-6 text-right">Coste</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filas.map((f) => (
-                <TableRow key={f.tipo}>
-                  <TableCell className="pl-6 font-medium">
-                    {f.tipo ? etiquetaTipoGeneracion(f.tipo) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(f.items)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.tokens)}>
-                    {numeroCompacto(f.tokens)}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">
-                    {costeUsd(f.coste_usd)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <>
+      <TableCell className="text-right tabular-nums">{numeroCompleto(celda.items)}</TableCell>
+      <TableCell className="text-right tabular-nums" title={numeroCompleto(celda.tokens)}>
+        {numeroCompacto(celda.tokens)}
+      </TableCell>
+      <TableCell className="pr-6 text-right tabular-nums">{costeUsd(celda.coste_usd)}</TableCell>
+    </>
   );
 }
 
-/** Mini-tabla de desglose por DÍA con actividad, más reciente primero. */
-function DesglosePorDia({ filas }: { filas: EconomiaDia[] }) {
+/** Cabecera de columnas compartida: primera columna libre + Items · Tokens · Coste. */
+function CabeceraGasto({ primera }: { primera: string }) {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead className="pl-6">{primera}</TableHead>
+        <TableHead className="text-right">Items</TableHead>
+        <TableHead className="text-right">Tokens</TableHead>
+        <TableHead className="pr-6 text-right">Coste</TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+/** Botón-celda de la primera columna: chevron que gira al abrir + etiqueta. */
+function CeldaDesplegable({
+  abierto,
+  etiqueta,
+  onToggle,
+  aria,
+}: {
+  abierto: boolean;
+  etiqueta: string;
+  onToggle: () => void;
+  aria: string;
+}) {
+  return (
+    <TableCell className="pl-4 font-medium">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={abierto}
+        aria-label={aria}
+        className="flex items-center gap-1.5 text-left hover:text-foreground"
+      >
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+            abierto && "rotate-90",
+          )}
+          aria-hidden="true"
+        />
+        {etiqueta}
+      </button>
+    </TableCell>
+  );
+}
+
+/** Hook de conjunto de claves abiertas (filas desplegadas) con toggle. */
+function useDesplegables() {
+  const [abierto, setAbierto] = React.useState<Set<string>>(() => new Set());
+  const toggle = (clave: string) =>
+    setAbierto((prev) => {
+      const sig = new Set(prev);
+      if (sig.has(clave)) sig.delete(clave);
+      else sig.add(clave);
+      return sig;
+    });
+  return { abierto, toggle };
+}
+
+/** Tabla POR DÍA (más reciente primero): cada día despliega su desglose por ETAPA (prompt). */
+function TablaPorDia({ filas }: { filas: EconomiaDia[] }) {
   const conActividad = React.useMemo(
     () => filas.filter((f) => f.items > 0).sort((a, b) => b.dia.localeCompare(a.dia)),
     [filas],
   );
+  const { abierto, toggle } = useDesplegables();
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
@@ -118,29 +172,33 @@ function DesglosePorDia({ filas }: { filas: EconomiaDia[] }) {
           <LineaVacia texto="Sin actividad por día" />
         ) : (
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-6">Día</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Tokens</TableHead>
-                <TableHead className="pr-6 text-right">Coste</TableHead>
-              </TableRow>
-            </TableHeader>
+            <CabeceraGasto primera="Día" />
             <TableBody>
-              {conActividad.map((f) => (
-                <TableRow key={f.dia}>
-                  <TableCell className="pl-6 font-medium">{formatearDia(f.dia)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(f.items)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.tokens)}>
-                    {numeroCompacto(f.tokens)}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">
-                    {costeUsd(f.coste_usd)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {conActividad.map((f) => {
+                const open = abierto.has(f.dia);
+                return (
+                  <React.Fragment key={f.dia}>
+                    <TableRow>
+                      <CeldaDesplegable
+                        abierto={open}
+                        etiqueta={formatearDia(f.dia)}
+                        onToggle={() => toggle(f.dia)}
+                        aria={`Desglose por etapa de ${formatearDia(f.dia)}`}
+                      />
+                      <CeldasGasto celda={f} />
+                    </TableRow>
+                    {open &&
+                      f.por_etapa.map((e) => (
+                        <TableRow key={`${f.dia}-${e.tipo}`} className="bg-muted/30">
+                          <TableCell className="pl-11 text-sm text-muted-foreground">
+                            {etiquetaEtapa(e.tipo)}
+                          </TableCell>
+                          <CeldasGasto celda={e} />
+                        </TableRow>
+                      ))}
+                  </React.Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -149,77 +207,70 @@ function DesglosePorDia({ filas }: { filas: EconomiaDia[] }) {
   );
 }
 
-/** Mini-gráfico de los últimos `DIAS` días: una barra por día escalada por TOKENS. Cada fila es
- *  clicable: togglea el día seleccionado (clic en el activo lo deselecciona) y eso reenfoca los
- *  KPIs superiores a ese día. */
-function SerieEconomia({
-  motor,
-  filas,
-  diaSel,
-  onToggle,
-}: {
-  motor: Proceso;
-  filas: EconomiaDia[];
-  diaSel: string | null;
-  onToggle: (dia: string) => void;
-}) {
-  const maximo = Math.max(1, ...filas.map((f) => f.tokens));
-  const meta = PROC_META[motor];
+/** Tabla POR ETAPA (prompt; ordenada por coste desc): cada etapa despliega su serie por DÍA. */
+function TablaPorEtapa({ filas }: { filas: EconomiaEtapaConDias[] }) {
+  const conActividad = React.useMemo(() => filas.filter((f) => f.items > 0), [filas]);
+  const { abierto, toggle } = useDesplegables();
   return (
-    <div className="space-y-1.5">
-      {filas.map((f) => {
-        const activo = f.dia === diaSel;
-        return (
-          <button
-            key={f.dia}
-            type="button"
-            onClick={() => onToggle(f.dia)}
-            aria-pressed={activo}
-            className={cn(
-              "flex w-full items-center gap-3 rounded px-2 py-1 text-left text-xs transition-colors",
-              activo ? "bg-muted" : "hover:bg-muted/50",
-            )}
-          >
-            <span className="w-16 shrink-0 tabular-nums text-muted-foreground">
-              {formatearDia(f.dia)}
-            </span>
-            <div className="flex h-4 flex-1 overflow-hidden rounded bg-muted">
-              <div
-                className={cn(meta.barra, activo && "brightness-110")}
-                style={{ width: `${(f.tokens / maximo) * 100}%` }}
-                title={`${numeroCompleto(f.tokens)} tokens`}
-              />
-            </div>
-            <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
-              {numeroCompacto(f.tokens)} · {costeUsd(f.coste_usd)}
-            </span>
-          </button>
-        );
-      })}
-    </div>
+    <Card className="h-full">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Por etapa</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {conActividad.length === 0 ? (
+          <LineaVacia texto="Sin actividad por etapa" />
+        ) : (
+          <Table>
+            <CabeceraGasto primera="Etapa" />
+            <TableBody>
+              {conActividad.map((f) => {
+                const open = abierto.has(f.tipo);
+                const dias = f.por_dia
+                  .filter((d) => d.items > 0)
+                  .sort((a, b) => b.dia.localeCompare(a.dia));
+                return (
+                  <React.Fragment key={f.tipo || "—"}>
+                    <TableRow>
+                      <CeldaDesplegable
+                        abierto={open}
+                        etiqueta={etiquetaEtapa(f.tipo)}
+                        onToggle={() => toggle(f.tipo)}
+                        aria={`Desglose por día de ${etiquetaEtapa(f.tipo)}`}
+                      />
+                      <CeldasGasto celda={f} />
+                    </TableRow>
+                    {open &&
+                      dias.map((d) => (
+                        <TableRow key={`${f.tipo}-${d.dia}`} className="bg-muted/30">
+                          <TableCell className="pl-11 text-sm text-muted-foreground">
+                            {formatearDia(d.dia)}
+                          </TableCell>
+                          <CeldasGasto celda={d} />
+                        </TableRow>
+                      ))}
+                  </React.Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-/** Cabecera del motor + ámbito + KPIs (Trabajos IA · Tokens · Coste), reenfocables al día
- *  elegido en la serie (`diaSel`); sin día elegido muestran el total del periodo. */
+/** Cabecera de una pestaña + sus KPIs (Trabajos IA · Tokens · Coste) del periodo. */
 function CabeceraKpis({
-  motor,
+  pestana,
   bloque,
-  diaSel,
   cargando,
 }: {
-  motor: Proceso;
+  pestana: PestanaEconomia;
   bloque: EconomiaProcesoBloque | undefined;
-  diaSel: string | null;
   cargando: boolean;
 }) {
-  const meta = PROC_META[motor];
-  const porDia = bloque?.por_dia ?? [];
-  const delDia = diaSel ? porDia.find((f) => f.dia === diaSel) : undefined;
-  const items = delDia?.items ?? bloque?.total.items ?? 0;
-  const tokens = delDia?.tokens ?? bloque?.total.tokens ?? 0;
-  const coste = delDia?.coste_usd ?? bloque?.total.coste_usd ?? 0;
-  const ambito = diaSel ? formatearDia(diaSel) : `últimos ${DIAS} días`;
+  const meta = META[pestana];
+  const total = bloque?.total ?? { items: 0, tokens: 0, coste_usd: 0 };
   return (
     <section className="space-y-3">
       <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
@@ -229,123 +280,71 @@ function CabeceraKpis({
       {cargando ? (
         <Skeleton className="h-24 w-full rounded-xl" />
       ) : (
-        <>
-          <p className="text-xs text-muted-foreground">
-            Mostrando: <span className="font-medium text-foreground">{ambito}</span>
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(items)} />
-            <TarjetaKpi
-              variante="card"
-              etiqueta="Tokens"
-              valor={numeroCompacto(tokens)}
-              titulo={numeroCompleto(tokens)}
-            />
-            <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(coste)} />
-          </div>
-        </>
+        <div className="grid grid-cols-3 gap-3">
+          <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
+          <TarjetaKpi
+            variante="card"
+            etiqueta="Tokens"
+            valor={numeroCompacto(total.tokens)}
+            titulo={numeroCompleto(total.tokens)}
+          />
+          <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
+        </div>
       )}
     </section>
-  );
-}
-
-/** Serie de los últimos N días, clicable (cada día reenfoca los KPIs del motor). */
-function SerieCard({
-  motor,
-  bloque,
-  diaSel,
-  onToggle,
-  cargando,
-}: {
-  motor: Proceso;
-  bloque: EconomiaProcesoBloque | undefined;
-  diaSel: string | null;
-  onToggle: (dia: string) => void;
-  cargando: boolean;
-}) {
-  const porDia = bloque?.por_dia ?? [];
-  return (
-    <Card className="h-full">
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <RotateCcw className="h-4 w-4 text-muted-foreground" />
-          Últimos {DIAS} días
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 pt-2">
-        {cargando ? (
-          <Skeleton className="h-32 w-full" />
-        ) : porDia.length === 0 ? (
-          <LineaVacia texto="Sin actividad en la ventana" />
-        ) : (
-          <SerieEconomia motor={motor} filas={porDia} diaSel={diaSel} onToggle={onToggle} />
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
 export default function Economia() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  const { marcaActiva } = useMarcaActiva();
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [searchParams, setSearchParams] = useSearchParams();
-  const crudoProceso = searchParams.get("proceso");
-  const proceso: Proceso | undefined =
-    crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
+  const crudo = searchParams.get("proceso");
+  const foco: PestanaEconomia | undefined = PESTANAS.includes(crudo as PestanaEconomia)
+    ? (crudo as PestanaEconomia)
+    : undefined;
 
-  // Presupuesto (global) + parada de emergencia: la cola trae el presupuesto.
+  // Ventana de tiempo (Día / 7 / 30): la fija el usuario; reenfoca todas las tablas y KPIs.
+  const [dias, setDias] = React.useState<number>(VENTANA_DEFECTO);
+
+  // Presupuesto + parada de emergencia: la cola lo trae, ya con el ámbito de marca (estado(marca)).
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
-  // Economía por motor (ledger gasto_ia): totales + serie + desgloses que cuadran. Respeta el
-  // switch de marca: marca activa acota el desglose; "todas" muestra el AGREGADO global.
+  // Economía agrupada en las 4 pestañas (ledger gasto_ia). Respeta el switch de marca.
   const economia = useQuery({
-    queryKey: ["actividad", "economia", DIAS, marcaActiva ?? "todas"],
-    queryFn: ({ signal }) => api.economia({ dias: DIAS, marca: marcaActiva ?? undefined }, signal),
+    queryKey: ["actividad", "economia", dias, marcaActiva ?? "todas"],
+    queryFn: ({ signal }) => api.economia({ dias, marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_SERIE_MS,
   });
 
-  const quitarProceso = () => {
+  const quitarFoco = () => {
     const params = new URLSearchParams(searchParams);
     params.delete("proceso");
     setSearchParams(params, { replace: true });
   };
 
-  const motores: Proceso[] = proceso ? [proceso] : MOTORES;
-
-  // Día elegido en la serie POR MOTOR (reenfoca sus KPIs); null = total del periodo.
-  const [diaSel, setDiaSel] = React.useState<Partial<Record<Proceso, string | null>>>({});
-  const toggleDia = (motor: Proceso, dia: string) =>
-    setDiaSel((prev) => ({ ...prev, [motor]: prev[motor] === dia ? null : dia }));
-
-  // Cada panel se renderiza como una FILA de 2 columnas (una por motor) que estiran a la misma
-  // altura (`items-stretch` + tarjetas `h-full`): así las dos columnas alinean panel a panel
-  // aunque un motor tenga menos datos (p. ej. Investigación vacía al filtrar por marca).
-  const filaCols = cn(
-    "grid grid-cols-1 gap-4 items-stretch",
-    motores.length > 1 && "xl:grid-cols-2 xl:gap-6",
-  );
-  const bloqueDe = (m: Proceso) => economia.data?.por_proceso?.[m];
+  const pestanas: readonly PestanaEconomia[] = foco ? [foco] : PESTANAS;
+  const bloqueDe = (p: PestanaEconomia) => economia.data?.por_proceso?.[p];
 
   return (
     <>
-      {/* Prefiltro de proceso (?proceso=): la página queda enfocada a ese motor. */}
-      {proceso && (
+      {/* Prefiltro de pestaña (?proceso=): la página queda enfocada a esa pestaña. */}
+      {foco && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
-            Enfocado a{" "}
-            <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>.
+            Enfocado a <strong className={META[foco].texto}>{META[foco].etiqueta}</strong>.
           </span>
-          <Button variant="ghost" size="sm" onClick={quitarProceso}>
-            Ver ambos motores
+          <Button variant="ghost" size="sm" onClick={quitarFoco}>
+            Ver las 4 pestañas
           </Button>
         </div>
       )}
 
-      {/* Presupuesto + parada de emergencia (GLOBALES). */}
+      {/* Presupuesto + parada de emergencia (GLOBAL o de la marca activa). */}
       <div className="mb-6">
         {cola.isError ? (
           <BloqueError
@@ -358,47 +357,58 @@ export default function Economia() {
           <Skeleton className="h-28 w-full rounded-xl" />
         ) : (
           cola.data.presupuesto && (
-            <PanelPresupuesto presupuesto={cola.data.presupuesto} esAdmin={esAdmin} />
+            <PanelPresupuesto
+              presupuesto={cola.data.presupuesto}
+              esAdmin={esAdmin}
+              nombreMarca={nombreActiva ?? undefined}
+            />
           )
         )}
       </div>
 
-      {/* Economía por motor: cada panel en su propia fila de 2 columnas que alinean (simétrico). */}
-      <div className="space-y-4">
-        <div className={filaCols}>
-          {motores.map((m) => (
-            <CabeceraKpis
-              key={m}
-              motor={m}
-              bloque={bloqueDe(m)}
-              diaSel={diaSel[m] ?? null}
-              cargando={economia.isPending}
-            />
-          ))}
-        </div>
-        <div className={filaCols}>
-          {motores.map((m) => (
-            <SerieCard
-              key={m}
-              motor={m}
-              bloque={bloqueDe(m)}
-              diaSel={diaSel[m] ?? null}
-              onToggle={(dia) => toggleDia(m, dia)}
-              cargando={economia.isPending}
-            />
-          ))}
-        </div>
-        <div className={filaCols}>
-          {motores.map((m) => (
-            <DesglosePorTipo key={m} filas={bloqueDe(m)?.por_tipo ?? []} />
-          ))}
-        </div>
-        <div className={filaCols}>
-          {motores.map((m) => (
-            <DesglosePorDia key={m} filas={bloqueDe(m)?.por_dia ?? []} />
-          ))}
-        </div>
+      {/* Selector de ventana (Día / 7 días / 30 días): sustituye al fijo a 7 días, sin icono. */}
+      <div className="mb-4 flex items-center gap-1" role="group" aria-label="Ventana de tiempo">
+        {VENTANAS.map((v) => (
+          <Button
+            key={v.dias}
+            variant={v.dias === dias ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDias(v.dias)}
+            aria-pressed={v.dias === dias}
+          >
+            {v.etiqueta}
+          </Button>
+        ))}
       </div>
+
+      {economia.isError ? (
+        <BloqueError
+          titulo="No se pudo leer la economía"
+          mensaje={mensajeError(economia.error)}
+          onReintentar={() => void economia.refetch()}
+          cargando={economia.isFetching}
+        />
+      ) : (
+        // Cada pestaña: cabecera + KPIs y, debajo, las dos tablas (por día | por etapa) a la par.
+        <div className="space-y-8">
+          {pestanas.map((p) => {
+            const bloque = bloqueDe(p);
+            return (
+              <div key={p} className="space-y-4">
+                <CabeceraKpis pestana={p} bloque={bloque} cargando={economia.isPending} />
+                {economia.isPending ? (
+                  <Skeleton className="h-40 w-full rounded-xl" />
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
+                    <TablaPorDia filas={bloque?.por_dia ?? []} />
+                    <TablaPorEtapa filas={bloque?.por_etapa ?? []} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

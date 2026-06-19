@@ -375,20 +375,30 @@ function PanelMotor({
   );
 }
 
-/** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA: cabeza GLOBAL de la economía. La cabecera
- *  resume el gasto de hoy (tokens · USD · generaciones), ofrece el ÚNICO tope de coste global en
- *  USD (admin) y la parada de emergencia (KENI_GENERACION_PAUSADA, en caliente) que corta TODA la
- *  generación con IA. Bajo ella, los dos motores con sus topes de tokens IN/OUT propios. */
+/** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA. Su ÁMBITO lo fija `presupuesto.marca`: con
+ *  marca activa edita los controles PROPIOS de esa marca (su cap USD `KENI_PRESUPUESTO_USD_DIA::marca`
+ *  y su parada `KENI_GENERACION_PAUSADA::marca`) y muestra SU gasto; sin marca ("todas") opera los
+ *  controles GLOBALES y, debajo, los dos motores con sus topes de tokens IN/OUT (que son globales,
+ *  ADR 0011 — en la vista de marca se muestran como gasto sin tope editable). `nombreMarca` solo
+ *  rotula la cabecera. */
 export function PanelPresupuesto({
   presupuesto,
   esAdmin,
+  nombreMarca,
 }: {
   presupuesto: PresupuestoIA;
   esAdmin: boolean;
+  /** Nombre legible de la marca activa (solo para la cabecera); ausente = vista global. */
+  nombreMarca?: string;
 }) {
   const guardar = useGuardarAjuste();
+  const marca = presupuesto.marca || "";
   const conCapUsd = presupuesto.presupuesto_usd_dia > 0;
   const pctUsd = presupuesto.pct_usado_usd;
+  // Claves de ajuste con sufijo por marca cuando hay ámbito de marca (`KENI_*::<marca>`).
+  const clavePausa = marca ? `KENI_GENERACION_PAUSADA::${marca}` : "KENI_GENERACION_PAUSADA";
+  const claveUsd = marca ? `KENI_PRESUPUESTO_USD_DIA::${marca}` : "KENI_PRESUPUESTO_USD_DIA";
+  const etiquetaUsd = marca ? "Presupuesto de la marca (tope)" : "Gasto global (tope)";
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
@@ -396,12 +406,15 @@ export function PanelPresupuesto({
           <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
             <Coins className="h-4 w-4 text-muted-foreground" />
             Presupuesto y parada de emergencia
+            {marca && (
+              <span className="font-normal text-muted-foreground">· {nombreMarca || marca}</span>
+            )}
           </CardTitle>
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
         </div>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-2">
-        {/* Cabecera GLOBAL: gasto de hoy + parada de emergencia. */}
+        {/* Cabecera: gasto de hoy (del ámbito) + parada de emergencia (global o de la marca). */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm">
             Hoy:{" "}
@@ -420,44 +433,46 @@ export function PanelPresupuesto({
               <Switch
                 checked={presupuesto.pausada}
                 disabled={guardar.isPending}
-                onCheckedChange={(v) =>
-                  guardar.mutate({ clave: "KENI_GENERACION_PAUSADA", valor: v })
+                onCheckedChange={(v) => guardar.mutate({ clave: clavePausa, valor: v })}
+                aria-label={
+                  marca
+                    ? "Parada de emergencia de la marca: corta toda su generación (fondo y manual)"
+                    : "Parada de emergencia: corta toda la generación con IA, incluida la manual"
                 }
-                aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
               />
             </label>
           )}
         </div>
-        {/* Tope GLOBAL en USD: el único control de coste (los topes de tokens van por motor). */}
+        {/* Tope en USD del ámbito (global o de la marca): el control de coste editable por admin. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {esAdmin ? (
             <PresupuestoEditable
               valor={presupuesto.presupuesto_usd_dia}
-              clave="KENI_PRESUPUESTO_USD_DIA"
-              etiqueta="Gasto global (tope)"
+              clave={claveUsd}
+              etiqueta={etiquetaUsd}
               unidad="USD"
               decimal
             />
           ) : (
             <span>
-              Gasto global (tope){" "}
-              {conCapUsd ? costeUsd(presupuesto.presupuesto_usd_dia) : "Sin límite"}
+              {etiquetaUsd} {conCapUsd ? costeUsd(presupuesto.presupuesto_usd_dia) : "Sin límite"}
             </span>
           )}
           {conCapUsd && pctUsd != null && <span>· {pctUsd.toFixed(0)}% gasto</span>}
           {conCapUsd && pctUsd != null && <BarraPct pct={pctUsd} ancho="w-56" />}
         </div>
-        {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección. */}
+        {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección. Los
+            topes son GLOBALES (ADR 0011): en la vista de marca van como gasto sin tope editable. */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <PanelMotor
             motor="investigacion"
             datos={presupuesto.por_proceso?.investigacion}
-            esAdmin={esAdmin}
+            esAdmin={esAdmin && !marca}
           />
           <PanelMotor
             motor="produccion"
             datos={presupuesto.por_proceso?.produccion}
-            esAdmin={esAdmin}
+            esAdmin={esAdmin && !marca}
           />
         </div>
       </CardContent>

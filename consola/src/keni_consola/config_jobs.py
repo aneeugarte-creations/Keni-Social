@@ -164,6 +164,49 @@ def generacion_pausada() -> bool:
     return _crudo(ENV_GENERACION_PAUSADA).lower() in _VERDADEROS
 
 
+# --------------------------------------------------------------------------- #
+# Presupuesto + parada de emergencia POR MARCA (overrides KENI_*::<marca>)      #
+# --------------------------------------------------------------------------- #
+#
+# Cada marca puede llevar su PROPIO tope de coste USD/día y su PROPIA parada de emergencia, sobre
+# la misma maquinaria de overrides por-marca de las etapas (`config_produccion.clave_por_marca`,
+# clave `KENI_*::<marca>` en el store). Son INDEPENDIENTES del control global: el corte efectivo de
+# un job de la marca es el MÁS restrictivo entre su control de marca y el global (ver
+# `presupuesto_ia`). Sin override la marca no añade límite (solo aplica el global).
+
+
+def presupuesto_usd_dia_marca(marca: str) -> float:
+    """Tope de coste USD/día PROPIO de una marca (`KENI_PRESUPUESTO_USD_DIA::<marca>`, def 0).
+
+    `0`/ausente = SIN tope de marca (solo aplica el cap global). Independiente del global: el corte
+    de un job de la marca toma el MÁS restrictivo de ambos.
+    """
+    from .config_produccion import clave_por_marca
+
+    if not marca:
+        return 0.0
+    crudo = _crudo(clave_por_marca(ENV_PRESUPUESTO_USD_DIA, marca))
+    if not crudo:
+        return 0.0
+    try:
+        return max(0.0, float(crudo))
+    except ValueError:
+        return 0.0
+
+
+def generacion_pausada_marca(marca: str) -> bool:
+    """Parada de emergencia PROPIA de una marca (`KENI_GENERACION_PAUSADA::<marca>`, def off).
+
+    Encendida corta TODA la generación de ESA marca (fondo y manual) sin tocar al resto. Ortogonal
+    al kill switch global: basta con que UNO de los dos (global o de marca) esté activo.
+    """
+    from .config_produccion import clave_por_marca
+
+    if not marca:
+        return False
+    return _crudo(clave_por_marca(ENV_GENERACION_PAUSADA, marca)).lower() in _VERDADEROS
+
+
 
 # --------------------------------------------------------------------------- #
 # Accesores: cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B)       #
