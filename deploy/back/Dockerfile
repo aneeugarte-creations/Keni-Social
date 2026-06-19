@@ -74,7 +74,12 @@ VOLUME ["/data"]
 # carga del unico worker uvicorn podia tardar y fallar el chequeo, marcando el
 # contenedor "unhealthy". Como Traefik NO enruta a contenedores no-sanos, eso tiraba
 # el router `back` y los POST /api caian al nginx del front -> "405 Not Allowed".
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+# start-period AMPLIO (120s): durante un deploy el server corre hasta 3 pipelines de CI a
+# la vez (builds tsc/vite + pytest), y arrancar los 2 workers uvicorn bajo esa carga puede
+# tardar >>20s en ligar :8765. Con un start-period corto, esos fallos de arranque marcaban
+# el back "unhealthy", el sidecar autoheal lo REINICIABA a medio bootear, y nunca llegaba a
+# sano -> espera_sano del deploy expiraba -> rollback espurio con el codigo perfectamente OK.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
   CMD curl -fsS http://localhost:8765/healthz >/dev/null || exit 1
 
 # --factory: `crear_app()` resuelve token (KENI_CONSOLA_TOKEN) y bootstrapea el

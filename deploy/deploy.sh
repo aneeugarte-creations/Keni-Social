@@ -261,14 +261,17 @@ if [ "$SIN_VERIFICAR" = "1" ]; then
   echo "==> [6/6] verificacion de salud SALTADA (KENI_DEPLOY_SIN_VERIFICAR=1)"
 else
   echo "==> [6/6] verificacion de salud (back, front, daemons, worker) con rollback automatico"
-  # back: healthcheck del Dockerfile = curl /healthz (start_period 20s, interval 30s).
+  # back: healthcheck del Dockerfile = curl /healthz (start_period 120s, interval 30s). El
+  # plazo de espera DEBE superar ese start_period + el tiempo de bind de los 2 workers bajo
+  # la carga de varios pipelines de CI a la vez; 300s da margen (180s se quedaba justo y
+  # rollbackeaba con el back a punto de quedar sano).
   # daemons: healthcheck por fichero de latido (compose; el proceso lo toca cada 30s).
   # worker: healthcheck por escaneo de /proc (compose). Ambos son imagenes NUESTRAS con
   # foto :previa, asi que un fallo suyo tambien debe disparar el rollback (antes solo se
   # verificaban back/front y un daemons/worker roto pasaba en verde).
   # worker-dev / worker-ralph: imagenes NUESTRAS (misma tag WORKER_VERSION), asi que un fallo
   # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
-  if espera_sano back 180 && espera_sano front 120 \
+  if espera_sano back 300 && espera_sano front 120 \
       && espera_sano daemons 150 && espera_sano worker 120 \
       && espera_sano worker-dev 120 && espera_sano worker-ralph 120; then
     echo "==> salud OK (back, front, daemons, worker, worker-dev y worker-ralph healthy)"
