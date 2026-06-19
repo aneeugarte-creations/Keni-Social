@@ -346,12 +346,14 @@ def borrar_audio_transcripcion(transcripcion_id: str) -> bool:
 def crear_audio_artefacto(
     *, transcripcion_id: str, tipo: str, titulo: str = "", contenido: str = "",
     formato: str = "txt", estado: str = "listo", gen_id: str = "", error: str = "",
+    origen_id: str = "", origen_version: str = "",
     id: str = "", creado: str = "", actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_audio_artefacto(
         transcripcion_id=transcripcion_id, tipo=tipo, titulo=titulo, contenido=contenido,
-        formato=formato, estado=estado, gen_id=gen_id, error=error, id=id, creado=creado,
-        actualizado=actualizado,
+        formato=formato, estado=estado, gen_id=gen_id, error=error,
+        origen_id=origen_id, origen_version=origen_version,
+        id=id, creado=creado, actualizado=actualizado,
     )
 
 
