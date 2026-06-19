@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Link2, ListChecks, Loader2, Sparkles, Upload } from "lucide-react";
+import { CalendarDays, Check, Link2, ListChecks, Loader2, Pencil, Sparkles, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -242,7 +242,7 @@ export function DialogoCrearTarea({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => (o ? onOpenChange(o) : cerrar())}>
-      <DialogContent className="gap-2.5">
+      <DialogContent className="gap-2.5 sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Añadir a la lista</DialogTitle>
         </DialogHeader>
@@ -355,9 +355,16 @@ export function DialogoCrearTarea({
                 : "No va al calendario: solo en Panorama y Mis tareas."}
             </p>
 
-            {/* Caja inteligente: en AMBOS modos. En Evento la IA propone eventos; en Tarea
-                propone encargos sueltos (mismo flujo: pega/sube/escribe → revisa → acepta). */}
-            <div
+            {/* Dos motores de IGUAL PESO (misión keni-social): REUTILIZAR (pega/sube/IA) y CREAR a
+                mano, lado a lado. En ≥sm son dos columnas (entra sin scroll); en móvil se apilan. La
+                caja inteligente va en AMBOS modos: en Evento la IA propone eventos; en Tarea, encargos. */}
+            <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                Pega un enlace, sube un documento o escribe una frase
+              </div>
+              <div
               onDragOver={(e) => {
                 e.preventDefault();
                 setArrastrando(true);
@@ -380,10 +387,6 @@ export function DialogoCrearTarea({
                 arrastrando ? "border-foreground/40 bg-muted" : "border-border",
               )}
             >
-              <div className="flex items-center gap-1.5 text-sm font-medium">
-                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-                Pega un enlace, sube un documento o escribe una frase
-              </div>
               <Textarea
                 value={pegado}
                 onChange={(e) => setPegado(e.target.value)}
@@ -432,12 +435,14 @@ export function DialogoCrearTarea({
                 </Button>
               </div>
             </div>
-
-            <div className="relative text-center text-xs text-muted-foreground">
-              — o escríbelo a mano —
             </div>
 
+            {/* Crear: el otro motor (de igual peso) — el formulario a mano. */}
             <div className="space-y-2.5">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
+                Escríbelo a mano
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tarea-titulo">
                   {modo === "evento" ? "Qué evento" : "Qué hay que hacer"}
@@ -455,7 +460,7 @@ export function DialogoCrearTarea({
               </div>
 
               {modo === "evento" ? (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="tarea-fecha">Día</Label>
                     <Input
@@ -480,7 +485,7 @@ export function DialogoCrearTarea({
                 // Tarea: «Asignar a» cabalga en la MISMA fila que Para cuándo/Prioridad (3 col)
                 // en vez de una fila aparte, para que el diálogo entre sin scroll (igual altura
                 // que Evento). Etiquetas cortas → los campos alinean.
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="tarea-fecha">Para cuándo</Label>
                     <Input
@@ -515,6 +520,7 @@ export function DialogoCrearTarea({
               {modo === "evento" && (
                 <SelectorRecurrencia fechaBase={fecha} onChange={setRecurrencia} />
               )}
+            </div>
             </div>
 
             <DialogFooter>
