@@ -100,11 +100,31 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
 _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
-def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> None:
+def _linea_de_feed(items: list[dict[str, Any]] | None) -> str:
+    """LÍNEA (id de etiqueta `vertical`) del feed del que nació la historia, o '' si no aplica.
+
+    La resuelve del feed del item líder (`fuente_id` -> `fuentes_rss.linea_id`). Sirve de
+    fallback de clasificación cuando el clasificador por keywords no casa: una pieza de un feed
+    enganchado a una línea hereda esa línea (así el eje de líneas queda poblado para métricas).
+    """
+    fid = ((items[0].get("fuente_id") if items else "") or "")
+    if not fid:
+        return ""
+    try:
+        fuente = repos.obtener_fuente_rss(fid) or {}
+        return str(fuente.get("linea_id") or "")
+    except Exception:  # noqa: BLE001 -- el fallback es best-effort
+        return ""
+
+
+def _auto_etiquetar_linea(
+    tema: dict[str, Any], titulo: str, resumen: str, *, linea_feed: str = ""
+) -> None:
     """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN (siempre, dentro de la etapa de Redactar).
 
-    Sin línea → deja un aviso en `notas` (la pieza NO se descarta). Best-effort: un fallo no
-    rompe la ingesta.
+    La línea sale del clasificador por keywords; si NINGUNA casa, hereda la LÍNEA DEL FEED
+    (`linea_feed`) del que nació. Sin ninguna de las dos → aviso en `notas` (la pieza NO se
+    descarta). Best-effort: un fallo no rompe la ingesta.
     """
     try:
         from ..dominio import clasificador_lineas
@@ -112,6 +132,8 @@ def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> No
         res = clasificador_lineas.clasificar_pieza(titulo, resumen, tema.get("marca", ""))
         if res.get("vertical"):
             repos.asignar_etiqueta(tema["id"], str(res["vertical"]))
+        elif linea_feed:
+            repos.asignar_etiqueta(tema["id"], linea_feed)
         else:
             repos.actualizar_publicacion(tema["id"], {"notas": _AVISO_SIN_LINEA})
         if res.get("origen"):
@@ -630,7 +652,7 @@ def crear_tema_de_cluster(
     except Exception:  # noqa: BLE001 -- sin tema, esta historia no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema de la historia (%s)", marca, exc_info=True)
         return None
-    _auto_etiquetar_linea(tema, titulo, resumen)
+    _auto_etiquetar_linea(tema, titulo, resumen, linea_feed=_linea_de_feed(items))
     if claves_vistas is not None:
         claves_vistas.add(dedup.clave(titulo))
     if cid:
@@ -711,7 +733,7 @@ def _crear_carrusel_de_familia(
             tema_macro[:40], subtema[:40], marca, exc_info=True,
         )
         return None
-    _auto_etiquetar_linea(tema, tema_macro, resumen_lead)
+    _auto_etiquetar_linea(tema, tema_macro, resumen_lead, linea_feed=_linea_de_feed(items_lead))
     # Dedup por (evento, subtema): dos FACETAS distintas del mismo evento no se deduplican entre sí.
     if claves_vistas is not None and (clave := dedup.clave(f"{tema_macro} {subtema}")):
         claves_vistas.add(clave)

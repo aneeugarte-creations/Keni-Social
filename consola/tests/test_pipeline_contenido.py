@@ -1887,3 +1887,23 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
     assert marca == "unotv"
     assert publicacion_id == "tema-tablero"
     assert gen_id == "gen-tablero-1"
+
+
+def test_auto_etiquetar_linea_hereda_la_linea_del_feed(entorno):
+    """Sin match del clasificador, la pieza hereda la LÍNEA del feed del que nació."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    # Línea de la marca + feed enganchado a ella (sin keywords -> el clasificador no casa).
+    linea = repos.crear_etiqueta(nombre="Nacional", clase="vertical", marca="unotv")
+    feed = repos.crear_fuente_rss(
+        "Diario", "https://e.example/f.xml", marca="unotv", linea_id=linea["id"]
+    )
+    # _linea_de_feed resuelve fuente_id -> linea_id del feed.
+    assert _admitir._linea_de_feed([{"fuente_id": feed["id"]}]) == linea["id"]
+    assert _admitir._linea_de_feed([]) == ""
+    # Una pieza sin línea por keywords cae a la del feed (no al aviso "Sin línea").
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Nota sin keywords", descripcion="cuerpo", marca="unotv"
+    )
+    _admitir._auto_etiquetar_linea(tema, "Nota sin keywords", "cuerpo", linea_feed=linea["id"])
+    assert tema["id"] in repos.ids_contenido_con_etiqueta(linea["id"])
