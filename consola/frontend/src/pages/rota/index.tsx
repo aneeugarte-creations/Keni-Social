@@ -20,6 +20,7 @@ import type { FiltrosSwaps } from "@/types";
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { Hoy } from "./Hoy";
+import { PanelCoordinacion } from "./PanelCoordinacion";
 import { contarSwapsPendientes } from "./comun";
 
 
@@ -136,10 +137,21 @@ export default function Rota() {
           son planos hermanos (capacidad vs cobertura). */}
       {pestaniaEfectiva === "cobertura" && <TareasBoard acciones="inline" />}
 
-      {/* «Gestión» (admin): panel de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/
-          export), separado de la rejilla de consulta. Comparte `lunes` con el Calendario. */}
+      {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden
+          decisión (huecos sin cubrir, semana en borrador, cambios/ausencias, conflictos), y debajo
+          el panel de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/export). Ambos
+          comparten `lunes` con el Calendario. */}
       {pestaniaEfectiva === "gestion" && (
-        <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+        <div className="space-y-4">
+          <PanelCoordinacion
+            lunes={lunes}
+            marcaActiva={marcaActiva}
+            esAdmin={esAdmin}
+            usuarioId={usuario?.id ?? ""}
+            onIr={setPestania}
+          />
+          <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+        </div>
       )}
 
       {/* «Cambios y ausencias»: una sola vista que mezcla cambios de turno y ausencias en una lista

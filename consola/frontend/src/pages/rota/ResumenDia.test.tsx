@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AusenciaRota, FranjaSemana, TurnoRota } from "@/types";
 
 import {
+  conflictosDeLaSemana,
   conflictosDelDia,
   formatearMinutos,
   horarioEfectivo,
@@ -181,5 +182,45 @@ describe("conflictosDelDia — solapes y ausentes con turno", () => {
         ausencia({ miembro_id: "u1", desde: "2026-06-18", hasta: "2026-06-20" }),
       ]),
     ).toHaveLength(0);
+  });
+});
+
+describe("conflictosDeLaSemana — agrega los conflictos de cada día de la semana", () => {
+  const SEMANA = ["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"];
+
+  it("recoge solapes/ausencias de DÍAS distintos y los etiqueta con su fecha", () => {
+    const fp = mapa([
+      franja({ id: "f-manana", nombre: "Mañana", inicio: "08:00", fin: "16:00" }),
+      franja({ id: "f-tarde", nombre: "Tarde", inicio: "14:00", fin: "22:00", orden: 1 }),
+    ]);
+    const turnos = [
+      // Lunes 15: Luis solapado en dos franjas que comparten 14:00–16:00.
+      turno({ id: "t1", fecha: "2026-06-15", miembro_id: "u1", miembro_nombre: "Luis", franja_id: "f-manana", franja_nombre: "Mañana" }),
+      turno({ id: "t2", fecha: "2026-06-15", miembro_id: "u1", miembro_nombre: "Luis", franja_id: "f-tarde", franja_nombre: "Tarde" }),
+      // Miércoles 17: Ana con turno pero de vacaciones ese día.
+      turno({ id: "t3", fecha: "2026-06-17", miembro_id: "u2", miembro_nombre: "Ana", franja_id: "f-manana", franja_nombre: "Mañana" }),
+    ];
+    const r = conflictosDeLaSemana(SEMANA, turnos, fp, [
+      ausencia({ miembro_id: "u2", miembro_nombre: "Ana", desde: "2026-06-17", hasta: "2026-06-17" }),
+    ]);
+    expect(r).toHaveLength(2);
+    expect(r.find((x) => x.tipo === "solape")).toMatchObject({ miembroNombre: "Luis", fecha: "2026-06-15" });
+    expect(r.find((x) => x.tipo === "ausencia")).toMatchObject({ miembroNombre: "Ana", fecha: "2026-06-17" });
+  });
+
+  it("un solape solo se mira dentro del MISMO día (dos turnos en días distintos no solapan)", () => {
+    const fp = mapa([
+      franja({ id: "f-manana", nombre: "Mañana", inicio: "08:00", fin: "16:00" }),
+      franja({ id: "f-tarde", nombre: "Tarde", inicio: "14:00", fin: "22:00", orden: 1 }),
+    ]);
+    const turnos = [
+      turno({ id: "t1", fecha: "2026-06-15", miembro_id: "u1", franja_id: "f-manana" }),
+      turno({ id: "t2", fecha: "2026-06-16", miembro_id: "u1", franja_id: "f-tarde" }),
+    ];
+    expect(conflictosDeLaSemana(SEMANA, turnos, fp, [])).toHaveLength(0);
+  });
+
+  it("semana sin turnos = sin conflictos", () => {
+    expect(conflictosDeLaSemana(SEMANA, [], mapa([franja()]), [])).toHaveLength(0);
   });
 });

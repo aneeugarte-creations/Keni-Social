@@ -149,6 +149,40 @@ export function conflictosDelDia(
   return avisos;
 }
 
+/** Un aviso de la semana: la incidencia de un día más la fecha (ISO) en que ocurre. */
+export interface IncidenciaSemana extends IncidenciaDia {
+  fecha: string;
+}
+
+/**
+ * Incidencias de TODA la semana: aplica `conflictosDelDia` a cada uno de `dias` y anota la fecha.
+ * Los turnos se reparten por su `fecha` antes de evaluar cada día, así un solape solo se reporta
+ * dentro del mismo día (la misma persona con dos franjas que comparten horas ESE día). Misma
+ * derivación que el «Resumen del día», agregada para el panel de coordinación.
+ */
+export function conflictosDeLaSemana(
+  dias: string[],
+  turnos: TurnoRota[],
+  franjaPorId: Map<string, FranjaSemana>,
+  ausencias: AusenciaRota[],
+): IncidenciaSemana[] {
+  const porFecha = new Map<string, TurnoRota[]>();
+  for (const t of turnos) {
+    const lista = porFecha.get(t.fecha) ?? [];
+    lista.push(t);
+    porFecha.set(t.fecha, lista);
+  }
+  const out: IncidenciaSemana[] = [];
+  for (const fecha of dias) {
+    const delDia = porFecha.get(fecha) ?? [];
+    if (delDia.length === 0) continue;
+    for (const inc of conflictosDelDia(fecha, delDia, franjaPorId, ausencias)) {
+      out.push({ ...inc, fecha });
+    }
+  }
+  return out;
+}
+
 /**
  * Panel «Resumen del día»: abre desde la cabecera de un día del calendario y muestra, en UNA vista,
  * todo lo de esa jornada para `fecha`. Reusa `useTablero(marca, usuarioId, fecha)` —la MISMA
