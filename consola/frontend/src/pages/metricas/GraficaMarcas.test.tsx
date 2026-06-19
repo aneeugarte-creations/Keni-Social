@@ -5,6 +5,7 @@ import { numeroCompacto } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { GraficaMarcas } from "./GraficaMarcas";
+import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -61,6 +62,14 @@ describe("GraficaMarcas", () => {
     const img = screen.getByRole("img", { name: /Vistas por marca:/ });
     expect(img.getAttribute("aria-label")).toMatch(/ y 1 más$/);
     expect(img.getAttribute("aria-label")).not.toContain("Marca 5");
+  });
+
+  it("avisa que las vistas agregadas mezclan magnitudes entre redes", () => {
+    render(<GraficaMarcas cuentas={CUENTAS} />);
+
+    // El reparto siempre es de vistas: la nota cross-red está presente para no leer
+    // el total como si impresiones (FB/IG) y reproducciones (TT/YT) fueran lo mismo.
+    expect(screen.getAllByLabelText(NOTA_VISTAS_CROSSRED).length).toBeGreaterThan(0);
   });
 
   it("dice con honestidad cuando no hay marcas en el periodo", () => {

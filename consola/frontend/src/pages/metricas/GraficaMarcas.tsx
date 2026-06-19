@@ -10,6 +10,7 @@
  * se lean como "221.6 M" en lugar de notación cruda.
  */
 import { BarChart, type CustomTooltipProps } from "@tremor/react";
+import { Info } from "lucide-react";
 import * as React from "react";
 import type { ReactNode } from "react";
 
@@ -24,7 +25,22 @@ import {
 import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
+import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 import { SeccionColapsable } from "./SeccionColapsable";
+
+/** Icono de info con la nota en el tooltip nativo (mismo patrón que `DetallePieza`). */
+function NotaInfo({ nota }: { nota: string }) {
+  return (
+    <button
+      type="button"
+      title={nota}
+      aria-label={nota}
+      className="inline-flex text-muted-foreground/70 hover:text-muted-foreground focus-visible:text-muted-foreground"
+    >
+      <Info className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+}
 
 type Metrica = "visualizaciones" | "interacciones";
 
@@ -120,7 +136,12 @@ export function GraficaMarcas({
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Título dinámico: la gráfica enseña UNA métrica a la vez (la del Select). */}
-            <CardTitle className="text-base">Por marca</CardTitle>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              Por marca
+              {/* Honestidad: las vistas agregadas mezclan impresiones (FB/IG) con
+                  reproducciones (TT/YT); el aviso solo aplica cuando se grafican vistas. */}
+              {metrica === "visualizaciones" ? <NotaInfo nota={NOTA_VISTAS_CROSSRED} /> : null}
+            </CardTitle>
             <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
               <SelectTrigger className="w-[170px]" aria-label="Métrica de la comparativa">
                 <SelectValue />
@@ -153,7 +174,10 @@ export function GraficaMarcas({
 
       <Card className="lg:col-span-2">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Reparto de vistas</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            Reparto de vistas
+            <NotaInfo nota={NOTA_VISTAS_CROSSRED} />
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="space-y-4">

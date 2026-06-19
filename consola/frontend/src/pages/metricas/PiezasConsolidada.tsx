@@ -75,6 +75,7 @@ import type { MarcaDisponible, PiezaListado } from "@/types";
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
 import { DetallePieza } from "./DetallePieza";
+import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 /** Piezas de ejemplo en la vista compacta. */
@@ -302,10 +303,12 @@ export function PiezasConsolidada({
             <TarjetaKpi
               etiqueta="Vistas promedio"
               valor={stats.vistasMedia == null ? "—" : numeroCompacto(stats.vistasMedia)}
+              titulo={NOTA_VISTAS_CROSSRED}
             />
             <TarjetaKpi
               etiqueta="Vistas mediana"
               valor={stats.vistasMediana == null ? "—" : numeroCompacto(stats.vistasMediana)}
+              titulo={NOTA_VISTAS_CROSSRED}
             />
             <TarjetaKpi
               etiqueta="Engagement (agregado)"

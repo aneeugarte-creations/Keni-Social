@@ -13,6 +13,16 @@ import { numeroCompacto, numeroCompleto, porcentaje } from "./formato";
  * red con la fuente actual de posts, así que no se expone en la UI). */
 export type ClaveMetrica = "visualizaciones" | "interacciones" | "engagement_pct";
 
+/** Honestidad de las "Vistas" agregadas ENTRE redes: el total suma magnitudes que no
+ * son la misma cosa (impresiones en Facebook/Instagram vs. reproducciones en
+ * TikTok/YouTube), así que el agregado cross-red es informativo y debe leerse "por red".
+ * Documentado en el backend (`mcp-metricas/.../schema.py` ResumenMetricas, #138). Texto
+ * único para reusar en cada sitio donde se enseñan vistas sumadas entre redes. */
+export const NOTA_VISTAS_CROSSRED =
+  "Las vistas suman magnitudes distintas según la red: impresiones en Facebook e " +
+  "Instagram, reproducciones en TikTok y YouTube. El total entre redes es orientativo; " +
+  "para comparar, léelo por red.";
+
 export interface MetaMetrica {
   clave: ClaveMetrica;
   /** Etiqueta legible (es-MX). */
@@ -38,6 +48,7 @@ export const METRICAS: MetaMetrica[] = [
     compacto: numeroCompacto,
     completo: numeroCompleto,
     color: "orange",
+    descripcion: NOTA_VISTAS_CROSSRED,
   },
   {
     clave: "interacciones",
