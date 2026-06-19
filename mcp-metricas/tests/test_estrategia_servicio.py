@@ -238,6 +238,47 @@ def test_serie_seguidores_degrada_sin_followers():
     assert s["neto_por_red"] == {}
 
 
+def test_serie_seguidores_cuenta_conectada_a_mitad_no_pinta_escalon():
+    """Una red conectada a mitad de ventana aporta su stock como baseline desde el primer
+    día (backfill del borde), no como un escalón el día del alta que parezca crecimiento.
+
+    `facebook` crece de verdad (+20) toda la ventana; `youtube` aparece SOLO el último día
+    con 350k de stock. El neto debe ser +20 (youtube no aporta), y el invariante
+    neto == total[-1] − total[0] debe seguir cumpliéndose pese al alta a mitad de ventana.
+    """
+    class _Cuenta:
+        def __init__(self, cid):
+            self.id = cid
+
+    class _Fuente:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return [_Cuenta("a"), _Cuenta("b")]
+
+        def serie_seguidores(self, cuenta_id, rango):
+            if cuenta_id == "a":
+                return [
+                    {"fecha": "2026-05-01", "por_red": {"facebook": 1000}},
+                    {"fecha": "2026-05-04", "por_red": {"facebook": 1010}},
+                    {"fecha": "2026-05-07", "por_red": {"facebook": 1020}},
+                ]
+            return [{"fecha": "2026-05-07", "por_red": {"youtube": 350_000}}]
+
+    s = servicio.serie_seguidores_desde_fuente(_Fuente(), RANGO)
+    fechas = {p["fecha"]: p for p in s["puntos"]}
+
+    # youtube ya está en el PRIMER día con su baseline (no entra de golpe el último día).
+    assert fechas["2026-05-01"]["por_red"]["youtube"] == 350_000
+    assert fechas["2026-05-01"]["total"] == 1000 + 350_000
+    # El alta no cuenta como crecimiento: neto = solo lo que creció facebook.
+    assert s["neto_por_red"]["youtube"] == 0
+    assert s["neto_por_red"]["facebook"] == 20
+    assert s["neto"] == 20
+    # Invariante: el neto coincide con la pendiente real de la curva, sin escalón.
+    assert s["neto"] == s["puntos"][-1]["total"] - s["puntos"][0]["total"]
+
+
 # --------------------------------------------------------------------------- #
 # Metricool (respx): serie de seguidores REUSA /v2/analytics/timelines         #
 # --------------------------------------------------------------------------- #

@@ -508,11 +508,25 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
 
     # Chart: CARRY-FORWARD por cuenta×red ANTES de sumar. Los followers PERSISTEN día a día;
     # si una cuenta no reporta (o reporta un valor inválido) se arrastra su último valor
-    # válido en vez de hundir el total de la red. Una cuenta no aparece hasta su primer
-    # valor válido (no se inventa stock previo).
-    arrastrado: dict[str, dict[str, int]] = {}  # fecha -> red -> suma de cuentas arrastradas
-    ultimo: dict[tuple[str, str], int] = {}
+    # válido en vez de hundir el total de la red.
+    #
+    # BACKFILL del borde inicial: cada cuenta aporta su PRIMER valor válido también en los
+    # días ANTERIORES a su primera aparición. Sin esto, conectar una cuenta a mitad de
+    # ventana mete su stock entero de golpe el día del alta y el total pinta un escalón que
+    # parece crecimiento sin serlo. Con el baseline constante, `neto_por_red` no cambia
+    # (primer y último día comparten ese valor) y se mantiene el invariante
+    # neto == total[-1] − total[0].
+    primer_valido: dict[tuple[str, str], int] = {}
     claves_orden = sorted(reportado)
+    for clave in claves_orden:
+        for f in fechas:
+            v = reportado[clave].get(f)
+            if v is not None and _valido(clave, v):
+                primer_valido[clave] = v
+                break
+
+    arrastrado: dict[str, dict[str, int]] = {}  # fecha -> red -> suma de cuentas arrastradas
+    ultimo: dict[tuple[str, str], int] = dict(primer_valido)  # baseline desde el primer día
     for f in fechas:
         dest = arrastrado.setdefault(f, {})
         for clave in claves_orden:
