@@ -42,6 +42,8 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
   if (!data.plan) return null;
   const objetivo = Math.max(1, data.total_objetivo);
   const avance = Math.min(100, (data.total_generados / objetivo) * 100);
+  const exceso = data.total_generados > data.total_objetivo;
+  const completo = data.total_generados >= data.total_objetivo;
   return (
     <div className="mb-4 space-y-2" data-testid="barra-plan-dia">
       <div className="flex flex-wrap items-center gap-2">
@@ -51,7 +53,13 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
           {data.total_generados} de {data.total_objetivo}
         </span>
         <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-foreground" style={{ width: `${avance}%` }} />
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
+            )}
+            style={{ width: `${avance}%` }}
+          />
         </div>
         <Link
           to="/operacion/programacion"
