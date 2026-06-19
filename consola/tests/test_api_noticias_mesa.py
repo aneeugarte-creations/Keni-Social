@@ -7,9 +7,18 @@ restaurar es el deshacer del descarte rápido (descartada -> pool).
 
 from __future__ import annotations
 
-from keni_consola import repos
+from keni_consola import bootstrap_lineas, repos
 
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
+
+
+def _linea_nacional() -> str:
+    """Siembra las líneas y devuelve el id de 'Nacional' (unotv) — la línea que mapea el feed 'mx'.
+
+    El plan y la mesa se clavan por id de línea; un feed 'mx' se reparte en esta línea.
+    """
+    bootstrap_lineas.inicializar_lineas()
+    return repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")["id"]
 
 
 def _inicializar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
@@ -54,7 +63,14 @@ def test_mesa_requiere_marca_concreta(cliente):
 
 
 def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2,internacional:1,breaking:1")
+    # El plan y la mesa se clavan por LÍNEA (id de etiqueta vertical): un feed 'mx' se reparte
+    # en la línea Nacional; 'breaking'/'evergreen' son señales del motor.
+    from keni_consola import bootstrap_lineas, repos
+
+    bootstrap_lineas.inicializar_lineas()
+    nac = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")["id"]
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")["id"]
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,{intl}:1,breaking:1")
     _inicializar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
     _inicializar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
     # Breaking: compite por la línea 'breaking' aunque su feed sea futbol.
@@ -68,19 +84,21 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     assert datos["marca"] == "unotv"
     assert datos["plan"] is True
     assert datos["total_objetivo"] == 4
-    # Breaking PRIMERO, luego el orden del plan.
-    assert [ln["linea"] for ln in datos["lineas"]] == ["breaking", "mx", "internacional"]
+    # Breaking PRIMERO, luego el orden del plan (por id de línea).
+    assert [ln["linea"] for ln in datos["lineas"]] == ["breaking", nac, intl]
     por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
-    assert por_linea["mx"]["cupo"] == 2
-    assert por_linea["mx"]["en_pool"] == 2
-    assert [h["id"] for h in por_linea["mx"]["historias"]] == ["mx-top", "mx-baja"]
+    assert por_linea[nac]["etiqueta"] == "Nacional"
+    assert por_linea["breaking"]["etiqueta"] == "Última hora"
+    assert por_linea[nac]["cupo"] == 2
+    assert por_linea[nac]["en_pool"] == 2
+    assert [h["id"] for h in por_linea[nac]["historias"]] == ["mx-top", "mx-baja"]
     assert por_linea["breaking"]["en_pool"] == 1
     assert por_linea["breaking"]["historias"][0]["id"] == "br1"
-    assert por_linea["internacional"]["en_pool"] == 0
+    assert por_linea[intl]["en_pool"] == 0
     assert datos["fuera_de_plan"]["en_pool"] == 1
     assert datos["fuera_de_plan"]["historias"][0]["id"] == "dep1"
     # Cada historia trae el contrato Historia (umbral + estado de pieza incluidos).
-    h = por_linea["mx"]["historias"][0]
+    h = por_linea[nac]["historias"][0]
     assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
 
 
@@ -88,14 +106,15 @@ def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatc
     """La mesa se ve SIEMPRE en español: una historia extranjera sin traducir SÍ aparece, pero con
     un placeholder "Traduciendo…" (nunca su titular en idioma original) y `traduciendo=True`. La
     traducida se muestra en español (titulo_es) y la nativa en español, normales."""
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:5")
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:5")
     _inicializar("es-nativa", score=0.9, categoria="mx", titulo="Noticia nacional", idioma="es")
     _inicializar("en-cruda", score=0.8, categoria="mx", titulo="Foreign breaking",
                  idioma="en", traducido=0)
     _inicializar("en-trad", score=0.7, categoria="mx", titulo="Foreign two",
                  idioma="en", traducido=1, titulo_es="Noticia traducida")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
-    linea = {ln["linea"]: ln for ln in datos["lineas"]}["mx"]
+    linea = {ln["linea"]: ln for ln in datos["lineas"]}[nac]
     por_id = {h["id"]: h for h in linea["historias"]}
     assert set(por_id) == {"es-nativa", "en-cruda", "en-trad"}  # todas visibles
     # Extranjera sin traducir: placeholder, nunca el titular en idioma original.
@@ -109,7 +128,8 @@ def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatc
 
 
 def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
     for i in range(4):
         _inicializar(f"m{i}", score=0.9 - i * 0.1, categoria="mx", titulo=f"Nacional {i}")
     datos = cliente.get(
@@ -132,12 +152,13 @@ def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
 
 
 def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
     # Un tema CON post real cuenta...
-    _contenido_con_post(categoria="mx", titulo="Ya generada")
+    _contenido_con_post(categoria=nac, titulo="Ya generada")
     # ...pero un tema SIN ningún post (promovido y con el copy sin generar, o fallido) NO:
     # es el "fantasma" que antes inflaba el plan (6 en el conteo con 5 posts visibles).
-    repos.crear_publicacion(clase="contenido", titulo="Sin post", marca="unotv", categoria="mx")
+    repos.crear_publicacion(clase="contenido", titulo="Sin post", marca="unotv", categoria=nac)
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     linea = datos["lineas"][0]
     assert linea["generados"] == 1  # solo el que tiene post; el fantasma no cuenta
@@ -152,12 +173,13 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
     México (aquí, hace años) NO cuenta; solo lo generado en la jornada de hoy. Así, al día
     siguiente el plan vuelve a 0 aunque la pieza vieja siga viva en el tablero.
     """
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
     # Ambos con post real, así que lo ÚNICO que excluye al viejo es la fecha (no la falta
     # de pieza): de otro día (muy anterior a cualquier medianoche MX de hoy) NO cuenta.
-    _contenido_con_post(categoria="mx", titulo="De ayer", creado="2020-01-01T00:00:00")
+    _contenido_con_post(categoria=nac, titulo="De ayer", creado="2020-01-01T00:00:00")
     # De hoy (creado=ahora por defecto): SÍ cuenta.
-    _contenido_con_post(categoria="mx", titulo="De hoy")
+    _contenido_con_post(categoria=nac, titulo="De hoy")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     linea = datos["lineas"][0]
     assert linea["generados"] == 1  # solo la de hoy

@@ -1,22 +1,19 @@
 /**
- * «Plan y horarios» de la página Programación: EL sitio donde se configura, por marca, qué
- * LÍNEAS publica, cuántos contenidos salen al día de cada una y a qué horas (CDMX). Es una
- * SECCIÓN INLINE del panel de ajustes (capa base, colapsable), no un diálogo.
+ * «Plan y horarios» de la página Programación: EL sitio donde se configura, por marca, cuántos
+ * contenidos salen al día de cada LÍNEA y a qué horas (CDMX). Es una SECCIÓN INLINE del panel
+ * de ajustes (capa base, colapsable), no un diálogo.
  *
- * El conjunto de líneas es POR MARCA y editable (añadir/quitar): así Fundación lista sus
- * temáticas (salud, medio-ambiente…) y no las de UnoTV. Por debajo toca tres cosas:
- *   - el CONJUNTO de líneas (y su orden) escribe el ajuste `KENI_LINEAS::<marca>` (CSV de
- *     claves); solo lo lee este editor para decidir qué filas pintar;
- *   - la CANTIDAD escribe el ajuste `KENI_PLAN_DIA::<marca>` ("linea:n,…", el que lee la
- *     admisión del pipeline) vía la API admin de ajustes;
- *   - los HORARIOS sincronizan las franjas editoriales CON CATEGORÍA de la marca (7 días a
- *     la misma hora; el backend guarda UTC, aquí se edita en hora CDMX).
- * Una línea cuya clave es una categoría con feeds se auto-rellena; las demás (p. ej.
- * «evergreen») son cajones de publicación que nutre el equipo. «Breaking» no lleva horario:
- * sale al instante. Solo admin (la API de ajustes rechaza al resto).
+ * Las LÍNEAS son las REALES de la marca (etiquetas `vertical`, las mismas de métricas y feeds):
+ * se leen de `/api/etiquetas?clase=vertical`. Más dos filas especiales del motor: «Última hora»
+ * (breaking, sin horario: sale al instante) y «Evergreen» (cajón de reciclaje). Por debajo toca:
+ *   - la CANTIDAD por línea escribe `KENI_PLAN_DIA::<marca>` ("clave:n,…", clave = id de línea o
+ *     'breaking'/'evergreen'), el ajuste que lee la admisión del pipeline;
+ *   - los HORARIOS sincronizan las franjas editoriales de la marca (categoría = la misma clave;
+ *     7 días a la misma hora; el backend guarda UTC, aquí se edita en hora CDMX).
+ * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Save, X } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -25,19 +22,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
-import { CATALOGO_LINEAS, ETIQUETA_LINEA, resolverClaveLinea } from "@/lib/lineas";
 
 import { SelectorHoras } from "./SelectorHoras";
 
-/** Líneas que el editor muestra por defecto cuando la marca no tiene su conjunto guardado. */
-const LINEAS_BASE = ["mx", "internacional", "breaking", "entretenimiento", "evergreen"];
-
 const RE_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-/** Etiqueta legible de una línea (fallback: la clave capitalizada). */
-function etiqueta(linea: string): string {
-  return ETIQUETA_LINEA[linea] ?? linea.charAt(0).toUpperCase() + linea.slice(1);
-}
+/** Claves especiales del motor (no son líneas): última hora y reciclaje. */
+const CLAVE_BREAKING = "breaking";
+const CLAVE_EVERGREEN = "evergreen";
 
 /** Parsea el CSV de horas del input ("8:45, 10:45") a "HH:MM" únicos y ordenados (CDMX). */
 function parsearHoras(texto: string): string[] | null {
@@ -52,33 +44,33 @@ function parsearHoras(texto: string): string[] | null {
   return [...horas].sort();
 }
 
-/** Parsea el plan "linea:n,…" del ajuste a mapa. */
+/** Parsea el plan "clave:n,…" del ajuste a mapa (la clave es id de línea o señal del motor). */
 function parsearPlan(crudo: string): Record<string, number> {
   const plan: Record<string, number> = {};
   for (const trozo of (crudo || "").split(",")) {
-    const [cat, n] = trozo.split(":");
+    const [clave, n] = trozo.split(":");
     const cupo = Number((n ?? "").trim());
-    if (cat?.trim() && Number.isInteger(cupo) && cupo > 0) plan[cat.trim().toLowerCase()] = cupo;
+    if (clave?.trim() && Number.isInteger(cupo) && cupo > 0) plan[clave.trim()] = cupo;
   }
   return plan;
 }
 
-interface FilaLinea {
+interface Fila {
   cupo: string;
   horas: string;
 }
 
-export function PanelPlan({
-  marca,
-}: {
-  marca: string;
-}) {
+/** Una fila del plan: una clave (id de línea o señal) + su etiqueta legible + si lleva horario. */
+interface FilaPlan {
+  clave: string;
+  etiqueta: string;
+  conHorario: boolean;
+}
+
+export function PanelPlan({ marca }: { marca: string }) {
   const queryClient = useQueryClient();
   const clavePlan = `KENI_PLAN_DIA::${marca}`;
-  const claveLineas = `KENI_LINEAS::${marca}`;
 
-  // Sin gate `enabled`: esta sección solo se MONTA cuando el usuario la despliega (la sección
-  // colapsable no pinta su contenido plegada), así que las queries arrancan justo entonces.
   const ajustes = useQuery({
     queryKey: ["ajustes"],
     queryFn: ({ signal }) => api.ajustes(signal),
@@ -87,11 +79,27 @@ export function PanelPlan({
     queryKey: ["franjas"],
     queryFn: ({ signal }) => api.franjas(signal),
   });
+  const lineasQuery = useQuery({
+    queryKey: ["etiquetas", "vertical", marca],
+    queryFn: ({ signal }) =>
+      api.etiquetas({ marca, clase: "vertical", activas: true }, signal),
+  });
 
-  // Estado del formulario, inicializado al montar desde el conjunto de líneas + plan + franjas.
-  const [filas, setFilas] = React.useState<Record<string, FilaLinea>>({});
-  const [orden, setOrden] = React.useState<string[]>([]);
-  const [nuevaLinea, setNuevaLinea] = React.useState("");
+  // Filas del plan: Última hora (breaking) + las líneas reales de la marca + Evergreen.
+  const filasPlan: FilaPlan[] = React.useMemo(() => {
+    const lineas = (lineasQuery.data?.etiquetas ?? []).map((l) => ({
+      clave: l.id,
+      etiqueta: l.grupo ? `${l.grupo} · ${l.nombre}` : l.nombre,
+      conHorario: true,
+    }));
+    return [
+      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false },
+      ...lineas,
+      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true },
+    ];
+  }, [lineasQuery.data]);
+
+  const [filas, setFilas] = React.useState<Record<string, Fila>>({});
   const [inicializado, setInicializado] = React.useState(false);
 
   const valorAjuste = React.useCallback(
@@ -105,7 +113,6 @@ export function PanelPlan({
     [ajustes.data],
   );
   const valorPlan = valorAjuste(clavePlan);
-  const valorLineas = valorAjuste(claveLineas);
 
   const franjasMarca = React.useMemo(
     () =>
@@ -116,84 +123,58 @@ export function PanelPlan({
   );
 
   React.useEffect(() => {
-    if (inicializado || ajustes.isPending || franjasQuery.isPending) return;
-    const plan = parsearPlan(valorPlan);
-    const horasPorLinea = new Map<string, Set<string>>();
-    for (const f of franjasMarca) {
-      const set = horasPorLinea.get(f.categoria) ?? new Set<string>();
-      set.add(horaUtcACdmx(f.hora));
-      horasPorLinea.set(f.categoria, set);
+    if (inicializado || ajustes.isPending || franjasQuery.isPending || lineasQuery.isPending) {
+      return;
     }
-    const guardadas = valorLineas
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    const base = guardadas.length ? guardadas : LINEAS_BASE;
-    // Une el conjunto guardado con lo que ya tenga datos, para no esconder líneas con plan/horario.
-    const ordenInicial = [...new Set([...base, ...Object.keys(plan), ...horasPorLinea.keys()])];
-    const inicializadas: Record<string, FilaLinea> = {};
-    for (const linea of ordenInicial) {
-      inicializadas[linea] = {
-        cupo: String(plan[linea] ?? 0),
-        horas: [...(horasPorLinea.get(linea) ?? [])].sort().join(", "),
+    const plan = parsearPlan(valorPlan);
+    const horasPorClave = new Map<string, Set<string>>();
+    for (const f of franjasMarca) {
+      const set = horasPorClave.get(f.categoria) ?? new Set<string>();
+      set.add(horaUtcACdmx(f.hora));
+      horasPorClave.set(f.categoria, set);
+    }
+    const inicializadas: Record<string, Fila> = {};
+    for (const fila of filasPlan) {
+      inicializadas[fila.clave] = {
+        cupo: String(plan[fila.clave] ?? 0),
+        horas: [...(horasPorClave.get(fila.clave) ?? [])].sort().join(", "),
       };
     }
     setFilas(inicializadas);
-    setOrden(ordenInicial);
     setInicializado(true);
-  }, [inicializado, ajustes.isPending, franjasQuery.isPending, valorPlan, valorLineas, franjasMarca]);
-
-  const anadirLinea = () => {
-    const clave = resolverClaveLinea(nuevaLinea);
-    if (!clave) return;
-    if (orden.includes(clave)) {
-      toast.error(`«${etiqueta(clave)}» ya está en el plan.`);
-      return;
-    }
-    setOrden((prev) => [...prev, clave]);
-    setFilas((prev) => ({ ...prev, [clave]: { cupo: "0", horas: "" } }));
-    setNuevaLinea("");
-  };
-
-  const quitarLinea = (linea: string) => {
-    setOrden((prev) => prev.filter((l) => l !== linea));
-    setFilas((prev) => {
-      const sig = { ...prev };
-      delete sig[linea];
-      return sig;
-    });
-  };
+  }, [
+    inicializado, ajustes.isPending, franjasQuery.isPending, lineasQuery.isPending,
+    valorPlan, franjasMarca, filasPlan,
+  ]);
 
   const guardar = useMutation({
     mutationFn: async () => {
-      // 1) Valida horas de todas las líneas (antes de tocar nada).
-      const horasPorLinea: Record<string, string[]> = {};
-      for (const linea of orden) {
-        if (linea === "breaking") continue; // sin horario: sale al instante
-        const horas = parsearHoras(filas[linea]?.horas ?? "");
+      // 1) Valida horas de todas las filas con horario.
+      const horasPorClave: Record<string, string[]> = {};
+      for (const fila of filasPlan) {
+        if (!fila.conHorario) continue;
+        const horas = parsearHoras(filas[fila.clave]?.horas ?? "");
         if (horas === null) {
           throw new Error(
-            `Horas inválidas en «${etiqueta(linea)}»: usa HH:MM separadas por comas.`,
+            `Horas inválidas en «${fila.etiqueta}»: usa HH:MM separadas por comas.`,
           );
         }
-        horasPorLinea[linea] = horas;
+        horasPorClave[fila.clave] = horas;
       }
-      // 2) Conjunto de líneas de la marca (orden incluido): lo lee este editor.
-      await api.guardarAjuste({ clave: claveLineas, valor: orden.join(",") });
-      // 3) Plan (cantidad por línea): escribe el ajuste que lee la admisión.
-      const partes = orden
-        .map((linea) => [linea, Number(filas[linea]?.cupo)] as const)
+      // 2) Plan (cantidad por clave): escribe el ajuste que lee la admisión.
+      const partes = filasPlan
+        .map((fila) => [fila.clave, Number(filas[fila.clave]?.cupo)] as const)
         .filter(([, n]) => Number.isInteger(n) && n > 0)
-        .map(([linea, n]) => `${linea}:${n}`);
+        .map(([clave, n]) => `${clave}:${n}`);
       await api.guardarAjuste({ clave: clavePlan, valor: partes.join(",") });
-      // 4) Limpia las franjas de líneas que ya no están en el plan (líneas quitadas).
-      const vigentes = new Set(orden);
+      // 3) Limpia franjas de claves que ya no son filas del plan (líneas borradas).
+      const vigentes = new Set(filasPlan.map((f) => f.clave));
       const huerfanas = franjasMarca.filter((f) => !vigentes.has(f.categoria));
       await Promise.all(huerfanas.map((f) => api.eliminarFranja(f.id)));
-      // 5) Horarios: sincroniza las franjas de cada línea (7 días por hora, en UTC).
-      for (const [linea, horasCdmx] of Object.entries(horasPorLinea)) {
+      // 4) Horarios: sincroniza las franjas de cada clave (7 días por hora, en UTC).
+      for (const [clave, horasCdmx] of Object.entries(horasPorClave)) {
         const objetivo = new Set(horasCdmx.map(horaCdmxAUtc));
-        const actuales = franjasMarca.filter((f) => f.categoria === linea);
+        const actuales = franjasMarca.filter((f) => f.categoria === clave);
         const sobran = actuales.filter((f) => !objetivo.has(f.hora));
         await Promise.all(sobran.map((f) => api.eliminarFranja(f.id)));
         const existentes = new Set(actuales.map((f) => `${f.dia_semana}|${f.hora}`));
@@ -201,7 +182,7 @@ export function PanelPlan({
         for (const hora of objetivo) {
           for (let dia = 0; dia < 7; dia += 1) {
             if (!existentes.has(`${dia}|${hora}`)) {
-              altas.push(api.crearFranja({ dia_semana: dia, hora, marca, categoria: linea }));
+              altas.push(api.crearFranja({ dia_semana: dia, hora, marca, categoria: clave }));
             }
           }
         }
@@ -217,98 +198,59 @@ export function PanelPlan({
     onError: (e) => toast.error(e instanceof Error ? e.message : mensajeError(e)),
   });
 
-  const total = orden.reduce((acc, l) => acc + (Number(filas[l]?.cupo) || 0), 0);
-  const sugerencias = CATALOGO_LINEAS.filter((l) => !orden.includes(l.clave));
+  const total = filasPlan.reduce((acc, f) => acc + (Number(filas[f.clave]?.cupo) || 0), 0);
+  const cargando =
+    ajustes.isPending || franjasQuery.isPending || lineasQuery.isPending;
 
   return (
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Qué líneas publica esta marca, cuántos contenidos al día y a qué horas (CDMX).
+        Cuántos contenidos al día publica cada línea de esta marca y a qué horas (CDMX). Las
+        líneas se gestionan en su pestaña; aquí defines volumen y horario.
       </p>
-      {ajustes.isPending || franjasQuery.isPending ? (
+      {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : (
         <div className="space-y-3">
-          {orden.map((linea) => (
+          {filasPlan.map((fila) => (
             <div
-              key={linea}
-              className="grid grid-cols-[8rem_5rem_minmax(0,1fr)_auto] items-center gap-3"
+              key={fila.clave}
+              className="grid grid-cols-[12rem_5rem_minmax(0,1fr)] items-center gap-3"
             >
-              <Label className="text-sm">{etiqueta(linea)}</Label>
+              <Label className="text-sm">{fila.etiqueta}</Label>
               <Input
                 type="number"
                 min={0}
-                value={filas[linea]?.cupo ?? "0"}
+                value={filas[fila.clave]?.cupo ?? "0"}
                 onChange={(e) =>
                   setFilas((prev) => ({
                     ...prev,
-                    [linea]: { ...(prev[linea] ?? { cupo: "0", horas: "" }), cupo: e.target.value },
+                    [fila.clave]: { ...(prev[fila.clave] ?? { cupo: "0", horas: "" }), cupo: e.target.value },
                   }))
                 }
-                aria-label={`Publicaciones al día de ${etiqueta(linea)}`}
+                aria-label={`Publicaciones al día de ${fila.etiqueta}`}
                 className="tabular-nums"
               />
-              {linea === "breaking" ? (
-                <span className="text-xs text-muted-foreground">
-                  Sin horario: sale al instante.
-                </span>
-              ) : (
+              {fila.conHorario ? (
                 <SelectorHoras
-                  value={filas[linea]?.horas ?? ""}
+                  value={filas[fila.clave]?.horas ?? ""}
                   onChange={(csv) =>
                     setFilas((prev) => ({
                       ...prev,
-                      [linea]: { ...(prev[linea] ?? { cupo: "0", horas: "" }), horas: csv },
+                      [fila.clave]: { ...(prev[fila.clave] ?? { cupo: "0", horas: "" }), horas: csv },
                     }))
                   }
-                  ariaLabel={`Horarios de ${etiqueta(linea)} (hora CDMX)`}
+                  ariaLabel={`Horarios de ${fila.etiqueta} (hora CDMX)`}
                 />
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Sin horario: sale al instante.
+                </span>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => quitarLinea(linea)}
-                aria-label={`Quitar ${etiqueta(linea)}`}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </Button>
             </div>
           ))}
-
-          <div className="grid grid-cols-[8rem_minmax(0,1fr)_auto] items-center gap-3">
-            <Label className="text-sm text-muted-foreground">Añadir línea</Label>
-            <Input
-              list="catalogo-lineas"
-              value={nuevaLinea}
-              placeholder="p. ej. Salud, Medio ambiente…"
-              onChange={(e) => setNuevaLinea(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  anadirLinea();
-                }
-              }}
-              aria-label="Nombre de la nueva línea"
-            />
-            <datalist id="catalogo-lineas">
-              {sugerencias.map((l) => (
-                <option key={l.clave} value={l.etiqueta} />
-              ))}
-            </datalist>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={anadirLinea}
-              disabled={!nuevaLinea.trim()}
-            >
-              <Plus className="h-4 w-4" />
-              Añadir
-            </Button>
-          </div>
 
           <div className="flex items-center justify-between border-t border-border/60 pt-3">
             <span className="text-sm text-muted-foreground">

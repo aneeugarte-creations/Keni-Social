@@ -72,7 +72,7 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
               )}
               data-testid={`chip-linea-${l.linea}`}
             >
-              {etiquetaLinea(l.linea)} {l.generados}/{l.cupo}
+              {(l.etiqueta || etiquetaLinea(l.linea))} {l.generados}/{l.cupo}
               {completa ? " ✓" : ""}
             </Badge>
           );
@@ -179,7 +179,7 @@ function SeccionLinea({
   expandida: boolean;
   onToggleExpandida: () => void;
 }) {
-  const etiqueta = etiquetaLinea(linea.linea);
+  const etiqueta = linea.etiqueta || etiquetaLinea(linea.linea);
   const hayMas = linea.en_pool > linea.historias.length || expandida;
   return (
     <section className="space-y-2" data-testid={`seccion-${linea.linea}`}>

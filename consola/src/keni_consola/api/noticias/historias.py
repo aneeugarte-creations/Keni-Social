@@ -365,12 +365,23 @@ async def mesa(request: Request) -> Response:
     clusters, _total = repos.listar_noticia_clusters(
         marca=marca, estado="nuevo", limite=_MESA_MUESTRA
     )
-    # Reparto por línea (el pool ya viene ordenado por score: cada lista queda rankeada).
+    # Reparto por LÍNEA (el pool ya viene ordenado por score: cada lista queda rankeada). La
+    # historia se reparte por la línea de su feed (id), el mismo eje con que se clava el plan.
+    from ... import bootstrap_lineas
+
     por_linea_pool: dict[str, list[dict[str, Any]]] = {}
     for c in clusters:
-        cat = _pc_ingesta.categoria_efectiva(c)
+        cat = bootstrap_lineas.linea_id_de_slug(marca, _pc_ingesta.categoria_efectiva(c))
         destino = cat if cat in plan else "__fuera__"
         por_linea_pool.setdefault(destino, []).append(c)
+
+    def _etiqueta_linea(clave: str) -> str:
+        if clave == "breaking":
+            return "Última hora"
+        if clave == "evergreen":
+            return "Evergreen"
+        et = repos.obtener_etiqueta(clave)
+        return (et or {}).get("nombre") or clave
 
     cids = [c.get("publicacion_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_publicacion(cids)
@@ -404,6 +415,7 @@ async def mesa(request: Request) -> Response:
         lineas.append(
             {
                 "linea": cat,
+                "etiqueta": _etiqueta_linea(cat),
                 "cupo": int(plan[cat]),
                 "generados": generados,
                 "publicados": int(contadores.get("publicados", 0)),

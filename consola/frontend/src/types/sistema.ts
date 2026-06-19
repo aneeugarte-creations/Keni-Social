@@ -288,7 +288,10 @@ export interface RespuestaPriorizarCola {
 
 /** Una línea del plan editorial diario: generados/publicados vs objetivo en la ventana. */
 export interface ProduccionLinea {
+  /** Clave del plan: id de línea (etiqueta vertical) o señal del motor ('breaking'/'evergreen'). */
   categoria: string;
+  /** Nombre legible de la línea (o "Última hora"/"Evergreen"). */
+  etiqueta?: string;
   generados: number;
   publicados: number;
   objetivo: number | null;

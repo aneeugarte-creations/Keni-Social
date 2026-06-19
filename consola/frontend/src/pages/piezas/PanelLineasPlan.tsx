@@ -40,7 +40,8 @@ export function PanelLineasPlan({ marca }: { marca: string }) {
             return (
               <div key={l.categoria} className="rounded-lg border border-border/60 p-3">
                 <div className="text-xs text-muted-foreground">
-                  {ETIQUETA_LINEA[l.categoria] ??
+                  {l.etiqueta ||
+                    ETIQUETA_LINEA[l.categoria] ||
                     l.categoria.charAt(0).toUpperCase() + l.categoria.slice(1)}
                 </div>
                 <div

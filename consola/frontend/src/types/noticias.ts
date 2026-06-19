@@ -204,8 +204,10 @@ export interface RespuestaHistorias {
 
 /** Una línea del plan editorial diario en la Mesa: cupo + progreso + top candidatas. */
 export interface MesaLinea {
-  /** Id de la línea (categoría del plan: mx, internacional, breaking…). */
+  /** Clave de la línea: id de etiqueta vertical o señal del motor ('breaking'/'evergreen'). */
   linea: string;
+  /** Nombre legible de la línea (o "Última hora"/"Evergreen"). */
+  etiqueta?: string;
   /** Objetivo diario de la línea según el plan. */
   cupo: number;
   /** Temas generados en 24 h móviles (el mismo conteo que la admisión). */

@@ -171,9 +171,20 @@ async def dia(request: Request) -> Response:
             _log.exception("produccion: fallo el conteo por categoría (%s).", marca)
             resumen = {}
         categorias = sorted(set(plan) | set(resumen))
+
+        def _etiqueta_clave(clave: str) -> str:
+            """Nombre legible de una clave de plan: id de línea -> su nombre; señales con su rótulo."""
+            if clave == "breaking":
+                return "Última hora"
+            if clave == "evergreen":
+                return "Evergreen"
+            et = repos.obtener_etiqueta(clave)
+            return (et or {}).get("nombre") or clave
+
         por_categoria = [
             {
                 "categoria": cat,
+                "etiqueta": _etiqueta_clave(cat),
                 "generados": resumen.get(cat, {}).get("generados", 0),
                 "publicados": resumen.get(cat, {}).get("publicados", 0),
                 "objetivo": plan.get(cat) or None,
