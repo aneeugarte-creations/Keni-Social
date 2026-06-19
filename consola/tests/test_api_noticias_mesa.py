@@ -102,28 +102,27 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
 
 
-def test_mesa_fundacion_clasifica_candidatas_por_contenido(cliente, monkeypatch):
-    """Fundación: sus feeds vienen con slugs gruesos (entretenimiento/internacional) que NO
-    mapean a sus líneas; la mesa reparte cada candidata a su línea del plan por CONTENIDO
-    (keywords), no por el slug del feed. Así un feed mixto (divulgación) no cae entero a
-    «Fuera del plan»."""
+def test_mesa_clasifica_por_contenido_si_el_feed_no_mapea(cliente, monkeypatch):
+    """Si el slug del feed de una candidata NO cae en ninguna línea del plan, la mesa la
+    reparte por CONTENIDO (keywords de la línea), no a «Fuera del plan». Es el caso de
+    Fundación, cuyos feeds traen slugs gruesos (entretenimiento/internacional) que no mapean a
+    sus líneas; aquí se reproduce con UnoTV dándole keywords a una línea y un feed sin mapeo.
+    """
     bootstrap_lineas.inicializar_lineas()
-    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")["id"]
-    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")["id"]
-    monkeypatch.setenv("KENI_PLAN_DIA", f"{ciencia}:1,{salud}:1")
-    # Feed «entretenimiento» (Muy Interesante) pero CONTENIDO de ciencia / salud.
-    _inicializar("sci", score=0.9, marca="fundacion", categoria="entretenimiento",
-                 titulo="Científicos descubren un fósil que reescribe la evolución")
-    _inicializar("med", score=0.8, marca="fundacion", categoria="internacional",
-                 titulo="Una nueva vacuna reduce el cáncer en pacientes")
-    # Sin línea reconocible por contenido: se queda fuera del plan.
-    _inicializar("nada", score=0.7, marca="fundacion", categoria="entretenimiento",
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")["id"]
+    # Como las líneas de Fundación, esta línea recibe keywords: una candidata cuyo feed NO
+    # mapea ('gaming' no es línea de UnoTV) se clasifica por su texto.
+    repos.actualizar_etiqueta(intl, {"keywords": "groenlandia, vikingos, fosil"})
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{intl}:2")
+    _inicializar("sci", score=0.9, marca="unotv", categoria="gaming",
+                 titulo="Hallazgo en Groenlandia revela el rastro de vikingos")
+    # Sin coincidencia de keywords: el feed tampoco mapea -> fuera del plan.
+    _inicializar("nada", score=0.7, marca="unotv", categoria="gaming",
                  titulo="El equipo gana el partido en el último minuto")
 
-    datos = cliente.get("/api/noticias/mesa", params={"marca": "fundacion"}).json()
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
-    assert [h["id"] for h in por_linea[ciencia]["historias"]] == ["sci"]
-    assert [h["id"] for h in por_linea[salud]["historias"]] == ["med"]
+    assert [h["id"] for h in por_linea[intl]["historias"]] == ["sci"]
     assert datos["fuera_de_plan"]["en_pool"] == 1
     assert datos["fuera_de_plan"]["historias"][0]["id"] == "nada"
 

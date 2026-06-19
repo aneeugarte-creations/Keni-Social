@@ -56,6 +56,16 @@ def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
     assert gaming is not None
 
 
+def test_bootstrap_siembra_keywords_de_fundacion(entorno):
+    # Las líneas de Fundación reciben su catálogo de keywords: sus feeds traen slugs gruesos que
+    # no mapean a sus líneas, así que la Mesa y la admisión las clasifican por CONTENIDO.
+    bootstrap_lineas.inicializar_lineas()
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
+    assert "cientifico" in (ciencia["keywords"] or "")
+    assert "vacuna" in (salud["keywords"] or "")
+
+
 def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
     bootstrap_lineas.inicializar_lineas()
 

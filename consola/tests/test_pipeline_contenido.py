@@ -1412,27 +1412,29 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     assert [c["id"] for c in elegidos] == ["brx"]
 
 
-def test_clusters_para_promover_fundacion_clasifica_por_contenido(entorno, monkeypatch):
-    """Fundación: sus feeds vienen con slugs gruesos (entretenimiento/internacional) que NO
-    mapean a sus líneas, así que la línea del plan se decide por CONTENIDO (keywords). Una
-    candidata de divulgación compite por el cupo de la línea que le toca por su texto
-    (Ciencia/Tech), no por el slug del feed.
+def test_clusters_para_promover_clasifica_por_contenido_si_el_feed_no_mapea(entorno, monkeypatch):
+    """Una candidata cuyo slug de feed NO mapea a ninguna línea compite por el cupo de la línea
+    que le toca por CONTENIDO (keywords), no por el slug. Es el caso de Fundación (feeds con
+    slugs gruesos que no son sus líneas); aquí se reproduce con UnoTV dándole keywords a una
+    línea y un feed sin mapeo ('gaming' no es línea de UnoTV).
     """
     from keni_consola import bootstrap_lineas
 
     bootstrap_lineas.inicializar_lineas()
-    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
-    # El encaje de marca no es lo que se prueba aquí (la categoría sí): se desactiva su umbral.
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    repos.actualizar_etiqueta(intl["id"], {"keywords": "groenlandia, vikingos, fosil"})
+    # Solo se prueba el enrutado por categoría: se neutralizan los umbrales de score y marca.
     monkeypatch.setenv("KENI_PROMOVER_MIN_MARCA", "0")
+    monkeypatch.setenv("KENI_PROMOVER_MIN_SCORE", "0")
     _inicializar_cluster(
-        "sci", marca="fundacion", categoria="entretenimiento", score=0.9,
-        titulo="Científicos descubren un fósil clave de la evolución",
-        resumen="Un equipo de investigación presenta el hallazgo",
+        "sci", marca="unotv", categoria="gaming", score=0.9,
+        titulo="Hallazgo en Groenlandia revela el rastro de vikingos",
+        resumen="Un equipo de investigación presenta el fósil",
         verificacion_fuente=pc.VERIFICACION_VERIFICADO,
     )
 
     elegidos = pc.clusters_para_promover(
-        "fundacion", maximo=5, cupos_categoria={ciencia["id"]: 1}
+        "unotv", maximo=5, cupos_categoria={intl["id"]: 1}
     )
 
     assert [c["id"] for c in elegidos] == ["sci"]
