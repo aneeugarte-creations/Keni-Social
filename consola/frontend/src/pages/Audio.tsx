@@ -21,6 +21,8 @@ import {
   HelpCircle,
   Lightbulb,
   Loader2,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   SpellCheck,
@@ -267,6 +269,7 @@ export default function Audio() {
                     cargando={arts.isLoading}
                     artefactoId={artefactoId}
                     onSeleccionar={setArtefactoId}
+                    onCambio={refetchArtefactos}
                   />
                 </div>
               ) : (
@@ -566,6 +569,7 @@ function PanelArtefactos({
   cargando,
   artefactoId,
   onSeleccionar,
+  onCambio,
 }: {
   className?: string;
   audio: TranscripcionAudio | null;
@@ -573,6 +577,7 @@ function PanelArtefactos({
   cargando: boolean;
   artefactoId: string | null;
   onSeleccionar: (id: string) => void;
+  onCambio: () => void;
 }) {
   const qc = useQueryClient();
   const reintentar = useMutation({
@@ -581,6 +586,11 @@ function PanelArtefactos({
       qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
       toast.success("Reintentando…");
     },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.audio.eliminarArtefacto(id),
+    onSuccess: () => onCambio(),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -622,23 +632,37 @@ function PanelArtefactos({
           {artefactos.map((a) => {
             const activo = a.id === artefactoId;
             return (
-              <button
+              <div
                 key={a.id}
-                type="button"
-                onClick={() => onSeleccionar(a.id)}
-                className={`flex items-center justify-between gap-1.5 rounded-md border px-2 py-1.5 text-left text-xs ${
+                className={`group flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs ${
                   activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
                 }`}
               >
-                <span className="truncate font-medium">{a.titulo || TITULO_ARTEFACTO[a.tipo] || a.tipo}</span>
-                {a.estado === "generando" ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-                ) : a.estado === "error" ? (
-                  <Badge variant="destructive" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
-                ) : (
-                  <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
-                )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onSeleccionar(a.id)}
+                  className="flex min-w-0 flex-1 items-center justify-between gap-1.5 text-left"
+                >
+                  <span className="truncate font-medium">{a.titulo || TITULO_ARTEFACTO[a.tipo] || a.tipo}</span>
+                  {a.estado === "generando" ? (
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                  ) : a.estado === "error" ? (
+                    <Badge variant="destructive" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
+                  ) : (
+                    <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
+                  )}
+                </button>
+                {a.tipo !== "srt" && a.estado !== "generando" ? (
+                  <button
+                    type="button"
+                    title="Eliminar artefacto"
+                    onClick={() => borrar.mutate(a.id)}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
             );
           })}
           {/* Documentos planificados (aún sin fila): por crear cuando termine la transcripción. */}
@@ -691,10 +715,17 @@ function Lector({
   const [verProgreso, setVerProgreso] = React.useState(true);
   React.useEffect(() => setVerProgreso(true), [audio?.id]);
 
-  // Fuente de un tratamiento NUEVO: el artefacto abierto o, si ninguno, el SRT (base canónica).
+  // Fuente de un tratamiento NUEVO. Solo valen las bases de CONTENIDO; 'texto' (= SRT sin tiempos)
+  // y 'preguntas' (cajón-formulario) NO son fuente: se parte del SRT (subtítulos, con timestamps).
   const srt = artefactos.find((a) => a.tipo === "srt") ?? null;
-  const fuente = artefacto ?? srt;
+  const fuente = (artefacto && FUENTES_VALIDAS.has(artefacto.tipo) ? artefacto : srt) ?? null;
   const fuenteLista = !!fuente && fuente.estado === "listo";
+
+  // El cajón de preguntas es ÚNICO por audio: si hay uno utilizable, el botón lo ABRE (no relanza).
+  const preguntaAbrible =
+    artefactos.find((a) => a.tipo === "preguntas" && a.estado === "listo") ??
+    artefactos.find((a) => a.tipo === "preguntas" && a.estado === "generando") ??
+    null;
 
   // ¿ya hay un artefacto de este tipo derivado de la fuente actual, en su versión actual?
   const yaDe = (tipo: TratamientoClaude) =>
@@ -706,7 +737,10 @@ function Lector({
     ) ?? null;
 
   const crear = useMutation({
-    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo, fuente?.id),
+    // 'preguntas' SIEMPRE parte del SRT (necesita timestamps para el snippet de audio); el resto, de
+    // la fuente activa.
+    mutationFn: (tipo: TratamientoClaude) =>
+      api.audio.crearArtefacto(audio!.id, tipo, (tipo === "preguntas" ? srt : fuente)?.id),
     onSuccess: (r) => {
       onCambio();
       onSeleccionarArtefacto(r.artefacto.id);
@@ -758,13 +792,14 @@ function Lector({
               Desde «{fuente ? fuente.titulo || TITULO_ARTEFACTO[fuente.tipo] : "la transcripción"}»:
             </span>
             {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => {
-              const ya = yaDe(tipo);
-              // 'preguntas' NO se deshabilita: si ya existe, su botón abre el cajón; si no, lo genera.
+              // 'preguntas' NO se deshabilita ni relanza: si ya hay un cajón, su botón lo ABRE.
               const esPreguntas = tipo === "preguntas";
-              const deshab = !esPreguntas && !!ya;
+              const abrir = esPreguntas ? preguntaAbrible : null;
+              const ya = esPreguntas ? null : yaDe(tipo);
+              const deshab = !!ya;
               const label = deshab
                 ? "Ya generado desde esta fuente. Edita la fuente para regenerar."
-                : esPreguntas && ya
+                : abrir
                   ? "Abre el cajón de preguntas"
                   : desc;
               const cargando = crear.isPending && crear.variables === tipo;
@@ -772,11 +807,11 @@ function Lector({
                 <Tooltip key={tipo} label={label} side="bottom">
                   <Button
                     size="sm"
-                    variant={esPreguntas && ya ? "secondary" : "ghost"}
+                    variant={abrir ? "secondary" : "ghost"}
                     className="h-7 gap-1 px-2 text-xs"
-                    disabled={crear.isPending || deshab || !fuenteLista}
+                    disabled={crear.isPending || deshab || (!abrir && !fuenteLista)}
                     onClick={() =>
-                      esPreguntas && ya ? onSeleccionarArtefacto(ya.id) : crear.mutate(tipo)
+                      abrir ? onSeleccionarArtefacto(abrir.id) : crear.mutate(tipo)
                     }
                   >
                     {cargando ? (
@@ -855,6 +890,7 @@ function Lector({
             {artefacto.tipo === "preguntas" ? (
               <FormularioPreguntas
                 artefacto={artefacto}
+                audio={audio}
                 onCambio={onCambio}
                 onSeleccionarArtefacto={onSeleccionarArtefacto}
               />
@@ -903,35 +939,69 @@ const TIPOS_TRATAMIENTO = new Set<TipoArtefacto>([
   "corregido",
 ]);
 
+/** Artefactos que valen como FUENTE de un tratamiento. 'texto' (SRT sin tiempos) y 'preguntas'
+ *  (formulario) quedan fuera: deriva del SRT. */
+const FUENTES_VALIDAS = new Set<TipoArtefacto>([
+  "srt",
+  "limpio",
+  "resumen",
+  "ideas",
+  "corregido",
+]);
+
+// "mm:ss"/"hh:mm:ss" -> segundos. NaN/sin dígitos -> 0.
+function ssToSec(t: string): number {
+  const partes = t.split(":").map((n) => Number(n));
+  if (!partes.length || partes.some((n) => Number.isNaN(n))) return 0;
+  return partes.reduce((acc, n) => acc * 60 + n, 0);
+}
+
 interface PreguntaItem {
   t: string;
   frase: string;
   pregunta: string;
 }
 
-// Parsea las líneas «[mm:ss] «frase» — pregunta» que produce el prompt «Aclarar» (tolera viñeta o
-// numeración al inicio). Las que no encajan se descartan (p. ej. «(no hay dudas…)»).
+// Marca de tiempo que aporta información (la hay): «12:11» sí, «--:--» (sin timestamp, p. ej. al
+// partir de texto plano) no.
+function tieneTiempo(t: string): boolean {
+  return /\d/.test(t);
+}
+
+// Parsea las líneas «[t] frase — pregunta» del prompt «Aclarar». Robusto: el corchete admite
+// CUALQUIER marca (incl. «--:--» sin timestamp), tolera viñeta/numeración, una o varias «…» en la
+// frase, y guion largo/medio. Las líneas que no encajan se descartan (p. ej. «(no hay dudas…)»).
 function parsePreguntas(contenido: string): PreguntaItem[] {
-  const re = /^[-*\d.\s]*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*«([\s\S]*?)»\s*[—–-]\s*(.+)$/;
-  return contenido
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => {
-      const m = l.match(re);
-      return m ? { t: m[1], frase: m[2], pregunta: m[3] } : null;
-    })
-    .filter((x): x is PreguntaItem => x !== null);
+  const out: PreguntaItem[] = [];
+  for (const linea of contenido.split("\n")) {
+    const l = linea.trim().replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "");
+    if (!l.startsWith("[")) continue;
+    const cierre = l.indexOf("]");
+    if (cierre < 1) continue;
+    const t = l.slice(1, cierre).trim();
+    // Frase y pregunta van separadas por « — » (espacio, raya, espacio); corta en la PRIMERA.
+    const m = l.slice(cierre + 1).trim().match(/^(.*?)\s+[—–-]\s+(.+)$/);
+    if (!m) continue;
+    const frase = m[1].trim();
+    const pregunta = m[2].trim();
+    if (!pregunta) continue;
+    out.push({ t, frase, pregunta });
+  }
+  return out;
 }
 
 // Cajón de PREGUNTAS: el artefacto intermedio del prompt «Aclarar» como formulario. Cada duda lleva
-// su marca de tiempo, el fragmento escuchado y un campo de respuesta; al enviar genera el «Corregido».
+// su marca de tiempo, el fragmento escuchado, un PLAY del snippet de audio de esa franja y un campo
+// de respuesta; al enviar genera el «Corregido». Las preguntas sin timestamp (derivadas de texto
+// plano) no llevan play.
 function FormularioPreguntas({
   artefacto,
+  audio,
   onCambio,
   onSeleccionarArtefacto,
 }: {
   artefacto: ArtefactoAudio;
+  audio: TranscripcionAudio;
   onCambio: () => void;
   onSeleccionarArtefacto: (id: string) => void;
 }) {
@@ -939,12 +1009,41 @@ function FormularioPreguntas({
   const [resp, setResp] = React.useState<Record<number, string>>({});
   React.useEffect(() => setResp({}), [artefacto.id]);
 
+  // Reproductor de snippets: un solo <audio> del media; cada play salta a su franja y se detiene al
+  // final de la ventana (~8 s desde un poco antes del timestamp).
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const finRef = React.useRef(0);
+  const [sonando, setSonando] = React.useState<number | null>(null);
+  React.useEffect(() => setSonando(null), [artefacto.id]);
+
+  const reproducir = (i: number, inicioSeg: number) => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (sonando === i) {
+      el.pause();
+      setSonando(null);
+      return;
+    }
+    finRef.current = inicioSeg + 8;
+    el.currentTime = Math.max(0, inicioSeg - 0.5);
+    void el.play().then(() => setSonando(i)).catch(() => setSonando(null));
+  };
+  const alAvanzar = () => {
+    const el = audioRef.current;
+    if (el && el.currentTime >= finRef.current) {
+      el.pause();
+      setSonando(null);
+    }
+  };
+
   const corregir = useMutation({
     mutationFn: () => {
       const respuestas = preguntas
         .map((q, i) => {
           const a = (resp[i] ?? "").trim();
-          return a ? `[${q.t}] «${q.frase}» → ${a}` : null;
+          if (!a) return null;
+          const marca = tieneTiempo(q.t) ? `[${q.t}] ` : "";
+          return `${marca}${q.frase} → ${a}`;
         })
         .filter((x): x is string => x !== null);
       return api.audio.corregir(artefacto.id, respuestas);
@@ -968,26 +1067,50 @@ function FormularioPreguntas({
   const algunaResp = Object.values(resp).some((v) => v.trim());
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <audio
+        ref={audioRef}
+        src={audio.media_url || undefined}
+        preload="none"
+        onTimeUpdate={alAvanzar}
+        onEnded={() => setSonando(null)}
+        className="hidden"
+      />
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
-        {preguntas.map((q, i) => (
-          <div key={i} className="rounded-md border border-border/70 bg-background p-3">
-            <div className="flex items-baseline gap-2">
-              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-                {q.t}
-              </span>
-              <p className="text-xs">
-                <span className="text-muted-foreground">«{q.frase}»</span> — {q.pregunta}
-              </p>
+        {preguntas.map((q, i) => {
+          const conTiempo = tieneTiempo(q.t) && !!audio.media_url;
+          return (
+            <div key={i} className="rounded-md border border-border/70 bg-background p-3">
+              <div className="flex items-baseline gap-2">
+                {conTiempo ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 shrink-0 gap-1 px-1.5 font-mono text-xs"
+                    title="Escuchar este fragmento"
+                    onClick={() => reproducir(i, ssToSec(q.t))}
+                  >
+                    {sonando === i ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    {q.t}
+                  </Button>
+                ) : (
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                    {q.t || "—"}
+                  </span>
+                )}
+                <p className="text-xs">
+                  <span className="text-muted-foreground">{q.frase}</span> — {q.pregunta}
+                </p>
+              </div>
+              <Textarea
+                value={resp[i] ?? ""}
+                onChange={(e) => setResp((s) => ({ ...s, [i]: e.target.value }))}
+                rows={1}
+                className="mt-2 min-h-9"
+                placeholder="Tu respuesta…"
+              />
             </div>
-            <Textarea
-              value={resp[i] ?? ""}
-              onChange={(e) => setResp((s) => ({ ...s, [i]: e.target.value }))}
-              rows={1}
-              className="mt-2 min-h-9"
-              placeholder="Tu respuesta…"
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
