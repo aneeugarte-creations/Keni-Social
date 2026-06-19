@@ -1,20 +1,16 @@
 /**
- * Lanzador de un Ralph nuevo: textarea de prompt + selector de modelo (opus por
- * defecto) + botón Lanzar. Al lanzar, el store crea el Ralph, abre su chat y empieza
- * a seguir su stream en vivo.
+ * Lanzador de un Ralph nuevo — diseño Ane Ugarte.
+ *
+ * El textarea ES la interfaz: cromo al mínimo y el input como protagonista. El modelo
+ * (y el tipo, solo para superadmin) son controles silenciosos en el pie; lanzar es una
+ * única acción circular que solo se enciende en naranja cuando hay algo que decir.
+ * Al lanzar, el store crea el Ralph, abre su chat y empieza a seguir su stream en vivo.
  */
-import { Rocket } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { AutoTextarea } from "@/components/ui/auto-textarea";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -23,21 +19,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import { ETIQUETA_MODELO, useRalphStore } from "@/store/ralphStore";
 import type { ModeloRalph, TipoRalph } from "@/types/ralph";
 
 const MODELOS: ModeloRalph[] = ["opus", "sonnet", "haiku"];
 
+/** Selector silencioso del pie: solo texto + chevron, sin caja, hasta que lo tocas. */
+const DISPARADOR_SILENCIOSO =
+  "h-8 w-auto gap-1 rounded-full border-0 bg-transparent px-3 text-sm text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus:ring-0";
+
 export function LanzadorRalph() {
   const spawn = useRalphStore((s) => s.spawn);
   const spawneando = useRalphStore((s) => s.spawneando);
-  const cerrarLanzador = useRalphStore((s) => s.cerrarLanzador);
   const superadmin = useRalphStore((s) => s.superadmin);
+  const cerrarLanzador = useRalphStore((s) => s.cerrarLanzador);
 
   const [prompt, setPrompt] = React.useState("");
   const [modelo, setModelo] = React.useState<ModeloRalph>("opus");
   // Solo el superadmin elige tipo; el resto siempre lanza un Ralph operativo.
   const [tipo, setTipo] = React.useState<TipoRalph>("operativo");
+
+  // Esc cierra el lanzador (sin botón Cancelar visible). No interfiere con el Esc
+  // que cierra un Select abierto: Radix lo consume (stopPropagation) antes de llegar.
+  React.useEffect(() => {
+    const alPulsar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cerrarLanzador();
+    };
+    document.addEventListener("keydown", alPulsar);
+    return () => document.removeEventListener("keydown", alPulsar);
+  }, [cerrarLanzador]);
+
+  const hayTexto = prompt.trim().length > 0;
+  const esDev = superadmin && tipo === "dev";
 
   const lanzar = async () => {
     const limpio = prompt.trim();
@@ -50,47 +64,41 @@ export function LanzadorRalph() {
     }
   };
 
-  const esDev = superadmin && tipo === "dev";
-
   return (
-    <Card className="w-[360px] max-w-[calc(100vw-3rem)] shadow-xl">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Lanzar Ralph</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {superadmin && (
-          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoRalph)}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="operativo">Operativo</SelectItem>
-              <SelectItem value="dev">Desarrollo</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-        <AutoTextarea
-          autoFocus
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            // Cmd/Ctrl+Enter lanza sin salir del textarea.
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              void lanzar();
-            }
-          }}
-          placeholder={
-            esDev
-              ? "¿Qué quieres que desarrolle este Ralph?"
-              : "¿En qué te ayudo hoy? (marcas, contenido, métricas, noticias…)"
+    <div className="w-[380px] max-w-[calc(100vw-3rem)] rounded-3xl border border-border bg-card shadow-[0_20px_50px_-20px_rgba(0,0,0,0.25)]">
+      <p className="px-4 pt-3 text-[13px] font-medium text-muted-foreground">Ralph</p>
+      <AutoTextarea
+        autoFocus
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        onKeyDown={(e) => {
+          // Cmd/Ctrl+Enter lanza sin salir del textarea.
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            void lanzar();
           }
-          maxHeight={200}
-          className="min-h-[88px]"
-        />
-        <div className="flex items-center gap-2">
+        }}
+        placeholder={
+          esDev ? "¿Qué quieres que desarrolle este Ralph?" : "¿En qué te ayudo?"
+        }
+        maxHeight={220}
+        className="min-h-[92px] border-0 bg-transparent px-4 pt-1 text-lg shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0"
+      />
+      <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        <div className="flex items-center gap-1">
+          {superadmin && (
+            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoRalph)}>
+              <SelectTrigger className={DISPARADOR_SILENCIOSO} aria-label="Tipo de Ralph">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="operativo">Operativo</SelectItem>
+                <SelectItem value="dev">Desarrollo</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={modelo} onValueChange={(v) => setModelo(v as ModeloRalph)}>
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className={DISPARADOR_SILENCIOSO} aria-label="Modelo">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -101,26 +109,22 @@ export function LanzadorRalph() {
               ))}
             </SelectContent>
           </Select>
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" size="sm" onClick={cerrarLanzador} disabled={spawneando}>
-              Cancelar
-            </Button>
-            <Button
-              variant="brand"
-              size="sm"
-              onClick={lanzar}
-              disabled={spawneando || !prompt.trim()}
-            >
-              {spawneando ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                <Rocket className="h-4 w-4" />
-              )}
-              Lanzar
-            </Button>
-          </div>
         </div>
-      </CardContent>
-    </Card>
+        <button
+          type="button"
+          onClick={lanzar}
+          disabled={spawneando || !hayTexto}
+          aria-label="Lanzar"
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed",
+            hayTexto
+              ? "bg-keni text-white hover:bg-keni-500"
+              : "bg-muted text-muted-foreground/40",
+          )}
+        >
+          {spawneando ? <Spinner className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
   );
 }
