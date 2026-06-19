@@ -1163,6 +1163,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         detalle       TEXT NOT NULL DEFAULT '',
         categoria     TEXT NOT NULL DEFAULT 'idea',
         autor         TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
         estado        TEXT NOT NULL DEFAULT 'nueva',
         complejidad   TEXT NOT NULL DEFAULT '',
         spec          TEXT NOT NULL DEFAULT '',
@@ -1180,6 +1181,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_estado ON sugerencias (estado)",
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_categoria ON sugerencias (categoria)",
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_creada ON sugerencias (creada)",
+    # `autor_id`: id del usuario que creó la sugerencia (clave de PROPIEDAD fiable, distinta
+    # del `autor` de display). El tablero solo lo ve el superadmin; el resto ve únicamente las
+    # suyas (filtradas por este id). Índice para el filtrado por dueño.
+    "ALTER TABLE sugerencias ADD COLUMN IF NOT EXISTS autor_id TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_autor_id ON sugerencias (autor_id)",
     # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
     # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
     # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.

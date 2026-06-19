@@ -22,6 +22,7 @@ _COLS_SUGERENCIA = (
     "detalle",
     "categoria",
     "autor",
+    "autor_id",
     "estado",
     "complejidad",
     "spec",
@@ -38,7 +39,7 @@ _COLS_SUGERENCIA = (
 _SELECT_SUGERENCIA = f"SELECT {', '.join(_COLS_SUGERENCIA)} FROM sugerencias"
 # Todo lo MUTABLE: el texto que edita el equipo (titulo/detalle/categoria), el estado del
 # kanban y los campos que el motor de desarrollo va rellenando (complejidad/spec/plan/fase/
-# gen_id/rama/worktree/diff_resumen/coste_usd). `id`/`autor`/`creada` son inmutables.
+# gen_id/rama/worktree/diff_resumen/coste_usd). `id`/`autor`/`autor_id`/`creada` son inmutables.
 _CAMPOS_EDITABLES_SUGERENCIA: tuple[str, ...] = (
     "titulo",
     "detalle",
@@ -69,6 +70,7 @@ def crear_sugerencia(
     detalle: str = "",
     categoria: str = "idea",
     autor: str = "",
+    autor_id: str = "",
     estado: str = "nueva",
     complejidad: str = "",
     spec: str = "",
@@ -94,6 +96,7 @@ def crear_sugerencia(
         "detalle": detalle or "",
         "categoria": categoria or "idea",
         "autor": autor or "",
+        "autor_id": autor_id or "",
         "estado": estado or "nueva",
         "complejidad": complejidad or "",
         "spec": spec or "",
@@ -121,9 +124,13 @@ def crear_sugerencia(
 
 
 def listar_sugerencias(
-    *, estado: str | None = None, categoria: str | None = None
+    *, estado: str | None = None, categoria: str | None = None, autor_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """Lista sugerencias, recientes primero. Filtros opcionales por `estado`/`categoria`."""
+    """Lista sugerencias, recientes primero. Filtros opcionales por `estado`/`categoria`/`autor_id`.
+
+    Con `autor_id` solo devuelve las de ESE dueño (cada persona ve únicamente las suyas; el
+    tablero completo es del superadmin).
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if estado:
@@ -132,6 +139,9 @@ def listar_sugerencias(
     if categoria:
         clausulas.append("categoria = ?")
         params.append(categoria)
+    if autor_id is not None:
+        clausulas.append("autor_id = ?")
+        params.append(autor_id)
     sql = _SELECT_SUGERENCIA
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)

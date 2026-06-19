@@ -1,9 +1,9 @@
-"""Tests de la PROMOCIÓN a main (`POST /api/sugerencias/{id}/promover`). Panel ADMIN.
+"""Tests de la PROMOCIÓN a main (`POST /api/sugerencias/{id}/promover`). Control del TABLERO.
 
-Cubre el cerrojo de rol (solo admin; editor/token -> 403), el gate de estado (`revision`), la
-DEGRADACIÓN cuando worker-dev no responde y el REENVÍO al listener de promoción (parcheando
-`_llamar_dev`, sin red real ni git). Usa el fixture `entorno` (Postgres) para las sesiones y el
-kanban, como el resto de tests de `/api/sistema`.
+Cubre el cerrojo de rol (solo SUPERADMIN; editor/admin-sin-flag/token -> 403), el gate de estado
+(`revision`), la DEGRADACIÓN cuando worker-dev no responde y el REENVÍO al listener de promoción
+(parcheando `_llamar_dev`, sin red real ni git). Usa el fixture `entorno` (Postgres) para las
+sesiones y el kanban, como el resto de tests de `/api/sistema`.
 """
 
 from __future__ import annotations
@@ -24,13 +24,17 @@ def _cli() -> TestClient:
     return TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))
 
 
-def _cli_como(rol: str) -> TestClient:
-    auth.crear_usuario("u", CLAVE, rol)
+def _cli_como(rol: str, *, superadmin: bool = False) -> TestClient:
+    auth.crear_usuario("u", CLAVE, rol, superadmin=superadmin)
     c = _cli()
     assert c.post(
         "/api/auth/login", json={"usuario": "u", "password": CLAVE}, headers=_ORIGIN
     ).status_code == 200
     return c
+
+
+def _cli_super() -> TestClient:
+    return _cli_como("admin", superadmin=True)
 
 
 def _cli_token() -> TestClient:
@@ -48,12 +52,18 @@ def _en_revision(titulo: str = "Promovible") -> str:
     return s["id"]
 
 
-# --- Permisos: solo admin -------------------------------------------------- #
+# --- Permisos: solo superadmin --------------------------------------------- #
 
 
 def test_editor_no_promueve_403(entorno):
     sid = _en_revision()
     assert _cli_como("editor").post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN).status_code == 403
+
+
+def test_admin_sin_flag_no_promueve_403(entorno):
+    # Un admin SIN el flag superadmin tampoco controla el tablero.
+    sid = _en_revision()
+    assert _cli_como("admin").post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN).status_code == 403
 
 
 def test_token_mantenimiento_no_promueve_403(entorno):
@@ -62,18 +72,18 @@ def test_token_mantenimiento_no_promueve_403(entorno):
     assert r.status_code == 403
 
 
-# --- Gate de estado / existencia (admin) ----------------------------------- #
+# --- Gate de estado / existencia (superadmin) ------------------------------ #
 
 
 def test_promover_desde_estado_invalido_400(entorno):
     s = sugerencias.crear("Idea")  # nace en `nueva`: no promovible
-    r = _cli_como("admin").post(f"/api/sugerencias/{s['id']}/promover", json={}, headers=_ORIGIN)
+    r = _cli_super().post(f"/api/sugerencias/{s['id']}/promover", json={}, headers=_ORIGIN)
     assert r.status_code == 400
     assert r.json()["ok"] is False
 
 
 def test_promover_inexistente_404(entorno):
-    r = _cli_como("admin").post("/api/sugerencias/nope/promover", json={}, headers=_ORIGIN)
+    r = _cli_super().post("/api/sugerencias/nope/promover", json={}, headers=_ORIGIN)
     assert r.status_code == 404
 
 
@@ -86,7 +96,7 @@ def test_promover_worker_dev_caido_degrada(entorno, monkeypatch):
         api_sugerencias, "_llamar_dev",
         lambda metodo, ruta, json=None: (502, {"ok": False, "detalle": "No se pudo contactar worker-dev para promover."}),
     )
-    r = _cli_como("admin").post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN)
+    r = _cli_super().post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN)
     assert r.status_code == 502
     assert r.json()["ok"] is False
     # No mueve el kanban: sigue en revision.
@@ -106,7 +116,7 @@ def test_promover_ok_marca_hecha(entorno, monkeypatch):
         return 200, {"ok": True, "detalle": "Rama «dev/sug-x» promovida a main.", "rama": "dev/sug-x"}
 
     monkeypatch.setattr(api_sugerencias, "_llamar_dev", _fake)
-    r = _cli_como("admin").post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN)
+    r = _cli_super().post(f"/api/sugerencias/{sid}/promover", json={}, headers=_ORIGIN)
     assert r.status_code == 200
     cuerpo = r.json()
     assert cuerpo["ok"] is True

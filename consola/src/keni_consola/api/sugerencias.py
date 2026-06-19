@@ -59,13 +59,67 @@ def _catalogos() -> dict[str, list[str]]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Identidad / propiedad. El TABLERO y su control (mover, discovery, construir,  #
+# checkpoint, borrar, promover) son del SUPERADMIN; el resto del equipo solo    #
+# crea ideas y ve LAS SUYAS y su spec. La propiedad se fija server-side por el   #
+# id de la sesión (`autor_id`), nunca por lo que mande el cliente.              #
+# --------------------------------------------------------------------------- #
+
+
+def _uid(request: Request) -> str:
+    """Id del usuario de la sesión (o "" si se entró por el token de mantenimiento)."""
+    usuario = permisos.usuario_actual(request)
+    return str(usuario["id"]) if usuario and usuario.get("id") else ""
+
+
+def _nombre(request: Request) -> str:
+    """Nombre de display del usuario de la sesión (nombre o usuario), o "" si no hay sesión."""
+    usuario = permisos.usuario_actual(request) or {}
+    return str(usuario.get("nombre") or usuario.get("usuario") or "")
+
+
+def _puede_ver(request: Request, sug: dict) -> bool:
+    """True si la sesión puede ver `sug`: superadmin (todo) o su autor (las suyas)."""
+    if permisos.es_superadmin(request):
+        return True
+    return bool(sug.get("autor_id")) and sug["autor_id"] == _uid(request)
+
+
+def _solo_superadmin(request: Request, mensaje: str) -> Response | None:
+    """403 si la sesión NO es superadmin; None si puede continuar."""
+    if not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(mensaje)
+    return None
+
+
 async def listar(request: Request) -> Response:
-    """GET /api/sugerencias: kanban completo + catálogos."""
-    return JSONResponse({"sugerencias": sugerencias.listar(), **_catalogos()})
+    """GET /api/sugerencias: kanban + catálogos. Superadmin ve TODO; el resto solo SUS ideas."""
+    es_super = permisos.es_superadmin(request)
+    autor_id = None if es_super else _uid(request)
+    return JSONResponse(
+        {
+            "sugerencias": sugerencias.listar(autor_id=autor_id),
+            "superadmin": es_super,
+            **_catalogos(),
+        }
+    )
+
+
+async def obtener(request: Request) -> Response:
+    """GET /api/sugerencias/{id} -> `{sugerencia}`. Dueño o superadmin; ajena -> 404 (no se filtra)."""
+    sug = sugerencias.obtener(request.path_params["sugerencia_id"])
+    if sug is None or not _puede_ver(request, sug):
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+    return JSONResponse({"sugerencia": sug})
 
 
 async def crear(request: Request) -> Response:
-    """POST /api/sugerencias `{titulo, detalle?, categoria?, autor?}` -> `{sugerencia}`."""
+    """POST /api/sugerencias `{titulo, detalle?, categoria?}` -> `{sugerencia}`.
+
+    El autor (nombre + id de propiedad) sale de la SESIÓN, no del cuerpo: cada idea queda
+    atada a quien la crea para que solo él (y el superadmin) la vea luego.
+    """
     datos = await leer_json(request)
     titulo = datos.get("titulo")
     if not isinstance(titulo, str) or not titulo.strip():
@@ -79,21 +133,34 @@ async def crear(request: Request) -> Response:
     if categoria not in sugerencias.CATEGORIAS:
         return JSONResponse({"error": "Categoría no permitida."}, status_code=400)
 
-    autor = datos.get("autor") or ""
-    if not isinstance(autor, str):
-        return JSONResponse({"error": "El autor debe ser texto."}, status_code=400)
-
-    sugerencia = sugerencias.crear(titulo, detalle=detalle, categoria=categoria, autor=autor)
+    sugerencia = sugerencias.crear(
+        titulo, detalle=detalle, categoria=categoria,
+        autor=_nombre(request), autor_id=_uid(request),
+    )
     return JSONResponse({"sugerencia": sugerencia})
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/sugerencias/{id} `{estado?|titulo?|detalle?|categoria?}` -> `{sugerencia}`."""
+    """PATCH /api/sugerencias/{id} `{estado?|titulo?|detalle?|categoria?}` -> `{sugerencia}`.
+
+    Mover de ESTADO (tablero/flujo) es solo del superadmin; editar el TEXTO lo puede hacer el
+    superadmin o el AUTOR de la idea.
+    """
     sugerencia_id = request.path_params["sugerencia_id"]
     datos = await leer_json(request)
 
-    # Cambio de ESTADO (validado por la máquina de estados).
+    actual0 = sugerencias.obtener(sugerencia_id)
+    # Una sugerencia que la sesión no puede ver es, para ella, inexistente (no se filtra que
+    # exista una ajena). Quien la ve es superadmin o su autor.
+    if actual0 is None or not _puede_ver(request, actual0):
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+    es_super = permisos.es_superadmin(request)
+    es_dueno = bool(actual0.get("autor_id")) and actual0["autor_id"] == _uid(request)
+
+    # Cambio de ESTADO (validado por la máquina de estados). Solo superadmin.
     if "estado" in datos:
+        if not es_super:
+            return permisos.rechazo_solo_admin("Solo un superadmin puede mover sugerencias.")
         estado = datos.get("estado")
         if estado not in sugerencias.ESTADOS:
             return JSONResponse({"error": "Estado no permitido."}, status_code=400)
@@ -106,9 +173,13 @@ async def actualizar(request: Request) -> Response:
         if actualizada is None:
             return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
 
-    # Edición de TEXTO (titulo/detalle/categoria) en el mismo PATCH si vienen.
+    # Edición de TEXTO (titulo/detalle/categoria): superadmin o el autor de la idea.
     texto = {k: datos[k] for k in ("titulo", "detalle", "categoria") if k in datos}
     if texto:
+        if not (es_super or es_dueno):
+            return permisos.rechazo_solo_admin(
+                "Solo el autor o un superadmin puede editar esta idea."
+            )
         try:
             actualizada = sugerencias.editar(sugerencia_id, texto)
         except ValueError:
@@ -126,7 +197,10 @@ async def actualizar(request: Request) -> Response:
 
 
 async def borrar(request: Request) -> Response:
-    """DELETE /api/sugerencias/{id} -> `{ok: true}`."""
+    """DELETE /api/sugerencias/{id} -> `{ok: true}`. Solo superadmin (limpia el tablero)."""
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede borrar sugerencias.")
+    if rechazo is not None:
+        return rechazo
     sugerencia_id = request.path_params["sugerencia_id"]
     if not sugerencias.borrar(sugerencia_id):
         return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
@@ -152,11 +226,17 @@ def _lanzar_o_error(funcion, *args, **kwargs) -> Response:
 
 async def discovery(request: Request) -> Response:
     """POST /api/sugerencias/{id}/discovery -> `{generacion}` (encola el job dev-discovery)."""
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede lanzar discovery.")
+    if rechazo is not None:
+        return rechazo
     return _lanzar_o_error(sugerencias.lanzar_discovery, request.path_params["sugerencia_id"])
 
 
 async def construir(request: Request) -> Response:
     """POST /api/sugerencias/{id}/construir -> `{generacion}` (en_cola + primera fase)."""
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede construir.")
+    if rechazo is not None:
+        return rechazo
     sugerencia_id = request.path_params["sugerencia_id"]
     datos = await leer_json(request)
     complejidad = datos.get("complejidad") or ""
@@ -179,6 +259,9 @@ async def checkpoint(request: Request) -> Response:
     - cambios: re-ejecuta la construcción con el comentario como feedback.
     - cancelar: descarta la sugerencia.
     """
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede resolver un checkpoint.")
+    if rechazo is not None:
+        return rechazo
     sugerencia_id = request.path_params["sugerencia_id"]
     datos = await leer_json(request)
     accion = datos.get("accion")
@@ -211,13 +294,15 @@ async def checkpoint(request: Request) -> Response:
 async def promover(request: Request) -> Response:
     """POST /api/sugerencias/{id}/promover -> `{ok, detalle, rama}` (checkpoint humano → main).
 
-    ADMIN-gated: promover ejecuta un `git push` REAL a `main`. PROXEA (httpx+bearer) al listener
-    de worker-dev (`KENI_DEV_URL`), que hace fetch+rebase+push de la rama de la sugerencia dentro
-    de su worktree. Solo desde estado `revision`; si worker-dev no responde, degrada con error
-    claro y NO mueve el kanban. Tras un push OK, marca la sugerencia `hecha`.
+    SUPERADMIN-gated: promover ejecuta un `git push` REAL a `main` (es control del tablero, que
+    es del superadmin). PROXEA (httpx+bearer) al listener de worker-dev (`KENI_DEV_URL`), que hace
+    fetch+rebase+push de la rama de la sugerencia dentro de su worktree. Solo desde estado
+    `revision`; si worker-dev no responde, degrada con error claro y NO mueve el kanban. Tras un
+    push OK, marca la sugerencia `hecha`.
     """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin("Solo un administrador puede promover a main.")
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede promover a main.")
+    if rechazo is not None:
+        return rechazo
     sugerencia_id = request.path_params["sugerencia_id"]
     sug = sugerencias.obtener(sugerencia_id)
     if sug is None:
@@ -251,6 +336,7 @@ async def promover(request: Request) -> Response:
 RUTAS = [
     Route("/api/sugerencias", listar, methods=["GET"]),
     Route("/api/sugerencias", crear, methods=["POST"]),
+    Route("/api/sugerencias/{sugerencia_id}", obtener, methods=["GET"]),
     Route("/api/sugerencias/{sugerencia_id}", actualizar, methods=["PATCH"]),
     Route("/api/sugerencias/{sugerencia_id}", borrar, methods=["DELETE"]),
     Route("/api/sugerencias/{sugerencia_id}/discovery", discovery, methods=["POST"]),

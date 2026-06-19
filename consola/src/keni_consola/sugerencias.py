@@ -88,9 +88,10 @@ def transicion_valida(origen: str, destino: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def listar() -> list[dict[str, Any]]:
-    """Todas las sugerencias, recientes primero."""
-    return db_sugerencias.listar_sugerencias()
+def listar(autor_id: str | None = None) -> list[dict[str, Any]]:
+    """Sugerencias recientes primero. Con `autor_id`, solo las de ESE dueño (cada persona ve
+    únicamente las suyas); sin él, todas (vista de superadmin)."""
+    return db_sugerencias.listar_sugerencias(autor_id=autor_id)
 
 
 def obtener(sugerencia_id: str) -> dict[str, Any] | None:
@@ -103,10 +104,12 @@ def crear(
     detalle: str = "",
     categoria: str = CATEGORIA_DEFECTO,
     autor: str = "",
+    autor_id: str = "",
 ) -> dict[str, Any]:
     """Crea una sugerencia en estado `nueva` y la persiste.
 
-    Lanza `ValueError` si el título está vacío. Categoría inválida → defecto.
+    `autor` es el nombre de display; `autor_id` la clave de propiedad (id del usuario). Lanza
+    `ValueError` si el título está vacío. Categoría inválida → defecto.
     """
     titulo = (titulo or "").strip()[:_MAX_TITULO]
     if not titulo:
@@ -116,6 +119,7 @@ def crear(
         detalle=(detalle or "").strip()[:_MAX_DETALLE],
         categoria=categoria if categoria in CATEGORIAS else CATEGORIA_DEFECTO,
         autor=(autor or "").strip()[:_MAX_AUTOR],
+        autor_id=(autor_id or "").strip()[:_MAX_AUTOR],
         estado=ESTADO_DEFECTO,
     )
 
