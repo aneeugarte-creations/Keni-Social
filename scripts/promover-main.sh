@@ -82,6 +82,57 @@ if [ -n "$shas_borrados" ]; then
   fi
 fi
 
+# ── Gate de seams (pre-push, síncrono, SIN Postgres) ──────────────────────────
+# Con ~7 autores empujando directo a `main`, los rojos más frecuentes son seams no
+# propagados (un cambio en un lado de una frontera sin tocar el otro) y errores de
+# fronteras/catálogo/tipos. Hoy solo se ven en CI DESPUÉS de aterrizar en `main`,
+# donde bloquean a todos. Este gate replica los steps BARATOS del CI (sin BD) sobre
+# el árbol final ya rebasado, con el autor presente para arreglar:
+#   - contrato-fronteras: lint de fronteras + catálogo (.woodpecker/fronteras.yml).
+#   - frontend: tsc + bundle (.woodpecker/frontend-build.yml), solo si tocas el front.
+# Es PARCIAL a propósito: no levanta la suite pytest (necesita Postgres y es lenta).
+# Degradación elegante: si el entorno del que promueve no puede correr un check (sin
+# venv editable, sin node_modules…), AVISA y CONTINÚA — no bloquea a ciegas a quien
+# no tenga el entorno; el CI sigue siendo la red final.
+# Kill-switch: KENI_PROMOVER_SIN_GATE=1 lo salta entero (emergencias).
+if [ "${KENI_PROMOVER_SIN_GATE:-0}" = "1" ]; then
+  echo "⚠ KENI_PROMOVER_SIN_GATE=1: me salto el gate de seams (bajo tu responsabilidad)." >&2
+else
+  raiz="$(git rev-parse --show-toplevel)"
+  archivos_cambiados="$(git diff --name-only origin/main..HEAD)"
+  toca() { printf '%s\n' "$archivos_cambiados" | grep -qE "$1"; }
+  py="$(command -v python || command -v python3 || true)"
+
+  # contrato-fronteras: corre si el diff toca backend o los workflows (mismo path
+  # filter que .woodpecker/fronteras.yml).
+  if toca '^(consola/|keni-shared/|mcp-metricas/|\.woodpecker/)'; then
+    if [ -z "$py" ] || ! "$py" -c 'import keni_consola, pytest' >/dev/null 2>&1; then
+      echo "⚠ Gate fronteras OMITIDO: sin entorno Python editable (instala con" >&2
+      echo "  'pip install -e ./keni-shared -e ./mcp-metricas -e ./consola'). El CI lo cubrirá." >&2
+    else
+      echo "→ Gate: contrato de fronteras + catálogo"
+      if ! "$py" -m pytest "$raiz/consola/tests/test_fronteras.py" "$raiz/consola/tests/test_catalogo.py" -q; then
+        echo "✗ Gate de fronteras ROJO. Arréglalo antes de promover (o KENI_PROMOVER_SIN_GATE=1 para saltarlo)." >&2
+        exit 1
+      fi
+    fi
+  fi
+
+  # frontend: corre si el diff toca el front o el contrato de tipos (mismo path
+  # filter que .woodpecker/frontend-build.yml). `npm run build` = tsc -b && vite build.
+  if toca '^(consola/frontend/|consola/src/keni_consola/esquema_api/)'; then
+    if ! command -v npm >/dev/null 2>&1 || [ ! -d "$raiz/consola/frontend/node_modules" ]; then
+      echo "⚠ Gate frontend OMITIDO: falta npm o node_modules (corre 'npm ci' en consola/frontend). El CI lo cubrirá." >&2
+    else
+      echo "→ Gate: build del frontend (tsc -b && vite build)"
+      if ! ( cd "$raiz/consola/frontend" && npm run build ); then
+        echo "✗ Gate de frontend ROJO (tipos/bundle). Arréglalo antes de promover (o KENI_PROMOVER_SIN_GATE=1)." >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
+
 # Qué vas a meter en main: revísalo. Si aparece algo que no es tuyo, PARA.
 echo
 echo "Commits que se añadirían a main (origin/main..HEAD):"
