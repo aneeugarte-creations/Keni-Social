@@ -223,6 +223,37 @@ def test_mesa_sin_grupos_no_trae_barra(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# GET /api/noticias/sugerencias-secciones                                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_sugerencias_secciones_propone_tema_sin_clasificar(cliente):
+    # Un tema recurrente que NINGUNA línea de Claro captura (pádel) se propone como sección; una
+    # candidata que SÍ clasifica (Canelo→Boxeo) no contamina la lista.
+    bootstrap_lineas.inicializar_lineas()
+    for i, t in enumerate([
+        "El padel mexicano crece con un torneo nuevo",
+        "Premier Padel anuncia su llegada al pais",
+        "La final de padel llena las gradas",
+        "Padel: la disciplina suma adeptos",
+    ]):
+        _inicializar(f"pad{i}", marca="claro-sports", categoria="otros-deportes", titulo=t)
+    _inicializar("box", marca="claro-sports", categoria="otros-deportes",
+                 titulo="Canelo confirma su próxima pelea")
+    datos = cliente.get(
+        "/api/noticias/sugerencias-secciones", params={"marca": "claro-sports"}
+    ).json()
+    por_termino = {s["termino"]: s for s in datos["sugerencias"]}
+    assert "padel" in por_termino
+    assert por_termino["padel"]["n"] == 4 and por_termino["padel"]["ejemplos"]
+    assert "canelo" not in por_termino  # lo ya clasificado no se mina
+
+
+def test_sugerencias_secciones_requiere_marca(cliente):
+    assert cliente.get("/api/noticias/sugerencias-secciones").status_code == 400
+
+
+# --------------------------------------------------------------------------- #
 # POST /api/noticias/historias/{id}/restaurar                                  #
 # --------------------------------------------------------------------------- #
 

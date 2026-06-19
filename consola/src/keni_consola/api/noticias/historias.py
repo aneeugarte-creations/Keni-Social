@@ -325,6 +325,8 @@ _MESA_MUESTRA = 300
 # Tope de candidatas (rankeadas por score) que viajan en la lista de navegación por GRUPO.
 # El conteo por grupo (`en_pool`) usa la muestra completa; esta lista es solo el browse visible.
 _MESA_GRUPO_TOPE = 60
+# Muestra del pool que se analiza para SUGERIR secciones nuevas (temas recurrentes sin clasificar).
+_SUGERENCIAS_MUESTRA = 500
 
 # Orden de los GRUPOS en la barra de navegación de la Mesa (mayor prioridad primero), según el
 # peso editorial real de Claro Sports. Un grupo fuera de esta lista va después, alfabético.
@@ -490,6 +492,31 @@ async def mesa(request: Request) -> Response:
             "historias_grupo": historias_grupo,
         }
     )
+
+
+async def sugerencias_secciones_handler(request: Request) -> Response:
+    """GET /api/noticias/sugerencias-secciones?marca=: temas recurrentes en las candidatas SIN
+    sección, como propuestas de sección nueva (para que la navegación no se quede obsoleta).
+
+    Mina los titulares del pool (`estado='nuevo'`) que NINGUNA línea clasifica: si un término se
+    repite en varias historias y no es keyword de ninguna línea, se sugiere. Solo lectura; el
+    equipo decide si crea la línea o añade las keywords a una existente.
+    """
+    from ...dominio import sugerencias_secciones
+
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    if not marca:
+        return JSONResponse(
+            {"error": "Las sugerencias son por marca: elige una marca concreta."}, status_code=400
+        )
+    etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    clusters, _total = repos.listar_noticia_clusters(
+        marca=marca, estado="nuevo", limite=_SUGERENCIAS_MUESTRA
+    )
+    sugerencias = sugerencias_secciones.sugerir(clusters, etiquetas)
+    return JSONResponse({"marca": marca, "sugerencias": sugerencias})
 
 
 async def detalle_historia(request: Request) -> Response:

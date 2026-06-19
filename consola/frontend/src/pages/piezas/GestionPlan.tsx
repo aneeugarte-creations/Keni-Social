@@ -13,7 +13,7 @@
  * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Save, Tags, X } from "lucide-react";
+import { Lightbulb, Loader2, Plus, Save, Tags, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -56,6 +56,11 @@ function parsearPlan(crudo: string): Record<string, number> {
   return plan;
 }
 
+/** Pone en mayúscula la inicial de cada palabra (para proponer un término como nombre de línea). */
+function tituloDe(termino: string): string {
+  return termino.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface Fila {
   cupo: string;
   horas: string;
@@ -89,6 +94,13 @@ export function PanelPlan({ marca }: { marca: string }) {
     queryFn: ({ signal }) =>
       api.etiquetas({ marca, clase: "vertical", activas: true }, signal),
   });
+  // Temas que el pool repite pero ninguna línea captura: candidatos a sección nueva.
+  const sugerenciasQuery = useQuery({
+    queryKey: ["sugerencias-secciones", marca],
+    queryFn: ({ signal }) => api.noticias.sugerenciasSecciones(marca, signal),
+    staleTime: 60_000,
+  });
+  const sugerencias = sugerenciasQuery.data?.sugerencias ?? [];
 
   // Filas del plan: Última hora (breaking) + las líneas reales de la marca + Evergreen.
   const filasPlan: FilaPlan[] = React.useMemo(() => {
@@ -352,6 +364,46 @@ export function PanelPlan({ marca }: { marca: string }) {
             )}
             </React.Fragment>
           ))}
+
+          {/* Temas emergentes sin sección: el sistema detecta lo que el pool repite y ninguna
+              línea captura. Pulsar uno lo pre-rellena abajo como nombre de línea nueva. */}
+          {sugerencias.length > 0 && (
+            <div className="rounded-md border border-dashed border-border p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-sm font-medium">
+                <Lightbulb className="h-4 w-4 text-muted-foreground" />
+                Temas emergentes sin sección
+              </div>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Salen mucho en el pool pero ninguna línea los captura. Pulsa uno para proponerlo
+                como línea nueva (luego añade sus palabras clave).
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {sugerencias.map((s) => (
+                  <div key={s.termino} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                      onClick={() => setNuevaLinea(tituloDe(s.termino))}
+                      data-testid={`sugerencia-${s.termino}`}
+                    >
+                      {tituloDe(s.termino)}
+                    </button>
+                    <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                      {s.n} historias
+                    </span>
+                    {s.ejemplos[0] && (
+                      <span
+                        className="truncate text-xs text-muted-foreground/80"
+                        title={s.ejemplos.join(" · ")}
+                      >
+                        · {s.ejemplos[0]}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Añadir una LÍNEA nueva a esta marca (la crea de verdad; aparece como fila). */}
           <div className="grid grid-cols-[12rem_minmax(0,1fr)_auto] items-center gap-3 pt-1">

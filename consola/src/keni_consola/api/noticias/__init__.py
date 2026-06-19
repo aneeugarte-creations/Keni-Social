@@ -52,6 +52,7 @@ from .historias import (
     listar_historias,
     mesa,
     restaurar_historia,
+    sugerencias_secciones_handler,
     usar_historia,
 )
 from .items import (
@@ -79,6 +80,7 @@ __all__ = [
     # Handlers de HISTORIAS (clusters) + la Mesa.
     "listar_historias",
     "mesa",
+    "sugerencias_secciones_handler",
     "detalle_historia",
     "usar_historia",
     "descartar_historia",
@@ -109,6 +111,8 @@ RUTAS = [
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
     # La Mesa de redacción: pool segmentado por las líneas del plan + progreso del día.
     Route("/api/noticias/mesa", mesa, methods=["GET"]),
+    # Sugerencias de secciones nuevas: temas recurrentes en el pool que ninguna línea clasifica.
+    Route("/api/noticias/sugerencias-secciones", sugerencias_secciones_handler, methods=["GET"]),
     # Los lotes van ANTES de `/historias/{cluster_id}` para que `descartar-lote`/`borrar-lote`/
     # `borrar-todo` no se confundan con un cluster_id (difieren en método, pero el orden lo deja
     # explícito y a prueba de futuros GET).

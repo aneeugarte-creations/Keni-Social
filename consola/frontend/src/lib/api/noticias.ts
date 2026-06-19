@@ -7,6 +7,7 @@ import type {
   RespuestaMesa,
   RespuestaNoticias,
   RespuestaStatsFuentes,
+  RespuestaSugerenciasSecciones,
   ResumenCobertura,
   SaludCobertura,
 } from "@/types";
@@ -121,6 +122,17 @@ export const apiNoticias = {
           marca: params.marca,
           por_linea: params.porLinea != null ? String(params.porLinea) : undefined,
         })}`,
+        { signal },
+      ),
+
+    /**
+     * Sugerencias de SECCIONES nuevas: temas recurrentes en el pool de la marca que ninguna
+     * línea clasifica (para que la navegación no se quede obsoleta).
+     * GET /api/noticias/sugerencias-secciones?marca=
+     */
+    sugerenciasSecciones: (marca: string, signal?: AbortSignal) =>
+      peticion<RespuestaSugerenciasSecciones>(
+        `/noticias/sugerencias-secciones${query({ marca })}`,
         { signal },
       ),
 
