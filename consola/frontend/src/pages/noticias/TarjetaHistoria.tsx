@@ -53,11 +53,10 @@ export interface PropsTarjetaHistoria {
   conRestaurar?: boolean;
 }
 
-// Solo la prioridad ALTA se tiñe (rojo, negativo/urgente real); media y baja quedan
-// neutras, alineado con la taxonomía de estado (lib/rota-calendario.ts COLOR_PRIORIDAD).
+// El puntito gradúa el score: alta en verde, media en ámbar, baja en gris apagado.
 const COLOR_PRIORIDAD: Record<string, string> = {
-  alta: "bg-destructive",
-  media: "bg-muted-foreground/40",
+  alta: "bg-emerald-500",
+  media: "bg-amber-400",
   baja: "bg-muted-foreground/40",
 };
 
