@@ -152,7 +152,7 @@ def test_srt_de_segmentos_descarta_vacios_y_vacio():
 def test_transcribir_datos_delega_en_inyectable(monkeypatch):
     visto: dict = {}
 
-    def fake(datos, *, ext, idioma, word_level):
+    def fake(datos, *, ext, idioma, word_level, progreso=None):
         visto.update(datos=datos, ext=ext, idioma=idioma, word_level=word_level)
         return {"texto": "hola", "segmentos": [{"inicio_ms": 0, "fin_ms": 1, "texto": "hola", "palabras": []}]}
 
@@ -187,7 +187,7 @@ def test_transcribir_subida_demasiado_grande(monkeypatch):
 def test_transcribir_subida_camino_feliz(monkeypatch):
     visto: dict = {}
 
-    def fake(datos, *, ext, idioma="es", word_level=False):
+    def fake(datos, *, ext, idioma="es", word_level=False, progreso=None):
         visto.update(datos=datos, ext=ext)
         return {"texto": "  texto transcrito  ", "segmentos": []}
 

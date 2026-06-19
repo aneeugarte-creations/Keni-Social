@@ -69,8 +69,11 @@ def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
     )
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
 
-    def _transcribir(datos, *, ext, idioma, word_level):
+    def _transcribir(datos, *, ext, idioma, word_level, progreso=None):
         assert ext == "mp4" and idioma == "es-MX"
+        # El motor pasa un callback de progreso; lo invocamos para cubrir ese camino.
+        if progreso is not None:
+            progreso(1.5, 2.4)
         segs = _segmentos_canonicos()
         return {"texto": " ".join(s["texto"] for s in segs), "segmentos": segs}
 
@@ -106,7 +109,7 @@ def test_ejecutor_audio_tratamientos_crea_texto_y_lanza_claude(entorno, monkeypa
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
     monkeypatch.setattr(
         transcripcion_raiz, "transcribir_datos",
-        lambda datos, *, ext, idioma, word_level: {
+        lambda datos, *, ext, idioma, word_level, progreso=None: {
             "texto": "hola", "segmentos": _segmentos_canonicos()
         },
     )

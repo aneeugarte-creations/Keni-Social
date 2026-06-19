@@ -267,26 +267,44 @@ def srt_de_segmentos(segmentos: list[dict[str, Any]]) -> str:
 
 
 def _transcribir_faster(
-    datos: bytes, *, ext: str, idioma: str = _IDIOMA, word_level: bool = False
+    datos: bytes,
+    *,
+    ext: str,
+    idioma: str = _IDIOMA,
+    word_level: bool = False,
+    progreso: Any = None,
 ) -> dict[str, Any]:
     """Transcribe bytes de audio/video a `{"texto", "segmentos"}` con faster-whisper.
 
     Escribe los bytes a un temporal (faster-whisper lo decodifica con su av embebido) y transcribe
-    con el modelo cacheado. `word_level=True` ademas trocea cada segmento en palabras.
+    con el modelo cacheado. `word_level=True` ademas trocea cada segmento en palabras. `progreso`, si
+    se pasa, es un callback `(segundos_hechos: float, segundos_total: float)` que se invoca por cada
+    segmento conforme avanza (faster-whisper EMITE los segmentos en streaming): permite reportar el
+    progreso REAL del motor. Un fallo del callback nunca interrumpe la transcripcion.
     """
     modelo = _cargar_modelo()
     with tempfile.TemporaryDirectory(prefix="keni-transcripcion-") as tmp:
         ruta = Path(tmp) / f"{uuid.uuid4().hex}.{ext}"
         ruta.write_bytes(datos)
         try:
-            seg_iter, _info = modelo.transcribe(
+            seg_iter, info = modelo.transcribe(
                 str(ruta),
                 language=_codigo_idioma(idioma),
                 word_timestamps=word_level,
                 vad_filter=True,
             )
-            # `transcribe` devuelve un GENERADOR perezoso: materializarlo aqui (dentro del temporal).
-            segmentos = mapear_segmentos(seg_iter, word_level=word_level)
+            # `transcribe` devuelve un GENERADOR perezoso: la transcripcion REAL ocurre al iterarlo.
+            # Lo recorremos aqui (dentro del temporal) reportando el avance por segmento.
+            duracion = float(getattr(info, "duration", 0) or 0)
+            crudos: list[Any] = []
+            for seg in seg_iter:
+                crudos.append(seg)
+                if progreso is not None:
+                    try:
+                        progreso(float(getattr(seg, "end", 0) or 0), duracion)
+                    except Exception:  # noqa: BLE001 -- el reporte nunca rompe la transcripcion
+                        pass
+            segmentos = mapear_segmentos(crudos, word_level=word_level)
         except TranscripcionError:
             raise
         except Exception as e:  # noqa: BLE001 -- audio ilegible/formato raro: mensaje claro
@@ -303,14 +321,22 @@ _TRANSCRIPTOR_JSON = _transcribir_faster
 
 
 def transcribir_datos(
-    datos: bytes, *, ext: str, idioma: str = _IDIOMA, word_level: bool = False
+    datos: bytes,
+    *,
+    ext: str,
+    idioma: str = _IDIOMA,
+    word_level: bool = False,
+    progreso: Any = None,
 ) -> dict[str, Any]:
     """Transcribe bytes de audio/video a `{"texto", "segmentos"}` con timestamps (motor compartido).
 
     Entrada del gestor de audio y del motor de subtitulos de video. Delega en `_TRANSCRIPTOR_JSON`
     (parcheable en tests; NUNCA carga el modelo real ahi). `word_level=True` trocea en palabras.
+    `progreso` (opcional) reporta el avance real por segmento; ver `_transcribir_faster`.
     """
-    return _TRANSCRIPTOR_JSON(datos, ext=ext, idioma=idioma, word_level=word_level)
+    return _TRANSCRIPTOR_JSON(
+        datos, ext=ext, idioma=idioma, word_level=word_level, progreso=progreso
+    )
 
 
 async def transcribir_subida(archivo, *, content_type: str | None = None) -> str:  # noqa: ANN001

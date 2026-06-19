@@ -602,7 +602,7 @@ def test_aportar_con_clip_transcribe_en_local(entorno, monkeypatch):
     # Mock del motor de transcripcion: nunca carga faster-whisper ni el modelo reales.
     monkeypatch.setattr(
         transcripcion, "_TRANSCRIPTOR_JSON",
-        lambda datos, *, ext, idioma="es", word_level=False: {
+        lambda datos, *, ext, idioma="es", word_level=False, progreso=None: {
             "texto": "Hoy ganamos tres a cero.", "segmentos": []
         },
     )
@@ -629,7 +629,7 @@ def test_aportar_clip_se_concatena_al_material(entorno, monkeypatch):
 
     monkeypatch.setattr(
         transcripcion, "_TRANSCRIPTOR_JSON",
-        lambda datos, *, ext, idioma="es", word_level=False: {"texto": "lo que se dijo", "segmentos": []},
+        lambda datos, *, ext, idioma="es", word_level=False, progreso=None: {"texto": "lo que se dijo", "segmentos": []},
     )
 
     c = _cli()
@@ -664,7 +664,7 @@ def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
 
     monkeypatch.setattr(
         transcripcion, "_TRANSCRIPTOR_JSON",
-        lambda datos, *, ext, idioma="es", word_level=False: {"texto": "", "segmentos": []},
+        lambda datos, *, ext, idioma="es", word_level=False, progreso=None: {"texto": "", "segmentos": []},
     )
 
     c = _cli()

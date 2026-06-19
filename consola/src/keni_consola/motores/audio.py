@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 from .. import generaciones, media, repos
@@ -34,6 +35,36 @@ _log = logging.getLogger("keni_consola.motores.audio")
 
 # Idioma por defecto del piloto (es-MX); el motor compartido reduce al codigo base ("es").
 _IDIOMA_DEF = "es-MX"
+# Cada cuanto (segundos de reloj) refrescar la fase con el avance de whisper (no saturar la BD).
+_PROGRESO_CADA_S = 2.0
+
+
+def _mmss(segundos: float) -> str:
+    total = max(0, int(segundos))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def _progreso_a_gen(gen_id: str):
+    """Callback de progreso de whisper -> fase de la generacion ('Transcribiendo mm:ss/mm:ss · NN%').
+
+    Throttleado a `_PROGRESO_CADA_S` para no escribir en BD por cada segmento. faster-whisper emite
+    los segmentos en streaming, asi que esto da feedback REAL de que el motor avanza (no esta pillado).
+    """
+    ultimo = [0.0]
+
+    def progreso(hechos: float, total: float) -> None:
+        ahora = time.monotonic()
+        if ahora - ultimo[0] < _PROGRESO_CADA_S:
+            return
+        ultimo[0] = ahora
+        if total > 0:
+            pct = min(99, int(hechos / total * 100))
+            fase = f"Transcribiendo {_mmss(hechos)} / {_mmss(total)} · {pct}%"
+        else:
+            fase = f"Transcribiendo {_mmss(hechos)}"
+        generaciones.actualizar(gen_id, {"fase": fase})
+
+    return progreso
 
 
 def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
@@ -79,7 +110,10 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
         )
         ext = Path(media_id).suffix.lstrip(".") or "mp4"
         try:
-            resultado = asr.transcribir_datos(datos, ext=ext, idioma=idioma, word_level=False)
+            resultado = asr.transcribir_datos(
+                datos, ext=ext, idioma=idioma, word_level=False,
+                progreso=_progreso_a_gen(gen_id),
+            )
         except asr.TranscripcionError as e:
             _terminar_error(gen_id, transcripcion_id, str(e))
             return
