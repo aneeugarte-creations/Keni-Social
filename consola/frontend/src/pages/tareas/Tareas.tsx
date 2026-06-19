@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
+import { useRelojVivo } from "@/hooks/use-reloj-vivo";
 import { api, mensajeError } from "@/lib/api";
 import { derivarCoberturaEvento } from "@/lib/cobertura";
 import { hoyCDMX, posicionTemporal } from "@/lib/fecha";
@@ -57,6 +58,10 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   // Filtro del Panorama (id de persona, "__pool__" o null), aquí arriba para que el KPI de cabecera
   // pueda activar «Por cubrir» («N sin cubrir») y el Panorama lo lea controlado.
   const [filtroPanorama, setFiltroPanorama] = React.useState<string | null>(null);
+  // El KPI «Cobertura de hoy» y el Panorama son hermanos: un reloj vivo AQUÍ (en el padre) re-rinde
+  // ambos para que sus semáforos/conteos («en vivo», «empieza pronto») avancen con el tiempo sin
+  // esperar al refetch. Antes el reloj vivía solo dentro del Panorama y el KPI se quedaba congelado.
+  useRelojVivo();
 
   const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
   // El día de HOY en CDMX (no el UTC): `new Date().toISOString()` da el día UTC, que de 18:00 a
@@ -116,8 +121,10 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   // mezclando semanas). Reusa `derivarCoberturaEvento`: nada de turno/franja reconstruido a mano.
   const rotaDe = (e: { fecha: string }): RotaSemana | undefined =>
     e.fecha ? porLunes.get(lunesSiguiente(e.fecha, 0)) : undefined;
+  // Solo los eventos SIN cubridores (`eventosLibres`) pueden ser «cubierto por turno»; los que ya
+  // tienen dueño son coberturas y nunca consultan este set. Iterar solo esos evita derivar de más.
   const cubiertosPorTurno = new Set<string>();
-  for (const e of eventosCoverables) {
+  for (const e of eventosLibres) {
     const semana = rotaDe(e);
     if (!semana) continue;
     const d = derivarCoberturaEvento(e, [], semana.turnos, semana.franjas);
