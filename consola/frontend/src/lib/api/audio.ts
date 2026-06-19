@@ -73,6 +73,8 @@ export interface ArtefactoAudio {
   /** Herencia: artefacto del que deriva (''=de la transcripción base) y su versión al generarlo. */
   origen_id: string;
   origen_version: string;
+  /** Respuestas guardadas del cajón de preguntas ({índice: respuesta}); persisten en el servidor. */
+  respuestas: Record<string, string>;
   creado: string;
   actualizado: string;
 }
@@ -165,6 +167,12 @@ export const apiAudio = {
     /** Borra un artefacto. */
     eliminarArtefacto: (id: string) =>
       peticion<void>(`/audio/artefactos/${enc(id)}`, { metodo: "DELETE" }),
+    /** Guarda (en el servidor) las respuestas del cajón de preguntas: {índice: respuesta}. */
+    guardarRespuestas: (id: string, respuestas: Record<string, string>) =>
+      peticion<{ artefacto: ArtefactoAudio }>(`/audio/artefactos/${enc(id)}/respuestas`, {
+        metodo: "PUT",
+        json: { respuestas },
+      }),
     /** Sobre un artefacto de 'preguntas', aplica respuestas -> nuevo artefacto 'corregido'. */
     corregir: (artefactoId: string, respuestas: string[]) =>
       peticion<{ artefacto: ArtefactoAudio }>(`/audio/artefactos/${enc(artefactoId)}/corregir`, {

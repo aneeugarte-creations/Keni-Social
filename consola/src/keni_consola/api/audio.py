@@ -87,8 +87,18 @@ def _transcripcion_a_dict(item: dict) -> dict:
     }
 
 
+def _respuestas_de(art: dict) -> dict:
+    """Parsea las `respuestas` (string JSON) del cajón de preguntas a objeto (vacío si no hay)."""
+    crudo = art.get("respuestas") or ""
+    try:
+        obj = json.loads(crudo) if isinstance(crudo, str) and crudo else {}
+    except (ValueError, TypeError):
+        obj = {}
+    return obj if isinstance(obj, dict) else {}
+
+
 def _artefacto_a_dict(art: dict) -> dict:
-    """Serializa un artefacto. Reconcilia 'generando' con su generación: si el job falló, 'error'.
+    """Serializa un artefacto (`respuestas` como objeto). Reconcilia 'generando': si el job falló, 'error'.
 
     El post-procesado escribe el artefacto SOLO al completar el job; si el job de Claude FALLA, el
     artefacto se quedaría 'generando'. Al leerlo, si su generación ya está en error, lo reflejamos
@@ -100,7 +110,7 @@ def _artefacto_a_dict(art: dict) -> dict:
             mensaje = g.get("error") or "El tratamiento falló."
             repos.actualizar_audio_artefacto(art["id"], {"estado": "error", "error": mensaje})
             art = {**art, "estado": "error", "error": mensaje}
-    return art
+    return {**art, "respuestas": _respuestas_de(art)}
 
 
 # --------------------------------------------------------------------------- #
@@ -368,6 +378,30 @@ async def borrar_artefacto(request: Request) -> Response:
     return Response(status_code=204)
 
 
+async def guardar_respuestas(request: Request) -> Response:
+    """PUT /api/audio/artefactos/{id}/respuestas (`{respuestas:{...}}`): guarda las respuestas del cajón.
+
+    PERSISTENCIA REAL (servidor) de las respuestas del formulario de preguntas, por artefacto. El
+    cuerpo es un objeto `{<índice>: "<respuesta>"}`; se guardan solo las no vacías.
+    """
+    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+    if art is None:
+        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+    datos = await leer_json(request)
+    respuestas = datos.get("respuestas")
+    if not isinstance(respuestas, dict):
+        return JSONResponse({"error": "`respuestas` debe ser un objeto."}, status_code=400)
+    limpio = {
+        str(k): v.strip()
+        for k, v in respuestas.items()
+        if isinstance(v, str) and v.strip()
+    }
+    actualizado = repos.actualizar_audio_artefacto(
+        art["id"], {"respuestas": json.dumps(limpio, ensure_ascii=False) if limpio else ""}
+    )
+    return JSONResponse({"artefacto": _artefacto_a_dict(actualizado)})
+
+
 async def corregir_artefacto(request: Request) -> Response:
     """POST /api/audio/artefactos/{id}/corregir (`{respuestas:[...]}`): aplica respuestas -> 'corregido'.
 
@@ -414,5 +448,6 @@ RUTAS = [
     Route("/api/audio/artefactos/{artefacto_id}", obtener_artefacto, methods=["GET"]),
     Route("/api/audio/artefactos/{artefacto_id}", actualizar_artefacto, methods=["PUT"]),
     Route("/api/audio/artefactos/{artefacto_id}", borrar_artefacto, methods=["DELETE"]),
+    Route("/api/audio/artefactos/{artefacto_id}/respuestas", guardar_respuestas, methods=["PUT"]),
     Route("/api/audio/artefactos/{artefacto_id}/corregir", corregir_artefacto, methods=["POST"]),
 ]

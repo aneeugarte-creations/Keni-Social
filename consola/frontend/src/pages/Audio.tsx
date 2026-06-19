@@ -975,32 +975,6 @@ function ssToSec(t: string): number {
   return partes.reduce((acc, n) => acc * 60 + n, 0);
 }
 
-// Persistencia LOCAL de las respuestas del cajón de preguntas (por id de artefacto): así no se
-// pierden al cambiar de artefacto, colapsar paneles o recargar.
-const claveRespuestas = (id: string) => `keni:audio:preg-resp:${id}`;
-
-function leerRespuestas(id: string): Record<number, string> {
-  try {
-    const raw = localStorage.getItem(claveRespuestas(id));
-    const o = raw ? JSON.parse(raw) : null;
-    return o && typeof o === "object" ? (o as Record<number, string>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function guardarRespuestas(id: string, resp: Record<number, string>): void {
-  try {
-    const limpio = Object.fromEntries(Object.entries(resp).filter(([, v]) => v && v.trim()));
-    if (Object.keys(limpio).length) {
-      localStorage.setItem(claveRespuestas(id), JSON.stringify(limpio));
-    } else {
-      localStorage.removeItem(claveRespuestas(id));
-    }
-  } catch {
-    /* almacenamiento lleno/no disponible: no es crítico */
-  }
-}
 
 interface PreguntaItem {
   t: string;
@@ -1051,11 +1025,34 @@ function FormularioPreguntas({
   onCambio: () => void;
   onSeleccionarArtefacto: (id: string) => void;
 }) {
+  const qc = useQueryClient();
   const preguntas = React.useMemo(() => parsePreguntas(artefacto.contenido), [artefacto.contenido]);
-  // Respuestas persistidas en localStorage por artefacto: se cargan al abrir y se guardan al teclear.
-  const [resp, setResp] = React.useState<Record<number, string>>(() => leerRespuestas(artefacto.id));
-  React.useEffect(() => setResp(leerRespuestas(artefacto.id)), [artefacto.id]);
-  React.useEffect(() => guardarRespuestas(artefacto.id, resp), [artefacto.id, resp]);
+  // Respuestas PERSISTIDAS en el servidor (por artefacto): se cargan del artefacto y se guardan al
+  // teclear (con un pequeño retardo). No es caché: viven en la base, las ve todo el equipo.
+  const [resp, setResp] = React.useState<Record<string, string>>(() => artefacto.respuestas ?? {});
+  React.useEffect(() => setResp(artefacto.respuestas ?? {}), [artefacto.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const guardarResp = useMutation({
+    mutationFn: (r: Record<string, string>) => api.audio.guardarRespuestas(artefacto.id, r),
+    onSuccess: (data) => {
+      // Refresca la copia en caché del artefacto para que, al volver, traiga las respuestas guardadas.
+      qc.setQueryData<{ artefactos: ArtefactoAudio[] }>(
+        ["audio", "artefactos", artefacto.transcripcion_id],
+        (old) =>
+          old
+            ? { artefactos: old.artefactos.map((a) => (a.id === artefacto.id ? data.artefacto : a)) }
+            : old,
+      );
+    },
+  });
+  // Guarda con retardo cuando las respuestas difieren de lo ya persistido en el artefacto.
+  React.useEffect(() => {
+    const persistido = JSON.stringify(artefacto.respuestas ?? {});
+    const limpio = Object.fromEntries(Object.entries(resp).filter(([, v]) => v && v.trim()));
+    if (JSON.stringify(limpio) === persistido) return;
+    const id = setTimeout(() => guardarResp.mutate(limpio), 700);
+    return () => clearTimeout(id);
+  }, [resp, artefacto.id, artefacto.respuestas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reproductor de snippets: un solo <audio> del media; cada play salta a su franja y se detiene al
   // final de la ventana (~8 s desde un poco antes del timestamp).

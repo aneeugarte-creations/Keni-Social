@@ -276,6 +276,32 @@ def test_srt_no_editable(cliente, monkeypatch):
     assert r.status_code == 400
 
 
+def test_respuestas_persisten_en_servidor(cliente, monkeypatch):
+    """PUT /artefactos/{id}/respuestas guarda en BD; el GET las devuelve como objeto."""
+    _mock_subida_y_cola(monkeypatch, {})
+    tid = _crear(cliente).json()["transcripcion"]["id"]
+    preg = repos.crear_audio_artefacto(
+        transcripcion_id=tid, tipo="preguntas", titulo="Preguntas", contenido="[00:01] x — ¿y?",
+        formato="md",
+    )
+    aid = preg["id"]
+
+    r = cliente.put(
+        f"/api/audio/artefactos/{aid}/respuestas",
+        json={"respuestas": {"0": "  Piso 15  ", "1": "", "2": "pesos"}},
+    )
+    assert r.status_code == 200
+    # Solo las no vacías, recortadas.
+    assert r.json()["artefacto"]["respuestas"] == {"0": "Piso 15", "2": "pesos"}
+    # Persisten: una lectura posterior las trae.
+    arts = cliente.get(f"/api/audio/transcripciones/{tid}/artefactos").json()["artefactos"]
+    guardado = next(a for a in arts if a["id"] == aid)
+    assert guardado["respuestas"] == {"0": "Piso 15", "2": "pesos"}
+
+    # Cuerpo inválido -> 400.
+    assert cliente.put(f"/api/audio/artefactos/{aid}/respuestas", json={"respuestas": "x"}).status_code == 400
+
+
 def test_corregir_desde_preguntas(cliente, monkeypatch):
     _mock_subida_y_cola(monkeypatch, {})
     tid = _crear(cliente).json()["transcripcion"]["id"]

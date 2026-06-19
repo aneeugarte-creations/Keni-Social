@@ -1495,6 +1495,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         error           TEXT NOT NULL DEFAULT '',
         origen_id       TEXT NOT NULL DEFAULT '',
         origen_version  TEXT NOT NULL DEFAULT '',
+        respuestas      TEXT NOT NULL DEFAULT '',
         creado          TEXT NOT NULL DEFAULT '',
         actualizado     TEXT NOT NULL DEFAULT ''
     )
@@ -1505,6 +1506,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # tratamiento ya generado y reactivarlo cuando la fuente cambia (su `actualizado` difiere).
     "ALTER TABLE audio_artefactos ADD COLUMN IF NOT EXISTS origen_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE audio_artefactos ADD COLUMN IF NOT EXISTS origen_version TEXT NOT NULL DEFAULT ''",
+    # `respuestas`: JSON {índice_de_pregunta: respuesta} del cajón de PREGUNTAS, para que las
+    # respuestas del equipo PERSISTAN en el servidor (no en el navegador).
+    "ALTER TABLE audio_artefactos ADD COLUMN IF NOT EXISTS respuestas TEXT NOT NULL DEFAULT ''",
     # PIEZAS de la Prompts de Texto (rediseno "version publicada"): cada fila es un
     # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;
