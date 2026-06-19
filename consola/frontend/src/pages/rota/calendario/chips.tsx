@@ -27,6 +27,7 @@ import { COBERTURA_BADGE } from "@/lib/estado-color";
 import {
   COBERTURA,
   COLOR_PRIORIDAD,
+  fechaMasDias,
 } from "@/lib/rota-calendario";
 import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
@@ -153,10 +154,13 @@ export function ChipTurnoCM({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // «Duplicar a la semana siguiente»: clona el turno al mismo día de la semana próxima,
+  // mismo miembro y franja (el backend mapea la franja por nombre a la semana destino).
   const duplicar = useMutation({
-    mutationFn: () => api.duplicarTurno(turno.id, {}),
+    mutationFn: () =>
+      api.duplicarTurno(turno.id, { fecha: fechaMasDias(turno.fecha, 7) }),
     onSuccess: () => {
-      toast.success("Turno duplicado.");
+      toast.success("Turno duplicado a la semana siguiente.");
       onCambio();
     },
     onError: (e) => {
@@ -211,7 +215,7 @@ export function ChipTurnoCM({
       onClick: () => setEditandoDetalles(true),
     },
     {
-      etiqueta: "Duplicar",
+      etiqueta: "Duplicar a la semana siguiente",
       icono: Copy,
       onClick: () => duplicar.mutate(),
       deshabilitado: duplicar.isPending,

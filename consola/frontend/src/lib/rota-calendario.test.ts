@@ -6,10 +6,23 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fechaMasDias,
   mesSiguiente,
   mismoMes,
   semanasDelMes,
 } from "./rota-calendario";
+
+describe("fechaMasDias — desplaza un día calendario conservando el día de la semana", () => {
+  it("suma y resta días dentro del mes", () => {
+    expect(fechaMasDias("2026-05-25", 7)).toBe("2026-06-01"); // +1 semana (lun→lun)
+    expect(fechaMasDias("2026-06-01", -7)).toBe("2026-05-25");
+  });
+
+  it("cruza el fin de mes y de año", () => {
+    expect(fechaMasDias("2026-05-28", 7)).toBe("2026-06-04");
+    expect(fechaMasDias("2026-12-31", 7)).toBe("2027-01-07");
+  });
+});
 
 describe("mesSiguiente — aritmética de meses (cruza año)", () => {
   it("avanza y retrocede dentro del año", () => {

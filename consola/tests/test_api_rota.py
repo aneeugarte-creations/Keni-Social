@@ -1034,6 +1034,28 @@ def test_duplicar_turno_inexistente_404(cliente):
     assert r.status_code == 404
 
 
+def test_duplicar_turno_a_semana_siguiente(cliente):
+    """Clonar a la semana siguiente mapea la franja por NOMBRE a la semana destino.
+
+    El menú «Duplicar a la semana siguiente» manda `fecha = fecha + 7`. La franja del
+    original es de la semana origen, así que el backend la resuelve a la del mismo nombre
+    («Mañana») en la semana destino (sembrándola si la semana aún está vacía).
+    """
+    equipo = _crear_equipo(1)
+    original = _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino")
+    r = cliente.post(
+        f"/api/rota/turnos/{original['id']}/duplicar",
+        json={"fecha": LUNES2},
+    )
+    assert r.status_code == 201, r.text
+    clon = r.json()["turno"]
+    assert clon["fecha"] == LUNES2
+    assert clon["semana"] == LUNES2
+    # Franja resuelta a la de la semana destino (mismo nombre, distinto id por ser otra semana).
+    assert clon["franja"] == "matutino"
+    assert clon["franja_id"] != original["franja_id"]
+
+
 # --------------------------------------------------------------------------- #
 # Turnos: aprobar (solo admin) + mis-turnos                                    #
 # --------------------------------------------------------------------------- #

@@ -769,13 +769,14 @@ async def actualizar_turnos_lote(request: Request) -> Response:
 async def duplicar_turno(request: Request) -> Response:
     """POST /api/rota/turnos/{id}/duplicar: clona un turno con overrides opcionales.
 
-    Cuerpo opcional `{fecha?, miembro_id?, franja_id?}`. Caso comun: copiar el turno del
-    lunes al martes con el mismo miembro y franja. Aplica las mismas reglas que la creacion
+    Cuerpo opcional `{fecha?, miembro_id?, franja_id?}`. Caso comun: copiar el turno a la
+    semana siguiente con el mismo miembro y franja. Aplica las mismas reglas que la creacion
     (sabado, ausencia, choque `(miembro, fecha, franja_id)`).
 
-    Si la `fecha` cambia a otra semana, el `franja_id` del original NO es valido en la
-    semana destino (las franjas son por semana). En ese caso devolvemos 400: el cliente
-    debe pasar un `franja_id` de la semana destino, o crear la franja antes.
+    Si la `fecha` cae en otra semana y el cliente NO pasa `franja_id`, mapeamos la franja del
+    original a la de la semana destino con el mismo nombre (sembrando las franjas por defecto
+    si la semana destino aun esta vacia). Si esa franja no existe en la semana destino y no es
+    sembrable, devolvemos 400: el cliente debe crear la franja o pasar un `franja_id` valido.
     """
     turno_id = request.path_params["turno_id"]
     original = repos.obtener_turno_rota(turno_id)
@@ -801,7 +802,8 @@ async def duplicar_turno(request: Request) -> Response:
             )
         miembro_id = m
     franja_id = original["franja_id"]
-    if "franja_id" in datos:
+    franja_explicita = "franja_id" in datos
+    if franja_explicita:
         f = datos["franja_id"]
         if not isinstance(f, str) or not f.strip():
             return JSONResponse(
@@ -819,14 +821,26 @@ async def duplicar_turno(request: Request) -> Response:
             {"error": "No se puede derivar la semana de la fecha."}, status_code=400
         )
 
-    # La franja del clon debe pertenecer a la semana destino.
+    # La franja del clon debe pertenecer a la semana destino. Si el clon cae en otra semana
+    # (caso «rellena la semana siguiente») y el cliente no pidió una franja concreta, mapeamos
+    # la franja del original a la de la semana destino con el MISMO nombre (sembrando las
+    # franjas por defecto de esa semana si aún no las tiene).
     franja_def = repos.obtener_franja_semana(franja_id)
+    if franja_def is not None and franja_def["lunes"] != semana and not franja_explicita:
+        marca_franja = franja_def.get("marca") or ""
+        destino = repos.inicializar_franjas_por_defecto(semana, marca_franja)
+        equivalente = next(
+            (d for d in destino if d["nombre"] == franja_def["nombre"]), None
+        )
+        if equivalente is not None:
+            franja_id = equivalente["id"]
+            franja_def = equivalente
     if franja_def is None or franja_def["lunes"] != semana:
         return JSONResponse(
             {
                 "error": (
-                    "La franja del turno original es de otra semana. Pasa un `franja_id` "
-                    "que exista en la semana destino."
+                    "La franja del turno original no existe en la semana destino. Crea esa "
+                    "franja en la semana destino o pasa un `franja_id` que ya exista en ella."
                 )
             },
             status_code=400,

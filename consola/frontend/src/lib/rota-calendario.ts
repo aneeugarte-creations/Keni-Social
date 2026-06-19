@@ -74,6 +74,14 @@ export function lunesDeSemana(d: Date): string {
   return isoAnclado(base);
 }
 
+/** El día calendario `dias` después (o antes, si negativo) de `fechaIso`, preservando el día
+ * de la semana (a diferencia de `lunesSiguiente`, que ancla al lunes). */
+export function fechaMasDias(fechaIso: string, dias: number): string {
+  const d = anclar(fechaIso);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return isoAnclado(d);
+}
+
 /** El lunes `semanas` después (o antes, si negativo) de `lunesIso`. */
 export function lunesSiguiente(lunesIso: string, semanas: number): string {
   const d = anclar(lunesIso);
