@@ -30,6 +30,7 @@ SEGURIDAD / TESTS
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -37,6 +38,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 
 _log = logging.getLogger("keni_consola.transcripcion")
 
@@ -83,8 +85,17 @@ ENV_MODELO_WHISPER = "KENI_WHISPER_MODEL"
 # fijarlo evita que un clip con poca habla salga rotulado como otro idioma.
 _IDIOMA = "es"
 
-# Timeout (segundos) de cada subproceso (ffmpeg / whisper). Un clip largo tarda; damos margen.
+# Timeout (segundos) de cada subproceso (ffmpeg / whisper) del flujo clip-a-copy (clips cortos
+# de redes). El gestor de audio transcribe piezas mas largas y usa su propio margen (`_TIMEOUT_LARGO`).
 _TIMEOUT = 600
+
+# Timeout para audios/videos largos del gestor de transcripciones (hasta 30 min de habla).
+_TIMEOUT_LARGO = 1800
+
+
+def _codigo_idioma(idioma: str | None) -> str:
+    """Codigo base que entiende whisper ('es-MX' -> 'es'). Cae a 'es' si viene vacio."""
+    return (idioma or _IDIOMA).split("-", 1)[0].strip().lower() or _IDIOMA
 
 
 def _rutas_modelo_whisper() -> list[Path]:
@@ -150,7 +161,7 @@ def ext_de_subida(content_type: str | None, nombre: str | None) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
-def _ejecutar(argv: list[str], *, etapa: str) -> None:
+def _ejecutar(argv: list[str], *, etapa: str, timeout: int = _TIMEOUT) -> None:
     """Corre un subproceso (argv lista, sin shell) y lanza `TranscripcionError` si falla."""
     try:
         subprocess.run(  # noqa: S603 -- argv lista, sin shell; nombres generados por nosotros
@@ -158,7 +169,7 @@ def _ejecutar(argv: list[str], *, etapa: str) -> None:
             check=True,
             capture_output=True,
             text=True,
-            timeout=_TIMEOUT,
+            timeout=timeout,
         )
     except FileNotFoundError as e:
         raise TranscripcionError(
@@ -177,13 +188,8 @@ def _ejecutar(argv: list[str], *, etapa: str) -> None:
         ) from e
 
 
-def _transcribir_whisper(datos: bytes, *, ext: str) -> str:
-    """Transcribe los bytes de un clip en LOCAL: ffmpeg (-> wav 16 kHz mono) + whisper-cli.
-
-    Mismo camino que la skill `clip-a-copy` / `transcribir.sh`. Trabaja en un directorio
-    temporal que se borra al salir; el nombre lo generamos nosotros (uuid), nunca el del
-    cliente. Devuelve el texto transcrito (vacio si el clip no tenia habla).
-    """
+def _exigir_dependencias() -> Path:
+    """Comprueba whisper-cli + ffmpeg + modelo; devuelve la ruta del modelo o lanza error claro."""
     modelo = _resolver_modelo()
     if modelo is None:
         raise TranscripcionError(
@@ -195,19 +201,46 @@ def _transcribir_whisper(datos: bytes, *, ext: str) -> str:
             "Falta whisper-cli o ffmpeg para transcribir en local "
             "(instálalos con: brew install whisper-cpp ffmpeg)."
         )
+    return modelo
 
+
+def _extraer_audio_wav(entrada: Path, wav: Path, *, timeout: int = _TIMEOUT) -> None:
+    """Extrae/normaliza la pista de voz a wav 16 kHz mono con ffmpeg (lo que whisper.cpp espera).
+
+    `-vn` descarta el video (transcribimos solo la voz, da igual el contenedor) y `-f wav` fija el
+    formato de salida explicitamente. Sin shell (argv lista; rutas generadas por nosotros).
+    """
+    _ejecutar(
+        [
+            "ffmpeg", "-nostdin", "-y",
+            "-i", str(entrada),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-f", "wav",
+            str(wav),
+        ],
+        etapa="ffmpeg",
+        timeout=timeout,
+    )
+
+
+def _transcribir_whisper(datos: bytes, *, ext: str) -> str:
+    """Transcribe los bytes de un clip en LOCAL: ffmpeg (-> wav 16 kHz mono) + whisper-cli.
+
+    Mismo camino que la skill `clip-a-copy` / `transcribir.sh`. Trabaja en un directorio
+    temporal que se borra al salir; el nombre lo generamos nosotros (uuid), nunca el del
+    cliente. Devuelve el texto transcrito (vacio si el clip no tenia habla).
+    """
+    modelo = _exigir_dependencias()
     with tempfile.TemporaryDirectory(prefix="keni-transcripcion-") as tmp:
         base = Path(tmp) / uuid.uuid4().hex
         entrada = base.with_suffix(f".{ext}")
         wav = base.with_suffix(".wav")
         entrada.write_bytes(datos)
 
-        # 1) ffmpeg: extrae/normaliza el audio a wav 16 kHz mono (lo que whisper.cpp espera).
-        _ejecutar(
-            ["ffmpeg", "-nostdin", "-y", "-i", str(entrada), "-ar", "16000", "-ac", "1", str(wav)],
-            etapa="ffmpeg",
-        )
-        # 2) whisper-cli: transcribe el wav a un .txt (`-otxt -of <base>` -> <base>.txt).
+        _extraer_audio_wav(entrada, wav)
+        # whisper-cli: transcribe el wav a un .txt (`-otxt -of <base>` -> <base>.txt).
         _ejecutar(
             [
                 "whisper-cli",
@@ -227,8 +260,135 @@ def _transcribir_whisper(datos: bytes, *, ext: str) -> str:
     return texto.strip()
 
 
+# --------------------------------------------------------------------------- #
+# Transcripcion con TIMESTAMPS (gestor de audio + subtitulos de video)          #
+# --------------------------------------------------------------------------- #
+#
+# whisper.cpp emite JSON (`-ojf`, output-json-full) con offsets en milisegundos por SEGMENTO y,
+# dentro, los `tokens` (subpalabras) con sus propios offsets. De ahi sacamos la forma canonica de
+# segmentos que edita el frontend y de la que el motor de video arma el ASS karaoke:
+#
+#     [{"inicio_ms", "fin_ms", "texto", "palabras": [{"inicio_ms", "fin_ms", "texto"}, ...]}, ...]
+
+
+def _ms(valor: Any) -> int:
+    """Normaliza un offset de whisper.cpp (ya en ms) a entero no negativo."""
+    try:
+        return max(0, int(valor))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _palabras_de_tokens(tokens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Agrupa los tokens (subpalabras) de un segmento en PALABRAS con sus tiempos.
+
+    whisper.cpp parte cada palabra en uno o mas tokens; una palabra nueva empieza cuando el texto
+    del token trae un espacio inicial. Se descartan los tokens especiales (texto vacio o `[...]`,
+    p. ej. marcas internas del modelo) para que no ensucien el karaoke.
+    """
+    palabras: list[dict[str, Any]] = []
+    for tok in tokens:
+        crudo = tok.get("text")
+        if not isinstance(crudo, str):
+            continue
+        if not crudo.strip() or (crudo.strip().startswith("[") and crudo.strip().endswith("]")):
+            continue
+        off = tok.get("offsets") or {}
+        ini, fin = _ms(off.get("from")), _ms(off.get("to"))
+        nueva_palabra = crudo[:1].isspace() or not palabras
+        limpio = crudo.strip()
+        if nueva_palabra:
+            palabras.append({"inicio_ms": ini, "fin_ms": max(ini, fin), "texto": limpio})
+        else:
+            p = palabras[-1]
+            p["texto"] += limpio
+            p["fin_ms"] = max(p["fin_ms"], fin)
+    return palabras
+
+
+def parsear_whispercpp(data: dict[str, Any], *, word_level: bool = False) -> list[dict[str, Any]]:
+    """Mapea el JSON de whisper.cpp (`-ojf`) a la forma canonica de segmentos. FUNCION PURA.
+
+    Lee `transcription[]` (cada item: `offsets.{from,to}` en ms, `text`, y `tokens[]` si es full).
+    Con `word_level` arma tambien las `palabras` (para el karaoke del motor de video). Descarta los
+    segmentos sin texto ni palabras. Tolera claves ausentes (degrada a lista vacia / segmento sin
+    palabras) en vez de romper.
+    """
+    segmentos: list[dict[str, Any]] = []
+    for seg in data.get("transcription") or []:
+        if not isinstance(seg, dict):
+            continue
+        off = seg.get("offsets") or {}
+        ini, fin = _ms(off.get("from")), _ms(off.get("to"))
+        texto = (seg.get("text") or "").strip()
+        palabras = _palabras_de_tokens(seg.get("tokens") or []) if word_level else []
+        if not texto and not palabras:
+            continue
+        if not texto and palabras:
+            texto = " ".join(p["texto"] for p in palabras)
+        segmentos.append(
+            {"inicio_ms": ini, "fin_ms": max(ini, fin), "texto": texto, "palabras": palabras}
+        )
+    return segmentos
+
+
+def _transcribir_whisper_json(
+    datos: bytes, *, ext: str, idioma: str = _IDIOMA, word_level: bool = False
+) -> dict[str, Any]:
+    """Transcribe bytes de audio/video a segmentos CON TIMESTAMPS: ffmpeg + whisper-cli `-ojf`.
+
+    Mismo motor whisper.cpp + modelo `v3 turbo` que el flujo clip-a-copy, pero pidiendo JSON con
+    offsets en milisegundos. Devuelve `{"texto": <texto plano>, "segmentos": [...]}`. Trabaja en un
+    temporal con nombres generados por nosotros (uuid), nunca el del cliente.
+    """
+    modelo = _exigir_dependencias()
+    with tempfile.TemporaryDirectory(prefix="keni-transcripcion-") as tmp:
+        base = Path(tmp) / uuid.uuid4().hex
+        entrada = base.with_suffix(f".{ext}")
+        wav = base.with_suffix(".wav")
+        entrada.write_bytes(datos)
+
+        _extraer_audio_wav(entrada, wav, timeout=_TIMEOUT_LARGO)
+        # whisper-cli: JSON full (`-ojf -of <base>` -> <base>.json) con offsets en ms y tokens.
+        _ejecutar(
+            [
+                "whisper-cli",
+                "-m", str(modelo),
+                "-f", str(wav),
+                "-l", _codigo_idioma(idioma),
+                "-ojf",
+                "-of", str(base),
+            ],
+            etapa="whisper-cli",
+            timeout=_TIMEOUT_LARGO,
+        )
+        salida = base.with_suffix(".json")
+        try:
+            data = json.loads(salida.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError) as e:
+            raise TranscripcionError("No se pudo leer la transcripción generada.") from e
+
+    segmentos = parsear_whispercpp(data, word_level=word_level)
+    texto = " ".join(s["texto"] for s in segmentos).strip()
+    return {"texto": texto, "segmentos": segmentos}
+
+
 # Punto INYECTABLE: lo unico que toca whisper/ffmpeg reales. Los tests lo parchean.
 _TRANSCRIPTOR = _transcribir_whisper
+# Punto INYECTABLE del camino con timestamps (gestor de audio + ASR de video). Los tests lo parchean.
+_TRANSCRIPTOR_JSON = _transcribir_whisper_json
+
+
+def transcribir_datos(
+    datos: bytes, *, ext: str, idioma: str = _IDIOMA, word_level: bool = False
+) -> dict[str, Any]:
+    """Transcribe bytes de audio/video a `{"texto", "segmentos"}` con timestamps (motor compartido).
+
+    Entrada del gestor de audio y del motor de subtitulos de video. Delega en `_TRANSCRIPTOR_JSON`
+    (parcheable en tests; NUNCA invoca whisper real ahi). `word_level=True` ademas trocea cada
+    segmento en palabras (para el karaoke del video).
+    """
+    return _TRANSCRIPTOR_JSON(datos, ext=ext, idioma=idioma, word_level=word_level)
 
 
 async def transcribir_subida(archivo, *, content_type: str | None = None) -> str:  # noqa: ANN001

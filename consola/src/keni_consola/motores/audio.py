@@ -1,0 +1,139 @@
+"""Motor de TRANSCRIPCION del gestor de AUDIO (audio→texto).
+
+Ejecutor del job de proceso `transcribir-audio`: transcribe un audio/video subido con el MOTOR
+COMPARTIDO `keni_consola.transcripcion` (whisper.cpp `whisper-cli` + modelo `v3 turbo`, JSON con
+timestamps) y persiste el resultado en `audio_transcripciones`. Mismo camino LOCAL, gratuito y BAJO
+DEMANDA que el ASR de subtitulos de video; la unica degradacion es por DISPONIBILIDAD de deps
+(whisper-cli/ffmpeg/modelo), que el motor compartido reporta con un error claro en espanol.
+
+Sobre la transcripcion bruta, el equipo trabaja con AGENTES de Claude (limpiar/resumir/aclarar/
+corregir) desde la API `api/audio.py` — eso NO vive aqui: este modulo solo produce el borrador con
+timestamps (estado 'transcrito').
+
+CONTRATO (no cambiar la firma): `ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None`.
+
+    spec = {
+      "version": 1,
+      "kind": "transcribir-audio",
+      "transcripcion_id": "<id de audio_transcripciones>",  # fila a rellenar (estado 'pendiente')
+      "media_id": "audios/<sha>.<ext>",                     # de donde sacar el audio
+      "idioma": "es-MX",                                    # opcional (def es-MX)
+    }
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from .. import generaciones, media, repos
+from .. import transcripcion as asr
+
+_log = logging.getLogger("keni_consola.motores.audio")
+
+# Idioma por defecto del piloto (es-MX); el motor compartido reduce al codigo base ("es").
+_IDIOMA_DEF = "es-MX"
+
+
+def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
+    """Ejecutor del job de proceso `transcribir-audio` (ver docstring del modulo).
+
+    Firma del CONTRATO (no cambiar). Reporta progreso/estado/error a Actividad IA via
+    `generaciones.actualizar` y refleja el estado en la fila `audio_transcripciones`. Deja la
+    transcripcion en estado 'transcrito' (borrador con timestamps para revision/agentes) y la
+    generacion en 'completado'.
+    """
+    transcripcion_id = (spec.get("transcripcion_id") or "").strip()
+    try:
+        media_id = (spec.get("media_id") or "").strip()
+        idioma = (spec.get("idioma") or _IDIOMA_DEF).strip() or _IDIOMA_DEF
+        if not transcripcion_id:
+            _terminar_error(gen_id, "", "Falta 'transcripcion_id' en el job de transcripcion.")
+            return
+        if not media_id:
+            _terminar_error(
+                gen_id, transcripcion_id, "Falta 'media_id' (audio a transcribir) en el job."
+            )
+            return
+        if repos.obtener_audio_transcripcion(transcripcion_id) is None:
+            _terminar_error(gen_id, "", f"No existe la transcripcion {transcripcion_id}.")
+            return
+
+        generaciones.actualizar(
+            gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "extrayendo audio"}
+        )
+        repos.actualizar_audio_transcripcion(transcripcion_id, {"estado": "transcribiendo"})
+
+        # 1) Bajar el media a transcribir.
+        datos = media.leer_objeto(media_id)
+        if datos is None:
+            _terminar_error(
+                gen_id, transcripcion_id, f"No se encontro el media {media_id} en el almacen."
+            )
+            return
+
+        # 2) Transcribir con el motor compartido (whisper-cli + v3 turbo, JSON con timestamps).
+        generaciones.actualizar(
+            gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "transcribiendo"}
+        )
+        ext = Path(media_id).suffix.lstrip(".") or "mp4"
+        try:
+            resultado = asr.transcribir_datos(datos, ext=ext, idioma=idioma, word_level=False)
+        except asr.TranscripcionError as e:
+            _terminar_error(gen_id, transcripcion_id, str(e))
+            return
+
+        segmentos = resultado["segmentos"]
+        texto = resultado["texto"]
+        duracion_ms = int(segmentos[-1]["fin_ms"]) if segmentos else 0
+
+        # 3) Persistir el borrador con timestamps (estado 'transcrito').
+        repos.actualizar_audio_transcripcion(
+            transcripcion_id,
+            {
+                "estado": "transcrito",
+                "segmentos": json.dumps(segmentos, ensure_ascii=False),
+                "texto": texto,
+                "duracion_ms": duracion_ms,
+                "error": "",
+            },
+        )
+        generaciones.actualizar(
+            gen_id,
+            {
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "salida": texto,
+                "resultado": {
+                    "transcripcion_id": transcripcion_id,
+                    "segmentos": len(segmentos),
+                },
+                "fecha_fin": generaciones.ahora_iso(),
+            },
+        )
+    except Exception as e:  # noqa: BLE001 -- red de seguridad: nunca dejar el job sin terminal
+        _log.exception("audio.ejecutar_transcripcion_audio: fallo inesperado (gen %s)", gen_id)
+        _terminar_error(gen_id, transcripcion_id, f"Error inesperado al transcribir: {e}")
+
+
+def _terminar_error(gen_id: str, transcripcion_id: str, mensaje: str) -> None:
+    """Marca la generacion (y, si se conoce, la fila) en error con un mensaje claro en espanol."""
+    _log.warning("audio (gen %s): %s", gen_id, mensaje)
+    if transcripcion_id:
+        try:
+            repos.actualizar_audio_transcripcion(
+                transcripcion_id, {"estado": "error", "error": mensaje}
+            )
+        except Exception:  # noqa: BLE001 -- el error principal manda; no enmascarar con uno de BD
+            _log.exception("audio: no se pudo marcar la transcripcion %s en error", transcripcion_id)
+    generaciones.actualizar(
+        gen_id,
+        {
+            "estado": generaciones.ESTADO_ERROR,
+            "error": mensaje,
+            "fecha_fin": generaciones.ahora_iso(),
+        },
+    )
+
+
+__all__ = ["ejecutar_transcripcion_audio"]

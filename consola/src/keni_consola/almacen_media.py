@@ -44,6 +44,7 @@ CATEGORIAS: frozenset[str] = frozenset(
     {
         "fotos",        # fotos crudas subidas / extraidas (efimeras; borrables manualmente)
         "videos",       # videos crudos subidos para piezas de formato video (efimeros)
+        "audios",       # audios/videos subidos al gestor de transcripciones (audio→texto; efimeros)
         "documentos",   # documentos de importacion de parrilla (PDF/word/...; efimeros)
         "generadas",    # variantes de imagen generadas por IA (efimeras)
         "render",       # composites horneados / cache de render (reciclable, regenerable)

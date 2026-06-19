@@ -15,6 +15,7 @@ import { apiPiezas } from "./piezas";
 import { apiMedia } from "./media";
 import { apiImagen } from "./imagen";
 import { apiVideo } from "./video";
+import { apiAudio } from "./audio";
 import { apiMarcaActivos } from "./marcaActivos";
 import { apiPlantillasDiseno } from "./plantillasDiseno";
 import { apiEtiquetasPlantilla } from "./etiquetasPlantilla";
@@ -62,6 +63,7 @@ export const api = {
   ...apiMedia,
   ...apiImagen,
   ...apiVideo,
+  ...apiAudio,
   ...apiMarcaActivos,
   ...apiPlantillasDiseno,
   ...apiEtiquetasPlantilla,

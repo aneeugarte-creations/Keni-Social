@@ -70,6 +70,18 @@ from .plantillas_diseno import (
     obtener_plantilla_diseno,
     reordenar_plantillas_diseno,
 )
+from .audio import (
+    _CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES,
+    _COLS_AUDIO_TRANSCRIPCIONES,
+    _SELECT_AUDIO_TRANSCRIPCIONES,
+    ESTADOS_AUDIO_TRANSCRIPCION,
+    _fila_a_audio_transcripcion,
+    actualizar_audio_transcripcion,
+    borrar_audio_transcripcion,
+    crear_audio_transcripcion,
+    listar_audio_transcripciones,
+    obtener_audio_transcripcion,
+)
 from .video import (
     _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES,
     _CAMPOS_EDITABLES_VIDEO_SUBTITULOS,
@@ -138,6 +150,17 @@ __all__ = [
     "listar_plantillas_diseno",
     "obtener_plantilla_diseno",
     "reordenar_plantillas_diseno",
+    # audio
+    "ESTADOS_AUDIO_TRANSCRIPCION",
+    "_CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES",
+    "_COLS_AUDIO_TRANSCRIPCIONES",
+    "_SELECT_AUDIO_TRANSCRIPCIONES",
+    "_fila_a_audio_transcripcion",
+    "actualizar_audio_transcripcion",
+    "borrar_audio_transcripcion",
+    "crear_audio_transcripcion",
+    "listar_audio_transcripciones",
+    "obtener_audio_transcripcion",
     # video
     "ESTADOS_VIDEO_COMPOSICION",
     "ESTADOS_VIDEO_SUBTITULO",

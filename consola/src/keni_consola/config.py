@@ -275,7 +275,6 @@ from ._config_comun import (  # noqa: F401
     ENV_TRENDS_INTERVALO_MIN,
     ENV_VIDEO_MAX_MB,
     ENV_VIDEO_RENDER_TIMEOUT,
-    ENV_WHISPER_MODELO,
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
     FEED_SLA_MIN_DEF,
@@ -340,7 +339,6 @@ from ._config_comun import (  # noqa: F401
     TRENDS_INTERVALO_MIN_DEF,
     VIDEO_MAX_MB_DEF,
     VIDEO_RENDER_TIMEOUT_DEF,
-    WHISPER_MODELO_DEF,
     WORKER_SONDEO_SEGUNDOS_DEF,
     Callable,
     Path,
@@ -561,5 +559,4 @@ from .config_prompts import (  # noqa: F401
 from .config_video import (  # noqa: F401
     ffmpeg_bin,
     video_render_timeout,
-    whisper_modelo,
 )

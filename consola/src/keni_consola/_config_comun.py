@@ -444,17 +444,15 @@ ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
-# Motor de VIDEO (Ola VIDEO). El render (ffmpeg) y la transcripcion (faster-whisper) son
-# locales, gratuitos y BAJO DEMANDA (solo corren cuando un humano pulsa "Renderizar" /
-# "Transcribir"; no hay daemon que los dispare ni consumen tokens), asi que NO tienen
-# kill-switch ni estan gateados por la maquina. Aqui solo queda configuracion legitima:
-#   - KENI_WHISPER_MODELO     (str, def "medium"): modelo de faster-whisper para el ASR.
+# Motor de VIDEO (Ola VIDEO). El render (ffmpeg) y la transcripcion (whisper.cpp `whisper-cli`,
+# en `keni_consola.transcripcion`) son locales, gratuitos y BAJO DEMANDA (solo corren cuando un
+# humano pulsa "Renderizar" / "Transcribir"; no hay daemon que los dispare ni consumen tokens),
+# asi que NO tienen kill-switch ni estan gateados por la maquina. Aqui solo queda configuracion
+# legitima del render (el modelo de whisper se resuelve en el motor compartido, KENI_WHISPER_MODEL):
 #   - KENI_FFMPEG_BIN         (str, def "ffmpeg"): binario de ffmpeg (path o nombre en PATH).
 #   - KENI_VIDEO_RENDER_TIMEOUT (int, def 1800 s): wall-timeout del render de un video.
-ENV_WHISPER_MODELO = "KENI_WHISPER_MODELO"
 ENV_FFMPEG_BIN = "KENI_FFMPEG_BIN"
 ENV_VIDEO_RENDER_TIMEOUT = "KENI_VIDEO_RENDER_TIMEOUT"
-WHISPER_MODELO_DEF = "medium"
 FFMPEG_BIN_DEF = "ffmpeg"
 VIDEO_RENDER_TIMEOUT_DEF = 1800
 
@@ -995,7 +993,6 @@ __all__ = [
     'ENV_TRENDS_INTERVALO_MIN',
     'ENV_VIDEO_MAX_MB',
     'ENV_VIDEO_RENDER_TIMEOUT',
-    'ENV_WHISPER_MODELO',
     'ENV_WORKER_EXTERNO',
     'ENV_WORKER_SONDEO_SEGUNDOS',
     'FEED_SLA_MIN_DEF',
@@ -1063,7 +1060,6 @@ __all__ = [
     'TRENDS_INTERVALO_MIN_DEF',
     'VIDEO_MAX_MB_DEF',
     'VIDEO_RENDER_TIMEOUT_DEF',
-    'WHISPER_MODELO_DEF',
     'WORKER_SONDEO_SEGUNDOS_DEF',
     '_FALSOS',
     '_VERDADEROS',

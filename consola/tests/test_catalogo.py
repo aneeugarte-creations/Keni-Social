@@ -24,10 +24,10 @@ _SIDEBAR_BLOQUES = [
     # luego el Feed (red social interna + lista), la Programación (calendario) y los Turnos (rota;
     # el tablero de Tareas vive dentro de Turnos como «Cobertura», sin entrada propia).
     ["Investigación", "Feed", "Programación", "Turnos"],
-    # "Contenido": DOS páginas planas por tipo de contenido — Imagen (editor por capas + IA) y
-    # Video (estudio de video). La página «Texto»/Prompts se retiró: los prompts viven en cada
-    # fase del pipeline en «Contexto».
-    ["Imagen", "Video"],
+    # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
+    # (estudio de video) y Audio (gestor audio→texto: transcripción whisper + agentes de Claude).
+    # La página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
+    ["Imagen", "Video", "Audio"],
     # "Máquina": «Contexto» (la máquina en una página — el pipeline de cada motor como estructura,
     # con prompt/contexto/logs y on/off por fase) + «Agentes» (la sala de máquinas: Cómputo/cola en
     # vivo y, en pestañas hermanas, Economía —coste— y Actividad —la traza—).

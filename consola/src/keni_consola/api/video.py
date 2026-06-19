@@ -24,7 +24,7 @@ CONTRATO
     con el mensaje en espanol del ValueError). Solo valida la FORMA del sobre.
   - El encolado usa `generaciones.encolar_job_proceso(kind=..., params=..., marca=...)` con los
     kinds del seam (`dominio.jobspec.PROC_RENDER_VIDEO` / `PROC_TRANSCRIBIR`). Render (ffmpeg) y
-    ASR (faster-whisper) son LOCALES, gratuitos y BAJO DEMANDA (los dispara un humano, no un
+    ASR (whisper.cpp) son LOCALES, gratuitos y BAJO DEMANDA (los dispara un humano, no un
     daemon, y no consumen tokens), asi que NO tienen kill-switch ni gateo por maquina. La cola NO
     tiene tope (R-NO-LIMIT): solo el límite de presupuesto/pausa puede dar `ColaLlenaError` => 429.
   - Multi-tenant por marca: igual que el resto de la app, la marca de una peticion se valida
@@ -298,7 +298,7 @@ async def transcribir_composicion(request: Request) -> Response:
     """POST /api/video/composiciones/{id}/transcribir: encola la transcripcion ASR.
 
     Cuerpo: `media_id` (clip del que sacar el audio, obligatorio), `idioma` (opcional, def
-    es-MX). ASR local (faster-whisper) bajo demanda: sin kill-switch ni gateo por maquina. Si
+    es-MX). ASR local (whisper.cpp) bajo demanda: sin kill-switch ni gateo por maquina. Si
     no hay fila `video_subtitulos` para la composicion, se CREA (estado 'pendiente') antes de
     encolar. -> `{gen_id, subtitulo_id}` | 400/404/429.
     """
@@ -409,7 +409,7 @@ async def actualizar_subtitulo(request: Request) -> Response:
 def _regenerar_ass(segmentos: list) -> str | None:
     """Regenera el ASS desde segmentos word-level. None si el motor de ASR no esta disponible.
 
-    Import PEREZOSO Y OPCIONAL: el motor de transcripcion (faster-whisper) puede no exponer aun
+    Import PEREZOSO Y OPCIONAL: el motor de transcripcion (whisper.cpp) puede no exponer aun
     `segmentos_a_ass` (lo rellena el agente B). Si falta, devolvemos None y el llamante guarda
     los segmentos SIN ass (la correccion humana del texto no se pierde).
     """

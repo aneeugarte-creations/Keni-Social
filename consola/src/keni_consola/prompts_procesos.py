@@ -53,6 +53,11 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
         "Aprobar · crítica IA con visión (vota el nivel «Crítica IA» antes de programar)",
     ],
     "prompt/idear": ["Idear · brainstorming de ideas"],
+    # Gestor de audio (audio→texto): agentes de Claude sobre la transcripción.
+    "prompt/audio/limpiar": ["Audio · Limpiar la transcripción (silencios/loops/repeticiones)"],
+    "prompt/audio/resumir": ["Audio · Resumir la transcripción"],
+    "prompt/audio/aclarar": ["Audio · Aclarar (preguntas sobre los fragmentos dudosos)"],
+    "prompt/audio/corregir": ["Audio · Corregir la transcripción con las respuestas del equipo"],
     # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
     # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).
     "prompt/envoltorios/redes": [

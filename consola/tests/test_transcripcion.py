@@ -8,6 +8,7 @@ degradación honesta cuando falta el toolchain, y el camino feliz (ffmpeg -> whi
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -173,3 +174,112 @@ def test_transcribir_whisper_subproceso_falla(monkeypatch, tmp_path):
     monkeypatch.setattr(transcripcion.subprocess, "run", fake_run)
     with pytest.raises(transcripcion.TranscripcionError):
         transcripcion._transcribir_whisper(b"clip", ext="mp4")
+
+
+# --- parsear_whispercpp (puro: JSON de whisper.cpp -> segmentos) --------------
+
+
+def _json_whispercpp() -> dict:
+    """JSON como el que emite `whisper-cli -ojf` (offsets en ms + tokens subpalabra)."""
+    return {
+        "transcription": [
+            {
+                "offsets": {"from": 0, "to": 1500},
+                "text": " Hola mundo",
+                "tokens": [
+                    {"text": " Hola", "offsets": {"from": 0, "to": 500}},
+                    {"text": " mundo", "offsets": {"from": 600, "to": 1500}},
+                    {"text": "[_TT_8]", "offsets": {"from": 1500, "to": 1500}},
+                ],
+            },
+            {
+                "offsets": {"from": 2000, "to": 2400},
+                "text": " adiós",
+                "tokens": [
+                    {"text": " adi", "offsets": {"from": 2000, "to": 2200}},
+                    {"text": "ós", "offsets": {"from": 2200, "to": 2400}},
+                ],
+            },
+        ]
+    }
+
+
+def test_parsear_whispercpp_segmentos_con_timestamps():
+    segs = transcripcion.parsear_whispercpp(_json_whispercpp())
+    assert len(segs) == 2
+    assert segs[0]["inicio_ms"] == 0 and segs[0]["fin_ms"] == 1500
+    assert segs[0]["texto"] == "Hola mundo"
+    assert segs[0]["palabras"] == []  # sin word_level no se trocea
+    assert segs[1]["inicio_ms"] == 2000 and segs[1]["texto"] == "adiós"
+
+
+def test_parsear_whispercpp_word_level_desde_tokens():
+    segs = transcripcion.parsear_whispercpp(_json_whispercpp(), word_level=True)
+    # Una palabra nueva empieza con el espacio inicial del token; los tokens especiales [..] se filtran.
+    assert segs[0]["palabras"] == [
+        {"inicio_ms": 0, "fin_ms": 500, "texto": "Hola"},
+        {"inicio_ms": 600, "fin_ms": 1500, "texto": "mundo"},
+    ]
+    # Subpalabras "adi" + "ós" se unen en una palabra "adiós" (sin espacio intermedio).
+    assert segs[1]["palabras"] == [{"inicio_ms": 2000, "fin_ms": 2400, "texto": "adiós"}]
+
+
+def test_parsear_whispercpp_descarta_vacios_y_tolera_claves_ausentes():
+    data = {"transcription": [{"offsets": {"from": 0, "to": 0}, "text": "  "}, {}]}
+    assert transcripcion.parsear_whispercpp(data) == []
+    assert transcripcion.parsear_whispercpp({}) == []
+
+
+# --- transcribir_datos (motor compartido, con _TRANSCRIPTOR_JSON mockeado) ----
+
+
+def test_transcribir_datos_delega_en_inyectable(monkeypatch):
+    visto: dict = {}
+
+    def fake(datos, *, ext, idioma, word_level):
+        visto.update(datos=datos, ext=ext, idioma=idioma, word_level=word_level)
+        return {"texto": "hola", "segmentos": [{"inicio_ms": 0, "fin_ms": 1, "texto": "hola", "palabras": []}]}
+
+    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR_JSON", fake)
+    res = transcripcion.transcribir_datos(b"bytes", ext="mp3", idioma="es-MX", word_level=True)
+    assert res["texto"] == "hola" and len(res["segmentos"]) == 1
+    assert visto == {"datos": b"bytes", "ext": "mp3", "idioma": "es-MX", "word_level": True}
+
+
+# --- _transcribir_whisper_json (subprocess mockeado): ffmpeg fix + JSON --------
+
+
+def test_transcribir_whisper_json_ffmpeg_y_whisper(monkeypatch, tmp_path):
+    modelo = tmp_path / "ggml.bin"
+    modelo.write_bytes(b"x")
+    monkeypatch.setenv(transcripcion.ENV_MODELO_WHISPER, str(modelo))
+    monkeypatch.setattr(transcripcion.shutil, "which", lambda b: f"/usr/bin/{b}")
+
+    llamadas: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        llamadas.append(argv)
+        if argv[0] == "whisper-cli":
+            of = argv[argv.index("-of") + 1]
+            Path(of).with_suffix(".json").write_text(
+                json.dumps(_json_whispercpp()), encoding="utf-8"
+            )
+
+        class _R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return _R()
+
+    monkeypatch.setattr(transcripcion.subprocess, "run", fake_run)
+    res = transcripcion._transcribir_whisper_json(b"clip", ext="mp4", idioma="es-MX", word_level=True)
+
+    assert res["texto"] == "Hola mundo adiós"
+    assert len(res["segmentos"]) == 2 and res["segmentos"][0]["palabras"][0]["texto"] == "Hola"
+    # ffmpeg primero, con el ARREGLO del bug: descarta el vídeo (-vn) y fija el formato (-f wav).
+    assert llamadas[0][0] == "ffmpeg"
+    assert "-vn" in llamadas[0] and llamadas[0][llamadas[0].index("-f") + 1] == "wav"
+    # whisper-cli pide JSON completo (-ojf) con el idioma base y el modelo resuelto.
+    assert llamadas[1][0] == "whisper-cli"
+    assert "-ojf" in llamadas[1] and "es" in llamadas[1] and str(modelo) in llamadas[1]

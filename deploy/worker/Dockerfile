@@ -41,9 +41,10 @@ ARG GH_VERSION=2.62.0
 # dev (worktrees/promocion). gh: CLI de GitHub para el carril de auto-desarrollo. Node 20 + Claude
 # Code CLI: AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola
 # VIDEO) — el worker tambien ejecuta los jobs de proceso `render-video` (filtergraph: scale/crop/
-# pad, overlay, xstack/vstack, subtitles=ASS). NOTA: la dependencia ASR (faster-whisper/torch) NO
-# se bakea aqui (pesado, rompe el build): es OPCIONAL y se instala en el servidor cuando se active
-# la transcripcion (import perezoso en motores/transcripcion; degrada con error claro si falta).
+# pad, overlay, xstack/vstack, subtitles=ASS). NOTA: la transcripcion ASR (whisper.cpp `whisper-cli`
+# + modelo `v3 turbo`) NO se bakea aqui: por privacidad el audio se transcribe en el PERFIL LOCAL
+# (no en hosted; ver deploy/README.md), y `keni_consola.transcripcion` degrada con error claro en
+# espanol si faltan `whisper-cli`/`ffmpeg`/modelo. ffmpeg si va aqui (lo usa el render de video).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates git ffmpeg \
  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

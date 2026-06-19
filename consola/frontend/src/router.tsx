@@ -15,6 +15,7 @@ import { Loader2 } from "lucide-react";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Imagen = lazy(() => import("@/pages/Imagen"));
 const Video = lazy(() => import("@/pages/Video"));
+const Audio = lazy(() => import("@/pages/Audio"));
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
@@ -218,6 +219,8 @@ export const router = createBrowserRouter([
           { path: "imagen", element: <Imagen /> },
           // Página VIDEO: subida + preview (motor de edición próximamente).
           { path: "video", element: <Video /> },
+          // Página AUDIO: gestor audio→texto (transcripción whisper + agentes de Claude).
+          { path: "audio", element: <Audio /> },
           // Página TEXTO/Prompts: RETIRADA. Los prompts viven en cada fase del pipeline en
           // «Contexto» (Máquina) y el contexto editorial se inyecta desde ahí. Todo
           // `/publicaciones/texto*` (incl. la vieja pestaña de algoritmos) redirige a Contexto.

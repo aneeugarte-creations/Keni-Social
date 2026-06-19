@@ -101,6 +101,8 @@ _TABLAS = (
     # sorpresas de orden; sin FK declarada). Sin truncar, acumularian filas entre tests.
     "video_subtitulos",
     "video_composiciones",
+    # Gestor de audio (audio→texto): transcripciones. Sin truncar, acumularian filas entre tests.
+    "audio_transcripciones",
     # Latidos de daemons (observabilidad): sin truncar, un latido de un test contamina las
     # aserciones de estado/contadores del siguiente.
     "daemon_latidos",

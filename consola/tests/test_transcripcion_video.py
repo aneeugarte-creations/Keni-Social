@@ -2,9 +2,12 @@
 
 Cubre:
   - PURO: `segmentos_a_ass` (cabecera valida, estilo, tags \\k karaoke con duraciones en cs).
-  - PURO: `construir_segmentos` (mapeo de la salida de faster-whisper a nuestro JSON word-level).
-  - Ejecutor con faster-whisper y ffmpeg MONKEYPATCHEADOS: kill-switch off -> error; import
-    ausente -> error claro; happy-path -> escribe en video_subtitulos estado='transcrito'.
+  - Ejecutor con el MOTOR COMPARTIDO (`keni_consola.transcripcion.transcribir_datos`) y `media`
+    MONKEYPATCHEADOS: deps ausentes (whisper-cli/modelo) -> error claro; happy-path -> escribe en
+    video_subtitulos estado='transcrito'.
+
+El mapeo del JSON de whisper.cpp a segmentos vive ahora en el motor compartido
+(`keni_consola.transcripcion.parsear_whispercpp`, cubierto en `test_transcripcion.py`).
 
 Los tests PUROS no necesitan modelo, ffmpeg ni Postgres. Los del ejecutor que tocan
 `video_subtitulos` usan la fixture `entorno` (Postgres de pruebas; se saltan sin el).
@@ -13,77 +16,29 @@ Los tests PUROS no necesitan modelo, ffmpeg ni Postgres. Los del ejecutor que to
 from __future__ import annotations
 
 import json
-import sys
-import types
 
 from keni_consola import generaciones, media, repos
+from keni_consola import transcripcion as transcripcion_raiz
 from keni_consola.motores import transcripcion
 
 _MARCA = "claro-sports"
 
 
-# --------------------------------------------------------------------------- #
-# Helpers de simulacion de la salida de faster-whisper                          #
-# --------------------------------------------------------------------------- #
-
-
-class _Word:
-    def __init__(self, start, end, word):
-        self.start, self.end, self.word = start, end, word
-
-
-class _Segment:
-    def __init__(self, start, end, text, words):
-        self.start, self.end, self.text, self.words = start, end, text, words
-
-
-def _segmentos_fake_fw():
-    """Estructura como la que devuelve faster-whisper (objetos con atributos)."""
+def _segmentos_canonicos():
+    """Segmentos en la FORMA canonica que devuelve el motor compartido (word-level)."""
     return [
-        _Segment(
-            0.0, 1.5, "Hola mundo",
-            [_Word(0.0, 0.5, "Hola"), _Word(0.6, 1.5, "mundo")],
-        ),
-        _Segment(
-            2.0, 2.4, "adios",
-            [_Word(2.0, 2.4, "adios")],
-        ),
+        {
+            "inicio_ms": 0, "fin_ms": 1500, "texto": "Hola mundo",
+            "palabras": [
+                {"inicio_ms": 0, "fin_ms": 500, "texto": "Hola"},
+                {"inicio_ms": 600, "fin_ms": 1500, "texto": "mundo"},
+            ],
+        },
+        {
+            "inicio_ms": 2000, "fin_ms": 2400, "texto": "adios",
+            "palabras": [{"inicio_ms": 2000, "fin_ms": 2400, "texto": "adios"}],
+        },
     ]
-
-
-# --------------------------------------------------------------------------- #
-# PURO: construir_segmentos                                                     #
-# --------------------------------------------------------------------------- #
-
-
-def test_construir_segmentos_desde_objetos():
-    segs = transcripcion.construir_segmentos(_segmentos_fake_fw())
-    assert len(segs) == 2
-    s0 = segs[0]
-    assert s0["inicio_ms"] == 0 and s0["fin_ms"] == 1500
-    assert s0["texto"] == "Hola mundo"
-    assert s0["palabras"] == [
-        {"inicio_ms": 0, "fin_ms": 500, "texto": "Hola"},
-        {"inicio_ms": 600, "fin_ms": 1500, "texto": "mundo"},
-    ]
-    assert segs[1]["palabras"][0]["texto"] == "adios"
-
-
-def test_construir_segmentos_acepta_dicts_y_clave_text():
-    # Acepta dicts (no solo objetos) y 'text' como alias de 'word' a nivel palabra.
-    crudos = [
-        {"start": 1.0, "end": 2.0, "text": "uno dos",
-         "words": [{"start": 1.0, "end": 1.4, "text": "uno"},
-                   {"start": 1.5, "end": 2.0, "word": "dos"}]},
-    ]
-    segs = transcripcion.construir_segmentos(crudos)
-    assert segs[0]["inicio_ms"] == 1000 and segs[0]["fin_ms"] == 2000
-    assert [p["texto"] for p in segs[0]["palabras"]] == ["uno", "dos"]
-
-
-def test_construir_segmentos_descarta_vacios():
-    crudos = [{"start": 0, "end": 0, "text": "  ", "words": []}]
-    assert transcripcion.construir_segmentos(crudos) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -92,8 +47,7 @@ def test_construir_segmentos_descarta_vacios():
 
 
 def test_segmentos_a_ass_cabecera_y_estilo():
-    segs = transcripcion.construir_segmentos(_segmentos_fake_fw())
-    ass = transcripcion.segmentos_a_ass(segs)
+    ass = transcripcion.segmentos_a_ass(_segmentos_canonicos())
     # Cabecera ASS valida.
     assert "[Script Info]" in ass
     assert "ScriptType: v4.00+" in ass
@@ -105,8 +59,7 @@ def test_segmentos_a_ass_cabecera_y_estilo():
 
 
 def test_segmentos_a_ass_karaoke_duraciones_en_centisegundos():
-    segs = transcripcion.construir_segmentos(_segmentos_fake_fw())
-    ass = transcripcion.segmentos_a_ass(segs)
+    ass = transcripcion.segmentos_a_ass(_segmentos_canonicos())
     # Primer Dialogue: "Hola" dura 0.5s -> \k50; hueco 0.1s -> \k10; "mundo" dura 0.9s -> \k90.
     assert "{\\k50}Hola " in ass
     assert "{\\k10} " in ass  # hueco entre palabras
@@ -119,8 +72,7 @@ def test_segmentos_a_ass_karaoke_duraciones_en_centisegundos():
 
 
 def test_segmentos_a_ass_estilo_personalizado():
-    segs = transcripcion.construir_segmentos(_segmentos_fake_fw())
-    ass = transcripcion.segmentos_a_ass(segs, {"fuente": "Roboto", "tam": 80})
+    ass = transcripcion.segmentos_a_ass(_segmentos_canonicos(), {"fuente": "Roboto", "tam": 80})
     assert "Style: Keni,Roboto,80," in ass
 
 
@@ -141,18 +93,24 @@ def test_segmentos_a_ass_escapa_llaves():
 
 
 # --------------------------------------------------------------------------- #
-# Ejecutor: import ausente, happy-path                                          #
+# Ejecutor: deps ausentes, subtitulo inexistente, happy-path                   #
 # (El ASR es local/gratuito/bajo-demanda: NO tiene kill-switch.)               #
 # --------------------------------------------------------------------------- #
 
 
-def test_ejecutor_import_ausente_marca_error(entorno, monkeypatch):
-    """Sin faster-whisper instalado, el ejecutor degrada con error claro (no rompe)."""
-    # Subtitulo real para pasar la validacion previa.
+def test_ejecutor_deps_ausentes_marca_error(entorno, monkeypatch):
+    """Sin whisper-cli/modelo, el motor compartido lanza error claro y el ejecutor lo reporta."""
     c = repos.crear_video_composicion(marca=_MARCA)
     s = repos.crear_video_subtitulo(composicion_id=c["id"])
-    # Forzar ImportError del import perezoso `from faster_whisper import WhisperModel`.
-    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+
+    monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-video-bytes")
+
+    def _falla(*a, **k):
+        raise transcripcion_raiz.TranscripcionError(
+            "Falta whisper-cli o ffmpeg para transcribir en local."
+        )
+
+    monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _falla)
 
     capturas: list[dict] = []
     real_actualizar = generaciones.actualizar
@@ -162,7 +120,7 @@ def test_ejecutor_import_ausente_marca_error(entorno, monkeypatch):
     )
     transcripcion.ejecutar_transcripcion("g2", {"subtitulo_id": s["id"], "media_id": "videos/x.mp4"})
     assert capturas[-1]["estado"] == generaciones.ESTADO_ERROR
-    assert "faster-whisper" in capturas[-1]["error"]
+    assert "whisper-cli" in capturas[-1]["error"]
     # El subtitulo NO avanzo de estado.
     assert repos.obtener_video_subtitulo(s["id"])["estado"] == "pendiente"
 
@@ -177,31 +135,20 @@ def test_ejecutor_subtitulo_inexistente_error(monkeypatch):
 
 
 def test_ejecutor_happy_path_escribe_transcrito(entorno, monkeypatch):
-    """Con ffmpeg + faster-whisper mockeados, escribe segmentos+ass y estado='transcrito'."""
+    """Con el motor compartido mockeado, escribe segmentos+ass y estado='transcrito'."""
     c = repos.crear_video_composicion(marca=_MARCA)
     s = repos.crear_video_subtitulo(composicion_id=c["id"])
 
-    # El media existe en el almacen (bytes cualquiera; ffmpeg esta mockeado).
+    # El media existe en el almacen (bytes cualquiera; el motor esta mockeado).
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-video-bytes")
-    # ffmpeg: en vez de extraer audio, escribe un wav vacio en el destino.
-    monkeypatch.setattr(
-        transcripcion, "_extraer_audio_wav",
-        lambda origen, destino: destino.write_bytes(b"RIFF"),
-    )
 
-    # faster-whisper falso: modulo con WhisperModel que devuelve el iterador simulado.
-    class _ModeloFake:
-        def __init__(self, modelo):
-            self.modelo = modelo
+    def _transcribir(datos, *, ext, idioma, word_level):
+        assert word_level is True
+        assert idioma == "es-MX"
+        segs = _segmentos_canonicos()
+        return {"texto": " ".join(x["texto"] for x in segs), "segmentos": segs}
 
-        def transcribe(self, ruta, **kw):
-            assert kw.get("word_timestamps") is True
-            assert kw.get("language") == "es"  # 'es-MX' -> 'es'
-            return iter(_segmentos_fake_fw()), {"language": "es"}
-
-    fake_mod = types.ModuleType("faster_whisper")
-    fake_mod.WhisperModel = _ModeloFake
-    monkeypatch.setitem(sys.modules, "faster_whisper", fake_mod)
+    monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _transcribir)
 
     transcripcion.ejecutar_transcripcion(
         "g4", {"subtitulo_id": s["id"], "media_id": "videos/x.mp4", "idioma": "es-MX"}

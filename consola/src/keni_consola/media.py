@@ -624,6 +624,60 @@ async def guardar_video_subida(
         raise MediaError("No se pudo guardar el video subido.") from e
 
 
+async def guardar_audio_subida(
+    archivo, *, content_type: str | None = None
+) -> str:  # noqa: ANN001
+    """Vuelca un `UploadFile` de AUDIO o VIDEO al almacen para el gestor de transcripciones.
+
+    A diferencia de `guardar_video_subida` (solo video, para piezas), aqui aceptamos AUDIO y VIDEO:
+    el gestor audio→texto extrae la pista de voz de cualquier contenedor. El NOMBRE del objeto lo
+    generamos (sha256); NUNCA el del cliente. Reutiliza el mapeo mime/extension de
+    `keni_consola.transcripcion` (la fuente del flujo whisper.cpp). DEDUP content-addressed bajo
+    `audios/<sha256>.<ext>`; limite de tamano `config.video_max_mb()` MB (def 300).
+
+    Devuelve la KEY del objeto. Lanza `MediaError` (en espanol) ante formato no soportado, archivo
+    vacio o demasiado grande.
+    """
+    from . import config, transcripcion
+
+    ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
+    ext = transcripcion.ext_de_subida(ct, getattr(archivo, "filename", None))
+    if ext is None:
+        raise MediaError("Solo se aceptan audios o videos (MP4, MOV, MP3, M4A, WAV, OGG…).")
+
+    limite_mb = config.video_max_mb()
+    limite = limite_mb * 1024 * 1024
+    trozos: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            trozo = await archivo.read(_TROZO)
+            if not trozo:
+                break
+            total += len(trozo)
+            if total > limite:
+                raise MediaError(
+                    f"El archivo es demasiado grande (máximo {limite_mb} MB); sube uno más corto."
+                )
+            trozos.append(trozo)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- cualquier fallo de E/S: reporta en espanol
+        raise MediaError("No se pudo guardar el archivo subido.") from e
+    if total == 0:
+        raise MediaError("El archivo está vacío.")
+    datos = b"".join(trozos)
+    mime = next(
+        (m for m, e in transcripcion._MIME_A_EXT.items() if e == ext), "application/octet-stream"
+    )
+    try:
+        return _guardar_contenido(datos, ext=ext, categoria="audios", mime=mime)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
+        raise MediaError("No se pudo guardar el archivo subido.") from e
+
+
 def guardar_bytes(datos: bytes, *, ext: str = "png", categoria: str = "generadas") -> str:
     """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su KEY.
 

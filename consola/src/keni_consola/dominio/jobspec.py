@@ -95,13 +95,17 @@ PROC_CARRUSEL = "carrusel"
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
 # ------------------------------------------------------------------------------------------- #
 # Estos KINDS encolan trabajo GENERICO (render de video con ffmpeg, transcripcion ASR con
-# faster-whisper) que NO usa claude, pero SI reutiliza la infra de `generaciones`/`jobs`/worker
+# whisper.cpp) que NO usa claude, pero SI reutiliza la infra de `generaciones`/`jobs`/worker
 # para colgarse de Actividad IA + streaming. El worker DESPACHA un job de proceso a su EJECUTOR
 # (ver `EJECUTORES_PROCESO`) en vez de reconstruir un `procesar` de claude. El spec de un job de
 # proceso es PLANO: {"kind": <PROC_*>, ...params}  (sin `prompt`/`procesar`/`cwd`; el ejecutor
 # lee los params).
 PROC_RENDER_VIDEO = "render-video"
 PROC_TRANSCRIBIR = "transcribir"
+# Transcripcion del GESTOR DE AUDIO (audio→texto): mismo motor whisper.cpp (v3 turbo) que el ASR
+# de subtitulos, pero persiste en `audio_transcripciones` (no en `video_subtitulos`). Local,
+# gratuito y bajo demanda, igual que el resto de procesos.
+PROC_TRANSCRIBIR_AUDIO = "transcribir-audio"
 # Generacion de ARTE (imagen) del auto-pipeline: un job de PROCESO. La llamada HTTP al
 # proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
 # en el carril de proceso (NO bloquea el copy) y heredan idempotencia (clave estable en
@@ -113,7 +117,9 @@ PROC_IMAGEN = "imagen"
 
 # KINDS de proceso (no-claude). El worker, al reclamar un job, mira si su `spec["kind"]` esta
 # aqui; si lo esta, despacha al ejecutor; si no, sigue el camino `claude` de siempre.
-KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_IMAGEN})
+KINDS_PROCESO = frozenset(
+    {PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_TRANSCRIBIR_AUDIO, PROC_IMAGEN}
+)
 
 # ------------------------------------------------------------------------------------------- #
 # Jobs de AUTO-DESARROLLO (carril `dev`): los reclama SOLO `worker_dev`, no el worker de        #
@@ -138,6 +144,7 @@ CARRIL_DEV = "dev"
 EJECUTORES_PROCESO: dict[str, str] = {
     PROC_RENDER_VIDEO: "keni_consola.motores.estudio_video:ejecutar_render",
     PROC_TRANSCRIBIR: "keni_consola.motores.transcripcion:ejecutar_transcripcion",
+    PROC_TRANSCRIBIR_AUDIO: "keni_consola.motores.audio:ejecutar_transcripcion_audio",
     # El ejecutor del arte vive junto al resto de la logica de auto-arte (seleccion + dedup +
     # registro), que ya conoce `media`/`repos`/`generaciones`; el worker lo despacha igual que
     # ASR/video, sin que worker.py tenga que conocer la imagen (dispatch GENERICO de proceso).

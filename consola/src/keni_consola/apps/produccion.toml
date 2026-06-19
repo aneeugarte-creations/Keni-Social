@@ -61,6 +61,8 @@ modulos_backend = [
   # Motor de video (Ola VIDEO): api/video.py (lo crea otro agente). Declarado aqui para que
   # el lint de fronteras mapee el router a esta app.
   "video",
+  # Gestor de audio (audio→texto): api/audio.py. Mismo motor whisper.cpp (v3 turbo) que el de video.
+  "audio",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
@@ -68,6 +70,7 @@ modulos_backend = [
 rutas_frontend = [
   "/contenido/imagen",
   "/contenido/video",
+  "/contenido/audio",
   "/contenido/texto",
   "/contenido/texto/documentos",
   "/contenido/texto/estrategia",
@@ -122,6 +125,18 @@ descripcion = "Estudio de video: el toque RRSS sobre un clip ya editado — form
 grupo = "contenido"
 grupo_orden = 20
 orden = 20
+
+# Gestor de audio (audio→texto): sube cualquier audio o vídeo, extrae la voz y la transcribe con
+# timestamps (whisper.cpp v3 turbo, local), y la trabaja con agentes de Claude (limpiar/resumir/
+# aclarar/corregir). Mismo bloque CONTENIDO, después de Video.
+[[nav]]
+ruta = "/contenido/audio"
+etiqueta = "Audio"
+icono = "AudioLines"
+descripcion = "Gestor de audio→texto: sube cualquier audio o vídeo, extrae la voz y genera la transcripción con timestamps; límpiala, resúmela o corrígela con agentes de Claude."
+grupo = "contenido"
+grupo_orden = 20
+orden = 30
 
 # (La página «Texto»/Prompts se RETIRÓ del bloque Contenido: los prompts viven ahora dentro de
 # cada fase del pipeline en «Contexto» —Máquina—, y el contexto editorial se inyecta desde ahí.

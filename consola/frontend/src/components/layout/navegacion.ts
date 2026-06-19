@@ -1,5 +1,6 @@
 import {
   Activity,
+  AudioLines,
   BarChart3,
   Bot,
   CalendarClock,
@@ -52,6 +53,7 @@ export interface GrupoNav {
  */
 export const ICONOS: Record<string, LucideIcon> = {
   Activity,
+  AudioLines,
   BarChart3,
   Bot,
   CalendarClock,

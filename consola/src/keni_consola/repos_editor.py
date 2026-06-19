@@ -295,6 +295,53 @@ def actualizar_video_subtitulo(
     return db.actualizar_video_subtitulo(subtitulo_id, campos)
 
 
+# --------------------------------------------------------------------------- #
+# Gestor de audio: transcripciones (audio→texto)                                #
+# --------------------------------------------------------------------------- #
+
+
+def crear_audio_transcripcion(
+    *,
+    marca: str,
+    nombre: str = "",
+    media_id: str = "",
+    idioma: str = "es-MX",
+    estado: str = "pendiente",
+    duracion_ms: int = 0,
+    segmentos: str = "",
+    texto: str = "",
+    resumen: str = "",
+    error: str = "",
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    return db.crear_audio_transcripcion(
+        marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado=estado,
+        duracion_ms=duracion_ms, segmentos=segmentos, texto=texto, resumen=resumen,
+        error=error, id=id, creado=creado, actualizado=actualizado,
+    )
+
+
+def listar_audio_transcripciones(
+    *, marca: str | None = None, estado: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_audio_transcripciones(marca=marca, estado=estado)
+
+
+def obtener_audio_transcripcion(transcripcion_id: str) -> dict[str, Any] | None:
+    return db.obtener_audio_transcripcion(transcripcion_id)
+
+
+def actualizar_audio_transcripcion(
+    transcripcion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_audio_transcripcion(transcripcion_id, campos)
+
+
+def borrar_audio_transcripcion(transcripcion_id: str) -> bool:
+    return db.borrar_audio_transcripcion(transcripcion_id)
+
 
 # --------------------------------------------------------------------------- #
 # Bloques (almacén de capas reutilizables)                                       #

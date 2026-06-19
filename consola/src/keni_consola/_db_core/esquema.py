@@ -1395,7 +1395,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_video_composiciones_marca ON video_composiciones (marca)",
     "CREATE INDEX IF NOT EXISTS idx_video_composiciones_contenido ON video_composiciones (publicacion_id)",
     # `video_subtitulos`: pista de subtitulos de una composicion. `segmentos` = JSON word-level
-    # del ASR (faster-whisper); `ass` = el ASS renderizado para quemar con ffmpeg. `estado` ∈
+    # del ASR (whisper.cpp); `ass` = el ASS renderizado para quemar con ffmpeg. `estado` ∈
     # {pendiente, transcrito, editado, listo}. La rellena el motor de ASR (motores/transcripcion).
     """
     CREATE TABLE IF NOT EXISTS video_subtitulos (
@@ -1411,6 +1411,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
+    # GESTOR DE AUDIO (audio→texto). Cada fila es una transcripción de un audio/vídeo subido:
+    # `media_id` (clave en el almacén, `audios/<sha>.<ext>`) es el origen; `segmentos` = JSON con
+    # timestamps `[{inicio_ms,fin_ms,texto,palabras}]` que rellena el motor ASR (whisper.cpp v3
+    # turbo, vía `motores/audio`); `texto` = transcripción plana; `resumen` = salida del agente de
+    # resumen (opcional). `estado` ∈ {pendiente, transcribiendo, transcrito, editado, error}. La
+    # corrección y los agentes de Claude (limpiar/resumir/aclarar/corregir) la dejan en 'editado'.
+    """
+    CREATE TABLE IF NOT EXISTS audio_transcripciones (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        nombre       TEXT NOT NULL DEFAULT '',
+        media_id     TEXT NOT NULL DEFAULT '',
+        idioma       TEXT NOT NULL DEFAULT 'es-MX',
+        estado       TEXT NOT NULL DEFAULT 'pendiente',
+        duracion_ms  INTEGER NOT NULL DEFAULT 0,
+        segmentos    TEXT NOT NULL DEFAULT '',
+        texto        TEXT NOT NULL DEFAULT '',
+        resumen      TEXT NOT NULL DEFAULT '',
+        error        TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_marca ON audio_transcripciones (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_audio_transcripciones_estado ON audio_transcripciones (estado)",
     # PIEZAS de la Prompts de Texto (rediseno "version publicada"): cada fila es un
     # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;

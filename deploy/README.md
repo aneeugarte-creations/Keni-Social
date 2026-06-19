@@ -49,8 +49,11 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   (ADR 0001): el worker **no** usa la API de Claude. *Reiniciar el back NO mata los jobs en
   curso del worker* (es otro contenedor). En **local / un solo proceso** no hace falta el
   servicio: el back arranca el worker **en proceso** (un hilo), y la UX no cambia.
-- **whisper (clip→copy) NO está en hosted.** Por privacidad (el audio no sale de la
-  máquina), la transcripción es del perfil local. El gateway hosted no transcribe.
+- **whisper NO está en hosted.** Por privacidad (el audio no sale de la máquina), TODA la
+  transcripción (clip→copy, subtítulos de vídeo y el gestor de audio) corre con whisper.cpp
+  (`whisper-cli` + modelo `v3 turbo`) en el **perfil local**. El worker hosted no lleva
+  `whisper-cli` ni el modelo: el motor `keni_consola.transcripcion` degrada con un error claro en
+  español si faltan. El gateway hosted no transcribe.
 - **Expuesto públicamente tras auth (login multiusuario + CSRF; token interino OPCIONAL).**
   La barrera **principal** de `/api` es el **login multiusuario** user/pass + roles (#130):
   sesión server-side (cookie `keni_consola_sesion`, HttpOnly+SameSite=Strict). El admin

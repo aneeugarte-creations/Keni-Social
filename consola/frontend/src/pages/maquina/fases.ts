@@ -242,6 +242,16 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
     descripcion: "Propone contenido evergreen para la marca",
     fases: [{ nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" }],
   },
+  {
+    titulo: "Audio",
+    descripcion: "Agentes que trabajan las transcripciones del gestor de audio→texto",
+    fases: [
+      { nombre: "Limpiar", es_ia: true, claves: [], ayuda: "Quita silencios, loops, frases repetidas y muletillas conservando el sentido", doc: "prompt/audio/limpiar" },
+      { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Resume la transcripción: idea central, puntos clave y citas", doc: "prompt/audio/resumir" },
+      { nombre: "Aclarar", es_ia: true, claves: [], ayuda: "Detecta fragmentos dudosos y pregunta al equipo para corregirlos", doc: "prompt/audio/aclarar" },
+      { nombre: "Corregir", es_ia: true, claves: [], ayuda: "Aplica las respuestas del equipo a la transcripción", doc: "prompt/audio/corregir" },
+    ],
+  },
 ];
 
 /**
