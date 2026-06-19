@@ -26,6 +26,26 @@ leer_env() {
   printf '%s' "$v"
 }
 
+# ── BLUE-GREEN del back (deploy SIN downtime) ─────────────────────────────────────────
+# Con blue-green ON, un cambio de back arranca el contenedor NUEVO junto al viejo (que sigue
+# sirviendo), espera a que el nuevo esté `healthy` —Traefik solo enruta a sanos— y SOLO
+# entonces retira el viejo: cero ventana sin back sano. KILL-SWITCH: por defecto ON; ponlo a
+# 0/no/off/false en el .env (o exportando KENI_DEPLOY_BLUEGREEN=0) para volver al cutover
+# clásico stop-the-world (stop back -> esquema -> up) al instante si algo fallara.
+# REQUISITO del solape: durante el cutover conviven back VIEJO y NUEVO y la migración de
+# esquema ([4/6]) corre con el viejo aún sirviendo, así que el esquema DEBE ser COMPATIBLE
+# HACIA ATRÁS (expand/contract): la migración de keni-social es ADITIVA e IDEMPOTENTE por
+# diseño (ADR 0004), que es justo lo que el solape exige. Una migración destructiva (DROP/
+# RENAME/constraint NOT NULL sin default) rompería al back viejo durante el solape: si alguna
+# vez se necesita, hazla en dos deploys (expand ahora, contract en el siguiente) o desactiva
+# el blue-green para ese deploy concreto.
+BLUEGREEN="$(leer_env KENI_DEPLOY_BLUEGREEN)"
+[ -n "${KENI_DEPLOY_BLUEGREEN:-}" ] && BLUEGREEN="$KENI_DEPLOY_BLUEGREEN"   # export MANDA sobre el .env
+case "$BLUEGREEN" in
+  0|no|off|false) BLUEGREEN=0 ;;
+  *) BLUEGREEN=1 ;;   # vacío (default) y cualquier otro valor: ON
+esac
+
 # ── GUARDA: la app NO debe conectar a Postgres como SUPERUSUARIO ──────────────────────
 # Con DATABASE_URL vacia el back DERIVA la URL de POSTGRES_* y conecta como el rol
 # bootstrap (superusuario). En hosted eso es un agujero de minimo privilegio: la app debe
@@ -170,8 +190,12 @@ construir mcp    "keni-social/mcp:$MCP_VERSION"
 # Pasos de ESQUEMA/ESTADO: SOLO cuando cambió el código del back/worker (comparten `consola/`).
 # Un deploy de solo front no toca el esquema ni el volumen de estado (ni para el back).
 if [ "$BACK_CAMBIO" = 1 ]; then
-  echo "==> [2/6] stop back (breve indisponibilidad mientras se aplica el esquema)"
-  $DC stop back || true
+  if [ "$BLUEGREEN" = 1 ]; then
+    echo "==> [2/6] back cambió — blue-green ON: NO se para (el viejo sigue sirviendo durante el solape)"
+  else
+    echo "==> [2/6] stop back (blue-green OFF: breve indisponibilidad mientras se aplica el esquema)"
+    $DC stop back || true
+  fi
 else
   echo "==> [2/6] back sin cambios — no se para (sin indisponibilidad)"
 fi
@@ -212,7 +236,10 @@ if docker image inspect "keni-social/worker:$WORKER_VERSION" >/dev/null 2>&1; th
 fi
 
 if [ "$BACK_CAMBIO" = 1 ]; then
-  echo "==> [4/6] asegura esquema Postgres (idempotente; ADR 0004)"
+  # Con blue-green el back VIEJO sigue sirviendo mientras corre esta migración, así que el
+  # esquema debe ser COMPATIBLE HACIA ATRÁS (expand/contract). Lo es por diseño: ADITIVO e
+  # IDEMPOTENTE (ADR 0004). Ver la nota del kill-switch KENI_DEPLOY_BLUEGREEN arriba.
+  echo "==> [4/6] asegura esquema Postgres (idempotente, aditivo; ADR 0004)"
   $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
   # El `back` arranca uvicorn-factory (no pasa por `__main__`), así que la inicialización de la Texto
   # NO corre en su arranque: la materializamos aquí para que los prompts/editorial NUEVOS de la
@@ -249,8 +276,68 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
 }
 foto_previa front; foto_previa back; foto_previa worker; foto_previa transcriptor; foto_previa mcp
 
-echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
-$DC up -d
+# Espera a que al menos $3 contenedores del servicio $1 que corren la imagen $2 estén
+# 'healthy' (timeout $4 s; 0 si lo logra). Necesario en el solape blue-green, donde conviven
+# contenedores de la imagen VIEJA y la NUEVA del mismo servicio y `head -n1` no basta.
+espera_sano_imagen() {  # $1 servicio ; $2 imagen:tag ; $3 N sanos requeridos ; $4 timeout(s)
+  transcurrido=0
+  while [ "$transcurrido" -le "$4" ]; do
+    sanos=0
+    for cid in $($DC ps -q "$1" 2>/dev/null); do
+      img="$(docker inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null || true)"
+      [ "$img" = "$2" ] || continue
+      est="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo desconocido)"
+      [ "$est" = "healthy" ] && sanos=$((sanos + 1))
+    done
+    [ "$sanos" -ge "$3" ] && return 0
+    sleep 5; transcurrido=$((transcurrido + 5))
+  done
+  echo "==> $1: solo ${sanos:-0}/$3 contenedores de $2 sanos tras ${4}s" >&2
+  return 1
+}
+
+# BLUE-GREEN del back: arranca el back NUEVO junto al viejo, espera a que el nuevo esté sano
+# (Traefik solo enruta a sanos), recrea el viejo a la imagen nueva con el nuevo ya sirviendo y
+# por último retira la réplica extra. Cero ventana sin back sano. Devuelve 1 SOLO si el back
+# nuevo nunca llega a sano (imagen mala): en ese caso el caller retira el nuevo y deja al viejo
+# sirviendo (sin downtime) y sale en rojo. El resto de fallos los recoge la verificación [6/6].
+# Naming de réplicas: compose nombra back-1 (índice 1, el viejo) y back-2 (índice 2, el nuevo);
+# `--scale back=1` retira el índice MÁS ALTO, así que el orden recrear-viejo-luego-bajar deja
+# como superviviente el índice 1 ya con la imagen nueva.
+rodar_back() {  # usa NEW (imagen nueva del back). 0 = listo para [6/6] ; 1 = back nuevo no arrancó.
+  echo "==> blue-green del back: arranca el contenedor NUEVO junto al viejo (scale=2, sin recrear el viejo)"
+  $DC up -d --no-deps --no-recreate --scale back=2 back
+  $DC ps back
+  if ! espera_sano_imagen back "$NEW" 1 300; then
+    return 1
+  fi
+  echo "==> blue-green del back: nuevo SANO y enrutado; recrea el viejo a la imagen nueva (sirve el nuevo durante el corte)"
+  $DC up -d --no-deps --scale back=2 back
+  espera_sano_imagen back "$NEW" 2 300 \
+    || echo "==> aviso: el segundo back no quedó sano en plazo; lo resuelve la verificación [6/6]" >&2
+  echo "==> blue-green del back: retira la réplica extra (scale=1); queda 1 back NUEVO sirviendo"
+  $DC up -d --no-deps --scale back=1 back
+  return 0
+}
+
+if [ "$BLUEGREEN" = 1 ] && [ "$BACK_CAMBIO" = 1 ]; then
+  echo "==> [5b/6] up de los servicios NO-back + blue-green del back (sin downtime)"
+  NEW="keni-social/back:$BACK_VERSION"
+  # El resto del stack con el up normal (recrea solo lo que cambió); el back se actualiza aparte.
+  otros="$($DC config --services | grep -vx back || true)"
+  # shellcheck disable=SC2086  # $otros es una lista de servicios: word-splitting deliberado
+  [ -n "$otros" ] && $DC up -d $otros
+  if ! rodar_back; then
+    printf '\033[31m==> blue-green: el back NUEVO no llegó a healthy. Retiro la réplica nueva; PROD sigue sirviendo con el back VIEJO (sin downtime).\033[0m\n' >&2
+    $DC up -d --no-deps --scale back=1 back || true   # retira el back nuevo malo (índice alto); el viejo queda
+    docker rmi "$NEW" >/dev/null 2>&1 || true          # untag: el próximo deploy del mismo contenido RECONSTRUYE
+    printf '\033[31m==> Deploy EN ROJO (back nuevo no arrancó). Revisa: docker logs de un keni-social-back-*. Sin downtime: el viejo sigue.\033[0m\n' >&2
+    exit 1
+  fi
+else
+  echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
+  $DC up -d
+fi
 $DC ps
 
 espera_sano() {  # $1 = servicio compose ; $2 = timeout en segundos. 0 si llega a healthy.
