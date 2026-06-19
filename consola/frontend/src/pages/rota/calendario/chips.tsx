@@ -23,6 +23,7 @@ import {
 } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import { COBERTURA_BADGE } from "@/lib/estado-color";
 import {
   COBERTURA,
   COLOR_PRIORIDAD,
@@ -99,11 +100,15 @@ export function ChipEventoCalendario({
           ))}
         </span>
       ) : cubrenPorTurno.length > 0 ? (
-        <span className="inline-flex w-fit items-center rounded border border-emerald-300 bg-emerald-50 px-1 text-[10px] font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+        <span
+          className={`inline-flex w-fit items-center rounded border px-1 text-[10px] font-medium ${COBERTURA_BADGE["cubierto-turno"]}`}
+        >
           Cubierto · {textoTurno}
         </span>
       ) : (
-        <span className="inline-flex w-fit items-center rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+        <span
+          className={`inline-flex w-fit items-center rounded border px-1 text-[10px] font-medium ${COBERTURA_BADGE["sin-cubrir"]}`}
+        >
           Sin cubrir
         </span>
       )}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { EstadoCobertura, Semaforo } from "@/lib/cobertura";
 
-import { COBERTURA_TEXTO, SEMAFORO_ESTILO } from "./estado-color";
+import { COBERTURA_BADGE, COBERTURA_TEXTO, SEMAFORO_ESTILO } from "./estado-color";
 
 /**
  * Fija la taxonomía CENTRAL de color: cada fase del semáforo y cada estado de cobertura mapea a sus
@@ -64,5 +64,29 @@ describe("COBERTURA_TEXTO — color del corte del KPI por estado de cobertura", 
     const estados: EstadoCobertura[] = ["sin-cubrir", "cubierto-turno", "cogido"];
     for (const e of estados) expect(COBERTURA_TEXTO[e]).toBeTruthy();
     expect(Object.keys(COBERTURA_TEXTO).sort()).toEqual([...estados].sort());
+  });
+});
+
+describe("COBERTURA_BADGE — píldora rellena de cobertura del chip del calendario", () => {
+  it("verde relleno para cubierto-turno («Cubierto · <nombres>»)", () => {
+    expect(COBERTURA_BADGE["cubierto-turno"]).toBe(
+      "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+    );
+  });
+
+  it("cogido comparte el verde relleno de cubierto-turno", () => {
+    expect(COBERTURA_BADGE.cogido).toBe(COBERTURA_BADGE["cubierto-turno"]);
+  });
+
+  it("ámbar relleno para sin-cubrir (el chip usa ámbar, no el rojo del KPI)", () => {
+    expect(COBERTURA_BADGE["sin-cubrir"]).toBe(
+      "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+    );
+  });
+
+  it("cubre los tres estados de cobertura", () => {
+    const estados: EstadoCobertura[] = ["sin-cubrir", "cubierto-turno", "cogido"];
+    for (const e of estados) expect(COBERTURA_BADGE[e]).toBeTruthy();
+    expect(Object.keys(COBERTURA_BADGE).sort()).toEqual([...estados].sort());
   });
 });

@@ -73,6 +73,23 @@ export const COBERTURA_TEXTO: Record<EstadoCobertura, string> = {
   cogido: "text-emerald-700 dark:text-emerald-300",
 };
 
+/**
+ * Badge RELLENO (borde + fondo + texto, con `dark:`) por estado de cobertura, para el chip del
+ * calendario de la rota. Es la píldora compacta de cobertura del chip de evento. Replica EXACTAMENTE
+ * las clases que el chip pintaba inline:
+ *  - `cubierto-turno`/`cogido` → verde relleno («Cubierto · <nombres>»: lo cubre quien está de turno).
+ *  - `sin-cubrir`              → ÁMBAR relleno («Sin cubrir»: hueco real). El chip usa ámbar (no el
+ *    rojo del KPI) para esta píldora; se conserva su lenguaje tal cual.
+ */
+export const COBERTURA_BADGE: Record<EstadoCobertura, string> = {
+  "cubierto-turno":
+    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+  cogido:
+    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+  "sin-cubrir":
+    "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+};
+
 // FASE 2 (preparado, SIN consumidor todavía — no se añaden entradas para no dejar código muerto que
 // moleste a eslint): cuando el cockpit muestre el estado de PUBLICACIÓN de una pieza, esta taxonomía
 // crece con:
