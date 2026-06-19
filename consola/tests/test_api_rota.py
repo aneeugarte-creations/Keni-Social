@@ -332,19 +332,27 @@ def test_editar_alcance_serie_propaga_a_todas_menos_la_fecha(cliente):
     cuerpo = _crear_serie(cliente)
     sid = cuerpo["serie_id"]
     primero = cuerpo["eventos"][0]  # lunes 2026-05-25
+    # Renombra (se propaga) y mueve SU fecha a un día FUERA de la semana de la serie (2026-06-15):
+    # así las fechas no chocan y se ve claro que la fecha NO se propaga a las demás ocurrencias.
     r = cliente.patch(
         f"/api/rota/eventos/{primero['id']}?alcance=serie",
-        json={"titulo": "Renombrado", "fecha": "2026-05-26"},
+        json={"titulo": "Renombrado", "fecha": "2026-06-15"},
     )
     assert r.status_code == 200
     assert r.json()["propagados"] == 4  # las otras 4 ocurrencias
-    titulos = _titulos_por_fecha(cliente, sid)
+    serie = [
+        e for e in cliente.get("/api/rota/eventos").json()["eventos"] if e["serie_id"] == sid
+    ]
     # El título se propaga a TODA la serie...
-    assert set(titulos.values()) == {"Renombrado"}
-    # ...pero la fecha NO: cada ocurrencia conserva su día (la editada movió SOLO la suya).
-    assert "2026-05-26" in titulos  # el primero se movió del 25 al 26
-    assert "2026-05-27" in titulos  # el miércoles sigue en su sitio
-    assert len(titulos) == 5
+    assert {e["titulo"] for e in serie} == {"Renombrado"}
+    # ...pero la fecha NO: las otras 4 conservan su día (L-V) y solo la editada se movió al 15.
+    assert sorted(e["fecha"] for e in serie) == [
+        "2026-05-26",
+        "2026-05-27",
+        "2026-05-28",
+        "2026-05-29",
+        "2026-06-15",
+    ]
 
 
 def test_editar_alcance_siguientes_no_toca_las_anteriores(cliente):
