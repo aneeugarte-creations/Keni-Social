@@ -8,8 +8,8 @@ import { useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Button } from "@/components/ui/button";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { SeccionColapsable } from "@/pages/configuracion/SeccionColapsable";
 import { PanelPlan } from "@/pages/piezas/GestionPlan";
 import { GestionPiezas } from "@/pages/piezas/GestionPiezas";
 import { PanelLineasPlan } from "@/pages/piezas/PanelLineasPlan";
@@ -30,9 +30,12 @@ export default function CalendarioPublicacion() {
   // render (el panel y la sección capturan su estado inicial); el efecto de abajo limpia luego
   // el parámetro.
   const [horariosDeepLink] = React.useState(() => searchParams.get("horarios") === "1");
+  // «Plan y horarios» es una SUBPÁGINA (no un panel lateral ni pop-up): se abre a pantalla
+  // completa con su flecha «← volver». `?horarios=1` la abre directamente.
+  const [mostrarPlan, setMostrarPlan] = React.useState(horariosDeepLink);
 
-  // Si se llega con ?horarios=1, limpia el parámetro de la URL (el panel ya abrió desplegado en
-  // "Plan y horarios" por `horariosDeepLink`, congelado en el primer render).
+  // Si se llega con ?horarios=1, limpia el parámetro de la URL (la subpágina ya abrió por
+  // `horariosDeepLink`, congelado en el primer render).
   React.useEffect(() => {
     if (searchParams.get("horarios") === "1") {
       const next = new URLSearchParams(searchParams);
@@ -41,38 +44,44 @@ export default function CalendarioPublicacion() {
     }
   }, [searchParams, setSearchParams]);
 
+  // SUBPÁGINA «Plan y horarios»: a pantalla completa, con «← volver». El editor es POR MARCA
+  // (key por marca: remontar al cambiar evita arrastrar el plan de la marca anterior).
+  if (mostrarPlan && marcaActiva) {
+    return (
+      <>
+        <TituloPagina
+          titulo="Plan y horarios"
+          icono={CalendarDays}
+          onAtras={() => setMostrarPlan(false)}
+        />
+        <PanelPlan key={marcaActiva} marca={marcaActiva} />
+      </>
+    );
+  }
+
   return (
     <>
       <TituloPagina titulo="Programación" icono={CalendarDays} />
       <AccionesPagina>
-        {/* Barra superior limpia: UN "⋮" con la entrada «Ajustes» (plan y horarios + publicación
-            real). */}
+        {/* «Plan y horarios» abre su SUBPÁGINA (no pop-up). El "⋮" queda para los ajustes de
+            publicación real. */}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!marcaActiva}
+          onClick={() => setMostrarPlan(true)}
+        >
+          Plan y horarios
+        </Button>
         <MenuAcciones
           ajustesTitulo="Ajustes de programación"
-          ajustesAbiertoInicial={horariosDeepLink}
           ajustes={
-            <>
-              {/* Plan y horarios INLINE: el formulario vive en la capa base del panel (sección
-                  colapsable), no escondido tras un botón que abre un diálogo. */}
-              {marcaActiva && (
-                <SeccionColapsable
-                  titulo="Plan y horarios"
-                  abiertaInicial={horariosDeepLink}
-                >
-                  {/* key por marca: el editor es POR MARCA; remontar al cambiar evita arrastrar
-                      el conjunto de líneas/cupos de la marca anterior. */}
-                  <PanelPlan key={marcaActiva} marca={marcaActiva} />
-                </SeccionColapsable>
-              )}
-              {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
-                  ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
-              <PanelAjustes
-                grupos={GRUPOS_PIEZA}
-                titulo="Ajustes de publicación"
-                acento="amber"
-                descripcion="Habilita/deshabilita publicación automática en redes, con excepciones por marca."
-              />
-            </>
+            <PanelAjustes
+              grupos={GRUPOS_PIEZA}
+              titulo="Ajustes de publicación"
+              acento="amber"
+              descripcion="Habilita/deshabilita publicación automática en redes, con excepciones por marca."
+            />
           }
         />
       </AccionesPagina>

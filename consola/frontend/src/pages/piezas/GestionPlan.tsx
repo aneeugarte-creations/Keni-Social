@@ -13,7 +13,7 @@
  * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Plus, Save, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -60,11 +60,13 @@ interface Fila {
   horas: string;
 }
 
-/** Una fila del plan: una clave (id de línea o señal) + su etiqueta legible + si lleva horario. */
+/** Una fila del plan: una clave (id de línea o señal) + su etiqueta legible + si lleva horario.
+ *  `esLinea` distingue las LÍNEAS reales (se pueden quitar) de las señales del motor. */
 interface FilaPlan {
   clave: string;
   etiqueta: string;
   conHorario: boolean;
+  esLinea: boolean;
 }
 
 export function PanelPlan({ marca }: { marca: string }) {
@@ -91,16 +93,39 @@ export function PanelPlan({ marca }: { marca: string }) {
       clave: l.id,
       etiqueta: l.grupo ? `${l.grupo} · ${l.nombre}` : l.nombre,
       conHorario: true,
+      esLinea: true,
     }));
     return [
-      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false },
+      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false, esLinea: false },
       ...lineas,
-      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true },
+      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true, esLinea: false },
     ];
   }, [lineasQuery.data]);
 
   const [filas, setFilas] = React.useState<Record<string, Fila>>({});
   const [inicializado, setInicializado] = React.useState(false);
+  const [nuevaLinea, setNuevaLinea] = React.useState("");
+
+  const claveLineas = ["etiquetas", "vertical", marca] as const;
+  const crearLinea = useMutation({
+    mutationFn: (nombre: string) =>
+      api.crearEtiqueta({ nombre: nombre.trim(), clase: "vertical", marca }),
+    onSuccess: () => {
+      setNuevaLinea("");
+      void queryClient.invalidateQueries({ queryKey: claveLineas });
+      toast.success("Línea añadida.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const quitarLinea = useMutation({
+    mutationFn: (id: string) => api.actualizarEtiqueta(id, { activo: false }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: claveLineas });
+      void queryClient.invalidateQueries({ queryKey: ["franjas"] });
+      toast.success("Línea quitada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   const valorAjuste = React.useCallback(
     (clave: string) => {
@@ -205,8 +230,8 @@ export function PanelPlan({ marca }: { marca: string }) {
   return (
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Cuántos contenidos al día publica cada línea de esta marca y a qué horas (CDMX). Las
-        líneas se gestionan en su pestaña; aquí defines volumen y horario.
+        Las líneas de esta marca: cuántos contenidos al día publica cada una y a qué horas
+        (CDMX). Añade o quita líneas aquí mismo.
       </p>
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -217,7 +242,7 @@ export function PanelPlan({ marca }: { marca: string }) {
           {filasPlan.map((fila) => (
             <div
               key={fila.clave}
-              className="grid grid-cols-[12rem_5rem_minmax(0,1fr)] items-center gap-3"
+              className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_2rem] items-center gap-3"
             >
               <Label className="text-sm">{fila.etiqueta}</Label>
               <Input
@@ -249,8 +274,54 @@ export function PanelPlan({ marca }: { marca: string }) {
                   Sin horario: sale al instante.
                 </span>
               )}
+              {fila.esLinea ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  aria-label={`Quitar ${fila.etiqueta}`}
+                  disabled={quitarLinea.isPending}
+                  onClick={() => quitarLinea.mutate(fila.clave)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              ) : (
+                <span />
+              )}
             </div>
           ))}
+
+          {/* Añadir una LÍNEA nueva a esta marca (la crea de verdad; aparece como fila). */}
+          <div className="grid grid-cols-[12rem_minmax(0,1fr)_auto] items-center gap-3 pt-1">
+            <Label className="text-sm text-muted-foreground">Añadir línea</Label>
+            <Input
+              value={nuevaLinea}
+              placeholder="Nombre de la línea"
+              maxLength={60}
+              onChange={(e) => setNuevaLinea(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && nuevaLinea.trim()) {
+                  e.preventDefault();
+                  crearLinea.mutate(nuevaLinea);
+                }
+              }}
+              aria-label="Nombre de la nueva línea"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!nuevaLinea.trim() || crearLinea.isPending}
+              onClick={() => crearLinea.mutate(nuevaLinea)}
+            >
+              {crearLinea.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Añadir
+            </Button>
+          </div>
 
           <div className="flex items-center justify-between border-t border-border/60 pt-3">
             <span className="text-sm text-muted-foreground">
