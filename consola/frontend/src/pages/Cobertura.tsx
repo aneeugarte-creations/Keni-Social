@@ -420,18 +420,23 @@ export default function Cobertura() {
     <>
       <AvisoSalud />
 
-      {/* Pestañas de flujo: Candidatas (la mesa) · En marcha · Descartadas */}
-      <div className="mb-4 flex gap-1 border-b" role="tablist" aria-label="Vista del pool">
+      {/* Pestañas de flujo: Candidatas (la mesa) · En marcha · Descartadas. Mismo lenguaje de
+          subrayado que el primitivo `ui/tabs` y la subnav del topbar (no un tercer estilo). */}
+      <div
+        className="mb-4 flex h-9 items-center gap-1 border-b border-border"
+        role="tablist"
+        aria-label="Vista del pool"
+      >
         {VISTAS.map((v) => (
           <button
             key={v.id}
             type="button"
             role="tab"
             aria-selected={vista === v.id}
-            className={`px-3 py-1.5 text-sm transition-colors ${
+            className={`-mb-px inline-flex h-9 items-center whitespace-nowrap border-b-2 px-3 text-sm transition-colors ${
               vista === v.id
-                ? "border-b-2 border-primary font-medium text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+                ? "border-foreground font-medium text-foreground"
+                : "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground"
             }`}
             onClick={() => setVista(v.id)}
             data-testid={`tab-${v.id}`}

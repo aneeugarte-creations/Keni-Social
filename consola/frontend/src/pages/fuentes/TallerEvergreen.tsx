@@ -303,12 +303,12 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
             value={tipoManual}
             onValueChange={(v) => setTipoManual(v as "idea" | "interna")}
           >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="idea" className="gap-1.5">
+            <TabsList className="w-full">
+              <TabsTrigger value="idea" className="flex-1 justify-center gap-1.5">
                 <Lightbulb className="h-4 w-4" />
                 Idea
               </TabsTrigger>
-              <TabsTrigger value="interna" className="gap-1.5">
+              <TabsTrigger value="interna" className="flex-1 justify-center gap-1.5">
                 <Building2 className="h-4 w-4" />
                 Interno AMX
               </TabsTrigger>
