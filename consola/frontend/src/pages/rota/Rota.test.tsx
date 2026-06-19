@@ -420,11 +420,16 @@ describe("Turnos — home «Hoy»", () => {
     expect(screen.getByText("Tu turno hoy")).toBeInTheDocument();
   });
 
-  it("HERO vacío: si hoy no hay turno, dice «Hoy libras»", async () => {
+  it("HERO: si hoy no hay turno, el hero NO se muestra (sin cartel de «libras»)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
     renderRota({ misTurnosMes: { mis_turnos: [] } });
-    expect(await screen.findByText(/Hoy libras/)).toBeInTheDocument();
+    // Espera a que la página cargue (la sección «Lo mío hoy» siempre está) y comprueba que el hero
+    // del turno no aparece: ni el cartel de «libras» ni los rótulos de turno.
+    await screen.findByText(/Lo mío hoy/);
+    expect(screen.queryByText(/Hoy libras/)).toBeNull();
+    expect(screen.queryByText("Tu turno hoy")).toBeNull();
+    expect(screen.queryByText("Tu próximo turno")).toBeNull();
   });
 
   it("POR CUBRIR HOY: un evento de hoy sin dueño ni turno se cuenta en el aviso de huecos", async () => {

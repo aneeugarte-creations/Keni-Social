@@ -76,30 +76,35 @@ export function Hoy({ onVerAgenda }: { onVerAgenda: () => void }) {
 
   return (
     <div className="space-y-5">
-      {/* 1) HERO: tu próximo turno */}
-      <Card>
-        <CardContent className="flex items-center gap-3 p-4">
-          <CalendarClock className="h-5 w-5 shrink-0 text-muted-foreground" />
-          {turnoQ.isLoading ? (
-            <Skeleton className="h-5 w-48" />
-          ) : proximo ? (
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                {turnoHoy ? "Tu turno hoy" : "Tu próximo turno"}
-              </span>
-              <span className="text-base font-semibold">{proximo.franja_nombre}</span>
-              {proximo.inicio && (
-                <span className="tabular-nums text-sm text-muted-foreground">
-                  {proximo.inicio}–{proximo.fin}
-                </span>
-              )}
-              {!turnoHoy && <span className="text-sm text-muted-foreground">· {proximo.fecha}</span>}
-            </div>
-          ) : (
-            <span className="text-sm text-muted-foreground">Hoy libras. No tienes turno asignado.</span>
-          )}
-        </CardContent>
-      </Card>
+      {/* 1) HERO: tu turno (de hoy o el próximo). Solo se muestra si TIENES turno; si libras, no
+          aparece (no metemos un cartel de «no tienes nada» que solo es ruido). */}
+      {(turnoQ.isLoading || proximo) && (
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <CalendarClock className="h-5 w-5 shrink-0 text-muted-foreground" />
+            {turnoQ.isLoading ? (
+              <Skeleton className="h-5 w-48" />
+            ) : (
+              proximo && (
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {turnoHoy ? "Tu turno hoy" : "Tu próximo turno"}
+                  </span>
+                  <span className="text-base font-semibold">{proximo.franja_nombre}</span>
+                  {proximo.inicio && (
+                    <span className="tabular-nums text-sm text-muted-foreground">
+                      {proximo.inicio}–{proximo.fin}
+                    </span>
+                  )}
+                  {!turnoHoy && (
+                    <span className="text-sm text-muted-foreground">· {proximo.fecha}</span>
+                  )}
+                </div>
+              )
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {t.hayError && t.sinDatos ? (
         <BloqueError
