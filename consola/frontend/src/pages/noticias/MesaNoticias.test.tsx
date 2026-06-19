@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Historia } from "@/types";
 
-import { agruparPorMacro } from "./MesaNoticias";
+import { agruparPorMacro, historiasDelGrupo } from "./MesaNoticias";
 
 function historia(id: string, overrides: Partial<Historia> = {}): Historia {
   return {
@@ -90,5 +90,27 @@ describe("agruparPorMacro", () => {
       historia("b", { tema_macro: "" }),
     ]);
     expect(bloques.every((b) => b.tipo === "suelta")).toBe(true);
+  });
+});
+
+describe("historiasDelGrupo", () => {
+  const lista = [
+    historia("a", { grupo: "Fútbol" }),
+    historia("b", { grupo: "Motor" }),
+    historia("c", { grupo: "Fútbol" }),
+    historia("d", { grupo: "" }),
+  ];
+
+  it("'' (Todas) no filtra: devuelve todas en orden", () => {
+    expect(historiasDelGrupo(lista, "").map((h) => h.id)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("un grupo concreto deja solo sus candidatas, conservando el orden", () => {
+    expect(historiasDelGrupo(lista, "Fútbol").map((h) => h.id)).toEqual(["a", "c"]);
+    expect(historiasDelGrupo(lista, "Motor").map((h) => h.id)).toEqual(["b"]);
+  });
+
+  it("un grupo sin candidatas devuelve lista vacía", () => {
+    expect(historiasDelGrupo(lista, "Boxeo")).toEqual([]);
   });
 });

@@ -187,6 +187,41 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
     assert datos["total_generados"] == 1
 
 
+def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
+    # Claro Sports usa GRUPOS: la mesa devuelve la barra de chips (ordenada por prioridad
+    # editorial, con su conteo) y la lista de candidatas con su grupo, clasificadas por keywords.
+    # Sin plan, el front navega por estos grupos en vez de degradar a lista plana.
+    bootstrap_lineas.inicializar_lineas()
+    monkeypatch.delenv("KENI_PLAN_DIA", raising=False)
+    monkeypatch.delenv("KENI_PLAN_DIA::claro-sports", raising=False)
+    _inicializar("box1", score=0.9, marca="claro-sports", categoria="otros-deportes",
+                 titulo="Canelo Álvarez confirma su próxima pelea de box")
+    _inicializar("f1", score=0.8, marca="claro-sports", categoria="motor",
+                 titulo="Checo Pérez debuta con Cadillac en la Fórmula 1")
+    _inicializar("liga", score=0.7, marca="claro-sports", categoria="futbol",
+                 titulo="Cruz Azul vence al América en la Liga MX")
+
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "claro-sports"}).json()
+    # Barra de grupos: orden de prioridad editorial.
+    nombres = [g["grupo"] for g in datos["grupos"]]
+    assert nombres[:3] == ["Fútbol", "Motor", "Olímpicos"]
+    conteo = {g["grupo"]: g["en_pool"] for g in datos["grupos"]}
+    assert conteo["Boxeo"] == 1 and conteo["Motor"] == 1 and conteo["Fútbol"] == 1
+    # Cada candidata trae su grupo clasificado por léxico.
+    grupo_de = {h["id"]: h["grupo"] for h in datos["historias_grupo"]}
+    assert grupo_de["box1"] == "Boxeo"
+    assert grupo_de["f1"] == "Motor"
+    assert grupo_de["liga"] == "Fútbol"
+
+
+def test_mesa_sin_grupos_no_trae_barra(cliente):
+    # UnoTV no usa grupos: la mesa no trae barra (el front mantiene el layout por plan).
+    bootstrap_lineas.inicializar_lineas()
+    _inicializar("c1", marca="unotv", categoria="mx")
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    assert datos["grupos"] == [] and datos["historias_grupo"] == []
+
+
 # --------------------------------------------------------------------------- #
 # POST /api/noticias/historias/{id}/restaurar                                  #
 # --------------------------------------------------------------------------- #

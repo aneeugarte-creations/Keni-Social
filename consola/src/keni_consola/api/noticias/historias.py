@@ -322,6 +322,26 @@ _MESA_POR_LINEA_MAX = 20
 # Muestra del pool que se reparte por línea (el pool viene rankeado por score: con cientos
 # de historias vivas la muestra cubre de sobra el top de cada línea).
 _MESA_MUESTRA = 300
+# Tope de candidatas (rankeadas por score) que viajan en la lista de navegación por GRUPO.
+# El conteo por grupo (`en_pool`) usa la muestra completa; esta lista es solo el browse visible.
+_MESA_GRUPO_TOPE = 60
+
+# Orden de los GRUPOS en la barra de navegación de la Mesa (mayor prioridad primero), según el
+# peso editorial real de Claro Sports. Un grupo fuera de esta lista va después, alfabético.
+_ORDEN_GRUPOS: tuple[str, ...] = (
+    "Fútbol", "Motor", "Olímpicos", "NFL", "Boxeo", "NBA", "Béisbol",
+    "Otros deportes", "Actualidad",
+)
+
+
+def _grupos_ordenados(etiquetas: list[dict[str, Any]]) -> list[str]:
+    """Grupos distintos (no vacíos) de las líneas de una marca, en el orden de la barra.
+
+    Vacío si la marca no usa grupos (p. ej. UnoTV): la Mesa conserva su layout por plan.
+    """
+    presentes = {(e.get("grupo") or "") for e in etiquetas if (e.get("grupo") or "")}
+    en_orden = [g for g in _ORDEN_GRUPOS if g in presentes]
+    return en_orden + sorted(g for g in presentes if g not in _ORDEN_GRUPOS)
 
 
 async def mesa(request: Request) -> Response:
@@ -375,6 +395,25 @@ async def mesa(request: Request) -> Response:
         destino = cat if cat in plan else "__fuera__"
         por_linea_pool.setdefault(destino, []).append(c)
 
+    # Barra de GRUPOS (navegación temática): solo marcas con grupos definidos (p. ej. Claro
+    # Sports). Clasifica cada candidata en su LÍNEA por léxico (keywords) y la cuelga de su GRUPO.
+    # El resto de marcas (sin grupos, p. ej. UnoTV) conserva el layout por plan y se salta el coste.
+    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    grupos_orden = _grupos_ordenados(vert_etiquetas)
+    grupo_por_cluster: dict[str, str] = {}
+    conteo_grupo: dict[str, int] = dict.fromkeys(grupos_orden, 0)
+    if grupos_orden:
+        from ...dominio import clasificador_lineas
+
+        grupo_de_linea = {e["id"]: (e.get("grupo") or "") for e in vert_etiquetas}
+        for c in clusters:
+            texto = f"{c.get('titulo', '')} {c.get('resumen', '')}"
+            lid = clasificador_lineas.clasificar(texto, vert_etiquetas)
+            grupo = grupo_de_linea.get(lid or "", "")
+            grupo_por_cluster[c["id"]] = grupo
+            if grupo in conteo_grupo:
+                conteo_grupo[grupo] += 1
+
     def _etiqueta_linea(clave: str) -> str:
         if clave == "breaking":
             return "Última hora"
@@ -390,7 +429,8 @@ async def mesa(request: Request) -> Response:
     verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
-    def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _historias(lote: list[dict[str, Any]], limite: int | None = None) -> list[dict[str, Any]]:
+        tope = por_linea if limite is None else limite
         return [
             _historia_a_dict(
                 {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("publicacion_id") or "", "")},
@@ -400,7 +440,7 @@ async def mesa(request: Request) -> Response:
                 ),
                 umbral=_evaluar_umbral(c, vocab_memo),
             )
-            for c in lote[:por_linea]
+            for c in lote[:tope]
         ]
 
     # Breaking primero (si el plan lo contempla), luego el orden del plan.
@@ -425,14 +465,29 @@ async def mesa(request: Request) -> Response:
             }
         )
     fuera = por_linea_pool.get("__fuera__", [])
+    # Navegación por GRUPO (si la marca usa grupos): la lista visible (top por score, tag de grupo)
+    # y el resumen ordenado de chips con su conteo. En este modo el front ignora `fuera_de_plan`
+    # (los grupos cubren todo el pool), así que no se construye su lista.
+    historias_grupo: list[dict[str, Any]] = []
+    grupos: list[dict[str, Any]] = []
+    if grupos_orden:
+        historias_grupo = _historias(clusters, limite=_MESA_GRUPO_TOPE)
+        for h in historias_grupo:
+            h["grupo"] = grupo_por_cluster.get(h["id"], "")
+        grupos = [{"grupo": g, "en_pool": conteo_grupo.get(g, 0)} for g in grupos_orden]
     return JSONResponse(
         {
             "marca": marca,
             "plan": bool(plan),
             "lineas": lineas,
-            "fuera_de_plan": {"en_pool": len(fuera), "historias": _historias(fuera)},
+            "fuera_de_plan": {
+                "en_pool": len(fuera),
+                "historias": [] if grupos_orden else _historias(fuera),
+            },
             "total_objetivo": sum(int(v) for v in plan.values()),
             "total_generados": total_generados,
+            "grupos": grupos,
+            "historias_grupo": historias_grupo,
         }
     )
 

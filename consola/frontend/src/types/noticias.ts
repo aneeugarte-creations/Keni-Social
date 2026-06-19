@@ -192,6 +192,12 @@ export interface Historia {
    * evento y la UI las agrupa. '' o ausente = sin macro-evento (se muestra suelta).
    */
   tema_macro?: string;
+  /**
+   * Grupo de navegación de la historia (el chip de la barra: "Fútbol", "Motor", "Boxeo"…).
+   * Lo asigna el clasificador léxico en la Mesa para marcas con grupos (p. ej. Claro Sports);
+   * '' o ausente para marcas sin grupos o candidatas sin clasificar.
+   */
+  grupo?: string;
 }
 
 /** Respuesta paginada de `GET /api/noticias/historias`. */
@@ -221,6 +227,14 @@ export interface MesaLinea {
   historias: Historia[];
 }
 
+/** Un chip de la barra de navegación por grupo (su nombre + cuántas candidatas tiene). */
+export interface GrupoMesa {
+  /** Nombre del grupo (= el chip): "Fútbol", "Motor", "Boxeo"… */
+  grupo: string;
+  /** Candidatas (`estado='nuevo'`) clasificadas en este grupo. */
+  en_pool: number;
+}
+
 /** Respuesta de `GET /api/noticias/mesa?marca=`: el pool segmentado por el plan. */
 export interface RespuestaMesa {
   marca: string;
@@ -232,6 +246,14 @@ export interface RespuestaMesa {
   total_objetivo: number;
   /** Σ generados de las líneas del plan en 24 h. */
   total_generados: number;
+  /**
+   * Barra de navegación por GRUPO, ordenada por prioridad editorial. Vacía para marcas sin
+   * grupos (UnoTV): en ese caso la Mesa mantiene su layout por plan. Cuando trae grupos, la
+   * lista visible es `historias_grupo` (el front ignora `fuera_de_plan`).
+   */
+  grupos?: GrupoMesa[];
+  /** Candidatas (top por score) con su `grupo`, para navegar por la barra. */
+  historias_grupo?: Historia[];
 }
 
 /**

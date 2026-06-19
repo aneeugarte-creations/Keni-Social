@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaLinea } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
-import type { Historia, MesaLinea, RespuestaMesa } from "@/types";
+import type { GrupoMesa, Historia, MesaLinea, RespuestaMesa } from "@/types";
 
 import { TarjetaHistoria } from "./TarjetaHistoria";
 
@@ -80,6 +80,81 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
       </div>
     </div>
   );
+}
+
+// ── Barra de navegación por GRUPO ──────────────────────────────────────────────
+
+/** Un chip de la barra de categorías: nombre + conteo, estado activo/inactivo. */
+function ChipGrupo({
+  etiqueta,
+  n,
+  activo,
+  onClick,
+}: {
+  etiqueta: string;
+  n: number;
+  activo: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={activo}
+      onClick={onClick}
+      data-testid={`chip-grupo-${etiqueta}`}
+      className={cn(
+        "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors",
+        activo
+          ? "border-foreground/15 bg-muted font-medium text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      {etiqueta}
+      {n > 0 && <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">{n}</span>}
+    </button>
+  );
+}
+
+/**
+ * La barra superior de categorías de la Mesa (marcas con grupos, p. ej. Claro Sports): un chip
+ * "Todas" + uno por grupo en el orden de prioridad editorial que envía el back. Scroll horizontal
+ * si no caben. Filtrar es instantáneo (la lista ya viene; el chip solo cambia qué se muestra).
+ */
+function BarraGrupos({
+  grupos,
+  total,
+  sel,
+  onSel,
+}: {
+  grupos: GrupoMesa[];
+  total: number;
+  sel: string;
+  onSel: (g: string) => void;
+}) {
+  return (
+    <div
+      className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1"
+      role="tablist"
+      aria-label="Categorías"
+    >
+      <ChipGrupo etiqueta="Todas" n={total} activo={sel === ""} onClick={() => onSel("")} />
+      {grupos.map((g) => (
+        <ChipGrupo
+          key={g.grupo}
+          etiqueta={g.grupo}
+          n={g.en_pool}
+          activo={sel === g.grupo}
+          onClick={() => onSel(g.grupo)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Candidatas visibles según el chip seleccionado ('' = Todas = sin filtrar). */
+export function historiasDelGrupo(historias: Historia[], grupoSel: string): Historia[] {
+  return grupoSel ? historias.filter((h) => h.grupo === grupoSel) : historias;
 }
 
 // ── Agrupamiento por macro-evento ──────────────────────────────────────────────
@@ -214,6 +289,8 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
   // payload es uno solo; las plegadas siguen mostrando 5).
   const [expandidas, setExpandidas] = React.useState<Set<string>>(() => new Set());
   const [fueraAbierto, setFueraAbierto] = React.useState(false);
+  // Categoría seleccionada en la barra de grupos ('' = Todas). Solo aplica a marcas con grupos.
+  const [grupoSel, setGrupoSel] = React.useState<string>("");
   const porLinea = expandidas.size > 0 || fueraAbierto ? POR_LINEA_EXPANDIDO : POR_LINEA_PLEGADO;
   const clave = CLAVE_MESA(marca, porLinea);
 
@@ -246,6 +323,34 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
   }
 
   const data = query.data;
+
+  // Modo NAVEGACIÓN POR GRUPO (marcas con grupos, p. ej. Claro Sports): barra de categorías + la
+  // lista filtrada por la seleccionada. Sustituye al layout por plan (que para estas marcas no
+  // aplica): el back manda la barra ordenada en `grupos` y la lista en `historias_grupo`.
+  const grupos = data.grupos ?? [];
+  if (grupos.length > 0) {
+    const browse = data.historias_grupo ?? [];
+    const total = grupos.reduce((acc, g) => acc + g.en_pool, 0);
+    const visibles = historiasDelGrupo(browse, grupoSel);
+    return (
+      <div className="space-y-4" data-testid="mesa-grupos">
+        <BarraGrupos grupos={grupos} total={total} sel={grupoSel} onSel={setGrupoSel} />
+        {query.isFetching && !query.isPending && (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-label="Actualizando" />
+        )}
+        {visibles.length === 0 ? (
+          <EstadoVacio
+            icono={Newspaper}
+            titulo="Sin candidatas en esta categoría"
+            texto="Prueba con otra categoría o espera a que lleguen nuevas."
+          />
+        ) : (
+          <ListaHistorias historias={visibles} clave={clave} />
+        )}
+      </div>
+    );
+  }
+
   const alternarExpandida = (linea: string) =>
     setExpandidas((prev) => {
       const next = new Set(prev);
