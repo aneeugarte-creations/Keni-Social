@@ -16,9 +16,3 @@ export const CLASE_AYUDA: Record<ClaseLinea, string> = {
 export const GLOBAL = "__global__";
 
 export const CLAVE_ETIQUETAS = ["etiquetas"] as const;
-
-/** Etiqueta humana del eje de una etiqueta editorial transversal (campaña / tipo). */
-export const CLASE_ETIQUETA_LABEL: Record<string, string> = {
-  campania: "Campaña",
-  tipo: "Tipo",
-};
