@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  CalendarClock,
+  ArrowLeftRight,
+  CalendarCheck,
+  CalendarDays,
+  ClipboardList,
+  Settings2,
 } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { TituloPagina } from "@/components/layout/encabezado";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -22,15 +25,16 @@ import { contarSwapsPendientes } from "./comun";
 
 // ===========================================================================
 
-/** Valores válidos de pestaña (orden = el de la barra). «Hoy» es la home (default). «Mi jornada»
- *  dejó de ser pestaña: es el modo «Mes» del Calendario; el legacy `mis-turnos` se normaliza abajo. */
-const PESTANAS = ["hoy", "calendario", "cobertura", "gestion", "cambios-ausencias"];
+/** Valores válidos de pestaña (orden = el de la barra). «Hoy» es la home (default). «Gestión» es
+ *  admin-only. «Mi jornada» dejó de ser pestaña: es el modo «Mes» del Calendario; el legacy
+ *  `mis-turnos` se normaliza abajo. */
+const VALORES_PESTANA = ["hoy", "calendario", "cobertura", "gestion", "cambios-ausencias"];
 
 /** El deep-link legacy a la antigua pestaña «Mi jornada» (`?tab=mis-turnos`) cae en el
  *  Calendario abierto en su modo «Mes» (la misma vista mensual de jornada). */
 function normalizarTab(tab: string | null): { pestania: string; vistaCalendario: "semana" | "mes" } {
   if (tab === "mis-turnos") return { pestania: "calendario", vistaCalendario: "mes" };
-  if (tab && PESTANAS.includes(tab)) return { pestania: tab, vistaCalendario: "semana" };
+  if (tab && VALORES_PESTANA.includes(tab)) return { pestania: tab, vistaCalendario: "semana" };
   return { pestania: "hoy", vistaCalendario: "semana" };
 }
 
@@ -83,66 +87,64 @@ export default function Rota() {
     }
   }, [tabParam]);
 
+  // La subnav vive en el topbar (como Métricas). «Gestión» es admin-only; la insignia de
+  // «Cambios y ausencias» cuelga de su pestaña (nº de cambios que esperan MI acción).
+  const pestanas: PestanaSeccion[] = [
+    { valor: "hoy", etiqueta: "Hoy", icono: CalendarCheck },
+    { valor: "calendario", etiqueta: "Calendario", icono: CalendarDays },
+    { valor: "cobertura", etiqueta: "Cobertura", icono: ClipboardList },
+    ...(esAdmin ? [{ valor: "gestion", etiqueta: "Gestión", icono: Settings2 }] : []),
+    {
+      valor: "cambios-ausencias",
+      etiqueta: "Cambios y ausencias",
+      icono: ArrowLeftRight,
+      insignia:
+        pendientesCambios > 0 ? (
+          <span
+            className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums"
+            aria-label={`${pendientesCambios} pendientes`}
+          >
+            {pendientesCambios > 99 ? "99+" : pendientesCambios}
+          </span>
+        ) : undefined,
+    },
+  ];
+
   return (
     <>
-      <TituloPagina titulo="Turnos" icono={CalendarClock} />
-      <Tabs value={pestaniaEfectiva} onValueChange={setPestania} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="hoy">Hoy</TabsTrigger>
-          <TabsTrigger value="calendario">Calendario</TabsTrigger>
-          <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
-          {esAdmin && <TabsTrigger value="gestion">Gestión</TabsTrigger>}
-          <TabsTrigger value="cambios-ausencias">
-            Cambios y ausencias
-            {pendientesCambios > 0 && (
-              <span
-                className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums"
-                aria-label={`${pendientesCambios} pendientes`}
-              >
-                {pendientesCambios > 99 ? "99+" : pendientesCambios}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      <PestanasSeccion pestanas={pestanas} activo={pestaniaEfectiva} onSelect={setPestania} />
 
-        {/* «Hoy»: home del trabajador (próximo turno + por-cubrir-hoy + lo-mío-hoy). «Ver toda
-            la agenda» y el «N sin cubrir» del KPI saltan a «Cobertura». */}
-        <TabsContent value="hoy">
-          <Hoy onVerAgenda={() => setPestania("cobertura")} />
-        </TabsContent>
-        <TabsContent value="calendario">
-          {/* `key`={vistaCalendario}: un deep-link legacy a «Mi jornada» (?tab=mis-turnos) que
-              llegue con la página ya montada fuerza el remonte del Calendario en modo «Mes»
-              (su `vistaInicial` solo se lee al montar). El uso normal no cambia este valor. */}
-          <Calendario
-            key={vistaCalendario}
-            lunes={lunes}
-            setLunes={setLunes}
-            esAdmin={esAdmin}
-            vistaInicial={vistaCalendario}
-          />
-        </TabsContent>
-        {/* «Cobertura»: el tablero de Tareas (Panorama/Por cubrir/Mis tareas) embebido,
-            con el botón «Añadir» inline para no colgar acciones en la barra de Turnos.
-            El Calendario de arriba queda intacto; son planos hermanos (capacidad vs cobertura). */}
-        <TabsContent value="cobertura">
-          <TareasBoard acciones="inline" />
-        </TabsContent>
-        {esAdmin && (
-          <TabsContent value="gestion">
-            {/* Panel admin de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/export),
-                separado de la rejilla de consulta. Comparte `lunes` con el Calendario. */}
-            <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
-          </TabsContent>
-        )}
-        <TabsContent value="cambios-ausencias">
-          {/* Ola "fusion real": una sola vista que mezcla cambios de turno y
-              ausencias en una lista cronologica unica, con filtros por tipo y
-              estado. Sin sub-tabs. */}
-          <CambiosYAusencias esAdmin={esAdmin} />
-        </TabsContent>
-      </Tabs>
+      {/* «Hoy»: home del trabajador (próximo turno + por-cubrir-hoy + lo-mío-hoy). «Ver toda
+          la agenda» y el «N sin cubrir» del KPI saltan a «Cobertura». */}
+      {pestaniaEfectiva === "hoy" && <Hoy onVerAgenda={() => setPestania("cobertura")} />}
+
+      {/* `key`={vistaCalendario}: un deep-link legacy a «Mi jornada» (?tab=mis-turnos) que llegue con
+          la página ya montada fuerza el remonte del Calendario en modo «Mes» (su `vistaInicial` solo
+          se lee al montar). El uso normal no cambia este valor. */}
+      {pestaniaEfectiva === "calendario" && (
+        <Calendario
+          key={vistaCalendario}
+          lunes={lunes}
+          setLunes={setLunes}
+          esAdmin={esAdmin}
+          vistaInicial={vistaCalendario}
+        />
+      )}
+
+      {/* «Cobertura»: el tablero de Tareas (Panorama/Por cubrir/Mis tareas) embebido, con el botón
+          «Añadir» inline para no colgar acciones en la barra de Turnos. El Calendario queda intacto;
+          son planos hermanos (capacidad vs cobertura). */}
+      {pestaniaEfectiva === "cobertura" && <TareasBoard acciones="inline" />}
+
+      {/* «Gestión» (admin): panel de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/
+          export), separado de la rejilla de consulta. Comparte `lunes` con el Calendario. */}
+      {pestaniaEfectiva === "gestion" && (
+        <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+      )}
+
+      {/* «Cambios y ausencias»: una sola vista que mezcla cambios de turno y ausencias en una lista
+          cronológica única, con filtros por tipo y estado. Sin sub-tabs. */}
+      {pestaniaEfectiva === "cambios-ausencias" && <CambiosYAusencias esAdmin={esAdmin} />}
     </>
   );
 }
-

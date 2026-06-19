@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { ServerCog, ShieldAlert } from "lucide-react";
+import { HardDrive, Plug, Server, ShieldAlert } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { TituloPagina } from "@/components/layout/encabezado";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
@@ -39,11 +38,11 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
  * El backend devuelve 403 si quien entra no es admin; se avisa de forma unificada
  * (la entrada del avatar ya se oculta a un editor, esto cubre la URL directa /sistema).
  */
-const PESTANAS = [
-  { valor: "proveedores", etiqueta: "Proveedores" },
-  { valor: "servidor", etiqueta: "Servidor" },
-  { valor: "s3", etiqueta: "S3" },
-] as const;
+const PESTANAS: PestanaSeccion[] = [
+  { valor: "proveedores", etiqueta: "Proveedores", icono: Plug },
+  { valor: "servidor", etiqueta: "Servidor", icono: Server },
+  { valor: "s3", etiqueta: "S3", icono: HardDrive },
+];
 
 export default function Sistema() {
   // Una sonda inicial para detectar el 403 y mostrar el aviso de permiso unificado.
@@ -57,53 +56,57 @@ export default function Sistema() {
     guardia.error instanceof ApiError &&
     guardia.error.status === 403;
 
-  const [searchParams] = useSearchParams();
+  // La sección activa viaja en `?tab=` (deep-link), reflejada por la subnav del topbar.
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const tabInicial = PESTANAS.some((p) => p.valor === tabParam)
-    ? (tabParam as string)
-    : "proveedores";
+  const tab = PESTANAS.some((p) => p.valor === tabParam) ? (tabParam as string) : "proveedores";
+  const cambiarTab = (valor: string) =>
+    setSearchParams(
+      (prev) => {
+        prev.set("tab", valor);
+        return prev;
+      },
+      { replace: true },
+    );
 
   if (esProhibido) {
     return <EstadoVacio icono={ShieldAlert} titulo="No tienes permiso" />;
   }
   return (
     <>
-      <TituloPagina titulo="Sistema" icono={ServerCog} />
+      <PestanasSeccion pestanas={PESTANAS} activo={tab} onSelect={cambiarTab} />
       <div className="space-y-6">
         <AvisosDoctor />
-        <Tabs defaultValue={tabInicial} className="space-y-4">
-          <TabsList>
-            {PESTANAS.map((p) => (
-              <TabsTrigger key={p.valor} value={p.valor}>
-                {p.etiqueta}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {/* PROVEEDORES: conexiones a servicios externos. La cuenta de Claude que alimenta la
-              generación de copy y Metricool (token por marca) del que se leen las métricas de
-              audiencia. Metricool se gestiona aquí (antes vivía en el «⋮» de Analíticas). */}
-          <TabsContent value="proveedores" className="space-y-6">
+        {/* PROVEEDORES: conexiones a servicios externos. La cuenta de Claude que alimenta la
+            generación de copy y Metricool (token por marca) del que se leen las métricas de
+            audiencia. Metricool se gestiona aquí (antes vivía en el «⋮» de Analíticas). */}
+        {tab === "proveedores" && (
+          <div className="space-y-6">
             <SeccionCuentaClaude />
             <SeccionGitHub />
             <SeccionMetricool />
             <SeccionPostproxy />
-          </TabsContent>
-          {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura
-              (limpiador, GC de media, métricas, alertas, patrones). Los servicios de la
-              máquina de contenido (clase=maquina) viven en los cockpits; los agentes IA (clase=ia)
-              son los cockpits. Más backups y latencias de la API. */}
-          <TabsContent value="servidor" className="space-y-6">
+          </div>
+        )}
+        {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura
+            (limpiador, GC de media, métricas, alertas, patrones). Los servicios de la
+            máquina de contenido (clase=maquina) viven en los cockpits; los agentes IA (clase=ia)
+            son los cockpits. Más backups y latencias de la API. */}
+        {tab === "servidor" && (
+          <div className="space-y-6">
             <SeccionRecursos />
             <SeccionDaemons clases={["sistema"]} titulo="Servicios de sistema" />
             <SeccionBackups />
             <SeccionRendimiento />
-          </TabsContent>
-          {/* S3: almacenamiento de media (Garage) — estado + explorador. */}
-          <TabsContent value="s3" className="space-y-6">
+          </div>
+        )}
+        {/* S3: almacenamiento de media (Garage) — estado + explorador. */}
+        {tab === "s3" && (
+          <div className="space-y-6">
             <SeccionS3 />
             <SeccionNavegadorS3 />
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
     </>
   );

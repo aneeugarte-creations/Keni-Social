@@ -69,14 +69,15 @@ function renderContexto(ruta = "/maquina/contexto") {
 }
 
 describe("Contexto · la máquina en una página", () => {
-  it("pinta las tres pestañas y el pipeline de Investigación por defecto", () => {
+  it("pinta las cuatro pestañas y el pipeline de Investigación por defecto", () => {
     renderContexto();
-    expect(screen.getByRole("tab", { name: "Investigación" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Producción" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Herramientas" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Desarrollo" })).toBeInTheDocument();
+    // La subnav unificada (topbar) son botones de sección con `aria-current`, no un tablist Radix.
+    expect(screen.getByRole("button", { name: "Investigación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Producción" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Herramientas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Desarrollo" })).toBeInTheDocument();
     // Importación dejó de ser una pestaña: sus agentes viven ahora dentro de Herramientas.
-    expect(screen.queryByRole("tab", { name: "Importación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Importación" })).not.toBeInTheDocument();
     // Pestaña por defecto = Investigación: sus fases se leen en orden (incl. el nuevo «Cotejar»).
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
     expect(screen.getByText("Cotejar")).toBeInTheDocument();

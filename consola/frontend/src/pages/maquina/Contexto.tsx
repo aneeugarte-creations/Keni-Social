@@ -11,12 +11,11 @@
  * pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Layers } from "lucide-react";
+import { Code2, Factory, Telescope, Wrench } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -52,6 +51,13 @@ const PROCESOS: readonly Proceso[] = [
   "produccion",
   "herramientas",
   "desarrollo",
+];
+/** Sub-secciones de la máquina (clave `?proceso=`). La subnav vive en el topbar (como Métricas). */
+const PESTANAS: PestanaSeccion[] = [
+  { valor: "investigacion", etiqueta: "Investigación", icono: Telescope },
+  { valor: "produccion", etiqueta: "Producción", icono: Factory },
+  { valor: "herramientas", etiqueta: "Herramientas", icono: Wrench },
+  { valor: "desarrollo", etiqueta: "Desarrollo", icono: Code2 },
 ];
 
 // Grupos del catálogo que gobiernan CÓMO se produce (jobs, limpieza, alertas): se ajustan desde el
@@ -104,27 +110,12 @@ export default function Contexto() {
 
   return (
     <>
-      <TituloPagina titulo="Contexto" icono={Layers} />
-      {esMotor ? (
-        <AccionesPagina>
-          <MenuAcciones
-            ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
-            ajustesAbiertoInicial={abrirAjustes}
-            ajustes={ajustes}
-          />
-        </AccionesPagina>
-      ) : null}
-
-      <Tabs value={proceso} onValueChange={cambiarProceso}>
-        {/* Las pestañas y el control de la máquina (maestro del proceso activo + interruptor general)
-            comparten fila: el on/off vive a la altura de las pestañas, no dentro de cada panel. */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <TabsList>
-            <TabsTrigger value="investigacion">Investigación</TabsTrigger>
-            <TabsTrigger value="produccion">Producción</TabsTrigger>
-            <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
-            <TabsTrigger value="desarrollo">Desarrollo</TabsTrigger>
-          </TabsList>
+      <PestanasSeccion pestanas={PESTANAS} activo={proceso} onSelect={cambiarProceso} />
+      {/* El control de la máquina (maestro del proceso activo + interruptor general) y, en los
+          motores, los ajustes «⋮» viven en el flanco de acciones del topbar —como el selector de
+          Métricas—, no en una fila dentro del cuerpo. */}
+      <AccionesPagina>
+        <div className="flex items-center gap-2">
           <ControlesMaquina
             claveMaestro={
               proceso === "investigacion"
@@ -136,9 +127,18 @@ export default function Contexto() {
             esAdmin={esAdmin}
             marcaActiva={marcaActiva}
           />
+          {esMotor && (
+            <MenuAcciones
+              ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
+              ajustesAbiertoInicial={abrirAjustes}
+              ajustes={ajustes}
+            />
+          )}
         </div>
+      </AccionesPagina>
 
-        <TabsContent value="investigacion" className="mt-4">
+      {proceso === "investigacion" && (
+        <div className="mt-4">
           <PanelPipeline
             fases={FASES_INVESTIGACION}
             queuePorTipo={QUEUE_INVESTIGACION}
@@ -152,9 +152,11 @@ export default function Contexto() {
             }
           />
           {esAdmin && <ServiciosMaquina motor="investigacion" />}
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="produccion" className="mt-4">
+      {proceso === "produccion" && (
+        <div className="mt-4">
           <PanelPipeline
             fases={FASES_PRODUCCION}
             queuePorTipo={QUEUE_PRODUCCION}
@@ -167,21 +169,25 @@ export default function Contexto() {
             }
           />
           {esAdmin && <ServiciosMaquina motor="produccion" />}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Herramientas: TODOS los agentes independientes (sin daemon). NO son un pipeline: se agrupan
-            en CAJAS por tipo (sin conectores); clicar abre la SUBPÁGINA del agente, sin pop-up. */}
-        <TabsContent value="herramientas" className="mt-4">
+      {/* Herramientas: TODOS los agentes independientes (sin daemon). NO son un pipeline: se agrupan
+          en CAJAS por tipo (sin conectores); clicar abre la SUBPÁGINA del agente, sin pop-up. */}
+      {proceso === "herramientas" && (
+        <div className="mt-4">
           <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} proceso="herramientas" />
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Desarrollo: los prompts del motor de auto-desarrollo (clase editorial `desarrollo`). No es
-            un pipeline ni un motor con interruptor; se presenta igual que Herramientas (cajas por tipo)
-            y clicar abre la SUBPÁGINA del agente, sin pop-up. */}
-        <TabsContent value="desarrollo" className="mt-4">
+      {/* Desarrollo: los prompts del motor de auto-desarrollo (clase editorial `desarrollo`). No es
+          un pipeline ni un motor con interruptor; se presenta igual que Herramientas (cajas por tipo)
+          y clicar abre la SUBPÁGINA del agente, sin pop-up. */}
+      {proceso === "desarrollo" && (
+        <div className="mt-4">
           <PanelAgentes grupos={GRUPOS_DESARROLLO} esAdmin={esAdmin} proceso="desarrollo" />
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </>
   );
 }

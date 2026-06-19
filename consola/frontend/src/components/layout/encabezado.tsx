@@ -3,16 +3,26 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
+import {
+  TiraPestanasSeccion,
+  type PestanaSeccion,
+} from "@/components/layout/pestanas-seccion";
 
 import type { LucideIcon } from "lucide-react";
+
+export type { PestanaSeccion } from "@/components/layout/pestanas-seccion";
 
 /**
  * Cabecera de sección UNIFICADA (misma altura, ancho y posición en todas las páginas).
  *
  * Regla de diseño: una sola barra superior por página, con el mismo formato.
- *   - Hub (2+ pestañas) → la barra son las PESTAÑAS (las pinta `EncabezadoSeccion`). Sin título.
- *   - Página plana → la barra es UN título con el MISMO formato que una pestaña activa
- *     (mismo tamaño, icono y subrayado). Lo aporta la página vía `<TituloPagina/>`.
+ *   - Hub por RUTA (2+ pestañas) → la barra son las PESTAÑAS (las pinta `EncabezadoSeccion`).
+ *   - Sección por ESTADO (una página plana cuyas sub-vistas conmutan por `?param=`/`useState`) →
+ *     la barra son sus pestañas, vía `<PestanasSeccion/>` (mismo formato que un hub por ruta).
+ *   - Página plana sin sub-vistas → la barra es UN título con el MISMO formato que una pestaña
+ *     activa (mismo tamaño, icono y subrayado). Lo aporta la página vía `<TituloPagina/>`.
+ * Los tres son EXCLUYENTES: una página usa uno. Pestañas (ruta o estado) y título caen en el
+ * mismo hueco izquierdo de la barra.
  * En ambos casos las ACCIONES (un menú "⋯" minimalista, o controles sueltos) van a la
  * DERECHA de esa misma barra, vía `<AccionesPagina/>`. Sin subtítulos.
  *
@@ -102,6 +112,38 @@ export function TituloPagina({
   // Con barra disponible, portaliza al hueco. Sin proveedor (p. ej. tests que montan la
   // página suelta, sin AppShell) cae a render inline para no perder el título. Con proveedor
   // pero hueco aún sin montar (un frame), no pinta nada.
+  if (ctx?.slotInicio) return createPortal(elemento, ctx.slotInicio);
+  if (!ctx) return elemento;
+  return null;
+}
+
+/**
+ * Navegación de SECCIÓN de una página plana cuyas sub-vistas conmutan por ESTADO (no por ruta):
+ * se portaliza al MISMO hueco izquierdo que `<TituloPagina/>` (son EXCLUYENTES — una página usa
+ * una u otra) y se pinta con el formato de la subnav por ruta del topbar. Así una página con
+ * pestañas-por-estado (Turnos, Investigación, Contexto, Sistema) arranca idéntica a un hub por
+ * ruta (Métricas/Campañas): misma tira en escritorio, mismo dropdown en móvil, mismos estados.
+ *
+ * La página posee el estado (qué sección está activa) y lo refleja donde quiera (un `?param=` o
+ * un `useState`); aquí solo se presenta y se notifica el cambio vía `onSelect`.
+ */
+export function PestanasSeccion({
+  pestanas,
+  activo,
+  onSelect,
+}: {
+  pestanas: PestanaSeccion[];
+  activo: string;
+  onSelect: (valor: string) => void;
+}) {
+  const ctx = useEncabezado();
+  // Igual que el título: marca que la barra tiene contenido propio (no-op estable hoy).
+  React.useEffect(() => ctx?.registrarTitulo(), [ctx]);
+  const elemento = (
+    <TiraPestanasSeccion pestanas={pestanas} activo={activo} onSelect={onSelect} />
+  );
+  // Mismas tres ramas que `TituloPagina`: portal al hueco, inline sin proveedor (tests sueltos),
+  // o nada mientras el hueco aún no está montado.
   if (ctx?.slotInicio) return createPortal(elemento, ctx.slotInicio);
   if (!ctx) return elemento;
   return null;

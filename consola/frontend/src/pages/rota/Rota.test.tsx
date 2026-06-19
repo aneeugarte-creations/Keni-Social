@@ -136,7 +136,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // lunes 15 jun 2026 (CDMX)
     renderRota();
     // «Hoy» es el default; el Calendario monta su rejilla (y pide los turnos) al activar su pestaña.
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     // El Calendario pide los turnos de la semana por defecto: el lunes de HOY (no el siguiente).
     await vi.waitFor(() =>
       expect(
@@ -149,15 +149,17 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("abre en «Hoy» por defecto, con Calendario y Cobertura disponibles", async () => {
     renderRota();
-    expect(await screen.findByRole("tab", { name: "Hoy" })).toHaveAttribute(
-      "data-state",
-      "active",
+    // La subnav unificada (topbar) son botones de sección con `aria-current`, agrupados en
+    // el landmark «Secciones»; la activa lleva aria-current="page".
+    const nav = await screen.findByRole("navigation", { name: "Secciones" });
+    expect(within(nav).getByRole("button", { name: "Hoy" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
-    expect(screen.getByRole("tab", { name: "Calendario" })).toHaveAttribute(
-      "data-state",
-      "inactive",
+    expect(within(nav).getByRole("button", { name: "Calendario" })).not.toHaveAttribute(
+      "aria-current",
     );
-    expect(screen.getByRole("tab", { name: "Cobertura" })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "Cobertura" })).toBeInTheDocument();
     // «Hoy» no pinta el «Añadir» del tablero (ese vive en «Cobertura»).
     expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
@@ -165,8 +167,8 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
   it("el admin ve 5 pestañas incluida «Gestión»; «Mi jornada» ya NO es una", async () => {
     renderRota();
     // «Hoy» es la home; «Mi jornada» sigue fundida en el modo «Mes» del Calendario.
-    await screen.findByRole("tab", { name: "Hoy" });
-    const tabs = screen.getAllByRole("tab");
+    const nav = await screen.findByRole("navigation", { name: "Secciones" });
+    const tabs = within(nav).getAllByRole("button");
     expect(tabs).toHaveLength(5);
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Hoy",
@@ -175,12 +177,12 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
       "Gestión",
       expect.stringContaining("Cambios y ausencias"),
     ]);
-    expect(screen.queryByRole("tab", { name: "Mi jornada" })).toBeNull();
+    expect(within(nav).queryByRole("button", { name: "Mi jornada" })).toBeNull();
   });
 
   it("el Calendario abre en modo «Semana» y ofrece el conmutador Semana|Mes", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     // Conmutador con PALABRAS (no iconos crípticos): «Semana» activo por defecto.
     expect(
       await screen.findByRole("button", { name: "Semana", pressed: true }),
@@ -192,7 +194,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("conmutar a «Mes» muestra la vista mensual de jornada (Yo/Equipo + Imprimir)", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El modo «Mes» = la antigua «Mi jornada»: su selector de ámbito y su Imprimir/PDF.
     expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
@@ -205,9 +207,9 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
   it("deep-link legacy ?tab=mis-turnos cae en el Calendario en modo «Mes»", async () => {
     renderRotaConTab("mis-turnos");
     // No hay pestaña «Mi jornada»: el Calendario queda activo y abierto en «Mes».
-    expect(await screen.findByRole("tab", { name: "Calendario" })).toHaveAttribute(
-      "data-state",
-      "active",
+    expect(await screen.findByRole("button", { name: "Calendario" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
     expect(
       await screen.findByRole("button", { name: "Mes", pressed: true }),
@@ -219,7 +221,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
   it("al abrir «Cobertura» aparece el tablero (Panorama + «Añadir» inline)", async () => {
     renderRota();
     // Radix Tabs activa en pointer-down (patrón de la suite).
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Cobertura" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Cobertura" }));
 
     // El tablero embebido pinta su botón «Añadir» inline (barra) y, al cargar, el atajo «Añadir»
     // del Panorama: dos botones «Añadir». Basta con que aparezca alguno (el tablero ya montó).
@@ -231,7 +233,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("para el admin, el modo «Mes» del Calendario abre en «Equipo» (turnos de todos)", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El admin no está en la rota: arranca en «Equipo» (jornada de todo el equipo), no en «Yo».
     expect(
@@ -244,7 +246,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
   it("para un editor, el modo «Mes» del Calendario abre en «Yo» (su propia jornada)", async () => {
     renderRota({ rol: "editor" });
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El editor sí está en la rota: arranca en «Yo» (su jornada), no en «Equipo».
     expect(
@@ -297,7 +299,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     });
 
     // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     // El chip de evento es clicable (su aria-label arranca por «Cubrir …»).
     const chip = await screen.findByRole("button", { name: /España vs Cabo Verde/ });
     fireEvent.click(chip);
@@ -354,7 +356,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
       .mockResolvedValue({ contenido: { responsable_nombre: "ana" } } as never);
 
     // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     // Abrir el chip → su diálogo de cobertura, y desde el menú elegir «Asignar a…».
     fireEvent.click(await screen.findByRole("button", { name: /España vs Cabo Verde/ }));
     const dialogo = await screen.findByRole("dialog");
@@ -471,7 +473,7 @@ describe("Turnos — Calendario: gating de coordinador", () => {
 
   it("el trabajador (no-admin) NO ve el menú ⋯ de coordinador", async () => {
     renderRota({ rol: "editor" });
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     // Calendario montado (conmutador visible) y SIN el menú ⋯ (Carga/Export son de coordinador).
     await screen.findByRole("button", { name: "Semana", pressed: true });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
@@ -479,11 +481,11 @@ describe("Turnos — Calendario: gating de coordinador", () => {
 
   it("el admin tampoco ve el ⋯ en el Calendario: ahora vive en «Gestión»", async () => {
     renderRota(); // admin por defecto
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     await screen.findByRole("button", { name: "Semana", pressed: true });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
     // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión».
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Gestión" }), { button: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
     expect(await screen.findByRole("button", { name: "Más acciones" })).toBeInTheDocument();
   });
 });
@@ -496,30 +498,38 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
 
   it("el trabajador (no-admin) NO ve la pestaña «Gestión»", async () => {
     renderRota({ rol: "editor" });
-    await screen.findByRole("tab", { name: "Hoy" });
-    expect(screen.queryByRole("tab", { name: "Gestión" })).toBeNull();
-    expect(screen.getAllByRole("tab")).toHaveLength(4);
+    const nav = await screen.findByRole("navigation", { name: "Secciones" });
+    expect(within(nav).queryByRole("button", { name: "Gestión" })).toBeNull();
+    expect(within(nav).getAllByRole("button")).toHaveLength(4);
   });
 
   it("«Gestión» reúne Asignar/Aprobar; el header del Calendario ya no los tiene", async () => {
     renderRota();
-    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     await screen.findByRole("button", { name: "Semana", pressed: true });
     expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Gestión" }), { button: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
     expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
   });
 
   it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {
     renderRotaConTab("gestion", { rol: "editor" });
-    expect(await screen.findByRole("tab", { name: "Hoy" })).toHaveAttribute("data-state", "active");
-    expect(screen.queryByRole("tab", { name: "Gestión" })).toBeNull();
+    const nav = await screen.findByRole("navigation", { name: "Secciones" });
+    expect(within(nav).getByRole("button", { name: "Hoy" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).queryByRole("button", { name: "Gestión" })).toBeNull();
   });
 
   it("deep-link ?tab=gestion para admin abre «Gestión»", async () => {
     renderRotaConTab("gestion");
-    expect(await screen.findByRole("tab", { name: "Gestión" })).toHaveAttribute("data-state", "active");
+    const nav = await screen.findByRole("navigation", { name: "Secciones" });
+    expect(within(nav).getByRole("button", { name: "Gestión" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 });

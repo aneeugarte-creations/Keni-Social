@@ -2,9 +2,9 @@ import { NavLink, useLocation } from "react-router-dom";
 
 import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
 import { pestanasDeRuta } from "@/components/layout/hub-tabs";
+import { clasesPestanaSeccion } from "@/components/layout/pestanas-seccion";
 import { SelectorSeccion } from "@/components/layout/SelectorSeccion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { cn } from "@/lib/utils";
 
 /**
  * Cabecera de sección UNIFICADA, dentro de la barra superior (donde antes estaban los
@@ -58,14 +58,7 @@ export function EncabezadoSeccion({
                   key={pestana.ruta}
                   to={pestana.ruta}
                   end={pestana.end}
-                  className={({ isActive }) =>
-                    cn(
-                      "-mb-px flex items-center gap-2 border-b-2 px-3 text-sm transition-colors",
-                      isActive
-                        ? "border-foreground font-medium text-foreground"
-                        : "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground",
-                    )
-                  }
+                  className={({ isActive }) => clasesPestanaSeccion(isActive)}
                 >
                   <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span>{pestana.etiqueta}</span>

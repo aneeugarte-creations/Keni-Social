@@ -1,8 +1,7 @@
-import { Search } from "lucide-react";
+import { Newspaper, Rss, Sparkles, TrendingUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
-import { TituloPagina } from "@/components/layout/encabezado";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
 import PublicacionesHub from "@/pages/PublicacionesHub";
@@ -10,21 +9,30 @@ import Fuentes from "@/pages/Fuentes";
 
 /**
  * Cockpit OPERATIVO de INVESTIGACIÓN (`/maquina/investigacion`): el pool de noticias que el equipo
- * revisa a diario. Pestañas planas (`?seccion=`), cada una REUTILIZANDO una superficie existente:
+ * revisa a diario. Sub-secciones planas (`?seccion=`), cada una REUTILIZANDO una superficie existente:
  *   · NOTICIAS (`Cobertura`): el pool segmentado por líneas con usar/descartar — lo que el humano
- *     revisa. Es la pestaña por defecto. (La ruta vieja `/datos/investigacion` redirige aquí.)
+ *     revisa. Es la sección por defecto. (La ruta vieja `/datos/investigacion` redirige aquí.)
  *   · FUENTES (`Fuentes`): los canales que alimentan el pool.
  *   · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends.
  *   · CONTENIDOS (`PublicacionesHub`): el banco EVERGREEN —piezas que no caducan—.
+ *
+ * La subnav vive en el TOPBAR (vía `<PestanasSeccion/>`), igual que un hub por ruta (Métricas):
+ * sin una tira propia bajo el título.
  *
  * El PIPELINE (recolectar → verificar) ya NO vive aquí: se enciende y se vigila en «Contexto»
  * (Máquina), donde cada fase trae su prompt, su contexto y sus logs. Los ajustes del motor también
  * viven en «Contexto» (esta página es solo operativa, sin «⋮» propio).
  */
 
-/** Pestañas del cockpit (clave `?seccion=`). Noticias (el pool) es la primera y la por defecto. */
+/** Sub-secciones del cockpit (clave `?seccion=`). Noticias (el pool) es la primera y la por defecto. */
 type Seccion = "mesa" | "fuentes" | "algoritmos" | "contenidos";
 const SECCIONES: readonly Seccion[] = ["mesa", "fuentes", "algoritmos", "contenidos"];
+const PESTANAS: PestanaSeccion[] = [
+  { valor: "mesa", etiqueta: "Noticias", icono: Newspaper },
+  { valor: "fuentes", etiqueta: "Fuentes", icono: Rss },
+  { valor: "algoritmos", etiqueta: "Algoritmos", icono: TrendingUp },
+  { valor: "contenidos", etiqueta: "Publicaciones", icono: Sparkles },
+];
 
 export default function CockpitInvestigacion() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,36 +53,16 @@ export default function CockpitInvestigacion() {
 
   return (
     <>
-      <TituloPagina titulo="Investigación" icono={Search} />
+      <PestanasSeccion pestanas={PESTANAS} activo={seccion} onSelect={cambiarSeccion} />
 
-      <Tabs value={seccion} onValueChange={cambiarSeccion}>
-        <TabsList>
-          <TabsTrigger value="mesa">Noticias</TabsTrigger>
-          <TabsTrigger value="fuentes">Fuentes</TabsTrigger>
-          <TabsTrigger value="algoritmos">Algoritmos</TabsTrigger>
-          <TabsTrigger value="contenidos">Publicaciones</TabsTrigger>
-        </TabsList>
-
-        {/* NOTICIAS: el pool con usar/descartar (Cobertura) — la pestaña por defecto. */}
-        <TabsContent value="mesa">
-          <Cobertura />
-        </TabsContent>
-
-        {/* FUENTES: los canales que alimentan el pool. */}
-        <TabsContent value="fuentes">
-          <Fuentes />
-        </TabsContent>
-
-        {/* ALGORITMOS: inteligencia de plataforma + trends. */}
-        <TabsContent value="algoritmos">
-          <Algoritmos />
-        </TabsContent>
-
-        {/* CONTENIDOS: el banco EVERGREEN (PublicacionesHub). */}
-        <TabsContent value="contenidos">
-          <PublicacionesHub />
-        </TabsContent>
-      </Tabs>
+      {/* NOTICIAS: el pool con usar/descartar (Cobertura) — la sección por defecto. */}
+      {seccion === "mesa" && <Cobertura />}
+      {/* FUENTES: los canales que alimentan el pool. */}
+      {seccion === "fuentes" && <Fuentes />}
+      {/* ALGORITMOS: inteligencia de plataforma + trends. */}
+      {seccion === "algoritmos" && <Algoritmos />}
+      {/* CONTENIDOS: el banco EVERGREEN (PublicacionesHub). */}
+      {seccion === "contenidos" && <PublicacionesHub />}
     </>
   );
 }
