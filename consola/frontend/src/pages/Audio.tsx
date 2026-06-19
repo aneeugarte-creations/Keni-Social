@@ -116,77 +116,106 @@ export default function Audio() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const onArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const abrirSelector = () => {
     if (!marca) {
       toast.error("Selecciona una marca antes de subir audio.");
       return;
     }
-    subir.mutate(f);
+    inputRef.current?.click();
+  };
+  const onArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) subir.mutate(f);
   };
 
+  // Estado VACÍO total (sin transcripciones y sin selección): un único botón central grande.
+  const vacioTotal = !lista.isLoading && transcripciones.length === 0 && seleccionId === null;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="audio/*,video/*"
+        className="sr-only"
+        onChange={onArchivo}
+      />
       <TituloPagina titulo="Audio" icono={AudioLines} />
-      <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-        <aside className="flex flex-col gap-3">
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border/70 bg-muted/30 p-5 text-center text-sm hover:bg-muted/50">
-            <input
-              type="file"
-              accept="audio/*,video/*"
-              className="sr-only"
-              onChange={onArchivo}
-              disabled={subir.isPending || !marca}
-            />
+
+      {vacioTotal ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <Button
+            size="lg"
+            onClick={abrirSelector}
+            disabled={subir.isPending || !marca}
+            className="h-auto gap-3 rounded-2xl px-10 py-7 text-base shadow-sm"
+          >
             {subir.isPending ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin" />
             ) : (
-              <Upload className="h-5 w-5 text-muted-foreground" />
+              <Upload className="h-6 w-6" />
             )}
-            <span className="font-medium">Subir audio o vídeo</span>
-            <span className="text-xs text-muted-foreground">
-              {marca ? "Se extrae la voz y se transcribe" : "Selecciona una marca primero"}
-            </span>
-          </label>
+            Subir audio o vídeo
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            {marca ? "Se extrae la voz y se transcribe con timestamps" : "Selecciona una marca primero"}
+          </p>
+        </div>
+      ) : (
+        <div className="grid flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
+          <aside className="flex flex-col gap-3">
+            <Button
+              onClick={abrirSelector}
+              disabled={subir.isPending || !marca}
+              className="w-full gap-2"
+            >
+              {subir.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              Subir audio o vídeo
+            </Button>
 
-          <ListaTranscripciones
-            transcripciones={transcripciones}
-            cargando={lista.isLoading}
-            seleccionId={seleccionId}
-            onSeleccionar={setSeleccionId}
-            onEliminar={(id) => eliminar.mutate(id)}
-          />
-        </aside>
-
-        <section className="min-w-0">
-          {seleccionId === null ? (
-            <Vacio />
-          ) : actual ? (
-            <Editor
-              transcripcion={actual}
-              onCambio={() => {
-                qc.invalidateQueries({ queryKey: ["audio", "transcripcion", seleccionId] });
-                qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
-              }}
+            <ListaTranscripciones
+              transcripciones={transcripciones}
+              cargando={lista.isLoading}
+              seleccionId={seleccionId}
+              onSeleccionar={setSeleccionId}
+              onEliminar={(id) => eliminar.mutate(id)}
             />
-          ) : (
-            <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando…
-            </div>
-          )}
-        </section>
-      </div>
+          </aside>
+
+          <section className="min-w-0">
+            {seleccionId === null ? (
+              <Vacio />
+            ) : actual ? (
+              <Editor
+                transcripcion={actual}
+                onCambio={() => {
+                  qc.invalidateQueries({ queryKey: ["audio", "transcripcion", seleccionId] });
+                  qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
+                }}
+              />
+            ) : (
+              <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando…
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }
 
 function Vacio() {
   return (
-    <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-xl border border-border/70 bg-muted/20 text-center text-sm text-muted-foreground">
-      <AudioLines className="h-8 w-8 opacity-50" />
-      <p>Sube un audio o vídeo, o elige una transcripción de la lista.</p>
+    <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+      <AudioLines className="h-8 w-8 opacity-40" />
+      <p>Elige una transcripción de la lista.</p>
     </div>
   );
 }
