@@ -5,11 +5,11 @@ import { cn } from "@/lib/utils";
 
 const Tabs = TabsPrimitive.Root;
 
-// Subnav de CUERPO con el MISMO lenguaje que la subnav de sección del topbar
-// (`clasesPestanaSeccion`): subrayado, no píldora. La jerarquía es de CONTEXTO/volumen (el
-// topbar vive en el cromo y muerde el borde del header; esta vive en el cuerpo y trae su
-// propia línea base), no de forma. La `List` aporta la línea base continua (`border-b`) y
-// cada `Trigger` la muerde con `-mb-px` + su `border-b-2`.
+// Pestañas de CONTENIDO (bajo la barra superior): control SEGMENTADO, idéntico al
+// `ToggleGroup` «Semana | Mes» del Calendario — contenedor con borde y el item activo
+// resaltado sobre `muted` con sombra. La navegación de SECCIÓN del topbar usa el subrayado
+// (`clasesPestanaSeccion`); el cuerpo, segmentado: jerarquía de dos niveles por FORMA.
+// (Mantener en paralelo con `components/ui/toggle-group.tsx`.)
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
@@ -17,7 +17,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center gap-1 border-b border-border text-muted-foreground",
+      "inline-flex items-center rounded-md border p-0.5 text-muted-foreground",
       className,
     )}
     {...props}
@@ -32,13 +32,13 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "-mb-px inline-flex h-9 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors",
+      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 py-1 text-sm font-medium transition-colors",
       "ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       "disabled:pointer-events-none disabled:opacity-50",
       // Inactiva
-      "border-transparent font-normal text-muted-foreground hover:border-border hover:text-foreground",
-      // Activa: subraya en foreground, igual que la pestaña de sección activa del topbar.
-      "data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=active]:text-foreground",
+      "text-muted-foreground hover:text-foreground",
+      // Activa: item resaltado sobre `muted` con sombra (mismo tratamiento que «Semana | Mes»).
+      "data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-sm",
       className,
     )}
     {...props}

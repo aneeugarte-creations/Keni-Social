@@ -342,7 +342,7 @@ function Cuerpo({
       {!calendario && (
         <div className="mb-3 overflow-x-auto">
           <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
-            <TabsList className="w-fit gap-1" aria-label="Vista de la lista">
+            <TabsList className="w-fit" aria-label="Vista de la lista">
               {VISTAS.map((v) => (
                 <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
                   <PublicacionPestanaVista vista={v} conteo={conteoVista[v.id]} />

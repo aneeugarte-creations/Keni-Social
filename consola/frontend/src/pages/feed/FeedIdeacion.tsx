@@ -496,7 +496,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
             en cuanto su número está resuelto, no solo con el feed agotado. */}
         <div className="mb-4 overflow-x-auto">
           <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
-            <TabsList className="w-fit gap-1" aria-label="Vista del feed">
+            <TabsList className="w-fit" aria-label="Vista del feed">
               {VISTAS.map((v) => (
                 <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
                   <PublicacionPestanaVista
