@@ -955,6 +955,33 @@ function ssToSec(t: string): number {
   return partes.reduce((acc, n) => acc * 60 + n, 0);
 }
 
+// Persistencia LOCAL de las respuestas del cajón de preguntas (por id de artefacto): así no se
+// pierden al cambiar de artefacto, colapsar paneles o recargar.
+const claveRespuestas = (id: string) => `keni:audio:preg-resp:${id}`;
+
+function leerRespuestas(id: string): Record<number, string> {
+  try {
+    const raw = localStorage.getItem(claveRespuestas(id));
+    const o = raw ? JSON.parse(raw) : null;
+    return o && typeof o === "object" ? (o as Record<number, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function guardarRespuestas(id: string, resp: Record<number, string>): void {
+  try {
+    const limpio = Object.fromEntries(Object.entries(resp).filter(([, v]) => v && v.trim()));
+    if (Object.keys(limpio).length) {
+      localStorage.setItem(claveRespuestas(id), JSON.stringify(limpio));
+    } else {
+      localStorage.removeItem(claveRespuestas(id));
+    }
+  } catch {
+    /* almacenamiento lleno/no disponible: no es crítico */
+  }
+}
+
 interface PreguntaItem {
   t: string;
   frase: string;
@@ -1005,8 +1032,10 @@ function FormularioPreguntas({
   onSeleccionarArtefacto: (id: string) => void;
 }) {
   const preguntas = React.useMemo(() => parsePreguntas(artefacto.contenido), [artefacto.contenido]);
-  const [resp, setResp] = React.useState<Record<number, string>>({});
-  React.useEffect(() => setResp({}), [artefacto.id]);
+  // Respuestas persistidas en localStorage por artefacto: se cargan al abrir y se guardan al teclear.
+  const [resp, setResp] = React.useState<Record<number, string>>(() => leerRespuestas(artefacto.id));
+  React.useEffect(() => setResp(leerRespuestas(artefacto.id)), [artefacto.id]);
+  React.useEffect(() => guardarRespuestas(artefacto.id, resp), [artefacto.id, resp]);
 
   // Reproductor de snippets: un solo <audio> del media; cada play salta a su franja y se detiene al
   // final de la ventana (~8 s desde un poco antes del timestamp).
