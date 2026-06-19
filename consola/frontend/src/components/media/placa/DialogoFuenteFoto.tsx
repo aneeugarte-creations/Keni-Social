@@ -3,7 +3,7 @@
  * TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO ACTIVO (lo gobierna el
  * componente padre vía callbacks).
  */
-import { Library, Loader2, Upload } from "lucide-react";
+import { Library, Upload } from "lucide-react";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface DialogoFuenteFotoProps {
   open: boolean;
@@ -87,7 +88,7 @@ export function DialogoFuenteFoto({
               onClick={onSubir}
               disabled={ocupado}
             >
-              {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {subiendo ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
               Subir
             </Button>
           </div>
@@ -115,7 +116,7 @@ export function DialogoFuenteFoto({
                 disabled={ocupado || prompt.trim().length === 0}
                 className="shrink-0"
               >
-                {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
+                {generandoIA ? <Spinner className="h-4 w-4" /> : <MarcaIA costo />}
                 {generandoIA ? "Generando…" : "Generar"}
               </Button>
             </div>

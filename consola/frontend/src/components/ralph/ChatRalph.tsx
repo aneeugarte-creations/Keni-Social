@@ -4,7 +4,7 @@
  * acumula token a token desde su stream SSE (gestionado por el store). El render del
  * texto del Ralph reusa `Markdown`; el del humano va en texto plano.
  */
-import { Loader2, Maximize2, Minimize2, Send, Trash2, X } from "lucide-react";
+import { Maximize2, Minimize2, Send, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -12,6 +12,7 @@ import { COLOR_ESTADO, ETIQUETA_ESTADO } from "./PanelRalphs";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/Markdown";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ETIQUETA_MODELO, useRalphStore } from "@/store/ralphStore";
@@ -108,7 +109,7 @@ export function ChatRalph({ id }: { id: string }) {
           </Tooltip>
           <Tooltip label="Detener Ralph" side="top">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onMatar} disabled={matando}>
-              {matando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {matando ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
             </Button>
           </Tooltip>
           <Tooltip label="Cerrar chat" side="top">
@@ -134,7 +135,7 @@ export function ChatRalph({ id }: { id: string }) {
                 className={cn(
                   "max-w-[85%] rounded-lg px-3 py-2 text-sm",
                   m.autor === "tu"
-                    ? "bg-keni text-white"
+                    ? "bg-keni text-primary-foreground"
                     : "bg-muted text-foreground",
                 )}
               >
@@ -147,7 +148,7 @@ export function ChatRalph({ id }: { id: string }) {
                   <p
                     className={cn(
                       "mt-1 text-right text-[10px] leading-none",
-                      m.autor === "tu" ? "text-white/70" : "text-muted-foreground",
+                      m.autor === "tu" ? "text-primary-foreground/70" : "text-muted-foreground",
                     )}
                   >
                     {hora}

@@ -31,6 +31,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
@@ -118,14 +119,15 @@ function EstadoPilar({ pilar }: { pilar: PilarNormalizado }) {
     );
   }
   return (
-    <span className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       {pilar.publicado ? (
-        <span
-          className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+        <Badge
+          variant="ok"
+          className="gap-1 px-2 py-0.5 text-[11px]"
           title="Versión publicada: es la que sirven los pipelines"
         >
           <span aria-hidden>●</span> publicada
-        </span>
+        </Badge>
       ) : (
         <span
           className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
@@ -135,14 +137,15 @@ function EstadoPilar({ pilar }: { pilar: PilarNormalizado }) {
         </span>
       )}
       {pilar.sinPublicar ? (
-        <span
-          className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+        <Badge
+          variant="aviso"
+          className="gap-1 px-2 py-0.5 text-[11px]"
           title="El borrador difiere de la versión publicada"
         >
           <AlertTriangle className="h-3 w-3" aria-hidden /> cambios sin publicar
-        </span>
+        </Badge>
       ) : null}
-    </span>
+    </div>
   );
 }
 
@@ -170,14 +173,14 @@ function TarjetaPilar({
         "flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm transition-colors",
         pilar.vacio
           ? "border-dashed border-border bg-muted/20"
-          : "border-border hover:border-keni/40",
+          : "border-border hover:bg-accent",
       )}
     >
       <header className="flex items-start gap-3">
         <span
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
-            pilar.vacio ? "bg-muted text-muted-foreground" : "bg-keni/10 text-keni",
+            pilar.vacio ? "bg-muted text-muted-foreground" : "bg-muted text-foreground",
           )}
           aria-hidden
         >
@@ -264,10 +267,10 @@ function FranjaEnsamblaje({
               <button
                 type="button"
                 onClick={() => onAbrir(o.docId)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium shadow-sm transition-colors hover:border-keni/40 hover:bg-muted/60"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium shadow-sm transition-colors hover:bg-accent"
                 title={`${o.etiqueta} — abrir documento`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-keni/10 text-[10px] font-semibold tabular-nums text-keni">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold tabular-nums text-foreground">
                   {i + 1}
                 </span>
                 {o.etiqueta}
@@ -293,7 +296,7 @@ function TarjetaExtra({
     <button
       type="button"
       onClick={() => extra.docId && onAbrir(extra.docId)}
-      className="flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-keni-300 focus-visible:border-keni-300 hover:bg-muted/40"
+      className="flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:bg-accent focus-visible:bg-accent"
       title={`${extra.tituloDoc || extra.titulo} — abrir documento`}
     >
       <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -307,7 +310,7 @@ function TarjetaExtra({
       </span>
       {extra.sinPublicar ? (
         <AlertTriangle
-          className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+          className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--aviso-texto-plano))]"
           aria-label="Cambios sin publicar"
         />
       ) : null}

@@ -32,6 +32,7 @@ import { IconoEvento } from "./icono-evento";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
 
+import { ChipEstado } from "@/components/comunes/ChipEstado";
 import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -661,16 +662,8 @@ export function TarjetaTarea({
           </>
         )}
         {/* Estados manuales solo fuera de cobertura: en cobertura manda el semáforo. */}
-        {!enCobertura && tarea.estado === "en_curso" && (
-          <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
-            En curso
-          </Badge>
-        )}
-        {!enCobertura && tarea.estado === "hecha" && (
-          <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
-            Hecha
-          </Badge>
-        )}
+        {!enCobertura && tarea.estado === "en_curso" && <ChipEstado estado="en_curso" />}
+        {!enCobertura && tarea.estado === "hecha" && <ChipEstado estado="completado" />}
         {tarea.prioridad && (
           <Badge variant="outline" className={cn("font-normal", PRIORIDAD_CLASE[tarea.prioridad])}>
             {etiquetaPrioridad(tarea.prioridad)}

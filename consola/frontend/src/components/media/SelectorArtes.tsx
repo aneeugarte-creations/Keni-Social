@@ -9,7 +9,7 @@
  * tras componer en el editor de imagen.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImageOff, Loader2, Search, Trash2 } from "lucide-react";
+import { ImageOff, Search, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Arte, TipoArte } from "@/types";
@@ -124,7 +125,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
         <div className="max-h-[55vh] min-h-[12rem] overflow-y-auto">
           {isLoading ? (
             <div className="flex h-48 items-center justify-center text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Spinner className="h-5 w-5" />
             </div>
           ) : isError ? (
             <p className="flex h-48 items-center justify-center text-sm text-destructive">

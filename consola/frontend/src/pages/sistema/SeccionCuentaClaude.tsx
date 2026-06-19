@@ -4,7 +4,6 @@ import {
   Copy,
   ExternalLink,
   KeyRound,
-  Loader2,
   LogOut,
   RefreshCw,
   UserCog,
@@ -12,6 +11,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import {
   AlertDialog,
@@ -38,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -70,11 +71,7 @@ function BadgeAuth({ auth }: { auth: CuentaAuth | undefined }) {
     return <Badge variant="secondary">Desconocido</Badge>;
   }
   if (auth.logueado) {
-    return (
-      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-        Cuenta conectada
-      </Badge>
-    );
+    return <Badge variant="ok">Cuenta conectada</Badge>;
   }
   return <Badge variant="destructive">Sin cuenta</Badge>;
 }
@@ -221,7 +218,7 @@ function DialogoCambiarCuenta({
             <DialogFooter>
               <Button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
                 {iniciar.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}
@@ -265,7 +262,7 @@ function DialogoCambiarCuenta({
                 disabled={confirmar.isPending || !codigo.trim()}
               >
                 {confirmar.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <BadgeCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}
@@ -378,10 +375,10 @@ export function SeccionCuentaClaude() {
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {!data.disponible ? (
-          <p className="text-sm text-amber-600 dark:text-amber-400">
+          <Aviso>
             No se pudo contactar el servicio de generación (daemons).{" "}
             {data.error ?? "Reintenta en unos segundos."}
-          </p>
+          </Aviso>
         ) : !conectado ? (
           // SIN CUENTA: dejarlo MUY claro y ofrecer SOLO conectar (nada de cerrar sesión).
           <div className="space-y-3">

@@ -46,7 +46,7 @@ export function SeccionColapsable({
           <h3
             className={cn(
               "text-sm font-semibold tracking-tight",
-              acento === "amber" && "text-amber-700 dark:text-amber-400",
+              acento === "amber" && "text-[hsl(var(--aviso-texto))]",
             )}
           >
             {titulo}

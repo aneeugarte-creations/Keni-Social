@@ -6,11 +6,12 @@
  * tardar; corre en el worker y sobrevive a recargas (el sondeo lo reanuda).
  */
 import { useMutation } from "@tanstack/react-query";
-import { Download, Film, Loader2, Play } from "lucide-react";
+import { Download, Film, Play } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 
@@ -91,7 +92,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
         title={!composicionId ? "Sube un clip base en la sección Base" : undefined}
       >
         {renderizando ? (
-          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          <Spinner className="mr-1 h-4 w-4" />
         ) : (
           <Film className="mr-1 h-4 w-4" />
         )}
@@ -134,7 +135,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
               aria-busy={descargando}
             >
               {descargando ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                <Spinner className="mr-1 h-4 w-4" />
               ) : (
                 <Download className="mr-1 h-4 w-4" />
               )}

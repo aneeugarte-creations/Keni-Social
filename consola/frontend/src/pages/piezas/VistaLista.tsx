@@ -231,8 +231,8 @@ function TarjetaPieza({
               )}
               {pieza.id_post_metricool && (
                 <Badge
-                  variant="outline"
-                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
+                  variant="info"
+                  className="gap-1 font-normal"
                   title={`Programada en Metricool · id ${pieza.id_post_metricool}`}
                 >
                   <Send className="h-3 w-3" />
@@ -240,10 +240,7 @@ function TarjetaPieza({
                 </Badge>
               )}
               {pieza.evergreen && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-emerald-500/40 font-normal text-emerald-700 dark:text-emerald-300"
-                >
+                <Badge variant="ok" className="gap-1 font-normal">
                   <Sprout className="h-3 w-3" />
                   Evergreen
                 </Badge>

@@ -8,12 +8,13 @@
  * Notifica cada cambio vía `onCambio(clave, url)`.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Trash2, Upload, Video, VideoOff } from "lucide-react";
+import { Trash2, Upload, Video, VideoOff } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -147,7 +148,7 @@ export function EditorVideo({
             disabled={ocupado}
           >
             {subir.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Upload className="h-4 w-4" />
             )}

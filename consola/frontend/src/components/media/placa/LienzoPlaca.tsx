@@ -4,8 +4,10 @@
  * "Faltan X de N fotos". Es PRESENTACIONAL: toda la lógica (render, punteros, estado) vive en el
  * componente padre `EditorPlacaInline` y se pasa por props.
  */
-import { Loader2 } from "lucide-react";
 import * as React from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 
 export interface LienzoPlacaProps {
   /** Ref al `<canvas>` (lo gobierna el padre: render + tamaño + capturas de puntero). */
@@ -62,7 +64,7 @@ export function LienzoPlaca({
       <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
         {!fuentesListas ? (
           <div className="flex h-56 items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <Spinner className="h-5 w-5 text-muted-foreground" />
           </div>
         ) : (
           <div className="relative">
@@ -114,15 +116,9 @@ export function LienzoPlaca({
               : "Toca la imagen para añadir o cambiar la foto"}
         </p>
         {esCollage && (
-          <span
-            className={
-              faltan > 0
-                ? "shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
-                : "shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300"
-            }
-          >
+          <Badge variant={faltan > 0 ? "aviso" : "ok"} className="shrink-0">
             {faltan > 0 ? `Faltan ${faltan} de ${nHuecos} fotos` : `${nHuecos} de ${nHuecos} fotos`}
-          </span>
+          </Badge>
         )}
       </div>
     </>

@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora } from "@/lib/fecha";
@@ -252,23 +253,13 @@ function FilaComposicion({
               {tituloMostrado}
             </span>
           )}
-          <span
-            className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
-              estadoComp === "listo"
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-            }`}
-          >
+          <Badge variant={estadoComp === "listo" ? "ok" : "aviso"}>
             {ETIQUETA_ESTADO_COMPOSICION[estadoComp] ?? estadoComp}
-          </span>
+          </Badge>
           <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
             {preset}
           </span>
-          {!tieneBase && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-              Sin clip base
-            </span>
-          )}
+          {!tieneBase && <Badge variant="aviso">Sin clip base</Badge>}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span title={comp.actualizado}>
@@ -280,15 +271,15 @@ function FilaComposicion({
           </span>
           {comp.publicacion_id ? (
             faltaVideo === true ? (
-              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
+              <Badge variant="aviso" className="gap-1">
                 <VideoOff className="h-3 w-3" />
                 Falta el video en la pieza
-              </span>
+              </Badge>
             ) : faltaVideo === false ? (
-              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+              <Badge variant="ok" className="gap-1">
                 <FilmIcon className="h-3 w-3" />
                 Video adjunto a la pieza
-              </span>
+              </Badge>
             ) : null
           ) : (
             <span>Sin pieza ligada</span>

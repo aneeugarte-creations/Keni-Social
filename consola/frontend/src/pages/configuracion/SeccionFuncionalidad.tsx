@@ -407,7 +407,7 @@ function GruposAjustes({
           // apagadas/deshabilitadas igual que Generar/Arte.
           const maestrosPub = maestroPub ? { [maestroPub.clave]: maestroPubOn } : {};
           return (
-            <div key={grupo.id} className="space-y-3 border-l-2 border-amber-500/40 pl-3">
+            <div key={grupo.id} className="space-y-3 border-l-2 border-[hsl(var(--aviso-borde))] pl-3">
               <div>{filas}</div>
               {exMarca.length > 0 && (
                 <div className="space-y-1.5">

@@ -25,7 +25,6 @@ import {
   Bot,
   CalendarClock,
   GitBranch,
-  Loader2,
   MessageSquare,
   ThumbsDown,
   ThumbsUp,
@@ -43,6 +42,7 @@ import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -638,7 +638,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                 aria-pressed={miReaccion === "like"}
               >
                 {aprobar.isPending || (deshacer.isPending && deshacer.variables !== undefined) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <ThumbsUp className="h-4 w-4" />
                 )}
@@ -673,7 +673,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                 aria-pressed={miReaccion === "dislike"}
               >
                 {rechazar.isPending || (deshacer.isPending && deshacer.variables === undefined) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <ThumbsDown className="h-4 w-4" />
                 )}
@@ -738,7 +738,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
               aria-label={`Quitar de ${pieza.red_nombre}`}
             >
               {borrar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
@@ -777,7 +777,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
               void cadenaQuery.refetch();
             }}
           >
-            {cadenaQuery.isFetching && <Loader2 className="h-3 w-3 animate-spin" />}
+            {cadenaQuery.isFetching && <Spinner className="h-3 w-3" />}
             Reintentar
           </Button>
         </div>

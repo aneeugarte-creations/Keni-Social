@@ -8,16 +8,17 @@
  * del contexto, así Fuentes lo compone sin props.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, Newspaper, Radio, RefreshCw } from "lucide-react";
+import { AlertTriangle, Newspaper, Radio, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -137,19 +138,19 @@ export function SaludFeeds() {
             {resumen.activos} activo{resumen.activos !== 1 ? "s" : ""}
           </Badge>
           {resumen.fallando > 0 && (
-            <Badge variant="outline" className="gap-1 text-xs border-amber-400 text-amber-600">
+            <Badge variant="aviso" className="gap-1 text-xs">
               <AlertTriangle className="h-3 w-3" />
               {resumen.fallando} fallando
             </Badge>
           )}
           {resumen.auto_desactivados > 0 && (
-            <Badge variant="outline" className="gap-1 text-xs border-red-400 text-red-600">
+            <Badge variant="error" className="gap-1 text-xs">
               <AlertTriangle className="h-3 w-3" />
               {resumen.auto_desactivados} auto-desactivado{resumen.auto_desactivados !== 1 ? "s" : ""}
             </Badge>
           )}
           {resumen.stale > 0 && (
-            <Badge variant="outline" className="gap-1 text-xs border-amber-300 text-amber-500">
+            <Badge variant="aviso" className="gap-1 text-xs">
               <AlertTriangle className="h-3 w-3" />
               {resumen.stale} stale
             </Badge>
@@ -164,28 +165,23 @@ export function SaludFeeds() {
             </Badge>
           )}
           {query.isFetching && (
-            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-label="Actualizando" />
+            <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
           )}
         </div>
       )}
 
       {/* Huecos de cobertura */}
       {resumen && resumen.huecos.length > 0 && (
-        <Card className="border-amber-300 bg-amber-50/30">
-          <CardContent className="pt-3 pb-3">
-            <p className="text-xs font-semibold text-amber-700 mb-2" data-testid="salud-huecos-titulo">
-              Huecos de cobertura ({resumen.huecos.length})
-            </p>
-            <ul className="space-y-1" data-testid="salud-huecos-lista">
-              {resumen.huecos.map((hueco) => (
-                <li key={hueco} className="flex items-center gap-1.5 text-xs text-amber-700">
-                  <AlertTriangle className="h-3 w-3 shrink-0" />
-                  {hueco}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+        <Aviso>
+          <p className="font-semibold mb-2" data-testid="salud-huecos-titulo">
+            Huecos de cobertura ({resumen.huecos.length})
+          </p>
+          <ul className="space-y-1" data-testid="salud-huecos-lista">
+            {resumen.huecos.map((hueco) => (
+              <li key={hueco}>{hueco}</li>
+            ))}
+          </ul>
+        </Aviso>
       )}
 
       {/* Tabla de feeds */}
@@ -244,7 +240,7 @@ export function SaludFeeds() {
                           aria-label={`Reactivar feed ${feed.nombre}`}
                         >
                           {reactivarMut.isPending ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <Spinner className="h-3 w-3" />
                           ) : (
                             <RefreshCw className="h-3 w-3" />
                           )}

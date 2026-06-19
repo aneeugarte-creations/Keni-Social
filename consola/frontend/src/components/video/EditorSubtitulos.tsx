@@ -13,12 +13,13 @@
  * usa la versión corregida. Honesto: la transcripción es un punto de partida, no un final.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Captions, CheckCircle2, Loader2, Save, Sparkles } from "lucide-react";
+import { Captions, CheckCircle2, Save, Sparkles } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
 import {
@@ -180,7 +181,7 @@ export function EditorSubtitulos({
           disabled={transcribiendo || !baseMediaId}
         >
           {transcribiendo ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            <Spinner className="mr-1 h-4 w-4" />
           ) : (
             <Sparkles className="mr-1 h-4 w-4" />
           )}
@@ -207,9 +208,9 @@ export function EditorSubtitulos({
               Cambios sin guardar de tu sesión anterior.
             </Aviso>
           )}
-          <p className="text-[11px] text-amber-700 dark:text-amber-400">
+          <Aviso icono={false}>
             Corrige ortografía. Los cambios se usan al marcar como listos.
-          </p>
+          </Aviso>
           <ul className="max-h-72 space-y-2 overflow-auto pr-1">
             {segmentos.map((s) => (
               <li key={s.id} className="flex gap-2">

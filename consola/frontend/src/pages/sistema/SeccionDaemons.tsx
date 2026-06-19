@@ -97,14 +97,7 @@ function FilaDaemon({
           <ChipEstadoDaemon estado={latido.estado} />
           {/* Solicitud de barrido forzado pendiente (campo `barrido_solicitado`): el bucle
               del daemon la consume en su siguiente tick (<= ~1 min). */}
-          {solicitado && (
-            <Badge
-              variant="outline"
-              className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-            >
-              Barrido solicitado
-            </Badge>
-          )}
+          {solicitado && <Badge variant="info">Barrido solicitado</Badge>}
         </span>
       </TableCell>
       <TableCell className="text-muted-foreground">

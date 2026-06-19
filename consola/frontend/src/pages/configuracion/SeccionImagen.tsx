@@ -135,7 +135,7 @@ function SeccionImagenAdmin() {
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
               <span className="text-sm font-medium">Estado</span>
               {data.configurado ? (
-                <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+                <span className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
                   <Check className="h-4 w-4" aria-hidden="true" />
                   Configurada
                   {data.pista && (
@@ -214,7 +214,7 @@ function SeccionImagenAdmin() {
                 className={cn(
                   "flex items-center gap-1.5 text-sm",
                   resultadoPrueba.ok
-                    ? "text-emerald-600 dark:text-emerald-400"
+                    ? "text-emerald-700 dark:text-emerald-300"
                     : "text-destructive",
                 )}
               >

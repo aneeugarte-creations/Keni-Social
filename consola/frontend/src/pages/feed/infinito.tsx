@@ -4,11 +4,11 @@
  * skeleton con la anatomía real de una tarjeta. Un solo sitio para que ambas superficies se
  * comporten y se vean IGUAL (antes eran copias divergentes).
  */
-import { Loader2 } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 
 /**
  * Sentinel de scroll infinito: devuelve el ref a colgar de un nodo invisible al fondo del feed;
@@ -90,7 +90,7 @@ export function PieFeed({
       role="status"
       aria-live="polite"
     >
-      <Loader2 className="h-4 w-4 animate-spin" />
+      <Spinner className="h-4 w-4" />
       {estado === "buscando" ? "Buscando piezas…" : "Cargando más…"}
     </div>
   );

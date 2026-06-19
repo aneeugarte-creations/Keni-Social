@@ -20,7 +20,7 @@
  * de la página del enlace, de la 1ª línea del material o, si solo hay foto, un genérico).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, Paperclip, Sparkles, X } from "lucide-react";
+import { Link2, Paperclip, Sparkles, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -43,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -444,7 +445,7 @@ export function DialogoCrearPost({
             {/* La estrellita marca que la acción la redacta la IA (mismo signo que MarcaIA /
                 el resto de acciones de IA de la casa); al lanzar, cede al spinner. */}
             {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Sparkles className="h-4 w-4" />
             )}

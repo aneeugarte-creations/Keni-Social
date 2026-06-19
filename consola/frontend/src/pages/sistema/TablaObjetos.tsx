@@ -6,12 +6,12 @@ import {
   File,
   FileImage,
   Folder,
-  Loader2,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import {
@@ -183,7 +183,7 @@ export function TablaObjetos({
             <TableCell />
             <TableCell>
               <div className="flex h-12 w-12 items-center justify-center">
-                <Folder className="h-5 w-5 text-blue-500" aria-hidden="true" />
+                <Folder className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
               </div>
             </TableCell>
             <TableCell className="font-medium text-muted-foreground">..</TableCell>
@@ -206,7 +206,7 @@ export function TablaObjetos({
               <TableCell />
               <TableCell>
                 <div className="flex h-12 w-12 items-center justify-center">
-                  <Folder className="h-5 w-5 text-blue-500" aria-hidden="true" />
+                  <Folder className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                 </div>
               </TableCell>
               <TableCell className="font-medium">{nombre}/</TableCell>
@@ -235,7 +235,7 @@ export function TablaObjetos({
             {
               etiqueta: "Borrar",
               // Mientras se borra ESTE objeto, muestra el spinner en vez de la papelera.
-              icono: keyBorrando === obj.key ? Loader2 : Trash2,
+              icono: keyBorrando === obj.key ? Spinner : Trash2,
               destructivo: true,
               // `onBorrar` (confirmarBorrar en NavegadorS3) ya pide confirmación.
               deshabilitado: borrando,

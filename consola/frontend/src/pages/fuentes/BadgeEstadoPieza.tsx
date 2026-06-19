@@ -3,9 +3,10 @@
  * nota de Presidencia): generando el copy → lista en el feed → aún sin pieza. Mismo
  * vocabulario visual en todos los cajones de Fuentes.
  */
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 
 type EstadoPieza = "generando" | "lista" | "sin_pieza";
 
@@ -19,7 +20,7 @@ export function BadgeEstadoPieza({
   if (estado === "generando") {
     return (
       <Badge variant="aviso" className="gap-1" title={tituloGenerando}>
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Spinner className="h-3 w-3" />
         Generando…
       </Badge>
     );

@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   Info,
-  Loader2,
   MoreHorizontal,
   Plug,
   Save,
@@ -29,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
@@ -202,7 +202,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             title={!puedeBuscar ? "Pega el token y el userId para buscar." : undefined}
           >
             {buscarMarcas.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Plug className="h-4 w-4" />
             )}
@@ -243,7 +243,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
         <p
           className={cn(
             "flex items-center gap-1.5 text-sm",
-            resultadoPrueba.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+            resultadoPrueba.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive",
           )}
         >
           {resultadoPrueba.ok ? (
@@ -258,7 +258,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
           {guardar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="h-4 w-4" />
           ) : (
             <Save className="h-4 w-4" />
           )}

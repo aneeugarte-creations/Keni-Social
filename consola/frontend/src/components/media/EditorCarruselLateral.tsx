@@ -13,12 +13,13 @@
  *    (servidor, `componerSlide`) de forma DEBOUNCED al cambiar la receta. La previa es el lienzo en
  *    vivo (instantáneo); el horneado solo refresca el media que se publica.
  */
-import { ChevronLeft, ChevronRight, Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import type { Documento } from "@/editor/documento";
 import { api, mensajeError, urlMedia, type PlantillaDiseno } from "@/lib/api";
@@ -337,7 +338,7 @@ export function EditorCarruselLateral({
             title="Descargar carrusel para postear"
           >
             {descargando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Download className="h-4 w-4" />
             )}
@@ -424,7 +425,7 @@ export function EditorCarruselLateral({
         {/* Spinner mientras se hornea el slide extra activo (la previa ya está en el lienzo). */}
         {!esPortada && horneando === activo - 1 && (
           <span className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs text-muted-foreground shadow-sm">
-            <Loader2 className="h-3 w-3 animate-spin" /> Guardando…
+            <Spinner className="h-3 w-3" /> Guardando…
           </span>
         )}
       </div>

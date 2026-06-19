@@ -1,37 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { DatabaseBackup } from "lucide-react";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
-import { cn } from "@/lib/utils";
 
 import { INTERVALO_RECURSOS_MS, formatoBytes } from "./lib";
-
-function Chip({
-  tono,
-  children,
-}: {
-  tono: "ok" | "mal" | "aviso";
-  children: React.ReactNode;
-}) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border-transparent",
-        tono === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-        tono === "mal" && "bg-red-500/15 text-red-600 dark:text-red-400",
-        tono === "aviso" && "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-      )}
-    >
-      {children}
-    </Badge>
-  );
-}
 
 /**
  * Sección de backups locales del panel Sistema: último run del keni-backup del host
@@ -69,14 +47,14 @@ export function SeccionBackups() {
           Backups locales
           {configurado && (
             <span className="ml-auto flex gap-1.5">
-              {atrasado && <Chip tono="mal">Atrasado</Chip>}
+              {atrasado && <Badge variant="error">Atrasado</Badge>}
               {estado &&
                 (estado.ok ? (
-                  <Chip tono="ok">
+                  <Badge variant="ok">
                     {estado.verificado ? "OK · verificado" : "OK"}
-                  </Chip>
+                  </Badge>
                 ) : (
-                  <Chip tono="mal">Falló: {estado.paso}</Chip>
+                  <Badge variant="error">Falló: {estado.paso}</Badge>
                 ))}
             </span>
           )}
@@ -99,7 +77,7 @@ export function SeccionBackups() {
                 · {formatoBytes(ultimo_dump.bytes)} · {dumps} dumps retenidos
               </p>
             ) : (
-              <p className="text-red-500">
+              <p className="text-destructive">
                 No hay ningún dump de Postgres en el directorio de backups.
               </p>
             )}
@@ -111,11 +89,11 @@ export function SeccionBackups() {
                   .map((v) => `${v.volumen} ${formatoBytes(v.bytes)}`)
                   .join(" · ") || "—"}
                 {!estado.ok && estado.error && (
-                  <span className="text-red-500"> · {estado.error}</span>
+                  <span className="text-destructive"> · {estado.error}</span>
                 )}
               </p>
             )}
-            {error && <p className="text-xs text-amber-600">{error}</p>}
+            {error && <Aviso icono={false}>{error}</Aviso>}
           </>
         )}
       </CardContent>

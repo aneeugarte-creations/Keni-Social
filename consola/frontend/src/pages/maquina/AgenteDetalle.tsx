@@ -358,10 +358,7 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
             </span>
           </Dato>
           {latido.gasta_tokens && (
-            <Badge
-              variant="outline"
-              className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
-            >
+            <Badge variant="aviso">
               <Coins className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               gasta tokens
             </Badge>
@@ -460,12 +457,7 @@ export default function AgenteDetalle() {
             )}
             <ChipEstadoDaemon estado={latido.estado} />
             {latido.barrido_solicitado !== "" && (
-              <Badge
-                variant="outline"
-                className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-              >
-                Barrido solicitado
-              </Badge>
+              <Badge variant="info">Barrido solicitado</Badge>
             )}
           </div>
         </CardHeader>

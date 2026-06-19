@@ -8,17 +8,19 @@
  * Es un cajón de UnoTV (como Portal/Corresponsales): visible con esa marca activa o en "Todas".
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crown, Loader2, Send } from "lucide-react";
+import { Crown, Send } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -114,9 +116,7 @@ export default function CajonPresidencia() {
           etiqueta="Media de la nota"
         />
         {!hayImagen && media.length > 0 && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
-            Se necesita imagen para portada del carrusel.
-          </p>
+          <Aviso>Se necesita imagen para portada del carrusel.</Aviso>
         )}
         <div className="flex justify-end">
           <Button
@@ -131,7 +131,7 @@ export default function CajonPresidencia() {
             }
           >
             {crearMut.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Send className="h-4 w-4" />
             )}

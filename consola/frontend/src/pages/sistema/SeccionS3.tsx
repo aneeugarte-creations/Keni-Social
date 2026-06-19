@@ -1,13 +1,15 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Database, Loader2, RefreshCw } from "lucide-react";
+import { Database, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import type { RespuestaProbarS3, RespuestaS3 } from "@/types";
 
@@ -16,11 +18,7 @@ import { formatoBytes } from "./lib";
 /** Badge de salud para el bucket S3. */
 function BadgeSalud({ salud }: { salud: RespuestaS3["salud"] }) {
   if (salud === "ok") {
-    return (
-      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-        Conectado
-      </Badge>
-    );
+    return <Badge variant="ok">Conectado</Badge>;
   }
   if (salud === "err") {
     return <Badge variant="destructive">Error de conexión</Badge>;
@@ -110,9 +108,7 @@ export function SeccionS3() {
               />
               <Dato etiqueta="Tamaño total" valor={formatoBytes(s3.bytes)} />
             </dl>
-            {s3.error && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">{s3.error}</p>
-            )}
+            {s3.error && <Aviso>{s3.error}</Aviso>}
             {s3.truncado && (
               <p className="text-xs text-muted-foreground">
                 Conteo truncado por volumen: la cifra es un mínimo.
@@ -126,7 +122,7 @@ export function SeccionS3() {
                 disabled={probar.isPending}
               >
                 {probar.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}

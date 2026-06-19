@@ -88,7 +88,7 @@ function mensajeAfectados(activar: boolean, afectados: UsuarioAdmin[]): React.Re
               {nombreVisible(u)} <span className="text-muted-foreground">@{u.usuario}</span>
             </span>
             {activar && !u.mfa_activo && (
-              <span className="shrink-0 text-xs text-amber-600 dark:text-amber-500">sin llave</span>
+              <span className="shrink-0 text-xs text-[hsl(var(--aviso-texto-plano))]">sin llave</span>
             )}
           </span>
         ))}

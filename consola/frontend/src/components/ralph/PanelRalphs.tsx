@@ -46,7 +46,7 @@ export function PanelRalphs() {
               type="button"
               onClick={() => seleccionar(activa ? null : r.id)}
               className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white shadow-md transition-transform hover:scale-105",
+                "flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-primary-foreground shadow-md transition-transform hover:scale-105",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-keni focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 COLOR_ESTADO[r.estado],
                 activa && "ring-2 ring-keni ring-offset-2 ring-offset-background",

@@ -15,6 +15,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Cog, Hammer } from "lucide-rea
 import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EtapaMaquina, EtapaPrompt, MaquinaTexto } from "@/types";
 
@@ -30,12 +31,13 @@ function BadgesPieza({ etapa }: { etapa: EtapaPrompt }) {
   return (
     <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {etapa.produccion ? (
-        <span
-          className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+        <Badge
+          variant="ok"
+          className="gap-1"
           title={`Versión de producción ${etapa.produccion.sha.slice(0, 8)} (${etapa.produccion.autor})`}
         >
           <span aria-hidden>●</span> producción
-        </span>
+        </Badge>
       ) : (
         <span
           className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
@@ -45,12 +47,9 @@ function BadgesPieza({ etapa }: { etapa: EtapaPrompt }) {
         </span>
       )}
       {etapa.sin_publicar ? (
-        <span
-          className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
-          title="El borrador difiere de la versión publicada"
-        >
+        <Badge variant="aviso" className="gap-1" title="El borrador difiere de la versión publicada">
           <AlertTriangle className="h-3 w-3" aria-hidden /> sin publicar
-        </span>
+        </Badge>
       ) : null}
     </span>
   );
@@ -161,17 +160,14 @@ export function FlujoMaquina({
           ) : null}
         </div>
         {conCambios > 0 ? (
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300"
-            title="Etapas cuyo prompt tiene cambios sin publicar"
-          >
+          <Badge variant="aviso" className="gap-1.5" title="Etapas cuyo prompt tiene cambios sin publicar">
             <AlertTriangle className="h-3 w-3" aria-hidden />
             {conCambios} {conCambios === 1 ? "etapa" : "etapas"} sin publicar
-          </span>
+          </Badge>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+          <Badge variant="ok" className="gap-1.5">
             <CheckCircle2 className="h-3 w-3" aria-hidden /> todo publicado
-          </span>
+          </Badge>
         )}
       </header>
 

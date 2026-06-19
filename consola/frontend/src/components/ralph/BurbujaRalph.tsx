@@ -81,7 +81,7 @@ export function BurbujaRalph() {
               draggable={false}
             />
             {!panelAbierto && activos > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-semibold text-white ring-2 ring-background">
+              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[11px] font-semibold text-primary-foreground ring-2 ring-background">
                 {activos}
               </span>
             )}

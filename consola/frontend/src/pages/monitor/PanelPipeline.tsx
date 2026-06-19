@@ -229,7 +229,7 @@ function FilaInterruptor({
         <span
           className={cn(
             "ml-1.5 text-xs font-medium",
-            encendido ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+            encendido ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
           )}
         >
           · {encendido ? "on" : "off"}

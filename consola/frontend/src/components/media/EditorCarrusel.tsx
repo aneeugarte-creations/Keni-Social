@@ -16,7 +16,6 @@ import {
   ArrowUp,
   Film,
   ImagePlus,
-  Loader2,
   RefreshCw,
   Star,
   Trash2,
@@ -26,6 +25,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -159,7 +159,7 @@ export function EditorCarrusel({
           aria-label="Añadir slides"
         >
           {subiendo ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="h-4 w-4" />
           ) : (
             <ImagePlus className="h-4 w-4" />
           )}
@@ -263,7 +263,7 @@ export function EditorCarrusel({
                       />
                       {reemplazando === i && (
                         <span className="absolute inset-0 flex items-center justify-center rounded bg-background/70">
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          <Spinner className="h-4 w-4" aria-hidden="true" />
                         </span>
                       )}
                     </span>

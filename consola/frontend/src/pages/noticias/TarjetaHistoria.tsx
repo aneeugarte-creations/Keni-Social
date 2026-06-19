@@ -11,8 +11,6 @@ import {
   Clock,
   ExternalLink,
   Globe,
-  Loader2,
-  ShieldAlert,
   Sparkles,
   Trash2,
   Zap,
@@ -20,6 +18,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -33,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
@@ -53,9 +53,11 @@ export interface PropsTarjetaHistoria {
   conRestaurar?: boolean;
 }
 
+// Solo la prioridad ALTA se tiñe (rojo, negativo/urgente real); media y baja quedan
+// neutras, alineado con la taxonomía de estado (lib/rota-calendario.ts COLOR_PRIORIDAD).
 const COLOR_PRIORIDAD: Record<string, string> = {
-  alta: "bg-emerald-500",
-  media: "bg-amber-400",
+  alta: "bg-destructive",
+  media: "bg-muted-foreground/40",
   baja: "bg-muted-foreground/40",
 };
 
@@ -219,7 +221,7 @@ export function TarjetaHistoria({
                 >
                   {historia.traduciendo ? (
                     <span className="inline-flex items-center gap-1 italic text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="h-3 w-3" />
                       {historia.titulo || "Traduciendo…"}
                     </span>
                   ) : (
@@ -242,7 +244,7 @@ export function TarjetaHistoria({
                   className="gap-1 text-xs"
                   title="Redactando copy"
                 >
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                   Generando…
                 </Badge>
               ) : piezaEstado === "en_cola" ? (
@@ -277,25 +279,24 @@ export function TarjetaHistoria({
                     </Tooltip>
                   )}
                   {enCurso && (
-                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    <Spinner className="h-3 w-3 text-muted-foreground" />
                   )}
                 </>
               )}
             </div>
           </div>
 
-          {/* La FRASE de corroboración: quién la confirma, quién la abrió, hace cuánto. */}
-          <p
-            className={`text-xs leading-relaxed ${
-              historia.verificacion === "dudosa" ? "text-amber-600" : "text-muted-foreground"
-            }`}
-            data-testid="frase-corroboracion"
-          >
-            {historia.verificacion === "dudosa" && (
-              <ShieldAlert className="mr-1 inline h-3 w-3 align-text-bottom" />
-            )}
-            {fraseCorroboracion(historia)}
-          </p>
+          {/* La FRASE de corroboración: quién la confirma, quién la abrió, hace cuánto.
+              Si la verificación es dudosa, se eleva a un aviso ámbar; si no, texto gris. */}
+          {historia.verificacion === "dudosa" ? (
+            <Aviso className="py-1.5" data-testid="frase-corroboracion">
+              {fraseCorroboracion(historia)}
+            </Aviso>
+          ) : (
+            <p className="text-xs leading-relaxed text-muted-foreground" data-testid="frase-corroboracion">
+              {fraseCorroboracion(historia)}
+            </p>
+          )}
 
           {/* Resumen */}
           {historia.resumen && (

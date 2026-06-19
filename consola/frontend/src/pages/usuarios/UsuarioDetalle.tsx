@@ -3,7 +3,6 @@ import { startRegistration } from "@simplewebauthn/browser";
 import {
   Info,
   KeyRound,
-  Loader2,
   ShieldAlert,
   ShieldOff,
   Smartphone,
@@ -37,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -643,7 +643,7 @@ export default function UsuarioDetalle() {
                   onClick={() => void pedirRegistrarAsistida()}
                 >
                   {registrarAsistida.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner className="h-4 w-4" />
                   ) : (
                     <Smartphone className="h-4 w-4" />
                   )}
@@ -657,7 +657,7 @@ export default function UsuarioDetalle() {
                 onClick={pedirResetMfa}
               >
                 {resetearMfa.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <ShieldOff className="h-4 w-4" />
                 )}
@@ -696,7 +696,7 @@ export default function UsuarioDetalle() {
                   setPassword("");
                 }}
               >
-                {resetear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {resetear.isPending ? <Spinner className="h-4 w-4" /> : null}
                 Resetear
               </Button>
             </div>
@@ -710,7 +710,7 @@ export default function UsuarioDetalle() {
                 onClick={pedirEliminar}
               >
                 {eliminar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <Trash2 className="h-4 w-4" />
                 )}

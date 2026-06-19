@@ -7,9 +7,9 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { api } from "@/lib/api";
 
 export function AvisoSalud() {
@@ -24,12 +24,11 @@ export function AvisoSalud() {
   if (query.isError || query.isPending || errores <= 0) return null;
 
   return (
-    <p className="mb-3 flex items-center gap-1.5 text-xs text-amber-600" data-testid="aviso-salud">
-      <AlertTriangle className="h-3.5 w-3.5" />
+    <Aviso className="mb-3" data-testid="aviso-salud">
       {errores} fuente{errores !== 1 ? "s" : ""} con fallas —{" "}
-      <Link to="/datos/investigacion/fuentes" className="underline hover:text-amber-700">
+      <Link to="/datos/investigacion/fuentes" className="underline">
         revisar en Fuentes
       </Link>
-    </p>
+    </Aviso>
   );
 }

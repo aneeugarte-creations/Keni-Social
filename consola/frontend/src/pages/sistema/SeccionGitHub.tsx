@@ -5,13 +5,13 @@ import {
   ExternalLink,
   Github,
   KeyRound,
-  Loader2,
   LogOut,
   RefreshCw,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import {
   AlertDialog,
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import type { GithubAuth } from "@/types";
 
@@ -50,11 +51,7 @@ function BadgeAuth({ auth }: { auth: GithubAuth | undefined }) {
     return <Badge variant="secondary">Desconocido</Badge>;
   }
   if (auth.logueado) {
-    return (
-      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-        GitHub conectado
-      </Badge>
-    );
+    return <Badge variant="ok">GitHub conectado</Badge>;
   }
   return <Badge variant="destructive">Sin conectar</Badge>;
 }
@@ -148,7 +145,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
             <DialogFooter>
               <Button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
                 {iniciar.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <KeyRound className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}
@@ -189,7 +186,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
               <DialogFooter>
                 <Button onClick={() => confirmar.mutate()} disabled={confirmar.isPending}>
                   {confirmar.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Spinner className="mr-2 h-4 w-4" />
                   ) : (
                     <BadgeCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                   )}
@@ -299,9 +296,9 @@ export function SeccionGitHub() {
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {!data.disponible ? (
-          <p className="text-sm text-amber-600 dark:text-amber-400">
+          <Aviso>
             No se pudo contactar el servicio de control (daemons). Reintenta en unos segundos.
-          </p>
+          </Aviso>
         ) : !conectado ? (
           <div className="space-y-3">
             <p className="text-sm">

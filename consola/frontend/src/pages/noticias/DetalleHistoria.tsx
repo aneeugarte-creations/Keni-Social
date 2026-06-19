@@ -8,7 +8,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Newspaper, Trash2, Zap } from "lucide-react";
+import { ExternalLink, Newspaper, Trash2, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { etiquetaLinea } from "@/lib/lineas";
@@ -175,7 +176,7 @@ export function DetalleHistoria({
               disabled={usarMut.isPending || descartarMut.isPending}
             >
               {descartarMut.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Spinner className="h-3 w-3" />
               ) : (
                 <Trash2 className="h-3 w-3" />
               )}
@@ -188,7 +189,7 @@ export function DetalleHistoria({
               disabled={usarMut.isPending || descartarMut.isPending}
             >
               {usarMut.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Spinner className="h-3 w-3" />
               ) : (
                 <Newspaper className="h-3 w-3" />
               )}

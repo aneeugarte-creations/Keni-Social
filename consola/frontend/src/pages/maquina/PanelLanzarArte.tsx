@@ -11,9 +11,10 @@
  * selector LOCAL).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Coins, ImageOff, Loader2, Pencil, Sparkles } from "lucide-react";
+import { Coins, ImageOff, Pencil, Sparkles } from "lucide-react";
 import * as React from "react";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError, urlMedia } from "@/lib/api";
@@ -175,13 +177,10 @@ export function PanelLanzarArte({
         </DialogHeader>
 
         {!configurado ? (
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              La generación de imagen no está configurada. Añade una clave de proveedor de
-              imagen (Ajustes → Conexiones · Imagen con IA) para activarla.
-            </span>
-          </div>
+          <Aviso>
+            La generación de imagen no está configurada. Añade una clave de proveedor de
+            imagen (Ajustes → Conexiones · Imagen con IA) para activarla.
+          </Aviso>
         ) : null}
 
         {/* Prompt de arte (Prompts), precargado y editable. */}
@@ -267,7 +266,7 @@ export function PanelLanzarArte({
             disabled={!puedeArrancar}
           >
             {lanzar.isPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              <Spinner className="mr-1 h-4 w-4" />
             ) : (
               <Sparkles className="mr-1 h-4 w-4" />
             )}
@@ -308,7 +307,7 @@ function ResultadoArte({ gen }: { gen: Generacion }) {
   if (gen.estado === "ejecutando" || !res?.url) {
     return (
       <div className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md border border-border bg-muted/40 text-xs text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
+        <Spinner className="h-5 w-5" />
         <span>Generando…</span>
       </div>
     );

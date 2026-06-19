@@ -10,7 +10,7 @@
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Layers, Loader2, Newspaper, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, Newspaper, Target } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -18,6 +18,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaLinea } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
@@ -44,13 +45,13 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
   return (
     <div className="mb-4 space-y-2" data-testid="barra-plan-dia">
       <div className="flex flex-wrap items-center gap-2">
-        <Target className="h-4 w-4 text-emerald-600" />
+        <Target className="h-4 w-4 text-foreground" />
         <span className="text-sm font-medium">Plan de hoy{nombre ? ` — ${nombre}` : ""}</span>
         <span className="text-sm tabular-nums text-muted-foreground">
           {data.total_generados} de {data.total_objetivo}
         </span>
         <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${avance}%` }} />
+          <div className="h-full rounded-full bg-foreground" style={{ width: `${avance}%` }} />
         </div>
         <Link
           to="/operacion/programacion"
@@ -65,11 +66,8 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
           return (
             <Badge
               key={l.linea}
-              variant="outline"
-              className={cn(
-                "gap-1 text-xs tabular-nums",
-                completa && "border-emerald-500 text-emerald-700",
-              )}
+              variant={completa ? "ok" : "outline"}
+              className="gap-1 text-xs tabular-nums"
               data-testid={`chip-linea-${l.linea}`}
             >
               {(l.etiqueta || etiquetaLinea(l.linea))} {l.generados}/{l.cupo}
@@ -218,11 +216,11 @@ function ListaHistorias({
         ) : (
           <div
             key={`macro:${b.tema}`}
-            className="space-y-2 rounded-lg border border-keni-200 bg-keni-50/40 p-2"
+            className="space-y-2 rounded-lg border border-border bg-muted/30 p-2"
             data-testid="grupo-macro"
             data-tema-macro={b.tema}
           >
-            <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-keni-700">
+            <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-foreground">
               <Layers className="h-3.5 w-3.5" />
               <span>{b.tema}</span>
               <span className="font-normal tabular-nums text-muted-foreground">
@@ -336,7 +334,7 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
       <div className="space-y-4" data-testid="mesa-grupos">
         <BarraGrupos grupos={grupos} total={total} sel={grupoSel} onSel={setGrupoSel} />
         {query.isFetching && !query.isPending && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-label="Actualizando" />
+          <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
         )}
         {visibles.length === 0 ? (
           <EstadoVacio
@@ -367,7 +365,7 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
     <div className="space-y-6">
       <BarraPlanDia data={data} nombre={nombre} />
       {query.isFetching && !query.isPending && (
-        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-label="Actualizando" />
+        <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
       )}
 
       {vacia && (

@@ -5,13 +5,13 @@ import {
   Download,
   File,
   Folder,
-  Loader2,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, mensajeError, urlS3Objeto } from "@/lib/api";
 import type { MigaS3, ObjetoS3 } from "@/types";
 
@@ -132,7 +133,7 @@ function PreviewObjeto({
                     onClick={() => onBorrar(objeto)}
                   >
                     {borrando ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      <Spinner className="mr-2 h-4 w-4" />
                     ) : (
                       <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
                     )}
@@ -331,7 +332,7 @@ export function SeccionNavegadorS3() {
             aria-label="Refrescar"
           >
             {query.isFetching ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <Spinner className="h-3.5 w-3.5" />
             ) : (
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
             )}
@@ -350,9 +351,7 @@ export function SeccionNavegadorS3() {
         )}
 
         {/* Error de sonda (S3 configurado pero fallo de red) */}
-        {datos.error && (
-          <p className="text-sm text-amber-600 dark:text-amber-400">{datos.error}</p>
-        )}
+        {datos.error && <Aviso>{datos.error}</Aviso>}
 
         {/* Barra de acciones en masa: aparece al seleccionar objetos. Confirma antes de borrar. */}
         {nSeleccionados > 0 && (
@@ -377,7 +376,7 @@ export function SeccionNavegadorS3() {
                 onClick={() => confirmarBorrarLote([...seleccion])}
               >
                 {borrarLote.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  <Spinner className="mr-2 h-4 w-4" />
                 ) : (
                   <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}

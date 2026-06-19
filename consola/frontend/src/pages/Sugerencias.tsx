@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightbulb, Loader2, Plus } from "lucide-react";
+import { Lightbulb, Plus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -278,7 +279,7 @@ function Tarjeta({
         )}
         {enVivo && (
           <span className="flex items-center gap-1 text-[10px] text-sky-600">
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            <Spinner className="h-3 w-3" aria-hidden="true" />
             en vivo
           </span>
         )}
@@ -395,7 +396,7 @@ function NuevaIdea({
           </Button>
           <Button onClick={() => crear.mutate()} disabled={!puedeEnviar}>
             {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Plus className="h-4 w-4" />
             )}

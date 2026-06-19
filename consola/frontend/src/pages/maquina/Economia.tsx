@@ -49,7 +49,9 @@ import type {
 } from "@/types";
 
 /** Las 4 pestañas de Contexto, en orden de flujo, con su etiqueta y color. Reusa la meta de los
- *  dos motores (ADR 0011) y añade Herramientas y Desarrollo. */
+ *  dos motores (ADR 0011) y añade Herramientas y Desarrollo. Es color por CATEGORÍA (identifica la
+ *  pestaña en cabeceras y puntos), no un estado de trabajo: por eso va con color directo, igual que
+ *  `PROC_META`, y no por `Badge`/`ChipEstado`. */
 const PESTANAS: readonly PestanaEconomia[] = [
   "investigacion",
   "produccion",

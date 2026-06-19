@@ -157,11 +157,13 @@ export function TablaDocumentos({
           <button
             type="button"
             onClick={() => onCambioSinPublicar(false)}
-            className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Quitar el filtro de cambios sin publicar"
           >
-            <AlertTriangle className="h-3 w-3" aria-hidden /> solo sin publicar
-            <X className="h-3 w-3" aria-hidden />
+            <Badge variant="aviso" className="gap-1">
+              <AlertTriangle className="h-3 w-3" aria-hidden /> solo sin publicar
+              <X className="h-3 w-3" aria-hidden />
+            </Badge>
           </button>
         ) : null}
         <Button

@@ -27,7 +27,7 @@ export function ChipInvestigacion() {
       className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       title="Abrir Cómputo prefiltrado al loop de investigación"
     >
-      <Microscope className="h-3.5 w-3.5 text-sky-600" aria-hidden="true" />
+      <Microscope className="h-3.5 w-3.5" aria-hidden="true" />
       <span>
         Investigación:{" "}
         <span className="font-medium tabular-nums text-foreground">{inv.procesando}</span> en

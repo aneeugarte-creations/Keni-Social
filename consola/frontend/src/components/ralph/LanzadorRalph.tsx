@@ -3,7 +3,7 @@
  * defecto) + botón Lanzar. Al lanzar, el store crea el Ralph, abre su chat y empieza
  * a seguir su stream en vivo.
  */
-import { Loader2, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { ETIQUETA_MODELO, useRalphStore } from "@/store/ralphStore";
 import type { ModeloRalph, TipoRalph } from "@/types/ralph";
 
@@ -111,7 +112,7 @@ export function LanzadorRalph() {
               disabled={spawneando || !prompt.trim()}
             >
               {spawneando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Rocket className="h-4 w-4" />
               )}

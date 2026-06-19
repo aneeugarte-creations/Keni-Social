@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Info, Loader2, Save, ShieldCheck, Trash2, X } from "lucide-react";
+import { Check, Info, Save, ShieldCheck, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -139,7 +140,7 @@ function SeccionPostproxyAdmin() {
           <p
             className={cn(
               "flex items-center gap-1.5 text-sm",
-              resultadoPrueba.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+              resultadoPrueba.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive",
             )}
           >
             {resultadoPrueba.ok ? (
@@ -154,7 +155,7 @@ function SeccionPostproxyAdmin() {
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
             {guardar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Save className="h-4 w-4" />
             )}
@@ -164,7 +165,7 @@ function SeccionPostproxyAdmin() {
             <>
               <Button size="sm" variant="outline" onClick={() => probar.mutate()} disabled={ocupado}>
                 {probar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <ShieldCheck className="h-4 w-4" />
                 )}

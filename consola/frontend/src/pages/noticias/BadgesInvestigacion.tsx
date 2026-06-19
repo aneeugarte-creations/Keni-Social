@@ -30,7 +30,7 @@ export function ChipMarca({ historia, className }: { historia: Historia; classNa
         <Tooltip label="Marca asignada por IA" side="top">
           <Badge
             variant="outline"
-            className="gap-0.5 border-violet-500/30 px-1 text-[10px] text-violet-600"
+            className="gap-0.5 border-violet-500/30 px-1 text-[10px] text-violet-700 dark:text-violet-300"
             data-testid="badge-marca-ia"
           >
             <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />
@@ -72,11 +72,8 @@ export function BadgeVerificacionFuente({
     return (
       <Tooltip label="La IA no pudo verificarla; requiere revisión humana" side="top">
         <Badge
-          variant="secondary"
-          className={cn(
-            "gap-1 border border-amber-500/30 bg-amber-500/15 text-amber-600",
-            className,
-          )}
+          variant="aviso"
+          className={cn("gap-1", className)}
           data-testid="badge-verificacion-requiere-humano"
         >
           <AlertTriangle className="h-3 w-3" aria-hidden="true" />

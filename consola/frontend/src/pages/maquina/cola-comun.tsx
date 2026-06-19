@@ -168,10 +168,7 @@ export function TablaJobs({
                 <span className="inline-flex items-center gap-1.5">
                   {j.etiqueta || j.gen_id}
                   {j.prioridad > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
-                    >
+                    <Badge variant="info" className="text-[10px]">
                       prioritario
                     </Badge>
                   )}
@@ -279,7 +276,9 @@ const PROC_PRESUPUESTO_VACIO: PresupuestoProcesoIA = {
   nivel: "normal",
 };
 
-/** Barra de progreso del % usado (verde < 80, ámbar < 100, rojo ≥ 100). */
+/** Barra de progreso del % usado (verde < 80, ámbar < 100, rojo ≥ 100). El relleno es una
+ *  GRADACIÓN DE SEVERIDAD por umbral (no un estado discreto), así que va con color directo
+ *  y no por `Badge`. */
 function BarraPct({ pct, ancho = "w-full" }: { pct: number; ancho?: string }) {
   return (
     <div className={cn("h-1.5 overflow-hidden rounded-full bg-muted", ancho)}>

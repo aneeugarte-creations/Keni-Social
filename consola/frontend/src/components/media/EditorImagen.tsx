@@ -14,7 +14,6 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ImagePlus,
   Library,
-  Loader2,
   Save,
   Trash2,
   Upload,
@@ -33,6 +32,7 @@ import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { nombreRed, tamanoRed } from "@/pages/piezas/meta";
@@ -353,7 +353,7 @@ function FuenteFondo({
           Galería
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onSubir} disabled={ocupado}>
-          {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {subiendo ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
           Subir foto
         </Button>
         <span className="text-xs text-muted-foreground">o genera con IA:</span>
@@ -382,7 +382,7 @@ function FuenteFondo({
           disabled={ocupado || prompt.trim().length === 0}
           className="shrink-0"
         >
-          {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
+          {generandoIA ? <Spinner className="h-4 w-4" /> : <MarcaIA costo />}
           {generandoIA ? "Generando…" : "Generar con IA"}
         </Button>
       </div>

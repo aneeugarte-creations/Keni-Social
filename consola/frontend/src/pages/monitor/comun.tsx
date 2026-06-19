@@ -11,7 +11,10 @@ import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { ColaSerie, Proceso, ResultadoDia, ResultadoProceso } from "@/types";
 
-/** Metadatos de presentación por proceso (color del segmento, etiqueta, tinte del texto). */
+/** Metadatos de presentación por proceso (color del segmento, etiqueta, tinte del texto). Es un
+ *  mapa de color por MOTOR (investigación/producción), no un estado de trabajo: identifica el
+ *  proceso en barras y gráficas, por eso NO va por `Badge`/`ChipEstado`. Reutilizado por Monitor,
+ *  Cómputo y Economía. */
 export const PROC_META: Record<Proceso, { etiqueta: string; barra: string; texto: string }> = {
   investigacion: { etiqueta: "Investigación", barra: "bg-sky-500/70", texto: "text-sky-600" },
   produccion: { etiqueta: "Producción", barra: "bg-emerald-500/70", texto: "text-emerald-600" },
