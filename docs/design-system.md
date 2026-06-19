@@ -49,6 +49,7 @@ Definidos en `index.css` como variables HSL y mapeados en `tailwind.config.js`.
 - Paleta Tailwind arbitraria para **chrome** (`bg-blue-*`, `text-indigo-*`, `bg-violet-*`…).
 - **Color semántico de estado a mano** (`bg-emerald-500/15`, `text-amber-700`, `bg-red-500`…). Para eso están las variantes de `Badge`, `ChipEstado` y `<Aviso>` (§5).
 - Permitido sin tokens: `src/editor/*` (lienzo gráfico), gráficas (`lib/coloresRed.ts` + safelist Tremor), y mocks de redes sociales (imitan IG/TikTok/X/YouTube — coméntalo).
+- **Guard ACTIVO (`eslint.config.js`)**: `no-restricted-syntax` ERRORA si pintas la píldora de estado / el callout inline con `bg-{emerald|amber|sky|red|rose}-{400|500}/{10|15|20}` en `src/pages`/`src/components`. Si tu caso es una excepción legítima nueva, añádela al `ignores` del rule con justificación; si no, usa la primitiva (§5).
 
 ---
 
