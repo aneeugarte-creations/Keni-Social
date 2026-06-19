@@ -23,6 +23,8 @@ export interface Sugerencia {
   detalle: string;
   categoria: string;
   autor: string;
+  /** Id del usuario que la creó (clave de propiedad; el resto del equipo solo ve las suyas). */
+  autor_id: string;
   estado: EstadoSugerencia | string;
   complejidad: ComplejidadSugerencia | string;
   /** Fase del pipeline en curso: ''|analyze|plan|build|review. */
@@ -45,6 +47,8 @@ export interface RespuestaSugerencias {
   sugerencias: Sugerencia[];
   categorias: string[];
   estados: string[];
+  /** `true` => la sesión es superadmin: ve el TABLERO completo. El resto solo sus ideas. */
+  superadmin: boolean;
 }
 
 export interface RespuestaSugerencia {
@@ -55,7 +59,6 @@ export interface CuerpoCrearSugerencia {
   titulo: string;
   detalle?: string;
   categoria?: string;
-  autor?: string;
 }
 
 export interface CuerpoActualizarSugerencia {

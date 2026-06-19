@@ -74,6 +74,9 @@ const OauthConectado = lazy(() => import("@/pages/OauthConectado"));
 
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
+const DetalleSugerenciaPagina = lazy(
+  () => import("@/pages/sugerencias/DetalleSugerenciaPagina"),
+);
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 // Panel de usuarios: lista (tabla) + subpáginas a tamaño completo (alta, detalle, config global).
@@ -387,6 +390,8 @@ export const router = createBrowserRouter([
       // apariencia → Mi cuenta. La ruta vieja redirige al drawer (cockpit de Producción).
       { path: "configuracion", element: <Navigate to="/maquina/contexto?proceso=produccion&tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
+      // Detalle/spec de una sugerencia como SUBPÁGINA (no popup): URL propia, deep-link.
+      { path: "sugerencias/:id", element: <DetalleSugerenciaPagina /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.
       { path: "webhooks", element: <Webhooks /> },

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lightbulb, Plus } from "lucide-react";
+import { Hammer, Lightbulb, Plus, X } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -26,11 +27,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { EstadoSugerencia, Sugerencia } from "@/types";
 
-import { DetalleSugerencia } from "./sugerencias/DetalleSugerencia";
 import {
   CATEGORIA_LABEL,
   CLAVE_SUGERENCIAS,
@@ -46,23 +47,24 @@ import {
 const MIME_ARRASTRE = "text/plain";
 
 /**
- * Panel de Sugerencias como KANBAN de auto-desarrollo (estilo Nolan v2):
- * Ideas → Discovery → En cola → Building → Revisión → Hecho, con una zona aparte
- * para piezas Fallidas/Descartadas. Arrastre HTML5 nativo entre columnas; click en
- * una tarjeta abre el detalle (spec/plan, stream en vivo y acciones del flujo).
+ * Panel de Sugerencias. El SUPERADMIN ve el KANBAN de auto-desarrollo completo
+ * (Ideas → Discovery → En cola → Building → Revisión → Hecho + zona de archivadas) y lo
+ * controla; el resto del equipo solo ve SUS ideas y su spec. El detalle/spec abre como
+ * SUBPÁGINA (`/sugerencias/:id`), no como popup.
  */
 export default function Sugerencias() {
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: CLAVE_SUGERENCIAS,
     queryFn: ({ signal }) => api.sugerencias(signal),
   });
 
   const [nuevaAbierta, setNuevaAbierta] = React.useState(false);
-  const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
 
   const sugerencias = query.data?.sugerencias ?? [];
   const categorias = query.data?.categorias ?? Object.keys(CATEGORIA_LABEL);
-  const seleccion = sugerencias.find((s) => s.id === seleccionId) ?? null;
+  const esSuper = query.data?.superadmin ?? false;
+  const abrir = (s: Sugerencia) => navigate(`/sugerencias/${s.id}`);
 
   return (
     <>
@@ -88,8 +90,14 @@ export default function Sugerencias() {
               <Skeleton key={i} className="h-64 w-full rounded-lg" />
             ))}
           </div>
+        ) : esSuper ? (
+          <Tablero sugerencias={sugerencias} onAbrir={abrir} />
         ) : (
-          <Tablero sugerencias={sugerencias} onAbrir={(s) => setSeleccionId(s.id)} />
+          <MisIdeas
+            sugerencias={sugerencias}
+            onAbrir={abrir}
+            onNueva={() => setNuevaAbierta(true)}
+          />
         )}
       </div>
 
@@ -98,12 +106,69 @@ export default function Sugerencias() {
         onCerrar={() => setNuevaAbierta(false)}
         categorias={categorias}
       />
-      <DetalleSugerencia sugerencia={seleccion} onClose={() => setSeleccionId(null)} />
     </>
   );
 }
 
-// --- Tablero kanban --------------------------------------------------------
+// --- Vista del equipo (no superadmin): solo MIS ideas ----------------------
+
+function MisIdeas({
+  sugerencias,
+  onAbrir,
+  onNueva,
+}: {
+  sugerencias: Sugerencia[];
+  onAbrir: (s: Sugerencia) => void;
+  onNueva: () => void;
+}) {
+  if (sugerencias.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/20 p-10 text-center">
+        <Lightbulb className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+        <p className="text-sm text-muted-foreground">
+          Aún no has propuesto ninguna idea. Comparte una mejora, un bug o una idea para el
+          equipo.
+        </p>
+        <Button onClick={onNueva}>
+          <Plus className="h-4 w-4" />
+          Nueva idea
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Tus ideas. Ábrelas para seguir su discovery y su spec.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {sugerencias.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onAbrir(s)}
+            className="space-y-2 rounded-md border border-border bg-card p-3 text-left text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <p className="text-sm font-medium leading-snug">{s.titulo}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="text-[10px] font-normal">
+                {etiqueta(CATEGORIA_LABEL, s.categoria)}
+              </Badge>
+              <Badge
+                variant={ESTADO_VARIANTE[s.estado] ?? "secondary"}
+                className="text-[10px] font-normal"
+              >
+                {etiqueta(ESTADO_LABEL, s.estado)}
+              </Badge>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// --- Tablero kanban (superadmin) -------------------------------------------
 
 function Tablero({
   sugerencias,
@@ -114,6 +179,9 @@ function Tablero({
 }) {
   const queryClient = useQueryClient();
   const [sobreColumna, setSobreColumna] = React.useState<string | null>(null);
+
+  const invalidar = () =>
+    void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
 
   const mover = useMutation({
     mutationFn: async ({ s, destino }: { s: Sugerencia; destino: EstadoSugerencia }) => {
@@ -127,8 +195,22 @@ function Tablero({
         await api.actualizarSugerencia(s.id, { estado: destino });
       }
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
+    onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Acciones RÁPIDAS desde la propia tarjeta (sin abrir el detalle).
+  const accionRapida = useMutation({
+    mutationFn: async ({ s, accion }: { s: Sugerencia; accion: "construir" | "descartar" }) => {
+      if (accion === "construir") {
+        await api.construirSugerencia(s.id);
+      } else {
+        await api.actualizarSugerencia(s.id, { estado: "descartada" });
+      }
+    },
+    onSuccess: (_r, { accion }) => {
+      invalidar();
+      toast.success(accion === "construir" ? "En cola para construir" : "Descartada");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -165,7 +247,13 @@ function Tablero({
               onDrop={(e) => soltar(col.estado, e)}
             >
               {items.map((s) => (
-                <Tarjeta key={s.id} sugerencia={s} onAbrir={() => onAbrir(s)} />
+                <Tarjeta
+                  key={s.id}
+                  sugerencia={s}
+                  onAbrir={() => onAbrir(s)}
+                  onAccion={(accion) => accionRapida.mutate({ s, accion })}
+                  ocupada={accionRapida.isPending}
+                />
               ))}
             </Columna>
           );
@@ -244,11 +332,24 @@ function Columna({
 function Tarjeta({
   sugerencia,
   onAbrir,
+  onAccion,
+  ocupada,
 }: {
   sugerencia: Sugerencia;
   onAbrir: () => void;
+  onAccion: (accion: "construir" | "descartar") => void;
+  ocupada: boolean;
 }) {
-  const enVivo = !!sugerencia.gen_id && sugerencia.estado === "building";
+  const estado = sugerencia.estado;
+  const enVivo = !!sugerencia.gen_id && estado === "building";
+  const puedeConstruir = estado === "nueva" || estado === "discovery" || estado === "fallida";
+  const puedeDescartar = estado !== "descartada";
+  // Las acciones rápidas no deben disparar el click de la tarjeta ni el arrastre.
+  const sinPropagar = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
+
   return (
     <div
       draggable
@@ -262,7 +363,7 @@ function Tarjeta({
           onAbrir();
         }
       }}
-      className="cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      className="group cursor-grab space-y-2 rounded-md border border-border bg-card p-3 text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
     >
       <p className="text-sm font-medium leading-snug">{sugerencia.titulo}</p>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -291,6 +392,38 @@ function Tarjeta({
             .join(" · ")}
         </p>
       )}
+      {(puedeConstruir || puedeDescartar) && (
+        <div className="flex items-center justify-end gap-1 pt-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {puedeConstruir && (
+            <Tooltip label="Construir" side="top">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                disabled={ocupada}
+                onClick={sinPropagar(() => onAccion("construir"))}
+                aria-label="Construir"
+              >
+                <Hammer className="h-3.5 w-3.5" />
+              </Button>
+            </Tooltip>
+          )}
+          {puedeDescartar && (
+            <Tooltip label="Descartar" side="top">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-destructive hover:text-destructive"
+                disabled={ocupada}
+                onClick={sinPropagar(() => onAccion("descartar"))}
+                aria-label="Descartar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </Tooltip>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -310,7 +443,6 @@ function NuevaIdea({
   const [titulo, setTitulo] = React.useState("");
   const [detalle, setDetalle] = React.useState("");
   const [categoria, setCategoria] = React.useState(categorias[0] ?? "idea");
-  const [autor, setAutor] = React.useState("");
 
   const crear = useMutation({
     mutationFn: () =>
@@ -318,14 +450,12 @@ function NuevaIdea({
         titulo: titulo.trim(),
         detalle: detalle.trim() || undefined,
         categoria,
-        autor: autor.trim() || undefined,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
       toast.success("Idea creada");
       setTitulo("");
       setDetalle("");
-      setAutor("");
       onCerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -362,32 +492,20 @@ function NuevaIdea({
               maxLength={8000}
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="idea-categoria">Categoría</Label>
-              <Select value={categoria} onValueChange={setCategoria}>
-                <SelectTrigger id="idea-categoria">
-                  <SelectValue placeholder="Categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categorias.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {etiqueta(CATEGORIA_LABEL, c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="idea-autor">Tu nombre</Label>
-              <Input
-                id="idea-autor"
-                value={autor}
-                onChange={(e) => setAutor(e.target.value)}
-                placeholder="Opcional"
-                maxLength={120}
-              />
-            </div>
+          <div className="space-y-1.5 sm:max-w-xs">
+            <Label htmlFor="idea-categoria">Categoría</Label>
+            <Select value={categoria} onValueChange={setCategoria}>
+              <SelectTrigger id="idea-categoria">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                {categorias.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {etiqueta(CATEGORIA_LABEL, c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter>

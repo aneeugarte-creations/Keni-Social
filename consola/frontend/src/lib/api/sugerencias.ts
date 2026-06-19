@@ -18,6 +18,8 @@ export const apiSugerencias = {
   // --- CRUD ---
   sugerencias: (signal?: AbortSignal) =>
     peticion<RespuestaSugerencias>("/sugerencias", { signal }),
+  sugerencia: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaSugerencia>(`/sugerencias/${enc(id)}`, { signal }),
   crearSugerencia: (cuerpo: CuerpoCrearSugerencia) =>
     peticion<RespuestaSugerencia>("/sugerencias", { metodo: "POST", json: cuerpo }),
   actualizarSugerencia: (id: string, cuerpo: CuerpoActualizarSugerencia) =>
