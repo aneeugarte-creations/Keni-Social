@@ -196,6 +196,7 @@ def paso_agrupar() -> dict[str, Any]:
                         f"Priorizar historias — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
                         salida,  # la respuesta REAL de Haiku (keywords del perfil)
                         prompt=prompt,
+                        etapa="Priorizar",
                     ),
                 )
             palabras = _palabras_relevancia(marca_c, perfil_activo)

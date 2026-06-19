@@ -502,6 +502,7 @@ def registrar_gasto_ia(
     cache_creation: int = 0,
     modelo: str = "",
     proceso: str = "produccion",
+    etapa: str = "",
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
@@ -514,6 +515,8 @@ def registrar_gasto_ia(
     `proceso` (ADR 0011): 'investigacion' | 'produccion', el loop de la maquina que gasto;
     lo conoce el llamante (`presupuesto_ia.registrar_cierre` via `generaciones.proceso_de`).
     Default 'produccion' (la maquina de contenido) para llamantes que aun no lo pasan.
+    `etapa` (opcional): fase del pipeline EXPLICITA cuando el llamante la conoce (las fases inline
+    del pool, que comparten `tipo='pipeline'`); vacio => la economia la deriva de `tipo`+`proceso`.
     """
     if not gen_id:
         return
@@ -522,18 +525,18 @@ def registrar_gasto_ia(
     try:
         con.execute(
             "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
-            "coste_usd, prompt_chars, cache_read, cache_creation, modelo, proceso, actualizado) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "coste_usd, prompt_chars, cache_read, cache_creation, modelo, proceso, etapa, actualizado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
             "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
             "coste_usd = EXCLUDED.coste_usd, prompt_chars = EXCLUDED.prompt_chars, "
             "cache_read = EXCLUDED.cache_read, cache_creation = EXCLUDED.cache_creation, "
-            "modelo = EXCLUDED.modelo, proceso = EXCLUDED.proceso, "
+            "modelo = EXCLUDED.modelo, proceso = EXCLUDED.proceso, etapa = EXCLUDED.etapa, "
             "actualizado = EXCLUDED.actualizado",
             (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd),
              int(prompt_chars), int(cache_read), int(cache_creation), str(modelo or ""),
-             str(proceso or "produccion"), ahora),
+             str(proceso or "produccion"), str(etapa or ""), ahora),
         )
         con.commit()
     finally:
@@ -769,10 +772,10 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT proceso, tipo, dia, COUNT(*) AS items, "
+            "SELECT proceso, tipo, etapa, dia, COUNT(*) AS items, "
             "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, "
             "COALESCE(SUM(coste_usd), 0) AS coste "
-            f"FROM gasto_ia {where} GROUP BY proceso, tipo, dia",
+            f"FROM gasto_ia {where} GROUP BY proceso, tipo, etapa, dia",
             params,
         ).fetchall()
     finally:
@@ -791,8 +794,9 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
         tipo = str(f["tipo"] or "")
         acc = acumulado[pestana_economia(proceso, tipo)]
         # La ETAPA (fase del pipeline) es la unidad del desglose, no el tipo crudo: varios tipos
-        # colapsan en una fase (copy/autogen -> Redactar) para hablar el idioma del pipeline.
-        etapa_nom = etapa_economia(proceso, tipo)
+        # colapsan en una fase (copy/autogen -> Redactar). Si la fila trae una etapa EXPLICITA (las
+        # fases inline del pool, que comparten tipo='pipeline'), manda; si no, se deriva del tipo.
+        etapa_nom = str(f["etapa"] or "") or etapa_economia(proceso, tipo)
         _bump(acc, items, tokens, coste)
         dia = iso_o_vacio(f["dia"])
         celda_dia = acc["_por_dia"].get(dia)

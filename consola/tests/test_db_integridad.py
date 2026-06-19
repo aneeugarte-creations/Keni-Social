@@ -572,6 +572,32 @@ def test_gasto_ia_economia_reclasifica_herramientas_y_desarrollo(pg):
     assert eco["investigacion"]["total"]["items"] == 1  # el pipeline sellado investigacion
 
 
+def test_gasto_ia_economia_etapa_explicita_manda(pg):
+    """Las fases inline del pool (tipo='pipeline'+investigacion) traen ETAPA explícita: la economía
+    la usa en vez de colapsarlas en «Verificar» (la derivación por tipo)."""
+    from keni_consola import repos
+    from keni_consola.tiempo import hoy_utc
+
+    hoy_iso = hoy_utc().isoformat()
+    # Mismo tipo+proceso, distinta etapa explícita: deben separarse en el desglose por etapa.
+    repos.registrar_gasto_ia("f1", dia=hoy_iso, proceso="investigacion", tipo="pipeline",
+                             etapa="Fusionar", marca="unotv", tokens_in=100, tokens_out=20,
+                             coste_usd=0.01)
+    repos.registrar_gasto_ia("p1", dia=hoy_iso, proceso="investigacion", tipo="pipeline",
+                             etapa="Priorizar", marca="unotv", tokens_in=50, tokens_out=10,
+                             coste_usd=0.02)
+    # Sin etapa explícita -> deriva «Verificar» de tipo='pipeline'+investigacion.
+    repos.registrar_gasto_ia("v1", dia=hoy_iso, proceso="investigacion", tipo="pipeline",
+                             marca="unotv", tokens_in=200, tokens_out=20, coste_usd=0.005)
+
+    inv = db.gasto_ia_economia_por_proceso(2)["investigacion"]
+    etapas = {e["etapa"]: e for e in inv["por_etapa"]}
+    assert set(etapas) == {"Fusionar", "Priorizar", "Verificar"}
+    assert etapas["Priorizar"]["coste_usd"] == pytest.approx(0.02)  # ordenado por coste desc primero
+    assert etapas["Fusionar"]["items"] == 1 and etapas["Verificar"]["items"] == 1
+    assert inv["total"]["items"] == 3  # las tres siguen sumando al total de Investigación
+
+
 def test_gasto_ia_economia_filtra_por_marca(pg):
     """`marca` acota el desglose a sus filas; "" devuelve el AGREGADO de todas."""
     from keni_consola import repos

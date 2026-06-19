@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import keni_consola.recolectar_daemon as _pkg
+
 from ... import config, repos
 from ...dominio import traducir
 from .._comun import _log
@@ -36,9 +38,16 @@ def paso_traducir(*, ejecutor: traducir.Ejecutor | None = None) -> dict[str, Any
         for c in candidatos
     ]
     traducciones = traducir.traducir_items(items, ejecutor=ejecutor)
-    # Traducir no registra actividad propia: descarta sus métricas para que no se
-    # atribuyan al SIGUIENTE paso que sí registra (Fusionar/Priorizar del próximo barrido).
-    traducir.tomar_metricas_acumuladas()
+    # Traducir es POOL-WIDE (un lote de varias marcas en una llamada Haiku): registra SU propia
+    # actividad con etapa "Traducir" y marca "" (agregado del pool), tomando las métricas
+    # acumuladas de ESTA llamada. Así su coste aparece en la economía por etapa en vez de
+    # filtrarse al siguiente paso que registra (Fusionar/Priorizar del próximo barrido).
+    _pkg._registrar_actividad_ia(
+        "",
+        f"Traducir historias — {len(candidatos)} cluster(s) a ES (MX)",
+        "",
+        etapa="Traducir",
+    )
     por_id = {str(t.get("id") or ""): t for t in traducciones}
     originales = {c["id"]: c for c in candidatos}
 

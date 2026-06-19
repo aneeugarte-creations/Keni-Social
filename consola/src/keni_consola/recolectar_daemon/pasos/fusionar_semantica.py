@@ -181,6 +181,7 @@ def paso_fusionar_semantica(
                 f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s)",
                 salida,
                 prompt=haiku["prompt"],
+                etapa="Fusionar",
             )
 
         # MACRO-EVENTO (Fase A): además de FUNDIR duplicados, ETIQUETA familias de clusters
@@ -232,6 +233,7 @@ def paso_fusionar_semantica(
                 f"Macro-evento — {marcas.etiqueta_de(marca_f)}: {etiquetadas} familia(s)",
                 salida_m,
                 prompt=haiku_macro["prompt"],
+                etapa="Macro-evento",
             )
     _comun._ultimo_fusionar = ahora_mono
     _comun._ultima_huella_fusionar = huella

@@ -118,17 +118,19 @@ def _rendimiento_bonus(
     return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
 
 
-def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: str = "") -> None:
-    """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
+def _registrar_actividad_ia(
+    marca: str, etiqueta: str, salida: str, *, prompt: str = "", etapa: str = ""
+) -> None:
+    """Sella una GENERACIÓN-actividad (`tipo='pipeline'`) de un paso IA INLINE del pool (best-effort).
 
-    Hace VISIBLES en «Actividad IA» (y en la etapa Priorizar del pipeline) los pasos Haiku del pool
-    —Fusionar (dedup) y Priorizar— que antes corrían mudos. Es un registro ya
-    COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
-    llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
-    queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el
-    ejecutor síncrono desde la última toma (las llamadas Haiku de ESTE paso): antes estas
-    generaciones salían sin coste en Producción (etapas Fusionar/Priorizar a cero). Un fallo al
-    registrar NUNCA aborta el barrido (es observabilidad).
+    Hace VISIBLES en «Actividad IA» y en la economía POR ETAPA los pasos Haiku inline del pool
+    —Fusionar, Macro-evento, Clasificar, Priorizar, Traducir— que comparten `tipo='pipeline'`. Es un
+    registro ya COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los
+    REALES de la llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no
+    se pasan, queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el
+    ejecutor síncrono desde la última toma (las llamadas Haiku de ESTE paso). `etapa` es la fase del
+    pipeline EXPLÍCITA: la economía la usa para desglosar por etapa en vez de colapsar todo el
+    `tipo='pipeline'` de investigación en «Verificar». Un fallo al registrar NUNCA aborta el barrido.
     """
     try:
         registro: dict[str, Any] = {
@@ -136,6 +138,7 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
             # Fusionar/Clasificar/Traducir del pool = INVESTIGACION (motor de noticias). Corre
             # INLINE (Haiku, ya completado: no encola), pero su coste cuenta del lado investigacion.
             "proceso": generaciones.PROCESO_INVESTIGACION,
+            "etapa": etapa,
             "marca": marca,
             "etiqueta": etiqueta,
             "prompt": (prompt or "")[:20000],
@@ -147,7 +150,14 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
         metricas = traducir.tomar_metricas_acumuladas()
         if metricas:
             registro["metricas"] = metricas
-        generaciones.crear(registro)
+        pub = generaciones.crear(registro)
+        # Vuelca su gasto al ledger `gasto_ia` con la ETAPA explícita: `crear` (a diferencia de
+        # `actualizar`) no dispara el hook de cierre, así que lo hacemos aquí. Idempotente (UPSERT
+        # por gen_id) y no-op sin métricas medibles: una fase sin coste no ensucia el ledger.
+        if metricas:
+            from .. import presupuesto_ia
+
+            presupuesto_ia.registrar_cierre(pub)
     except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la recolección
         _log.warning("recolectar_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
 
@@ -184,6 +194,7 @@ def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
         f"Encaje de marca — breaking → {marcas.etiqueta_de(marca)}",
         f'{{"marca": "{marca}"}}',
         prompt=str(cluster.get("titulo") or "")[:300],
+        etapa="Clasificar",
     )
     return marca
 

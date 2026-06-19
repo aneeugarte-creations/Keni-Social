@@ -521,6 +521,9 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
             cache_creation=cache_creation,
             modelo=modelo,
             proceso=proceso,
+            # ETAPA explicita si el registro la trae (fases inline del pool, que comparten
+            # tipo='pipeline'); vacio => la economia la deriva de tipo/proceso.
+            etapa=str(registro.get("etapa") or ""),
         )
     except Exception:  # noqa: BLE001 -- el ledger nunca debe romper el cierre de un job
         _log.warning("presupuesto_ia: fallo al registrar el gasto de %s", gen_id, exc_info=True)

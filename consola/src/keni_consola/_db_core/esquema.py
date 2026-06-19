@@ -759,6 +759,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # DEFAULT 'produccion' (la maquina de contenido): las filas existentes quedan en produccion
     # al instante y la migracion 0035 REFINA las de investigacion desde `generaciones_indice`.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS proceso TEXT NOT NULL DEFAULT 'produccion'",
+    # ETAPA explicita (fase del pipeline) del gasto, cuando el llamante la conoce. La fijan las
+    # fases INLINE del pool (Fusionar/Traducir/Clasificar/Priorizar/Macro-evento), que comparten
+    # `tipo='pipeline'` y por eso no se distinguirian solo por su tipo. Vacio (la mayoria) => la
+    # economia DERIVA la etapa de `tipo`+`proceso` (`etapa_economia`). Idempotente.
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS etapa TEXT NOT NULL DEFAULT ''",
     # INDICE de GENERACIONES (ADR 0012, rendimiento): el registro de cada generacion vive en un
     # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
     # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS

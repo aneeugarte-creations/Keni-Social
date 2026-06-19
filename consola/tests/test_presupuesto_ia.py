@@ -337,6 +337,27 @@ def test_tope_tokens_por_marca_corta_su_motor(entorno):
     assert bloque["presupuesto_tokens_out_dia"] == 100 and bloque["pct_out"] == pytest.approx(100.0)
 
 
+def test_fase_inline_del_pool_registra_gasto_con_etapa(entorno, monkeypatch):
+    """Una fase INLINE del pool (Fusionar) vuelca su gasto al ledger con su ETAPA explícita; la
+    economía la muestra como su propia fila de Investigación, no colapsada en «Verificar»."""
+    from keni_consola import recolectar_daemon
+    from keni_consola.dominio import traducir as _trad
+
+    # El ejecutor síncrono no corre (no hay claude): simulamos las métricas acumuladas del paso.
+    monkeypatch.setattr(
+        _trad, "tomar_metricas_acumuladas",
+        lambda: {"tokens_in": 100, "tokens_out": 30, "total_cost_usd": 0.02},
+    )
+    recolectar_daemon._registrar_actividad_ia(
+        "unotv", "Fusionar historias — UnoTV: 2 absorbida(s)", "ok", etapa="Fusionar"
+    )
+    presupuesto_ia.invalidar_cache()
+    inv = repos.gasto_ia_economia_por_proceso(2)["investigacion"]
+    fus = next((e for e in inv["por_etapa"] if e["etapa"] == "Fusionar"), None)
+    assert fus is not None, "la fase Fusionar debe aparecer como etapa propia"
+    assert fus["tokens"] == 130 and fus["coste_usd"] == pytest.approx(0.02)
+
+
 def test_encolar_parada_marca_corta_su_trabajo_no_otras(entorno):
     """La parada de una marca rechaza el encolado de SU trabajo (fondo y manual); otras pasan."""
     ajustes.guardar("KENI_GENERACION_PAUSADA::unotv", "1")
