@@ -230,8 +230,19 @@ fi
 # idempotente por diseño, ADR 0004). Escape para emergencias: KENI_DEPLOY_SIN_VERIFICAR=1
 # (en el .env o exportado) salta la verificacion/rollback.
 echo "==> [5/6] foto de rollback: tag :previa de las imagenes en ejecucion"
-foto_previa() {  # $1 = servicio
-  id="$(docker inspect --format '{{.Image}}' "keni-social-$1-1" 2>/dev/null || true)"
+foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un deploy anterior
+                 # dejó este servicio flapando (unhealthy/starting), su imagen actual NO es una
+                 # foto fiable y revertir a ella deja prod igual de roto. En ese caso se conserva
+                 # la :previa anterior (mejor garantía) o no se crea ninguna (rollback no aplica).
+  cont="keni-social-$1-1"
+  estado="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cont" 2>/dev/null || true)"
+  case "$estado" in
+    healthy|running) : ;;  # 'running' = servicios sin healthcheck propio
+    *)
+      echo "==> aviso: $1 está '${estado:-ausente}', NO sano: conservo su :previa anterior (no fotografío una imagen no fiable)" >&2
+      return 0 ;;
+  esac
+  id="$(docker inspect --format '{{.Image}}' "$cont" 2>/dev/null || true)"
   if [ -n "$id" ]; then docker tag "$id" "keni-social/$1:previa"; fi
 }
 foto_previa front; foto_previa back; foto_previa worker; foto_previa mcp
@@ -295,13 +306,21 @@ else
     export FRONT_VERSION BACK_VERSION WORKER_VERSION MCP_VERSION
     $DC up -d || true
     $DC ps || true
+    # RE-VERIFICA que la foto :previa SÍ levanta sana. Antes el rollback hacía `up` y salía
+    # rojo SIN comprobar nada: si la :previa tampoco arrancaba (carga, secreto, schema), prod
+    # quedaba CAÍDO en silencio (Traefik no enruta un back no sano) y nadie se enteraba hasta
+    # que un humano miraba. Ahora se distingue «rollback recuperó» de «rollback TAMPOCO levantó».
+    if espera_sano back 180 && espera_sano front 120; then
+      printf '\033[31m==> ROLLBACK aplicado y VERIFICADO (back+front sanos en :previa). Deploy EN ROJO: revisa por qué la nueva imagen no arrancó (docker logs keni-social-back-1).\033[0m\n' >&2
+    else
+      printf '\033[31m==> ALERTA GRAVE: el ROLLBACK a :previa TAMPOCO quedó sano. PROD PUEDE ESTAR CAÍDO — intervención manual YA: docker logs keni-social-back-1 / keni-social-front-1.\033[0m\n' >&2
+    fi
     # Untag de las versiones fallidas: el proximo deploy del mismo contenido RECONSTRUYE
     # (si no, `construir` veria la imagen-por-hash ya creada y re-desplegaria la mala).
     [ "$FRONT_VERSION" = previa ]  && docker rmi "keni-social/front:$FRONT_NUEVA"   >/dev/null 2>&1 || true
     [ "$BACK_VERSION" = previa ]   && docker rmi "keni-social/back:$BACK_NUEVA"     >/dev/null 2>&1 || true
     [ "$WORKER_VERSION" = previa ] && docker rmi "keni-social/worker:$WORKER_NUEVA" >/dev/null 2>&1 || true
     [ "$MCP_VERSION" = previa ]    && docker rmi "keni-social/mcp:$MCP_NUEVA"       >/dev/null 2>&1 || true
-    printf '\033[31m==> ROLLBACK aplicado; el deploy queda EN ROJO. Revisa logs: docker logs keni-social-back-1\033[0m\n' >&2
     exit 1
   fi
 fi
