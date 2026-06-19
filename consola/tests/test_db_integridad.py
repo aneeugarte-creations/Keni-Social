@@ -521,25 +521,25 @@ def test_gasto_ia_economia_agrega_por_pestana_dia_y_etapa(pg):
 
     prod = eco["produccion"]
     assert prod["total"] == {"items": 3, "tokens": 155, "coste_usd": pytest.approx(0.062)}
-    # por_etapa: imagen (0.05) antes que copy (0.012), ordenado por coste desc.
-    assert [t["tipo"] for t in prod["por_etapa"]] == ["imagen", "copy"]
-    etapa_copy = next(t for t in prod["por_etapa"] if t["tipo"] == "copy")
-    assert etapa_copy["items"] == 2 and etapa_copy["tokens"] == 155
-    assert etapa_copy["coste_usd"] == pytest.approx(0.012)
-    # Cruce por_etapa[].por_dia: la etapa copy tiene su serie de 3 dias (zero-filled), con sus
+    # por_etapa = fases del pipeline: imagen->Ilustrar (0.05) antes que copy->Redactar (0.012).
+    assert [t["etapa"] for t in prod["por_etapa"]] == ["Ilustrar", "Redactar"]
+    etapa_redactar = next(t for t in prod["por_etapa"] if t["etapa"] == "Redactar")
+    assert etapa_redactar["items"] == 2 and etapa_redactar["tokens"] == 155
+    assert etapa_redactar["coste_usd"] == pytest.approx(0.012)
+    # Cruce por_etapa[].por_dia: la etapa Redactar tiene su serie de 3 dias (zero-filled), con sus
     # 2 items en HOY.
-    copy_por_dia = {d["dia"]: d for d in etapa_copy["por_dia"]}
-    assert len(etapa_copy["por_dia"]) == 3 and copy_por_dia[hoy_iso]["items"] == 2
-    assert copy_por_dia[ayer]["items"] == 0
+    redactar_por_dia = {d["dia"]: d for d in etapa_redactar["por_dia"]}
+    assert len(etapa_redactar["por_dia"]) == 3 and redactar_por_dia[hoy_iso]["items"] == 2
+    assert redactar_por_dia[ayer]["items"] == 0
     # por_dia: longitud 3, el dia mas reciente suma las dos filas de hoy.
     assert len(prod["por_dia"]) == 3
     por_dia = {d["dia"]: d for d in prod["por_dia"]}
     assert por_dia[hoy_iso]["items"] == 2 and por_dia[hoy_iso]["tokens"] == 155
     assert por_dia[ayer]["coste_usd"] == pytest.approx(0.05)
-    # Cruce por_dia[].por_etapa: el desglose por etapa de HOY trae copy (2 items); el de AYER, imagen.
-    assert [e["tipo"] for e in por_dia[hoy_iso]["por_etapa"]] == ["copy"]
+    # Cruce por_dia[].por_etapa: el desglose por etapa de HOY trae Redactar (2 items); AYER, Ilustrar.
+    assert [e["etapa"] for e in por_dia[hoy_iso]["por_etapa"]] == ["Redactar"]
     assert por_dia[hoy_iso]["por_etapa"][0]["items"] == 2
-    assert [e["tipo"] for e in por_dia[ayer]["por_etapa"]] == ["imagen"]
+    assert [e["etapa"] for e in por_dia[ayer]["por_etapa"]] == ["Ilustrar"]
 
     inv = eco["investigacion"]
     assert inv["total"]["items"] == 1 and inv["total"]["tokens"] == 220

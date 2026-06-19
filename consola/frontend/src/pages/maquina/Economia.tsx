@@ -1,16 +1,17 @@
 /**
  * Página ECONOMÍA (`/maquina/economia`): la CONTABILIDAD de la máquina de contenido, separada de
  * la operación de la cola (`/maquina/computo`). Reúne el gasto: el presupuesto + la parada de
- * emergencia (POR MARCA si hay marca activa; GLOBAL en "todas") y la economía de tokens agrupada
- * en las 4 PESTAÑAS de Contexto (Investigación · Producción · Herramientas · Desarrollo), cada una
- * con sus KPIs (trabajos IA · tokens · coste), una tabla por DÍA (desplegable a su desglose por
- * etapa/prompt) y otra por ETAPA (desplegable a su serie por día).
+ * emergencia (POR MARCA si hay marca activa; GLOBAL en "todas"), un AGREGADO de todas las pestañas
+ * y la economía de tokens de las 4 PESTAÑAS de Contexto, dispuestas en parejas paralelas
+ * (Investigación ‖ Producción arriba, Herramientas ‖ Desarrollo debajo). Cada pestaña trae sus
+ * KPIs (trabajos IA · tokens · coste), una tabla por DÍA (desplegable a su desglose por etapa) y
+ * otra por ETAPA del pipeline (desplegable a su serie por día).
  *
  * Todo sale de `/api/actividad/economia` (ledger `gasto_ia`): la MISMA fuente para totales y
  * desgloses, así que cuadra. Respeta el switch de marca: una marca activa acota el desglose a sus
  * filas; "todas" muestra el AGREGADO global. El presupuesto se sirve por separado (la cola, que ya
  * respeta el switch de marca). `?proceso=` enfoca a una sola pestaña; la ventana (Día/7/30) la fija
- * el propio usuario.
+ * el usuario con un selector.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
@@ -21,6 +22,13 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -35,7 +43,6 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearDia } from "@/lib/fecha";
 import { costeUsd, numeroCompacto, numeroCompleto } from "@/lib/formato";
-import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { PanelPresupuesto } from "@/pages/maquina/cola-comun";
@@ -48,16 +55,15 @@ import type {
   PestanaEconomia,
 } from "@/types";
 
-/** Las 4 pestañas de Contexto, en orden de flujo, con su etiqueta y color. Reusa la meta de los
- *  dos motores (ADR 0011) y añade Herramientas y Desarrollo. Es color por CATEGORÍA (identifica la
- *  pestaña en cabeceras y puntos), no un estado de trabajo: por eso va con color directo, igual que
- *  `PROC_META`, y no por `Badge`/`ChipEstado`. */
-const PESTANAS: readonly PestanaEconomia[] = [
-  "investigacion",
-  "produccion",
-  "herramientas",
-  "desarrollo",
+/** Las 4 pestañas de Contexto. El orden de PAREJAS importa: los dos motores (ADR 0011) arriba,
+ *  Herramientas y Desarrollo (agentes sueltos) debajo. Cada pareja se pinta en paralelo. */
+const PAREJAS: readonly (readonly [PestanaEconomia, PestanaEconomia])[] = [
+  ["investigacion", "produccion"],
+  ["herramientas", "desarrollo"],
 ];
+const PESTANAS: readonly PestanaEconomia[] = PAREJAS.flat();
+// Color por CATEGORÍA (identifica la pestaña en cabeceras y puntos), no un estado de trabajo: por
+// eso va con color directo, igual que `PROC_META`, y no por `Badge`/`ChipEstado`.
 const META: Record<PestanaEconomia, { etiqueta: string; barra: string; texto: string }> = {
   investigacion: PROC_META.investigacion,
   produccion: PROC_META.produccion,
@@ -65,7 +71,7 @@ const META: Record<PestanaEconomia, { etiqueta: string; barra: string; texto: st
   desarrollo: { etiqueta: "Desarrollo", barra: "bg-amber-500/70", texto: "text-amber-600" },
 };
 
-/** Las ventanas de tiempo seleccionables (días que pide la economía). */
+/** Ventanas de tiempo del selector (días que pide la economía). */
 const VENTANAS: readonly { dias: number; etiqueta: string }[] = [
   { dias: 1, etiqueta: "Día" },
   { dias: 7, etiqueta: "7 días" },
@@ -73,10 +79,7 @@ const VENTANAS: readonly { dias: number; etiqueta: string }[] = [
 ];
 const VENTANA_DEFECTO = 7;
 
-/** Etiqueta legible de una etapa (= `tipo` del ledger); "—" si viene vacía. */
-function etiquetaEtapa(tipo: string): string {
-  return tipo ? etiquetaTipoGeneracion(tipo) : "—";
-}
+const CELDA_CERO: EconomiaCelda = { items: 0, tokens: 0, coste_usd: 0 };
 
 /** Línea discreta de "sin datos": una sola fila, no una tarjeta enorme con hueco. */
 function LineaVacia({ texto }: { texto: string }) {
@@ -144,7 +147,7 @@ function CeldaDesplegable({
   );
 }
 
-/** Hook de conjunto de claves abiertas (filas desplegadas) con toggle. */
+/** Conjunto de claves abiertas (filas desplegadas) con toggle. */
 function useDesplegables() {
   const [abierto, setAbierto] = React.useState<Set<string>>(() => new Set());
   const toggle = (clave: string) =>
@@ -157,7 +160,7 @@ function useDesplegables() {
   return { abierto, toggle };
 }
 
-/** Tabla POR DÍA (más reciente primero): cada día despliega su desglose por ETAPA (prompt). */
+/** Tabla POR DÍA (más reciente primero): cada día despliega su desglose por ETAPA del pipeline. */
 function TablaPorDia({ filas }: { filas: EconomiaDia[] }) {
   const conActividad = React.useMemo(
     () => filas.filter((f) => f.items > 0).sort((a, b) => b.dia.localeCompare(a.dia)),
@@ -191,9 +194,9 @@ function TablaPorDia({ filas }: { filas: EconomiaDia[] }) {
                     </TableRow>
                     {open &&
                       f.por_etapa.map((e) => (
-                        <TableRow key={`${f.dia}-${e.tipo}`} className="bg-muted/30">
+                        <TableRow key={`${f.dia}-${e.etapa}`} className="bg-muted/30">
                           <TableCell className="pl-11 text-sm text-muted-foreground">
-                            {etiquetaEtapa(e.tipo)}
+                            {e.etapa}
                           </TableCell>
                           <CeldasGasto celda={e} />
                         </TableRow>
@@ -209,7 +212,7 @@ function TablaPorDia({ filas }: { filas: EconomiaDia[] }) {
   );
 }
 
-/** Tabla POR ETAPA (prompt; ordenada por coste desc): cada etapa despliega su serie por DÍA. */
+/** Tabla POR ETAPA del pipeline (ordenada por coste desc): cada etapa despliega su serie por DÍA. */
 function TablaPorEtapa({ filas }: { filas: EconomiaEtapaConDias[] }) {
   const conActividad = React.useMemo(() => filas.filter((f) => f.items > 0), [filas]);
   const { abierto, toggle } = useDesplegables();
@@ -226,24 +229,24 @@ function TablaPorEtapa({ filas }: { filas: EconomiaEtapaConDias[] }) {
             <CabeceraGasto primera="Etapa" />
             <TableBody>
               {conActividad.map((f) => {
-                const open = abierto.has(f.tipo);
+                const open = abierto.has(f.etapa);
                 const dias = f.por_dia
                   .filter((d) => d.items > 0)
                   .sort((a, b) => b.dia.localeCompare(a.dia));
                 return (
-                  <React.Fragment key={f.tipo || "—"}>
+                  <React.Fragment key={f.etapa}>
                     <TableRow>
                       <CeldaDesplegable
                         abierto={open}
-                        etiqueta={etiquetaEtapa(f.tipo)}
-                        onToggle={() => toggle(f.tipo)}
-                        aria={`Desglose por día de ${etiquetaEtapa(f.tipo)}`}
+                        etiqueta={f.etapa}
+                        onToggle={() => toggle(f.etapa)}
+                        aria={`Desglose por día de ${f.etapa}`}
                       />
                       <CeldasGasto celda={f} />
                     </TableRow>
                     {open &&
                       dias.map((d) => (
-                        <TableRow key={`${f.tipo}-${d.dia}`} className="bg-muted/30">
+                        <TableRow key={`${f.etapa}-${d.dia}`} className="bg-muted/30">
                           <TableCell className="pl-11 text-sm text-muted-foreground">
                             {formatearDia(d.dia)}
                           </TableCell>
@@ -261,8 +264,8 @@ function TablaPorEtapa({ filas }: { filas: EconomiaEtapaConDias[] }) {
   );
 }
 
-/** Cabecera de una pestaña + sus KPIs (Trabajos IA · Tokens · Coste) del periodo. */
-function CabeceraKpis({
+/** Una pestaña: cabecera con su color + KPIs del periodo + tablas Por día / Por etapa (apiladas). */
+function ColumnaPestana({
   pestana,
   bloque,
   cargando,
@@ -272,25 +275,35 @@ function CabeceraKpis({
   cargando: boolean;
 }) {
   const meta = META[pestana];
-  const total = bloque?.total ?? { items: 0, tokens: 0, coste_usd: 0 };
+  const total = bloque?.total ?? CELDA_CERO;
   return (
-    <section className="space-y-3">
-      <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
-        <span className={cn("h-2.5 w-2.5 rounded-full", meta.barra)} aria-hidden="true" />
-        {meta.etiqueta}
-      </h2>
+    <section className="space-y-4">
+      <div className="space-y-3">
+        <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
+          <span className={cn("h-2.5 w-2.5 rounded-full", meta.barra)} aria-hidden="true" />
+          {meta.etiqueta}
+        </h2>
+        {cargando ? (
+          <Skeleton className="h-24 w-full rounded-xl" />
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
+            <TarjetaKpi
+              variante="card"
+              etiqueta="Tokens"
+              valor={numeroCompacto(total.tokens)}
+              titulo={numeroCompleto(total.tokens)}
+            />
+            <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
+          </div>
+        )}
+      </div>
       {cargando ? (
-        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
-        <div className="grid grid-cols-3 gap-3">
-          <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
-          <TarjetaKpi
-            variante="card"
-            etiqueta="Tokens"
-            valor={numeroCompacto(total.tokens)}
-            titulo={numeroCompleto(total.tokens)}
-          />
-          <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
+        <div className="space-y-4">
+          <TablaPorDia filas={bloque?.por_dia ?? []} />
+          <TablaPorEtapa filas={bloque?.por_etapa ?? []} />
         </div>
       )}
     </section>
@@ -307,8 +320,9 @@ export default function Economia() {
     ? (crudo as PestanaEconomia)
     : undefined;
 
-  // Ventana de tiempo (Día / 7 / 30): la fija el usuario; reenfoca todas las tablas y KPIs.
+  // Ventana de tiempo (Día / 7 / 30): la fija el usuario con un selector; reenfoca todo.
   const [dias, setDias] = React.useState<number>(VENTANA_DEFECTO);
+  const etiquetaVentana = VENTANAS.find((v) => v.dias === dias)?.etiqueta ?? `${dias} días`;
 
   // Presupuesto + parada de emergencia: la cola lo trae, ya con el ámbito de marca (estado(marca)).
   const cola = useQuery({
@@ -329,8 +343,26 @@ export default function Economia() {
     setSearchParams(params, { replace: true });
   };
 
-  const pestanas: readonly PestanaEconomia[] = foco ? [foco] : PESTANAS;
   const bloqueDe = (p: PestanaEconomia) => economia.data?.por_proceso?.[p];
+  // Agregado de TODAS las pestañas (la foto global del periodo), bajo el presupuesto.
+  const agregado = React.useMemo<EconomiaCelda>(() => {
+    const pp = economia.data?.por_proceso;
+    if (!pp) return CELDA_CERO;
+    return PESTANAS.reduce(
+      (acc, p) => {
+        const t = pp[p]?.total;
+        if (t) {
+          acc.items += t.items;
+          acc.tokens += t.tokens;
+          acc.coste_usd += t.coste_usd;
+        }
+        return acc;
+      },
+      { items: 0, tokens: 0, coste_usd: 0 },
+    );
+  }, [economia.data]);
+
+  const parejas: readonly (readonly PestanaEconomia[])[] = foco ? [[foco]] : PAREJAS;
 
   return (
     <>
@@ -347,7 +379,7 @@ export default function Economia() {
       )}
 
       {/* Presupuesto + parada de emergencia (GLOBAL o de la marca activa). */}
-      <div className="mb-6">
+      <div className="mb-4">
         {cola.isError ? (
           <BloqueError
             titulo="No se pudo leer el presupuesto"
@@ -368,20 +400,42 @@ export default function Economia() {
         )}
       </div>
 
-      {/* Selector de ventana (Día / 7 días / 30 días): sustituye al fijo a 7 días, sin icono. */}
-      <div className="mb-4 flex items-center gap-1" role="group" aria-label="Ventana de tiempo">
-        {VENTANAS.map((v) => (
-          <Button
-            key={v.dias}
-            variant={v.dias === dias ? "default" : "outline"}
-            size="sm"
-            onClick={() => setDias(v.dias)}
-            aria-pressed={v.dias === dias}
-          >
-            {v.etiqueta}
-          </Button>
-        ))}
-      </div>
+      {/* Agregado de TODAS las pestañas + selector de ventana (un solo selector, no 3 filtros). */}
+      <Card className="mb-6">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <p className="text-xs text-muted-foreground">Trabajos IA</p>
+              <p className="text-2xl font-semibold tabular-nums">{numeroCompleto(agregado.items)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Tokens</p>
+              <p className="text-2xl font-semibold tabular-nums" title={numeroCompleto(agregado.tokens)}>
+                {numeroCompacto(agregado.tokens)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Coste</p>
+              <p className="text-2xl font-semibold tabular-nums">{costeUsd(agregado.coste_usd)}</p>
+            </div>
+            <p className="self-end text-xs text-muted-foreground">
+              Total de las 4 pestañas · {etiquetaVentana.toLowerCase()}
+            </p>
+          </div>
+          <Select value={String(dias)} onValueChange={(v) => setDias(Number(v))}>
+            <SelectTrigger className="w-36 shrink-0" aria-label="Ventana de tiempo">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VENTANAS.map((v) => (
+                <SelectItem key={v.dias} value={String(v.dias)}>
+                  {v.etiqueta}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       {economia.isError ? (
         <BloqueError
@@ -391,24 +445,20 @@ export default function Economia() {
           cargando={economia.isFetching}
         />
       ) : (
-        // Cada pestaña: cabecera + KPIs y, debajo, las dos tablas (por día | por etapa) a la par.
+        // Pestañas en parejas paralelas: Investigación ‖ Producción, luego Herramientas ‖ Desarrollo.
         <div className="space-y-8">
-          {pestanas.map((p) => {
-            const bloque = bloqueDe(p);
-            return (
-              <div key={p} className="space-y-4">
-                <CabeceraKpis pestana={p} bloque={bloque} cargando={economia.isPending} />
-                {economia.isPending ? (
-                  <Skeleton className="h-40 w-full rounded-xl" />
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
-                    <TablaPorDia filas={bloque?.por_dia ?? []} />
-                    <TablaPorEtapa filas={bloque?.por_etapa ?? []} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {parejas.map((pareja, i) => (
+            <div key={i} className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              {pareja.map((p) => (
+                <ColumnaPestana
+                  key={p}
+                  pestana={p}
+                  bloque={bloqueDe(p)}
+                  cargando={economia.isPending}
+                />
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </>

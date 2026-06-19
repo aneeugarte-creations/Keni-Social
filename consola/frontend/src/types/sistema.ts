@@ -89,9 +89,11 @@ export interface EconomiaCelda {
   coste_usd: number;
 }
 
-/** Gasto de una ETAPA (prompt; `tipo` del ledger) dentro de un día o de una pestaña. */
+/** Gasto de una ETAPA (fase del pipeline: Redactar/Verificar/Ilustrar…) dentro de un día o de
+ *  una pestaña. La deriva el back con `etapa_economia` (varios tipos del job colapsan en una
+ *  fase), así que es un nombre legible, no el `tipo` crudo. */
 export interface EconomiaEtapa extends EconomiaCelda {
-  tipo: string;
+  etapa: string;
 }
 
 /** Gasto de un día (`YYYY-MM-DD`, zero-filled), con su desglose por ETAPA (prompt) ese día. */

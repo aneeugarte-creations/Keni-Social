@@ -194,7 +194,7 @@ def test_economia_contrato_global_desde_ledger(entorno):
     prod = por_proceso["produccion"]
     assert prod["total"]["items"] == 2 and prod["total"]["tokens"] == 155
     assert len(prod["por_dia"]) == 7  # zero-filled a la ventana pedida
-    assert prod["por_etapa"][0]["tipo"] == "copy"
+    assert prod["por_etapa"][0]["etapa"] == "Redactar"  # tipo copy -> fase Redactar
     assert por_proceso["investigacion"]["total"]["items"] == 1
 
 

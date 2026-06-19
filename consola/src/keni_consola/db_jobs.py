@@ -683,6 +683,42 @@ def pestana_economia(proceso: str, tipo: str) -> str:
     return PESTANA_PRODUCCION
 
 
+# `tipo` del ledger -> ETAPA (fase del pipeline de Contexto). Varios tipos colapsan en una fase
+# (copy/autogen/evergreen = Redactar) para que el desglose "por etapa" hable el idioma del
+# pipeline (Redactar/Verificar/Ilustrar…) en vez del tipo crudo del job (pipeline/copy…). Las
+# sub-fases que NO dejan fila propia en el ledger (Admitir sin IA; Fusionar/Traducir/Clasificar
+# inline) no aparecen aquí: solo se listan las etapas que de verdad consumen tokens.
+_ETAPA_POR_TIPO = {
+    # Investigación
+    "rss": "Recolectar", "noticias-ia": "Recolectar", "noticias": "Recolectar",
+    "verificacion": "Verificar", "revision": "Revisión editorial",
+    # Producción
+    "copy": "Redactar", "autogen": "Redactar", "evergreen": "Redactar",
+    "sugerir-hashtags": "Sugerir hashtags",
+    "imagen": "Ilustrar",
+    "critica-ia": "Crítica",
+    "carrusel": "Carrusel",
+    # Herramientas
+    "insumos": "Recibir",
+    "import-calendario": "Importar", "parrilla-import": "Importar",
+    "evergreen-ideas": "Ideación",
+    "transcribir": "Audio",
+    # Desarrollo
+    "dev-fase": "Desarrollo", "dev-discovery": "Exploración",
+}
+
+
+def etapa_economia(proceso: str, tipo: str) -> str:
+    """ETAPA (fase del pipeline) de una fila de gasto, para el desglose "por etapa".
+
+    El tipo `pipeline` es ambiguo: lo desambigua el `proceso` sellado (investigación = Verificar
+    la fuente; producción = Redactar). El resto sale del mapa `tipo -> etapa`; un tipo desconocido
+    cae a sí mismo (mejor un nombre crudo que perder la fila)."""
+    if tipo == "pipeline":
+        return "Verificar" if proceso == PESTANA_INVESTIGACION else "Redactar"
+    return _ETAPA_POR_TIPO.get(tipo, tipo or "—")
+
+
 def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, dict[str, Any]]:
     """Desglose económico de los últimos `dias` (UTC) DESDE el ledger `gasto_ia`, AGRUPADO en las
     4 PESTAÑAS de Contexto (investigacion/produccion/herramientas/desarrollo).
@@ -693,10 +729,12 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
     pestaña devuelve:
       - `total`:    `{items, tokens, coste_usd}` (items=COUNT, tokens=SUM(in+out), coste=SUM).
       - `por_dia`:  EXACTAMENTE `dias` entradas, antiguo→reciente, ZERO-FILLED; cada una
-                    `{dia, items, tokens, coste_usd, por_etapa:[{tipo, items, tokens, coste_usd}]}`
-                    (el desglose por ETAPA/prompt de ESE día, ordenado por coste desc).
-      - `por_etapa`:`[{tipo, items, tokens, coste_usd, por_dia:[{dia, items, tokens, coste_usd}]}]`
+                    `{dia, items, tokens, coste_usd, por_etapa:[{etapa, items, tokens, coste_usd}]}`
+                    (el desglose por ETAPA/fase de ESE día, ordenado por coste desc).
+      - `por_etapa`:`[{etapa, items, tokens, coste_usd, por_dia:[{dia, items, tokens, coste_usd}]}]`
                     ordenado por coste desc; el `por_dia` interno va zero-filled (longitud `dias`).
+    La ETAPA es la fase del pipeline (Redactar/Verificar/Ilustrar…), derivada con `etapa_economia`
+    (varios tipos colapsan en una fase); NO es el `tipo` crudo del job.
     GARANTIZA siempre las 4 claves (a ceros, con `por_dia` de longitud `dias`) aunque no haya filas.
     `dia` es `date` (migración 0033): el corte `dia >= ?` compara nativo y el `dia` agrupado se
     re-emite como string ISO `YYYY-MM-DD`.
@@ -749,19 +787,25 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
         items = int(f["items"])
         tokens = int(f["tokens"])
         coste = float(f["coste"])
+        proceso = str(f["proceso"] or "")
         tipo = str(f["tipo"] or "")
-        acc = acumulado[pestana_economia(str(f["proceso"] or ""), tipo)]
+        acc = acumulado[pestana_economia(proceso, tipo)]
+        # La ETAPA (fase del pipeline) es la unidad del desglose, no el tipo crudo: varios tipos
+        # colapsan en una fase (copy/autogen -> Redactar) para hablar el idioma del pipeline.
+        etapa_nom = etapa_economia(proceso, tipo)
         _bump(acc, items, tokens, coste)
         dia = iso_o_vacio(f["dia"])
         celda_dia = acc["_por_dia"].get(dia)
         if celda_dia is not None:
             _bump(celda_dia, items, tokens, coste)
             _bump(
-                celda_dia["_etapas"].setdefault(tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0}),
+                celda_dia["_etapas"].setdefault(
+                    etapa_nom, {"items": 0, "tokens": 0, "coste_usd": 0.0}
+                ),
                 items, tokens, coste,
             )
         etapa = acc["_por_etapa"].setdefault(
-            tipo, {"items": 0, "tokens": 0, "coste_usd": 0.0, "_dias": {}}
+            etapa_nom, {"items": 0, "tokens": 0, "coste_usd": 0.0, "_dias": {}}
         )
         _bump(etapa, items, tokens, coste)
         if dia in acc["_por_dia"]:
@@ -771,7 +815,7 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
             )
 
     def _orden_etapa(r: dict[str, Any]) -> tuple[float, str]:
-        return (-r["coste_usd"], r["tipo"])
+        return (-r["coste_usd"], r["etapa"])
 
     resultado: dict[str, dict[str, Any]] = {}
     for pestana, acc in acumulado.items():
@@ -784,13 +828,13 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
                 "tokens": celda["tokens"],
                 "coste_usd": celda["coste_usd"],
                 "por_etapa": sorted(
-                    ({"tipo": t, **v} for t, v in celda["_etapas"].items()), key=_orden_etapa
+                    ({"etapa": e, **v} for e, v in celda["_etapas"].items()), key=_orden_etapa
                 ),
             })
         por_etapa = sorted(
             (
                 {
-                    "tipo": tipo,
+                    "etapa": etapa_nom,
                     "items": v["items"],
                     "tokens": v["tokens"],
                     "coste_usd": v["coste_usd"],
@@ -799,7 +843,7 @@ def gasto_ia_economia_por_proceso(dias: int = 7, marca: str = "") -> dict[str, d
                         for d in dias_esperados
                     ],
                 }
-                for tipo, v in acc["_por_etapa"].items()
+                for etapa_nom, v in acc["_por_etapa"].items()
             ),
             key=_orden_etapa,
         )
