@@ -9,7 +9,7 @@
  * (ni texto «· sigue …» ni chevron): la fila sigue siendo clicable, solo desaparecen esos adornos.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -128,8 +128,9 @@ function filaDe(nombre: string): HTMLElement {
 
 describe("PanelPipeline · toggles independientes", () => {
   it("el maestro vive junto a las pestañas (ControlesMaquina), no como switch por fila", async () => {
-    // El maestro aparece como control ÚNICO en ControlesMaquina…
+    // El maestro vive en el popover del chip de la máquina (en la barra): se abre y aparece.
     renderControles();
+    fireEvent.click(await screen.findByRole("button", { name: "Estado de la máquina" }));
     expect(
       await screen.findByRole("switch", {
         name: /Investigación \(maestro del proceso/,
@@ -151,6 +152,7 @@ describe("PanelPipeline · toggles independientes", () => {
     );
     // El maestro mostrado es el de la marca (`KENI_INVESTIGACION::nacion-gamer`, etiqueta «Nación
     // Gamer · Investigación»), y refleja SU estado (OFF en el mock), no el global (ON).
+    fireEvent.click(await screen.findByRole("button", { name: "Estado de la máquina" }));
     const sw = await screen.findByRole("switch", {
       name: /Nación Gamer · Investigación \(maestro del proceso/,
     });

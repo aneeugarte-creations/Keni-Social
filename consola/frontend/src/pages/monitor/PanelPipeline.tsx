@@ -17,7 +17,7 @@
  * tienen el maestro virtual del proceso NO pintan switch por fila (lo gobierna `ControlesMaquina`).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, Cog, Users } from "lucide-react";
+import { Bot, ChevronDown, Cog, Power, Users } from "lucide-react";
 import * as React from "react";
 
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -210,10 +210,43 @@ export function FilaFasePipeline({
   );
 }
 
+/** Una fila «etiqueta · on/off + Switch» del popover de la máquina (interruptor general o maestro). */
+function FilaInterruptor({
+  ajuste,
+  encendido,
+  ariaLabel,
+  nota,
+}: {
+  ajuste: AjusteAdmin;
+  encendido: boolean;
+  ariaLabel: string;
+  nota: string;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 px-1.5 py-1.5 text-sm">
+      <span className="min-w-0">
+        <span className="text-foreground">{ajuste.etiqueta}</span>
+        <span
+          className={cn(
+            "ml-1.5 text-xs font-medium",
+            encendido ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+          )}
+        >
+          · {encendido ? "on" : "off"}
+        </span>
+        <span className="block text-xs text-muted-foreground">{nota}</span>
+      </span>
+      <SwitchAjuste ajuste={ajuste} ariaLabel={ariaLabel} tono="estado" />
+    </label>
+  );
+}
+
 /**
- * Controles de la máquina, pensados para ir JUNTO a las pestañas de Contexto: el maestro del proceso
- * activo (`claveMaestro`: enciende/apaga todas sus fases) y el interruptor general «Máquina». Cada
- * toggle ES su indicador de estado (verde on / rojo off). Sin admin no pinta nada.
+ * Estado de la máquina como un CHIP compacto en la barra superior (junto al «⋮» de Contexto): un
+ * semáforo de estado —En marcha / Pausada / Máquina · off— que al pulsarlo despliega un popover con
+ * los dos interruptores: el general «Máquina» (apaga toda la auto-producción) y el maestro del
+ * proceso activo (`claveMaestro`). Antes eran dos switches con etiqueta siempre visibles, que
+ * apelmazaban la barra; el chip los recoge en un solo control limpio. Sin admin no pinta nada.
  */
 export function ControlesMaquina({
   claveMaestro,
@@ -244,48 +277,72 @@ export function ControlesMaquina({
   const claveMaestroEf = claveMaestro && marcaActiva ? `${claveMaestro}::${marcaActiva}` : claveMaestro;
   const maestro = esAdmin && claveMaestroEf ? porClave.get(claveMaestroEf) : undefined;
   const maestroOn = Boolean(maestro?.valor);
+
+  const [abierto, setAbierto] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!abierto) return;
+    const alClicFuera = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    };
+    const alEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("mousedown", alClicFuera);
+    document.addEventListener("keydown", alEscape);
+    return () => {
+      document.removeEventListener("mousedown", alClicFuera);
+      document.removeEventListener("keydown", alEscape);
+    };
+  }, [abierto]);
+
   if (!maestro && !maquina) return null;
+
+  // Estado agregado del chip: el kill-switch global manda; luego el maestro del proceso.
+  const apagada = Boolean(maquina) && !maquinaOn;
+  const pausada = !apagada && Boolean(maestro) && !maestroOn;
+  const etiquetaChip = apagada ? "Máquina · off" : pausada ? "Pausada" : "En marcha";
+  const tonoPunto = apagada ? "bg-red-500" : pausada ? "bg-amber-500" : "bg-emerald-500";
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {maestro && (
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">
-            {maestro.etiqueta}
-            <span
-              className={cn(
-                "ml-1.5 text-xs font-medium",
-                maestroOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-              )}
-            >
-              · {maestroOn ? "on" : "off"}
-            </span>
-          </span>
-          <SwitchAjuste
-            ajuste={maestro}
-            ariaLabel={`${maestro.etiqueta} (maestro del proceso: enciende/apaga todas sus fases)`}
-            tono="estado"
-          />
-        </label>
-      )}
-      {maquina && (
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">
-            Máquina
-            <span
-              className={cn(
-                "ml-1.5 text-xs font-medium",
-                maquinaOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
-              )}
-            >
-              · {maquinaOn ? "on" : "off"}
-            </span>
-          </span>
-          <SwitchAjuste
-            ajuste={maquina}
-            ariaLabel="Máquina (interruptor general de toda la auto-producción)"
-            tono="estado"
-          />
-        </label>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={abierto}
+        aria-label="Estado de la máquina"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+      >
+        <Power className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tonoPunto)} aria-hidden="true" />
+        <span className="whitespace-nowrap">{etiquetaChip}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
+      {abierto && (
+        <div
+          role="dialog"
+          aria-label="Controles de la máquina"
+          className="absolute left-0 z-50 mt-1 w-64 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md"
+        >
+          {maquina && (
+            <FilaInterruptor
+              ajuste={maquina}
+              encendido={maquinaOn}
+              ariaLabel="Máquina (interruptor general de toda la auto-producción)"
+              nota="Apaga toda la auto-producción"
+            />
+          )}
+          {maquina && maestro && <div role="separator" className="my-1 h-px bg-border" />}
+          {maestro && (
+            <FilaInterruptor
+              ajuste={maestro}
+              encendido={maestroOn}
+              ariaLabel={`${maestro.etiqueta} (maestro del proceso: enciende/apaga todas sus fases)`}
+              nota="Enciende o apaga este proceso"
+            />
+          )}
+        </div>
       )}
     </div>
   );
