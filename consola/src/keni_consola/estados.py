@@ -315,6 +315,14 @@ ORIGENES_AUTOGEN: tuple[str, ...] = (
 CLASES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "tipo", "origen")
 CLASE_ETIQUETA_DEFECTO = "campania"
 
+# Cadencia de sondeo de las fuentes de una LÍNEA (clase `vertical`). La línea —no el feed—
+# dicta el ritmo; el feed la hereda de su línea/grupo. Sustituye al mapa de slugs de feed:
+#   - `rapida`    ~3 min  (deporte en vivo, última hora)
+#   - `normal`    ~10 min (noticia general)
+#   - `evergreen` ~30 min (temas de cambio lento)
+CADENCIAS_LINEA: tuple[str, ...] = ("rapida", "normal", "evergreen")
+CADENCIA_LINEA_DEFECTO = "normal"
+
 # Las dos clases que el auto-etiquetado aplica a cada pieza en la ingesta:
 #   - `vertical` = la LÍNEA de contenido (futbol, beisbol, ultima hora...). Cada
 #     línea lleva `keywords` (CSV) para clasificar sin coste de IA.

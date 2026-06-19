@@ -39,6 +39,8 @@ _COLS_ETIQUETA = (
     "activo",
     "ttl_dias",
     "es_evergreen",
+    "grupo",
+    "cadencia",
     "creado",
     "actualizado",
 )
@@ -53,6 +55,8 @@ _CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = (
     "activo",
     "ttl_dias",
     "es_evergreen",
+    "grupo",
+    "cadencia",
 )
 
 
@@ -62,6 +66,8 @@ def _fila_a_etiqueta(fila: Any) -> dict[str, Any]:
     et["activo"] = bool(fila["activo"])
     et["ttl_dias"] = int(fila["ttl_dias"] or 0)
     et["es_evergreen"] = bool(fila["es_evergreen"])
+    et["grupo"] = fila["grupo"] or ""
+    et["cadencia"] = fila["cadencia"] or "normal"
     return et
 
 
@@ -76,6 +82,8 @@ def crear_etiqueta(
     activo: bool = True,
     ttl_dias: int = 0,
     es_evergreen: bool = False,
+    grupo: str = "",
+    cadencia: str = "normal",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -93,6 +101,8 @@ def crear_etiqueta(
         "activo": 1 if activo else 0,
         "ttl_dias": max(0, int(ttl_dias or 0)),
         "es_evergreen": 1 if es_evergreen else 0,
+        "grupo": grupo or "",
+        "cadencia": cadencia or "normal",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

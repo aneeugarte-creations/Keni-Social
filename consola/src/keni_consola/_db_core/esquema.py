@@ -1031,6 +1031,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         activo       INTEGER NOT NULL DEFAULT 1,
         ttl_dias     INTEGER NOT NULL DEFAULT 0,
         es_evergreen     INTEGER NOT NULL DEFAULT 0,
+        grupo        TEXT NOT NULL DEFAULT '',
+        cadencia     TEXT NOT NULL DEFAULT 'normal',
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
     )
@@ -1077,6 +1079,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         propia                INTEGER NOT NULL DEFAULT 0,
         intervalo_min         INTEGER NOT NULL DEFAULT 0,
         categoria             TEXT NOT NULL DEFAULT '',
+        linea_id              TEXT NOT NULL DEFAULT '',
         prioridad             INTEGER NOT NULL DEFAULT 0,
         proximo_sondeo        TEXT NOT NULL DEFAULT '',
         errores_seguidos      INTEGER NOT NULL DEFAULT 0,

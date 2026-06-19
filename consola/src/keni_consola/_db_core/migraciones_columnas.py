@@ -241,6 +241,13 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
     - `es_evergreen` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
     - `hashtags` (CSV/JSON, def ''): hashtags propios de la línea/estrategia, que se inyectan al
       final del copy de sus piezas (un único sitio para hashtags + estrategia de marca).
+    - `grupo` (TEXT, def ''): agrupación de líneas (clase `vertical`) de una marca, p. ej.
+      "Fútbol"/"Otros deportes" en Claro Sports. '' = línea plana (sin grupo): el caso de
+      UnoTV/Fundación. Las fuentes se cuelgan de una línea o de un grupo; las piezas reciben
+      la línea fina.
+    - `cadencia` (TEXT, def 'normal'): ritmo de sondeo de las fuentes de esta línea —
+      'rapida' (~3 min, deporte en vivo), 'normal' (~10 min, noticia general) o 'evergreen'
+      (~30 min, temas de cambio lento). La fuente la hereda de su línea/grupo.
 
     Solo aplica si la tabla ya existe (un primer arranque la crea con las columnas).
     """
@@ -262,6 +269,14 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
     if "es_evergreen" not in cols:
         con.execute(
             "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS es_evergreen INTEGER NOT NULL DEFAULT 0"
+        )
+    if "grupo" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS grupo TEXT NOT NULL DEFAULT ''"
+        )
+    if "cadencia" not in cols:
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS cadencia TEXT NOT NULL DEFAULT 'normal'"
         )
 
 
@@ -866,6 +881,12 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # (potente 2.0 / normal 1.0 / baja 0.5, ver `dominio/fuentes_pesos.py`). Editable
     # desde la UI de Fuentes; el seed por host lo asigna `0026-backfill-pesos-fuente`.
     ("peso", "REAL NOT NULL DEFAULT 1.0"),
+    # LÍNEA editorial de la fuente (id de `etiquetas` clase=vertical): de qué línea cuelga este
+    # feed. Reemplaza al slug libre `categoria` como vínculo editorial (la cadencia de sondeo
+    # pasa a derivarse de la línea). '' = catch-all "General" (cadencia normal). El backfill
+    # `categoria`->`linea_id` por marca lo hace `bootstrap_lineas.vincular_fuentes_a_lineas`
+    # en el arranque (necesita las líneas ya sembradas, que no existen aún en la migración).
+    ("linea_id", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_fuentes_rss(con: Any) -> None:

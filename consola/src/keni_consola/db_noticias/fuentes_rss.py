@@ -24,6 +24,7 @@ _COLS_FUENTE_RSS = (
     "propia",
     "intervalo_min",
     "categoria",
+    "linea_id",
     "prioridad",
     "proximo_sondeo",
     "errores_seguidos",
@@ -36,7 +37,7 @@ _COLS_FUENTE_RSS = (
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
 _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
     "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def", "propia",
-    "intervalo_min", "categoria", "prioridad",
+    "intervalo_min", "categoria", "linea_id", "prioridad",  # linea_id: la edita la UI de Fuentes
     # Ola D: reactivar un feed auto-desactivado (resetear estado del motor de ingesta).
     "desactivado_auto", "errores_seguidos", "proximo_sondeo", "pausado_hasta",
     # Peso editorial (ranking ponderado): editable desde la UI de Fuentes.
@@ -64,6 +65,9 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         # Planificación del motor de ingesta (Ola A).
         "intervalo_min": int(fila["intervalo_min"] or 0),
         "categoria": fila["categoria"] or "",
+        # Línea editorial (id de `etiquetas` clase=vertical / grupo) de la que cuelga el feed.
+        # '' = catch-all "General" (cadencia normal). La cadencia de sondeo se deriva de aquí.
+        "linea_id": fila["linea_id"] or "",
         "prioridad": int(fila["prioridad"] or 0),
         "proximo_sondeo": fila["proximo_sondeo"] or "",
         "errores_seguidos": int(fila["errores_seguidos"] or 0),
@@ -161,6 +165,7 @@ def crear_fuente_rss(
     redes_def: str = "",
     propia: bool = False,
     categoria: str = "",
+    linea_id: str = "",
     prioridad: int = 0,
     intervalo_min: int = 0,
     peso: float = 1.0,
@@ -190,6 +195,7 @@ def crear_fuente_rss(
         "propia": 1 if propia else 0,
         "intervalo_min": int(intervalo_min or 0),
         "categoria": categoria or "",
+        "linea_id": linea_id or "",
         "prioridad": int(prioridad or 0),
         "proximo_sondeo": "",
         "errores_seguidos": 0,

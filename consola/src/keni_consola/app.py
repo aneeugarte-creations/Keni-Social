@@ -281,6 +281,14 @@ def crear_app(
             bootstrap_lineas.inicializar_fuentes_ingesta()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron inicializar las fuentes del motor de ingesta.", exc_info=True)
+        try:
+            # Asocia cada feed a su LÍNEA (backfill `categoria`->`linea_id` por marca). Corre tras
+            # sembrar líneas y fuentes; idempotente (solo toca feeds sin línea).
+            from . import bootstrap_lineas
+
+            bootstrap_lineas.vincular_fuentes_a_lineas()
+        except Exception:  # noqa: BLE001 -- idem: no impide el arranque
+            _logger.warning("No se pudieron vincular las fuentes a sus líneas.", exc_info=True)
         # Lleva tareas, piezas de la rota y
         # piezas al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.
