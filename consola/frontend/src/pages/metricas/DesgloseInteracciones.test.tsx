@@ -118,6 +118,25 @@ describe("DesgloseInteracciones", () => {
     expect(cabLikes.closest("th")).toHaveAttribute("aria-sort", "descending");
   });
 
+  it("ofrece un conmutador Proporción/Volumen, con Proporción activo por defecto", async () => {
+    vi.spyOn(api, "metricasDesglose").mockResolvedValue(RESP);
+    renderConProviders(
+      <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    await screen.findByText("Total");
+    const proporcion = screen.getByRole("button", { name: "Proporción" });
+    const volumen = screen.getByRole("button", { name: "Volumen" });
+    // Por defecto manda Proporción: normaliza cada barra y deja legibles los segmentos
+    // pequeños que el volumen absoluto de "me gusta" aplastaría.
+    expect(proporcion).toHaveAttribute("aria-pressed", "true");
+    expect(volumen).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(volumen);
+    expect(volumen).toHaveAttribute("aria-pressed", "true");
+    expect(proporcion).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("dice con honestidad cuando no hay celdas", async () => {
     vi.spyOn(api, "metricasDesglose").mockResolvedValue({ ...RESP, celdas: [] });
     renderConProviders(

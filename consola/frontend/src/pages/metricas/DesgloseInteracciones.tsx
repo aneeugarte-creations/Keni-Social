@@ -7,6 +7,13 @@
  * reproducciones son consumo, no interacción, y aplastarían al resto) y una tabla con
  * las 5 columnas, el detalle y los `totales` del periodo.
  *
+ * La gráfica ofrece dos modos: "Proporción" (apilado al 100 %, cada barra normalizada a
+ * su composición) y "Volumen" (apilado absoluto). El modo proporción es el predeterminado
+ * porque los "me gusta" superan en órdenes de magnitud a comentarios/compartidos/guardados
+ * y, en volumen absoluto, aplastan al resto hasta hacerlos invisibles; normalizar a 100 %
+ * vuelve legible cada segmento y compara composición entre marcas/redes aunque difieran en
+ * volumen.
+ *
  * Mismo stack (Tremor) y estados honestos (carga / vacío / error) que el resto de
  * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. La sección es
  * colapsable y filtra client-side por red (selector en la cabecera).
@@ -25,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup } from "@/components/ui/toggle-group";
 import {
   Table,
   TableBody,
@@ -39,6 +47,7 @@ import {
   nombreRed,
   numeroCompacto,
   numeroCompleto,
+  porcentaje,
   REDES_CANONICAS,
   type RedCanonica,
 } from "@/lib/formato";
@@ -76,6 +85,9 @@ const COLORES = COMPONENTES_GRAFICA.map((c) => c.color);
 /** Centinela "sin filtro" para los selectores de red/marca. */
 const TODAS = "__todas__";
 
+/** Modo de la gráfica: proporción (apilado al 100 %) o volumen (apilado absoluto). */
+type ModoGrafica = "proporcion" | "volumen";
+
 export function DesgloseInteracciones({
   marcas,
   marcaActual = MARCA_TODAS,
@@ -99,6 +111,10 @@ export function DesgloseInteracciones({
   // el switch global de la barra superior (la consulta ya viene scopeada).
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
 
+  // Modo de la gráfica. Por defecto "proporcion": los "me gusta" eclipsan al resto en
+  // volumen absoluto, así que normalizar a 100 % es lo que deja legibles los segmentos.
+  const [modo, setModo] = React.useState<ModoGrafica>("proporcion");
+
   const celdas = React.useMemo(() => data?.celdas ?? [], [data]);
   // "Todas las tablas, todas las redes": el selector ofrece SIEMPRE las 5 redes canónicas
   // (no solo las que traen datos), así el operador puede enfocar cualquiera —incluida X, que
@@ -109,19 +125,30 @@ export function DesgloseInteracciones({
   const redesDisp = REDES_CANONICAS;
 
   const acciones = (
-    <Select value={redFiltro} onValueChange={setRedFiltro}>
-      <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
-        <SelectValue placeholder="Red" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={TODAS}>Todas las redes</SelectItem>
-        {redesDisp.map((r) => (
-          <SelectItem key={r} value={r}>
-            {nombreRed(r)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <ToggleGroup<ModoGrafica>
+        ariaLabel="Modo de la gráfica"
+        valor={modo}
+        onCambio={setModo}
+        opciones={[
+          { valor: "proporcion", etiqueta: "Proporción" },
+          { valor: "volumen", etiqueta: "Volumen" },
+        ]}
+      />
+      <Select value={redFiltro} onValueChange={setRedFiltro}>
+        <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
+          <SelectValue placeholder="Red" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TODAS}>Todas las redes</SelectItem>
+          {redesDisp.map((r) => (
+            <SelectItem key={r} value={r}>
+              {nombreRed(r)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 
   return (
@@ -153,7 +180,12 @@ export function DesgloseInteracciones({
               data.totales.compartidos ?? 0,
             )}, Guardados ${numeroCompacto(data.totales.guardados ?? 0)}`}
           >
-            <GraficaApilada celdas={celdas} marcas={marcas} redFiltro={redFiltro} />
+            <GraficaApilada
+              celdas={celdas}
+              marcas={marcas}
+              redFiltro={redFiltro}
+              modo={modo}
+            />
           </div>
           <TablaDesglose
             celdas={celdas}
@@ -201,28 +233,46 @@ function GraficaApilada({
   celdas,
   marcas,
   redFiltro,
+  modo,
 }: {
   celdas: CeldaDesglose[];
   marcas: MarcaDisponible[];
   redFiltro: string;
+  modo: ModoGrafica;
 }) {
+  const proporcion = modo === "proporcion";
   // Una barra por marca×red canónica: las redes sin datos quedan en 0 (sin barra) pero
   // conservan su entrada/etiqueta en el eje, para no "desaparecer" de la gráfica.
   // Solo interacciones: las reproducciones quedan fuera de la pila (ver COMPONENTES_GRAFICA).
-  const datos = construirRejilla(celdas, redFiltro).map(({ marca, red, celda }) => ({
-    grupo: `${nombreMarca(marca, marcas)} · ${nombreRed(red)}`,
-    "Me gusta": celda?.likes ?? 0,
-    Comentarios: celda?.comentarios ?? 0,
-    Compartidos: celda?.compartidos ?? 0,
-    Guardados: celda?.guardados ?? 0,
-  }));
+  // En modo proporción cada barra se normaliza a su composición (segmentos que suman 100 %);
+  // una barra sin interacciones se queda toda en 0 (sin pila).
+  const datos = construirRejilla(celdas, redFiltro).map(({ marca, red, celda }) => {
+    const valores = {
+      "Me gusta": celda?.likes ?? 0,
+      Comentarios: celda?.comentarios ?? 0,
+      Compartidos: celda?.compartidos ?? 0,
+      Guardados: celda?.guardados ?? 0,
+    };
+    const grupo = `${nombreMarca(marca, marcas)} · ${nombreRed(red)}`;
+    if (!proporcion) return { grupo, ...valores };
+    const total = ETIQUETAS.reduce((s, e) => s + valores[e as keyof typeof valores], 0);
+    if (total === 0) return { grupo, ...valores };
+    return {
+      grupo,
+      "Me gusta": (valores["Me gusta"] / total) * 100,
+      Comentarios: (valores.Comentarios / total) * 100,
+      Compartidos: (valores.Compartidos / total) * 100,
+      Guardados: (valores.Guardados / total) * 100,
+    };
+  });
   return (
     <BarChart
       data={datos}
       index="grupo"
       categories={ETIQUETAS}
       colors={COLORES}
-      valueFormatter={numeroCompacto}
+      valueFormatter={proporcion ? porcentaje : numeroCompacto}
+      maxValue={proporcion ? 100 : undefined}
       stack
       showAnimation
       className="h-72"
