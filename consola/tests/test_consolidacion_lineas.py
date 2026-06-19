@@ -76,3 +76,50 @@ def test_vincular_fuentes_es_idempotente_y_no_pisa(entorno):
     )
     bootstrap_lineas.vincular_fuentes_a_lineas()
     assert db.obtener_fuente_rss(fija["id"])["linea_id"] == "manual-x"
+
+
+# --------------------------------------------------------------------------- #
+# API: etiquetas (grupo/cadencia) y fuentes (linea_id)                         #
+# --------------------------------------------------------------------------- #
+_URL_OK = "https://93.184.216.34/feed.xml"  # IP pública literal: pasa el guard SSRF sin DNS.
+
+
+def test_api_etiqueta_acepta_grupo_y_cadencia(cliente):
+    r = cliente.post(
+        "/api/etiquetas",
+        json={"nombre": "Liga MX", "clase": "vertical", "marca": "claro-sports",
+              "grupo": "Fútbol", "cadencia": "rapida"},
+    )
+    assert r.status_code == 200, r.text
+    et = r.json()["etiqueta"]
+    assert et["grupo"] == "Fútbol" and et["cadencia"] == "rapida"
+
+
+def test_api_etiqueta_cadencia_invalida_cae_a_normal(cliente):
+    r = cliente.post(
+        "/api/etiquetas",
+        json={"nombre": "X", "clase": "vertical", "marca": "unotv", "cadencia": "turbo"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["etiqueta"]["cadencia"] == "normal"
+
+
+def test_api_fuente_acepta_linea_id_valida(cliente):
+    et = cliente.post(
+        "/api/etiquetas",
+        json={"nombre": "Nacional", "clase": "vertical", "marca": "unotv"},
+    ).json()["etiqueta"]
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Diario", "url": _URL_OK, "marca": "unotv", "linea_id": et["id"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["fuente"]["linea_id"] == et["id"]
+
+
+def test_api_fuente_rechaza_linea_inexistente(cliente):
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Diario", "url": _URL_OK, "marca": "unotv", "linea_id": "nope"},
+    )
+    assert r.status_code == 400

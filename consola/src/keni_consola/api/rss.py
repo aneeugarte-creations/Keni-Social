@@ -231,6 +231,21 @@ async def listar_fuentes(request: Request) -> Response:
     return JSONResponse({"fuentes": [_fuente_a_dict(f) for f in fuentes]})
 
 
+def _validar_linea_id(valor: object, marca: str) -> tuple[str | None, str | None]:
+    """'' (catch-all "General") es válido; si llega un id debe ser una LÍNEA (clase `vertical`)
+    de la marca de la fuente (o global)."""
+    if valor in (None, ""):
+        return "", None
+    if not isinstance(valor, str):
+        return None, "Línea no válida."
+    et = repos.obtener_etiqueta(valor.strip())
+    if et is None or et.get("clase") != "vertical":
+        return None, "Esa línea no existe."
+    if (et.get("marca") or "") not in ("", marca):
+        return None, "La línea no pertenece a esta marca."
+    return valor.strip(), None
+
+
 async def crear_fuente(request: Request) -> Response:
     """Crea una fuente `{nombre, url, marca?, incluir?, excluir?, redes_def?}` -> `{fuente}`.
 
@@ -259,6 +274,9 @@ async def crear_fuente(request: Request) -> Response:
     categoria, error = _validar_categoria(datos.get("categoria"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    linea_id, error = _validar_linea_id(datos.get("linea_id"), marca or "")
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
     # Peso editorial: explícito en el cuerpo, o el SEED por host de la url (Reuters/BBC/…
     # nacen potentes sin que nadie lo configure; el equipo lo puede corregir después).
     if datos.get("peso") is not None:
@@ -277,6 +295,7 @@ async def crear_fuente(request: Request) -> Response:
         redes_def=redes_def,
         propia=bool(datos.get("propia")),
         categoria=categoria or "",
+        linea_id=linea_id or "",
         peso=peso or 1.0,
     )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
@@ -289,7 +308,8 @@ async def actualizar_fuente(request: Request) -> Response:
     en profundidad). Solo se tocan los campos presentes en el cuerpo.
     """
     fuente_id = request.path_params["fuente_id"]
-    if repos.obtener_fuente_rss(fuente_id) is None:
+    actual = repos.obtener_fuente_rss(fuente_id)
+    if actual is None:
         return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -335,6 +355,13 @@ async def actualizar_fuente(request: Request) -> Response:
         if error is not None:
             return JSONResponse({"error": error}, status_code=400)
         campos["categoria"] = categoria
+    if "linea_id" in datos:
+        # La línea se valida contra la marca resultante (la nueva si se cambia, o la actual).
+        marca_ref = str(campos.get("marca", actual.get("marca") or ""))
+        linea_id, error = _validar_linea_id(datos.get("linea_id"), marca_ref)
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["linea_id"] = linea_id
     if "peso" in datos:
         peso, error = _validar_peso(datos.get("peso"))
         if error is not None:

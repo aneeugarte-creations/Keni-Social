@@ -31,7 +31,12 @@ from starlette.routing import Route
 
 from .. import marcas, repos
 from .._http_json import leer_json
-from ..estados import CLASE_ETIQUETA_DEFECTO, CLASES_ETIQUETA
+from ..estados import (
+    CADENCIA_LINEA_DEFECTO,
+    CADENCIAS_LINEA,
+    CLASE_ETIQUETA_DEFECTO,
+    CLASES_ETIQUETA,
+)
 
 _MAX_NOMBRE = 60
 # Color como token hex (#rgb o #rrggbb). Vacío = sin color (la UI elige uno por clase).
@@ -59,6 +64,20 @@ def _validar_color(color: object) -> str:
     if isinstance(color, str) and _RE_COLOR.match(color.strip()):
         return color.strip().lower()
     return ""
+
+
+_MAX_GRUPO = 40
+
+
+def _normalizar_grupo(valor: object) -> str:
+    """Grupo de líneas (clase `vertical`): texto libre recortado. '' = línea plana (sin grupo)."""
+    return valor.strip()[:_MAX_GRUPO] if isinstance(valor, str) else ""
+
+
+def _validar_cadencia(valor: object) -> str:
+    """Cadencia de la línea: una de `CADENCIAS_LINEA`; cualquier otra cae al defecto ('normal')."""
+    c = valor.strip().lower() if isinstance(valor, str) else ""
+    return c if c in CADENCIAS_LINEA else CADENCIA_LINEA_DEFECTO
 
 
 _MAX_KEYWORDS = 400
@@ -162,6 +181,8 @@ async def crear(request: Request) -> Response:
         hashtags=_normalizar_hashtags(datos.get("hashtags")),
         ttl_dias=_validar_ttl_dias(datos.get("ttl_dias", 0)),
         es_evergreen=bool(datos.get("es_evergreen", False)),
+        grupo=_normalizar_grupo(datos.get("grupo")),
+        cadencia=_validar_cadencia(datos.get("cadencia", CADENCIA_LINEA_DEFECTO)),
     )
     return JSONResponse({"etiqueta": _etiqueta_a_dict(etiqueta)})
 
@@ -202,6 +223,10 @@ async def actualizar(request: Request) -> Response:
         campos["ttl_dias"] = _validar_ttl_dias(datos.get("ttl_dias"))
     if "es_evergreen" in datos:
         campos["es_evergreen"] = bool(datos["es_evergreen"])
+    if "grupo" in datos:
+        campos["grupo"] = _normalizar_grupo(datos.get("grupo"))
+    if "cadencia" in datos:
+        campos["cadencia"] = _validar_cadencia(datos.get("cadencia"))
 
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
