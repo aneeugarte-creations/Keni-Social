@@ -30,7 +30,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
-import { TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { Markdown } from "@/components/ui/Markdown";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -73,13 +74,45 @@ const TRATAMIENTOS_SUBIDA: { tipo: TipoArtefacto; etiqueta: string }[] = [
   { tipo: "ideas", etiqueta: "Ideas" },
 ];
 
-// Tratamientos de Claude que se pueden añadir a mano a un audio ya transcrito.
-const TRATAMIENTOS_CLAUDE: { tipo: TratamientoClaude; etiqueta: string; Icono: typeof Eraser }[] = [
-  { tipo: "limpio", etiqueta: "Limpiar", Icono: Eraser },
-  { tipo: "resumen", etiqueta: "Resumen", Icono: FileText },
-  { tipo: "preguntas", etiqueta: "Preguntas", Icono: HelpCircle },
-  { tipo: "ideas", etiqueta: "Ideas", Icono: Lightbulb },
+// Tratamientos de Claude que se pueden añadir a mano a un audio ya transcrito. `desc` explica qué
+// hace cada uno (tooltip al pasar el ratón).
+const TRATAMIENTOS_CLAUDE: {
+  tipo: TratamientoClaude;
+  etiqueta: string;
+  Icono: typeof Eraser;
+  desc: string;
+}[] = [
+  {
+    tipo: "limpio",
+    etiqueta: "Limpiar",
+    Icono: Eraser,
+    desc: "Quita muletillas, silencios y repeticiones sin cambiar el sentido.",
+  },
+  { tipo: "resumen", etiqueta: "Resumen", Icono: FileText, desc: "Resumen breve del contenido." },
+  {
+    tipo: "preguntas",
+    etiqueta: "Preguntas",
+    Icono: HelpCircle,
+    desc: "Detecta frases que no se entienden y te pregunta para corregirlas.",
+  },
+  {
+    tipo: "ideas",
+    etiqueta: "Ideas",
+    Icono: Lightbulb,
+    desc: "Extrae las ideas clave para reutilizarlas como contenido.",
+  },
 ];
+
+// Icono por tipo de artefacto (lista y raíl colapsado).
+const ICONO_ARTEFACTO: Record<TipoArtefacto, typeof Eraser> = {
+  srt: FileText,
+  texto: FileText,
+  limpio: Eraser,
+  resumen: FileText,
+  preguntas: HelpCircle,
+  ideas: Lightbulb,
+  corregido: SpellCheck,
+};
 
 const EXT_ARTEFACTO: Record<string, string> = { srt: "srt", md: "md", txt: "txt" };
 
@@ -168,10 +201,10 @@ export default function Audio() {
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
-      {/* Cabecera: título + «Subir» al lado (la barra superior de la página). */}
-      <div className="flex items-center gap-3">
-        <TituloPagina titulo="Audio" icono={AudioLines} />
-        {!vacioTotal ? (
+      {/* El título se portaliza a la barra superior; «Subir» va a su lado (hueco de acciones). */}
+      <TituloPagina titulo="Audio" icono={AudioLines} />
+      {!vacioTotal ? (
+        <AccionesPagina>
           <Button
             variant="outline"
             size="sm"
@@ -181,8 +214,8 @@ export default function Audio() {
           >
             <Upload className="h-4 w-4" /> Subir
           </Button>
-        ) : null}
-      </div>
+        </AccionesPagina>
+      ) : null}
 
       {vacioTotal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
@@ -201,11 +234,17 @@ export default function Audio() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 gap-3">
-          {/* IZQUIERDA: doble panel (audios · artefactos). Colapsado se RETIRA por completo (deja el
-              lector a ancho total); se reabre con el chevron de la barra del lector. */}
-          {panelesAbiertos ? (
-            <aside className="flex w-[28rem] shrink-0 flex-col">
-              <div className="flex h-full min-h-0 flex-col rounded-md border border-border bg-card p-2">
+          {/* IZQUIERDA: doble panel (audios · artefactos), SIEMPRE presente. Expandido = listas;
+              colapsado = raíl estrecho de iconos que SIGUE navegable (como el lector de contexto).
+              El chevron al pie alterna; al colapsar el lector gana el ancho. */}
+          <aside className={cn("flex shrink-0 flex-col", panelesAbiertos ? "w-[28rem]" : "w-auto")}>
+            <div
+              className={cn(
+                "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
+                panelesAbiertos ? "p-2" : "p-1",
+              )}
+            >
+              {panelesAbiertos ? (
                 <div className="flex min-h-0 flex-1 gap-2">
                   <PanelAudios
                     className="w-1/2"
@@ -228,26 +267,40 @@ export default function Audio() {
                     onSeleccionar={setArtefactoId}
                   />
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="mt-2 h-8 w-8 shrink-0 self-center"
-                  aria-label="Colapsar paneles"
-                  title="Colapsar (leer a ancho completo)"
-                  onClick={() => setPanelesAbiertos(false)}
-                >
+              ) : (
+                <RailColapsado
+                  lista={lista}
+                  audioId={audioId}
+                  onSeleccionarAudio={(id) => {
+                    setAudioId(id);
+                    setArtefactoId(null);
+                  }}
+                  artefactos={artefactos}
+                  artefactoId={artefactoId}
+                  onSeleccionarArtefacto={setArtefactoId}
+                />
+              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn("h-8 w-8 shrink-0 self-center", panelesAbiertos && "mt-2")}
+                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
+                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
+                onClick={() => setPanelesAbiertos((v) => !v)}
+              >
+                {panelesAbiertos ? (
                   <ChevronLeft className="h-4 w-4" />
-                </Button>
-              </div>
-            </aside>
-          ) : null}
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </aside>
 
           {/* DERECHA: barra superior (tratamientos + acciones) sobre el lector del artefacto. */}
           <Lector
             audio={audio}
             artefacto={artefacto}
-            panelesAbiertos={panelesAbiertos}
-            onExpandir={() => setPanelesAbiertos(true)}
             onSeleccionarArtefacto={setArtefactoId}
             onCambio={refetchArtefactos}
           />
@@ -280,6 +333,77 @@ function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
     <Badge variant={variante} className="px-1.5 py-0 text-[10px] font-normal">
       {ETIQUETA_ESTADO[estado]}
     </Badge>
+  );
+}
+
+// Raíl estrecho del panel colapsado: iconos de audio (arriba) y, debajo, los artefactos del audio
+// activo. Sigue navegable —clicar selecciona— igual que el raíl de versiones del lector de contexto.
+function RailColapsado({
+  lista,
+  audioId,
+  onSeleccionarAudio,
+  artefactos,
+  artefactoId,
+  onSeleccionarArtefacto,
+}: {
+  lista: TranscripcionAudio[];
+  audioId: string | null;
+  onSeleccionarAudio: (id: string) => void;
+  artefactos: ArtefactoAudio[];
+  artefactoId: string | null;
+  onSeleccionarArtefacto: (id: string) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
+      {lista.map((t) => {
+        const activo = t.id === audioId;
+        return (
+          <Tooltip key={t.id} label={t.nombre || "Sin título"} side="right">
+            <button
+              type="button"
+              onClick={() => onSeleccionarAudio(t.id)}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent",
+                activo && "bg-accent text-primary",
+              )}
+            >
+              <AudioLines className="h-4 w-4" />
+            </button>
+          </Tooltip>
+        );
+      })}
+      {audioId && artefactos.length ? (
+        <>
+          <div className="my-1 h-px w-5 bg-border" />
+          {artefactos.map((a) => {
+            const activo = a.id === artefactoId;
+            const Icono = ICONO_ARTEFACTO[a.tipo] ?? FileText;
+            return (
+              <Tooltip
+                key={a.id}
+                label={a.titulo || TITULO_ARTEFACTO[a.tipo] || a.tipo}
+                side="right"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSeleccionarArtefacto(a.id)}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent",
+                    activo && "bg-accent text-primary",
+                  )}
+                >
+                  {a.estado === "generando" ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Icono className="h-4 w-4" />
+                  )}
+                </button>
+              </Tooltip>
+            );
+          })}
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -440,15 +564,11 @@ function PanelArtefactos({
 function Lector({
   audio,
   artefacto,
-  panelesAbiertos,
-  onExpandir,
   onSeleccionarArtefacto,
   onCambio,
 }: {
   audio: TranscripcionAudio | null;
   artefacto: ArtefactoAudio | null;
-  panelesAbiertos: boolean;
-  onExpandir: () => void;
   onSeleccionarArtefacto: (id: string) => void;
   onCambio: () => void;
 }) {
@@ -497,40 +617,28 @@ function Lector({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-2">
-      {/* Barra superior: chevron para reabrir paneles (si colapsados) + tratamientos a la izquierda;
-          acciones del artefacto a la derecha. */}
+      {/* Barra superior: tratamientos (con tooltip que explica cada uno) a la izquierda; acciones
+          del artefacto a la derecha. */}
       <div className="flex min-h-9 flex-wrap items-center gap-2">
-        {!panelesAbiertos ? (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 shrink-0"
-            aria-label="Mostrar paneles"
-            title="Mostrar paneles"
-            onClick={onExpandir}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        ) : null}
         {transcrito ? (
           <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-xs text-muted-foreground">Añadir:</span>
-            {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono }) => (
-              <Button
-                key={tipo}
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 px-2 text-xs"
-                disabled={crear.isPending}
-                onClick={() => crear.mutate(tipo)}
-              >
-                {crear.isPending && crear.variables === tipo ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Icono className="h-3 w-3" />
-                )}
-                {etiqueta}
-              </Button>
+            {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => (
+              <Tooltip key={tipo} label={desc} side="bottom">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={crear.isPending}
+                  onClick={() => crear.mutate(tipo)}
+                >
+                  {crear.isPending && crear.variables === tipo ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Icono className="h-3 w-3" />
+                  )}
+                  {etiqueta}
+                </Button>
+              </Tooltip>
             ))}
           </div>
         ) : null}
