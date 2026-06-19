@@ -24,7 +24,7 @@ import { contarSwapsPendientes } from "./comun";
 
 /** Valores válidos de pestaña (orden = el de la barra). «Hoy» es la home (default). «Mi jornada»
  *  dejó de ser pestaña: es el modo «Mes» del Calendario; el legacy `mis-turnos` se normaliza abajo. */
-const PESTANAS = ["hoy", "calendario", "cobertura", "cambios-ausencias"];
+const PESTANAS = ["hoy", "calendario", "cobertura", "gestion", "cambios-ausencias"];
 
 /** El deep-link legacy a la antigua pestaña «Mi jornada» (`?tab=mis-turnos`) cae en el
  *  Calendario abierto en su modo «Mes» (la misma vista mensual de jornada). */
@@ -66,6 +66,9 @@ export default function Rota() {
   const [params] = useSearchParams();
   const tabParam = params.get("tab");
   const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam).pestania);
+  // «Gestión» es admin-only: un no-admin que llegue con `?tab=gestion` cae en «Hoy» (la pestaña
+  // no existe para él). El resto de deep-links (`cobertura`/`cambios-ausencias`/`mis-turnos`) intacto.
+  const pestaniaEfectiva = pestania === "gestion" && !esAdmin ? "hoy" : pestania;
   // Modo de apertura del Calendario para los deep-links legacy a «Mi jornada».
   const [vistaCalendario, setVistaCalendario] = React.useState<"semana" | "mes">(
     () => normalizarTab(tabParam).vistaCalendario,
@@ -83,11 +86,12 @@ export default function Rota() {
   return (
     <>
       <TituloPagina titulo="Turnos" icono={CalendarClock} />
-      <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
+      <Tabs value={pestaniaEfectiva} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="hoy">Hoy</TabsTrigger>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
+          {esAdmin && <TabsTrigger value="gestion">Gestión</TabsTrigger>}
           <TabsTrigger value="cambios-ausencias">
             Cambios y ausencias
             {pendientesCambios > 0 && (
@@ -124,6 +128,13 @@ export default function Rota() {
         <TabsContent value="cobertura">
           <TareasBoard acciones="inline" />
         </TabsContent>
+        {esAdmin && (
+          <TabsContent value="gestion">
+            {/* Panel admin de la SEMANA (asignar/aprobar/despublicar/franjas/copiar/carga/export),
+                separado de la rejilla de consulta. Comparte `lunes` con el Calendario. */}
+            <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+          </TabsContent>
+        )}
         <TabsContent value="cambios-ausencias">
           {/* Ola "fusion real": una sola vista que mezcla cambios de turno y
               ausencias en una lista cronologica unica, con filtros por tipo y

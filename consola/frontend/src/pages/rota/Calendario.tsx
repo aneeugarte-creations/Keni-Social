@@ -80,6 +80,7 @@ export function Calendario({
   setLunes,
   esAdmin,
   vistaInicial = "semana",
+  modo = "calendario",
 }: {
   lunes: string;
   setLunes: (l: string) => void;
@@ -87,6 +88,10 @@ export function Calendario({
   /** Modo de apertura. Por defecto «Semana» (rejilla actual); «mes» lo usan los deep-links
    *  legacy a la antigua pestaña «Mi jornada». */
   vistaInicial?: VistaCalendario;
+  /** "calendario" = rejilla de consulta (edición inline de celdas para admin). "gestion" = panel
+   *  admin de la semana (asignar/aprobar/despublicar/franjas/copiar/carga/export). Lo monta
+   *  index.tsx en su pestaña admin-only; comparte `lunes`/`marcaActiva` y la misma queryKey de turnos. */
+  modo?: "calendario" | "gestion";
 }) {
   // Conmutador Semana|Mes: la rejilla semanal vive aquí; el modo «Mes» reutiliza la vista
   // mensual de jornada. Su valor inicial puede venir de un deep-link legacy (?tab=mis-turnos).
@@ -106,6 +111,7 @@ export function Calendario({
     queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
     queryFn: ({ signal }) =>
       api.cobertura({ lunes, marca: marcaActiva ?? undefined }, signal),
+    enabled: modo === "calendario",
   });
   // Tareas de cobertura (clase='tarea' con evento_id): la TITULARIDAD real, quién COGIÓ
   // cada evento. Es la MISMA fuente que el Panorama (mismo queryKey → cache compartida y se
@@ -114,6 +120,7 @@ export function Calendario({
     queryKey: [...CLAVE_TAREAS, "tareas", marcaActiva ?? "todas"],
     queryFn: ({ signal }) =>
       api.contenido({ clase: "tarea", marca: marcaActiva ?? undefined }, signal),
+    enabled: modo === "calendario",
   });
   const turnosQ = useQuery({
     queryKey: claveTurnos,
@@ -127,6 +134,7 @@ export function Calendario({
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+    enabled: modo === "calendario",
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -399,6 +407,104 @@ export function Calendario({
     />
   );
 
+  // Panel «Gestión» (admin): controles de la SEMANA, sin rejilla. Reutiliza las mutaciones y
+  // diálogos de esta misma instancia; la edición de celdas vive en la pestaña «Calendario».
+  if (modo === "gestion") {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+          <div className="flex flex-wrap items-center gap-2">
+            <BadgeEstadoSemana aprobada={Boolean(semana?.aprobada)} hayTurnos={turnos.length > 0} />
+            {!semana?.aprobada && (
+              <Button variant="outline" onClick={() => setAbrirAsignar(true)}>
+                <CalendarPlus className="h-4 w-4" /> Asignar turnos
+              </Button>
+            )}
+            {!semana?.aprobada && (
+              <Button
+                variant="secondary"
+                onClick={() => aprobar.mutate()}
+                disabled={aprobar.isPending || turnos.length === 0}
+              >
+                {aprobar.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                Aprobar y publicar
+              </Button>
+            )}
+            {semana?.aprobada && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (
+                    await confirmar({
+                      mensaje: "La semana volverá a ser editable. ¿Despublicar los turnos?",
+                      destructivo: true,
+                      textoConfirmar: "Despublicar",
+                    })
+                  )
+                    despublicar.mutate();
+                }}
+                disabled={despublicar.isPending}
+                title="Volver a borrador para editar"
+              >
+                {despublicar.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CalendarOff className="h-4 w-4" />
+                )}
+                Despublicar
+              </Button>
+            )}
+            <MenuMasAcciones
+              esAdmin={esAdmin}
+              semanaAprobada={Boolean(semana?.aprobada)}
+              copiarPendiente={copiarAnterior.isPending}
+              onCopiarAnterior={() => copiarAnterior.mutate()}
+              onAbrirFranjas={() => setAbrirFranjas(true)}
+              onAbrirCarga={() => setAbrirCarga(true)}
+              onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
+              onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
+            />
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Reparte y publica los turnos de la semana. La rejilla y la edición de celdas están en la
+          pestaña «Calendario».
+        </p>
+
+        {abrirFranjas && (
+          <DialogFranjas
+            lunes={lunes}
+            onCerrar={() => setAbrirFranjas(false)}
+            onAsignar={
+              editable
+                ? () => {
+                    setAbrirFranjas(false);
+                    setAbrirAsignar(true);
+                  }
+                : undefined
+            }
+          />
+        )}
+        {abrirCarga && <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />}
+        <DialogoAsignarTurnos
+          abierto={abrirAsignar}
+          onOpenChange={setAbrirAsignar}
+          lunes={lunes}
+          dias={dias}
+          franjas={franjasSemana}
+          cms={cms}
+          marca={marcaActiva ?? ""}
+          onCambio={invalidar}
+        />
+      </div>
+    );
+  }
+
   // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
   // imprimir/PDF intactos. El conmutador queda arriba; el vacío de «Yo» salta a «Semana».
   if (vista === "mes") {
@@ -423,13 +529,9 @@ export function Calendario({
           <AyudaLeyenda />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Bandeja de propuestas: tareas con fecha esperando entrar al calendario. Solo se
-              pinta si hay alguna; aceptar una la promueve a evento «Por cubrir». */}
-          <PropuestasCalendario propuestas={propuestas} />
-          <BadgeEstadoSemana
-            aprobada={Boolean(semana?.aprobada)}
-            hayTurnos={turnos.length > 0}
-          />
+          {/* Bandeja de propuestas: aceptar una promueve a evento «Por cubrir» (acción de
+              coordinador) → solo admin. El estado de la semana (Borrador/Publicada) vive en Gestión. */}
+          {esAdmin && <PropuestasCalendario propuestas={propuestas} />}
           {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
           {esAdmin && nCambiados > 0 && (
             <Tooltip
@@ -454,85 +556,10 @@ export function Calendario({
               </Badge>
             </Tooltip>
           )}
-          {/* «Asignar turnos» (reparto de la semana) es botón primario junto a Aprobar; el «⋯»
-              queda para acciones secundarias. */}
-          {esAdmin && !semana?.aprobada && (
-            <Button variant="outline" onClick={() => setAbrirAsignar(true)}>
-              <CalendarPlus className="h-4 w-4" /> Asignar turnos
-            </Button>
-          )}
-          {esAdmin && !semana?.aprobada && (
-            <Button
-              variant="secondary"
-              onClick={() => aprobar.mutate()}
-              disabled={aprobar.isPending || turnos.length === 0}
-            >
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
-              Aprobar y publicar
-            </Button>
-          )}
-          {esAdmin && semana?.aprobada && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                if (
-                  await confirmar({
-                    mensaje:
-                      "La semana volverá a ser editable. ¿Despublicar los turnos?",
-                    destructivo: true,
-                    textoConfirmar: "Despublicar",
-                  })
-                )
-                  despublicar.mutate();
-              }}
-              disabled={despublicar.isPending}
-              title="Volver a borrador para editar"
-            >
-              {despublicar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CalendarOff className="h-4 w-4" />
-              )}
-              Despublicar
-            </Button>
-          )}
-          {/* «Importar documento» ya no es un botón suelto aquí: vive dentro de «Asignar
-              turnos» como su vía automática (ver DialogoAsignarTurnos). */}
-          {/* Menú «⋯» solo de coordinador (Franjas/Copiar/Carga/Export): oculto al trabajador.
-              Para el no-admin solo ofrecía Carga del equipo + Export, ambas de coordinador. */}
-          {esAdmin && (
-            <MenuMasAcciones
-              esAdmin={esAdmin}
-              semanaAprobada={Boolean(semana?.aprobada)}
-              copiarPendiente={copiarAnterior.isPending}
-              onCopiarAnterior={() => copiarAnterior.mutate()}
-              onAbrirFranjas={() => setAbrirFranjas(true)}
-              onAbrirCarga={() => setAbrirCarga(true)}
-              onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
-              onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
-            />
-          )}
+          {/* Asignar/Aprobar/Despublicar/Franjas/Copiar/Carga/Export viven ahora en la pestaña
+              «Gestión» (admin); el Calendario es consulta + edición de celdas. */}
         </div>
       </div>
-
-      {abrirFranjas && (
-        <DialogFranjas
-          lunes={lunes}
-          onCerrar={() => setAbrirFranjas(false)}
-          onAsignar={
-            editable
-              ? () => {
-                  setAbrirFranjas(false);
-                  setAbrirAsignar(true);
-                }
-              : undefined
-          }
-        />
-      )}
 
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
@@ -728,20 +755,6 @@ export function Calendario({
         </Dialog>
       )}
 
-      {abrirCarga && (
-        <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
-      )}
-
-      <DialogoAsignarTurnos
-        abierto={abrirAsignar}
-        onOpenChange={setAbrirAsignar}
-        lunes={lunes}
-        dias={dias}
-        franjas={franjasSemana}
-        cms={cms}
-        marca={marcaActiva ?? ""}
-        onCambio={invalidar}
-      />
     </div>
   );
 }

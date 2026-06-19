@@ -162,16 +162,17 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
 
-  it("tiene 4 pestañas (Hoy, Calendario, Cobertura, Cambios) y «Mi jornada» ya NO es una", async () => {
+  it("el admin ve 5 pestañas incluida «Gestión»; «Mi jornada» ya NO es una", async () => {
     renderRota();
     // «Hoy» es la home; «Mi jornada» sigue fundida en el modo «Mes» del Calendario.
     await screen.findByRole("tab", { name: "Hoy" });
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(5);
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Hoy",
       "Calendario",
       "Cobertura",
+      "Gestión",
       expect.stringContaining("Cambios y ausencias"),
     ]);
     expect(screen.queryByRole("tab", { name: "Mi jornada" })).toBeNull();
@@ -476,9 +477,49 @@ describe("Turnos — Calendario: gating de coordinador", () => {
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
   });
 
-  it("el admin SÍ conserva el menú ⋯ (Franjas/Copiar/Carga/Export)", async () => {
+  it("el admin tampoco ve el ⋯ en el Calendario: ahora vive en «Gestión»", async () => {
     renderRota(); // admin por defecto
     fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    await screen.findByRole("button", { name: "Semana", pressed: true });
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+    // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión».
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Gestión" }), { button: 0 });
     expect(await screen.findByRole("button", { name: "Más acciones" })).toBeInTheDocument();
+  });
+});
+
+describe("Turnos — pestaña «Gestión» (admin)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("el trabajador (no-admin) NO ve la pestaña «Gestión»", async () => {
+    renderRota({ rol: "editor" });
+    await screen.findByRole("tab", { name: "Hoy" });
+    expect(screen.queryByRole("tab", { name: "Gestión" })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
+  });
+
+  it("«Gestión» reúne Asignar/Aprobar; el header del Calendario ya no los tiene", async () => {
+    renderRota();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Calendario" }), { button: 0 });
+    await screen.findByRole("button", { name: "Semana", pressed: true });
+    expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Gestión" }), { button: 0 });
+    expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
+  });
+
+  it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {
+    renderRotaConTab("gestion", { rol: "editor" });
+    expect(await screen.findByRole("tab", { name: "Hoy" })).toHaveAttribute("data-state", "active");
+    expect(screen.queryByRole("tab", { name: "Gestión" })).toBeNull();
+  });
+
+  it("deep-link ?tab=gestion para admin abre «Gestión»", async () => {
+    renderRotaConTab("gestion");
+    expect(await screen.findByRole("tab", { name: "Gestión" })).toHaveAttribute("data-state", "active");
   });
 });
