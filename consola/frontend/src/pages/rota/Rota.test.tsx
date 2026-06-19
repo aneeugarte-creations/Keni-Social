@@ -438,9 +438,26 @@ describe("Turnos — home «Hoy»", () => {
       },
       listarTurnos: { turnos: [], aprobada: false, franjas: [] },
     });
-    // «Hoy» ya no LISTA los huecos (eso vive en «Cobertura»): solo muestra el conteo como aviso.
+    // «Hoy» arranca COLAPSADO: muestra el conteo como aviso, sin listar los huecos todavía.
     expect(await screen.findByText(/1 por cubrir hoy/i)).toBeInTheDocument();
     expect(screen.queryByText("Rueda de prensa")).not.toBeInTheDocument();
+  });
+
+  it("POR CUBRIR HOY: al expandir el aviso, lista los huecos de hoy para coger sin salir de «Hoy»", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
+    renderRota({
+      rotaEventos: {
+        eventos: [
+          { id: "ev1", titulo: "Rueda de prensa", fecha: "2026-06-15", hora: "12:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
+        ],
+      },
+      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
+    });
+    // Pulsar el aviso revela la lista de huecos in situ (progressive disclosure), sin ir a «Cobertura».
+    const aviso = await screen.findByRole("button", { name: /coger lo que falta por cubrir hoy/i });
+    fireEvent.click(aviso);
+    expect(await screen.findByText("Rueda de prensa")).toBeInTheDocument();
   });
 
   it("LO MÍO HOY: una cobertura del usuario, de hoy, aparece bajo «Lo mío hoy»", async () => {
