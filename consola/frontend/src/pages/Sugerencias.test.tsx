@@ -31,6 +31,8 @@ const RESP_SUGERENCIAS = {
   sugerencias: SUGERENCIAS,
   categorias: ["idea", "producto", "mejora", "bug"],
   estados: ["nueva", "discovery", "en_cola", "building", "revision", "hecha"],
+  // superadmin: la página pinta el tablero kanban completo (el resto del equipo ve solo MIS ideas).
+  superadmin: true,
 };
 
 /** Stub de fetch que enruta /api/sugerencias. Captura POSTs/PATCH/DELETE. */
