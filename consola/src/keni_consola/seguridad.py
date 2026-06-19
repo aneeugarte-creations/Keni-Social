@@ -178,14 +178,17 @@ def mfa_maquinaria_activa() -> bool:
 def mfa_requerido_para(usuario: dict) -> bool:
     """¿Se le EXIGE segundo factor (passkey) a ESTE usuario? FUENTE ÚNICA del enforcement.
 
-    Combina las tres políticas de obligación, todas GATEADAS por que haya clave de firma
-    (`mfa_key_presente`, red ANTI-LOCKOUT: sin clave no se puede inscribir ni verificar, así que
-    no se fuerza a nadie):
+    GATEADO por que haya clave de firma (`mfa_key_presente`, red ANTI-LOCKOUT: sin clave no se
+    puede inscribir ni verificar, así que no se fuerza a nadie). Combina:
 
-      1. GLOBAL para TODOS — `KENI_CONSOLA_MFA` (`config.mfa_habilitado`): obliga a todo el equipo.
-      2. ADMINS — `KENI_CONSOLA_MFA_ADMIN` (`config.mfa_obligatorio_admin`, def ON): obliga a los
+      1. ADMINS — `KENI_CONSOLA_MFA_ADMIN` (`config.mfa_obligatorio_admin`, def ON): obliga a los
          de rol admin (publican en canales de marca; un password robado sin 2º factor es ATO).
-      3. PER-USUARIO — la columna `mfa_requerido` que un superadmin marca en Usuarios.
+      2. PER-USUARIO — la columna `mfa_requerido` que un superadmin marca en Usuarios.
+
+    El flag GLOBAL `KENI_CONSOLA_MFA` ya NO es un override de runtime: «passkey obligatorio para
+    todo el equipo» es una ACCIÓN MASIVA en la UI que MARCA `mfa_requerido` en cada cuenta, y a
+    partir de ahí MANDA el flag individual (se puede eximir a alguien). Así el enforcement depende
+    solo de la columna per-usuario y de la política de admins.
 
     `usuario` es la forma pública (debe traer `rol` y `mfa_requerido`). Lo consultan la elevación
     del login (`api/auth`), `me.debe_inscribir_mfa` y el hard-block de `api/usuarios`. Devuelve
@@ -194,8 +197,6 @@ def mfa_requerido_para(usuario: dict) -> bool:
     """
     if not config.mfa_key_presente():
         return False
-    if config.mfa_habilitado():
-        return True
     if usuario.get("rol") == ROL_ADMIN and config.mfa_obligatorio_admin():
         return True
     return bool(usuario.get("mfa_requerido"))

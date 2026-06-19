@@ -22,7 +22,6 @@ import { type AjusteConfig, type UsuarioAdmin } from "@/types";
 
 import {
   CLAVE_CONFIG_USUARIOS,
-  CLAVE_MFA,
   CLAVE_MFA_ADMIN,
   CLAVE_PASSWORD_MIN,
   CLAVE_SESION_HORAS,
@@ -35,11 +34,11 @@ const SECCIONES: { titulo: string; descripcion: string; claves: string[]; nota?:
   {
     titulo: "Acceso",
     descripcion: "Obligatoriedad del segundo factor (passkey).",
-    claves: [CLAVE_MFA, CLAVE_MFA_ADMIN],
+    claves: [CLAVE_MFA_ADMIN],
     nota:
-      "Con «passkey obligatorio para todo el equipo» activo, TODAS las cuentas quedan obligadas " +
-      "y no se puede eximir a nadie por separado (el interruptor individual de cada persona se " +
-      "muestra exigido). Desactívalo para gestionar la exigencia persona a persona.",
+      "«Passkey obligatorio para todo el equipo» MARCA a cada cuenta como exigida (te avisa a " +
+      "quién afecta); a partir de ahí puedes eximir o exigir persona a persona desde su ficha. " +
+      "Las cuentas nuevas no quedan exigidas solas: vuelve a aplicarlo cuando se incorpore gente.",
   },
   {
     titulo: "Sesión",
@@ -53,15 +52,13 @@ const SECCIONES: { titulo: string; descripcion: string; claves: string[]; nota?:
   },
 ];
 
-/** ¿A esta persona se le exige passkey por una política DISTINTA del flag global? (rol admin con
- * el flag de admins, o exigencia individual). Si no, su exigencia la decide SOLO el flag global,
- * así que activarlo/desactivarlo le AFECTA. */
-function afectadoPorGlobal(u: UsuarioAdmin, mfaAdminActivo: boolean): boolean {
-  const forzadoPorRol = u.rol === "admin" && mfaAdminActivo;
-  return !forzadoPorRol && !u.mfa_requerido;
+/** Personas cuya exigencia la decide su flag INDIVIDUAL (no su rol de admin): a estas afecta la
+ * acción masiva. Si el flag de admins está activo, los administradores quedan fuera (ya obligados). */
+function relevantesParaMasiva(usuarios: UsuarioAdmin[], mfaAdminActivo: boolean): UsuarioAdmin[] {
+  return usuarios.filter((u) => !(u.rol === "admin" && mfaAdminActivo));
 }
 
-/** Mensaje (ReactNode) del diálogo de confirmación del flag global: lista de afectados.
+/** Mensaje (ReactNode) del diálogo de confirmación de la acción masiva: lista de afectados.
  * Solo `<span>` (válido dentro del `<p>` de AlertDialogDescription). */
 function mensajeAfectados(activar: boolean, afectados: UsuarioAdmin[]): React.ReactNode {
   if (afectados.length === 0) {
@@ -231,6 +228,67 @@ function CabeceraFuente({
 }
 
 /**
+ * «Passkey obligatorio para todo el equipo» como ACCIÓN MASIVA (no un flag de override): el switch
+ * refleja si TODAS las cuentas relevantes ya lo tienen exigido; al cambiarlo, confirma con la lista
+ * de afectados y marca/desmarca `mfa_requerido` en cada una. Tras aplicarlo, cada persona se puede
+ * eximir/exigir desde su ficha (el flag individual manda). Los administradores quedan fuera cuando
+ * su política propia está activa (ya obligados).
+ */
+function ControlPasskeyGlobal({
+  usuarios,
+  mfaAdminActivo,
+  ocupado,
+  onAplicar,
+}: {
+  usuarios: UsuarioAdmin[];
+  mfaAdminActivo: boolean;
+  ocupado: boolean;
+  onAplicar: (ids: string[], valor: boolean) => void;
+}) {
+  const relevantes = relevantesParaMasiva(usuarios, mfaAdminActivo);
+  const todosExigidos = relevantes.length > 0 && relevantes.every((u) => Boolean(u.mfa_requerido));
+
+  const alCambiar = async () => {
+    const valor = !todosExigidos;
+    const afectados = relevantes
+      .filter((u) => Boolean(u.mfa_requerido) !== valor)
+      .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
+    const ok = await confirmar({
+      titulo: valor
+        ? "Exigir passkey a todo el equipo"
+        : "Dejar de exigir passkey a todo el equipo",
+      mensaje: mensajeAfectados(valor, afectados),
+      textoConfirmar: valor ? "Activar para todos" : "Desactivar",
+    });
+    if (!ok) return;
+    onAplicar(
+      afectados.map((u) => u.id),
+      valor,
+    );
+  };
+
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 space-y-0.5">
+        <Label htmlFor="cfg-passkey-global" className="text-sm font-normal">
+          Passkey obligatorio para todo el equipo
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Marca a cada cuenta como exigida; luego puedes eximir o exigir persona a persona.
+        </p>
+      </div>
+      <Switch
+        id="cfg-passkey-global"
+        aria-label="Passkey obligatorio para todo el equipo"
+        checked={todosExigidos}
+        disabled={ocupado || relevantes.length === 0}
+        onCheckedChange={alCambiar}
+      />
+    </div>
+  );
+}
+
+/**
  * Subpágina de configuración GLOBAL de seguridad (`/usuarios/configuracion`). Lee los ajustes
  * efectivos del equipo y los presenta en secciones (Acceso · Sesión · Contraseñas); cada cambio
  * guarda al instante (PATCH) y refresca. Muestra el ORIGEN de cada valor (personalizado / por
@@ -268,31 +326,27 @@ export default function ConfiguracionGlobal() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Acción MASIVA del «passkey obligatorio para todo el equipo»: marca/desmarca `mfa_requerido`
+  // en cada cuenta afectada (PATCH por usuario; el equipo del piloto es pequeño).
+  const aplicarMasiva = useMutation({
+    mutationFn: async ({ ids, valor }: { ids: string[]; valor: boolean }) => {
+      await Promise.all(ids.map((id) => api.actualizarUsuario(id, { mfa_requerido: valor })));
+    },
+    onSuccess: (_d, { valor }) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
+      toast.success(valor ? "Passkey exigido al equipo" : "Exigencia retirada");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const porClave = React.useMemo(() => {
     const mapa = new Map<string, AjusteConfig>();
     for (const a of query.data?.ajustes ?? []) mapa.set(a.clave, a);
     return mapa;
   }, [query.data]);
+  const mfaAdminActivo = porClave.get(CLAVE_MFA_ADMIN)?.valor === true;
 
-  const onGuardar = async (clave: string, valor: unknown) => {
-    // El flag GLOBAL afecta a todo el equipo: confirmamos con la lista de afectados antes de
-    // aplicarlo (un toggle silencioso fuerza a media plantilla a inscribir passkey sin avisar).
-    if (clave === CLAVE_MFA && typeof valor === "boolean") {
-      const mfaAdminActivo = porClave.get(CLAVE_MFA_ADMIN)?.valor === true;
-      const afectados = usuarios
-        .filter((u) => afectadoPorGlobal(u, mfaAdminActivo))
-        .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
-      const ok = await confirmar({
-        titulo: valor
-          ? "Exigir passkey a todo el equipo"
-          : "Dejar de exigir passkey a todo el equipo",
-        mensaje: mensajeAfectados(valor, afectados),
-        textoConfirmar: valor ? "Activar para todos" : "Desactivar",
-      });
-      if (!ok) return;
-    }
-    guardar.mutate({ clave, valor });
-  };
+  const onGuardar = (clave: string, valor: unknown) => guardar.mutate({ clave, valor });
   const onReset = (clave: string) => guardar.mutate({ clave, reset: true });
 
   if (!cargando && !esSuperadmin) {
@@ -336,10 +390,12 @@ export default function ConfiguracionGlobal() {
           )}
 
           {SECCIONES.map((seccion) => {
+            const esAcceso = seccion.titulo === "Acceso";
             const ajustes = seccion.claves
               .map((c) => porClave.get(c))
               .filter((a): a is AjusteConfig => Boolean(a));
-            if (ajustes.length === 0) return null;
+            // La sección Acceso siempre se pinta (lleva el control masivo, no solo ajustes).
+            if (ajustes.length === 0 && !esAcceso) return null;
             return (
               <Card key={seccion.titulo}>
                 <CardHeader>
@@ -347,6 +403,14 @@ export default function ConfiguracionGlobal() {
                   <p className="text-sm text-muted-foreground">{seccion.descripcion}</p>
                 </CardHeader>
                 <CardContent className="space-y-5">
+                  {esAcceso && (
+                    <ControlPasskeyGlobal
+                      usuarios={usuarios}
+                      mfaAdminActivo={mfaAdminActivo}
+                      ocupado={aplicarMasiva.isPending}
+                      onAplicar={(ids, valor) => aplicarMasiva.mutate({ ids, valor })}
+                    />
+                  )}
                   {ajustes.map((a) =>
                     a.tipo === "bool" ? (
                       <AjusteBool

@@ -572,21 +572,16 @@ async def borrar(request: Request) -> Response:
 # `password_min`) lo recogen sin más wiring. Acotado a estas claves curadas (jamás otras del
 # catálogo de la máquina). El enforcement de MFA ya lo aplica `seguridad.mfa_requerido_para`.
 _AJUSTES_SEGURIDAD: tuple[ajustes_catalogo.Ajuste, ...] = (
-    ajustes_catalogo.Ajuste(
-        clave=config.ENV_MFA,
-        tipo="bool",
-        etiqueta="Passkey obligatorio para todo el equipo",
-        ayuda="Cada cuenta debe inscribir una llave de acceso (passkey) la próxima vez que "
-        "inicie sesión, antes de poder operar. Requiere clave de firma configurada en el servidor.",
-        grupo="seguridad",
-        defecto=False,
-    ),
+    # NOTA: «passkey obligatorio para todo el equipo» (KENI_CONSOLA_MFA) ya NO es un ajuste de
+    # override aquí: es una ACCIÓN MASIVA del frontend que marca `mfa_requerido` en cada cuenta
+    # (PATCH /api/usuarios/{id}), y a partir de ahí manda el flag individual. Solo queda como
+    # política persistente la de administradores.
     ajustes_catalogo.Ajuste(
         clave=config.ENV_MFA_ADMIN,
         tipo="bool",
         etiqueta="Passkey obligatorio para administradores",
-        ayuda="Exige el segundo factor a las cuentas con rol administrador, aunque el global "
-        "esté desactivado. Recomendado: un admin publica en canales de marca.",
+        ayuda="Exige la llave de acceso a las cuentas con rol administrador (publican en canales "
+        "de marca). A los administradores no se les puede eximir mientras esté activo.",
         grupo="seguridad",
         defecto=True,
     ),

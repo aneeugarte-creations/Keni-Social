@@ -1413,3 +1413,16 @@ def _forzar_reset_password_existentes(con: Any) -> None:
         return
     con.execute("UPDATE usuarios SET debe_cambiar_password = 1 WHERE debe_cambiar_password = 0")
 
+
+def _materializar_passkey_requerido_existentes(con: Any) -> None:
+    """ONE-SHOT: materializa el «passkey obligatorio para todo el equipo» en la columna per-usuario.
+
+    El flag global dejó de ser un override de runtime y pasó a ser una ACCIÓN MASIVA sobre
+    `mfa_requerido`. Para NO des-forzar al equipo actual en el despliegue (que estaba exigido vía
+    el flag global), marcamos `mfa_requerido=1` en las cuentas existentes; las nuevas nacen sin
+    exigir (el superadmin re-aplica la acción masiva). Corre UNA vez por BD; en BD vacía/tests es
+    no-op. Idempotente (solo toca las filas a 0)."""
+    if not _tabla_existe(con, "usuarios"):
+        return
+    con.execute("UPDATE usuarios SET mfa_requerido = 1 WHERE mfa_requerido = 0")
+

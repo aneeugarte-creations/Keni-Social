@@ -49,7 +49,6 @@ import { formatearFecha } from "./lib";
 import { SelectorMarcas } from "./SelectorMarcas";
 import {
   CLAVE_CONFIG_USUARIOS,
-  CLAVE_MFA,
   CLAVE_MFA_ADMIN,
   CLAVE_OPCIONES_MARCAS,
   CLAVE_PASSWORD_MIN,
@@ -123,12 +122,9 @@ export default function UsuarioDetalle() {
     const ajuste = configQuery.data?.find((a) => a.clave === CLAVE_PASSWORD_MIN);
     return typeof ajuste?.valor === "number" ? ajuste.valor : MIN_PASSWORD;
   }, [configQuery.data]);
-  // Políticas globales: si una EXIGE passkey a esta persona, su toggle individual se muestra
-  // exigido y bloqueado (no se puede eximir a alguien a quien la política global ya obliga).
-  const mfaGlobal = React.useMemo(
-    () => configQuery.data?.find((a) => a.clave === CLAVE_MFA)?.valor === true,
-    [configQuery.data],
-  );
+  // Política de ADMINS: si está activa, a un administrador se le exige passkey y su toggle se
+  // muestra exigido y bloqueado (no se le puede eximir mientras la política esté activa). El
+  // «passkey para todo el equipo» ya NO bloquea: es una acción masiva y el flag individual manda.
   const mfaAdmin = React.useMemo(
     () => configQuery.data?.find((a) => a.clave === CLAVE_MFA_ADMIN)?.valor === true,
     [configQuery.data],
@@ -282,16 +278,12 @@ export default function UsuarioDetalle() {
   const superiorActual = (usuario.manager_id ?? "") || SIN_SUPERIOR;
   const rolActual = usuario.superadmin ? ROL_SUPERADMIN : usuario.rol;
 
-  // ¿Una política GLOBAL ya exige passkey a esta persona? Si sí, su toggle individual se muestra
-  // exigido y bloqueado (coherencia: no se puede eximir a quien la política obliga).
-  const forzadoPorGlobal = mfaGlobal;
-  const forzadoPorAdmin = !mfaGlobal && usuario.rol === "admin" && mfaAdmin;
-  const forzadoPorPolitica = forzadoPorGlobal || forzadoPorAdmin;
-  const notaPasskey = forzadoPorGlobal
-    ? "Exigido por la política global (passkey para todo el equipo)."
-    : forzadoPorAdmin
-      ? "Exigido por la política para administradores."
-      : null;
+  // La política de admins bloquea el toggle de un administrador (no se le puede eximir mientras
+  // esté activa). A los demás, su flag individual manda y siempre es editable.
+  const forzadoPorPolitica = usuario.rol === "admin" && mfaAdmin;
+  const notaPasskey = forzadoPorPolitica
+    ? "Exigido por la política para administradores."
+    : null;
 
   // Candidatos a superior: todos menos uno mismo y sus descendientes (evita ciclos).
   const prohibidos = descendientes(usuario.id, hijos);

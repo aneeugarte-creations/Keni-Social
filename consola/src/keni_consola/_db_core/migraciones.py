@@ -37,6 +37,7 @@ from .migraciones_columnas import (
     _backfill_gasto_ia_proceso,
     _backfill_pesos_fuente,
     _forzar_reset_password_existentes,
+    _materializar_passkey_requerido_existentes,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_config_franjas,
@@ -465,6 +466,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # se pueden auditar (solo hay hash)—. Junto al MFA obligatorio para todos, la primera vuelta a
     # entrar de cada persona cambia contrasena + inscribe passkey. One-shot; no-op en BD vacia/tests.
     Migracion("0044-forzar-reset-password-existentes", _forzar_reset_password_existentes),
+    # SEGURIDAD: el «passkey obligatorio para todo el equipo» pasó de override global a acción
+    # masiva sobre `mfa_requerido`. Para no des-forzar al equipo actual en el deploy, materializa
+    # ese estado marcando `mfa_requerido=1` en las cuentas existentes. One-shot; no-op en BD vacía/tests.
+    Migracion("0045-materializar-passkey-requerido", _materializar_passkey_requerido_existentes),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

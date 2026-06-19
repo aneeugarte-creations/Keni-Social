@@ -521,13 +521,14 @@ def test_mfa_requerido_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatc
 
 
 # --------------------------------------------------------------------------- #
-# 8b) OBLIGATORIEDAD GLOBAL (`KENI_CONSOLA_MFA`) y de ADMINS (`..._MFA_ADMIN`)  #
+# 8b) OBLIGATORIEDAD de ADMINS (`..._MFA_ADMIN`) y el global como ACCIÓN MASIVA              #
 # --------------------------------------------------------------------------- #
 
 
-def test_global_obliga_a_todos(entorno, monkeypatch):
-    """`KENI_CONSOLA_MFA=1` (+ clave) obliga a CUALQUIER usuario: un editor sin passkey y sin
-    `mfa_requerido` per-usuario entra en gracia (`debe_inscribir_mfa`)."""
+def test_flag_global_ya_no_fuerza_en_runtime(entorno, monkeypatch):
+    """El flag global `KENI_CONSOLA_MFA` dejó de ser un override: con él a 1 + clave, un editor
+    SIN `mfa_requerido` per-usuario NO se fuerza (el global es ahora una acción masiva que marca
+    la columna; el enforcement depende del flag individual)."""
     monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
     monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
     auth.crear_usuario("ana", CLAVE, "editor")  # sin mfa_requerido, sin passkey
@@ -535,8 +536,8 @@ def test_global_obliga_a_todos(entorno, monkeypatch):
     c = _cli()
     r = _login(c, "ana", CLAVE)
     assert r.status_code == 200 and "mfa_required" not in r.json()
-    assert r.json()["usuario"]["debe_inscribir_mfa"] is True
-    assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is True
+    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
+    assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False
 
 
 def test_admin_obligatorio_por_defecto_obliga_admins_no_editores(entorno, monkeypatch):
@@ -570,21 +571,6 @@ def test_mfa_admin_off_no_obliga_admin(entorno, monkeypatch):
     r = _login(c, "jefe", CLAVE)
     assert r.status_code == 200
     assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
-
-
-def test_global_obligatorio_sin_clave_no_hay_lockout(entorno, monkeypatch):
-    """ANTI-LOCKOUT: `KENI_CONSOLA_MFA=1` pero SIN clave de firma -> no se fuerza a nadie (no se
-    puede correr la ceremonia ni la inscripcion)."""
-    monkeypatch.setenv("KENI_CONSOLA_MFA", "1")
-    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
-    auth.crear_usuario("ana", CLAVE, "editor")
-
-    c = _cli()
-    r = _login(c, "ana", CLAVE)
-    assert r.status_code == 200 and "mfa_required" not in r.json()
-    assert r.json()["usuario"].get("debe_inscribir_mfa") in (None, False)
-    me = c.get("/api/auth/me", headers=_ORIGIN)
-    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
 
 
 # --------------------------------------------------------------------------- #

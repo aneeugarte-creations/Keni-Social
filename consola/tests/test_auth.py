@@ -1427,8 +1427,9 @@ def test_borrar_usuario_libera_sus_piezas_cogidas(entorno):
 # la fixture de conftest). Los accesores de `config` la recogen (precedencia STORE > ENV >
 # DEFECTO), así que un PATCH desde la UI cambia el comportamiento real (MFA / política de pass).
 
+# `KENI_CONSOLA_MFA` (passkey para todo el equipo) ya NO es un ajuste de override: es una acción
+# masiva del frontend sobre `mfa_requerido`, así que no aparece en este endpoint curado.
 _CLAVES_SEGURIDAD = {
-    "KENI_CONSOLA_MFA",
     "KENI_CONSOLA_MFA_ADMIN",
     "KENI_CONSOLA_SESION_HORAS",
     "KENI_CONSOLA_SESION_MAX_HORAS",
@@ -1461,15 +1462,16 @@ def test_configuracion_patch_cambia_el_comportamiento(entorno):
     c = _cli()
     _login(c, "jefa", CLAVE)
 
-    assert config.mfa_habilitado() is False
+    # Política de admins: apagarla se refleja en el accesor.
+    assert config.mfa_obligatorio_admin() is True
     r = c.patch(
         "/api/usuarios/configuracion",
-        json={"clave": "KENI_CONSOLA_MFA", "valor": True},
+        json={"clave": "KENI_CONSOLA_MFA_ADMIN", "valor": False},
         headers=_ORIGIN,
     )
     assert r.status_code == 200
-    assert r.json()["ajuste"]["valor"] is True and r.json()["ajuste"]["fuente"] == "store"
-    assert config.mfa_habilitado() is True
+    assert r.json()["ajuste"]["valor"] is False and r.json()["ajuste"]["fuente"] == "store"
+    assert config.mfa_obligatorio_admin() is False
 
     # Política de contraseña: subir el mínimo efectivo.
     assert config.password_min() == 12

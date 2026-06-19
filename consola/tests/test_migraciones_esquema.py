@@ -341,3 +341,26 @@ def test_forzar_reset_password_existentes_marca_todos(pg):
 
     for u in auth.listar_usuarios():
         assert auth.obtener_usuario_por_id(u["id"])["debe_cambiar_password"] is True
+
+
+def test_materializar_passkey_requerido_existentes(pg):
+    """0045: materializa el «passkey para todo el equipo» (que pasó de override a acción masiva)
+    marcando `mfa_requerido=1` en las cuentas existentes, para no des-forzar al equipo en el deploy."""
+    from keni_consola import auth
+    from keni_consola._db_core.migraciones_columnas import (
+        _materializar_passkey_requerido_existentes,
+    )
+
+    auth.crear_usuario("ana", "clave-de-prueba", "editor")
+    auth.crear_usuario("jefe", "clave-de-prueba", "admin")
+    assert all(not u["mfa_requerido"] for u in auth.listar_usuarios())
+
+    con = motor_db.conectar_cruda()
+    try:
+        _materializar_passkey_requerido_existentes(con)
+        con.commit()
+    finally:
+        con.close()
+
+    for u in auth.listar_usuarios():
+        assert auth.obtener_usuario_por_id(u["id"])["mfa_requerido"] is True
