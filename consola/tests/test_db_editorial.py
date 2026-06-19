@@ -45,7 +45,7 @@ def test_crear_listar_obtener_fuente_rss(entorno):
     assert set(f) == {
         "id", "nombre", "url", "marca", "fecha", "activo", "incluir", "excluir",
         "redes_def", "ultima_actualizacion", "ultimo_error", "ultimo_conteo", "propia",
-        "categoria", "intervalo_min", "proximo_sondeo", "prioridad", "pausado_hasta",
+        "categoria", "linea_id", "intervalo_min", "proximo_sondeo", "prioridad", "pausado_hasta",
         "errores_seguidos", "desactivado_auto", "ultimo_filtrados", "peso",
     }
     assert f["nombre"] == "Diario"
