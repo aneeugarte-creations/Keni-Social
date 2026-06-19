@@ -303,6 +303,9 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
     monkeypatch.setattr(_admitir.marcas, "es_marca", lambda m: True)
     monkeypatch.setattr(_admitir.redes, "redes_de_formato", lambda formato: ["x"])
     monkeypatch.setattr(_admitir, "_auto_etiquetar_linea", lambda *a, **k: None)
+    # La clave de plan resuelve la LÍNEA contra la BD (bootstrap_lineas); sin BD aquí, la
+    # dejamos en el slug (estos tests cubren el carrusel, no el mapeo a línea del plan).
+    monkeypatch.setattr(_admitir, "_categoria_plan", lambda marca, cluster: _admitir.categoria_efectiva(cluster))
     return reg
 
 
