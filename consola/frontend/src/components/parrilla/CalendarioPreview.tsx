@@ -509,7 +509,7 @@ export function CalendarioPreview({
                     className={cn(
                       "flex items-baseline justify-between px-2 py-2",
                       esFinDeSemana(fecha)
-                        ? "bg-amber-50/40 dark:bg-amber-950/10"
+                        ? "bg-muted/60 dark:bg-muted/30"
                         : "bg-background",
                     )}
                   >
@@ -582,7 +582,7 @@ function CeldaDePreview({ celda, finde }: { celda?: CeldaPreview; finde: boolean
     <div
       className={cn(
         "flex min-h-[6rem] flex-col gap-1.5 border-l p-2",
-        finde && "bg-amber-50/20 dark:bg-amber-950/5",
+        finde && "bg-muted/40 dark:bg-muted/20",
       )}
     >
       {personas.length === 0 && eventos.length === 0 && (

@@ -50,9 +50,11 @@ const SIGUIENTE: Record<string, { estado: string; etiqueta: string; icono: typeo
   en_curso: { estado: "hecha", etiqueta: "Marcar hecha", icono: Check },
 };
 
+// Misma taxonomía que la rota (`lib/rota-calendario.ts` COLOR_PRIORIDAD): SOLO «alta»
+// lleva color (rojo); «media»/«baja» son neutras. El ámbar queda reservado a «empieza-en».
 const PRIORIDAD_CLASE: Record<string, string> = {
   alta: "border-red-500/40 text-red-700 dark:text-red-300",
-  media: "border-amber-500/40 text-amber-700 dark:text-amber-300",
+  media: "border-border text-muted-foreground",
   baja: "border-border text-muted-foreground",
 };
 
@@ -921,7 +923,7 @@ export function TarjetaCoberturaMia({ cobertura }: { cobertura: Cobertura }) {
         <span className="font-medium">{cobertura.titulo}</span>
         {/* Prioridad solo si es «alta» (la «media» no aporta): un badge rojo sobrio. */}
         {cobertura.prioridad === "alta" && (
-          <Badge variant="outline" className="border-red-500/50 font-normal text-red-700 dark:text-red-300">
+          <Badge variant="outline" className="border-red-500/40 font-normal text-red-700 dark:text-red-300">
             Urgente
           </Badge>
         )}

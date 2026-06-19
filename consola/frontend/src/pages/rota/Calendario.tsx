@@ -613,7 +613,7 @@ export function Calendario({
                           esHoy
                             ? "bg-keni-50/70 ring-1 ring-inset ring-keni-500/40 dark:bg-keni-900/20"
                             : finde
-                              ? "bg-amber-50/40 dark:bg-amber-950/10"
+                              ? "bg-muted/60 dark:bg-muted/30"
                               : "bg-background"
                         }`}
                       >
