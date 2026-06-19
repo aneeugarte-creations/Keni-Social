@@ -35,6 +35,7 @@ import { ZONA_CDMX } from "@/lib/fecha";
 import {
   COBERTURA,
   formatearRango,
+  lunesDeSemana,
   lunesSiguiente,
 } from "@/lib/rota-calendario";
 import type {
@@ -198,6 +199,16 @@ export function NavegadorSemana({
         onClick={() => setLunes(lunesSiguiente(lunes, 1))}
       >
         <ChevronRight className="h-4 w-4" />
+      </Button>
+      {/* Atajo «Hoy»: vuelve a la semana actual de un toque (la operación nº1 de cualquier
+          calendario). Antes solo el modo Mes lo tenía; la rejilla semanal obligaba a pulsar ‹/›. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground"
+        onClick={() => setLunes(lunesDeSemana(new Date()))}
+      >
+        Hoy
       </Button>
     </div>
   );

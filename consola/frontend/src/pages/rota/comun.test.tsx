@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
+import { lunesDeSemana } from "@/lib/rota-calendario";
 import type { EventoRota, FranjaSemana, SwapTurno, TurnoRota } from "@/types";
 
-import { contarSwapsPendientes, eventosPorTurno, type CubridorEvento } from "./comun";
+import { contarSwapsPendientes, eventosPorTurno, NavegadorSemana, type CubridorEvento } from "./comun";
 
 function swap(over: Partial<SwapTurno> = {}): SwapTurno {
   return {
@@ -64,6 +66,18 @@ describe("contarSwapsPendientes", () => {
       swap({ estado: "rechazado_admin", destinatario_id: "yo" }),
     ];
     expect(contarSwapsPendientes(swaps, "yo", true)).toBe(0);
+  });
+});
+
+describe("NavegadorSemana — atajo «Hoy»", () => {
+  it("«Hoy» salta a la semana ACTUAL (lunes de hoy), esté donde esté el navegador", () => {
+    const setLunes = vi.fn();
+    // Arrancamos en una semana lejana (enero 2020) para que «Hoy» tenga algo a lo que volver.
+    render(
+      <NavegadorSemana lunes="2020-01-06" setLunes={setLunes} inicio="2020-01-06" fin="2020-01-12" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(setLunes).toHaveBeenCalledWith(lunesDeSemana(new Date()));
   });
 });
 
