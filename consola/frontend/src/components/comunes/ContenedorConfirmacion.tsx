@@ -114,7 +114,6 @@ export function ContenedorConfirmacion() {
                       : undefined
                   }
                   onClick={() => responder(true)}
-                  autoFocus
                 >
                   {estado.textoConfirmar ?? "Confirmar"}
                 </AlertDialogAction>
