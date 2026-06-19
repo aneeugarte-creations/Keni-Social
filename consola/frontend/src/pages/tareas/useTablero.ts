@@ -19,8 +19,17 @@ const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
  * por el cuerpo «Cobertura» (TareasBoard) y la home «Hoy». Centraliza el fetch y la derivación
  * cubierto-por-turno / sin-cubrir vía el selector canónico (`lib/cobertura`), para que ningún
  * consumidor la reconstruya a mano. Incluye `useRelojVivo` para que los semáforos avancen.
+ *
+ * `fecha` (por defecto HOY en CDMX) es el día del que salen los cortes `eventosHoy`/`turnosHoy`/
+ * `franjasHoy`/`hechasHoy` (y `esDeHoy`): pasándola se obtiene el mismo «resumen» de CUALQUIER
+ * día sin que los consumidores que la omiten (Cobertura, home «Hoy») cambien. `hoy` en el retorno
+ * sigue siendo HOY real (es el ancla temporal de la agenda), independiente de `fecha`.
  */
-export function useTablero(marca: string | undefined, usuarioId: string | null) {
+export function useTablero(
+  marca: string | undefined,
+  usuarioId: string | null,
+  fecha: string = hoyCDMX(),
+) {
   useRelojVivo();
   const hoy = hoyCDMX();
 
@@ -29,9 +38,12 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
     queryFn: ({ signal }) => api.contenido({ clase: "tarea", marca }, signal),
     ...REFRESCO,
   });
+  // La ventana de fetch arranca en el más temprano de HOY y el día seleccionado: así un resumen de
+  // un día PASADO trae igualmente sus eventos (la agenda sigue mostrando de HOY en adelante).
+  const desdeEventos = fecha < hoy ? fecha : hoy;
   const eventosQuery = useQuery({
-    queryKey: [...CLAVE_TAREAS, "eventos", marca ?? "todas"],
-    queryFn: ({ signal }) => api.rotaEventos({ desde: hoy, marca }, signal),
+    queryKey: [...CLAVE_TAREAS, "eventos", marca ?? "todas", desdeEventos],
+    queryFn: ({ signal }) => api.rotaEventos({ desde: desdeEventos, marca }, signal),
     ...REFRESCO,
   });
   // Ausencias (vacaciones/descanso/baja): una persona ausente NO cubre por turno. Global (sin
@@ -81,13 +93,15 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
     if (d.estado === "cubierto-turno") cubiertosPorTurno.add(e.id);
   }
 
-  const eventosHoy = eventosCoverables.filter((e) => e.fecha === hoy);
+  // Cortes del DÍA SELECCIONADO (`fecha`, por defecto HOY). Las claves del retorno conservan el
+  // sufijo «Hoy» por contrato con los consumidores; su contenido sale de `fecha`.
+  const eventosHoy = eventosCoverables.filter((e) => e.fecha === fecha);
   const claimsCobertura = tareas.filter((t) => t.evento_id);
-  const semanaHoy = porLunes.get(lunesSiguiente(hoy, 0));
-  const turnosHoy = semanaHoy?.turnos ?? [];
+  const semanaHoy = porLunes.get(lunesSiguiente(fecha, 0));
+  const turnosHoy = (semanaHoy?.turnos ?? []).filter((t) => t.fecha === fecha);
   const franjasHoy = semanaHoy?.franjas ?? [];
 
-  const esDeHoy = (fecha?: string | null) => (fecha || "").slice(0, 10) === hoy;
+  const esDeHoy = (f?: string | null) => (f || "").slice(0, 10) === fecha;
   const hechasHoy =
     coberturas.filter((c) => esDeHoy(c.orden) && posicionTemporal(c.orden, c.hora) === "despues")
       .length +
@@ -128,7 +142,7 @@ export function useTablero(marca: string | undefined, usuarioId: string | null) 
   };
 
   return {
-    hoy, cargando, hayError, sinDatos, reintentar,
+    hoy, fecha, cargando, hayError, sinDatos, reintentar,
     error: tareasQuery.error ?? eventosQuery.error,
     isFetching: tareasQuery.isFetching || eventosQuery.isFetching,
     catalogos, tareas, eventosCoverables, cubiertosPorTurno, ausencias,

@@ -64,7 +64,7 @@ function esHoraValida(s: string): boolean {
 }
 
 /** "HH:MM" → minutos desde 00:00 (00:00–23:59), con «24:00» = 1440. `null` si no parsea. */
-function aMinutos24(s: string): number | null {
+export function aMinutos24(s: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
   if (!m) return null;
   const h = Number(m[1]);

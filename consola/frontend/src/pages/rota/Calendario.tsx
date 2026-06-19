@@ -28,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup } from "@/components/ui/toggle-group";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { resumenCobertura } from "@/lib/cobertura";
 import {
@@ -54,6 +55,7 @@ import {
   NavegadorSemana,
   ausenciaTocaDia,
   filtrarEquipoPorMarca,
+  formatearFechaCorta,
   franjaIdParaHoraEvento,
   franjasSolapan,
   presentacionFranja,
@@ -62,6 +64,7 @@ import {
   type ItemEventoCalendario,
 } from "./comun";
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
+import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas } from "./Franjas";
 import { VistaMensualTurnos } from "./MisTurnos";
 import { PropuestasCalendario } from "./PropuestasCalendario";
@@ -164,6 +167,10 @@ export function Calendario({
   // Panorama) para coger/«Asignar a…»/soltar/editar sin salir del calendario. La edición del
   // evento vive ahora en el kebab de esa tarjeta, no en un modal de edición aparte.
   const [eventoCobertura, setEventoCobertura] = React.useState<EventoRota | null>(null);
+  // «Resumen del día»: pulsar la cabecera de un día abre un panel con TODO lo de esa jornada
+  // (eventos+cobertura, personal de turno, huecos/tareas, horas y avisos). Guarda la fecha abierta.
+  const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   // Diálogo de franjas (unificado): un solo «Franjas» en el menú «Más» con dos pestañas
   // (esta semana / plantilla por defecto). Antes eran dos items sueltos que se confundían.
   const [abrirFranjas, setAbrirFranjas] = React.useState(false);
@@ -610,7 +617,14 @@ export function Calendario({
                               : "bg-background"
                         }`}
                       >
-                        <div className="flex items-baseline justify-between">
+                        {/* La cabecera (nombre + número) es un botón: abre el «Resumen del día». La
+                            fila de ausencias queda FUERA del botón (no anidar interactivos). */}
+                        <button
+                          type="button"
+                          onClick={() => setDiaResumen(fecha)}
+                          aria-label={`Ver el resumen del ${formatearFechaCorta(fecha) || fecha}`}
+                          className="-mx-1 flex items-baseline justify-between rounded px-1 py-0.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           <span
                             className={`text-xs font-semibold capitalize ${
                               esHoy ? "text-keni-700 dark:text-keni-300" : ""
@@ -626,7 +640,7 @@ export function Calendario({
                           <span className="text-xs text-muted-foreground">
                             {fecha.slice(8, 10)}
                           </span>
-                        </div>
+                        </button>
                         {ausDia.length > 0 && (
                           <div
                             className="flex flex-wrap gap-1"
@@ -755,6 +769,17 @@ export function Calendario({
             )}
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* «Resumen del día»: panel con todo lo de la jornada pulsada (su propia derivación de
+          cobertura por fecha vía `useTablero`). */}
+      {diaResumen && (
+        <ResumenDia
+          fecha={diaResumen}
+          marca={marcaActiva ?? undefined}
+          usuarioId={usuario?.id ?? null}
+          onClose={() => setDiaResumen(null)}
+        />
       )}
 
     </div>
