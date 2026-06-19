@@ -31,7 +31,6 @@ import {
   DetalleDocumento,
 } from "@/pages/prompts/DetalleDocumento";
 import { EstrategiaMarca } from "@/pages/prompts/estrategia/EstrategiaMarca";
-import { PanelClase } from "@/pages/prompts/gestion-lineas/PanelClase";
 import type { ColaJob, ColaMonitor } from "@/types";
 
 /** Motores con contexto editorial por marca; las pestañas-catálogo (Herramientas / Desarrollo) son
@@ -165,16 +164,6 @@ function EditorialFase({
   inyectaEditorial: boolean;
   onAbrirDoc: (docId: string) => void;
 }) {
-  if (proceso === "investigacion" && fase.contextoMarca) {
-    // Lo que clasifica/prioriza usa: las líneas de contenido y los orígenes de la marca (CRUD inline).
-    return (
-      <div className="grid gap-6 lg:grid-cols-2">
-        <PanelClase clase="vertical" />
-        <PanelClase clase="origen" />
-      </div>
-    );
-  }
-
   if (proceso === "produccion" && fase.contextoMarca) {
     // Producción: la estrategia de marca (orden de inyección + pilares); cada pilar → su subpágina.
     return marca ? (
