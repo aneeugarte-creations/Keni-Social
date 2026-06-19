@@ -38,7 +38,7 @@ CATEGORIAS_VALIDAS: tuple[str, ...] = (
     "negocios",
     "tendencias",
     # Temáticas de misión (Fundación): el contenido se clasifica por el pilar del que habla,
-    # no por geografía. Cadencia perenne (~30 min): son temas de cambio lento, no breaking.
+    # no por geografía. Cadencia evergreen (~30 min): son temas de cambio lento, no breaking.
     "ciencia-tech",
     "salud",
     "medio-ambiente",
