@@ -6,8 +6,8 @@
  *   · su ICONO de tipo — 🤖 (LLM) / ⚙ (determinista) —,
  *   · su INTERRUPTOR (on/off) — el toggle ES el indicador de estado; no hay puntos de color —,
  *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos,
- *   · «Editar prompt» (las fases con prompt abren su doc de la Prompts en un overlay) y las
- *     «Excepciones por marca», en el menú de la fila.
+ *   · al clicar la fila NAVEGA a la subpágina de la fase (Prompt · Acompaña · Logs) vía
+ *     `onAbrirFase`; las «Excepciones por marca» van en el menú de la fila. No hay overlay.
  * El maestro del proceso y el interruptor general «Máquina» (`KENI_MAQUINA`) NO van aquí: viven
  * junto a las pestañas de Contexto (`ControlesMaquina`). Apagados, nada automático corre.
  *
@@ -20,7 +20,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Bot, ChevronDown, Cog, Users } from "lucide-react";
 import * as React from "react";
 
-import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { Badge } from "@/components/ui/badge";
 import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
@@ -327,8 +326,6 @@ export function PanelPipeline({
    *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
   onAbrirFase?: (fase: FasePipeline) => void;
 }) {
-  // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
-  const [docEditando, setDocEditando] = React.useState<string | null>(null);
   // Fase cuyo diálogo de «Excepciones por marca» está abierto (o null).
   const [excepNombre, setExcepNombre] = React.useState<string | null>(null);
   const navegable = onAbrirFase !== undefined;
@@ -394,13 +391,9 @@ export function PanelPipeline({
           const esMaestroProceso = claveEfectiva !== undefined && claveEfectiva === claveMaestro;
           const esDuena = claveEfectiva !== undefined && duenoDeClave.get(claveEfectiva) === i;
           const switchEditable = Boolean(ajuste) && esDuena && !esMaestroProceso;
-          const doc = esAdmin ? e.doc : undefined;
           const deEtapa = e.excepciones
             ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
             : [];
-          // «Editar prompt» es la acción de click izquierdo (abre el overlay): NO se
-          // duplica en el menú contextual. El menú solo lleva las secundarias («Excepciones»).
-          const editarPrompt = doc ? () => setDocEditando(doc) : undefined;
           const acciones: ItemMenuContextual[] = [];
           if (ajuste && e.excepciones && deEtapa.length > 0) {
             acciones.push({
@@ -445,7 +438,7 @@ export function PanelPipeline({
                     {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
                   </>
                 }
-                onPrimaria={navegableFase ? () => onAbrirFase!(e) : navegable ? undefined : editarPrompt}
+                onPrimaria={navegableFase ? () => onAbrirFase!(e) : undefined}
                 acciones={acciones}
                 etiquetaAcciones={`Acciones de ${e.nombre}`}
                 derecha={
@@ -483,12 +476,6 @@ export function PanelPipeline({
           );
         })}
       </ol>
-
-      <EditorPromptOverlay
-        docId={docEditando}
-        abierto={docEditando !== null}
-        onCerrar={() => setDocEditando(null)}
-      />
     </section>
   );
 }

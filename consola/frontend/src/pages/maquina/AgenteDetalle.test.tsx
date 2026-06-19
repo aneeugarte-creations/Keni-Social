@@ -1,16 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgenteDetalle from "./AgenteDetalle";
 import type { BarridoDaemon, LatidoDaemon } from "@/types";
 
-// El editor de prompt arrastra DetalleDocumento (cadena de imports pesada e irrelevante para
-// esta página): lo stubeamos a un nodo vacío. El overlay solo se monta al abrirlo.
-vi.mock("@/components/prompts/EditorPromptOverlay", () => ({
-  EditorPromptOverlay: () => null,
-}));
+/** Sello de la subpágina de un documento: muestra el id capturado por la ruta splat. */
+function SubpaginaDoc() {
+  const { "*": docId } = useParams();
+  return <p>doc:{docId}</p>;
+}
 
 function latido(parcial: Partial<LatidoDaemon>): LatidoDaemon {
   return {
@@ -87,6 +87,7 @@ function renderEn(agente: string) {
       <MemoryRouter initialEntries={[`/maquina/agentes/${agente}`]}>
         <Routes>
           <Route path="/maquina/agentes/:agente" element={<AgenteDetalle />} />
+          <Route path="/maquina/contexto/doc/*" element={<SubpaginaDoc />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -114,6 +115,10 @@ describe("AgenteDetalle", () => {
     fireEvent.contextMenu(hostControles);
     expect(screen.getByRole("menuitem", { name: /Editar prompt/ })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Barrer ahora" })).toBeInTheDocument();
+
+    // «Editar prompt» NAVEGA a la subpágina del documento (no abre overlay).
+    fireEvent.click(screen.getByRole("menuitem", { name: /Editar prompt/ }));
+    expect(await screen.findByText("doc:prompt/verificar")).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando no hay barridos", async () => {

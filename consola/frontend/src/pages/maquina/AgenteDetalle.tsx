@@ -32,7 +32,6 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { TituloPagina } from "@/components/layout/encabezado";
-import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -118,7 +117,7 @@ function Dato({
 /** Controles in-place del agente: toggle de encendido inline + acciones secundarias en menú. */
 function Controles({ latido }: { latido: LatidoDaemon }) {
   const queryClient = useQueryClient();
-  const [promptAbierto, setPromptAbierto] = React.useState<string | null>(null);
+  const navigate = useNavigate();
 
   const guardar = useGuardarAjuste();
   const onToggle = (clave: string, valor: boolean) =>
@@ -167,56 +166,51 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
           },
         ]
       : []),
+    // «Editar prompt» abre la SUBPÁGINA del documento (mismo editor completo que una fase), no un
+    // overlay: cada prompt se gestiona en su propia URL.
     ...prompts.map((p) => ({
       etiqueta: `Editar prompt: ${p.etiqueta}`,
       icono: Pencil,
-      onClick: () => setPromptAbierto(p.doc),
+      onClick: () => navigate(`/maquina/contexto/doc/${p.doc}`),
     })),
   ];
 
   return (
-    <>
-      <FilaConAcciones
-        como="div"
-        kebab="nunca"
-        realce
-        acciones={acciones}
-        className="rounded-lg border bg-card text-card-foreground shadow-sm"
-      >
-        <div className="p-4">
-          <div className="pb-2 text-sm font-semibold text-muted-foreground">Controles</div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {/* Encendido IN-PLACE: Switch inline sobre la `clave_gate`. Refleja el flag PROPIO
-                configurado (`gate_activo`), no el efectivo: encenderlo con la máquina apagada se
-                queda ON (estado «en espera») en vez de rebotar. */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Encendido:</span>
-              {latido.clave_gate ? (
-                <Switch
-                  checked={Boolean(latido.gate_activo)}
-                  disabled={guardandoClave === latido.clave_gate}
-                  onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
-                  aria-label={`Encender/apagar el daemon ${latido.daemon}`}
-                />
-              ) : (
-                <span className="text-xs text-muted-foreground">Siempre activo</span>
-              )}
-            </div>
-            {latido.estado === "en_espera" && (
-              <p className="w-full text-xs text-sky-600 dark:text-sky-400">
-                Encendido, pero la máquina de contenido está apagada: no correrá hasta que la
-                enciendas.
-              </p>
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      acciones={acciones}
+      className="rounded-lg border bg-card text-card-foreground shadow-sm"
+    >
+      <div className="p-4">
+        <div className="pb-2 text-sm font-semibold text-muted-foreground">Controles</div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          {/* Encendido IN-PLACE: Switch inline sobre la `clave_gate`. Refleja el flag PROPIO
+              configurado (`gate_activo`), no el efectivo: encenderlo con la máquina apagada se
+              queda ON (estado «en espera») en vez de rebotar. */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Encendido:</span>
+            {latido.clave_gate ? (
+              <Switch
+                checked={Boolean(latido.gate_activo)}
+                disabled={guardandoClave === latido.clave_gate}
+                onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
+                aria-label={`Encender/apagar el daemon ${latido.daemon}`}
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">Siempre activo</span>
             )}
           </div>
+          {latido.estado === "en_espera" && (
+            <p className="w-full text-xs text-sky-600 dark:text-sky-400">
+              Encendido, pero la máquina de contenido está apagada: no correrá hasta que la
+              enciendas.
+            </p>
+          )}
         </div>
-      </FilaConAcciones>
-      <EditorPromptOverlay
-        docId={promptAbierto}
-        abierto={promptAbierto !== null}
-        onCerrar={() => setPromptAbierto(null)}
-      />
-    </>
+      </div>
+    </FilaConAcciones>
   );
 }
 
