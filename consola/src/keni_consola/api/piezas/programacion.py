@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -145,27 +146,26 @@ async def encolar(request: Request) -> Response:
     aplicables a su (marca, red).
     """
     pieza_id = request.path_params["pieza_id"]
+    status, cuerpo = await run_in_threadpool(_encolar, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _encolar(pieza_id: str) -> tuple[int, dict[str, Any]]:
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     # PUBLICADO ES TERMINAL: una pieza cuyo post YA salió no se re-encola. Reprogramarla
     # revierte publicado->programado y, peor, `_encolar_en_hueco_libre` resetea `preparado_en`
     # (el claim que el barrido usa para no re-publicar): con KENI_PUBLICAR_REAL on eso abre la
     # puerta a un DOBLE-POST. Guard en profundidad (la UI ya oculta la acción, ver VistaLista).
     if (pub.get("estado") or "") == ESTADO_PUBLICADO:
-        return JSONResponse(
-            {"error": "Una pieza ya publicada no se re-encola."},
-            status_code=409,
-        )
+        return 409, {"error": "Una pieza ya publicada no se re-encola."}
     actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
     if not hubo_hueco:
-        return JSONResponse(
-            {"error": "No hay franjas de horario configuradas para esta marca/red."},
-            status_code=400,
-        )
+        return 400, {"error": "No hay franjas de horario configuradas para esta marca/red."}
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"pieza": _publicacion_a_dict(actualizada)})
+        return 404, {"error": "Esa publicación ya no existe."}
+    return 200, {"pieza": _publicacion_a_dict(actualizada)}
 
 
 # Tope de reintentos al programar en un hueco: cada choque significa que OTRA pieza tomo ese

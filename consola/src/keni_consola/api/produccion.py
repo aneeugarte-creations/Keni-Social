@@ -37,6 +37,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -91,7 +92,10 @@ async def dia(request: Request) -> Response:
     marca = (request.query_params.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    return JSONResponse(await run_in_threadpool(_dia, marca))
 
+
+def _dia(marca: str) -> dict:
     ahora = datetime.fromisoformat(ahora_iso())
     # JORNADA MX (la parrilla del día), no ventana móvil de 24 h: a medianoche de México
     # el monitor vuelve a 0, igual que el contador del plan de la Mesa y Admitir.
@@ -227,26 +231,24 @@ async def dia(request: Request) -> Response:
             if hueco:
                 proximos_huecos.append({"red": red, "hueco": hueco})
 
-    return JSONResponse(
-        {
-            "marca": marca,
-            "ventana": {"desde": desde_iso, "hasta": ahora.isoformat(timespec="seconds")},
-            "objetivo": objetivo,
-            "por_categoria": por_categoria,
-            "admision": admision,
-            "por_vertical": [
-                {"vertical": k, **v}
-                for k, v in sorted(por_vertical.items(), key=lambda kv: -kv[1]["total"])
-            ],
-            "por_origen": por_origen,
-            "cola_generacion": cola,
-            "programacion": {
-                "programadas": programadas,
-                "proximos_huecos": proximos_huecos,
-            },
-            "piezas": piezas,
-        }
-    )
+    return {
+        "marca": marca,
+        "ventana": {"desde": desde_iso, "hasta": ahora.isoformat(timespec="seconds")},
+        "objetivo": objetivo,
+        "por_categoria": por_categoria,
+        "admision": admision,
+        "por_vertical": [
+            {"vertical": k, **v}
+            for k, v in sorted(por_vertical.items(), key=lambda kv: -kv[1]["total"])
+        ],
+        "por_origen": por_origen,
+        "cola_generacion": cola,
+        "programacion": {
+            "programadas": programadas,
+            "proximos_huecos": proximos_huecos,
+        },
+        "piezas": piezas,
+    }
 
 
 RUTAS = [Route("/api/produccion/dia", dia, methods=["GET"])]

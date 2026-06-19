@@ -8,6 +8,7 @@ que la UI lo pinte con la misma tarjeta.
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -193,7 +194,21 @@ async def listar(request: Request) -> Response:
         limite = _LIMITE_DEF
     limite = min(limite, _LIMITE_MAX)
     desplazamiento = _entero_query(qp.get("desplazamiento"), minimo=0) or 0
+    cuerpo = await run_in_threadpool(
+        _feed, marca, etapa, estado, tipo, clase, limite, desplazamiento
+    )
+    return JSONResponse(cuerpo)
 
+
+def _feed(
+    marca: str,
+    etapa: str,
+    estado: str,
+    tipo: str,
+    clase: str,
+    limite: int,
+    desplazamiento: int,
+) -> dict:
     # UNA sola lectura del almacén de generaciones: alimenta el universo de runs (temas del
     # tablero TRABAJADOS por el pipeline), las métricas por run, la evidencia del pool (fix
     # "Saltada") y los items sueltos del feed.
@@ -258,12 +273,10 @@ async def listar(request: Request) -> Response:
         totales["coste_usd"] = round(totales["coste_usd"] + (m.get("coste_usd") or 0.0), 6)
         totales["duration_ms"] += int(m.get("duration_ms") or 0)
     pagina = todas[desplazamiento : desplazamiento + limite]
-    return JSONResponse(
-        {
-            "pipelines": pagina,
-            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
-            # Suma de las métricas de TODOS los items que casan el filtro (tokens/coste/
-            # duración; `items` = generaciones sumadas). La UI lo pinta junto al conteo.
-            "totales": totales,
-        }
-    )
+    return {
+        "pipelines": pagina,
+        "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+        # Suma de las métricas de TODOS los items que casan el filtro (tokens/coste/
+        # duración; `items` = generaciones sumadas). La UI lo pinta junto al conteo.
+        "totales": totales,
+    }

@@ -24,6 +24,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -85,18 +86,19 @@ def _reflejar_estado_pieza(
     return repos.actualizar_pieza(pieza_id, campos)
 
 
-async def _decidir(request: Request, decision: str) -> Response:
-    """Forwardea aprobar/rechazar al nivel ACTUAL de la cadena de la pieza.
+def _decidir_sync(
+    pieza_id: str, decision: str, decisor: dict[str, str] | None, rol: str | None
+) -> tuple[int, dict]:
+    """Decide (aprobar/rechazar) el nivel ACTUAL de la cadena. Todo el trabajo de BD en un hilo.
 
     Centraliza el patron: 404 si la pieza no existe; 409 si no hay nivel pendiente que
     decidir (no se mando a revision o la cadena esta parada); delega la regla de "otro par
     de ojos" y de orden en `dominio.colaboracion.decidir`; refleja el estado resultante en
     la pieza.
     """
-    pieza_id = request.path_params["pieza_id"]
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
 
     # Pre-flight (solo para un mensaje claro): si no hay nivel pendiente, la pieza no está en
     # revisión. La validación REAL (orden, "otro par de ojos", estado) se re-hace bajo bloqueo
@@ -104,20 +106,14 @@ async def _decidir(request: Request, decision: str) -> Response:
     cadena = repos.listar_aprobaciones(pieza_id)
     nivel = colaboracion.nivel_actual(cadena)
     if nivel is None:
-        return JSONResponse(
-            {"error": "Esta publicación no está en revisión."}, status_code=409
-        )
+        return 409, {"error": "Esta publicación no está en revisión."}
     # El nivel "Crítica IA" lo vota SOLO el critico automatico: nadie lo decide a mano por el feed
     # (un coordinador que quiera saltarse el critico usa `forzar`). Mensaje claro en vez del 409
     # generico de cargo. Pasa la decision humana al SIGUIENTE par de ojos, no a la maquina.
     if colaboracion.es_nivel_critica_ia(nivel):
-        return JSONResponse(
-            {"error": "La crítica IA decide este paso automáticamente; espera su decisión."},
-            status_code=409,
-        )
-
-    decisor = autor_de_peticion(request)
-    rol = _rol_de_peticion(request)
+        return 409, {
+            "error": "La crítica IA decide este paso automáticamente; espera su decisión.",
+        }
 
     def _validar(nivel_fresco: dict[str, Any], cadena_fresca: list[dict[str, Any]]):
         # Re-aplica la regla PURA del dominio sobre la cadena YA bloqueada/consistente: cierra
@@ -138,21 +134,34 @@ async def _decidir(request: Request, decision: str) -> Response:
         pieza_id, nivel["id"], _validar
     )
     if error is not None:
-        return JSONResponse({"error": error}, status_code=409)
+        return 409, {"error": error}
     if nivel_decidido is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
 
     actualizada = _reflejar_estado_pieza(pieza_id, nivel_decidido)
     if actualizada is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     # Si esta decision cerro la parte HUMANA y queda el nivel IA pendiente, encola al critico
     # (best-effort). La pieza queda `en_revision` hasta que el critico vote; no se programa aun.
     _encolar_critica_si_corresponde(pieza_id)
     return _responder_aprobada(pieza_id, actualizada)
 
 
-def _responder_aprobada(pieza_id: str, actualizada: dict[str, Any]) -> Response:
-    """Auto-programa si la cadena juntó sus 2 likes y devuelve la pieza (estado final) como JSON.
+async def _decidir(request: Request, decision: str) -> Response:
+    """Forwardea aprobar/rechazar al nivel ACTUAL de la cadena de la pieza (BD fuera del loop)."""
+    pieza_id = request.path_params["pieza_id"]
+    decisor = autor_de_peticion(request)
+    rol = _rol_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _decidir_sync, pieza_id, decision, decisor, rol
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _responder_aprobada(
+    pieza_id: str, actualizada: dict[str, Any]
+) -> tuple[int, dict]:
+    """Auto-programa si la cadena juntó sus 2 likes y devuelve la pieza (estado final).
 
     2 likes => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
     gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Lo comparten la
@@ -174,7 +183,7 @@ def _responder_aprobada(pieza_id: str, actualizada: dict[str, Any]) -> Response:
                 actualizada = programada
         except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
             _log.exception("Auto-programación falló para %s (queda en revisión).", pieza_id)
-    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
+    return 200, {"pieza": pieza_a_dict(actualizada)}
 
 
 def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
@@ -210,13 +219,7 @@ def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
         _log.exception("No se pudo emitir pieza.aprobada para %s.", pub.get("id"))
 
 
-async def cola(request: Request) -> Response:
-    """Cola de aprobacion: piezas EN REVISION, mas antiguas primero (FIFO de revision).
-
-    Devuelve `{cola: [...], total: N}`. Cada item incluye `autor_nombre`/`autor_id`
-    (quien envio) y `enviado_a_revision_en` (cuando), para que el equipo vea que espera
-    revision y desde cuando. Lectura: sin cambios respecto al flujo legado.
-    """
+def _cola(request: Request) -> dict:
     pendientes = repos.listar_piezas(estado=ESTADO_EN_REVISION, limite=_CAP_COLA)
     # FOCO POR DEFECTO (no es restriccion): la cola se ENFOCA en las marcas preferentes de la
     # sesion para reducir la mezcla de contexto. No bloquea: cualquiera puede revisar piezas de
@@ -230,24 +233,27 @@ async def cola(request: Request) -> Response:
     # Mas antiguas primero por `enviado_a_revision_en` (lo que lleva mas esperando, arriba).
     pendientes.sort(key=lambda p: p.get("enviado_a_revision_en") or "")
     items = [pieza_a_dict(p) for p in pendientes]
-    return JSONResponse({"cola": items, "total": len(items)})
+    return {"cola": items, "total": len(items)}
 
 
-async def enviar_a_revision(request: Request) -> Response:
-    """POST /api/aprobacion/{id}/enviar-a-revision: crea la cadena SIMPLE y deja en revision.
+async def cola(request: Request) -> Response:
+    """Cola de aprobacion: piezas EN REVISION, mas antiguas primero (FIFO de revision).
 
-    Equivale a la vieja transicion borrador->en_revision, pero montando una cadena de un
-    solo nivel ("otro par de ojos") sobre la pieza. Solo desde `borrador`. 409 si no lo esta.
+    Devuelve `{cola: [...], total: N}`. Cada item incluye `autor_nombre`/`autor_id`
+    (quien envio) y `enviado_a_revision_en` (cuando), para que el equipo vea que espera
+    revision y desde cuando. Lectura: sin cambios respecto al flujo legado.
     """
-    pieza_id = request.path_params["pieza_id"]
+    # `marcas_preferentes` consulta BD (id de usuario -> marcas), por eso va en el hilo.
+    cuerpo = await run_in_threadpool(_cola, request)
+    return JSONResponse(cuerpo)
+
+
+def _enviar_a_revision(pieza_id: str) -> tuple[int, dict]:
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     if pub.get("estado") != "borrador":
-        return JSONResponse(
-            {"error": "Solo se puede enviar a revisión una pieza en borrador."},
-            status_code=409,
-        )
+        return 409, {"error": "Solo se puede enviar a revisión una pieza en borrador."}
 
     # CAS de la transicion borrador->en_revision: cierra el TOCTOU (dos envios a revision
     # concurrentes leian el mismo snapshot `borrador` y pasaban ambos). El estado se mueve EN
@@ -268,10 +274,7 @@ async def enviar_a_revision(request: Request) -> Response:
         },
     )
     if actualizada is None:
-        return JSONResponse(
-            {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
-            status_code=409,
-        )
+        return 409, {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."}
 
     # `publicacion_id` no viaja en el dict publico de la pieza; se lee de la fila
     # plataforma (la pieza ES esa fila: su id es el `pieza_id`).
@@ -289,7 +292,18 @@ async def enviar_a_revision(request: Request) -> Response:
     if config.etapa_activa(config.ENV_CRITICA_IA, str(actualizada.get("marca") or "")):
         etiquetas = [*etiquetas, colaboracion.ETIQUETA_CRITICA_IA]
     montar_cadena_aprobacion(pieza_id, plat or {}, etiquetas, con_cargos=False)
-    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
+    return 200, {"pieza": pieza_a_dict(actualizada)}
+
+
+async def enviar_a_revision(request: Request) -> Response:
+    """POST /api/aprobacion/{id}/enviar-a-revision: crea la cadena SIMPLE y deja en revision.
+
+    Equivale a la vieja transicion borrador->en_revision, pero montando una cadena de un
+    solo nivel ("otro par de ojos") sobre la pieza. Solo desde `borrador`. 409 si no lo esta.
+    """
+    pieza_id = request.path_params["pieza_id"]
+    status, cuerpo = await run_in_threadpool(_enviar_a_revision, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def _encolar_critica_si_corresponde(pieza_id: str) -> None:
@@ -361,6 +375,29 @@ async def rechazar(request: Request) -> Response:
     return await _decidir(request, DECISION_RECHAZADO)
 
 
+def _deshacer(pieza_id: str, decisor_id: str) -> tuple[int, dict]:
+    pub = repos.obtener_pieza(pieza_id)
+    if pub is None:
+        return 404, {"error": "Esa publicación ya no existe."}
+
+    cadena = repos.listar_aprobaciones(pieza_id)
+    nivel_id, error = colaboracion.deshacer_decision(cadena, decisor_id)
+    if error is not None:
+        return 409, {"error": error}
+
+    if repos.actualizar_aprobacion(nivel_id, dict(colaboracion.CAMPOS_NIVEL_PENDIENTE)) is None:
+        return 404, {"error": "Esa publicación ya no existe."}
+
+    # Tras retirar la decisión NO hay "último revisor" que mostrar: se limpia (la pieza vuelve
+    # a su estado según el resto de la cadena, normalmente `en_revision`).
+    actualizada = _reflejar_estado_pieza(
+        pieza_id, {"decisor_id": "", "decisor_nombre": "", "decidido_en": ""}
+    )
+    if actualizada is None:
+        return 404, {"error": "Esa publicación ya no existe."}
+    return 200, {"pieza": pieza_a_dict(actualizada)}
+
+
 async def deshacer(request: Request) -> Response:
     """POST /api/aprobacion/{id}/deshacer: el revisor RETIRA su decisión (su OK o su dislike).
 
@@ -370,27 +407,9 @@ async def deshacer(request: Request) -> Response:
     existe; 409 si no tienes ninguna decisión propia que deshacer (o hay una decisión posterior).
     """
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    cadena = repos.listar_aprobaciones(pieza_id)
     decisor_id = (autor_de_peticion(request) or {}).get("id", "") or ""
-    nivel_id, error = colaboracion.deshacer_decision(cadena, decisor_id)
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=409)
-
-    if repos.actualizar_aprobacion(nivel_id, dict(colaboracion.CAMPOS_NIVEL_PENDIENTE)) is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    # Tras retirar la decisión NO hay "último revisor" que mostrar: se limpia (la pieza vuelve
-    # a su estado según el resto de la cadena, normalmente `en_revision`).
-    actualizada = _reflejar_estado_pieza(
-        pieza_id, {"decisor_id": "", "decisor_nombre": "", "decidido_en": ""}
-    )
-    if actualizada is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
+    status, cuerpo = await run_in_threadpool(_deshacer, pieza_id, decisor_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def _puede_forzar(request: Request) -> bool:
@@ -409,34 +428,13 @@ def _puede_forzar(request: Request) -> bool:
     return cargo.startswith("coordinador") or bool(usuario.get("puede_coordinar"))
 
 
-async def forzar(request: Request) -> Response:
-    """POST /api/aprobacion/{id}/forzar: admin/coordinador salta SOLO los OK humanos.
-
-    Forzar bypassa el "doble par de ojos" humano (sella los niveles humanos pendientes como
-    override, con traza de quién forzó), pero NO sustituye a la Crítica IA: esa sigue siendo
-    automática. Por eso, sobre el nivel "Crítica IA":
-      - PENDIENTE (aún no corrió): se deja pendiente y se ENCOLA al crítico (debe correr igual).
-        La pieza queda `en_revision` hasta que la IA vote; forzar no la da por publicable.
-      - RECHAZADA (la IA ya vetó): override CONSCIENTE de coordinación ("publicar a pesar de la
-        IA") — se voltea a aprobado y se cierra su objeción.
-    403 si la sesión no puede forzar; 404 si la pieza no existe; 409 si no está en revisión.
-    """
-    if not _puede_forzar(request):
-        return JSONResponse(
-            {"error": "Solo un admin o coordinador puede forzar la aprobación."},
-            status_code=403,
-        )
-    pieza_id = request.path_params["pieza_id"]
+def _forzar(pieza_id: str, autor: dict[str, str]) -> tuple[int, dict]:
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     if pub.get("estado") != ESTADO_EN_REVISION:
-        return JSONResponse(
-            {"error": "Solo se puede forzar la aprobación de una pieza en revisión."},
-            status_code=409,
-        )
+        return 409, {"error": "Solo se puede forzar la aprobación de una pieza en revisión."}
 
-    autor = autor_de_peticion(request) or {}
     decisor_id = autor.get("id", "") or "forzado"
     decisor_nombre = autor.get("usuario", "") or "Override"
     ahora = ahora_iso()
@@ -490,8 +488,31 @@ async def forzar(request: Request) -> Response:
     }
     actualizada = _reflejar_estado_pieza(pieza_id, sello)
     if actualizada is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     return _responder_aprobada(pieza_id, actualizada)
+
+
+async def forzar(request: Request) -> Response:
+    """POST /api/aprobacion/{id}/forzar: admin/coordinador salta SOLO los OK humanos.
+
+    Forzar bypassa el "doble par de ojos" humano (sella los niveles humanos pendientes como
+    override, con traza de quién forzó), pero NO sustituye a la Crítica IA: esa sigue siendo
+    automática. Por eso, sobre el nivel "Crítica IA":
+      - PENDIENTE (aún no corrió): se deja pendiente y se ENCOLA al crítico (debe correr igual).
+        La pieza queda `en_revision` hasta que la IA vote; forzar no la da por publicable.
+      - RECHAZADA (la IA ya vetó): override CONSCIENTE de coordinación ("publicar a pesar de la
+        IA") — se voltea a aprobado y se cierra su objeción.
+    403 si la sesión no puede forzar; 404 si la pieza no existe; 409 si no está en revisión.
+    """
+    if not _puede_forzar(request):
+        return JSONResponse(
+            {"error": "Solo un admin o coordinador puede forzar la aprobación."},
+            status_code=403,
+        )
+    pieza_id = request.path_params["pieza_id"]
+    autor = autor_de_peticion(request) or {}
+    status, cuerpo = await run_in_threadpool(_forzar, pieza_id, autor)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 async def adelantar(request: Request) -> Response:
@@ -509,15 +530,20 @@ async def adelantar(request: Request) -> Response:
     o si aún le falta algo (otro OK, un hueco libre) para que el aviso sea honesto.
     """
     comentario_id = request.path_params["comentario_id"]
+    autor = autor_de_peticion(request) or {}
+    status, cuerpo = await run_in_threadpool(_adelantar, comentario_id, autor)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _adelantar(comentario_id: str, autor: dict[str, str]) -> tuple[int, dict]:
     comentario = repos.obtener_comentario(comentario_id)
     if comentario is None:
-        return JSONResponse({"error": "Ese comentario ya no existe."}, status_code=404)
+        return 404, {"error": "Ese comentario ya no existe."}
     actualizado = repos.actualizar_comentario(comentario_id, {"resuelto": True}) or comentario
 
     pieza_id = comentario.get("pieza_id", "") or ""
     programada = False
     if pieza_id:
-        autor = autor_de_peticion(request) or {}
         sello = {
             "decision": DECISION_APROBADO,
             "decisor_id": autor.get("id", "") or "adelante",
@@ -545,7 +571,7 @@ async def adelantar(request: Request) -> Response:
             programada = auto_programar.programar_si_aprobada(pieza_id) is not None
         except Exception:  # noqa: BLE001 — programar es secundario al «resuelto» ya registrado.
             _log.exception("Auto-programación tras «Adelante» falló para %s.", pieza_id)
-    return JSONResponse({"comentario": actualizado, "programada": programada})
+    return 200, {"comentario": actualizado, "programada": programada}
 
 
 def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
@@ -569,24 +595,19 @@ def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
     return fecha.strftime("%Y-%m-%dT%H:%M"), None
 
 
-async def programar(request: Request) -> Response:
-    """POST /api/aprobacion/{id}/programar {fecha}: aprobado -> programado en esa fecha.
+def _programar(
+    pieza_id: str, fecha: str | None, error_fecha: str | None
+) -> tuple[int, dict]:
+    """Gates + transición en_revision->programado. La validación de `fecha` se hizo en el handler.
 
-    NO es aprobacion: es programacion, y se conserva intacta. Solo se puede programar una
-    pieza APROBADA (el humano ya la aprobó vía la cadena). NO publica: deja la pieza en
-    `programado` con su `fecha_programada`, que es lo que la pagina feed muestra; la salida
-    a redes la dispara una persona desde ahi. 404 si no existe; 409 si no está aprobada;
-    400 si la fecha no es válida/futura.
+    `error_fecha` (400) se reporta DESPUÉS de los gates de gobernanza/editorial para conservar
+    el mismo orden de respuestas que el flujo legado.
     """
-    pieza_id = request.path_params["pieza_id"]
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     if pub.get("estado") != ESTADO_EN_REVISION:
-        return JSONResponse(
-            {"error": "Solo se puede programar una pieza en revisión con sus likes."},
-            status_code=409,
-        )
+        return 409, {"error": "Solo se puede programar una pieza en revisión con sus likes."}
 
     # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
     # cadena (def 2, "cuatro ojos" reales). El gate SOLO aplica si la pieza tiene una CADENA
@@ -598,9 +619,7 @@ async def programar(request: Request) -> Response:
     if cadena:
         cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, minimo)
         if not cumple:
-            return JSONResponse(
-                {"error": f"Faltan aprobaciones: {aprobados} de {minimo}."}, status_code=409
-            )
+            return 409, {"error": f"Faltan aprobaciones: {aprobados} de {minimo}."}
 
     # GATE B (revisión editorial): un comentario sin resolver es una objecion pendiente; bloquea
     # programar hasta que el equipo lo cierre. Se cuentan los del item entero + los de esta red.
@@ -609,20 +628,15 @@ async def programar(request: Request) -> Response:
         (plat or {}).get("publicacion_id", "") or "", pieza_id
     )
     if pendientes:
-        return JSONResponse(
-            {
-                "error": (
-                    f"Hay {pendientes} comentario(s) sin resolver; "
-                    "resuélvelos antes de programar."
-                )
-            },
-            status_code=409,
-        )
+        return 409, {
+            "error": (
+                f"Hay {pendientes} comentario(s) sin resolver; "
+                "resuélvelos antes de programar."
+            )
+        }
 
-    datos = await leer_json(request)
-    fecha, error = _validar_fecha_programada(datos.get("fecha"))
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+    if error_fecha is not None:
+        return 400, {"error": error_fecha}
 
     try:
         # CAS de la transicion en_revision->programado: cierra el TOCTOU (los gates de arriba se
@@ -639,17 +653,29 @@ async def programar(request: Request) -> Response:
         # Backstop de doble-reserva (índice parcial `idx_parrilla_slot_uniq`): ese (red, fecha)
         # ya está ocupado por otra pieza programada. El usuario eligió la fecha a mano, así que
         # no recalculamos; le pedimos otra ranura.
-        return JSONResponse(
-            {"error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."},
-            status_code=409,
-        )
+        return 409, {
+            "error": "Ya hay una publicación programada en esa red y fecha; elige otra hora.",
+        }
     if actualizada is None:
         # El CAS no aplicó: la pieza ya no está `en_revision` (transición concurrente) o se borró.
-        return JSONResponse(
-            {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
-            status_code=409,
-        )
-    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
+        return 409, {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."}
+    return 200, {"pieza": pieza_a_dict(actualizada)}
+
+
+async def programar(request: Request) -> Response:
+    """POST /api/aprobacion/{id}/programar {fecha}: aprobado -> programado en esa fecha.
+
+    NO es aprobacion: es programacion, y se conserva intacta. Solo se puede programar una
+    pieza APROBADA (el humano ya la aprobó vía la cadena). NO publica: deja la pieza en
+    `programado` con su `fecha_programada`, que es lo que la pagina feed muestra; la salida
+    a redes la dispara una persona desde ahi. 404 si no existe; 409 si no está aprobada;
+    400 si la fecha no es válida/futura.
+    """
+    pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    fecha, error = _validar_fecha_programada(datos.get("fecha"))
+    status, cuerpo = await run_in_threadpool(_programar, pieza_id, fecha, error)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

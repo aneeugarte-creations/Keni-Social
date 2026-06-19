@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -117,18 +118,68 @@ async def listar(request: Request) -> Response:
     para que un arte reutilizable (p.ej. una foto generada por IA) salga en cualquier marca.
     """
     q = request.query_params
+    cuerpo = await run_in_threadpool(
+        _listar, q.get("marca") or None, q.get("tipo") or None, (q.get("q") or "").strip()
+    )
+    return JSONResponse(cuerpo)
+
+
+def _listar(marca: str | None, tipo: str | None, busqueda: str) -> dict:
     artes = [
         _arte_a_dict(item)
         for item in repos.listar_media_catalogo(
-            marca=q.get("marca") or None,
-            tipo=q.get("tipo") or None,
+            marca=marca,
+            tipo=tipo,
             incluir_globales=True,
         )
     ]
-    busqueda = (q.get("q") or "").strip()
     if busqueda:
         artes = [a for a in artes if _coincide_busqueda(a, busqueda)]
-    return JSONResponse({"artes": artes})
+    return {"artes": artes}
+
+
+def _crear(
+    *,
+    objeto: str,
+    marca_cruda: object,
+    tipo_crudo: object,
+    titulo_crudo: object,
+    etiquetas_crudas: object,
+    autor: dict | None,
+) -> tuple[int, dict]:
+    if media.leer_media(objeto) is None:
+        return 400, {"error": "Esa imagen no existe en el almacén."}
+    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `artes/` ANTES
+    # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
+    objeto = almacen_media.promover_objeto(objeto, "artes")
+
+    marca, err = _validar_marca(marca_cruda)
+    if err:
+        return 400, {"error": err}
+
+    tipo = tipo_crudo or _TIPO_DEFECTO
+    if tipo not in _TIPOS:
+        return 400, {"error": "Origen de arte no válido."}
+
+    # Idempotente: el `objeto` es UNIQUE en la tabla. Si ya esta catalogado, devolvemos el
+    # item existente (no duplicamos ni dejamos que el INSERT falle por la restriccion).
+    if repos.existe_media_objeto(objeto):
+        for item in repos.listar_media_catalogo():
+            if item.get("objeto") == objeto:
+                return 200, {"arte": _arte_a_dict(item)}
+
+    titulo = (titulo_crudo or "").strip()[:_MAX_TITULO]
+    etiquetas = _normalizar_etiquetas(etiquetas_crudas)
+
+    arte = repos.crear_media_catalogo(
+        objeto=objeto,
+        tipo=tipo,
+        marca=marca or "",
+        titulo=titulo,
+        etiquetas=json.dumps(etiquetas, ensure_ascii=False),
+        autor=autor,
+    )
+    return 200, {"arte": _arte_a_dict(arte)}
 
 
 async def crear(request: Request) -> Response:
@@ -144,39 +195,31 @@ async def crear(request: Request) -> Response:
     if not isinstance(objeto, str) or not objeto.strip():
         return JSONResponse({"error": "Falta la imagen a guardar."}, status_code=400)
     objeto = objeto.strip()
-    if media.leer_media(objeto) is None:
-        return JSONResponse({"error": "Esa imagen no existe en el almacén."}, status_code=400)
-    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `artes/` ANTES
-    # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
-    objeto = almacen_media.promover_objeto(objeto, "artes")
 
-    marca, err = _validar_marca(datos.get("marca"))
-    if err:
-        return JSONResponse({"error": err}, status_code=400)
-
-    tipo = datos.get("tipo") or _TIPO_DEFECTO
-    if tipo not in _TIPOS:
-        return JSONResponse({"error": "Origen de arte no válido."}, status_code=400)
-
-    # Idempotente: el `objeto` es UNIQUE en la tabla. Si ya esta catalogado, devolvemos el
-    # item existente (no duplicamos ni dejamos que el INSERT falle por la restriccion).
-    if repos.existe_media_objeto(objeto):
-        for item in repos.listar_media_catalogo():
-            if item.get("objeto") == objeto:
-                return JSONResponse({"arte": _arte_a_dict(item)})
-
-    titulo = (datos.get("titulo") or "").strip()[:_MAX_TITULO]
-    etiquetas = _normalizar_etiquetas(datos.get("etiquetas"))
-
-    arte = repos.crear_media_catalogo(
+    status, cuerpo = await run_in_threadpool(
+        _crear,
         objeto=objeto,
-        tipo=tipo,
-        marca=marca or "",
-        titulo=titulo,
-        etiquetas=json.dumps(etiquetas, ensure_ascii=False),
+        marca_cruda=datos.get("marca"),
+        tipo_crudo=datos.get("tipo"),
+        titulo_crudo=datos.get("titulo"),
+        etiquetas_crudas=datos.get("etiquetas"),
         autor=autor_de_peticion(request),
     )
-    return JSONResponse({"arte": _arte_a_dict(arte)})
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar(arte_id: str, purgar: bool) -> tuple[int, dict]:
+    item = repos.borrar_media_catalogo(arte_id)
+    if item is None:
+        return 404, {"error": "Ese arte ya no está en la galería."}
+
+    if purgar:
+        try:
+            almacen_media.borrar_objeto(item["objeto"])
+        except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
+            _log.exception("No se pudo purgar el binario del arte %r.", item.get("objeto"))
+
+    return 200, {"mensaje": "Arte quitado de la galería."}
 
 
 async def borrar(request: Request) -> Response:
@@ -188,17 +231,9 @@ async def borrar(request: Request) -> Response:
     -> `{mensaje}` | 404.
     """
     arte_id = request.path_params["arte_id"]
-    item = repos.borrar_media_catalogo(arte_id)
-    if item is None:
-        return JSONResponse({"error": "Ese arte ya no está en la galería."}, status_code=404)
-
-    if request.query_params.get("purgar") == "1":
-        try:
-            almacen_media.borrar_objeto(item["objeto"])
-        except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
-            _log.exception("No se pudo purgar el binario del arte %r.", item.get("objeto"))
-
-    return JSONResponse({"mensaje": "Arte quitado de la galería."})
+    purgar = request.query_params.get("purgar") == "1"
+    status, cuerpo = await run_in_threadpool(_borrar, arte_id, purgar)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def _prompt_arte_almacen() -> str:
@@ -274,35 +309,44 @@ async def generar_arte(request: Request) -> Response:
             status_code=400,
         )
 
-    prompt = datos.get("prompt")
-    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else _prompt_arte_almacen()
+    status, cuerpo = await run_in_threadpool(
+        _generar_arte,
+        marca=marca,
+        modelo=modelo,
+        n=n,
+        prompt_dado=datos.get("prompt"),
+        autor=autor_de_peticion(request) or {},
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _generar_arte(
+    *, marca: str, modelo: str, n: int, prompt_dado: object, autor: dict
+) -> tuple[int, dict]:
+    prompt = (
+        prompt_dado.strip()
+        if isinstance(prompt_dado, str) and prompt_dado.strip()
+        else _prompt_arte_almacen()
+    )
     if not prompt:
-        return JSONResponse(
-            {"error": "Falta el texto (prompt) para generar el arte."}, status_code=400
-        )
+        return 400, {"error": "Falta el texto (prompt) para generar el arte."}
 
     if not media.proveedor_configurado():
-        return JSONResponse(
-            {
-                "error": "La generación de imagen no está configurada. Añade una clave "
-                "de proveedor de imagen para activarla."
-            },
-            status_code=400,
-        )
+        return 400, {
+            "error": "La generación de imagen no está configurada. Añade una clave "
+            "de proveedor de imagen para activarla."
+        }
 
-    autor = autor_de_peticion(request) or {}
     generaciones = [
         lanzar_generacion_imagen(prompt=prompt, modelo=modelo, marca=marca, autor=autor)
         for _ in range(n)
     ]
-    return JSONResponse(
-        {
-            "generaciones": generaciones,
-            "modelo": modelo or media._modelo(),
-            "n": n,
-            "coste_medio": _coste_medio_payload(modelo),
-        }
-    )
+    return 200, {
+        "generaciones": generaciones,
+        "modelo": modelo or media._modelo(),
+        "n": n,
+        "coste_medio": _coste_medio_payload(modelo),
+    }
 
 
 async def coste_medio(request: Request) -> Response:
@@ -317,7 +361,8 @@ async def coste_medio(request: Request) -> Response:
     modelo = request.query_params.get("modelo") or ""
     if modelo and not media.modelo_valido(modelo):
         return JSONResponse({"error": "Modelo de imagen no reconocido."}, status_code=400)
-    return JSONResponse(_coste_medio_payload(modelo))
+    cuerpo = await run_in_threadpool(_coste_medio_payload, modelo)
+    return JSONResponse(cuerpo)
 
 
 RUTAS = [

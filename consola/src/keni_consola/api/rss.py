@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -229,8 +230,13 @@ async def listar_fuentes(request: Request) -> Response:
     marca = (request.query_params.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    cuerpo = await run_in_threadpool(_listar_fuentes, marca)
+    return JSONResponse(cuerpo)
+
+
+def _listar_fuentes(marca: str) -> dict:
     fuentes = repos.listar_fuentes_rss(marca=marca or None)
-    return JSONResponse({"fuentes": [_fuente_a_dict(f) for f in fuentes]})
+    return {"fuentes": [_fuente_a_dict(f) for f in fuentes]}
 
 
 def _validar_linea_id(valor: object, marca: str) -> tuple[str | None, str | None]:
@@ -248,43 +254,37 @@ def _validar_linea_id(valor: object, marca: str) -> tuple[str | None, str | None
     return valor.strip(), None
 
 
-async def crear_fuente(request: Request) -> Response:
-    """Crea una fuente `{nombre, url, marca?, incluir?, excluir?, redes_def?}` -> `{fuente}`.
-
-    Valida URL + SSRF; la fuente nace activa. `incluir`/`excluir` son CSV de
-    terminos; `redes_def` una lista de ids de red por defecto.
-    """
-    datos = await leer_json(request)
+def _crear_fuente(datos: dict) -> tuple[int, dict]:
     nombre = datos.get("nombre")
     if not isinstance(nombre, str) or not nombre.strip():
-        return JSONResponse({"error": "El nombre de la fuente es obligatorio."}, status_code=400)
+        return 400, {"error": "El nombre de la fuente es obligatorio."}
     url, error = validar_url(datos.get("url"))
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     marca, error = _validar_marca(datos.get("marca", ""))
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     excluir, error = _validar_filtro(datos.get("excluir"), "exclusión")
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     redes_def, error = _validar_redes_def(datos.get("redes_def"))
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     categoria, error = _validar_categoria(datos.get("categoria"))
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     linea_id, error = _validar_linea_id(datos.get("linea_id"), marca or "")
     if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+        return 400, {"error": error}
     # Peso editorial: explícito en el cuerpo, o el SEED por host de la url (Reuters/BBC/…
     # nacen potentes sin que nadie lo configure; el equipo lo puede corregir después).
     if datos.get("peso") is not None:
         peso, error = _validar_peso(datos.get("peso"))
         if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
+            return 400, {"error": error}
     else:
         peso = fuentes_pesos.peso_de_url(url or "")
 
@@ -300,7 +300,82 @@ async def crear_fuente(request: Request) -> Response:
         linea_id=linea_id or "",
         peso=peso or 1.0,
     )
-    return JSONResponse({"fuente": _fuente_a_dict(fuente)})
+    return 200, {"fuente": _fuente_a_dict(fuente)}
+
+
+async def crear_fuente(request: Request) -> Response:
+    """Crea una fuente `{nombre, url, marca?, incluir?, excluir?, redes_def?}` -> `{fuente}`.
+
+    Valida URL + SSRF; la fuente nace activa. `incluir`/`excluir` son CSV de
+    terminos; `redes_def` una lista de ids de red por defecto.
+    """
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_crear_fuente, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar_fuente(fuente_id: str, datos: dict) -> tuple[int, dict]:
+    actual = repos.obtener_fuente_rss(fuente_id)
+    if actual is None:
+        return 404, {"error": "Esa fuente ya no existe."}
+    campos: dict[str, Any] = {}
+
+    if "nombre" in datos:
+        nombre = datos.get("nombre")
+        if not isinstance(nombre, str) or not nombre.strip():
+            return 400, {"error": "El nombre de la fuente es obligatorio."}
+        campos["nombre"] = nombre.strip()
+    if "url" in datos:
+        url, error = validar_url(datos.get("url"))  # re-valida URL + SSRF
+        if error is not None:
+            return 400, {"error": error}
+        campos["url"] = url
+    if "marca" in datos:
+        marca, error = _validar_marca(datos.get("marca"))
+        if error is not None:
+            return 400, {"error": error}
+        campos["marca"] = marca
+    if "activo" in datos:
+        campos["activo"] = bool(datos.get("activo"))
+    if "incluir" in datos:
+        incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
+        if error is not None:
+            return 400, {"error": error}
+        campos["incluir"] = incluir
+    if "excluir" in datos:
+        excluir, error = _validar_filtro(datos.get("excluir"), "exclusión")
+        if error is not None:
+            return 400, {"error": error}
+        campos["excluir"] = excluir
+    if "redes_def" in datos:
+        redes_def, error = _validar_redes_def(datos.get("redes_def"))
+        if error is not None:
+            return 400, {"error": error}
+        campos["redes_def"] = redes_def
+    if "propia" in datos:
+        campos["propia"] = bool(datos.get("propia"))
+    if "categoria" in datos:
+        categoria, error = _validar_categoria(datos.get("categoria"))
+        if error is not None:
+            return 400, {"error": error}
+        campos["categoria"] = categoria
+    if "linea_id" in datos:
+        # La línea se valida contra la marca resultante (la nueva si se cambia, o la actual).
+        marca_ref = str(campos.get("marca", actual.get("marca") or ""))
+        linea_id, error = _validar_linea_id(datos.get("linea_id"), marca_ref)
+        if error is not None:
+            return 400, {"error": error}
+        campos["linea_id"] = linea_id
+    if "peso" in datos:
+        peso, error = _validar_peso(datos.get("peso"))
+        if error is not None:
+            return 400, {"error": error}
+        campos["peso"] = peso
+
+    fuente = repos.actualizar_fuente_rss(fuente_id, campos)
+    if fuente is None:
+        return 404, {"error": "Esa fuente ya no existe."}
+    return 200, {"fuente": _fuente_a_dict(fuente)}
 
 
 async def actualizar_fuente(request: Request) -> Response:
@@ -310,77 +385,21 @@ async def actualizar_fuente(request: Request) -> Response:
     en profundidad). Solo se tocan los campos presentes en el cuerpo.
     """
     fuente_id = request.path_params["fuente_id"]
-    actual = repos.obtener_fuente_rss(fuente_id)
-    if actual is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     datos = await leer_json(request)
-    campos: dict[str, Any] = {}
+    status, cuerpo = await run_in_threadpool(_actualizar_fuente, fuente_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
-    if "nombre" in datos:
-        nombre = datos.get("nombre")
-        if not isinstance(nombre, str) or not nombre.strip():
-            return JSONResponse(
-                {"error": "El nombre de la fuente es obligatorio."}, status_code=400
-            )
-        campos["nombre"] = nombre.strip()
-    if "url" in datos:
-        url, error = validar_url(datos.get("url"))  # re-valida URL + SSRF
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["url"] = url
-    if "marca" in datos:
-        marca, error = _validar_marca(datos.get("marca"))
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["marca"] = marca
-    if "activo" in datos:
-        campos["activo"] = bool(datos.get("activo"))
-    if "incluir" in datos:
-        incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["incluir"] = incluir
-    if "excluir" in datos:
-        excluir, error = _validar_filtro(datos.get("excluir"), "exclusión")
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["excluir"] = excluir
-    if "redes_def" in datos:
-        redes_def, error = _validar_redes_def(datos.get("redes_def"))
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["redes_def"] = redes_def
-    if "propia" in datos:
-        campos["propia"] = bool(datos.get("propia"))
-    if "categoria" in datos:
-        categoria, error = _validar_categoria(datos.get("categoria"))
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["categoria"] = categoria
-    if "linea_id" in datos:
-        # La línea se valida contra la marca resultante (la nueva si se cambia, o la actual).
-        marca_ref = str(campos.get("marca", actual.get("marca") or ""))
-        linea_id, error = _validar_linea_id(datos.get("linea_id"), marca_ref)
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["linea_id"] = linea_id
-    if "peso" in datos:
-        peso, error = _validar_peso(datos.get("peso"))
-        if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
-        campos["peso"] = peso
 
-    fuente = repos.actualizar_fuente_rss(fuente_id, campos)
-    if fuente is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    return JSONResponse({"fuente": _fuente_a_dict(fuente)})
+def _borrar_fuente(fuente_id: str) -> tuple[int, dict]:
+    if not repos.borrar_fuente_rss(fuente_id):
+        return 404, {"error": "Esa fuente ya no existe."}
+    return 200, {"mensaje": "Fuente borrada."}
 
 
 async def borrar_fuente(request: Request) -> Response:
     fuente_id = request.path_params["fuente_id"]
-    if not repos.borrar_fuente_rss(fuente_id):
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Fuente borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar_fuente, fuente_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #

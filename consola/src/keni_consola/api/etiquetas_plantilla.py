@@ -13,6 +13,7 @@ El catálogo de rótulos POR DEFECTO (y la lista de categorías presentes) vive 
 """
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -36,11 +37,21 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     return marca, None
 
 
+def _listar(marca_q: str | None) -> dict:
+    etiquetas = [_etiqueta_a_dict(e) for e in repos.listar_etiquetas_plantilla(marca=marca_q)]
+    return {"etiquetas": etiquetas}
+
+
 async def listar(request: Request) -> Response:
     """GET /api/etiquetas-plantilla: rótulos personalizados, filtrables por marca."""
     marca_q = (request.query_params.get("marca") or "").strip() or None
-    etiquetas = [_etiqueta_a_dict(e) for e in repos.listar_etiquetas_plantilla(marca=marca_q)]
-    return JSONResponse({"etiquetas": etiquetas})
+    cuerpo = await run_in_threadpool(_listar, marca_q)
+    return JSONResponse(cuerpo)
+
+
+def _guardar(marca: str, slug: str, etiqueta: str) -> dict:
+    item = repos.upsert_etiqueta_plantilla(marca=marca, slug=slug, etiqueta=etiqueta)
+    return {"etiqueta": _etiqueta_a_dict(item)}
 
 
 async def guardar(request: Request) -> Response:
@@ -57,8 +68,16 @@ async def guardar(request: Request) -> Response:
     etiqueta = (datos.get("etiqueta") if isinstance(datos.get("etiqueta"), str) else "").strip()[
         :_MAX_ETIQUETA
     ]
-    item = repos.upsert_etiqueta_plantilla(marca=marca, slug=slug, etiqueta=etiqueta)
-    return JSONResponse({"etiqueta": _etiqueta_a_dict(item)})
+    cuerpo = await run_in_threadpool(_guardar, marca, slug, etiqueta)
+    return JSONResponse(cuerpo)
+
+
+def _borrar(marca: str, slug: str) -> tuple[int, dict]:
+    en_uso = len(repos.listar_plantillas_diseno(marca=marca, categoria=slug))
+    if en_uso:
+        return 409, {"error": f"{en_uso} plantilla(s) usan esta etiqueta.", "en_uso": en_uso}
+    repos.borrar_etiqueta_plantilla(marca=marca, slug=slug)
+    return 200, {"mensaje": "Etiqueta eliminada."}
 
 
 async def borrar(request: Request) -> Response:
@@ -69,14 +88,8 @@ async def borrar(request: Request) -> Response:
     slug = _normalizar_slug(request.path_params.get("slug"))
     if not slug:
         return JSONResponse({"error": "Etiqueta no válida."}, status_code=400)
-    en_uso = len(repos.listar_plantillas_diseno(marca=marca, categoria=slug))
-    if en_uso:
-        return JSONResponse(
-            {"error": f"{en_uso} plantilla(s) usan esta etiqueta.", "en_uso": en_uso},
-            status_code=409,
-        )
-    repos.borrar_etiqueta_plantilla(marca=marca, slug=slug)
-    return JSONResponse({"mensaje": "Etiqueta eliminada."})
+    status, cuerpo = await run_in_threadpool(_borrar, marca, slug)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -74,14 +75,24 @@ def _franja_a_dict(franja: dict[str, Any], etiqueta: str = "") -> dict[str, Any]
 # --------------------------------------------------------------------------- #
 
 
-async def listar(request: Request) -> Response:
-    """Listado de franjas (con el nombre legible de su línea)."""
+def _listar() -> dict:
     franjas = repos.listar_franjas()
     # Mapa id de línea -> nombre (una lectura) para rotular sin N consultas.
     lineas = {e["id"]: e["nombre"] for e in repos.listar_etiquetas(clase="vertical")}
-    return JSONResponse(
-        {"franjas": [_franja_a_dict(f, _label_linea(f.get("categoria", ""), lineas)) for f in franjas]}
-    )
+    return {
+        "franjas": [_franja_a_dict(f, _label_linea(f.get("categoria", ""), lineas)) for f in franjas]
+    }
+
+
+async def listar(request: Request) -> Response:
+    """Listado de franjas (con el nombre legible de su línea)."""
+    cuerpo = await run_in_threadpool(_listar)
+    return JSONResponse(cuerpo)
+
+
+def _crear(dia: int, hora: str, marca: str, red: str, categoria: str) -> dict:
+    franja = repos.crear_franja(dia, hora, marca=marca, red=red, categoria=categoria)
+    return {"franja": _franja_a_dict(franja)}
 
 
 async def crear(request: Request) -> Response:
@@ -119,17 +130,22 @@ async def crear(request: Request) -> Response:
     if not isinstance(categoria, str) or len(categoria) > 40:
         return JSONResponse({"error": "La categoría debe ser texto corto."}, status_code=400)
 
-    franja = repos.crear_franja(
-        dia, hora, marca=marca, red=red, categoria=categoria.strip().lower()
+    cuerpo = await run_in_threadpool(
+        _crear, dia, hora, marca, red, categoria.strip().lower()
     )
-    return JSONResponse({"franja": _franja_a_dict(franja)})
+    return JSONResponse(cuerpo)
+
+
+def _borrar(franja_id: str) -> tuple[int, dict]:
+    if not repos.borrar_franja(franja_id):
+        return 404, {"error": "Esa franja ya no existe."}
+    return 200, {"mensaje": "Franja borrada."}
 
 
 async def borrar(request: Request) -> Response:
     franja_id = request.path_params["franja_id"]
-    if not repos.borrar_franja(franja_id):
-        return JSONResponse({"error": "Esa franja ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Franja borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar, franja_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

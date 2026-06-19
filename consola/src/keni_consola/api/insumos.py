@@ -31,6 +31,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -245,6 +246,15 @@ async def listar(request: Request) -> Response:
     if marca_filtro and marca_filtro not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no válida."}, status_code=400)
 
+    cuerpo = await run_in_threadpool(
+        _listar, fecha, cajon_filtro, marca_filtro, solo_frescos
+    )
+    return JSONResponse(cuerpo)
+
+
+def _listar(
+    fecha: str, cajon_filtro: str | None, marca_filtro: str | None, solo_frescos: bool
+) -> dict:
     hoy = hoy_utc().isoformat()
     cajones_resultado: list[dict[str, Any]] = []
     for cajon in _CAJONES:
@@ -291,7 +301,7 @@ async def listar(request: Request) -> Response:
             "items": items_serializados,
         })
 
-    return JSONResponse({"fecha": fecha, "cajones": cajones_resultado})
+    return {"fecha": fecha, "cajones": cajones_resultado}
 
 
 # --------------------------------------------------------------------------- #
@@ -299,10 +309,14 @@ async def listar(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _dias() -> dict:
+    return {"dias": repos.dias_con_insumos()}
+
+
 async def dias(request: Request) -> Response:
     """`GET /api/insumos/dias` -> historial de días con insumos."""
-    resultado = repos.dias_con_insumos()
-    return JSONResponse({"dias": resultado})
+    cuerpo = await run_in_threadpool(_dias)
+    return JSONResponse(cuerpo)
 
 
 # --------------------------------------------------------------------------- #
@@ -379,6 +393,22 @@ async def aportar(request: Request) -> Response:
 
     # Autor de la petición.
     autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _aportar, cajon, fecha, marca, texto, archivo_bytes, archivo_nombre, autor
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _aportar(
+    cajon: str,
+    fecha: str,
+    marca: str,
+    texto: str,
+    archivo_bytes: bytes,
+    archivo_nombre: str,
+    autor: dict[str, str] | None,
+) -> tuple[int, dict]:
+    """Crea el lote, vuelca el archivo y ENCOLA el job de parseo (todo el I/O en un hilo)."""
     creado_por = (autor or {}).get("usuario") or (autor or {}).get("id") or ""
 
     # Crea el lote en estado "parseando": el WORKER lo dejará en "listo"/"error" al terminar.
@@ -409,7 +439,7 @@ async def aportar(request: Request) -> Response:
                 lote_id, {"estado": "error", "error": "No se pudo preparar el archivo."}
             )
             lote = repos.obtener_insumo_lote(lote_id) or lote
-            return JSONResponse({"lote": _lote_a_dict(lote), "generacion": None}, status_code=500)
+            return 500, {"lote": _lote_a_dict(lote), "generacion": None}
         prompt = recibir_parse.construir_prompt_archivo(cajon, str(ruta))
     else:
         prompt = recibir_parse.construir_prompt_texto(cajon, texto)
@@ -456,10 +486,10 @@ async def aportar(request: Request) -> Response:
             "fecha_fin": generaciones.ahora_iso(),
         })
         lote = repos.obtener_insumo_lote(lote_id) or lote
-        return JSONResponse(
-            {"lote": _lote_a_dict(lote), "generacion": generaciones.obtener(gen["id"])},
-            status_code=429,
-        )
+        return 429, {
+            "lote": _lote_a_dict(lote),
+            "generacion": generaciones.obtener(gen["id"]),
+        }
     except Exception:  # noqa: BLE001 -- reflejamos el fallo en el lote/generación, sin traceback al cliente
         _log.exception("no se pudo encolar el parseo del lote %s", lote_id)
         if dir_temporal is not None:
@@ -472,16 +502,16 @@ async def aportar(request: Request) -> Response:
             "fecha_fin": generaciones.ahora_iso(),
         })
         lote = repos.obtener_insumo_lote(lote_id) or lote
-        return JSONResponse(
-            {"lote": _lote_a_dict(lote), "generacion": generaciones.obtener(gen["id"])},
-            status_code=500,
-        )
+        return 500, {
+            "lote": _lote_a_dict(lote),
+            "generacion": generaciones.obtener(gen["id"]),
+        }
 
     lote = repos.obtener_insumo_lote(lote_id) or lote
-    return JSONResponse({
+    return 200, {
         "lote": _lote_a_dict(lote),
         "generacion": generaciones.obtener(gen["id"]) or gen,
-    })
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -489,18 +519,23 @@ async def aportar(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _detalle_lote(lote_id: str) -> tuple[int, dict]:
+    lote = repos.obtener_insumo_lote(lote_id)
+    if lote is None:
+        return 404, {"error": "Ese lote no existe."}
+    items = repos.listar_insumo_items(lote_id=lote_id)
+    _hoy = hoy_utc().isoformat()
+    return 200, {
+        "lote": _lote_a_dict(lote),
+        "items": [_item_a_dict(i, hoy=_hoy) for i in items],
+    }
+
+
 async def detalle_lote(request: Request) -> Response:
     """`GET /api/insumos/lote/{lote_id}` -> {lote, items}."""
     lote_id = request.path_params["lote_id"]
-    lote = repos.obtener_insumo_lote(lote_id)
-    if lote is None:
-        return JSONResponse({"error": "Ese lote no existe."}, status_code=404)
-    items = repos.listar_insumo_items(lote_id=lote_id)
-    _hoy = hoy_utc().isoformat()
-    return JSONResponse({
-        "lote": _lote_a_dict(lote),
-        "items": [_item_a_dict(i, hoy=_hoy) for i in items],
-    })
+    status, cuerpo = await run_in_threadpool(_detalle_lote, lote_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -508,16 +543,10 @@ async def detalle_lote(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-async def editar_item(request: Request) -> Response:
-    """`PATCH /api/insumos/item/{item_id}` -> {item}.
-
-    Campos editables: titulo, resumen, marca, linea, hora, lugar, estado_material, tipo.
-    """
-    item_id = request.path_params["item_id"]
+def _editar_item(item_id: str, datos: dict) -> tuple[int, dict]:
     item_previo = repos.obtener_insumo_item(item_id)
     if item_previo is None:
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Ese ítem no existe."}
     campos: dict[str, Any] = {}
     for campo in _CAMPOS_PATCH_ITEM:
         if campo in datos:
@@ -525,11 +554,11 @@ async def editar_item(request: Request) -> Response:
     if "marca" in campos:
         m = campos["marca"]
         if m and m not in _MARCAS_IDS:
-            return JSONResponse({"error": "Marca no válida."}, status_code=400)
+            return 400, {"error": "Marca no válida."}
     if "tipo" in campos and campos["tipo"] not in {"nota", "cobertura", "evento", "contexto"}:
-        return JSONResponse({"error": "Tipo no válido."}, status_code=400)
+        return 400, {"error": "Tipo no válido."}
     if "estado_material" in campos and campos["estado_material"] not in {"tengo", "espero", ""}:
-        return JSONResponse({"error": "estado_material no válido."}, status_code=400)
+        return 400, {"error": "estado_material no válido."}
     # Si cambia el TÍTULO, re-enlaza la gemela del pool (su identidad es el hash del título): sin
     # esto el enlace ítem↔gemela se pierde y Descartar / el 409 anti-doble-pieza dejan de operar.
     if "titulo" in campos and str(campos["titulo"] or "").strip() != str(
@@ -538,8 +567,19 @@ async def editar_item(request: Request) -> Response:
         _reenlazar_gemela_pool(item_previo, campos)
     item = repos.actualizar_insumo_item(item_id, campos)
     if item is None:
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
-    return JSONResponse({"item": _item_a_dict(item, hoy=hoy_utc().isoformat())})
+        return 404, {"error": "Ese ítem no existe."}
+    return 200, {"item": _item_a_dict(item, hoy=hoy_utc().isoformat())}
+
+
+async def editar_item(request: Request) -> Response:
+    """`PATCH /api/insumos/item/{item_id}` -> {item}.
+
+    Campos editables: titulo, resumen, marca, linea, hora, lugar, estado_material, tipo.
+    """
+    item_id = request.path_params["item_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_editar_item, item_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -561,39 +601,42 @@ async def usar_item(request: Request) -> Response:
       {redes: ["x", ...], generar: bool}
     """
     item_id = request.path_params["item_id"]
+    datos = await leer_json(request)
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_usar_item, item_id, datos, autor)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _usar_item(
+    item_id: str, datos: dict, autor: dict[str, str] | None
+) -> tuple[int, dict]:
     item = repos.obtener_insumo_item(item_id)
     if item is None:
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+        return 404, {"error": "Ese ítem no existe."}
     # Backstop: las indicaciones (cajón contexto) son guía editorial, NUNCA piezas. Aunque
     # alguien archive una nota en el cajón equivocado, el `tipo=contexto` la frena aquí.
     if str(item.get("tipo") or "") == "contexto":
-        return JSONResponse(
-            {"error": "Las indicaciones son guía editorial; no se llevan al tablero."},
-            status_code=400,
-        )
+        return 400, {"error": "Las indicaciones son guía editorial; no se llevan al tablero."}
     if item.get("usado"):
         # Ya fue llevado al tablero; devuelve el estado actual.
-        return JSONResponse({"item": _item_a_dict(item), "publicacion_id": item.get("publicacion_id", "")})
+        return 200, {
+            "item": _item_a_dict(item),
+            "publicacion_id": item.get("publicacion_id", ""),
+        }
     # Sin marca NO se empuja: la pieza nacería sin marca (invisible en los feeds por marca)
     # y el copy ni arrancaría (la generación se gatea por marca) — el toast "Copy en marcha"
     # sería mentira. Que el equipo asigne marca (editar ítem) y reintente.
     if not str(item.get("marca") or "").strip():
-        return JSONResponse(
-            {"error": "Asigna marca al ítem antes de empujarlo."}, status_code=400
-        )
+        return 400, {"error": "Asigna marca al ítem antes de empujarlo."}
     # Dedup contra el AUTO-FEED: si la historia gemela del pool (la fila de noticias creada
     # al parsear) ya tiene pieza (el auto-feed la recogió y la marcó usada con su
     # `publicacion_id`), empujar crearía una SEGUNDA pieza del mismo tema. 409 honesto.
     gemela = _noticia_pool_de_item(item)
     if gemela is not None and (gemela.get("estado") == "usado" or gemela.get("publicacion_id")):
-        return JSONResponse(
-            {"error": "Ya está en el feed: el auto-feed la recogió."}, status_code=409
-        )
+        return 409, {"error": "Ya está en el feed: el auto-feed la recogió."}
 
-    datos = await leer_json(request)
     redes_iniciales = _redes_iniciales(datos.get("redes"))
     generar = datos.get("generar", True)
-    autor = autor_de_peticion(request)
 
     contenido = repos.crear_publicacion(
         clase="contenido",
@@ -644,11 +687,11 @@ async def usar_item(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- el marcado del pool es dedup, nunca rompe el empujón
         _log.warning("insumos: no se pudo marcar la gemela del pool usada (%s)", item_id, exc_info=True)
 
-    return JSONResponse({
+    return 200, {
         "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
         "publicacion_id": contenido["id"],
         "copy_en_proceso": genero,
-    })
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -673,25 +716,25 @@ async def crear_evento_item(request: Request) -> Response:
       {tipo_cobertura: str, prioridad: str}
     """
     item_id = request.path_params["item_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_crear_evento_item, item_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_evento_item(item_id: str, datos: dict) -> tuple[int, dict]:
     item = repos.obtener_insumo_item(item_id)
     if item is None:
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+        return 404, {"error": "Ese ítem no existe."}
     if str(item.get("tipo") or "") == "contexto":
-        return JSONResponse(
-            {"error": "Las indicaciones son guía editorial; no generan eventos."},
-            status_code=400,
-        )
+        return 400, {"error": "Las indicaciones son guía editorial; no generan eventos."}
     if item.get("usado"):
         # Ya fue convertido en evento (o llevado al tablero); devuelve el estado actual.
-        return JSONResponse(
-            {"item": _item_a_dict(item), "evento_id": item.get("publicacion_id", "")}
-        )
+        return 200, {"item": _item_a_dict(item), "evento_id": item.get("publicacion_id", "")}
     if not (item.get("titulo") or "").strip():
-        return JSONResponse({"error": "El ítem necesita un título."}, status_code=400)
+        return 400, {"error": "El ítem necesita un título."}
     if not (item.get("fecha") or "").strip():
-        return JSONResponse({"error": "El ítem necesita una fecha."}, status_code=400)
+        return 400, {"error": "El ítem necesita una fecha."}
 
-    datos = await leer_json(request)
     tipo_cobertura = str(datos.get("tipo_cobertura", "transmision")).strip() or "transmision"
     prioridad = str(datos.get("prioridad", "media")).strip() or "media"
 
@@ -714,13 +757,11 @@ async def crear_evento_item(request: Request) -> Response:
     if item_actualizado is None:
         item_actualizado = item
 
-    return JSONResponse(
-        {
-            "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
-            "evento": evento,
-            "evento_id": evento["id"],
-        }
-    )
+    return 200, {
+        "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
+        "evento": evento,
+        "evento_id": evento["id"],
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -742,20 +783,23 @@ async def descartar_item(request: Request) -> Response:
     (borrarlo aquí mentiría sobre lo ya producido).
     """
     item_id = request.path_params["item_id"]
+    status, cuerpo = await run_in_threadpool(_descartar_item, item_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _descartar_item(item_id: str) -> tuple[int, dict]:
     item = repos.obtener_insumo_item(item_id)
     if item is None:
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+        return 404, {"error": "Ese ítem no existe."}
     if item.get("usado"):
-        return JSONResponse(
-            {"error": "El ítem ya se usó; no se puede descartar."}, status_code=400
-        )
+        return 400, {"error": "El ítem ya se usó; no se puede descartar."}
     # Gemela del pool: descartarla evita que el auto-feed la promueva después. Best-effort:
     # si el equipo editó el título tras parsear, el PATCH ya re-enlazó la gemela
     # (`_reenlazar_gemela_pool`), así que el lookup por título actual sigue encontrándola.
     _descartar_gemela_pool(item)
     if not repos.borrar_insumo_item(item_id):
-        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
-    return JSONResponse({"ok": True})
+        return 404, {"error": "Ese ítem no existe."}
+    return 200, {"ok": True}
 
 
 # --------------------------------------------------------------------------- #
@@ -772,12 +816,17 @@ async def borrar_lote(request: Request) -> Response:
     conservan su rastro: su pieza/evento vive en el tablero/rota y su gemela quedó `usado`.
     """
     lote_id = request.path_params["lote_id"]
+    status, cuerpo = await run_in_threadpool(_borrar_lote, lote_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_lote(lote_id: str) -> tuple[int, dict]:
     for item in repos.listar_insumo_items(lote_id=lote_id):
         if not item.get("usado"):
             _descartar_gemela_pool(item)
     if not repos.borrar_insumo_lote(lote_id):
-        return JSONResponse({"error": "Ese lote no existe."}, status_code=404)
-    return JSONResponse({"ok": True})
+        return 404, {"error": "Ese lote no existe."}
+    return 200, {"ok": True}
 
 
 # --------------------------------------------------------------------------- #

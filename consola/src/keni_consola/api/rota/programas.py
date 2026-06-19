@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -47,11 +48,39 @@ def _activo_param(crudo: str | None) -> bool | None:
     return None
 
 
+def _listar_programas(activo: bool | None) -> dict[str, Any]:
+    programas = repos.listar_programas_rota(activo=activo)
+    return {"programas": [_programa_a_dict(p) for p in programas]}
+
+
 async def listar_programas(request: Request) -> Response:
     """GET /api/rota/programas[?activo=true|false]: programas del catálogo."""
     activo = _activo_param(request.query_params.get("activo"))
-    programas = repos.listar_programas_rota(activo=activo)
-    return JSONResponse({"programas": [_programa_a_dict(p) for p in programas]})
+    cuerpo = await run_in_threadpool(_listar_programas, activo)
+    return JSONResponse(cuerpo)
+
+
+def _crear_programa(nombre: str, datos: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    # Unicidad case-insensitive: defensa en profundidad (el UNIQUE del DDL es el ultimo bloqueo).
+    if repos.existe_programa_por_nombre(nombre):
+        return 409, {"error": "Ya existe un programa con ese nombre.", "programa_existente": True}
+    inicio = str(datos.get("inicio", "")).strip()
+    fin = str(datos.get("fin", "")).strip()
+    if inicio and not _fecha_iso_valida_o_vacia(inicio):
+        return 400, {"error": "La fecha de inicio no es válida (usa AAAA-MM-DD)."}
+    if fin and not _fecha_iso_valida_o_vacia(fin):
+        return 400, {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}
+    if inicio and fin and fin < inicio:
+        return 400, {"error": "La fecha de fin no puede ser anterior a la de inicio."}
+    programa = repos.crear_programa_rota(
+        nombre,
+        descripcion=str(datos.get("descripcion", "")).strip(),
+        color=str(datos.get("color", "")).strip(),
+        inicio=inicio,
+        fin=fin,
+        activo=bool(datos.get("activo", True)),
+    )
+    return 201, {"programa": _programa_a_dict(programa)}
 
 
 async def crear_programa(request: Request) -> Response:
@@ -70,71 +99,30 @@ async def crear_programa(request: Request) -> Response:
             {"error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."},
             status_code=400,
         )
-    # Unicidad case-insensitive: defensa en profundidad (el UNIQUE del DDL es el ultimo bloqueo).
-    if repos.existe_programa_por_nombre(nombre):
-        return JSONResponse(
-            {"error": "Ya existe un programa con ese nombre.", "programa_existente": True},
-            status_code=409,
-        )
-    inicio = str(datos.get("inicio", "")).strip()
-    fin = str(datos.get("fin", "")).strip()
-    if inicio and not _fecha_iso_valida_o_vacia(inicio):
-        return JSONResponse(
-            {"error": "La fecha de inicio no es válida (usa AAAA-MM-DD)."}, status_code=400
-        )
-    if fin and not _fecha_iso_valida_o_vacia(fin):
-        return JSONResponse(
-            {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}, status_code=400
-        )
-    if inicio and fin and fin < inicio:
-        return JSONResponse(
-            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
-            status_code=400,
-        )
-    programa = repos.crear_programa_rota(
-        nombre,
-        descripcion=str(datos.get("descripcion", "")).strip(),
-        color=str(datos.get("color", "")).strip(),
-        inicio=inicio,
-        fin=fin,
-        activo=bool(datos.get("activo", True)),
-    )
-    return JSONResponse({"programa": _programa_a_dict(programa)}, status_code=201)
+    status, cuerpo = await run_in_threadpool(_crear_programa, nombre, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar_programa(request: Request) -> Response:
-    """PATCH /api/rota/programas/{id}: edita un programa.
-
-    Si cambia `nombre`, hace CASCADA sobre `rota_piezas.programa` (transaccional). El nuevo
-    nombre debe ser único case-insensitive (si otro programa ya lo usa, 409).
-    """
-    programa_id = request.path_params["programa_id"]
+def _actualizar_programa(programa_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     actual = repos.obtener_programa_rota(programa_id)
     if actual is None:
-        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "El programa ya no existe."}
     campos: dict[str, Any] = {}
     if "nombre" in datos:
         nuevo = datos["nombre"]
         if not isinstance(nuevo, str) or not nuevo.strip():
-            return JSONResponse(
-                {"error": "El programa necesita un nombre."}, status_code=400
-            )
+            return 400, {"error": "El programa necesita un nombre."}
         nuevo = nuevo.strip()
         if len(nuevo) > _MAX_NOMBRE_PROGRAMA:
-            return JSONResponse(
-                {"error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."},
-                status_code=400,
-            )
+            return 400, {
+                "error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."
+            }
         # Si el nuevo nombre (case-insensitive) ya existe en OTRO programa -> 409.
         if nuevo.lower() != (actual.get("nombre") or "").lower() and repos.existe_programa_por_nombre(nuevo):
-            return JSONResponse(
-                {
-                    "error": "Ya existe un programa con ese nombre.",
-                    "programa_existente": True,
-                },
-                status_code=409,
-            )
+            return 409, {
+                "error": "Ya existe un programa con ese nombre.",
+                "programa_existente": True,
+            }
         campos["nombre"] = nuevo
     for clave in ("descripcion", "color"):
         if clave in datos:
@@ -144,10 +132,7 @@ async def actualizar_programa(request: Request) -> Response:
         if fecha_col in datos:
             valor = str(datos.get(fecha_col, "")).strip()
             if valor and not _fecha_iso_valida_o_vacia(valor):
-                return JSONResponse(
-                    {"error": f"La fecha de {fecha_col} no es válida (usa AAAA-MM-DD)."},
-                    status_code=400,
-                )
+                return 400, {"error": f"La fecha de {fecha_col} no es válida (usa AAAA-MM-DD)."}
             campos[fecha_col] = valor
     if "activo" in datos:
         campos["activo"] = bool(datos["activo"])
@@ -155,14 +140,42 @@ async def actualizar_programa(request: Request) -> Response:
     nuevo_inicio = campos.get("inicio", actual.get("inicio", ""))
     nuevo_fin = campos.get("fin", actual.get("fin", ""))
     if nuevo_inicio and nuevo_fin and nuevo_fin < nuevo_inicio:
-        return JSONResponse(
-            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
-            status_code=400,
-        )
+        return 400, {"error": "La fecha de fin no puede ser anterior a la de inicio."}
     programa = repos.actualizar_programa_rota(programa_id, campos)
     if programa is None:
-        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
-    return JSONResponse({"programa": _programa_a_dict(programa)})
+        return 404, {"error": "El programa ya no existe."}
+    return 200, {"programa": _programa_a_dict(programa)}
+
+
+async def actualizar_programa(request: Request) -> Response:
+    """PATCH /api/rota/programas/{id}: edita un programa.
+
+    Si cambia `nombre`, hace CASCADA sobre `rota_piezas.programa` (transaccional). El nuevo
+    nombre debe ser único case-insensitive (si otro programa ya lo usa, 409).
+    """
+    programa_id = request.path_params["programa_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_actualizar_programa, programa_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_programa(programa_id: str, forzar: bool) -> tuple[int, dict[str, Any]]:
+    actual = repos.obtener_programa_rota(programa_id)
+    if actual is None:
+        return 404, {"error": "El programa ya no existe."}
+    en_uso = repos.contar_piezas_por_programa(actual["nombre"])
+    if en_uso and not forzar:
+        return 409, {
+            "error": (
+                f"El programa «{actual['nombre']}» está en uso por {en_uso} piezas. "
+                "Llama con `?forzar=true` para borrarlo igualmente."
+            ),
+            "en_uso": True,
+            "piezas_afectadas": en_uso,
+        }
+    if not repos.borrar_programa_rota(programa_id):
+        return 404, {"error": "El programa ya no existe."}
+    return 200, {"mensaje": "Programa eliminado.", "piezas_afectadas": en_uso}
 
 
 async def borrar_programa(request: Request) -> Response:
@@ -174,30 +187,11 @@ async def borrar_programa(request: Request) -> Response:
     piezas sueltas seguirán mostrando el nombre textual").
     """
     programa_id = request.path_params["programa_id"]
-    actual = repos.obtener_programa_rota(programa_id)
-    if actual is None:
-        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
     forzar = (request.query_params.get("forzar") or "").strip().lower() in (
         "1",
         "true",
         "sí",
         "si",
     )
-    en_uso = repos.contar_piezas_por_programa(actual["nombre"])
-    if en_uso and not forzar:
-        return JSONResponse(
-            {
-                "error": (
-                    f"El programa «{actual['nombre']}» está en uso por {en_uso} piezas. "
-                    "Llama con `?forzar=true` para borrarlo igualmente."
-                ),
-                "en_uso": True,
-                "piezas_afectadas": en_uso,
-            },
-            status_code=409,
-        )
-    if not repos.borrar_programa_rota(programa_id):
-        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
-    return JSONResponse(
-        {"mensaje": "Programa eliminado.", "piezas_afectadas": en_uso}
-    )
+    status, cuerpo = await run_in_threadpool(_borrar_programa, programa_id, forzar)
+    return JSONResponse(cuerpo, status_code=status)

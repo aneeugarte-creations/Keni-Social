@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -93,6 +94,16 @@ def _origenes(marca: str | None = None) -> tuple[list, list]:
     return gens, runs
 
 
+def _agregados(marca: str | None) -> dict:
+    gens, runs = _origenes(marca)
+    # SELLA el proceso (ADR 0011) de cada generacion (prefiere el sellado, deduce de
+    # tipo/etiqueta) antes de agregar: el dominio `actividad` es PURO y solo LEE el campo
+    # para abrir el desglose `por_proceso`. Los runs no llevan proceso (no son de la maquina).
+    for g in gens:
+        g["proceso"] = generaciones.proceso_de(g)
+    return actividad.agregados(gens, runs)
+
+
 async def agregados(request: Request) -> Response:
     """Agregados de la actividad: total + por_tipo (incluye 'run') + por_dia.
 
@@ -102,13 +113,7 @@ async def agregados(request: Request) -> Response:
     marca = (qp.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    gens, runs = _origenes(marca or None)
-    # SELLA el proceso (ADR 0011) de cada generacion (prefiere el sellado, deduce de
-    # tipo/etiqueta) antes de agregar: el dominio `actividad` es PURO y solo LEE el campo
-    # para abrir el desglose `por_proceso`. Los runs no llevan proceso (no son de la maquina).
-    for g in gens:
-        g["proceso"] = generaciones.proceso_de(g)
-    return JSONResponse(actividad.agregados(gens, runs))
+    return JSONResponse(await run_in_threadpool(_agregados, marca or None))
 
 
 _ECONOMIA_DIAS_MAX = 31
@@ -127,9 +132,11 @@ async def economia(request: Request) -> Response:
     marca = (request.query_params.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    return JSONResponse(
-        {"dias": dias, "por_proceso": repos.gasto_ia_economia_por_proceso(dias, marca)}
-    )
+    return JSONResponse(await run_in_threadpool(_economia, dias, marca))
+
+
+def _economia(dias: int, marca: str) -> dict:
+    return {"dias": dias, "por_proceso": repos.gasto_ia_economia_por_proceso(dias, marca)}
 
 
 # --------------------------------------------------------------------------- #
@@ -272,7 +279,10 @@ async def cola(request: Request) -> Response:
     marca = (qp.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    return JSONResponse(await run_in_threadpool(_cola, marca))
 
+
+def _cola(marca: str) -> dict:
     snap = snapshot_cola()
     pendientes = snap["pendientes"]
     reclamados = snap["reclamados"]
@@ -316,36 +326,34 @@ async def cola(request: Request) -> Response:
     esperando = [j for j in en_proceso if j["estado"] == repos.JOB_PENDIENTE]
     workers = sorted({j.get("worker") for j in filas if j["estado"] == repos.JOB_RECLAMADO and j.get("worker")})
 
-    return JSONResponse(
-        {
-            # Eco del filtro aplicado a las listas ("" = todas): la UI lo usa para etiquetar.
-            "marca": marca,
-            # La cola NO tiene tope (R-NO-LIMIT): la capacidad es solo la CONCURRENCIA.
-            "capacidad": {"max_jobs": max_jobs},
-            "conteo": {
-                "pendientes": pendientes,
-                "reclamados": reclamados,
-                "terminados": terminados,
-                "activos": activos,
-            },
-            "procesando": reclamados,  # claude -p en proceso (acotado por max_jobs)
-            "slots_libres": max(0, max_jobs - reclamados),
-            "workers_activos": workers,
-            # Desglose del pool compartido por proceso + admision de verificación (Investigacion). La cola es
-            # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
-            "por_proceso": por_proceso,
-            "admision_verificacion": admision,
-            "en_curso": en_curso,
-            "esperando": esperando,
-            "daemons": _daemons_estado(),
-            # Economia de tokens (presupuesto_ia): presupuesto diario, gasto del dia UTC,
-            # nivel de corte vigente (normal/solo_manual/agotado/pausado) y kill switch.
-            # CONTRATO de visibilidad para humanos (Monitor) y agentes (observabilidad).
-            # Respeta el switch de marca: con marca activa, el presupuesto/parada PROPIOS de esa
-            # marca; "" = el control GLOBAL.
-            "presupuesto": presupuesto_ia.estado(marca),
-        }
-    )
+    return {
+        # Eco del filtro aplicado a las listas ("" = todas): la UI lo usa para etiquetar.
+        "marca": marca,
+        # La cola NO tiene tope (R-NO-LIMIT): la capacidad es solo la CONCURRENCIA.
+        "capacidad": {"max_jobs": max_jobs},
+        "conteo": {
+            "pendientes": pendientes,
+            "reclamados": reclamados,
+            "terminados": terminados,
+            "activos": activos,
+        },
+        "procesando": reclamados,  # claude -p en proceso (acotado por max_jobs)
+        "slots_libres": max(0, max_jobs - reclamados),
+        "workers_activos": workers,
+        # Desglose del pool compartido por proceso + admision de verificación (Investigacion). La cola es
+        # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
+        "por_proceso": por_proceso,
+        "admision_verificacion": admision,
+        "en_curso": en_curso,
+        "esperando": esperando,
+        "daemons": _daemons_estado(),
+        # Economia de tokens (presupuesto_ia): presupuesto diario, gasto del dia UTC,
+        # nivel de corte vigente (normal/solo_manual/agotado/pausado) y kill switch.
+        # CONTRATO de visibilidad para humanos (Monitor) y agentes (observabilidad).
+        # Respeta el switch de marca: con marca activa, el presupuesto/parada PROPIOS de esa
+        # marca; "" = el control GLOBAL.
+        "presupuesto": presupuesto_ia.estado(marca),
+    }
 
 
 def _metricas_tokens(g: dict) -> tuple[int, float]:
@@ -415,19 +423,21 @@ def _resultados_por_dia(dias: int) -> list[dict]:
     return [{"dia": d, **v} for d, v in sorted(buckets.items())]
 
 
+def _cola_series(dias: int) -> dict:
+    return {
+        "dias": dias,
+        "encolados": repos.encolados_por_dia(dias),
+        "resultados": _resultados_por_dia(dias),
+        # Lado de CONSUMO (ledger gasto_ia): tokens/coste/generaciones cerradas por dia,
+        # para correlacionar el volumen de la cola con el gasto real de la suscripcion.
+        "gasto": repos.gasto_ia_por_dia(dias),
+    }
+
+
 async def cola_series(request: Request) -> Response:
     """GET /api/actividad/cola/series?dias=: encolados (jobs) vs resultados (generaciones) por dia."""
     dias = _entero_query(request.query_params.get("dias"), minimo=1) or 14
-    return JSONResponse(
-        {
-            "dias": dias,
-            "encolados": repos.encolados_por_dia(dias),
-            "resultados": _resultados_por_dia(dias),
-            # Lado de CONSUMO (ledger gasto_ia): tokens/coste/generaciones cerradas por dia,
-            # para correlacionar el volumen de la cola con el gasto real de la suscripcion.
-            "gasto": repos.gasto_ia_por_dia(dias),
-        }
-    )
+    return JSONResponse(await run_in_threadpool(_cola_series, dias))
 
 
 # --------------------------------------------------------------------------- #
@@ -445,6 +455,10 @@ async def cola_purgar(request: Request) -> Response:
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse(await run_in_threadpool(_cola_purgar))
+
+
+def _cola_purgar() -> dict:
     filas = repos.jobs_activos(limite=10_000)
     purgados = 0
     for j in filas:
@@ -465,7 +479,7 @@ async def cola_purgar(request: Request) -> Response:
             purgados += 1
         except Exception:  # noqa: BLE001 -- un fallo por job no debe abortar la purga del resto
             continue
-    return JSONResponse({"purgados": purgados})
+    return {"purgados": purgados}
 
 
 async def cola_priorizar(request: Request) -> Response:
@@ -484,13 +498,16 @@ async def cola_priorizar(request: Request) -> Response:
     gen_id = (cuerpo.get("gen_id") or "").strip() if isinstance(cuerpo, dict) else ""
     if not gen_id:
         return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
+    status, cuerpo_resp = await run_in_threadpool(_cola_priorizar, gen_id)
+    return JSONResponse(cuerpo_resp, status_code=status)
+
+
+def _cola_priorizar(gen_id: str) -> tuple[int, dict]:
     from ..dominio import jobspec
 
     if not repos.priorizar_job(gen_id, jobspec.PRIORIDAD_URGENTE):
-        return JSONResponse(
-            {"error": "No hay un job esperando para esa generación."}, status_code=404
-        )
-    return JSONResponse({"priorizado": True, "gen_id": gen_id})
+        return 404, {"error": "No hay un job esperando para esa generación."}
+    return 200, {"priorizado": True, "gen_id": gen_id}
 
 
 async def cola_reencolar(request: Request) -> Response:
@@ -508,8 +525,13 @@ async def cola_reencolar(request: Request) -> Response:
     gen_id = (cuerpo.get("gen_id") or "").strip() if isinstance(cuerpo, dict) else ""
     if not gen_id:
         return JSONResponse({"error": "Falta el identificador de la generación."}, status_code=400)
+    status, cuerpo_resp = await run_in_threadpool(_cola_reencolar, gen_id)
+    return JSONResponse(cuerpo_resp, status_code=status)
+
+
+def _cola_reencolar(gen_id: str) -> tuple[int, dict]:
     if not repos.reencolar_job(gen_id):
-        return JSONResponse({"error": "No hay un job para esa generación."}, status_code=404)
+        return 404, {"error": "No hay un job para esa generación."}
     # Reabrir el registro: si quedara terminal, el guardia anti-duplicado de `reclamar_job` lo
     # cerraria sin correr. Lo dejamos `ejecutando` (y limpiamos motivo/error de la vez anterior).
     generaciones.actualizar(
@@ -522,7 +544,7 @@ async def cola_reencolar(request: Request) -> Response:
             "fecha_fin": "",
         },
     )
-    return JSONResponse({"reencolado": True, "gen_id": gen_id})
+    return 200, {"reencolado": True, "gen_id": gen_id}
 
 
 RUTAS = [

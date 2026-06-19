@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -136,6 +137,12 @@ def _autoprellenar_semana_nueva(lunes_iso: str, marca: str) -> None:
     repos.copiar_turnos_rota(previo, lunes_iso, reemplazar=False, marca=marca)
 
 
+def _turnos_semana_resp(lunes: str, marca: str | None, es_admin: bool) -> Response:
+    if marca and es_admin:
+        _autoprellenar_semana_nueva(lunes, marca)
+    return JSONResponse(_turnos_semana(lunes, marca))
+
+
 async def turnos_semana(request: Request) -> Response:
     """GET /api/rota/turnos[?lunes&marca]: los turnos (horario) de una semana.
 
@@ -147,9 +154,8 @@ async def turnos_semana(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
-    if marca and _es_admin(request):
-        _autoprellenar_semana_nueva(lunes, marca)
-    return JSONResponse(_turnos_semana(lunes, marca))
+    es_admin = _es_admin(request)
+    return await run_in_threadpool(_turnos_semana_resp, lunes, marca, es_admin)
 
 
 def _validar_y_resolver_turno(
@@ -373,16 +379,7 @@ def _violacion_ausencia(
     )
 
 
-async def crear_turno(request: Request) -> Response:
-    """POST /api/rota/turnos: crea un turno (horario `(fecha, franja_id)` para un miembro).
-
-    Cuerpo: `{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}`.
-    La `semana` se deriva del `lunes` enviado, o del lunes que contiene `fecha`. La
-    `franja_id` debe pertenecer a la misma semana. Devuelve 409 si ya existe un turno para
-    `(miembro_id, fecha, franja_id)` (el cliente debe editar el existente, no duplicar).
-    Tambien aplica la regla de sabado y la cruzada de ausencias.
-    """
-    datos = await leer_json(request)
+def _crear_turno(datos: dict[str, Any]) -> Response:
     nombres = _nombres_equipo()
     campos, err = _validar_y_resolver_turno(datos, nombres, actual=None)
     if err is not None:
@@ -449,18 +446,24 @@ async def crear_turno(request: Request) -> Response:
     return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)}, status_code=201)
 
 
-async def actualizar_turno(request: Request) -> Response:
-    """PATCH /api/rota/turnos/{id}: edita un turno (franja_id/miembro/override/motivo/...).
+async def crear_turno(request: Request) -> Response:
+    """POST /api/rota/turnos: crea un turno (horario `(fecha, franja_id)` para un miembro).
 
-    Si la edicion pone a TRABAJAR el sabado a quien trabajó el sabado previo SIN override,
-    devuelve 409. Si la persona esta de ausencia sin override, 409.
+    Cuerpo: `{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}`.
+    La `semana` se deriva del `lunes` enviado, o del lunes que contiene `fecha`. La
+    `franja_id` debe pertenecer a la misma semana. Devuelve 409 si ya existe un turno para
+    `(miembro_id, fecha, franja_id)` (el cliente debe editar el existente, no duplicar).
+    Tambien aplica la regla de sabado y la cruzada de ausencias.
     """
-    turno_id = request.path_params["turno_id"]
+    datos = await leer_json(request)
+    return await run_in_threadpool(_crear_turno, datos)
+
+
+def _actualizar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
     actual = repos.obtener_turno_rota(turno_id)
     if actual is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
 
-    datos = await leer_json(request)
     nombres = _nombres_equipo()
     campos, err = _validar_y_resolver_turno(datos, nombres, actual=actual)
     if err is not None:
@@ -490,12 +493,34 @@ async def actualizar_turno(request: Request) -> Response:
     return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)})
 
 
-async def borrar_turno(request: Request) -> Response:
-    """DELETE /api/rota/turnos/{id}: borra un turno individual."""
+async def actualizar_turno(request: Request) -> Response:
+    """PATCH /api/rota/turnos/{id}: edita un turno (franja_id/miembro/override/motivo/...).
+
+    Si la edicion pone a TRABAJAR el sabado a quien trabajó el sabado previo SIN override,
+    devuelve 409. Si la persona esta de ausencia sin override, 409.
+    """
     turno_id = request.path_params["turno_id"]
+    datos = await leer_json(request)
+    return await run_in_threadpool(_actualizar_turno, turno_id, datos)
+
+
+def _borrar_turno(turno_id: str) -> Response:
     if not repos.borrar_turno_rota(turno_id):
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Turno eliminado."})
+
+
+async def borrar_turno(request: Request) -> Response:
+    """DELETE /api/rota/turnos/{id}: borra un turno individual."""
+    turno_id = request.path_params["turno_id"]
+    return await run_in_threadpool(_borrar_turno, turno_id)
+
+
+def _borrar_turnos_lote(ids: list[str]) -> Response:
+    existentes = {t["id"] for t in repos.listar_turnos_rota() if t["id"] in ids}
+    no_encontrados = [i for i in ids if i not in existentes]
+    n = repos.borrar_turnos_rota_lote(list(existentes))
+    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
 
 
 async def borrar_turnos_lote(request: Request) -> Response:
@@ -509,26 +534,10 @@ async def borrar_turnos_lote(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica al menos un turno (`ids`)."}, status_code=400
         )
-    existentes = {t["id"] for t in repos.listar_turnos_rota() if t["id"] in ids}
-    no_encontrados = [i for i in ids if i not in existentes]
-    n = repos.borrar_turnos_rota_lote(list(existentes))
-    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
+    return await run_in_threadpool(_borrar_turnos_lote, ids)
 
 
-async def crear_turnos_lote(request: Request) -> Response:
-    """POST /api/rota/turnos/lote {turnos: [...]}: crea varios turnos en una sola peticion.
-
-    Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}, ...]}`.
-    Si ALGUNA entrada falla la validacion (fecha invalida, miembro no existe, franja
-    invalida) o ya existe un turno para `(miembro, fecha, franja_id)`, devuelve 409 con el
-    indice y el motivo SIN tocar BD. Caso comun: "Mañana lun-vie para un community manager".
-    """
-    datos = await leer_json(request)
-    entradas = datos.get("turnos")
-    if not isinstance(entradas, list) or not entradas:
-        return JSONResponse(
-            {"error": "Indica al menos un turno (`turnos`)."}, status_code=400
-        )
+def _crear_turnos_lote(entradas: list[Any]) -> Response:
     nombres = _nombres_equipo()
     preparados: list[dict[str, Any]] = []
     errores: list[dict[str, Any]] = []
@@ -652,20 +661,24 @@ async def crear_turnos_lote(request: Request) -> Response:
     )
 
 
-async def actualizar_turnos_lote(request: Request) -> Response:
-    """PATCH /api/rota/turnos/lote: edita en lote varios turnos.
+async def crear_turnos_lote(request: Request) -> Response:
+    """POST /api/rota/turnos/lote {turnos: [...]}: crea varios turnos en una sola peticion.
 
-    Cuerpo: `{ids: [...], miembro_id?, franja_id?, override?: bool, motivo?: str, nota_relevo?: str}`.
-    Si algun turno requiere override (sabado consecutivo con el mismo miembro) y no se
-    mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar BD.
-    `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
+    Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}, ...]}`.
+    Si ALGUNA entrada falla la validacion (fecha invalida, miembro no existe, franja
+    invalida) o ya existe un turno para `(miembro, fecha, franja_id)`, devuelve 409 con el
+    indice y el motivo SIN tocar BD. Caso comun: "Mañana lun-vie para un community manager".
     """
     datos = await leer_json(request)
-    ids = datos.get("ids")
-    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+    entradas = datos.get("turnos")
+    if not isinstance(entradas, list) or not entradas:
         return JSONResponse(
-            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
+            {"error": "Indica al menos un turno (`turnos`)."}, status_code=400
         )
+    return await run_in_threadpool(_crear_turnos_lote, entradas)
+
+
+def _actualizar_turnos_lote(datos: dict[str, Any], ids: list[str]) -> Response:
     nombres = _nombres_equipo()
     override = bool(datos.get("override", False))
 
@@ -766,23 +779,27 @@ async def actualizar_turnos_lote(request: Request) -> Response:
     )
 
 
-async def duplicar_turno(request: Request) -> Response:
-    """POST /api/rota/turnos/{id}/duplicar: clona un turno con overrides opcionales.
+async def actualizar_turnos_lote(request: Request) -> Response:
+    """PATCH /api/rota/turnos/lote: edita en lote varios turnos.
 
-    Cuerpo opcional `{fecha?, miembro_id?, franja_id?}`. Caso comun: copiar el turno a la
-    semana siguiente con el mismo miembro y franja. Aplica las mismas reglas que la creacion
-    (sabado, ausencia, choque `(miembro, fecha, franja_id)`).
-
-    Si la `fecha` cae en otra semana y el cliente NO pasa `franja_id`, mapeamos la franja del
-    original a la de la semana destino con el mismo nombre (sembrando las franjas por defecto
-    si la semana destino aun esta vacia). Si esa franja no existe en la semana destino y no es
-    sembrable, devolvemos 400: el cliente debe crear la franja o pasar un `franja_id` valido.
+    Cuerpo: `{ids: [...], miembro_id?, franja_id?, override?: bool, motivo?: str, nota_relevo?: str}`.
+    Si algun turno requiere override (sabado consecutivo con el mismo miembro) y no se
+    mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar BD.
+    `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
     """
-    turno_id = request.path_params["turno_id"]
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+        return JSONResponse(
+            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
+        )
+    return await run_in_threadpool(_actualizar_turnos_lote, datos, ids)
+
+
+def _duplicar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
     original = repos.obtener_turno_rota(turno_id)
     if original is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    datos = await leer_json(request) or {}
     nombres = _nombres_equipo()
 
     fecha = original["fecha"]
@@ -894,6 +911,35 @@ async def duplicar_turno(request: Request) -> Response:
     )
 
 
+async def duplicar_turno(request: Request) -> Response:
+    """POST /api/rota/turnos/{id}/duplicar: clona un turno con overrides opcionales.
+
+    Cuerpo opcional `{fecha?, miembro_id?, franja_id?}`. Caso comun: copiar el turno a la
+    semana siguiente con el mismo miembro y franja. Aplica las mismas reglas que la creacion
+    (sabado, ausencia, choque `(miembro, fecha, franja_id)`).
+
+    Si la `fecha` cae en otra semana y el cliente NO pasa `franja_id`, mapeamos la franja del
+    original a la de la semana destino con el mismo nombre (sembrando las franjas por defecto
+    si la semana destino aun esta vacia). Si esa franja no existe en la semana destino y no es
+    sembrable, devolvemos 400: el cliente debe crear la franja o pasar un `franja_id` valido.
+    """
+    turno_id = request.path_params["turno_id"]
+    datos = await leer_json(request) or {}
+    return await run_in_threadpool(_duplicar_turno, turno_id, datos)
+
+
+def _aprobar_turnos(lunes: str, marca: str) -> Response:
+    n = repos.aprobar_semana_rota(lunes, marca)
+    if n == 0:
+        return JSONResponse(
+            {"error": "No hay turnos en esa semana para aprobar. Asigna los turnos primero."},
+            status_code=400,
+        )
+    payload = _turnos_semana(lunes, marca)
+    payload["mensaje"] = f"Turnos aprobados y publicados al equipo ({n} turnos)."
+    return JSONResponse(payload)
+
+
 async def aprobar_turnos(request: Request) -> Response:
     """POST /api/rota/turnos/aprobar {lunes}: el coordinador de la rota APRUEBA (publica) los turnos al equipo.
 
@@ -913,14 +959,18 @@ async def aprobar_turnos(request: Request) -> Response:
     marca, error = _marca_cuerpo(datos)
     if error is not None:
         return error
-    n = repos.aprobar_semana_rota(lunes, marca)
+    return await run_in_threadpool(_aprobar_turnos, lunes, marca)
+
+
+def _despublicar_turnos(lunes: str, marca: str) -> Response:
+    n = repos.desaprobar_semana_rota(lunes, marca)
     if n == 0:
         return JSONResponse(
-            {"error": "No hay turnos en esa semana para aprobar. Asigna los turnos primero."},
+            {"error": "No hay turnos en esa semana para despublicar."},
             status_code=400,
         )
     payload = _turnos_semana(lunes, marca)
-    payload["mensaje"] = f"Turnos aprobados y publicados al equipo ({n} turnos)."
+    payload["mensaje"] = f"Semana despublicada: vuelve a borrador ({n} turnos editables)."
     return JSONResponse(payload)
 
 
@@ -944,27 +994,10 @@ async def despublicar_turnos(request: Request) -> Response:
     marca, error = _marca_cuerpo(datos)
     if error is not None:
         return error
-    n = repos.desaprobar_semana_rota(lunes, marca)
-    if n == 0:
-        return JSONResponse(
-            {"error": "No hay turnos en esa semana para despublicar."},
-            status_code=400,
-        )
-    payload = _turnos_semana(lunes, marca)
-    payload["mensaje"] = f"Semana despublicada: vuelve a borrador ({n} turnos editables)."
-    return JSONResponse(payload)
+    return await run_in_threadpool(_despublicar_turnos, lunes, marca)
 
 
-async def mis_turnos(request: Request) -> Response:
-    """GET /api/rota/mis-turnos[?lunes&marca]: los turnos del USUARIO actual en esa semana.
-
-    GRID POR MARCA: `?marca=` acota a la rejilla de esa marca; ausente = todas las marcas.
-    """
-    lunes = _lunes_param(request)
-    marca, error = _marca_param(request)
-    if error is not None:
-        return error
-    usuario = _usuario_actual(request)
+def _mis_turnos(lunes: str, marca: str | None, usuario: dict[str, Any] | None) -> Response:
     base = _turnos_semana(lunes, marca)
     if usuario is None:
         return JSONResponse(
@@ -985,6 +1018,19 @@ async def mis_turnos(request: Request) -> Response:
             "mis_turnos": mios,
         }
     )
+
+
+async def mis_turnos(request: Request) -> Response:
+    """GET /api/rota/mis-turnos[?lunes&marca]: los turnos del USUARIO actual en esa semana.
+
+    GRID POR MARCA: `?marca=` acota a la rejilla de esa marca; ausente = todas las marcas.
+    """
+    lunes = _lunes_param(request)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    usuario = _usuario_actual(request)
+    return await run_in_threadpool(_mis_turnos, lunes, marca, usuario)
 
 
 def _mes_param(request: Request) -> tuple[str, str, str] | tuple[None, None, None]:
@@ -1061,6 +1107,12 @@ async def mis_turnos_mes(request: Request) -> Response:
                 "aviso": "Inicia sesión para ver tu calendario de turnos.",
             }
         )
+    return await run_in_threadpool(_mis_turnos_mes, mes, desde, hasta, marca, usuario)
+
+
+def _mis_turnos_mes(
+    mes: str, desde: str, hasta: str, marca: str | None, usuario: dict[str, Any]
+) -> Response:
     nombres = _nombres_equipo()
     crudos = repos.listar_turnos_rota_rango(
         desde, hasta, miembro_id=usuario["id"], marca=marca
@@ -1080,19 +1132,7 @@ async def mis_turnos_mes(request: Request) -> Response:
     )
 
 
-async def turnos_mes(request: Request) -> Response:
-    """GET /api/rota/turnos/mes[?mes=AAAA-MM&marca]: los turnos de TODO el equipo en el mes.
-
-    Calendario MENSUAL del EQUIPO en «Mis turnos»: solo el horario (turnos) de todos, SIN
-    eventos ni cobertura. Lectura PURA por rango de fecha (no siembra franjas ni prellena).
-    No requiere sesión (mismo dato que el Calendario semanal). GRID POR MARCA: `?marca=` acota.
-    """
-    mes, desde, hasta = _mes_param(request)
-    if mes is None:
-        return JSONResponse({"error": "Mes inválido (usa AAAA-MM)."}, status_code=400)
-    marca, error = _marca_param(request)
-    if error is not None:
-        return error
+def _turnos_mes(mes: str, desde: str, hasta: str, marca: str | None) -> Response:
     nombres = _nombres_equipo()
     crudos = repos.listar_turnos_rota_rango(desde, hasta, marca=marca)
     franjas_por_id = _franjas_por_id_de(crudos)
@@ -1106,3 +1146,19 @@ async def turnos_mes(request: Request) -> Response:
             "total": len(turnos),
         }
     )
+
+
+async def turnos_mes(request: Request) -> Response:
+    """GET /api/rota/turnos/mes[?mes=AAAA-MM&marca]: los turnos de TODO el equipo en el mes.
+
+    Calendario MENSUAL del EQUIPO en «Mis turnos»: solo el horario (turnos) de todos, SIN
+    eventos ni cobertura. Lectura PURA por rango de fecha (no siembra franjas ni prellena).
+    No requiere sesión (mismo dato que el Calendario semanal). GRID POR MARCA: `?marca=` acota.
+    """
+    mes, desde, hasta = _mes_param(request)
+    if mes is None:
+        return JSONResponse({"error": "Mes inválido (usa AAAA-MM)."}, status_code=400)
+    marca, error = _marca_param(request)
+    if error is not None:
+        return error
+    return await run_in_threadpool(_turnos_mes, mes, desde, hasta, marca)

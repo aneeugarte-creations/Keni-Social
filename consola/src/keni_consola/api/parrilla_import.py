@@ -29,6 +29,7 @@ import logging
 from typing import Any
 
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -196,7 +197,8 @@ async def importar(request: Request) -> Response:
             doc_nombre, doc_ext = await media.guardar_documento_subido(archivo)
         except media.MediaError as e:
             return JSONResponse({"error": str(e)}, status_code=400)
-        propuesta = repos.crear_propuesta_parrilla(
+        propuesta = await run_in_threadpool(
+            repos.crear_propuesta_parrilla,
             semana=semana,
             doc_nombre=doc_nombre,
             doc_tipo=doc_ext,
@@ -235,7 +237,8 @@ async def importar(request: Request) -> Response:
         # la propuesta (estado generando), respondemos al INSTANTE y bajamos+encolamos en segundo
         # plano —igual que «Cajones del día» hace el trabajo pesado fuera del handler—. El frontend
         # sondea la propuesta hasta `pendiente` o `error`; ya no ve un timeout de la petición.
-        propuesta = repos.crear_propuesta_parrilla(
+        propuesta = await run_in_threadpool(
+            repos.crear_propuesta_parrilla,
             semana=semana,
             doc_nombre=url_limpia[:200],
             doc_tipo="enlace",
@@ -300,7 +303,8 @@ async def importar(request: Request) -> Response:
         )
 
     elif texto_pegado:
-        propuesta = repos.crear_propuesta_parrilla(
+        propuesta = await run_in_threadpool(
+            repos.crear_propuesta_parrilla,
             semana=semana,
             doc_nombre="Texto pegado",
             doc_tipo="texto",
@@ -330,9 +334,10 @@ async def importar(request: Request) -> Response:
         )
 
     try:
-        gen = _encolar()
+        gen = await run_in_threadpool(_encolar)
     except generaciones.ColaLlenaError:
-        repos.actualizar_propuesta_parrilla(
+        await run_in_threadpool(
+            repos.actualizar_propuesta_parrilla,
             propuesta["id"],
             {
                 "estado": pi.ESTADO_ERROR,
@@ -344,13 +349,16 @@ async def importar(request: Request) -> Response:
             status_code=429,
         )
     except job.ParrillaImportError as e:
-        repos.actualizar_propuesta_parrilla(
+        await run_in_threadpool(
+            repos.actualizar_propuesta_parrilla,
             propuesta["id"], {"estado": pi.ESTADO_ERROR, "error": str(e)}
         )
         return JSONResponse({"error": str(e)}, status_code=400)
 
     gen_id = gen.get("id", "")
-    repos.actualizar_propuesta_parrilla(propuesta["id"], {"gen_id": gen_id})
+    await run_in_threadpool(
+        repos.actualizar_propuesta_parrilla, propuesta["id"], {"gen_id": gen_id}
+    )
     return JSONResponse(
         {"propuesta_id": propuesta["id"], "gen_id": gen_id}, status_code=202
     )
@@ -361,16 +369,35 @@ async def importar(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _listar_propuestas(estado: str | None) -> dict[str, Any]:
+    propuestas = repos.listar_propuestas_parrilla(estado=estado)
+    return {"propuestas": [_propuesta_publica(p) for p in propuestas]}
+
+
 async def listar_propuestas(request: Request) -> Response:
     """GET /api/parrilla/propuestas[?estado]: propuestas mas recientes primero."""
     estado = (request.query_params.get("estado") or "").strip() or None
     if estado is not None and estado not in pi.ESTADOS_PROPUESTA:
         validos = " o ".join(f'"{e}"' for e in pi.ESTADOS_PROPUESTA)
         return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
-    propuestas = repos.listar_propuestas_parrilla(estado=estado)
-    return JSONResponse(
-        {"propuestas": [_propuesta_publica(p) for p in propuestas]}
-    )
+    cuerpo = await run_in_threadpool(_listar_propuestas, estado)
+    return JSONResponse(cuerpo)
+
+
+def _detalle_propuesta(propuesta_id: str) -> tuple[int, dict[str, Any]]:
+    propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
+    if propuesta is None:
+        return 404, {"error": "La propuesta no existe."}
+    estado = _estado_efectivo(propuesta)
+    ops_crudas = propuesta.get("operaciones")
+    marca = str(propuesta.get("marca") or "")
+    operaciones = _operaciones_con_conflicto(ops_crudas, _roster(), marca)
+    cuerpo = _propuesta_publica(propuesta)
+    cuerpo["estado"] = estado
+    cuerpo["operaciones"] = operaciones
+    # El rango cuenta solo CAMBIOS reales: usa las ops anotadas (excluye las `ya_existe`).
+    cuerpo["rango"] = _rango_de_operaciones(operaciones)
+    return 200, cuerpo
 
 
 async def detalle_propuesta(request: Request) -> Response:
@@ -383,19 +410,8 @@ async def detalle_propuesta(request: Request) -> Response:
     para que el frontend muestre un resumen y navegue las semanas cubiertas.
     """
     propuesta_id = request.path_params["propuesta_id"]
-    propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
-    if propuesta is None:
-        return JSONResponse({"error": "La propuesta no existe."}, status_code=404)
-    estado = _estado_efectivo(propuesta)
-    ops_crudas = propuesta.get("operaciones")
-    marca = str(propuesta.get("marca") or "")
-    operaciones = _operaciones_con_conflicto(ops_crudas, _roster(), marca)
-    cuerpo = _propuesta_publica(propuesta)
-    cuerpo["estado"] = estado
-    cuerpo["operaciones"] = operaciones
-    # El rango cuenta solo CAMBIOS reales: usa las ops anotadas (excluye las `ya_existe`).
-    cuerpo["rango"] = _rango_de_operaciones(operaciones)
-    return JSONResponse(cuerpo)
+    status, cuerpo = await run_in_threadpool(_detalle_propuesta, propuesta_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -414,14 +430,16 @@ async def aplicar_propuesta(request: Request) -> Response:
     semana nueva), marca la propuesta `aplicada` y devuelve el conteo de omitidas.
     """
     propuesta_id = request.path_params["propuesta_id"]
+    status, cuerpo = await run_in_threadpool(_aplicar_propuesta, propuesta_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _aplicar_propuesta(propuesta_id: str) -> tuple[int, dict[str, Any]]:
     propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
     if propuesta is None:
-        return JSONResponse({"error": "La propuesta no existe."}, status_code=404)
+        return 404, {"error": "La propuesta no existe."}
     if _estado_efectivo(propuesta) != pi.ESTADO_PENDIENTE:
-        return JSONResponse(
-            {"error": "Solo se puede aplicar una propuesta en estado pendiente."},
-            status_code=409,
-        )
+        return 409, {"error": "Solo se puede aplicar una propuesta en estado pendiente."}
 
     operaciones = propuesta.get("operaciones") or []
     nombres = _roster()
@@ -431,13 +449,10 @@ async def aplicar_propuesta(request: Request) -> Response:
     # Re-valida contra el estado ACTUAL (las filas pudieron cambiar tras generar la propuesta).
     validas, errores = pi.validar_operaciones(operaciones, ctx)
     if errores:
-        return JSONResponse(
-            {
-                "error": "La propuesta ya no es válida contra el estado actual.",
-                "errores": errores,
-            },
-            status_code=409,
-        )
+        return 409, {
+            "error": "La propuesta ya no es válida contra el estado actual.",
+            "errores": errores,
+        }
 
     # Particiona contra el estado VIVO y APLICA LO NUEVO. Lo idempotente («ya está»: la MISMA
     # persona ya tiene ese turno / el mismo evento) y lo conflictivo (un `modificar_turno` cuyo
@@ -467,24 +482,29 @@ async def aplicar_propuesta(request: Request) -> Response:
         )
     except ValueError as e:
         # Una franja (slot) no resoluble para su semana: el diff entero se descartó (rollback).
-        return JSONResponse({"error": str(e)}, status_code=409)
+        return 409, {"error": str(e)}
     # `ya_existe`/`omitidas_conflicto`: cuántas operaciones se omitieron (no son error): la misma
     # persona ya estaba, o un `modificar_turno` cuyo turno ya no existe.
-    return JSONResponse(
-        {"aplicada": True, "ya_existe": n_ya_existe, "omitidas_conflicto": n_conflicto, **resumen}
+    return 200, {
+        "aplicada": True, "ya_existe": n_ya_existe, "omitidas_conflicto": n_conflicto, **resumen
+    }
+
+
+def _descartar_propuesta(propuesta_id: str) -> tuple[int, dict[str, Any]]:
+    propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
+    if propuesta is None:
+        return 404, {"error": "La propuesta no existe."}
+    actualizada = repos.actualizar_propuesta_parrilla(
+        propuesta_id, {"estado": pi.ESTADO_DESCARTADA}
     )
+    return 200, _propuesta_publica(actualizada or propuesta)
 
 
 async def descartar_propuesta(request: Request) -> Response:
     """POST /api/parrilla/propuestas/{id}/descartar: marca la propuesta descartada."""
     propuesta_id = request.path_params["propuesta_id"]
-    propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
-    if propuesta is None:
-        return JSONResponse({"error": "La propuesta no existe."}, status_code=404)
-    actualizada = repos.actualizar_propuesta_parrilla(
-        propuesta_id, {"estado": pi.ESTADO_DESCARTADA}
-    )
-    return JSONResponse(_propuesta_publica(actualizada or propuesta))
+    status, cuerpo = await run_in_threadpool(_descartar_propuesta, propuesta_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

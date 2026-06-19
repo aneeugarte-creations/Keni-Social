@@ -168,23 +168,14 @@ def _coincide(p: dict, q: str) -> bool:
     return _normalizar_categoria(q) in _normalizar_categoria(p.get("categoria"))
 
 
-async def listar(request: Request) -> Response:
-    """GET /api/plantillas-diseno: plantillas (mas recientes primero) con filtros opcionales."""
-    q = request.query_params
-    tipo_q = (q.get("tipo") or "").strip() or None
-    if tipo_q and tipo_q not in _TIPOS_VALIDOS:
-        return JSONResponse({"error": "tipo debe ser 'foto' o 'miniatura'."}, status_code=400)
+def _listar(marca: str | None, tipo: str | None, cat_q: str, linea: str, busqueda: str) -> list[dict]:
     plantillas = [
         _plantilla_a_dict(item)
-        for item in repos.listar_plantillas_diseno(
-            marca=q.get("marca") or None,
-            tipo=tipo_q,
-        )
+        for item in repos.listar_plantillas_diseno(marca=marca, tipo=tipo)
     ]
     # Filtro de categoría: acepta el valor crudo (igualdad exacta, p. ej. el legado "post") o
     # cualquier forma que normalice al mismo slug («Última hora» == `ultima-hora`). Se filtra en
     # memoria, como `linea` y `q`, para no acoplar la normalización al SQL del repo.
-    cat_q = (q.get("categoria") or "").strip()
     if cat_q:
         cat_norm = _normalizar_categoria(cat_q)
         plantillas = [
@@ -192,12 +183,27 @@ async def listar(request: Request) -> Response:
             for p in plantillas
             if p.get("categoria") == cat_q or _normalizar_categoria(p.get("categoria")) == cat_norm
         ]
-    linea = (q.get("linea") or "").strip()
     if linea:
         plantillas = [p for p in plantillas if linea in p.get("lineas", [])]
-    busqueda = (q.get("q") or "").strip()
     if busqueda:
         plantillas = [p for p in plantillas if _coincide(p, busqueda)]
+    return plantillas
+
+
+async def listar(request: Request) -> Response:
+    """GET /api/plantillas-diseno: plantillas (mas recientes primero) con filtros opcionales."""
+    q = request.query_params
+    tipo_q = (q.get("tipo") or "").strip() or None
+    if tipo_q and tipo_q not in _TIPOS_VALIDOS:
+        return JSONResponse({"error": "tipo debe ser 'foto' o 'miniatura'."}, status_code=400)
+    plantillas = await run_in_threadpool(
+        _listar,
+        q.get("marca") or None,
+        tipo_q,
+        (q.get("categoria") or "").strip(),
+        (q.get("linea") or "").strip(),
+        (q.get("q") or "").strip(),
+    )
     return JSONResponse({"plantillas": plantillas})
 
 
@@ -237,7 +243,8 @@ async def crear(request: Request) -> Response:
     etiqueta_muestra = _texto_muestra(datos.get("etiqueta_muestra"))
     lineas = _normalizar_lineas(datos.get("lineas"))
 
-    plantilla = repos.crear_plantilla_diseno(
+    plantilla = await run_in_threadpool(
+        repos.crear_plantilla_diseno,
         marca=marca or "",
         nombre=nombre,
         categoria=categoria,
@@ -267,13 +274,13 @@ async def reordenar(request: Request) -> Response:
     ids = datos.get("ids")
     if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
         return JSONResponse({"error": "«ids» debe ser una lista de identificadores."}, status_code=400)
-    n = repos.reordenar_plantillas_diseno([i for i in ids if i])
+    n = await run_in_threadpool(repos.reordenar_plantillas_diseno, [i for i in ids if i])
     return JSONResponse({"actualizadas": n})
 
 
 async def obtener(request: Request) -> Response:
     """GET /api/plantillas-diseno/{id}: una plantilla con su documento listo para cargar. -> 404 si no existe."""
-    item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
+    item = await run_in_threadpool(repos.obtener_plantilla_diseno, request.path_params["plantilla_id"])
     if item is None:
         return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
     return JSONResponse({"plantilla": _plantilla_a_dict(item)})
@@ -325,7 +332,7 @@ async def actualizar(request: Request) -> Response:
             )
         campos["documento"] = json.dumps(doc_ok, ensure_ascii=False)
 
-    plantilla = repos.actualizar_plantilla_diseno(plantilla_id, campos)
+    plantilla = await run_in_threadpool(repos.actualizar_plantilla_diseno, plantilla_id, campos)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
     return JSONResponse({"plantilla": _plantilla_a_dict(plantilla)})
@@ -333,7 +340,7 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     """DELETE /api/plantillas-diseno/{id}: borra la plantilla. -> `{mensaje}` | 404."""
-    item = repos.borrar_plantilla_diseno(request.path_params["plantilla_id"])
+    item = await run_in_threadpool(repos.borrar_plantilla_diseno, request.path_params["plantilla_id"])
     if item is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Plantilla borrada."})
@@ -397,7 +404,7 @@ async def preview(request: Request) -> Response:
     `max-age`— se sirven del almacén, sin Node). Cambiar el documento/muestra cambia la huella -> clave
     nueva (self-invalida). 404 si no existe; 422 si el render falla.
     """
-    item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
+    item = await run_in_threadpool(repos.obtener_plantilla_diseno, request.path_params["plantilla_id"])
     if item is None:
         return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
     documento = item.get("documento") or "{}"

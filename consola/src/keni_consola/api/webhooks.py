@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -81,18 +82,43 @@ def _validar_eventos(valor: object) -> tuple[list[str] | None, str | None]:
     return limpios, None
 
 
+def _listar() -> dict:
+    return {
+        "webhooks": repos.listar_webhooks(),
+        "catalogo": {
+            "eventos": list(eventos.TIPOS_EVENTO),
+            "formatos": list(eventos.FORMATOS_WEBHOOK),
+        },
+        "eventos_recientes": repos.listar_eventos_internos(limite=30),
+    }
+
+
 async def listar(request: Request) -> Response:
     """GET /api/webhooks: suscripciones (sin secretos) + catalogo de eventos + bitacora."""
-    return JSONResponse(
-        {
-            "webhooks": repos.listar_webhooks(),
-            "catalogo": {
-                "eventos": list(eventos.TIPOS_EVENTO),
-                "formatos": list(eventos.FORMATOS_WEBHOOK),
-            },
-            "eventos_recientes": repos.listar_eventos_internos(limite=30),
-        }
+    cuerpo = await run_in_threadpool(_listar)
+    return JSONResponse(cuerpo)
+
+
+def _crear(
+    *,
+    nombre: str,
+    url: str,
+    eventos: list[str],
+    formato: str,
+    secreto: str,
+    activo: bool,
+    autor: object,
+) -> dict:
+    wh = repos.crear_webhook(
+        nombre=nombre,
+        url=url,
+        eventos=eventos,
+        formato=formato,
+        secreto=secreto,
+        activo=activo,
+        autor=autor,
     )
+    return {"webhook": wh}
 
 
 async def crear(request: Request) -> Response:
@@ -118,7 +144,8 @@ async def crear(request: Request) -> Response:
         v = datos.get(clave, "")
         return v.strip()[:maximo] if isinstance(v, str) else ""
 
-    wh = repos.crear_webhook(
+    cuerpo = await run_in_threadpool(
+        _crear,
         nombre=_texto("nombre", _MAX_NOMBRE),
         url=datos["url"].strip()[:_MAX_URL],
         eventos=lista_eventos,
@@ -127,7 +154,7 @@ async def crear(request: Request) -> Response:
         activo=bool(datos.get("activo", True)),
         autor=autor_de_peticion(request),
     )
-    return JSONResponse({"webhook": wh})
+    return JSONResponse(cuerpo)
 
 
 async def actualizar(request: Request) -> Response:
@@ -166,10 +193,21 @@ async def actualizar(request: Request) -> Response:
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
 
+    status, cuerpo = await run_in_threadpool(_actualizar, webhook_id, campos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar(webhook_id: str, campos: dict) -> tuple[int, dict]:
     wh = repos.actualizar_webhook(webhook_id, campos)
     if wh is None:
-        return JSONResponse({"error": "Ese webhook ya no existe."}, status_code=404)
-    return JSONResponse({"webhook": wh})
+        return 404, {"error": "Ese webhook ya no existe."}
+    return 200, {"webhook": wh}
+
+
+def _borrar(webhook_id: str) -> tuple[int, dict]:
+    if not repos.borrar_webhook(webhook_id):
+        return 404, {"error": "Ese webhook ya no existe."}
+    return 200, {"mensaje": "Webhook borrado."}
 
 
 async def borrar(request: Request) -> Response:
@@ -179,9 +217,16 @@ async def borrar(request: Request) -> Response:
             {"error": "Solo un administrador puede gestionar webhooks."}, status_code=403
         )
     webhook_id = request.path_params["webhook_id"]
-    if not repos.borrar_webhook(webhook_id):
-        return JSONResponse({"error": "Ese webhook ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Webhook borrado."})
+    status, cuerpo = await run_in_threadpool(_borrar, webhook_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _probar(webhook_id: str) -> tuple[int, dict]:
+    crudo = repos.obtener_webhook_con_secreto(webhook_id)
+    if crudo is None:
+        return 404, {"error": "Ese webhook ya no existe."}
+    ok, estado = eventos.probar_webhook(crudo)
+    return 200, {"ok": ok, "estado": estado}
 
 
 async def probar(request: Request) -> Response:
@@ -195,11 +240,8 @@ async def probar(request: Request) -> Response:
             {"error": "Solo un administrador puede gestionar webhooks."}, status_code=403
         )
     webhook_id = request.path_params["webhook_id"]
-    crudo = repos.obtener_webhook_con_secreto(webhook_id)
-    if crudo is None:
-        return JSONResponse({"error": "Ese webhook ya no existe."}, status_code=404)
-    ok, estado = eventos.probar_webhook(crudo)
-    return JSONResponse({"ok": ok, "estado": estado})
+    status, cuerpo = await run_in_threadpool(_probar, webhook_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

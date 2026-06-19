@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -74,14 +75,31 @@ def _bloque_a_dict(item: dict) -> dict:
     }
 
 
+def _listar(marca: str | None, busqueda: str) -> dict:
+    bloques = [_bloque_a_dict(item) for item in repos.listar_bloques(marca=marca)]
+    if busqueda:
+        bloques = [b for b in bloques if busqueda in (b.get("nombre") or "").lower()]
+    return {"bloques": bloques}
+
+
 async def listar(request: Request) -> Response:
     """GET /api/bloques: bloques (mas recientes primero), filtros `marca`/`q` opcionales."""
     q = request.query_params
-    bloques = [_bloque_a_dict(item) for item in repos.listar_bloques(marca=q.get("marca") or None)]
     busqueda = (q.get("q") or "").strip().lower()
-    if busqueda:
-        bloques = [b for b in bloques if busqueda in (b.get("nombre") or "").lower()]
-    return JSONResponse({"bloques": bloques})
+    cuerpo = await run_in_threadpool(_listar, q.get("marca") or None, busqueda)
+    return JSONResponse(cuerpo)
+
+
+def _crear(*, marca: str, nombre: str, capas: str, lineas: str, miniatura: str, autor: object) -> dict:
+    bloque = repos.crear_bloque(
+        marca=marca,
+        nombre=nombre,
+        capas=capas,
+        lineas=lineas,
+        miniatura=miniatura,
+        autor=autor,
+    )
+    return {"bloque": _bloque_a_dict(bloque)}
 
 
 async def crear(request: Request) -> Response:
@@ -106,7 +124,8 @@ async def crear(request: Request) -> Response:
     miniatura = (datos.get("miniatura") or "").strip() if isinstance(datos.get("miniatura"), str) else ""
     lineas = _normalizar_lineas(datos.get("lineas"))
 
-    bloque = repos.crear_bloque(
+    cuerpo = await run_in_threadpool(
+        _crear,
         marca=marca or "",
         nombre=nombre,
         capas=json.dumps(capas_ok, ensure_ascii=False),
@@ -114,15 +133,27 @@ async def crear(request: Request) -> Response:
         miniatura=miniatura,
         autor=autor_de_peticion(request),
     )
-    return JSONResponse({"bloque": _bloque_a_dict(bloque)})
+    return JSONResponse(cuerpo)
+
+
+def _obtener(bloque_id: str) -> tuple[int, dict]:
+    item = repos.obtener_bloque(bloque_id)
+    if item is None:
+        return 404, {"error": "Ese bloque no existe."}
+    return 200, {"bloque": _bloque_a_dict(item)}
 
 
 async def obtener(request: Request) -> Response:
     """GET /api/bloques/{id}: un bloque con sus capas listas para insertar. -> 404 si no existe."""
-    item = repos.obtener_bloque(request.path_params["bloque_id"])
-    if item is None:
-        return JSONResponse({"error": "Ese bloque no existe."}, status_code=404)
-    return JSONResponse({"bloque": _bloque_a_dict(item)})
+    status, cuerpo = await run_in_threadpool(_obtener, request.path_params["bloque_id"])
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar(bloque_id: str, campos: dict) -> tuple[int, dict]:
+    bloque = repos.actualizar_bloque(bloque_id, campos)
+    if bloque is None:
+        return 404, {"error": "Ese bloque no existe."}
+    return 200, {"bloque": _bloque_a_dict(bloque)}
 
 
 async def actualizar(request: Request) -> Response:
@@ -148,18 +179,21 @@ async def actualizar(request: Request) -> Response:
             return JSONResponse({"error": str(e)}, status_code=400)
         campos["capas"] = json.dumps(capas_ok, ensure_ascii=False)
 
-    bloque = repos.actualizar_bloque(bloque_id, campos)
-    if bloque is None:
-        return JSONResponse({"error": "Ese bloque no existe."}, status_code=404)
-    return JSONResponse({"bloque": _bloque_a_dict(bloque)})
+    status, cuerpo = await run_in_threadpool(_actualizar, bloque_id, campos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar(bloque_id: str) -> tuple[int, dict]:
+    item = repos.borrar_bloque(bloque_id)
+    if item is None:
+        return 404, {"error": "Ese bloque ya no existe."}
+    return 200, {"mensaje": "Bloque borrado."}
 
 
 async def borrar(request: Request) -> Response:
     """DELETE /api/bloques/{id}: borra el bloque. -> `{mensaje}` | 404."""
-    item = repos.borrar_bloque(request.path_params["bloque_id"])
-    if item is None:
-        return JSONResponse({"error": "Ese bloque ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Bloque borrado."})
+    status, cuerpo = await run_in_threadpool(_borrar, request.path_params["bloque_id"])
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

@@ -40,6 +40,7 @@ import json
 import logging
 
 from keni_shared import video as video_shared
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -143,19 +144,39 @@ async def formatos(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _listar_composiciones(marca: str | None, publicacion_id: str | None) -> dict:
+    items = [
+        _composicion_a_dict(item)
+        for item in repos.listar_video_composiciones(
+            marca=marca, publicacion_id=publicacion_id
+        )
+    ]
+    return {"composiciones": items}
+
+
 async def listar_composiciones(request: Request) -> Response:
     """GET /api/video/composiciones: composiciones (filtro `?marca=`). -> `{composiciones: [...]}`."""
     q = request.query_params
     marca = q.get("marca") or None
     if marca is not None and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    items = [
-        _composicion_a_dict(item)
-        for item in repos.listar_video_composiciones(
-            marca=marca, publicacion_id=q.get("publicacion_id") or None
-        )
-    ]
-    return JSONResponse({"composiciones": items})
+    cuerpo = await run_in_threadpool(
+        _listar_composiciones, marca, q.get("publicacion_id") or None
+    )
+    return JSONResponse(cuerpo)
+
+
+def _crear_composicion(
+    *, marca: str, documento: str, publicacion_id: str, titulo: str, estado: str
+) -> dict:
+    comp = repos.crear_video_composicion(
+        marca=marca,
+        documento=documento,
+        publicacion_id=publicacion_id,
+        titulo=titulo,
+        estado=estado,
+    )
+    return {"id": comp["id"]}
 
 
 async def crear_composicion(request: Request) -> Response:
@@ -188,22 +209,68 @@ async def crear_composicion(request: Request) -> Response:
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
-    comp = repos.crear_video_composicion(
+    cuerpo = await run_in_threadpool(
+        _crear_composicion,
         marca=marca,
         documento=json.dumps(doc_norm, ensure_ascii=False),
         publicacion_id=publicacion_id,
         titulo=titulo,
         estado=estado,
     )
-    return JSONResponse({"id": comp["id"]})
+    return JSONResponse(cuerpo)
+
+
+def _obtener_composicion(composicion_id: str) -> tuple[int, dict]:
+    comp = repos.obtener_video_composicion(composicion_id)
+    if comp is None:
+        return 404, {"error": "Esa composición no existe."}
+    return 200, {"composicion": _composicion_a_dict(comp)}
 
 
 async def obtener_composicion(request: Request) -> Response:
     """GET /api/video/composiciones/{id}: detalle de una composicion. -> `{composicion}` | 404."""
-    comp = repos.obtener_video_composicion(request.path_params["composicion_id"])
+    status, cuerpo = await run_in_threadpool(
+        _obtener_composicion, request.path_params["composicion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar_composicion(composicion_id: str, datos: dict) -> tuple[int, dict]:
+    comp = repos.obtener_video_composicion(composicion_id)
     if comp is None:
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
-    return JSONResponse({"composicion": _composicion_a_dict(comp)})
+        return 404, {"error": "Esa composición no existe."}
+
+    campos: dict[str, object] = {}
+
+    if "documento" in datos:
+        documento = datos.get("documento")
+        if not isinstance(documento, dict):
+            return 400, {"error": "El documento de la composición debe ser un objeto."}
+        try:
+            doc_norm = video_shared.validar_composicion({**documento, "marca": comp["marca"]})
+        except ValueError as e:
+            return 400, {"error": str(e)}
+        campos["documento"] = json.dumps(doc_norm, ensure_ascii=False)
+
+    if "titulo" in datos:
+        titulo = datos.get("titulo")
+        if not isinstance(titulo, str):
+            return 400, {"error": "El título debe ser texto."}
+        campos["titulo"] = titulo.strip()
+
+    if "estado" in datos:
+        estado, err = _validar_estado(datos.get("estado"), defecto=None)
+        if err:
+            return 400, {"error": err}
+        campos["estado"] = estado
+
+    if not campos:
+        return 400, {"error": "Nada que actualizar."}
+
+    actualizada = repos.actualizar_video_composicion(composicion_id, campos)
+    if actualizada is None:
+        return 404, {"error": "Esa composición no existe."}
+    return 200, {"composicion": _composicion_a_dict(actualizada)}
 
 
 async def actualizar_composicion(request: Request) -> Response:
@@ -215,52 +282,23 @@ async def actualizar_composicion(request: Request) -> Response:
     debe traer al menos uno. La validacion del documento solo corre cuando el documento viene.
     """
     composicion_id = request.path_params["composicion_id"]
-    comp = repos.obtener_video_composicion(composicion_id)
-    if comp is None:
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
-
     datos = await leer_json(request)
-    campos: dict[str, object] = {}
+    status, cuerpo = await run_in_threadpool(_actualizar_composicion, composicion_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
-    if "documento" in datos:
-        documento = datos.get("documento")
-        if not isinstance(documento, dict):
-            return JSONResponse(
-                {"error": "El documento de la composición debe ser un objeto."}, status_code=400
-            )
-        try:
-            doc_norm = video_shared.validar_composicion({**documento, "marca": comp["marca"]})
-        except ValueError as e:
-            return JSONResponse({"error": str(e)}, status_code=400)
-        campos["documento"] = json.dumps(doc_norm, ensure_ascii=False)
 
-    if "titulo" in datos:
-        titulo = datos.get("titulo")
-        if not isinstance(titulo, str):
-            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
-        campos["titulo"] = titulo.strip()
-
-    if "estado" in datos:
-        estado, err = _validar_estado(datos.get("estado"), defecto=None)
-        if err:
-            return JSONResponse({"error": err}, status_code=400)
-        campos["estado"] = estado
-
-    if not campos:
-        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
-
-    actualizada = repos.actualizar_video_composicion(composicion_id, campos)
-    if actualizada is None:
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
-    return JSONResponse({"composicion": _composicion_a_dict(actualizada)})
+def _borrar_composicion(composicion_id: str) -> tuple[int, dict]:
+    if not repos.borrar_video_composicion(composicion_id):
+        return 404, {"error": "Esa composición no existe."}
+    return 200, {"ok": True}
 
 
 async def borrar_composicion(request: Request) -> Response:
     """DELETE /api/video/composiciones/{id}: borra la composicion y sus subtitulos. -> `{ok}` | 404."""
-    composicion_id = request.path_params["composicion_id"]
-    if not repos.borrar_video_composicion(composicion_id):
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
-    return JSONResponse({"ok": True})
+    status, cuerpo = await run_in_threadpool(
+        _borrar_composicion, request.path_params["composicion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -268,16 +306,10 @@ async def borrar_composicion(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-async def render_composicion(request: Request) -> Response:
-    """POST /api/video/composiciones/{id}/render: encola el render. -> `{gen_id}` | 404/429.
-
-    Render local (ffmpeg) bajo demanda: sin kill-switch ni gateo por maquina. Encola
-    `PROC_RENDER_VIDEO` con `params={"composicion_id": id}`.
-    """
-    composicion_id = request.path_params["composicion_id"]
+def _render_composicion(composicion_id: str) -> tuple[int, dict]:
     comp = repos.obtener_video_composicion(composicion_id)
     if comp is None:
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
+        return 404, {"error": "Esa composición no existe."}
 
     try:
         gen = generaciones.encolar_job_proceso(
@@ -287,30 +319,30 @@ async def render_composicion(request: Request) -> Response:
             etiqueta="Render de video",
         )
     except generaciones.ColaLlenaError:
-        return JSONResponse(
-            {"error": "La cola de generación está saturada; reintenta en un momento."},
-            status_code=429,
-        )
-    return JSONResponse({"gen_id": gen["id"]})
+        return 429, {"error": "La cola de generación está saturada; reintenta en un momento."}
+    return 200, {"gen_id": gen["id"]}
 
 
-async def transcribir_composicion(request: Request) -> Response:
-    """POST /api/video/composiciones/{id}/transcribir: encola la transcripcion ASR.
+async def render_composicion(request: Request) -> Response:
+    """POST /api/video/composiciones/{id}/render: encola el render. -> `{gen_id}` | 404/429.
 
-    Cuerpo: `media_id` (clip del que sacar el audio, obligatorio), `idioma` (opcional, def
-    es-MX). ASR local (whisper.cpp) bajo demanda: sin kill-switch ni gateo por maquina. Si
-    no hay fila `video_subtitulos` para la composicion, se CREA (estado 'pendiente') antes de
-    encolar. -> `{gen_id, subtitulo_id}` | 400/404/429.
+    Render local (ffmpeg) bajo demanda: sin kill-switch ni gateo por maquina. Encola
+    `PROC_RENDER_VIDEO` con `params={"composicion_id": id}`.
     """
-    composicion_id = request.path_params["composicion_id"]
+    status, cuerpo = await run_in_threadpool(
+        _render_composicion, request.path_params["composicion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _transcribir_composicion(composicion_id: str, datos: dict) -> tuple[int, dict]:
     comp = repos.obtener_video_composicion(composicion_id)
     if comp is None:
-        return JSONResponse({"error": "Esa composición no existe."}, status_code=404)
+        return 404, {"error": "Esa composición no existe."}
 
-    datos = await leer_json(request)
     media_id = datos.get("media_id")
     if not isinstance(media_id, str) or not media_id.strip():
-        return JSONResponse({"error": "Falta el media a transcribir."}, status_code=400)
+        return 400, {"error": "Falta el media a transcribir."}
     media_id = media_id.strip()
     idioma = datos.get("idioma")
     idioma = idioma.strip() if isinstance(idioma, str) and idioma.strip() else "es-MX"
@@ -337,11 +369,24 @@ async def transcribir_composicion(request: Request) -> Response:
             etiqueta="Transcripción",
         )
     except generaciones.ColaLlenaError:
-        return JSONResponse(
-            {"error": "La cola de generación está saturada; reintenta en un momento."},
-            status_code=429,
-        )
-    return JSONResponse({"gen_id": gen["id"], "subtitulo_id": subtitulo["id"]})
+        return 429, {"error": "La cola de generación está saturada; reintenta en un momento."}
+    return 200, {"gen_id": gen["id"], "subtitulo_id": subtitulo["id"]}
+
+
+async def transcribir_composicion(request: Request) -> Response:
+    """POST /api/video/composiciones/{id}/transcribir: encola la transcripcion ASR.
+
+    Cuerpo: `media_id` (clip del que sacar el audio, obligatorio), `idioma` (opcional, def
+    es-MX). ASR local (whisper.cpp) bajo demanda: sin kill-switch ni gateo por maquina. Si
+    no hay fila `video_subtitulos` para la composicion, se CREA (estado 'pendiente') antes de
+    encolar. -> `{gen_id, subtitulo_id}` | 400/404/429.
+    """
+    composicion_id = request.path_params["composicion_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(
+        _transcribir_composicion, composicion_id, datos
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -358,9 +403,46 @@ async def listar_subtitulos(request: Request) -> Response:
     composicion_id = request.query_params.get("composicion_id")
     if not composicion_id:
         return JSONResponse({"error": "Falta la composición."}, status_code=400)
+    cuerpo = await run_in_threadpool(_listar_subtitulos, composicion_id)
+    return JSONResponse(cuerpo)
+
+
+def _listar_subtitulos(composicion_id: str) -> dict:
     filas = repos.listar_video_subtitulos(composicion_id=composicion_id)
     subtitulo = _subtitulo_a_dict(filas[0]) if filas else None
-    return JSONResponse({"subtitulo": subtitulo})
+    return {"subtitulo": subtitulo}
+
+
+def _actualizar_subtitulo(subtitulo_id: str, datos: dict) -> tuple[int, dict]:
+    sub = repos.obtener_video_subtitulo(subtitulo_id)
+    if sub is None:
+        return 404, {"error": "Esos subtítulos no existen."}
+
+    campos: dict[str, object] = {}
+
+    if "segmentos" in datos:
+        segmentos = datos.get("segmentos")
+        if not isinstance(segmentos, list):
+            return 400, {"error": "Los segmentos deben ser una lista."}
+        campos["segmentos"] = json.dumps(segmentos, ensure_ascii=False)
+        # Regenerar el ASS desde los segmentos corregidos (best-effort, motor opcional).
+        ass = _regenerar_ass(segmentos)
+        if ass is not None:
+            campos["ass"] = ass
+
+    if "estado" in datos:
+        estado = datos.get("estado")
+        if estado not in db.ESTADOS_VIDEO_SUBTITULO:
+            return 400, {"error": "Estado de subtítulo no válido."}
+        campos["estado"] = estado
+
+    if not campos:
+        return 400, {"error": "Nada que actualizar."}
+
+    actualizado = repos.actualizar_video_subtitulo(subtitulo_id, campos)
+    if actualizado is None:
+        return 404, {"error": "Esos subtítulos no existen."}
+    return 200, {"subtitulo": _subtitulo_a_dict(actualizado)}
 
 
 async def actualizar_subtitulo(request: Request) -> Response:
@@ -372,38 +454,9 @@ async def actualizar_subtitulo(request: Request) -> Response:
     motor de ASR no expone ese helper, guarda los segmentos SIN ass, sin romper).
     """
     subtitulo_id = request.path_params["subtitulo_id"]
-    sub = repos.obtener_video_subtitulo(subtitulo_id)
-    if sub is None:
-        return JSONResponse({"error": "Esos subtítulos no existen."}, status_code=404)
-
     datos = await leer_json(request)
-    campos: dict[str, object] = {}
-
-    if "segmentos" in datos:
-        segmentos = datos.get("segmentos")
-        if not isinstance(segmentos, list):
-            return JSONResponse(
-                {"error": "Los segmentos deben ser una lista."}, status_code=400
-            )
-        campos["segmentos"] = json.dumps(segmentos, ensure_ascii=False)
-        # Regenerar el ASS desde los segmentos corregidos (best-effort, motor opcional).
-        ass = _regenerar_ass(segmentos)
-        if ass is not None:
-            campos["ass"] = ass
-
-    if "estado" in datos:
-        estado = datos.get("estado")
-        if estado not in db.ESTADOS_VIDEO_SUBTITULO:
-            return JSONResponse({"error": "Estado de subtítulo no válido."}, status_code=400)
-        campos["estado"] = estado
-
-    if not campos:
-        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
-
-    actualizado = repos.actualizar_video_subtitulo(subtitulo_id, campos)
-    if actualizado is None:
-        return JSONResponse({"error": "Esos subtítulos no existen."}, status_code=404)
-    return JSONResponse({"subtitulo": _subtitulo_a_dict(actualizado)})
+    status, cuerpo = await run_in_threadpool(_actualizar_subtitulo, subtitulo_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def _regenerar_ass(segmentos: list) -> str | None:

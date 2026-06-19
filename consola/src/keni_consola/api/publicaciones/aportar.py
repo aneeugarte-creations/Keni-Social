@@ -6,6 +6,7 @@ eso enciende el pipeline de auto-generación. Ver el docstring de `aportar`.
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -212,6 +213,34 @@ async def aportar(request: Request) -> Response:
             status_code=400,
         )
 
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _crear_aportacion,
+        marca=marca,
+        flujo=flujo,
+        titulo=titulo,
+        material=material,
+        categoria=categoria,
+        redes_objetivo=redes_objetivo,
+        foto=foto,
+        url=url,
+        autor=autor,
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_aportacion(
+    *,
+    marca: str,
+    flujo: str,
+    titulo: str,
+    material: str,
+    categoria: str,
+    redes_objetivo: list[str],
+    foto: str,
+    url: str,
+    autor: dict | None,
+) -> tuple[int, dict]:
     # «La lista» (reparto PULL, todas las marcas): la pieza nace LIBRE y el equipo la coge
     # desde «Por cubrir». `responsable_automatico` devuelve None hoy (el gancho de un futuro
     # PUSH por marca vive en él, no aquí).
@@ -225,7 +254,7 @@ async def aportar(request: Request) -> Response:
         marca=marca,
         prioridad="media",
         fecha_objetivo=hoy_utc().isoformat(),
-        autor=autor_de_peticion(request),
+        autor=autor,
         responsable=responsable,
         origen=ORIGEN_EQUIPO,
         # El equipo trae la imagen de fuera => tipo "galeria" (foto propia), no IA ni fuente.
@@ -259,6 +288,4 @@ async def aportar(request: Request) -> Response:
             genero = False
 
     plataformas = repos.listar_piezas_fila(item["id"])
-    return JSONResponse(
-        {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}
-    )
+    return 200, {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}

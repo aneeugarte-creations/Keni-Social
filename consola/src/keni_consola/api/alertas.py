@@ -22,6 +22,7 @@ Errores en espanol, sin tracebacks (contrato del paquete `api`).
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -50,6 +51,15 @@ def _limite(crudo: str | None) -> int:
     return max(1, min(valor, _LIMITE_MAX))
 
 
+def _listar(limite: int) -> dict:
+    # Lee mas de la bitacora (otros tipos diluyen) y recorta tras filtrar. El tope duro de
+    # `repos.listar_eventos_internos` (500) acota el coste; con doble del limite basta de
+    # sobra para el volumen real del piloto.
+    crudos = repos.listar_eventos_internos(limite=min(_LIMITE_MAX * 2, limite * 4))
+    alertas = [e for e in crudos if e.get("tipo") in TIPOS_ALERTA][:limite]
+    return {"alertas": alertas}
+
+
 async def listar(request: Request) -> Response:
     """GET /api/alertas[?limite=N]: alertas de rendimiento (bajo rendimiento).
 
@@ -58,12 +68,8 @@ async def listar(request: Request) -> Response:
     el limite pedido y luego recortamos al limite ya filtrado.
     """
     limite = _limite(request.query_params.get("limite"))
-    # Lee mas de la bitacora (otros tipos diluyen) y recorta tras filtrar. El tope duro de
-    # `repos.listar_eventos_internos` (500) acota el coste; con doble del limite basta de
-    # sobra para el volumen real del piloto.
-    crudos = repos.listar_eventos_internos(limite=min(_LIMITE_MAX * 2, limite * 4))
-    alertas = [e for e in crudos if e.get("tipo") in TIPOS_ALERTA][:limite]
-    return JSONResponse({"alertas": alertas})
+    cuerpo = await run_in_threadpool(_listar, limite)
+    return JSONResponse(cuerpo)
 
 
 RUTAS = [

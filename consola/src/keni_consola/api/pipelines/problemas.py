@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -46,6 +47,24 @@ def _problema_de(item: dict) -> dict:
     }
 
 
+def _problemas(marca: str, limite: int) -> dict:
+    bloqueados = [
+        it
+        for it in repos.listar_publicacion(marca=marca or None)
+        if (it.get("origen") or "") == ORIGEN_PIPELINE
+        and (it.get("verificacion_fuente") or "").strip() in (VERIFICACION_REQUIERE_HUMANO, VERIFICACION_RECHAZADO)
+    ]
+    bloqueados.sort(
+        key=lambda it: (it.get("actualizado") or it.get("creado") or "", it.get("id", "")),
+        reverse=True,
+    )
+    total = len(bloqueados)
+    return {
+        "problemas": [_problema_de(it) for it in bloqueados[:limite]],
+        "total": total,
+    }
+
+
 async def problemas(request: Request) -> Response:
     """GET /api/pipelines/problemas?marca=&limite=50: temas BLOQUEADOS del pipeline (solo lectura).
 
@@ -62,19 +81,5 @@ async def problemas(request: Request) -> Response:
     if limite is None:
         limite = _LIMITE_DEF
     limite = min(limite, _LIMITE_MAX)
-
-    bloqueados = [
-        it
-        for it in repos.listar_publicacion(marca=marca or None)
-        if (it.get("origen") or "") == ORIGEN_PIPELINE
-        and (it.get("verificacion_fuente") or "").strip() in (VERIFICACION_REQUIERE_HUMANO, VERIFICACION_RECHAZADO)
-    ]
-    bloqueados.sort(
-        key=lambda it: (it.get("actualizado") or it.get("creado") or "", it.get("id", "")),
-        reverse=True,
-    )
-    total = len(bloqueados)
-    return JSONResponse({
-        "problemas": [_problema_de(it) for it in bloqueados[:limite]],
-        "total": total,
-    })
+    cuerpo = await run_in_threadpool(_problemas, marca, limite)
+    return JSONResponse(cuerpo)

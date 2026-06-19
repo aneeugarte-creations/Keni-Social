@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -180,7 +181,18 @@ async def daemons_latidos(request: Request) -> Response:
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
-    return JSONResponse(sonda_daemons())
+    return JSONResponse(await run_in_threadpool(sonda_daemons))
+
+
+def _barridos(daemon: str, limite: int) -> tuple[int, dict]:
+    try:
+        registrados = {f["daemon"] for f in db.listar_latidos()}
+    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
+        _logger.warning("No se pudieron leer los latidos para el historial de barridos: %s", e)
+        return 503, {"error": "No se pudo consultar el registro de daemons."}
+    if daemon not in registrados or daemon in latidos.RETIRADOS:
+        return 404, {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."}
+    return 200, {"daemon": daemon, "barridos": db.listar_barridos(daemon, limite)}
 
 
 async def daemons_barridos(request: Request) -> Response:
@@ -194,20 +206,40 @@ async def daemons_barridos(request: Request) -> Response:
     if not _es_admin(request):
         return _rechazo_no_admin()
     daemon = str(request.path_params.get("daemon") or "").strip()
-    try:
-        registrados = {f["daemon"] for f in db.listar_latidos()}
-    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
-        _logger.warning("No se pudieron leer los latidos para el historial de barridos: %s", e)
-        return JSONResponse(
-            {"error": "No se pudo consultar el registro de daemons."}, status_code=503
-        )
-    if daemon not in registrados or daemon in latidos.RETIRADOS:
-        return JSONResponse(
-            {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."},
-            status_code=404,
-        )
     limite = _entero_query(request.query_params.get("limite"), minimo=1) or 50
-    return JSONResponse({"daemon": daemon, "barridos": db.listar_barridos(daemon, limite)})
+    status, cuerpo = await run_in_threadpool(_barridos, daemon, limite)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _barrer(daemon: str) -> tuple[int, dict]:
+    try:
+        filas = {f["daemon"]: f for f in db.listar_latidos()}
+    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
+        _logger.warning("No se pudieron leer los latidos para forzar un barrido: %s", e)
+        return 503, {"error": "No se pudo consultar el registro de daemons."}
+    fila = filas.get(daemon)
+    if fila is None or daemon in latidos.RETIRADOS:
+        return 404, {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."}
+    if daemon not in latidos.BARRIBLES:
+        # Su bucle NO consume `barrido_solicitado`: aceptar dejaria el flag suelto.
+        return 409, {
+            "error": f"El daemon {daemon!r} no admite barrido forzado: su bucle "
+            "no consume la solicitud."
+        }
+    if not fila["activo"]:
+        # No corre de verdad: o su flag propio está OFF, o está «en espera» (flag ON pero la
+        # máquina apagada). En ambos casos el bucle no consumiría la solicitud, así que se rechaza.
+        en_espera = _gate_configurado(latidos.clave_gate_de(daemon)) is True
+        motivo = (
+            "está en espera (su interruptor está encendido pero la máquina de contenido está "
+            "apagada); enciende la máquina"
+            if en_espera
+            else "está apagado por su ajuste; enciéndelo"
+        )
+        return 409, {"error": f"El daemon {daemon!r} {motivo} antes de forzar un barrido."}
+    db.solicitar_barrido(daemon)
+    _logger.info("Barrido forzado de %r solicitado por un administrador.", daemon)
+    return 200, {"solicitado": True, "daemon": daemon}
 
 
 async def daemons_barrer(request: Request) -> Response:
@@ -230,42 +262,5 @@ async def daemons_barrer(request: Request) -> Response:
     if not _es_admin(request):
         return _rechazo_no_admin()
     daemon = str(request.path_params.get("daemon") or "").strip()
-    try:
-        filas = {f["daemon"]: f for f in db.listar_latidos()}
-    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
-        _logger.warning("No se pudieron leer los latidos para forzar un barrido: %s", e)
-        return JSONResponse(
-            {"error": "No se pudo consultar el registro de daemons."}, status_code=503
-        )
-    fila = filas.get(daemon)
-    if fila is None or daemon in latidos.RETIRADOS:
-        return JSONResponse(
-            {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."},
-            status_code=404,
-        )
-    if daemon not in latidos.BARRIBLES:
-        # Su bucle NO consume `barrido_solicitado`: aceptar dejaria el flag suelto.
-        return JSONResponse(
-            {
-                "error": f"El daemon {daemon!r} no admite barrido forzado: su bucle "
-                "no consume la solicitud."
-            },
-            status_code=409,
-        )
-    if not fila["activo"]:
-        # No corre de verdad: o su flag propio está OFF, o está «en espera» (flag ON pero la
-        # máquina apagada). En ambos casos el bucle no consumiría la solicitud, así que se rechaza.
-        en_espera = _gate_configurado(latidos.clave_gate_de(daemon)) is True
-        motivo = (
-            "está en espera (su interruptor está encendido pero la máquina de contenido está "
-            "apagada); enciende la máquina"
-            if en_espera
-            else "está apagado por su ajuste; enciéndelo"
-        )
-        return JSONResponse(
-            {"error": f"El daemon {daemon!r} {motivo} antes de forzar un barrido."},
-            status_code=409,
-        )
-    db.solicitar_barrido(daemon)
-    _logger.info("Barrido forzado de %r solicitado por un administrador.", daemon)
-    return JSONResponse({"solicitado": True, "daemon": daemon})
+    status, cuerpo = await run_in_threadpool(_barrer, daemon)
+    return JSONResponse(cuerpo, status_code=status)

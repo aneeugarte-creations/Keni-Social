@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -72,27 +73,30 @@ def _idea_a_dict(idea: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _listar(marca: str | None, estado: str | None, preferentes: set[str] | None) -> dict:
+    ideas = repos.listar_evergreen_ideas(marca=marca, estado=estado)
+    # FOCO POR DEFECTO (no es restriccion): sin marca explicita, el taller se ENFOCA en las
+    # marcas preferentes de la sesion. Sobreescribible con `?marca=` (cualquiera). Sin
+    # preferencia (admin/token/sin marcas) ve todo. Post-filtro en memoria.
+    if preferentes is not None:
+        ideas = [i for i in ideas if not i.get("marca") or i.get("marca") in preferentes]
+    return {
+        "ideas": [_idea_a_dict(i) for i in ideas],
+        "estados": list(ESTADOS_EVERGREEN_IDEA),
+        "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
+    }
+
+
 async def listar(request: Request) -> Response:
     """GET /api/evergreen/ideas: catálogo de ideas evergreen. Filtros: `marca`, `estado`."""
     q = request.query_params
     estado = q.get("estado") or None
     if estado is not None and estado not in ESTADOS_EVERGREEN_IDEA:
         return JSONResponse({"error": "Estado no permitido."}, status_code=400)
-    ideas = repos.listar_evergreen_ideas(marca=q.get("marca") or None, estado=estado)
-    # FOCO POR DEFECTO (no es restriccion): sin marca explicita, el taller se ENFOCA en las
-    # marcas preferentes de la sesion. Sobreescribible con `?marca=` (cualquiera). Sin
-    # preferencia (admin/token/sin marcas) ve todo. Post-filtro en memoria.
-    if not (q.get("marca") or None):
-        preferentes = permisos.marcas_preferentes(request)
-        if preferentes is not None:
-            ideas = [i for i in ideas if not i.get("marca") or i.get("marca") in preferentes]
-    return JSONResponse(
-        {
-            "ideas": [_idea_a_dict(i) for i in ideas],
-            "estados": list(ESTADOS_EVERGREEN_IDEA),
-            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
-        }
-    )
+    marca = q.get("marca") or None
+    # Las preferentes solo aplican sin marca explícita; con marca, no se filtra (None).
+    preferentes = None if marca else permisos.marcas_preferentes(request)
+    return JSONResponse(await run_in_threadpool(_listar, marca, estado, preferentes))
 
 
 async def crear(request: Request) -> Response:
@@ -116,14 +120,26 @@ async def crear(request: Request) -> Response:
     if origen not in ORIGENES_EVERGREEN_IDEA_MANUAL:
         return JSONResponse({"error": "Origen de aportación no permitido."}, status_code=400)
 
+    return JSONResponse(
+        await run_in_threadpool(
+            _crear,
+            marca=marca,
+            titulo=titulo.strip()[:_MAX_TITULO],
+            descripcion=descripcion,
+            origen=origen,
+        )
+    )
+
+
+def _crear(*, marca: str, titulo: str, descripcion: str, origen: str) -> dict:
     idea = repos.crear_evergreen_idea(
         marca=marca,
-        titulo=titulo.strip()[:_MAX_TITULO],
+        titulo=titulo,
         descripcion=descripcion,
         estado=ESTADO_EVERGREEN_PROPUESTA,
         origen=origen,
     )
-    return JSONResponse({"idea": _idea_a_dict(idea)})
+    return {"idea": _idea_a_dict(idea)}
 
 
 async def actualizar(request: Request) -> Response:
@@ -133,21 +149,26 @@ async def actualizar(request: Request) -> Response:
     la idea ya no existe.
     """
     idea_id = request.path_params["idea_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_actualizar, idea_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar(idea_id: str, datos: dict) -> tuple[int, dict]:
     idea_actual = repos.obtener_evergreen_idea(idea_id)
     if idea_actual is None:
-        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa idea ya no existe."}
     campos: dict[str, Any] = {}
 
     if "estado" in datos:
         estado = datos.get("estado")
         if estado not in ESTADOS_EVERGREEN_IDEA:
-            return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+            return 400, {"error": "Estado no permitido."}
         campos["estado"] = estado
     if "titulo" in datos:
         titulo = datos.get("titulo")
         if not isinstance(titulo, str) or not titulo.strip():
-            return JSONResponse({"error": "El título no puede quedar vacío."}, status_code=400)
+            return 400, {"error": "El título no puede quedar vacío."}
         campos["titulo"] = titulo.strip()[:_MAX_TITULO]
     if "descripcion" in datos:
         descripcion = datos.get("descripcion")
@@ -156,23 +177,28 @@ async def actualizar(request: Request) -> Response:
         )
 
     if not campos:
-        return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
+        return 400, {"error": "Indica algún campo a actualizar."}
 
     idea = repos.actualizar_evergreen_idea(idea_id, campos)
     if idea is None:
-        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
-    return JSONResponse({"idea": _idea_a_dict(idea)})
+        return 404, {"error": "Esa idea ya no existe."}
+    return 200, {"idea": _idea_a_dict(idea)}
+
+
+def _borrar(idea_id: str) -> tuple[int, dict]:
+    idea = repos.obtener_evergreen_idea(idea_id)
+    if idea is None:
+        return 404, {"error": "Esa idea ya no existe."}
+    if not repos.borrar_evergreen_idea(idea_id):
+        return 404, {"error": "Esa idea ya no existe."}
+    return 200, {"mensaje": "Idea borrada."}
 
 
 async def borrar(request: Request) -> Response:
     """DELETE /api/evergreen/ideas/{id}: borra la idea (no toca la pieza generada, si la hubiera)."""
     idea_id = request.path_params["idea_id"]
-    idea = repos.obtener_evergreen_idea(idea_id)
-    if idea is None:
-        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
-    if not repos.borrar_evergreen_idea(idea_id):
-        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Idea borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar, idea_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 async def proponer(request: Request) -> Response:
@@ -190,11 +216,15 @@ async def proponer(request: Request) -> Response:
     contexto = contexto.strip()[:_MAX_CONTEXTO] if isinstance(contexto, str) else ""
 
     autor = autor_de_peticion(request)
+    return JSONResponse(await run_in_threadpool(_proponer, marca, contexto, autor))
+
+
+def _proponer(marca: str, contexto: str, autor: dict[str, str] | None) -> dict:
     # `proponer` no crea NADA antes de encolar (solo valida): deja propagar `ColaLlenaError`
     # al manejador CENTRAL (`_manejar_cola_llena`), que responde 429 + `Retry-After` consistente.
     # No la atrapamos aquí (no hay efecto que limpiar, a diferencia de `generar_pieza`).
     gen = dom_idear.lanzar_propuesta(marca=marca, contexto=contexto, autor=autor)
-    return JSONResponse({"generacion": gen})
+    return {"generacion": gen}
 
 
 async def generar_pieza(request: Request) -> Response:
@@ -206,23 +236,27 @@ async def generar_pieza(request: Request) -> Response:
     `{redes:[..]}` para acotar las redes del copy (por defecto, todas las canónicas).
     """
     idea_id = request.path_params["idea_id"]
-    idea = repos.obtener_evergreen_idea(idea_id)
-    if idea is None:
-        return JSONResponse({"error": "Esa idea ya no existe."}, status_code=404)
-    if idea["estado"] != ESTADO_EVERGREEN_APROBADA:
-        return JSONResponse(
-            {"error": "Solo se puede generar contenido de una idea aprobada."}, status_code=400
-        )
-    if not gen_dom.marca_valida(idea["marca"]):
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-
     datos = await leer_json(request)
     crudas = datos.get("redes")
     redes_ids = stream.normalizar_redes(
         crudas if isinstance(crudas, list) else None, canonicas=redes.ids()
     )
-
     autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_generar_pieza, idea_id, redes_ids, autor)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _generar_pieza(
+    idea_id: str, redes_ids: list[str], autor: dict[str, str] | None
+) -> tuple[int, dict]:
+    idea = repos.obtener_evergreen_idea(idea_id)
+    if idea is None:
+        return 404, {"error": "Esa idea ya no existe."}
+    if idea["estado"] != ESTADO_EVERGREEN_APROBADA:
+        return 400, {"error": "Solo se puede generar contenido de una idea aprobada."}
+    if not gen_dom.marca_valida(idea["marca"]):
+        return 400, {"error": "Marca no permitida."}
+
     titulo = idea["titulo"]
     descripcion = idea.get("descripcion", "")
     # La nota de la pieza es la idea aprobada (título + descripción): es el material a redactar.
@@ -253,19 +287,16 @@ async def generar_pieza(request: Request) -> Response:
             publicacion_id=contenido["id"],
         )
     except generaciones.ColaLlenaError:
-        return JSONResponse(
-            {"error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
-            status_code=429,
-        )
+        return 429, {
+            "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
+        }
 
     # TERMINAL feliz: la idea pasa a `generada` (cajón histórico del taller, sin más
     # acciones) y queda enlazada a su pieza. Volver a generarla = duplicar contenido.
     actualizada = repos.actualizar_evergreen_idea(
         idea_id, {"publicacion_id": contenido["id"], "estado": ESTADO_EVERGREEN_GENERADA}
     )
-    return JSONResponse(
-        {"idea": _idea_a_dict(actualizada or idea), "generacion": gen}
-    )
+    return 200, {"idea": _idea_a_dict(actualizada or idea), "generacion": gen}
 
 
 RUTAS = [

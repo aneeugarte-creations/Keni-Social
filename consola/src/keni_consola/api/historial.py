@@ -14,6 +14,7 @@ desde el dominio vía `repos`.)
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -68,55 +69,62 @@ async def historial_guardar(request: Request) -> Response:
     ya creadas (no quedan piezas rotas) y se devuelve un 500 en español.
     """
     historial_id = request.path_params["historial_id"]
-    entrada = repos.obtener_historial_prompt(historial_id)
-    if entrada is None:
-        return JSONResponse({"error": "No se encontró ese borrador en el historial."}, status_code=404)
-
     datos = await leer_json(request)
     if not isinstance(datos, dict):
         datos = {}
     titulo_dado = datos.get("titulo")
     titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
     redes_filtro = _redes_pedidas(datos)
+    autor = autor_de_peticion(request)
+
+    status, cuerpo = await run_in_threadpool(
+        _historial_guardar, historial_id, titulo_dado, redes_filtro, autor
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _historial_guardar(
+    historial_id: str,
+    titulo_dado: str,
+    redes_filtro: set[str] | None,
+    autor: dict[str, str] | None,
+) -> tuple[int, dict]:
+    entrada = repos.obtener_historial_prompt(historial_id)
+    if entrada is None:
+        return 404, {"error": "No se encontró ese borrador en el historial."}
 
     marca = entrada["marca"]
     verdicto = stream.derivar_verdicto(entrada["resultado"])
     titulo = titulo_dado or entrada["titulo"] or stream.derivar_titulo(entrada["resultado"])
     piezas = entrada["piezas"]
-    autor = autor_de_peticion(request)
 
     if piezas:
         # Sin redes pedidas no creamos nada (evita inundar el tablero con todas las redes
         # de golpe): el usuario debe elegir al menos una en el selector.
         if redes_filtro is None:
-            return JSONResponse(
-                {"error": "Elige al menos una red para guardar el termómetro como publicación."},
-                status_code=400,
-            )
+            return 400, {
+                "error": "Elige al menos una red para guardar el termómetro como publicación."
+            }
         # ¿Alguna pieza casa con las redes pedidas? Si no, avisamos en vez de devolver vacío.
         redes_piezas = {p.get("red") for p in piezas if isinstance(p, dict)}
         if not (redes_filtro & redes_piezas):
-            return JSONResponse(
-                {"error": "Ninguna de las redes elegidas tiene contenido en este termómetro."},
-                status_code=400,
-            )
+            return 400, {
+                "error": "Ninguna de las redes elegidas tiene contenido en este termómetro."
+            }
         try:
             piezas = dom_copy.crear_publicaciones_desde_piezas(
                 piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id,
                 redes_filtro=redes_filtro, autor=autor, atomico=True,
             )
         except Exception:  # noqa: BLE001 -- creación a medias: ya revirtió; error en español
-            return JSONResponse(
-                {"error": "No se pudieron guardar todas las piezas; no se guardó ninguna."},
-                status_code=500,
-            )
-        return JSONResponse({"piezas": piezas})
+            return 500, {
+                "error": "No se pudieron guardar todas las piezas; no se guardó ninguna."
+            }
+        return 200, {"piezas": piezas}
 
     # Entrada antigua sin piezas: requiere red(es) explícitas; el documento entero va a cada una.
     if redes_filtro is None:
-        return JSONResponse(
-            {"error": "Indica la red para guardar este borrador como publicación."}, status_code=400
-        )
+        return 400, {"error": "Indica la red para guardar este borrador como publicación."}
     creadas: list[dict[str, object]] = []
     try:
         for red in sorted(redes_filtro):
@@ -127,11 +135,10 @@ async def historial_guardar(request: Request) -> Response:
             creadas.append(pub)
     except Exception:  # noqa: BLE001 -- guardado a medias: revierte y error en español
         _revertir([str(p.get("id")) for p in creadas if p.get("id")])
-        return JSONResponse(
-            {"error": "No se pudieron guardar todas las piezas; no se guardó ninguna."},
-            status_code=500,
-        )
-    return JSONResponse({"piezas": creadas})
+        return 500, {
+            "error": "No se pudieron guardar todas las piezas; no se guardó ninguna."
+        }
+    return 200, {"piezas": creadas}
 
 
 RUTAS = [

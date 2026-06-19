@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -102,22 +103,24 @@ def _nota_a_dict(item: dict[str, Any], estado_pieza: str) -> dict[str, Any]:
     }
 
 
-async def listar(request: Request) -> Response:
-    """GET /api/presidencia/notas: notas volcadas, recientes primero. Filtro: `marca`."""
-    marca = request.query_params.get("marca") or None
+def _listar(marca: str | None) -> dict:
     items = repos.listar_publicaciones_origenes([ORIGEN_PRESIDENCIA])
     if marca:
         items = [it for it in items if (it.get("marca") or "") == marca]
     items.sort(key=lambda it: it.get("creado") or "", reverse=True)
     estados = repos.estado_pieza_por_publicacion([it["id"] for it in items])
-    return JSONResponse(
-        {
-            "notas": [
-                _nota_a_dict(it, estados.get(it["id"], "sin_pieza")) for it in items
-            ],
-            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
-        }
-    )
+    return {
+        "notas": [
+            _nota_a_dict(it, estados.get(it["id"], "sin_pieza")) for it in items
+        ],
+        "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
+    }
+
+
+async def listar(request: Request) -> Response:
+    """GET /api/presidencia/notas: notas volcadas, recientes primero. Filtro: `marca`."""
+    marca = request.query_params.get("marca") or None
+    return JSONResponse(await run_in_threadpool(_listar, marca))
 
 
 async def crear(request: Request) -> Response:
@@ -147,12 +150,26 @@ async def crear(request: Request) -> Response:
     if not titulo:
         return JSONResponse({"error": "La nota necesita un título."}, status_code=400)
 
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _crear, marca=marca, texto=texto, titulo=titulo, slides=slides, autor=autor
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear(
+    *,
+    marca: str,
+    texto: str,
+    titulo: str,
+    slides: list[dict[str, str]],
+    autor: dict[str, str] | None,
+) -> tuple[int, dict]:
     # PORTADA = primera imagen (se compone con la placa de marca); el RESTO del media va
     # en crudo, en su orden de llegada, como slides extra del carrusel.
     portada = next(s for s in slides if s["tipo"] == "imagen")
     extras = [s for s in slides if s is not portada]
 
-    autor = autor_de_peticion(request)
     item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
@@ -199,24 +216,19 @@ async def crear(request: Request) -> Response:
     except generaciones.ColaLlenaError:
         # El tema y su pieza YA existen (con su media); solo faltó encolar el copy. Se
         # informa con claridad: el equipo puede relanzar el copy desde la pieza.
-        return JSONResponse(
-            {
-                "error": (
-                    "La nota se guardó pero hay demasiadas generaciones en curso; "
-                    "lanza el copy desde la pieza del feed en unos segundos."
-                ),
-                "publicacion_id": item["id"],
-            },
-            status_code=429,
-        )
-
-    return JSONResponse(
-        {
-            "nota": _nota_a_dict(item, "generando"),
+        return 429, {
+            "error": (
+                "La nota se guardó pero hay demasiadas generaciones en curso; "
+                "lanza el copy desde la pieza del feed en unos segundos."
+            ),
             "publicacion_id": item["id"],
-            "generacion": gen,
         }
-    )
+
+    return 200, {
+        "nota": _nota_a_dict(item, "generando"),
+        "publicacion_id": item["id"],
+        "generacion": gen,
+    }
 
 
 RUTAS = [

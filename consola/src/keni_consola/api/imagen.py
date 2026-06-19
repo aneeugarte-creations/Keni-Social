@@ -100,16 +100,7 @@ def _doc_de_version(version: dict[str, Any] | None) -> Any:
         return None
 
 
-async def pieza_documento(request: Request) -> Response:
-    """GET /api/imagen/pieza/{publicacion_id}/{pieza_id}: documento editable de la pieza.
-
-    Devuelve la ÚLTIMA versión guardada del documento (o `null` si aún no se editó con el editor),
-    más el número de versiones. Si no hay versión, el frontend arranca de la `plantilla` EFECTIVA
-    (la misma que compone el feed) e inyecta las `fotos` de la pieza en sus huecos, para que el
-    lienzo muestre el marco y la foto REALES (no la plantilla genérica de la marca ni una muestra).
-    """
-    cid = request.path_params["publicacion_id"]
-    pid = request.path_params["pieza_id"]
+def _pieza_documento(cid: str, pid: str) -> dict:
     versiones = repos.listar_documento_versiones(cid, pid)
     ultima = versiones[0] if versiones else None
     # `pub` (fila publicación = contenido+plataforma) para resolver plantilla efectiva y fotos.
@@ -120,19 +111,69 @@ async def pieza_documento(request: Request) -> Response:
         f for f in (render_pieza.fotos_de_pieza(pub) if pub else [])
         if (f.get("objeto") or "").strip()
     ]
-    return JSONResponse(
-        {
-            "documento": _doc_de_version(ultima),
-            "versiones": len(versiones),
-            # Bindings reales para que el editor renderice el titular/pleca de la publicación
-            # (no el texto de muestra de las capas con `binding`).
-            "bindings": _bindings_de_pieza(cid, pid),
-            # Plantilla efectiva (mismo documento que publica el feed) y fotos por hueco: el editor
-            # las usa solo cuando NO hay versión guardada (ver `abrirPiezaTab`).
-            "plantilla": render_pieza.plantilla_efectiva_doc(pub) if pub else None,
-            "fotos": fotos,
-        }
-    )
+    return {
+        "documento": _doc_de_version(ultima),
+        "versiones": len(versiones),
+        # Bindings reales para que el editor renderice el titular/pleca de la publicación
+        # (no el texto de muestra de las capas con `binding`).
+        "bindings": _bindings_de_pieza(cid, pid),
+        # Plantilla efectiva (mismo documento que publica el feed) y fotos por hueco: el editor
+        # las usa solo cuando NO hay versión guardada (ver `abrirPiezaTab`).
+        "plantilla": render_pieza.plantilla_efectiva_doc(pub) if pub else None,
+        "fotos": fotos,
+    }
+
+
+async def pieza_documento(request: Request) -> Response:
+    """GET /api/imagen/pieza/{publicacion_id}/{pieza_id}: documento editable de la pieza.
+
+    Devuelve la ÚLTIMA versión guardada del documento (o `null` si aún no se editó con el editor),
+    más el número de versiones. Si no hay versión, el frontend arranca de la `plantilla` EFECTIVA
+    (la misma que compone el feed) e inyecta las `fotos` de la pieza en sus huecos, para que el
+    lienzo muestre el marco y la foto REALES (no la plantilla genérica de la marca ni una muestra).
+    """
+    cid = request.path_params["publicacion_id"]
+    pid = request.path_params["pieza_id"]
+    cuerpo = await run_in_threadpool(_pieza_documento, cid, pid)
+    return JSONResponse(cuerpo)
+
+
+def _validar_pieza_guardar(cid: str, pid: str, bindings_cliente: object) -> tuple[int, dict | None, dict | None]:
+    """Valida que la plataforma existe y pertenece al contenido, y resuelve los bindings de render.
+
+    -> (status, error|None, bindings|None). Lectura de BD: se ejecuta en el threadpool.
+    """
+    # VALIDACIÓN PREVIA: que la plataforma existe y pertenece al contenido (404 si no).
+    # Se hace ANTES de renderizar para evitar registros sueltos si el render falla después.
+    plataforma = repos.obtener_pieza_fila(pid)
+    if plataforma is None:
+        return 404, {"error": "Esa publicación no existe."}, None
+    if plataforma.get("publicacion_id") != cid:
+        return 404, {"error": "La plataforma no pertenece a ese contenido."}, None
+    # Bindings: el cliente puede enviarlos (valores VIGENTES del editor, aún sin persistir); si no,
+    # se usan los reales de la pieza (copy_in de la fila + pleca de la marca). Así el PNG guardado
+    # muestra el titular/pleca REAL en las capas con `binding`, no el texto de muestra.
+    bindings = bindings_cliente if isinstance(bindings_cliente, dict) else _bindings_de_pieza(cid, pid)
+    return 200, None, bindings
+
+
+def _persistir_pieza_guardar(cid: str, pid: str, doc_ok: dict, render: dict, autor: str) -> tuple[int, dict]:
+    # CREAR VERSIÓN PRIMERO: si la creación de versión falla, no habremos actualizado la imagen aún.
+    # Así evitamos dejar la publicación apuntando a un PNG cuya versión nunca fue registrada.
+    try:
+        version = repos.crear_documento_version(
+            publicacion_id=cid,
+            pieza_id=pid,
+            documento=json.dumps(doc_ok, ensure_ascii=False),
+            render_objeto=render["id"],
+            autor=autor,
+        )
+    except Exception as e:
+        return 500, {"error": f"No se pudo guardar la versión: {str(e)}"}
+
+    # Solo después de crear la versión, fijar la imagen de la pieza.
+    repos.actualizar_pieza_fila(pid, {"imagen": render["id"]})
+    return 200, {"id": render["id"], "url": render["url"], "version": version["version"]}
 
 
 async def pieza_guardar(request: Request) -> Response:
@@ -149,22 +190,12 @@ async def pieza_guardar(request: Request) -> Response:
     if not isinstance(doc, dict):
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
 
-    # VALIDACIÓN PREVIA: que la plataforma existe y pertenece al contenido (404 si no).
-    # Se hace ANTES de renderizar para evitar registros sueltos si el render falla después.
-    plataforma = repos.obtener_pieza_fila(pid)
-    if plataforma is None:
-        return JSONResponse({"error": "Esa publicación no existe."}, status_code=404)
-    if plataforma.get("publicacion_id") != cid:
-        return JSONResponse(
-            {"error": "La plataforma no pertenece a ese contenido."}, status_code=404
-        )
-
-    # Bindings: el cliente puede enviarlos (valores VIGENTES del editor, aún sin persistir); si no,
-    # se usan los reales de la pieza (copy_in de la fila + pleca de la marca). Así el PNG guardado
-    # muestra el titular/pleca REAL en las capas con `binding`, no el texto de muestra.
-    bindings = datos.get("bindings") if isinstance(datos, dict) else None
-    if not isinstance(bindings, dict):
-        bindings = _bindings_de_pieza(cid, pid)
+    bindings_cliente = datos.get("bindings") if isinstance(datos, dict) else None
+    status, error, bindings = await run_in_threadpool(
+        _validar_pieza_guardar, cid, pid, bindings_cliente
+    )
+    if error is not None:
+        return JSONResponse(error, status_code=status)
 
     try:
         doc_ok = estudio_imagen.validar_documento(doc)
@@ -173,30 +204,13 @@ async def pieza_guardar(request: Request) -> Response:
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    # CREAR VERSIÓN PRIMERO: si la creación de versión falla, no habremos actualizado la imagen aún.
-    # Así evitamos dejar la publicación apuntando a un PNG cuya versión nunca fue registrada.
-    try:
-        version = repos.crear_documento_version(
-            publicacion_id=cid,
-            pieza_id=pid,
-            documento=json.dumps(doc_ok, ensure_ascii=False),
-            render_objeto=render["id"],
-            autor=autor_de_peticion(request),
-        )
-    except Exception as e:
-        return JSONResponse(
-            {"error": f"No se pudo guardar la versión: {str(e)}"}, status_code=500
-        )
-
-    # Solo después de crear la versión, fijar la imagen de la pieza.
-    repos.actualizar_pieza_fila(pid, {"imagen": render["id"]})
-    return JSONResponse({"id": render["id"], "url": render["url"], "version": version["version"]})
+    status, cuerpo = await run_in_threadpool(
+        _persistir_pieza_guardar, cid, pid, doc_ok, render, autor_de_peticion(request)
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def pieza_versiones(request: Request) -> Response:
-    """GET /api/imagen/pieza/{publicacion_id}/{pieza_id}/versiones: historial (sin el documento)."""
-    cid = request.path_params["publicacion_id"]
-    pid = request.path_params["pieza_id"]
+def _pieza_versiones(cid: str, pid: str) -> dict:
     versiones = [
         {
             "id": v["id"],
@@ -209,7 +223,15 @@ async def pieza_versiones(request: Request) -> Response:
         }
         for v in repos.listar_documento_versiones(cid, pid)
     ]
-    return JSONResponse({"versiones": versiones})
+    return {"versiones": versiones}
+
+
+async def pieza_versiones(request: Request) -> Response:
+    """GET /api/imagen/pieza/{publicacion_id}/{pieza_id}/versiones: historial (sin el documento)."""
+    cid = request.path_params["publicacion_id"]
+    pid = request.path_params["pieza_id"]
+    cuerpo = await run_in_threadpool(_pieza_versiones, cid, pid)
+    return JSONResponse(cuerpo)
 
 
 RUTAS = [

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -30,7 +31,7 @@ async def equipo(request: Request) -> Response:
     normalmente no cubre.
     """
     todos = (request.query_params.get("todos") or "").strip().lower() in {"1", "true", "yes"}
-    miembros = _equipo_dict(solo_cobertura=not todos)
+    miembros = await run_in_threadpool(_equipo_dict, solo_cobertura=not todos)
     return JSONResponse({"equipo": miembros})
 
 
@@ -42,6 +43,43 @@ def _error_cobertura() -> Response:
 def _error_prioridad() -> Response:
     validos = " o ".join(f'"{p}"' for p in PRIORIDADES_EVENTO)
     return JSONResponse({"error": f"Prioridad inválida. Usa {validos}."}, status_code=400)
+
+
+def _listar_eventos(
+    *,
+    desde: str | None,
+    hasta: str | None,
+    solo_cambiados: bool,
+    tipos_cob: list[str],
+    prioridades: list[str],
+    cambiado_filtro: bool | None,
+    q: str,
+    marca_filtro: str | None,
+) -> dict[str, Any]:
+    # El repo solo soporta filtro mono `tipo_cobertura`; multi/prioridad/q los aplicamos
+    # en Python sobre el resultado bruto (orden lineal, dataset pequeño en operación real).
+    eventos = repos.listar_eventos_rota(
+        desde=desde,
+        hasta=hasta,
+        solo_cambiados=solo_cambiados,
+        tipo_cobertura=tipos_cob[0] if len(tipos_cob) == 1 else None,
+        marca=marca_filtro,
+    )
+
+    if len(tipos_cob) > 1:
+        eventos = [e for e in eventos if e.get("tipo_cobertura", "transmision") in tipos_cob]
+    if prioridades:
+        eventos = [e for e in eventos if e.get("prioridad", "media") in prioridades]
+    if cambiado_filtro is not None:
+        eventos = [e for e in eventos if bool(e.get("cambiado")) is cambiado_filtro]
+    if q:
+        eventos = [
+            e
+            for e in eventos
+            if q in (e.get("titulo") or "").lower() or q in (e.get("contenido") or "").lower()
+        ]
+
+    return {"eventos": [_evento_a_dict(e) for e in eventos]}
 
 
 async def listar_eventos(request: Request) -> Response:
@@ -93,30 +131,43 @@ async def listar_eventos(request: Request) -> Response:
     if marca_filtro and not marcas.es_marca(marca_filtro):
         return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
 
-    # El repo solo soporta filtro mono `tipo_cobertura`; multi/prioridad/q los aplicamos
-    # en Python sobre el resultado bruto (orden lineal, dataset pequeño en operación real).
-    eventos = repos.listar_eventos_rota(
+    cuerpo = await run_in_threadpool(
+        _listar_eventos,
         desde=desde,
         hasta=hasta,
         solo_cambiados=solo_cambiados,
-        tipo_cobertura=tipos_cob[0] if len(tipos_cob) == 1 else None,
-        marca=marca_filtro,
+        tipos_cob=tipos_cob,
+        prioridades=prioridades,
+        cambiado_filtro=cambiado_filtro,
+        q=q,
+        marca_filtro=marca_filtro,
     )
+    return JSONResponse(cuerpo)
 
-    if len(tipos_cob) > 1:
-        eventos = [e for e in eventos if e.get("tipo_cobertura", "transmision") in tipos_cob]
-    if prioridades:
-        eventos = [e for e in eventos if e.get("prioridad", "media") in prioridades]
-    if cambiado_filtro is not None:
-        eventos = [e for e in eventos if bool(e.get("cambiado")) is cambiado_filtro]
-    if q:
-        eventos = [
-            e
-            for e in eventos
-            if q in (e.get("titulo") or "").lower() or q in (e.get("contenido") or "").lower()
-        ]
 
-    return JSONResponse({"eventos": [_evento_a_dict(e) for e in eventos]})
+def _crear_evento(
+    titulo: str,
+    fecha: str,
+    comunes: dict[str, Any],
+    dias: list[int],
+    fechas: list[str],
+    repetir_hasta: str,
+) -> tuple[int, dict[str, Any]]:
+    if dias:
+        serie = repos.crear_serie_eventos(
+            titulo,
+            fechas=fechas,
+            dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
+            repetir_hasta=repetir_hasta,
+            **comunes,
+        )
+        return 201, {
+            "eventos": [_evento_a_dict(e) for e in serie["eventos"]],
+            "serie_id": serie["serie_id"],
+            "total": len(serie["eventos"]),
+        }
+    evento = repos.crear_evento_rota(titulo, fecha=fecha, **comunes)
+    return 201, {"evento": _evento_a_dict(evento)}
 
 
 async def crear_evento(request: Request) -> Response:
@@ -159,6 +210,8 @@ async def crear_evento(request: Request) -> Response:
         return JSONResponse(
             {"error": "Días de la semana inválidos (usa 0=lunes … 6=domingo)."}, status_code=400
         )
+    fechas: list[str] = []
+    repetir_hasta = ""
     if dias:
         repetir_hasta = str(datos.get("repetir_hasta", "")).strip()
         if not repetir_hasta:
@@ -175,24 +228,30 @@ async def crear_evento(request: Request) -> Response:
                 status_code=400,
             )
         fechas = recurrencia.fechas_recurrencia(fecha.strip(), dias, repetir_hasta)
-        serie = repos.crear_serie_eventos(
-            titulo.strip(),
-            fechas=fechas,
-            dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
-            repetir_hasta=repetir_hasta,
-            **comunes,
-        )
-        return JSONResponse(
-            {
-                "eventos": [_evento_a_dict(e) for e in serie["eventos"]],
-                "serie_id": serie["serie_id"],
-                "total": len(serie["eventos"]),
-            },
-            status_code=201,
-        )
 
-    evento = repos.crear_evento_rota(titulo.strip(), fecha=fecha.strip(), **comunes)
-    return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
+    status, cuerpo = await run_in_threadpool(
+        _crear_evento, titulo.strip(), fecha.strip(), comunes, dias, fechas, repetir_hasta
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar_evento(
+    evento_id: str, campos: dict[str, Any], alcance: str
+) -> tuple[int, dict[str, Any]]:
+    evento = repos.actualizar_evento_rota(evento_id, campos)
+    if evento is None:
+        return 404, {"error": "El evento ya no existe."}
+
+    # Alcance de serie: tras editar ESTE evento, propaga los campos (sin la fecha) al resto de la
+    # serie. "siguientes" = desde su fecha en adelante; "serie" = toda. El propio evento se excluye.
+    propagados = 0
+    serie_id = evento.get("serie_id") or ""
+    if alcance != "este" and serie_id:
+        desde = evento["fecha"] if alcance == "siguientes" else None
+        propagados = repos.actualizar_serie_eventos(
+            serie_id, campos, desde=desde, excluir_id=evento_id
+        )
+    return 200, {"evento": _evento_a_dict(evento), "propagados": propagados}
 
 
 async def actualizar_evento(request: Request) -> Response:
@@ -240,20 +299,25 @@ async def actualizar_evento(request: Request) -> Response:
     # puede enviarlo (típicamente `false`) como acción "ya avisé / visto" del coordinador de la rota.
     if "cambiado" in datos:
         campos["cambiado"] = bool(datos["cambiado"])
-    evento = repos.actualizar_evento_rota(evento_id, campos)
-    if evento is None:
-        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
 
-    # Alcance de serie: tras editar ESTE evento, propaga los campos (sin la fecha) al resto de la
-    # serie. "siguientes" = desde su fecha en adelante; "serie" = toda. El propio evento se excluye.
-    propagados = 0
-    serie_id = evento.get("serie_id") or ""
-    if alcance != "este" and serie_id:
-        desde = evento["fecha"] if alcance == "siguientes" else None
-        propagados = repos.actualizar_serie_eventos(
-            serie_id, campos, desde=desde, excluir_id=evento_id
-        )
-    return JSONResponse({"evento": _evento_a_dict(evento), "propagados": propagados})
+    status, cuerpo = await run_in_threadpool(_actualizar_evento, evento_id, campos, alcance)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_evento(evento_id: str, alcance: str) -> tuple[int, dict[str, Any]]:
+    if alcance != "este":
+        evento = repos.obtener_evento_rota(evento_id)
+        if evento is None:
+            return 404, {"error": "El evento ya no existe."}
+        serie_id = evento.get("serie_id") or ""
+        if serie_id:
+            desde = evento["fecha"] if alcance == "siguientes" else None
+            n = repos.borrar_serie_eventos(serie_id, desde=desde)
+            return 200, {"mensaje": f"{n} eventos eliminados.", "eliminados": n}
+
+    if not repos.borrar_evento_rota(evento_id):
+        return 404, {"error": "El evento ya no existe."}
+    return 200, {"mensaje": "Evento eliminado.", "eliminados": 1}
 
 
 async def borrar_evento(request: Request) -> Response:
@@ -270,19 +334,17 @@ async def borrar_evento(request: Request) -> Response:
             {"error": 'Alcance inválido. Usa "este", "siguientes" o "serie".'}, status_code=400
         )
 
-    if alcance != "este":
-        evento = repos.obtener_evento_rota(evento_id)
-        if evento is None:
-            return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-        serie_id = evento.get("serie_id") or ""
-        if serie_id:
-            desde = evento["fecha"] if alcance == "siguientes" else None
-            n = repos.borrar_serie_eventos(serie_id, desde=desde)
-            return JSONResponse({"mensaje": f"{n} eventos eliminados.", "eliminados": n})
+    status, cuerpo = await run_in_threadpool(_borrar_evento, evento_id, alcance)
+    return JSONResponse(cuerpo, status_code=status)
 
-    if not repos.borrar_evento_rota(evento_id):
-        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Evento eliminado.", "eliminados": 1})
+
+def _duplicar_evento(
+    evento_id: str, fecha: str | None, hora: str | None, titulo: str | None
+) -> tuple[int, dict[str, Any]]:
+    evento = repos.duplicar_evento_rota(evento_id, fecha=fecha, hora=hora, titulo=titulo)
+    if evento is None:
+        return 404, {"error": "El evento ya no existe."}
+    return 201, {"evento": _evento_a_dict(evento)}
 
 
 async def duplicar_evento(request: Request) -> Response:
@@ -310,10 +372,36 @@ async def duplicar_evento(request: Request) -> Response:
             return JSONResponse(
                 {"error": "El título no puede estar vacío."}, status_code=400
             )
-    evento = repos.duplicar_evento_rota(evento_id, fecha=fecha, hora=hora, titulo=titulo)
+    status, cuerpo = await run_in_threadpool(_duplicar_evento, evento_id, fecha, hora, titulo)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _repetir_evento(evento_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    evento = repos.obtener_evento_rota(evento_id)
     if evento is None:
-        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
+        return 404, {"error": "El evento ya no existe."}
+    if evento.get("serie_id"):
+        return 400, {"error": "El evento ya es recurrente."}
+    dias = recurrencia.normalizar_dias_semana(datos.get("dias_semana"))
+    if not dias:
+        return 400, {"error": "Días de la semana inválidos (usa 0=lunes … 6=domingo)."}
+    repetir_hasta = str(datos.get("repetir_hasta", "")).strip()
+    if not repetir_hasta:
+        return 400, {"error": "Indica hasta cuándo se repite el evento."}
+    if dominio.lunes_de_semana_iso(repetir_hasta) == "":
+        return 400, {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}
+    if repetir_hasta < evento["fecha"]:
+        return 400, {"error": "La fecha de fin debe ser igual o posterior a la del evento."}
+    fechas = recurrencia.fechas_recurrencia(evento["fecha"], dias, repetir_hasta)
+    serie = repos.convertir_evento_en_serie(
+        evento_id,
+        fechas=fechas,
+        dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
+        repetir_hasta=repetir_hasta,
+    )
+    if serie is None:
+        return 404, {"error": "El evento ya no existe."}
+    return 201, serie
 
 
 async def repetir_evento(request: Request) -> Response:
@@ -324,36 +412,6 @@ async def repetir_evento(request: Request) -> Response:
     Devuelve `{serie_id, total, creados}`.
     """
     evento_id = request.path_params["evento_id"]
-    evento = repos.obtener_evento_rota(evento_id)
-    if evento is None:
-        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    if evento.get("serie_id"):
-        return JSONResponse({"error": "El evento ya es recurrente."}, status_code=400)
     datos = await leer_json(request)
-    dias = recurrencia.normalizar_dias_semana(datos.get("dias_semana"))
-    if not dias:
-        return JSONResponse(
-            {"error": "Días de la semana inválidos (usa 0=lunes … 6=domingo)."}, status_code=400
-        )
-    repetir_hasta = str(datos.get("repetir_hasta", "")).strip()
-    if not repetir_hasta:
-        return JSONResponse({"error": "Indica hasta cuándo se repite el evento."}, status_code=400)
-    if dominio.lunes_de_semana_iso(repetir_hasta) == "":
-        return JSONResponse(
-            {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}, status_code=400
-        )
-    if repetir_hasta < evento["fecha"]:
-        return JSONResponse(
-            {"error": "La fecha de fin debe ser igual o posterior a la del evento."},
-            status_code=400,
-        )
-    fechas = recurrencia.fechas_recurrencia(evento["fecha"], dias, repetir_hasta)
-    serie = repos.convertir_evento_en_serie(
-        evento_id,
-        fechas=fechas,
-        dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
-        repetir_hasta=repetir_hasta,
-    )
-    if serie is None:
-        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    return JSONResponse(serie, status_code=201)
+    status, cuerpo = await run_in_threadpool(_repetir_evento, evento_id, datos)
+    return JSONResponse(cuerpo, status_code=status)

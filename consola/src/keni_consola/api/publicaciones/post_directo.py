@@ -8,6 +8,7 @@ que sin generación: el copy ya lo trae el humano. Ver el docstring de `crear_po
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -88,13 +89,33 @@ async def crear_post_directo(request: Request) -> Response:
     if not redes_objetivo:
         redes_objetivo = list(redes.redes_de_formato("foto"))
 
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _crear_post_directo,
+        titulo=titulo,
+        marca=marca,
+        copy=copy,
+        redes_objetivo=redes_objetivo,
+        autor=autor,
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_post_directo(
+    *,
+    titulo: str,
+    marca: str,
+    copy: str,
+    redes_objetivo: list[str],
+    autor: dict | None,
+) -> tuple[int, dict]:
     item = repos.crear_publicacion(
         clase="contenido",
         titulo=titulo,
         marca=marca,
         prioridad="media",
         fecha_objetivo=hoy_utc().isoformat(),
-        autor=autor_de_peticion(request),
+        autor=autor,
         # «La lista» (reparto PULL, todas las marcas): la pieza nace LIBRE y el equipo la coge
         # desde «Por cubrir» (`responsable_automatico` → None; ver su docstring).
         responsable=auto_responsable.responsable_automatico(marca),
@@ -105,4 +126,4 @@ async def crear_post_directo(request: Request) -> Response:
         dom_publicaciones.crear_borrador_en(item["id"], marca, red, titulo=titulo, contenido=copy)
 
     plataformas = repos.listar_piezas_fila(item["id"])
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
+    return 200, {"contenido": _contenido_a_dict(item, plataformas)}

@@ -26,6 +26,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from keni_metricas import servicio
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -90,18 +91,21 @@ async def sugerir(request: Request) -> Response:
     if isinstance(rango_crudo, str) and rango_crudo in servicio.RANGOS_VALIDOS:
         rango = rango_crudo
 
+    cuerpo = await run_in_threadpool(_sugerir, marca, red, rango)
+    return JSONResponse(cuerpo)
+
+
+def _sugerir(marca: str, red: str, rango: str) -> dict:
     franjas = repos.listar_franjas()
     aplican = api_franjas.franjas_aplicables(franjas, marca, red)
     if not aplican:
-        return JSONResponse(
-            {
-                "sugerencia": None,
-                "motivo": (
-                    "No hay franjas configuradas para esta marca/red. "
-                    "Crea una franja horaria para poder sugerir un momento."
-                ),
-            }
-        )
+        return {
+            "sugerencia": None,
+            "motivo": (
+                "No hay franjas configuradas para esta marca/red. "
+                "Crea una franja horaria para poder sugerir un momento."
+            ),
+        }
 
     perfil = _perfil_dia_de_cache(marca, rango)
     sugerencia = planificacion.sugerir_mejor_hora(
@@ -111,13 +115,11 @@ async def sugerir(request: Request) -> Response:
         ocupados=_ocupados_programados(),
     )
     if sugerencia is None:
-        return JSONResponse(
-            {
-                "sugerencia": None,
-                "motivo": "No hay huecos libres próximos en las franjas de esta marca/red.",
-            }
-        )
-    return JSONResponse({"sugerencia": sugerencia.a_dict(), "motivo": ""})
+        return {
+            "sugerencia": None,
+            "motivo": "No hay huecos libres próximos en las franjas de esta marca/red.",
+        }
+    return {"sugerencia": sugerencia.a_dict(), "motivo": ""}
 
 
 RUTAS = [

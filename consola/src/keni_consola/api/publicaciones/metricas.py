@@ -2,23 +2,14 @@
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ._comun import _enfocar_items_por_marca, metricas_pieza, repos
 
 
-async def metricas(request: Request) -> Response:
-    """GET /api/publicaciones/metricas: rendimiento REAL por pieza publicada (Metricool).
-
-    Para cada fila por plataforma del tablero que tiene `id_post_metricool`, devuelve su
-    rendimiento (visualizaciones/interacciones/engagement) leido de la fuente activa
-    (Metricool de pago en prod; muestra en demo) y cacheado por pieza. La UI lo pinta en
-    cada tarjeta. Las filas sin `id_post_metricool` se omiten (la UI no muestra nada).
-
-    Forma: `{"metricas": {"<pieza.id>": {<MetricaPieza>, generado_en}}}`.
-    Acepta los mismos filtros que `GET /api/publicaciones` para acotar el universo.
-    """
+def _metricas(request: Request) -> dict:
     q = request.query_params
     items = repos.listar_publicacion(
         clase=q.get("clase") or None,
@@ -39,4 +30,19 @@ async def metricas(request: Request) -> Response:
         {"marca": it.get("marca", ""), "plataformas": por_contenido.get(it["id"], [])}
         for it in items
     ]
-    return JSONResponse({"metricas": metricas_pieza.rendimiento_de_tablero(contenidos)})
+    return {"metricas": metricas_pieza.rendimiento_de_tablero(contenidos)}
+
+
+async def metricas(request: Request) -> Response:
+    """GET /api/publicaciones/metricas: rendimiento REAL por pieza publicada (Metricool).
+
+    Para cada fila por plataforma del tablero que tiene `id_post_metricool`, devuelve su
+    rendimiento (visualizaciones/interacciones/engagement) leido de la fuente activa
+    (Metricool de pago en prod; muestra en demo) y cacheado por pieza. La UI lo pinta en
+    cada tarjeta. Las filas sin `id_post_metricool` se omiten (la UI no muestra nada).
+
+    Forma: `{"metricas": {"<pieza.id>": {<MetricaPieza>, generado_en}}}`.
+    Acepta los mismos filtros que `GET /api/publicaciones` para acotar el universo.
+    """
+    cuerpo = await run_in_threadpool(_metricas, request)
+    return JSONResponse(cuerpo)

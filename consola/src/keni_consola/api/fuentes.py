@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -80,29 +81,25 @@ async def listar(request: Request) -> Response:
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    cuerpo = await run_in_threadpool(_listar, tipo, marca)
+    return JSONResponse(cuerpo)
+
+
+def _listar(tipo: str | None, marca: str | None) -> dict:
     fuentes_rss = (
         repos.listar_fuentes_rss(marca=marca or None) if tipo in (None, "rss") else []
     )
-    return JSONResponse(
-        {
-            "fuentes": [_fuente_rss_a_hub(f) for f in fuentes_rss],
-            "tipos": list(_TIPOS_FUENTE),
-            "agencias": [agencias.estado_fuente(a) for a in ("reuters", "afp")],
-            "pendientes": agencias.fuentes_pendientes(),
-        }
-    )
+    return {
+        "fuentes": [_fuente_rss_a_hub(f) for f in fuentes_rss],
+        "tipos": list(_TIPOS_FUENTE),
+        "agencias": [agencias.estado_fuente(a) for a in ("reuters", "afp")],
+        "pendientes": agencias.fuentes_pendientes(),
+    }
 
 
-async def reactivar(request: Request) -> Response:
-    """`POST /api/fuentes/{id}/reactivar` -> reactiva un feed RSS auto-desactivado (Ola D).
-
-    Opera sobre `fuentes_rss` (la fuente de verdad del motor de ingesta): `activo=1`,
-    `desactivado_auto=0`, `errores_seguidos=0`, `proximo_sondeo=''` (reintentar YA). Idempotente.
-    404 si el feed no existe.
-    """
-    fuente_id = request.path_params["fuente_id"]
+def _reactivar(fuente_id: str) -> tuple[int, dict]:
     if repos.obtener_fuente_rss(fuente_id) is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+        return 404, {"error": "Esa fuente ya no existe."}
     fuente = repos.actualizar_fuente_rss(
         fuente_id,
         {
@@ -113,8 +110,20 @@ async def reactivar(request: Request) -> Response:
         },
     )
     if fuente is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    return JSONResponse({"fuente": fuente})
+        return 404, {"error": "Esa fuente ya no existe."}
+    return 200, {"fuente": fuente}
+
+
+async def reactivar(request: Request) -> Response:
+    """`POST /api/fuentes/{id}/reactivar` -> reactiva un feed RSS auto-desactivado (Ola D).
+
+    Opera sobre `fuentes_rss` (la fuente de verdad del motor de ingesta): `activo=1`,
+    `desactivado_auto=0`, `errores_seguidos=0`, `proximo_sondeo=''` (reintentar YA). Idempotente.
+    404 si el feed no existe.
+    """
+    fuente_id = request.path_params["fuente_id"]
+    status, cuerpo = await run_in_threadpool(_reactivar, fuente_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -137,16 +146,19 @@ async def listar_presets_handler(request: Request) -> Response:
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    cuerpo = await run_in_threadpool(_listar_presets, categoria, marca)
+    return JSONResponse(cuerpo)
+
+
+def _listar_presets(categoria: str | None, marca: str | None) -> dict:
     todos = fuentes_presets.listar_presets(categoria=categoria, marca=marca or None)
     urls = _urls_activas()
     for p in todos:
         p["activa"] = p.get("url", "") in urls
-    return JSONResponse(
-        {
-            "presets": todos,
-            "categorias": fuentes_presets.categorias(),
-        }
-    )
+    return {
+        "presets": todos,
+        "categorias": fuentes_presets.categorias(),
+    }
 
 
 async def activar_presets_handler(request: Request) -> Response:
@@ -177,6 +189,11 @@ async def activar_presets_handler(request: Request) -> Response:
     else:
         marca_override = None  # usar marca_sugerida del preset
 
+    respuesta = await run_in_threadpool(_activar_presets, ids_raw, marca_override)
+    return JSONResponse(respuesta)
+
+
+def _activar_presets(ids_raw: list, marca_override: str | None) -> dict[str, Any]:
     # URLs ya activas -> idempotencia.
     urls_activas = _urls_activas()
 
@@ -249,7 +266,7 @@ async def activar_presets_handler(request: Request) -> Response:
     }
     if errores:
         respuesta["errores"] = errores
-    return JSONResponse(respuesta)
+    return respuesta
 
 
 RUTAS = [

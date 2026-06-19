@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -86,22 +87,39 @@ async def listar(request: Request) -> Response:
         limite = _LIMITE_DEFECTO
     limite = max(1, min(limite, 500))
 
+    return JSONResponse(
+        await run_in_threadpool(
+            _listar,
+            plataforma,
+            nivel,
+            _flag(request, "solo_cambios"),
+            _flag(request, "incluir_archivadas"),
+            limite,
+        )
+    )
+
+
+def _listar(
+    plataforma: str | None,
+    nivel: str | None,
+    solo_cambios: bool,
+    incluir_archivadas: bool,
+    limite: int,
+) -> dict:
     noticias = repos.listar_noticias_algoritmo(
         plataforma=plataforma,
         nivel=nivel,
-        solo_cambios=_flag(request, "solo_cambios"),
-        incluir_archivadas=_flag(request, "incluir_archivadas"),
+        solo_cambios=solo_cambios,
+        incluir_archivadas=incluir_archivadas,
         limite=limite,
     )
     fuentes = repos.listar_fuentes_algoritmo()
-    return JSONResponse(
-        {
-            "noticias": [_noticia_a_dict(n) for n in noticias],
-            "fuentes": [_fuente_a_dict(f) for f in fuentes],
-            "pendientes": algoritmos.fuentes_pendientes(),
-            **_vocabulario(),
-        }
-    )
+    return {
+        "noticias": [_noticia_a_dict(n) for n in noticias],
+        "fuentes": [_fuente_a_dict(f) for f in fuentes],
+        "pendientes": algoritmos.fuentes_pendientes(),
+        **_vocabulario(),
+    }
 
 
 async def refrescar(request: Request) -> Response:
@@ -113,18 +131,25 @@ async def refrescar(request: Request) -> Response:
     datos = await leer_json(request)
     solo = datos.get("fuente")
     solo = solo.strip() if isinstance(solo, str) and solo.strip() else None
+    status, cuerpo = await run_in_threadpool(_refrescar, solo)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _refrescar(solo: str | None) -> tuple[int, dict]:
     if solo and repos.obtener_fuente_algoritmo(solo) is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+        return 404, {"error": "Esa fuente ya no existe."}
     resumen = algoritmos.refrescar(solo_fuente=solo)
-    return JSONResponse({"resumen": resumen})
+    return 200, {"resumen": resumen}
+
+
+def _inicializar() -> dict:
+    creadas = algoritmos.inicializar()
+    return {"creadas": [_fuente_a_dict(f) for f in creadas], "total": len(creadas)}
 
 
 async def inicializar(request: Request) -> Response:
     """POST /api/algoritmos/inicializar: crea las fuentes recomendadas que falten (idempotente)."""
-    creadas = algoritmos.inicializar()
-    return JSONResponse(
-        {"creadas": [_fuente_a_dict(f) for f in creadas], "total": len(creadas)}
-    )
+    return JSONResponse(await run_in_threadpool(_inicializar))
 
 
 def _validar_plataforma(valor: Any) -> tuple[str | None, str | None]:
@@ -162,52 +187,64 @@ async def crear_fuente(request: Request) -> Response:
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
 
-    fuente = repos.crear_fuente_algoritmo(nombre.strip(), url, plataforma=plataforma, tipo=tipo)
+    fuente = await run_in_threadpool(
+        repos.crear_fuente_algoritmo, nombre.strip(), url, plataforma=plataforma, tipo=tipo
+    )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
 
 
-async def actualizar_fuente(request: Request) -> Response:
-    """PUT /api/algoritmos/fuentes/{id}: edicion parcial `{nombre?,url?,plataforma?,tipo?,activo?}`."""
-    fuente_id = request.path_params["fuente_id"]
+def _actualizar_fuente(fuente_id: str, datos: dict) -> tuple[int, dict]:
     if repos.obtener_fuente_algoritmo(fuente_id) is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa fuente ya no existe."}
     campos: dict[str, Any] = {}
     if "nombre" in datos:
         nombre = datos.get("nombre")
         if not isinstance(nombre, str) or not nombre.strip():
-            return JSONResponse({"error": "El nombre de la fuente es obligatorio."}, status_code=400)
+            return 400, {"error": "El nombre de la fuente es obligatorio."}
         campos["nombre"] = nombre.strip()
     if "url" in datos:
         url, error = rss.validar_url(datos.get("url"))
         if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
+            return 400, {"error": error}
         campos["url"] = url
     if "plataforma" in datos:
         plataforma, error = _validar_plataforma(datos.get("plataforma"))
         if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
+            return 400, {"error": error}
         campos["plataforma"] = plataforma
     if "tipo" in datos:
         tipo, error = _validar_tipo(datos.get("tipo"))
         if error is not None:
-            return JSONResponse({"error": error}, status_code=400)
+            return 400, {"error": error}
         campos["tipo"] = tipo
     if "activo" in datos:
         campos["activo"] = bool(datos.get("activo"))
 
     fuente = repos.actualizar_fuente_algoritmo(fuente_id, campos)
     if fuente is None:
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    return JSONResponse({"fuente": _fuente_a_dict(fuente)})
+        return 404, {"error": "Esa fuente ya no existe."}
+    return 200, {"fuente": _fuente_a_dict(fuente)}
+
+
+async def actualizar_fuente(request: Request) -> Response:
+    """PUT /api/algoritmos/fuentes/{id}: edicion parcial `{nombre?,url?,plataforma?,tipo?,activo?}`."""
+    fuente_id = request.path_params["fuente_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_actualizar_fuente, fuente_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_fuente(fuente_id: str) -> tuple[int, dict]:
+    if not repos.borrar_fuente_algoritmo(fuente_id):
+        return 404, {"error": "Esa fuente ya no existe."}
+    return 200, {"mensaje": "Fuente borrada."}
 
 
 async def borrar_fuente(request: Request) -> Response:
     """DELETE /api/algoritmos/fuentes/{id}: baja de la fuente y sus noticias."""
     fuente_id = request.path_params["fuente_id"]
-    if not repos.borrar_fuente_algoritmo(fuente_id):
-        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Fuente borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar_fuente, fuente_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 async def a_texto(request: Request) -> Response:
@@ -218,29 +255,37 @@ async def a_texto(request: Request) -> Response:
     re-proponerla. Devuelve `{noticia, propuesta, plataforma}`.
     """
     noticia_id = request.path_params["noticia_id"]
+    status, cuerpo = await run_in_threadpool(_a_texto, noticia_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _a_texto(noticia_id: str) -> tuple[int, dict]:
     noticia = repos.obtener_noticia_algoritmo(noticia_id)
     if noticia is None:
-        return JSONResponse({"error": "Esa noticia ya no existe."}, status_code=404)
+        return 404, {"error": "Esa noticia ya no existe."}
     propuesta = algoritmos.texto_propuesta_ficha(noticia)
     actualizada = repos.marcar_noticia_algoritmo(noticia_id, aplicada=True)
-    return JSONResponse(
-        {
-            "noticia": _noticia_a_dict(actualizada or noticia),
-            "propuesta": propuesta,
-            "plataforma": noticia.get("plataforma", "general"),
-        }
-    )
+    return 200, {
+        "noticia": _noticia_a_dict(actualizada or noticia),
+        "propuesta": propuesta,
+        "plataforma": noticia.get("plataforma", "general"),
+    }
+
+
+def _archivar(noticia_id: str, archivada: bool) -> tuple[int, dict]:
+    if repos.obtener_noticia_algoritmo(noticia_id) is None:
+        return 404, {"error": "Esa noticia ya no existe."}
+    noticia = repos.marcar_noticia_algoritmo(noticia_id, archivada=archivada)
+    return 200, {"noticia": _noticia_a_dict(noticia) if noticia else None}
 
 
 async def archivar(request: Request) -> Response:
     """POST /api/algoritmos/{id}/archivar: archiva/desarchiva `{archivada?: true}`."""
     noticia_id = request.path_params["noticia_id"]
-    if repos.obtener_noticia_algoritmo(noticia_id) is None:
-        return JSONResponse({"error": "Esa noticia ya no existe."}, status_code=404)
     datos = await leer_json(request)
     archivada = datos.get("archivada", True)
-    noticia = repos.marcar_noticia_algoritmo(noticia_id, archivada=bool(archivada))
-    return JSONResponse({"noticia": _noticia_a_dict(noticia) if noticia else None})
+    status, cuerpo = await run_in_threadpool(_archivar, noticia_id, bool(archivada))
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

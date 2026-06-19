@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -57,7 +58,8 @@ async def obtener_config_franjas(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
-    return JSONResponse(repos.obtener_plantilla_franjas(marca or ""))
+    plantilla = await run_in_threadpool(repos.obtener_plantilla_franjas, marca or "")
+    return JSONResponse(plantilla)
 
 
 async def guardar_config_franjas(request: Request) -> Response:
@@ -132,7 +134,7 @@ async def guardar_config_franjas(request: Request) -> Response:
                 status_code=400,
             )
         limpias.append({"nombre": nombre, "inicio": inicio, "fin": fin})
-    plantilla = repos.guardar_plantilla_franjas(limpias, marca)
+    plantilla = await run_in_threadpool(repos.guardar_plantilla_franjas, limpias, marca)
     return JSONResponse(plantilla)
 
 
@@ -150,8 +152,13 @@ async def listar_franjas_de_semana(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
+    cuerpo = await run_in_threadpool(_listar_franjas_de_semana, lunes, marca)
+    return JSONResponse(cuerpo)
+
+
+def _listar_franjas_de_semana(lunes: str, marca: str | None) -> dict[str, Any]:
     franjas, _por_id = _franjas_de_semana(lunes, marca)
-    return JSONResponse({"franjas": [_franja_semana_a_dict(f) for f in franjas]})
+    return {"franjas": [_franja_semana_a_dict(f) for f in franjas]}
 
 
 async def crear_franja_de_semana(request: Request) -> Response:
@@ -199,8 +206,15 @@ async def crear_franja_de_semana(request: Request) -> Response:
         return JSONResponse(
             {"error": "`orden` debe ser un entero."}, status_code=400
         )
-    creada = repos.crear_franja_semana(
-        lunes, nombre, inicio, fin, orden=orden_int, es_descanso=es_descanso, marca=marca
+    creada = await run_in_threadpool(
+        repos.crear_franja_semana,
+        lunes,
+        nombre,
+        inicio,
+        fin,
+        orden=orden_int,
+        es_descanso=es_descanso,
+        marca=marca,
     )
     if creada is None:
         return JSONResponse(
@@ -250,7 +264,7 @@ async def actualizar_franja_de_semana(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica al menos un campo a editar."}, status_code=400
         )
-    actualizada = repos.actualizar_franja_semana(franja_id, campos)
+    actualizada = await run_in_threadpool(repos.actualizar_franja_semana, franja_id, campos)
     if actualizada is None:
         return JSONResponse(
             {"error": "La franja no existe o el cambio rompe la unicidad por nombre."},
@@ -275,27 +289,30 @@ async def listar_coordinacion_de_semana(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
+    cuerpo = await run_in_threadpool(_listar_coordinacion_de_semana, lunes, marca)
+    return JSONResponse(cuerpo)
+
+
+def _listar_coordinacion_de_semana(lunes: str, marca: str | None) -> dict[str, Any]:
     nombres = _nombres_equipo()
     coordinacion = repos.listar_coordinacion_semana(lunes, marca)
-    return JSONResponse(
-        {
-            "lunes": lunes,
-            "coordinacion": [
-                {
-                    "fecha": c["fecha"],
-                    "franja_id": c["franja_id"],
-                    "coordinador_id": c["coordinador_id"],
-                    "coordinador_nombre": nombres.get(c["coordinador_id"], ""),
-                    # GRID POR MARCA: la rejilla de la celda (la UI etiqueta en "Todas").
-                    "marca": c.get("marca", "") or "",
-                    "marca_nombre": (
-                        marcas.etiqueta_de(c["marca"]) if c.get("marca") else ""
-                    ),
-                }
-                for c in coordinacion
-            ],
-        }
-    )
+    return {
+        "lunes": lunes,
+        "coordinacion": [
+            {
+                "fecha": c["fecha"],
+                "franja_id": c["franja_id"],
+                "coordinador_id": c["coordinador_id"],
+                "coordinador_nombre": nombres.get(c["coordinador_id"], ""),
+                # GRID POR MARCA: la rejilla de la celda (la UI etiqueta en "Todas").
+                "marca": c.get("marca", "") or "",
+                "marca_nombre": (
+                    marcas.etiqueta_de(c["marca"]) if c.get("marca") else ""
+                ),
+            }
+            for c in coordinacion
+        ],
+    }
 
 
 def _candidato_a_coordinador(usuario_id: str) -> bool:
@@ -337,16 +354,22 @@ async def set_coordinador_de_celda(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica el `coordinador_id`."}, status_code=400
         )
+    status, cuerpo = await run_in_threadpool(
+        _set_coordinador_de_celda, lunes, fecha, franja_id, coordinador_id
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _set_coordinador_de_celda(
+    lunes: str, fecha: str, franja_id: str, coordinador_id: str
+) -> tuple[int, dict[str, Any]]:
     if not _candidato_a_coordinador(coordinador_id):
-        return JSONResponse(
-            {
-                "error": (
-                    "El usuario indicado no es candidato a coordinador "
-                    "(necesita `puede_coordinar=true`)."
-                )
-            },
-            status_code=400,
-        )
+        return 400, {
+            "error": (
+                "El usuario indicado no es candidato a coordinador "
+                "(necesita `puede_coordinar=true`)."
+            )
+        }
     # GRID POR MARCA: la celda hereda la marca de su franja (fuente de verdad de la rejilla).
     franja_def = repos.obtener_franja_semana(franja_id)
     marca_celda = (franja_def or {}).get("marca", "") or ""
@@ -354,18 +377,16 @@ async def set_coordinador_de_celda(request: Request) -> Response:
         lunes, fecha, franja_id, coordinador_id, marca_celda
     )
     nombres = _nombres_equipo()
-    return JSONResponse(
-        {
-            "fecha": registro["fecha"],
-            "franja_id": registro["franja_id"],
-            "coordinador_id": registro["coordinador_id"],
-            "coordinador_nombre": nombres.get(registro["coordinador_id"], ""),
-            "marca": registro.get("marca", "") or "",
-            "marca_nombre": (
-                marcas.etiqueta_de(registro["marca"]) if registro.get("marca") else ""
-            ),
-        }
-    )
+    return 200, {
+        "fecha": registro["fecha"],
+        "franja_id": registro["franja_id"],
+        "coordinador_id": registro["coordinador_id"],
+        "coordinador_nombre": nombres.get(registro["coordinador_id"], ""),
+        "marca": registro.get("marca", "") or "",
+        "marca_nombre": (
+            marcas.etiqueta_de(registro["marca"]) if registro.get("marca") else ""
+        ),
+    }
 
 
 async def quitar_coordinador_de_celda(request: Request) -> Response:
@@ -388,7 +409,7 @@ async def quitar_coordinador_de_celda(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica la `franja_id`."}, status_code=400
         )
-    borrado = repos.quitar_coordinador_rota(fecha, franja_id)
+    borrado = await run_in_threadpool(repos.quitar_coordinador_rota, fecha, franja_id)
     return JSONResponse({"ok": True, "borrado": borrado})
 
 
@@ -409,7 +430,7 @@ async def borrar_franja_de_semana(request: Request) -> Response:
         "sí",
         "si",
     )
-    resultado = repos.borrar_franja_semana(franja_id, forzar=forzar)
+    resultado = await run_in_threadpool(repos.borrar_franja_semana, franja_id, forzar=forzar)
     if not resultado["borrada"] and resultado["turnos_asociados"] > 0:
         return JSONResponse(
             {

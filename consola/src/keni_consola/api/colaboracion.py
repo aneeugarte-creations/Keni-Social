@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -68,12 +69,11 @@ def _cargo_de_peticion(request: Request) -> str:
     return ""
 
 
-def _puede_gestionar(request: Request, autor_id: str) -> bool:
+def _puede_gestionar(autor: dict | None, rol: str | None, autor_id: str) -> bool:
     """True si quien pide es el autor del recurso, un admin, o entro por token (mantenimiento)."""
-    autor = autor_de_peticion(request)
     if autor is None:  # token de bootstrap / sin sesion => mantenimiento
         return True
-    if _rol_de_peticion(request) == ROL_ADMIN:
+    if rol == ROL_ADMIN:
         return True
     return bool(autor_id) and autor.get("id") == autor_id
 
@@ -83,15 +83,51 @@ def _puede_gestionar(request: Request, autor_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
+def _listar_comentarios(publicacion_id: str, pieza_id: str | None) -> tuple[int, dict]:
+    if repos.obtener_publicacion(publicacion_id) is None:
+        return 404, {"error": "Ese contenido ya no existe."}
+    comentarios = repos.listar_comentarios(publicacion_id, pieza_id)
+    return 200, {"comentarios": comentarios, "total": len(comentarios)}
+
+
 async def listar_comentarios(request: Request) -> Response:
     """GET /api/publicaciones/{cid}/comentarios: hilo del item (filtro opcional por plataforma)."""
     publicacion_id = request.path_params["publicacion_id"]
-    if repos.obtener_publicacion(publicacion_id) is None:
-        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     # `?pieza_id=` presente (aunque vacio) filtra esa red; ausente = todo el hilo.
     pieza_id = request.query_params.get("pieza_id")
-    comentarios = repos.listar_comentarios(publicacion_id, pieza_id)
-    return JSONResponse({"comentarios": comentarios, "total": len(comentarios)})
+    status, cuerpo = await run_in_threadpool(_listar_comentarios, publicacion_id, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_comentario(
+    publicacion_id: str, datos: dict, autor: dict | None, menciones: list[str]
+) -> tuple[int, dict]:
+    contenido = repos.obtener_publicacion(publicacion_id)
+    if contenido is None:
+        return 404, {"error": "Ese contenido ya no existe."}
+    texto = datos.get("texto")
+    if not isinstance(texto, str) or not texto.strip():
+        return 400, {"error": "El comentario no puede estar vacío."}
+
+    pieza_id = datos.get("pieza_id", "") or ""
+    if not isinstance(pieza_id, str):
+        pieza_id = ""
+    pieza_id = pieza_id.strip()
+    if pieza_id:
+        plat = repos.obtener_pieza_fila(pieza_id)
+        if plat is None or plat.get("publicacion_id") != publicacion_id:
+            return 400, {"error": "Esa plataforma no es de este contenido."}
+
+    comentario = repos.crear_comentario(
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
+        texto=texto.strip()[:_MAX_TEXTO],
+        autor=autor,
+        menciones=menciones,
+    )
+    # Notificar (best-effort, ya envuelto en su propio try/except): nunca rompe el comentar.
+    notificaciones.tras_comentario(contenido, comentario, autor)
+    return 201, {"comentario": comentario}
 
 
 async def crear_comentario(request: Request) -> Response:
@@ -102,23 +138,7 @@ async def crear_comentario(request: Request) -> Response:
     suscritos a la pieza). Tras crear el comentario notificamos tambien al resto de interesados.
     """
     publicacion_id = request.path_params["publicacion_id"]
-    contenido = repos.obtener_publicacion(publicacion_id)
-    if contenido is None:
-        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     datos = await leer_json(request)
-    texto = datos.get("texto")
-    if not isinstance(texto, str) or not texto.strip():
-        return JSONResponse({"error": "El comentario no puede estar vacío."}, status_code=400)
-
-    pieza_id = datos.get("pieza_id", "") or ""
-    if not isinstance(pieza_id, str):
-        pieza_id = ""
-    pieza_id = pieza_id.strip()
-    if pieza_id:
-        plat = repos.obtener_pieza_fila(pieza_id)
-        if plat is None or plat.get("publicacion_id") != publicacion_id:
-            return JSONResponse({"error": "Esa plataforma no es de este contenido."}, status_code=400)
-
     # Menciones (@): ids de usuario unicos y no vacios (cap defensivo). El front los manda
     # resueltos por el autocompletado; aqui solo reparamos la forma.
     menciones_raw = datos.get("menciones")
@@ -127,58 +147,71 @@ async def crear_comentario(request: Request) -> Response:
         if isinstance(menciones_raw, list)
         else []
     )
-
     autor = autor_de_peticion(request)
-    comentario = repos.crear_comentario(
-        publicacion_id=publicacion_id,
-        pieza_id=pieza_id,
-        texto=texto.strip()[:_MAX_TEXTO],
-        autor=autor,
-        menciones=menciones,
+    status, cuerpo = await run_in_threadpool(
+        _crear_comentario, publicacion_id, datos, autor, menciones
     )
-    # Notificar (best-effort, ya envuelto en su propio try/except): nunca rompe el comentar.
-    notificaciones.tras_comentario(contenido, comentario, autor)
-    return JSONResponse({"comentario": comentario}, status_code=201)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar_comentario(request: Request) -> Response:
-    """PATCH /api/comentarios/{id}: edita texto y/o resuelto (solo autor o admin para el texto)."""
-    comentario_id = request.path_params["comentario_id"]
+def _actualizar_comentario(
+    comentario_id: str, datos: dict, autor: dict | None, rol: str | None
+) -> tuple[int, dict]:
     actual = repos.obtener_comentario(comentario_id)
     if actual is None:
-        return JSONResponse({"error": "Ese comentario ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Ese comentario ya no existe."}
     campos: dict[str, object] = {}
 
     if "texto" in datos:
         texto = datos.get("texto")
         if not isinstance(texto, str) or not texto.strip():
-            return JSONResponse({"error": "El comentario no puede estar vacío."}, status_code=400)
-        if not _puede_gestionar(request, actual.get("autor_id", "")):
-            return JSONResponse({"error": "Solo el autor puede editar su comentario."}, status_code=403)
+            return 400, {"error": "El comentario no puede estar vacío."}
+        if not _puede_gestionar(autor, rol, actual.get("autor_id", "")):
+            return 403, {"error": "Solo el autor puede editar su comentario."}
         campos["texto"] = texto.strip()[:_MAX_TEXTO]
     # Marcar resuelto/reabrir lo puede hacer cualquiera del equipo (es un estado del hilo).
     if "resuelto" in datos:
         campos["resuelto"] = bool(datos["resuelto"])
 
     if not campos:
-        return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
+        return 400, {"error": "Indica algún campo a actualizar."}
     actualizado = repos.actualizar_comentario(comentario_id, campos)
     if actualizado is None:
-        return JSONResponse({"error": "Ese comentario ya no existe."}, status_code=404)
-    return JSONResponse({"comentario": actualizado})
+        return 404, {"error": "Ese comentario ya no existe."}
+    return 200, {"comentario": actualizado}
+
+
+async def actualizar_comentario(request: Request) -> Response:
+    """PATCH /api/comentarios/{id}: edita texto y/o resuelto (solo autor o admin para el texto)."""
+    comentario_id = request.path_params["comentario_id"]
+    datos = await leer_json(request)
+    autor = autor_de_peticion(request)
+    rol = _rol_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _actualizar_comentario, comentario_id, datos, autor, rol
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_comentario(
+    comentario_id: str, autor: dict | None, rol: str | None
+) -> tuple[int, dict]:
+    actual = repos.obtener_comentario(comentario_id)
+    if actual is None:
+        return 404, {"error": "Ese comentario ya no existe."}
+    if not _puede_gestionar(autor, rol, actual.get("autor_id", "")):
+        return 403, {"error": "Solo el autor puede borrar su comentario."}
+    repos.borrar_comentario(comentario_id)
+    return 200, {"mensaje": "Comentario borrado."}
 
 
 async def borrar_comentario(request: Request) -> Response:
     """DELETE /api/comentarios/{id}: borra un comentario (solo autor o admin)."""
     comentario_id = request.path_params["comentario_id"]
-    actual = repos.obtener_comentario(comentario_id)
-    if actual is None:
-        return JSONResponse({"error": "Ese comentario ya no existe."}, status_code=404)
-    if not _puede_gestionar(request, actual.get("autor_id", "")):
-        return JSONResponse({"error": "Solo el autor puede borrar su comentario."}, status_code=403)
-    repos.borrar_comentario(comentario_id)
-    return JSONResponse({"mensaje": "Comentario borrado."})
+    autor = autor_de_peticion(request)
+    rol = _rol_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_borrar_comentario, comentario_id, autor, rol)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -186,14 +219,54 @@ async def borrar_comentario(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _listar_copy_versiones(pieza_id: str) -> tuple[int, dict]:
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa plataforma ya no existe."}
+    versiones = repos.listar_copy_versiones(pieza_id)
+    return 200, {
+        "versiones": versiones,
+        "total": len(versiones),
+        "copy_actual": plat.get("copy", ""),
+    }
+
+
 async def listar_copy_versiones(request: Request) -> Response:
     """GET /api/plataformas/{pid}/copy/versiones: historial (más reciente primero)."""
     pieza_id = request.path_params["pieza_id"]
+    status, cuerpo = await run_in_threadpool(_listar_copy_versiones, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _guardar_copy(pieza_id: str, datos: dict, autor: dict | None) -> tuple[int, dict]:
     plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    versiones = repos.listar_copy_versiones(pieza_id)
-    return JSONResponse({"versiones": versiones, "total": len(versiones), "copy_actual": plat.get("copy", "")})
+        return 404, {"error": "Esa plataforma ya no existe."}
+    nuevo = datos.get("copy")
+    if not isinstance(nuevo, str):
+        return 400, {"error": "El copy no es válido."}
+    nuevo = nuevo[:_MAX_TEXTO]
+    nota = datos.get("nota", "")
+    nota = nota.strip()[:_MAX_TEXTO] if isinstance(nota, str) else ""
+
+    anterior = plat.get("copy", "")
+    if nuevo == anterior:
+        return 200, {"plataforma": _plat_publica(plat), "version": None}
+
+    # Snapshot del texto que se va a pisar (autoria = quien hace el cambio).
+    version = repos.registrar_copy_version(
+        pieza_id=pieza_id,
+        publicacion_id=plat.get("publicacion_id", ""),
+        copy=anterior,
+        autor=autor,
+        nota=nota,
+    )
+    actualizada = repos.actualizar_pieza_fila(
+        pieza_id, {"copy": nuevo, "falta_copy": not bool(nuevo.strip())}
+    )
+    if actualizada is None:
+        return 404, {"error": "Esa plataforma ya no existe."}
+    return 200, {"plataforma": _plat_publica(actualizada), "version": version}
 
 
 async def guardar_copy(request: Request) -> Response:
@@ -204,35 +277,39 @@ async def guardar_copy(request: Request) -> Response:
     cambia, no hace nada (evita versiones duplicadas).
     """
     pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_guardar_copy, pieza_id, datos, autor)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _revertir_copy(pieza_id: str, datos: dict, autor: dict | None) -> tuple[int, dict]:
     plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    datos = await leer_json(request)
-    nuevo = datos.get("copy")
-    if not isinstance(nuevo, str):
-        return JSONResponse({"error": "El copy no es válido."}, status_code=400)
-    nuevo = nuevo[:_MAX_TEXTO]
-    nota = datos.get("nota", "")
-    nota = nota.strip()[:_MAX_TEXTO] if isinstance(nota, str) else ""
+        return 404, {"error": "Esa plataforma ya no existe."}
+    version_id = datos.get("version_id")
+    if not isinstance(version_id, str) or not version_id.strip():
+        return 400, {"error": "Indica la versión a revertir."}
+    version = repos.obtener_copy_version(version_id.strip())
+    if version is None or version.get("pieza_id") != pieza_id:
+        return 400, {"error": "Esa versión no es de esta plataforma."}
 
-    anterior = plat.get("copy", "")
-    if nuevo == anterior:
-        return JSONResponse({"plataforma": _plat_publica(plat), "version": None})
-
-    # Snapshot del texto que se va a pisar (autoria = quien hace el cambio).
-    version = repos.registrar_copy_version(
-        pieza_id=pieza_id,
-        publicacion_id=plat.get("publicacion_id", ""),
-        copy=anterior,
-        autor=autor_de_peticion(request),
-        nota=nota,
-    )
+    objetivo = version.get("copy", "")
+    actual = plat.get("copy", "")
+    if objetivo != actual:
+        repos.registrar_copy_version(
+            pieza_id=pieza_id,
+            publicacion_id=plat.get("publicacion_id", ""),
+            copy=actual,
+            autor=autor,
+            nota=f"Antes de revertir a la versión {version.get('version', '')}",
+        )
     actualizada = repos.actualizar_pieza_fila(
-        pieza_id, {"copy": nuevo, "falta_copy": not bool(nuevo.strip())}
+        pieza_id, {"copy": objetivo, "falta_copy": not bool(objetivo.strip())}
     )
     if actualizada is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    return JSONResponse({"plataforma": _plat_publica(actualizada), "version": version})
+        return 404, {"error": "Esa plataforma ya no existe."}
+    return 200, {"plataforma": _plat_publica(actualizada)}
 
 
 async def revertir_copy(request: Request) -> Response:
@@ -242,33 +319,10 @@ async def revertir_copy(request: Request) -> Response:
     texto de la versión elegida como copy actual. Así el historial crece sin huecos.
     """
     pieza_id = request.path_params["pieza_id"]
-    plat = repos.obtener_pieza_fila(pieza_id)
-    if plat is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     datos = await leer_json(request)
-    version_id = datos.get("version_id")
-    if not isinstance(version_id, str) or not version_id.strip():
-        return JSONResponse({"error": "Indica la versión a revertir."}, status_code=400)
-    version = repos.obtener_copy_version(version_id.strip())
-    if version is None or version.get("pieza_id") != pieza_id:
-        return JSONResponse({"error": "Esa versión no es de esta plataforma."}, status_code=400)
-
-    objetivo = version.get("copy", "")
-    actual = plat.get("copy", "")
-    if objetivo != actual:
-        repos.registrar_copy_version(
-            pieza_id=pieza_id,
-            publicacion_id=plat.get("publicacion_id", ""),
-            copy=actual,
-            autor=autor_de_peticion(request),
-            nota=f"Antes de revertir a la versión {version.get('version', '')}",
-        )
-    actualizada = repos.actualizar_pieza_fila(
-        pieza_id, {"copy": objetivo, "falta_copy": not bool(objetivo.strip())}
-    )
-    if actualizada is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    return JSONResponse({"plataforma": _plat_publica(actualizada)})
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_revertir_copy, pieza_id, datos, autor)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -305,12 +359,41 @@ def cadena_publica(pieza_id: str) -> dict[str, object]:
     return _cadena_publica(pieza_id)
 
 
+def _obtener_aprobacion_cadena(pieza_id: str) -> tuple[int, dict]:
+    if repos.obtener_pieza_fila(pieza_id) is None:
+        return 404, {"error": "Esa plataforma ya no existe."}
+    return 200, dict(_cadena_publica(pieza_id))
+
+
 async def obtener_aprobacion_cadena(request: Request) -> Response:
     """GET /api/plataformas/{pid}/aprobacion: la cadena de niveles y su estado global."""
     pieza_id = request.path_params["pieza_id"]
-    if repos.obtener_pieza_fila(pieza_id) is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    return JSONResponse(_cadena_publica(pieza_id))
+    status, cuerpo = await run_in_threadpool(_obtener_aprobacion_cadena, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_aprobacion_cadena(pieza_id: str, datos: dict) -> tuple[int, dict]:
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa plataforma ya no existe."}
+    etiquetas_raw = datos.get("etiquetas")
+    if etiquetas_raw is None:
+        etiquetas = list(CADENA_APROBACION_DEFECTO)
+    elif isinstance(etiquetas_raw, list):
+        etiquetas = [
+            e.strip()[:_MAX_ETIQUETA] for e in etiquetas_raw if isinstance(e, str) and e.strip()
+        ]
+    else:
+        return 400, {"error": "Las etiquetas no son válidas."}
+    if not etiquetas:
+        return 400, {"error": "La cadena necesita al menos un nivel."}
+    if len(etiquetas) > _MAX_NIVELES:
+        return 400, {"error": f"Demasiados niveles (máximo {_MAX_NIVELES})."}
+
+    # Cadena del TABLERO (recrear a mano): respeta el cargo del organigrama por nivel
+    # (item C: Coordinación→coordinador, Dirección→director).
+    montar_cadena_aprobacion(pieza_id, plat, etiquetas, con_cargos=True)
+    return 201, dict(_cadena_publica(pieza_id))
 
 
 async def crear_aprobacion_cadena(request: Request) -> Response:
@@ -321,30 +404,9 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
     decisiones (todos los niveles vuelven a `pendiente`).
     """
     pieza_id = request.path_params["pieza_id"]
-    plat = repos.obtener_pieza_fila(pieza_id)
-    if plat is None:
-        return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     datos = await leer_json(request)
-    etiquetas_raw = datos.get("etiquetas")
-    if etiquetas_raw is None:
-        etiquetas = list(CADENA_APROBACION_DEFECTO)
-    elif isinstance(etiquetas_raw, list):
-        etiquetas = [
-            e.strip()[:_MAX_ETIQUETA] for e in etiquetas_raw if isinstance(e, str) and e.strip()
-        ]
-    else:
-        return JSONResponse({"error": "Las etiquetas no son válidas."}, status_code=400)
-    if not etiquetas:
-        return JSONResponse({"error": "La cadena necesita al menos un nivel."}, status_code=400)
-    if len(etiquetas) > _MAX_NIVELES:
-        return JSONResponse(
-            {"error": f"Demasiados niveles (máximo {_MAX_NIVELES})."}, status_code=400
-        )
-
-    # Cadena del TABLERO (recrear a mano): respeta el cargo del organigrama por nivel
-    # (item C: Coordinación→coordinador, Dirección→director).
-    montar_cadena_aprobacion(pieza_id, plat, etiquetas, con_cargos=True)
-    return JSONResponse(_cadena_publica(pieza_id), status_code=201)
+    status, cuerpo = await run_in_threadpool(_crear_aprobacion_cadena, pieza_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def montar_cadena_aprobacion(
@@ -411,47 +473,42 @@ def _aplicar_preaprobacion_bajo_riesgo(
         repos.actualizar_aprobacion(nivel_id, campos)
 
 
-async def decidir_nivel(request: Request) -> Response:
-    """POST /api/aprobacion-nivel/{id}/decidir {decision, comentario?}: aprueba/rechaza un nivel.
-
-    Se decide POR ORDEN (solo el nivel pendiente más bajo). Un `rechazado` para la cadena.
-    Cuando todos los niveles quedan `aprobado` (los 2 OK), la pieza se auto-programa al próximo
-    hueco; mientras tanto sigue `en_revision` (ya no hay estado de reposo `aprobado`).
-    """
-    aprobacion_id = request.path_params["aprobacion_id"]
+def _decidir_nivel(
+    aprobacion_id: str,
+    decision: str,
+    comentario: str,
+    autor: dict | None,
+    rol: str | None,
+    cargo: str,
+) -> tuple[int, dict]:
     nivel = repos.obtener_aprobacion(aprobacion_id)
     if nivel is None:
-        return JSONResponse({"error": "Ese nivel de aprobación ya no existe."}, status_code=404)
+        return 404, {"error": "Ese nivel de aprobación ya no existe."}
     pieza_id = nivel.get("pieza_id", "")
     cadena = repos.listar_aprobaciones(pieza_id)
     plat = repos.obtener_pieza_fila(pieza_id)
 
-    datos = await leer_json(request)
-    decision = datos.get("decision")
-    comentario = datos.get("comentario", "")
-    comentario = comentario.strip()[:_MAX_TEXTO] if isinstance(comentario, str) else ""
-
     campos, error = colaboracion.decidir(
         nivel,
         cadena,
-        decision if isinstance(decision, str) else "",
-        autor_de_peticion(request),
-        rol=_rol_de_peticion(request),
+        decision,
+        autor,
+        rol=rol,
         comentario=comentario,
-        cargo_decisor=_cargo_de_peticion(request),
+        cargo_decisor=cargo,
     )
     if error is not None:
-        return JSONResponse({"error": error}, status_code=409)
+        return 409, {"error": error}
     actualizado = repos.actualizar_aprobacion(aprobacion_id, campos)
     if actualizado is None:
-        return JSONResponse({"error": "Ese nivel de aprobación ya no existe."}, status_code=404)
+        return 404, {"error": "Ese nivel de aprobación ya no existe."}
 
     # Notificar la decision recien aplicada (OK -> interesados + coordinador; rechazo ->
     # interesados). Best-effort: nunca rompe el OK/rechazo ya registrado.
     if plat is not None:
         contenido_padre = repos.obtener_publicacion(plat.get("publicacion_id", "") or "") or {}
         notificaciones.tras_decision(
-            plat, contenido_padre, actualizado.get("decision", ""), autor_de_peticion(request)
+            plat, contenido_padre, actualizado.get("decision", ""), autor
         )
 
     # Reflejar el estado GLOBAL de la cadena en la pieza y, si juntó los 2 OK, auto-programar.
@@ -475,9 +532,31 @@ async def decidir_nivel(request: Request) -> Response:
                 _log.exception(
                     "Auto-programación falló para %s (queda en revisión).", pieza_id
                 )
-    return JSONResponse(
-        {"nivel": actualizado, "estado": estado_global, "niveles": cadena}
+    return 200, {"nivel": actualizado, "estado": estado_global, "niveles": cadena}
+
+
+async def decidir_nivel(request: Request) -> Response:
+    """POST /api/aprobacion-nivel/{id}/decidir {decision, comentario?}: aprueba/rechaza un nivel.
+
+    Se decide POR ORDEN (solo el nivel pendiente más bajo). Un `rechazado` para la cadena.
+    Cuando todos los niveles quedan `aprobado` (los 2 OK), la pieza se auto-programa al próximo
+    hueco; mientras tanto sigue `en_revision` (ya no hay estado de reposo `aprobado`).
+    """
+    aprobacion_id = request.path_params["aprobacion_id"]
+    datos = await leer_json(request)
+    decision = datos.get("decision")
+    comentario = datos.get("comentario", "")
+    comentario = comentario.strip()[:_MAX_TEXTO] if isinstance(comentario, str) else ""
+    status, cuerpo = await run_in_threadpool(
+        _decidir_nivel,
+        aprobacion_id,
+        decision if isinstance(decision, str) else "",
+        comentario,
+        autor_de_peticion(request),
+        _rol_de_peticion(request),
+        _cargo_de_peticion(request),
     )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 def _plat_publica(plat: dict) -> dict:

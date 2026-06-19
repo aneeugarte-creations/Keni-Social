@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -106,50 +107,34 @@ def _clip_a_dict(item: dict[str, Any], estado_pieza: str) -> dict[str, Any]:
     }
 
 
-async def listar(request: Request) -> Response:
-    """GET /api/clips: clips volcados, recientes primero. Filtro: `marca`."""
-    marca = request.query_params.get("marca") or None
+def _listar(marca: str | None) -> dict:
     items = repos.listar_publicaciones_origenes([ORIGEN_CLIPS])
     if marca:
         items = [it for it in items if (it.get("marca") or "") == marca]
     items.sort(key=lambda it: it.get("creado") or "", reverse=True)
     estados = repos.estado_pieza_por_publicacion([it["id"] for it in items])
-    return JSONResponse(
-        {
-            "clips": [_clip_a_dict(it, estados.get(it["id"], "sin_pieza")) for it in items],
-            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
-        }
-    )
+    return {
+        "clips": [_clip_a_dict(it, estados.get(it["id"], "sin_pieza")) for it in items],
+        "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
+    }
 
 
-async def crear(request: Request) -> Response:
-    """POST /api/clips: vuelca el clip y genera su pieza (video o carrusel) en el feed.
+async def listar(request: Request) -> Response:
+    """GET /api/clips: clips volcados, recientes primero. Filtro: `marca`."""
+    marca = request.query_params.get("marca") or None
+    cuerpo = await run_in_threadpool(_listar, marca)
+    return JSONResponse(cuerpo)
 
-    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{clip, publicacion_id,
-    generacion}`. Crea el tema (`origen='clips'`), las filas por red de su formato (vídeo en
-    crudo, o portada con placa + slides) y lanza el copy EN SEGUNDO PLANO con el texto.
-    """
-    datos = await leer_json(request)
-    marca = datos.get("marca")
-    if not isinstance(marca, str) or not marcas.es_marca(marca.strip()):
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    marca = marca.strip()
-    texto = datos.get("texto")
-    if not isinstance(texto, str) or not texto.strip():
-        return JSONResponse(
-            {"error": "Pega el pie o el contexto del clip (es el material del copy)."},
-            status_code=400,
-        )
-    texto = texto.strip()[:_MAX_TEXTO]
-    formato, slides, error = _resolver_media(datos.get("media"))
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
 
-    titulo = _derivar_titulo(datos.get("titulo"), texto)
-    if not titulo:
-        return JSONResponse({"error": "El clip necesita un título."}, status_code=400)
-
-    autor = autor_de_peticion(request)
+def _crear(
+    *,
+    marca: str,
+    texto: str,
+    titulo: str,
+    formato: str,
+    slides: list[dict[str, str]],
+    autor: dict | None,
+) -> tuple[int, dict]:
     item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
@@ -211,24 +196,59 @@ async def crear(request: Request) -> Response:
         )
     except generaciones.ColaLlenaError:
         # El tema y su pieza YA existen (con su media); solo faltó encolar el copy.
-        return JSONResponse(
-            {
-                "error": (
-                    "El clip se guardó pero hay demasiadas generaciones en curso; "
-                    "lanza el copy desde la pieza del feed en unos segundos."
-                ),
-                "publicacion_id": item["id"],
-            },
-            status_code=429,
-        )
-
-    return JSONResponse(
-        {
-            "clip": _clip_a_dict(item, "generando"),
+        return 429, {
+            "error": (
+                "El clip se guardó pero hay demasiadas generaciones en curso; "
+                "lanza el copy desde la pieza del feed en unos segundos."
+            ),
             "publicacion_id": item["id"],
-            "generacion": gen,
         }
+
+    return 200, {
+        "clip": _clip_a_dict(item, "generando"),
+        "publicacion_id": item["id"],
+        "generacion": gen,
+    }
+
+
+async def crear(request: Request) -> Response:
+    """POST /api/clips: vuelca el clip y genera su pieza (video o carrusel) en el feed.
+
+    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{clip, publicacion_id,
+    generacion}`. Crea el tema (`origen='clips'`), las filas por red de su formato (vídeo en
+    crudo, o portada con placa + slides) y lanza el copy EN SEGUNDO PLANO con el texto.
+    """
+    datos = await leer_json(request)
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or not marcas.es_marca(marca.strip()):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    marca = marca.strip()
+    texto = datos.get("texto")
+    if not isinstance(texto, str) or not texto.strip():
+        return JSONResponse(
+            {"error": "Pega el pie o el contexto del clip (es el material del copy)."},
+            status_code=400,
+        )
+    texto = texto.strip()[:_MAX_TEXTO]
+    formato, slides, error = _resolver_media(datos.get("media"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+
+    titulo = _derivar_titulo(datos.get("titulo"), texto)
+    if not titulo:
+        return JSONResponse({"error": "El clip necesita un título."}, status_code=400)
+
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _crear,
+        marca=marca,
+        texto=texto,
+        titulo=titulo,
+        formato=formato,
+        slides=slides,
+        autor=autor,
     )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

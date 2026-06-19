@@ -21,6 +21,7 @@ dueño cuando exista el tag de marca; no se sobre-restringe aqui para no romper 
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -242,10 +243,21 @@ async def generar(request: Request) -> Response:
         )
     prompt = prompt.strip()
 
-    # Pieza a la que pertenece (opcional): `publicacion_id` directo o vía `pieza_id`. De ella
-    # sacamos marca y título para correlacionar la generación con el pipeline de la pieza.
     publicacion_id = str(datos.get("publicacion_id") or "").strip()
     pieza_id = str(datos.get("pieza_id") or "").strip()
+    cuerpo = await run_in_threadpool(
+        _generar,
+        prompt=prompt,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
+        autor=autor_de_peticion(request) or {},
+    )
+    return JSONResponse(cuerpo)
+
+
+def _generar(*, prompt: str, publicacion_id: str, pieza_id: str, autor: dict) -> dict:
+    # Pieza a la que pertenece (opcional): `publicacion_id` directo o vía `pieza_id`. De ella
+    # sacamos marca y título para correlacionar la generación con el pipeline de la pieza.
     marca, titulo_pieza = "", ""
     if not publicacion_id and pieza_id:
         pub = repos.obtener_pieza(pieza_id)
@@ -261,9 +273,9 @@ async def generar(request: Request) -> Response:
     # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
     gen = lanzar_generacion_imagen(
         prompt=prompt, marca=marca, publicacion_id=publicacion_id,
-        titulo=titulo_pieza, autor=autor_de_peticion(request) or {},
+        titulo=titulo_pieza, autor=autor,
     )
-    return JSONResponse({"generacion": gen})
+    return {"generacion": gen}
 
 
 async def desde_url(request: Request) -> Response:

@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -117,20 +118,71 @@ async def listar(request: Request) -> Response:
     (substring por nombre, en memoria). Devuelve `{activos: [...]}`.
     """
     q = request.query_params
+    cuerpo = await run_in_threadpool(
+        _listar,
+        q.get("marca") or None,
+        q.get("tipo") or None,
+        (q.get("linea") or "").strip(),
+        (q.get("q") or "").strip(),
+    )
+    return JSONResponse(cuerpo)
+
+
+def _listar(marca: str | None, tipo: str | None, linea: str, busqueda: str) -> dict:
     activos = [
         _activo_a_dict(item)
         for item in repos.listar_marca_activos(
-            marca=q.get("marca") or None,
-            tipo=q.get("tipo") or None,
+            marca=marca,
+            tipo=tipo,
         )
     ]
-    linea = (q.get("linea") or "").strip()
     if linea:
         activos = [a for a in activos if linea in a.get("lineas", [])]
-    busqueda = (q.get("q") or "").strip()
     if busqueda:
         activos = [a for a in activos if _coincide_busqueda(a, busqueda)]
-    return JSONResponse({"activos": activos})
+    return {"activos": activos}
+
+
+def _crear(
+    *,
+    tipo: str,
+    objeto: str,
+    marca_cruda: object,
+    metadatos_crudos: object,
+    nombre_crudo: object,
+    lineas_crudas: object,
+    autor: dict | None,
+) -> tuple[int, dict]:
+    if tipo not in _TIPOS_SIN_OBJETO:
+        if not objeto:
+            return 400, {"error": "Falta el archivo del activo."}
+        if media.leer_media(objeto) is None:
+            return 400, {"error": "Ese archivo no existe en el almacén."}
+        # Un activo de marca (logo/tipografía/pleca) es REUSABLE: lo promovemos a la carpeta
+        # `logos/`. Así, al limpiar `fotos/` a mano, el logo (en otra carpeta) no se toca.
+        objeto = almacen_media.promover_objeto(objeto, "logos")
+
+    marca, err = _validar_marca(marca_cruda)
+    if err:
+        return 400, {"error": err}
+
+    metadatos, err = _metadatos_json(metadatos_crudos)
+    if err:
+        return 400, {"error": err}
+
+    nombre = (nombre_crudo or "").strip()[:_MAX_NOMBRE]
+    lineas = _normalizar_lineas(lineas_crudas)
+
+    activo = repos.crear_marca_activo(
+        marca=marca or "",
+        tipo=tipo,
+        nombre=nombre,
+        objeto=objeto,
+        metadatos=metadatos,
+        lineas=json.dumps(lineas, ensure_ascii=False),
+        autor=autor,
+    )
+    return 200, {"activo": _activo_a_dict(activo)}
 
 
 async def crear(request: Request) -> Response:
@@ -149,36 +201,25 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": "Tipo de activo no válido."}, status_code=400)
 
     objeto = (datos.get("objeto") or "").strip() if isinstance(datos.get("objeto"), str) else ""
-    if tipo not in _TIPOS_SIN_OBJETO:
-        if not objeto:
-            return JSONResponse({"error": "Falta el archivo del activo."}, status_code=400)
-        if media.leer_media(objeto) is None:
-            return JSONResponse({"error": "Ese archivo no existe en el almacén."}, status_code=400)
-        # Un activo de marca (logo/tipografía/pleca) es REUSABLE: lo promovemos a la carpeta
-        # `logos/`. Así, al limpiar `fotos/` a mano, el logo (en otra carpeta) no se toca.
-        objeto = almacen_media.promover_objeto(objeto, "logos")
 
-    marca, err = _validar_marca(datos.get("marca"))
-    if err:
-        return JSONResponse({"error": err}, status_code=400)
-
-    metadatos, err = _metadatos_json(datos.get("metadatos"))
-    if err:
-        return JSONResponse({"error": err}, status_code=400)
-
-    nombre = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
-    lineas = _normalizar_lineas(datos.get("lineas"))
-
-    activo = repos.crear_marca_activo(
-        marca=marca or "",
+    status, cuerpo = await run_in_threadpool(
+        _crear,
         tipo=tipo,
-        nombre=nombre,
         objeto=objeto,
-        metadatos=metadatos,
-        lineas=json.dumps(lineas, ensure_ascii=False),
+        marca_cruda=datos.get("marca"),
+        metadatos_crudos=datos.get("metadatos"),
+        nombre_crudo=datos.get("nombre"),
+        lineas_crudas=datos.get("lineas"),
         autor=autor_de_peticion(request),
     )
-    return JSONResponse({"activo": _activo_a_dict(activo)})
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar(activo_id: str, campos: dict) -> tuple[int, dict]:
+    activo = repos.actualizar_marca_activo(activo_id, campos)
+    if activo is None:
+        return 404, {"error": "Ese activo no existe."}
+    return 200, {"activo": _activo_a_dict(activo)}
 
 
 async def actualizar(request: Request) -> Response:
@@ -205,26 +246,30 @@ async def actualizar(request: Request) -> Response:
     if "aprobado" in datos:
         campos["aprobado"] = bool(datos["aprobado"])
 
-    activo = repos.actualizar_marca_activo(activo_id, campos)
-    if activo is None:
-        return JSONResponse({"error": "Ese activo no existe."}, status_code=404)
-    return JSONResponse({"activo": _activo_a_dict(activo)})
+    status, cuerpo = await run_in_threadpool(_actualizar, activo_id, campos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def borrar(request: Request) -> Response:
-    """DELETE /api/marca-activos/{id}: descataloga. Con `?purgar=1` borra el binario. -> `{mensaje}` | 404."""
-    activo_id = request.path_params["activo_id"]
+def _borrar(activo_id: str, purgar: bool) -> tuple[int, dict]:
     item = repos.borrar_marca_activo(activo_id)
     if item is None:
-        return JSONResponse({"error": "Ese activo ya no está catalogado."}, status_code=404)
+        return 404, {"error": "Ese activo ya no está catalogado."}
 
-    if request.query_params.get("purgar") == "1" and item.get("objeto"):
+    if purgar and item.get("objeto"):
         try:
             almacen_media.borrar_objeto(item["objeto"])
         except Exception:  # noqa: BLE001 -- el descatalogado ya esta hecho; purgar es best-effort
             _log.exception("No se pudo purgar el binario del activo %r.", item.get("objeto"))
 
-    return JSONResponse({"mensaje": "Activo quitado."})
+    return 200, {"mensaje": "Activo quitado."}
+
+
+async def borrar(request: Request) -> Response:
+    """DELETE /api/marca-activos/{id}: descataloga. Con `?purgar=1` borra el binario. -> `{mensaje}` | 404."""
+    activo_id = request.path_params["activo_id"]
+    purgar = request.query_params.get("purgar") == "1"
+    status, cuerpo = await run_in_threadpool(_borrar, activo_id, purgar)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [

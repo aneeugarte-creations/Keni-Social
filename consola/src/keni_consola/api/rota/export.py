@@ -5,6 +5,7 @@ import csv
 import io
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -146,7 +147,7 @@ async def export_csv(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
-    _, filas = _filas_export(lunes, marca)
+    _, filas = await run_in_threadpool(_filas_export, lunes, marca)
     buffer = io.StringIO()
     escritor = csv.writer(buffer)
     escritor.writerow(_CABECERAS_EXPORT)
@@ -170,7 +171,7 @@ async def export_xlsx(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
-    titulo, filas = _filas_export(lunes, marca)
+    titulo, filas = await run_in_threadpool(_filas_export, lunes, marca)
     try:
         import xlsxwriter
     except ImportError:
@@ -197,7 +198,7 @@ async def export_xlsx(request: Request) -> Response:
         hoja.set_column(col, col, ancho)
 
     # Hoja 2: horario de trabajo del equipo (grid persona×día) — gestión de turnos.
-    titulo_h, cabeceras_h, filas_h = _grid_horario(lunes, marca)
+    titulo_h, cabeceras_h, filas_h = await run_in_threadpool(_grid_horario, lunes, marca)
     hoja_h = libro.add_worksheet("Horario equipo")
     hoja_h.write(0, 0, titulo_h, fmt_titulo)
     for col, encabezado in enumerate(cabeceras_h):

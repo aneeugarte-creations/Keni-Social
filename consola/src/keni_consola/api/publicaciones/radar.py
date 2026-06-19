@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -56,6 +57,33 @@ async def desde_radar(request: Request) -> Response:
     except (TypeError, ValueError):
         senal_viralidad = 0
 
+    generar_copy = datos.get("generar", True)
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _desde_radar,
+        titulo=titulo,
+        descripcion=descripcion,
+        marca=marca,
+        prioridad=prioridad,
+        redes_iniciales=redes_iniciales,
+        senal_viralidad=senal_viralidad,
+        generar_copy=generar_copy,
+        autor=autor,
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _desde_radar(
+    *,
+    titulo: str,
+    descripcion: str,
+    marca: str,
+    prioridad: str,
+    redes_iniciales: list[str],
+    senal_viralidad: int,
+    generar_copy: object,
+    autor: dict | None,
+) -> tuple[int, dict]:
     item = repos.crear_publicacion(
         clase="contenido",
         flujo="importante",
@@ -64,7 +92,7 @@ async def desde_radar(request: Request) -> Response:
         marca=marca,
         prioridad=prioridad,
         fecha_objetivo=hoy_utc().isoformat(),
-        autor=autor_de_peticion(request),
+        autor=autor,
         origen="radar",
         # El tema viene de una FUENTE (Radar), no de arte propio: tipo "fuente" (item E).
         tipo_contenido="fuente",
@@ -83,7 +111,6 @@ async def desde_radar(request: Request) -> Response:
     # encola un `claude -p` cuyo borrador cuelga del tema. GATEADO por marca (sin marca no
     # hay voz) y por el flag `generar` del cuerpo (def True). Es BEST-EFFORT: si la skill o
     # la cola fallan, NO rompe la promocion (queda el copy manual como fallback).
-    generar_copy = datos.get("generar", True)
     genero = False
     if marca and generar_copy:
         try:
@@ -92,6 +119,4 @@ async def desde_radar(request: Request) -> Response:
             genero = False
 
     plataformas = repos.listar_piezas_fila(item["id"])
-    return JSONResponse(
-        {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}
-    )
+    return 200, {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}

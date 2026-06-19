@@ -30,7 +30,7 @@ async def integrar_foto(request: Request) -> Response:
     from ...dominio import estudio_imagen
 
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
+    pub = await run_in_threadpool(repos.obtener_pieza, pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
@@ -74,7 +74,7 @@ async def aplicar_plantilla(request: Request) -> Response:
     from ...dominio import estudio_imagen
 
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
+    pub = await run_in_threadpool(repos.obtener_pieza, pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
@@ -83,7 +83,7 @@ async def aplicar_plantilla(request: Request) -> Response:
     if not isinstance(plantilla_id, str) or not plantilla_id.strip():
         return JSONResponse({"error": "Falta la plantilla a aplicar."}, status_code=400)
     plantilla_id = plantilla_id.strip()
-    plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+    plantilla = await run_in_threadpool(repos.obtener_plantilla_diseno, plantilla_id)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
 
@@ -111,7 +111,8 @@ async def aplicar_plantilla(request: Request) -> Response:
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    actualizada = repos.actualizar_pieza(
+    actualizada = await run_in_threadpool(
+        repos.actualizar_pieza,
         pieza_id,
         {
             # `imagen` vacío: la composición se deriva de la receta y se sirve por `/compuesta`.
@@ -145,7 +146,7 @@ async def componer_slide(request: Request) -> Response:
     from ...dominio import estudio_imagen, render_pieza
 
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
+    pub = await run_in_threadpool(repos.obtener_pieza, pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
@@ -165,7 +166,7 @@ async def componer_slide(request: Request) -> Response:
     plantilla: dict | None = None
     if not sin_plantilla:
         if plantilla_id:
-            plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+            plantilla = await run_in_threadpool(repos.obtener_plantilla_diseno, plantilla_id)
             if plantilla is None:
                 return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
         else:
@@ -220,7 +221,7 @@ async def compuesta(request: Request) -> Response:
     from ...dominio import estudio_imagen, render_pieza
 
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
+    pub = await run_in_threadpool(repos.obtener_pieza, pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 

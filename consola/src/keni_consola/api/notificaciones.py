@@ -16,6 +16,7 @@ ENDPOINTS
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -36,21 +37,24 @@ def _marca(request: Request) -> str | None:
     return marca or None
 
 
+def _listar(usuario_id: str, marca_id: str | None) -> dict:
+    notificaciones = repos.listar_notificaciones(usuario_id, marca_id)
+    no_leidas = repos.contar_notificaciones_no_leidas(usuario_id, marca_id)
+    return {
+        "notificaciones": notificaciones,
+        "no_leidas": no_leidas,
+        "total": len(notificaciones),
+    }
+
+
 async def listar(request: Request) -> Response:
     """GET /api/notificaciones: buzon del usuario (acotado a la marca activa) + no_leidas."""
     usuario_id = _usuario_id(request)
     if not usuario_id:
         return JSONResponse({"notificaciones": [], "no_leidas": 0, "total": 0})
     marca_id = _marca(request)
-    notificaciones = repos.listar_notificaciones(usuario_id, marca_id)
-    no_leidas = repos.contar_notificaciones_no_leidas(usuario_id, marca_id)
-    return JSONResponse(
-        {
-            "notificaciones": notificaciones,
-            "no_leidas": no_leidas,
-            "total": len(notificaciones),
-        }
-    )
+    cuerpo = await run_in_threadpool(_listar, usuario_id, marca_id)
+    return JSONResponse(cuerpo)
 
 
 async def contador(request: Request) -> Response:
@@ -58,7 +62,9 @@ async def contador(request: Request) -> Response:
     usuario_id = _usuario_id(request)
     if not usuario_id:
         return JSONResponse({"no_leidas": 0})
-    no_leidas = repos.contar_notificaciones_no_leidas(usuario_id, _marca(request))
+    no_leidas = await run_in_threadpool(
+        repos.contar_notificaciones_no_leidas, usuario_id, _marca(request)
+    )
     return JSONResponse({"no_leidas": no_leidas})
 
 
@@ -68,7 +74,7 @@ async def marcar_leida(request: Request) -> Response:
     if not usuario_id:
         return JSONResponse({"error": "Sin sesión."}, status_code=401)
     notificacion_id = request.path_params["notificacion_id"]
-    repos.marcar_notificacion_leida(notificacion_id, usuario_id)
+    await run_in_threadpool(repos.marcar_notificacion_leida, notificacion_id, usuario_id)
     return JSONResponse({"ok": True})
 
 
@@ -77,8 +83,23 @@ async def marcar_todas_leidas(request: Request) -> Response:
     usuario_id = _usuario_id(request)
     if not usuario_id:
         return JSONResponse({"error": "Sin sesión."}, status_code=401)
-    marcadas = repos.marcar_notificaciones_leidas(usuario_id, _marca(request))
+    marcadas = await run_in_threadpool(
+        repos.marcar_notificaciones_leidas, usuario_id, _marca(request)
+    )
     return JSONResponse({"marcadas": marcadas})
+
+
+def _menciones_candidatos(usuario_id: str, marca_id: str | None) -> dict:
+    candidatos = [
+        {
+            "id": u["id"],
+            "nombre": (u.get("nombre") or "").strip() or u.get("usuario", ""),
+            "usuario": u.get("usuario", ""),
+        }
+        for u in auth.listar_usuarios()
+        if u["id"] != usuario_id and (not marca_id or marca_id in (u.get("marcas") or []))
+    ]
+    return {"usuarios": candidatos}
 
 
 async def menciones_candidatos(request: Request) -> Response:
@@ -92,16 +113,8 @@ async def menciones_candidatos(request: Request) -> Response:
     if not usuario_id:
         return JSONResponse({"usuarios": []})
     marca_id = _marca(request)
-    candidatos = [
-        {
-            "id": u["id"],
-            "nombre": (u.get("nombre") or "").strip() or u.get("usuario", ""),
-            "usuario": u.get("usuario", ""),
-        }
-        for u in auth.listar_usuarios()
-        if u["id"] != usuario_id and (not marca_id or marca_id in (u.get("marcas") or []))
-    ]
-    return JSONResponse({"usuarios": candidatos})
+    cuerpo = await run_in_threadpool(_menciones_candidatos, usuario_id, marca_id)
+    return JSONResponse(cuerpo)
 
 
 RUTAS = [

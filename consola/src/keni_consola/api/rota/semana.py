@@ -1,6 +1,9 @@
 """API Rota · copia de semana + panel de carga por miembro."""
 from __future__ import annotations
 
+from typing import Any
+
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -37,7 +40,9 @@ async def copiar_semana(request: Request) -> Response:
     if error is not None:
         return error
 
-    n = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar, marca=marca)
+    n = await run_in_threadpool(
+        repos.copiar_turnos_rota, de_lunes, a_lunes, reemplazar=reemplazar, marca=marca
+    )
     return JSONResponse({"copiados": n})
 
 
@@ -59,6 +64,11 @@ async def carga_semana(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
+    cuerpo = await run_in_threadpool(_carga_semana, lunes, marca)
+    return JSONResponse(cuerpo)
+
+
+def _carga_semana(lunes: str, marca: str | None) -> dict[str, Any]:
     equipo = _equipo()
     turnos = repos.listar_turnos_rota(semana=lunes, marca=marca)
     inicio, fin = dominio.rango_semana(lunes)
@@ -71,19 +81,17 @@ async def carga_semana(request: Request) -> Response:
         franjas_lista,
         lunes_iso=lunes,
     )
-    return JSONResponse(
-        {
-            "lunes": lunes,
-            "miembros": [
-                {
-                    "miembro_id": c.miembro_id,
-                    "nombre": c.nombre,
-                    "eventos": c.eventos,
-                    "dias_trabajados": c.dias_trabajados,
-                    "sabado": c.sabado,
-                    "descansos": c.descansos,
-                }
-                for c in cargas
-            ],
-        }
-    )
+    return {
+        "lunes": lunes,
+        "miembros": [
+            {
+                "miembro_id": c.miembro_id,
+                "nombre": c.nombre,
+                "eventos": c.eventos,
+                "dias_trabajados": c.dias_trabajados,
+                "sabado": c.sabado,
+                "descansos": c.descansos,
+            }
+            for c in cargas
+        ],
+    }

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -21,7 +22,9 @@ _MSG_SOLO_DUENO = (
 )
 
 
-def _puede_gestionar_ausencia(request: Request, miembro_id: str) -> bool:
+def _puede_gestionar_ausencia(
+    usuario: dict[str, Any] | None, es_admin: bool, miembro_id: str
+) -> bool:
     """¿La petición puede crear/editar/borrar una ausencia de `miembro_id`?
 
     Frontera de permisos (auditoría Turnos jun-2026): el agujero era que cualquier editor
@@ -32,10 +35,9 @@ def _puede_gestionar_ausencia(request: Request, miembro_id: str) -> bool:
     Honra "capacidad, no dependencia": cada quien gestiona LO SUYO sin pedir permiso, y el
     admin/coordinador la de cualquiera; nadie toca la de otro.
     """
-    usuario = _usuario_actual(request)
     if usuario is None:  # entró por el token de mantenimiento
         return True
-    return usuario["id"] == miembro_id or _es_admin(request)
+    return usuario["id"] == miembro_id or es_admin
 
 
 def _turnos_descubiertos(miembro_id: str, desde: str, hasta: str) -> list[dict[str, str]]:
@@ -84,7 +86,11 @@ def _turnos_descubiertos(miembro_id: str, desde: str, hasta: str) -> list[dict[s
 
 
 def _avisar_huecos(
-    request: Request, miembro_id: str, nombres: dict[str, str], desde: str, hasta: str
+    actor: dict[str, Any] | None,
+    miembro_id: str,
+    nombres: dict[str, str],
+    desde: str,
+    hasta: str,
 ) -> list[dict[str, str]]:
     """Calcula los turnos que la ausencia deja sin cubrir y, si los hay, avisa a los admin
     en la campana. Devuelve los `conflictos` (forma pública) para la respuesta de la API.
@@ -95,7 +101,7 @@ def _avisar_huecos(
             miembro_nombre=nombres.get(miembro_id, ""),
             n_huecos=len(descubiertos),
             marcas={t["marca"] for t in descubiertos},
-            actor=_usuario_actual(request),
+            actor=actor,
         )
     return [{"fecha": t["fecha"], "franja": t["franja"]} for t in descubiertos]
 
@@ -140,42 +146,38 @@ def _ausencia_que_cubre(miembro_id: str, fecha_iso: str) -> dict[str, Any] | Non
     return candidatos[0] if candidatos else None
 
 
+def _listar_ausencias(miembro_id: str | None) -> dict[str, Any]:
+    nombres = _nombres_equipo()
+    ausencias = repos.listar_ausencias_rota(miembro_id=miembro_id)
+    return {"ausencias": [_ausencia_a_dict(a, nombres) for a in ausencias]}
+
+
 async def listar_ausencias(request: Request) -> Response:
     """GET /api/rota/ausencias[?miembro_id]: vacaciones/ausencias registradas."""
     miembro_id = (request.query_params.get("miembro_id") or "").strip() or None
-    nombres = _nombres_equipo()
-    ausencias = repos.listar_ausencias_rota(miembro_id=miembro_id)
-    return JSONResponse(
-        {"ausencias": [_ausencia_a_dict(a, nombres) for a in ausencias]}
-    )
+    cuerpo = await run_in_threadpool(_listar_ausencias, miembro_id)
+    return JSONResponse(cuerpo)
 
 
-async def crear_ausencia(request: Request) -> Response:
-    """POST /api/rota/ausencias: registra una vacacion/ausencia (rango inclusivo)."""
-    datos = await leer_json(request)
+def _crear_ausencia(
+    datos: dict[str, Any], usuario: dict[str, Any] | None, es_admin: bool
+) -> tuple[int, dict[str, Any]]:
     nombres = _nombres_equipo()
     miembro_id = datos.get("miembro_id")
     if not isinstance(miembro_id, str) or miembro_id not in nombres:
-        return JSONResponse(
-            {"error": "Indica un miembro del equipo válido."}, status_code=400
-        )
-    if not _puede_gestionar_ausencia(request, miembro_id):
-        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
+        return 400, {"error": "Indica un miembro del equipo válido."}
+    if not _puede_gestionar_ausencia(usuario, es_admin, miembro_id):
+        return 403, {"error": _MSG_SOLO_DUENO}
     desde = str(datos.get("desde", "")).strip()
     hasta = str(datos.get("hasta", "")).strip()
     if not _fecha_valida(desde) or not _fecha_valida(hasta):
-        return JSONResponse(
-            {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}, status_code=400
-        )
+        return 400, {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}
     if hasta < desde:
-        return JSONResponse(
-            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
-            status_code=400,
-        )
+        return 400, {"error": "La fecha de fin no puede ser anterior a la de inicio."}
     tipo = str(datos.get("tipo", "otro")).strip() or "otro"
     if tipo not in TIPOS_AUSENCIA:
         validos = " o ".join(f'"{t}"' for t in TIPOS_AUSENCIA)
-        return JSONResponse({"error": f"Tipo inválido. Usa {validos}."}, status_code=400)
+        return 400, {"error": f"Tipo inválido. Usa {validos}."}
     ausencia = repos.crear_ausencia_rota(
         miembro_id,
         desde,
@@ -184,40 +186,45 @@ async def crear_ausencia(request: Request) -> Response:
         tipo=tipo,
         motivo=str(datos.get("motivo", "")).strip(),
     )
-    return JSONResponse(
-        {
-            "ausencia": _ausencia_a_dict(ausencia, nombres),
-            # Aviso (no bloqueo): turnos que esta ausencia deja descubiertos (+ campana al admin).
-            "conflictos": _avisar_huecos(request, miembro_id, nombres, desde, hasta),
-        },
-        status_code=201,
-    )
+    return 201, {
+        "ausencia": _ausencia_a_dict(ausencia, nombres),
+        # Aviso (no bloqueo): turnos que esta ausencia deja descubiertos (+ campana al admin).
+        "conflictos": _avisar_huecos(usuario, miembro_id, nombres, desde, hasta),
+    }
 
 
-async def actualizar_ausencia(request: Request) -> Response:
-    """PATCH /api/rota/ausencias/{id}: edita una ausencia (tipo/fechas/motivo)."""
-    ausencia_id = request.path_params["ausencia_id"]
+async def crear_ausencia(request: Request) -> Response:
+    """POST /api/rota/ausencias: registra una vacacion/ausencia (rango inclusivo)."""
+    datos = await leer_json(request)
+    usuario = _usuario_actual(request)
+    es_admin = _es_admin(request)
+    status, cuerpo = await run_in_threadpool(_crear_ausencia, datos, usuario, es_admin)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _actualizar_ausencia(
+    ausencia_id: str,
+    datos: dict[str, Any],
+    usuario: dict[str, Any] | None,
+    es_admin: bool,
+) -> tuple[int, dict[str, Any]]:
     actual = repos.obtener_ausencia_rota(ausencia_id)
     if actual is None:
-        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
-    if not _puede_gestionar_ausencia(request, actual["miembro_id"]):
-        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
-    datos = await leer_json(request)
+        return 404, {"error": "La ausencia ya no existe."}
+    if not _puede_gestionar_ausencia(usuario, es_admin, actual["miembro_id"]):
+        return 403, {"error": _MSG_SOLO_DUENO}
     campos: dict[str, Any] = {}
     if "tipo" in datos:
         tipo = str(datos["tipo"]).strip()
         if tipo not in TIPOS_AUSENCIA:
             validos = " o ".join(f'"{t}"' for t in TIPOS_AUSENCIA)
-            return JSONResponse({"error": f"Tipo inválido. Usa {validos}."}, status_code=400)
+            return 400, {"error": f"Tipo inválido. Usa {validos}."}
         campos["tipo"] = tipo
     for clave in ("desde", "hasta"):
         if clave in datos:
             valor = str(datos[clave]).strip()
             if not _fecha_valida(valor):
-                return JSONResponse(
-                    {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."},
-                    status_code=400,
-                )
+                return 400, {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}
             campos[clave] = valor
     if "motivo" in datos and isinstance(datos["motivo"], str):
         campos["motivo"] = datos["motivo"].strip()
@@ -225,31 +232,49 @@ async def actualizar_ausencia(request: Request) -> Response:
     desde = campos.get("desde", actual["desde"])
     hasta = campos.get("hasta", actual["hasta"])
     if desde and hasta and hasta < desde:
-        return JSONResponse(
-            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
-            status_code=400,
-        )
+        return 400, {"error": "La fecha de fin no puede ser anterior a la de inicio."}
     ausencia = repos.actualizar_ausencia_rota(ausencia_id, campos)
     if ausencia is None:
-        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+        return 404, {"error": "La ausencia ya no existe."}
     nombres = _nombres_equipo()
-    return JSONResponse(
-        {
-            "ausencia": _ausencia_a_dict(ausencia, nombres),
-            # Aviso (no bloqueo): turnos que el rango (quizá ampliado) deja descubiertos.
-            "conflictos": _avisar_huecos(request, actual["miembro_id"], nombres, desde, hasta),
-        }
+    return 200, {
+        "ausencia": _ausencia_a_dict(ausencia, nombres),
+        # Aviso (no bloqueo): turnos que el rango (quizá ampliado) deja descubiertos.
+        "conflictos": _avisar_huecos(usuario, actual["miembro_id"], nombres, desde, hasta),
+    }
+
+
+async def actualizar_ausencia(request: Request) -> Response:
+    """PATCH /api/rota/ausencias/{id}: edita una ausencia (tipo/fechas/motivo)."""
+    ausencia_id = request.path_params["ausencia_id"]
+    datos = await leer_json(request)
+    usuario = _usuario_actual(request)
+    es_admin = _es_admin(request)
+    status, cuerpo = await run_in_threadpool(
+        _actualizar_ausencia, ausencia_id, datos, usuario, es_admin
     )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_ausencia(
+    ausencia_id: str, usuario: dict[str, Any] | None, es_admin: bool
+) -> tuple[int, dict[str, Any]]:
+    actual = repos.obtener_ausencia_rota(ausencia_id)
+    if actual is None:
+        return 404, {"error": "La ausencia ya no existe."}
+    if not _puede_gestionar_ausencia(usuario, es_admin, actual["miembro_id"]):
+        return 403, {"error": _MSG_SOLO_DUENO}
+    if not repos.borrar_ausencia_rota(ausencia_id):
+        return 404, {"error": "La ausencia ya no existe."}
+    return 200, {"mensaje": "Ausencia eliminada."}
 
 
 async def borrar_ausencia(request: Request) -> Response:
     """DELETE /api/rota/ausencias/{id}: borra una ausencia (solo su dueño o un admin)."""
     ausencia_id = request.path_params["ausencia_id"]
-    actual = repos.obtener_ausencia_rota(ausencia_id)
-    if actual is None:
-        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
-    if not _puede_gestionar_ausencia(request, actual["miembro_id"]):
-        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
-    if not repos.borrar_ausencia_rota(ausencia_id):
-        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Ausencia eliminada."})
+    usuario = _usuario_actual(request)
+    es_admin = _es_admin(request)
+    status, cuerpo = await run_in_threadpool(
+        _borrar_ausencia, ausencia_id, usuario, es_admin
+    )
+    return JSONResponse(cuerpo, status_code=status)

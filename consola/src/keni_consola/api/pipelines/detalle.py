@@ -7,6 +7,7 @@ para mostrar el proceso del agente entrada/salida en cada fase.
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -143,16 +144,10 @@ def _actividad_y_generaciones(publicacion_id: str, gens: list[dict]) -> tuple[li
     return eventos, generaciones_por_etapa
 
 
-async def detalle(request: Request) -> Response:
-    """GET /api/pipelines/{pipeline_id}: una run + su log de actividad por etapas.
-
-    Acepta tanto los temas del pipeline (`origen='pipeline'`) como los del TABLERO que su
-    etapa Redactar redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
-    """
-    pipeline_id = request.path_params["pipeline_id"]
+def _detalle(pipeline_id: str) -> tuple[int, dict]:
     item = repos.obtener_publicacion(pipeline_id)
     if item is None or (item.get("origen") or "") not in _ORIGENES_RUN:
-        return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
+        return 404, {"error": "Ese pipeline ya no existe."}
     es_pipeline = (item.get("origen") or "") == ORIGEN_PIPELINE
     piezas = repos.listar_piezas_fila(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
@@ -192,26 +187,35 @@ async def detalle(request: Request) -> Response:
     met = _metricas_por_run(gens, {pipeline_id}).get(pipeline_id)
     if es_pipeline:
         met = _con_pool(met, _pool_por_marca(gens).get(marca_tema, []))
-    return JSONResponse(
-        {
-            "pipeline": _run_de(
-                item,
-                piezas,
-                completo=True,
-                cluster=cluster,
-                metricas=met,
-                pool_fusion=gen_fusion is not None,
-                pool_editorial=gen_encaje is not None,
-                hashtags_ia=pipeline_id in _runs_con_hashtags(gens),
-                arte_ia=pipeline_id in _runs_con_arte_ia(gens),
-                critica_ia=pipeline_id in _runs_con_critica_ia(gens),
-            ),
-            "actividad": eventos,
-            # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
-            # ninguna etapa tiene una generación correlacionada.
-            "generaciones_por_etapa": generaciones_por_etapa,
-            # Plantilla del prompt de cada etapa IA (para enseñar el prompt de ENTRADA aunque la
-            # etapa aún no haya corrido; cuando corre, se prefiere el prompt real de la generación).
-            "prompts_por_etapa": _prompts_plantilla(),
-        }
-    )
+    return 200, {
+        "pipeline": _run_de(
+            item,
+            piezas,
+            completo=True,
+            cluster=cluster,
+            metricas=met,
+            pool_fusion=gen_fusion is not None,
+            pool_editorial=gen_encaje is not None,
+            hashtags_ia=pipeline_id in _runs_con_hashtags(gens),
+            arte_ia=pipeline_id in _runs_con_arte_ia(gens),
+            critica_ia=pipeline_id in _runs_con_critica_ia(gens),
+        ),
+        "actividad": eventos,
+        # Stream del agente (`claude -p`) por código de etapa. Aditivo y back-compat: vacío si
+        # ninguna etapa tiene una generación correlacionada.
+        "generaciones_por_etapa": generaciones_por_etapa,
+        # Plantilla del prompt de cada etapa IA (para enseñar el prompt de ENTRADA aunque la
+        # etapa aún no haya corrido; cuando corre, se prefiere el prompt real de la generación).
+        "prompts_por_etapa": _prompts_plantilla(),
+    }
+
+
+async def detalle(request: Request) -> Response:
+    """GET /api/pipelines/{pipeline_id}: una run + su log de actividad por etapas.
+
+    Acepta tanto los temas del pipeline (`origen='pipeline'`) como los del TABLERO que su
+    etapa Redactar redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
+    """
+    pipeline_id = request.path_params["pipeline_id"]
+    status, cuerpo = await run_in_threadpool(_detalle, pipeline_id)
+    return JSONResponse(cuerpo, status_code=status)

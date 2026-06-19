@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -71,6 +72,11 @@ async def cobertura_semana(request: Request) -> Response:
     marca, error = _marca_param(request)
     if error is not None:
         return error
+    cuerpo = await run_in_threadpool(_cobertura_semana, lunes, marca)
+    return JSONResponse(cuerpo)
+
+
+def _cobertura_semana(lunes: str, marca: str | None) -> dict[str, Any]:
     inicio, fin = dominio.rango_semana(lunes)
     eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin, marca=marca)
     # Filtra los `no_cubrir` por defecto (no se cubren por convencion editorial).
@@ -79,27 +85,30 @@ async def cobertura_semana(request: Request) -> Response:
     nombres = _nombres_equipo()
     franjas_cfg = repos.obtener_franjas_config(marca or "")
     franjas_lista, franjas_por_id = _franjas_de_semana(lunes, marca)
-    return JSONResponse(
-        {
-            "lunes": lunes,
-            "inicio": inicio,
-            "fin": fin,
-            "franjas_config": franjas_cfg,
-            "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
-            "eventos": [
-                _cobertura_para_evento(e, turnos, nombres, franjas_lista, franjas_por_id)
-                for e in eventos
-            ],
-        }
-    )
+    return {
+        "lunes": lunes,
+        "inicio": inicio,
+        "fin": fin,
+        "franjas_config": franjas_cfg,
+        "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
+        "eventos": [
+            _cobertura_para_evento(e, turnos, nombres, franjas_lista, franjas_por_id)
+            for e in eventos
+        ],
+    }
 
 
 async def cobertura_evento(request: Request) -> Response:
     """GET /api/rota/cobertura/evento/{evento_id}: cobertura derivada de UN evento."""
     evento_id = request.path_params["evento_id"]
+    status, cuerpo = await run_in_threadpool(_cobertura_evento, evento_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _cobertura_evento(evento_id: str) -> tuple[int, dict[str, Any]]:
     evento = repos.obtener_evento_rota(evento_id)
     if evento is None:
-        return JSONResponse({"error": "El evento no existe."}, status_code=404)
+        return 404, {"error": "El evento no existe."}
     semana = dominio.lunes_de_semana_iso(evento.get("fecha", ""))
     # GRID POR MARCA: la cobertura del evento se cruza con la rejilla de SU marca (turnos y
     # franjas de esa marca); sin marca (evento legado) cae al comportamiento agregado.
@@ -108,12 +117,10 @@ async def cobertura_evento(request: Request) -> Response:
     nombres = _nombres_equipo()
     franjas_cfg = repos.obtener_franjas_config(marca_ev or "")
     franjas_lista, franjas_por_id = _franjas_de_semana(semana, marca_ev) if semana else ([], {})
-    return JSONResponse(
-        {
-            "evento": _cobertura_para_evento(
-                evento, turnos, nombres, franjas_lista, franjas_por_id
-            ),
-            "franjas_config": franjas_cfg,
-            "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
-        }
-    )
+    return 200, {
+        "evento": _cobertura_para_evento(
+            evento, turnos, nombres, franjas_lista, franjas_por_id
+        ),
+        "franjas_config": franjas_cfg,
+        "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
+    }

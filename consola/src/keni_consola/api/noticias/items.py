@@ -31,6 +31,25 @@ from ._comun import (
 )
 
 
+def _listar(
+    marca: str | None,
+    desde: str | None,
+    q: str | None,
+    estado: str | None,
+    limite: int,
+    desplazamiento: int,
+) -> dict:
+    items, total = repos.listar_noticias_items(
+        marca=marca or None,
+        desde=desde,
+        q=q,
+        estado=estado,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+    return {"items": [_item_a_dict(it) for it in items], "total": total}
+
+
 async def listar(request: Request) -> Response:
     """GET /api/noticias: archivo filtrable + paginado, MÁS NUEVOS primero.
 
@@ -60,15 +79,79 @@ async def listar(request: Request) -> Response:
         desplazamiento = 0
     desplazamiento = max(0, desplazamiento)
 
-    items, total = repos.listar_noticias_items(
-        marca=marca or None,
-        desde=desde,
-        q=q,
-        estado=estado,
-        limite=limite,
-        desplazamiento=desplazamiento,
+    cuerpo = await run_in_threadpool(
+        _listar, marca, desde, q, estado, limite, desplazamiento
     )
-    return JSONResponse({"items": [_item_a_dict(it) for it in items], "total": total})
+    return JSONResponse(cuerpo)
+
+
+def _cargar_item(item_id: str) -> tuple[int, dict | None, dict | None]:
+    """Lee el item y resuelve los cortes tempranos (404 / ya usada). -> (status, cuerpo|None, item|None)."""
+    item = repos.obtener_noticia_item(item_id)
+    if item is None:
+        return 404, {"error": "Esa noticia ya no existe."}, None
+    if item.get("estado") == "usado" and item.get("publicacion_id"):
+        return 200, {
+            "contenido": {"id": item["publicacion_id"]},
+            "copy_en_proceso": False,
+            "ya_usada": True,
+        }, None
+    return 200, None, item
+
+
+def _materializar_uso(
+    item: dict,
+    item_id: str,
+    titulo_src: str,
+    resumen_src: str,
+    redes_iniciales: list[str],
+    generar: bool,
+    autor: str,
+) -> tuple[int, dict]:
+    marca = item.get("marca") or ""
+    titulo = titulo_src or (item.get("url") or "")
+    if not titulo:
+        return 400, {"error": "La noticia no tiene título ni enlace."}
+    descripcion = resumen_src
+    if item.get("url"):
+        # Deja el enlace de origen en la nota para trazar la fuente.
+        descripcion = (descripcion + f"\n\nFuente: {item['url']}").strip()
+
+    contenido = repos.crear_publicacion(
+        clase="contenido",
+        flujo="importante",
+        # LÍNEA del plan: la categoría del ITEM (un item suelto no tiene señal de breaking).
+        categoria=str(item.get("categoria") or "").strip().lower(),
+        titulo=titulo[:_MAX_TITULO],
+        descripcion=descripcion[:_MAX_TEXTO],
+        marca=marca,
+        prioridad="media",
+        fecha_objetivo=hoy_utc().isoformat(),
+        autor=autor,
+        origen="noticia",
+        tipo_contenido="fuente",
+        fecha_fuente=item.get("publicado_en") or "",
+        url_fuente=item.get("url_canonica") or "",
+    )
+    for red in redes_iniciales:
+        repos.crear_pieza_fila(
+            publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
+        )
+
+    # Copy en segundo plano (best-effort), gateado por marca + flag `generar` (def True).
+    genero = False
+    if marca and generar:
+        try:
+            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
+        except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
+            genero = False
+
+    repos.actualizar_noticia_item(item_id, estado="usado", publicacion_id=contenido["id"])
+    plataformas = repos.listar_piezas_fila(contenido["id"])
+    return 200, {
+        "contenido": {**contenido, "plataformas": plataformas},
+        "copy_en_proceso": genero,
+    }
 
 
 async def usar(request: Request) -> Response:
@@ -81,17 +164,12 @@ async def usar(request: Request) -> Response:
     usado, devuelve el contenido enlazado sin duplicar.
     """
     item_id = request.path_params["item_id"]
-    item = repos.obtener_noticia_item(item_id)
-    if item is None:
-        return JSONResponse({"error": "Esa noticia ya no existe."}, status_code=404)
-    if item.get("estado") == "usado" and item.get("publicacion_id"):
-        return JSONResponse(
-            {"contenido": {"id": item["publicacion_id"]}, "copy_en_proceso": False, "ya_usada": True}
-        )
+    status, cuerpo, item = await run_in_threadpool(_cargar_item, item_id)
+    if cuerpo is not None:
+        return JSONResponse(cuerpo, status_code=status)
 
     datos = await leer_json(request)
     redes_iniciales = _redes_iniciales(datos.get("redes"))
-    marca = item.get("marca") or ""
 
     # Una noticia extranjera no baja al tablero en inglés: la traducimos EN EL ACTO a ES MX antes
     # de crear la pieza. Si tiene HISTORIA (cluster), traducimos+persistimos ahí (Traducir opera
@@ -103,7 +181,7 @@ async def usar(request: Request) -> Response:
         from ...pipeline_contenido import _admitir as _pc_ingesta
 
         cid = item.get("cluster_id") or ""
-        cluster = repos.obtener_noticia_cluster(cid) if cid else None
+        cluster = await run_in_threadpool(repos.obtener_noticia_cluster, cid) if cid else None
         if cluster is not None:
             if _pc_ingesta._falta_traduccion(cluster):
                 cluster = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
@@ -123,66 +201,36 @@ async def usar(request: Request) -> Response:
                 )
             titulo_src, resumen_src = par
 
-    titulo = titulo_src or (item.get("url") or "")
-    if not titulo:
-        return JSONResponse({"error": "La noticia no tiene título ni enlace."}, status_code=400)
-    descripcion = resumen_src
-    if item.get("url"):
-        # Deja el enlace de origen en la nota para trazar la fuente.
-        descripcion = (descripcion + f"\n\nFuente: {item['url']}").strip()
-
-    contenido = repos.crear_publicacion(
-        clase="contenido",
-        flujo="importante",
-        # LÍNEA del plan: la categoría del ITEM (un item suelto no tiene señal de breaking).
-        categoria=str(item.get("categoria") or "").strip().lower(),
-        titulo=titulo[:_MAX_TITULO],
-        descripcion=descripcion[:_MAX_TEXTO],
-        marca=marca,
-        prioridad="media",
-        fecha_objetivo=hoy_utc().isoformat(),
-        autor=autor_de_peticion(request),
-        origen="noticia",
-        tipo_contenido="fuente",
-        fecha_fuente=item.get("publicado_en") or "",
-        url_fuente=item.get("url_canonica") or "",
+    status, cuerpo = await run_in_threadpool(
+        _materializar_uso,
+        item,
+        item_id,
+        titulo_src,
+        resumen_src,
+        redes_iniciales,
+        datos.get("generar", True),
+        autor_de_peticion(request),
     )
-    for red in redes_iniciales:
-        repos.crear_pieza_fila(
-            publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
-        )
+    return JSONResponse(cuerpo, status_code=status)
 
-    # Copy en segundo plano (best-effort), gateado por marca + flag `generar` (def True).
-    generar = datos.get("generar", True)
-    genero = False
-    if marca and generar:
-        try:
-            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
-        except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
-            genero = False
 
-    repos.actualizar_noticia_item(item_id, estado="usado", publicacion_id=contenido["id"])
-    plataformas = repos.listar_piezas_fila(contenido["id"])
-    return JSONResponse(
-        {
-            "contenido": {**contenido, "plataformas": plataformas},
-            "copy_en_proceso": genero,
-        }
-    )
+def _descartar(item_id: str) -> tuple[int, dict]:
+    if repos.obtener_noticia_item(item_id) is None:
+        return 404, {"error": "Esa noticia ya no existe."}
+    item = repos.actualizar_noticia_item(item_id, estado="descartado")
+    return 200, {"item": _item_a_dict(item) if item else None}
 
 
 async def descartar(request: Request) -> Response:
     """POST /api/noticias/{id}/descartar: marca el item `estado=descartado`."""
     item_id = request.path_params["item_id"]
-    if repos.obtener_noticia_item(item_id) is None:
-        return JSONResponse({"error": "Esa noticia ya no existe."}, status_code=404)
-    item = repos.actualizar_noticia_item(item_id, estado="descartado")
-    return JSONResponse({"item": _item_a_dict(item) if item else None})
+    status, cuerpo = await run_in_threadpool(_descartar, item_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 async def cobertura(request: Request) -> Response:
     """GET /api/noticias/cobertura: resumen de salud del motor de ingesta."""
-    return JSONResponse(repos.resumen_cobertura())
+    return JSONResponse(await run_in_threadpool(repos.resumen_cobertura))
 
 
 # --------------------------------------------------------------------------- #
@@ -308,8 +356,6 @@ async def stats_fuentes_handler(request: Request) -> Response:
     cuántas acabaron usadas (promovidas al tablero) y su tasa de uso. `dias` acota la ventana
     (def 7, máx 90). Marca-aware (items de la marca + compartidos). Orden: más historias 1º.
     """
-    from ...dominio import fuentes_pesos
-
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
@@ -318,6 +364,13 @@ async def stats_fuentes_handler(request: Request) -> Response:
     except ValueError:
         dias = 7
     dias = max(1, min(dias, 90))
+    cuerpo = await run_in_threadpool(_stats_fuentes, marca, dias)
+    return JSONResponse(cuerpo)
+
+
+def _stats_fuentes(marca: str | None, dias: int) -> dict:
+    from ...dominio import fuentes_pesos
+
     fuentes = []
     for f in repos.stats_fuentes(marca or None, dias=dias):
         historias = int(f.get("historias") or 0)
@@ -329,7 +382,7 @@ async def stats_fuentes_handler(request: Request) -> Response:
                 "tasa_uso": round(usadas / historias, 3) if historias else 0.0,
             }
         )
-    return JSONResponse({"fuentes": fuentes, "dias": dias})
+    return {"fuentes": fuentes, "dias": dias}
 
 
 async def salud(request: Request) -> Response:
@@ -341,12 +394,16 @@ async def salud(request: Request) -> Response:
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    payload = await run_in_threadpool(_salud, marca)
+    return JSONResponse(payload)
+
+
+def _salud(marca: str | None) -> dict:
     feeds = repos.salud_feeds(marca or None)
     distribuciones = repos.conteos_items_recientes(marca or None, horas=24)
-    payload = construir_salud(
+    return construir_salud(
         feeds,
         distribuciones,
         sla_min=config.feed_sla_min(),
         ahora=datetime.now(UTC),
     )
-    return JSONResponse(payload)

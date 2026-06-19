@@ -13,6 +13,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -155,8 +156,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
 # --------------------------------------------------------------------------- #
 
 
-async def opciones(request: Request) -> Response:
-    """Catalogos para los selects del SPA: redes, estados, marcas y lineas editoriales."""
+def _opciones() -> dict[str, Any]:
     # Lineas editoriales = etiquetas de clase `vertical` (la LÍNEA de contenido). Pueblan el
     # selector de "Línea editorial" de las superficies Lista/Calendario/Feed. Se devuelven
     # TODAS las activas con su marca; el SPA acota por la marca activa del switch global.
@@ -186,29 +186,32 @@ async def opciones(request: Request) -> Response:
     }
     from ... import config
 
-    return JSONResponse(
-        {
-            "redes": redes.opciones(),
-            "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PIEZA],
-            # `tipo` ('noticias'|'propio'): el SPA oculta el panel de Noticias para las de
-            # contenido propio (se saltan la investigación).
-            "marcas": [
-                {
-                    "id": m.id,
-                    "nombre": m.etiqueta,
-                    "tipo": m.tipo,
-                    "etiqueta_investigacion": m.etiqueta_investigacion,
-                }
-                for m in marcas.catalogo()
-            ],
-            "lineas": lineas,
-            # Categorías del plan con franja, por marca (para el dropdown obligatorio de «Crear post»).
-            "categorias": categorias,
-            # Gate maestro de pieza real (KENI_PUBLICAR_REAL). OFF => las piezas
-            # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.
-            "publicar_real": config.publicar_real(),
-        }
-    )
+    return {
+        "redes": redes.opciones(),
+        "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PIEZA],
+        # `tipo` ('noticias'|'propio'): el SPA oculta el panel de Noticias para las de
+        # contenido propio (se saltan la investigación).
+        "marcas": [
+            {
+                "id": m.id,
+                "nombre": m.etiqueta,
+                "tipo": m.tipo,
+                "etiqueta_investigacion": m.etiqueta_investigacion,
+            }
+            for m in marcas.catalogo()
+        ],
+        "lineas": lineas,
+        # Categorías del plan con franja, por marca (para el dropdown obligatorio de «Crear post»).
+        "categorias": categorias,
+        # Gate maestro de pieza real (KENI_PUBLICAR_REAL). OFF => las piezas
+        # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.
+        "publicar_real": config.publicar_real(),
+    }
+
+
+async def opciones(request: Request) -> Response:
+    """Catalogos para los selects del SPA: redes, estados, marcas y lineas editoriales."""
+    return JSONResponse(await run_in_threadpool(_opciones))
 
 
 def _parsear_bool_query(valor: str | None) -> bool | None:
@@ -327,19 +330,33 @@ async def listar(request: Request) -> Response:
     tope = tope_listado()
     sin_limite = limite is None
     limite = tope if limite is None else min(limite, tope)
+    # Toda la lectura de BD (las dos consultas + serialización) se concentra en el helper
+    # síncrono, que comparte el MISMO diccionario de filtros entre listado y conteo.
+    filtros = {
+        "marca": marca_efectiva, "red": red, "estado": estado, "evergreen": evergreen,
+        "linea": linea, "responsable": responsable, "desde": desde, "hasta": hasta,
+        "origen": origen, "categoria": categoria, "tipo_contenido": tipo_contenido,
+        "fuente": fuente, "fase": fase, "creado_antes": creado_antes,
+        "excluir_origen": excluir_origen,
+    }
+    cuerpo = await run_in_threadpool(
+        _listar, filtros, limite, desplazamiento, cursor, modo_feed, sin_limite
+    )
+    return JSONResponse(cuerpo)
+
+
+def _listar(
+    filtros: dict[str, Any],
+    limite: int | None,
+    desplazamiento: int | None,
+    cursor: str | None,
+    modo_feed: bool,
+    sin_limite: bool,
+) -> dict[str, Any]:
     pubs = repos.listar_piezas(
-        marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable, desde=desde, hasta=hasta, origen=origen,
-        categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
-        creado_antes=creado_antes, excluir_origen=excluir_origen,
-        limite=limite, desplazamiento=desplazamiento, cursor=cursor,
+        **filtros, limite=limite, desplazamiento=desplazamiento, cursor=cursor
     )
-    total = repos.contar_piezas(
-        marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable, desde=desde, hasta=hasta, origen=origen,
-        categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente, fase=fase,
-        creado_antes=creado_antes, excluir_origen=excluir_origen,
-    )
+    total = repos.contar_piezas(**filtros)
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la
     # última fila vista (`<creado>|<id>`). Si vino corta (o vacía), es la última página y omitimos
@@ -351,21 +368,15 @@ async def listar(request: Request) -> Response:
     # Envelope retrocompatible: sin `?limite=` y sin truncado por el cap, se reporta como
     # antes (`limite = total`); si el cap recorto de verdad, se reporta el cap (honesto).
     limite_reportado = None if (sin_limite and not modo_feed and total <= limite) else limite
-    return JSONResponse(
-        {
-            "piezas": [_publicacion_a_dict(p) for p in pubs],
-            "paginacion": envoltura_paginacion(
-                total, limite_reportado, desplazamiento, cursor_siguiente=cursor_siguiente
-            ),
-        }
-    )
+    return {
+        "piezas": [_publicacion_a_dict(p) for p in pubs],
+        "paginacion": envoltura_paginacion(
+            total, limite_reportado, desplazamiento, cursor_siguiente=cursor_siguiente
+        ),
+    }
 
 
-async def crear(request: Request) -> Response:
-    datos = await leer_json(request)
-    entrada, error = _validar_nueva(datos)
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
+def _crear(entrada: dict[str, Any], autor: dict[str, Any] | None) -> dict[str, Any]:
     pub = repos.crear_pieza(
         entrada["marca"],
         entrada["red"],
@@ -377,9 +388,18 @@ async def crear(request: Request) -> Response:
         fecha_programada=entrada["fecha_programada"],
         origen=entrada["origen"],
         imagen=entrada["imagen"],
-        autor=autor_de_peticion(request),
+        autor=autor,
     )
-    return JSONResponse({"pieza": _publicacion_a_dict(pub)})
+    return {"pieza": _publicacion_a_dict(pub)}
+
+
+async def crear(request: Request) -> Response:
+    datos = await leer_json(request)
+    entrada, error = _validar_nueva(datos)
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    cuerpo = await run_in_threadpool(_crear, entrada, autor_de_peticion(request))
+    return JSONResponse(cuerpo)
 
 
 async def crear_lote(request: Request) -> Response:
@@ -404,65 +424,67 @@ async def crear_lote(request: Request) -> Response:
         entrada["autor_id"] = autor.get("id", "")
         entrada["autor_nombre"] = autor.get("usuario", "")
         entradas.append(entrada)
+    cuerpo = await run_in_threadpool(_crear_lote, entradas)
+    return JSONResponse(cuerpo)
+
+
+def _crear_lote(entradas: list[dict[str, Any]]) -> dict[str, Any]:
     pubs = repos.crear_publicaciones(entradas)
-    return JSONResponse({"piezas": [_publicacion_a_dict(p) for p in pubs]})
+    return {"piezas": [_publicacion_a_dict(p) for p in pubs]}
+
+
+def _detalle(pieza_id: str) -> tuple[int, dict[str, Any]]:
+    pub = repos.obtener_pieza(pieza_id)
+    if pub is None:
+        return 404, {"error": "Esa publicación ya no existe."}
+    return 200, {"pieza": _publicacion_a_dict(pub)}
 
 
 async def detalle(request: Request) -> Response:
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"pieza": _publicacion_a_dict(pub)})
+    status, cuerpo = await run_in_threadpool(_detalle, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar(request: Request) -> Response:
-    """Edicion PARCIAL: titulo/contenido/copy_in/estado/fecha_programada (404 si no existe)."""
-    pieza_id = request.path_params["pieza_id"]
+def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     # Existencia: 404 si la pieza ya no existe. Mas abajo se recarga `actual` para el reset de
     # aprobaciones. La marca NO acota nada: el equipo edita piezas de cualquier marca.
     pieza = repos.obtener_pieza(pieza_id)
     if pieza is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa publicación ya no existe."}
 
     campos: dict[str, Any] = {}
     if "titulo" in datos:
         titulo = datos.get("titulo")
         if not isinstance(titulo, str):
-            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
+            return 400, {"error": "El título debe ser texto."}
         campos["titulo"] = titulo.strip()
     if "contenido" in datos:
         contenido = datos.get("contenido")
         if not isinstance(contenido, str):
-            return JSONResponse({"error": "El contenido debe ser texto."}, status_code=400)
+            return 400, {"error": "El contenido debe ser texto."}
         campos["contenido"] = contenido
     if "copy_in" in datos:
         copy_in = datos.get("copy_in")
         if not isinstance(copy_in, str):
-            return JSONResponse(
-                {"error": "El texto en imagen debe ser texto."}, status_code=400
-            )
+            return 400, {"error": "El texto en imagen debe ser texto."}
         campos["copy_in"] = copy_in
     if "estado" in datos:
         estado = datos.get("estado")
         if not isinstance(estado, str) or estado not in repos.ESTADOS_PIEZA:
-            return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+            return 400, {"error": "Estado no permitido."}
         # MAQUINA DE ESTADOS: la transicion debe ser valida DESDE el estado actual (tabla
         # `_TRANSICIONES_PUT`). Mismo estado = no-op permitido (PUT idempotente).
         estado_desde = pieza.get("estado") or ESTADO_BORRADOR
         if estado != estado_desde and estado not in _TRANSICIONES_PUT.get(
             estado_desde, frozenset()
         ):
-            return JSONResponse(
-                {
-                    "error": (
-                        f"Transición de estado no permitida: de '{estado_desde}' "
-                        f"a '{estado}'."
-                    )
-                },
-                status_code=400,
-            )
+            return 400, {
+                "error": (
+                    f"Transición de estado no permitida: de '{estado_desde}' "
+                    f"a '{estado}'."
+                )
+            }
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")
@@ -473,12 +495,10 @@ async def actualizar(request: Request) -> Response:
             # compara el TEXT crudo; sin canon "T18:00" y "T18:00:00" no chocaban.
             fecha_norm, err_fecha = _normalizar_fecha_programada(fecha.strip())
             if err_fecha is not None:
-                return JSONResponse({"error": err_fecha}, status_code=400)
+                return 400, {"error": err_fecha}
             campos["fecha_programada"] = fecha_norm
         else:
-            return JSONResponse(
-                {"error": "La fecha programada debe ser texto o nula."}, status_code=400
-            )
+            return 400, {"error": "La fecha programada debe ser texto o nula."}
         # REPROGRAMAR (mover la fecha a una DISTINTA) resetea el claim de preparación, igual que
         # `_encolar_en_hueco_libre`: hay que limpiar `preparado_en` para que el barrido NO trate la
         # pieza como "ya preparada" y la (re)publique a la NUEVA hora —con KENI_PUBLICAR_REAL on, un
@@ -490,62 +510,52 @@ async def actualizar(request: Request) -> Response:
     if "imagen" in datos:
         imagen = datos.get("imagen")
         if not isinstance(imagen, str):
-            return JSONResponse({"error": "La imagen debe ser texto."}, status_code=400)
+            return 400, {"error": "La imagen debe ser texto."}
         campos["imagen"] = imagen.strip()
     if "foto" in datos:
         foto = datos.get("foto")
         if not isinstance(foto, str):
-            return JSONResponse({"error": "La foto debe ser texto."}, status_code=400)
+            return 400, {"error": "La foto debe ser texto."}
         campos["foto"] = foto.strip()
     if "evergreen" in datos:
         evergreen = datos.get("evergreen")
         if not isinstance(evergreen, bool):
-            return JSONResponse({"error": "El campo evergreen debe ser verdadero o falso."}, status_code=400)
+            return 400, {"error": "El campo evergreen debe ser verdadero o falso."}
         campos["evergreen"] = evergreen
     if "placa_oculta" in datos:
         placa_oculta = datos.get("placa_oculta")
         if not isinstance(placa_oculta, bool):
-            return JSONResponse(
-                {"error": "El campo placa_oculta debe ser verdadero o falso."}, status_code=400
-            )
+            return 400, {"error": "El campo placa_oculta debe ser verdadero o falso."}
         campos["placa_oculta"] = placa_oculta
     if "plantilla_diseno_id" in datos:
         plantilla_diseno_id = datos.get("plantilla_diseno_id")
         if not isinstance(plantilla_diseno_id, str):
-            return JSONResponse({"error": "La plantilla debe ser texto."}, status_code=400)
+            return 400, {"error": "La plantilla debe ser texto."}
         campos["plantilla_diseno_id"] = plantilla_diseno_id.strip()
     if "foto_encuadre" in datos:
         foto_encuadre = datos.get("foto_encuadre")
         if not isinstance(foto_encuadre, str):
-            return JSONResponse(
-                {"error": "El reencuadre de la foto debe ser texto."}, status_code=400
-            )
+            return 400, {"error": "El reencuadre de la foto debe ser texto."}
         campos["foto_encuadre"] = foto_encuadre.strip()
     if "fotos" in datos:
         # COLLAGE: JSON array `[{objeto,foco,zoom}, …]` (una por hueco), serializado por el editor.
         fotos = datos.get("fotos")
         if not isinstance(fotos, str):
-            return JSONResponse(
-                {"error": "Las fotos del collage deben ser texto (JSON)."}, status_code=400
-            )
+            return 400, {"error": "Las fotos del collage deben ser texto (JSON)."}
         campos["fotos"] = fotos.strip()
     if "carrusel" in datos:
         # CARRUSEL: slides extra en crudo, JSON `[{tipo:"imagen"|"video",objeto}, …]` serializado
         # por el editor (mismo trato que `fotos`: el backend lo persiste como texto).
         carrusel = datos.get("carrusel")
         if not isinstance(carrusel, str):
-            return JSONResponse(
-                {"error": "Los slides del carrusel deben ser texto (JSON)."}, status_code=400
-            )
+            return 400, {"error": "Los slides del carrusel deben ser texto (JSON)."}
         campos["carrusel"] = carrusel.strip()
     if "espejo" in datos:
         # ESPEJO entre redes (vive en el padre: es de la idea). El editor lo togglea desde
         # cualquier pieza hermana; OFF = cada red se edita por separado.
         espejo = datos.get("espejo")
         if not isinstance(espejo, bool):
-            return JSONResponse(
-                {"error": "El campo espejo debe ser verdadero o falso."}, status_code=400
-            )
+            return 400, {"error": "El campo espejo debe ser verdadero o falso."}
         campos["espejo"] = espejo
 
     # PUBLICADO ES TERMINAL para la fecha: el post de una pieza publicada ya salió en su
@@ -559,21 +569,15 @@ async def actualizar(request: Request) -> Response:
         and "fecha_programada" in campos
         and campos["fecha_programada"] != (pieza.get("fecha_programada") or "")
     ):
-        return JSONResponse(
-            {"error": "Una pieza ya publicada es terminal: su fecha no se cambia."},
-            status_code=409,
-        )
+        return 409, {"error": "Una pieza ya publicada es terminal: su fecha no se cambia."}
 
     if not campos:
-        return JSONResponse(
-            {
-                "error": (
-                    "No hay nada que actualizar (título, contenido, texto en imagen, "
-                    "estado, fecha, imagen o evergreen)."
-                )
-            },
-            status_code=400,
-        )
+        return 400, {
+            "error": (
+                "No hay nada que actualizar (título, contenido, texto en imagen, "
+                "estado, fecha, imagen o evergreen)."
+            )
+        }
 
     # RESET DE APROBACIONES AL EDITAR: editar el CONTENIDO de una pieza que ya acumula
     # aprobaciones las invalida (como reescribir un PR aprobado). La pieza vuelve a `borrador` con
@@ -583,7 +587,7 @@ async def actualizar(request: Request) -> Response:
     # aplica si la propia petición fija `estado` (el flujo lo está moviendo a propósito).
     actual = repos.obtener_pieza(pieza_id)
     if actual is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
     estado_actual = actual.get("estado") or ""
     resetear = _pierde_aprobaciones(actual, campos)
     if resetear:
@@ -606,35 +610,46 @@ async def actualizar(request: Request) -> Response:
     except IntegrityError:
         # Backstop de doble-reserva de parrilla (índice parcial `idx_parrilla_slot_uniq`): la
         # edición dejaría dos piezas programadas en el mismo (red, fecha). 409 accionable.
-        return JSONResponse(
-            {"error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."},
-            status_code=409,
-        )
+        return 409, {
+            "error": "Ya hay una publicación programada en esa red y fecha; elige otra hora."
+        }
     if pub is None:
         if repos.obtener_pieza(pieza_id) is None:
-            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+            return 404, {"error": "Esa publicación ya no existe."}
         # Existe pero el CAS no aplico: otro flujo movio el estado entre lectura y escritura.
-        return JSONResponse(
-            {"error": "La publicación cambió de estado mientras editabas; recarga e intenta de nuevo."},
-            status_code=409,
-        )
+        return 409, {
+            "error": "La publicación cambió de estado mientras editabas; recarga e intenta de nuevo."
+        }
     if resetear:
         # Limpia la cadena (borra todos los niveles): las aprobaciones previas dejan de existir.
         _limpiar_cadena(pieza_id)
     # ESPEJO entre redes (default ON): los campos de contenido editados se replican a las
     # redes hermanas de la idea, con su mismo reset de aprobaciones si lo necesitan.
     _propagar_espejo(pub, campos)
-    return JSONResponse({"pieza": _publicacion_a_dict(pub)})
+    return 200, {"pieza": _publicacion_a_dict(pub)}
+
+
+async def actualizar(request: Request) -> Response:
+    """Edicion PARCIAL: titulo/contenido/copy_in/estado/fecha_programada (404 si no existe)."""
+    pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_actualizar, pieza_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar(pieza_id: str) -> tuple[int, dict[str, Any]]:
+    pub = repos.obtener_pieza(pieza_id)
+    if pub is None:
+        return 404, {"error": "Esa publicación ya no existe."}
+    if not repos.borrar_pieza(pieza_id):
+        return 404, {"error": "Esa publicación ya no existe."}
+    return 200, {"mensaje": "Publicación borrada."}
 
 
 async def borrar(request: Request) -> Response:
     pieza_id = request.path_params["pieza_id"]
-    pub = repos.obtener_pieza(pieza_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    if not repos.borrar_pieza(pieza_id):
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Publicación borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # Tope de ids por peticion batch (cadenas / borrar-lote): defensivo, el SPA manda como
@@ -665,6 +680,11 @@ async def borrar_lote(request: Request) -> Response:
         return JSONResponse(
             {"error": "Envía la lista de ids de piezas a borrar."}, status_code=400
         )
+    cuerpo = await run_in_threadpool(_borrar_lote, ids)
+    return JSONResponse(cuerpo)
+
+
+def _borrar_lote(ids: list[str]) -> dict[str, Any]:
     borradas = 0
     fallos: list[str] = []
     for pieza_id in ids:
@@ -672,7 +692,7 @@ async def borrar_lote(request: Request) -> Response:
             borradas += 1
         else:
             fallos.append(pieza_id)
-    return JSONResponse({"borradas": borradas, "fallos": fallos})
+    return {"borradas": borradas, "fallos": fallos}
 
 
 async def cadenas_lote(request: Request) -> Response:
@@ -684,16 +704,21 @@ async def cadenas_lote(request: Request) -> Response:
     (`estado="sin_cadena"`), de modo que el cliente nunca reitere ids "que faltan".
     El endpoint individual (`GET /api/plataformas/{id}/aprobacion`) sigue intacto.
     """
-    from .. import colaboracion as api_colaboracion
-
     crudo = request.query_params.get("ids") or ""
     ids = _ids_de_lote(crudo.split(","))
     if ids is None:
         return JSONResponse(
             {"error": "Indica las ids de piezas (?ids=a,b,c)."}, status_code=400
         )
+    cuerpo = await run_in_threadpool(_cadenas_lote, ids)
+    return JSONResponse(cuerpo)
+
+
+def _cadenas_lote(ids: list[str]) -> dict[str, Any]:
+    from .. import colaboracion as api_colaboracion
+
     cadenas = {pid: api_colaboracion.cadena_publica(pid) for pid in ids}
-    return JSONResponse({"cadenas": cadenas})
+    return {"cadenas": cadenas}
 
 
 async def clonar(request: Request) -> Response:
@@ -707,23 +732,25 @@ async def clonar(request: Request) -> Response:
     | 400 (red inválida / sin padre) | 404 | 409 (la hermana ya está publicada).
     """
     pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_clonar, pieza_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _clonar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     original = repos.obtener_pieza(pieza_id)
     if original is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa publicación ya no existe."}
     red = datos.get("red")
     if not isinstance(red, str) or not redes.es_red(red):
-        return JSONResponse({"error": "Red no permitida."}, status_code=400)
+        return 400, {"error": "Red no permitida."}
     if red == original["red"]:
-        return JSONResponse(
-            {"error": "La pieza ya está en esa red; elige otra red destino."}, status_code=400
-        )
+        return 400, {"error": "La pieza ya está en esa red; elige otra red destino."}
     publicacion_id = original.get("publicacion_id") or ""
     if not publicacion_id:
-        return JSONResponse(
-            {"error": "Esta pieza no tiene idea padre: no se puede clonar entre redes."},
-            status_code=400,
-        )
+        return 400, {
+            "error": "Esta pieza no tiene idea padre: no se puede clonar entre redes."
+        }
 
     campos: dict[str, Any] = {clave: original.get(clave) for clave in _CAMPOS_ESPEJO}
     hermanas = [
@@ -732,21 +759,18 @@ async def clonar(request: Request) -> Response:
     if hermanas:
         destino = repos.obtener_pieza(hermanas[0]["id"])
         if destino is None:
-            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+            return 404, {"error": "Esa publicación ya no existe."}
         if (destino.get("estado") or "") == ESTADO_PUBLICADO:
-            return JSONResponse(
-                {"error": "La pieza de esa red ya está publicada; no se sobrescribe."},
-                status_code=409,
-            )
+            return 409, {"error": "La pieza de esa red ya está publicada; no se sobrescribe."}
         resetear = _pierde_aprobaciones(destino, campos)
         if resetear:
             campos.update(_RESET_APROBACIONES)
         pub = repos.actualizar_pieza(destino["id"], campos)
         if pub is None:
-            return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+            return 404, {"error": "Esa publicación ya no existe."}
         if resetear:
             _limpiar_cadena(destino["id"])
-        return JSONResponse({"pieza": _publicacion_a_dict(pub)})
+        return 200, {"pieza": _publicacion_a_dict(pub)}
 
     # La idea no salía en esa red: nace la pieza (borrador) con el contenido clonado. El
     # checklist (`falta_copy`/`falta_imagen`) se autodeduce del copy/imagen clonados.
@@ -767,8 +791,8 @@ async def clonar(request: Request) -> Response:
     )
     pub = repos.obtener_pieza(plat["id"])
     if pub is None:
-        return JSONResponse({"error": "No se pudo clonar la pieza."}, status_code=500)
-    return JSONResponse({"pieza": _publicacion_a_dict(pub)})
+        return 500, {"error": "No se pudo clonar la pieza."}
+    return 200, {"pieza": _publicacion_a_dict(pub)}
 
 
 async def programar_metricool(request: Request) -> Response:
@@ -779,25 +803,27 @@ async def programar_metricool(request: Request) -> Response:
     NO publica ni persiste); con ON publica de verdad, persiste `id_post_metricool`
     y pasa la pieza a `publicado`. -> `{resultado, pieza}` | 400 | 404.
     """
+    pieza_id = request.path_params["pieza_id"]
+    status, cuerpo = await run_in_threadpool(_programar_metricool, pieza_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _programar_metricool(pieza_id: str) -> tuple[int, dict[str, Any]]:
     # Import local: `programador` es infra (no es router de ninguna app); el camino
     # real solo se activa con el gate. Mantiene el módulo de API sin acoplarse a él.
     from ... import programador
 
-    pieza_id = request.path_params["pieza_id"]
     pub = repos.obtener_pieza(pieza_id)
     if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+        return 404, {"error": "Esa publicación ya no existe."}
 
     resultado = programador.programar_pieza_metricool(pub)
     if not resultado.get("ok"):
-        return JSONResponse(
-            {"error": resultado.get("motivo") or "No se pudo programar en Metricool."},
-            status_code=400,
-        )
-    actualizada = repos.obtener_pieza(pieza_id)
-    return JSONResponse(
-        {
-            "resultado": resultado,
-            "pieza": _publicacion_a_dict(actualizada) if actualizada else None,
+        return 400, {
+            "error": resultado.get("motivo") or "No se pudo programar en Metricool."
         }
-    )
+    actualizada = repos.obtener_pieza(pieza_id)
+    return 200, {
+        "resultado": resultado,
+        "pieza": _publicacion_a_dict(actualizada) if actualizada else None,
+    }

@@ -10,8 +10,7 @@
 
 from __future__ import annotations
 
-import asyncio
-
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -62,10 +61,9 @@ async def piezas(request: Request) -> Response:
     try:
         if red:
             # Vista filtrada por red: recálculo bajo demanda (trabajo bloqueante de la
-            # fuente) en executor para no congelar el event loop; no usa la cache por combo.
-
-            payload = await asyncio.get_running_loop().run_in_executor(
-                None, servicio.construir_analitica_piezas, rango, marca, red
+            # fuente) en threadpool para no congelar el event loop; no usa la cache por combo.
+            payload = await run_in_threadpool(
+                servicio.construir_analitica_piezas, rango, marca, red
             )
             generado_en = ahora_iso()
         else:
@@ -100,8 +98,8 @@ def _listado_piezas_publicadas(marca_consola: str | None) -> list[dict]:
     """Construye el listado de piezas publicadas (con rendimiento) para una marca.
 
     Trabajo BLOQUEANTE (lecturas de BD + golpe a Metricool por pieza): se ejecuta en un
-    hilo del executor desde `piezas_rendimiento`, no en el event loop. Aislado en una
-    función síncrona para poder pasarlo a `run_in_executor`.
+    hilo del threadpool desde `piezas_rendimiento`, no en el event loop. Aislado en una
+    función síncrona para poder pasarlo a `run_in_threadpool`.
     """
     items = repos.listar_publicacion(marca=marca_consola)
     por_contenido: dict[str, list[dict]] = {}
@@ -140,10 +138,8 @@ async def piezas_rendimiento(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     try:
         # Lee BD + golpea Metricool por pieza (lazy-fill con TTL): potencialmente lento, así
-        # que se ejecuta en el executor para no bloquear el event loop al cambiar de tab.
-        piezas = await asyncio.get_running_loop().run_in_executor(
-            None, _listado_piezas_publicadas, marca_consola
-        )
+        # que se ejecuta en el threadpool para no bloquear el event loop al cambiar de tab.
+        piezas = await run_in_threadpool(_listado_piezas_publicadas, marca_consola)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception(
             "Fallo al generar el listado de piezas (marca=%s).", marca_metricas or "todas"
@@ -195,12 +191,12 @@ async def piezas_listado(request: Request) -> Response:
     piezas_crudas = payload.get("piezas", [])
     # Enriquecemos cada pieza con su LÍNEA editorial (cruce con la BD) y normalizamos el
     # campo `red` -> `plataforma` (contrato `PiezaListado`). El cruce de líneas es trabajo
-    # bloqueante de BD: va en el executor para no congelar el event loop. La cache guarda
+    # bloqueante de BD: va en el threadpool para no congelar el event loop. La cache guarda
     # el listado crudo; la línea se resuelve aquí (lectura de BD barata, sin volver a Metricool).
     marca_consola = _marca_consola_de_metricas(marca)
     try:
-        linea_map = await asyncio.get_running_loop().run_in_executor(
-            None, metricas_linea.lineas_por_pieza, marca_consola, piezas_crudas
+        linea_map = await run_in_threadpool(
+            metricas_linea.lineas_por_pieza, marca_consola, piezas_crudas
         )
     except Exception:  # noqa: BLE001 -- la línea es best-effort; sin ella, todo "Sin línea"
         _log.exception("Fallo al resolver líneas del listado (marca=%s).", marca or "todas")
@@ -336,9 +332,7 @@ async def pieza_historico(request: Request) -> Response:
     # Datos de baja sensibilidad (serie de vis/inter de UNA pieza) -> se deja al dueño cerrarlo
     # cuando exista el cruce. Ver ADR 0003.
     try:
-        serie = await asyncio.get_running_loop().run_in_executor(
-            None, repos.serie_pieza, pieza_id
-        )
+        serie = await run_in_threadpool(repos.serie_pieza, pieza_id)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al leer el histórico de la pieza (id=%s).", pieza_id)
         return JSONResponse(
@@ -371,8 +365,8 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
-        payload = await asyncio.get_running_loop().run_in_executor(
-            None, metricas_pieza.analitica_por_etiqueta, rango, marca_consola, marca_metricas
+        payload = await run_in_threadpool(
+            metricas_pieza.analitica_por_etiqueta, rango, marca_consola, marca_metricas
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -416,8 +410,8 @@ async def lineas(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
-        payload = await asyncio.get_running_loop().run_in_executor(
-            None, metricas_linea.lineas_y_origenes, rango, marca_consola, marca_metricas
+        payload = await run_in_threadpool(
+            metricas_linea.lineas_y_origenes, rango, marca_consola, marca_metricas
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)

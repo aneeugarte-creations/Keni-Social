@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -75,6 +76,11 @@ async def listar(request: Request) -> Response:
     if not geo:
         geo = _GEO_DEFECTO
 
+    cuerpo = await run_in_threadpool(_listar, marca_crudo, geo)
+    return JSONResponse(cuerpo)
+
+
+def _listar(marca_crudo: str, geo: str) -> dict:
     items = dom_breaking.items_breaking(marca_crudo, geo)
 
     # Anota IN-PLACE: estado_borrador / publicacion_id / generacion_id.
@@ -83,7 +89,7 @@ async def listar(request: Request) -> Response:
     # Serializar: extraer sólo los campos públicos del contrato.
     publicos = [_serializar_item(it, marca_crudo) for it in items]
 
-    return JSONResponse({"items": publicos})
+    return {"items": publicos}
 
 
 def _serializar_item(item: dict, marca: str) -> dict:
@@ -160,6 +166,12 @@ async def preparar(request: Request) -> Response:
         redes_crudo = []
     redes_ids = [r for r in redes_crudo if isinstance(r, str) and redes.es_red(r)]
 
+    autor = autor_de_peticion(request)
+    cuerpo = await run_in_threadpool(_preparar, titulo, marca_crudo, redes_ids, autor)
+    return JSONResponse(cuerpo)
+
+
+def _preparar(titulo: str, marca_crudo: str, redes_ids: list[str], autor: object) -> dict:
     # --- Dedup: si ya existe un borrador breaking para este título+marca, no duplicar ---
     clave = dom_breaking.clave_de_titulo(titulo)
     existente_id = ""
@@ -179,10 +191,9 @@ async def preparar(request: Request) -> Response:
     if existente_id:
         # Devuelve el existente con su generación activa.
         gen_id, _ = dom_breaking._generacion_reciente_de(existente_id)
-        return JSONResponse({"publicacion_id": existente_id, "generacion_id": gen_id})
+        return {"publicacion_id": existente_id, "generacion_id": gen_id}
 
     # --- Crear el borrador ---
-    autor = autor_de_peticion(request)
     item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
@@ -213,7 +224,7 @@ async def preparar(request: Request) -> Response:
             "breaking/preparar: fallo al encolar la generación (publicacion_id=%s)", item["id"]
         )
 
-    return JSONResponse({"publicacion_id": item["id"], "generacion_id": gen_id})
+    return {"publicacion_id": item["id"], "generacion_id": gen_id}
 
 
 RUTAS = [
