@@ -22,7 +22,6 @@ import { useMutation } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { confirmar } from "@/components/comunes/confirmar";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
 import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
@@ -34,6 +33,7 @@ import { useImagenesPlaca } from "@/components/media/placa/useImagenesPlaca";
 import type { CapaImagen } from "@/editor/documento";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import { descargarBlob, ofrecerCopiarCopy, slugNombre } from "@/lib/descargas";
 import { dibujarDocumento } from "@/lib/placa/dibujar.mjs";
 import {
   capasFotoDoc,
@@ -504,38 +504,9 @@ export function EditorPlacaInline({
       toast.error("No se pudo generar la imagen. Inténtalo de nuevo.");
       return;
     }
-    const base =
-      (marca || "publicacion")
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 50) || "publicacion";
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${base}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    descargarBlob(blob, `${slugNombre(marca)}.png`);
     toast.success("Imagen descargada.");
-    const texto = (copy || "").trim();
-    if (!texto) return;
-    const copiar = await confirmar({
-      titulo: "¿Copiar el copy al portapapeles?",
-      mensaje: "Pega el texto del post junto a la imagen donde vayas a publicar.",
-      textoConfirmar: "Copiar copy",
-      textoCancelar: "No, gracias",
-    });
-    if (!copiar) return;
-    try {
-      await navigator.clipboard.writeText(texto);
-      toast.success("Copy copiado al portapapeles.");
-    } catch {
-      toast.error("No se pudo copiar el copy.");
-    }
+    await ofrecerCopiarCopy(copy);
   }, [copy, marca]);
 
   return (

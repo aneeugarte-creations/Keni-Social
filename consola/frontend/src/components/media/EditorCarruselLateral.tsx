@@ -13,7 +13,7 @@
  *    (servidor, `componerSlide`) de forma DEBOUNCED al cambiar la receta. La previa es el lienzo en
  *    vivo (instantáneo); el horneado solo refresca el media que se publica.
  */
-import { ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -23,6 +23,7 @@ import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import type { Documento } from "@/editor/documento";
 import { api, mensajeError, urlMedia, type PlantillaDiseno } from "@/lib/api";
 import { slidePlacaEditable, type SlideCarrusel } from "@/lib/carrusel";
+import { descargarUrlConAuth, ofrecerCopiarCopy, slugNombre } from "@/lib/descargas";
 import type { FotoCollage } from "@/lib/placa/docPieza";
 import { parsearEncuadre, serializarEncuadre } from "@/lib/placa/encuadre";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,7 @@ export function EditorCarruselLateral({
   const [activo, setActivo] = React.useState(0);
   const [galeria, setGaleria] = React.useState(false);
   const [horneando, setHorneando] = React.useState<number | null>(null);
+  const [descargando, setDescargando] = React.useState(false);
 
   // El índice activo nunca debe salirse de rango (al quitar el último slide).
   React.useEffect(() => {
@@ -197,6 +199,49 @@ export function EditorCarruselLateral({
 
   const ir = (delta: -1 | 1) => setActivo((a) => Math.min(total - 1, Math.max(0, a + delta)));
 
+  // Descarga el carrusel ENTERO como archivos sueltos (uno por slide, en orden), para postear a mano
+  // donde Metricool no llega. Cada slide se descarga en su forma PUBLICABLE:
+  //  - Portada: composite on-demand del servidor (`/compuesta`, refleja la receta guardada).
+  //  - Slide extra de imagen: se RE-HORNEA con su receta actual (sin depender del debounce) y se baja.
+  //  - Slide extra de video: su media de video tal cual.
+  // Al terminar, ofrece copiar el copy del post al portapapeles.
+  const descargarCarrusel = React.useCallback(async () => {
+    setDescargando(true);
+    const base = slugNombre(marca);
+    try {
+      // Portada (archivo 1). Cache-bust para no reusar un render viejo del navegador.
+      await descargarUrlConAuth(`/api/piezas/${piezaId}/compuesta?d=${Date.now()}`, `${base}-1`);
+      // Slides extra (archivos 2..N): re-hornea imágenes, baja el video tal cual.
+      const lista = slidesRef.current;
+      for (let i = 0; i < lista.length; i++) {
+        const s = lista[i];
+        const nombre = `${base}-${i + 2}`;
+        if (s.tipo === "video") {
+          if (s.objeto) await descargarUrlConAuth(urlMedia(s.objeto), nombre, "mp4");
+          continue;
+        }
+        let id = s.objeto ?? "";
+        if (slidePlacaEditable(s)) {
+          const resp = await api.componerSlide(piezaId, {
+            foto: s.foto ?? "",
+            titular: s.titular ?? "",
+            plantilla_id: s.sinPlaca ? "" : s.plantillaId ?? "",
+            foto_encuadre: s.fotoEncuadre ?? "",
+            sin_plantilla: s.sinPlaca ?? false,
+          });
+          id = resp.id;
+        }
+        if (id) await descargarUrlConAuth(urlMedia(id), nombre);
+      }
+      toast.success("Carrusel descargado.");
+      await ofrecerCopiarCopy(copy);
+    } catch (e) {
+      toast.error(mensajeError(e));
+    } finally {
+      setDescargando(false);
+    }
+  }, [marca, piezaId, copy]);
+
   // --- Receta del slide activo para el editor de placa --- //
   const esPortada = activo === 0;
   const slideExtra = esPortada ? null : slides[activo - 1];
@@ -264,6 +309,25 @@ export function EditorCarruselLateral({
           >
             <Plus className="h-4 w-4" />
             Slide
+          </Button>
+          {/* Descarga el carrusel entero (un archivo por slide) para postear a mano donde
+              Metricool no llega (p. ej. X). */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2"
+            onClick={() => void descargarCarrusel()}
+            disabled={disabled || descargando}
+            aria-label="Descargar carrusel"
+            title="Descargar carrusel para postear"
+          >
+            {descargando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Carrusel
           </Button>
         </div>
       </div>

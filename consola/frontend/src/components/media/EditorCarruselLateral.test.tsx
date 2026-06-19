@@ -97,6 +97,34 @@ describe("EditorCarruselLateral", () => {
     expect(onSlides).toHaveBeenCalledWith([{ tipo: "imagen", objeto: "s3.png", titular: "B" }]);
   });
 
+  it("'Carrusel' descarga la portada (/compuesta), re-hornea cada imagen extra y baja el video", async () => {
+    const componer = vi
+      .spyOn(api, "componerSlide")
+      .mockResolvedValue({ id: "artes/h.png", url: "/api/media/artes/h.png" });
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["x"]) });
+    vi.stubGlobal("fetch", fetchSpy);
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    renderLateral([
+      { tipo: "imagen", objeto: "s2.png", titular: "Clave 2", foto: "f.jpg" },
+      { tipo: "video", objeto: "v.mp4", titular: "" },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Descargar carrusel" }));
+
+    // Una descarga por slide: portada (/compuesta) + imagen re-horneada + video.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(3));
+    expect(fetchSpy.mock.calls[0][0]).toMatch(/\/api\/piezas\/pub-1\/compuesta/);
+    expect(componer).toHaveBeenCalledWith("pub-1", {
+      foto: "f.jpg",
+      titular: "Clave 2",
+      plantilla_id: "",
+      foto_encuadre: "",
+      sin_plantilla: false,
+    });
+  });
+
   it("editar el titular de un slide extra lo RE-HORNEA (debounced) y fija el nuevo objeto", async () => {
     vi.useFakeTimers();
     const componer = vi
