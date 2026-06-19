@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { CalendarPlus, Check, Loader2, Sparkles, X } from "lucide-react";
+import { CalendarPlus, Check, Loader2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { diaCorto } from "@/lib/rota-calendario";
@@ -215,7 +214,6 @@ export function DialogoAsignarTurnos({
   dias,
   franjas,
   cms,
-  marca,
   onCambio,
   incrustado = false,
 }: {
@@ -229,8 +227,6 @@ export function DialogoAsignarTurnos({
   franjas: FranjaSemana[];
   /** CMs asignables de la marca activa. */
   cms: MiembroRota[];
-  /** Marca activa: el import de documento mapea las personas a las franjas de ESTA marca. */
-  marca: string;
   /** Refresca la rejilla tras asignar. */
   onCambio: () => void;
   /** Incrustado: en vez de un modal centrado, se pinta como columna lateral junto a la rejilla
@@ -340,34 +336,11 @@ export function DialogoAsignarTurnos({
   // Turnos que se intentarán crear: el mismo horario+días aplicado a cada persona marcada.
   const totalTurnos = personasSel.size * diasSel.size;
 
-  // El cuerpo del formulario es idéntico en modal y en columna lateral (incrustado); solo cambia
-  // el envoltorio (Dialog vs <aside>) y dónde van el título y las acciones.
-  const campos = (
+  // Cuerpo del formulario MANUAL (personas/horario/días), compartido por el modal y la columna
+  // lateral (incrustado). El reparto automático «de un documento» vive aparte, al final del panel
+  // (lo monta el contenedor de Gestión), por ser la última opción.
+  const camposManual = (
     <>
-      {/* AUTOMÁTICO: subir un documento (parrilla/Excel/foto) → Keni propone los turnos
-            (y eventos), se revisan y se aplican. Antes era un botón suelto en la cabecera del
-            calendario; ahora vive aquí como la vía RÁPIDA de «Asignar turnos». */}
-        <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
-          <div className="flex items-center gap-1.5 text-sm font-medium">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Automático: de un documento
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Sube una parrilla, un Excel o una foto: Keni propone los turnos y los revisas antes de aplicar.
-          </p>
-          <ImportarDocumentoParrilla
-            marca={marca}
-            onAplicado={() => {
-              onCambio();
-              onOpenChange(false);
-            }}
-          />
-        </div>
-
-        <div className="relative py-0.5 text-center text-xs text-muted-foreground">
-          — o a mano —
-        </div>
-
         <p className="text-xs text-muted-foreground">
           Reparte la semana a mano: elige quién trabaja, su horario y qué días. Puedes marcar
           varias personas y aplicarles el mismo turno de una vez. Esto es la CAPACIDAD; quién
@@ -491,39 +464,32 @@ export function DialogoAsignarTurnos({
     </>
   );
 
-  const acciones = (
-    <>
-      <Button variant="outline" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
-        Cancelar
-      </Button>
-      <Button
-        variant="secondary"
-        onClick={() => asignar.mutate()}
-        disabled={incompleto || asignar.isPending}
-      >
-        {asignar.isPending ? (
-          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-        ) : (
-          <CalendarPlus className="mr-1 h-4 w-4" />
-        )}
-        {asignar.isPending
-          ? "Asignando…"
-          : totalTurnos > 0
-            ? `Asignar ${totalTurnos} turno${totalTurnos === 1 ? "" : "s"}`
-            : "Asignar"}
-      </Button>
-    </>
+  const botonAsignar = (
+    <Button
+      variant="secondary"
+      onClick={() => asignar.mutate()}
+      disabled={incompleto || asignar.isPending}
+    >
+      {asignar.isPending ? (
+        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+      ) : (
+        <CalendarPlus className="mr-1 h-4 w-4" />
+      )}
+      {asignar.isPending
+        ? "Asignando…"
+        : totalTurnos > 0
+          ? `Asignar ${totalTurnos} turno${totalTurnos === 1 ? "" : "s"}`
+          : "Asignar"}
+    </Button>
   );
 
-  // Columna lateral (Gestión): junto a la rejilla viva, sin overlay que la tape. Cerrada no
-  // pinta nada; sticky para seguir visible mientras la rejilla hace scroll.
+  // Columna lateral (Gestión): tarjeta del reparto MANUAL. La compone el contenedor de Gestión
+  // junto a «Cambios y ausencias» y, al final, el import automático. Cerrada no pinta nada; el ✕
+  // de la cabecera oculta el panel.
   if (incrustado) {
     if (!abierto) return null;
     return (
-      <aside
-        aria-label="Asignar turnos"
-        className="sticky top-4 flex max-h-[calc(100dvh-7rem)] w-[22rem] shrink-0 flex-col gap-3 self-start overflow-y-auto rounded-lg border bg-card p-4 shadow-sm"
-      >
+      <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Asignar turnos</h2>
           <Button
@@ -536,9 +502,9 @@ export function DialogoAsignarTurnos({
             <X className="h-4 w-4" />
           </Button>
         </div>
-        {campos}
-        <div className="flex justify-end gap-2 pt-1">{acciones}</div>
-      </aside>
+        {camposManual}
+        <div className="flex justify-end pt-1">{botonAsignar}</div>
+      </div>
     );
   }
 
@@ -548,8 +514,13 @@ export function DialogoAsignarTurnos({
         <DialogHeader>
           <DialogTitle>Asignar turnos</DialogTitle>
         </DialogHeader>
-        {campos}
-        <DialogFooter>{acciones}</DialogFooter>
+        {camposManual}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
+            Cancelar
+          </Button>
+          {botonAsignar}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

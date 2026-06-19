@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
@@ -161,9 +161,7 @@ const CMS: MiembroRota[] = [
 const DIAS = ["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"];
 
 describe("DialogoAsignarTurnos (render)", () => {
-  it("pide personas + horario (sin selector de franja) y ofrece import automático", () => {
-    // El diálogo embebe «Importar documento» (su badge sondea propuestas pendientes).
-    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
+  it("pide personas + horario (sin selector de franja); reparto manual", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -174,7 +172,6 @@ describe("DialogoAsignarTurnos (render)", () => {
           dias={DIAS}
           franjas={FRANJAS}
           cms={CMS}
-          marca="claro-sports"
           onCambio={vi.fn()}
         />
       </QueryClientProvider>,
@@ -189,15 +186,15 @@ describe("DialogoAsignarTurnos (render)", () => {
     expect(screen.queryByText("Franja")).not.toBeInTheDocument();
     // Sin persona ni días elegidos, «Asignar» está deshabilitado.
     expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
-    // La vía automática (import) está disponible dentro del mismo diálogo.
-    expect(screen.getByRole("button", { name: /Importar documento/ })).toBeInTheDocument();
+    // El reparto automático (import de documento) ya NO vive en el diálogo: lo monta el panel
+    // de Gestión, al final, como última opción.
+    expect(screen.queryByRole("button", { name: /Importar documento/ })).not.toBeInTheDocument();
   });
 
   it("arranca vacío; personas × días mueven el conteo de turnos del botón", () => {
     // Los chips de persona/día y los atajos son <button> planos (no Selects de Radix), así que
     // sí se pueden ejercitar en jsdom. El botón «Asignar» lleva el conteo de turnos
     // (personas × días): el aviso para que «elijo 2 personas y 3 días» se vea como 6 turnos.
-    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -208,7 +205,6 @@ describe("DialogoAsignarTurnos (render)", () => {
           dias={DIAS}
           franjas={FRANJAS}
           cms={CMS}
-          marca="claro-sports"
           onCambio={vi.fn()}
         />
       </QueryClientProvider>,
@@ -245,10 +241,9 @@ describe("DialogoAsignarTurnos (render)", () => {
     expect(screen.getByRole("button", { name: "Asignar 1 turno" })).toBeInTheDocument();
   });
 
-  it("incrustado: columna lateral (aside), no modal; cerrado no pinta nada", () => {
-    // En «Gestión» el reparto va junto a la rejilla viva: un <aside> (rol complementary), NO un
-    // modal que la tape. Cerrado no renderiza nada para que la rejilla recupere el ancho.
-    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
+  it("incrustado: tarjeta de reparto (no modal); cerrado no pinta nada", () => {
+    // En «Gestión» el reparto va junto a la rejilla viva como una tarjeta (no un modal que la
+    // tape). Cerrado no renderiza nada para que la rejilla recupere el ancho.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onOpenChange = vi.fn();
     const props = {
@@ -258,7 +253,6 @@ describe("DialogoAsignarTurnos (render)", () => {
       dias: DIAS,
       franjas: FRANJAS,
       cms: CMS,
-      marca: "claro-sports",
       onCambio: vi.fn(),
     };
     const { rerender } = render(
@@ -273,13 +267,12 @@ describe("DialogoAsignarTurnos (render)", () => {
         <DialogoAsignarTurnos abierto {...props} />
       </QueryClientProvider>,
     );
-    const panel = screen.getByRole("complementary", { name: "Asignar turnos" });
-    expect(within(panel).getByText("Personas")).toBeInTheDocument();
-    expect(within(panel).getByText("Horario")).toBeInTheDocument();
+    expect(screen.getByText("Personas")).toBeInTheDocument();
+    expect(screen.getByText("Horario")).toBeInTheDocument();
     // No es un modal: nada de role=dialog que cubra la rejilla.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Su propio botón de cerrar devuelve el ancho a la rejilla.
-    fireEvent.click(within(panel).getByRole("button", { name: "Cerrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

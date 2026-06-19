@@ -81,6 +81,7 @@ function renderRota(opts: OpcionesRender = {}, tab?: string) {
     "rotaEquipoTodos",
     "rotaAusencias",
     "listarCoordinacionSemana",
+    "listarSwaps",
     "misTurnos",
     "misTurnosMes",
     "turnosMes",

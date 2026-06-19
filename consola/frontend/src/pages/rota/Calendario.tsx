@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BellRing,
   CalendarPlus,
+  Sparkles,
   Sunrise,
   Sunset,
   UserPlus,
@@ -13,6 +14,7 @@ import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,6 +64,7 @@ import {
   type ItemEventoCalendario,
 } from "./comun";
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
+import { CambiosYAusencias } from "./CambiosYAusencias";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas } from "./Franjas";
 import { VistaMensualTurnos } from "./MisTurnos";
@@ -660,7 +663,9 @@ export function Calendario({
                               franja={franja}
                               franjasSemana={franjasSemana}
                               personas={personas}
-                              eventos={eventos}
+                              /* «Gestión» = rejilla de CAPACIDAD pura: solo turnos, sin los chips
+                                 de eventos/cobertura (esos viven en «Calendario»/«Cobertura»). */
+                              eventos={esGestion ? [] : eventos}
                               equipo={equipo}
                               cmsDisponibles={cmsDisponibles}
                               editable={editable}
@@ -677,8 +682,9 @@ export function Calendario({
                   });
                 })()}
                 {/* Eventos que no caen en ninguna franja (semana sin franjas configuradas): se
-                    muestran aquí en vez de perderse, y siguen siendo cubribles desde su chip. */}
-                {eventosSinFranjaPorDia.size > 0 && (
+                    muestran aquí en vez de perderse, y siguen siendo cubribles desde su chip. En
+                    «Gestión» no se pintan eventos (rejilla de turnos pura). */}
+                {!esGestion && eventosSinFranjaPorDia.size > 0 && (
                   <div className="grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-t-4 border-t-amber-300 dark:border-t-amber-700">
                     <div className="sticky left-0 z-[1] flex flex-col justify-center border-l-4 border-l-amber-400 bg-amber-50/40 px-3 py-3 text-sm font-semibold dark:bg-amber-950/15">
                       <span className="flex items-center gap-1.5">
@@ -715,21 +721,46 @@ export function Calendario({
         </Card>
       )}
         </div>
-        {/* Panel de reparto como columna lateral (solo Gestión). Cerrado no pinta nada (la rejilla
-            recupera el ancho); abierto, comparte la misma instancia/estado que la rejilla, así cada
-            turno asignado aparece al instante (invalida `["rota"]`). */}
-        {esGestion && (
-          <DialogoAsignarTurnos
-            incrustado
-            abierto={abrirAsignar}
-            onOpenChange={setAbrirAsignar}
-            lunes={lunes}
-            dias={dias}
-            franjas={franjasSemana}
-            cms={cms}
-            marca={marcaActiva ?? ""}
-            onCambio={invalidar}
-          />
+        {/* Panel de Gestión como columna lateral (solo admin). Cerrado no pinta nada (la rejilla
+            recupera el ancho). Tres bloques, de más usado a menos: reparto MANUAL (comparte estado
+            con la rejilla → cada turno aparece al instante), «Cambios y ausencias», y al FINAL el
+            reparto automático desde un documento (la última opción). */}
+        {esGestion && abrirAsignar && (
+          <aside
+            aria-label="Asignar turnos"
+            className="sticky top-4 flex max-h-[calc(100dvh-7rem)] w-[26rem] shrink-0 flex-col gap-4 self-start overflow-y-auto"
+          >
+            <DialogoAsignarTurnos
+              incrustado
+              abierto
+              onOpenChange={setAbrirAsignar}
+              lunes={lunes}
+              dias={dias}
+              franjas={franjasSemana}
+              cms={cms}
+              onCambio={invalidar}
+            />
+            <section
+              aria-label="Cambios y ausencias"
+              className="rounded-lg border bg-card p-4 shadow-sm"
+            >
+              <h2 className="mb-3 text-base font-semibold">Cambios y ausencias</h2>
+              <CambiosYAusencias esAdmin={esAdmin} />
+            </section>
+            {/* Reparto automático: la ÚLTIMA opción, al fondo. Sube una parrilla/Excel/foto y Keni
+                propone los turnos; al aplicar, la rejilla se refresca (no cierra el panel). */}
+            <div className="space-y-2 rounded-lg border border-dashed border-border p-4">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Automático: de un documento
+              </div>
+              <p className="text-xs text-muted-foreground">
+                ¿Tienes una parrilla, un Excel o una foto? Súbela y Keni propone los turnos; los
+                revisas antes de aplicar. Es la última opción si no quieres repartir a mano.
+              </p>
+              <ImportarDocumentoParrilla marca={marcaActiva ?? ""} onAplicado={invalidar} />
+            </div>
+          </aside>
         )}
       </div>
 
