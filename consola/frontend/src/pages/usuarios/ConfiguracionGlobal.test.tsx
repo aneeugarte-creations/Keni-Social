@@ -19,6 +19,17 @@ const ADMIN = {
 
 const AJUSTES = [
   {
+    clave: "KENI_CONSOLA_MFA",
+    tipo: "bool",
+    etiqueta: "Passkey obligatorio para todo el equipo",
+    ayuda: "Predeterminado del equipo.",
+    grupo: "seguridad",
+    peligroso: false,
+    valor: false,
+    fuente: "defecto",
+    defecto: false,
+  },
+  {
     clave: "KENI_CONSOLA_MFA_ADMIN",
     tipo: "bool",
     etiqueta: "Passkey obligatorio para administradores",
@@ -157,7 +168,7 @@ describe("ConfiguracionGlobal", () => {
     c.url.includes("/api/usuarios/") &&
     !c.url.includes("/configuracion");
 
-  it("el passkey global es una acción masiva: confirma y marca a cada usuario afectado", async () => {
+  it("el passkey global guarda el predeterminado Y marca a cada usuario afectado", async () => {
     const capturas: Captura[] = [];
     stubFetch(capturas);
     renderConfig();
@@ -167,17 +178,22 @@ describe("ConfiguracionGlobal", () => {
     });
     fireEvent.click(sw);
 
-    // Aparece la confirmación; aún no se ha tocado a nadie.
+    // Aparece la confirmación; aún no se ha tocado nada.
     const confirmar = await screen.findByRole("button", { name: "Activar para todos" });
     expect(capturas.find(patchUsuario)).toBeUndefined();
 
     fireEvent.click(confirmar);
 
-    // Marca mfa_requerido=true en la persona afectada (ana, editora sin exigir).
     await waitFor(() => {
-      const patch = capturas.find(patchUsuario);
-      expect(patch?.url).toContain("/api/usuarios/u1");
-      expect(patch?.body).toMatchObject({ mfa_requerido: true });
+      // Guarda el predeterminado global (que heredan las altas)…
+      const patchFlag = capturas.find(
+        (c) => c.url.includes("/api/usuarios/configuracion") && c.metodo === "PATCH",
+      );
+      expect(patchFlag?.body).toMatchObject({ clave: "KENI_CONSOLA_MFA", valor: true });
+      // …y marca mfa_requerido=true en la persona afectada (ana, editora sin exigir).
+      const patchUser = capturas.find(patchUsuario);
+      expect(patchUser?.url).toContain("/api/usuarios/u1");
+      expect(patchUser?.body).toMatchObject({ mfa_requerido: true });
     });
   });
 

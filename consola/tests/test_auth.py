@@ -1427,14 +1427,64 @@ def test_borrar_usuario_libera_sus_piezas_cogidas(entorno):
 # la fixture de conftest). Los accesores de `config` la recogen (precedencia STORE > ENV >
 # DEFECTO), así que un PATCH desde la UI cambia el comportamiento real (MFA / política de pass).
 
-# `KENI_CONSOLA_MFA` (passkey para todo el equipo) ya NO es un ajuste de override: es una acción
-# masiva del frontend sobre `mfa_requerido`, así que no aparece en este endpoint curado.
+# `KENI_CONSOLA_MFA` (passkey para todo el equipo) NO es un override de runtime: es el
+# PREDETERMINADO global que el frontend togglea (acción masiva) y que HEREDAN las altas nuevas.
 _CLAVES_SEGURIDAD = {
+    "KENI_CONSOLA_MFA",
     "KENI_CONSOLA_MFA_ADMIN",
     "KENI_CONSOLA_SESION_HORAS",
     "KENI_CONSOLA_SESION_MAX_HORAS",
     "KENI_CONSOLA_PASSWORD_MIN",
 }
+
+
+def test_alta_hereda_passkey_global(entorno):
+    """Una cuenta nueva HEREDA el «passkey obligatorio para todo el equipo» vigente; un valor
+    `mfa_requerido` explícito en el alta manda sobre el predeterminado global."""
+    from keni_consola import ajustes
+
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+
+    def _mfa_req(usuario: str) -> bool:
+        return next(u for u in auth.listar_usuarios() if u["usuario"] == usuario)["mfa_requerido"]
+
+    # Global ON: la nueva cuenta nace exigida.
+    ajustes.guardar("KENI_CONSOLA_MFA", "1")
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "ana", "password": CLAVE, "rol": "editor"},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("ana") is True
+
+    # Global OFF: la nueva NO hereda exigencia.
+    ajustes.guardar("KENI_CONSOLA_MFA", "0")
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "beto", "password": CLAVE, "rol": "editor"},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("beto") is False
+
+    # Explícito (mfa_requerido) manda sobre el global.
+    ajustes.guardar("KENI_CONSOLA_MFA", "1")
+    assert (
+        c.post(
+            "/api/usuarios",
+            json={"usuario": "caro", "password": CLAVE, "rol": "editor", "mfa_requerido": False},
+            headers=_ORIGIN,
+        ).status_code
+        == 201
+    )
+    assert _mfa_req("caro") is False
 
 
 def test_configuracion_get_solo_superadmin(entorno):

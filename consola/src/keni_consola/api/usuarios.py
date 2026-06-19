@@ -234,9 +234,13 @@ async def crear(request: Request) -> Response:
     # El primer admin por token nace SUPERADMIN (debe poder gestionar usuarios). En el alta
     # normal, los flags `superadmin`/`mfa_requerido` los decide el superadmin que crea.
     crea_superadmin = True if bootstrap_por_token else bool(superadmin)
+    # HERENCIA del modelo global: si no se indica `mfa_requerido` explícito, la cuenta nueva
+    # HEREDA el «passkey obligatorio para todo el equipo» vigente (`config.mfa_habilitado`), para
+    # que las altas queden cubiertas sin re-aplicar la acción masiva. Un valor explícito manda.
+    mfa_req = bool(mfa_requerido) if mfa_requerido is not None else config.mfa_habilitado()
     creado = auth.crear_usuario(
         usuario, password, rol, nombre=nombre,
-        superadmin=crea_superadmin, mfa_requerido=bool(mfa_requerido),
+        superadmin=crea_superadmin, mfa_requerido=mfa_req,
     )
     if creado is None:
         return JSONResponse({"error": "Ya existe un usuario con ese nombre."}, status_code=409)
@@ -572,10 +576,19 @@ async def borrar(request: Request) -> Response:
 # `password_min`) lo recogen sin más wiring. Acotado a estas claves curadas (jamás otras del
 # catálogo de la máquina). El enforcement de MFA ya lo aplica `seguridad.mfa_requerido_para`.
 _AJUSTES_SEGURIDAD: tuple[ajustes_catalogo.Ajuste, ...] = (
-    # NOTA: «passkey obligatorio para todo el equipo» (KENI_CONSOLA_MFA) ya NO es un ajuste de
-    # override aquí: es una ACCIÓN MASIVA del frontend que marca `mfa_requerido` en cada cuenta
-    # (PATCH /api/usuarios/{id}), y a partir de ahí manda el flag individual. Solo queda como
-    # política persistente la de administradores.
+    # «Passkey obligatorio para todo el equipo» NO es un override de runtime (el enforcement es
+    # per-usuario; ver `seguridad.mfa_requerido_para`). Es el PREDETERMINADO global: el frontend lo
+    # togglea como ACCIÓN MASIVA (marca/desmarca `mfa_requerido` en las cuentas existentes) y,
+    # persistido aquí, lo HEREDAN las cuentas NUEVAS al crearse (ver `crear`). Editable per-usuario.
+    ajustes_catalogo.Ajuste(
+        clave=config.ENV_MFA,
+        tipo="bool",
+        etiqueta="Passkey obligatorio para todo el equipo",
+        ayuda="Predeterminado del equipo: marca a las cuentas existentes y se HEREDA en las "
+        "nuevas. Luego puedes eximir o exigir persona a persona desde su ficha.",
+        grupo="seguridad",
+        defecto=False,
+    ),
     ajustes_catalogo.Ajuste(
         clave=config.ENV_MFA_ADMIN,
         tipo="bool",

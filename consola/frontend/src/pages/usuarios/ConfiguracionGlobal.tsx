@@ -22,6 +22,7 @@ import { type AjusteConfig, type UsuarioAdmin } from "@/types";
 
 import {
   CLAVE_CONFIG_USUARIOS,
+  CLAVE_MFA,
   CLAVE_MFA_ADMIN,
   CLAVE_PASSWORD_MIN,
   CLAVE_SESION_HORAS,
@@ -36,9 +37,9 @@ const SECCIONES: { titulo: string; descripcion: string; claves: string[]; nota?:
     descripcion: "Obligatoriedad del segundo factor (passkey).",
     claves: [CLAVE_MFA_ADMIN],
     nota:
-      "«Passkey obligatorio para todo el equipo» MARCA a cada cuenta como exigida (te avisa a " +
-      "quién afecta); a partir de ahí puedes eximir o exigir persona a persona desde su ficha. " +
-      "Las cuentas nuevas no quedan exigidas solas: vuelve a aplicarlo cuando se incorpore gente.",
+      "«Passkey obligatorio para todo el equipo» marca a las cuentas actuales (te avisa a quién " +
+      "afecta) y queda como PREDETERMINADO que heredan las altas nuevas. Aun así puedes eximir o " +
+      "exigir persona a persona desde su ficha (el flag individual manda).",
   },
   {
     titulo: "Sesión",
@@ -64,8 +65,9 @@ function mensajeAfectados(activar: boolean, afectados: UsuarioAdmin[]): React.Re
   if (afectados.length === 0) {
     return (
       <span>
-        Todo el equipo ya tiene la passkey exigida (por rol de administrador o de forma
-        individual): este cambio no altera a nadie.
+        No cambia ninguna cuenta actual (ya están todas{" "}
+        {activar ? "exigidas" : "sin exigir"} o son administradores). Quedará como predeterminado
+        del equipo, que heredarán las cuentas nuevas.
       </span>
     );
   }
@@ -228,28 +230,31 @@ function CabeceraFuente({
 }
 
 /**
- * «Passkey obligatorio para todo el equipo» como ACCIÓN MASIVA (no un flag de override): el switch
- * refleja si TODAS las cuentas relevantes ya lo tienen exigido; al cambiarlo, confirma con la lista
- * de afectados y marca/desmarca `mfa_requerido` en cada una. Tras aplicarlo, cada persona se puede
- * eximir/exigir desde su ficha (el flag individual manda). Los administradores quedan fuera cuando
- * su política propia está activa (ya obligados).
+ * «Passkey obligatorio para todo el equipo»: PREDETERMINADO global persistente + ACCIÓN MASIVA. El
+ * switch refleja el flag guardado (predeterminado del equipo); al cambiarlo, confirma con la lista
+ * de cuentas existentes afectadas y entonces (1) guarda el flag —que HEREDAN las cuentas nuevas— y
+ * (2) marca/desmarca `mfa_requerido` en las existentes. No es un override de runtime: cada persona
+ * se puede eximir/exigir desde su ficha (el flag individual manda). Los administradores quedan
+ * fuera cuando su política propia está activa (ya obligados).
  */
 function ControlPasskeyGlobal({
+  activo,
   usuarios,
   mfaAdminActivo,
   ocupado,
   onAplicar,
 }: {
+  /** Flag guardado (predeterminado del equipo) que se hereda en las altas. */
+  activo: boolean;
   usuarios: UsuarioAdmin[];
   mfaAdminActivo: boolean;
   ocupado: boolean;
-  onAplicar: (ids: string[], valor: boolean) => void;
+  onAplicar: (valor: boolean, ids: string[]) => void;
 }) {
   const relevantes = relevantesParaMasiva(usuarios, mfaAdminActivo);
-  const todosExigidos = relevantes.length > 0 && relevantes.every((u) => Boolean(u.mfa_requerido));
 
   const alCambiar = async () => {
-    const valor = !todosExigidos;
+    const valor = !activo;
     const afectados = relevantes
       .filter((u) => Boolean(u.mfa_requerido) !== valor)
       .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
@@ -262,8 +267,8 @@ function ControlPasskeyGlobal({
     });
     if (!ok) return;
     onAplicar(
-      afectados.map((u) => u.id),
       valor,
+      afectados.map((u) => u.id),
     );
   };
 
@@ -274,14 +279,15 @@ function ControlPasskeyGlobal({
           Passkey obligatorio para todo el equipo
         </Label>
         <p className="text-xs text-muted-foreground">
-          Marca a cada cuenta como exigida; luego puedes eximir o exigir persona a persona.
+          Marca a las cuentas actuales y se hereda en las nuevas; luego puedes eximir o exigir
+          persona a persona.
         </p>
       </div>
       <Switch
         id="cfg-passkey-global"
         aria-label="Passkey obligatorio para todo el equipo"
-        checked={todosExigidos}
-        disabled={ocupado || relevantes.length === 0}
+        checked={activo}
+        disabled={ocupado}
         onCheckedChange={alCambiar}
       />
     </div>
@@ -326,14 +332,17 @@ export default function ConfiguracionGlobal() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Acción MASIVA del «passkey obligatorio para todo el equipo»: marca/desmarca `mfa_requerido`
-  // en cada cuenta afectada (PATCH por usuario; el equipo del piloto es pequeño).
-  const aplicarMasiva = useMutation({
-    mutationFn: async ({ ids, valor }: { ids: string[]; valor: boolean }) => {
+  // «Passkey obligatorio para todo el equipo»: guarda el PREDETERMINADO (que heredan las altas) Y
+  // marca/desmarca `mfa_requerido` en las cuentas existentes afectadas (PATCH por usuario; el
+  // equipo del piloto es pequeño).
+  const aplicarGlobal = useMutation({
+    mutationFn: async ({ valor, ids }: { valor: boolean; ids: string[] }) => {
+      await api.actualizarConfiguracionUsuarios({ clave: CLAVE_MFA, valor });
       await Promise.all(ids.map((id) => api.actualizarUsuario(id, { mfa_requerido: valor })));
     },
     onSuccess: (_d, { valor }) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG_USUARIOS });
       toast.success(valor ? "Passkey exigido al equipo" : "Exigencia retirada");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -345,6 +354,7 @@ export default function ConfiguracionGlobal() {
     return mapa;
   }, [query.data]);
   const mfaAdminActivo = porClave.get(CLAVE_MFA_ADMIN)?.valor === true;
+  const passkeyGlobalActivo = porClave.get(CLAVE_MFA)?.valor === true;
 
   const onGuardar = (clave: string, valor: unknown) => guardar.mutate({ clave, valor });
   const onReset = (clave: string) => guardar.mutate({ clave, reset: true });
@@ -405,10 +415,11 @@ export default function ConfiguracionGlobal() {
                 <CardContent className="space-y-5">
                   {esAcceso && (
                     <ControlPasskeyGlobal
+                      activo={passkeyGlobalActivo}
                       usuarios={usuarios}
                       mfaAdminActivo={mfaAdminActivo}
-                      ocupado={aplicarMasiva.isPending}
-                      onAplicar={(ids, valor) => aplicarMasiva.mutate({ ids, valor })}
+                      ocupado={aplicarGlobal.isPending}
+                      onAplicar={(valor, ids) => aplicarGlobal.mutate({ valor, ids })}
                     />
                   )}
                   {ajustes.map((a) =>
