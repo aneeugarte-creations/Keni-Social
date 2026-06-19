@@ -49,6 +49,9 @@ _CAMPOS_EDITABLES_EVENTO_ROTA = (
     "prioridad",
     "marca",
 )
+# Campos que se PROPAGAN al resto de la serie en una edición con alcance (todo lo editable MENOS
+# `fecha`: cada ocurrencia conserva su propio día). Editar `hora`/`tipo_cobertura` reprograma.
+_CAMPOS_PROPAGABLES_SERIE = tuple(c for c in _CAMPOS_EDITABLES_EVENTO_ROTA if c != "fecha")
 
 
 def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
@@ -364,6 +367,51 @@ def borrar_serie_eventos(serie_id: str, *, desde: str | None = None) -> int:
         else:
             cur = con.execute("DELETE FROM rota_eventos WHERE serie_id = ?", (serie_id,))
             con.execute("DELETE FROM rota_evento_series WHERE id = ?", (serie_id,))
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def actualizar_serie_eventos(
+    serie_id: str,
+    campos: dict[str, Any],
+    *,
+    desde: str | None = None,
+    excluir_id: str | None = None,
+) -> int:
+    """Propaga los campos editables (NUNCA `fecha`) al resto de ocurrencias de la serie.
+
+    Devuelve cuántas filas se actualizaron. `desde='AAAA-MM-DD'` limita a `fecha >= desde`
+    (alcance "este y los siguientes"); `excluir_id` salta la ocurrencia que ya se editó por
+    separado (la que disparó la acción). Si la propagación toca `hora`/`tipo_cobertura`, esas
+    ocurrencias quedan `cambiado=1` (se reprogramaron). Sin serie o sin campos propagables: 0.
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_PROPAGABLES_SERIE}
+    if not serie_id or not cambios:
+        return 0
+    reprograma = any(k in cambios for k in ("hora", "tipo_cobertura"))
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora_iso()]
+    if reprograma:
+        asignaciones.append("cambiado = ?")
+        params.append(1)
+    clausulas = ["serie_id = ?"]
+    params.append(serie_id)
+    if desde:
+        clausulas.append("fecha >= ?")
+        params.append(desde)
+    if excluir_id:
+        clausulas.append("id <> ?")
+        params.append(excluir_id)
+    sql = (
+        f"UPDATE rota_eventos SET {', '.join(asignaciones)} "  # noqa: S608 -- columnas de allowlist
+        f"WHERE {' AND '.join(clausulas)}"
+    )
+    con = _conectar()
+    try:
+        cur = con.execute(sql, tuple(params))
         con.commit()
         return cur.rowcount
     finally:

@@ -85,11 +85,13 @@ export const apiRota = {
   // recurrente (respuesta `{eventos, serie_id, total}`). El llamante distingue por la forma.
   crearEventoRota: (cuerpo: CuerpoCrearEventoRota) =>
     peticion<RespuestaCrearEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
-  actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota) =>
-    peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}`, {
-      metodo: "PATCH",
-      json: cuerpo,
-    }),
+  // `alcance` (solo útil en una serie): "este" (def.) edita el evento; "siguientes"/"serie"
+  // propagan los campos editados (NUNCA la fecha) a este y los siguientes, o a toda la serie.
+  actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota, alcance?: AlcanceSerie) =>
+    peticion<RespuestaEventoRota & { propagados?: number }>(
+      `/rota/eventos/${encodeURIComponent(id)}${alcance ? `?alcance=${alcance}` : ""}`,
+      { metodo: "PATCH", json: cuerpo },
+    ),
   // `alcance` (solo útil en una serie): "este" (def.) borra el evento; "siguientes" borra este
   // y los posteriores de la serie; "serie" la borra entera.
   eliminarEventoRota: (id: string, alcance?: AlcanceSerie) =>

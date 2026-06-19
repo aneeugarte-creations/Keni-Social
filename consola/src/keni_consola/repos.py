@@ -334,6 +334,7 @@ from .repos_rota import (  # noqa: F401
     actualizar_evento_rota,
     actualizar_franja_semana,
     actualizar_programa_rota,
+    actualizar_serie_eventos,
     actualizar_swap_turno,
     actualizar_turno_rota,
     actualizar_turnos_rota_lote,

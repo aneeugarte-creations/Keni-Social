@@ -103,6 +103,16 @@ def borrar_serie_eventos(serie_id: str, *, desde: str | None = None) -> int:
     return db.borrar_serie_eventos(serie_id, desde=desde)
 
 
+def actualizar_serie_eventos(
+    serie_id: str,
+    campos: dict[str, Any],
+    *,
+    desde: str | None = None,
+    excluir_id: str | None = None,
+) -> int:
+    return db.actualizar_serie_eventos(serie_id, campos, desde=desde, excluir_id=excluir_id)
+
+
 def crear_turno_rota(
     semana: str,
     fecha: str,

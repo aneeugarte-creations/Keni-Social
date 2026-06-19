@@ -201,8 +201,17 @@ async def actualizar_evento(request: Request) -> Response:
     Editar `fecha`/`hora`/`tipo_cobertura` lo marca como REPROGRAMADO (`cambiado=1`); el
     request puede enviar `cambiado:false` para la acción "marcar avisado" (limpiar el aviso),
     que gana incluso si en el mismo PATCH se reprogramó.
+
+    `?alcance=este` (def.) edita solo este evento. En una serie recurrente, `?alcance=siguientes`
+    propaga los campos editados (NUNCA la fecha) a este y los posteriores de la serie, y
+    `?alcance=serie` a toda ella. Un evento sin serie ignora el alcance.
     """
     evento_id = request.path_params["evento_id"]
+    alcance = (request.query_params.get("alcance") or "este").strip().lower()
+    if alcance not in _ALCANCES_SERIE:
+        return JSONResponse(
+            {"error": 'Alcance inválido. Usa "este", "siguientes" o "serie".'}, status_code=400
+        )
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
     for clave in ("titulo", "fecha", "hora", "contenido", "nota"):
@@ -234,7 +243,17 @@ async def actualizar_evento(request: Request) -> Response:
     evento = repos.actualizar_evento_rota(evento_id, campos)
     if evento is None:
         return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
-    return JSONResponse({"evento": _evento_a_dict(evento)})
+
+    # Alcance de serie: tras editar ESTE evento, propaga los campos (sin la fecha) al resto de la
+    # serie. "siguientes" = desde su fecha en adelante; "serie" = toda. El propio evento se excluye.
+    propagados = 0
+    serie_id = evento.get("serie_id") or ""
+    if alcance != "este" and serie_id:
+        desde = evento["fecha"] if alcance == "siguientes" else None
+        propagados = repos.actualizar_serie_eventos(
+            serie_id, campos, desde=desde, excluir_id=evento_id
+        )
+    return JSONResponse({"evento": _evento_a_dict(evento), "propagados": propagados})
 
 
 async def borrar_evento(request: Request) -> Response:

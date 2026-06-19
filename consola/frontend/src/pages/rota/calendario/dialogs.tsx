@@ -11,7 +11,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { confirmar } from "@/components/comunes/confirmar";
+import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import type {
+  AlcanceSerie,
   Publicacion,
   EventoRota,
   FranjaSemana,
@@ -88,16 +89,20 @@ export function DialogEditarEvento({
   const [contenido, setPublicacion] = React.useState(evento.contenido);
 
   const vinculadas = tareasVinculadas ?? [];
+  const esSerie = Boolean(evento.serie_id);
   const guardar = useMutation({
-    mutationFn: async () => {
-      await api.actualizarEventoRota(evento.id, {
+    mutationFn: async (alcance?: AlcanceSerie) => {
+      const campos = {
         titulo: titulo.trim(),
         fecha,
         hora: hora.trim(),
         tipo_cobertura: tipoCobertura,
         prioridad,
         contenido: contenido.trim(),
-      });
+      };
+      // Sin alcance (evento suelto) la llamada es la de siempre; con alcance propaga a la serie.
+      if (alcance) await api.actualizarEventoRota(evento.id, campos, alcance);
+      else await api.actualizarEventoRota(evento.id, campos);
       // Propaga el cambio a las tareas de cobertura: su título/fecha/hora son una foto del
       // evento al cubrir, así que sin esto la agenda mostraría los datos viejos del partido.
       if (vinculadas.length > 0) {
@@ -121,8 +126,9 @@ export function DialogEditarEvento({
     onError: (e) => toast.error(mensajeError(e)),
   });
   const borrar = useMutation({
-    mutationFn: async () => {
-      await api.eliminarEventoRota(evento.id);
+    mutationFn: async (alcance?: AlcanceSerie) => {
+      if (alcance) await api.eliminarEventoRota(evento.id, alcance);
+      else await api.eliminarEventoRota(evento.id);
       // Cascada: la fila de cobertura se deriva de estas tareas, no del evento; sin borrarlas
       // el partido seguiría apareciendo (ahora sin dueño claro). Borrar el evento = cancelarlo.
       if (vinculadas.length > 0) {
@@ -143,6 +149,21 @@ export function DialogEditarEvento({
       ? `¿Borrar este evento? Cancelará la cobertura de ${nCubren} ${nCubren === 1 ? "persona" : "personas"}.`
       : "¿Borrar este evento? Sus turnos también se perderán.";
 
+  // En una serie, editar/borrar pregunta el ALCANCE (este / siguientes / toda la serie). Devuelve
+  // el alcance elegido, o null si se cancela. Un evento suelto no pregunta y devuelve undefined.
+  async function elegirAlcance(verbo: "Editar" | "Borrar"): Promise<AlcanceSerie | null | undefined> {
+    if (!esSerie) return undefined;
+    return (await elegir({
+      titulo: `${verbo} evento recurrente`,
+      mensaje: `"${evento.titulo}" se repite. ¿A qué eventos aplicar?`,
+      opciones: [
+        { valor: "este", etiqueta: "Solo este" },
+        { valor: "siguientes", etiqueta: "Este y los siguientes" },
+        { valor: "serie", etiqueta: "Toda la serie", destructivo: verbo === "Borrar" },
+      ],
+    })) as AlcanceSerie | null;
+  }
+
   return (
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-w-xl">
@@ -150,6 +171,11 @@ export function DialogEditarEvento({
           <DialogTitle>Editar evento</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          {esSerie && (
+            <p className="text-sm text-muted-foreground">
+              Forma parte de una serie recurrente: al guardar o borrar podrás elegir el alcance.
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="ce-titulo">Evento / transmisión</Label>
             <Input
@@ -231,6 +257,11 @@ export function DialogEditarEvento({
             variant="outline"
             className="text-destructive hover:text-destructive"
             onClick={async () => {
+              if (esSerie) {
+                const alcance = await elegirAlcance("Borrar");
+                if (alcance) borrar.mutate(alcance);
+                return;
+              }
               if (
                 await confirmar({
                   mensaje: mensajeBorrar,
@@ -238,7 +269,7 @@ export function DialogEditarEvento({
                   textoConfirmar: "Borrar",
                 })
               )
-                borrar.mutate();
+                borrar.mutate(undefined);
             }}
             disabled={borrar.isPending}
           >
@@ -253,7 +284,14 @@ export function DialogEditarEvento({
             <Button variant="ghost" onClick={onCerrar}>
               Cancelar
             </Button>
-            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+            <Button
+              onClick={async () => {
+                const alcance = await elegirAlcance("Editar");
+                if (alcance === null) return; // canceló el diálogo de alcance
+                guardar.mutate(alcance);
+              }}
+              disabled={guardar.isPending}
+            >
               {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
             </Button>

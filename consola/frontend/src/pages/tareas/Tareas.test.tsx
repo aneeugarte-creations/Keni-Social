@@ -1068,6 +1068,34 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     );
   });
 
+  it("EDITAR un evento RECURRENTE pregunta el alcance y lo pasa a actualizarEventoRota", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarEventoRota")
+      .mockResolvedValue({} as never);
+    // El evento pertenece a una serie → al guardar se pregunta el alcance; el manager elige «toda la serie».
+    vi.mocked(elegir).mockResolvedValueOnce("serie");
+    renderTareas(
+      [],
+      [evento({ id: "ev9", titulo: "Peloteando", serie_id: "serie-1" })],
+      usuario("admin", "u-admin"),
+    );
+
+    fireEvent.click(await screen.findByText("Peloteando"));
+    const badges = await screen.findAllByText("Sin cubrir");
+    fireEvent.contextMenu(badges[badges.length - 1]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Editar/ }));
+    expect(await screen.findByText("Editar evento")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() => expect(elegir).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith(
+        "ev9",
+        expect.objectContaining({ titulo: "Peloteando" }),
+        "serie",
+      ),
+    );
+  });
+
   it("MANAGER BORRA un evento por cubrir: confirma y llama a eliminarEventoRota", async () => {
     const borrar = vi
       .spyOn(apiMod.api, "eliminarEventoRota")

@@ -319,6 +319,70 @@ def test_borrar_alcance_serie_en_evento_suelto_borra_solo_ese(cliente):
     assert cliente.get("/api/rota/eventos").json()["eventos"] == []
 
 
+def _titulos_por_fecha(cliente, serie_id):
+    """{fecha: titulo} de las ocurrencias de una serie (para comprobar la propagación)."""
+    return {
+        e["fecha"]: e["titulo"]
+        for e in cliente.get("/api/rota/eventos").json()["eventos"]
+        if e["serie_id"] == serie_id
+    }
+
+
+def test_editar_alcance_serie_propaga_a_todas_menos_la_fecha(cliente):
+    cuerpo = _crear_serie(cliente)
+    sid = cuerpo["serie_id"]
+    primero = cuerpo["eventos"][0]  # lunes 2026-05-25
+    r = cliente.patch(
+        f"/api/rota/eventos/{primero['id']}?alcance=serie",
+        json={"titulo": "Renombrado", "fecha": "2026-05-26"},
+    )
+    assert r.status_code == 200
+    assert r.json()["propagados"] == 4  # las otras 4 ocurrencias
+    titulos = _titulos_por_fecha(cliente, sid)
+    # El título se propaga a TODA la serie...
+    assert set(titulos.values()) == {"Renombrado"}
+    # ...pero la fecha NO: cada ocurrencia conserva su día (la editada movió SOLO la suya).
+    assert "2026-05-26" in titulos  # el primero se movió del 25 al 26
+    assert "2026-05-27" in titulos  # el miércoles sigue en su sitio
+    assert len(titulos) == 5
+
+
+def test_editar_alcance_siguientes_no_toca_las_anteriores(cliente):
+    cuerpo = _crear_serie(cliente)
+    sid = cuerpo["serie_id"]
+    miercoles = next(e for e in cuerpo["eventos"] if e["fecha"] == _MIE)
+    r = cliente.patch(
+        f"/api/rota/eventos/{miercoles['id']}?alcance=siguientes",
+        json={"titulo": "Desde el miércoles"},
+    )
+    assert r.status_code == 200
+    assert r.json()["propagados"] == 2  # jueves y viernes (el miércoles se editó aparte)
+    titulos = _titulos_por_fecha(cliente, sid)
+    assert titulos["2026-05-25"] == "Peloteando"  # lunes intacto
+    assert titulos["2026-05-26"] == "Peloteando"  # martes intacto
+    assert titulos["2026-05-27"] == "Desde el miércoles"
+    assert titulos["2026-05-28"] == "Desde el miércoles"
+    assert titulos["2026-05-29"] == "Desde el miércoles"
+
+
+def test_editar_alcance_este_no_propaga(cliente):
+    cuerpo = _crear_serie(cliente)
+    sid = cuerpo["serie_id"]
+    primero = cuerpo["eventos"][0]
+    r = cliente.patch(f"/api/rota/eventos/{primero['id']}", json={"titulo": "Solo este"})
+    assert r.status_code == 200
+    assert r.json()["propagados"] == 0
+    titulos = _titulos_por_fecha(cliente, sid)
+    assert titulos["2026-05-25"] == "Solo este"
+    assert titulos["2026-05-26"] == "Peloteando"  # el resto intacto
+
+
+def test_editar_alcance_invalido_400(cliente):
+    ev = _crear_evento(cliente)
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}?alcance=humo", json={"titulo": "X"})
+    assert r.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Cobertura + prioridad + reprogramaciones (ola B, #144)                       #
 # --------------------------------------------------------------------------- #
