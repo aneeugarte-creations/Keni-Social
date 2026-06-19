@@ -94,8 +94,9 @@ const AlertDialogDescription = React.forwardRef<
 ));
 AlertDialogDescription.displayName = AlertDialogPrimitive.Description.displayName;
 
-// Acción afirmativa = CTA sutil (guía de diseño Keni): hairline gris, no relleno
-// oscuro. El único punto focal de la tarjeta; las confirmaciones destructivas la
+// Acción afirmativa = relleno gris suave (guía de diseño Keni): grises, sin relleno
+// oscuro. Es el punto focal de la tarjeta y se lee como botón (el outline hairline
+// quedaba invisible sobre la tarjeta clara). Las confirmaciones destructivas la
 // sobreescriben con `variant="destructive"` (rojo), el único color que el peligro
 // justifica.
 const AlertDialogAction = React.forwardRef<
@@ -104,7 +105,7 @@ const AlertDialogAction = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action
     ref={ref}
-    className={cn(buttonVariants({ variant: "outline" }), className)}
+    className={cn(buttonVariants({ variant: "secondary" }), className)}
     {...props}
   />
 ));

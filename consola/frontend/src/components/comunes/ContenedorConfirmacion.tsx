@@ -110,7 +110,7 @@ export function ContenedorConfirmacion() {
                 <AlertDialogAction
                   className={
                     estado.destructivo
-                      ? cn(buttonVariants({ variant: "destructive" }), "border-transparent")
+                      ? buttonVariants({ variant: "destructive" })
                       : undefined
                   }
                   onClick={() => responder(true)}
