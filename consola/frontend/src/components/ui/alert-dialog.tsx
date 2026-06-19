@@ -111,14 +111,15 @@ const AlertDialogAction = React.forwardRef<
 ));
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName;
 
-// Cancelar = descarte secundario: ghost en gris medio, recede frente a la acción.
+// Cancelar = descarte secundario: ghost sin relleno (recede frente a la acción,
+// que sí lo lleva), pero con texto en `foreground` para que la etiqueta se lea bien.
 const AlertDialogCancel = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Cancel>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>
 >(({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
-    className={cn(buttonVariants({ variant: "ghost" }), "text-muted-foreground", className)}
+    className={cn(buttonVariants({ variant: "ghost" }), "text-foreground", className)}
     {...props}
   />
 ));
