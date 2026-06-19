@@ -348,9 +348,10 @@ def clusters_para_promover(
         for c in aptas:
             if len(elegidos) >= maximo:
                 break
-            cat = categoria_efectiva(c)
+            cat = _categoria_plan(marca, c)
             if cat == "breaking" and not plan_con_breaking:
-                cat = str(c.get("categoria") or "").strip().lower()
+                # Sin cupo 'breaking' en el plan, la última hora compite por el cupo de SU LÍNEA.
+                cat = _categoria_plan(marca, {**c, "breaking": 0})
             if huecos.get(cat, 0) <= 0:
                 continue
             huecos[cat] -= 1
@@ -627,7 +628,7 @@ def crear_tema_de_cluster(
             origen=ORIGEN_PORTAL if portal else ORIGEN_PIPELINE,
             # LÍNEA del plan con la que nació ('breaking' si lo era): queda EN la pieza
             # (estable frente al GC del pool); la leen el conteo del plan y los horarios.
-            categoria=categoria_efectiva(cluster),
+            categoria=_categoria_plan(marca, cluster),
             # MACRO-EVENTO heredado del cluster: gobierna la cadencia por evento aguas arriba.
             tema_macro=(cluster.get("tema_macro") or "").strip(),
             subtema=(cluster.get("subtema") or "").strip(),
@@ -713,7 +714,7 @@ def _crear_carrusel_de_familia(
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
-            categoria=categoria_efectiva(cluster_lead),
+            categoria=_categoria_plan(marca, cluster_lead),
             # El carrusel ES un (tema_macro, subtema): lo estampamos para la cadencia por evento.
             tema_macro=tema_macro,
             subtema=subtema,
@@ -936,6 +937,15 @@ def categoria_efectiva(cluster: dict[str, Any]) -> str:
     if bool(int(cluster.get("breaking") or 0)):
         return "breaking"
     return str(cluster.get("categoria") or "").strip().lower()
+
+
+def _categoria_plan(marca: str, cluster: dict[str, Any]) -> str:
+    """Clave de PLAN/PROGRAMACIÓN de una historia: su LÍNEA (id de etiqueta vertical), con
+    'breaking' como señal y '' = genérico. Re-clava el motor del slug de feed a la línea
+    (que es con lo que el equipo planifica y programa). Best-effort: '' si no resuelve."""
+    from .. import bootstrap_lineas
+
+    return bootstrap_lineas.linea_id_de_slug(marca, categoria_efectiva(cluster))
 
 
 def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:

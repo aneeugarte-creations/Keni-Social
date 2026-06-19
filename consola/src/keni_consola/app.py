@@ -289,6 +289,14 @@ def crear_app(
             bootstrap_lineas.vincular_fuentes_a_lineas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron vincular las fuentes a sus líneas.", exc_info=True)
+        try:
+            # Re-clava el plan diario y las franjas del slug de categoría al id de LÍNEA.
+            # Idempotente; corre tras sembrar/vincular líneas.
+            from . import bootstrap_lineas
+
+            bootstrap_lineas.migrar_plan_y_franjas_a_lineas()
+        except Exception:  # noqa: BLE001 -- idem: no impide el arranque
+            _logger.warning("No se pudo migrar el plan/franjas a líneas.", exc_info=True)
         # Lleva tareas, piezas de la rota y
         # piezas al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.

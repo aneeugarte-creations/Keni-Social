@@ -123,3 +123,44 @@ def test_api_fuente_rechaza_linea_inexistente(cliente):
         json={"nombre": "Diario", "url": _URL_OK, "marca": "unotv", "linea_id": "nope"},
     )
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Re-clavado del scheduler: slug -> línea (resolver + migración plan/franjas)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_linea_id_de_slug_resuelve_y_es_idempotente(entorno):
+    bootstrap_lineas.inicializar_lineas()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    # Señales del motor: pasan tal cual.
+    assert bootstrap_lineas.linea_id_de_slug("unotv", "breaking") == "breaking"
+    assert bootstrap_lineas.linea_id_de_slug("unotv", "evergreen") == "evergreen"
+    assert bootstrap_lineas.linea_id_de_slug("unotv", "") == ""
+    # Slug temático -> id de su línea.
+    assert bootstrap_lineas.linea_id_de_slug("unotv", "mx") == nacional["id"]
+    # Idempotente: un id de línea ya migrado se devuelve igual.
+    assert bootstrap_lineas.linea_id_de_slug("unotv", nacional["id"]) == nacional["id"]
+    # No mapeable (cajón 'mx' de Claro, sin línea fina) -> genérico ''.
+    assert bootstrap_lineas.linea_id_de_slug("claro-sports", "mx") == ""
+
+
+def test_migrar_plan_y_franjas_a_lineas(entorno):
+    from keni_consola import ajustes
+
+    bootstrap_lineas.inicializar_lineas()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    # Plan y franja en forma SLUG (lo de antes del re-clavado).
+    ajustes.guardar("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
+    franja = repos.crear_franja(1, "09:00", marca="unotv", red="x", categoria="mx")
+    bootstrap_lineas.migrar_plan_y_franjas_a_lineas()
+    # Plan re-clavado: 'mx' -> id de Nacional; 'breaking' conservado.
+    assert ajustes.obtener("KENI_PLAN_DIA::unotv") == f"{nacional['id']}:4,breaking:2"
+    # Franja re-clavada a la línea (borrada+recreada con la nueva categoría).
+    franjas_unotv = [f for f in repos.listar_franjas() if f["marca"] == "unotv"]
+    assert any(f["categoria"] == nacional["id"] for f in franjas_unotv)
+    assert not any(f["categoria"] == "mx" for f in franjas_unotv)
+    # Idempotente: una segunda pasada no cambia nada.
+    antes = ajustes.obtener("KENI_PLAN_DIA::unotv")
+    assert bootstrap_lineas.migrar_plan_y_franjas_a_lineas() == 0
+    assert ajustes.obtener("KENI_PLAN_DIA::unotv") == antes

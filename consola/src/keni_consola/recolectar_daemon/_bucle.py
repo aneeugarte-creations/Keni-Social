@@ -95,8 +95,8 @@ def _particion_por_plan(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Separa los feeds en (dentro_del_plan, fuera_del_plan) según el plan de su marca. PURA-ish.
 
-    Fuera de plan = la marca TIENE plan (`config.plan_dia`), el feed tiene categoría y esa
-    categoría no está en el plan. Sin marca, sin plan o sin categoría → dentro (fail-open).
+    Fuera de plan = la marca TIENE plan (`config.plan_dia`, claveado por LÍNEA) y la LÍNEA del
+    feed (`linea_id`) no está en el plan. Sin marca, sin plan o sin línea → dentro (fail-open).
     Memoiza el plan por marca (una lectura de config por barrido y marca).
     """
     planes: dict[str, dict[str, int]] = {}
@@ -104,14 +104,14 @@ def _particion_por_plan(
     fuera: list[dict[str, Any]] = []
     for f in feeds:
         marca = str(f.get("marca") or "")
-        categoria = str(f.get("categoria") or "").strip().lower()
-        if not marca or not categoria:
+        linea = str(f.get("linea_id") or "").strip()
+        if not marca or not linea:
             dentro.append(f)
             continue
         if marca not in planes:
             planes[marca] = config.plan_dia(marca)
         plan = planes[marca]
-        (dentro if not plan or categoria in plan else fuera).append(f)
+        (dentro if not plan or linea in plan else fuera).append(f)
     return dentro, fuera
 
 

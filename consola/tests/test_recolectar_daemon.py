@@ -248,14 +248,15 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
     """PLAN EDITORIAL: una marca con plan solo digiere los feeds de las categorías del plan.
 
     El feed fuera de plan NO se sondea y se APLAZA (registrar_sondeo_feed con proximo_sondeo
-    futuro). Fail-open: un feed sin categoría se sondea aunque la marca tenga plan."""
+    futuro). Fail-open: un feed sin LÍNEA se sondea aunque la marca tenga plan. El plan se
+    clava por LÍNEA (id de etiqueta vertical), no por el slug de categoría."""
     en_plan = {"id": "mx1", "nombre": "MX", "url": "https://93.184.216.34/a",
-               "categoria": "mx", "marca": "unotv", "errores_seguidos": 0}
+               "linea_id": "lin-nacional", "marca": "unotv", "errores_seguidos": 0}
     fuera = {"id": "dep1", "nombre": "Dep", "url": "https://93.184.216.34/b",
-             "categoria": "futbol", "marca": "unotv", "errores_seguidos": 0}
+             "linea_id": "lin-deportes", "marca": "unotv", "errores_seguidos": 0}
     sin_categoria = {"id": "sc1", "nombre": "SC", "url": "https://93.184.216.34/c",
-                     "categoria": "", "marca": "unotv", "errores_seguidos": 0}
-    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
+                     "linea_id": "", "marca": "unotv", "errores_seguidos": 0}
+    monkeypatch.setenv("KENI_PLAN_DIA::unotv", "lin-nacional:4,breaking:2")
 
     registrados = {}
     _parchear_comun(monkeypatch, feeds=[en_plan, fuera, sin_categoria], fetcher=lambda _u: _FEED_OK)

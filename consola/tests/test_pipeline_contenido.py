@@ -1285,24 +1285,30 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
 
 
 def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
-    """Al promover, la LÍNEA queda en `contenido.categoria` ('breaking' si lo era)."""
+    """Al promover, la LÍNEA (id) queda en `contenido.categoria` ('breaking' si lo era).
+
+    El scheduler programa por LÍNEA: una historia de feed 'mx' se promueve con la categoría
+    re-clavada al id de su línea (Nacional); la última hora conserva la señal 'breaking'.
+    """
+    from keni_consola import bootstrap_lineas
+
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    # El plan declara la línea 'breaking' para que la última hora consuma SU cupo (y no el
-    # de su categoría de feed): así la breaking sale a la vez que la nacional. Sin línea
-    # 'breaking' en el plan, una última hora competiría por el cupo 'mx' (ver
-    # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
+    bootstrap_lineas.inicializar_lineas()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    # El plan declara la línea 'breaking' para que la última hora consuma SU cupo y salga a la
+    # vez que la nacional (sin él competiría por el cupo de su línea y la desplazaría).
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,breaking:1")
     _inicializar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
                      verificacion_fuente=pc.VERIFICACION_VERIFICADO)
     _inicializar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
                      verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
     temas = pc.promover_clusters_marca(
-        "unotv", maximo=2, cupos_categoria={"mx": 1, "breaking": 1}
+        "unotv", maximo=2, cupos_categoria={nacional["id"]: 1, "breaking": 1}
     )
 
     por_titulo = {t["titulo"]: t for t in temas}
-    assert por_titulo["Nacional persistida"]["categoria"] == "mx"
+    assert por_titulo["Nacional persistida"]["categoria"] == nacional["id"]
     assert por_titulo["Urgente persistida"]["categoria"] == "breaking"
 
 
@@ -1380,12 +1386,16 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
 
 def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     """Si el plan no declara 'breaking', la última hora no queda invisible: compite por el
-    cupo de su categoría de FEED."""
-    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    cupo de SU LÍNEA (la del feed del que nació)."""
+    from keni_consola import bootstrap_lineas
+
+    bootstrap_lineas.inicializar_lineas()
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1")
     _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
                      categoria="mx", breaking=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO)
 
-    elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
+    elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={nacional["id"]: 1})
 
     assert [c["id"] for c in elegidos] == ["brx"]
 

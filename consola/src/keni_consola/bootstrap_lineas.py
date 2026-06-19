@@ -221,6 +221,35 @@ _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
 }
 
 
+# Claves de PLAN/FRANJA que NO son líneas sino señales del motor: se dejan TAL CUAL.
+#   - 'breaking' = última hora (prioridad), '' = genérico (cualquier pieza).
+#   - 'evergreen' = flujo de reciclaje (lo llena su automatismo diario).
+_CLAVES_NO_LINEA: frozenset[str] = frozenset({"", "breaking", "evergreen"})
+
+
+def linea_id_de_slug(marca: str, clave: str) -> str:
+    """Traduce una clave de plan/franja (slug de categoría) al id de su LÍNEA por marca.
+
+    Idempotente: las señales del motor ('', 'breaking', 'evergreen') y una clave que YA es un
+    id de línea (etiqueta vertical existente) se devuelven sin tocar. Un slug temático conocido
+    (`_CATEGORIA_A_LINEA`) se resuelve al id de su línea; lo no mapeable cae a '' (genérico).
+    """
+    clave = (clave or "").strip()
+    if clave.lower() in _CLAVES_NO_LINEA:
+        return clave.lower()
+    try:
+        ya = repos.obtener_etiqueta(clave)
+        if ya is not None and ya.get("clase") == "vertical":
+            return clave  # ya es un id de línea -> idempotente
+    except Exception:  # noqa: BLE001 -- resolver es best-effort
+        pass
+    nombre = _CATEGORIA_A_LINEA.get(marca, {}).get(clave.lower())
+    if not nombre:
+        return ""
+    et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+    return et["id"] if et else ""
+
+
 def vincular_fuentes_a_lineas() -> int:
     """Backfilla `fuentes_rss.linea_id` desde el slug `categoria` por marca. Devuelve cuántas tocó.
 
@@ -253,6 +282,71 @@ def vincular_fuentes_a_lineas() -> int:
     if vinculadas:
         _log.info("vincular fuentes->líneas: %d fuentes asociadas a su línea", vinculadas)
     return vinculadas
+
+
+def migrar_plan_y_franjas_a_lineas() -> int:
+    """Re-clava el PLAN DIARIO y las FRANJAS del slug de categoría al id de LÍNEA, por marca.
+
+    El scheduler pasa a programar por LÍNEA (etiqueta vertical), no por slug de feed. Esto
+    reescribe las dos claves persistentes del motor a ids de línea:
+      - `KENI_PLAN_DIA::marca` (cupos "clave:n,…"): cada slug temático -> id de su línea; las
+        señales 'breaking'/'evergreen' se conservan; un cupo no mapeable se descarta.
+      - `franjas_editoriales.categoria`: idem (sin update en la capa db, se borra+recrea).
+    Idempotente (las claves ya en forma de id/sentinela no se tocan) y best-effort. Devuelve
+    cuántas filas/claves tocó. Requiere las líneas ya sembradas. Lo no mapeable (p. ej. el cajón
+    'mx' de Claro, sin línea fina) cae a '' = genérico, sin romper la programación.
+    """
+    from . import ajustes
+
+    tocadas = 0
+    marcas = set(LINEAS_POR_MARCA)
+    try:
+        franjas = repos.listar_franjas()
+    except Exception:  # noqa: BLE001
+        _log.warning("migrar plan/franjas: no se pudieron listar franjas", exc_info=True)
+        franjas = []
+    marcas |= {str(f.get("marca") or "") for f in franjas if f.get("marca")}
+    # 1) Plan diario por marca.
+    for marca in marcas:
+        clave = f"KENI_PLAN_DIA::{marca}"
+        crudo = ajustes.obtener(clave)
+        if not crudo:
+            continue
+        partes: list[str] = []
+        cambiado = False
+        for seg in crudo.split(","):
+            if ":" not in seg:
+                continue
+            k, _, n = seg.partition(":")
+            nueva = linea_id_de_slug(marca, k.strip())
+            if nueva != k.strip():
+                cambiado = True
+            if nueva:  # descarta cupos no mapeables (sin línea)
+                partes.append(f"{nueva}:{n.strip()}")
+        if cambiado:
+            try:
+                ajustes.guardar(clave, ",".join(partes))
+                tocadas += 1
+            except Exception:  # noqa: BLE001
+                _log.warning("migrar plan: fallo en %s", clave, exc_info=True)
+    # 2) Franjas (sin update en db: borrar + recrear con la nueva categoría).
+    for f in franjas:
+        marca = str(f.get("marca") or "")
+        nueva = linea_id_de_slug(marca, str(f.get("categoria") or ""))
+        if nueva == (f.get("categoria") or ""):
+            continue
+        try:
+            repos.borrar_franja(f["id"])
+            repos.crear_franja(
+                int(f.get("dia_semana") or 0), str(f.get("hora") or ""),
+                marca=marca, red=str(f.get("red") or ""), categoria=nueva,
+            )
+            tocadas += 1
+        except Exception:  # noqa: BLE001 -- una franja no debe romper el resto
+            _log.warning("migrar franjas: fallo en %s", f.get("id"), exc_info=True)
+    if tocadas:
+        _log.info("migrar plan/franjas a líneas: %d claves/filas re-clavadas", tocadas)
+    return tocadas
 
 
 # --------------------------------------------------------------------------- #
