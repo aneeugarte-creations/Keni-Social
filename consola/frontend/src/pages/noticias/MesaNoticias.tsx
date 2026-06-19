@@ -116,17 +116,20 @@ function ChipGrupo({
       onClick={onClick}
       data-testid={`chip-grupo-${etiqueta}`}
       className={cn(
-        "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors",
-        activo
-          ? "border-foreground/15 bg-muted font-medium text-foreground"
-          : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+        // Texto plano: sin borde, fondo ni píldora en ningún estado; el activo se distingue solo
+        // por oscurecer y engrosar la etiqueta. Lo más sobrio (estética Geist gris/negro).
+        "flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-sm transition-colors",
+        activo ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       <span>{etiqueta}</span>
-      {n > 0 && <span className="tabular-nums text-xs text-muted-foreground">{n}</span>}
+      {n > 0 && <span className="tabular-nums text-xs text-muted-foreground/55">{n}</span>}
       {despliega && (
         <ChevronDown
-          className={cn("h-3 w-3 text-muted-foreground transition-transform", abierto && "rotate-180")}
+          className={cn(
+            "h-3 w-3 text-muted-foreground/40 transition-transform",
+            abierto && "rotate-180",
+          )}
         />
       )}
     </button>
@@ -296,7 +299,7 @@ export function NavGruposLineas({
       <div ref={wrapRef} className="relative">
         <div
           ref={navRef}
-          className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1"
+          className="flex flex-nowrap gap-x-5 overflow-x-auto pb-1"
           aria-label="Categorías"
         >
           <ChipGrupo
