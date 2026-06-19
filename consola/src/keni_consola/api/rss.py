@@ -174,6 +174,8 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "propia": bool(fuente.get("propia", False)),
         # Categoría del feed: manda la CADENCIA de sondeo del motor y la cobertura de /salud.
         "categoria": fuente.get("categoria", ""),
+        # Línea editorial a la que cuelga el feed (consolidación de líneas); '' = catch-all.
+        "linea_id": fuente.get("linea_id", ""),
         # Peso editorial (pondera la corroboración del ranking) + su tier legible.
         "peso": float(fuente.get("peso") or 1.0),
         "tier": fuentes_pesos.tier_de_peso(float(fuente.get("peso") or 1.0)),
