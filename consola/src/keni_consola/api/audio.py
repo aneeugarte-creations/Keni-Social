@@ -300,11 +300,27 @@ async def crear_artefacto(request: Request) -> Response:
             {"error": "Tipo de tratamiento no válido (limpio, resumen, preguntas o ideas)."},
             status_code=400,
         )
+    # `origen_id`: artefacto del que parte (herencia). Si no se indica, parte del SRT (base
+    # canónica = transcripción con timestamps). Debe pertenecer a este audio.
+    origen = _resolver_origen(transcripcion_id, datos.get("origen_id"))
+    if isinstance(origen, Response):
+        return origen
     try:
-        r = audio_artefactos.lanzar_tratamiento(fila, tipo)
+        r = audio_artefactos.lanzar_tratamiento(fila, tipo, origen=origen)
     except audio_artefactos.AudioArtefactoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)
+
+
+def _resolver_origen(transcripcion_id: str, origen_id: object) -> dict | None | Response:
+    """Artefacto fuente de un tratamiento. None/'' => el SRT del audio (base). 400 si no encaja."""
+    arts = repos.listar_audio_artefactos(transcripcion_id)
+    if isinstance(origen_id, str) and origen_id.strip():
+        origen = next((a for a in arts if a["id"] == origen_id), None)
+        if origen is None:
+            return JSONResponse({"error": "El artefacto de origen no existe."}, status_code=400)
+        return origen
+    return next((a for a in arts if a["tipo"] == "srt"), None)
 
 
 async def obtener_artefacto(request: Request) -> Response:
@@ -364,7 +380,10 @@ async def corregir_artefacto(request: Request) -> Response:
     ):
         return JSONResponse({"error": "Faltan las respuestas a las dudas."}, status_code=400)
     try:
-        r = audio_artefactos.lanzar_tratamiento(fila, "corregido", respuestas=respuestas)
+        # El 'corregido' hereda del propio artefacto de 'preguntas' (su herencia visible).
+        r = audio_artefactos.lanzar_tratamiento(
+            fila, "corregido", origen=art, respuestas=respuestas
+        )
     except audio_artefactos.AudioArtefactoError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)

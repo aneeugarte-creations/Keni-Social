@@ -204,11 +204,14 @@ _COLS_AUDIO_ARTEFACTOS = (
     "estado",
     "gen_id",
     "error",
+    "origen_id",
+    "origen_version",
     "creado",
     "actualizado",
 )
 _SELECT_AUDIO_ARTEFACTOS = f"SELECT {', '.join(_COLS_AUDIO_ARTEFACTOS)} FROM audio_artefactos"
-# `contenido`/`estado`/`titulo` los edita el humano o el post-procesado; el resto es inmutable.
+# `contenido`/`estado`/`titulo` los edita el humano o el post-procesado; el resto (incl. la herencia
+# `origen_*`, que fija el linaje al crear) es inmutable.
 _CAMPOS_EDITABLES_AUDIO_ARTEFACTOS: tuple[str, ...] = (
     "titulo",
     "contenido",
@@ -237,11 +240,13 @@ def crear_audio_artefacto(
     estado: str = "listo",
     gen_id: str = "",
     error: str = "",
+    origen_id: str = "",
+    origen_version: str = "",
     id: str = "",
     creado: str = "",
     actualizado: str = "",
 ) -> dict[str, Any]:
-    """Crea un artefacto de un audio y lo devuelve."""
+    """Crea un artefacto de un audio y lo devuelve. `origen_*` fijan su herencia (ver esquema)."""
     ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
@@ -253,6 +258,8 @@ def crear_audio_artefacto(
         "estado": estado if estado in ESTADOS_ARTEFACTO else "listo",
         "gen_id": gen_id or "",
         "error": error or "",
+        "origen_id": origen_id or "",
+        "origen_version": origen_version or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

@@ -1475,11 +1475,18 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         estado          TEXT NOT NULL DEFAULT 'listo',
         gen_id          TEXT NOT NULL DEFAULT '',
         error           TEXT NOT NULL DEFAULT '',
+        origen_id       TEXT NOT NULL DEFAULT '',
+        origen_version  TEXT NOT NULL DEFAULT '',
         creado          TEXT NOT NULL DEFAULT '',
         actualizado     TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_audio_artefactos_transcripcion ON audio_artefactos (transcripcion_id)",
+    # HERENCIA: de qué artefacto deriva este (`origen_id`='' => de la transcripción base) y la
+    # `actualizado` de esa fuente al generarlo (`origen_version`). Permite deshabilitar el botón del
+    # tratamiento ya generado y reactivarlo cuando la fuente cambia (su `actualizado` difiere).
+    "ALTER TABLE audio_artefactos ADD COLUMN IF NOT EXISTS origen_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE audio_artefactos ADD COLUMN IF NOT EXISTS origen_version TEXT NOT NULL DEFAULT ''",
     # PIEZAS de la Prompts de Texto (rediseno "version publicada"): cada fila es un
     # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;

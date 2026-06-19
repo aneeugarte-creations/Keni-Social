@@ -137,8 +137,9 @@ def _crear_artefactos(
     """
     from ..dominio import audio_artefactos  # noqa: PLC0415 -- import perezoso (evita ciclo)
 
+    srt = None
     try:
-        repos.crear_audio_artefacto(
+        srt = repos.crear_audio_artefacto(
             transcripcion_id=transcripcion_id, tipo="srt", titulo="Subtítulos (SRT)",
             contenido=asr.srt_de_segmentos(segmentos), formato="srt", estado="listo",
         )
@@ -157,7 +158,8 @@ def _crear_artefactos(
         if tipo not in audio_artefactos.TRATAMIENTOS:
             continue
         try:
-            audio_artefactos.lanzar_tratamiento(fila, tipo)
+            # Heredan del SRT (base canónica): mismo origen que al lanzarlos desde la UI.
+            audio_artefactos.lanzar_tratamiento(fila, tipo, origen=srt)
         except Exception:  # noqa: BLE001 -- un tratamiento que no arranca no frena a los demás
             _log.exception("audio: no se pudo lanzar el tratamiento %s de %s", tipo, transcripcion_id)
 

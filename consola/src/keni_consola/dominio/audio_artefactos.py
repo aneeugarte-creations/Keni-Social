@@ -66,25 +66,44 @@ def construir_procesar_audio_artefacto(artefacto_id: str):  # noqa: ANN201 -- ge
     return procesar
 
 
+def _fuente_del_tratamiento(
+    transcripcion: dict[str, Any], tipo: str, origen: dict[str, Any] | None
+) -> tuple[str, str, str]:
+    """Texto de entrada + herencia (`origen_id`, `origen_version`) de un tratamiento.
+
+    Regla: 'corregido' y la fuente base (sin origen, o el propio SRT) parten de la transcripción con
+    timestamps; cualquier otro artefacto parte de su `contenido` (encadenar tratamientos). La versión
+    es la `actualizado` de la fuente al generar, para detectar después si la fuente cambió.
+    """
+    if origen is None:
+        return bloque_de_transcripcion(transcripcion), "", transcripcion.get("actualizado", "") or ""
+    version = origen.get("actualizado", "") or ""
+    if tipo == "corregido" or origen.get("tipo") == "srt":
+        return bloque_de_transcripcion(transcripcion), origen.get("id", "") or "", version
+    return origen.get("contenido", "") or "", origen.get("id", "") or "", version
+
+
 def lanzar_tratamiento(
     transcripcion: dict[str, Any],
     tipo: str,
     *,
+    origen: dict[str, Any] | None = None,
     autor: dict[str, str] | None = None,
     respuestas: list[str] | None = None,
 ) -> dict[str, Any]:
     """Crea el artefacto (estado 'generando') y lanza la generación de Claude que lo rellenará.
 
-    Devuelve `{"artefacto": <fila>, "gen": <registro>}`. Lanza `AudioArtefactoError` si el tipo no
-    es un tratamiento, si falta el prompt de librería o si la transcripción no tiene texto.
+    `origen` es el artefacto del que parte (None => transcripción base); fija la herencia del nuevo
+    artefacto. Devuelve `{"artefacto": <fila>, "gen": <registro>}`. Lanza `AudioArtefactoError` si el
+    tipo no es un tratamiento, si falta el prompt de librería o si no hay texto del que partir.
     """
     if tipo not in TRATAMIENTOS:
         raise AudioArtefactoError(f"Tratamiento no válido: {tipo!r}.")
     prompt_id, formato, titulo = TRATAMIENTOS[tipo]
 
-    bloque = bloque_de_transcripcion(transcripcion)
+    bloque, origen_id, origen_version = _fuente_del_tratamiento(transcripcion, tipo, origen)
     if not bloque.strip():
-        raise AudioArtefactoError("La transcripción aún no tiene texto.")
+        raise AudioArtefactoError("La fuente del tratamiento aún no tiene texto.")
     if tipo == "corregido" and respuestas:
         dudas = "\n".join(f"- {r}" for r in respuestas if isinstance(r, str) and r.strip())
         if dudas:
@@ -98,7 +117,7 @@ def lanzar_tratamiento(
 
     artefacto = repos.crear_audio_artefacto(
         transcripcion_id=transcripcion["id"], tipo=tipo, titulo=titulo,
-        formato=formato, estado="generando",
+        formato=formato, estado="generando", origen_id=origen_id, origen_version=origen_version,
     )
     procesar_spec = jobspec.construir_audio_artefacto(artefacto["id"])
     prompt_final = generar.componer(cuerpo, [], bloque)

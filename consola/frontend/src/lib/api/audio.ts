@@ -64,6 +64,9 @@ export interface ArtefactoAudio {
   estado: EstadoArtefacto;
   gen_id: string;
   error: string;
+  /** Herencia: artefacto del que deriva (''=de la transcripción base) y su versión al generarlo. */
+  origen_id: string;
+  origen_version: string;
   creado: string;
   actualizado: string;
 }
@@ -129,11 +132,14 @@ export const apiAudio = {
         `/audio/transcripciones/${enc(transcripcionId)}/artefactos`,
         { signal },
       ),
-    /** Lanza un tratamiento de Claude (limpio/resumen/preguntas/ideas) -> artefacto 'generando'. */
-    crearArtefacto: (transcripcionId: string, tipo: TratamientoClaude) =>
+    /**
+     * Lanza un tratamiento de Claude (limpio/resumen/preguntas/ideas) -> artefacto 'generando'.
+     * `origenId` es el artefacto del que parte (su herencia); si se omite, parte del SRT (base).
+     */
+    crearArtefacto: (transcripcionId: string, tipo: TratamientoClaude, origenId?: string) =>
       peticion<{ artefacto: ArtefactoAudio }>(
         `/audio/transcripciones/${enc(transcripcionId)}/artefacto`,
-        { metodo: "POST", json: { tipo } },
+        { metodo: "POST", json: { tipo, origen_id: origenId } },
       ),
     /** Un artefacto por id. */
     artefacto: (id: string, signal?: AbortSignal) =>

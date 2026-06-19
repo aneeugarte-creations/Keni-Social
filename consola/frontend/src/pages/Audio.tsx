@@ -301,6 +301,7 @@ export default function Audio() {
           <Lector
             audio={audio}
             artefacto={artefacto}
+            artefactos={artefactos}
             onSeleccionarArtefacto={setArtefactoId}
             onCambio={refetchArtefactos}
           />
@@ -558,15 +559,18 @@ function PanelArtefactos({
 function Lector({
   audio,
   artefacto,
+  artefactos,
   onSeleccionarArtefacto,
   onCambio,
 }: {
   audio: TranscripcionAudio | null;
   artefacto: ArtefactoAudio | null;
+  artefactos: ArtefactoAudio[];
   onSeleccionarArtefacto: (id: string) => void;
   onCambio: () => void;
 }) {
-  const editable = !!artefacto && artefacto.tipo !== "srt";
+  // El SRT y las 'preguntas' (cajón-formulario) no se editan como texto libre.
+  const editable = !!artefacto && artefacto.tipo !== "srt" && artefacto.tipo !== "preguntas";
   const esMd = artefacto?.formato === "md";
   const [editando, setEditando] = React.useState(false);
   const [texto, setTexto] = React.useState(artefacto?.contenido ?? "");
@@ -575,8 +579,22 @@ function Lector({
     setEditando(false);
   }, [artefacto?.id, artefacto?.contenido]);
 
+  // Fuente de un tratamiento NUEVO: el artefacto abierto o, si ninguno, el SRT (base canónica).
+  const srt = artefactos.find((a) => a.tipo === "srt") ?? null;
+  const fuente = artefacto ?? srt;
+  const fuenteLista = !!fuente && fuente.estado === "listo";
+
+  // ¿ya hay un artefacto de este tipo derivado de la fuente actual, en su versión actual?
+  const yaDe = (tipo: TratamientoClaude) =>
+    artefactos.find(
+      (a) =>
+        a.tipo === tipo &&
+        a.origen_id === (fuente?.id ?? "") &&
+        a.origen_version === (fuente?.actualizado ?? ""),
+    ) ?? null;
+
   const crear = useMutation({
-    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo),
+    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo, fuente?.id),
     onSuccess: (r) => {
       onCambio();
       onSeleccionarArtefacto(r.artefacto.id);
@@ -607,7 +625,15 @@ function Lector({
   };
 
   const transcrito = !!audio && (audio.estado === "transcrito" || audio.estado === "editado");
-  const acciones = !!artefacto && artefacto.estado === "listo";
+  // 'preguntas' es un cajón-formulario: sin barra de Editar/Descargar.
+  const acciones =
+    !!artefacto && artefacto.estado === "listo" && artefacto.tipo !== "preguntas";
+  // Herencia del artefacto abierto (si es un tratamiento): de qué deriva.
+  const origen =
+    artefacto && artefacto.origen_id
+      ? artefactos.find((a) => a.id === artefacto.origen_id) ?? null
+      : null;
+  const esTratamiento = !!artefacto && TIPOS_TRATAMIENTO.has(artefacto.tipo);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-2">
@@ -616,24 +642,41 @@ function Lector({
       <div className="flex min-h-9 flex-wrap items-center gap-2">
         {transcrito ? (
           <div className="flex flex-wrap items-center gap-1">
-            {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => (
-              <Tooltip key={tipo} label={desc} side="bottom">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 gap-1 px-2 text-xs"
-                  disabled={crear.isPending}
-                  onClick={() => crear.mutate(tipo)}
-                >
-                  {crear.isPending && crear.variables === tipo ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Icono className="h-3 w-3" />
-                  )}
-                  {etiqueta}
-                </Button>
-              </Tooltip>
-            ))}
+            <span className="mr-1 text-xs text-muted-foreground">
+              Desde «{fuente ? fuente.titulo || TITULO_ARTEFACTO[fuente.tipo] : "la transcripción"}»:
+            </span>
+            {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono, desc }) => {
+              const ya = yaDe(tipo);
+              // 'preguntas' NO se deshabilita: si ya existe, su botón abre el cajón; si no, lo genera.
+              const esPreguntas = tipo === "preguntas";
+              const deshab = !esPreguntas && !!ya;
+              const label = deshab
+                ? "Ya generado desde esta fuente. Edita la fuente para regenerar."
+                : esPreguntas && ya
+                  ? "Abre el cajón de preguntas"
+                  : desc;
+              const cargando = crear.isPending && crear.variables === tipo;
+              return (
+                <Tooltip key={tipo} label={label} side="bottom">
+                  <Button
+                    size="sm"
+                    variant={esPreguntas && ya ? "secondary" : "ghost"}
+                    className="h-7 gap-1 px-2 text-xs"
+                    disabled={crear.isPending || deshab || !fuenteLista}
+                    onClick={() =>
+                      esPreguntas && ya ? onSeleccionarArtefacto(ya.id) : crear.mutate(tipo)
+                    }
+                  >
+                    {cargando ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Icono className="h-3 w-3" />
+                    )}
+                    {etiqueta}
+                  </Button>
+                </Tooltip>
+              );
+            })}
           </div>
         ) : null}
         {acciones ? (
@@ -668,10 +711,23 @@ function Lector({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
-            <h2 className="text-sm font-semibold">
-              {artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}
-            </h2>
-            {editando && editable ? (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <h2 className="text-sm font-semibold">
+                {artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}
+              </h2>
+              {esTratamiento ? (
+                <span className="text-xs text-muted-foreground">
+                  Derivado de «{origen ? origen.titulo || TITULO_ARTEFACTO[origen.tipo] : "la transcripción"}»
+                </span>
+              ) : null}
+            </div>
+            {artefacto.tipo === "preguntas" ? (
+              <FormularioPreguntas
+                artefacto={artefacto}
+                onCambio={onCambio}
+                onSeleccionarArtefacto={onSeleccionarArtefacto}
+              />
+            ) : editando && editable ? (
               <div className="flex min-h-0 flex-1 flex-col gap-2">
                 <Textarea
                   value={texto}
@@ -700,10 +756,6 @@ function Lector({
                 {artefacto.contenido || "(vacío)"}
               </pre>
             )}
-
-            {artefacto.tipo === "preguntas" ? (
-              <PanelCorregir artefacto={artefacto} onCambio={onCambio} />
-            ) : null}
           </div>
         )}
       </div>
@@ -711,36 +763,112 @@ function Lector({
   );
 }
 
-function PanelCorregir({ artefacto, onCambio }: { artefacto: ArtefactoAudio; onCambio: () => void }) {
-  const [respuestas, setRespuestas] = React.useState("");
+/** Tipos que son TRATAMIENTOS (derivan de otra fuente; muestran herencia). */
+const TIPOS_TRATAMIENTO = new Set<TipoArtefacto>([
+  "limpio",
+  "resumen",
+  "preguntas",
+  "ideas",
+  "corregido",
+]);
+
+interface PreguntaItem {
+  t: string;
+  frase: string;
+  pregunta: string;
+}
+
+// Parsea las líneas «[mm:ss] «frase» — pregunta» que produce el prompt «Aclarar» (tolera viñeta o
+// numeración al inicio). Las que no encajan se descartan (p. ej. «(no hay dudas…)»).
+function parsePreguntas(contenido: string): PreguntaItem[] {
+  const re = /^[-*\d.\s]*\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*«([\s\S]*?)»\s*[—–-]\s*(.+)$/;
+  return contenido
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const m = l.match(re);
+      return m ? { t: m[1], frase: m[2], pregunta: m[3] } : null;
+    })
+    .filter((x): x is PreguntaItem => x !== null);
+}
+
+// Cajón de PREGUNTAS: el artefacto intermedio del prompt «Aclarar» como formulario. Cada duda lleva
+// su marca de tiempo, el fragmento escuchado y un campo de respuesta; al enviar genera el «Corregido».
+function FormularioPreguntas({
+  artefacto,
+  onCambio,
+  onSeleccionarArtefacto,
+}: {
+  artefacto: ArtefactoAudio;
+  onCambio: () => void;
+  onSeleccionarArtefacto: (id: string) => void;
+}) {
+  const preguntas = React.useMemo(() => parsePreguntas(artefacto.contenido), [artefacto.contenido]);
+  const [resp, setResp] = React.useState<Record<number, string>>({});
+  React.useEffect(() => setResp({}), [artefacto.id]);
+
   const corregir = useMutation({
-    mutationFn: () =>
-      api.audio.corregir(
-        artefacto.id,
-        respuestas.split("\n").map((s) => s.trim()).filter(Boolean),
-      ),
-    onSuccess: () => {
-      setRespuestas("");
+    mutationFn: () => {
+      const respuestas = preguntas
+        .map((q, i) => {
+          const a = (resp[i] ?? "").trim();
+          return a ? `[${q.t}] «${q.frase}» → ${a}` : null;
+        })
+        .filter((x): x is string => x !== null);
+      return api.audio.corregir(artefacto.id, respuestas);
+    },
+    onSuccess: (r) => {
       onCambio();
+      onSeleccionarArtefacto(r.artefacto.id);
       toast.success("Aplicando correcciones… verás el artefacto «Corregido».");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  if (!preguntas.length) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-md border border-border/70 bg-background p-3 text-xs text-muted-foreground">
+        {artefacto.contenido || "Sin preguntas."}
+      </div>
+    );
+  }
+
+  const algunaResp = Object.values(resp).some((v) => v.trim());
   return (
-    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
-      <label className="text-xs font-medium text-muted-foreground">
-        Responde a las dudas (una por línea) y genera el «Corregido»:
-      </label>
-      <Textarea
-        value={respuestas}
-        onChange={(e) => setRespuestas(e.target.value)}
-        rows={3}
-        className="mt-1.5"
-        placeholder="Ej.: El apellido correcto es Mbappé&#10;Ganó el América"
-      />
-      <div className="mt-2 flex justify-end">
-        <Button size="sm" disabled={!respuestas.trim() || corregir.isPending} onClick={() => corregir.mutate()}>
-          <SpellCheck className="mr-1.5 h-3.5 w-3.5" /> Corregir con estas respuestas
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+        {preguntas.map((q, i) => (
+          <div key={i} className="rounded-md border border-border/70 bg-background p-3">
+            <div className="flex items-baseline gap-2">
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+                {q.t}
+              </span>
+              <p className="text-xs">
+                <span className="text-muted-foreground">«{q.frase}»</span> — {q.pregunta}
+              </p>
+            </div>
+            <Textarea
+              value={resp[i] ?? ""}
+              onChange={(e) => setResp((s) => ({ ...s, [i]: e.target.value }))}
+              rows={1}
+              className="mt-2 min-h-9"
+              placeholder="Tu respuesta…"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          {preguntas.length} {preguntas.length === 1 ? "pregunta" : "preguntas"}
+        </span>
+        <Button size="sm" disabled={!algunaResp || corregir.isPending} onClick={() => corregir.mutate()}>
+          {corregir.isPending ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <SpellCheck className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Generar «Corregido»
         </Button>
       </div>
     </div>
