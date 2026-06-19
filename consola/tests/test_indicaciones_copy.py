@@ -157,3 +157,35 @@ def test_componer_copy_sin_bd_no_rompe_ni_inyecta(monkeypatch, tmp_path):
     )
     assert "HAZ EL COPY" in prompt
     assert indicaciones.ENCABEZADO_INDICACIONES not in prompt
+
+
+# --------------------------------------------------------------------------- #
+# Fecha de redacción: dato del sistema para resolver relativos a absolutos     #
+# --------------------------------------------------------------------------- #
+
+
+def test_componer_copy_inyecta_fecha_de_redaccion(monkeypatch, tmp_path):
+    """La fecha del día va en el bloque CONTEXTO (variable), fuera del envoltorio anti-inyección.
+
+    Es dato del sistema (no contenido del usuario) y permite al modelo convertir referencias
+    temporales relativas de la fuente en fechas absolutas. No depende de la BD.
+    """
+    from keni_consola.dominio.placeholders import fecha_es
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+
+    prompt = generar.componer_copy(
+        "HAZ EL COPY", marca="unotv", contexto="el pasado domingo hubo un evento", redes_ids=["x"]
+    )
+
+    etiqueta = f"Fecha de redacción: {fecha_es()}"
+    assert etiqueta in prompt
+    i_contexto = prompt.index("CONTEXTO:")
+    i_fecha = prompt.index("Fecha de redacción:")
+    # El envoltorio anti-inyección abre con `<contenido_usuario_<nonce>>` (la primera vez en su aviso).
+    i_usuario = prompt.index("<contenido_usuario_")
+    # DENTRO del bloque CONTEXTO (variable) y FUERA del envoltorio del contenido del usuario.
+    assert i_contexto < i_fecha < i_usuario
+    # La fecha NO contamina el prefijo estable (prompt caching por marca).
+    assert "Fecha de redacción:" not in prompt[:i_contexto]

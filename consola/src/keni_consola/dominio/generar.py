@@ -20,6 +20,7 @@ from typing import Any
 
 from .. import generaciones, libprompts, limites_plataforma, marcas, redes
 from . import jobspec
+from .placeholders import fecha_es
 
 _log = logging.getLogger("keni_consola.generar")
 
@@ -379,6 +380,7 @@ def componer(
     n_notas: int = 0,
     fotos_notas: list[dict[str, str]] | None = None,
     indicaciones: str = "",
+    fecha_redaccion: str = "",
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
@@ -392,6 +394,10 @@ def componer(
 
     `indicaciones` (solo copy, opt-in): bloque YA COMPUESTO con las indicaciones vigentes
     del equipo (`dominio.indicaciones.bloque_para_marca`). "" (default) = ni un byte extra.
+
+    `fecha_redaccion` (solo copy, opt-in): fecha legible del día. Se inyecta al inicio del
+    bloque CONTEXTO para que el modelo resuelva referencias temporales relativas de la fuente
+    ("el pasado domingo") a fechas absolutas. "" (default) = no se añade.
     """
     # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos de la misma
     # marca (cuerpo del prompt + instrucciones fijas + editorial de la marca) va ANTES; lo
@@ -437,7 +443,13 @@ def componer(
         # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
         # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
         # el modelo no lo interprete como instrucciones (defensa contra prompt-injection).
-        partes.append("---\nCONTEXTO:\n\n" + envolver_contenido_usuario(bloque_contexto))
+        # La fecha de redacción es dato del SISTEMA: va FUERA del envoltorio (no es contenido
+        # del usuario) y DENTRO del bloque CONTEXTO (variable por lanzamiento → no rompe el
+        # prefijo estable del prompt caching).
+        prefijo_fecha = f"Fecha de redacción: {fecha_redaccion}\n\n" if fecha_redaccion else ""
+        partes.append(
+            "---\nCONTEXTO:\n\n" + prefijo_fecha + envolver_contenido_usuario(bloque_contexto)
+        )
     return "\n\n".join(partes)
 
 
@@ -712,6 +724,7 @@ def componer_copy(
         cuerpo, adjuntos_copy(marca), contexto,
         redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
         indicaciones=indicaciones_dom.bloque_para_marca(marca),
+        fecha_redaccion=fecha_es(),
     )
 
 
