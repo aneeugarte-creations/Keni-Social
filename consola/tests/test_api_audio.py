@@ -158,6 +158,28 @@ def test_artefactos_crear_listar_editar_borrar(cliente, monkeypatch):
     assert cliente.get(f"/api/audio/artefactos/{aid}").status_code == 404
 
 
+def test_listar_artefactos_reconstruye_srt_legado(cliente):
+    """Audio transcrito ANTES del modelo de artefactos (con segmentos, sin filas): se backfillea."""
+    import json
+
+    fila = repos.crear_audio_transcripcion(
+        marca=_MARCA, nombre="viejo.mp3", estado="transcrito",
+        segmentos=json.dumps([{"inicio_ms": 0, "fin_ms": 1500, "texto": "hola mundo"}]),
+        texto="hola mundo",
+    )
+    tid = fila["id"]
+    assert repos.listar_audio_artefactos(tid) == []
+
+    arts = cliente.get(f"/api/audio/transcripciones/{tid}/artefactos").json()["artefactos"]
+    tipos = {a["tipo"] for a in arts}
+    assert "srt" in tipos and "texto" in tipos
+    srt = next(a for a in arts if a["tipo"] == "srt")
+    assert "hola mundo" in srt["contenido"] and srt["estado"] == "listo"
+    # Idempotente: una segunda lectura no duplica.
+    arts2 = cliente.get(f"/api/audio/transcripciones/{tid}/artefactos").json()["artefactos"]
+    assert len(arts2) == len(arts)
+
+
 def test_srt_no_editable(cliente, monkeypatch):
     _mock_subida_y_cola(monkeypatch, {})
     tid = _crear(cliente).json()["transcripcion"]["id"]

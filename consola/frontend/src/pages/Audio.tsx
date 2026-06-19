@@ -13,14 +13,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eraser,
   FileText,
   HelpCircle,
   Lightbulb,
   Loader2,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   RefreshCw,
   SpellCheck,
@@ -45,6 +45,7 @@ import { Markdown } from "@/components/ui/Markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   ArtefactoAudio,
   EstadoTranscripcion,
@@ -167,18 +168,18 @@ export default function Audio() {
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
-      <div className="flex items-center justify-between">
+      {/* Cabecera: título + «Subir» al lado (la barra superior de la página). */}
+      <div className="flex items-center gap-3">
         <TituloPagina titulo="Audio" icono={AudioLines} />
         {!vacioTotal ? (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            onClick={() => setPanelesAbiertos((v) => !v)}
+            onClick={() => setDialogo(true)}
+            disabled={!marca}
             className="gap-2"
-            title={panelesAbiertos ? "Colapsar paneles (leer a ancho completo)" : "Mostrar paneles"}
           >
-            {panelesAbiertos ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-            {panelesAbiertos ? "Lectura" : "Paneles"}
+            <Upload className="h-4 w-4" /> Subir
           </Button>
         ) : null}
       </div>
@@ -199,45 +200,64 @@ export default function Audio() {
           </p>
         </div>
       ) : (
-        <div
-          className={`grid flex-1 gap-4 ${
-            panelesAbiertos ? "lg:grid-cols-[15rem_15rem_1fr]" : "grid-cols-1"
-          }`}
-        >
-          {panelesAbiertos ? (
-            <>
-              <PanelAudios
-                lista={lista}
-                cargando={audios.isLoading}
-                audioId={audioId}
-                onSeleccionar={(id) => {
-                  setAudioId(id);
-                  setArtefactoId(null);
-                }}
-                onSubir={() => setDialogo(true)}
-                onEliminar={(id) => eliminarAudio.mutate(id)}
-                puedeSubir={!!marca}
-              />
-              <PanelArtefactos
-                audio={audio}
-                artefactos={artefactos}
-                cargando={arts.isLoading}
-                artefactoId={artefactoId}
-                onSeleccionar={setArtefactoId}
-                onCambio={refetchArtefactos}
-              />
-            </>
-          ) : null}
+        <div className="flex min-h-0 flex-1 gap-3">
+          {/* IZQUIERDA: doble panel (audios · artefactos), colapsable con el chevron al pie,
+              igual que el lector de contexto. Colapsado deja el lector a ancho completo. */}
+          <aside className={cn("flex shrink-0 flex-col", panelesAbiertos ? "w-[28rem]" : "w-auto")}>
+            <div
+              className={cn(
+                "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
+                panelesAbiertos ? "p-2" : "items-center justify-center p-1",
+              )}
+            >
+              {panelesAbiertos ? (
+                <div className="flex min-h-0 flex-1 gap-2">
+                  <PanelAudios
+                    className="w-1/2"
+                    lista={lista}
+                    cargando={audios.isLoading}
+                    audioId={audioId}
+                    onSeleccionar={(id) => {
+                      setAudioId(id);
+                      setArtefactoId(null);
+                    }}
+                    onEliminar={(id) => eliminarAudio.mutate(id)}
+                  />
+                  <div className="w-px shrink-0 bg-border" />
+                  <PanelArtefactos
+                    className="flex-1"
+                    audio={audio}
+                    artefactos={artefactos}
+                    cargando={arts.isLoading}
+                    artefactoId={artefactoId}
+                    onSeleccionar={setArtefactoId}
+                  />
+                </div>
+              ) : null}
+              <Button
+                size="icon"
+                variant="ghost"
+                className={cn("h-8 w-8 shrink-0 self-center", panelesAbiertos && "mt-2")}
+                aria-label={panelesAbiertos ? "Colapsar paneles" : "Expandir paneles"}
+                title={panelesAbiertos ? "Colapsar (leer a ancho completo)" : "Expandir paneles"}
+                onClick={() => setPanelesAbiertos((v) => !v)}
+              >
+                {panelesAbiertos ? (
+                  <ChevronLeft className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </aside>
 
-          <section className="min-w-0">
-            {artefacto ? (
-              <VistaArtefacto artefacto={artefacto} onCambio={refetchArtefactos} />
-            ) : audio ? (
-              <Vacio texto={EN_PROCESO.includes(audio.estado) ? "Transcribiendo… los artefactos aparecerán aquí." : "Elige un artefacto."} />
-            ) : (
-              <Vacio texto="Elige un audio de la lista." />
-            )}
-          </section>
+          {/* DERECHA: barra superior (tratamientos + acciones) sobre el lector del artefacto. */}
+          <Lector
+            audio={audio}
+            artefacto={artefacto}
+            onSeleccionarArtefacto={setArtefactoId}
+            onCambio={refetchArtefactos}
+          />
         </div>
       )}
 
@@ -271,27 +291,25 @@ function EstadoBadge({ estado }: { estado: EstadoTranscripcion }) {
 }
 
 function PanelAudios({
+  className,
   lista,
   cargando,
   audioId,
   onSeleccionar,
-  onSubir,
   onEliminar,
-  puedeSubir,
 }: {
+  className?: string;
   lista: TranscripcionAudio[];
   cargando: boolean;
   audioId: string | null;
   onSeleccionar: (id: string) => void;
-  onSubir: () => void;
   onEliminar: (id: string) => void;
-  puedeSubir: boolean;
 }) {
   return (
-    <aside className="flex min-w-0 flex-col gap-2">
-      <Button variant="outline" size="sm" onClick={onSubir} disabled={!puedeSubir} className="w-full gap-2">
-        <Upload className="h-4 w-4" /> Subir
-      </Button>
+    <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
+      <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Audios
+      </span>
       {cargando ? (
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
@@ -326,7 +344,7 @@ function PanelAudios({
           })}
         </div>
       )}
-    </aside>
+    </div>
   );
 }
 
@@ -341,29 +359,21 @@ const TITULO_ARTEFACTO: Record<TipoArtefacto, string> = {
 };
 
 function PanelArtefactos({
+  className,
   audio,
   artefactos,
   cargando,
   artefactoId,
   onSeleccionar,
-  onCambio,
 }: {
+  className?: string;
   audio: TranscripcionAudio | null;
   artefactos: ArtefactoAudio[];
   cargando: boolean;
   artefactoId: string | null;
   onSeleccionar: (id: string) => void;
-  onCambio: () => void;
 }) {
   const qc = useQueryClient();
-  const crear = useMutation({
-    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo),
-    onSuccess: (r) => {
-      onCambio();
-      onSeleccionar(r.artefacto.id);
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
   const reintentar = useMutation({
     mutationFn: () => api.audio.retranscribir(audio!.id),
     onSuccess: () => {
@@ -374,11 +384,20 @@ function PanelArtefactos({
   });
 
   if (!audio) {
-    return <aside className="hidden lg:block" />;
+    return (
+      <div className={cn("flex min-w-0 flex-col gap-2", className)}>
+        <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Artefactos
+        </span>
+        <p className="px-1 text-xs text-muted-foreground">Elige un audio.</p>
+      </div>
+    );
   }
-  const transcrito = audio.estado === "transcrito" || audio.estado === "editado";
   return (
-    <aside className="flex min-w-0 flex-col gap-2">
+    <div className={cn("flex min-w-0 flex-col gap-2 overflow-hidden", className)}>
+      <span className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        Artefactos
+      </span>
       {EN_PROCESO.includes(audio.estado) ? (
         <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribiendo…
@@ -396,7 +415,7 @@ function PanelArtefactos({
       {cargando ? (
         <p className="px-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 overflow-y-auto">
           {artefactos.map((a) => {
             const activo = a.id === artefactoId;
             return (
@@ -421,45 +440,41 @@ function PanelArtefactos({
           })}
         </div>
       )}
-
-      {transcrito ? (
-        <div className="mt-1 flex flex-wrap gap-1.5 border-t border-border/60 pt-2">
-          <span className="w-full px-1 text-[11px] text-muted-foreground">Añadir tratamiento</span>
-          {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono }) => (
-            <Button
-              key={tipo}
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1 px-2 text-xs"
-              disabled={crear.isPending}
-              onClick={() => crear.mutate(tipo)}
-            >
-              {crear.isPending && crear.variables === tipo ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Icono className="h-3 w-3" />
-              )}
-              {etiqueta}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-    </aside>
+    </div>
   );
 }
 
-function VistaArtefacto({ artefacto, onCambio }: { artefacto: ArtefactoAudio; onCambio: () => void }) {
-  const editable = artefacto.tipo !== "srt";
-  const esMd = artefacto.formato === "md";
+function Lector({
+  audio,
+  artefacto,
+  onSeleccionarArtefacto,
+  onCambio,
+}: {
+  audio: TranscripcionAudio | null;
+  artefacto: ArtefactoAudio | null;
+  onSeleccionarArtefacto: (id: string) => void;
+  onCambio: () => void;
+}) {
+  const editable = !!artefacto && artefacto.tipo !== "srt";
+  const esMd = artefacto?.formato === "md";
   const [editando, setEditando] = React.useState(false);
-  const [texto, setTexto] = React.useState(artefacto.contenido);
+  const [texto, setTexto] = React.useState(artefacto?.contenido ?? "");
   React.useEffect(() => {
-    setTexto(artefacto.contenido);
+    setTexto(artefacto?.contenido ?? "");
     setEditando(false);
-  }, [artefacto.id, artefacto.contenido]);
+  }, [artefacto?.id, artefacto?.contenido]);
+
+  const crear = useMutation({
+    mutationFn: (tipo: TratamientoClaude) => api.audio.crearArtefacto(audio!.id, tipo),
+    onSuccess: (r) => {
+      onCambio();
+      onSeleccionarArtefacto(r.artefacto.id);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   const guardar = useMutation({
-    mutationFn: () => api.audio.guardarArtefacto(artefacto.id, { contenido: texto }),
+    mutationFn: () => api.audio.guardarArtefacto(artefacto!.id, { contenido: texto }),
     onSuccess: () => {
       setEditando(false);
       onCambio();
@@ -469,6 +484,7 @@ function VistaArtefacto({ artefacto, onCambio }: { artefacto: ArtefactoAudio; on
   });
 
   const descargar = () => {
+    if (!artefacto) return;
     const ext = EXT_ARTEFACTO[artefacto.formato] || "txt";
     const blob = new Blob([artefacto.contenido], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -479,65 +495,109 @@ function VistaArtefacto({ artefacto, onCambio }: { artefacto: ArtefactoAudio; on
     URL.revokeObjectURL(url);
   };
 
-  if (artefacto.estado === "generando") {
-    return (
-      <div className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
-      </div>
-    );
-  }
-  if (artefacto.estado === "error") {
-    return (
-      <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-        {artefacto.error || "Este tratamiento falló."}
-      </div>
-    );
-  }
+  const transcrito = !!audio && (audio.estado === "transcrito" || audio.estado === "editado");
+  const acciones = !!artefacto && artefacto.estado === "listo";
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">{artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}</h2>
-        <div className="flex items-center gap-2">
-          {editable ? (
-            <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
-              {editando ? "Vista" : "Editar"}
-            </Button>
-          ) : null}
-          <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> Descargar
-          </Button>
-        </div>
-      </div>
-
-      {editando && editable ? (
-        <div className="flex flex-1 flex-col gap-2">
-          <Textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            className="min-h-[16rem] flex-1 font-mono text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setTexto(artefacto.contenido)}>
-              Descartar
-            </Button>
-            <Button size="sm" disabled={guardar.isPending || texto === artefacto.contenido} onClick={() => guardar.mutate()}>
-              <Check className="mr-1.5 h-3.5 w-3.5" /> Guardar
+    <section className="flex min-w-0 flex-1 flex-col gap-2">
+      {/* Barra superior: tratamientos a la izquierda, acciones del artefacto a la derecha. */}
+      <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+        {transcrito ? (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-xs text-muted-foreground">Añadir:</span>
+            {TRATAMIENTOS_CLAUDE.map(({ tipo, etiqueta, Icono }) => (
+              <Button
+                key={tipo}
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 px-2 text-xs"
+                disabled={crear.isPending}
+                onClick={() => crear.mutate(tipo)}
+              >
+                {crear.isPending && crear.variables === tipo ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Icono className="h-3 w-3" />
+                )}
+                {etiqueta}
+              </Button>
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
+        {acciones ? (
+          <div className="flex items-center gap-2">
+            {editable ? (
+              <Button size="sm" variant="ghost" onClick={() => setEditando((v) => !v)}>
+                {editando ? "Vista" : "Editar"}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="outline" onClick={descargar} className="gap-1.5">
+              <Download className="h-3.5 w-3.5" /> Descargar
             </Button>
           </div>
-        </div>
-      ) : esMd ? (
-        <div className="flex-1 overflow-y-auto rounded-lg border border-border/70 bg-card p-4">
-          <Markdown>{artefacto.contenido || "_(vacío)_"}</Markdown>
-        </div>
-      ) : (
-        <pre className="flex-1 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-card p-4 font-mono text-sm">
-          {artefacto.contenido || "(vacío)"}
-        </pre>
-      )}
+        ) : null}
+      </div>
 
-      {artefacto.tipo === "preguntas" ? <PanelCorregir artefacto={artefacto} onCambio={onCambio} /> : null}
-    </div>
+      {/* Lector del artefacto seleccionado. */}
+      <div className="flex min-h-0 flex-1 flex-col rounded-md border border-border bg-card p-4">
+        {!audio ? (
+          <Vacio texto="Elige un audio de la lista." />
+        ) : EN_PROCESO.includes(audio.estado) ? (
+          <Vacio texto="Transcribiendo… los artefactos aparecerán aquí." />
+        ) : !artefacto ? (
+          <Vacio texto="Elige un artefacto." />
+        ) : artefacto.estado === "generando" ? (
+          <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
+          </div>
+        ) : artefacto.estado === "error" ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {artefacto.error || "Este tratamiento falló."}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <h2 className="text-lg font-semibold">
+              {artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo]}
+            </h2>
+            {editando && editable ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <Textarea
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  className="min-h-[16rem] flex-1 font-mono text-sm"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setTexto(artefacto.contenido)}>
+                    Descartar
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={guardar.isPending || texto === artefacto.contenido}
+                    onClick={() => guardar.mutate()}
+                  >
+                    <Check className="mr-1.5 h-3.5 w-3.5" /> Guardar
+                  </Button>
+                </div>
+              </div>
+            ) : esMd ? (
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border/70 bg-background p-4">
+                <Markdown>{artefacto.contenido || "_(vacío)_"}</Markdown>
+              </div>
+            ) : (
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-background p-4 font-mono text-sm">
+                {artefacto.contenido || "(vacío)"}
+              </pre>
+            )}
+
+            {artefacto.tipo === "preguntas" ? (
+              <PanelCorregir artefacto={artefacto} onCambio={onCambio} />
+            ) : null}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

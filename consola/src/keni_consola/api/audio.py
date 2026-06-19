@@ -245,12 +245,41 @@ async def retranscribir(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _asegurar_artefactos_base(fila: dict) -> None:
+    """Crea el SRT (y el texto plano) desde los segmentos ya guardados.
+
+    Para audios que se transcribieron ANTES del modelo de artefactos: tienen `segmentos`/`texto` en
+    la fila pero ninguna fila en `audio_artefactos`, así que su lista saldría vacía. Reconstruimos
+    aquí el SRT por defecto (y el texto plano) sin volver a transcribir ni llamar a Claude.
+    """
+    from .. import transcripcion as asr  # noqa: PLC0415 -- import perezoso (evita ciclo)
+
+    segs = _segmentos_de(fila)
+    try:
+        if segs:
+            repos.crear_audio_artefacto(
+                transcripcion_id=fila["id"], tipo="srt", titulo="Subtítulos (SRT)",
+                contenido=asr.srt_de_segmentos(segs), formato="srt", estado="listo",
+            )
+        if fila.get("texto"):
+            repos.crear_audio_artefacto(
+                transcripcion_id=fila["id"], tipo="texto", titulo="Texto plano",
+                contenido=fila["texto"], formato="txt", estado="listo",
+            )
+    except Exception:  # noqa: BLE001 -- un fallo de backfill no debe tumbar el listado
+        _log.exception("audio: no se pudo reconstruir el SRT de %s", fila["id"])
+
+
 async def listar_artefactos(request: Request) -> Response:
     """GET /api/audio/transcripciones/{id}/artefactos: artefactos del audio (srt primero)."""
     transcripcion_id = request.path_params["transcripcion_id"]
-    if repos.obtener_audio_transcripcion(transcripcion_id) is None:
+    fila = repos.obtener_audio_transcripcion(transcripcion_id)
+    if fila is None:
         return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
     arts = repos.listar_audio_artefactos(transcripcion_id)
+    if not arts and fila["estado"] in ("transcrito", "editado"):
+        _asegurar_artefactos_base(fila)
+        arts = repos.listar_audio_artefactos(transcripcion_id)
     return JSONResponse({"artefactos": [_artefacto_a_dict(a) for a in arts]})
 
 
