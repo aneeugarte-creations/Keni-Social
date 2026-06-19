@@ -351,6 +351,7 @@ from .repos_rota import (  # noqa: F401
     borrar_turnos_semana_rota,
     contar_piezas_por_programa,
     contar_turnos_de_franja,
+    convertir_evento_en_serie,
     copiar_turnos_rota,
     crear_ausencia_rota,
     crear_evento_rota,

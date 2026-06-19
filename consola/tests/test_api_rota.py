@@ -391,6 +391,48 @@ def test_editar_alcance_invalido_400(cliente):
     assert r.status_code == 400
 
 
+def test_repetir_convierte_evento_suelto_en_serie(cliente):
+    ev = _crear_evento(cliente, fecha=LUNES1)  # lunes 2026-05-25, suelto
+    assert ev["serie_id"] == ""
+    r = cliente.post(
+        f"/api/rota/eventos/{ev['id']}/repetir",
+        json={"dias_semana": [0, 1, 2, 3, 4], "repetir_hasta": _VIE},
+    )
+    assert r.status_code == 201, r.text
+    cuerpo = r.json()
+    assert cuerpo["total"] == 5  # L-V
+    assert cuerpo["creados"] == 4  # el ancla ya existía; se crean las otras 4
+    sid = cuerpo["serie_id"]
+    de_la_serie = [
+        e for e in cliente.get("/api/rota/eventos").json()["eventos"] if e["serie_id"] == sid
+    ]
+    assert len(de_la_serie) == 5
+    assert any(e["id"] == ev["id"] for e in de_la_serie)  # el ancla quedó dentro de la serie
+    assert sorted(e["fecha"] for e in de_la_serie) == [
+        "2026-05-25",
+        "2026-05-26",
+        "2026-05-27",
+        "2026-05-28",
+        "2026-05-29",
+    ]
+
+
+def test_repetir_un_evento_ya_recurrente_400(cliente):
+    cuerpo = _crear_serie(cliente)
+    ocurrencia = cuerpo["eventos"][0]
+    r = cliente.post(
+        f"/api/rota/eventos/{ocurrencia['id']}/repetir",
+        json={"dias_semana": [0], "repetir_hasta": _VIE},
+    )
+    assert r.status_code == 400
+
+
+def test_repetir_sin_dias_400(cliente):
+    ev = _crear_evento(cliente, fecha=LUNES1)
+    r = cliente.post(f"/api/rota/eventos/{ev['id']}/repetir", json={"repetir_hasta": _VIE})
+    assert r.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Cobertura + prioridad + reprogramaciones (ola B, #144)                       #
 # --------------------------------------------------------------------------- #

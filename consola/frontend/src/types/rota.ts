@@ -81,6 +81,21 @@ export type RespuestaCrearEventoRota = RespuestaEventoRota | RespuestaSerieEvent
 /** Alcance de un borrado/edición sobre una serie recurrente. */
 export type AlcanceSerie = "este" | "siguientes" | "serie";
 
+/** Cuerpo de «convertir un evento suelto en serie» (`POST /rota/eventos/{id}/repetir`). */
+export interface CuerpoRepetirEventoRota {
+  /** Días de la semana 0=lunes … 6=domingo. */
+  dias_semana: number[];
+  /** Fin de la recurrencia (ISO AAAA-MM-DD, inclusive). */
+  repetir_hasta: string;
+}
+
+/** Respuesta de convertir en serie: el id de serie + cuántas ocurrencias hay/se crearon. */
+export interface RespuestaRepetirEventoRota {
+  serie_id: string;
+  total: number;
+  creados: number;
+}
+
 /**
  * Filtros de la lista de Eventos (pestaña /rota → Eventos). Todo opcional; los
  * arrays vacíos = sin filtro (igual a no enviar el campo). `q` es substring

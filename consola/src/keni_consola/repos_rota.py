@@ -113,6 +113,18 @@ def actualizar_serie_eventos(
     return db.actualizar_serie_eventos(serie_id, campos, desde=desde, excluir_id=excluir_id)
 
 
+def convertir_evento_en_serie(
+    evento_id: str,
+    *,
+    fechas: list[str],
+    dias_semana_csv: str = "",
+    repetir_hasta: str = "",
+) -> dict[str, Any] | None:
+    return db.convertir_evento_en_serie(
+        evento_id, fechas=fechas, dias_semana_csv=dias_semana_csv, repetir_hasta=repetir_hasta
+    )
+
+
 def crear_turno_rota(
     semana: str,
     fecha: str,

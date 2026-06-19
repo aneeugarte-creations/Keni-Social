@@ -314,3 +314,46 @@ async def duplicar_evento(request: Request) -> Response:
     if evento is None:
         return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
     return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
+
+
+async def repetir_evento(request: Request) -> Response:
+    """POST /api/rota/eventos/{id}/repetir: convierte un evento SUELTO en una serie recurrente.
+
+    Cuerpo: `dias_semana` (0=lun..6=dom) + `repetir_hasta` (ISO inclusive). Materializa, desde la
+    fecha del evento, las ocurrencias que falten (clonando sus campos). 400 si ya es recurrente.
+    Devuelve `{serie_id, total, creados}`.
+    """
+    evento_id = request.path_params["evento_id"]
+    evento = repos.obtener_evento_rota(evento_id)
+    if evento is None:
+        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
+    if evento.get("serie_id"):
+        return JSONResponse({"error": "El evento ya es recurrente."}, status_code=400)
+    datos = await leer_json(request)
+    dias = recurrencia.normalizar_dias_semana(datos.get("dias_semana"))
+    if not dias:
+        return JSONResponse(
+            {"error": "Días de la semana inválidos (usa 0=lunes … 6=domingo)."}, status_code=400
+        )
+    repetir_hasta = str(datos.get("repetir_hasta", "")).strip()
+    if not repetir_hasta:
+        return JSONResponse({"error": "Indica hasta cuándo se repite el evento."}, status_code=400)
+    if dominio.lunes_de_semana_iso(repetir_hasta) == "":
+        return JSONResponse(
+            {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}, status_code=400
+        )
+    if repetir_hasta < evento["fecha"]:
+        return JSONResponse(
+            {"error": "La fecha de fin debe ser igual o posterior a la del evento."},
+            status_code=400,
+        )
+    fechas = recurrencia.fechas_recurrencia(evento["fecha"], dias, repetir_hasta)
+    serie = repos.convertir_evento_en_serie(
+        evento_id,
+        fechas=fechas,
+        dias_semana_csv=recurrencia.dias_semana_a_csv(dias),
+        repetir_hasta=repetir_hasta,
+    )
+    if serie is None:
+        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
+    return JSONResponse(serie, status_code=201)

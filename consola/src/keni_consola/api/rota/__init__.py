@@ -40,6 +40,7 @@ from .eventos import (
     duplicar_evento,
     equipo,
     listar_eventos,
+    repetir_evento,
 )
 from .export import (
     export_csv,
@@ -99,6 +100,7 @@ __all__ = [
     "actualizar_evento",
     "borrar_evento",
     "duplicar_evento",
+    "repetir_evento",
     "listar_ausencias",
     "crear_ausencia",
     "actualizar_ausencia",
@@ -153,6 +155,7 @@ RUTAS = [
     Route("/api/rota/eventos/{evento_id}", actualizar_evento, methods=["PATCH"]),
     Route("/api/rota/eventos/{evento_id}", borrar_evento, methods=["DELETE"]),
     Route("/api/rota/eventos/{evento_id}/duplicar", duplicar_evento, methods=["POST"]),
+    Route("/api/rota/eventos/{evento_id}/repetir", repetir_evento, methods=["POST"]),
     # Turnos (horario persona×dia×franja). OJO: las rutas de lote DEBEN ir ANTES que las
     # paramétricas `{turno_id}`, si no Starlette captura "lote"/"lote/borrar"/"aprobar" como
     # id de turno y devuelve 404/405.

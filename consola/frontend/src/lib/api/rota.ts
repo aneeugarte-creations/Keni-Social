@@ -25,6 +25,7 @@ import type {
   CuerpoDuplicarTurnoRota,
   CuerpoGuardarConfigFranjas,
   CuerpoQuitarCoordinador,
+  CuerpoRepetirEventoRota,
   CuerpoSetCoordinador,
   FiltrosSwaps,
   FranjaSemana,
@@ -49,6 +50,7 @@ import type {
   RespuestaMensaje,
   RespuestaProgramaRota,
   RespuestaProgramasRota,
+  RespuestaRepetirEventoRota,
   RespuestaSwap,
   RespuestaSwaps,
   RespuestaTurnoRota,
@@ -99,6 +101,12 @@ export const apiRota = {
       `/rota/eventos/${encodeURIComponent(id)}${alcance ? `?alcance=${alcance}` : ""}`,
       { metodo: "DELETE" },
     ),
+  // Convierte un evento SUELTO en una serie recurrente (materializa las ocurrencias que falten).
+  repetirEventoRota: (id: string, cuerpo: CuerpoRepetirEventoRota) =>
+    peticion<RespuestaRepetirEventoRota>(`/rota/eventos/${encodeURIComponent(id)}/repetir`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
   duplicarEventoRota: (id: string, cuerpo: CuerpoDuplicarEventoRota = {}) =>
     peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}/duplicar`, {
       metodo: "POST",

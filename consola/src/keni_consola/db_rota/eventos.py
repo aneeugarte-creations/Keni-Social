@@ -416,3 +416,64 @@ def actualizar_serie_eventos(
         return cur.rowcount
     finally:
         con.close()
+
+
+def convertir_evento_en_serie(
+    evento_id: str,
+    *,
+    fechas: list[str],
+    dias_semana_csv: str = "",
+    repetir_hasta: str = "",
+) -> dict[str, Any] | None:
+    """Convierte un evento SUELTO en el ancla de una serie nueva.
+
+    Le pone un `serie_id` propio, guarda la regla en `rota_evento_series` y CREA las ocurrencias
+    que falten (clonando los campos editoriales del ancla) en las `fechas` distintas de la suya.
+    `fechas` son TODAS las ocurrencias (incluida la del ancla; la calcula `dominio.recurrencia`).
+    Devuelve `{serie_id, total, creados}`; None si el id no existe o ya pertenece a una serie.
+    """
+    anchor = obtener_evento_rota(evento_id)
+    if anchor is None or anchor.get("serie_id"):
+        return None
+    ahora = ahora_iso()
+    serie_id = uuid.uuid4().hex[:12]
+    nuevas = [f for f in fechas if f != anchor["fecha"]]
+    filas = [
+        _nueva_fila_evento(
+            anchor["titulo"],
+            fecha=fecha,
+            hora=anchor["hora"],
+            contenido=anchor["contenido"],
+            nota=anchor["nota"],
+            tipo_cobertura=anchor["tipo_cobertura"],
+            prioridad=anchor["prioridad"],
+            marca=anchor["marca"],
+            serie_id=serie_id,
+            ahora=ahora,
+        )
+        for fecha in nuevas
+    ]
+    serie = {
+        "id": serie_id,
+        "dias_semana": dias_semana_csv or "",
+        "repetir_hasta": repetir_hasta or "",
+        "fecha_base": anchor["fecha"],
+        "marca": anchor["marca"],
+        "creado": ahora,
+    }
+    marcadores_ev = ", ".join("?" for _ in _COLS_EVENTO_ROTA)
+    insert_ev = f"INSERT INTO rota_eventos ({', '.join(_COLS_EVENTO_ROTA)}) VALUES ({marcadores_ev})"
+    marcadores_se = ", ".join("?" for _ in _COLS_SERIE_EVENTO)
+    con = _conectar()
+    try:
+        con.execute(
+            f"INSERT INTO rota_evento_series ({', '.join(_COLS_SERIE_EVENTO)}) VALUES ({marcadores_se})",
+            tuple(serie[col] for col in _COLS_SERIE_EVENTO),
+        )
+        con.execute("UPDATE rota_eventos SET serie_id = ? WHERE id = ?", (serie_id, evento_id))
+        for fila in filas:
+            con.execute(insert_ev, tuple(fila[col] for col in _COLS_EVENTO_ROTA))
+        con.commit()
+    finally:
+        con.close()
+    return {"serie_id": serie_id, "total": len(nuevas) + 1, "creados": len(nuevas)}

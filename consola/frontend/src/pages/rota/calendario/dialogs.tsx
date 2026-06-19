@@ -44,6 +44,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import {
+  SelectorRecurrencia,
+  type ValorRecurrencia,
+} from "@/pages/rota/SelectorRecurrencia";
 import type {
   AlcanceSerie,
   Publicacion,
@@ -87,9 +91,14 @@ export function DialogEditarEvento({
   );
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>(evento.prioridad);
   const [contenido, setPublicacion] = React.useState(evento.contenido);
+  // Recurrencia para CONVERTIR un evento suelto en serie (solo si aún no pertenece a una).
+  const [recurrencia, setRecurrencia] = React.useState<ValorRecurrencia | null>(null);
 
   const vinculadas = tareasVinculadas ?? [];
   const esSerie = Boolean(evento.serie_id);
+  // «Personalizado» sin días no es una recurrencia válida: no dejes guardar en ese estado.
+  const recurrenciaIncompleta =
+    !esSerie && recurrencia !== null && recurrencia.dias_semana.length === 0;
   const guardar = useMutation({
     mutationFn: async (alcance?: AlcanceSerie) => {
       const campos = {
@@ -103,6 +112,10 @@ export function DialogEditarEvento({
       // Sin alcance (evento suelto) la llamada es la de siempre; con alcance propaga a la serie.
       if (alcance) await api.actualizarEventoRota(evento.id, campos, alcance);
       else await api.actualizarEventoRota(evento.id, campos);
+      // Convertir en serie: si el evento NO era recurrente y el usuario configuró «Repetir»,
+      // genera las ocurrencias (clona los campos YA guardados de este evento como ancla).
+      const serie =
+        !esSerie && recurrencia ? await api.repetirEventoRota(evento.id, recurrencia) : null;
       // Propaga el cambio a las tareas de cobertura: su título/fecha/hora son una foto del
       // evento al cubrir, así que sin esto la agenda mostraría los datos viejos del partido.
       if (vinculadas.length > 0) {
@@ -117,9 +130,14 @@ export function DialogEditarEvento({
           ),
         );
       }
+      return serie;
     },
-    onSuccess: () => {
-      toast.success("Evento guardado.");
+    onSuccess: (serie) => {
+      toast.success(
+        serie && serie.total > 1
+          ? `Serie creada: ${serie.total} eventos.`
+          : "Evento guardado.",
+      );
       onCambio();
       onCerrar();
     },
@@ -251,6 +269,9 @@ export function DialogEditarEvento({
               maxLength={2000}
             />
           </div>
+          {/* Convertir un evento suelto en recurrente: configurar «Repetir» aquí lo vuelve serie
+              al guardar. Un evento que YA es serie no lo muestra (se gestiona por alcance). */}
+          {!esSerie && <SelectorRecurrencia fechaBase={fecha} onChange={setRecurrencia} />}
         </div>
         <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
           <Button
@@ -290,7 +311,7 @@ export function DialogEditarEvento({
                 if (alcance === null) return; // canceló el diálogo de alcance
                 guardar.mutate(alcance);
               }}
-              disabled={guardar.isPending}
+              disabled={guardar.isPending || recurrenciaIncompleta}
             >
               {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
