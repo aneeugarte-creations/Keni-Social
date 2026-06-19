@@ -157,6 +157,9 @@ def _objetos_recursos_marca() -> set[str]:
                 mini = (p.get("miniatura") or "").strip()
                 if mini:
                     refs.add(mini)
+                muestra = (p.get("foto_muestra") or "").strip()
+                if muestra:
+                    refs.add(muestra)
                 doc_raw = p.get("documento") or ""
                 if doc_raw:
                     try:

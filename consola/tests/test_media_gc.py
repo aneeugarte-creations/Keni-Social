@@ -130,12 +130,19 @@ def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
         '"capas":[{"tipo":"logo","tipo_logo":"imagen","media_id":"logo-spec.png"},'
         '{"tipo":"grupo","capas":[{"tipo":"imagen","objeto":"muestra.jpg"}]}]}'
     )
+    # `foto_muestra` es columna propia (fondo de ejemplo de la galería), NO va dentro de
+    # `documento`: el GC la protege por separado o el barrido borra el fondo de muestra.
     monkeypatch.setattr(
         media_gc.repos, "listar_plantillas_diseno",
-        lambda *a, **k: [{"miniatura": "mini.png", "documento": doc}],
+        lambda *a, **k: [
+            {"miniatura": "mini.png", "documento": doc, "foto_muestra": "plantillas/fondo-muestra.jpg"}
+        ],
     )
     vivas = media_gc.referencias_vivas()
-    assert {"logo-oficial.png", "mini.png", "fondo.jpg", "logo-spec.png", "muestra.jpg"} <= vivas
+    assert {
+        "logo-oficial.png", "mini.png", "fondo.jpg", "logo-spec.png", "muestra.jpg",
+        "plantillas/fondo-muestra.jpg",
+    } <= vivas
 
 
 def test_protege_fotos_de_collage(monkeypatch):
