@@ -103,6 +103,19 @@ describe("PanelUsuarios", () => {
     expect(screen.getByText("@ana")).toBeInTheDocument();
   });
 
+  it("muestra el conteo de marcas y el rol efectivo (superadmin es un rol más)", async () => {
+    stubFetch();
+    renderPanel();
+
+    expect(await screen.findByText("Ana López")).toBeInTheDocument();
+    // Marcas como CONTEO (no chips): 2 para el admin, 1 para Ana.
+    expect(screen.getByText("2 marcas")).toBeInTheDocument();
+    expect(screen.getByText("1 marca")).toBeInTheDocument();
+    // Rol efectivo: el admin es superadmin; Ana, editora.
+    expect(screen.getByText("Superadmin")).toBeInTheDocument();
+    expect(screen.getByText("Editor")).toBeInTheDocument();
+  });
+
   it("el buscador filtra las filas por nombre", async () => {
     stubFetch();
     renderPanel();

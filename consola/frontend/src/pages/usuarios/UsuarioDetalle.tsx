@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ShieldAlert, ShieldOff, Trash2, UserCog } from "lucide-react";
+import { Info, Loader2, ShieldAlert, ShieldOff, Trash2, UserCog } from "lucide-react";
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -28,15 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import {
   descendientes,
   hijosPorManager,
   indexarPorId,
-  metaZona,
   nombreVisible,
-  zonaDe,
 } from "@/lib/organigrama";
 import {
   CARGOS_ORDENADOS,
@@ -46,27 +45,47 @@ import {
   type RolUsuario,
 } from "@/types";
 
-import { AvatarPersona } from "./AvatarPersona";
 import { formatearFecha } from "./lib";
+import { SelectorMarcas } from "./SelectorMarcas";
 import {
   CLAVE_CONFIG_USUARIOS,
   CLAVE_OPCIONES_MARCAS,
   CLAVE_PASSWORD_MIN,
   CLAVE_USUARIOS,
   MIN_PASSWORD,
-  ROL_LABEL,
-  ROLES,
   SIN_CARGO,
   SIN_SUPERIOR,
 } from "./tipos";
 
+/** Centinela de rol en el Select: superadmin es un rol más (= admin + flag superadmin). */
+const ROL_SUPERADMIN = "superadmin";
+const ROL_OPCIONES: { valor: string; etiqueta: string }[] = [
+  { valor: "editor", etiqueta: "Editor" },
+  { valor: "admin", etiqueta: "Administrador" },
+  { valor: ROL_SUPERADMIN, etiqueta: "Superadmin" },
+];
+
+/** Pequeño icono de ayuda con tooltip (para explicaciones que antes iban como subtexto). */
+function Ayuda({ texto }: { texto: string }) {
+  return (
+    <Tooltip label={texto}>
+      <button
+        type="button"
+        className="inline-flex rounded-full text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={texto}
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+    </Tooltip>
+  );
+}
+
 /**
- * Subpágina de detalle de UNA persona (`/usuarios/:id`). Porta a ancho completo todo lo que
- * antes vivía en el popup de edición: cada control guarda al instante (PATCH del campo que
- * cambia) e invalida la lista. El selector de SUPERIOR excluye a la propia persona y a sus
- * descendientes para no ofrecer un cambio que cerraría un ciclo (el backend también lo rechaza).
- * Al final, una zona de acciones sensibles: resetear contraseña, resetear el segundo factor y
- * eliminar. Solo superadmin (el backend devuelve 403 como red de seguridad).
+ * Subpágina de detalle de UNA persona (`/usuarios/:id`), a ancho completo. Cada control guarda al
+ * instante (PATCH del campo que cambia) e invalida la lista. El rol es un único selector donde
+ * superadmin es un rol más (admin + flag). El selector de SUPERIOR excluye a la persona y a sus
+ * descendientes (evita ciclos; el backend también lo rechaza). Al final, una zona de acciones
+ * sensibles: resetear contraseña, resetear las llaves de acceso y eliminar. Solo superadmin.
  */
 export default function UsuarioDetalle() {
   const { id = "" } = useParams();
@@ -161,13 +180,13 @@ export default function UsuarioDetalle() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Reset del segundo factor: borra todas las passkeys de la persona (rescate cuando pierde
-  // sus dispositivos y queda fuera; la recuperación de cuenta es solo por este reset).
+  // Reset del segundo factor: borra todas las llaves de acceso de la persona (rescate cuando
+  // pierde sus dispositivos y queda fuera; la recuperación de cuenta es solo por este reset).
   const resetearMfa = useMutation({
     mutationFn: () => api.actualizarUsuario(usuario!.id, { mfa_reset: true }),
     onSuccess: () => {
       invalidar();
-      toast.success("Verificación en dos pasos restablecida");
+      toast.success("Llaves de acceso restablecidas");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -176,7 +195,7 @@ export default function UsuarioDetalle() {
     if (!usuario) return;
     if (
       await confirmar({
-        titulo: "Resetear verificación en dos pasos",
+        titulo: "Resetear las llaves de acceso",
         mensaje: `Se eliminarán todas las llaves de acceso de ${nombreVisible(usuario)}. Úsalo cuando la persona pierde sus dispositivos y queda fuera de su cuenta. Tendrá que registrar una llave nueva.`,
         destructivo: true,
         textoConfirmar: "Resetear",
@@ -248,16 +267,14 @@ export default function UsuarioDetalle() {
 
   const esYoMismo = usuario.id === actual?.id;
   const cargoActual = (usuario.cargo ?? "") as CargoUsuario;
-  const marcasUsuario = new Set(usuario.marcas ?? []);
   const superiorActual = (usuario.manager_id ?? "") || SIN_SUPERIOR;
+  const rolActual = usuario.superadmin ? ROL_SUPERADMIN : usuario.rol;
 
   // Candidatos a superior: todos menos uno mismo y sus descendientes (evita ciclos).
   const prohibidos = descendientes(usuario.id, hijos);
   const candidatos = usuarios
     .filter((u) => u.id !== usuario.id && !prohibidos.has(u.id))
     .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
-
-  const zona = zonaDe(usuario, porId);
 
   const guardarNombre = () => {
     const limpio = nombre.trim();
@@ -274,81 +291,76 @@ export default function UsuarioDetalle() {
     guardarUsuario.mutate(limpio);
   };
 
+  // Superadmin es un rol más: "superadmin" => admin + flag; los otros => su rol, sin flag.
+  const cambiarRol = (valor: string) => {
+    if (valor === ROL_SUPERADMIN) guardar.mutate({ rol: "admin", superadmin: true });
+    else guardar.mutate({ rol: valor as RolUsuario, superadmin: false });
+  };
+
   return (
     <>
       <TituloPagina titulo={nombreVisible(usuario)} icono={UserCog} onAtras={volver} />
 
-      <div className="mx-auto max-w-3xl space-y-4 pb-10">
-        {/* Cabecera con avatar tintado por zona. */}
-        <div className="flex items-center gap-3">
-          <AvatarPersona usuario={usuario} zona={zona} className="h-12 w-12 text-sm" />
-          <div className="min-w-0">
-            <p className="truncate text-base font-medium">{nombreVisible(usuario)}</p>
-            <p className="truncate text-sm text-muted-foreground">
-              @{usuario.usuario} · {metaZona(zona).etiqueta}
-            </p>
-          </div>
-        </div>
-
+      <div className="w-full space-y-6 pb-12">
         {/* Perfil */}
         <Card>
           <CardHeader>
             <CardTitle>Perfil</CardTitle>
+            <CardDescription>@{usuario.usuario}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="d-nombre">Nombre</Label>
-              <Input
-                id="d-nombre"
-                value={nombre}
-                placeholder={usuario.usuario}
-                maxLength={120}
-                onChange={(e) => setNombre(e.target.value)}
-                onBlur={guardarNombre}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="d-usuario">Usuario</Label>
-              <Input
-                id="d-usuario"
-                value={login}
-                maxLength={64}
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                onChange={(e) => setLogin(e.target.value)}
-                onBlur={guardarLogin}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Con este nombre inicia sesión. Debe ser único; cambiarlo no cierra su sesión.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Cargo</Label>
-              <Select
-                value={cargoActual === "" ? SIN_CARGO : cargoActual}
-                onValueChange={(v) =>
-                  guardar.mutate({ cargo: (v === SIN_CARGO ? "" : v) as CargoUsuario })
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={etiquetaCargo("")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_CARGO}>{etiquetaCargo("")}</SelectItem>
-                  {CARGOS_ORDENADOS.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {ETIQUETA_CARGO[c]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <CardContent>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="d-nombre">Nombre</Label>
+                <Input
+                  id="d-nombre"
+                  value={nombre}
+                  placeholder={usuario.usuario}
+                  maxLength={120}
+                  onChange={(e) => setNombre(e.target.value)}
+                  onBlur={guardarNombre}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="d-usuario">Usuario</Label>
+                <Input
+                  id="d-usuario"
+                  value={login}
+                  maxLength={64}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(e) => setLogin(e.target.value)}
+                  onBlur={guardarLogin}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cargo</Label>
+                <Select
+                  value={cargoActual === "" ? SIN_CARGO : cargoActual}
+                  onValueChange={(v) =>
+                    guardar.mutate({ cargo: (v === SIN_CARGO ? "" : v) as CargoUsuario })
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={etiquetaCargo("")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_CARGO}>{etiquetaCargo("")}</SelectItem>
+                    {CARGOS_ORDENADOS.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {ETIQUETA_CARGO[c]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -359,63 +371,43 @@ export default function UsuarioDetalle() {
             <CardTitle>Organización</CardTitle>
             <CardDescription>Reporte, verticales y disponibilidad operativa.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Reporta a</Label>
-              <Select
-                value={superiorActual}
-                onValueChange={(v) =>
-                  guardar.mutate({ manager_id: v === SIN_SUPERIOR ? "" : v })
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_SUPERIOR}>Sin superior (raíz)</SelectItem>
-                  {candidatos.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {nombreVisible(u)}
-                      {u.cargo ? ` · ${etiquetaCargo(u.cargo)}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Marcas</Label>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-md border p-3">
-                {catalogoMarcas.length === 0 ? (
-                  <p className="col-span-2 text-sm text-muted-foreground">
-                    No hay catálogo de marcas.
-                  </p>
-                ) : (
-                  catalogoMarcas.map((m) => {
-                    const cid = `d-marca-${m.id}`;
-                    return (
-                      <div key={m.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={cid}
-                          checked={marcasUsuario.has(m.id)}
-                          onCheckedChange={(v) => {
-                            const nuevas = new Set(marcasUsuario);
-                            if (v) nuevas.add(m.id);
-                            else nuevas.delete(m.id);
-                            guardar.mutate({ marcas: [...nuevas] });
-                          }}
-                        />
-                        <Label htmlFor={cid} className="cursor-pointer text-sm font-normal">
-                          {m.nombre}
-                        </Label>
-                      </div>
-                    );
-                  })
-                )}
+          <CardContent className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Reporta a</Label>
+                <Select
+                  value={superiorActual}
+                  onValueChange={(v) =>
+                    guardar.mutate({ manager_id: v === SIN_SUPERIOR ? "" : v })
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_SUPERIOR}>Sin superior (raíz)</SelectItem>
+                    {candidatos.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {nombreVisible(u)}
+                        {u.cargo ? ` · ${etiquetaCargo(u.cargo)}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Marcas</Label>
+                <div>
+                  <SelectorMarcas
+                    marcas={usuario.marcas ?? []}
+                    catalogo={catalogoMarcas}
+                    onChange={(marcas) => guardar.mutate({ marcas })}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <div className="flex flex-wrap gap-x-8 gap-y-3">
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={Boolean(usuario.cobertura)}
@@ -439,21 +431,20 @@ export default function UsuarioDetalle() {
           <CardHeader>
             <CardTitle>Permisos y seguridad</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             <div className="space-y-1.5">
-              <Label>Rol</Label>
-              <Select
-                value={usuario.rol}
-                onValueChange={(v) => guardar.mutate({ rol: v as RolUsuario })}
-                disabled={esYoMismo}
-              >
-                <SelectTrigger className="h-9">
+              <div className="flex items-center gap-1.5">
+                <Label>Rol</Label>
+                <Ayuda texto="Superadmin es el único rol que puede gestionar usuarios; un administrador tiene el resto de permisos." />
+              </div>
+              <Select value={rolActual} onValueChange={cambiarRol} disabled={esYoMismo}>
+                <SelectTrigger className="h-9 sm:max-w-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {ROL_LABEL[r]}
+                  {ROL_OPCIONES.map((r) => (
+                    <SelectItem key={r.valor} value={r.valor}>
+                      {r.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -462,34 +453,19 @@ export default function UsuarioDetalle() {
 
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-0.5">
-                <Label htmlFor="d-superadmin" className="text-sm font-normal">
-                  Superadmin
-                </Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="d-passkey" className="text-sm font-normal">
+                    Requerir llave de acceso (passkey)
+                  </Label>
+                  <Ayuda texto="Si se exige y la persona aún no tiene una, deberá registrar una llave de acceso (Face ID, huella o llave de seguridad) la próxima vez que inicie sesión." />
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Único rol que puede gestionar usuarios.
+                  {usuario.mfa_activo ? "Llave registrada." : "Sin llave aún."}
                 </p>
               </div>
               <Switch
-                id="d-superadmin"
-                aria-label="Superadmin"
-                checked={Boolean(usuario.superadmin)}
-                onCheckedChange={(v) => guardar.mutate({ superadmin: v })}
-              />
-            </div>
-
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5">
-                <Label htmlFor="d-mfa-requerido" className="text-sm font-normal">
-                  Requerir verificación en dos pasos (MFA)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {usuario.mfa_activo ? "Llave registrada." : "Sin llave aún."} Si se exige y no
-                  tiene llave, deberá inscribir una al iniciar sesión.
-                </p>
-              </div>
-              <Switch
-                id="d-mfa-requerido"
-                aria-label="Requerir verificación en dos pasos"
+                id="d-passkey"
+                aria-label="Requerir llave de acceso"
                 checked={Boolean(usuario.mfa_requerido)}
                 onCheckedChange={(v) => guardar.mutate({ mfa_requerido: v })}
               />
@@ -507,9 +483,9 @@ export default function UsuarioDetalle() {
           <CardHeader>
             <CardTitle>Acciones sensibles</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="flex-1 space-y-1">
+          <CardContent className="space-y-6">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1 space-y-1 sm:max-w-sm">
                 <Label htmlFor="d-pass" className="text-xs">
                   Nueva contraseña
                 </Label>
@@ -547,7 +523,7 @@ export default function UsuarioDetalle() {
               ) : (
                 <ShieldOff className="h-4 w-4" />
               )}
-              Resetear verificación en dos pasos
+              Resetear las llaves de acceso
             </Button>
 
             <div>

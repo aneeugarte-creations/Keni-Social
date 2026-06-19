@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Settings, ShieldAlert, UserPlus, Users } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -27,25 +28,41 @@ import {
 } from "@/components/ui/table";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
-import { indexarPorId, metaZona, nombreVisible, zonaDe } from "@/lib/organigrama";
-import { type CargoUsuario, etiquetaCargo, type RolUsuario } from "@/types";
+import { nombreVisible } from "@/lib/organigrama";
+import { type CargoUsuario, etiquetaCargo, type RolUsuario, type UsuarioAdmin } from "@/types";
 
-import { AvatarPersona } from "./AvatarPersona";
 import { formatearFecha } from "./lib";
-import { CLAVE_USUARIOS, ROL_LABEL } from "./tipos";
+import { SelectorMarcas } from "./SelectorMarcas";
+import { CLAVE_OPCIONES_MARCAS, CLAVE_USUARIOS, ROL_LABEL } from "./tipos";
 
 /** Centinela del filtro de rol: "todos". */
 const ROL_TODOS = "__todos__";
 
+/** Insignia del rol EFECTIVO (superadmin es un rol más: gana sobre admin/editor). */
+function BadgeRol({ usuario }: { usuario: UsuarioAdmin }) {
+  if (usuario.superadmin) {
+    return <Badge className="h-5 px-1.5 text-[10px] font-medium">Superadmin</Badge>;
+  }
+  if (usuario.rol === "admin") {
+    return (
+      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-medium">
+        Administrador
+      </Badge>
+    );
+  }
+  return <span className="text-sm text-muted-foreground">Editor</span>;
+}
+
 /**
- * Panel de administración de usuarios (rediseño del antiguo organigrama). Pinta el equipo como
- * una TABLA con buscador y filtro de rol; cada fila lleva a la subpágina de detalle de la persona
- * (`/usuarios/:id`). Las acciones globales —alta y configuración de seguridad— viven en el menú de
- * la cabecera. Gestionar usuarios es SOLO superadmin: a quien no lo sea se le muestra el aviso (y
- * el backend devuelve 403 como red de seguridad si se llega por URL).
+ * Panel de administración de usuarios. Pinta el equipo como una TABLA con buscador y filtro de rol;
+ * cada fila lleva a la subpágina de detalle (`/usuarios/:id`). La columna Marcas es un checklist
+ * desplegable que edita en línea. Las acciones globales —alta y configuración de seguridad— viven
+ * en el menú de la cabecera. Gestionar usuarios es SOLO superadmin (el backend devuelve 403 como
+ * red de seguridad si se llega por URL).
  */
 export default function PanelUsuarios() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { usuario: actual, cargando } = useSesion();
   const esSuperadmin = actual?.es_superadmin === true;
 
@@ -55,11 +72,29 @@ export default function PanelUsuarios() {
     enabled: esSuperadmin,
   });
 
+  // Catálogo de marcas (canónico) para el checklist por fila.
+  const marcasQuery = useQuery({
+    queryKey: CLAVE_OPCIONES_MARCAS,
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    select: (data) => data.marcas,
+    staleTime: 5 * 60 * 1000,
+    enabled: esSuperadmin,
+  });
+  const catalogoMarcas = marcasQuery.data ?? [];
+
+  const guardarMarcas = useMutation({
+    mutationFn: ({ id, marcas }: { id: string; marcas: string[] }) =>
+      api.actualizarUsuario(id, { marcas }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const [busqueda, setBusqueda] = React.useState("");
   const [rolFiltro, setRolFiltro] = React.useState<string>(ROL_TODOS);
 
   const usuarios = query.data?.usuarios ?? [];
-  const porId = React.useMemo(() => indexarPorId(usuarios), [usuarios]);
 
   const filtrados = React.useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -160,13 +195,12 @@ export default function PanelUsuarios() {
                     <TableHead>Cargo</TableHead>
                     <TableHead>Permisos</TableHead>
                     <TableHead>Marcas</TableHead>
-                    <TableHead>MFA</TableHead>
+                    <TableHead>Passkey</TableHead>
                     <TableHead>Último acceso</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtrados.map((u) => {
-                    const marcas = u.marcas ?? [];
                     const mfaTexto = u.mfa_activo
                       ? "Activa"
                       : u.mfa_requerido
@@ -179,62 +213,33 @@ export default function PanelUsuarios() {
                         onClick={() => navigate(`/usuarios/${u.id}`)}
                       >
                         <TableCell>
-                          <div className="flex items-center gap-2.5">
-                            <AvatarPersona usuario={u} zona={zonaDe(u, porId)} />
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 text-sm font-medium leading-tight">
-                                <span className="truncate">{nombreVisible(u)}</span>
-                                {u.id === actual?.id && (
-                                  <span className="text-xs font-normal text-muted-foreground">
-                                    (tú)
-                                  </span>
-                                )}
-                              </div>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                @{u.usuario}
-                              </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 text-sm font-medium leading-tight">
+                              <span className="truncate">{nombreVisible(u)}</span>
+                              {u.id === actual?.id && (
+                                <span className="text-xs font-normal text-muted-foreground">
+                                  (tú)
+                                </span>
+                              )}
                             </div>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              @{u.usuario}
+                            </span>
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {etiquetaCargo((u.cargo ?? "") as CargoUsuario)}
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {u.superadmin && (
-                              <Badge className="h-5 px-1.5 text-[10px] font-medium">
-                                Superadmin
-                              </Badge>
-                            )}
-                            {u.rol === "admin" && (
-                              <Badge
-                                variant="secondary"
-                                className="h-5 px-1.5 text-[10px] font-medium"
-                              >
-                                Admin
-                              </Badge>
-                            )}
-                            {!u.superadmin && u.rol !== "admin" && (
-                              <span className="text-sm text-muted-foreground">—</span>
-                            )}
-                          </div>
+                          <BadgeRol usuario={u} />
                         </TableCell>
                         <TableCell>
-                          <div className="flex max-w-[16rem] flex-wrap gap-1">
-                            {marcas.length === 0 ? (
-                              <span className="text-sm text-muted-foreground">—</span>
-                            ) : (
-                              marcas.map((m) => (
-                                <Badge
-                                  key={m}
-                                  variant="outline"
-                                  className="h-5 whitespace-nowrap px-1.5 text-[10px] font-medium"
-                                >
-                                  {metaZona(m).etiqueta}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
+                          <SelectorMarcas
+                            marcas={u.marcas ?? []}
+                            catalogo={catalogoMarcas}
+                            disabled={guardarMarcas.isPending}
+                            onChange={(marcas) => guardarMarcas.mutate({ id: u.id, marcas })}
+                          />
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {mfaTexto}
