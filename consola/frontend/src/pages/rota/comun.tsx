@@ -563,6 +563,18 @@ export function franjaIdParaHoraEvento(
 }
 
 /**
+ * Eventos que NO bucketizan en ninguna franja de la semana (hoy: cuando la semana aún no tiene
+ * franjas configuradas). Sin esto el calendario los descartaba en silencio y quedaban invisibles
+ * —y por tanto sin cubrir—; con esto se sacan a una fila «Sin franja» donde siguen siendo cubribles.
+ */
+export function eventosFueraDeFranja<T extends { hora: string }>(
+  eventos: T[],
+  franjas: FranjaSemana[],
+): T[] {
+  return eventos.filter((e) => franjaIdParaHoraEvento(e.hora, franjas) === null);
+}
+
+/**
  * Color/banda visual de una franja en la rejilla del calendario. La franja de descanso
  * es muted; las franjas laborables alternan amber/sky/violet/teal por `orden` para no
  * depender del nombre literal (soportamos franjas custom).

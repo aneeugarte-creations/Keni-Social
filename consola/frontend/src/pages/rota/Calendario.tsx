@@ -1,6 +1,7 @@
 // Pestaña CALENDARIO de la rota (rejilla semanal de turnos + cobertura derivada).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BellRing,
   CalendarOff,
   CalendarPlus,
@@ -46,6 +47,7 @@ import type {
 } from "@/types";
 
 import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo } from "./CalendarioPiezas";
+import { ChipEventoCalendario } from "./calendario/chips";
 import {
   AyudaLeyenda,
   BadgeEstadoSemana,
@@ -54,6 +56,7 @@ import {
   MenuMasAcciones,
   NavegadorSemana,
   ausenciaTocaDia,
+  eventosFueraDeFranja,
   filtrarEquipoPorMarca,
   formatearFechaCorta,
   franjaIdParaHoraEvento,
@@ -368,6 +371,21 @@ export function Calendario({
       m.set(clave, lista);
     }
     // Orden estable por hora dentro de la celda.
+    for (const lista of m.values()) {
+      lista.sort((a, b) => (a.evento.hora || "").localeCompare(b.evento.hora || ""));
+    }
+    return m;
+  }, [eventosCobertura, franjasSemana, cubridoresPorEvento]);
+
+  // Eventos que no caen en ninguna franja (la semana aún no tiene franjas): en vez de perderlos,
+  // van a una fila «Sin franja» por día, donde siguen siendo cubribles. Clave: fecha.
+  const eventosSinFranjaPorDia = React.useMemo(() => {
+    const m = new Map<string, ItemEventoCalendario[]>();
+    for (const evento of eventosFueraDeFranja(eventosCobertura, franjasSemana)) {
+      const lista = m.get(evento.fecha) ?? [];
+      lista.push({ evento, cubridores: cubridoresPorEvento.get(evento.id) ?? [] });
+      m.set(evento.fecha, lista);
+    }
     for (const lista of m.values()) {
       lista.sort((a, b) => (a.evento.hora || "").localeCompare(b.evento.hora || ""));
     }
@@ -736,6 +754,39 @@ export function Calendario({
                     );
                   });
                 })()}
+                {/* Eventos que no caen en ninguna franja (semana sin franjas configuradas): se
+                    muestran aquí en vez de perderse, y siguen siendo cubribles desde su chip. */}
+                {eventosSinFranjaPorDia.size > 0 && (
+                  <div className="grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-t-4 border-t-amber-300 dark:border-t-amber-700">
+                    <div className="sticky left-0 z-[1] flex flex-col justify-center border-l-4 border-l-amber-400 bg-amber-50/40 px-3 py-3 text-sm font-semibold dark:bg-amber-950/15">
+                      <span className="flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        Sin franja
+                      </span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        configura las franjas
+                      </span>
+                    </div>
+                    {dias.map((fecha) => (
+                      <div
+                        key={`sinfranja-${fecha}`}
+                        className={`flex min-h-[5rem] flex-col gap-1 border-l p-2 ${
+                          esFinDeSemana(fecha) ? "bg-amber-50/20 dark:bg-amber-950/5" : ""
+                        }`}
+                      >
+                        {(eventosSinFranjaPorDia.get(fecha) ?? []).map((item) => (
+                          <ChipEventoCalendario
+                            key={item.evento.id}
+                            item={item}
+                            cubrenPorTurno={[]}
+                            onClick={() => setEventoCobertura(item.evento)}
+                            onCambio={invalidar}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

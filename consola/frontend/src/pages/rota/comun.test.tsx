@@ -2,9 +2,24 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { lunesDeSemana } from "@/lib/rota-calendario";
-import type { SwapTurno } from "@/types";
+import type { FranjaSemana, SwapTurno } from "@/types";
 
-import { contarSwapsPendientes, NavegadorSemana } from "./comun";
+import { contarSwapsPendientes, eventosFueraDeFranja, NavegadorSemana } from "./comun";
+
+function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
+  return {
+    id: "f-manana",
+    lunes: "2026-06-15",
+    nombre: "Mañana",
+    inicio: "08:00",
+    fin: "14:00",
+    orden: 0,
+    es_descanso: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  } as unknown as FranjaSemana;
+}
 
 function swap(over: Partial<SwapTurno> = {}): SwapTurno {
   return {
@@ -66,6 +81,23 @@ describe("contarSwapsPendientes", () => {
       swap({ estado: "rechazado_admin", destinatario_id: "yo" }),
     ];
     expect(contarSwapsPendientes(swaps, "yo", true)).toBe(0);
+  });
+});
+
+describe("eventosFueraDeFranja", () => {
+  it("sin franjas configuradas, TODOS los eventos quedan fuera de franja (no se pierden)", () => {
+    const evs = [{ hora: "10:00" }, { hora: "20:00" }];
+    expect(eventosFueraDeFranja(evs, [])).toHaveLength(2);
+  });
+
+  it("con una franja que cubre la hora, ningún evento queda fuera", () => {
+    const franjas = [franja({ inicio: "08:00", fin: "22:00" })];
+    expect(eventosFueraDeFranja([{ hora: "10:00" }], franjas)).toHaveLength(0);
+  });
+
+  it("con franjas, una hora que no encaja NO queda fuera (cae al fallback de franja), no se pierde", () => {
+    const franjas = [franja({ inicio: "08:00", fin: "14:00" })];
+    expect(eventosFueraDeFranja([{ hora: "23:00" }], franjas)).toHaveLength(0);
   });
 });
 
