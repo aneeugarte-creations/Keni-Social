@@ -169,10 +169,6 @@ export function PantallaLogin() {
                 </Button>
               )}
             </div>
-            <p className="mt-4 text-center text-xs text-muted-foreground">
-              ¿Este equipo no te deja usar Face ID o Windows Hello? Cuando aparezca el diálogo,
-              elige «usar otro dispositivo» o «teléfono» y escanea el código QR con tu móvil.
-            </p>
             <Button
               type="button"
               variant="ghost"

@@ -5,9 +5,11 @@ import type {
   CuerpoActualizarUsuario,
   CuerpoConfiguracionUsuarios,
   CuerpoCrearUsuario,
+  OpcionesCeremoniaWebauthn,
   RespuestaActualizarConfiguracion,
   RespuestaConfiguracionUsuarios,
   RespuestaMfaCredenciales,
+  RespuestaMfaRegistro,
   RespuestaUsuarios,
   UsuarioAdmin,
 } from "@/types";
@@ -27,8 +29,7 @@ export const apiUsuarios = {
 
   // --- Llaves de acceso (passkeys) de OTRA persona (solo superadmin) ---
   // Lista las llaves de una cuenta (sin secretos) y borra una concreta: rescate cuando alguien
-  // pierde un dispositivo o no puede usar su passkey en un equipo. Crear una por otro NO existe
-  // (la clave privada vive en el dispositivo del propio usuario); el reset total va por el PATCH
+  // pierde un dispositivo o no puede usar su passkey en un equipo. El reset total va por el PATCH
   // de usuario (`mfa_reset`).
   usuarioPasskeys: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaMfaCredenciales>(`/usuarios/${encodeURIComponent(id)}/passkeys`, { signal }),
@@ -36,6 +37,22 @@ export const apiUsuarios = {
     peticion<void>(
       `/usuarios/${encodeURIComponent(id)}/passkeys/${encodeURIComponent(credId)}`,
       { metodo: "DELETE" },
+    ),
+
+  // Alta ASISTIDA: el superadmin LANZA la ceremonia (QR) para registrar una passkey en el
+  // teléfono de la persona (Face ID/huella). El backend fuerza «otro dispositivo» (cross-platform)
+  // para que salga el QR y la clave nazca en el móvil de la persona, no en el equipo del superadmin.
+  //   1) opciones -> optionsJSON para `startRegistration({optionsJSON})` (muestra el QR).
+  //   2) verificar(credential) -> guarda la llave CONTRA la cuenta destino.
+  usuarioPasskeyAsistidaOpciones: (id: string) =>
+    peticion<OpcionesCeremoniaWebauthn>(
+      `/auth/passkey-asistida/${encodeURIComponent(id)}/opciones`,
+      { metodo: "POST" },
+    ),
+  usuarioPasskeyAsistidaVerificar: (id: string, credential: unknown, nombre: string) =>
+    peticion<RespuestaMfaRegistro>(
+      `/auth/passkey-asistida/${encodeURIComponent(id)}/verificar`,
+      { metodo: "POST", json: { credential, nombre } },
     ),
 
   // --- Configuración GLOBAL de seguridad (solo superadmin) ---

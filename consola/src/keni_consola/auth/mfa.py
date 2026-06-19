@@ -116,6 +116,8 @@ def opciones_registro(
     rp_id: str,
     rp_nombre: str,
     credenciales_existentes: list[dict[str, Any]],
+    *,
+    solo_cross_device: bool = False,
 ) -> tuple[str, str]:
     """Genera las opciones de REGISTRO (creacion de credencial) y devuelve `(opciones_json, challenge_b64url)`.
 
@@ -126,9 +128,17 @@ def opciones_registro(
     `credenciales_existentes` son las passkeys que el usuario YA tiene (cada una con su
     `credential_id` en base64url): se pasan como `exclude_credentials` para que el navegador no
     deje registrar dos veces el MISMO autenticador.
+
+    `solo_cross_device` (alta ASISTIDA por un superadmin): cuando True, fija
+    `authenticatorAttachment=cross-platform`. Así el navegador NO ofrece el autenticador de
+    plataforma de ESTA máquina (el Touch ID del superadmin) sino el flujo «otro dispositivo» —el
+    código QR híbrido—, para que la passkey se cree en el TELÉFONO de la persona (Face ID/huella),
+    no en el equipo del superadmin. En el enrolamiento normal (el usuario sobre su propia cuenta)
+    se deja en False: cada quien elige su autenticador.
     """
     from webauthn import generate_registration_options, options_to_json
     from webauthn.helpers.structs import (
+        AuthenticatorAttachment,
         AuthenticatorSelectionCriteria,
         PublicKeyCredentialDescriptor,
         ResidentKeyRequirement,
@@ -139,6 +149,14 @@ def opciones_registro(
         for c in credenciales_existentes
         if c.get("credential_id")
     ]
+    seleccion = AuthenticatorSelectionCriteria(
+        # Passkeys: pedimos resident key/discoverable cuando se pueda (mejor UX), pero sin
+        # EXIGIRla (preferred) para no romper autenticadores de plataforma mas viejos.
+        resident_key=ResidentKeyRequirement.PREFERRED,
+        authenticator_attachment=(
+            AuthenticatorAttachment.CROSS_PLATFORM if solo_cross_device else None
+        ),
+    )
     opciones = generate_registration_options(
         rp_id=rp_id,
         rp_name=rp_nombre,
@@ -149,11 +167,7 @@ def opciones_registro(
         user_name=usuario_nombre,
         user_display_name=usuario_nombre,
         exclude_credentials=excluir,
-        # Passkeys: pedimos resident key/discoverable cuando se pueda (mejor UX), pero sin
-        # EXIGIRla (preferred) para no romper autenticadores de plataforma mas viejos.
-        authenticator_selection=AuthenticatorSelectionCriteria(
-            resident_key=ResidentKeyRequirement.PREFERRED,
-        ),
+        authenticator_selection=seleccion,
     )
     challenge_b64url = bytes_a_b64url(opciones.challenge)
     return options_to_json(opciones), challenge_b64url

@@ -140,6 +140,10 @@ COOKIE_MFA_CHALLENGE_REGISTRO = "keni_consola_mfa_reto_registro"
 # token NO ata usuario (uid=""); la assertion se verifica criptograficamente contra la clave
 # publica de la credencial que el navegador devuelva.
 COOKIE_MFA_CHALLENGE_PASSKEY = "keni_consola_mfa_reto_passkey"
+# Challenge del ALTA ASISTIDA por superadmin (registro de una passkey EN NOMBRE de otra cuenta):
+# atada al usuario DESTINO. Cookie propia para no pisar el enrolamiento que el superadmin pudiera
+# tener a la vez sobre SU cuenta (`..._REGISTRO`).
+COOKIE_MFA_CHALLENGE_ASISTIDO = "keni_consola_mfa_reto_asistido"
 # Vida del estado pre-auth/challenge: 5 minutos para completar la ceremonia. Corta a proposito.
 _MFA_PENDIENTE_TTL_SEG = 300
 
@@ -976,6 +980,132 @@ async def mfa_disable(request: Request) -> Response:
     return Response(status_code=204)
 
 
+# --------------------------------------------------------------------------- #
+# Alta ASISTIDA de passkey: un SUPERADMIN lanza la ceremonia (QR) para OTRA cuenta #
+# --------------------------------------------------------------------------- #
+#
+# La passkey se crea en el TELÉFONO de la persona (Face ID/huella) por el QR híbrido: el superadmin
+# arma la ceremonia desde la ficha del usuario, pero `authenticatorAttachment=cross-platform`
+# fuerza el flujo «otro dispositivo» (QR), de modo que la clave privada NACE y se queda en el móvil
+# de la persona, NO en el equipo del superadmin. El user handle es el de la cuenta DESTINO, así que
+# la credencial queda guardada CONTRA esa cuenta. Requiere SESIÓN superadmin. (Proximidad: el móvil
+# que escanea debe tener Bluetooth y estar cerca del equipo que muestra el QR.)
+
+_MSG_SOLO_SUPERADMIN_PASSKEY = (
+    "Solo un superadministrador puede registrar llaves de acceso de otra cuenta."
+)
+
+
+async def passkey_asistida_opciones(request: Request) -> Response:
+    """POST /api/auth/passkey-asistida/{usuario_id}/opciones: opciones de REGISTRO para OTRA cuenta.
+
+    Solo superadmin. Arma las opciones WebAuthn con el user handle de la cuenta DESTINO y forzando
+    `cross-platform` (sale el QR / «otro dispositivo»: la passkey se crea en el teléfono de la
+    persona). Siembra la cookie de challenge atada al usuario destino. 404 si la cuenta no existe;
+    503 si la maquinaria MFA no opera (falta clave de firma).
+    """
+    if not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_SUPERADMIN_PASSKEY)
+    if not seguridad.mfa_maquinaria_activa():
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    usuario_id = request.path_params["usuario_id"]
+    destino = auth.obtener_usuario_por_id(usuario_id)
+    if destino is None:
+        return JSONResponse({"error": "El usuario no existe."}, status_code=404)
+
+    existentes = auth.listar_credenciales_mfa(usuario_id)
+    try:
+        opciones_json, challenge = auth.opciones_registro(
+            usuario_id,
+            destino.get("usuario", "usuario"),
+            _rp_id(),
+            _rp_nombre(),
+            existentes,
+            solo_cross_device=True,
+        )
+    except auth.MfaNoDisponible:  # pragma: no cover - opciones_registro no firma; defensivo
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    token_reto = _emitir_token_challenge(challenge, usuario_id)
+    if token_reto is None:
+        _logger.warning(
+            "passkey-asistida/opciones: KENI_CONSOLA_MFA_KEY falta/es invalida (fail-safe)."
+        )
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+
+    resp = Response(content=opciones_json, media_type="application/json")
+    _set_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_ASISTIDO, token_reto)
+    return resp
+
+
+async def passkey_asistida_verificar(request: Request) -> Response:
+    """POST /api/auth/passkey-asistida/{usuario_id}/verificar: guarda la passkey en la cuenta DESTINO.
+
+    Solo superadmin. Cuerpo `{credential, nombre?}` (lo que devuelve `startRegistration` en el
+    navegador del superadmin cuando la persona escanea el QR). Verifica contra la cookie de
+    challenge atada al destino y persiste la credencial CONTRA esa cuenta (enciende su `mfa_activo`).
+    Se registra en el log para auditoría. 404 si la cuenta no existe; 409 si la llave ya estaba.
+    """
+    if not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_SUPERADMIN_PASSKEY)
+    if not seguridad.mfa_maquinaria_activa():
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    usuario_id = request.path_params["usuario_id"]
+    destino = auth.obtener_usuario_por_id(usuario_id)
+    if destino is None:
+        return JSONResponse({"error": "El usuario no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    credential = datos.get("credential")
+    nombre = datos.get("nombre")
+    nombre = nombre.strip()[:80] if isinstance(nombre, str) else ""
+    if not isinstance(credential, (dict, str)) or not credential:
+        return JSONResponse({"error": "Falta la credencial de la llave."}, status_code=400)
+
+    challenge = _leer_token_challenge(
+        request.cookies.get(COOKIE_MFA_CHALLENGE_ASISTIDO), usuario_id
+    )
+    if challenge is None:
+        resp = JSONResponse(
+            {"error": "La ceremonia de registro caducó. Vuelve a intentarlo."}, status_code=400
+        )
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_ASISTIDO)
+        return resp
+
+    try:
+        nueva = auth.verificar_registro(credential, challenge, _rp_id(), _rp_origenes())
+    except Exception as exc:  # noqa: BLE001 - py_webauthn lanza varias; tratamos todas como KO
+        _logger.info("passkey-asistida/verificar: respuesta WebAuthn rechazada: %s", exc)
+        resp = JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=400)
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_ASISTIDO)
+        return resp
+
+    guardada = auth.guardar_credencial_mfa(
+        usuario_id,
+        credential_id=nueva["credential_id"],
+        public_key=nueva["public_key"],
+        sign_count=nueva["sign_count"],
+        transports=nueva["transports"],
+        nombre=nombre,
+    )
+    if not guardada:
+        resp = JSONResponse(
+            {"error": "Esa llave de acceso ya está registrada."}, status_code=409
+        )
+        _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_ASISTIDO)
+        return resp
+
+    autor = seguridad.autor_de_peticion(request)
+    _logger.warning(
+        "Alta ASISTIDA de passkey: superadmin %s registró una llave para la cuenta %s.",
+        (autor or {}).get("usuario", "?"),
+        destino["usuario"],
+    )
+    resp = JSONResponse({"ok": True})
+    _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_ASISTIDO)
+    return resp
+
+
 RUTAS = [
     Route("/api/auth/login", login, methods=["POST"]),
     Route("/api/auth/logout", logout, methods=["POST"]),
@@ -995,4 +1125,16 @@ RUTAS = [
     Route("/api/auth/mfa/credenciales/{id}", mfa_credencial_renombrar, methods=["PATCH"]),
     Route("/api/auth/mfa/credenciales/{id}", mfa_credencial_borrar, methods=["DELETE"]),
     Route("/api/auth/mfa/disable", mfa_disable, methods=["POST"]),
+    # Alta ASISTIDA por superadmin: lanzar la ceremonia (QR) para registrar una passkey en el
+    # teléfono de OTRA cuenta. Exige sesión superadmin (no es pública).
+    Route(
+        "/api/auth/passkey-asistida/{usuario_id}/opciones",
+        passkey_asistida_opciones,
+        methods=["POST"],
+    ),
+    Route(
+        "/api/auth/passkey-asistida/{usuario_id}/verificar",
+        passkey_asistida_verificar,
+        methods=["POST"],
+    ),
 ]

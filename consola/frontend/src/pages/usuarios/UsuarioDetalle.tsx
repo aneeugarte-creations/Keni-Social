@@ -1,5 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, KeyRound, Loader2, ShieldAlert, ShieldOff, Trash2, UserCog } from "lucide-react";
+import { startRegistration } from "@simplewebauthn/browser";
+import {
+  Info,
+  KeyRound,
+  Loader2,
+  ShieldAlert,
+  ShieldOff,
+  Smartphone,
+  Trash2,
+  UserCog,
+} from "lucide-react";
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -222,6 +232,46 @@ export default function UsuarioDetalle() {
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  // Alta ASISTIDA: el superadmin LANZA la ceremonia (QR) para registrar una passkey en el TELÉFONO
+  // de la persona. El navegador del superadmin muestra el QR; la persona lo escanea con su móvil y
+  // confirma con Face ID/huella. La clave nace y se queda en SU teléfono; aquí solo se persiste su
+  // parte pública contra la cuenta destino.
+  const registrarAsistida = useMutation({
+    mutationFn: async () => {
+      const optionsJSON = await api.usuarioPasskeyAsistidaOpciones(usuario!.id);
+      const credential = await startRegistration({
+        optionsJSON: optionsJSON as unknown as Parameters<
+          typeof startRegistration
+        >[0]["optionsJSON"],
+      });
+      await api.usuarioPasskeyAsistidaVerificar(usuario!.id, credential, "Teléfono");
+    },
+    onSuccess: () => {
+      void passkeysQuery.refetch();
+      invalidar();
+      toast.success("Llave de acceso registrada en el teléfono de la persona");
+    },
+    onError: (e) => {
+      if (e instanceof DOMException && e.name === "NotAllowedError") {
+        toast.error("Registro cancelado o no se escaneó el QR a tiempo.");
+      } else {
+        toast.error(mensajeError(e));
+      }
+    },
+  });
+
+  const pedirRegistrarAsistida = async () => {
+    if (!usuario) return;
+    if (
+      await confirmar({
+        titulo: "Registrar llave en el teléfono de la persona",
+        mensaje: `Se abrirá un código QR. Pide a ${nombreVisible(usuario)} que lo escanee con su teléfono y confirme con Face ID o huella: la llave quedará en SU teléfono y en su cuenta. El teléfono y este equipo deben tener Bluetooth activado y estar cerca.`,
+        textoConfirmar: "Mostrar QR",
+      })
+    )
+      registrarAsistida.mutate();
+  };
 
   const pedirResetMfa = async () => {
     if (!usuario) return;
@@ -540,8 +590,8 @@ export default function UsuarioDetalle() {
             </CardTitle>
             <CardDescription>
               Passkeys con las que esta persona inicia sesión (Face ID, huella, Windows Hello o su
-              teléfono). No se pueden crear por ella —la llave se genera en su dispositivo—; aquí
-              solo se ven y se eliminan.
+              teléfono). Puedes registrar una en su teléfono mostrando un QR, eliminar una concreta
+              o todas. La clave siempre se genera en el dispositivo de la persona.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -585,19 +635,35 @@ export default function UsuarioDetalle() {
               Para que el inicio de sesión DEJE de pedir la passkey hay que eliminar sus llaves;
               quitar «Requerir llave de acceso» solo evita que se le obligue a registrar una nueva.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resetearMfa.isPending || (passkeysQuery.data?.length ?? 0) === 0}
-              onClick={pedirResetMfa}
-            >
-              {resetearMfa.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShieldOff className="h-4 w-4" />
+            <div className="flex flex-wrap gap-3">
+              {actual?.mfa_habilitado && (
+                <Button
+                  size="sm"
+                  disabled={registrarAsistida.isPending}
+                  onClick={() => void pedirRegistrarAsistida()}
+                >
+                  {registrarAsistida.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Smartphone className="h-4 w-4" />
+                  )}
+                  Registrar en su teléfono (QR)
+                </Button>
               )}
-              Eliminar todas las llaves
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={resetearMfa.isPending || (passkeysQuery.data?.length ?? 0) === 0}
+                onClick={pedirResetMfa}
+              >
+                {resetearMfa.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldOff className="h-4 w-4" />
+                )}
+                Eliminar todas las llaves
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

@@ -82,11 +82,6 @@ export function PantallaInscribirMfa() {
               Registrar llave de acceso
             </Button>
           </form>
-          <p className="text-xs text-muted-foreground">
-            ¿Este equipo no te deja usar Face ID o Windows Hello? Cuando aparezca el diálogo, elige
-            «usar otro dispositivo» o «teléfono» y escanea el código QR con tu móvil: la llave
-            quedará en tu teléfono y podrás usarla aquí.
-          </p>
         </CardContent>
       </Card>
     </div>

@@ -682,6 +682,72 @@ def test_borrar_passkey_inexistente_404(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# 8d) Alta ASISTIDA: el superadmin LANZA la ceremonia (QR) para OTRA cuenta     #
+# --------------------------------------------------------------------------- #
+
+
+def test_passkey_asistida_registra_en_la_cuenta_destino(entorno, monkeypatch):
+    """El superadmin lanza la ceremonia para `ana`: las opciones fuerzan «otro dispositivo»
+    (cross-platform, el QR del teléfono) y al verificar la llave queda guardada CONTRA `ana`
+    (su `mfa_activo` se enciende), no contra el superadmin."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    ana = auth.crear_usuario("ana", CLAVE, "editor")
+    c = _cli()
+    _sesion_superadmin(c)
+
+    r_op = c.post(f"/api/auth/passkey-asistida/{ana['id']}/opciones", headers=_ORIGIN)
+    assert r_op.status_code == 200, r_op.text
+    assert api_auth.COOKIE_MFA_CHALLENGE_ASISTIDO in c.cookies
+    # Cross-platform: el QR del móvil, NO el Touch ID del superadmin.
+    assert r_op.json()["authenticatorSelection"]["authenticatorAttachment"] == "cross-platform"
+
+    monkeypatch.setattr(
+        api_auth.auth,
+        "verificar_registro",
+        lambda credential, challenge, rp_id, origenes: {
+            "credential_id": "cred-telefono",
+            "public_key": "pubkey-b64url",
+            "sign_count": 0,
+            "transports": json.dumps(["hybrid", "internal"]),
+        },
+    )
+    r_v = c.post(
+        f"/api/auth/passkey-asistida/{ana['id']}/verificar",
+        json={"credential": {"id": "cred-telefono"}, "nombre": "iPhone"},
+        headers=_ORIGIN,
+    )
+    assert r_v.status_code == 200 and r_v.json() == {"ok": True}
+    # La llave quedó en ANA (destino).
+    assert auth.estado_mfa(ana["id"])["activo"] is True
+    cred = auth.listar_credenciales_mfa(ana["id"])[0]
+    assert cred["credential_id"] == "cred-telefono" and cred["nombre"] == "iPhone"
+
+
+def test_passkey_asistida_solo_superadmin(entorno, monkeypatch):
+    """El alta asistida es competencia del superadmin: un editor con sesión recibe 403."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)  # debe existir un superadmin
+    ana = auth.crear_usuario("ana", CLAVE, "editor")
+    ed = auth.crear_usuario("ed", CLAVE, "editor")
+    c = _cli()
+    c.cookies.set(auth.COOKIE_SESION, auth.crear_sesion(ed["id"]))
+    assert (
+        c.post(f"/api/auth/passkey-asistida/{ana['id']}/opciones", headers=_ORIGIN).status_code
+        == 403
+    )
+
+
+def test_passkey_asistida_usuario_inexistente_404(entorno, monkeypatch):
+    """Lanzar la ceremonia para una cuenta que no existe -> 404."""
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    c = _cli()
+    _sesion_superadmin(c)
+    assert (
+        c.post("/api/auth/passkey-asistida/noexiste/opciones", headers=_ORIGIN).status_code == 404
+    )
+
+
+# --------------------------------------------------------------------------- #
 # 9) Login PASSWORDLESS por passkey (credencial descubrible, sin contraseña)    #
 # --------------------------------------------------------------------------- #
 
