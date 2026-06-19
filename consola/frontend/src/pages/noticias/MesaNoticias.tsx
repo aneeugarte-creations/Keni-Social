@@ -10,7 +10,7 @@
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Layers, Newspaper, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, Newspaper, Target, X } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -22,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaLinea } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
-import type { GrupoMesa, Historia, MesaLinea, RespuestaMesa } from "@/types";
+import type { GrupoMesa, Historia, LineaGrupo, MesaLinea, RespuestaMesa } from "@/types";
 
 import { TarjetaHistoria } from "./TarjetaHistoria";
 
@@ -88,79 +88,275 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
   );
 }
 
-// ── Barra de navegación por GRUPO ──────────────────────────────────────────────
+// ── Barra de navegación por GRUPO (con 2º nivel de LÍNEAS) ─────────────────────
 
-/** Un chip de la barra de categorías: nombre + conteo, estado activo/inactivo. */
+const ANCHO_MENU = 352; // ancho del desplegable de líneas (px), para acotar su anclaje
+
+/** Un chip de la barra de categorías: nombre + conteo (+ chevron si despliega líneas). */
 function ChipGrupo({
   etiqueta,
   n,
   activo,
+  abierto,
+  despliega,
   onClick,
 }: {
   etiqueta: string;
   n: number;
   activo: boolean;
-  onClick: () => void;
+  abierto?: boolean;
+  despliega?: boolean;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={activo}
+      aria-haspopup={despliega ? "menu" : undefined}
+      aria-expanded={despliega ? abierto : undefined}
       onClick={onClick}
       data-testid={`chip-grupo-${etiqueta}`}
       className={cn(
-        "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors",
+        "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-sm transition-colors",
         activo
           ? "border-foreground/15 bg-muted font-medium text-foreground"
           : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
       )}
     >
-      {etiqueta}
-      {n > 0 && <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">{n}</span>}
+      <span>{etiqueta}</span>
+      {n > 0 && <span className="tabular-nums text-xs text-muted-foreground">{n}</span>}
+      {despliega && (
+        <ChevronDown
+          className={cn("h-3 w-3 text-muted-foreground transition-transform", abierto && "rotate-180")}
+        />
+      )}
     </button>
   );
 }
 
-/**
- * La barra superior de categorías de la Mesa (marcas con grupos, p. ej. Claro Sports): un chip
- * "Todas" + uno por grupo en el orden de prioridad editorial que envía el back. Scroll horizontal
- * si no caben. Filtrar es instantáneo (la lista ya viene; el chip solo cambia qué se muestra).
- */
-function BarraGrupos({
-  grupos,
+/** Un ítem del desplegable de líneas: nombre + conteo; atenuado si no tiene candidatas. */
+function ItemLinea({
+  etiqueta,
+  n,
+  activo,
+  atenuada,
+  full,
+  onClick,
+}: {
+  etiqueta: string;
+  n: number;
+  activo: boolean;
+  atenuada?: boolean;
+  full?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={activo}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+        full && "col-span-2",
+        activo
+          ? "bg-muted font-medium text-foreground"
+          : atenuada
+            ? "text-muted-foreground/45 hover:bg-muted/60"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      <span className="truncate">{etiqueta}</span>
+      {n > 0 && <span className="shrink-0 tabular-nums text-[11px] text-muted-foreground">{n}</span>}
+    </button>
+  );
+}
+
+/** Desplegable con las líneas de un grupo (2º nivel): "Todas" + una por línea, en rejilla. */
+function MenuLineas({
+  grupo,
+  lineas,
   total,
-  sel,
+  lineaSel,
+  left,
+  panelRef,
   onSel,
 }: {
-  grupos: GrupoMesa[];
+  grupo: string;
+  lineas: LineaGrupo[];
   total: number;
-  sel: string;
-  onSel: (g: string) => void;
+  lineaSel: string;
+  left: number;
+  panelRef: React.RefObject<HTMLDivElement>;
+  onSel: (linea: string) => void;
 }) {
   return (
     <div
-      className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1"
-      role="tablist"
-      aria-label="Categorías"
+      ref={panelRef}
+      role="menu"
+      aria-label={`Líneas de ${grupo}`}
+      data-testid={`menu-lineas-${grupo}`}
+      className="absolute top-full z-20 mt-1 w-[22rem] max-w-[88vw] rounded-xl border border-border bg-card p-1 shadow-lg"
+      style={{ left }}
     >
-      <ChipGrupo etiqueta="Todas" n={total} activo={sel === ""} onClick={() => onSel("")} />
-      {grupos.map((g) => (
-        <ChipGrupo
-          key={g.grupo}
-          etiqueta={g.grupo}
-          n={g.en_pool}
-          activo={sel === g.grupo}
-          onClick={() => onSel(g.grupo)}
-        />
-      ))}
+      <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-muted-foreground/60">
+        {grupo}
+      </div>
+      <div className="grid max-h-[60vh] grid-cols-2 gap-0.5 overflow-y-auto">
+        <ItemLinea etiqueta={`Todas las de ${grupo}`} n={total} activo={lineaSel === ""} full onClick={() => onSel("")} />
+        {lineas.map((l) => (
+          <ItemLinea
+            key={l.linea}
+            etiqueta={l.nombre}
+            n={l.en_pool}
+            activo={lineaSel === l.linea}
+            atenuada={l.en_pool === 0}
+            onClick={() => onSel(l.linea)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-/** Candidatas visibles según el chip seleccionado ('' = Todas = sin filtrar). */
-export function historiasDelGrupo(historias: Historia[], grupoSel: string): Historia[] {
-  return grupoSel ? historias.filter((h) => h.grupo === grupoSel) : historias;
+/**
+ * Navegación temática de la Mesa (marcas con grupos, p. ej. Claro Sports): chip "Todas" + uno por
+ * grupo en el orden editorial que manda el back. Pulsar un grupo lo filtra y despliega sus LÍNEAS
+ * (2º nivel) en un menú que cae bajo el chip; elegir una línea afina el filtro y deja un indicador
+ * con la línea activa. El menú se cierra al pulsar fuera o con Escape (sin backdrop: los chips
+ * siguen clicables para saltar de grupo).
+ */
+export function NavGruposLineas({
+  grupos,
+  total,
+  grupoSel,
+  lineaSel,
+  onSelGrupo,
+  onSelLinea,
+}: {
+  grupos: GrupoMesa[];
+  total: number;
+  grupoSel: string;
+  lineaSel: string;
+  onSelGrupo: (g: string) => void;
+  onSelLinea: (g: string, linea: string) => void;
+}) {
+  const [menu, setMenu] = React.useState<string | null>(null);
+  const [left, setLeft] = React.useState(0);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const navRef = React.useRef<HTMLDivElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  // Cierre por click-fuera / Escape. Sin elemento backdrop para que un clic en otro chip cambie de
+  // grupo directamente (el listener ignora lo que cae dentro de la barra o del propio menú).
+  React.useEffect(() => {
+    if (!menu) return;
+    const fuera = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!panelRef.current?.contains(t) && !navRef.current?.contains(t)) setMenu(null);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menu]);
+
+  const abrirGrupo = (g: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (menu === g) {
+      setMenu(null); // segundo clic en el grupo abierto: solo cierra el menú (mantiene el filtro)
+      return;
+    }
+    const wrap = wrapRef.current;
+    if (wrap) {
+      const x = e.currentTarget.getBoundingClientRect().left - wrap.getBoundingClientRect().left;
+      const tope = Math.max(0, wrap.clientWidth - Math.min(ANCHO_MENU, wrap.clientWidth));
+      setLeft(Math.min(Math.max(0, x), tope));
+    }
+    onSelGrupo(g);
+    setMenu(g);
+  };
+
+  const grupoMenu = grupos.find((g) => g.grupo === menu) ?? null;
+  const grupoFiltro = grupos.find((g) => g.grupo === grupoSel) ?? null;
+  const nombreLineaSel = grupoFiltro?.lineas?.find((l) => l.linea === lineaSel)?.nombre ?? lineaSel;
+
+  return (
+    <div className="space-y-2">
+      <div ref={wrapRef} className="relative">
+        <div
+          ref={navRef}
+          className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1"
+          aria-label="Categorías"
+        >
+          <ChipGrupo
+            etiqueta="Todas"
+            n={total}
+            activo={grupoSel === ""}
+            onClick={() => {
+              setMenu(null);
+              onSelGrupo("");
+            }}
+          />
+          {grupos.map((g) => (
+            <ChipGrupo
+              key={g.grupo}
+              etiqueta={g.grupo}
+              n={g.en_pool}
+              activo={grupoSel === g.grupo}
+              abierto={menu === g.grupo}
+              despliega
+              onClick={(e) => abrirGrupo(g.grupo, e)}
+            />
+          ))}
+        </div>
+        {grupoMenu && (
+          <MenuLineas
+            grupo={grupoMenu.grupo}
+            lineas={grupoMenu.lineas ?? []}
+            total={grupoMenu.en_pool}
+            lineaSel={grupoSel === grupoMenu.grupo ? lineaSel : ""}
+            left={left}
+            panelRef={panelRef}
+            onSel={(linea) => {
+              onSelLinea(grupoMenu.grupo, linea);
+              setMenu(null);
+            }}
+          />
+        )}
+      </div>
+      {lineaSel && grupoFiltro && (
+        <div className="flex items-center gap-1.5 text-xs" data-testid="filtro-linea">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-foreground">
+            <span className="text-muted-foreground">{grupoFiltro.grupo} ›</span>
+            {nombreLineaSel}
+            <button
+              type="button"
+              className="ml-0.5 text-muted-foreground hover:text-foreground"
+              aria-label="Quitar filtro de línea"
+              onClick={() => onSelLinea(grupoFiltro.grupo, "")}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Candidatas visibles según el chip y la línea elegidos ('' = sin filtrar en ese nivel). */
+export function historiasDelGrupo(
+  historias: Historia[],
+  grupoSel: string,
+  lineaSel = "",
+): Historia[] {
+  return historias.filter(
+    (h) => (!grupoSel || h.grupo === grupoSel) && (!lineaSel || h.linea === lineaSel),
+  );
 }
 
 // ── Agrupamiento por macro-evento ──────────────────────────────────────────────
@@ -295,8 +491,10 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
   // payload es uno solo; las plegadas siguen mostrando 5).
   const [expandidas, setExpandidas] = React.useState<Set<string>>(() => new Set());
   const [fueraAbierto, setFueraAbierto] = React.useState(false);
-  // Categoría seleccionada en la barra de grupos ('' = Todas). Solo aplica a marcas con grupos.
+  // Categoría seleccionada en la barra de grupos ('' = Todas) y línea dentro de ella ('' = todas
+  // las del grupo). Solo aplican a marcas con grupos.
   const [grupoSel, setGrupoSel] = React.useState<string>("");
+  const [lineaSel, setLineaSel] = React.useState<string>("");
   const porLinea = expandidas.size > 0 || fueraAbierto ? POR_LINEA_EXPANDIDO : POR_LINEA_PLEGADO;
   const clave = CLAVE_MESA(marca, porLinea);
 
@@ -337,17 +535,30 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
   if (grupos.length > 0) {
     const browse = data.historias_grupo ?? [];
     const total = grupos.reduce((acc, g) => acc + g.en_pool, 0);
-    const visibles = historiasDelGrupo(browse, grupoSel);
+    const visibles = historiasDelGrupo(browse, grupoSel, lineaSel);
     return (
       <div className="space-y-4" data-testid="mesa-grupos">
-        <BarraGrupos grupos={grupos} total={total} sel={grupoSel} onSel={setGrupoSel} />
+        <NavGruposLineas
+          grupos={grupos}
+          total={total}
+          grupoSel={grupoSel}
+          lineaSel={lineaSel}
+          onSelGrupo={(g) => {
+            setGrupoSel(g);
+            setLineaSel("");
+          }}
+          onSelLinea={(g, linea) => {
+            setGrupoSel(g);
+            setLineaSel(linea);
+          }}
+        />
         {query.isFetching && !query.isPending && (
           <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
         )}
         {visibles.length === 0 ? (
           <EstadoVacio
             icono={Newspaper}
-            titulo="Sin candidatas en esta categoría"
+            titulo={lineaSel ? "Sin candidatas en esta línea" : "Sin candidatas en esta categoría"}
             texto="Prueba con otra categoría o espera a que lleguen nuevas."
           />
         ) : (

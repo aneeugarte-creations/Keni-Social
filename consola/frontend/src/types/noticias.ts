@@ -198,6 +198,12 @@ export interface Historia {
    * '' o ausente para marcas sin grupos o candidatas sin clasificar.
    */
   grupo?: string;
+  /**
+   * Línea de navegación de la historia (el 2º nivel bajo el grupo: id de la etiqueta vertical,
+   * p. ej. "fut-bundesliga"). Lo asigna el mismo clasificador léxico que el grupo en la Mesa;
+   * '' o ausente para marcas sin grupos o candidatas sin clasificar.
+   */
+  linea?: string;
 }
 
 /** Respuesta paginada de `GET /api/noticias/historias`. */
@@ -227,12 +233,27 @@ export interface MesaLinea {
   historias: Historia[];
 }
 
-/** Un chip de la barra de navegación por grupo (su nombre + cuántas candidatas tiene). */
+/** Una línea del 2º nivel de navegación, colgada de su grupo (id + nombre + candidatas). */
+export interface LineaGrupo {
+  /** Id de la etiqueta vertical (p. ej. "fut-bundesliga"). Es lo que filtra `historias_grupo`. */
+  linea: string;
+  /** Nombre visible de la línea ("Bundesliga"). */
+  nombre: string;
+  /** Candidatas (`estado='nuevo'`) clasificadas en esta línea. */
+  en_pool: number;
+}
+
+/** Un chip de la barra de navegación por grupo (su nombre + candidatas + sus líneas). */
 export interface GrupoMesa {
   /** Nombre del grupo (= el chip): "Fútbol", "Motor", "Boxeo"… */
   grupo: string;
   /** Candidatas (`estado='nuevo'`) clasificadas en este grupo. */
   en_pool: number;
+  /**
+   * Líneas del grupo (2º nivel de navegación), con candidatas arriba y las vacías al final.
+   * Ausente en payloads sin grupos; la UI degrada a la barra de grupos a secas.
+   */
+  lineas?: LineaGrupo[];
 }
 
 /** Respuesta de `GET /api/noticias/mesa?marca=`: el pool segmentado por el plan. */

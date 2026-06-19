@@ -238,6 +238,23 @@ def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
     assert grupo_de["f1"] == "Motor"
     assert grupo_de["liga"] == "Fútbol"
 
+    # 2º nivel de navegación: cada grupo cuelga sus LÍNEAS (id + nombre + conteo), con las que
+    # tienen candidatas arriba (conteo no-creciente) y las vacías al final.
+    grupos_por_nombre = {g["grupo"]: g for g in datos["grupos"]}
+    for g in datos["grupos"]:
+        assert isinstance(g["lineas"], list)
+        for ln in g["lineas"]:
+            assert ln["linea"] and ln["nombre"]  # id + nombre visibles
+        cuentas = [ln["en_pool"] for ln in g["lineas"]]
+        assert cuentas == sorted(cuentas, reverse=True)  # candidatas primero, vacías al final
+
+    # Cada candidata trae además su LÍNEA, que pertenece a su grupo y la cuenta como candidata.
+    linea_de = {h["id"]: h["linea"] for h in datos["historias_grupo"]}
+    for hid, gname in (("box1", "Boxeo"), ("f1", "Motor"), ("liga", "Fútbol")):
+        assert linea_de[hid]  # clasificada en una línea concreta
+        ln = next(x for x in grupos_por_nombre[gname]["lineas"] if x["linea"] == linea_de[hid])
+        assert ln["en_pool"] >= 1
+
 
 def test_mesa_sin_grupos_no_trae_barra(cliente):
     # UnoTV no usa grupos: la mesa no trae barra (el front mantiene el layout por plan).

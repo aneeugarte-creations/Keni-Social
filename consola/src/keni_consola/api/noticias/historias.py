@@ -402,18 +402,23 @@ async def mesa(request: Request) -> Response:
     # Sports). Clasifica cada candidata en su LÍNEA por léxico (keywords) y la cuelga de su GRUPO.
     # El resto de marcas (sin grupos, p. ej. UnoTV) conserva el layout por plan y se salta el coste.
     grupo_por_cluster: dict[str, str] = {}
+    linea_por_cluster: dict[str, str] = {}
     conteo_grupo: dict[str, int] = dict.fromkeys(grupos_orden, 0)
+    conteo_linea: dict[str, int] = {}
     if grupos_orden:
         from ...dominio import clasificador_lineas
 
         grupo_de_linea = {e["id"]: (e.get("grupo") or "") for e in vert_etiquetas}
         for c in clusters:
             texto = f"{c.get('titulo', '')} {c.get('resumen', '')}"
-            lid = clasificador_lineas.clasificar(texto, vert_etiquetas)
-            grupo = grupo_de_linea.get(lid or "", "")
+            lid = clasificador_lineas.clasificar(texto, vert_etiquetas) or ""
+            grupo = grupo_de_linea.get(lid, "")
             grupo_por_cluster[c["id"]] = grupo
+            linea_por_cluster[c["id"]] = lid
             if grupo in conteo_grupo:
                 conteo_grupo[grupo] += 1
+            if lid:
+                conteo_linea[lid] = conteo_linea.get(lid, 0) + 1
 
     def _etiqueta_linea(clave: str) -> str:
         if clave == "breaking":
@@ -475,7 +480,30 @@ async def mesa(request: Request) -> Response:
         historias_grupo = _historias(clusters, limite=_MESA_GRUPO_TOPE)
         for h in historias_grupo:
             h["grupo"] = grupo_por_cluster.get(h["id"], "")
-        grupos = [{"grupo": g, "en_pool": conteo_grupo.get(g, 0)} for g in grupos_orden]
+            h["linea"] = linea_por_cluster.get(h["id"], "")
+        # Líneas de cada grupo (2º nivel de navegación): id, nombre y candidatas en pool. Orden:
+        # las que tienen candidatas primero (mayor conteo arriba), las vacías al final. `vert_etiquetas`
+        # ya viene alfabético por nombre, así que el orden estable rompe empates alfabéticamente.
+        lineas_por_grupo: dict[str, list[dict[str, Any]]] = {}
+        for e in vert_etiquetas:
+            g = e.get("grupo") or ""
+            if not g:
+                continue
+            lineas_por_grupo.setdefault(g, []).append(
+                {
+                    "linea": e["id"],
+                    "nombre": e.get("nombre") or e["id"],
+                    "en_pool": conteo_linea.get(e["id"], 0),
+                }
+            )
+        grupos = [
+            {
+                "grupo": g,
+                "en_pool": conteo_grupo.get(g, 0),
+                "lineas": sorted(lineas_por_grupo.get(g, []), key=lambda li: -li["en_pool"]),
+            }
+            for g in grupos_orden
+        ]
     return JSONResponse(
         {
             "marca": marca,

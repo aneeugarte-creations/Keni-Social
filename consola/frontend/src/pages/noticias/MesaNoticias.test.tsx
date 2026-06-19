@@ -7,11 +7,12 @@
  *     la tarjeta, sin ninguna marca visual de macro-evento).
  *   - El orden de ranking del resto NO se altera.
  */
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import type { Historia } from "@/types";
+import type { GrupoMesa, Historia } from "@/types";
 
-import { agruparPorMacro, historiasDelGrupo } from "./MesaNoticias";
+import { agruparPorMacro, historiasDelGrupo, NavGruposLineas } from "./MesaNoticias";
 
 function historia(id: string, overrides: Partial<Historia> = {}): Historia {
   return {
@@ -95,10 +96,10 @@ describe("agruparPorMacro", () => {
 
 describe("historiasDelGrupo", () => {
   const lista = [
-    historia("a", { grupo: "Fútbol" }),
-    historia("b", { grupo: "Motor" }),
-    historia("c", { grupo: "Fútbol" }),
-    historia("d", { grupo: "" }),
+    historia("a", { grupo: "Fútbol", linea: "fut-mundial" }),
+    historia("b", { grupo: "Motor", linea: "mot-f1" }),
+    historia("c", { grupo: "Fútbol", linea: "fut-liga-mx" }),
+    historia("d", { grupo: "", linea: "" }),
   ];
 
   it("'' (Todas) no filtra: devuelve todas en orden", () => {
@@ -112,5 +113,87 @@ describe("historiasDelGrupo", () => {
 
   it("un grupo sin candidatas devuelve lista vacía", () => {
     expect(historiasDelGrupo(lista, "Boxeo")).toEqual([]);
+  });
+
+  it("una línea afina dentro del grupo (2º nivel)", () => {
+    expect(historiasDelGrupo(lista, "Fútbol", "fut-mundial").map((h) => h.id)).toEqual(["a"]);
+    expect(historiasDelGrupo(lista, "Fútbol", "fut-liga-mx").map((h) => h.id)).toEqual(["c"]);
+  });
+
+  it("una línea sin candidatas en el grupo devuelve lista vacía", () => {
+    expect(historiasDelGrupo(lista, "Fútbol", "fut-bundesliga")).toEqual([]);
+  });
+});
+
+describe("NavGruposLineas", () => {
+  const grupos: GrupoMesa[] = [
+    {
+      grupo: "Fútbol",
+      en_pool: 3,
+      lineas: [
+        { linea: "fut-mundial", nombre: "Mundial", en_pool: 2 },
+        { linea: "fut-liga-mx", nombre: "Liga MX", en_pool: 1 },
+        { linea: "fut-bundesliga", nombre: "Bundesliga", en_pool: 0 },
+      ],
+    },
+    { grupo: "Motor", en_pool: 1, lineas: [{ linea: "mot-f1", nombre: "F1", en_pool: 1 }] },
+  ];
+
+  it("pulsar un grupo lo selecciona y despliega sus líneas (2º nivel)", () => {
+    const onSelGrupo = vi.fn();
+    render(
+      <NavGruposLineas
+        grupos={grupos}
+        total={4}
+        grupoSel=""
+        lineaSel=""
+        onSelGrupo={onSelGrupo}
+        onSelLinea={vi.fn()}
+      />,
+    );
+    // Cerrado: el menú no está en el DOM.
+    expect(screen.queryByTestId("menu-lineas-Fútbol")).toBeNull();
+    fireEvent.click(screen.getByTestId("chip-grupo-Fútbol"));
+    expect(onSelGrupo).toHaveBeenCalledWith("Fútbol");
+    expect(screen.getByTestId("menu-lineas-Fútbol")).toBeTruthy();
+    // "Todas las de Fútbol" + una entrada por línea (incluida la vacía).
+    expect(screen.getByText("Mundial")).toBeTruthy();
+    expect(screen.getByText("Liga MX")).toBeTruthy();
+    expect(screen.getByText("Bundesliga")).toBeTruthy();
+  });
+
+  it("elegir una línea emite (grupo, línea) y cierra el menú", () => {
+    const onSelLinea = vi.fn();
+    render(
+      <NavGruposLineas
+        grupos={grupos}
+        total={4}
+        grupoSel="Fútbol"
+        lineaSel=""
+        onSelGrupo={vi.fn()}
+        onSelLinea={onSelLinea}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("chip-grupo-Fútbol"));
+    fireEvent.click(screen.getByText("Mundial"));
+    expect(onSelLinea).toHaveBeenCalledWith("Fútbol", "fut-mundial");
+    expect(screen.queryByTestId("menu-lineas-Fútbol")).toBeNull();
+  });
+
+  it("con una línea activa muestra el indicador y permite quitarla", () => {
+    const onSelLinea = vi.fn();
+    render(
+      <NavGruposLineas
+        grupos={grupos}
+        total={4}
+        grupoSel="Fútbol"
+        lineaSel="fut-mundial"
+        onSelGrupo={vi.fn()}
+        onSelLinea={onSelLinea}
+      />,
+    );
+    expect(screen.getByTestId("filtro-linea").textContent).toContain("Mundial");
+    fireEvent.click(screen.getByLabelText("Quitar filtro de línea"));
+    expect(onSelLinea).toHaveBeenCalledWith("Fútbol", "");
   });
 });
