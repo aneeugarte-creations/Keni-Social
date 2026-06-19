@@ -19,12 +19,18 @@ SEGURIDAD:
     catálogo de marcas (`consola.marcas`) o vacía (global). `color` se repara a un token
     hex corto. Unicidad por (nombre, clase, marca). Nada se confía del cliente.
   - SQL parametrizado en `repos`/`db`.
+
+CONCURRENCIA: los handlers son `async` pero el acceso a Postgres (`repos`) es síncrono;
+toda lectura/escritura de BD va en `run_in_threadpool` para no bloquear el event loop.
+La validación pura (sin BD) se queda en el handler; el helper síncrono concentra el
+trabajo de BD en una sola unidad por petición (conexión adquirida y soltada en el hilo).
 """
 
 from __future__ import annotations
 
 import re
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -121,27 +127,6 @@ def _normalizar_hashtags(valor: object) -> str:
     return ", ".join(vistas)[:_MAX_HASHTAGS]
 
 
-async def listar(request: Request) -> Response:
-    """GET /api/etiquetas: catálogo de etiquetas.
-
-    Filtros opcionales: `marca` (incluye las de esa marca Y las globales), `clase`,
-    `activas` ("1" para excluir las ocultas).
-    """
-    q = request.query_params
-    etiquetas = repos.listar_etiquetas(
-        marca=q.get("marca") if "marca" in q else None,
-        clase=q.get("clase") or None,
-        solo_activas=q.get("activas") == "1",
-    )
-    return JSONResponse(
-        {
-            "etiquetas": [_etiqueta_a_dict(e) for e in etiquetas],
-            "clases": list(CLASES_ETIQUETA),
-            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
-        }
-    )
-
-
 def _validar_ttl_dias(valor: object) -> int:
     """ttl_dias: entero >= 0. 0 = sin caducidad / evergreen. Default 0."""
     try:
@@ -149,6 +134,61 @@ def _validar_ttl_dias(valor: object) -> int:
         return max(0, v)
     except (TypeError, ValueError):
         return 0
+
+
+def _listar(marca: str | None, clase: str | None, solo_activas: bool) -> dict:
+    etiquetas = repos.listar_etiquetas(marca=marca, clase=clase, solo_activas=solo_activas)
+    return {
+        "etiquetas": [_etiqueta_a_dict(e) for e in etiquetas],
+        "clases": list(CLASES_ETIQUETA),
+        "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
+    }
+
+
+async def listar(request: Request) -> Response:
+    """GET /api/etiquetas: catálogo de etiquetas.
+
+    Filtros opcionales: `marca` (incluye las de esa marca Y las globales), `clase`,
+    `activas` ("1" para excluir las ocultas).
+    """
+    q = request.query_params
+    cuerpo = await run_in_threadpool(
+        _listar,
+        q.get("marca") if "marca" in q else None,
+        q.get("clase") or None,
+        q.get("activas") == "1",
+    )
+    return JSONResponse(cuerpo)
+
+
+def _crear(
+    *,
+    nombre: str,
+    clase: str,
+    marca: str,
+    color: str,
+    keywords: str,
+    hashtags: str,
+    ttl_dias: int,
+    es_evergreen: bool,
+    grupo: str,
+    cadencia: str,
+) -> tuple[int, dict]:
+    if repos.existe_etiqueta_nombre(nombre, clase, marca):
+        return 409, {"error": "Ya existe una etiqueta con ese nombre."}
+    etiqueta = repos.crear_etiqueta(
+        nombre=nombre,
+        clase=clase,
+        marca=marca,
+        color=color,
+        keywords=keywords,
+        hashtags=hashtags,
+        ttl_dias=ttl_dias,
+        es_evergreen=es_evergreen,
+        grupo=grupo,
+        cadencia=cadencia,
+    )
+    return 200, {"etiqueta": _etiqueta_a_dict(etiqueta)}
 
 
 async def crear(request: Request) -> Response:
@@ -169,10 +209,8 @@ async def crear(request: Request) -> Response:
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
-    if repos.existe_etiqueta_nombre(nombre, clase, marca):
-        return JSONResponse({"error": "Ya existe una etiqueta con ese nombre."}, status_code=409)
-
-    etiqueta = repos.crear_etiqueta(
+    status, cuerpo = await run_in_threadpool(
+        _crear,
         nombre=nombre,
         clase=clase,
         marca=marca,
@@ -184,32 +222,28 @@ async def crear(request: Request) -> Response:
         grupo=_normalizar_grupo(datos.get("grupo")),
         cadencia=_validar_cadencia(datos.get("cadencia", CADENCIA_LINEA_DEFECTO)),
     )
-    return JSONResponse({"etiqueta": _etiqueta_a_dict(etiqueta)})
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar(request: Request) -> Response:
-    """PATCH /api/etiquetas/{id}: edita nombre/clase/marca/color/keywords/hashtags/activo/
-    ttl_dias/es_evergreen (todos opcionales)."""
-    etiqueta_id = request.path_params["etiqueta_id"]
+def _actualizar(etiqueta_id: str, datos: dict) -> tuple[int, dict]:
     actual = repos.obtener_etiqueta(etiqueta_id)
     if actual is None:
-        return JSONResponse({"error": "Esa etiqueta ya no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa etiqueta ya no existe."}
     campos: dict[str, object] = {}
 
     if "nombre" in datos:
         nombre = datos.get("nombre")
         if not isinstance(nombre, str) or not nombre.strip():
-            return JSONResponse({"error": "El nombre no puede quedar vacío."}, status_code=400)
+            return 400, {"error": "El nombre no puede quedar vacío."}
         campos["nombre"] = nombre.strip()[:_MAX_NOMBRE]
     if "clase" in datos:
         if datos["clase"] not in CLASES_ETIQUETA:
-            return JSONResponse({"error": "Tipo de etiqueta inválido."}, status_code=400)
+            return 400, {"error": "Tipo de etiqueta inválido."}
         campos["clase"] = datos["clase"]
     if "marca" in datos:
         marca, err = _validar_marca(datos.get("marca"))
         if err:
-            return JSONResponse({"error": err}, status_code=400)
+            return 400, {"error": err}
         campos["marca"] = marca
     if "color" in datos:
         campos["color"] = _validar_color(datos.get("color"))
@@ -229,27 +263,41 @@ async def actualizar(request: Request) -> Response:
         campos["cadencia"] = _validar_cadencia(datos.get("cadencia"))
 
     if not campos:
-        return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
+        return 400, {"error": "Indica algún campo a actualizar."}
 
     # Revalida la unicidad si cambió algún campo del triplete (nombre, clase, marca).
     nombre_f = str(campos.get("nombre", actual["nombre"]))
     clase_f = str(campos.get("clase", actual["clase"]))
     marca_f = str(campos.get("marca", actual["marca"]))
     if repos.existe_etiqueta_nombre(nombre_f, clase_f, marca_f, excluir_id=etiqueta_id):
-        return JSONResponse({"error": "Ya existe una etiqueta con ese nombre."}, status_code=409)
+        return 409, {"error": "Ya existe una etiqueta con ese nombre."}
 
     etiqueta = repos.actualizar_etiqueta(etiqueta_id, campos)
     if etiqueta is None:
-        return JSONResponse({"error": "Esa etiqueta ya no existe."}, status_code=404)
-    return JSONResponse({"etiqueta": _etiqueta_a_dict(etiqueta)})
+        return 404, {"error": "Esa etiqueta ya no existe."}
+    return 200, {"etiqueta": _etiqueta_a_dict(etiqueta)}
+
+
+async def actualizar(request: Request) -> Response:
+    """PATCH /api/etiquetas/{id}: edita nombre/clase/marca/color/keywords/hashtags/activo/
+    ttl_dias/es_evergreen (todos opcionales)."""
+    etiqueta_id = request.path_params["etiqueta_id"]
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(_actualizar, etiqueta_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar(etiqueta_id: str) -> tuple[int, dict]:
+    if not repos.borrar_etiqueta(etiqueta_id):
+        return 404, {"error": "Esa etiqueta ya no existe."}
+    return 200, {"mensaje": "Etiqueta borrada."}
 
 
 async def borrar(request: Request) -> Response:
     """DELETE /api/etiquetas/{id}: borra la etiqueta y sus asignaciones (cascada)."""
     etiqueta_id = request.path_params["etiqueta_id"]
-    if not repos.borrar_etiqueta(etiqueta_id):
-        return JSONResponse({"error": "Esa etiqueta ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Etiqueta borrada."})
+    status, cuerpo = await run_in_threadpool(_borrar, etiqueta_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [
