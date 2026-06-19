@@ -70,7 +70,7 @@ export function LanzadorRalph() {
   };
 
   return (
-    <div className="w-[380px] max-w-[calc(100vw-3rem)] rounded-3xl border border-border bg-card shadow-[0_20px_50px_-20px_rgba(0,0,0,0.25)]">
+    <div className="w-[380px] max-w-[calc(100vw-3rem)] rounded-[20px] border border-border bg-card shadow-[0_20px_50px_-20px_rgba(0,0,0,0.25)]">
       <p className="px-4 pt-3 text-[13px] font-medium text-muted-foreground">Ralph</p>
       <AutoTextarea
         autoFocus
