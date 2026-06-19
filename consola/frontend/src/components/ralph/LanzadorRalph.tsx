@@ -29,6 +29,11 @@ const MODELOS: ModeloRalph[] = ["opus", "sonnet", "haiku"];
 const DISPARADOR_SILENCIOSO =
   "h-8 w-auto gap-1 rounded-full border-0 bg-transparent px-3 text-sm text-muted-foreground shadow-none hover:bg-accent hover:text-foreground focus:ring-0";
 
+/** El tipo (Operativo/Desarrollo) reposa aún más apagado que el modelo y oculta su
+ *  chevron hasta el hover: casi una etiqueta, porque rara vez se cambia. */
+const DISPARADOR_TIPO =
+  "h-8 w-auto gap-1 rounded-full border-0 bg-transparent px-3 text-sm text-muted-foreground/50 shadow-none hover:bg-accent hover:text-foreground focus:ring-0 [&>svg]:opacity-0 [&>svg]:transition-opacity hover:[&>svg]:opacity-50";
+
 export function LanzadorRalph() {
   const spawn = useRalphStore((s) => s.spawn);
   const spawneando = useRalphStore((s) => s.spawneando);
@@ -88,7 +93,7 @@ export function LanzadorRalph() {
         <div className="flex items-center gap-1">
           {superadmin && (
             <Select value={tipo} onValueChange={(v) => setTipo(v as TipoRalph)}>
-              <SelectTrigger className={DISPARADOR_SILENCIOSO} aria-label="Tipo de Ralph">
+              <SelectTrigger className={DISPARADOR_TIPO} aria-label="Tipo de Ralph">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
