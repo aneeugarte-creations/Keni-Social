@@ -261,10 +261,12 @@ describe("Cobertura · Mesa — plan del día", () => {
 
   it("última hora va primero y su tarjeta lleva el tratamiento ÚLTIMA HORA", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-breaking")).toBeTruthy());
-    const secciones = screen.getAllByTestId(/^seccion-/);
-    expect(secciones[0].getAttribute("data-testid")).toBe("seccion-breaking");
-    const breaking = within(screen.getByTestId("seccion-breaking"));
+    await waitFor(() => expect(screen.getByTestId("badge-ultima-hora")).toBeTruthy());
+    // Última hora abre la lista (orden de ranking): la primera tarjeta es la breaking.
+    const cards = screen
+      .getAllByTestId("historia-item")
+      .map((n) => n.closest('[role="button"]') as HTMLElement);
+    const breaking = within(cards[0]);
     expect(breaking.getByTestId("badge-ultima-hora")).toBeTruthy();
     // Frase editorial de última hora: la confirmaron casi a la vez.
     expect(breaking.getByTestId("frase-corroboracion").textContent).toMatch(
@@ -274,24 +276,25 @@ describe("Cobertura · Mesa — plan del día", () => {
 
   it("la tarjeta normal cuenta la corroboración como frase (quién la abrió)", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
-    const mx = within(screen.getByTestId("seccion-mx"));
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
+    const hostMx = (await screen.findByTestId("historia-item")).closest(
+      '[role="button"]',
+    ) as HTMLElement;
+    const mx = within(hostMx);
     const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
     expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
     expect(frase).toMatch(/la abrió Reforma/);
     // El SCORE es visible; el cálculo completo vive en su pop-up (menú contextual → Ver score).
     expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
-    const hostMx = mx.getByTestId("historia-item").closest('[role="button"]');
-    fireEvent.contextMenu(hostMx!);
+    fireEvent.contextMenu(hostMx);
     fireEvent.click(await screen.findByRole("menuitem", { name: /Ver score/i }));
     await waitFor(() => expect(screen.getByTestId("popup-calculo")).toBeTruthy());
     expect(screen.getByTestId("calculo-score")).toBeTruthy();
   });
 
   it("una línea con cupo pendiente y sin candidatas no muestra el aviso redundante", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-internacional")).toBeTruthy());
-    // internacional: cupo 1, generados 1 → sin hueco pendiente, no avisa.
+    // internacional: cupo 2 sin candidatas → hueco pendiente, pero sin aviso redundante.
     mockMesa.mockResolvedValue(
       mesaFixture({
         lineas: [
@@ -303,25 +306,26 @@ describe("Cobertura · Mesa — plan del día", () => {
       }),
     );
     renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Internacional")).toBeTruthy());
     // El aviso redundante fue eliminado; el KPI visual ya lo indica.
     expect(screen.queryByText(/sin candidatas en el pool/)).toBeNull();
   });
 
-  it("«Fuera del plan» está plegado por defecto y se expande al clic", async () => {
+  it("«Fuera del plan» es un chip que filtra sus candidatas", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-fuera-de-plan")).toBeTruthy());
-    expect(screen.queryByText("Gaming sin línea")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Fuera del plan/i }));
-    await waitFor(() => expect(screen.getByText("Gaming sin línea")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Fuera del plan")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("chip-grupo-Fuera del plan"));
+    await waitFor(() => expect(screen.getAllByTestId("historia-item")).toHaveLength(1));
+    expect(screen.getByText("Gaming sin línea")).toBeTruthy();
   });
 });
 
 describe("Cobertura · Mesa — acciones de la tarjeta", () => {
   it("Empujar/Adelantar llama a usarHistoria", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
-    const mx = within(screen.getByTestId("seccion-mx"));
-    const host = mx.getByTestId("historia-item").closest('[role="button"]');
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
+    const host = (await screen.findByTestId("historia-item")).closest('[role="button"]');
     fireEvent.click(host!);
     await waitFor(() =>
       expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true }),
@@ -330,9 +334,9 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
 
   it("Descartar llama a descartarHistoria", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
-    const mx = within(screen.getByTestId("seccion-mx"));
-    const host = mx.getByTestId("historia-item").closest('[role="button"]');
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
+    const host = (await screen.findByTestId("historia-item")).closest('[role="button"]');
     fireEvent.contextMenu(host!);
     fireEvent.click(await screen.findByRole("menuitem", { name: /Descartar/ }));
     await waitFor(() => expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1"));
@@ -347,6 +351,7 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
             historias: [historiaItem({ promovible: true, promovible_motivo: "score 0.55 ≥ 0.35" })],
           },
         ],
+        fuera_de_plan: { en_pool: 0, historias: [] },
       }),
     );
     renderConProviders(<Cobertura />);
