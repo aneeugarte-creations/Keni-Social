@@ -126,9 +126,11 @@ def reclamar(
     """
     necesita_kinds = solo_proceso is not None or carriles is not None
     kinds_proceso = tuple(jobspec.KINDS_PROCESO) if necesita_kinds else ()
+    kinds_transcripcion = tuple(jobspec.KINDS_TRANSCRIPCION) if carriles is not None else ()
     fila = repos.reclamar_job(
         worker, prioridad_minima=prioridad_minima,
-        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso, carriles=carriles,
+        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso,
+        kinds_transcripcion=kinds_transcripcion, carriles=carriles,
     )
     if fila is None:
         return None

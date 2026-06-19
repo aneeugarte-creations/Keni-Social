@@ -174,6 +174,7 @@ def reclamar_job(
     prioridad_minima: int | None = None,
     solo_proceso: bool | None = None,
     kinds_proceso: tuple[str, ...] = (),
+    kinds_transcripcion: tuple[str, ...] = (),
     carriles: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
@@ -197,9 +198,10 @@ def reclamar_job(
       - `solo_proceso=None`  -> cualquiera (back-compat: el pool unico de antes).
 
     POOL DE WORKERS (`carriles`): si viene, solo se clavan jobs cuyo carril (replica de
-    `jobspec.carril` en SQL: `carril` raiz explicito, o derivado a 'proceso'/'inferencia')
-    esté en el conjunto. `worker_dev` pasa {'dev'}; el worker de contenido {'inferencia',
-    'proceso'} (excluye dev). None = cualquier carril.
+    `jobspec.carril` en SQL: `carril` raiz explicito, o derivado a 'transcripcion' (kinds de
+    `kinds_transcripcion`) / 'proceso' (resto de `kinds_proceso`) / 'inferencia') esté en el
+    conjunto. `worker_dev` pasa {'dev'}; el `transcriptor` pasa {'transcripcion'}; el worker de
+    contenido {'inferencia','proceso'} (excluye dev y transcripcion). None = cualquier carril.
 
     RE-RECLAMO DE JOBS SIN DUEÑO: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
@@ -248,27 +250,26 @@ def reclamar_job(
         params_kind = tuple(kinds_proceso)
     # CARRIL (POOL de workers): filtra por el carril del spec, replicando `jobspec.carril` en SQL:
     # un `carril` raiz EXPLICITO (lo ponen los jobs de desarrollo: 'dev') manda; si no, se DERIVA
-    # ('proceso' si el kind raiz es de proceso, 'inferencia' en otro caso). `worker_dev` pasa
-    # {'dev'}; el worker de contenido pasa {'inferencia','proceso'} (excluye dev).
+    # ('transcripcion' si el kind raiz es de transcripcion, 'proceso' si es de otro proceso,
+    # 'inferencia' en otro caso). La rama de transcripcion va ANTES que la de proceso porque sus
+    # kinds son un subconjunto de `kinds_proceso`. `worker_dev` pasa {'dev'}; el `transcriptor`
+    # {'transcripcion'}; el worker de contenido {'inferencia','proceso'} (excluye dev/transcripcion).
     filtro_carril = ""
     params_carril: tuple[str, ...] = ()
     if carriles:
         carril_vals = tuple(sorted(carriles))
         car_marc = ", ".join("?" for _ in carril_vals)
+        ramas = "CASE WHEN COALESCE(spec->>'carril', '') <> '' THEN spec->>'carril' "
+        if kinds_transcripcion:
+            trans_marc = ", ".join("?" for _ in kinds_transcripcion)
+            ramas += f"WHEN COALESCE(spec->>'kind', '') IN ({trans_marc}) THEN 'transcripcion' "
+            params_carril += tuple(kinds_transcripcion)
         if kinds_proceso:
             kind_marc = ", ".join("?" for _ in kinds_proceso)
-            expr_carril = (
-                "CASE WHEN COALESCE(spec->>'carril', '') <> '' THEN spec->>'carril' "
-                f"WHEN COALESCE(spec->>'kind', '') IN ({kind_marc}) THEN 'proceso' "
-                "ELSE 'inferencia' END"
-            )
-            params_carril = (*kinds_proceso, *carril_vals)
-        else:
-            expr_carril = (
-                "CASE WHEN COALESCE(spec->>'carril', '') <> '' THEN spec->>'carril' "
-                "ELSE 'inferencia' END"
-            )
-            params_carril = carril_vals
+            ramas += f"WHEN COALESCE(spec->>'kind', '') IN ({kind_marc}) THEN 'proceso' "
+            params_carril += tuple(kinds_proceso)
+        expr_carril = ramas + "ELSE 'inferencia' END"
+        params_carril += carril_vals
         filtro_carril = f"AND ({expr_carril}) IN ({car_marc}) "
     con = _conectar()
     try:
