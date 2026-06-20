@@ -149,6 +149,7 @@ function valorSesion(rol: RolUsuario, esSuperadmin = false): ValorSesion {
   return {
     usuario: { id: "u1", usuario: "x", rol, debe_cambiar_password: false, es_superadmin: esSuperadmin },
     cargando: false,
+    errorConexion: false,
     iniciarSesion: async () => ({ mfaRequerido: false }),
     verificarConPasskey: async () => {},
   entrarConPasskey: async () => {},

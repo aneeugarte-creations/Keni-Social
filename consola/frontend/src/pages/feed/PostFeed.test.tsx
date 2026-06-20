@@ -65,6 +65,7 @@ function renderPost(pieza: Pieza, usuario: Partial<UsuarioSesion> = {}) {
   const valor: ValorSesion = {
     usuario: { id: "u1", usuario: "revisor", rol: "editor", debe_cambiar_password: false, ...usuario } as UsuarioSesion,
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

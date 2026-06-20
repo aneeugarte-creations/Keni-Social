@@ -14,6 +14,7 @@ import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { marcarSesionExpirada, SesionProvider } from "@/hooks/use-sesion";
 import { TemaProvider } from "@/hooks/use-tema";
 import { ApiError } from "@/lib/api";
+import { registrarExitoRed, registrarFalloRed } from "@/lib/estado-red";
 import { router } from "@/router";
 
 import "./index.css";
@@ -28,6 +29,12 @@ import "./index.css";
  */
 let avisoSesionExpiradaEnVuelo = false;
 function manejarErrorGlobal(error: unknown): void {
+  // Conexión degradada DURANTE el uso: un fallo de red (sin respuesta = status 0) o un
+  // 502/503/504 del proxy (back desplegando/caído) alimenta el detector que monta el banner
+  // sticky del AppShell. Un 401 (sesión expirada) NO es esto: se trata abajo, va al login.
+  if (error instanceof ApiError && (error.status === 0 || error.status >= 502)) {
+    registrarFalloRed();
+  }
   if (!(error instanceof ApiError) || error.status !== 401) return;
   if (avisoSesionExpiradaEnVuelo) return;
   avisoSesionExpiradaEnVuelo = true;
@@ -42,7 +49,8 @@ function manejarErrorGlobal(error: unknown): void {
 // Cliente de React Query. No reintentamos errores 4xx (un 404/400 no mejora al
 // reintentar); el resto reintenta una vez. Datos frescos por 30s.
 const queryClient = new QueryClient({
-  queryCache: new QueryCache({ onError: manejarErrorGlobal }),
+  // `onSuccess`: el primer fetch que vuelve a responder limpia el banner de conexión degradada.
+  queryCache: new QueryCache({ onError: manejarErrorGlobal, onSuccess: () => registrarExitoRed() }),
   mutationCache: new MutationCache({ onError: manejarErrorGlobal }),
   defaultOptions: {
     queries: {

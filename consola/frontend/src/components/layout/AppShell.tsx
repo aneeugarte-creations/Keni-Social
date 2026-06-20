@@ -4,6 +4,7 @@ import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { BannerConexion } from "@/components/layout/BannerConexion";
 import { CampanaNotificaciones } from "@/components/layout/CampanaNotificaciones";
 import { ControlContexto } from "@/components/layout/ControlContexto";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
@@ -208,6 +209,10 @@ export function AppShell() {
             </>
           )}
         </header>
+
+        {/* Banner de conexión degradada: aparece bajo el header cuando varias queries seguidas
+            fallan por red/proxy (back desplegando o caído) y se retira al primer éxito. */}
+        <BannerConexion />
 
         {/* Acciones de página en MÓVIL: fila propia bajo el header (el portal de
             `AccionesPagina` apunta aquí bajo `md`). `empty:hidden` la colapsa del todo

@@ -82,6 +82,7 @@ function renderConProviders(ui: React.ReactElement) {
       marcas: [],
     } as UsuarioSesion,
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

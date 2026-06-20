@@ -88,6 +88,7 @@ afterEach(() => {
 const sesion: ValorSesion = {
   usuario: { id: "u1", usuario: "x", rol: "editor", debe_cambiar_password: false },
   cargando: false,
+  errorConexion: false,
   iniciarSesion: async () => ({ mfaRequerido: false }),
   verificarConPasskey: async () => {},
   entrarConPasskey: async () => {},

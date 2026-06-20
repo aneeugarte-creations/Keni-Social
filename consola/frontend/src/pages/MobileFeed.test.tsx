@@ -114,6 +114,7 @@ function sesion(usuario: Partial<UsuarioSesion> = {}): ValorSesion {
       ...usuario,
     } as UsuarioSesion,
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

@@ -32,6 +32,7 @@ function sesionValor(rol: UsuarioSesion["rol"] = "admin"): ValorSesion {
   return {
     usuario: usuario(rol),
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

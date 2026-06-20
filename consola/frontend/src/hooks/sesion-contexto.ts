@@ -16,6 +16,13 @@ export interface ValorSesion {
   /** `true` mientras se resuelve el `me` inicial (pantalla de carga). */
   cargando: boolean;
   /**
+   * `true` cuando el `me` inicial NO pudo resolverse por un fallo que NO es "sin sesión"
+   * (red caída, timeout, 502/503/504 del proxy): el back puede estar desplegándose o caído.
+   * La puerta muestra una pantalla de estado degradado honesto (reintento), no el login: un
+   * 401 limpio sí lleva al login. Se apaga en cuanto un `me` vuelve a responder (200 o 401).
+   */
+  errorConexion: boolean;
+  /**
    * Inicia sesión; el backend pone la cookie. Lanza `ApiError` (401 genérico).
    * Devuelve `{ mfaRequerido: true }` cuando el backend pide un segundo factor (MFA ON y
    * cuenta con ≥1 passkey): en ese caso NO hay sesión todavía y la UI debe correr la ceremonia

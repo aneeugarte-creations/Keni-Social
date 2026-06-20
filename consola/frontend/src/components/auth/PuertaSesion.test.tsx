@@ -121,4 +121,51 @@ describe("PuertaSesion · guard de sesión", () => {
     expect(await screen.findByText("Usuario o contraseña incorrectos.")).toBeInTheDocument();
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
   });
+
+  it("estado degradado (no login) cuando el me falla por RED", async () => {
+    // fetch rechaza => ApiError status 0: no es "sin sesión", es back inalcanzable.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        if (String(url).includes("/api/auth/me")) throw new TypeError("network down");
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPuerta();
+
+    expect(await screen.findByText(/No podemos conectar con la consola/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
+    expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
+  });
+
+  it("estado degradado cuando el me da 503 (back desplegando), no login", async () => {
+    stubFetch({ me: { status: 503 } });
+    renderPuerta();
+
+    expect(await screen.findByText(/No podemos conectar con la consola/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
+  });
+
+  it("Reintentar tras una caída entra a la app cuando el me se recupera", async () => {
+    let caido = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/auth/me")) {
+          if (caido) throw new TypeError("network down");
+          return new Response(JSON.stringify({ usuario: EDITOR }), { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPuerta();
+
+    await screen.findByText(/No podemos conectar con la consola/i);
+    caido = false;
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+
+    expect(await screen.findByText("CONTENIDO PROTEGIDO")).toBeInTheDocument();
+    expect(screen.queryByText(/No podemos conectar con la consola/i)).not.toBeInTheDocument();
+  });
 });

@@ -24,6 +24,7 @@ function valorSesion(usuario: UsuarioSesion | null): ValorSesion {
   return {
     usuario,
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

@@ -332,7 +332,22 @@ services:
       - traefik.http.middlewares.keni-ratelimit.ratelimit.average=50
       - traefik.http.middlewares.keni-ratelimit.ratelimit.burst=100
       - traefik.http.middlewares.keni-inflightreq.inflightreq.amount=150
-      - traefik.http.routers.back.middlewares=keni-sec,keni-ratelimit,keni-inflightreq  # cabeceras + limites
+      # DEGRADACION HONESTA: cuando Traefik no puede servir el back (desplegando, reiniciando,
+      # arrancando, cuelgue) el upstream da 502/503/504 con un cuerpo crudo del proxy. Este
+      # middleware `errors` sustituye ESE cuerpo por la pagina JSON limpia y reintentable que
+      # sirve el `front` (nginx, location /_errores/consola-no-disponible), unificandolo con el
+      # caso "back ausente" (router caido => /api cae al front => mismo 503-JSON). statusRewrites
+      # normaliza 502-504 a 503 para que el cliente vea SIEMPRE el mismo codigo honesto.
+      # SOLO toca el cuerpo de RESPUESTAS 502-504: no captura ni bufferiza el 200 del streaming
+      # SSE (la generacion token a token) ni el cuerpo de las subidas; para codigos no
+      # capturados el wrapper de Traefik delega Write/Flush al writer real sin retener nada.
+      # Rango 502-504 a proposito (no 500-599): un 500 de la app suele llevar JSON util y no
+      # debe quedar enmascarado; 502-504 son fallos de proxy = back no disponible.
+      - traefik.http.middlewares.keni-errores-back.errors.status=502-504
+      - traefik.http.middlewares.keni-errores-back.errors.service=front
+      - traefik.http.middlewares.keni-errores-back.errors.query=/_errores/consola-no-disponible
+      - traefik.http.middlewares.keni-errores-back.errors.statusRewrites.502-504=503
+      - traefik.http.routers.back.middlewares=keni-sec,keni-errores-back,keni-ratelimit,keni-inflightreq  # cabeceras + degradacion honesta + limites
       # TOPE DE BODY para SUBIDAS (videos de hasta ~300 MB): middleware buffering con techo
       # de 350 MB, aplicado SOLO al router de subidas (POST /api/media*). NO se aplica al
       # router general del back a proposito: buffering almacena la respuesta antes de
@@ -344,7 +359,7 @@ services:
       - traefik.http.routers.back-subidas.entrypoints=websecure
       - traefik.http.routers.back-subidas.tls.certresolver=le
       - traefik.http.routers.back-subidas.service=back
-      - traefik.http.routers.back-subidas.middlewares=keni-sec,keni-ratelimit,keni-inflightreq,keni-buffer
+      - traefik.http.routers.back-subidas.middlewares=keni-sec,keni-errores-back,keni-ratelimit,keni-inflightreq,keni-buffer
       - autoheal=true  # el sidecar autoheal lo reinicia si /healthz queda unhealthy (cuelgue)
 
   daemons:

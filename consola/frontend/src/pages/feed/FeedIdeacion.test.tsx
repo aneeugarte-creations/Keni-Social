@@ -178,6 +178,7 @@ function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/", origen?: s
       ...usuario,
     } as UsuarioSesion,
     cargando: false,
+    errorConexion: false,
     iniciarSesion: vi.fn(),
     verificarConPasskey: vi.fn(),
     entrarConPasskey: vi.fn(),

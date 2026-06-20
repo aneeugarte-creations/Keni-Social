@@ -33,18 +33,25 @@ export function marcarSesionExpirada(): void {
 export function SesionProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = React.useState<UsuarioSesion | null>(null);
   const [cargando, setCargando] = React.useState(true);
+  const [errorConexion, setErrorConexion] = React.useState(false);
 
   const cargarMe = React.useCallback(async () => {
     try {
       const { usuario } = await api.me();
       setUsuario(usuario);
+      setErrorConexion(false);
     } catch (e) {
-      // 401 = sin sesión (esperado): mostramos el login sin alarmas. Cualquier
-      // otro error también cae al login (no podemos afirmar que haya sesión).
-      if (!(e instanceof ApiError)) {
-        // Error inesperado de red: lo dejamos sin sesión igualmente.
+      // 401 = sin sesión (esperado): mostramos el login sin alarmas y limpiamos el
+      // estado degradado (el back respondió). Cualquier OTRO fallo (red/timeout =>
+      // `ApiError` status 0, o 502/503/504 del proxy mientras el back despliega/cae)
+      // NO es "sin sesión": no mandamos al login, encendemos el estado degradado
+      // honesto para que la puerta ofrezca reintento en vez de un login engañoso.
+      if (e instanceof ApiError && e.status === 401) {
+        setUsuario(null);
+        setErrorConexion(false);
+      } else {
+        setErrorConexion(true);
       }
-      setUsuario(null);
     }
   }, []);
 
@@ -123,6 +130,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     () => ({
       usuario,
       cargando,
+      errorConexion,
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,
@@ -132,6 +140,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
     [
       usuario,
       cargando,
+      errorConexion,
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,
