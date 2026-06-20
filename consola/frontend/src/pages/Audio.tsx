@@ -39,6 +39,8 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -576,55 +578,66 @@ function FilaAudio({
   };
 
   const enProceso = EN_PROCESO.includes(t.estado);
+  const ambitoLabel = t.marca ? t.marca_nombre || t.marca : "Personal";
+
+  // Todas las acciones de la tarjeta viven en el menú (click derecho, kebab «⋮» o teclado):
+  // renombrar, eliminar y el ámbito (Personal / cada marca, con ✓ en el actual).
+  const acciones: EntradaMenuContextual[] = [
+    { etiqueta: "Renombrar", icono: Pencil, onClick: () => setEditando(true) },
+    {
+      etiqueta: "Eliminar",
+      icono: Trash2,
+      destructivo: true,
+      onClick: async () => {
+        if (
+          await confirmar({
+            titulo: "Eliminar audio",
+            mensaje: `¿Eliminar «${t.nombre || "sin título"}» y todos sus artefactos? No se puede deshacer.`,
+            destructivo: true,
+            textoConfirmar: "Eliminar",
+          })
+        )
+          onEliminar(t.id);
+      },
+    },
+    { separador: true },
+    { etiqueta: "Personal", activo: !t.marca, onClick: () => onActualizar(t.id, { marca: "" }) },
+    ...marcasOpts.map((m) => ({
+      etiqueta: m.nombre,
+      activo: t.marca === m.id,
+      onClick: () => onActualizar(t.id, { marca: m.id }),
+    })),
+  ];
 
   return (
-    <div
-      className={`group rounded-md border px-2 py-1.5 text-xs ${
+    <FilaConAcciones
+      como="div"
+      onPrimaria={editando ? undefined : () => onSeleccionar(t.id)}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de ${t.nombre || "audio"}`}
+      kebab="hover"
+      className={`rounded-md border px-2 py-1.5 pr-8 text-xs ${
         activo ? "border-primary/60 bg-primary/5" : "border-border/70 bg-card hover:bg-muted/40"
       }`}
     >
-      <div className="flex items-center gap-1">
-        {editando ? (
-          <input
-            autoFocus
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            onBlur={confirmarNombre}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmarNombre();
-              if (e.key === "Escape") {
-                setNombre(t.nombre);
-                setEditando(false);
-              }
-            }}
-            className="min-w-0 flex-1 rounded border border-border bg-background px-1 py-0.5 text-xs"
-          />
-        ) : (
-          <button
-            type="button"
-            onClick={() => onSeleccionar(t.id)}
-            className="min-w-0 flex-1 truncate text-left font-medium"
-          >
-            {t.nombre || "Sin título"}
-          </button>
-        )}
-        <button
-          type="button"
-          title="Renombrar"
-          onClick={() => setEditando(true)}
-          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          title="Eliminar"
-          onClick={() => onEliminar(t.id)}
-          className="shrink-0 rounded p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {editando ? (
+        <input
+          autoFocus
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          onBlur={confirmarNombre}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") confirmarNombre();
+            if (e.key === "Escape") {
+              setNombre(t.nombre);
+              setEditando(false);
+            }
+          }}
+          className="w-full rounded border border-border bg-background px-1 py-0.5 text-xs"
+        />
+      ) : (
+        <p className="truncate font-medium">{t.nombre || "Sin título"}</p>
+      )}
       <div className="mt-0.5 flex items-center gap-2 text-muted-foreground">
         {enProceso ? (
           <span className="inline-flex items-center gap-1">
@@ -635,21 +648,9 @@ function FilaAudio({
         ) : t.duracion_ms > 0 ? (
           <span>{fmtDur(t.duracion_ms)}</span>
         ) : null}
-        <select
-          value={t.marca}
-          onChange={(e) => onActualizar(t.id, { marca: e.target.value })}
-          title="Personal o de una marca"
-          className="ml-auto max-w-[8rem] cursor-pointer truncate rounded bg-transparent text-xs text-muted-foreground hover:text-foreground focus:outline-none"
-        >
-          <option value="">Personal</option>
-          {marcasOpts.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.nombre}
-            </option>
-          ))}
-        </select>
+        <span className="ml-auto max-w-[8rem] truncate">{ambitoLabel}</span>
       </div>
-    </div>
+    </FilaConAcciones>
   );
 }
 
