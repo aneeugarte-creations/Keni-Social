@@ -52,7 +52,9 @@ export default function Rota() {
     ...(marcaActiva ? { marca: marcaActiva } : {}),
   };
   const swapsPendientesQ = useQuery({
-    enabled: usuario !== null,
+    // Solo alimenta la insignia de la pestaña «Cambios y ausencias» (no-admin). El admin ya no
+    // tiene esa pestaña; ve sus cambios pendientes en el panel de Gestión (CambiosYAusencias).
+    enabled: usuario !== null && !esAdmin,
     queryKey: ["rota", "swaps", filtrosSwaps] as const,
     queryFn: ({ signal }) => api.listarSwaps(filtrosSwaps, signal),
   });
@@ -73,7 +75,14 @@ export default function Rota() {
   const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam).pestania);
   // «Gestión» es admin-only: un no-admin que llegue con `?tab=gestion` cae en «Hoy» (la pestaña
   // no existe para él). El resto de deep-links (`cobertura`/`cambios-ausencias`/`mis-turnos`) intacto.
-  const pestaniaEfectiva = pestania === "gestion" && !esAdmin ? "hoy" : pestania;
+  // «Gestión» es admin-only (no-admin → «Hoy»). «Cambios y ausencias» ya NO es pestaña para el
+  // admin (vive en su panel de Gestión): un deep-link admin a ese tab cae en «Gestión».
+  const pestaniaEfectiva =
+    pestania === "gestion" && !esAdmin
+      ? "hoy"
+      : pestania === "cambios-ausencias" && esAdmin
+        ? "gestion"
+        : pestania;
   // Modo de apertura del Calendario para los deep-links legacy a «Mi jornada».
   const [vistaCalendario, setVistaCalendario] = React.useState<"semana" | "mes">(
     () => normalizarTab(tabParam).vistaCalendario,
@@ -94,21 +103,27 @@ export default function Rota() {
     { valor: "hoy", etiqueta: "Hoy", icono: CalendarCheck },
     { valor: "calendario", etiqueta: "Calendario", icono: CalendarDays },
     { valor: "cobertura", etiqueta: "Cobertura", icono: ClipboardList },
-    ...(esAdmin ? [{ valor: "gestion", etiqueta: "Gestión", icono: Settings2 }] : []),
-    {
-      valor: "cambios-ausencias",
-      etiqueta: "Cambios y ausencias",
-      icono: ArrowLeftRight,
-      insignia:
-        pendientesCambios > 0 ? (
-          <span
-            className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums"
-            aria-label={`${pendientesCambios} pendientes`}
-          >
-            {pendientesCambios > 99 ? "99+" : pendientesCambios}
-          </span>
-        ) : undefined,
-    },
+    // Admin → «Gestión» (que ya incluye «Cambios y ausencias» en su panel). Trabajador → la
+    // pestaña «Cambios y ausencias» (su único sitio para pedir/responder cambios y ausencias,
+    // porque «Gestión» es admin-only). Son excluyentes: cada rol ve una de las dos.
+    ...(esAdmin
+      ? [{ valor: "gestion", etiqueta: "Gestión", icono: Settings2 }]
+      : [
+          {
+            valor: "cambios-ausencias",
+            etiqueta: "Cambios y ausencias",
+            icono: ArrowLeftRight,
+            insignia:
+              pendientesCambios > 0 ? (
+                <span
+                  className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums"
+                  aria-label={`${pendientesCambios} pendientes`}
+                >
+                  {pendientesCambios > 99 ? "99+" : pendientesCambios}
+                </span>
+              ) : undefined,
+          },
+        ]),
   ];
 
   return (
@@ -141,11 +156,12 @@ export default function Rota() {
           decisión (huecos sin cubrir, cambios/ausencias, conflictos), y debajo la rejilla de la
           SEMANA con su panel de reparto (asignar/franjas/copiar/carga/export). Ambos comparten
           `lunes` con el Calendario.
-          Gestión CABE en una pantalla: columna de alto acotado a la altura útil bajo la barra de
-          sección (`overflow-hidden` corta el scroll de PÁGINA); el «Necesita tu decisión» va arriba
-          a su alto natural y la rejilla+panel rellenan el resto con scroll INTERNO. */}
+          Gestión CABE en una pantalla: columna que llena el alto útil de `<main>` (= 100dvh − topbar
+          `h-12` − padding pt/pb del contenedor ≈ 5.5rem). `overflow-hidden` corta el scroll de
+          PÁGINA; el «Necesita tu decisión» va arriba a su alto natural y la rejilla+panel rellenan
+          el resto con scroll INTERNO. */}
       {pestaniaEfectiva === "gestion" && (
-        <div className="flex h-[calc(100dvh-11rem)] flex-col gap-4 overflow-hidden">
+        <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-4 overflow-hidden">
           <PanelCoordinacion
             lunes={lunes}
             marcaActiva={marcaActiva}

@@ -165,19 +165,20 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
 
-  it("el admin ve 5 pestañas incluida «Gestión»; «Mi jornada» ya NO es una", async () => {
+  it("el admin ve 4 pestañas incl. «Gestión»; «Cambios y ausencias» y «Mi jornada» ya NO son pestaña", async () => {
     renderRota();
-    // «Hoy» es la home; «Mi jornada» sigue fundida en el modo «Mes» del Calendario.
+    // «Hoy» es la home. «Cambios y ausencias» vive ahora en el panel de Gestión (no es pestaña para
+    // el admin). «Mi jornada» sigue fundida en el modo «Mes» del Calendario.
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
     const tabs = within(nav).getAllByRole("button");
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(4);
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Hoy",
       "Calendario",
       "Cobertura",
       "Gestión",
-      expect.stringContaining("Cambios y ausencias"),
     ]);
+    expect(within(nav).queryByRole("button", { name: /Cambios y ausencias/ })).toBeNull();
     expect(within(nav).queryByRole("button", { name: "Mi jornada" })).toBeNull();
   });
 
@@ -519,10 +520,12 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     vi.useRealTimers();
   });
 
-  it("el trabajador (no-admin) NO ve la pestaña «Gestión»", async () => {
+  it("el trabajador (no-admin) NO ve «Gestión» pero SÍ «Cambios y ausencias» (su único sitio)", async () => {
     renderRota({ rol: "editor" });
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
     expect(within(nav).queryByRole("button", { name: "Gestión" })).toBeNull();
+    // Gestión es admin-only; el trabajador conserva su pestaña para pedir/responder cambios y ausencias.
+    expect(within(nav).getByRole("button", { name: /Cambios y ausencias/ })).toBeInTheDocument();
     expect(within(nav).getAllByRole("button")).toHaveLength(4);
   });
 

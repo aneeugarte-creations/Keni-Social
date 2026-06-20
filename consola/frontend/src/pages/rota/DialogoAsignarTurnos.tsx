@@ -341,12 +341,6 @@ export function DialogoAsignarTurnos({
   // (lo monta el contenedor de Gestión), por ser la última opción.
   const camposManual = (
     <>
-        <p className="text-xs text-muted-foreground">
-          Reparte la semana a mano: elige quién trabaja, su horario y qué días. Puedes marcar
-          varias personas y aplicarles el mismo turno de una vez. Esto es la CAPACIDAD; quién
-          cubre cada evento se decide en Panorama.
-        </p>
-
         {/* Personas en pastillas multi-selección (mismo patrón que los Días): marca a quien
             trabaja ese horario y el reparto aplica el MISMO turno a todas. */}
         <div className="space-y-1.5">

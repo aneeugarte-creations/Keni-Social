@@ -533,12 +533,13 @@ export function Calendario({
                 la altura es FIJA `calc(100dvh-14rem)` (no `max-h`) para LLENAR el alto disponible;
                 en «Gestión» rellena (`flex-1`) el hueco de la columna acotada. Las franjas laborales
                 crecen (`grow`) y reparten el sobrante; si la semana es densa, scroll interno aquí.
-                `min-w-[56rem]` mantiene legibilidad horizontal. */}
+                En «Calendario» `min-w-[56rem]` mantiene legibilidad horizontal; en «Gestión» NO hay
+                ancho mínimo (`min-w-0`) para que la rejilla quepa junto al panel sin scroll lateral. */}
             <div
               className={esGestion ? "min-h-0 flex-1 overflow-auto" : "overflow-auto"}
               style={esGestion ? undefined : { height: "calc(100dvh - 14rem)" }}
             >
-              <div className="flex min-h-full min-w-[56rem] flex-col">
+              <div className={esGestion ? "flex min-h-full min-w-0 flex-col" : "flex min-h-full min-w-[56rem] flex-col"}>
                 {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
                 <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
                   <div className="bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
