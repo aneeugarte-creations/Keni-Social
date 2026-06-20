@@ -178,13 +178,19 @@ fi
 
 if [ "$BACK_CAMBIO" = 1 ] || [ "$WORKER_CAMBIO" = 1 ]; then
   echo "==> [3/6] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
-  docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
+  # Best-effort: el worker corre `claude -p` con XDG_CONFIG_HOME=/data, así que escribe ficheros
+  # de lock volátiles (`.claude.json.lock`) que pueden desaparecer a mitad del `chown -R` y hacerlo
+  # fallar; con `set -e` eso abortaría el deploy con el back ya parado. Toleramos esos errores: el
+  # chown reasigna todo lo estable y el resto es idempotente (la propiedad de un lock no importa).
+  docker run --rm -v "$VOL":/d alpine sh -c 'chown -R 10001:10001 /d 2>/dev/null || true'
   # El carril de auto-desarrollo (worker-dev/worker-ralph, uid 10001) escribe en /repo: el volumen
   # keni-repo nace root, así que hay que cederlo al uid del contenedor (idempotente). Crea el
   # volumen si no existe todavía.
   echo "==> [3b/6] chown del volumen keni-repo (clon git del carril dev) a uid 10001"
   docker volume create "$REPO_VOL" >/dev/null 2>&1 || true
-  docker run --rm -v "$REPO_VOL":/d alpine chown -R 10001:10001 /d
+  # Mismo motivo que arriba: el carril dev escribe ficheros volátiles en /repo; toleramos que un
+  # fichero desaparezca a mitad del `chown -R` para no abortar el deploy.
+  docker run --rm -v "$REPO_VOL":/d alpine sh -c 'chown -R 10001:10001 /d 2>/dev/null || true'
 else
   echo "==> [3/6] back/worker sin cambios — se omite chown del volumen"
 fi
