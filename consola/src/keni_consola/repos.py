@@ -196,6 +196,7 @@ from .repos_jobs import (  # noqa: F401
     priorizar_job,
     reclamar_job,
     reencolar_job,
+    reiniciar_intentos_job,
     registrar_gasto_ia,
     terminar_job,
 )

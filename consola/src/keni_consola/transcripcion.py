@@ -320,6 +320,104 @@ def _transcribir_faster(
 _TRANSCRIPTOR_JSON = _transcribir_faster
 
 
+# --------------------------------------------------------------------------- #
+# Transcripcion POR TRAMOS (resumible)                                          #
+#                                                                               #
+# Para audios largos, el gestor de audio decodifica UNA vez y transcribe en     #
+# ventanas; persiste el avance tras cada tramo y puede REANUDAR desde el ultimo #
+# (resiliencia a reinicios/deploys). Inyectables aparte (no cargan el modelo).  #
+# --------------------------------------------------------------------------- #
+
+TASA_MUESTREO = 16000  # faster-whisper trabaja a 16 kHz mono.
+
+
+def _decodificar_audio_real(datos: bytes, ext: str) -> Any:
+    """Decodifica los bytes a un array mono 16 kHz (numpy float32) con el `av` embebido."""
+    try:
+        try:
+            from faster_whisper import decode_audio  # noqa: PLC0415
+        except ImportError:
+            from faster_whisper.audio import decode_audio  # noqa: PLC0415
+    except ImportError as e:
+        raise TranscripcionError(
+            "Falta el motor de transcripción en este servicio "
+            "(instala el extra: pip install 'keni-consola[asr]')."
+        ) from e
+    with tempfile.TemporaryDirectory(prefix="keni-transcripcion-") as tmp:
+        ruta = Path(tmp) / f"{uuid.uuid4().hex}.{ext}"
+        ruta.write_bytes(datos)
+        try:
+            return decode_audio(str(ruta), sampling_rate=TASA_MUESTREO)
+        except Exception as e:  # noqa: BLE001 -- formato raro/archivo corrupto: mensaje claro
+            _log.warning("transcripcion: no se pudo decodificar el audio: %s", e)
+            raise TranscripcionError(
+                "No se pudo decodificar el audio (formato no soportado o archivo corrupto)."
+            ) from e
+
+
+def _transcribir_fragmento_real(
+    audio: Any, *, inicio_s: float, fin_s: float, idioma: str = _IDIOMA, word_level: bool = False
+) -> list[dict[str, Any]]:
+    """Transcribe la ventana `[inicio_s, fin_s)` del audio decodificado. Timestamps ABSOLUTOS."""
+    modelo = _cargar_modelo()
+    a = max(0, int(inicio_s * TASA_MUESTREO))
+    b = int(fin_s * TASA_MUESTREO)
+    try:
+        seg_iter, _info = modelo.transcribe(
+            audio[a:b],
+            language=_codigo_idioma(idioma),
+            word_timestamps=word_level,
+            vad_filter=True,
+        )
+        segmentos = mapear_segmentos(seg_iter, word_level=word_level)
+    except TranscripcionError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- audio ilegible: mensaje claro
+        _log.warning("transcripcion: faster-whisper fallo en el tramo: %s", e)
+        raise TranscripcionError(
+            "No se pudo transcribir el audio (formato no soportado o archivo corrupto)."
+        ) from e
+    return desplazar_segmentos(segmentos, int(round(inicio_s * 1000)))
+
+
+def desplazar_segmentos(segmentos: list[dict[str, Any]], desplazamiento_ms: int) -> list[dict[str, Any]]:
+    """Suma `desplazamiento_ms` a los timestamps de una lista de segmentos. FUNCION PURA."""
+    for s in segmentos:
+        s["inicio_ms"] = int(s.get("inicio_ms", 0)) + desplazamiento_ms
+        s["fin_ms"] = int(s.get("fin_ms", 0)) + desplazamiento_ms
+        for w in s.get("palabras") or []:
+            w["inicio_ms"] = int(w.get("inicio_ms", 0)) + desplazamiento_ms
+            w["fin_ms"] = int(w.get("fin_ms", 0)) + desplazamiento_ms
+    return segmentos
+
+
+# Inyectables del camino por tramos (los tests los parchean; NUNCA cargan el modelo real).
+_DECODIFICAR_AUDIO = _decodificar_audio_real
+_TRANSCRIPTOR_FRAGMENTO = _transcribir_fragmento_real
+
+
+def decodificar_audio(datos: bytes, *, ext: str) -> Any:
+    """Decodifica los bytes a un array de muestras 16 kHz (para transcribir por tramos)."""
+    return _DECODIFICAR_AUDIO(datos, ext)
+
+
+def duracion_audio(audio: Any) -> float:
+    """Duracion en SEGUNDOS de un audio decodificado (numero de muestras / tasa)."""
+    try:
+        return len(audio) / TASA_MUESTREO
+    except TypeError:
+        return 0.0
+
+
+def transcribir_fragmento(
+    audio: Any, *, inicio_s: float, fin_s: float, idioma: str = _IDIOMA, word_level: bool = False
+) -> list[dict[str, Any]]:
+    """Transcribe la ventana `[inicio_s, fin_s)`; devuelve segmentos con timestamps ABSOLUTOS."""
+    return _TRANSCRIPTOR_FRAGMENTO(
+        audio, inicio_s=inicio_s, fin_s=fin_s, idioma=idioma, word_level=word_level
+    )
+
+
 def transcribir_datos(
     datos: bytes,
     *,

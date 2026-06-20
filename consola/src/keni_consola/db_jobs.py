@@ -410,6 +410,22 @@ def reencolar_job(gen_id: str) -> bool:
         con.close()
 
 
+def reiniciar_intentos_job(gen_id: str) -> bool:
+    """Pone `intentos` a 0 para el job de `gen_id`, SIN tocar su estado. True si tocó una fila.
+
+    Lo usan los jobs LARGOS y resumibles (transcripción): cuando avanzan (completan un tramo), no
+    son un crash-loop aunque un reinicio/deploy los re-reclame, así que no deben gastar el tope de
+    intentos. Resetear el contador al progresar permite que se reanuden indefinidamente mientras
+    avancen; solo un job que se cae SIN progresar agota el tope."""
+    con = _conectar()
+    try:
+        cur = con.execute("UPDATE jobs SET intentos = 0 WHERE gen_id = ?", (gen_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def priorizar_job(gen_id: str, prioridad: int) -> bool:
     """Sube la prioridad de despacho del job PENDIENTE de `gen_id`. True si lo tocó.
 

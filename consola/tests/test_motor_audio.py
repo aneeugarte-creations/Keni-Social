@@ -10,6 +10,7 @@ de pruebas; se saltan sin él).
 
 from __future__ import annotations
 
+import copy
 import json
 
 from keni_consola import generaciones, media, repos
@@ -26,6 +27,23 @@ def _segmentos_canonicos():
     ]
 
 
+def _mock_motor(monkeypatch, *, duracion_s, segs):
+    """Mockea el camino POR TRAMOS: decodifica->sentinela; duración fija; cada tramo devuelve los
+    segmentos (timestamps absolutos) cuyo inicio cae en [inicio_s, fin_s). Devuelve la lista de
+    ventanas pedidas, para comprobar la reanudación."""
+    monkeypatch.setattr(transcripcion_raiz, "decodificar_audio", lambda datos, *, ext: object())
+    monkeypatch.setattr(transcripcion_raiz, "duracion_audio", lambda _audio: duracion_s)
+    ventanas: list[tuple[float, float]] = []
+
+    def _frag(_audio, *, inicio_s, fin_s, idioma, word_level=False):
+        ventanas.append((inicio_s, fin_s))
+        ini_ms, fin_ms = int(inicio_s * 1000), int(fin_s * 1000)
+        return [copy.deepcopy(s) for s in segs if ini_ms <= s["inicio_ms"] < fin_ms]
+
+    monkeypatch.setattr(transcripcion_raiz, "transcribir_fragmento", _frag)
+    return ventanas
+
+
 def test_ejecutor_audio_falta_transcripcion_id_error(monkeypatch):
     capturas: list[dict] = []
     monkeypatch.setattr(
@@ -36,14 +54,14 @@ def test_ejecutor_audio_falta_transcripcion_id_error(monkeypatch):
 
 
 def test_ejecutor_audio_deps_ausentes_marca_error(entorno, monkeypatch):
-    """Sin el motor (extra asr), el motor compartido lanza error; el ejecutor lo refleja en la fila."""
+    """Sin el motor (extra asr), decodificar lanza error; el ejecutor lo refleja en la fila."""
     fila = repos.crear_audio_transcripcion(marca=_MARCA, media_id="audios/x.mp4")
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
 
     def _falla(*a, **k):
         raise transcripcion_raiz.TranscripcionError("Falta el motor de transcripción en este servicio.")
 
-    monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _falla)
+    monkeypatch.setattr(transcripcion_raiz, "decodificar_audio", _falla)
 
     capturas: list[dict] = []
     real = generaciones.actualizar
@@ -63,21 +81,12 @@ def test_ejecutor_audio_deps_ausentes_marca_error(entorno, monkeypatch):
 
 
 def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
-    """Con el motor compartido mockeado, persiste segmentos+texto y estado='transcrito'."""
+    """Con el motor (por tramos) mockeado, persiste segmentos+texto y estado='transcrito'."""
     fila = repos.crear_audio_transcripcion(
         marca=_MARCA, media_id="audios/x.mp4", nombre="grabacion.mp4", idioma="es-MX"
     )
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
-
-    def _transcribir(datos, *, ext, idioma, word_level, progreso=None):
-        assert ext == "mp4" and idioma == "es-MX"
-        # El motor pasa un callback de progreso; lo invocamos para cubrir ese camino.
-        if progreso is not None:
-            progreso(1.5, 2.4)
-        segs = _segmentos_canonicos()
-        return {"texto": " ".join(s["texto"] for s in segs), "segmentos": segs}
-
-    monkeypatch.setattr(transcripcion_raiz, "transcribir_datos", _transcribir)
+    _mock_motor(monkeypatch, duracion_s=2.4, segs=_segmentos_canonicos())
 
     audio.ejecutar_transcripcion_audio(
         "g3", {"transcripcion_id": fila["id"], "media_id": "audios/x.mp4", "idioma": "es-MX"}
@@ -87,6 +96,7 @@ def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
     assert out["estado"] == "transcrito"
     assert out["texto"] == "Hola mundo adiós"
     assert out["duracion_ms"] == 2400
+    assert out["progreso_ms"] == 2400  # checkpoint al 100%
     segs = json.loads(out["segmentos"])
     assert len(segs) == 2 and segs[0]["texto"] == "Hola mundo"
 
@@ -103,16 +113,42 @@ def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
     assert "00:00:00,000 --> 00:00:01,500" in srt["contenido"]
 
 
+def test_ejecutor_audio_reanuda_desde_checkpoint(entorno, monkeypatch):
+    """Con un checkpoint a medias, REANUDA: solo transcribe el tramo restante y no duplica el SRT."""
+    # Audio de 600 s, ya transcrito hasta 300 s (un segmento guardado).
+    hechos = [{"inicio_ms": 10_000, "fin_ms": 11_000, "texto": "ya hecho", "palabras": []}]
+    fila = repos.crear_audio_transcripcion(
+        marca=_MARCA, media_id="audios/x.mp4", idioma="es-MX",
+        segmentos=json.dumps(hechos), progreso_ms=300_000, estado="transcribiendo",
+    )
+    repos.crear_audio_artefacto(  # un SRT a medias de la pasada anterior
+        transcripcion_id=fila["id"], tipo="srt", titulo="Subtítulos (SRT)", contenido="viejo", formato="srt"
+    )
+    monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
+    # El tramo [300,600) produce un segmento nuevo en 400 s.
+    todos = hechos + [{"inicio_ms": 400_000, "fin_ms": 401_000, "texto": "resto", "palabras": []}]
+    ventanas = _mock_motor(monkeypatch, duracion_s=600.0, segs=todos)
+
+    audio.ejecutar_transcripcion_audio(
+        "g6", {"transcripcion_id": fila["id"], "media_id": "audios/x.mp4", "idioma": "es-MX"}
+    )
+
+    # Solo se pidió el tramo restante (no se rehízo desde 0).
+    assert ventanas == [(300.0, 600.0)]
+    out = repos.obtener_audio_transcripcion(fila["id"])
+    assert out["estado"] == "transcrito"
+    segs = json.loads(out["segmentos"])
+    assert [s["texto"] for s in segs] == ["ya hecho", "resto"]
+    # Idempotente: no duplica el SRT que ya existía.
+    arts = repos.listar_audio_artefactos(fila["id"])
+    assert [a["tipo"] for a in arts] == ["srt"] and arts[0]["contenido"] == "viejo"
+
+
 def test_ejecutor_audio_tratamientos_crea_texto_y_lanza_claude(entorno, monkeypatch):
     """Con tratamientos pedidos: crea SRT + texto (síncronos) y LANZA los de Claude."""
     fila = repos.crear_audio_transcripcion(marca=_MARCA, media_id="audios/x.mp4", idioma="es-MX")
     monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
-    monkeypatch.setattr(
-        transcripcion_raiz, "transcribir_datos",
-        lambda datos, *, ext, idioma, word_level, progreso=None: {
-            "texto": "hola", "segmentos": _segmentos_canonicos()
-        },
-    )
+    _mock_motor(monkeypatch, duracion_s=2.4, segs=_segmentos_canonicos())
 
     from keni_consola.dominio import audio_artefactos
     lanzados: list[str] = []

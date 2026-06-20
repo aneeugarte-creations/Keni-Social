@@ -250,6 +250,7 @@ from .db_jobs import (  # noqa: F401
     priorizar_job,
     reclamar_job,
     reencolar_job,
+    reiniciar_intentos_job,
     registrar_gasto_ia,
     terminar_job,
 )
@@ -521,6 +522,7 @@ __all__ = [
     "registrar_gasto_ia",
     "jobs_activos",
     "reencolar_job",
+    "reiniciar_intentos_job",
     "actualizar_fuente_algoritmo",
     "borrar_fuente_algoritmo",
     "contar_fuentes_algoritmo",

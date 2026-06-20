@@ -28,6 +28,7 @@ _COLS_AUDIO_TRANSCRIPCIONES = (
     "gen_id",
     "tratamientos",
     "autor_id",
+    "progreso_ms",
     "creado",
     "actualizado",
 )
@@ -48,6 +49,7 @@ _CAMPOS_EDITABLES_AUDIO_TRANSCRIPCIONES: tuple[str, ...] = (
     "gen_id",
     "tratamientos",
     "autor_id",
+    "progreso_ms",
 )
 
 
@@ -59,6 +61,7 @@ def _fila_a_audio_transcripcion(fila: Any) -> dict[str, Any]:
         fila["estado"] if fila["estado"] in ESTADOS_AUDIO_TRANSCRIPCION else "pendiente"
     )
     item["duracion_ms"] = int(fila["duracion_ms"] or 0)
+    item["progreso_ms"] = int(fila["progreso_ms"] or 0)
     return item
 
 
@@ -77,6 +80,7 @@ def crear_audio_transcripcion(
     gen_id: str = "",
     tratamientos: str = "",
     autor_id: str = "",
+    progreso_ms: int = 0,
     id: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -101,6 +105,7 @@ def crear_audio_transcripcion(
         "gen_id": gen_id or "",
         "tratamientos": tratamientos or "",
         "autor_id": autor_id or "",
+        "progreso_ms": int(progreso_ms or 0),
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

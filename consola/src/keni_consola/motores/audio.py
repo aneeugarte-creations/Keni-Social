@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
-import time
+import os
 from pathlib import Path
 
 from .. import generaciones, media, repos
@@ -35,8 +35,22 @@ _log = logging.getLogger("keni_consola.motores.audio")
 
 # Idioma por defecto del piloto (es-MX); el motor compartido reduce al codigo base ("es").
 _IDIOMA_DEF = "es-MX"
-# Cada cuanto (segundos de reloj) refrescar la fase con el avance de whisper (no saturar la BD).
-_PROGRESO_CADA_S = 2.0
+
+
+def _tramo_s() -> float:
+    """Duracion (s) de cada ventana de transcripcion. Tras cada una se persiste el avance (checkpoint).
+
+    Mas pequeño = se pierde menos al reanudar pero hay mas costuras entre ventanas; mas grande = al
+    reves. `KENI_WHISPER_TRAMO_S` lo ajusta (def 300 s = 5 min).
+    """
+    try:
+        v = float(os.environ.get("KENI_WHISPER_TRAMO_S", "") or 300)
+    except (TypeError, ValueError):
+        v = 300.0
+    return v if v >= 30 else 300.0
+
+
+_TRAMO_S = _tramo_s()
 
 
 def _mmss(segundos: float) -> str:
@@ -44,27 +58,14 @@ def _mmss(segundos: float) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
-def _progreso_a_gen(gen_id: str):
-    """Callback de progreso de whisper -> fase de la generacion ('Transcribiendo mm:ss/mm:ss · NN%').
-
-    Throttleado a `_PROGRESO_CADA_S` para no escribir en BD por cada segmento. faster-whisper emite
-    los segmentos en streaming, asi que esto da feedback REAL de que el motor avanza (no esta pillado).
-    """
-    ultimo = [0.0]
-
-    def progreso(hechos: float, total: float) -> None:
-        ahora = time.monotonic()
-        if ahora - ultimo[0] < _PROGRESO_CADA_S:
-            return
-        ultimo[0] = ahora
-        if total > 0:
-            pct = min(99, int(hechos / total * 100))
-            fase = f"Transcribiendo {_mmss(hechos)} / {_mmss(total)} · {pct}%"
-        else:
-            fase = f"Transcribiendo {_mmss(hechos)}"
-        generaciones.actualizar(gen_id, {"fase": fase})
-
-    return progreso
+def _segmentos_guardados(fila: dict) -> list:
+    """Segmentos ya transcritos de una fila (para reanudar). Lista vacía si no hay o no parsean."""
+    crudo = fila.get("segmentos") or ""
+    try:
+        segs = json.loads(crudo) if isinstance(crudo, str) and crudo else (crudo or [])
+    except (ValueError, TypeError):
+        segs = []
+    return segs if isinstance(segs, list) else []
 
 
 def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
@@ -104,23 +105,64 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
             )
             return
 
-        # 2) Transcribir con el motor compartido (faster-whisper + v3 turbo, con timestamps).
-        generaciones.actualizar(
-            gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "transcribiendo"}
-        )
+        # 2) Transcribir POR TRAMOS (resumible). Decodifica una vez y transcribe en ventanas de
+        #    `_TRAMO_S`, persistiendo el avance (`segmentos` + `progreso_ms`) tras CADA tramo. Si el
+        #    proceso muere (reinicio/deploy) y el job se re-reclama, REANUDA desde `progreso_ms` en
+        #    vez de rehacerlo entero. Se pierde, como mucho, el tramo en curso.
         ext = Path(media_id).suffix.lstrip(".") or "mp4"
         try:
-            resultado = asr.transcribir_datos(
-                datos, ext=ext, idioma=idioma, word_level=False,
-                progreso=_progreso_a_gen(gen_id),
-            )
+            audio = asr.decodificar_audio(datos, ext=ext)
         except asr.TranscripcionError as e:
             _terminar_error(gen_id, transcripcion_id, str(e))
             return
+        total_s = asr.duracion_audio(audio)
+        total_ms = int(round(total_s * 1000))
 
-        segmentos = resultado["segmentos"]
-        texto = resultado["texto"]
-        duracion_ms = int(segmentos[-1]["fin_ms"]) if segmentos else 0
+        fila = repos.obtener_audio_transcripcion(transcripcion_id) or {}
+        segmentos = _segmentos_guardados(fila)
+        progreso_ms = int(fila.get("progreso_ms") or 0)
+        if segmentos:  # nunca por detrás de lo ya transcrito (estado inconsistente)
+            progreso_ms = max(progreso_ms, int(segmentos[-1].get("fin_ms", 0)))
+        inicio_s = progreso_ms / 1000
+
+        while inicio_s < total_s - 0.05:
+            fin_s = min(inicio_s + _TRAMO_S, total_s)
+            try:
+                frag = asr.transcribir_fragmento(
+                    audio, inicio_s=inicio_s, fin_s=fin_s, idioma=idioma
+                )
+            except asr.TranscripcionError as e:
+                _terminar_error(gen_id, transcripcion_id, str(e))
+                return
+            segmentos.extend(frag)
+            progreso_ms = int(round(fin_s * 1000))
+            repos.actualizar_audio_transcripcion(
+                transcripcion_id,
+                {
+                    "estado": "transcribiendo",
+                    "segmentos": json.dumps(segmentos, ensure_ascii=False),
+                    "progreso_ms": progreso_ms,
+                    "duracion_ms": total_ms,
+                },
+            )
+            # Avanzó un tramo: no es un crash-loop. Resetea el tope de intentos del job para que un
+            # reinicio/deploy pueda re-reclamarlo y REANUDARLO cuantas veces haga falta.
+            try:
+                repos.reiniciar_intentos_job(gen_id)
+            except Exception:  # noqa: BLE001 -- un fallo aquí no debe tumbar la transcripción
+                _log.debug("audio: no se pudo resetear intentos del job %s", gen_id)
+            pct = min(99, int(fin_s / total_s * 100)) if total_s > 0 else 0
+            generaciones.actualizar(
+                gen_id,
+                {
+                    "estado": generaciones.ESTADO_EJECUTANDO,
+                    "fase": f"Transcribiendo {_mmss(fin_s)} / {_mmss(total_s)} · {pct}%",
+                },
+            )
+            inicio_s = fin_s
+
+        texto = " ".join(s.get("texto", "") for s in segmentos).strip()
+        duracion_ms = int(segmentos[-1]["fin_ms"]) if segmentos else total_ms
 
         # 3) Persistir el borrador con timestamps (estado 'transcrito').
         repos.actualizar_audio_transcripcion(
@@ -130,6 +172,7 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
                 "segmentos": json.dumps(segmentos, ensure_ascii=False),
                 "texto": texto,
                 "duracion_ms": duracion_ms,
+                "progreso_ms": total_ms,
                 "error": "",
             },
         )
@@ -171,13 +214,21 @@ def _crear_artefactos(
     """
     from ..dominio import audio_artefactos  # noqa: PLC0415 -- import perezoso (evita ciclo)
 
+    # IDEMPOTENTE (resiliencia): si el job se re-ejecutó tras un reinicio, no dupliques artefactos.
+    existentes = {a["tipo"] for a in repos.listar_audio_artefactos(transcripcion_id)}
     srt = None
     try:
-        srt = repos.crear_audio_artefacto(
-            transcripcion_id=transcripcion_id, tipo="srt", titulo="Subtítulos (SRT)",
-            contenido=asr.srt_de_segmentos(segmentos), formato="srt", estado="listo",
-        )
-        if "texto" in tratamientos:
+        if "srt" in existentes:
+            srt = next(
+                (a for a in repos.listar_audio_artefactos(transcripcion_id) if a["tipo"] == "srt"),
+                None,
+            )
+        else:
+            srt = repos.crear_audio_artefacto(
+                transcripcion_id=transcripcion_id, tipo="srt", titulo="Subtítulos (SRT)",
+                contenido=asr.srt_de_segmentos(segmentos), formato="srt", estado="listo",
+            )
+        if "texto" in tratamientos and "texto" not in existentes:
             repos.crear_audio_artefacto(
                 transcripcion_id=transcripcion_id, tipo="texto", titulo="Texto plano",
                 contenido=texto, formato="txt", estado="listo",
@@ -189,7 +240,7 @@ def _crear_artefactos(
     if fila is None:
         return
     for tipo in tratamientos:
-        if tipo not in audio_artefactos.TRATAMIENTOS:
+        if tipo not in audio_artefactos.TRATAMIENTOS or tipo in existentes:
             continue
         try:
             # Heredan del SRT (base canónica): mismo origen que al lanzarlos desde la UI.

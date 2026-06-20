@@ -196,3 +196,35 @@ def test_transcribir_subida_camino_feliz(monkeypatch):
     texto = _correr(transcripcion.transcribir_subida(up))
     assert texto == "  texto transcrito  "  # devuelve el `.texto` del motor tal cual
     assert visto == {"datos": b"clipbytes", "ext": "mp4"}
+
+
+# --- Transcripcion POR TRAMOS (resumible) ------------------------------------
+
+
+def test_desplazar_segmentos_suma_a_los_timestamps():
+    segs = [{"inicio_ms": 0, "fin_ms": 500, "texto": "a", "palabras": [{"inicio_ms": 0, "fin_ms": 500, "texto": "a"}]}]
+    out = transcripcion.desplazar_segmentos(segs, 300_000)
+    assert out[0]["inicio_ms"] == 300_000 and out[0]["fin_ms"] == 300_500
+    assert out[0]["palabras"][0]["inicio_ms"] == 300_000 and out[0]["palabras"][0]["fin_ms"] == 300_500
+
+
+def test_duracion_audio_muestras_entre_tasa():
+    # len/16000 -> segundos. Lista de 24000 "muestras" = 1.5 s.
+    assert transcripcion.duracion_audio([0] * 24_000) == 1.5
+    assert transcripcion.duracion_audio(object()) == 0.0  # sin len -> 0
+
+
+def test_decodificar_y_fragmento_delegan_en_inyectables(monkeypatch):
+    monkeypatch.setattr(transcripcion, "_DECODIFICAR_AUDIO", lambda datos, ext: ("audio", ext, datos))
+    assert transcripcion.decodificar_audio(b"xy", ext="mp3") == ("audio", "mp3", b"xy")
+
+    visto: dict = {}
+
+    def fake_frag(audio, *, inicio_s, fin_s, idioma, word_level=False):
+        visto.update(audio=audio, inicio_s=inicio_s, fin_s=fin_s, idioma=idioma)
+        return [{"inicio_ms": int(inicio_s * 1000), "fin_ms": int(fin_s * 1000), "texto": "x"}]
+
+    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR_FRAGMENTO", fake_frag)
+    out = transcripcion.transcribir_fragmento("AUDIO", inicio_s=300, fin_s=600, idioma="es-MX")
+    assert out[0]["inicio_ms"] == 300_000 and out[0]["fin_ms"] == 600_000
+    assert visto == {"audio": "AUDIO", "inicio_s": 300, "fin_s": 600, "idioma": "es-MX"}

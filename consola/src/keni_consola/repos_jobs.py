@@ -43,6 +43,10 @@ def reencolar_job(gen_id: str) -> bool:
     return db.reencolar_job(gen_id)
 
 
+def reiniciar_intentos_job(gen_id: str) -> bool:
+    return db.reiniciar_intentos_job(gen_id)
+
+
 def reclamar_job(
     worker: str = "",
     *,

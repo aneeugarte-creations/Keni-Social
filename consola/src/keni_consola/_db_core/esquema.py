@@ -1480,6 +1480,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # ÁMBITO del audio: `marca`='' => PERSONAL (privado de su `autor_id`); `marca`<>'' => de MARCA
     # (colaborativo, lo ve el equipo). `autor_id` es el dueño cuando es personal.
     "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS autor_id TEXT NOT NULL DEFAULT ''",
+    # `progreso_ms`: hasta qué punto del audio se ha transcrito ya (checkpoint). El motor transcribe
+    # por tramos y lo persiste tras cada uno, así un reinicio/deploy REANUDA desde aquí en vez de
+    # rehacerlo entero (resiliencia).
+    "ALTER TABLE audio_transcripciones ADD COLUMN IF NOT EXISTS progreso_ms INTEGER NOT NULL DEFAULT 0",
     # ARTEFACTOS de un audio: cada audio (fila `audio_transcripciones`) produce VARIOS artefactos
     # independientes — `srt` (subtítulos, por defecto), `texto` plano, y los tratamientos de Claude
     # (`limpio`, `resumen`, `preguntas`, `ideas`, `corregido`). `contenido` es el texto del artefacto;
