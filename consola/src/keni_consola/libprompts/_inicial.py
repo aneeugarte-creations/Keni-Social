@@ -177,7 +177,7 @@ _SENTINELA_REFORMATO = ".reformato-prompts-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
 _SENTINELA_PARRILLA = ".parrilla-contrato-v1"
-_SENTINELA_IDEAS_AUDIO = ".ideas-audio-v1"
+_SENTINELA_IDEAS_AUDIO = ".ideas-audio-v2"
 
 # TÍTULOS de una palabra agrupados por etapa: los prompts del sistema pasan a un título de UNA
 # palabra (la carpeta da el contexto de etapa: `recibir/Notas`, `importar/Parrilla`, …). El store en
@@ -703,13 +703,14 @@ def migrar_redactar_v1() -> int:
 
 
 def migrar_ideas_audio_v1() -> int:
-    """Re-siembra `prompt/audio/ideas` (ampliado a TODO tipo) en el store y lo publica.
+    """Re-siembra `prompt/audio/ideas` (JSON estructurado, todo tipo) en el store y lo publica.
 
-    El prompt de ideas de audio pasó de «ideas de contenido» a ideas de TODO tipo (software/
-    contenido/negocio/operación) agrupadas por categoría. `importar_inicial` no pisa lo ya sembrado,
-    así que un store que ya tenía la versión vieja la conserva. Esto lo pone al día desde la inicial
-    nueva y lo publica (espejo de `migrar_redactar_v1`). ONE-SHOT por sentinela. Best-effort (la
-    publicación necesita BD). Devuelve 1 si lo migró, 0 si no.
+    El prompt de ideas de audio pasó a emitir un array JSON estructurado (idea/porque/minuto/
+    categoría) para parsear y mandar cada idea a Sugerencias por separado. `importar_inicial` no
+    pisa lo ya sembrado, así que un store con la versión vieja (markdown) la conserva. Esto lo pone
+    al día desde la inicial nueva y lo publica (espejo de `migrar_redactar_v1`). ONE-SHOT por
+    sentinela `v2` (re-corre aunque el `v1` ya hubiera sembrado la versión markdown intermedia).
+    Best-effort (la publicación necesita BD). Devuelve 1 si lo migró, 0 si no.
     """
     from .. import db
     from ._versiones import fijar_version
@@ -725,10 +726,11 @@ def migrar_ideas_audio_v1() -> int:
         try:
             escribir_atomico(ruta, ruta_inicial.read_text(encoding="utf-8"))
             n = 1
-            sha = fijar_version("prompt/audio/ideas", nota="ideas de audio: todo tipo")
+            sha = fijar_version("prompt/audio/ideas", nota="ideas de audio: JSON estructurado")
             if sha:
                 db.crear_texto_publicacion(
-                    doc_id="prompt/audio/ideas", sha=sha, autor="", nota="ideas de audio: todo tipo"
+                    doc_id="prompt/audio/ideas", sha=sha, autor="",
+                    nota="ideas de audio: JSON estructurado",
                 )
         except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
             pass

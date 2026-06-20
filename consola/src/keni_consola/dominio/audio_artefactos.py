@@ -10,7 +10,6 @@ texto plano NO pasan por aquí (los genera el motor sin Claude).
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
 from .. import libprompts, repos
@@ -21,91 +20,9 @@ class AudioArtefactoError(RuntimeError):
     """Error de un tratamiento de audio, con mensaje en español apto para mostrar."""
 
 
-# --------------------------------------------------------------------------- #
-# Ideas (artefacto) -> sugerencias (kanban): parser tolerante del markdown.    #
-# --------------------------------------------------------------------------- #
-
-_MAX_TITULO_IDEA = 160
-
-
-def _categoria_de_seccion(titulo: str) -> str:
-    """Mapea un encabezado de sección de las ideas a una categoría de sugerencia."""
-    low = titulo.lower()
-    if "software" in low or "producto" in low:
-        return "producto"
-    if "bug" in low:
-        return "bug"
-    if "mejora" in low:
-        return "mejora"
-    return "idea"
-
-
-def _titulo_de_vineta(texto: str) -> str:
-    """Título de una idea a partir de la 1ª línea de su viñeta: sin markdown ni etiqueta inicial."""
-    t = re.sub(r"[*_`]", "", texto).strip()
-    t = re.sub(r"^(idea|propuesta)\s*[:\-–]\s*", "", t, flags=re.IGNORECASE)
-    return t[:_MAX_TITULO_IDEA].strip()
-
-
-def parsear_ideas(markdown: str) -> list[dict[str, str]]:
-    """Convierte el markdown de un artefacto 'ideas' en sugerencias `{titulo, detalle, categoria}`.
-
-    Tolerante: cada viñeta de primer nivel (`-`/`*`) es una idea; la categoría sale del último
-    encabezado `##` (Producto/software→producto, Bug→bug, Mejora→mejora, resto→idea). Las líneas
-    siguientes de la viñeta se acumulan en el detalle. PURO.
-    """
-    items: list[dict[str, str]] = []
-    categoria = "idea"
-    actual: dict[str, str] | None = None
-    for cruda in (markdown or "").splitlines():
-        linea = cruda.rstrip()
-        enc = re.match(r"^\s{0,3}#{1,6}\s+(.*\S)", linea)
-        if enc:
-            categoria = _categoria_de_seccion(enc.group(1))
-            continue
-        vineta = re.match(r"^\s{0,3}[-*]\s+(.*\S)", linea)
-        if vineta:
-            if actual:
-                items.append(actual)
-            actual = {
-                "titulo": _titulo_de_vineta(vineta.group(1)),
-                "detalle": linea.strip(),
-                "categoria": categoria,
-            }
-        elif actual is not None and linea.strip():
-            actual["detalle"] = f"{actual['detalle']}\n{linea.strip()}"
-    if actual:
-        items.append(actual)
-    return [i for i in items if i["titulo"]]
-
-
-def volcar_ideas_en_sugerencias(
-    artefacto: dict[str, Any], *, autor: str, autor_id: str, nombre_audio: str
-) -> int:
-    """Crea una sugerencia por idea del artefacto y devuelve cuántas creó.
-
-    Handoff de DOMINIO produccion→shell (las ideas del audio entran al kanban de sugerencias),
-    análogo a `historial→piezas`: el cruce vive aquí, no en el router, para no acoplar fronteras.
-    El `autor`/`autor_id` (de la sesión) queda como dueño, para que las vea quien las manda.
-    """
-    from .. import sugerencias  # perezoso: el cruce vive en el dominio, no en el router
-
-    referencia = f"\n\n— De audio: {nombre_audio}"
-    creadas = 0
-    for it in parsear_ideas(artefacto.get("contenido") or ""):
-        try:
-            sugerencias.crear(
-                it["titulo"],
-                detalle=it["detalle"] + referencia,
-                categoria=it["categoria"],
-                autor=autor,
-                autor_id=autor_id,
-            )
-            creadas += 1
-        except ValueError:
-            continue  # título vacío: se salta
-    return creadas
-
+# El artefacto 'ideas' emite un array JSON estructurado (idea/porque/minuto/categoria) que el
+# front renderiza como lista y manda al kanban de Sugerencias idea a idea (vía /api/sugerencias),
+# así que aquí NO hay puente con sugerencias (no se acoplan fronteras produccion↔shell).
 
 # tipo de artefacto -> (prompt de librería, formato del contenido, título legible). Solo los
 # tratamientos de Claude; 'srt'/'texto' los crea el motor. 'corregido' es seguimiento de 'preguntas'.
