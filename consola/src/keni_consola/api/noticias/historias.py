@@ -257,6 +257,46 @@ def _historia_a_dict(
     }
 
 
+def _listar_historias(
+    marca: str | None,
+    desde: str | None,
+    estado: str | None,
+    limite: int,
+    desplazamiento: int,
+) -> dict[str, Any]:
+    clusters, total = repos.listar_noticia_clusters(
+        marca=marca or None,
+        desde=desde,
+        estado=estado,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+    # Estado REAL de cara al feed + verificacion verificación (verificación). El verificación vive en la HISTORIA
+    # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
+    # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
+    # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
+    cids = [c.get("publicacion_id") or "" for c in clusters]
+    resumen_pieza = repos.estado_pieza_por_publicacion(cids)
+    verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
+    vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
+    historias = [
+        _historia_a_dict(
+            {
+                **c,
+                "verificacion_fuente": (c.get("verificacion_fuente") or "")
+                or verificacion_map.get(c.get("publicacion_id") or "", ""),
+            },
+            repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+            pieza_estado=_pieza_estado(
+                c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
+            ),
+            umbral=_evaluar_umbral(c, vocab_memo),
+        )
+        for c in clusters
+    ]
+    return {"historias": historias, "total": total}
+
+
 async def listar_historias(request: Request) -> Response:
     """GET /api/noticias/historias: historias filtrables + paginadas, MÁS RELEVANTES primero.
 
@@ -286,33 +326,10 @@ async def listar_historias(request: Request) -> Response:
         desplazamiento = 0
     desplazamiento = max(0, desplazamiento)
 
-    clusters, total = repos.listar_noticia_clusters(
-        marca=marca or None,
-        desde=desde,
-        estado=estado,
-        limite=limite,
-        desplazamiento=desplazamiento,
+    cuerpo = await run_in_threadpool(
+        _listar_historias, marca, desde, estado, limite, desplazamiento
     )
-    # Estado REAL de cara al feed + verificacion verificación (verificación). El verificación vive en la HISTORIA
-    # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
-    # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
-    # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
-    cids = [c.get("publicacion_id") or "" for c in clusters]
-    resumen_pieza = repos.estado_pieza_por_publicacion(cids)
-    verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
-    vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
-    historias = [
-        _historia_a_dict(
-            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("publicacion_id") or "", "")},
-            repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
-            pieza_estado=_pieza_estado(
-                c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
-            ),
-            umbral=_evaluar_umbral(c, vocab_memo),
-        )
-        for c in clusters
-    ]
-    return JSONResponse({"historias": historias, "total": total})
+    return JSONResponse(cuerpo)
 
 
 # Historias por línea en la respuesta de la Mesa (top-N por sección; "Ver todas" pagina
@@ -344,32 +361,9 @@ def _grupos_ordenados(etiquetas: list[dict[str, Any]]) -> list[str]:
     return en_orden + sorted(g for g in presentes if g not in _ORDEN_GRUPOS)
 
 
-async def mesa(request: Request) -> Response:
-    """GET /api/noticias/mesa?marca=&por_linea=: el pool SEGMENTADO por las líneas del plan.
-
-    La vista de trabajo de la Mesa de redacción: para una marca concreta devuelve sus líneas
-    del plan editorial diario (cupo, generados/publicados en 24 h móviles, restante) con las
-    top-N candidatas (`estado='nuevo'`) de cada una, más el bloque `fuera_de_plan` (líneas de
-    feed que el plan no contempla). Una historia compite por la línea de su
-    `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que Admitir (CI)).
-    Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
-    lista plana). Orden de líneas: breaking primero, luego el orden del plan.
-    """
+def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     from ...pipeline_contenido import _admitir as _pc_ingesta
     from ...tiempo import inicio_dia_cdmx_iso_utc
-
-    marca, error = _validar_marca(request.query_params.get("marca"))
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
-    if not marca:
-        return JSONResponse(
-            {"error": "La mesa es por marca: elige una marca concreta."}, status_code=400
-        )
-    try:
-        por_linea = int(request.query_params.get("por_linea") or _MESA_POR_LINEA_DEF)
-    except ValueError:
-        por_linea = _MESA_POR_LINEA_DEF
-    por_linea = max(1, min(por_linea, _MESA_POR_LINEA_MAX))
 
     plan = config.plan_dia(marca)  # dict ordenado categoria -> cupo ({} sin plan)
     resumen_plan: dict[str, dict[str, int]] = {}
@@ -439,7 +433,11 @@ async def mesa(request: Request) -> Response:
         tope = por_linea if limite is None else limite
         return [
             _historia_a_dict(
-                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("publicacion_id") or "", "")},
+                {
+                    **c,
+                    "verificacion_fuente": (c.get("verificacion_fuente") or "")
+                    or verificacion_map.get(c.get("publicacion_id") or "", ""),
+                },
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
@@ -504,29 +502,53 @@ async def mesa(request: Request) -> Response:
             }
             for g in grupos_orden
         ]
-    return JSONResponse(
-        {
-            "marca": marca,
-            "plan": bool(plan),
-            "lineas": lineas,
-            "fuera_de_plan": {
-                "en_pool": len(fuera),
-                "historias": [] if grupos_orden else _historias(fuera),
-            },
-            "total_objetivo": sum(int(v) for v in plan.values()),
-            "total_generados": total_generados,
-            "grupos": grupos,
-            "historias_grupo": historias_grupo,
-        }
-    )
+    return {
+        "marca": marca,
+        "plan": bool(plan),
+        "lineas": lineas,
+        "fuera_de_plan": {
+            "en_pool": len(fuera),
+            "historias": [] if grupos_orden else _historias(fuera),
+        },
+        "total_objetivo": sum(int(v) for v in plan.values()),
+        "total_generados": total_generados,
+        "grupos": grupos,
+        "historias_grupo": historias_grupo,
+    }
 
 
-async def detalle_historia(request: Request) -> Response:
-    """GET /api/noticias/historias/{id}: la historia + TODOS sus items de archivo."""
-    cluster_id = request.path_params["cluster_id"]
+async def mesa(request: Request) -> Response:
+    """GET /api/noticias/mesa?marca=&por_linea=: el pool SEGMENTADO por las líneas del plan.
+
+    La vista de trabajo de la Mesa de redacción: para una marca concreta devuelve sus líneas
+    del plan editorial diario (cupo, generados/publicados en 24 h móviles, restante) con las
+    top-N candidatas (`estado='nuevo'`) de cada una, más el bloque `fuera_de_plan` (líneas de
+    feed que el plan no contempla). Una historia compite por la línea de su
+    `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que Admitir (CI)).
+    Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
+    lista plana). Orden de líneas: breaking primero, luego el orden del plan.
+    """
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    if not marca:
+        return JSONResponse(
+            {"error": "La mesa es por marca: elige una marca concreta."}, status_code=400
+        )
+    try:
+        por_linea = int(request.query_params.get("por_linea") or _MESA_POR_LINEA_DEF)
+    except ValueError:
+        por_linea = _MESA_POR_LINEA_DEF
+    por_linea = max(1, min(por_linea, _MESA_POR_LINEA_MAX))
+
+    cuerpo = await run_in_threadpool(_mesa, marca, por_linea)
+    return JSONResponse(cuerpo)
+
+
+def _detalle_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
     cluster = repos.obtener_noticia_cluster(cluster_id)
     if cluster is None:
-        return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
+        return 404, {"error": "Esa historia ya no existe."}
     items = repos.items_de_cluster(cluster_id)
     cid = cluster.get("publicacion_id") or ""
     # Verificacion NATIVO del cluster (ADR 0011 F3: la verificación corre sobre la historia); fallback al
@@ -538,53 +560,56 @@ async def detalle_historia(request: Request) -> Response:
         {**cluster, "verificacion_fuente": verificacion_fuente}, items, pieza_estado=_pieza_estado_de(cluster),
         umbral=_evaluar_umbral(cluster, {}),
     )
-    return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})
+    return 200, {"historia": historia, "items": [_item_a_dict(it) for it in items]}
 
 
-async def usar_historia(request: Request) -> Response:
-    """POST /api/noticias/historias/{id}/usar: lleva la historia al tablero (borrador).
-
-    Cuerpo `{redes?: [ids], generar?: bool}`. Reusa el camino de la aportación manual: crea un
-    `contenido` (`flujo='importante'`, `origen='historia'`, `tipo_contenido='fuente'`) con el
-    título/resumen representativos de la historia y sus enlaces corroborantes en la nota; si
-    hay marca y `generar` (def True), encola copy. Marca el cluster `usado` + `publicacion_id` y
-    todos sus items `usado`. Idempotente-amistoso: si ya estaba usado, devuelve lo enlazado.
-    """
+async def detalle_historia(request: Request) -> Response:
+    """GET /api/noticias/historias/{id}: la historia + TODOS sus items de archivo."""
     cluster_id = request.path_params["cluster_id"]
+    status, cuerpo = await run_in_threadpool(_detalle_historia, cluster_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _cargar_usar(
+    cluster_id: str,
+) -> tuple[int | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Lee el cluster y resuelve los cortes tempranos (no existe / ya usada) antes de traducir.
+
+    Devuelve `(status, cuerpo, cluster)`: si `status` no es None el handler responde ya; si es
+    None, `cluster` es la historia cargada lista para traducir y materializar.
+    """
     cluster = repos.obtener_noticia_cluster(cluster_id)
     if cluster is None:
-        return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
+        return 404, {"error": "Esa historia ya no existe."}, None
     if cluster.get("estado") == "usado" and cluster.get("publicacion_id"):
-        return JSONResponse(
+        return (
+            200,
             {
                 "contenido": {"id": cluster["publicacion_id"]},
                 "copy_en_proceso": False,
                 "ya_usada": True,
-            }
+            },
+            None,
         )
+    return None, None, cluster
 
+
+def _materializar_usar(
+    cluster: dict[str, Any],
+    cluster_id: str,
+    redes_iniciales: list[str],
+    generar: bool,
+    autor: str,
+) -> tuple[int, dict[str, Any]]:
+    """Crea la pieza en el tablero a partir de la historia (ya traducida) y marca el cluster usado."""
     from ...pipeline_contenido import _admitir as _pc_ingesta
 
-    # Una historia extranjera aún sin traducir NO baja al tablero en inglés: la traducimos EN EL
-    # ACTO (y la persistimos) antes de crear la pieza, en vez de esperar al barrido del daemon.
-    if _pc_ingesta._falta_traduccion(cluster):
-        traducido = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
-        if traducido is None:
-            return JSONResponse(
-                {"error": "No se pudo traducir la historia ahora mismo. Inténtalo en unos segundos."},
-                status_code=503,
-            )
-        cluster = traducido
-
-    datos = await leer_json(request)
-    redes_iniciales = _redes_iniciales(datos.get("redes"))
     marca = cluster.get("marca") or ""
-
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
     # Título/resumen en español (traducido a MX si existe), nunca el original extranjero.
     titulo = _pc_ingesta._titulo_es(cluster) or (items[0]["url"] if items else "")
     if not titulo:
-        return JSONResponse({"error": "La historia no tiene título ni enlace."}, status_code=400)
+        return 400, {"error": "La historia no tiene título ni enlace."}
     descripcion = _pc_ingesta._resumen_es(cluster)
     # Enlaces corroborantes en la nota, para trazar las fuentes de la historia.
     fuentes = [it.get("url") for it in items if it.get("url")][:_MAX_ENLACES_HISTORIA]
@@ -605,7 +630,7 @@ async def usar_historia(request: Request) -> Response:
         marca=marca,
         prioridad="media",
         fecha_objetivo=hoy_utc().isoformat(),
-        autor=autor_de_peticion(request),
+        autor=autor,
         origen=estados.ORIGEN_HISTORIA,
         tipo_contenido="fuente",
         fecha_fuente=fecha_fuente,
@@ -616,7 +641,6 @@ async def usar_historia(request: Request) -> Response:
             publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
-    generar = datos.get("generar", True)
     genero = False
     if marca and generar:
         try:
@@ -627,19 +651,53 @@ async def usar_historia(request: Request) -> Response:
     repos.actualizar_noticia_cluster(cluster_id, estado="usado", publicacion_id=contenido["id"])
     repos.marcar_items_cluster_usados(cluster_id, contenido["id"])
     plataformas = repos.listar_piezas_fila(contenido["id"])
-    return JSONResponse(
-        {
-            "contenido": {**contenido, "plataformas": plataformas},
-            "copy_en_proceso": genero,
-        }
-    )
+    return 200, {
+        "contenido": {**contenido, "plataformas": plataformas},
+        "copy_en_proceso": genero,
+    }
 
 
-async def descartar_historia(request: Request) -> Response:
-    """POST /api/noticias/historias/{id}/descartar: marca la historia `estado=descartado`."""
+async def usar_historia(request: Request) -> Response:
+    """POST /api/noticias/historias/{id}/usar: lleva la historia al tablero (borrador).
+
+    Cuerpo `{redes?: [ids], generar?: bool}`. Reusa el camino de la aportación manual: crea un
+    `contenido` (`flujo='importante'`, `origen='historia'`, `tipo_contenido='fuente'`) con el
+    título/resumen representativos de la historia y sus enlaces corroborantes en la nota; si
+    hay marca y `generar` (def True), encola copy. Marca el cluster `usado` + `publicacion_id` y
+    todos sus items `usado`. Idempotente-amistoso: si ya estaba usado, devuelve lo enlazado.
+    """
     cluster_id = request.path_params["cluster_id"]
+    status, cuerpo, cluster = await run_in_threadpool(_cargar_usar, cluster_id)
+    if status is not None:
+        return JSONResponse(cuerpo, status_code=status)
+
+    from ...pipeline_contenido import _admitir as _pc_ingesta
+
+    # Una historia extranjera aún sin traducir NO baja al tablero en inglés: la traducimos EN EL
+    # ACTO (y la persistimos) antes de crear la pieza, en vez de esperar al barrido del daemon.
+    if _pc_ingesta._falta_traduccion(cluster):
+        traducido = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
+        if traducido is None:
+            return JSONResponse(
+                {"error": "No se pudo traducir la historia ahora mismo. Inténtalo en unos segundos."},
+                status_code=503,
+            )
+        cluster = traducido
+
+    datos = await leer_json(request)
+    redes_iniciales = _redes_iniciales(datos.get("redes"))
+    generar = datos.get("generar", True)
+    autor = autor_de_peticion(request)
+
+    status, cuerpo = await run_in_threadpool(
+        _materializar_usar, cluster, cluster_id, redes_iniciales, generar, autor
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _descartar_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
     if repos.obtener_noticia_cluster(cluster_id) is None:
-        return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
+        return 404, {"error": "Esa historia ya no existe."}
     cluster = repos.actualizar_noticia_cluster(cluster_id, estado="descartado")
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA) if cluster else []
     historia = (
@@ -647,7 +705,31 @@ async def descartar_historia(request: Request) -> Response:
         if cluster
         else None
     )
-    return JSONResponse({"historia": historia})
+    return 200, {"historia": historia}
+
+
+async def descartar_historia(request: Request) -> Response:
+    """POST /api/noticias/historias/{id}/descartar: marca la historia `estado=descartado`."""
+    cluster_id = request.path_params["cluster_id"]
+    status, cuerpo = await run_in_threadpool(_descartar_historia, cluster_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _restaurar_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
+    cluster = repos.obtener_noticia_cluster(cluster_id)
+    if cluster is None:
+        return 404, {"error": "Esa historia ya no existe."}
+    estado = cluster.get("estado") or "nuevo"
+    if estado == "usado" or (cluster.get("publicacion_id") or ""):
+        return 400, {"error": "Esa historia ya se usó: vive en el tablero, no en el pool."}
+    if estado == "descartado":
+        cluster = repos.actualizar_noticia_cluster(cluster_id, estado="nuevo") or cluster
+    items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
+    historia = _historia_a_dict(
+        cluster, items, pieza_estado=_pieza_estado_de(cluster),
+        umbral=_evaluar_umbral(cluster, {}),
+    )
+    return 200, {"historia": historia}
 
 
 async def restaurar_historia(request: Request) -> Response:
@@ -659,27 +741,26 @@ async def restaurar_historia(request: Request) -> Response:
     está `nuevo` devuelve la historia tal cual.
     """
     cluster_id = request.path_params["cluster_id"]
-    cluster = repos.obtener_noticia_cluster(cluster_id)
-    if cluster is None:
-        return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
-    estado = cluster.get("estado") or "nuevo"
-    if estado == "usado" or (cluster.get("publicacion_id") or ""):
-        return JSONResponse(
-            {"error": "Esa historia ya se usó: vive en el tablero, no en el pool."},
-            status_code=400,
-        )
-    if estado == "descartado":
-        cluster = repos.actualizar_noticia_cluster(cluster_id, estado="nuevo") or cluster
-    items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
-    historia = _historia_a_dict(
-        cluster, items, pieza_estado=_pieza_estado_de(cluster),
-        umbral=_evaluar_umbral(cluster, {}),
-    )
-    return JSONResponse({"historia": historia})
+    status, cuerpo = await run_in_threadpool(_restaurar_historia, cluster_id)
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # Tope de ids por lote, para que un cuerpo enorme no dispare un barrido de updates sin control.
 _MAX_LOTE_DESCARTE = 500
+
+
+def _descartar_historias_lote(ids: list) -> dict[str, Any]:
+    descartadas = 0
+    for cid in dict.fromkeys(ids):  # dedup preservando orden; evita doble update del mismo id
+        if not isinstance(cid, str) or not cid:
+            continue
+        if descartadas >= _MAX_LOTE_DESCARTE:
+            break
+        if repos.obtener_noticia_cluster(cid) is None:
+            continue
+        repos.actualizar_noticia_cluster(cid, estado="descartado")
+        descartadas += 1
+    return {"descartadas": descartadas}
 
 
 async def descartar_historias_lote(request: Request) -> Response:
@@ -694,17 +775,8 @@ async def descartar_historias_lote(request: Request) -> Response:
     ids = datos.get("ids")
     if not isinstance(ids, list):
         return JSONResponse({"error": "Se esperaba una lista de ids."}, status_code=400)
-    descartadas = 0
-    for cid in dict.fromkeys(ids):  # dedup preservando orden; evita doble update del mismo id
-        if not isinstance(cid, str) or not cid:
-            continue
-        if descartadas >= _MAX_LOTE_DESCARTE:
-            break
-        if repos.obtener_noticia_cluster(cid) is None:
-            continue
-        repos.actualizar_noticia_cluster(cid, estado="descartado")
-        descartadas += 1
-    return JSONResponse({"descartadas": descartadas})
+    cuerpo = await run_in_threadpool(_descartar_historias_lote, ids)
+    return JSONResponse(cuerpo)
 
 
 async def borrar_historias_lote(request: Request) -> Response:
@@ -719,7 +791,7 @@ async def borrar_historias_lote(request: Request) -> Response:
     if not isinstance(ids, list):
         return JSONResponse({"error": "Se esperaba una lista de ids."}, status_code=400)
     limpios = [c for c in ids if isinstance(c, str) and c][:_MAX_LOTE_DESCARTE]
-    borradas = repos.borrar_clusters_con_items(limpios)
+    borradas = await run_in_threadpool(repos.borrar_clusters_con_items, limpios)
     return JSONResponse({"borradas": borradas})
 
 
@@ -737,5 +809,5 @@ async def borrar_todas_historias(request: Request) -> Response:
     estado = (datos.get("estado") or "").strip() or None
     if estado is not None and estado not in repos.ESTADOS_NOTICIA_CLUSTER:
         return JSONResponse({"error": "Estado no permitido."}, status_code=400)
-    borradas = repos.vaciar_clusters(marca, estado)
+    borradas = await run_in_threadpool(repos.vaciar_clusters, marca, estado)
     return JSONResponse({"borradas": borradas})

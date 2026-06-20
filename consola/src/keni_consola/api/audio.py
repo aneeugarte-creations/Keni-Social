@@ -24,6 +24,12 @@ QUE VIVE AQUI
 
 SEGURIDAD: errores en español como JSON `{"error": ...}` sin tracebacks; SQL parametrizado en
 `repos`/`db`. El NOMBRE del objeto de media lo genera el servidor (sha256), nunca el cliente.
+
+CONCURRENCIA: los handlers son `async` pero el acceso a Postgres (`repos`/`db`) es síncrono;
+todo el trabajo de BD va en `run_in_threadpool` para no bloquear el event loop. El handler
+conserva el parseo async (`leer_json`/`form`, `query_params`/`path_params`, lectura de sesión)
+y la validación pura; el helper síncrono `_*_db` concentra la BD en una unidad por petición y
+devuelve `(status, cuerpo)`. La subida multipart sigue en el handler (`await`).
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ from __future__ import annotations
 import json
 import logging
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -124,6 +131,15 @@ def _artefacto_a_dict(art: dict) -> dict:
 # --------------------------------------------------------------------------- #
 
 
+def _listar_transcripciones_db(
+    marca: str | None, estado: str | None, visible_para: str | None
+) -> dict:
+    filas = repos.listar_audio_transcripciones(
+        marca=marca, estado=estado, visible_para=visible_para,
+    )
+    return {"transcripciones": [_transcripcion_a_dict(f) for f in filas]}
+
+
 async def listar_transcripciones(request: Request) -> Response:
     """GET /api/audio/transcripciones?marca=&estado=: audios de marca + los personales del usuario."""
     marca = request.query_params.get("marca") or None
@@ -131,10 +147,33 @@ async def listar_transcripciones(request: Request) -> Response:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     estado = request.query_params.get("estado") or None
     autor = seguridad.autor_de_peticion(request)
-    filas = repos.listar_audio_transcripciones(
-        marca=marca, estado=estado, visible_para=(autor or {}).get("id"),
+    cuerpo = await run_in_threadpool(
+        _listar_transcripciones_db, marca, estado, (autor or {}).get("id")
     )
-    return JSONResponse({"transcripciones": [_transcripcion_a_dict(f) for f in filas]})
+    return JSONResponse(cuerpo)
+
+
+def _crear_transcripcion_db(
+    *,
+    marca: str,
+    nombre: str,
+    media_id: str,
+    idioma: str,
+    tratamientos: list[str],
+    autor_id: str,
+) -> tuple[int, dict]:
+    fila = repos.crear_audio_transcripcion(
+        marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente",
+        tratamientos=",".join(tratamientos), autor_id=autor_id,
+    )
+    gen, err = _encolar_asr(fila, idioma, tratamientos)
+    if err is not None:
+        # No se pudo encolar (cola llena): NO dejar una fila huérfana en 'pendiente' sin job.
+        repos.borrar_audio_transcripcion(fila["id"])
+        return err
+    # Liga el job del motor (whisper) para seguir su progreso en vivo desde la página.
+    fila = repos.actualizar_audio_transcripcion(fila["id"], {"gen_id": gen["id"]}) or fila
+    return 201, {"transcripcion": _transcripcion_a_dict(fila), "gen_id": gen["id"]}
 
 
 async def crear_transcripcion(request: Request) -> Response:
@@ -177,26 +216,24 @@ async def crear_transcripcion(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo guardar el archivo."}, status_code=500)
 
-    fila = repos.crear_audio_transcripcion(
-        marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado="pendiente",
-        tratamientos=",".join(tratamientos), autor_id=autor_id,
+    status, cuerpo = await run_in_threadpool(
+        _crear_transcripcion_db,
+        marca=marca,
+        nombre=nombre,
+        media_id=media_id,
+        idioma=idioma,
+        tratamientos=tratamientos,
+        autor_id=autor_id,
     )
-    gen = _encolar_asr(fila, idioma, tratamientos)
-    if isinstance(gen, Response):
-        # No se pudo encolar (cola llena): NO dejar una fila huérfana en 'pendiente' sin job.
-        repos.borrar_audio_transcripcion(fila["id"])
-        return gen
-    # Liga el job del motor (whisper) para seguir su progreso en vivo desde la página.
-    fila = repos.actualizar_audio_transcripcion(fila["id"], {"gen_id": gen["id"]}) or fila
-    return JSONResponse(
-        {"transcripcion": _transcripcion_a_dict(fila), "gen_id": gen["id"]}, status_code=201
-    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
-def _encolar_asr(fila: dict, idioma: str, tratamientos: list[str]) -> dict | Response:
-    """Encola el job de transcripción del motor de audio. Devuelve el registro o un 429."""
+def _encolar_asr(
+    fila: dict, idioma: str, tratamientos: list[str]
+) -> tuple[dict | None, tuple[int, dict] | None]:
+    """Encola el job de transcripción del motor de audio. Devuelve `(registro, None)` o `(None, 429)`."""
     try:
-        return generaciones.encolar_job_proceso(
+        gen = generaciones.encolar_job_proceso(
             kind=jobspec.PROC_TRANSCRIBIR_AUDIO,
             params={
                 "transcripcion_id": fila["id"],
@@ -207,84 +244,113 @@ def _encolar_asr(fila: dict, idioma: str, tratamientos: list[str]) -> dict | Res
             marca=fila["marca"],
             etiqueta="Transcripción de audio",
         )
+        return gen, None
     except generaciones.ColaLlenaError:
-        return JSONResponse(
+        return None, (
+            429,
             {"error": "La cola de generación está saturada; reintenta en un momento."},
-            status_code=429,
         )
+
+
+def _obtener_transcripcion_db(transcripcion_id: str) -> tuple[int, dict]:
+    fila = repos.obtener_audio_transcripcion(transcripcion_id)
+    if fila is None:
+        return 404, {"error": "Esa transcripción no existe."}
+    return 200, {"transcripcion": _transcripcion_a_dict(fila)}
 
 
 async def obtener_transcripcion(request: Request) -> Response:
     """GET /api/audio/transcripciones/{id}: detalle del audio (404 si no existe)."""
-    fila = repos.obtener_audio_transcripcion(request.path_params["transcripcion_id"])
-    if fila is None:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
-    return JSONResponse({"transcripcion": _transcripcion_a_dict(fila)})
+    status, cuerpo = await run_in_threadpool(
+        _obtener_transcripcion_db, request.path_params["transcripcion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar_transcripcion(request: Request) -> Response:
-    """PUT /api/audio/transcripciones/{id}: edita nombre/marca(ámbito)/idioma/estado/segmentos/texto."""
-    transcripcion_id = request.path_params["transcripcion_id"]
+def _actualizar_transcripcion_db(
+    transcripcion_id: str, datos: dict, autor_id: str | None
+) -> tuple[int, dict]:
     if repos.obtener_audio_transcripcion(transcripcion_id) is None:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Esa transcripción no existe."}
 
     cambios: dict[str, object] = {}
     if "segmentos" in datos:
         segs = datos["segmentos"]
         if not isinstance(segs, (list, str)):
-            return JSONResponse({"error": "`segmentos` debe ser una lista."}, status_code=400)
+            return 400, {"error": "`segmentos` debe ser una lista."}
         cambios["segmentos"] = segs if isinstance(segs, str) else json.dumps(segs, ensure_ascii=False)
     for campo in ("texto", "nombre", "idioma"):
         if campo in datos:
             if not isinstance(datos[campo], str):
-                return JSONResponse({"error": f"`{campo}` debe ser texto."}, status_code=400)
+                return 400, {"error": f"`{campo}` debe ser texto."}
             cambios[campo] = datos[campo]
     if "estado" in datos:
         if datos["estado"] not in db.ESTADOS_AUDIO_TRANSCRIPCION:
-            return JSONResponse({"error": "Estado de transcripción no válido."}, status_code=400)
+            return 400, {"error": "Estado de transcripción no válido."}
         cambios["estado"] = datos["estado"]
     if "marca" in datos:
         # Mover el audio entre PERSONAL ('') y una marca. Al hacerlo personal, su dueño es quien edita.
         marca, err = _validar_ambito(datos["marca"])
         if err:
-            return JSONResponse({"error": err}, status_code=400)
+            return 400, {"error": err}
         cambios["marca"] = marca
         if not marca:
-            autor = seguridad.autor_de_peticion(request)
-            if not (autor or {}).get("id"):
-                return JSONResponse(
-                    {"error": "Inicia sesión para hacer un audio personal."}, status_code=400
-                )
-            cambios["autor_id"] = autor["id"]
+            if not autor_id:
+                return 400, {"error": "Inicia sesión para hacer un audio personal."}
+            cambios["autor_id"] = autor_id
     if not cambios:
-        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
+        return 400, {"error": "Nada que actualizar."}
 
     fila = repos.actualizar_audio_transcripcion(transcripcion_id, cambios)
-    return JSONResponse({"transcripcion": _transcripcion_a_dict(fila)})
+    return 200, {"transcripcion": _transcripcion_a_dict(fila)}
+
+
+async def actualizar_transcripcion(request: Request) -> Response:
+    """PUT /api/audio/transcripciones/{id}: edita nombre/marca(ámbito)/idioma/estado/segmentos/texto."""
+    transcripcion_id = request.path_params["transcripcion_id"]
+    datos = await leer_json(request)
+    autor = seguridad.autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(
+        _actualizar_transcripcion_db, transcripcion_id, datos, (autor or {}).get("id")
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_transcripcion_db(transcripcion_id: str) -> tuple[int, dict]:
+    if not repos.borrar_audio_transcripcion(transcripcion_id):
+        return 404, {"error": "Esa transcripción no existe."}
+    return 204, {}
 
 
 async def borrar_transcripcion(request: Request) -> Response:
     """DELETE /api/audio/transcripciones/{id}: borra el audio y sus artefactos (204)."""
-    ok = repos.borrar_audio_transcripcion(request.path_params["transcripcion_id"])
-    if not ok:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
-    return Response(status_code=204)
+    status, cuerpo = await run_in_threadpool(
+        _borrar_transcripcion_db, request.path_params["transcripcion_id"]
+    )
+    if status == 204:
+        return Response(status_code=204)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _retranscribir_db(transcripcion_id: str) -> tuple[int, dict]:
+    fila = repos.obtener_audio_transcripcion(transcripcion_id)
+    if fila is None:
+        return 404, {"error": "Esa transcripción no existe."}
+    if not fila.get("media_id"):
+        return 400, {"error": "La transcripción no tiene un audio asociado."}
+    gen, err = _encolar_asr(fila, fila.get("idioma") or "es-MX", [])
+    if err is not None:
+        return err
+    repos.actualizar_audio_transcripcion(transcripcion_id, {"gen_id": gen["id"]})
+    return 200, {"gen_id": gen["id"]}
 
 
 async def retranscribir(request: Request) -> Response:
     """POST /api/audio/transcripciones/{id}/transcribir: re-encola el ASR. -> `{gen_id}` | 404/429."""
-    transcripcion_id = request.path_params["transcripcion_id"]
-    fila = repos.obtener_audio_transcripcion(transcripcion_id)
-    if fila is None:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
-    if not fila.get("media_id"):
-        return JSONResponse({"error": "La transcripción no tiene un audio asociado."}, status_code=400)
-    gen = _encolar_asr(fila, fila.get("idioma") or "es-MX", [])
-    if isinstance(gen, Response):
-        return gen
-    repos.actualizar_audio_transcripcion(transcripcion_id, {"gen_id": gen["id"]})
-    return JSONResponse({"gen_id": gen["id"]})
+    status, cuerpo = await run_in_threadpool(
+        _retranscribir_db, request.path_params["transcripcion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 # --------------------------------------------------------------------------- #
@@ -317,17 +383,44 @@ def _asegurar_artefactos_base(fila: dict) -> None:
         _log.exception("audio: no se pudo reconstruir el SRT de %s", fila["id"])
 
 
-async def listar_artefactos(request: Request) -> Response:
-    """GET /api/audio/transcripciones/{id}/artefactos: artefactos del audio (srt primero)."""
-    transcripcion_id = request.path_params["transcripcion_id"]
+def _listar_artefactos_db(transcripcion_id: str) -> tuple[int, dict]:
     fila = repos.obtener_audio_transcripcion(transcripcion_id)
     if fila is None:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
+        return 404, {"error": "Esa transcripción no existe."}
     arts = repos.listar_audio_artefactos(transcripcion_id)
     if not arts and fila["estado"] in ("transcrito", "editado"):
         _asegurar_artefactos_base(fila)
         arts = repos.listar_audio_artefactos(transcripcion_id)
-    return JSONResponse({"artefactos": [_artefacto_a_dict(a) for a in arts]})
+    return 200, {"artefactos": [_artefacto_a_dict(a) for a in arts]}
+
+
+async def listar_artefactos(request: Request) -> Response:
+    """GET /api/audio/transcripciones/{id}/artefactos: artefactos del audio (srt primero)."""
+    status, cuerpo = await run_in_threadpool(
+        _listar_artefactos_db, request.path_params["transcripcion_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _crear_artefacto_db(transcripcion_id: str, datos: dict) -> tuple[int, dict]:
+    fila = repos.obtener_audio_transcripcion(transcripcion_id)
+    if fila is None:
+        return 404, {"error": "Esa transcripción no existe."}
+    tipo = datos.get("tipo")
+    if tipo not in audio_artefactos.TRATAMIENTOS or tipo == "corregido":
+        return 400, {
+            "error": "Tipo de tratamiento no válido (limpio, resumen, preguntas o ideas)."
+        }
+    # `origen_id`: artefacto del que parte (herencia). Si no se indica, parte del SRT (base
+    # canónica = transcripción con timestamps). Debe pertenecer a este audio.
+    origen = _resolver_origen(transcripcion_id, datos.get("origen_id"))
+    if isinstance(origen, tuple):
+        return origen
+    try:
+        r = audio_artefactos.lanzar_tratamiento(fila, tipo, origen=origen)
+    except audio_artefactos.AudioArtefactoError as e:
+        return 400, {"error": str(e)}
+    return 201, {"artefacto": _artefacto_a_dict(r["artefacto"])}
 
 
 async def crear_artefacto(request: Request) -> Response:
@@ -337,90 +430,91 @@ async def crear_artefacto(request: Request) -> Response:
     worker rellenará. El SRT y el texto plano se crean al transcribir, no aquí.
     """
     transcripcion_id = request.path_params["transcripcion_id"]
-    fila = repos.obtener_audio_transcripcion(transcripcion_id)
-    if fila is None:
-        return JSONResponse({"error": "Esa transcripción no existe."}, status_code=404)
     datos = await leer_json(request)
-    tipo = datos.get("tipo")
-    if tipo not in audio_artefactos.TRATAMIENTOS or tipo == "corregido":
-        return JSONResponse(
-            {"error": "Tipo de tratamiento no válido (limpio, resumen, preguntas o ideas)."},
-            status_code=400,
-        )
-    # `origen_id`: artefacto del que parte (herencia). Si no se indica, parte del SRT (base
-    # canónica = transcripción con timestamps). Debe pertenecer a este audio.
-    origen = _resolver_origen(transcripcion_id, datos.get("origen_id"))
-    if isinstance(origen, Response):
-        return origen
-    try:
-        r = audio_artefactos.lanzar_tratamiento(fila, tipo, origen=origen)
-    except audio_artefactos.AudioArtefactoError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)
+    status, cuerpo = await run_in_threadpool(_crear_artefacto_db, transcripcion_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-def _resolver_origen(transcripcion_id: str, origen_id: object) -> dict | None | Response:
-    """Artefacto fuente de un tratamiento. None/'' => el SRT del audio (base). 400 si no encaja."""
+def _resolver_origen(
+    transcripcion_id: str, origen_id: object
+) -> dict | None | tuple[int, dict]:
+    """Artefacto fuente de un tratamiento. None/'' => el SRT del audio (base). `(400, ...)` si no encaja."""
     arts = repos.listar_audio_artefactos(transcripcion_id)
     if isinstance(origen_id, str) and origen_id.strip():
         origen = next((a for a in arts if a["id"] == origen_id), None)
         if origen is None:
-            return JSONResponse({"error": "El artefacto de origen no existe."}, status_code=400)
+            return 400, {"error": "El artefacto de origen no existe."}
         return origen
     return next((a for a in arts if a["tipo"] == "srt"), None)
 
 
+def _obtener_artefacto_db(artefacto_id: str) -> tuple[int, dict]:
+    art = repos.obtener_audio_artefacto(artefacto_id)
+    if art is None:
+        return 404, {"error": "Ese artefacto no existe."}
+    return 200, {"artefacto": _artefacto_a_dict(art)}
+
+
 async def obtener_artefacto(request: Request) -> Response:
     """GET /api/audio/artefactos/{id}: un artefacto (404 si no existe)."""
-    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
-    if art is None:
-        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
-    return JSONResponse({"artefacto": _artefacto_a_dict(art)})
+    status, cuerpo = await run_in_threadpool(
+        _obtener_artefacto_db, request.path_params["artefacto_id"]
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def actualizar_artefacto(request: Request) -> Response:
-    """PUT /api/audio/artefactos/{id}: edita `contenido`/`titulo`. El SRT crudo NO es editable."""
-    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+def _actualizar_artefacto_db(artefacto_id: str, datos: dict) -> tuple[int, dict]:
+    art = repos.obtener_audio_artefacto(artefacto_id)
     if art is None:
-        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
+        return 404, {"error": "Ese artefacto no existe."}
     if art["tipo"] == "srt":
-        return JSONResponse({"error": "El SRT no es editable."}, status_code=400)
-    datos = await leer_json(request)
+        return 400, {"error": "El SRT no es editable."}
     cambios: dict[str, object] = {}
     for campo in ("contenido", "titulo"):
         if campo in datos:
             if not isinstance(datos[campo], str):
-                return JSONResponse({"error": f"`{campo}` debe ser texto."}, status_code=400)
+                return 400, {"error": f"`{campo}` debe ser texto."}
             cambios[campo] = datos[campo]
     if not cambios:
-        return JSONResponse({"error": "Nada que actualizar."}, status_code=400)
+        return 400, {"error": "Nada que actualizar."}
     # Al editar a mano, el artefacto queda 'listo' (por si venía de un error o a medias).
     cambios["estado"] = "listo"
     actualizado = repos.actualizar_audio_artefacto(art["id"], cambios)
-    return JSONResponse({"artefacto": _artefacto_a_dict(actualizado)})
+    return 200, {"artefacto": _artefacto_a_dict(actualizado)}
+
+
+async def actualizar_artefacto(request: Request) -> Response:
+    """PUT /api/audio/artefactos/{id}: edita `contenido`/`titulo`. El SRT crudo NO es editable."""
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(
+        _actualizar_artefacto_db, request.path_params["artefacto_id"], datos
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _borrar_artefacto_db(artefacto_id: str) -> tuple[int, dict]:
+    if not repos.borrar_audio_artefacto(artefacto_id):
+        return 404, {"error": "Ese artefacto no existe."}
+    return 204, {}
 
 
 async def borrar_artefacto(request: Request) -> Response:
     """DELETE /api/audio/artefactos/{id}: borra un artefacto (204)."""
-    ok = repos.borrar_audio_artefacto(request.path_params["artefacto_id"])
-    if not ok:
-        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
-    return Response(status_code=204)
+    status, cuerpo = await run_in_threadpool(
+        _borrar_artefacto_db, request.path_params["artefacto_id"]
+    )
+    if status == 204:
+        return Response(status_code=204)
+    return JSONResponse(cuerpo, status_code=status)
 
 
-async def guardar_respuestas(request: Request) -> Response:
-    """PUT /api/audio/artefactos/{id}/respuestas (`{respuestas:{...}}`): guarda las respuestas del cajón.
-
-    PERSISTENCIA REAL (servidor) de las respuestas del formulario de preguntas, por artefacto. El
-    cuerpo es un objeto `{<índice>: "<respuesta>"}`; se guardan solo las no vacías.
-    """
-    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
+def _guardar_respuestas_db(artefacto_id: str, datos: dict) -> tuple[int, dict]:
+    art = repos.obtener_audio_artefacto(artefacto_id)
     if art is None:
-        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
-    datos = await leer_json(request)
+        return 404, {"error": "Ese artefacto no existe."}
     respuestas = datos.get("respuestas")
     if not isinstance(respuestas, dict):
-        return JSONResponse({"error": "`respuestas` debe ser un objeto."}, status_code=400)
+        return 400, {"error": "`respuestas` debe ser un objeto."}
     limpio = {
         str(k): v.strip()
         for k, v in respuestas.items()
@@ -429,7 +523,42 @@ async def guardar_respuestas(request: Request) -> Response:
     actualizado = repos.actualizar_audio_artefacto(
         art["id"], {"respuestas": json.dumps(limpio, ensure_ascii=False) if limpio else ""}
     )
-    return JSONResponse({"artefacto": _artefacto_a_dict(actualizado)})
+    return 200, {"artefacto": _artefacto_a_dict(actualizado)}
+
+
+async def guardar_respuestas(request: Request) -> Response:
+    """PUT /api/audio/artefactos/{id}/respuestas (`{respuestas:{...}}`): guarda las respuestas del cajón.
+
+    PERSISTENCIA REAL (servidor) de las respuestas del formulario de preguntas, por artefacto. El
+    cuerpo es un objeto `{<índice>: "<respuesta>"}`; se guardan solo las no vacías.
+    """
+    datos = await leer_json(request)
+    status, cuerpo = await run_in_threadpool(
+        _guardar_respuestas_db, request.path_params["artefacto_id"], datos
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _corregir_artefacto_db(artefacto_id: str, datos: dict) -> tuple[int, dict]:
+    art = repos.obtener_audio_artefacto(artefacto_id)
+    if art is None:
+        return 404, {"error": "Ese artefacto no existe."}
+    fila = repos.obtener_audio_transcripcion(art["transcripcion_id"])
+    if fila is None:
+        return 404, {"error": "El audio de ese artefacto ya no existe."}
+    respuestas = datos.get("respuestas")
+    if not isinstance(respuestas, list) or not any(
+        isinstance(r, str) and r.strip() for r in respuestas
+    ):
+        return 400, {"error": "Faltan las respuestas a las dudas."}
+    try:
+        # El 'corregido' hereda del propio artefacto de 'preguntas' (su herencia visible).
+        r = audio_artefactos.lanzar_tratamiento(
+            fila, "corregido", origen=art, respuestas=respuestas
+        )
+    except audio_artefactos.AudioArtefactoError as e:
+        return 400, {"error": str(e)}
+    return 201, {"artefacto": _artefacto_a_dict(r["artefacto"])}
 
 
 async def corregir_artefacto(request: Request) -> Response:
@@ -438,26 +567,11 @@ async def corregir_artefacto(request: Request) -> Response:
     `{id}` es un artefacto de 'preguntas'. Lanza un tratamiento 'corregido' sobre su transcripción con
     las respuestas del equipo. Devuelve el nuevo artefacto (estado 'generando').
     """
-    art = repos.obtener_audio_artefacto(request.path_params["artefacto_id"])
-    if art is None:
-        return JSONResponse({"error": "Ese artefacto no existe."}, status_code=404)
-    fila = repos.obtener_audio_transcripcion(art["transcripcion_id"])
-    if fila is None:
-        return JSONResponse({"error": "El audio de ese artefacto ya no existe."}, status_code=404)
     datos = await leer_json(request)
-    respuestas = datos.get("respuestas")
-    if not isinstance(respuestas, list) or not any(
-        isinstance(r, str) and r.strip() for r in respuestas
-    ):
-        return JSONResponse({"error": "Faltan las respuestas a las dudas."}, status_code=400)
-    try:
-        # El 'corregido' hereda del propio artefacto de 'preguntas' (su herencia visible).
-        r = audio_artefactos.lanzar_tratamiento(
-            fila, "corregido", origen=art, respuestas=respuestas
-        )
-    except audio_artefactos.AudioArtefactoError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    return JSONResponse({"artefacto": _artefacto_a_dict(r["artefacto"])}, status_code=201)
+    status, cuerpo = await run_in_threadpool(
+        _corregir_artefacto_db, request.path_params["artefacto_id"], datos
+    )
+    return JSONResponse(cuerpo, status_code=status)
 
 
 RUTAS = [
