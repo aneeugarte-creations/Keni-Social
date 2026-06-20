@@ -207,33 +207,6 @@ sudo systemctl start keni-janitor.service    # correr ya una vez
 tail -n 30 /var/log/keni-janitor.log
 ```
 
-## Deploy del back SIN downtime (blue-green) — `KENI_DEPLOY_BLUEGREEN`
-
-Cuando cambia el **back**, `deploy.sh` hace un **blue-green** del servicio para que **nunca
-haya ventana sin back sano** (antes se paraba el back mientras corría el esquema y el `up`, y
-Traefik devolvía 405 ~1 min). El patrón: arranca el contenedor **NUEVO junto al viejo**
-(`--scale back=2`, sin recrear el viejo, que sigue sirviendo), espera a que el nuevo quede
-`healthy` —**Traefik solo enruta a contenedores sanos**, así que hasta entonces sirve el
-viejo—, recrea el viejo a la imagen nueva con el nuevo ya sirviendo, y por último retira la
-réplica extra (`--scale back=1`). Es seguro porque el back es **stateless** (sesiones y cola
-viven en Postgres) y **no publica puerto de host ni tiene `container_name`** (escalar a 2 no
-choca). Si el back **nuevo nunca queda sano**, se retira la réplica nueva y **PROD sigue con
-el viejo (sin downtime)**; el deploy sale en **rojo** y el próximo deploy reconstruye.
-
-- **Kill-switch:** ON por defecto. Para volver al cutover clásico *stop-the-world*, pon
-  `KENI_DEPLOY_BLUEGREEN=0` en `deploy/.env` (o expórtalo: `KENI_DEPLOY_BLUEGREEN=0 sh
-  deploy/deploy.sh .env`). Valores `0`/`no`/`off`/`false` lo desactivan; cualquier otro (o
-  vacío) lo deja ON.
-- **Requisito — migraciones compatibles hacia atrás (expand/contract):** durante el solape
-  conviven back **viejo y nuevo**, y la migración de esquema corre con el viejo aún sirviendo.
-  El esquema debe ser **aditivo e idempotente** (lo es por diseño, **ADR 0004**). Una migración
-  destructiva (DROP/RENAME/constraint NOT NULL sin default) rompería al back viejo durante el
-  solape: hazla en **dos deploys** (expand ahora, contract después) o desactiva el blue-green
-  para ese deploy concreto con `KENI_DEPLOY_BLUEGREEN=0`.
-- La red de seguridad de rollback (`:previa` + verificación de salud [6/6] con re-verificación
-  de la `:previa`) sigue **intacta**: si tras el cutover algún servicio no queda sano, se
-  revierte a `:previa` como siempre. `KENI_DEPLOY_SIN_VERIFICAR=1` salta esa verificación.
-
 ## Bootstrap de Garage (una sola vez)
 
 Garage arranca "vacío": hay que asignar layout y crear bucket + clave.
