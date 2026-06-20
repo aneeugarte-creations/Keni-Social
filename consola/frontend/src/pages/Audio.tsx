@@ -864,17 +864,6 @@ function Lector({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const aSugerencias = useMutation({
-    mutationFn: (id: string) => api.audio.ideasASugerencias(id),
-    onSuccess: (r) =>
-      toast.success(
-        r.creadas
-          ? `${r.creadas} idea${r.creadas === 1 ? "" : "s"} enviada${r.creadas === 1 ? "" : "s"} a Sugerencias`
-          : "No se encontraron ideas para enviar",
-      ),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const onBorrar = async () => {
     if (!artefacto) return;
     const nombre = artefacto.titulo || TITULO_ARTEFACTO[artefacto.tipo] || artefacto.tipo;
@@ -896,8 +885,6 @@ function Lector({
     !!artefacto && artefacto.estado === "listo" && artefacto.tipo !== "preguntas";
   // El SRT (base canónica) no se borra; el resto sí, desde la barra (con confirmación).
   const puedeBorrar = !!artefacto && artefacto.estado === "listo" && artefacto.tipo !== "srt";
-  // Las ideas de audio se pueden volcar al kanban de Sugerencias.
-  const esIdeasListo = !!artefacto && artefacto.tipo === "ideas" && artefacto.estado === "listo";
   // Herencia del artefacto abierto (si es un tratamiento): de qué deriva.
   const origen =
     artefacto && artefacto.origen_id
@@ -951,23 +938,6 @@ function Lector({
         ) : null}
         {acciones || puedeBorrar ? (
           <div className="ml-auto flex shrink-0 items-center gap-1">
-            {esIdeasListo ? (
-              <Tooltip label="Enviar a Sugerencias" side="bottom">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7"
-                  onClick={() => aSugerencias.mutate(artefacto!.id)}
-                  disabled={aSugerencias.isPending}
-                >
-                  {aSugerencias.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Lightbulb className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </Tooltip>
-            ) : null}
             {acciones && editable ? (
               <Tooltip label={editando ? "Vista" : "Editar"} side="bottom">
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditando((v) => !v)}>
@@ -1053,6 +1023,8 @@ function Lector({
                 onCambio={onCambio}
                 onSeleccionarArtefacto={onSeleccionarArtefacto}
               />
+            ) : artefacto.tipo === "ideas" && !editando ? (
+              <FormularioIdeas artefacto={artefacto} audio={audio} onCambio={onCambio} />
             ) : editando && editable ? (
               <div className="flex min-h-0 flex-1 flex-col gap-2">
                 <Textarea
@@ -1154,6 +1126,200 @@ function parsePreguntas(contenido: string): PreguntaItem[] {
     out.push({ t, frase, pregunta });
   }
   return out;
+}
+
+// --- Ideas: artefacto JSON estructurado como lista numerada por categoría ---
+
+interface IdeaItem {
+  idea: string;
+  porque?: string;
+  minuto?: string;
+  categoria?: string;
+}
+
+/** Extrae el array de ideas del contenido JSON (tolera ```fences```). null si no es JSON (legacy). */
+function extraerIdeas(contenido: string): IdeaItem[] | null {
+  const txt = (contenido || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  const ini = txt.indexOf("[");
+  const fin = txt.lastIndexOf("]");
+  if (ini === -1 || fin < ini) return null;
+  try {
+    const arr = JSON.parse(txt.slice(ini, fin + 1));
+    if (!Array.isArray(arr)) return null;
+    return arr.filter(
+      (x): x is IdeaItem => !!x && typeof x.idea === "string" && x.idea.trim() !== "",
+    );
+  } catch {
+    return null;
+  }
+}
+
+const CAT_IDEA: { clave: string; etiqueta: string }[] = [
+  { clave: "producto", etiqueta: "Producto / software" },
+  { clave: "contenido", etiqueta: "Contenido" },
+  { clave: "negocio", etiqueta: "Negocio" },
+  { clave: "operacion", etiqueta: "Operación / equipo" },
+];
+const ETIQUETA_CAT_IDEA: Record<string, string> = Object.fromEntries(
+  CAT_IDEA.map((c) => [c.clave, c.etiqueta]),
+);
+/** Categoría de idea (display) -> categoría de la sugerencia del kanban (idea/producto/mejora/bug). */
+function catSugerencia(c?: string): string {
+  return c === "producto" ? "producto" : "idea";
+}
+
+// IDEAS: el artefacto del prompt «Ideas» es un array JSON; se pinta como lista numerada por
+// categoría. Cada idea se manda al kanban de Sugerencias (✦) o se elimina (🗑) por separado; ambas
+// acciones la sacan de la lista y persisten el JSON restante en el artefacto.
+function FormularioIdeas({
+  artefacto,
+  audio,
+  onCambio,
+}: {
+  artefacto: ArtefactoAudio;
+  audio: TranscripcionAudio;
+  onCambio: () => void;
+}) {
+  const parsed = React.useMemo(() => extraerIdeas(artefacto.contenido), [artefacto.contenido]);
+  const [ideas, setIdeas] = React.useState<IdeaItem[]>(() => parsed ?? []);
+  React.useEffect(
+    () => setIdeas(extraerIdeas(artefacto.contenido) ?? []),
+    [artefacto.id, artefacto.contenido],
+  );
+  const [ocupada, setOcupada] = React.useState<number | null>(null);
+
+  const persistir = (arr: IdeaItem[]) => {
+    setIdeas(arr);
+    return api.audio.guardarArtefacto(artefacto.id, { contenido: JSON.stringify(arr, null, 2) });
+  };
+  const restaurar = () => setIdeas(extraerIdeas(artefacto.contenido) ?? []);
+
+  const quitar = async (i: number) => {
+    setOcupada(i);
+    try {
+      await persistir(ideas.filter((_, j) => j !== i));
+      onCambio();
+    } catch (e) {
+      toast.error(mensajeError(e));
+      restaurar();
+    } finally {
+      setOcupada(null);
+    }
+  };
+
+  const guardar = async (i: number) => {
+    const it = ideas[i];
+    setOcupada(i);
+    try {
+      await api.crearSugerencia({
+        titulo: it.idea.slice(0, 200),
+        detalle: [it.porque, it.minuto ? `Minuto: ${it.minuto}` : "", `— De audio: ${audio.nombre}`]
+          .filter(Boolean)
+          .join("\n\n"),
+        categoria: catSugerencia(it.categoria),
+      });
+      await persistir(ideas.filter((_, j) => j !== i));
+      onCambio();
+      toast.success("Idea enviada a Sugerencias");
+    } catch (e) {
+      toast.error(mensajeError(e));
+      restaurar();
+    } finally {
+      setOcupada(null);
+    }
+  };
+
+  // Legacy (markdown) o JSON ilegible: render de texto, sin acciones por idea.
+  if (parsed === null) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border/70 bg-background p-3">
+        <Markdown>{artefacto.contenido || "_(vacío)_"}</Markdown>
+      </div>
+    );
+  }
+  if (!ideas.length) {
+    return <Vacio texto="No quedan ideas: las has enviado a Sugerencias o eliminado." />;
+  }
+
+  // Agrupa por categoría (orden fijo; las desconocidas caen en «Operación»).
+  const grupos = new Map<string, { it: IdeaItem; i: number }[]>();
+  ideas.forEach((it, i) => {
+    const c = ETIQUETA_CAT_IDEA[it.categoria ?? ""] ? (it.categoria as string) : "operacion";
+    const lista = grupos.get(c) ?? [];
+    lista.push({ it, i });
+    grupos.set(c, lista);
+  });
+  const orden = CAT_IDEA.map((c) => c.clave).filter((c) => grupos.has(c));
+  let n = 0;
+
+  return (
+    <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-md border border-border/70 bg-background p-3">
+      {orden.map((cat) => (
+        <div key={cat} className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">{ETIQUETA_CAT_IDEA[cat] ?? cat}</h3>
+          <ol className="space-y-2">
+            {grupos.get(cat)!.map(({ it, i }) => {
+              n += 1;
+              const num = n;
+              return (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 rounded-md border border-border/70 bg-card p-2.5"
+                >
+                  <span className="mt-0.5 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
+                    {num}.
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-medium leading-snug">{it.idea}</p>
+                    {it.porque ? (
+                      <p className="text-xs text-muted-foreground">{it.porque}</p>
+                    ) : null}
+                    {it.minuto ? (
+                      <Badge variant="outline" className="text-[10px] font-normal tabular-nums">
+                        {it.minuto}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Tooltip label="Enviar a Sugerencias" side="left">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        disabled={ocupada !== null}
+                        onClick={() => guardar(i)}
+                      >
+                        {ocupada === i ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Lightbulb className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label="Eliminar" side="left">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        disabled={ocupada !== null}
+                        onClick={() => quitar(i)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </Tooltip>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // Cajón de PREGUNTAS: el artefacto intermedio del prompt «Aclarar» como formulario. Cada duda lleva

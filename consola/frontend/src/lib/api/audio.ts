@@ -174,11 +174,6 @@ export const apiAudio = {
     /** Borra un artefacto. */
     eliminarArtefacto: (id: string) =>
       peticion<void>(`/audio/artefactos/${enc(id)}`, { metodo: "DELETE" }),
-    /** Vuelca las ideas de un artefacto 'ideas' al kanban de Sugerencias. Devuelve cuántas creó. */
-    ideasASugerencias: (id: string) =>
-      peticion<{ creadas: number }>(`/audio/artefactos/${enc(id)}/a-sugerencias`, {
-        metodo: "POST",
-      }),
     /** Guarda (en el servidor) las respuestas del cajón de preguntas: {índice: respuesta}. */
     guardarRespuestas: (id: string, respuestas: Record<string, string>) =>
       peticion<{ artefacto: ArtefactoAudio }>(`/audio/artefactos/${enc(id)}/respuestas`, {
