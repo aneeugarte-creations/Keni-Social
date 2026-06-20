@@ -111,7 +111,7 @@ else
       echo "  'pip install -e ./keni-shared -e ./mcp-metricas -e ./consola'). El CI lo cubrirá." >&2
     else
       echo "→ Gate: contrato de fronteras + catálogo"
-      if ! "$py" -m pytest "$raiz/consola/tests/test_fronteras.py" "$raiz/consola/tests/test_catalogo.py" -q; then
+      if ! "$py" -m pytest "$raiz/consola/tests/test_fronteras.py" "$raiz/consola/tests/test_catalogo.py" "$raiz/consola/tests/test_facades.py" -q; then
         echo "✗ Gate de fronteras ROJO. Arréglalo antes de promover (o KENI_PROMOVER_SIN_GATE=1 para saltarlo)." >&2
         exit 1
       fi

@@ -24,4 +24,4 @@ steps:
       - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
       # Lint de fronteras + contrato del catálogo. NO necesitan Postgres (los tests del
       # endpoint que lo requieren se SALTAN solos); este job es puro contrato estático.
-      - python -m pytest consola/tests/test_fronteras.py consola/tests/test_catalogo.py -q
+      - python -m pytest consola/tests/test_fronteras.py consola/tests/test_catalogo.py consola/tests/test_facades.py -q
