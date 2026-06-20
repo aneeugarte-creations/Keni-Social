@@ -388,6 +388,7 @@ from .config_auth import (  # noqa: F401
 )
 from .config_contenido import (  # noqa: F401
     fusion_modelo,
+    hashtags_modelo,
     insumos_modelo,
 )
 from .config_generacion import (  # noqa: F401

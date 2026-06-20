@@ -91,6 +91,28 @@ def test_falta_hashtags():
     assert dom_sh.falta_hashtags({"contenido": "Con #mundial"}) is False
 
 
+def test_endurecer_va_con_haiku_por_defecto():
+    # Elegir de la lista fija es tarea acotada: el run va con haiku (modelo barato), no el grande.
+    assert dom_sh._endurecer()["modelo"] == "haiku"
+
+
+def test_endurecer_respeta_el_modelo_configurado(monkeypatch):
+    monkeypatch.setenv("KENI_HASHTAGS_MODELO", "sonnet")
+    assert dom_sh._endurecer()["modelo"] == "sonnet"
+    monkeypatch.setenv("KENI_HASHTAGS_MODELO", "")  # vacío explícito: sin --model (default de claude)
+    assert dom_sh._endurecer()["modelo"] == ""
+
+
+def test_componer_prompt_no_inyecta_contexto_editorial(entorno):
+    # El pool de candidatos ya es de la marca; el prompt NO arrastra la voz/normas editoriales.
+    out = dom_sh._componer_prompt(
+        copy="Gana México el partido", marca=_MARCA, redes=["instagram"],
+        candidatos=hb.candidatos(_MARCA), cantidad=5,
+    )
+    assert "Contexto editorial" not in out
+    assert "Gana México el partido" in out
+
+
 # --------------------------------------------------------------------------- #
 # Persistencia + encadenado + gating — Postgres (fixture `entorno`)              #
 # --------------------------------------------------------------------------- #

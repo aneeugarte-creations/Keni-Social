@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from ._config_comun import (
     ENV_FUSION_MODELO,
+    ENV_HASHTAGS_MODELO,
     ENV_INSUMOS_MODELO,
     os,
 )
@@ -41,4 +42,17 @@ def fusion_modelo() -> str:
     raw = os.environ.get(ENV_FUSION_MODELO)
     if raw is None:
         return "sonnet"
+    return raw.strip()
+
+
+def hashtags_modelo() -> str:
+    """Modelo de claude para Sugerir hashtags (`KENI_HASHTAGS_MODELO`, def "haiku").
+
+    Elegir hashtags de la lista fija de candidatos de la marca es una tarea acotada (salida JSON
+    cerrada sobre un conjunto dado), no necesita el modelo grande: por eso va con haiku por defecto.
+    Mismas semánticas que `insumos_modelo`: "" explícito = sin `--model`.
+    """
+    raw = os.environ.get(ENV_HASHTAGS_MODELO)
+    if raw is None:
+        return "haiku"
     return raw.strip()

@@ -63,11 +63,13 @@ _TOOLS_VETADAS: tuple[str, ...] = (
 
 
 def _endurecer() -> dict[str, Any]:
-    """Run READ-ONLY y barato: veta escritura/red, acota turnos y coste (es solo elegir hashtags)."""
+    """Run READ-ONLY y barato: veta escritura/red, acota turnos y coste, y va con `hashtags_modelo`
+    (haiku por defecto: elegir de una lista fija no necesita el modelo grande)."""
     return {
         "disallowed_tools": list(_TOOLS_VETADAS),
         "max_turns": 8,
         "max_budget_usd": 2.0,
+        "modelo": config.hashtags_modelo(),
     }
 
 
@@ -91,18 +93,6 @@ def _sugeridos_actuales(pub: dict[str, Any]) -> list[str]:
     return []
 
 
-def _contexto_editorial(marca: str) -> str:
-    """Voz/normas de la marca como contexto (best-effort, "" si no hay). Reusa `adjuntos_copy`."""
-    try:
-        docs = generar.adjuntos_copy(marca)
-    except Exception:  # noqa: BLE001 -- el contexto editorial es opcional; nunca rompe el lanzamiento
-        return ""
-    cuerpos = [d.cuerpo.strip() for d in docs if getattr(d, "cuerpo", "").strip()]
-    if not cuerpos:
-        return ""
-    return "\n\n## Contexto editorial de la marca\n\n" + "\n\n---\n\n".join(cuerpos)
-
-
 def _componer_prompt(
     *, copy: str, marca: str, redes: list[str], candidatos: list[str], cantidad: int
 ) -> str:
@@ -122,7 +112,7 @@ def _componer_prompt(
     }
     for marcador, valor in sust.items():
         cuerpo = cuerpo.replace(marcador, valor)
-    return cuerpo + _contexto_editorial(marca)
+    return cuerpo
 
 
 def cantidad_contenido(marca: str, redes: list[str]) -> int:

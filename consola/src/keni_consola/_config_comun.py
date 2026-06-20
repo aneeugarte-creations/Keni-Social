@@ -433,6 +433,10 @@ ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 # Modelo de Fusionar (fusión semántica) historias (decide qué se corrobora con qué; el juicio
 # fino "mismo evento vs mismo tema" se le escapaba a haiku). Def "sonnet"; "" = sin --model.
 ENV_FUSION_MODELO = "KENI_FUSION_MODELO"
+# Modelo de Sugerir hashtags: elegir de una lista fija de candidatos de la marca es una tarea
+# acotada, así que va con haiku por defecto (no necesita el modelo grande). Def "haiku"; "" = sin
+# --model. Ver `dominio/sugerir_hashtags.py`.
+ENV_HASHTAGS_MODELO = "KENI_HASHTAGS_MODELO"
 
 # Traducir + tropicalización MX de temas extranjeros en el Radar (Ola 4). Traducir es
 # SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de Recolectar, gateada por
@@ -901,6 +905,7 @@ __all__ = [
     'ENV_INGESTA_MAX_ITEMS',
     'ENV_INGESTA_WORKERS',
     'ENV_FUSION_MODELO',
+    'ENV_HASHTAGS_MODELO',
     'ENV_INSUMOS_MODELO',
     'ENV_INVESTIGADOR',
     'ENV_INVESTIGADOR_INTERVALO_HORAS',
