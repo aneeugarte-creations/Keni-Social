@@ -90,6 +90,7 @@ from .audio import (
     crear_audio_transcripcion,
     listar_audio_artefactos,
     listar_audio_transcripciones,
+    media_ids_audio_transcripciones,
     obtener_audio_artefacto,
     obtener_audio_transcripcion,
 )
@@ -180,6 +181,7 @@ __all__ = [
     "crear_audio_transcripcion",
     "crear_audio_artefacto",
     "listar_audio_transcripciones",
+    "media_ids_audio_transcripciones",
     "listar_audio_artefactos",
     "obtener_audio_transcripcion",
     "obtener_audio_artefacto",

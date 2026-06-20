@@ -156,6 +156,19 @@ def listar_audio_transcripciones(
     return [_fila_a_audio_transcripcion(f) for f in filas]
 
 
+def media_ids_audio_transcripciones() -> list[str]:
+    """`media_id` de TODOS los audios (sin filtros). Lo usa el GC de media para NO borrar el audio
+    original mientras exista su transcripción (lo necesitan reanudar, re-transcribir y los snippets)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT DISTINCT media_id FROM audio_transcripciones WHERE media_id <> ''"
+        ).fetchall()
+    finally:
+        con.close()
+    return [f["media_id"] for f in filas]
+
+
 def obtener_audio_transcripcion(transcripcion_id: str) -> dict[str, Any] | None:
     """Una transcripcion de audio por id (None si no existe)."""
     con = _conectar()

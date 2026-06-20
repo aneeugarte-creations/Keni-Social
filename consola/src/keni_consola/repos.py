@@ -146,6 +146,7 @@ from .repos_editor import (  # noqa: F401
     crear_video_subtitulo,
     existe_media_objeto,
     listar_audio_transcripciones,
+    media_ids_audio_transcripciones,
     listar_bloques,
     listar_documento_versiones,
     listar_etiquetas_plantilla,

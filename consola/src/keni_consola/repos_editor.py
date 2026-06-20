@@ -332,6 +332,10 @@ def listar_audio_transcripciones(
     return db.listar_audio_transcripciones(marca=marca, estado=estado, visible_para=visible_para)
 
 
+def media_ids_audio_transcripciones() -> list[str]:
+    return db.media_ids_audio_transcripciones()
+
+
 def obtener_audio_transcripcion(transcripcion_id: str) -> dict[str, Any] | None:
     return db.obtener_audio_transcripcion(transcripcion_id)
 

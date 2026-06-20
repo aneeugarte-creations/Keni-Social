@@ -255,6 +255,14 @@ def _refs_documento_versiones() -> set[str]:
     return refs
 
 
+def _medias_de_audio() -> set[str]:
+    """`media_id` de los audios del gestor de transcripciones (no borrar mientras exista su fila)."""
+    try:
+        return {m for m in repos.media_ids_audio_transcripciones() if m}
+    except Exception:  # noqa: BLE001 -- fuente opcional: nunca tumba el GC
+        return set()
+
+
 def referencias_vivas() -> set[str]:
     """Conjunto de nombres de objeto REFERENCIADOS (NO borrables).
 
@@ -262,6 +270,8 @@ def referencias_vivas() -> set[str]:
       - el `imagen` de TODAS las piezas (sin filtro de estado/marca),
       - el `foto` cruda (render on-demand; CRÍTICO),
       - las fotos de collage (`fotos` JSON array),
+      - el `media_id` de TODOS los audios del gestor de transcripciones (los necesitan reanudar,
+        re-transcribir y reproducir snippets mientras exista su fila),
       - el PNG renderizado + media del documento en TODAS las versiones del editor,
       - DEFENSIVO Y OPCIONAL: el `objeto` de la galería de artes SOLO si ese repo existe
         en runtime (ver `_objetos_catalogo_media`).
@@ -271,6 +281,7 @@ def referencias_vivas() -> set[str]:
     protege los PNG renderizados y los media que cada versión referencia.
     """
     vivas: set[str] = set()
+    vivas |= _medias_de_audio()
     piezas = repos.listar_piezas()
     vivas |= _imagenes_de(piezas)
     # Con render on-demand la FOTO cruda ya no está horneada en `imagen`: protégela también, o

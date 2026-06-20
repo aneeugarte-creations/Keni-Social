@@ -35,6 +35,7 @@ def _recursos_marca_vacios(monkeypatch):
     sobrescriben. Así el resto sigue siendo determinista (no aportan referencias)."""
     monkeypatch.setattr(media_gc.repos, "listar_plantillas_diseno", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_marca_activos", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "media_ids_audio_transcripciones", lambda: [])
 
 # Antiguedades sinteticas (epoch): "viejo" = hace 48h, "nuevo" = hace 1h.
 _AHORA = time.time()
@@ -76,6 +77,22 @@ def test_referencias_unen_publicaciones(monkeypatch):
     # Sin catalogo-media: solo cuentan las piezas.
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     assert media_gc.referencias_vivas() == {"pub.png"}
+
+
+def test_protege_media_de_audio(monkeypatch):
+    """El audio original de una transcripción NO es suelto: se conserva aunque sea viejo."""
+    monkeypatch.setattr(media_gc.repos, "listar_piezas", lambda *a, **k: [])
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.setattr(
+        media_gc.repos, "media_ids_audio_transcripciones", lambda: ["audios/abc.mp3"]
+    )
+    assert "audios/abc.mp3" in media_gc.referencias_vivas()
+
+    _objetos(monkeypatch, [("audios/abc.mp3", _VIEJO), ("audios/huerfano.mp3", _VIEJO)])
+    borrados = _captura_borrados(monkeypatch)
+    media_gc.limpiar(antiguedad_horas=24)
+    # Borra el huérfano viejo, conserva el del audio referenciado.
+    assert borrados == ["audios/huerfano.mp3"]
 
 
 def test_catalogo_media_es_red_de_seguridad_opcional_si_existe(monkeypatch):
