@@ -11,6 +11,13 @@ Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
                                       nombre?, manager_id?, marcas?} -> 200.
   - DELETE /api/usuarios/{id}       -> 204.
 
+Tokens del MCP (SELF-SERVICE, NO superadmin: cualquier sesión real gestiona los SUYOS):
+  - GET    /api/usuarios/tokens-mcp            -> {tokens: [{etiqueta, creado, ultimo_uso,
+                                                  expira, revocado}]} (sin el valor).
+  - POST   /api/usuarios/tokens-mcp            {etiqueta, expira_horas?} -> 201 {token, etiqueta}
+                                                  (el valor del token, UNA vez).
+  - DELETE /api/usuarios/tokens-mcp/{token_id} -> 204 (revoca por el valor del token).
+
 PATCH: ademas de rol/password, el admin puede actualizar
 `cargo` (allowlist `CARGOS_USUARIO`), `cobertura` (bool) y `marcas` (lista de ids canonicos
 del catalogo de `keni_shared.marcas`). Las marcas se REEMPLAZAN al conjunto enviado (lista
@@ -47,6 +54,10 @@ from ..observabilidad import NOMBRE_LOGGER
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
 _MSG_SOLO_ADMIN = "Solo un superadministrador puede gestionar usuarios."
+
+# Los tokens del MCP son SELF-SERVICE (cada cuenta gestiona los suyos), no gestión de usuarios:
+# exigen una SESIÓN real (no el token de mantenimiento, que no tiene usuario al que atribuir).
+_MSG_TOKEN_MCP_SESION = "Necesitas una sesión iniciada para gestionar tus tokens del MCP."
 
 # Hard-block de MFA: una persona a la que se le EXIGE segundo factor (`mfa_requerido`) y aun
 # no inscribio passkey no puede gestionar usuarios (crear/editar/borrar) hasta enrolar una
@@ -758,12 +769,91 @@ async def actualizar_configuracion(request: Request) -> Response:
     return JSONResponse({"ajuste": ajustes_catalogo.a_dict(ajuste)})
 
 
+# --------------------------------------------------------------------------- #
+# Tokens del MCP operativo (self-service de la cuenta en sesión)               #
+# --------------------------------------------------------------------------- #
+#
+# Cada cuenta emite/lista/revoca SUS PROPIOS tokens del MCP por identidad (`tokens_mcp`): un
+# secreto atado al usuario que un cliente MCP (Claude Code) presenta como bearer y que el guard
+# de `/mcp` resuelve a esta identidad, sin cabeceras. NO es gestión de usuarios (no exige
+# superadmin), pero sí una SESIÓN real: el token de mantenimiento no tiene usuario al que atribuir.
+
+
+def _rechazo_token_mcp_sesion() -> Response:
+    return JSONResponse({"error": _MSG_TOKEN_MCP_SESION}, status_code=403)
+
+
+async def listar_tokens_mcp(request: Request) -> Response:
+    """GET /api/usuarios/tokens-mcp: tokens MCP de la cuenta en sesión, SIN el secreto.
+
+    Devuelve `{tokens: [{etiqueta, creado, ultimo_uso, expira, revocado}]}`. El valor del token
+    NO se devuelve aquí (solo se entrega una vez, al crearlo).
+    """
+    usuario_id = _usuario_actual_id(request)
+    if usuario_id is None:
+        return _rechazo_token_mcp_sesion()
+    return JSONResponse({"tokens": auth.listar_tokens_mcp(usuario_id)})
+
+
+async def crear_token_mcp(request: Request) -> Response:
+    """POST /api/usuarios/tokens-mcp {etiqueta, expira_horas?}: emite un token (201).
+
+    Devuelve `{token, etiqueta}` con el VALOR del token UNA sola vez (no se vuelve a mostrar).
+    `etiqueta` es obligatoria; `expira_horas` (opcional) son las horas hasta caducar (sin ella,
+    sin caducidad).
+    """
+    usuario_id = _usuario_actual_id(request)
+    if usuario_id is None:
+        return _rechazo_token_mcp_sesion()
+    datos = await leer_json(request)
+    etiqueta = datos.get("etiqueta")
+    if not isinstance(etiqueta, str) or not etiqueta.strip():
+        return JSONResponse({"error": "El token necesita una etiqueta."}, status_code=400)
+    etiqueta = etiqueta.strip()
+    if len(etiqueta) > _LONGITUD_MAX_NOMBRE:
+        return JSONResponse(
+            {"error": f"La etiqueta no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
+            status_code=400,
+        )
+    expira_horas = datos.get("expira_horas")
+    if expira_horas is not None and (
+        isinstance(expira_horas, bool)
+        or not isinstance(expira_horas, (int, float))
+        or expira_horas <= 0
+    ):
+        return JSONResponse(
+            {"error": "El campo 'expira_horas' debe ser un número de horas positivo."},
+            status_code=400,
+        )
+    token = auth.crear_token_mcp(usuario_id, etiqueta, expira=expira_horas)
+    return JSONResponse({"token": token, "etiqueta": etiqueta}, status_code=201)
+
+
+async def revocar_token_mcp(request: Request) -> Response:
+    """DELETE /api/usuarios/tokens-mcp/{token_id}: revoca un token MCP por su valor (204).
+
+    404 si no existe ningún token con ese valor. Marca el token `revocado` (no lo borra): el
+    guard de `/mcp` deja de aceptarlo de inmediato.
+    """
+    usuario_id = _usuario_actual_id(request)
+    if usuario_id is None:
+        return _rechazo_token_mcp_sesion()
+    token = request.path_params.get("token_id", "")
+    if not auth.revocar_token_mcp(token):
+        return JSONResponse({"error": "Ese token no existe."}, status_code=404)
+    return Response(status_code=204)
+
+
 RUTAS = [
     Route("/api/usuarios", listar, methods=["GET"]),
     Route("/api/usuarios", crear, methods=["POST"]),
     # Rutas LITERALES antes que la paramétrica `{usuario_id}` (Starlette matchea en orden).
     Route("/api/usuarios/configuracion", configuracion, methods=["GET"]),
     Route("/api/usuarios/configuracion", actualizar_configuracion, methods=["PATCH"]),
+    # Tokens del MCP (self-service): literal `tokens-mcp` antes que la paramétrica `{usuario_id}`.
+    Route("/api/usuarios/tokens-mcp", listar_tokens_mcp, methods=["GET"]),
+    Route("/api/usuarios/tokens-mcp", crear_token_mcp, methods=["POST"]),
+    Route("/api/usuarios/tokens-mcp/{token_id}", revocar_token_mcp, methods=["DELETE"]),
     # Llaves de acceso de OTRA persona (superadmin): listar / borrar una concreta. Van ANTES de
     # las paramétricas de 2 segmentos (no colisionan, pero las agrupamos junto a /configuracion).
     Route("/api/usuarios/{usuario_id}/passkeys", passkeys_de_usuario, methods=["GET"]),

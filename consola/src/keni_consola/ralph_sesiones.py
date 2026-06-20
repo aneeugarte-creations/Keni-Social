@@ -360,27 +360,48 @@ def _escribir_persona_operativa(destino_dir: str) -> None:
         _log.warning("Ralph operativo: no se pudo escribir CLAUDE.md en %s", destino_dir)
 
 
+# Vida de un token MCP emitido para un Ralph operativo: corta (el agente vive una sesión
+# acotada), de modo que un token filtrado no quede válido indefinidamente.
+_MCP_TOKEN_HORAS = 12
+
+
 def _mcp_config(destino_dir: str, usuario_id: str | None = None) -> str | None:
     """Escribe el `--mcp-config` que engancha el MCP de la app (`/mcp`) y devuelve su ruta.
 
-    Apunta a `KENI_MCP_URL` (def `http://back:8765/mcp`) con `Authorization: Bearer
-    KENI_MCP_BEARER`. Si viene `usuario_id`, añade `X-Keni-Usuario-Id` para que el MCP actúe
-    como ESE usuario (acotado a sus permisos) en vez del usuario fijo. Sin bearer, el MCP no está
-    disponible: devuelve None (el Ralph arranca igual, sin tools del MCP) en vez de fallar."""
+    Apunta a `KENI_MCP_URL` (def `http://back:8765/mcp`). Si viene `usuario_id`, EMITE un token
+    MCP por identidad (`auth.crear_token_mcp`, vida `_MCP_TOKEN_HORAS`) y lo presenta como
+    `Authorization: Bearer <token>`: el MCP actúa como ESE usuario (acotado a sus permisos), sin
+    cabecera de impersonación. Sin `usuario_id` (o si la emisión falla) cae al bearer COMPARTIDO
+    legacy (`KENI_MCP_BEARER`, usuario fijo del MCP). Si no hay forma de autenticar, el MCP no
+    está disponible: devuelve None (el Ralph arranca igual, sin tools) en vez de fallar."""
     url = os.environ.get("KENI_MCP_URL", "http://back:8765/mcp")
-    bearer = os.environ.get("KENI_MCP_BEARER", "")
-    if not bearer:
-        _log.warning("Ralph operativo: sin KENI_MCP_BEARER; arranca sin tools del MCP")
-        return None
-    headers = {"Authorization": f"Bearer {bearer}"}
+    autorizacion: str | None = None
     if usuario_id:
-        headers["X-Keni-Usuario-Id"] = usuario_id
+        try:
+            from . import auth
+
+            token = auth.crear_token_mcp(
+                usuario_id, f"ralph:{usuario_id}", expira=_MCP_TOKEN_HORAS
+            )
+            autorizacion = f"Bearer {token}"
+        except Exception:  # noqa: BLE001 -- emitir el token no debe tumbar el lanzamiento
+            _log.warning(
+                "Ralph operativo: no se pudo emitir el token MCP; pruebo el bearer compartido"
+            )
+    if autorizacion is None:
+        bearer = os.environ.get("KENI_MCP_BEARER", "")
+        if not bearer:
+            _log.warning(
+                "Ralph operativo: sin token MCP ni KENI_MCP_BEARER; arranca sin tools del MCP"
+            )
+            return None
+        autorizacion = f"Bearer {bearer}"
     cfg = {
         "mcpServers": {
             "keni": {
                 "type": "http",
                 "url": url,
-                "headers": headers,
+                "headers": {"Authorization": autorizacion},
             }
         }
     }

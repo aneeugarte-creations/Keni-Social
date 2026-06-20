@@ -175,6 +175,88 @@ def test_guard_extrae_usuario_de_cabecera():
 
 
 # --------------------------------------------------------------------------- #
+# Guard: ventana de token por identidad + ventana legacy del bearer compartido #
+# --------------------------------------------------------------------------- #
+
+
+async def _recibir() -> dict:
+    return {"type": "http.request", "body": b"", "more_body": False}
+
+
+def _correr_guard(guard, headers):
+    """Corre el guard con un downstream que CAPTURA la identidad impersonada y el estado HTTP.
+
+    Devuelve `(uid_impersonado_o_None, status_o_None)`: `uid` si el guard dejó pasar (None si
+    pasó pero sin identidad), `status` si en cambio respondió él mismo (p. ej. 401)."""
+    capturado: dict = {"uid": None, "status": None, "paso": False}
+
+    async def downstream(scope, receive, send):
+        capturado["paso"] = True
+        capturado["uid"] = mcp_operativo._USUARIO_PETICION.get()
+
+    async def send(mensaje):
+        if mensaje["type"] == "http.response.start":
+            capturado["status"] = mensaje["status"]
+
+    guard.app = downstream
+    scope = {"type": "http", "path": "/mcp", "headers": headers}
+
+    async def flujo():
+        await guard(scope, _recibir, send)
+
+    anyio.run(flujo)
+    if capturado["paso"]:
+        return capturado["uid"], None
+    return None, capturado["status"]
+
+
+def test_guard_token_identidad_impersona_al_dueno(entorno):
+    """Un TOKEN MCP por identidad fija la identidad al dueño e IGNORA la cabecera de usuario."""
+    nombre = _crear_owner_admin()
+    uid = mcp_operativo._resolver_usuario_id(nombre)
+    token = auth.crear_token_mcp(uid, "prueba")
+    # Sin bearer compartido configurado: solo la ventana de identidad puede autenticar.
+    guard = mcp_operativo.GuardBearerMcp(app=None, bearer="")
+    impersonado, status = _correr_guard(
+        guard,
+        [
+            (b"authorization", f"Bearer {token}".encode("latin-1")),
+            (b"x-keni-usuario-id", b"otro-usuario-que-se-ignora"),
+        ],
+    )
+    assert status is None
+    assert impersonado == uid
+
+
+def test_guard_token_revocado_rechaza(entorno):
+    """Un token revocado no autentica; sin bearer compartido, el guard responde 401."""
+    nombre = _crear_owner_admin()
+    uid = mcp_operativo._resolver_usuario_id(nombre)
+    token = auth.crear_token_mcp(uid, "revocado")
+    auth.revocar_token_mcp(token)
+    guard = mcp_operativo.GuardBearerMcp(app=None, bearer="")
+    impersonado, status = _correr_guard(
+        guard, [(b"authorization", f"Bearer {token}".encode("latin-1"))]
+    )
+    assert impersonado is None
+    assert status == 401
+
+
+def test_guard_bearer_compartido_legacy_usa_cabecera(entorno):
+    """El bearer COMPARTIDO legacy autentica y toma la identidad de `X-Keni-Usuario-Id`."""
+    guard = mcp_operativo.GuardBearerMcp(app=None, bearer=BEARER)
+    impersonado, status = _correr_guard(
+        guard,
+        [
+            (b"authorization", f"Bearer {BEARER}".encode("latin-1")),
+            (b"x-keni-usuario-id", b"u-legacy"),
+        ],
+    )
+    assert status is None
+    assert impersonado == "u-legacy"
+
+
+# --------------------------------------------------------------------------- #
 # Registro de tools                                                            #
 # --------------------------------------------------------------------------- #
 

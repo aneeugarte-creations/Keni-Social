@@ -38,6 +38,7 @@ _TABLAS = (
     "usuarios_marcas",
     "webauthn_credenciales",
     "sesiones",
+    "tokens_mcp",
     "usuarios",
     "campanias",
     "gasto_ia",

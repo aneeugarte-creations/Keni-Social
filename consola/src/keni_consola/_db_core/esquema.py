@@ -161,6 +161,26 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    # Tokens del MCP operativo POR IDENTIDAD: cada token es un secreto atado a UN usuario, a
+    # diferencia del bearer compartido `KENI_MCP_BEARER` (que no identifica a nadie). El guard de
+    # `/mcp` resuelve la identidad de la peticion del token presentado, sin confiar en cabeceras.
+    #   - `token`: el secreto (url-safe, ~256 bits); es la PK y la clave de validacion/revocacion.
+    #   - `etiqueta`: nota humana del emisor ("ralph:<id>", "Claude Code de Ana").
+    #   - `expira`: ISO de caducidad ABSOLUTA desde la emision (NULL = sin caducidad). No desliza.
+    #   - `revocado`: 1 = invalidado a mano (no se borra, para trazabilidad). Borrar el usuario
+    #     propaga (ON DELETE CASCADE).
+    """
+    CREATE TABLE IF NOT EXISTS tokens_mcp (
+        token       TEXT PRIMARY KEY,
+        usuario_id  TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        etiqueta    TEXT NOT NULL,
+        creado      TEXT,
+        ultimo_uso  TEXT,
+        expira      TEXT,
+        revocado    INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tokens_mcp_usuario ON tokens_mcp (usuario_id)",
     # Relacion N:M usuarios <-> marcas (organigrama del cliente, transcripciones de la dirección):
     # una persona puede pertenecer a varias verticales/marcas (editorial de YouTube cubre ClaroSports +
     # UnoTV + Piso 15; la dirección a todas). `marca_id` se valida en la capa API contra el

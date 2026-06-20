@@ -50,12 +50,13 @@ from .observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
-# Identidad a IMPERSONAR en la petición MCP en curso (id de usuario). La pone el guard del
-# endpoint leyendo la cabecera `X-Keni-Usuario-Id` y la lee `ClienteConsola` para mintear la
-# sesión de ESE usuario (así un Ralph operativo actúa como quien lo lanzó, acotado a sus
-# permisos). Sin cabecera queda None y se cae al usuario fijo (`config.mcp_usuario()`), que es el
-# comportamiento del MCP de sesión (claude.ai/desktop). El guard del bearer es la barrera de
-# confianza: solo nuestra infra interna puede presentar el bearer, así que la cabecera es fiable.
+# Identidad a IMPERSONAR en la petición MCP en curso (id de usuario). La fija el guard del
+# endpoint y la lee `ClienteConsola` para mintear la sesión de ESE usuario (así un Ralph
+# operativo actúa como quien lo lanzó, acotado a sus permisos). El guard la resuelve por dos vías
+# (ver `GuardBearerMcp`): si el bearer presentado es un TOKEN MCP por identidad, el usuario es su
+# dueño (no se mira ninguna cabecera); si es el bearer COMPARTIDO legacy (`KENI_MCP_BEARER`), cae
+# a la cabecera `X-Keni-Usuario-Id`. None => usuario fijo (`config.mcp_usuario()`), el del MCP de
+# sesión (claude.ai/desktop).
 _HEADER_USUARIO = "x-keni-usuario-id"
 _USUARIO_PETICION: ContextVar[str | None] = ContextVar("_USUARIO_PETICION", default=None)
 
@@ -178,22 +179,39 @@ class _Holder:
 
 
 class GuardBearerMcp:
-    """Middleware ASGI: exige `Authorization: Bearer <bearer>` en las rutas `/mcp`.
+    """Middleware ASGI: autentica `Authorization: Bearer <token>` en las rutas `/mcp`.
 
     Todo lo que NO empieza por `/mcp` pasa intacto (el resto de la app la protege
-    `SeguridadConsola`). La comparación es en tiempo constante. Es la única barrera del
-    MCP frente al exterior; por dentro las tools operan con la sesión del dueño.
+    `SeguridadConsola`). Es la única barrera del MCP frente al exterior; por dentro las tools
+    operan con la sesión del usuario resuelto.
+
+    DOS VENTANAS de autenticación, en orden:
+      1) TOKEN MCP POR IDENTIDAD: si el bearer presentado valida contra `tokens_mcp`
+         (`auth.token_mcp_valido`), la identidad de la petición es su DUEÑO. No se mira ninguna
+         cabecera: el token YA identifica al usuario.
+      2) BEARER COMPARTIDO legacy (`KENI_MCP_BEARER`): si el token no es de identidad y el bearer
+         compartido sigue configurado, se compara en tiempo constante; al pasar, la identidad se
+         toma de la cabecera `X-Keni-Usuario-Id` (o el usuario fijo si no viene). Vía de
+         transición mientras queden emisores con el bearer compartido.
     """
 
-    def __init__(self, app: ASGIApp, bearer: str) -> None:
+    def __init__(self, app: ASGIApp, bearer: str | None) -> None:
         self.app = app
-        self._bearer = bearer
+        self._bearer = bearer or ""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not scope.get("path", "").startswith("/mcp"):
             await self.app(scope, receive, send)
             return
-        if not self._autorizado(scope):
+        presentado = self._bearer_presentado(scope)
+        usuario = auth.token_mcp_valido(presentado) if presentado else None
+        if usuario is not None:
+            # Vía 1: el token identifica al usuario; la cabecera se ignora.
+            uid: str | None = usuario["id"]
+        elif self._autorizado(presentado):
+            # Vía 2 (legacy): bearer compartido válido -> identidad por cabecera (o fijo).
+            uid = self._usuario_cabecera(scope)
+        else:
             from starlette.responses import JSONResponse
 
             resp = JSONResponse(
@@ -209,22 +227,31 @@ class GuardBearerMcp:
         # cliente HTTP del MCP no sigue por defecto).
         if scope.get("path") == "/mcp":
             scope = {**scope, "path": "/mcp/", "raw_path": b"/mcp/"}
-        # Impersona al usuario de la cabecera (si viene) durante TODA la petición: el cliente
-        # in-proceso mintea la sesión de ese usuario. El bearer ya autenticó al llamante.
-        token = _USUARIO_PETICION.set(self._usuario_cabecera(scope))
+        # Impersona al usuario resuelto durante TODA la petición: el cliente in-proceso mintea su
+        # sesión.
+        token = _USUARIO_PETICION.set(uid)
         try:
             await self.app(scope, receive, send)
         finally:
             _USUARIO_PETICION.reset(token)
 
-    def _autorizado(self, scope: Scope) -> bool:
+    def _bearer_presentado(self, scope: Scope) -> str | None:
+        """Token del `Authorization: Bearer …` presentado (o None si no viene)."""
         for k, v in scope.get("headers", []):
             if k.decode("latin-1").lower() == "authorization":
                 valor = v.decode("latin-1")
                 if valor.lower().startswith("bearer "):
-                    presentado = valor[len("bearer "):].strip()
-                    return bool(presentado) and secrets.compare_digest(presentado, self._bearer)
-        return False
+                    return valor[len("bearer "):].strip() or None
+        return None
+
+    def _autorizado(self, presentado: str | None) -> bool:
+        """True si `presentado` casa con el bearer COMPARTIDO legacy (tiempo constante).
+
+        False si no hay bearer compartido configurado (ventana legacy cerrada).
+        """
+        if not self._bearer or not presentado:
+            return False
+        return secrets.compare_digest(presentado, self._bearer)
 
     def _usuario_cabecera(self, scope: Scope) -> str | None:
         """Id de usuario a impersonar de la cabecera `X-Keni-Usuario-Id` (o None)."""

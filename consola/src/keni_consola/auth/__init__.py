@@ -53,6 +53,12 @@ from .mfa import (
     verificar_registro,
 )
 from .sesiones import COOKIE_SESION, borrar_sesion, crear_sesion, sesion_valida
+from .tokens_mcp import (
+    crear_token_mcp,
+    listar_tokens_mcp,
+    revocar_token_mcp,
+    token_mcp_valido,
+)
 from .usuarios import (
     BLOQUEO_MINUTOS,
     MAX_INTENTOS_FALLIDOS,
@@ -134,6 +140,11 @@ __all__ = [
     "sesion_valida",
     "borrar_sesion",
     "horas_sesion",
+    # Tokens del MCP operativo por identidad
+    "crear_token_mcp",
+    "token_mcp_valido",
+    "revocar_token_mcp",
+    "listar_tokens_mcp",
     # Bootstrap
     "hay_usuarios",
     "bootstrap_admin",
