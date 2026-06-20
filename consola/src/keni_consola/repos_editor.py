@@ -309,6 +309,7 @@ def crear_audio_transcripcion(
     estado: str = "pendiente",
     duracion_ms: int = 0,
     segmentos: str = "",
+    progreso_ms: int = 0,
     texto: str = "",
     resumen: str = "",
     error: str = "",
@@ -320,7 +321,8 @@ def crear_audio_transcripcion(
 ) -> dict[str, Any]:
     return db.crear_audio_transcripcion(
         marca=marca, nombre=nombre, media_id=media_id, idioma=idioma, estado=estado,
-        duracion_ms=duracion_ms, segmentos=segmentos, texto=texto, resumen=resumen,
+        duracion_ms=duracion_ms, segmentos=segmentos, progreso_ms=progreso_ms,
+        texto=texto, resumen=resumen,
         error=error, tratamientos=tratamientos, autor_id=autor_id,
         id=id, creado=creado, actualizado=actualizado,
     )
