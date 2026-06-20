@@ -47,6 +47,13 @@ name: keni-social
 # `worker`. Suma de defaults ≈ 37.8 GiB sobre 61 GiB: deja ~23 GiB para host + CI +
 # learn-postgres.
 # Los `cpus` son TOPES (no reservas): si keni esta ocioso, el CI usa los 12 nucleos.
+#
+# PARTICION DE NUCLEOS (cpuset, 12 vCPU = 0-11). Aparte de los TOPES `cpus`, fijamos
+# en QUE nucleos puede correr cada servicio para que el `back` (user-facing) arranque
+# sin pelear CPU con el trabajo pesado:
+#   0-2  -> back + db (user-facing; arranque garantizado, db sin pinear comparte aqui).
+#   3-11 -> CI (Woodpecker) + prod pesado (transcriptor/worker/...), aislado del back.
+# `cpuset` es clave valida de Compose no-Swarm (junto a `cpus`/`mem_limit`).
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -91,6 +98,7 @@ services:
     # Ingress liviano; topes conservadores (ver bloque de cabecera).
     mem_limit: 512m
     cpus: 1.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 200
@@ -153,6 +161,7 @@ services:
       start_period: 10s
     mem_limit: 256m
     cpus: 1.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 200
@@ -293,6 +302,7 @@ services:
     # BACK_MEM_LIMIT. Son TOPES, no reservas (ver cabecera).
     mem_limit: ${BACK_MEM_LIMIT:-3g}
     cpus: 3.0
+    cpuset: "0-2"  # nucleos DEDICADOS al user-facing: arranca sin competir con CI/transcriptor
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
@@ -464,6 +474,7 @@ services:
         condition: service_healthy
     mem_limit: ${DAEMONS_MEM_LIMIT:-2g}
     cpus: 2.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
@@ -584,6 +595,7 @@ services:
     # monopolizar la caja (12 vCPU). Es un TOPE, no reserva: si el worker esta ocioso, esos
     # nucleos quedan para el resto del stack/CI.
     cpus: ${WORKER_CPUS:-6}
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024
@@ -667,6 +679,7 @@ services:
     # (el worker de contenido es I/O-bound sobre la API de claude, casi no usa CPU). DEBE casar con
     # KENI_WHISPER_CPU_THREADS de arriba. Con 4 cores el ASR iba muy lento (era el cuello de botella).
     cpus: ${TRANSCRIPTOR_CPUS:-8}
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2): el ASR no ahoga el arranque del back
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024
@@ -764,6 +777,7 @@ services:
     # Carril dev más liviano que el worker de contenido (def 2 jobs vs 6). Overridable por .env.
     mem_limit: ${WORKER_DEV_MEM_LIMIT:-8g}
     cpus: ${WORKER_DEV_CPUS:-3.0}
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024
@@ -837,6 +851,7 @@ services:
     stop_grace_period: 30s
     mem_limit: ${WORKER_RALPH_MEM_LIMIT:-8g}
     cpus: ${WORKER_RALPH_CPUS:-3.0}
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 1024
@@ -879,6 +894,7 @@ services:
       start_period: 15s
     mem_limit: ${MCP_MEM_LIMIT:-1g}
     cpus: 1.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 256
@@ -946,6 +962,9 @@ services:
     # Postgres es el corazon del stack: le reservamos holgura de RAM y NO le ponemos tope
     # de CPU (no queremos throttlearlo). El mem_limit es un suelo defensivo para que un pico
     # de otro servicio no lo OOM-mate; subelo si el VPS tiene RAM de sobra.
+    # SIN `cpuset` a proposito: db queda libre para usar cualquier nucleo. Como el resto del
+    # stack (CI/transcriptor/worker) esta pineado a 3-11, db comparte 0-2 con el back sin
+    # pelear por CPU con el trabajo pesado; pinearlo solo lo limitaria sin beneficio.
     mem_limit: ${DB_MEM_LIMIT:-8g}
     security_opt:
       - no-new-privileges:true
@@ -993,6 +1012,7 @@ services:
       start_period: 30s
     mem_limit: ${FILES_MEM_LIMIT:-3g}
     cpus: 2.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
@@ -1024,6 +1044,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     mem_limit: 64m
     cpus: 0.25
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 64

@@ -112,6 +112,9 @@ services:
       # Subirlos = mas throughput de CI a costa de margen de prod; hazlo a conciencia.
       WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA: "200000"
       WOODPECKER_BACKEND_DOCKER_LIMIT_MEM: "4294967296"
+      # Fija los contenedores de STEP a los nucleos 3-11 (fuera de 0-2, dedicados al `back`
+      # user-facing en el stack principal): el CI no compite por CPU con el arranque del back.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_SET: "3-11"
       WOODPECKER_LOG_LEVEL: "info"
     networks:
       - woodpecker
