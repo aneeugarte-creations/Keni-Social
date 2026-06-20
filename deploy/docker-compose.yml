@@ -1032,22 +1032,65 @@ services:
   # Excluidos a proposito: `db` (reiniciar Postgres ante un falso-negativo es disruptivo) y
   # `traefik` (ingress host-network). Es complemento de `restart: unless-stopped` (que cubre el
   # caso de proceso muerto), no su sustituto.
+  #
+  # NO monta el docker.sock: habla la API Docker por HTTP a `autoheal-docker-proxy` (tecnativa/
+  # docker-socket-proxy), que la filtra a solo CONTAINERS+POST. `DOCKER_SOCK=tcp://…` hace que el
+  # entrypoint de la imagen use ese endpoint HTTP en vez del socket UNIX local, asi que el sidecar
+  # ya no tiene acceso root al daemon; el unico con el sock (en :ro) es el proxy, en una red
+  # interna dedicada sin egress. Mismo patron que el proxy del agente Woodpecker (deploy/woodpecker).
   autoheal:
-    image: willfarrell/autoheal:1.2.0
+    # Fijada por DIGEST (no por tag movil): el entrypoint de `:1.2.0` mapea `tcp://`→HTTPS+mTLS
+    # (exige certs cliente), incompatible con un proxy HTTP plano. El soporte de `tcp://`→`http://`
+    # llego despues de 1.2.0; se fija el digest actual de la build (`latest`) que lo trae.
+    image: willfarrell/autoheal:latest@sha256:030f9ffcdf9891ae4a1562d490c2594f880a6c7c84f4823a28e3dc2e0173b53b
     restart: unless-stopped
+    depends_on:
+      - autoheal-docker-proxy
     environment:
+      # Endpoint de la API Docker: el proxy filtrado, no el socket UNIX. El entrypoint detecta el
+      # prefijo `tcp://` y hace curl a http://autoheal-docker-proxy:2375 (sin --unix-socket).
+      DOCKER_SOCK: tcp://autoheal-docker-proxy:2375
       AUTOHEAL_CONTAINER_LABEL: autoheal   # solo contenedores con label autoheal=true
       AUTOHEAL_INTERVAL: "15"              # cada 15s revisa el estado de salud
       AUTOHEAL_START_PERIOD: "60"          # gracia inicial antes de actuar
       AUTOHEAL_DEFAULT_STOP_TIMEOUT: "20"  # SIGTERM->SIGKILL: deja al worker apagar limpio
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - autoheal-proxy
     mem_limit: 64m
     cpus: 0.25
     cpuset: "3-11"  # fuera de los nucleos del back (0-2)
     security_opt:
       - no-new-privileges:true
     pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Proxy de la API Docker (tecnativa) para `autoheal`: UNICO con acceso al socket crudo (en
+  # :ro). Expone una API FILTRADA a solo lo que autoheal usa —GET /containers/json y POST
+  # /containers/<id>/restart— y DENIEGA por defecto todo lo demas (swarm/secrets/exec/images/…).
+  # En su PROPIA red interna `autoheal-proxy` (sin egress); solo autoheal la alcanza. Sustituye
+  # al montaje directo del docker.sock en autoheal. Mismo patron que el proxy de Woodpecker.
+  autoheal-docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    privileged: false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # autoheal solo lista contenedores y hace POST /restart: CONTAINERS habilita el recurso y
+      # POST el verbo de escritura. Todo lo demas queda en DENY (default del proxy).
+      CONTAINERS: "1"
+      POST: "1"
+    networks:
+      - autoheal-proxy
+    mem_limit: 64m
+    cpus: 0.5
+    pids_limit: 128
     logging:
       driver: json-file
       options:
@@ -1072,6 +1115,10 @@ networks:
   # worker/mcp) la comparten ademas de `internal`/`edge`, asi que mantienen el DNS de
   # db/files Y conservan egress (Anthropic/OpenRouter/Metricool/noticias) por las otras.
   data:
+    internal: true
+  # Red dedicada autoheal<->proxy. `internal`: sin egress y ningun otro servicio la ve, asi que
+  # solo autoheal alcanza la API Docker filtrada del proxy (que es quien monta el sock en :ro).
+  autoheal-proxy:
     internal: true
 
 volumes:
