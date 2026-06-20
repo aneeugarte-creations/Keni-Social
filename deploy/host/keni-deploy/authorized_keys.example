@@ -1,0 +1,12 @@
+# Plantilla de ~keni-deploy/.ssh/authorized_keys (una sola linea, sin saltos).
+#
+# Forced command: pase lo que pase, SSH ejecuta SOLO `sudo -n /usr/local/sbin/keni-deploy-run`.
+# Lo que el cliente CI manda (`ssh ... keni-deploy@host "<sha>"`) NO se ejecuta como comando: SSH
+# lo expone en SSH_ORIGINAL_COMMAND, que el wrapper valida (40 hex + antecesora de origin/main).
+# Las restricciones no-pty/no-*-forwarding reducen la superficie a cero salvo el deploy.
+#
+# Sustituye AAAA... por la clave PUBLICA del par cuyo PRIVADO es el secreto Woodpecker
+# `deploy_ssh_key`. Genera el par con:  ssh-keygen -t ed25519 -f deploy_ssh_key -C keni-deploy-ci
+#
+# restrict = no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty (y futuras). Explicito:
+command="sudo -n /usr/local/sbin/keni-deploy-run",restrict,no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding ssh-ed25519 AAAA_REEMPLAZA_POR_LA_CLAVE_PUBLICA keni-deploy-ci

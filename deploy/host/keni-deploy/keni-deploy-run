@@ -1,0 +1,38 @@
+#!/bin/sh
+# keni-deploy-run — despliegue privilegiado invocado por SSH (forced command) como root via sudo.
+#
+# Cierra el hueco H/F del audit: el step de CI ya NO monta el docker.sock (acceso root al daemon).
+# En su lugar el CI corre:   ssh -i <deploy_ssh_key> keni-deploy@<host> "<sha>"
+# La forced command de authorized_keys ejecuta:   sudo -n /usr/local/sbin/keni-deploy-run
+# y la SHA viaja en SSH_ORIGINAL_COMMAND (preservada por env_keep en /etc/sudoers.d/keni-deploy).
+#
+# El cliente NO elige el comando: solo aporta UNA SHA, que aqui se VALIDA (40 hex) y se EXIGE
+# antecesora de origin/main. Cualquier otra cosa se rechaza. No hay shell remota ni argumentos
+# libres: el unico efecto posible es desplegar un commit que ya esta en main.
+set -eu
+
+REPO=/home/ubuntu/keni-social
+LOCK="$REPO/.deploy.lock"
+SHA="${SSH_ORIGINAL_COMMAND:-}"
+
+# 1) La SHA debe ser EXACTAMENTE 40 caracteres hex. Rechaza inyeccion de comandos/rutas.
+case "$SHA" in
+  "" | *[!0-9a-f]*) echo "keni-deploy-run: SHA invalida" >&2; exit 2 ;;
+esac
+[ "$(printf '%s' "$SHA" | wc -c)" -eq 40 ] || { echo "keni-deploy-run: SHA invalida (longitud)" >&2; exit 2; }
+
+# 2) Serializa con el MISMO lockfile que usa deploy.sh: un deploy a la vez (cola hasta 30 min).
+exec 9>"$LOCK"
+flock -x -w 1800 9 || { echo "keni-deploy-run: no se obtuvo el lock de deploy" >&2; exit 3; }
+
+cd "$REPO"
+# 3) Trae main (credencial read-only del clon del host) y EXIGE que la SHA sea antecesora de
+#    origin/main: no se despliega nada que no haya pasado por main.
+git fetch --quiet origin main
+git merge-base --is-ancestor "$SHA" origin/main \
+  || { echo "keni-deploy-run: $SHA no es antecesora de origin/main; abortado" >&2; exit 4; }
+
+# 4) Materializa esa SHA exacta y delega en deploy.sh (su logica de build/up/healthcheck/rollback
+#    NO se toca). Bind mounts del compose host-relativos: se resuelven en este dir real del host.
+git checkout --force "$SHA"
+exec sh deploy/deploy.sh "$REPO/deploy/.env"

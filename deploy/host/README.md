@@ -122,12 +122,19 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
 
 ### Notas
 
-- **autoheal y el docker.sock (H2):** `autoheal` monta `/var/run/docker.sock` en RW porque
-  `willfarrell/autoheal:1.2.0` solo habla con el socket UNIX (su modo `tcp://` exige mTLS con
-  certs cliente, incompatible con un socket-proxy HTTP como el de Woodpecker). Se deja como
-  riesgo residual ACEPTADO (imagen fijada, minima, en red interna). Camino futuro: sustituir el
-  healer por uno que hable HTTP a un `tecnativa/docker-socket-proxy` (CONTAINERS+POST) como el
-  del stack de CI, o anadir mTLS. No se "arregla" con algo fragil que deje el auto-heal muerto.
+- **Deploy sin docker.sock (F) y PAT minimo (A):** pasos de HOST para que el CI despliegue por
+  SSH a `keni-deploy` (sin montar el sock) y para acotar las credenciales de GitHub en
+  `HARDENING-RUNBOOK.md`. El cambio de repo de F ya esta hecho pero el pipeline de deploy NO
+  funciona hasta completar ese runbook (falla cerrado a proposito).
+
+- **autoheal y el docker.sock (H2, resuelto):** `autoheal` ya NO monta `/var/run/docker.sock`.
+  Habla la API Docker por HTTP a `autoheal-docker-proxy` (`tecnativa/docker-socket-proxy`),
+  filtrado a solo `CONTAINERS`+`POST` (lo unico que usa: `GET /containers/json` y `POST
+  /containers/<id>/restart`), en la red interna sin egress `autoheal-proxy`. El proxy es el unico
+  con el sock, montado en `:ro`. Mismo patron que el proxy del agente Woodpecker. Nota de version:
+  `willfarrell/autoheal:1.2.0` mapeaba `tcp://`→HTTPS+mTLS (incompatible con un proxy HTTP plano);
+  el soporte de `tcp://`→`http://` llego despues, asi que la imagen se fija por DIGEST de `latest`
+  (ver `deploy/docker-compose.yml`). El cambio del compose es PROMOVIBLE (no requiere setup de host).
 - **Cuenta `ubuntu` con password usable:** SSH es solo-clave, asi que el password solo sirve en
   consola/su. Se deja a proposito como break-glass de consola (Latitude OOB). Bloquearlo
   (`passwd -l ubuntu`) endurece un pelo a cambio de perder ese fallback; decision del operador.

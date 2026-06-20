@@ -1,23 +1,25 @@
 # Woodpecker: DESPLIEGUE de keni-social (build de imagenes + recreacion del stack).
 #
-# Corre en el agente del server Latitude (mismo host que el stack), que YA monta el
-# docker.sock. IMPORTANTE: docker compose se ejecuta desde el DIR ESTABLE del host
-# (/home/ubuntu/keni-social), NO desde el checkout efimero del pipeline: como se usa el
-# docker.sock, los bind mounts host-relativos del compose (garage.toml, traefik/dynamic)
-# los resuelve el daemon EN EL HOST, asi que deben existir en un path real del host. El
-# step sincroniza el checkout a ese dir (preservando .env) y corre deploy.sh desde ahi.
+# >>> AVISO: ESTE PIPELINE NO FUNCIONA HASTA COMPLETAR EL SETUP DE HOST. <<<
+# Antes montaba el /var/run/docker.sock REAL (acceso root al daemon desde un step de CI).
+# Ahora NO monta el sock ni volumenes: invoca un despliegue PRE-ACORDADO en el host por SSH
+# contra el usuario sin privilegios `keni-deploy` (forced command + sudo a un wrapper que solo
+# acepta una SHA validada y antecesora de origin/main). El step NO elige que se ejecuta: solo
+# entrega la SHA. Mientras no se complete el runbook de host NINGUN deploy pasara —es DELIBERADO,
+# falla cerrado. Pasos manuales de host (crear `keni-deploy`, authorized_keys con forced command,
+# wrapper /usr/local/sbin/keni-deploy-run, sudoers, clon git read-only, secretos de Woodpecker):
+#   deploy/host/HARDENING-RUNBOOK.md  (seccion F).
 #
 # AUTO-DEPLOY en push a `main`, DESPUES de que pasen los 3 pipelines de test (depends_on).
 # Un push con tests en rojo NO despliega. Tambien disparable a mano ("manual"). NO
-# despliega en PRs ni en otras ramas.
+# despliega en PRs ni en otras ramas. El deploy real (build + up -d + healthchecks + rollback)
+# lo sigue haciendo `deploy/deploy.sh` EN EL HOST, sin cambios: este pipeline solo cambia COMO
+# se invoca (sock -> ssh), no la logica de despliegue.
 #
-# REQUISITO (una vez) en tu instancia de Woodpecker — ver deploy/woodpecker/README.md:
-#   Repo Settings -> General -> seccion "Confiado": activa "Volumenes" (deja que el step
-#   monte el docker.sock + el .env). En v3.13 "trusted" es granular; basta "Volumenes".
-#
-# El .env de secretos vive en /home/ubuntu/keni-social/deploy/.env (ya esta en el server;
-# NO va a git). Hasta bootstrapear Garage, deja las S3_* VACIAS en ese .env: la media se
-# queda en disco (volumen keni-data) y el resto (Postgres, worker, auth) ya funciona.
+# SECRETOS de Woodpecker (Repo Settings -> Secrets), ver runbook:
+#   deploy_ssh_key      clave PRIVADA SSH del par cuyo publico esta en authorized_keys de keni-deploy.
+#   deploy_known_hosts  linea(s) known_hosts con la host-key PUBLICA del destino (host-key FIJADA;
+#                       StrictHostKeyChecking=yes, sin TOFU). El host es publico (ssh-keyscan), no secreto.
 when:
   - event: push
     branch: main
@@ -29,35 +31,29 @@ depends_on:
 
 steps:
   - name: build-and-deploy
-    image: docker:27-cli
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Dir estable del host montado al MISMO path (host==contenedor) para que los bind
-      # mounts del compose resuelvan en el host. Aqui vive tambien el .env (no en git).
-      - /home/ubuntu/keni-social:/home/ubuntu/keni-social
+    image: alpine:3.20
+    # Alcanza el sshd del HOST desde el contenedor de step via la gateway del bridge Docker
+    # (host-gateway). Evita salir por la IP publica (hairpin/fail2ban). El nombre
+    # `host.docker.internal` es tambien la clave de la linea known_hosts (ver runbook).
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      SSH_KEY:
+        from_secret: deploy_ssh_key
+      KNOWN_HOSTS:
+        from_secret: deploy_known_hosts
     commands:
-      - apk add --no-cache docker-cli-compose rsync flock
-      # Sincroniza el checkout al dir estable (preserva .env/.git/venv/node_modules).
-      # `--delete`: los ficheros BORRADOS en git deben desaparecer del dir estable; sin él se
-      # quedaban sueltos y rompían el build (p.ej. un .tsx eliminado seguía ahí y `tsc -b` lo
-      # compilaba -> fallo del deploy) y se acumulaba basura (bundles viejos en webapp/assets).
-      # Los excludes PROTEGEN del borrado el estado host-only: secretos (`deploy/.env*`,
-      # `deploy/woodpecker/.env`), repos/artefactos (.git, node_modules, .venv*, .ruff_cache,
-      # __pycache__) y un worktree de trabajo en el host (`.claude`). Validado con --dry-run:
-      # borra solo ficheros sueltos/artefactos, ningún .env.
-      # SERIALIZACION de deploys (audit nocturno 2026-06-10): el agente corre hasta
-      # WOODPECKER_MAX_WORKFLOWS=3 pipelines A LA VEZ, y dos pushes seguidos a main hacian
-      # solaparse dos deploys: el rsync de B MUTA las fuentes del dir estable mientras A
-      # construye (hash/imagen inconsistentes) y el `up -d` de B recrea contenedores
-      # mientras A espera salud -> rollback/pipeline rojo ESPURIO con prod sano (visto 2x
-      # esta noche). `flock` sobre un lockfile del dir estable (mismo fichero de HOST para
-      # todos los steps concurrentes) serializa rsync+deploy como una unidad; espera hasta
-      # 30 min su turno (cola de la noche) y falla claro si no lo consigue. El lockfile
-      # va EXCLUIDO del rsync --delete: borrarlo mientras está en uso rompe la semantica de flock
-      # (los que esperan quedan en el inode viejo y dos deploys entrarian a la vez).
+      - apk add --no-cache openssh-client
+      - install -d -m 700 ~/.ssh
+      # Clave privada y host-key FIJADA a ficheros con permisos estrictos.
+      - printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+      - printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+      # El UNICO argumento es la SHA del commit: la forced command del host la valida
+      # (^[0-9a-f]{40}$), exige que sea antecesora de origin/main y corre deploy.sh bajo flock.
+      # StrictHostKeyChecking=yes: si la host-key no casa, ABORTA (sin TOFU).
       - >-
-        flock -x -w 1800 /home/ubuntu/keni-social/.deploy.lock sh -c "
-        rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env'
-        --exclude .claude --exclude .deploy.lock --exclude .ruff_cache --exclude node_modules
-        --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
-        && cd /home/ubuntu/keni-social && sh deploy/deploy.sh /home/ubuntu/keni-social/deploy/.env"
+        ssh -i ~/.ssh/deploy_key
+        -o UserKnownHostsFile=~/.ssh/known_hosts
+        -o StrictHostKeyChecking=yes
+        -o BatchMode=yes
+        keni-deploy@host.docker.internal "$CI_COMMIT_SHA"

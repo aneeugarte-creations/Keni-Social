@@ -1,0 +1,14 @@
+# /etc/sudoers.d/keni-deploy — instalar con `visudo -cf` y permisos 0440.
+#
+# keni-deploy es un usuario SIN privilegios y SIN grupo docker. Solo puede correr, como root y
+# SIN password, el wrapper de despliegue (que valida la SHA y delega en deploy.sh). No tiene
+# ninguna otra capacidad: ni shell root, ni docker, ni otros binarios.
+#
+# env_keep de SSH_ORIGINAL_COMMAND: la forced command de authorized_keys es `sudo -n
+# /usr/local/sbin/keni-deploy-run`; sudo limpia el entorno por defecto, asi que sin esto la SHA
+# (que SSH pone en SSH_ORIGINAL_COMMAND) no llegaria al wrapper. secure_path acota el PATH del
+# wrapper a rutas de sistema.
+Defaults:keni-deploy        env_keep += "SSH_ORIGINAL_COMMAND"
+Defaults:keni-deploy        secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+keni-deploy ALL=(root) NOPASSWD: /usr/local/sbin/keni-deploy-run
