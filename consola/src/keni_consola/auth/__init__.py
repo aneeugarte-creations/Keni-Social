@@ -1,6 +1,6 @@
-"""Auth multiusuario de la Consola Keni: usuarios, roles, sesiones, bootstrap (#130).
+"""Auth multiusuario de la Consola Keni: usuarios, roles, sesiones, bootstrap.
 
-Sobre la barrera de TOKEN unico de #134 se monta un modelo MULTIUSUARIO con login
+Sobre la barrera de TOKEN unico previa se monta un modelo MULTIUSUARIO con login
 user/pass y roles (`admin`/`editor`). El middleware `SeguridadConsola` (ver
 `seguridad.py`) acepta UNA sesion valida (cookie) O el token de bootstrap, de modo que
 los clientes y tests que ya usan el token siguen funcionando.

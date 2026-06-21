@@ -51,7 +51,7 @@ from ._config_comun import (
 def token() -> str | None:
     """Token interino OPCIONAL fijado por `KENI_CONSOLA_TOKEN` (None si no esta; vacio = no fijado).
 
-    Tras la auth multiusuario (#130) este token es un gate EXTRA, no la barrera principal:
+    Tras la auth multiusuario este token es un gate EXTRA, no la barrera principal:
     la Consola queda protegida por sesion + CSRF aunque no se fije. Si esta presente, sigue
     valiendo como credencial adicional (cabecera/cookie) para clientes de mantenimiento.
     """

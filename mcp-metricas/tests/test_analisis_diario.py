@@ -1,6 +1,6 @@
-"""Tests del análisis diario con narrativa (F6 / #146).
+"""Tests del análisis diario con narrativa.
 
-Cubre los tres criterios de aceptación de la ficha F6:
+Cubre los tres criterios de aceptación del análisis diario:
   - resume top movimientos del periodo con la(s) pieza(s) que los explican;
   - cierra con una sugerencia accionable (loop a la acción);
   - marca explícitamente cuando los datos son de muestra (no reales).
@@ -138,7 +138,7 @@ def test_muestra_marcada_en_estructura():
     a = construir_analisis(FuenteMuestra(), "semana")
     assert a["es_muestra"] is True
     assert a["fuente"] == "muestra"
-    assert "aviso" in a  # campo de primer nivel (issue #131)
+    assert "aviso" in a  # campo de primer nivel
 
 
 def test_muestra_marcada_en_markdown():

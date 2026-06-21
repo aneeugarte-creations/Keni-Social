@@ -175,9 +175,8 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   const marca = marcaFija ?? marcaElegida;
   const [contexto, setContexto] = React.useState("");
 
-  // Aportación manual al MISMO banco (antes vivían en Fuentes-Internas como "Idea" e
-  // "Interno AMX"): un tipo, un título y una nota/contenido. Entra como idea en estado
-  // "propuesta" (se aprueba y se genera igual que una idea de la IA).
+  // Aportación manual al MISMO banco: un tipo, un título y una nota/contenido. Entra como idea
+  // en estado "propuesta" (se aprueba y se genera igual que una idea de la IA).
   const [tipoManual, setTipoManual] = React.useState<"idea" | "interna">("idea");
   const [tituloManual, setTituloManual] = React.useState("");
   const [descManual, setDescManual] = React.useState("");

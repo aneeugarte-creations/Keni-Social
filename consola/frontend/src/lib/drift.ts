@@ -1,5 +1,5 @@
 /**
- * Aviso NO FATAL de "contract drift" en producción (#120).
+ * Aviso NO FATAL de "contract drift" en producción.
  *
  * Cuando una respuesta del backend no cumple el contrato (`esquema.gen.json`) y NO
  * estamos en DEV, la validación no debe romper la página: solo deja constancia.

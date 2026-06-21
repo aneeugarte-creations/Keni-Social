@@ -94,11 +94,11 @@ from .tiempo import ahora_iso, hoy_utc, iso_o_vacio, iso_utc
 
 _log = logging.getLogger("keni_consola.db")
 
-# NOTA (__all__): solo la API real de la fundacion de persistencia. Antes re-exportaba
-# tambien los modulos/clases de stdlib que este modulo importa para si (`json`, `logging`,
-# `datetime`, `uuid`, `date`, `timedelta`, `annotations`, `Any`, `UTC`, `config`, `redes`);
-# los submodulos `db_<dominio>` que los importaban explicitamente siguen funcionando (un
-# import explicito no depende de __all__), pero dejan de anunciarse como API publica.
+# NOTA (__all__): solo la API real de la fundacion de persistencia. NO anuncia los
+# modulos/clases de stdlib que este modulo importa para si (`json`, `logging`, `datetime`,
+# `uuid`, `date`, `timedelta`, `annotations`, `Any`, `UTC`, `config`, `redes`); los
+# submodulos `db_<dominio>` que los importan explicitamente siguen funcionando (un import
+# explicito no depende de __all__), pero no se anuncian como API publica.
 __all__ = [
     'CLASE_CONTENIDO',
     'DECISION_APROBADO',

@@ -475,8 +475,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
 }
 
 /**
- * Diálogo «Franjas» UNIFICADO: una sola entrada (antes «Configurar franjas» + «Plantilla de
- * franjas», dos items que se confundían) con dos pestañas claras:
+ * Diálogo «Franjas» UNIFICADO: una sola entrada con dos pestañas claras:
  *  - «Esta semana»: las franjas SOLO de la semana en vista (puntual).
  *  - «Plantilla por defecto»: la lista flexible de franjas (2, 3 o N) del que parten las
  *    semanas nuevas; se puede añadir «Nocturna» u otras.

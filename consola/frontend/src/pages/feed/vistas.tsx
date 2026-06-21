@@ -149,8 +149,8 @@ export function useConteosFeed(filtros: {
   // con las filas). Ausente en los demás feeds (MobileFeed/FeedIdeacion): sin efecto.
   const { marca, red, linea, responsable, origen, excluirOrigen, enVivo } = filtros;
   // `enVivo` (tablero COMPARTIDO del reparto): los conteos laten al MISMO pulso que la lista
-  // y el calendario (que ya tienen refetchInterval+refetchOnWindowFocus); sin esto, tras el
-  // claim de un compañero el badge se quedaba rancio mientras la lista ya había cambiado.
+  // y el calendario (que ya tienen refetchInterval+refetchOnWindowFocus), para que tras el
+  // claim de un compañero el badge no quede rancio mientras la lista ya cambió.
   const refrescoEnVivo = enVivo
     ? { refetchInterval: 45_000, refetchOnWindowFocus: true }
     : {};

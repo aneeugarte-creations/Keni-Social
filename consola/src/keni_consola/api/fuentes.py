@@ -115,7 +115,7 @@ def _reactivar(fuente_id: str) -> tuple[int, dict]:
 
 
 async def reactivar(request: Request) -> Response:
-    """`POST /api/fuentes/{id}/reactivar` -> reactiva un feed RSS auto-desactivado (Ola D).
+    """`POST /api/fuentes/{id}/reactivar` -> reactiva un feed RSS auto-desactivado.
 
     Opera sobre `fuentes_rss` (la fuente de verdad del motor de ingesta): `activo=1`,
     `desactivado_auto=0`, `errores_seguidos=0`, `proximo_sondeo=''` (reintentar YA). Idempotente.

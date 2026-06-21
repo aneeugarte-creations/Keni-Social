@@ -182,7 +182,7 @@ export interface CuerpoVerificar {
   contexto?: string;
 }
 
-// --- revisión editorial (revisar el copy YA escrito por el community, ficha F3 / #143) ---
+// --- revisión editorial (revisar el copy YA escrito por el community) ---
 
 /** Tipo de hallazgo del revisión editorial: qué dimensión se incumple. */
 export type TipoHallazgoRevision = "ortografia" | "dato" | "legal" | "voz";
@@ -258,7 +258,7 @@ export interface Generacion {
   metricas: MetricasRun | null;
   /** Payload al completar; `null` mientras corre o si falla. */
   resultado: ResultadoGeneracion | null;
-  /** Atribución por usuario (#130 Fase 1): id estable de quien lanzó. "" si legado/anónimo. */
+  /** Atribución por usuario: id estable de quien lanzó. "" si legado/anónimo. */
   autor_id: string;
   /** Nombre de quien lanzó (para mostrar). "" si legado/anónimo. */
   autor_nombre: string;
@@ -272,6 +272,6 @@ export interface RespuestaGeneracion {
 
 export interface RespuestaGeneraciones {
   generaciones: Generacion[];
-  /** Envelope de paginacion (#121); opcional para retrocompat. */
+  /** Envelope de paginacion; opcional para retrocompat. */
   paginacion?: Paginacion;
 }

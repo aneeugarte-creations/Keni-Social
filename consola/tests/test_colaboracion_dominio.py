@@ -153,8 +153,8 @@ def test_decidir_no_permite_redecidir_un_nivel():
 
 
 def test_decidir_autor_puede_dar_un_ok():
-    """COLAPSO 2026-06: ya no se bloquea al autor; cualquiera puede dar un OK (la regla es que
-    los DOS OK los den dos personas distintas, no que el autor no participe)."""
+    """El autor no se bloquea: cualquiera puede dar un OK (la regla es que los DOS OK los den dos
+    personas distintas, no que el autor no participe)."""
     cadena = [_nivel("a", 1)]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u1", "usuario": "ana"}, rol="editor",
@@ -282,8 +282,8 @@ def test_campos_nivel_pendiente_resetea_decisor_y_sello():
 
 
 def test_estado_publicacion_para_aprobado_queda_en_revision():
-    # COLAPSO 2026-06: una cadena aprobada deja la pieza `en_revision` (la auto-programación
-    # la mueve luego a `programado`); ya no hay estado de reposo `aprobado`.
+    # Una cadena aprobada deja la pieza `en_revision` (la auto-programación la mueve luego a
+    # `programado`): no hay estado de reposo `aprobado`.
     assert colaboracion.estado_publicacion_para("aprobado") == "en_revision"
 
 

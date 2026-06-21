@@ -1,4 +1,4 @@
-"""Tests de seguridad de la Consola: auth por token + proteccion CSRF (#134 + #130).
+"""Tests de seguridad de la Consola: auth por token + proteccion CSRF.
 
 Cubre:
   - `/api` SIN token -> 401; CON token (cabecera o cookie) -> OK.
@@ -6,9 +6,9 @@ Cubre:
   - El SPA y sus estaticos se sirven SIN token (hay que poder cargar la pagina) y el
     index siembra la cookie + inyecta `window.__KENI_TOKEN__`.
   - El token se resuelve de `KENI_CONSOLA_TOKEN`; si no esta, se genera uno (logueado).
-  - CSRF detras de proxy (#130): la allowlist `KENI_CONSOLA_ORIGENES` deja pasar la
+  - CSRF detras de proxy: la allowlist `KENI_CONSOLA_ORIGENES` deja pasar la
     mutacion del SPA con el `Origin` del host publico, sin abrir cross-site. Local intacto.
-  - Token interino OPCIONAL (#130): con `crear_app(token=None)` la app se protege solo con
+  - Token interino OPCIONAL: con `crear_app(token=None)` la app se protege solo con
     sesion + CSRF (sin sesion -> 401; mutaciones con CSRF), sin debilitar nada.
 
 Todo OFFLINE: ningun lanzador real, ninguna red. Reusa el aislamiento de `entorno`.
@@ -252,7 +252,7 @@ def test_token_generado_si_no_hay_env(entorno, monkeypatch):
 
 
 def test_crear_app_genera_token_pero_no_loguea_su_valor(entorno, monkeypatch, caplog):
-    """#150: sin env var, `crear_app` genera un token pero NUNCA loguea su VALOR."""
+    """Sin env var, `crear_app` genera un token pero NUNCA loguea su VALOR."""
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     # `configurar_logging()` (lo llaman otros tests/arranque) deja el logger del paquete
     # con `propagate=False`; caplog captura via el root, asi que forzamos propagacion
@@ -268,7 +268,7 @@ def test_crear_app_genera_token_pero_no_loguea_su_valor(entorno, monkeypatch, ca
     # El token quedo en el estado de la app (se usa para autenticar)...
     token = app.state.token_consola
     assert token
-    # ...pero su VALOR NO aparece en NINGUN mensaje de log (#150), ni `?token=`.
+    # ...pero su VALOR NO aparece en NINGUN mensaje de log, ni `?token=`.
     mensajes = "\n".join(r.getMessage() for r in caplog.records if r.name == NOMBRE_LOGGER)
     assert token not in mensajes
     assert "?token=" not in mensajes
@@ -433,7 +433,7 @@ def test_origin_externo_sin_allowlist_se_rechaza(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 8) Token interino OPCIONAL (#130): sesion + CSRF protegen por si solas       #
+# 8) Token interino OPCIONAL: sesion + CSRF protegen por si solas              #
 # --------------------------------------------------------------------------- #
 #
 # Tras la auth multiusuario, el token interino es un gate EXTRA, no la barrera. Con

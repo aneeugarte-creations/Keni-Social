@@ -43,7 +43,7 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 
 # Centinela para distinguir "no se paso `token`" (=> resolver de env / generar en local)
 # de "se paso `token=None`" (=> EXPRESAMENTE sin token interino, solo sesion + CSRF). El
-# token interino es OPCIONAL (#130): el despliegue ya no depende de el.
+# token interino es OPCIONAL: el despliegue no depende de el.
 _TOKEN_NO_ESPECIFICADO = object()
 
 # Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
@@ -105,7 +105,7 @@ def _token_app(request: Request) -> str | None:
 
 
 def _respuesta_index_spa(request: Request, html: str) -> HTMLResponse:
-    """Devuelve el index del SPA inyectando el token y fijando la cookie (#134).
+    """Devuelve el index del SPA inyectando el token y fijando la cookie.
 
     El token se inyecta en el HTML (`window.__KENI_TOKEN__`, lo lee `api.ts` para la
     cabecera) y se fija como cookie `keni_consola_token`, de modo que las descargas
@@ -123,7 +123,7 @@ def _respuesta_index_spa(request: Request, html: str) -> HTMLResponse:
             token,
             httponly=False,  # el SPA puede leerla; la defensa CSRF no depende del secreto
             samesite="strict",
-            secure=seguridad.cookie_secure(),  # Secure tras un proxy TLS (#130); ver seguridad.py
+            secure=seguridad.cookie_secure(),  # Secure tras un proxy TLS; ver seguridad.py
             path="/",
         )
     return resp
@@ -157,7 +157,7 @@ async def _api_no_encontrado(request: Request) -> Response:
 
 
 async def _healthz(request: Request) -> Response:
-    """Liveness (#130): 200 JSON simple, SIN auth y SIN tocar la BD.
+    """Liveness: 200 JSON simple, SIN auth y SIN tocar la BD.
 
     Va FUERA de `/api` a proposito: asi el middleware `SeguridadConsola` la deja pasar
     sin credencial (un proxy/orquestador necesita pingarla sin token). Es liveness PURA:
@@ -200,16 +200,16 @@ def crear_app(
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
-    `token`: token INTERINO opcional para la API (#134/#130). Es un gate EXTRA, no la
+    `token`: token INTERINO opcional para la API. Es un gate EXTRA, no la
     barrera principal (esa es la sesion). Tres formas:
       - NO pasarlo (def): se resuelve de `KENI_CONSOLA_TOKEN`; si no esta, en local se
-        GENERA uno (su VALOR NO se loguea, #150; la cookie la fija el index del SPA). El
+        GENERA uno (su VALOR NO se loguea; la cookie la fija el index del SPA). El
         arranque hosted fija la env (o la deja vacia para correr SIN token interino).
       - `token="..."`: usa ese token fijo (los tests pasan uno conocido).
       - `token=None`: EXPRESAMENTE sin token interino. La unica credencial es la sesion;
         sin sesion -> 401 igual. Sirve para probar/usar el modo "solo sesion + CSRF".
     `bootstrap`: si True (def), crea el admin inicial si la BD no tiene
-    usuarios (#130, idempotente). Los tests lo desactivan por defecto (la mayoria usan
+    usuarios (idempotente). Los tests lo desactivan por defecto (la mayoria usan
     el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
     usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
     por defecto la real. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests, pero se IGNORA.
@@ -257,7 +257,7 @@ def crear_app(
     # vivos). El error SE PROPAGA a proposito (no lo tragamos): detiene el arranque.
     db.arrancar_persistencia()
 
-    # Bootstrap del admin inicial (#130): si la BD no tiene usuarios, crea uno desde
+    # Bootstrap del admin inicial: si la BD no tiene usuarios, crea uno desde
     # las env vars (o con pass aleatoria logueada). Idempotente; best-effort para no
     # impedir el arranque si la BD no esta disponible (la auth por token sigue valiendo).
     if bootstrap:
@@ -325,7 +325,7 @@ def crear_app(
     # devuelva el index.html del SPA (que confundiria al cliente).
     rutas.append(Route("/api/{resto:path}", _api_no_encontrado))
 
-    # Healthcheck de liveness (#130): ruta de nivel superior (NO bajo /api, asi el
+    # Healthcheck de liveness: ruta de nivel superior (NO bajo /api, asi el
     # middleware la deja pasar sin token) y ANTES del catch-all del SPA, para que no
     # caiga al index.html. 200 JSON barato, sin tocar la BD.
     rutas.append(Route("/healthz", _healthz))
@@ -349,15 +349,15 @@ def crear_app(
     rutas.append(Route("/", _servir_spa))
     rutas.append(Route("/{resto:path}", _servir_spa))
 
-    # Seguridad (#134/#130/#150): resolvemos el token de mantenimiento opcional. Si NO se
+    # Seguridad: resolvemos el token de mantenimiento opcional. Si NO se
     # inyecto (centinela), lo toma de KENI_CONSOLA_TOKEN; en local, si no esta, GENERA uno
-    # (su valor NO se loguea, #150; la cookie la fija el index del SPA). Si se inyecta
+    # (su valor NO se loguea; la cookie la fija el index del SPA). Si se inyecta
     # `token=None` EXPRESAMENTE, no hay token: la app queda protegida solo por sesion + CSRF
-    # (el despliegue ya no depende del token, #130). El token NO es admin (#150).
+    # (el despliegue no depende del token). El token NO es admin.
     if token is _TOKEN_NO_ESPECIFICADO:
         token, generado = seguridad.resolver_token()
         if generado:
-            # #150: NUNCA logueamos el VALOR del token (vector de fuga: logs/capturas). El
+            # NUNCA logueamos el VALOR del token (vector de fuga: logs/capturas). El
             # acceso normal es el login multiusuario; el token es una credencial de
             # mantenimiento opcional que se entrega fuera de banda, no por el log.
             _logger.warning(
@@ -366,13 +366,13 @@ def crear_app(
                 "multiusuario; fija KENI_CONSOLA_TOKEN para un token estable de mantenimiento."
             )
 
-    # Observabilidad (issue #123): UNA linea de log por peticion (sin body/query/
+    # Observabilidad: UNA linea de log por peticion (sin body/query/
     # cabeceras: ver `RegistroPeticiones`) + un manejador central que convierte
     # cualquier `Exception` no controlada en un 500 JSON consistente, logueando el
     # traceback en el servidor. Es ADITIVO: los endpoints que ya devuelven su propio
     # `{"error": ...}` siguen igual; esto solo atrapa lo que hoy caeria a un 500 crudo.
     #
-    # Seguridad (#134): `SeguridadConsola` envuelve TODO (va el primero, mas externo)
+    # Seguridad: `SeguridadConsola` envuelve TODO (va el primero, mas externo)
     # para exigir el token en `/api` y verificar CSRF en mutaciones ANTES de tocar las
     # rutas. El SPA y los estaticos pasan sin token (hay que poder cargar la pagina).
     middleware = [
@@ -393,7 +393,7 @@ def crear_app(
         middleware=middleware,
         lifespan=lifespan,
         # ColaLlenaError ANTES que Exception: Starlette elige el handler por tipo mas
-        # especifico, pero lo dejamos explicito (#137: cola al tope -> 429, no 500).
+        # especifico, pero lo dejamos explicito (cola al tope -> 429, no 500).
         exception_handlers={
             ColaLlenaError: _manejar_cola_llena,
             PiezaPublicadaInmutable: _manejar_pieza_inmutable,

@@ -270,7 +270,7 @@ def _generar(*, prompt: str, publicacion_id: str, pieza_id: str, autor: dict) ->
             marca = marca or str(cont.get("marca") or "")
             titulo_pieza = str(cont.get("titulo") or "")
 
-    # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
+    # Atribucion por usuario (Fase 1): la imagen la genera el usuario de la peticion.
     gen = lanzar_generacion_imagen(
         prompt=prompt, marca=marca, publicacion_id=publicacion_id,
         titulo=titulo_pieza, autor=autor,

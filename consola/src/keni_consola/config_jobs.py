@@ -241,7 +241,7 @@ def presupuesto_tokens_produccion_out_dia_marca(marca: str) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Accesores: cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B)       #
+# Accesores: cola + worker de generacion (ADR 0002 Fase B)                     #
 # --------------------------------------------------------------------------- #
 #
 # DOS modos de ejecucion del worker que consume la cola de generacion:

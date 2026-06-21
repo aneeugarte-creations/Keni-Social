@@ -150,7 +150,7 @@ async def verificar(request: Request) -> Response:
     def _generar() -> dict[str, object]:
         return analizar(enlace, contexto)
 
-    # Atribucion por usuario (#130 Fase 1): la verificacion la dispara el usuario actual.
+    # Atribucion por usuario (Fase 1): la verificacion la dispara el usuario actual.
     autor = autor_de_peticion(request) or {}
     gen = generaciones.crear(
         {

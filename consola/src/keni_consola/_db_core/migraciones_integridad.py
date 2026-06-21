@@ -137,8 +137,8 @@ def _migrar_checks_dominio(con: Any) -> None:
 
     checks: tuple[tuple[str, str, tuple[str, ...], str, dict[str, str]], ...] = (
         ("publicacion", "estado", ESTADOS_PUBLICACION, "pendiente", {}),
-        # Colapso 2026-06: la allowlist de pieza pasó a (borrador/en_revision/programado/
-        # publicado). El default de normalización es `borrador`: las filas viejas con valores
+        # La allowlist de pieza es (borrador/en_revision/programado/
+        # publicado). El default de normalización es `borrador`: las filas con valores
         # retirados (pendiente/en_curso/aprobado) se normalizan a `borrador` ANTES de re-aplicar
         # el CHECK (vuelven a preparación; conservan sus likes en `pieza_aprobaciones`).
         # Editar este default cambia el source de la fn -> su huella cambia -> la migración 0029
@@ -153,9 +153,8 @@ def _migrar_checks_dominio(con: Any) -> None:
     for tabla, columna, allowlist, normal, renombres in checks:
         nombre = f"ck_{tabla}_{columna}"
         # DROP ANTES de normalizar: el CHECK VIEJO (allowlist anterior) puede PROHIBIR el propio
-        # valor de normalizacion. Tras el colapso 2026-06, `borrador` es NUEVO en la allowlist de
-        # plataforma; el CHECK viejo aun en la tabla lo rechazaba, asi que el UPDATE que escribe
-        # `borrador` fallaba con CheckViolation antes de poder re-crear el constraint. Sin
+        # valor de normalizacion (un valor NUEVO en la allowlist que el CHECK aun en la tabla
+        # rechaza, abortando con CheckViolation el UPDATE que lo escribe). Sin
         # constraint, la normalizacion SIEMPRE entra; luego se re-aplica el CHECK nuevo.
         # FÓSIL DE NOMBRE: `publicacion` se llamó `contenido`; al renombrar la tabla, Postgres
         # conserva el NOMBRE viejo de sus CHECK (`ck_contenido_<col>`), que `ck_{tabla}_{columna}`

@@ -812,7 +812,7 @@ def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
 def test_metricas_de_run_via_marcador_sin_contenido_id(cliente):
     """Una generación SIN `publicacion_id` en el registro (los previos a sellarlo en `lanzar`)
     se atribuye a su run por el MARCADOR de etapa (`gen_id` -> `publicacion_id`): la tarjeta
-    suma sus métricas en vez de salir a cero (el bug visible: runs sin tokens/coste/tiempo)."""
+    suma sus métricas en vez de salir a cero (sin atribuir: runs sin tokens/coste/tiempo)."""
     tema = _tema_pipeline("Run correlada por marcador")
     gen = generaciones.crear({
         "tipo": "pipeline", "marca": "unotv", "etiqueta": "Copy · UnoTV",  # SIN publicacion_id

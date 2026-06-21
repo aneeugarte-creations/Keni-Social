@@ -1,8 +1,8 @@
 /**
  * TELÓN: backdrop clicable accesible para los overlays caseros del editor (flyouts,
- * inspector, menús). Antes eran `<div onClick>` mudos: invisibles para teclado y lector
- * de pantalla. Este es focusable (`role="button"` + `tabIndex`) y cierra también con
- * Enter / Espacio / Escape. El cierre global con Escape (sin foco en el telón) lo añade
+ * inspector, menús). Es focusable (`role="button"` + `tabIndex`) —visible para teclado y
+ * lector de pantalla— y cierra también con Enter / Espacio / Escape. El cierre global con
+ * Escape (sin foco en el telón) lo añade
  * cada overlay con `useCerrarConEscape`.
  */
 import * as React from "react";

@@ -1,6 +1,6 @@
 """Catalogo UNICO de marca de la consola — REEXPORTA `keni_shared.marcas`.
 
-La definicion canonica vive en `keni_shared.marcas` (H3/E1), la capa mas
+La definicion canonica vive en `keni_shared.marcas`, la capa mas
 baja del monorepo, para que keni-metricas y keni-consola la importen de la MISMA
 fuente.
 

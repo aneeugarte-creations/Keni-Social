@@ -80,7 +80,7 @@ export function useInsercionImagen({
   // documento), adoptando el ASPECT-RATIO natural de la foto (estilo Canva): caja == foto, sin
   // letterbox ni recorte sorpresa, y el marco de selección la abraza exacto. Las dimensiones se
   // leen del propio media (normalmente ya cacheado por la miniatura de la galería); si el
-  // navegador no puede decodificarlo, cae al cuadrado de antes.
+  // navegador no puede decodificarlo, cae a un cuadrado por defecto.
   const insertarActivoImagen = async (objeto: string, centro: { x: number; y: number }) => {
     const dims = await leerDimensionesUrl(urlMedia(objeto));
     const st = store.getState();

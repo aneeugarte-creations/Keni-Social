@@ -617,8 +617,8 @@ def test_mapear_franja_sin_horas_validas_devuelve_none():
 
 
 def test_canonicaliza_turno_con_nombre_de_persona_a_la_franja_real():
-    # El bug: claude emitió la COLUMNA (persona) como franja, con el horario de la persona.
-    # La canonicalización lo mete en la franja del equipo cuyo horario más solapa.
+    # Cuando claude emite la COLUMNA (persona) como franja, con el horario de la persona,
+    # la canonicalización lo mete en la franja del equipo cuyo horario más solapa.
     ops = [
         {
             "tipo": "crear_turno",

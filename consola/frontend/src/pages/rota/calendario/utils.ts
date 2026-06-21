@@ -18,9 +18,8 @@ import { filtrarEquipoPorMarca } from "../comun";
  *  - `marcas.includes(marcaActiva)` (vertical correcta; "Todas"/`null` no filtra).
  *  - `cobertura === true` (la persona está disponible para cubrir hoy).
  *
- * Antes excluía por `cargo === "community_manager"` (dejaba al coordinador fuera de la
- * grilla), pero eso rompía la paridad con el Panorama: el coordinador cubre y debe poder
- * tener turno. El filtro por cargo se eliminó a petición de dirección.
+ * No filtra por `cargo`: el coordinador también cubre y debe poder tener turno, en paridad
+ * con el Panorama.
  */
 export function cmsDeMarca(equipo: MiembroRota[], marcaActiva: string | null): MiembroRota[] {
   return filtrarEquipoPorMarca(equipo, marcaActiva).filter((m) => m.cobertura !== false);

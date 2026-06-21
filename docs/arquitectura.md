@@ -182,9 +182,9 @@ vigentes (verificados en código):
   | Flag (env) | Accesor | Semántica |
   |---|---|---|
   | `KENI_MAQUINA` | `maquina_activa()` | Master / kill-switch global. Sin él, NINGÚN daemon de contenido corre. |
-  | `KENI_PIPELINE_RECOLECTAR` | `ingesta_activa()` | «Crear noticias»: Recolectar + Agrupar + Traducir/tropicalización MX (siempre on, global). |
+  | `KENI_PIPELINE_RECOLECTAR` | `recolectar_activo()` | «Crear noticias»: Recolectar + Agrupar + Traducir/tropicalización MX (siempre on, global). |
   | `KENI_PIPELINE_REDACTAR` | `pipeline_activo()` | «Generar copy»: etapa de Redactar del pipeline (único motor de copy; funde la selección de autogen). |
-  | `KENI_PIPELINE_ILUSTRAR` | `autogen_arte_activo()` | «Generar arte»: etapa de Ilustrar del pipeline (degrada sin proveedor). |
+  | `KENI_PIPELINE_ILUSTRAR` | `ilustrar_activo()` | «Generar arte»: etapa de Ilustrar del pipeline (degrada sin proveedor). |
   | `KENI_PUBLICAR_REAL` | `publicar_real()` | Gate de publicación REAL vía Metricool. OFF = dry-run. |
 
 - **`origen='equipo'`** (`estados.ORIGEN_EQUIPO`): el origen con que nace un alta CREATIVA del

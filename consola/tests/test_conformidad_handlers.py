@@ -1,4 +1,4 @@
-"""Conformidad LIVE handler ↔ contrato (`esquema_api`) para las áreas de churn (#120).
+"""Conformidad LIVE handler ↔ contrato (`esquema_api`) para las áreas de churn.
 
 `test_esquema_api.py` solo ancla TS ↔ esquema (que el `types.gen.ts` siga al
 `TypedDict`). NO comprueba que el handler HTTP emita de verdad esa forma: los

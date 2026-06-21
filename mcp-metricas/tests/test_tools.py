@@ -107,7 +107,7 @@ async def test_mejores_piezas_clamp_de_n_a_1_y_10():
 
 
 async def test_comparar_periodos_calcula_diferencia_con_clave_engagement_pct():
-    """H3: la diferencia de engagement se emite como `engagement_pct` (puntos),
+    """La diferencia de engagement se emite como `engagement_pct` (puntos),
     igual que historico.variacion y variacion_vs_anterior. NUNCA `engagement_pp`."""
     mcp = _mcp(FuenteMuestra())
     out = await _llamar(mcp, "comparar_periodos", cuenta="claro_sports", rango_a="semana", rango_b="mes")
@@ -148,9 +148,9 @@ async def test_picos_devuelve_estructura_serializable():
 async def test_analisis_diario_devuelve_narrativa_con_siguiente_paso():
     out = await _llamar(_mcp(FuenteMuestra()), "analisis_diario", rango="semana")
     assert out["rango"] == "semana"
-    assert out["es_muestra"] is True  # marca datos de muestra (issue #131)
+    assert out["es_muestra"] is True  # marca datos de muestra
     assert isinstance(out["movimientos"], list)
-    # cierra con un siguiente paso accionable (loop a la accion, UX-roadmap #11)
+    # cierra con un siguiente paso accionable (loop a la accion)
     assert out["siguiente_paso"] is not None
     assert "Pídele a Claude" in out["siguiente_paso"]["texto"]
     json.dumps(out)

@@ -1,4 +1,4 @@
-"""Cola de jobs de generacion: el back ENCOLA, un WORKER CLAVA y ejecuta (#130 Fase 2).
+"""Cola de jobs de generacion: el back ENCOLA, un WORKER CLAVA y ejecuta.
 
 Capa fina sobre `repos` (persistencia SQLite local / Postgres hosted) + `dominio.jobspec`
 (serializacion del trabajo). Separa el "qué se encola/clava" (aquí) del "cómo se ejecuta"

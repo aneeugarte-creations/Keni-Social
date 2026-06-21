@@ -70,8 +70,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
     imagen = (pend.get("imagen") or "").strip()
     # CARRUSEL EDITORIAL: cuántas SUB-HISTORIAS agrupa la historia (con 2+, el prompt ofrece
     # al modelo decidir entre post y carrusel) y el catálogo de fotos propias por nota (para
-    # que asigne foto a cada slide). Pendientes anteriores sin estos campos: n_notas=1 (sin
-    # carrusel), comportamiento de siempre.
+    # que asigne foto a cada slide). Pendientes sin estos campos: n_notas=1 (sin carrusel).
     fotos_notas = [
         {"titulo": str(f.get("titulo") or ""), "imagen": str(f.get("imagen") or "").strip()}
         for f in (pend.get("fotos_notas") or [])

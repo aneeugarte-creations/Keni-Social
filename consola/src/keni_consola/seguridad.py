@@ -1,4 +1,4 @@
-"""Autenticacion + proteccion CSRF de la Consola Keni (issue #134).
+"""Autenticacion + proteccion CSRF de la Consola Keni.
 
 CONTEXTO DEL HALLAZGO
 =====================
@@ -6,7 +6,7 @@ La Consola escucha en `127.0.0.1` (ver `__main__.py`), pero ESO NO ES CONTROL DE
 ACCESO: cualquier pagina web abierta en el navegador del operador puede lanzar un
 POST a `http://127.0.0.1:8765/api/...` (los POST "simples" no disparan preflight
 CORS) y disparar acciones que GASTAN TOKENS, ESCRIBEN FICHEROS o PUBLICAN. Esto
-anade una barrera minima (NO multiusuario, eso es #130):
+anade una barrera minima (NO multiusuario):
 
   1) TOKEN DE SESION para la API. Se configura con la env var `KENI_CONSOLA_TOKEN`.
      Si no se define, se genera uno aleatorio al arrancar y se MUESTRA en el log
@@ -39,14 +39,14 @@ El SPA tambien manda el token por cabecera (`api.ts` lo lee de `window.__KENI_TO
 inyectado en el index), de modo que la cookie es defensa en profundidad y no el unico
 camino.
 
-AUTH MULTIUSUARIO (#130) — Y EL TOKEN AHORA ES OPCIONAL
-=======================================================
+AUTH MULTIUSUARIO — Y EL TOKEN ES OPCIONAL
+=================================================
 Sobre la barrera de token unico se monta el login user/pass + roles (ver `auth.py`).
 El middleware acepta para `/api` CUALQUIERA de estas credenciales:
 
   1) Una SESION valida: cookie `keni_consola_sesion` con un token de sesion vigente
      (tabla `sesiones`). Es el camino del multiusuario real y la barrera PRINCIPAL.
-  2) El TOKEN interino de #134 (cabecera Bearer/X-Keni-Token o cookie
+  2) El TOKEN interino (cabecera Bearer/X-Keni-Token o cookie
      `keni_consola_token`), SI ESTA CONFIGURADO. Es un gate EXTRA opcional: sigue
      valiendo para clientes de mantenimiento/tests, pero el despliegue YA NO depende de
      el. Si no se fija (`token=None`), esa via simplemente NO existe y la unica credencial
@@ -55,7 +55,7 @@ El middleware acepta para `/api` CUALQUIERA de estas credenciales:
 `/api/auth/login` es PUBLICO (no exige credencial previa) pero pasa por la verificacion
 Origin/CSRF de las mutaciones. Las rutas `/api/usuarios/*` exigen ADEMAS rol admin de un
 usuario REAL (lo comprueba el propio handler leyendo `request.state.usuario`, que este
-middleware fija). El TOKEN de mantenimiento NO es admin (#150): pasa la barrera de `/api`
+middleware fija). El TOKEN de mantenimiento NO es admin: pasa la barrera de `/api`
 (es una credencial de mantenimiento), pero NO otorga poder admin sobre `/api/usuarios/*`;
 la unica excepcion es el bootstrap del primer admin con la BD vacia (ver `api/usuarios`).
 """
@@ -352,7 +352,7 @@ def _es_media_publica(metodo: str, ruta: str) -> bool:
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
 # servidor, no solo en el frontend). El token de mantenimiento NO tiene usuario asociado,
 # asi que NO es una via para saltarse este gate de un usuario: si una cuenta debe cambiar
-# su contrasena, debe hacerlo por su sesion (no hay "admin fantasma" por token, #150).
+# su contrasena, debe hacerlo por su sesion (no hay "admin fantasma" por token).
 _RUTAS_API_CAMBIO_PASSWORD = frozenset(
     {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout"}
 )
@@ -360,7 +360,7 @@ _MSG_DEBE_CAMBIAR = "Debes cambiar tu contraseña antes de usar la Consola."
 
 
 class SeguridadConsola:
-    """Middleware ASGI: sesion (+ token interino opcional) para `/api` + CSRF (#134 + #130).
+    """Middleware ASGI: sesion (+ token interino opcional) para `/api` + CSRF.
 
     - Las rutas que NO empiezan por `/api` (SPA, assets, favicons) pasan SIN credencial:
       hay que poder cargar la pagina. El index escribe la cookie del token (si lo hay).
@@ -376,7 +376,7 @@ class SeguridadConsola:
     Cuando autentica por sesion, deja el usuario en `scope["state"]["usuario"]` (lo lee
     `request.state.usuario`) para que los handlers comprueben el rol. Si autentica por
     token de mantenimiento, NO hay usuario asociado (`auth_por_token=True`): es una
-    credencial de mantenimiento que pasa la barrera de `/api`, pero NO es admin (#150). Las
+    credencial de mantenimiento que pasa la barrera de `/api`, pero NO es admin. Las
     rutas que exigen rol admin (`/api/usuarios/*`) la rechazan, salvo el bootstrap del
     primer admin con la BD vacia (acotado en `api/usuarios`).
 
@@ -386,7 +386,7 @@ class SeguridadConsola:
 
     def __init__(self, app: ASGIApp, token: str | None) -> None:
         self.app = app
-        # Token interino OPCIONAL (#130): None/"" => esa via no existe (solo sesion).
+        # Token interino OPCIONAL: None/"" => esa via no existe (solo sesion).
         self._token = token or None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -467,7 +467,7 @@ async def _rechazar(scope: Scope, receive: Receive, send: Send, mensaje: str, st
 
 
 def autor_de_peticion(request: object) -> dict[str, str] | None:
-    """Autor (forma de atribucion) de una peticion autenticada, o None (#130 Fase 1).
+    """Autor (forma de atribucion) de una peticion autenticada, o None.
 
     Devuelve `{"id": <id estable>, "usuario": <nombre>}` cuando la peticion se autentico
     con una SESION de usuario (el middleware deja el usuario en `request.state.usuario`);
@@ -493,8 +493,8 @@ def resolver_token() -> tuple[str, bool]:
     """Devuelve `(token, generado)` para el token INTERINO: el de la env var o uno nuevo.
 
     `generado=True` indica que se creo uno aleatorio. El token de mantenimiento es un gate
-    EXTRA opcional (#130) y NO es admin (#150): aunque se genere uno, la barrera PRINCIPAL
-    es la sesion + CSRF. Su VALOR NO se loguea ni viaja en la URL (#150). Para correr
+    EXTRA opcional y NO es admin: aunque se genere uno, la barrera PRINCIPAL
+    es la sesion + CSRF. Su VALOR NO se loguea ni viaja en la URL. Para correr
     EXPRESAMENTE sin token, se pasa `crear_app(token=None)` (no se llama aqui); este
     resolver genera uno cuando no se fijo `KENI_CONSOLA_TOKEN`.
     """

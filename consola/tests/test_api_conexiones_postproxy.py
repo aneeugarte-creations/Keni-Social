@@ -1,6 +1,6 @@
 """Endpoints de conexión a Postproxy (`/api/conexiones/postproxy*`).
 
-Mismas reglas que Metricool (#153): SOLO ADMIN (un editor recibe 403), la api_key es un
+Mismas reglas que Metricool: SOLO ADMIN (un editor recibe 403), la api_key es un
 SECRETO GLOBAL que NUNCA se devuelve (solo pista `····last4`), y los puntos de red van
 mockeados (los tests NUNCA tocan la red ni el disco real: `entorno` aísla el config en
 tmp). La sesión admin se obtiene por login (cookie), igual que en los demás tests.

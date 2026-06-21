@@ -727,8 +727,8 @@ def test_paso_fusionar_semantica_macro_reusa_etiqueta_dominante(monkeypatch):
 
 def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkeypatch):
     """Un cluster formado SOLO por items sin marca (Trends) acaba con marca asignada por
-    vocabulario y, por tanto, SELECCIONABLE por la promoción por marca (antes quedaba con
-    marca='' e invisible para todas)."""
+    vocabulario y, por tanto, SELECCIONABLE por la promoción por marca (no queda con marca=''
+    e invisible para todas)."""
     item = {
         "id": "i1", "fuente_id": "google-trends", "fuente_nombre": "ESPN",
         "categoria": "mx", "marca": "",  # <- Trends llega SIN marca
@@ -770,8 +770,8 @@ def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkey
 
 def test_paso_agrupar_clasifica_por_ia_una_corroborada_sin_marca(monkeypatch):
     """Una historia SIN marca que el vocabulario no casa (jerga/entidad nueva) pero CORROBORADA
-    por 2+ fuentes se clasifica por IA (no solo el breaking): antes quedaba sin clasificar e
-    invisible en los paneles por marca. Misma historia (mismo título, sin url) vista por dos outlets."""
+    por 2+ fuentes se clasifica por IA (no solo el breaking), de modo que no queda sin clasificar
+    e invisible en los paneles por marca. Misma historia (mismo título, sin url) vista por dos outlets."""
     base_item = {
         "marca": "", "categoria": "internacional",
         "titulo": "Quarterly briefing on a niche protocol upgrade",  # sin vocabulario de ninguna marca
@@ -808,7 +808,7 @@ def test_paso_agrupar_clasifica_por_ia_una_corroborada_sin_marca(monkeypatch):
     final = [d for t, d in eventos if t == "upsert"][-1]
     assert int(final.get("n_fuentes") or 0) == 2
     assert int(final.get("breaking") or 0) == 0  # corroborada, NO breaking
-    # La IA le puso marca (antes habría quedado con marca='' por no casar vocabulario).
+    # La IA le asigna marca aunque el título no case el vocabulario (no queda con marca='').
     assert final["marca"] == "unotv"
     assert ("sello_ia", final["id"]) in eventos  # se sella el encaje por IA (no lo pisa un recalc)
 

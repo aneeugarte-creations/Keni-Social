@@ -1,4 +1,4 @@
-"""Tests de la fuente unica de limites de caracteres por plataforma (H3/E1)."""
+"""Tests de la fuente unica de limites de caracteres por plataforma."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def test_valores_canonicos():
         "x": 25000,  # X Premium
         "instagram": 2200,
         "facebook": None,
-        "tiktok": 4000,  # caption ampliado 2023-24 (#112)
+        "tiktok": 4000,  # maximo tecnico del caption
         "youtube": None,
     }
 

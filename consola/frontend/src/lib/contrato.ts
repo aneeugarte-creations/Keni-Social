@@ -1,5 +1,5 @@
 /**
- * Validación del contrato `/api/*` en el borde de fetch (#120).
+ * Validación del contrato `/api/*` en el borde de fetch.
  *
  * Validamos el body ya parseado contra el MISMO JSON Schema que emite el backend
  * (`esquema.gen.json`, generado por `keni_consola.esquema_api` y bundleado por

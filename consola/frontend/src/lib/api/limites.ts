@@ -6,7 +6,7 @@ import type {
 } from "@/types";
 
 export const apiLimites = {
-  // --- Límites de caracteres por red (fuente única backend, #112) ---
+  // --- Límites de caracteres por red (fuente única backend) ---
   limites: (signal?: AbortSignal) => peticion<RespuestaLimites>("/limites", { signal }),
 
 };

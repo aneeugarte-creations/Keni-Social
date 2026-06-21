@@ -191,7 +191,7 @@ def test_construir_prompt_inserta_items_y_contrato():
 
 
 # --------------------------------------------------------------------------- #
-# Regresión SQL: `clusters_extranjeros_sin_traducir` toca la BD REAL (no mock)  #
+# `clusters_extranjeros_sin_traducir` toca la BD REAL (no mock)                 #
 # La fixture `cliente` (conftest) aísla el entorno y prepara el esquema de BD.   #
 # --------------------------------------------------------------------------- #
 

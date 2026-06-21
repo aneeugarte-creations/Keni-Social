@@ -164,7 +164,7 @@ def _escribir_yaml(ruta: Path, datos: dict[str, Any], *, tipo: str) -> None:
     `default_flow_style=False` (mapas/listas en bloque), `allow_unicode=True`
     (acentos sin escapar), `sort_keys=False` (respeta el orden dado), y bloque `|`
     para textos multilinea (via `_DumperBloque`). `sellar(tipo, ...)` estampa la
-    `version` de esquema antes de volcar (#125).
+    `version` de esquema antes de volcar.
     """
     texto = yaml.dump(
         sellar(tipo, datos),
@@ -181,7 +181,7 @@ def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
     """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
 
     Degrada con log (nunca lanza): un fichero ilegible se trata como ausente. Al
-    leer aplica `migrar(tipo, ...)` (upgrade perezoso de esquema, #125): un YAML
+    leer aplica `migrar(tipo, ...)` (upgrade perezoso de esquema): un YAML
     legado sin `version` se trata como version 0 y se sube a la actual en memoria.
     """
     try:
@@ -396,7 +396,7 @@ def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str,
         "resultado": datos.get("resultado", "") or "",
         "piezas": [p for p in piezas if isinstance(p, dict)],
         "titulo": datos.get("titulo", "") or "",
-        # Atribucion por usuario (#130 Fase 1). Ausente en historial legado => "".
+        # Atribucion por usuario. Ausente en historial legado => "".
         "autor_id": datos.get("autor_id", "") or "",
         "autor_nombre": datos.get("autor_nombre", "") or "",
         "metricas": metricas,
@@ -416,7 +416,7 @@ def registrar_historial_prompt(
     """Guarda una ejecucion de prompt (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id.
 
     `metricas` (tokens/turnos/coste/duracion/modelo del run) se guarda como un mapa en
-    el YAML, o se omite si es None. `autor` (atribucion por usuario, #130 Fase 1) es
+    el YAML, o se omite si es None. `autor` (atribucion por usuario) es
     `{"id", "usuario"}` o `None`; se persiste (vacio si anonimo / por token).
     """
     autor = autor or {}

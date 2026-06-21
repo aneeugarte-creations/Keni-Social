@@ -7,7 +7,7 @@ from ._repos_comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Piezas de la parrilla (OPERACIONAL: Postgres via db.py; #150 PARRILLA 2026)   #
+# Piezas de la parrilla (OPERACIONAL: Postgres via db.py; PARRILLA 2026)        #
 # --------------------------------------------------------------------------- #
 #
 # Una pieza = un POST individual (no un evento). Un evento puede generar varias piezas;

@@ -1,4 +1,4 @@
-"""Util comun de escritura atomica (`io_atomico.escribir_atomico`) — H3/E1.
+"""Util comun de escritura atomica (`io_atomico.escribir_atomico`).
 
 Verifica que el destino nunca queda a medias, el padre se crea, el temporal se
 borra al fallar, y `modo` aplica permisos (p.ej. 0600).

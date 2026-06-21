@@ -1,4 +1,4 @@
-// Tests de la validación de contrato en el borde de fetch (#120).
+// Tests de la validación de contrato en el borde de fetch.
 //
 // Validamos contra el MISMO esquema que emite el backend (`esquema.gen.json`).
 // Cubrimos lo crítico: payload válido pasa, props EXTRA permitidas (cambios
@@ -22,7 +22,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("validarContrato (#120)", () => {
+describe("validarContrato", () => {
   it("acepta una respuesta válida y la devuelve tal cual", () => {
     expect(validarContrato("Paginacion", PAGINACION_OK)).toBe(PAGINACION_OK);
   });

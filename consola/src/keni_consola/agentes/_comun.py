@@ -199,7 +199,7 @@ def _escribir_texto_atomico(ruta: Path, contenido: str) -> None:
 def _escribir_yaml_atomico(ruta: Path, datos: dict[str, Any], *, tipo: str) -> None:
     """Escribe un dict como YAML legible de forma ATOMICA (tmp + os.replace).
 
-    `sellar(tipo, ...)` estampa la `version` de esquema antes de volcar (#125).
+    `sellar(tipo, ...)` estampa la `version` de esquema antes de volcar.
     """
     texto = yaml.safe_dump(
         sellar(tipo, datos),
@@ -214,7 +214,7 @@ def _escribir_yaml_atomico(ruta: Path, datos: dict[str, Any], *, tipo: str) -> N
 def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
     """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
 
-    `migrar(tipo, ...)` sube de version el dict legado en memoria (#125).
+    `migrar(tipo, ...)` sube de version el dict legado en memoria.
     """
     try:
         texto = ruta.read_text(encoding="utf-8")

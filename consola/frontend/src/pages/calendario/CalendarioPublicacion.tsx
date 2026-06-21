@@ -17,8 +17,7 @@ import { PanelLineasPlan } from "@/pages/piezas/PanelLineasPlan";
 /**
  * Página "Programación" (`/operacion/programacion`): la rejilla mensual de piezas
  * programadas (`GestionPiezas` en modo calendario), por marca activa del workspace.
- * Antes era la pestaña "Programación" del hub Calendario; ahora es una página plana del
- * sidebar (su hermana es "Turnos"). Desde la cabecera se gestionan los HORARIOS de
+ * Es una página plana del sidebar (su hermana es "Turnos"). Desde la cabecera se gestionan los HORARIOS de
  * publicación (las franjas/huecos que alimentan este calendario). Un enlace `?horarios=1` abre
  * los horarios directamente (lo usa el aviso "sin franjas" de la lista de contenido).
  */

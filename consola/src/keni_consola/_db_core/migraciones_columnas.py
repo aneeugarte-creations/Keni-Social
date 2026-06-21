@@ -390,7 +390,7 @@ def _migrar_renombre_columnas_veredicto(con: Any) -> None:
         con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_contenido_verificar_veredicto")
 
 
-# Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
+# Columnas que se anadieron a `rota_eventos` despues de su esquema original.
 # Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
 # retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
 #   - tipo_cobertura: transmision|imagenes|no_cubrir; legado -> "transmision" (sigue cubierto).
@@ -519,7 +519,7 @@ def _asegurar_marca_grid_rota(con: Any) -> None:
 
 
 def _migrar_columnas_eventos_rota(con: Any) -> None:
-    """Anade a `rota_eventos` las columnas de la ola B que una BD vieja no tuviera (idempotente).
+    """Anade a `rota_eventos` las columnas posteriores que una BD vieja no tuviera (idempotente).
 
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
     antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
@@ -537,7 +537,7 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
 
 # Columnas de `rota_piezas` declaradas en el DDL inicial: cualquier columna que se
 # anada DESPUES debera entrar aqui con `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` para
-# que las bases viejas la reciban (#150, PARRILLA 2026.xlsx). Mismo patron idempotente que
+# que las bases viejas la reciban (PARRILLA 2026.xlsx). Mismo patron idempotente que
 # `_migrar_columnas_eventos_rota`. Cada par es (columna, fragmento de tipo/DEFAULT).
 #
 # Ampliaciones reales del Excel (auditoria post-piloto):
@@ -753,7 +753,7 @@ def _recuperar_campanias_de_comercial(con: Any) -> None:
 # columna nueva, se agrega aqui como (col, tipo) y este migrador la pondra a las bases
 # viejas sin reescribir nada. Idempotente.
 _COLUMNAS_SWAP_AMPLIADAS: tuple[tuple[str, str], ...] = (
-    # VERBOS (#175): discriminador intercambio|cesion|abierto. Las filas viejas reciben el
+    # VERBOS: discriminador intercambio|cesion|abierto. Las filas viejas reciben el
     # DEFAULT 'intercambio' (su semántica actual) -> inerte para el swap existente. Al cambiar
     # esta tupla, la migración 0015-columnas-swaps (re_aplicar_si_cambia) hace el ALTER en prod.
     ("tipo", "TEXT NOT NULL DEFAULT 'intercambio'"),
@@ -1129,7 +1129,7 @@ def _migrar_etiquetas_etapas_verbos(con: Any) -> None:
 # "YYYY-MM-DDTHH:MM:SS" (el ~80%) y aware "...+00:00" (a veces con microsegundos). Como
 # estas columnas se comparan/ordenan LEXICOGRAFICAMENTE en SQL (limpieza de snapshots, keyset
 # del feed `c.creado < ?`, dedup por `creado >=`, el UNIQUE de parrilla sobre el texto de
-# `fecha_programada`), la mezcla rompia el orden. El canon es UTC SIN offset; aqui se
+# `fecha_programada`), la mezcla rompe el orden. El canon es UTC SIN offset; aqui se
 # normalizan los valores YA almacenados (idempotente: tras normalizar, ningun patron casa).
 # Cada par es (tabla, columna, longitud_canon): 19 = segundos ("...THH:MM:SS"), 16 =
 # minutos ("...THH:MM", el canon de `fecha_programada`, que generan las franjas de horario/UI).
@@ -1263,7 +1263,7 @@ def _dedup_turnos_rota(con: Any) -> None:
 # NOTA: `fuentes_rss` NO lleva UNIQUE(url) a proposito: el producto permite registrar la
 # MISMA URL en varias fuentes (distinta marca, filtros incluir/excluir o nombre). La
 # deduplicacion de ITEMS ya la cubre `rss_items_vistos` (PK compuesta). Imponer UNIQUE(url)
-# rompia ese caso de uso legitimo.
+# rompería ese caso de uso legitimo.
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     ("idx_franjas_editoriales_uniq2", "franjas_editoriales (marca, red, dia_semana, hora, categoria)"),
     # GRID POR MARCA: el NOMBRE de una franja es unico por (marca, lunes) — dos marcas pueden
@@ -1405,7 +1405,7 @@ def _migrar_renombre_entidades(con: Any) -> None:
 def _forzar_reset_password_existentes(con: Any) -> None:
     """ONE-SHOT: marca a TODOS los usuarios existentes `debe_cambiar_password=1`.
 
-    Endurecimiento enterprise 2026-06: las contrasenas fijadas con la politica antigua no se
+    Las contrasenas fijadas con la politica antigua no se
     pueden auditar (solo guardamos el hash), asi que se fuerza a cada cuenta a fijar una nueva
     (bajo la politica reforzada) en su proximo acceso. Combinado con el MFA obligatorio para
     todos, la primera vez que cada persona vuelva a entrar cambia su contrasena Y inscribe su

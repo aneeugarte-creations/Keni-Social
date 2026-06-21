@@ -23,9 +23,7 @@ from __future__ import annotations
 #   - x          25000 : limite del post con X Premium.
 #   - instagram  2200  : limite del caption.
 #   - facebook   None  : el tope es enorme (~63k); a efectos editoriales, sin tope.
-#   - tiktok     4000  : caption ampliado (2023-24). Antes 2200; ahora 4000 es el
-#                        maximo tecnico actual. Reconcilia la divergencia de #112
-#                        (meta.ts decia 2200; plataformas.md decia "2200/4000").
+#   - tiktok     4000  : maximo tecnico del caption.
 #   - youtube    None  : la DESCRIPCION no tiene tope practico (5000). El TITULO si
 #                        tiene tope (100) pero ese es un campo distinto del cuerpo de
 #                        copy; no se modela aqui como "limite de la red".

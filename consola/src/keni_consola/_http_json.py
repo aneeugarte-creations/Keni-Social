@@ -94,7 +94,7 @@ def _entero_query(valor: str | None, *, minimo: int = 0) -> int | None:
 
 
 # Cap de SERVIDOR para los listados grandes (piezas/contenido): sin `?limite=`
-# explicito, los endpoints devolvian el conjunto COMPLETO (full scan + serializacion sin
+# explicito, los endpoints servirian el conjunto COMPLETO (full scan + serializacion sin
 # tope). 1000 no rompe a ningun cliente actual del piloto (universos muy por debajo) y
 # acota el peor caso; el SPA pagina la vista de lista por su cuenta.
 _TOPE_LISTADO_DEF = 1000

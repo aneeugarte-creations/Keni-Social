@@ -36,8 +36,8 @@ export function useMarquee({
     if (!stage || espacioRef.current) return;
     if (e.evt.button !== 0 || e.target !== stage) return;
     // Editando la foto (encuadre/recorte): un clic en el VACÍO —fuera de la foto, cuyo gesto captura
-    // su propio overlay— sale del modo y deselecciona, como clicar fuera en Canva. Antes el guard de
-    // `modoImagen` lo ignoraba y solo se salía con Esc o el botón "Listo".
+    // su propio overlay— sale del modo y deselecciona, como clicar fuera en Canva (además de Esc o
+    // el botón "Listo").
     if (modoImagen) {
       salirDeModoImagen?.();
       store.getState().seleccionar(null);

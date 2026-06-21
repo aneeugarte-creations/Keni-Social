@@ -1,4 +1,4 @@
-"""Logica de DOMINIO de la parrilla y rota de horarios del equipo (F4 · #144).
+"""Logica de DOMINIO de la parrilla y rota de horarios del equipo.
 
 Modulo PURO (sin I/O ni dependencias de persistencia): aqui viven las reglas y
 predicados de rotacion, para poder probarlas a fondo sin tocar SQLite ni la red.

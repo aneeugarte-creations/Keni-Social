@@ -165,14 +165,14 @@ def _responder_aprobada(
 
     2 likes => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
     gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Lo comparten la
-    decisión normal (`_decidir`) y el override (`forzar`). COLAPSO 2026-06: ya no hay estado de
-    reposo `aprobado`; se mira el estado de la CADENA, no el `estado` de la pieza (que sigue
-    `en_revision` hasta que la auto-programación encuentre hueco).
+    decisión normal (`_decidir`) y el override (`forzar`). No hay estado de reposo `aprobado`: se
+    mira el estado de la CADENA, no el `estado` de la pieza (que sigue `en_revision` hasta que la
+    auto-programación encuentre hueco).
     """
     cadena = repos.listar_aprobaciones(pieza_id)
     if colaboracion.estado_cadena(cadena) == DECISION_APROBADO:
         # Evento público `pieza.aprobada`: el momento REAL de la aprobación es juntar los 2 OK
-        # (ya no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES de la
+        # (no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES de la
         # auto-programación. Best-effort: nunca rompe el OK ya registrado.
         _emitir_pieza_aprobada(actualizada)
         from .. import auto_programar
@@ -189,9 +189,9 @@ def _responder_aprobada(
 def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
     """Emite el evento público `pieza.aprobada` (best-effort) al juntarse los 2 OK de la cadena.
 
-    COLAPSO 2026-06: el evento ya no se dispara al ENTRAR en un estado `aprobado` (no existe);
-    se emite aquí, en el momento real de la aprobación, antes de que la auto-programación mueva
-    la pieza a `programado`. Un fallo de notificación nunca tumba la aprobación ya registrada.
+    El evento no se dispara al ENTRAR en un estado `aprobado` (no existe); se emite aquí, en el
+    momento real de la aprobación, antes de que la auto-programación mueva la pieza a `programado`.
+    Un fallo de notificación nunca tumba la aprobación ya registrada.
     """
     try:
         from .. import marcas, redes

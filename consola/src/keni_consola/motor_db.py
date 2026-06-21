@@ -160,8 +160,8 @@ class _ConexionPg:
             cur.execute(_traducir_sql(sql), tuple(params))
         except (
             # TODAS las violaciones de integridad (UNIQUE/PK, FK, NOT NULL, CHECK) se mapean a
-            # la excepcion neutra: antes solo UniqueViolation y las demas salian como psycopg
-            # crudo, que ningun call site capturaba (500 en vez de un error de dominio).
+            # la excepcion neutra; si salieran como psycopg crudo ningun call site las
+            # capturaria (500 en vez de un error de dominio).
             psycopg.errors.UniqueViolation,
             psycopg.errors.ForeignKeyViolation,
             psycopg.errors.NotNullViolation,

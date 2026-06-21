@@ -60,13 +60,13 @@ const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => {
-  // CIERRE POR TOQUE FUERA EN iOS/WebKit (bug real reproducido en iPhone): con el select
-  // abierto, Radix pone `pointer-events: none` en el body y, en TÁCTIL, espera el `click`
-  // posterior al touch para cerrar al tocar fuera. WebKit NO sintetiza ese click cuando el
-  // target tiene pointer-events:none (Chrome sí), así que el select se quedaba ABIERTO
-  // con su capa tragándose TODOS los toques: la app entera parecía bloqueada (Métricas,
-  // o cualquier página con un select). Escape SÍ cierra (verificado), así que mientras el
-  // contenido esté montado convertimos cualquier `touchend` FUERA de él en un Escape.
+  // CIERRE POR TOQUE FUERA EN iOS/WebKit: con el select abierto, Radix pone
+  // `pointer-events: none` en el body y, en TÁCTIL, espera el `click` posterior al touch
+  // para cerrar al tocar fuera. WebKit NO sintetiza ese click cuando el target tiene
+  // pointer-events:none (Chrome sí), por lo que un toque fuera no cierra el select y su
+  // capa se traga TODOS los toques, bloqueando la app entera (Métricas, o cualquier página
+  // con un select). Escape SÍ cierra, así que mientras el contenido esté montado
+  // convertimos cualquier `touchend` FUERA de él en un Escape.
   const refPublicacion = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     const cerrarSiFuera = (e: TouchEvent) => {

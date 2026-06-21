@@ -1,4 +1,4 @@
-"""Tests de auth multiusuario de la Consola: login/roles/usuarios (#130).
+"""Tests de auth multiusuario de la Consola: login/roles/usuarios.
 
 Cubre el CONTRATO de la API contra el que tambien se construye el frontend:
   - login OK/KO (mensaje generico, sin enumeracion), cookie de sesion HttpOnly/Strict.
@@ -7,7 +7,7 @@ Cubre el CONTRATO de la API contra el que tambien se construye el frontend:
   - CRUD de /api/usuarios SOLO admin (403 para editor), 409 de duplicado.
   - Guardas: ultimo admin (borrar/degradar), auto-borrado.
   - Hashing: nada en texto plano en la BD; expiracion de sesion.
-  - Convivencia con el TOKEN de #134 (sigue valiendo para /api).
+  - Convivencia con el TOKEN de mantenimiento (sigue valiendo para /api).
 
 Todo OFFLINE; reusa el aislamiento de `entorno`. Las apps se crean con `bootstrap`
 desactivado salvo donde se prueba el bootstrap; los usuarios se crean a mano o por la API.
@@ -1273,19 +1273,19 @@ def test_login_limite_por_ip_no_cuenta_exitos(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 10) Convivencia con el token de #134                                        #
+# 10) Convivencia con el token de mantenimiento                               #
 # --------------------------------------------------------------------------- #
 
 
 def test_token_de_bootstrap_sigue_valiendo_para_api(entorno):
-    """El TOKEN de #134 sigue autorizando /api sin necesidad de sesion."""
+    """El TOKEN de mantenimiento sigue autorizando /api sin necesidad de sesion."""
     c = _cli()
     r = c.get("/api/estado", headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     assert r.status_code == 200
 
 
 def test_token_bootstrap_crea_primer_admin_con_bd_vacia(entorno):
-    """#150: con la BD VACIA, el token de mantenimiento SI puede crear el PRIMER admin.
+    """Con la BD VACIA, el token de mantenimiento SI puede crear el PRIMER admin.
 
     Es el unico camino admin que conserva el token: bootstrap de recuperacion. No es poder
     admin general (ver los tests de abajo): en cuanto hay usuarios, el token deja de poder.
@@ -1304,7 +1304,7 @@ def test_token_bootstrap_crea_primer_admin_con_bd_vacia(entorno):
 
 
 def test_token_bootstrap_solo_admin_no_editor(entorno):
-    """#150: el bootstrap por token SOLO crea admin; un editor con BD vacia -> 403.
+    """El bootstrap por token SOLO crea admin; un editor con BD vacia -> 403.
 
     Inicializar un editor con la BD vacia dejaria la consola sin admin (y sin recuperacion).
     """
@@ -1320,7 +1320,7 @@ def test_token_bootstrap_solo_admin_no_editor(entorno):
 
 
 def test_token_no_crea_usuarios_si_ya_hay(entorno):
-    """#150: con usuarios YA en la BD, el token NO puede crear cuentas (no es admin) -> 403."""
+    """Con usuarios YA en la BD, el token NO puede crear cuentas (no es admin) -> 403."""
     _crear("jefa", CLAVE, "admin")
     c = _cli()
     h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}
@@ -1334,7 +1334,7 @@ def test_token_no_crea_usuarios_si_ya_hay(entorno):
 
 
 def test_token_no_lista_usuarios(entorno):
-    """#150: GET /api/usuarios por el token (sin sesion admin real) -> 403 (no es admin)."""
+    """GET /api/usuarios por el token (sin sesion admin real) -> 403 (no es admin)."""
     _crear("jefa", CLAVE, "admin")
     c = _cli()
     r = c.get("/api/usuarios", headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
@@ -1342,7 +1342,7 @@ def test_token_no_lista_usuarios(entorno):
 
 
 def test_token_no_modifica_usuarios(entorno):
-    """#150: PATCH /api/usuarios/{id} por el token -> 403 (no puede tocar cuentas)."""
+    """PATCH /api/usuarios/{id} por el token -> 403 (no puede tocar cuentas)."""
     _crear("jefa", CLAVE, "admin")
     ed = _crear("ed", CLAVE, "editor")
     c = _cli()
@@ -1354,7 +1354,7 @@ def test_token_no_modifica_usuarios(entorno):
 
 
 def test_token_no_borra_usuarios(entorno):
-    """#150: DELETE /api/usuarios/{id} por el token -> 403 (no puede borrar cuentas)."""
+    """DELETE /api/usuarios/{id} por el token -> 403 (no puede borrar cuentas)."""
     _crear("jefa", CLAVE, "admin")
     ed = _crear("ed", CLAVE, "editor")
     c = _cli()
@@ -1367,7 +1367,7 @@ def test_token_no_borra_usuarios(entorno):
 
 
 def test_admin_real_si_gestiona_usuarios(entorno):
-    """#150: un admin REAL (sesion) SIGUE gestionando usuarios (no se rompe el flujo normal)."""
+    """Un admin REAL (sesion) SIGUE gestionando usuarios (no se rompe el flujo normal)."""
     _crear("jefa", CLAVE, "admin")
     c = _cli()
     _login(c, "jefa", CLAVE)
@@ -1381,7 +1381,7 @@ def test_admin_real_si_gestiona_usuarios(entorno):
 
 
 def test_sesion_autoriza_api_sin_token(entorno):
-    """Una sesion valida autoriza /api aunque NO se mande el token de #134."""
+    """Una sesion valida autoriza /api aunque NO se mande el token de mantenimiento."""
     _crear("ana", CLAVE, "editor")
     c = _cli()
     _login(c, "ana", CLAVE)

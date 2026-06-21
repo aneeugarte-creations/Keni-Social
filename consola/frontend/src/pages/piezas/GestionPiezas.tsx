@@ -247,7 +247,7 @@ function Cuerpo({
 
   // LISTA: paginación KEYSET (modo `feed` del backend). Cada página devuelve
   // `paginacion.cursor_siguiente` y la siguiente se pide con `cursor=` desde la última fila
-  // vista. El offset (`limite`+`desplazamiento`) saltaba piezas cuando el conjunto encogía
+  // vista. El offset (`limite`+`desplazamiento`) saltaría piezas cuando el conjunto encoge
   // en vivo (lente "Por coger" + claims de compañeros); el cursor es inmune a eso.
   // `paginacion.total` sigue llegando para el "Mostrando X de Y". Cambiar los filtros
   // (incluida la vista de estado) cambia la queryKey, que resetea las páginas sola.

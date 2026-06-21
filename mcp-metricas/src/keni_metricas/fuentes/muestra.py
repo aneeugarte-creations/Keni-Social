@@ -47,9 +47,9 @@ from .base import CuentaNoEncontrada, engagement_pct
 # PERFILES de muestra por cuenta: cifras creibles (visualizaciones/mes, plataformas,
 # tema) ancladas a la realidad del cliente. Estan KEYED por `id_metricas` (guion_bajo).
 #
-# Las CUENTAS que sirve la muestra ya NO se hardcodean aqui: se DERIVAN del cliente
-# activo (`keni_shared.marcas`/`keni_shared.cuentas`, externalizado a config en #135;
-# por defecto, el cliente base). Este diccionario solo aporta el PERFIL de cada id; las cuentas de
+# Las CUENTAS que sirve la muestra se DERIVAN del cliente activo
+# (`keni_shared.marcas`/`keni_shared.cuentas`; por defecto, el cliente base).
+# Este diccionario solo aporta el PERFIL de cada id; las cuentas de
 # un cliente sin perfil propio caen a `_PERFIL_DEFECTO`. Asi, cambiar de cliente =
 # cambiar el `.toml`, sin tocar este modulo, y la muestra sigue al catalogo.
 #
@@ -119,8 +119,8 @@ _PERFIL_DEFECTO: tuple[str, int, list[Plataforma], str] = (
 )
 
 # `id_metricas` de las MARCAS editoriales del CLIENTE ACTIVO (sin las cuentas
-# hermanas de deportes). Se DERIVA de `keni_shared.marcas` (fuente unica, ahora
-# cargada de config en #135): la muestra sigue al cliente seleccionado.
+# hermanas de deportes). Se DERIVA de `keni_shared.marcas` (fuente unica,
+# cargada de config): la muestra sigue al cliente seleccionado.
 IDS_METRICAS_MARCAS: frozenset[str] = frozenset(m.id_metricas for m in _marcas.MARCAS)
 # Cuentas hermanas de deportes (canal de TV + sub-vertical de golf): NO son
 # marcas. Derivadas tambien de la fuente unica `keni_shared.cuentas`.
@@ -376,7 +376,7 @@ class FuenteMuestra:
 
     # UNICA fuente de verdad del nombre: `formato.FUENTE_MUESTRA`. Los renders
     # comparan `fuente.nombre` contra ese valor para anteponer el aviso de
-    # datos de muestra (issue #131), en vez de buscar el literal "muestra".
+    # datos de muestra, en vez de buscar el literal "muestra".
     nombre = _FUENTE_MUESTRA
 
     def cuentas(self) -> list[Cuenta]:
@@ -404,7 +404,7 @@ class FuenteMuestra:
         eng = round(_entre(_rand(cuenta_id, plat, rango, "e"), eng_min, eng_max) * factor, 1)
         interacciones = int(vistas * eng / 100)
         # solo las plataformas que realmente miden alcance (Meta) lo traen; el
-        # resto AUSENTE (None), igual que los adaptadores reales (#138).
+        # resto AUSENTE (None), igual que los adaptadores reales.
         alcance = (
             int(vistas * _entre(_rand(cuenta_id, plat, rango, "a"), 0.55, 0.75))
             if plat in PLATAFORMAS_CON_ALCANCE
@@ -433,7 +433,7 @@ class FuenteMuestra:
 
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
-        alc = agregar_alcance(por_plataforma)  # solo suma el alcance medido (#138)
+        alc = agregar_alcance(por_plataforma)  # solo suma el alcance medido
         # engagement combinado: la muestra es una fuente única y determinista, su
         # modelo de engagement por marca es coherente (calibrado a la realidad del
         # cliente); a diferencia del agregado de fuentes reales heterogéneas, aquí

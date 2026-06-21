@@ -20,7 +20,7 @@ import { type NombreContrato, validarContrato } from "../contrato";
 export const BASE_API = "/api";
 
 /**
- * Token de sesion de la Consola (#134). El backend lo inyecta en el index del SPA
+ * Token de sesion de la Consola. El backend lo inyecta en el index del SPA
  * como `window.__KENI_TOKEN__` y tambien lo guarda como cookie `keni_consola_token`
  * (SameSite=Strict). Lo mandamos por cabecera cuando esta disponible (defensa en
  * profundidad); la cookie cubre las descargas por `window.open` y las `<img src>`,
@@ -181,8 +181,8 @@ async function infoDeError(
 
 /**
  * Parsea el body de una respuesta OK como JSON. Si se pasa `validador` (nombre de
- * un `$def` del contrato), valida el body contra ese esquema en el borde de fetch
- * (#120): DEV lanza ante mismatch; PROD avisa y devuelve igual. NUNCA transforma el
+ * un `$def` del contrato), valida el body contra ese esquema en el borde de fetch.
+ * DEV lanza ante mismatch; PROD avisa y devuelve igual. NUNCA transforma el
  * body. `muestrear` (def `true`) deja que los endpoints sondeados solo validen una
  * fracción en PROD; pásalo a `false` para validar siempre.
  */
@@ -227,7 +227,7 @@ export interface OpcionesPeticion {
    */
   timeoutMs?: number;
   /**
-   * Nombre del `$def` del contrato contra el que validar el body (opt-in, #120).
+   * Nombre del `$def` del contrato contra el que validar el body (opt-in).
    * Solo se valida si el modelo existe en `esquema.gen.json`.
    */
   validador?: NombreContrato;

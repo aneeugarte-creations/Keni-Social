@@ -1,4 +1,4 @@
-"""Tests de PAGINACION real de los listados + indice de runs (#121).
+"""Tests de PAGINACION real de los listados + indice de runs.
 
 OFFLINE, todo aislado en tmp (raiz de datos + indice + almacenes via env vars). Cubre:
   - indice: `listar(limite/desplazamiento)` (LIMIT/OFFSET) respeta el ORDER BY y
@@ -173,7 +173,7 @@ def _agregados_full_scan() -> dict:
     """Reimplementacion del VIEJO agregados_runs (full-scan de todos los cuerpos).
 
     Itera TODOS los runs en disco (sin indice) y suma coste/tokens global, por agente
-    y por dia, EXACTAMENTE como lo hacia agentes.agregados_runs antes de #121. Es la
+    y por dia, EXACTAMENTE como lo hace agentes.agregados_runs. Es la
     referencia con la que comparamos la nueva agregacion en SQL.
     """
     runs: list[dict] = []

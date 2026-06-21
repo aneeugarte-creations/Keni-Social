@@ -1,4 +1,4 @@
-"""Tests del paquete de cliente: marcas/cuentas externalizadas a configuracion (#135).
+"""Tests del paquete de cliente: marcas/cuentas externalizadas a configuracion.
 
 OBJETIVO: anadir un cliente nuevo = anadir/seleccionar un `.toml`, SIN tocar la capa
 base. Estos tests verifican:
@@ -82,7 +82,7 @@ def test_seleccionar_otro_cliente_cambia_marcas_sin_tocar_codigo(
     # El catalogo de marcas cambio a las del cliente demo.
     assert marcas_mod.ids() == ["acme-news", "acme-sports"]
     assert marcas_mod.es_marca("acme-sports")
-    assert not marcas_mod.es_marca("claro-sports")  # ya no es la del cliente por defecto
+    assert not marcas_mod.es_marca("claro-sports")  # no pertenece al cliente demo cargado
     assert marcas_mod.etiqueta_de("acme-news") == "ACME News"
     assert marcas_mod.id_metricas_de("acme-sports") == "acme_sports"
     assert dict(marcas_mod.opciones_metricas()) == {

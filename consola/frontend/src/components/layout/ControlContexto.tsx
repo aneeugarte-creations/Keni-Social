@@ -1,6 +1,6 @@
 /**
  * CONTROL DE CONTEXTO unificado de la barra superior: junta en UN solo dropdown los tres
- * selectores que antes vivían sueltos (`SwitchMarca` + Red + Línea de `SwitchFiltrosPublicacion`).
+ * selectores de contexto (`SwitchMarca` + Red + Línea de `SwitchFiltrosPublicacion`).
  *
  *   - MARCA (workspace): la consola entera trabaja sobre la marca activa. Si el usuario es de
  *     una sola marca y la ruta no usa filtros, se muestra un chip fijo (nada que cambiar). Si

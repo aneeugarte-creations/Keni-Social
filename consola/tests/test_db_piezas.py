@@ -1,4 +1,4 @@
-"""Tests del CRUD de `rota_piezas` (`keni_consola.db`): dato OPERACIONAL (#150).
+"""Tests del CRUD de `rota_piezas` (`keni_consola.db`): dato OPERACIONAL.
 
 La PARRILLA 2026 del Excel de Tescu modela cada FILA como un POST individual. Aqui
 probamos el contrato basico de la persistencia: CRUD, filtros combinables, allowlist de

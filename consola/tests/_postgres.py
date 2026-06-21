@@ -85,8 +85,8 @@ _TABLAS = (
     # fuentes (sin FK, pero a la cabeza evita sorpresas de orden).
     "noticias_algoritmo",
     "fuentes_algoritmo",
-    # Motor de ingesta de noticias (Ola A): archivo de artículos + clusters. Sin truncar,
-    # acumulaban filas entre tests y reventaban counts de test_api_noticias/historias.
+    # Motor de ingesta de noticias (Ola A): archivo de artículos + clusters. Truncar evita que
+    # se acumulen filas entre tests y descuadren los counts de test_api_noticias/historias.
     "noticias_items",
     "noticias_clusters",
     # Taller Evergreen: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,

@@ -123,10 +123,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
-  // Tras una reacción: actualiza SOLO la pieza afectada en las cachés de listados (antes se
-  // invalidaba `CLAVE_PIEZAS` entero, que refetcheaba TODAS las páginas del scroll
-  // infinito por cada like) e invalida únicamente SU cadena. El kanban (`contenido`) se marca
-  // stale en bloque: es otra superficie y se refresca al montarse.
+  // Tras una reacción: actualiza SOLO la pieza afectada en las cachés de listados (sin
+  // invalidar `CLAVE_PIEZAS` entero, que refetchearía TODAS las páginas del scroll infinito
+  // por cada like) e invalida únicamente SU cadena. El kanban (`contenido`) se marca stale en
+  // bloque: es otra superficie y se refresca al montarse.
   const actualizarCaches = (res?: RespuestaPieza) => {
     if (res?.pieza) {
       remplazarPiezaEnCaches(queryClient, res.pieza);

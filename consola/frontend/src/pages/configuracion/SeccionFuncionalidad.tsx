@@ -527,7 +527,7 @@ export function PanelAjustes({
 
 /** Sección «Investigación» del drawer del MONITOR (Fase 3: UN solo sitio para los ajustes de la
  * máquina): el motor de noticias completo (entrada al pool, rendimiento, producción automática
- * y técnico), antes en el menú ⋮ de Noticias. Ni el MAESTRO «Investigación» ni las EXCEPCIONES
+ * y técnico). Ni el MAESTRO «Investigación» ni las EXCEPCIONES
  * por marca se pintan aquí: los switches de etapa (Selección/Validación) viven en la tira
  * «Pipeline en vivo» del propio Monitor y las excepciones por marca, en el diálogo de cada
  * etapa de esa tira (sin duplicar el control). Mismo motor (`/api/ajustes`); aplican en

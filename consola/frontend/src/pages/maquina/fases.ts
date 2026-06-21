@@ -1,9 +1,8 @@
 /**
  * Las FASES de las dos máquinas (Investigación y Producción), en orden de flujo.
  *
- * Antes vivían inline en `FlujoInvestigacion` y `CockpitProduccion`; al consolidar todo en la
- * página «Contexto» (Máquina) se extraen aquí para que un único `PanelPipeline` las pinte como
- * el ESQUELETO de cada pestaña. Cada fase resuelve su switch por la PRIMERA de sus `claves`
+ * Centralizadas aquí para que un único `PanelPipeline` las pinte como el ESQUELETO de cada
+ * pestaña de la página «Contexto» (Máquina). Cada fase resuelve su switch por la PRIMERA de sus `claves`
  * presente en el catálogo; las que solo cuelgan del maestro virtual del proceso lo indican con
  * `heredada`.
  */

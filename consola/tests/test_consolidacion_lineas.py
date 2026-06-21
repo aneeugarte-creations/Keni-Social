@@ -48,7 +48,7 @@ def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
     # UnoTV: solo sus líneas reales (Nacional/Internacional/Entretenimiento), planas y normales.
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
     assert nacional is not None and nacional["grupo"] == "" and nacional["cadencia"] == "normal"
-    # Fundación: sus pilares de misión quedan sembrados (antes vacía).
+    # Fundación: sus pilares de misión quedan sembrados (no nace sin líneas).
     salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
     assert salud is not None and salud["cadencia"] == "evergreen"
     # Nación Gamer: al menos su línea base.
@@ -74,7 +74,7 @@ def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
         assert et is not None, nombre
         return et
 
-    # Re-grupado a los CHIPS de la barra de navegación (antes todo era "Otros deportes").
+    # Cada disciplina cae en su CHIP de la barra de navegación, no en un cajón "Otros deportes".
     assert g("F1 Checo")["grupo"] == "Motor"
     assert g("F1 (no Checo)")["grupo"] == "Motor"
     assert g("NFL")["grupo"] == "NFL"
@@ -216,7 +216,7 @@ def test_migrar_plan_y_franjas_a_lineas(entorno):
 
     bootstrap_lineas.inicializar_lineas()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
-    # Plan y franja en forma SLUG (lo de antes del re-clavado).
+    # Plan y franja en forma SLUG (la forma de entrada, anterior al re-clavado a líneas).
     ajustes.guardar("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
     franja = repos.crear_franja(1, "09:00", marca="unotv", red="x", categoria="mx")
     bootstrap_lineas.migrar_plan_y_franjas_a_lineas()

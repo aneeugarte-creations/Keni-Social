@@ -35,7 +35,7 @@ __all__ = [
 
 
 def _variacion_pct(a: float | None, b: float | None) -> float | None:
-    """Variacion de A respecto a B en %. None si falta algun dato (#138: alcance/
+    """Variacion de A respecto a B en %. None si falta algun dato (alcance/
     engagement pueden ser n/d); 0.0 si B es 0 (no divide entre cero)."""
     if a is None or b is None:
         return None
@@ -43,7 +43,7 @@ def _variacion_pct(a: float | None, b: float | None) -> float | None:
 
 
 def _delta(a: float | None, b: float | None) -> float | None:
-    """Diferencia A-B tolerante a None (#138: alcance/engagement pueden ser n/d)."""
+    """Diferencia A-B tolerante a None (alcance/engagement pueden ser n/d)."""
     if a is None or b is None:
         return None
     return a - b
@@ -95,7 +95,7 @@ def _comparar_totales(total_a: dict, total_b: dict) -> dict:
     Solo se emiten las métricas de conteo presentes en los totales (las ausentes se
     omiten: el desglose por marca trae menos que el total global). El engagement NO se
     toma crudo del total: viene `None` cuando hay varias redes (denominadores
-    heterogéneos, #138). Se RECALCULA int/vis por periodo —igual que
+    heterogéneos). Se RECALCULA int/vis por periodo —igual que
     `_reporte_serializable`— para que deje de salir "—".
 
     NO incluye `alcance`: no se mide con la fuente de posts (sería siempre null y la UI ya
@@ -212,7 +212,7 @@ def _agregar_por_red(rep: dict) -> list[dict]:
     """Agrega el `por_plataforma` de TODAS las cuentas del reporte, por red.
 
     Suma `visualizaciones` e `interacciones`; el `alcance` suma solo los no-null y
-    queda `None` si NINGUNA cuenta mide esa red (criterio #138, igual que el `total`:
+    queda `None` si NINGUNA cuenta mide esa red (criterio igual que el `total`:
     no se inventa un 0). El engagement se recalcula sobre los agregados de la red.
     Devuelve las redes ordenadas por visualizaciones desc. La red se emite como id de
     plataforma (el frontend lo traduce a nombre legible).
@@ -367,11 +367,11 @@ def _engagement_pct(interacciones, visualizaciones) -> float:
     """Engagement de DISPLAY = interacciones ÷ vistas × 100 (0.0 si no hay vistas).
 
     El `engagement_pct` AGREGADO del resumen es `None` cuando la marca tiene varias redes
-    (denominadores heterogéneos, ADR/#138). Para el reporte que pinta la UI lo derivamos
+    (denominadores heterogéneos). Para el reporte que pinta la UI lo derivamos
     siempre como un número (int/vis), igual que ya hacían las tablas en cliente: así nunca
     llega `null` (que reventaba el comparador) y el engagement deja de salir "—" en todo.
 
-    Coacciona `None`→0 y delega en la fórmula única del monorepo (`keni_shared`, #97).
+    Coacciona `None`→0 y delega en la fórmula única del monorepo (`keni_shared`).
     """
     return engagement_pct(interacciones or 0, visualizaciones or 0)
 

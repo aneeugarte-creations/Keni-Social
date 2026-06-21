@@ -151,9 +151,9 @@ def paso_agrupar() -> dict[str, Any]:
             marca_por_ia = False  # ¿la marca la asignó el clasificador IA en este tick?
             if not marca_c:
                 # Encaje por VOCABULARIO: una historia formada SOLO por items sin marca
-                # (Trends/agencias) quedaba con marca='' e INVISIBLE para la promoción por
+                # (Trends/agencias) queda con marca='' e INVISIBLE para la promoción por
                 # marca. Se le asigna la marca cuyo vocabulario mejor casa (sobre umbral);
-                # si ninguna pasa, queda sin marca como antes (honesto).
+                # si ninguna pasa, queda sin marca (honesto).
                 if vocabularios is None:
                     # Solo marcas de NOTICIAS: el contenido propio (p. ej. piso-15/fundación) se
                     # salta la investigación, así que su vocabulario no compite por estas historias.

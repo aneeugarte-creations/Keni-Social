@@ -89,7 +89,7 @@ class RedMetrica(TypedDict):
 
     Agrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`
     es el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si
-    NINGUNA cuenta mide esa red (#138: no se inventa un 0).
+    NINGUNA cuenta mide esa red (no se inventa un 0).
     """
 
     red: str
@@ -221,14 +221,14 @@ class MovimientoAnalisis(TypedDict):
     # direccion: "sube" | "baja" | "estable" (se deriva del signo de la variación).
     direccion: str
     visualizaciones: int
-    # engagement_pct: None si no es comparable entre plataformas (#138).
+    # engagement_pct: None si no es comparable entre plataformas.
     engagement_pct: float | None
     # pieza: None si la marca no tiene piezas que destacar.
     pieza: PiezaAnalisis | None
 
 
 class SiguientePasoAnalisis(TypedDict):
-    """Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11)."""
+    """Sugerencia accionable que cierra el loop a la acción."""
 
     marca_id: str
     marca: str
@@ -240,9 +240,9 @@ class SiguientePasoAnalisis(TypedDict):
 class AnalisisDiario(TypedDict):
     """Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
 
-    Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
+    Capa narrativa sobre las métricas: top movimientos con la(s) pieza(s)
     que los explican y un siguiente paso. `fuente` marca la procedencia de los
-    datos (issue #131).
+    datos.
     """
 
     rango: str

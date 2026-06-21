@@ -77,7 +77,7 @@ const ROL_OPCIONES: { valor: string; etiqueta: string }[] = [
   { valor: ROL_SUPERADMIN, etiqueta: "Superadmin" },
 ];
 
-/** Pequeño icono de ayuda con tooltip (para explicaciones que antes iban como subtexto). */
+/** Pequeño icono de ayuda con tooltip para explicaciones secundarias. */
 function Ayuda({ texto }: { texto: string }) {
   return (
     <Tooltip label={texto}>

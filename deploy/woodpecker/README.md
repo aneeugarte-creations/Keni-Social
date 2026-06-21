@@ -2,8 +2,8 @@
 
 CI self-hosted para el repo privado `kenitech-io/keni-social`. Stack **separado**
 en el server Latitude (<IP-DEL-SERVIDOR>) que reusa el Traefik de keni-social como
-ingress + TLS. Sustituye al CI de GitHub Actions (bloqueado por facturacion, ver
-issue #136). Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
+ingress + TLS. Sustituye al CI de GitHub Actions (bloqueado por facturacion).
+Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
 
 > Convenciones tomadas del rol Ansible de DevOps (`kenidevops/devops-infra/
 > ansible/roles/woodpecker`). No se usa Ansible aqui porque los servers DevOps

@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
  * Badge de SOLO LECTURA: muestra quién lleva una pieza («la lista») sin permitir coger/soltar
  * (eso vive en el tablero de Cobertura). Pinta "Tuya" si la llevas tú o el nombre del
  * responsable. Aparece en CUALQUIER marca cuando hay alguien asignado (`responsableId` no
- * vacío); si la pieza está libre, NO renderiza nada. «La lista» (reparto PULL) es universal:
- * antes este badge solo se pintaba en ClaroSports.
+ * vacío); si la pieza está libre, NO renderiza nada. «La lista» (reparto PULL) es universal.
  *
  * useContext directo (no useSesion): en tests no hay SesionProvider y el badge debe pintarse
  * igual aunque no sepamos quién mira (mismo criterio que VistaLista).

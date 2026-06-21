@@ -29,8 +29,8 @@ _SIN_HISTORIAL = frozenset({"piso-15"})
 
 def test_toda_marca_del_catalogo_tiene_biblioteca():
     # Una marca ACTIVA sin biblioteca queda MUDA en hashtags (candidatos vacíos -> la etapa no
-    # encola ni aplica nada, en cualquier formato). Era el bug de `fundacion`: marca activa sin
-    # JSON. Las de `_SIN_HISTORIAL` no tienen historial medido del que sacar el pool: se exceptúan.
+    # encola ni aplica nada, en cualquier formato): toda marca activa debe tener su JSON. Las de
+    # `_SIN_HISTORIAL` no tienen historial medido del que sacar el pool: se exceptúan.
     for marca in marcas.ids():
         if marca in _SIN_HISTORIAL:
             continue

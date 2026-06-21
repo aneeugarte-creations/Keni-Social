@@ -1,5 +1,5 @@
 /**
- * Atribución por usuario (#130 Fase 1): muestra "por <usuario>" de quien creó un
+ * Atribución por usuario: muestra "por <usuario>" de quien creó un
  * registro (publicación, entrada de historial, tarea, generación). El estado es
  * COMPARTIDO entre el equipo y cada registro lleva su autor.
  *

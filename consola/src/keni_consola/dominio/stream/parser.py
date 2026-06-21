@@ -226,9 +226,9 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
             datos = json.loads(bloque)
         except (json.JSONDecodeError, ValueError):
             # El error típico del modelo es dejar comillas SIN ESCAPAR dentro de un valor (una
-            # cita: «..."x"...»), que invalida el JSON. Antes eso tiraba TODA la salida cruda al
-            # caption (con `copy_in` vacío). Como el objeto del copy es PLANO y de claves conocidas,
-            # lo recuperamos de forma tolerante anclando cada valor en la siguiente clave o el `}`.
+            # cita: «..."x"...»), que invalida el JSON. Como el objeto del copy es PLANO y de claves
+            # conocidas, lo recuperamos de forma tolerante anclando cada valor en la siguiente clave
+            # o el `}`.
             datos = _objeto_copy_tolerante(bloque)
         if datos is not None:
             limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()

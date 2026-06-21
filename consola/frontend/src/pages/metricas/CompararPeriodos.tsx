@@ -76,7 +76,7 @@ function etiquetaMarca(
 function formatoValor(metrica: string, valor: number | null): string {
   // Valor ausente (p. ej. engagement no comparable entre redes heterogéneas, o una
   // métrica que ya no se mide) -> "—". Sin esta guardia, `valor.toLocaleString` sobre
-  // null reventaba TODA la página de Analíticas (error boundary).
+  // null revienta TODA la página de Analíticas (error boundary).
   if (valor == null || !Number.isFinite(valor)) return "—";
   const meta = METRICAS.find((m) => m.metrica === metrica);
   // Métricas extra (granulares + seguidores) son conteos: separador de miles es-MX.

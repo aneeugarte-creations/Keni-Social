@@ -11,7 +11,7 @@ from ._comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Solicitudes de cambio de turno entre companeros (#175)                       #
+# Solicitudes de cambio de turno entre companeros                             #
 # --------------------------------------------------------------------------- #
 #
 # Cuando un CM (solicitante A) necesita cubrir un asunto personal le pide a un
@@ -41,7 +41,7 @@ _COLS_SWAP_TURNO = (
     "aplicado",
     # GRID POR MARCA: marca de la rejilla del swap (denormalizada del turno A al crear).
     "marca",
-    # VERBO del cambio (#175): intercambio|cesion|abierto. DEFAULT 'intercambio'.
+    # VERBO del cambio: intercambio|cesion|abierto. DEFAULT 'intercambio'.
     "tipo",
 )
 _SELECT_SWAP_TURNO = f"SELECT {', '.join(_COLS_SWAP_TURNO)} FROM rota_swaps_turno"

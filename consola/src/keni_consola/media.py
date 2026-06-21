@@ -57,7 +57,7 @@ class SalidaImagen:
     coste_usd: float
     modelo: str
 
-# Logger del módulo (#123): los fallos del proveedor de imagen se LOGUEAN con el motivo
+# Logger del módulo: los fallos del proveedor de imagen se LOGUEAN con el motivo
 # real (status + cuerpo recortado) en vez de tragarlo, y el motivo viaja al mensaje de
 # error (toast) para que el usuario sepa POR QUÉ (p.ej. el modelo respondió texto/rechazo).
 _log = logging.getLogger("keni_consola.media")

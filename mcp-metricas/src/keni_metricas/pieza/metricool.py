@@ -84,7 +84,7 @@ TIMEZONE_DEF = "America/Mexico_City"
 
 # Plataforma (keni) -> network (Metricool). Metricool usa "twitter" para X.
 # (Mismo mapeo que `fuentes.metricool._RED_METRICOOL`; se duplica a proposito para
-# NO acoplarse a un nombre privado de un modulo bajo trabajo paralelo.)
+# NO acoplarse a un nombre privado de otro modulo.)
 _RED_METRICOOL: dict[Plataforma, str] = {
     Plataforma.facebook: "facebook",
     Plataforma.instagram: "instagram",

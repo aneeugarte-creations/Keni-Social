@@ -295,9 +295,9 @@ def test_migrar_nombres_prompts_renombra_refresca_y_preserva():
 
 
 def test_inicializar_migra_antes_de_importar_sin_duplicar():
-    # REGRESIÓN del bug de duplicados: el paso de DEPLOY (`inicializar`, que corre bajo uvicorn, no
-    # `__main__`) DEBE migrar los ids ANTES de importar. Si no, `importar_inicial` crea el id NUEVO
-    # junto al VIEJO del store = duplicado.
+    # El paso de DEPLOY (`inicializar`, que corre bajo uvicorn, no `__main__`) migra los ids
+    # ANTES de importar: así `importar_inicial` no crea el id NUEVO junto al VIEJO del store
+    # (sin migrar primero quedarían duplicados).
     from keni_consola import inicializar
     from keni_consola.libprompts._rutas import raiz
 

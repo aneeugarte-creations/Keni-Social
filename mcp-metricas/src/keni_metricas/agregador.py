@@ -1,8 +1,8 @@
 """FuenteCompuesta: combina los adaptadores reales por plataforma en metricas
 multi-marca/multi-plataforma. Implementa FuenteMetricas a partir de la config.
 
-Semántica de agregación entre plataformas (#138)
--------------------------------------------------
+Semántica de agregación entre plataformas
+-----------------------------------------
 Las redes NO miden lo mismo, así que no todo se puede sumar entre ellas. La regla
 explícita que aplica el agregador (ver `agregar_resumen`):
 
@@ -144,7 +144,7 @@ class FuenteCompuesta:
                 detalle,
             )
 
-        # Agregación según la semántica de #138 (ver módulo): interacciones se
+        # Agregación según la semántica del módulo: interacciones se
         # suman; visualizaciones solo como total informativo; alcance solo entre
         # plataformas que lo miden; engagement no se divide sobre bases mixtas.
         vis = sum(m.visualizaciones for m in por_plataforma)

@@ -1,7 +1,7 @@
 """GENERACIONES · LANZADORES: encolado/ejecución de trabajos de `claude -p`, de IMAGEN y de
 PROCESO (render/transcripción), más la cancelación del árbol de subprocesos.
 
-Submódulo interno del paquete `generaciones`. Aquí vive TODO el endurecimiento #137: grupo de
+Submódulo interno del paquete `generaciones`. Aquí vive TODO el endurecimiento: grupo de
 procesos + kill del árbol, backpressure de admisión por presupuesto/pausa (`ColaLlenaError`; la
 cola NO tiene tope, R-NO-LIMIT), cancelación y logging correlacionado
 por job-id. El `__init__.py` re-exporta los lanzadores INYECTABLES (`encolar_job_claude`,
@@ -12,9 +12,9 @@ LANZADORES INYECTABLES: `crear_app(...)` REASIGNA `generaciones.encolar_job_clau
 ningún módulo del paquete los llama internamente, así que la reasignación del barrel basta. El
 `procesar` (callback que parsea la salida y crea los artefactos) SÍ corre en los tests.
 
-DESACOPLO (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el WORKER
+DESACOPLO (ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el WORKER
 EJECUTA (`lanzar_job_claude`). `lanzar_job_claude` NO desaparece: es la primitiva de ejecución
-del worker (con todo el #137).
+del worker.
 """
 
 from __future__ import annotations
@@ -313,12 +313,12 @@ def encolar_job_claude(
     dir_temporal: Path | None = None,
     spec: dict[str, Any] | None = None,
 ) -> None:
-    """ENCOLA un trabajo de claude (#130 Fase 2): persiste el `spec` y vuelve de INMEDIATO.
+    """ENCOLA un trabajo de claude: persiste el `spec` y vuelve de INMEDIATO.
 
     Es el NUEVO seam de lanzamiento que usan los endpoints/dominio en lugar de ejecutar
     `claude -p` en la peticion. El back solo ENCOLA; un WORKER (in-proceso en local,
-    servicio aparte en hosted) clava el job y corre `lanzar_job_claude` (el runner real
-    con todo el #137). `spec` es la forma serializable (prompt + post-procesado + cwd) que
+    servicio aparte en hosted) clava el job y corre `lanzar_job_claude` (el runner
+    real). `spec` es la forma serializable (prompt + post-procesado + cwd) que
     el worker usa para reconstruir el trabajo; `procesar`/`cwd`/`dir_temporal` SOLO los
     necesita un lanzador INYECTADO (tests), que recibe la MISMA firma que el viejo
     `lanzar_job_claude` y por eso sigue funcionando sin cambios.
@@ -421,7 +421,7 @@ def lanzar_job_claude(
     Si `dir_temporal` viene (archivo subido), se borra al terminar. INYECTABLE: los tests
     reemplazan esta funcion por una fake que llama a `procesar` con una salida canned.
 
-    LO LLAMA EL WORKER (#130 Fase 2) tras clavar un job, NO la peticion HTTP. `ya_admitido`
+    LO LLAMA EL WORKER tras clavar un job, NO la peticion HTTP. `ya_admitido`
     es True cuando el cupo de admision ya lo tomo `encolar_job_claude` (el caso normal del
     worker): asi NO se vuelve a admitir (evita doble cuenta), pero `slot` SIGUE liberandolo.
 
@@ -443,7 +443,7 @@ def lanzar_job_claude(
     if timeout_job > 0:
         timeout = min(timeout, timeout_job)
 
-    # CORRELACION (#123 + #137): capturamos AQUI (sincronicamente, dentro de la peticion)
+    # CORRELACION: capturamos AQUI (sincronicamente, dentro de la peticion)
     # el request-id de quien lanzo el job. El hilo de trabajo corre fuera del contexto de
     # la peticion, asi que el ContextVar ya no estara puesto; por eso lo guardamos ahora y
     # lo incluimos en TODOS los logs del job. Asi un fallo del job se rastrea hasta la
@@ -453,7 +453,7 @@ def lanzar_job_claude(
 
     # Admision: la cola NO tiene tope (R-NO-LIMIT), asi que `admitir()` SIEMPRE acepta (solo
     # cuenta el job en curso). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
-    # cupo ya lo tomo `encolar_job_claude` (worker, #130 Fase 2), NO re-admitimos.
+    # cupo ya lo tomo `encolar_job_claude` (worker), NO re-admitimos.
     if not ya_admitido:
         runner.admitir()
 
@@ -473,7 +473,7 @@ def lanzar_job_claude(
             )
         except Exception:  # noqa: BLE001 -- el avance nunca debe romper el hilo
             # Persistir un parcial es best-effort (el cierre fija el estado), pero ya no
-            # lo silenciamos en mudo: dejamos rastro con el job-id + request-id (#123, #137).
+            # lo silenciamos en mudo: dejamos rastro con el job-id + request-id.
             _log.warning("%s: fallo al persistir avance parcial", etq, exc_info=True)
 
     def _finalizar(timed_out: bool, returncode: int | None, cancelado: bool) -> None:
@@ -485,7 +485,7 @@ def lanzar_job_claude(
         fecha_fin = ahora_iso()
         try:
             if cancelado:
-                # Cancelacion del usuario (#137): se mato el arbol; estado terminal claro.
+                # Cancelacion del usuario: se mato el arbol; estado terminal claro.
                 actualizar(gen_id, {
                     "estado": ESTADO_ERROR, "motivo": MOTIVO_CANCELADO,
                     "error": "La generación fue cancelada.",
@@ -513,7 +513,7 @@ def lanzar_job_claude(
                     resultado = procesar(acumulador.texto, acumulador.final)
                 except Exception:  # noqa: BLE001 -- fallo del post-procesado -> error claro
                     # El cliente ve un mensaje generico (sin traceback), pero el fallo
-                    # queda CORRELACIONADO al job + a la peticion en el log (#123, #137).
+                    # queda CORRELACIONADO al job + a la peticion en el log.
                     _log.exception("%s: fallo el post-procesado (procesar)", etq)
                     actualizar(gen_id, {
                         "estado": ESTADO_ERROR,
@@ -541,7 +541,7 @@ def lanzar_job_claude(
                 "fecha_fin": fecha_fin,
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar
-            # Logueamos con el job-id + request-id (#123, #137) y, best-effort, intentamos dejarlo
+            # Logueamos con el job-id + request-id y, best-effort, intentamos dejarlo
             # en error (no propagamos: es daemon).
             _log.exception("%s: fallo al fijar el estado terminal", etq)
             try:
@@ -566,7 +566,7 @@ def lanzar_job_claude(
         # `_finalizar` lo leen del scope de `lanzar_job_claude`, asi que el `nonlocal` hace que
         # vean siempre el del intento en curso.
         nonlocal acumulador
-        # Concurrencia (#116) + admision/tope de cola (#137): el job YA fue admitido en
+        # Concurrencia + admision/tope de cola: el job YA fue admitido en
         # `lanzar_job_claude` (sincronicamente), asi que aqui solo esperamos un proceso
         # concurrente libre. `slot(ya_admitido=True)` libera el cupo al salir. El spawn
         # ocurre DENTRO del slot para que el tope limite procesos `claude` reales. Cada
@@ -590,7 +590,7 @@ def lanzar_job_claude(
                 intento = 0
                 while True:
                     try:
-                        # Subproceso en SU PROPIO grupo (#137): al timeout/cancel matamos el
+                        # Subproceso en SU PROPIO grupo: al timeout/cancel matamos el
                         # ARBOL entero (`runner.matar_arbol`), no solo el padre.
                         proc = runner.lanzar_proc(
                             _argv_claude(
@@ -623,7 +623,7 @@ def lanzar_job_claude(
                     runner.leer_stream(
                         proc, acumulador, _avance, idle=config.claude_idle_timeout()
                     )
-                    # `runner.esperar` mata el ARBOL si supera el wall-timeout (#137).
+                    # `runner.esperar` mata el ARBOL si supera el wall-timeout.
                     timed_out = runner.esperar(proc, timeout)
                     # ¿REINTENTAR? Solo un fallo TRANSITORIO (529/overloaded, blip, crash de la
                     # CLI), no cancelado ni timeout (ya gasto su wall-timeout), con reintentos y
@@ -669,11 +669,11 @@ def lanzar_job_claude(
 
 
 def cancelar(gen_id: str) -> bool:
-    """Cancela un job de claude EN CURSO: mata el ARBOL del subproceso (#137, PERMANENTE).
+    """Cancela un job de claude EN CURSO: mata el ARBOL del subproceso (PERMANENTE).
 
     Devuelve True si se pudo cancelar algo (handle in-memoria del proceso O un job en la
     cola); False si no hay nada que cancelar (ya terminó). Tiene DOS vias, porque el job
-    puede correr en ESTE proceso o en otro (worker hosted, #130 Fase 2):
+    puede correr en ESTE proceso o en otro (worker hosted):
       - IN-MEMORIA: si el job corre aqui (back local con worker in-proceso, o el propio
         worker), hay un handle con el proceso: armamos el evento y matamos el ARBOL ya.
       - CROSS-PROCESO: marcamos el job en la cola como `cancelado` (`cola.cancelar`). El

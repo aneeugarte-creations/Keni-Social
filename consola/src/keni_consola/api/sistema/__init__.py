@@ -3,7 +3,7 @@
 Superficie de ADMIN de la Consola: da un vistazo operativo a la maquina que sirve la
 consola (CPU/RAM/disco) y al object storage (S3/Garage) donde vive la media en hosted.
 Es informacion SENSIBLE (capacidad, endpoints, uso) -> exige una SESION admin real, igual
-que `/api/usuarios` y `/api/conexiones` (helper unico `permisos.es_admin`, #150/#153). El
+que `/api/usuarios` y `/api/conexiones` (helper unico `permisos.es_admin`). El
 token de mantenimiento NO es admin: recibe 403.
 
 Este paquete trocea por AREAS la antigua `api/sistema.py` (PURA reubicacion, mismo

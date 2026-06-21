@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
  * Panel lateral CONTROLADO de AJUSTES de página. El reparto canónico de la cabecera es: UN solo
  * menú "⋮" (`MenuAcciones`) que aloja TANTO las acciones puntuales COMO la entrada «Ajustes», y
  * ESTE panel temporal que esa entrada abre (overlay por la derecha; cierra con Escape, clic fuera
- * o la X). Ya no monta su propio botón en la barra: el disparador vive dentro del "⋮", para que la
+ * o la X). No monta botón propio en la barra: el disparador vive dentro del "⋮", para que la
  * barra superior quede limpia (solo pestañas + "⋮"). Lo abre/cierra quien lo monta (`MenuAcciones`)
  * vía `abierto`/`onCerrar`. Los filtros de vista efímeros (rango temporal, buscadores) NO van aquí.
  */

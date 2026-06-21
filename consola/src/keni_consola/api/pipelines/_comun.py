@@ -27,8 +27,8 @@ _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
 # Tipos de generación que son TRABAJO del pipeline (viven DENTRO de la run de su tema, no como
 # entradas sueltas): el copy/marcadores (`pipeline`/`pipeline_etapa`/`autogen`) y la sugerencia
 # de hashtags (`sugerir-hashtags`), etapa entre Redactar e Ilustrar. Sin `sugerir-hashtags` aquí,
-# su generación —que SÍ sella `publicacion_id`— resurgía como tarjeta suelta en cuanto su tema
-# salía de la ventana de runs (ya publicado/antiguo); ahora siempre se pliega en su run.
+# su generación —que SÍ sella `publicacion_id`— aparecería como tarjeta suelta cuando su tema
+# sale de la ventana de runs (ya publicado/antiguo) en vez de plegarse en su run.
 _TIPO_SUGERIR_HASHTAGS = "sugerir-hashtags"
 _TIPOS_TRABAJO_PIPELINE = frozenset(
     {"pipeline", TIPO_ACTIVIDAD, "autogen", _TIPO_SUGERIR_HASHTAGS}
@@ -106,7 +106,7 @@ _METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 _UNIVERSO_MAX = 500
 
 # Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobar: la pieza ya pasó
-# el gate humano (COLAPSO 2026-06: ya no hay estado de reposo `aprobado`; cuenta lo que salió).
+# el gate humano (no hay estado de reposo `aprobado`: cuenta lo que salió).
 _ESTADOS_APROBADOS = frozenset({"programado", "publicado"})
 # Estados de plataforma "en curso" de revisión humana (aún no aprobados).
 _ESTADOS_EN_CURSO = frozenset({"en_revision"})

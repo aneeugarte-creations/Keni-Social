@@ -1,6 +1,6 @@
 """Esquema tipado de un SUBCONJUNTO ESTABLE del contrato `/api/*`.
 
-Por que existe (#101 / H5/E6): el frontend mantenia ~179 interfaces a mano en
+Por que existe: el frontend mantenia ~179 interfaces a mano en
 `frontend/src/types.ts` espejando las respuestas del backend, y se desincronizaban
 en silencio. Este paquete define esas formas UNA VEZ en Python (como `TypedDict`),
 emite su JSON Schema y de ahi el frontend GENERA el TypeScript (`types.gen.ts`).

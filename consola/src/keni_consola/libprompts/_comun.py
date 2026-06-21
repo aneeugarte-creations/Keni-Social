@@ -85,8 +85,8 @@ PIPELINES: dict[str, dict[str, str]] = {
     },
     # `priorizar` (Investigación) deriva el perfil de keywords de una marca desde su línea
     # editorial. Es pipeline de primera clase para que su inyección se ACOTE (campo `pipelines`)
-    # como las demás —antes tragaba TODO el editorial de la marca— y para que la pestaña «Contexto»
-    # del prompt lo resuelva igual que al resto. `rol=""`: no rebindeable (no es base de un motor de
+    # como las demás y para que la pestaña «Contexto» del prompt lo resuelva igual que al resto.
+    # `rol=""`: no rebindeable (no es base de un motor de
     # generación de copy), cae siempre a su `prompt_defecto`.
     "priorizar": {
         "titulo": "Priorizar",

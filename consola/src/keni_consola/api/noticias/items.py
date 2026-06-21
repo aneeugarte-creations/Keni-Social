@@ -1,4 +1,4 @@
-"""Pool de ÍTEMS del archivo (Ola A) + monitor de COBERTURA / SALUD de fuentes (Ola D).
+"""Pool de ÍTEMS del archivo + monitor de COBERTURA / SALUD de fuentes.
 
 Superficie de LECTURA del archivo (`noticias_items`) + curación ligera por item: el equipo
 VE el flujo continuo, filtra, y decide qué USA (lleva al tablero) o DESCARTA. Aquí viven los
@@ -234,7 +234,7 @@ async def cobertura(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Monitor de COBERTURA / SALUD de fuentes a escala (Ola D)                      #
+# Monitor de COBERTURA / SALUD de fuentes a escala                             #
 # --------------------------------------------------------------------------- #
 
 
@@ -386,7 +386,7 @@ def _stats_fuentes(marca: str | None, dias: int) -> dict:
 
 
 async def salud(request: Request) -> Response:
-    """GET /api/noticias/salud?marca=: monitor de cobertura a escala (Ola D).
+    """GET /api/noticias/salud?marca=: monitor de cobertura a escala.
 
     Resumen + salud por feed: items 24h, frescura (min desde el último item), stale (SLA),
     huecos de cobertura, distribuciones por categoría/idioma. Marca-aware (`?marca=`).

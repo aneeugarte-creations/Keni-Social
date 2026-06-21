@@ -584,7 +584,7 @@ def test_error_de_red_libera_la_preparacion_y_no_rompe_barrido(entorno, monkeypa
 
 def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch):
     """Tras un fallo de entrega, el SIGUIENTE barrido reintenta y publica si Metricool ya
-    responde (cierre del bug 'pieza muerta en programado')."""
+    responde (la pieza no queda muerta en `programado`)."""
     monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
 

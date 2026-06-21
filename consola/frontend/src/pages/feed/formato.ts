@@ -16,7 +16,7 @@ export type Formato = "foto" | "video" | "carrusel";
 /**
  * Clases estáticas (Tailwind las detecta) por nº de columnas de las rejillas del feed. Sin
  * prefijo responsive: aplican en TODOS los anchos. Único export compartido por la rejilla
- * plana de `FeedIdeacion` y la matriz interna de `GrupoIdea` (antes eran clones).
+ * plana de `FeedIdeacion` y la matriz interna de `GrupoIdea`.
  */
 export const GRID_COLS: Record<number, string> = {
   1: "grid-cols-1",

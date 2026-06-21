@@ -17,14 +17,14 @@ from keni_metricas.fuentes.muestra import FuenteMuestra
 @pytest.fixture(autouse=True)
 def _entorno_limpio(monkeypatch, tmp_path):
     # parte siempre de un entorno sin marcas ni config en disco, fuente de muestra.
-    # La fuente única por defecto ahora es `metricool`; estos tests prueban el ACOTADO
+    # La fuente única por defecto es `metricool`; estos tests prueban el ACOTADO
     # por marcas sobre la fuente de muestra (offline), así que la fijamos explícita.
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
 
 
-# --- sin marcas: comportamiento historico (todas) ---------------------------
+# --- sin marcas: comportamiento por defecto (todas) -------------------------
 
 
 def test_sin_marcas_devuelve_fuente_cruda(monkeypatch):

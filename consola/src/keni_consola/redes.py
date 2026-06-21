@@ -8,7 +8,7 @@ Cada red tiene:
               persona en la UI.
   - `limite`  limite DURO de caracteres de la red, o `None` cuando no hay un tope
               tecnico practico (Facebook/YouTube). NO se redefine aqui: viene de
-              la fuente unica `limites_plataforma.LIMITES` (#112), de donde tambien
+              la fuente unica `limites_plataforma.LIMITES`, de donde tambien
               la lee el frontend (`GET /api/limites`).
 
 Sin estado ni I/O: solo datos y funciones puras. El orden de `REDES` es FIJO y se

@@ -4,7 +4,7 @@
  * Tipos DERIVADOS del backend (subconjunto estable del contrato `/api/*`).
  * Fuente: `keni_consola.esquema_api` (Python). Regenerar con `npm run gen:types`.
  * El guard `npm run gen:types:check` (y el test del backend) falla si esto se
- * desincroniza del backend. El resto de tipos vive a mano en `types.ts`. Ver #101.
+ * desincroniza del backend. El resto de tipos vive a mano en `types.ts`.
  */
 
 export interface ResultadoEstado {
@@ -66,7 +66,7 @@ export interface CuentaMetrica {
  *
  * Agrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`
  * es el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si
- * NINGUNA cuenta mide esa red (#138: no se inventa un 0).
+ * NINGUNA cuenta mide esa red (no se inventa un 0).
  */
 export interface RedMetrica {
   red: string;
@@ -179,7 +179,7 @@ export interface MovimientoAnalisis {
   pieza: PiezaAnalisis | null;
 }
 /**
- * Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11).
+ * Sugerencia accionable que cierra el loop a la acción.
  */
 export interface SiguientePasoAnalisis {
   marca_id: string;
@@ -191,9 +191,9 @@ export interface SiguientePasoAnalisis {
 /**
  * Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
  *
- * Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
+ * Capa narrativa sobre las métricas: top movimientos con la(s) pieza(s)
  * que los explican y un siguiente paso. `fuente` marca la procedencia de los
- * datos (issue #131).
+ * datos.
  */
 export interface AnalisisDiario {
   rango: string;
@@ -586,7 +586,7 @@ export interface CorrelacionSeguidores {
   generado_en: string;
 }
 /**
- * Envelope ADITIVO de paginacion (offset-based, #121).
+ * Envelope ADITIVO de paginacion (offset-based).
  *
  * Lo añaden los listados pesados (piezas/runs/generaciones) junto a su
  * clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
@@ -621,7 +621,7 @@ export interface MetricasRun {
  *
  * `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
  * archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
- * `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
+ * `autor_id`/`autor_nombre` (atribucion por usuario, Fase 1) identifican a quien
  * creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
  *
  * Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
@@ -692,7 +692,7 @@ export interface Pieza {
   carrusel?: string;
 }
 /**
- * Listado de `GET /api/piezas` con el envelope de paginacion (#121).
+ * Listado de `GET /api/piezas` con el envelope de paginacion.
  */
 export interface RespuestaPiezas {
   piezas: Pieza[];

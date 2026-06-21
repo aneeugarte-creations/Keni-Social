@@ -28,7 +28,7 @@ GUARDAS de integridad (no quedarse sin acceso de admin):
   - No borrarte a TI MISMO.
   - No dejar 0 admins via PATCH (degradar al ultimo admin a editor).
 
-Autorizacion (#150): exige una SESION de un usuario REAL con el flag `superadmin`. El
+Autorizacion: exige una SESION de un usuario REAL con el flag `superadmin`. El
 middleware deja ese usuario en `request.state.usuario`. Un admin normal (sin flag) NO entra,
 y el TOKEN de mantenimiento (`request.state.auth_por_token`) tampoco: 403. La UNICA excepcion
 es el BOOTSTRAP DE RECUPERACION: crear el PRIMER admin (que nace superadmin) cuando la BD no
@@ -100,7 +100,7 @@ def _es_superadmin(request: Request) -> bool:
     """True SOLO si la peticion la hace una sesion real con el flag `superadmin`.
 
     Gestionar usuarios es competencia EXCLUSIVA del superadmin (un admin normal NO entra).
-    Delega en `permisos.es_superadmin`, ESTRICTO (#150): el token de mantenimiento (sin
+    Delega en `permisos.es_superadmin`, ESTRICTO: el token de mantenimiento (sin
     usuario de sesion) NO cuenta. El arranque del PRIMER superadmin por token se trata aparte
     (la excepcion acotada de `crear`), no aqui.
     """
@@ -177,7 +177,7 @@ async def listar(request: Request) -> Response:
 async def crear(request: Request) -> Response:
     """POST /api/usuarios: alta de cuenta. 409 si el nombre ya existe.
 
-    Autorizacion (#150): la regla normal es rol admin (sesion real). EXCEPCION acotada de
+    Autorizacion: la regla normal es rol admin (sesion real). EXCEPCION acotada de
     recuperacion: si la peticion entro por el TOKEN de mantenimiento Y la BD NO tiene
     NINGUN usuario, se permite crear el PRIMER admin (bootstrap). Asi un despliegue recien
     arrancado puede crear su admin inicial con el token, pero el token NO da poder admin
@@ -263,7 +263,7 @@ async def crear(request: Request) -> Response:
     if creado is None:
         return JSONResponse({"error": "Ya existe un usuario con ese nombre."}, status_code=409)
     if bootstrap_por_token:
-        # Atribuible a MANTENIMIENTO (token, sin usuario): nunca un "admin fantasma" (#150).
+        # Atribuible a MANTENIMIENTO (token, sin usuario): nunca un "admin fantasma".
         _logger.warning(
             "Mantenimiento (token): primer admin creado por bootstrap de recuperacion. "
             "usuario=%s (la BD no tenia usuarios).",

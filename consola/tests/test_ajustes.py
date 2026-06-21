@@ -38,10 +38,10 @@ def test_guardar_y_obtener(store):
 
 
 def test_guardar_clave_por_marca_no_corrompe_el_store(store):
-    """Regresion: una clave con `::` (excepcion por marca, p.ej. `KENI_PIPELINE_REDACTAR::unotv`)
-    debe round-trippear por el FICHERO real. El bug: la clave se escribia desnuda, y `::`
-    es invalido en una clave TOML -> `tomllib` fallaba al parsear TODO el fichero ->
-    `_leer_disco` devolvia {} -> el siguiente guardado borraba las demas claves."""
+    """Una clave con `::` (excepcion por marca, p.ej. `KENI_PIPELINE_REDACTAR::unotv`) round-trippea
+    por el FICHERO real. Escrita desnuda, `::` es invalido en una clave TOML: `tomllib` fallaria al
+    parsear TODO el fichero, `_leer_disco` devolveria {} y el siguiente guardado borraria las demas
+    claves; por eso la clave va escapada."""
     ajustes.guardar("KENI_MAQUINA", "1")
     ajustes.guardar("KENI_PIPELINE_REDACTAR", "1")
     ajustes.guardar("KENI_PIPELINE_REDACTAR::unotv", "1")

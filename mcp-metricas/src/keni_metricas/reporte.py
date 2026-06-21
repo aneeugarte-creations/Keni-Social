@@ -48,7 +48,7 @@ def construir_reporte(
     cuentas = fuente.cuentas()
     filas: list[dict] = []
     tot_vis = tot_inter = tot_piezas = 0
-    tot_alc: int | None = None  # se suma solo el alcance medido; None = nadie lo mide (#138)
+    tot_alc: int | None = None  # se suma solo el alcance medido; None = nadie lo mide
     cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
     # Mapa id->nombre legible (mismo origen que el dashboard). El resumen guarda
     # el id crudo; el render lo traduce al NOMBRE legible con este mapa.
@@ -74,7 +74,7 @@ def construir_reporte(
         )
         tot_vis += r.visualizaciones
         if r.alcance is not None:
-            # solo suma el alcance realmente medido; deja None si nadie lo mide (#138)
+            # solo suma el alcance realmente medido; deja None si nadie lo mide
             tot_alc = (tot_alc or 0) + r.alcance
         tot_inter += r.interacciones
         if r.cobertura is not None and r.cobertura.omitidas:
@@ -89,7 +89,7 @@ def construir_reporte(
             "alcance": tot_alc,
             "interacciones": tot_inter,
             # engagement global no comparable: el total combina varias plataformas
-            # con bases de visualización heterogéneas (#138). El engagement fiable
+            # con bases de visualización heterogéneas. El engagement fiable
             # vive por plataforma. None se muestra como "n/d".
             "engagement_pct": None,
             "cuentas": len(filas),
@@ -108,7 +108,7 @@ def construir_reporte(
     }
     # Campo `aviso` de PRIMER nivel cuando son datos de muestra: hace que el
     # estado "no es real" viaje en la estructura misma (no solo en `fuente`),
-    # asi cualquier consumidor —tool JSON, agente, render— lo ve (issue #131).
+    # asi cualquier consumidor —tool JSON, agente, render— lo ve.
     if es_fuente_muestra(fuente.nombre):
         rep["aviso"] = AVISO_MUESTRA_TXT
     return rep
@@ -128,7 +128,7 @@ def render_markdown(rep: dict) -> str:
     out: list[str] = []
     out.append(f"# Reporte de redes — {rep['rango']}")
     # Aviso DESTACADO si son datos de muestra (no solo el campo `fuente`): hace
-    # imposible confundir cifras sinteticas con reales (issue #131).
+    # imposible confundir cifras sinteticas con reales.
     if (aviso := aviso_muestra_md(rep.get("fuente"))) is not None:
         out.append(aviso + "\n")
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")

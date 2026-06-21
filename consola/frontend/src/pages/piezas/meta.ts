@@ -6,7 +6,7 @@
  * hay) llega del backend vía `/api/piezas/opciones`; aquí solo añadimos
  * lo visual.
  *
- * LÍMITES DE CARACTERES (#112): la fuente ÚNICA de verdad de los topes es el
+ * LÍMITES DE CARACTERES: la fuente ÚNICA de verdad de los topes es el
  * backend (`GET /api/limites`, módulo `limites_plataforma`). Este módulo NO los
  * define: mantiene una inicial (`_LIMITES_BASE`, espejo del backend) para que
  * `metaRed().limite` funcione síncronamente antes de que la app hidrate, y se
@@ -123,7 +123,7 @@ export function tamanoRed(id: string): { ratio: string; px: string } | null {
 /**
  * Devuelve los metadatos de una red (visual + límite vigente), con un fallback
  * razonable. El `limite` proviene de la caché hidratada desde el backend (fuente
- * única, #112), no de un valor hardcodeado en este archivo.
+ * única), no de un valor hardcodeado en este archivo.
  */
 export function metaRed(id: string): MetaRed {
   const visual = _VISUAL_REDES[id];

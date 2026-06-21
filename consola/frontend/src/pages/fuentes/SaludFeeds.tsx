@@ -1,6 +1,5 @@
 /**
- * SaludFeeds — estado de salud del motor de ingesta de feeds (antes la sub-vista
- * "Salud" de Cobertura, Ola D).
+ * SaludFeeds — estado de salud del motor de ingesta de feeds.
  *
  * Vive en FUENTES, no en Noticias: monitorizar los canales (feeds activos, en
  * error, stale, huecos de cobertura, reactivación) es configuración/observabilidad

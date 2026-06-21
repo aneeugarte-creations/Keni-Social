@@ -100,7 +100,7 @@ describe("PanelVersiones", () => {
     montar();
     expect(await screen.findByText("Tono más directo en titulares")).toBeInTheDocument();
     expect(screen.getByText("Primera versión de la voz")).toBeInTheDocument();
-    // El EN VIVO ya NO es texto: lo indica el punto verde (aria-label «En vivo»).
+    // El EN VIVO se indica con el punto verde (aria-label «En vivo»), no con texto.
     expect(screen.queryByText("EN VIVO")).not.toBeInTheDocument();
     expect(screen.getByLabelText("En vivo")).toBeInTheDocument();
     // Fila sintética del borrador con su badge humano (hay cambios sin publicar).

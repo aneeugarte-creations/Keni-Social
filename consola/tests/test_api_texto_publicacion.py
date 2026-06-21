@@ -439,7 +439,7 @@ def test_adjunto_sin_puntero_sirve_snapshot_estable(entorno_pub):
 def test_inicial_recibe_linea_base_git_y_sirve_snapshot(entorno_pub):
     """Los documentos de la INICIAL se escriben sin commit; `asegurar_linea_base` les fija un
     HEAD git, de modo que los pipelines sirven su snapshot estable y NO el working copy que el
-    autosave reescribe en vivo (cierra el caso que antes caía al working copy)."""
+    autosave reescribe en vivo."""
     n = libprompts.importar_inicial()
     assert n > 0
     doc_id = "prompt/redactar"

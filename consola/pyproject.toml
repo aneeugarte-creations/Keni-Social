@@ -24,7 +24,7 @@ dependencies = [
     "pydantic>=2.6",
     # Render del deck semanal de deportes (reporte_deck). En keni-metricas es un
     # extra opcional; la consola SI lo necesita, asi que lo fija como dependencia:
-    # python-pptx para el .pptx y reportlab para el PDF NATIVO (sin LibreOffice, #141).
+    # python-pptx para el .pptx y reportlab para el PDF NATIVO (sin LibreOffice).
     "python-pptx>=0.6.23",
     "reportlab>=4.0",
     # Compositor determinista de imagen (Estudio + placa de marca: `motores/estudio_imagen`).
@@ -55,7 +55,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Persistencia HOSTED (#130). El perfil local/privado NO necesita estos extras: SQLite va
+# Persistencia HOSTED. El perfil local/privado NO necesita estos extras: SQLite va
 # en la stdlib y la media va a disco. Solo el back hosted los instala (ver
 # deploy/back/Dockerfile), que es donde `DATABASE_URL`/`S3_*` estan cableadas.
 #   - postgres: driver de Postgres + POOL de conexiones para `db.py`/`motor_db.py` cuando hay
@@ -73,7 +73,7 @@ s3 = ["boto3>=1.34"]
 #          se apoyaba en que huggingface_hub lo arrastrara, y hf_hub 1.x ya no (migró a httpx). Sin esta
 #          línea, `import faster_whisper` revienta con ModuleNotFoundError: requests. Lo fijamos explícito.
 asr = ["faster-whisper>=1.1.0", "requests>=2"]
-# pytest-timeout: backstop ANTI-CUELGUE de los tests de concurrencia/procesos (#116/#137)
+# pytest-timeout: backstop ANTI-CUELGUE de los tests de concurrencia/procesos
 # que usan @pytest.mark.timeout(...). Sin el, esa marca es un no-op silencioso (el test
 # podria colgarse indefinidamente si una espera no se libera). Con el, el wall-timeout mata
 # el test y falla en vez de bloquear la suite.

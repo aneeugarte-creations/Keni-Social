@@ -531,7 +531,7 @@ export default function Video() {
       <div className="min-h-0 flex-1 overflow-hidden">
         {seccion === "gestor" ? (
           <div className="h-full overflow-y-auto">
-            {/* Ocupa TODO el ancho (sin `max-w` centrado: los lados ya no quedan vacíos), mismo
+            {/* Ocupa TODO el ancho (sin `max-w` centrado, para no dejar los lados vacíos), mismo
                 criterio que la galería de Imagen.tsx. */}
             <div className="space-y-3 p-4 sm:p-6">
               <div className="flex items-center justify-between gap-2">

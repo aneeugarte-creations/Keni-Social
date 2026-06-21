@@ -1,4 +1,4 @@
-"""Tests de la capa REPOSITORIO: fachada UNICA de persistencia (E5/H2).
+"""Tests de la capa REPOSITORIO: fachada UNICA de persistencia.
 
 Tras retirar el conmutador (`KENI_CONSOLA_BACKEND`), `repos` enruta cada entidad a su
 almacen de forma FIJA:

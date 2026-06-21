@@ -9,7 +9,7 @@ from ._comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Catalogo de programas (#150, PARRILLA 2026.xlsx)                              #
+# Catalogo de programas (PARRILLA 2026.xlsx)                                  #
 # --------------------------------------------------------------------------- #
 #
 # En el Excel cada HOJA evergreen ("Álvaro Fidalgo", "Real Oviedo", "Anfitriones", "PATY

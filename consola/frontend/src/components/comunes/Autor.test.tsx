@@ -5,7 +5,7 @@ import { Autor } from "./Autor";
 import { AUTOR_DESCONOCIDO, etiquetaAutor } from "./atribucion";
 
 /**
- * Atribución por usuario (#130 Fase 1): "por <usuario>", con "desconocido" para
+ * Atribución por usuario: "por <usuario>", con "desconocido" para
  * registros legados/anónimos. Cubre el helper de etiqueta y el render del badge.
  */
 describe("etiquetaAutor", () => {

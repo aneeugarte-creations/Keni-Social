@@ -3,7 +3,7 @@
 // Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,
 // `CuentaMetrica`, `ReporteMetricas`, `ComparativaMetrica`, `ComparativaPorMarca`,
 // `CompararMetricas`) se GENERAN desde el backend y se re-exportan desde el barrel
-// (`index.ts`). Ver #101.
+// (`index.ts`).
 // NOTA: `fuente` es REQUERIDO (el backend siempre lo emite; "" si es desconocida).
 
 /** Un grupo (valor de un eje) con su rendimiento agregado. */

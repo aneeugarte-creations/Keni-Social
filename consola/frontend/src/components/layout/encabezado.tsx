@@ -70,9 +70,9 @@ function useEncabezado(): EncabezadoCtx | null {
  *
  * SUBPÁGINA de detalle: con `onAtras` pinta una flecha «←» (volver) ANTES del icono+título,
  * dentro del mismo hueco. Así una página de detalle lleva su «atrás» en la barra superior
- * (el header persistente), no como una fila suelta en el cuerpo. Sin `onAtras` se comporta
- * igual que antes (solo icono + título). La PRESENTACIÓN del «atrás» vive aquí; la LÓGICA
- * de a dónde se vuelve la pone la página en el callback.
+ * (el header persistente), no como una fila suelta en el cuerpo. Sin `onAtras` solo pinta
+ * icono + título. La PRESENTACIÓN del «atrás» vive aquí; la LÓGICA de a dónde se vuelve la
+ * pone la página en el callback.
  */
 export function TituloPagina({
   titulo,

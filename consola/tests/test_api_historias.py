@@ -169,7 +169,7 @@ def test_pieza_estado_descartada(cliente):
 
 def test_pieza_estado_en_cola_si_usada_sin_pieza(cliente):
     # Usada pero sin fila de plataforma (dedup / sin redes / copy por encolar): NO está en el
-    # feed -> 'en_cola'. Es el bug del piloto: antes el badge decía "En el feed" igualmente.
+    # feed -> 'en_cola' (el badge no debe decir "En el feed").
     _inicializar_cluster("c1")
     _usar_sin_pieza("c1")
     assert _pieza_estado(cliente, "c1") == "en_cola"

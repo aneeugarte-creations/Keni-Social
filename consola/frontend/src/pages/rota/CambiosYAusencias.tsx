@@ -1,4 +1,4 @@
-// Pestaña CAMBIOS Y AUSENCIAS (swaps de turno #175 + ausencias). Partido de pages/Rota.tsx.
+// Pestaña CAMBIOS Y AUSENCIAS (swaps de turno + ausencias). Partido de pages/Rota.tsx.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -311,8 +311,8 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
       }
     }
     // Lo ACCIONABLE primero: lo que espera TU respuesta (eres el destinatario de un
-    // `propuesto`) o, si eres admin, TU aprobación (`aceptado`). El resto, por fecha desc
-    // como antes. En "Historial" todo es terminal -> es un no-op (nada necesita acción).
+    // `propuesto`) o, si eres admin, TU aprobación (`aceptado`). El resto, por fecha desc.
+    // En "Historial" todo es terminal -> es un no-op (nada necesita acción).
     const miId = usuario?.id ?? "";
     const necesitaMiAccion = (it: ItemSolicitud) =>
       it.tipo === "cambio" &&

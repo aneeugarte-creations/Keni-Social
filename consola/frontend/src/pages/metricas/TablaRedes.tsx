@@ -9,7 +9,7 @@
  * comparada y son ORDENABLES (clic en la cabecera). Al pie, una fila de TOTALES, y
  * bajo la tabla un mini-reparto "% de vistas por red" (barra), como en
  * GraficaMarcas. `alcance` es `null` cuando ninguna cuenta mide alcance en esa red
- * (#138): se muestra "—" en vez de un 0 falso.
+ * se muestra "—" en vez de un 0 falso.
  */
 import * as React from "react";
 

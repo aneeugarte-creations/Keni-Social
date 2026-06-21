@@ -1,6 +1,6 @@
 # Mapa del código — `consola/src/keni_consola`
 
-Índice de navegación de los **78 módulos planos** del top-level de `keni_consola`.
+Índice de navegación de los **módulos planos** del top-level de `keni_consola`.
 Son la **capa de servicio/dominio compartida**: los routers de `api/` y el
 orquestador `daemons.py` los importan. NO están en el catálogo de apps
 (`apps/*.toml` mapea solo los routers `api/<X>.py`).
@@ -22,10 +22,10 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `programador.py` — programador de publicaciones (#9, Fase 3): prepara/publica las piezas vencidas.
 - `auto_programar.py` — una pieza APROBADA pasa SOLA a `programado` en su próximo hueco.
 - `auto_responsable.py` — auto-asignación de responsable desde la rota.
-- `pipeline_contenido.py` — MÁQUINA DE CONTENIDO: espinazo CI→QA→Redactar→Ilustrar (etapas «Generar copy»/«Generar arte»).
-- `autogen_copy.py` — lanzador reutilizable de COPY de un tema (`lanzar_para_topic`); usado por la etapa de Redactar del pipeline y por endpoints manuales.
-- `autogen_arte.py` — selección + lanzador de ARTE (`topics_sin_arte`/`lanzar_para_topic`); los usa la etapa de Ilustrar del pipeline.
-- `ingesta_daemon.py` — motor de ingesta persistente (Ola A), etapa «Crear noticias».
+- `pipeline_contenido/` — MÁQUINA DE CONTENIDO: espinazo CI→QA→Redactar→Ilustrar (etapas «Generar copy»/«Generar arte»). Paquete (`iniciar_pipeline`).
+- `autogen_redactar.py` — lanzador reutilizable de COPY de un tema (`lanzar_para_topic`); usado por la etapa de Redactar del pipeline y por endpoints manuales.
+- `autogen_ilustrar.py` — selección + lanzador de ARTE (`topics_sin_arte`/`lanzar_para_topic`); los usa la etapa de Ilustrar del pipeline.
+- `recolectar_daemon/` — motor de ingesta persistente, etapa «Crear noticias» (paquete; `iniciar_ingesta`).
 - `trends_daemon.py` — vuelca Google Trends (con sus noticias) al pool de Noticias.
 - `eventos_scanner.py` — barrido de vencimientos del tablero: emite `contenido.vencido`.
 - `alertas_rendimiento.py` — barrido de alertas de rendimiento / reciclaje proactivo.
@@ -43,7 +43,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `metricas_pieza.py` — rendimiento real por PIEZA del tablero, leído de Metricool.
 - `comercial.py` — seguimiento de UN post real de Metricool + captura + reporte.
 - `algoritmos.py` — inteligencia de PLATAFORMA (cambios de algoritmo + tendencias por red).
-- `priorizacion.py` — score de prioridad dinámico para la "lista viva" del día (H3).
+- `priorizacion.py` — score de prioridad dinámico para la "lista viva" del día.
 - `relevancia_marca.py` — relevancia por marca para la investigación (Plan del día).
 - `patrones_marca.py` — perfil de PATRONES por marca (top vs fondo medido) + verificador de voz del copy (ADR 0009).
 - `patrones_derivar.py` — CLI de derivación: Metricool/JSONL → perfil JSON + doc editorial `patrones`.
@@ -56,7 +56,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `transcripcion.py` — transcripción local de video/audio (whisper.cpp), capa SHELL.
 
 ## Pipeline de contenido (automatización, Flujo C)
-- `pipeline_contenido.py` — pipeline CI→CD→QA por marca (la "pipeline").
+- `pipeline_contenido/` — pipeline CI→CD→QA por marca (la "pipeline"). Paquete.
 - `pipeline_estado.py` — observabilidad: en qué ETAPA está cada tema.
 
 ## Persistencia / repos
@@ -64,13 +64,13 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `db.py` — BARREL: reexporta todos los `db_<dominio>`; `db.<algo>` sigue funcionando igual.
 - `db_<dominio>.py` — CRUD por dominio (el cuerpo de la antigua db.py de 9571 líneas): `db_rota`, `db_contenido`, `db_publicaciones`, `db_noticias`, `db_editor`, `db_parrilla`, `db_colaboracion`, `db_comercial`, `db_metricas`, `db_hashtags_franjas`, `db_webhooks`, `db_green`, `db_jobs`, `db_notificaciones`.
 - `_db_comun.py` — plumbing compartido de los `db_<dominio>`: imports, logger y re-export de `_db_core`.
-- `_db_core.py` — cimientos: conexión, locks y esquema/migraciones.
+- `_db_core/` — cimientos: conexión, locks y esquema/migraciones (paquete: `esquema.py`, `migraciones.py`, `migraciones_columnas.py`).
 - `motor_db.py` — motor de persistencia operacional: Postgres, un solo backend.
 - `migracion.py` — migración one-shot del cutover hosted: media disco → S3/Garage.
 - `migrar_contenido.py` — migración de datos legados al tablero de CONTENIDO unificado.
 - `versionado.py` — versionado de la Texto con git (historial · diff · rollback).
 
-> Capas de DB: `api/` → `repos.py` (fachada) → `db.py` (barrel) → `db_<dominio>.py` (CRUD) → `_db_core.py` (cimientos) ← `motor_db.py` (conexión Postgres). El plumbing común de los `db_<dominio>` está en `_db_comun.py`.
+> Capas de DB: `api/` → `repos.py` (fachada) → `db.py` (barrel) → `db_<dominio>.py` (CRUD) → `_db_core/` (cimientos) ← `motor_db.py` (conexión Postgres). El plumbing común de los `db_<dominio>` está en `_db_comun.py`.
 
 ## Ficheros-como-verdad (prosa editorial en disco)
 - `ficheros.py` — backend de FICHEROS YAML: el historial de prompts vive en disco.
@@ -89,13 +89,13 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `bootstrap_lineas.py` — inicial idempotente de LÍNEAS de contenido y orígenes.
 
 ## Cola de jobs y worker (generación IA)
-- `cola.py` — cola de jobs: el back ENCOLA, un WORKER clava y ejecuta (#130 Fase 2).
+- `cola.py` — cola de jobs: el back ENCOLA, un WORKER clava y ejecuta.
 - `worker.py` — clava jobs de la cola y corre `claude -p` (ADR 0002 Fase 2).
 - `generaciones.py` — dominio GENERACIONES: trabajos de IA seguibles en vivo.
 - `lanzador.py` — lanza Claude Code en una carpeta del proyecto.
 
 ## Operación del equipo
-- `rota.py` — lógica de DOMINIO de la parrilla y rota de horarios (#144).
+- `rota.py` — lógica de DOMINIO de la parrilla y rota de horarios.
 - `sugerencias.py` — buzón de sugerencias LOCAL (ideas de producto del equipo).
 - `proyectos.py` — config local de "carpetas de proyecto" para la pestaña Proyectos.
 - `importador_calendario.py` — importa calendario editorial (Excel/CSV) al tablero.
@@ -107,9 +107,9 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `ajustes_catalogo.py` — catálogo DECLARATIVO de ajustes editables (verdad para la API admin).
 - `preferencias.py` — preferencias locales no secretas del equipo.
 - `secretos.py` — almacén LOCAL de secretos (clave del proveedor de imagen IA).
-- `rutas.py` — raíz de estado ÚNICA (un solo volumen en contenedor, #130).
-- `permisos.py` — permisos por ROL: helper "¿es admin?" (#153).
-- `seguridad.py` — autenticación + protección CSRF (#134).
+- `rutas.py` — raíz de estado ÚNICA (un solo volumen en contenedor).
+- `permisos.py` — permisos por ROL: helper "¿es admin?".
+- `seguridad.py` — autenticación + protección CSRF.
 
 ## Plataforma / arranque / infra transversal
 - `app.py` — App Starlette: API JSON + sirve el SPA React.

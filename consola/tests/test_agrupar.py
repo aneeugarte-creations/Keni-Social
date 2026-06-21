@@ -779,8 +779,8 @@ def test_recalcular_fija_verificacion_e_idioma_representativo():
 
 
 def test_asignar_empate_exacto_gana_el_primero():
-    """A clave IDÉNTICA entre varios clusters gana el primer candidato (determinista, decide el
-    orden de entrada, no el azar del dict; antes ganaba el último)."""
+    """A clave IDÉNTICA entre varios clusters gana el primer candidato (determinista: decide el
+    orden de entrada, no el azar del dict)."""
     clave = agrupar.clave_cluster({"url": "", "titulo": "El presidente anuncia nueva reforma"})
     c_a = {"id": "primero", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}
     c_b = {"id": "segundo", "clave": clave, "titulo": "El presidente anuncia nueva reforma"}

@@ -88,8 +88,8 @@ def test_bearer_persistido_estable_y_compartido(tmp_path):
 
 
 def test_leer_disponible_corta_al_ver_url():
-    # REGRESION del timeout: con `hasta`, _leer_disponible devuelve EN CUANTO aparece la URL
-    # (claude auth login imprime la URL en <1s pero NO cierra), sin esperar al deadline.
+    # Con `hasta`, _leer_disponible devuelve EN CUANTO aparece la URL (claude auth login
+    # imprime la URL en <1s pero NO cierra), sin esperar al deadline.
     import os
     import time
 

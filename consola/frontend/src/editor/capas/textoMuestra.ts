@@ -19,8 +19,8 @@ export function textoMuestra(c: CapaTexto, muestraCopy = false): string {
         : c.texto;
   // MAYÚSCULAS en render (locale es), sin destruir lo escrito, + normalización ESPEJO del export
   // (`dibujarTexto` hace .trim() del total y `envolver` colapsa rachas de espacios POR PÁRRAFO,
-  // preservando los \n internos y las líneas en blanco): sin esto un salto/espacio inicial o un
-  // espacio doble envolvían distinto en la previa que en el PNG (línea fantasma, cortes movidos).
+  // preservando los \n internos y las líneas en blanco): así un salto/espacio inicial o un espacio
+  // doble envuelven igual en la previa que en el PNG (sin línea fantasma ni cortes movidos).
   // Solo render: el dato sigue crudo y la edición inline (Lienzo) muestra el `texto` tal cual.
   const texto = c.mayusculas ? base.toLocaleUpperCase("es") : base;
   return texto

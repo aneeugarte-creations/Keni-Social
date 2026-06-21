@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Alertas de infra de keni-social SIN servicios externos (audit 2026-06, item M).
+# Alertas de infra de keni-social SIN servicios externos.
 #
 # Corre cada 10 min via systemd timer (keni-alertas.timer) y comprueba:
 #   1) Salud de los contenedores del stack: back (su healthcheck ya es curl /healthz),
-#      front, worker, mcp, files, daemons (healthcheck por fichero de latido desde
-#      2026-06) y EN ESPECIAL db (Postgres esta EXCLUIDO del sidecar autoheal a
+#      front, worker, mcp, files, daemons (healthcheck por fichero de latido) y EN
+#      ESPECIAL db (Postgres esta EXCLUIDO del sidecar autoheal a
 #      proposito, asi que sin esto un db unhealthy pasaria desapercibido).
 #   2) Disco raiz > KENI_ALERTA_DISCO_MAX % (def 85).
 #   3) Antiguedad del ultimo backup local (dump de Postgres en /var/backups/keni-social)

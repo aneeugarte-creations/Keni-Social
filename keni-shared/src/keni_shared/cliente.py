@@ -1,4 +1,4 @@
-"""Carga del PAQUETE DE CLIENTE: marcas y cuentas, externalizadas a configuracion (#135).
+"""Carga del PAQUETE DE CLIENTE: marcas y cuentas, externalizadas a configuracion.
 
 Las marcas/cuentas viven en ficheros `.toml` empaquetados en `clientes/` (uno por cliente,
 declarativo, como ya hace el corpus editorial de skills). `marcas.py` y `cuentas.py` se

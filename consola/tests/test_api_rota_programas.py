@@ -1,4 +1,4 @@
-"""Tests de la API `/api/rota/programas` (#150 PARRILLA 2026.xlsx). Todo OFFLINE.
+"""Tests de la API `/api/rota/programas` (PARRILLA 2026.xlsx). Todo OFFLINE.
 
 Cubre el CRUD del catalogo de programas evergreen ("Álvaro Fidalgo", "Real Oviedo",
 "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS", "IDEAS SIN DERECHOS"

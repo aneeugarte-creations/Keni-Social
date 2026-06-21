@@ -62,7 +62,7 @@ código, `consola/frontend/src/components/layout/navegacion.ts`.
 
 - La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), la **Texto de Prompts** (`texto.py`) y el **lanzador neutro** (`dominio/generar.py`, que arranca `claude -p`).
 - El **contenido editorial estructurado** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) y lo **operacional** (tus tareas, el seguimiento Comercial con su serie temporal, la rota, usuarios/sesiones y la cola de jobs) viven en **Postgres** (`DATABASE_URL`, ADR 0004/0006): un único almacén operacional, sin índices ni SQLite paralelos que se desincronicen. Solo la **prosa editorial por marca** (`marca.yaml`, `CLAUDE.md`, voces) sigue como ficheros versionados editables a mano. La configuración de marcas/fuente sigue en los `.toml` de siempre.
-- El frontend viaja **ya compilado** dentro del paquete, así que para **usar** la consola **no hace falta Node** ni instalar nada de JavaScript.
+- El SPA se **compila desde fuente** (`vite build`): en producción/CI lo construye el deploy. El paquete Python ya **no incluye un bundle precompilado** (`webapp/` está gitignored); en local, si no lo compilas, el back sirve un placeholder amable. Construir la interfaz requiere Node.
 
 ---
 
@@ -79,10 +79,10 @@ Este documento es de **diseño**; el cómo-instalar vive donde se mantiene de ve
 para no duplicarlo aquí:
 
 - **Instalar y arrancar** (paquete `keni-consola`, dependencias del monorepo, `uv`):
-  [`../consola/README.md`](../consola/README.md). El bundle de la interfaz viaja
-  compilado, así que **para usar la consola no hace falta Node**.
-- **Tocar la interfaz** (Node ≥ 18, `npm run dev`/`build`, recompilar el bundle
-  versionado): [`../consola/frontend/README.md`](../consola/frontend/README.md).
+  [`../consola/README.md`](../consola/README.md). El SPA se compila desde fuente
+  (`vite build`); en producción/CI lo construye el deploy.
+- **Tocar la interfaz** (Node ≥ 18, `npm run dev`/`build`, compilar el SPA a
+  `webapp/`): [`../consola/frontend/README.md`](../consola/frontend/README.md).
 
 ---
 

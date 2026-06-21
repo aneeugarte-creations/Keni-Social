@@ -183,7 +183,7 @@ export function useGeneracion(persistKey?: string) {
     if (persistKey) sessionStorage.removeItem(persistKey);
   }, [persistKey]);
 
-  // CANCELACIÓN (#137): pide al backend matar el árbol del subproceso `claude` del job en
+  // CANCELACIÓN: pide al backend matar el árbol del subproceso `claude` del job en
   // vuelo. El backend responde con el registro en estado terminal; lo fijamos en el estado
   // local para CORTAR el seguimiento de inmediato (en vez de esperar al siguiente tick). El
   // trabajo corre en el servidor; esto solo lo detiene y refleja el resultado. Best-effort:

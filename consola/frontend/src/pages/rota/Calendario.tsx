@@ -158,9 +158,8 @@ export function Calendario({
   );
 
   // Las 7 fechas de la semana (lun → dom). Memo para estabilidad referencial.
-  // `diasDeSemana` ancla a mediodía UTC (antes aquí se parseaba T00:00:00 en zona
-  // LOCAL del navegador, a diferencia del resto de helpers de fecha: corregido a la
-  // convención CDMX de lib/fecha + rota-calendario).
+  // `diasDeSemana` ancla a mediodía UTC, siguiendo la convención CDMX de lib/fecha +
+  // rota-calendario (el resto de helpers de fecha).
   const dias = React.useMemo(() => diasDeSemana(lunes), [lunes]);
 
   // Diálogo de cobertura: clicar un chip de evento abre su tarjeta de cobertura (la MISMA del
@@ -172,10 +171,10 @@ export function Calendario({
   const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   // Diálogo de franjas (unificado): un solo «Franjas» en el menú «Más» con dos pestañas
-  // (esta semana / plantilla por defecto). Antes eran dos items sueltos que se confundían.
+  // (esta semana / plantilla por defecto).
   const [abrirFranjas, setAbrirFranjas] = React.useState(false);
-  // Resumen "Carga del equipo": antes vivía como panel colapsable bajo el calendario;
-  // ahora se abre bajo demanda desde el menú "Más" (popup), para no alargar la vista.
+  // Resumen "Carga del equipo": se abre bajo demanda desde el menú "Más" (popup), para no
+  // alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
   // «Asignar turnos»: reparte la semana (persona → franja → días) sin ir celda por celda. En
   // «Gestión» el panel arranca ABIERTO (columna lateral): repartir es la acción principal de esa
@@ -295,9 +294,9 @@ export function Calendario({
   );
 
   // TITULARIDAD: quién COGIÓ cada evento, derivada de las tareas de cobertura (la MISMA
-  // fuente que el Panorama) y NO de quién está de turno. Antes el calendario usaba la
-  // cobertura DERIVADA de turnos (`evento.cobertura`): metía el evento bajo CADA persona
-  // de la franja → salía duplicado y no coincidía con el Panorama. Ahora coinciden.
+  // fuente que el Panorama) y NO de quién está de turno. La cobertura derivada de turnos
+  // (`evento.cobertura`) metería el evento bajo CADA persona de la franja, duplicándolo y
+  // descuadrándolo respecto al Panorama; así ambos coinciden.
   // Ref estable (no un literal nuevo por render) para no invalidar los memos que dependen de ella.
   const tareas = React.useMemo(() => tareasQ.data?.contenidos ?? [], [tareasQ.data?.contenidos]);
   // PROPUESTAS de calendario: tareas sueltas CON fecha (sin evento) aún sin terminar. No entran

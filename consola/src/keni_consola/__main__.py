@@ -5,7 +5,7 @@
 Puerto configurable con `KENI_CONSOLA_PORT` (def: 8765) y host con
 `KENI_CONSOLA_HOST` (def: 127.0.0.1). Por defecto solo escucha en localhost: es una
 app que toca el disco y lanza procesos. Bind a `0.0.0.0` SOLO detras de un proxy de
-confianza y CON auth (login multiusuario + token, #130/#134); el proxy es quien la
+confianza y CON auth (login multiusuario + token); el proxy es quien la
 expone y termina TLS (entonces pon `KENI_CONSOLA_HTTPS=1` para cookies `Secure`).
 Imprime la URL y, best-effort, la abre en el navegador.
 
@@ -25,9 +25,9 @@ import uvicorn
 from . import config
 from .app import crear_app
 
-# Bind por defecto a localhost. Configurable con `KENI_CONSOLA_HOST` (#130): en
+# Bind por defecto a localhost. Configurable con `KENI_CONSOLA_HOST`: en
 # contenedor se pone `0.0.0.0` para que un reverse-proxy de confianza la exponga. Es
-# seguro porque YA hay auth (login multiusuario + token, #130/#134); NO la pongas en
+# seguro porque YA hay auth (login multiusuario + token); NO la pongas en
 # `0.0.0.0` sin un proxy delante. El nombre/default de la var vive en `config`.
 HOST = config.host()
 # Puerto por defecto (re-exportado de `config`; algunos tests lo referencian aqui).
@@ -39,7 +39,7 @@ def _puerto() -> int:
 
 
 def main() -> int:
-    # Logging del paquete (issue #123): nivel via KENI_CONSOLA_LOG_LEVEL (def: INFO).
+    # Logging del paquete: nivel via KENI_CONSOLA_LOG_LEVEL (def: INFO).
     # Se configura aqui, en el arranque real; los tests no lo necesitan (usan caplog).
     from .observabilidad import configurar_logging
 
@@ -47,9 +47,9 @@ def main() -> int:
 
     puerto = _puerto()
 
-    # Seguridad (#134/#150): resolvemos el token de mantenimiento AQUI para pasarselo a la
+    # Seguridad: resolvemos el token de mantenimiento AQUI para pasarselo a la
     # app (un unico token por proceso). Si el operador fijo `KENI_CONSOLA_TOKEN`, usamos
-    # ese; si no, generamos uno. NUNCA lo metemos en la URL ni lo imprimimos (#150): un
+    # ese; si no, generamos uno. NUNCA lo metemos en la URL ni lo imprimimos: un
     # token en la URL/log es un vector de fuga trivial (historial, capturas, logs). La
     # cookie del token la inicializa el propio index del SPA al cargar la pagina (ver
     # `app._respuesta_index_spa`), sin necesidad de `?token=` en la URL.
@@ -60,7 +60,7 @@ def main() -> int:
     # Host navegable para la URL: si el bind es `0.0.0.0` (todas las interfaces) no es
     # una direccion a la que el navegador pueda ir, asi que mostramos `localhost`.
     host_url = "localhost" if HOST in ("0.0.0.0", "::") else HOST
-    # URL LIMPIA, SIN el token (#150): la cookie se inicializa al servir el index.
+    # URL LIMPIA, SIN el token: la cookie se inicializa al servir el index.
     url = f"http://{host_url}:{puerto}/"
     print(f"Consola Keni escuchando en {HOST}:{puerto}")
     if HOST in ("0.0.0.0", "::"):
@@ -71,7 +71,7 @@ def main() -> int:
     else:
         print(f"Privacidad por diseno: solo escucha en {HOST} (no expuesta a la red).")
     if generado:
-        # NO imprimimos el token (#150). El operador local entra por el LOGIN multiusuario
+        # NO imprimimos el token. El operador local entra por el LOGIN multiusuario
         # (el admin de bootstrap se loguea aparte). El token es solo una credencial de
         # mantenimiento opcional y se entrega fuera de banda, nunca por la URL/log.
         print(
@@ -87,7 +87,7 @@ def main() -> int:
         )
 
     # Abrir el navegador es best-effort: si falla (sin entorno grafico, etc.) no debe
-    # impedir que el servidor arranque. Abrimos la URL LIMPIA (sin token, #150): la cookie
+    # impedir que el servidor arranque. Abrimos la URL LIMPIA (sin token): la cookie
     # del token la inicializa el index del SPA al cargar, asi que la UI funciona igual.
     try:
         webbrowser.open(url)
@@ -198,7 +198,7 @@ def main() -> int:
 
     iniciar_alertas_rendimiento()
 
-    # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un WORKER
+    # Worker de generacion (ADR 0002 Fase B): el back ENCOLA y un WORKER
     # corre `claude -p`. En el perfil LOCAL / un solo proceso, el worker corre EN PROCESO
     # (hilo daemon) para que la UX de una sola maquina no cambie (no hace falta un servicio
     # aparte). En HOSTED hay un servicio `worker` aparte: el back arranca con

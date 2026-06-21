@@ -20,7 +20,7 @@ def test_reporte_recorre_todas_las_cuentas():
     assert rep["total"]["cuentas"] == 7
     assert rep["total"]["visualizaciones"] > 0
     # engagement global = None: combina marcas y plataformas con bases de
-    # visualizacion heterogeneas; no se divide sobre bases incomparables (#138).
+    # visualizacion heterogeneas; no se divide sobre bases incomparables.
     assert rep["total"]["engagement_pct"] is None
     # total = suma de las marcas
     suma = sum(f["resumen"]["visualizaciones"] for f in rep["cuentas"])
@@ -38,7 +38,7 @@ def test_render_markdown():
 
 
 def test_reporte_muestra_lleva_aviso_destacado():
-    # #131: con fuente de muestra, el reporte debe AVISAR de forma destacada que
+    # con fuente de muestra, el reporte debe AVISAR de forma destacada que
     # los datos son sinteticos, no solo en el campo `fuente`.
     rep = construir_reporte(FuenteMuestra(), "mes", top=1)
     assert "aviso" in rep and "MUESTRA" in rep["aviso"].upper()
@@ -49,7 +49,7 @@ def test_reporte_muestra_lleva_aviso_destacado():
 
 
 def test_reporte_fuente_real_sin_aviso_de_muestra():
-    # #131: una fuente real (nombre != "muestra") NO debe llevar el aviso ni el
+    # una fuente real (nombre != "muestra") NO debe llevar el aviso ni el
     # banner; el comportamiento de datos reales no cambia.
     rep = construir_reporte(FuenteMuestra(), "mes", top=1)
     rep["fuente"] = "real"

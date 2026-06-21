@@ -32,7 +32,7 @@ from ._config_comun import (
 )
 
 # --------------------------------------------------------------------------- #
-# Accesores: persistencia hosted (Postgres + object storage S3/Garage, #130)   #
+# Accesores: persistencia hosted (Postgres + object storage S3/Garage)         #
 # --------------------------------------------------------------------------- #
 #
 # La media (S3) sigue siendo opcional: sin endpoint+credenciales S3 -> disco. La DB

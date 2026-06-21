@@ -1,9 +1,9 @@
 /**
  * Pestaña "Acerca de" del editor de documentos: explica EN PROSA, para humanos, qué es
- * este archivo y para qué sirve dentro del pipeline. Fusiona lo que antes se repartía
- * entre «Uso» (dónde se inyecta) y «Ficha» (metadata cruda): aquí no hay tablas ni
- * campos, solo párrafos compuestos a partir de los datos del documento (su descripción,
- * y dónde entra: procesos, pipelines y su sitio en la línea de la máquina).
+ * este archivo y para qué sirve dentro del pipeline. Reúne en una sola vista dónde se
+ * inyecta el documento y su metadata: aquí no hay tablas ni campos, solo párrafos
+ * compuestos a partir de los datos del documento (su descripción, y dónde entra:
+ * procesos, pipelines y su sitio en la línea de la máquina).
  */
 import * as React from "react";
 

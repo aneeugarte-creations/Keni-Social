@@ -300,7 +300,7 @@ def decidir(
 #
 # CONSERVADOR Y GATEADO: solo aplica si el llamante pasa `activa=True` (flag admin
 # `KENI_AUTO_PREAPROBACION`, def OFF) Y la pieza es de bajo riesgo. Si no, no auto-aprueba
-# nada (todos los niveles nacen `pendiente`, comportamiento de siempre). TRAZABLE: el decisor
+# nada (todos los niveles nacen `pendiente`). TRAZABLE: el decisor
 # auto se sella con un id/nombre reservado ("auto") para que la UI distinga lo automatico.
 
 # Identidad reservada del decisor AUTOMATICO (trazabilidad: la UI puede pintarlo distinto).

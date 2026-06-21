@@ -40,7 +40,7 @@ def test_crear_publicaciones_lote_ok(entorno):
 
 def test_crear_publicaciones_lote_es_atomico(entorno):
     """Si una pieza del lote viola una restriccion (doble-reserva del MISMO slot de
-    parrilla), NINGUNA queda insertada (antes quedaban las anteriores al fallo)."""
+    parrilla), NINGUNA queda insertada: el lote es atómico."""
     lote = [
         {"marca": "unotv", "red": "x", "titulo": "Primera", "contenido": "a"},
         {
@@ -119,7 +119,7 @@ def test_listar_y_contar_publicaciones_multi_marca(entorno):
 
 def test_keyset_multi_marca_pagina_sin_saltos(entorno):
     """El keyset con `marca IN (...)` recorre TODAS las piezas de las marcas del foco, sin
-    paginas cortas ni filas saltadas (el bug del post-filtro en memoria)."""
+    paginas cortas ni filas saltadas: el filtro va en SQL, no en un post-filtro en memoria."""
     for i in range(3):
         db.crear_pieza("unotv", "x", titulo=f"U{i}", contenido="c")
         db.crear_pieza("claro-sports", "instagram", titulo=f"C{i}", contenido="c")

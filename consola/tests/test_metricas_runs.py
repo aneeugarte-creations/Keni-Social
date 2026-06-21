@@ -177,7 +177,7 @@ def test_arg_presupuesto_invalido_o_ausente_se_ignora(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# arg_max_turns: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)         #
+# arg_max_turns: --max-turns desde KENI_CLAUDE_MAX_TURNS                        #
 # --------------------------------------------------------------------------- #
 
 

@@ -1,4 +1,4 @@
-"""Tests del nucleo de observabilidad (issue #123).
+"""Tests del nucleo de observabilidad.
 
 Cubre:
   (a) el manejador central convierte una `Exception` no controlada en la forma JSON
@@ -34,7 +34,7 @@ from .conftest import TOKEN_PRUEBA
 
 
 def _cli_obs(**kwargs) -> TestClient:
-    """TestClient con token de sesion (#134) fijo + auth por defecto, igual que conftest."""
+    """TestClient con token de sesion fijo + auth por defecto, igual que conftest."""
     return TestClient(
         app_modulo.crear_app(token=TOKEN_PRUEBA),
         headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"},
@@ -78,7 +78,7 @@ def modulo_api_que_lanza(monkeypatch):
 def test_excepcion_no_controlada_da_500_json_estandar(entorno, modulo_api_que_lanza):
     """Un endpoint que lanza -> 500 con `{"error", "request_id"}`, sin filtrar.
 
-    El cuerpo lleva el id de correlacion (#123): un usuario que reporta el fallo da ese
+    El cuerpo lleva el id de correlacion: un usuario que reporta el fallo da ese
     id y casa 1:1 con la traza del servidor. `error` es el mensaje generico; el nombre de
     la clase de excepcion NO viaja al cliente (queda solo en el log del servidor), igual
     que NUNCA el detalle interno ni el stack.
@@ -117,7 +117,7 @@ def test_excepcion_no_controlada_loguea_traceback_en_servidor(
 def test_excepcion_loguea_y_responde_el_mismo_request_id(
     entorno, modulo_api_que_lanza, caplog
 ):
-    """CORRELACION (#123): el id del cuerpo/cabecera 500 casa con el id del LOG.
+    """CORRELACION: el id del cuerpo/cabecera 500 casa con el id del LOG.
 
     Un fallo se loguea UNA vez con un id de correlacion usable, y ese mismo id viaja al
     cliente: dado el id que reporta el usuario, se localiza la traza exacta del servidor.

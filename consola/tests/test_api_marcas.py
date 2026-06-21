@@ -1,6 +1,6 @@
 """Dashboard "Marcas" (`GET /api/marcas`): vista única por marca × red (Postproxy).
 
-SOLO ADMIN (#153): un editor recibe 403. Se MOCKEAN el estado de conexiones y el cliente
+SOLO ADMIN: un editor recibe 403. Se MOCKEAN el estado de conexiones y el cliente
 de Postproxy, así el test ejercita la AGREGACIÓN (no la red real). Por cada marca: una
 fila por red con su estado de conexión + sus números (de Postproxy) y el sumatorio de la
 marca. Nunca casca y NUNCA inventa ceros. Metricool NO aparece (vive en Analíticas).

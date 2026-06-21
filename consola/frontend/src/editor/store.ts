@@ -344,9 +344,9 @@ export function crearStoreEditor(inicial: Documento) {
             doc,
             doc.capas.map((c) => {
               const p = mapa.get(c.id);
-              // `moverCapa` desplaza también a las hijas de un grupo (coords absolutas): antes
-              // mover un grupo por flechas o multi-arrastre viajaba solo la bbox y el export
-              // (que pinta las hijas e ignora la x/y del grupo) perdía el movimiento.
+              // `moverCapa` desplaza también a las hijas de un grupo (coords absolutas): así
+              // mover un grupo por flechas o multi-arrastre viaja con sus hijas y el export
+              // (que las pinta e ignora la x/y del grupo) conserva el movimiento.
               return p ? moverCapa(c, p.x, p.y) : c;
             }),
           ),

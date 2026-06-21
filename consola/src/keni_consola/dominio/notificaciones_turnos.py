@@ -1,4 +1,4 @@
-"""Reparto de NOTIFICACIONES in-app para CAMBIOS DE TURNO (swaps, #175).
+"""Reparto de NOTIFICACIONES in-app para CAMBIOS DE TURNO (swaps).
 
 Mismo "cajon de la campana" que `dominio/notificaciones`, pero para el ciclo de vida de
 un cambio de turno: el DESTINATARIO se entera de que le proponen un cambio, el APROBADOR

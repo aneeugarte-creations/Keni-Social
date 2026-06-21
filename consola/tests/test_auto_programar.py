@@ -183,7 +183,7 @@ def test_slug_de_categoria_se_traduce_a_linea_del_plan(cliente, ahora_fijo):
 
 def test_sin_categoria_sin_genericas_cae_al_plan(cliente, ahora_fijo):
     """Marca de una línea sin franjas genéricas: una pieza sin categoría usa el plan, no se queda
-    sin programar. (Antes `franjas_aplicables` devolvía [] y la pieza no salía nunca.)"""
+    sin programar."""
     from keni_consola import bootstrap_lineas
 
     bootstrap_lineas.inicializar_lineas()

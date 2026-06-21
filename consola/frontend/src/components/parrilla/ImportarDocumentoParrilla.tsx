@@ -100,7 +100,7 @@ function ResumenRango({
 /**
  * Punto de entrada: botón "Importar documento" + badge de pendientes. La apertura del
  * Dialog y la propuesta en curso se gestionan aquí; el calendario padre solo nos pasa un
- * `onAplicado` para refrescar tras el merge. Ya NO se elige semana destino: una propuesta
+ * `onAplicado` para refrescar tras el merge. No se elige semana destino: una propuesta
  * puede abarcar muchas semanas (hasta un año) y cada operación lleva su propia fecha.
  */
 export function ImportarDocumentoParrilla({

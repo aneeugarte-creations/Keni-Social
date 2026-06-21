@@ -1,7 +1,7 @@
 """Cuentas hermanas de las marcas — fuente UNICA del monorepo.
 
 Se cargan del paquete de cliente declarativo (`clientes/<cliente>.toml`, seccion `[cuentas]`),
-externalizado a configuracion (#135). Anadir un cliente nuevo = anadir/seleccionar un `.toml`.
+externalizado a configuracion. Anadir un cliente nuevo = anadir/seleccionar un `.toml`.
 
 Sin estado: solo datos, materializados una vez al importar (desde el cliente activo).
 """

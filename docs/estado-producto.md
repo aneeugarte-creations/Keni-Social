@@ -56,11 +56,11 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
 - **Lista viva multi-fuente (tablero).** El tablero de contenidos es una lista
   priorizada que se alimenta de varias fuentes y deja el trabajo operativo adelantado hasta el
   punto de validación humana. Ya construido y probado: el
-  **importador de calendario Excel/CSV** (H1) que sube los temas al tablero con prioridad, fecha y
+  **importador de calendario Excel/CSV** que sube los temas al tablero con prioridad, fecha y
   etiqueta de compromiso; la **generación de copy** al entrar un tema de una fuente (la etapa de
   Redactar del pipeline, por el mismo camino que el botón manual, dejando el borrador en la cola de
   revisión; gated por `KENI_PIPELINE_REDACTAR`, **OFF por defecto**); y el **score de prioridad dinámico** que re-ordena la vista
-  del día sin alterar el orden del kanban compartido (H3). La lista curada del día vive en el
+  del día sin alterar el orden del kanban compartido. La lista curada del día vive en el
   propio **tablero** (`/operacion/parrilla/pendientes`), ordenado por score (el dashboard "Panel"
   de un vistazo se retiró por no aportar sobre el tablero). El humano sigue validando los checkpoints
   (aprobar copy, autorizar publicación). Queda como follow-up: auto-arte, anidar el borrador bajo
@@ -107,8 +107,8 @@ alineadas al estado real:
 
 1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, **métricas-insight con
    dato real vía Metricool (Advanced)**, preview dry-run y la **lista viva multi-fuente**
-   (tablero priorizado + importador de calendario H1 + auto-generación de copy H2 gated OFF +
-   score dinámico H3; ver §1). No depende de aprobaciones externas: es lo que se
+   (tablero priorizado + importador de calendario + auto-generación de copy gated OFF +
+   score dinámico; ver §1). No depende de aprobaciones externas: es lo que se
    demuestra y se cobra. Lo único que sigue pendiente es **validar en producción** la
    **publicación real** vía Metricool (ya construida y gateada OFF, Fase 1/2), no la lista ni la
    generación del borrador.

@@ -58,7 +58,7 @@ def test_unificada_replica_el_mismo_copy_y_copy_in_a_todas_las_redes():
     assert [p["red"] for p in piezas] == ["x", "instagram", "facebook", "tiktok"]
     assert all(p["contenido"] == "Mismo copy" for p in piezas)
     assert all(p["copy_in"] == "TITULAR" for p in piezas)
-    # X (la primera) trae copy_in como las demás (regresión del copy_in vacío de X).
+    # X (la primera) trae copy_in como las demás, no vacío.
     assert piezas[0] == {"red": "x", "contenido": "Mismo copy", "caracteres": len("Mismo copy"), "copy_in": "TITULAR"}
 
 

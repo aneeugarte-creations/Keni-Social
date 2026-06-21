@@ -384,8 +384,8 @@ export default function AgenteDetalle() {
   });
 
   // El detalle se abre desde las tablas de daemons (Sistema / cockpits): «Atrás» vuelve a su
-  // origen en vez de a una página fija (ya no hay lista de Agentes). El «←» vive ahora en la
-  // BARRA SUPERIOR del shell (vía TituloPagina), no como fila del cuerpo.
+  // origen en vez de a una página fija. El «←» vive en la BARRA SUPERIOR del shell (vía
+  // TituloPagina), no como fila del cuerpo.
   const atras = () => navigate(-1);
 
   if (query.isPending) {

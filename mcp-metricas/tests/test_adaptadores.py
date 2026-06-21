@@ -40,7 +40,7 @@ def test_disponible_con_credenciales():
     assert AdaptadorTikTok({"access_token": "x"}).disponible()
 
 
-# --- AdaptadorBase: helper de engagement (fórmula única, H4 / #97) -----------
+# --- AdaptadorBase: helper de engagement (fórmula única) ---------------------
 
 
 @pytest.mark.parametrize(

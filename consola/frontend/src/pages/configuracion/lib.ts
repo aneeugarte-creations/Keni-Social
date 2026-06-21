@@ -26,7 +26,7 @@ export const GRUPOS_MAQUINA = new Set([
 
 /** Grupos de la sección «Investigación» del MISMO drawer del Monitor (Fase 3: UN solo sitio para
  *  los ajustes de la máquina): el maestro del proceso, sus excepciones por marca y el motor de
- *  noticias completo (antes en el menú ⋮ de Noticias). `noticias_produccion_marca` (plan diario
+ *  noticias completo. `noticias_produccion_marca` (plan diario
  *  por marca) NO se pinta: su editor único es «Plan y horarios» de Programación. Debe coincidir
  *  con `ajustes_catalogo.GRUPOS_INVESTIGACION` del backend; el orden es el de pintado. */
 export const GRUPOS_INVESTIGACION = [

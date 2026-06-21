@@ -27,9 +27,8 @@ import { ESTADOS_FILTRO, ETAPAS_FILTRO, FilaPipeline } from "./Pipelines";
 const PAGINA = 20;
 
 /**
- * Página PRODUCCIÓN (antes «Actividad IA», con pestañas Feed/Pipelines hoy FUSIONADAS): el
- * FEED de todo lo que la máquina produce, en una sola línea temporal — el drill-down de «qué
- * hizo la máquina».
+ * Página PRODUCCIÓN: el FEED de todo lo que la máquina produce, en una sola línea temporal —
+ * el drill-down de «qué hizo la máquina».
  *
  * El feed unificado (`GET /api/pipelines`): las runs del pipeline (tarjeta con su tira de
  * etapas) y la actividad suelta (generación manual/lote, run de agente) como tarjeta de UNA
@@ -77,8 +76,7 @@ export default function Produccion() {
   const hayFiltro = !!(etapa || estado || tipo);
 
   // Catálogo de tipos para el filtro: se deriva del PROPIO feed (los trabajos sueltos traen
-  // `tipo`). Antes salía de una query aparte a `/api/actividad/agregados` que ya no se usaba
-  // para nada más; se retiró (una sola fuente, una petición menos).
+  // `tipo`), una sola fuente y una petición menos.
   const tipos = React.useMemo(
     () =>
       Array.from(

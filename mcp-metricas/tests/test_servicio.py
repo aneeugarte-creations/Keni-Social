@@ -1,4 +1,4 @@
-"""Fachada `servicio`: el contrato estable que consume la Consola (H1).
+"""Fachada `servicio`: el contrato estable que consume la Consola.
 
 TODO OFFLINE: `KENI_METRICAS_CONFIG` apunta a un archivo inexistente => fuente de
 muestra; nunca toca la red. Cubre lo que la Consola consume: rangos, fuente activa,

@@ -301,7 +301,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # filtra por (semana, marca?); en "Todas" (marca None) NO filtra y devuelve todas, que la
     # UI apila etiquetando cada turno con su marca.
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_marca ON rota_turnos (marca)",
-    # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
+    # Ausencias/vacaciones del horario: un rango de fechas (inclusivo) en que un
     # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
     # esos dias). `tipo` es vacaciones|descanso|baja|otro.
     """
@@ -317,7 +317,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_ausencias_miembro ON rota_ausencias (miembro_id)",
-    # Piezas de la PARRILLA (#150, PARRILLA 2026.xlsx): en el Excel de Tescu cada FILA es un
+    # Piezas de la PARRILLA (PARRILLA 2026.xlsx): en el Excel de Tescu cada FILA es un
     # POST individual, no un evento. Una transmision (p. ej. "LIV GOLF Andalucia R1") genera
     # varias piezas: pre-evento FB/IG/X, reel IG/TK, historia "5:15 LINK VIVO", post-evento.
     # Tambien hay campanas EVERGREEN sin evento (Alvaro Fidalgo, Real Oviedo, MUNDIAL, Paty
@@ -569,7 +569,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON pieza_aprobaciones (pieza_id)",
     "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON pieza_aprobaciones (decision)",
-    # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
+    # Programas/campanas evergreen. En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
     # programas para tener color/descripcion/fechas vivas; `rota_piezas.programa` referencia
@@ -590,7 +590,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
-    # PLANTILLA de FRANJAS (#185): la lista de franjas con que se siembra cada semana NUEVA,
+    # PLANTILLA de FRANJAS: la lista de franjas con que se siembra cada semana NUEVA,
     # editorial del equipo y editable desde la UI. GRID POR MARCA: una fila POR MARCA — `id`
     # guarda el id de la marca (antes era el singleton `id='default'`, reclavado a
     # 'claro-sports' por `_asegurar_marca_grid_rota`). Si no existe, se usan los defaults del
@@ -612,7 +612,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado         TEXT NOT NULL DEFAULT ''
     )
     """,
-    # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
+    # Solicitudes de cambio de turno entre compañeros: cuando un CM (A) quiere
     # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
     # estado `propuesto`; B acepta/rechaza, y si acepta, el coordinador de la rota (admin) aprueba o rechaza.
     # Al aprobar se ejecuta el swap en `rota_turnos` (intercambia miembro_id) y la
@@ -709,7 +709,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Marca del workspace que disparó el import: se estampa en los `rota_eventos` creados al
     # aplicar, para que la lista de Tareas (filtrada por marca) los muestre. (Import a Tareas.)
     "ALTER TABLE parrilla_propuesta ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''",
-    # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
+    # Cola de jobs de generacion (ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
     # (fuente de verdad del sondeo), `spec` el JSON serializable para reconstruir el job

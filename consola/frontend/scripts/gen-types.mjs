@@ -1,4 +1,4 @@
-// Generador de tipos del frontend desde el esquema del backend (#101 / H5/E6).
+// Generador de tipos del frontend desde el esquema del backend.
 //
 // Flujo: invoca el export de JSON Schema del backend
 //   (`python -m keni_consola.esquema_api`) y, con `json-schema-to-typescript`,
@@ -38,7 +38,7 @@ const CABECERA = `/**
  * Tipos DERIVADOS del backend (subconjunto estable del contrato \`/api/*\`).
  * Fuente: \`keni_consola.esquema_api\` (Python). Regenerar con \`npm run gen:types\`.
  * El guard \`npm run gen:types:check\` (y el test del backend) falla si esto se
- * desincroniza del backend. El resto de tipos vive a mano en \`types.ts\`. Ver #101.
+ * desincroniza del backend. El resto de tipos vive a mano en \`types.ts\`.
  */
 `;
 

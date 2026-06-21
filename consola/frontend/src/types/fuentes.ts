@@ -81,7 +81,7 @@ export interface RespuestaFuentesHub {
   pendientes: AgenciaFuente[];
 }
 
-// --- Radar de tendencias (lo más viral del momento, multi-red · F7/#147) ---
+// --- Radar de tendencias (lo más viral del momento, multi-red) ---
 
 /** Una nota/enlace que explica por qué sube un tema (título + URL + medio). */
 export interface EnlaceRadar {

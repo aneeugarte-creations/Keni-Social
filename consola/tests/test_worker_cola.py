@@ -1,10 +1,10 @@
-"""Tests del DESACOPLO generacion (#130 Fase 2 / ADR 0002 Fase B): cola + worker.
+"""Tests del DESACOPLO generacion (ADR 0002 Fase B): cola + worker.
 
 TODO OFFLINE: nunca se llama a `claude` real (se mockea `runner.lanzar_proc` por un
 subproceso de python que emite NDJSON canned). Cubre:
   - Cola: encolar -> reclamar (clava) -> terminar; reclamacion idempotente.
   - jobspec: round-trip de serializacion y reconstruccion del `procesar` por kind.
-  - Worker: clava un job y corre el runner (con #137) -> el registro completa y el
+  - Worker: clava un job y corre el runner -> el registro completa y el
     post-procesado real corre (historial/piezas).
   - Reclamacion concurrente NO doble-ejecuta un mismo job (varios hilos worker).
   - Cancelacion cross-proceso mata el ARBOL (proceso que lanza un hijo; sin sueltos).
@@ -128,13 +128,11 @@ def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
 
 
 def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
-    """REGRESION del leak de admision: encolar->reclamar->terminar MUCHAS veces NO satura.
+    """encolar->reclamar->terminar MUCHAS veces NO satura la admision.
 
-    El gate de admision vivia en un contador EN MEMORIA por-proceso (`runner.admitir`): en hosted
-    el back sumaba al encolar y el worker restaba al terminar, en memorias SEPARADAS, asi que el
-    contador del back solo subia y nunca bajaba — saturando el back para siempre. Hoy la cola NO
-    tiene tope (R-NO-LIMIT) y `cola.encolar` SIEMPRE acepta: tras N ciclos completos seguimos
-    pudiendo encolar y la cuenta de jobs en proceso vuelve a 0.
+    La cola NO tiene tope (R-NO-LIMIT) y `cola.encolar` SIEMPRE acepta: el gate vive en BD
+    (`contar_jobs_activos`), no en un contador en memoria por-proceso. Tras N ciclos completos
+    seguimos pudiendo encolar y la cuenta de jobs en proceso vuelve a 0.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
     for i in range(20):  # muchos ciclos, muy por encima de cualquier antiguo tope
@@ -679,7 +677,7 @@ def _esperar_terminal(gid: str, timeout: float = 10.0) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Worker: clava un job y corre el runner real (con #137); el job COMPLETA      #
+# Worker: clava un job y corre el runner real; el job COMPLETA                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -690,7 +688,7 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
 
     Es el camino del desacoplo entero, salvo el binario real: el back encola (via el gate de
     cola COMPARTIDO), el worker reclama, reconstruye el `procesar` IDENTIDAD (prompt) desde el
-    spec y corre el runner #137; el registro queda `completado` con el texto en `salida`.
+    spec y corre el runner; el registro queda `completado` con el texto en `salida`.
     """
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
     monkeypatch.setattr(
@@ -885,10 +883,9 @@ def test_cancelacion_cross_proceso_mata_el_arbol(entorno, monkeypatch):
     assert not _vivo(pids["hijo"]), "cancelar debio matar el arbol entero (incluido el hijo)"
     g = generaciones.obtener(gen["id"])
     assert g["motivo"] == generaciones.MOTIVO_CANCELADO
-    # Join determinista: que `procesar_job` termine (y desregistre su entrada de
-    # `_JOBS_EN_CURSO`) ANTES de acabar el test; sin esto el hilo daemon sobrevivia unos
-    # instantes, el TRUNCATE le borraba la generacion y quedaba como job fantasma del
-    # siguiente test (`assert 4 == 3` en el pool).
+    # Join determinista: `procesar_job` termina (y desregistra su entrada de `_JOBS_EN_CURSO`)
+    # ANTES de acabar el test, para que el TRUNCATE no deje un job fantasma que el pool del
+    # siguiente test contaría de más.
     hilo.join(timeout=10)
     assert not hilo.is_alive(), "procesar_job no termino: fugaria un job en curso al siguiente test"
 
@@ -1229,8 +1226,8 @@ def test_pool_detener_reencola_los_en_proceso_para_el_worker_post_deploy(entorno
 
     hilo = pool_limpio(worker.iniciar_worker_inproceso())
     # Esperar a que los N jobs esten EN PROCESO (registrados como en curso en el worker). Que el
-    # registro tenga EXACTAMENTE n (ni 1 mas) verifica de paso que ningun pool de un test
-    # previo dejo jobs fantasma (la regresion de aislamiento que este fixture cierra).
+    # registro tenga EXACTAMENTE n (ni 1 mas) verifica de paso el aislamiento entre tests:
+    # ningun pool de un test previo dejo jobs fantasma.
     # Timeout AMPLIO (red de seguridad, no plazo de rendimiento): normalmente los N jobs entran
     # en proceso en <1s, pero bajo carga alta (suite -n6 lenta) el hilo worker puede tardar en
     # reclamar; 60s evita el flake sin enmascarar un cuelgue real.

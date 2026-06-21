@@ -1,6 +1,6 @@
 """Observabilidad de la Consola Keni: logging, middleware de peticiones y errores.
 
-Issue #123: la app no tenia logging de peticiones, casi no tenia loggers, no habia
+La app no tenia logging de peticiones, casi no tenia loggers, no habia
 manejador central de excepciones y los errores salian como ~250 respuestas
 `{"error": ...}` en linea. Esto centraliza el NUCLEO:
 
@@ -24,11 +24,11 @@ manejador central de excepciones y los errores salian como ~250 respuestas
     correlacion si lo hay). Es el destino al que las ~250 respuestas `{"error": ...}`
     en linea migran de forma INCREMENTAL.
 
-ID DE CORRELACION (#123): cada peticion recibe un `request_id` corto (lo genera el
+ID DE CORRELACION: cada peticion recibe un `request_id` corto (lo genera el
 middleware si el cliente/proxy no manda `X-Request-ID`). Ese id:
   - se incluye en la linea de log de la peticion (`[<rid>] METODO ruta -> estado (ms)`);
   - se guarda en `request.state.request_id` Y en un `ContextVar` (`request_id_actual()`),
-    para que CUALQUIER handler o hilo de trabajo (p.ej. una generacion, #137) lo pueda
+    para que CUALQUIER handler o hilo de trabajo (p.ej. una generacion) lo pueda
     leer y CORRELACIONAR sus logs sin pasarlo a mano por toda la pila;
   - viaja al cliente en la cabecera `X-Request-ID` de la respuesta y en el cuerpo JSON de
     error (`{"error", "request_id"}`), asi un usuario que reporta un fallo da un id que
@@ -253,7 +253,7 @@ def error(mensaje: str, status: int = 400) -> JSONResponse:
     Mantiene la clave `error` (mensaje en espanol) EXACTAMENTE como las ~250 respuestas
     `{"error": ...}` en linea que ya existen en `api/*.py`, para que migrar a este helper
     sea un swap 1:1 sin romper el contrato del API. ADEMAS, si hay un id de correlacion en
-    el contexto de la peticion (#123), lo AÑADE como `request_id` (clave extra, aditiva):
+    el contexto de la peticion, lo AÑADE como `request_id` (clave extra, aditiva):
     un cliente que solo lee `error`/`status` no nota el cambio, pero el id queda disponible
     para correlacionar el fallo con la traza del servidor. Si no hay id (fuera de peticion,
     p.ej. en tests del helper aislado), devuelve solo `{"error": ...}`.

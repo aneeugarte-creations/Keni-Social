@@ -127,7 +127,7 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   cierra el camino real (un commit malicioso en `main` -> `deploy.sh` corre como root igualmente), asi
   que no compensa la ceremonia. La imagen del step va pineada por digest (su imagen es TCB).
 
-- **autoheal y el docker.sock (H2, resuelto):** `autoheal` ya NO monta `/var/run/docker.sock`.
+- **autoheal y el docker.sock (resuelto):** `autoheal` ya NO monta `/var/run/docker.sock`.
   Habla la API Docker por HTTP a `autoheal-docker-proxy` (`tecnativa/docker-socket-proxy`),
   filtrado a solo `CONTAINERS`+`POST` (lo unico que usa: `GET /containers/json` y `POST
   /containers/<id>/restart`), en la red interna sin egress `autoheal-proxy`. El proxy es el unico

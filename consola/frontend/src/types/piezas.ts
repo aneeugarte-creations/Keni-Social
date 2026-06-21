@@ -214,9 +214,9 @@ export interface FiltrosPiezas {
   hasta?: string;
   /** "1" para mostrar solo piezas evergreens. */
   evergreen?: string;
-  /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */
+  /** Paginacion offset-based: tamaño de pagina; ausente = conjunto completo. */
   limite?: string;
-  /** Paginacion offset-based (#121): offset; ausente = 0. */
+  /** Paginacion offset-based: offset; ausente = 0. */
   desplazamiento?: string;
   /**
    * Paginacion KEYSET para el feed (scroll infinito): clave `"<creado>|<id>"` de la última

@@ -1,6 +1,6 @@
 """Tests de la API Sistema (/api/sistema): panel de ADMIN (CPU/RAM/disco + S3). OFFLINE.
 
-Cubre el CONTRATO y el cerrojo de rol (#150/#153): la info de sistema/S3 es sensible, asi
+Cubre el CONTRATO y el cerrojo de rol: la info de sistema/S3 es sensible, asi
 que SOLO una sesion admin real la ve; un editor o el token de mantenimiento -> 403. Nada
 toca red ni disco real: el disco va por `shutil` (stdlib, sobre rutas reales del entorno
 aislado) y S3 esta SIN configurar por defecto (degradado), o se mockea boto3.
@@ -42,7 +42,7 @@ def _cli_como(rol: str) -> TestClient:
 
 
 def _cli_token() -> TestClient:
-    """TestClient que entra SOLO por el TOKEN de mantenimiento (NO es admin, #150)."""
+    """TestClient que entra SOLO por el TOKEN de mantenimiento (NO es admin)."""
     c = _cli()
     c.headers.update({"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     return c
@@ -66,7 +66,7 @@ def test_editor_no_ve_s3_403(entorno):
 
 
 def test_token_mantenimiento_no_es_admin_403(entorno):
-    """El token pasa la barrera de /api pero NO da acceso al panel de sistema (#150)."""
+    """El token pasa la barrera de /api pero NO da acceso al panel de sistema."""
     c = _cli_token()
     assert c.get("/api/sistema/recursos").status_code == 403
     assert c.get("/api/sistema/s3").status_code == 403

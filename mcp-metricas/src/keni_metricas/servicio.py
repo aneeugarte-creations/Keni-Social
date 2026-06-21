@@ -11,9 +11,9 @@ disco ni muta el config. La sección «Gestión de configuración» es la unica 
 toca el config.toml (cambiar la fuente activa y el alcance de marcas); es frontera
 de gestion, no de datos. La escritura de CREDENCIALES (tokens de redes, claves de
 imagen) NO vive aqui: la gestiona `keni_metricas.asistente` directamente desde
-`api/conexiones.py` (ver hallazgo N4 de la re-auditoria).
+`api/conexiones.py`.
 
-Resuelve el hallazgo H1: la Consola deja de importar internals profundos
+Esta fachada evita que la Consola importe internals profundos
 (`config.construir_fuente`, `config.FuenteScoped`, `reporte.construir_reporte`,
 `schema.RANGOS_DIAS`, ...).
 """
@@ -231,11 +231,11 @@ def _historico_lectura():
 
 
 def construir_analisis_diario(rango: str = "semana", marca: str | None = None) -> dict:
-    """Análisis diario con narrativa (F6/#146) como dict JSON-serializable.
+    """Análisis diario con narrativa como dict JSON-serializable.
 
     Lectura accionable del periodo: qué se movió, la(s) pieza(s) que lo explican y
     el siguiente paso. Incluye `fuente`/`es_muestra` para que la UI marque cuando
-    los datos son de muestra (issue #131). Propaga `ValueError` (rango inválido) y
+    los datos son de muestra. Propaga `ValueError` (rango inválido) y
     `CuentaNoEncontrada` (marca fuera de alcance).
     """
     return _analisis.construir_analisis(_fuente(marca), rango, marca, _historico_lectura())

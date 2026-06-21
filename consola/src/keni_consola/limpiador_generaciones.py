@@ -104,7 +104,7 @@ def ejecutar_barrido() -> int:
 
     Dos reparaciones en el mismo tick (reusa el scheduling del limpiador, no abre un proceso
     nuevo): (1) cierra las `ejecutando` sueltas (`reclamar_atascadas`); (2) BORRA los registros
-    YAML fuera de la politica de retencion (`purgar_generaciones`, #128), que acota disco +
+    YAML fuera de la politica de retencion (`purgar_generaciones`), que acota disco +
     el escaneo de `_todas_ordenadas`. El borrado es best-effort y NO afecta al valor devuelto
     (que sigue siendo el numero de colgadas cerradas, contrato del limpiador); un fallo se loguea
     y no aborta el barrido (asi un problema de borrado nunca impide reclamar atascadas).

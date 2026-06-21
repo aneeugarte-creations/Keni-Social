@@ -20,13 +20,13 @@ def test_cuentas_listadas(fuente: FuenteMuestra):
     assert len(cuentas) == 7
 
 
-# --- #102: identidad UNICA de marca (guard de no-divergencia) ---------------
+# --- identidad UNICA de marca (guard de no-divergencia) ---------------------
 def test_ids_marca_muestra_anclados_al_catalogo_canonico(fuente: FuenteMuestra):
     """Las cuentas de la muestra son exactamente las 5 marcas editoriales (en su
     `id_metricas` guion_bajo) MAS las 2 cuentas hermanas de Claro Sports.
 
     Ancla los ids al catalogo UNICO de marca, que vive AHORA en `keni_shared.marcas`
-    (H3/E1): `IDS_METRICAS_MARCAS` se DERIVA de ese catalogo (no es ya un espejo),
+    `IDS_METRICAS_MARCAS` se DERIVA de ese catalogo (no es ya un espejo),
     asi que si alguien renombra o anade una marca en el `_MARCAS` de la muestra sin
     actualizar la fuente, este test lo caza.
     """

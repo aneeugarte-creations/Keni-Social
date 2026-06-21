@@ -28,14 +28,14 @@ from .db_rota import (
 # --------------------------------------------------------------------------- #
 # Una PIEZA = una fila `pieza` con `es_publicacion=1` unida a su
 # `contenido` padre (1:1). Estas funciones conservan EXACTAMENTE la firma y la forma del
-# dict que antes producía `ficheros.py` (YAML), de modo que `api/piezas`,
-# `api/aprobacion`, `programador` (Metricool), `dominio/piezas` y el frontend de
-# Piezas siguen funcionando sin cambios (van por la fachada `repos`). El estado de la
-# pieza usa el vocabulario único canónico (borrador→en_revision→programado→publicado).
+# dict que consumen `api/piezas`, `api/aprobacion`, `programador` (Metricool),
+# `dominio/piezas` y el frontend de Piezas, de modo que todos van por la fachada `repos`
+# sin cambios. El estado de la pieza usa el vocabulario único canónico
+# (borrador→en_revision→programado→publicado).
 
-# Colapso 2026-06: el estado de PIEZA y el de la fila por plataforma son AHORA el
-# MISMO vocabulario canónico (borrador/en_revision/programado/publicado), así que ya no hay
-# traducción entre ellos: la fila guarda el estado tal cual.
+# El estado de PIEZA y el de la fila por plataforma usan el MISMO vocabulario canónico
+# (borrador/en_revision/programado/publicado), sin traducción entre ellos: la fila guarda
+# el estado tal cual.
 
 # Columnas de la fila por plataforma que mapean campos editables de una pieza.
 # (El `contenido` de la pieza es el `copy` de la plataforma; ver `_campos_pub_a_plat`.)
@@ -65,8 +65,8 @@ _SELECT_PUBLICACION = (
     "c.formato AS formato, c.espejo AS espejo "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
-    # el muro `es_publicacion` se retiro al fusionar Tablero y Piezas (#fusion). La
-    # columna persiste por compatibilidad pero ya no filtra; `clase` excluye las tareas.
+    # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
+    # no filtra; `clase` excluye las tareas.
     "WHERE c.clase = 'contenido'"
 )
 
@@ -678,8 +678,8 @@ def actualizar_pieza(
                 "WHERE id = ?"
             )
             if estado_esperado is not None:
-                # Vocabulario único (colapso 2026-06): el estado de la fila ES el estado de
-                # publicación, así que el CAS compara contra el esperado tal cual (1:1).
+                # Vocabulario único: el estado de la fila ES el estado de publicación, así
+                # que el CAS compara contra el esperado tal cual (1:1).
                 sql += " AND estado = ?"
                 params.append(estado_esperado)
             cur = con.execute(sql, tuple(params))

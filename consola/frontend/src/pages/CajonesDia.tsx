@@ -585,8 +585,8 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   // Lotes realmente en proceso: el worker aún corre Haiku y todavía no insertó ítems.
   // Un lote `parseando` que YA tiene ítems está ATASCADO (el worker murió entre el INSERT de
   // los ítems y el UPDATE final del lote): el parseo SÍ produjo resultado, así que NO
-  // mostramos "Procesando con Haiku…" por él (antes se quedaba atascado para siempre). El
-  // limpiador del back lo reconciliará a `listo`. Comparamos por `lote_id` de los ítems.
+  // mostramos "Procesando con Haiku…" por él. El limpiador del back lo reconciliará a `listo`.
+  // Comparamos por `lote_id` de los ítems.
   const idsLotesConItems = new Set(items.map((it) => it.lote_id));
   const lotesParseando = lotes.filter(
     (l) => l.estado === "parseando" && !idsLotesConItems.has(l.id),

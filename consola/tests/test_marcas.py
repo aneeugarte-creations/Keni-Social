@@ -1,10 +1,10 @@
-"""Tests del catalogo UNICO de marcas (#82 · H3/E1). Solo datos puros; sin I/O ni red.
+"""Tests del catalogo UNICO de marcas. Solo datos puros; sin I/O ni red.
 
 Cubre: un solo catalogo (no dos) con 5 marcas (el golf NO es marca, es un
 sub-vertical editorial de Claro Sports), traduccion id canonico <-> id_metricas,
 y los helpers de la frontera con metricas.
 
-FUENTE UNICA (H3/E1): el catalogo canonico vive en `keni_shared.marcas`;
+FUENTE UNICA: el catalogo canonico vive en `keni_shared.marcas`;
 `keni_consola.marcas` lo REEXPORTA y `keni_metricas` tambien lo importa.
 Estos tests verifican via el reexport de la consola (que es como lo usa su codigo)
 y que la fuente es UNICA de verdad: un cambio en keni_shared se ve en consola y
@@ -99,7 +99,7 @@ def test_caidas_a_id_cuando_desconocido():
 
 
 # --------------------------------------------------------------------------- #
-# H3/E1: la fuente es UNICA e IMPORTABLE (keni_shared), no espejada.            #
+# La fuente es UNICA e IMPORTABLE (keni_shared), no espejada.                   #
 # --------------------------------------------------------------------------- #
 
 
@@ -122,7 +122,7 @@ def test_metricas_deriva_de_la_misma_fuente_unica():
 
 
 # --------------------------------------------------------------------------- #
-# #102: identidad UNICA de marca cruzando consola <-> metricas <-> skills       #
+# Identidad UNICA de marca cruzando consola <-> metricas <-> skills             #
 # --------------------------------------------------------------------------- #
 #
 # Estos guards convierten "copias independientes que pueden divergir" en

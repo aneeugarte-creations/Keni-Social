@@ -1,4 +1,4 @@
-"""API del MOTOR DE INGESTA PERSISTENTE (Ola A): archivo de artículos + cobertura.
+"""API del MOTOR DE INGESTA PERSISTENTE: archivo de artículos + cobertura.
 
 Superficie de LECTURA del archivo (`noticias_items`) + curación ligera. El motor ingiere en
 background (`recolectar_daemon`); aquí el equipo VE el flujo continuo, filtra, y decide qué USA

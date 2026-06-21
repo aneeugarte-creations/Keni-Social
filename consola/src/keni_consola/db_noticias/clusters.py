@@ -198,8 +198,8 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     # En conflicto por id, actualiza casi todo MENOS `id`/`creado`, los campos de TRADUCCIÓN
     # (que escribe `marcar_cluster_traducido`) y `estado`/`publicacion_id` (que muta SOLO
     # `actualizar_noticia_cluster`): un recalc del daemon con datos leídos ANTES de que el
-    # pipeline promoviera la historia (TOCTOU daemon↔pipeline) ya no puede revertir un cluster
-    # 'usado' a 'nuevo' ni borrar su enlace al tema (lo que duplicaba el tema en el tablero).
+    # pipeline promoviera la historia (TOCTOU daemon↔pipeline) no debe revertir un cluster
+    # 'usado' a 'nuevo' ni borrar su enlace al tema (revertirlo duplicaría el tema en el tablero).
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
         "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",

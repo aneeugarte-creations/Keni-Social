@@ -1,4 +1,4 @@
-"""Tests del catalogo UNICO de marcas (H3/E1). Solo datos puros; sin I/O ni red.
+"""Tests del catalogo UNICO de marcas. Solo datos puros; sin I/O ni red.
 
 keni_shared es la fuente canonica: un solo catalogo con 5 marcas (el golf NO es
 marca, es un sub-vertical editorial de Claro Sports), traduccion id canonico <->

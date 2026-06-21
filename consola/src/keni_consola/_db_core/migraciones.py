@@ -457,11 +457,12 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # RENDIMIENTO: indice compuesto `(estado, marca)` en `pieza` para el filtro caliente del
     # feed/colas (BDs existentes; las nuevas lo traen del DDL). One-shot e idempotente.
     Migracion("0042-indice-pieza-estado-marca", _migrar_indice_pieza_estado_marca),
-    # SANEO DE DATOS: clusters que el bug de traducción dejó `traducido=1` con el título extranjero
-    # pegado en `titulo_es` (== `titulo`) cuando Haiku falló. Se devuelven a `traducido=0` para que
-    # Traducir los reintente (la mesa dejaría de mostrarlos en idioma original). One-shot e idempotente.
+    # SANEO DE DATOS: clusters marcados `traducido=1` con el título extranjero
+    # pegado en `titulo_es` (== `titulo`), residuo de traducciones donde Haiku no tradujo. Se
+    # devuelven a `traducido=0` para que Traducir los reintente (la mesa dejaría de mostrarlos en
+    # idioma original). One-shot e idempotente.
     Migracion("0043-resanear-traduccion-envenenada", _resanear_traduccion_envenenada),
-    # SEGURIDAD (endurecimiento enterprise 2026-06): fuerza a TODOS los usuarios existentes a
+    # SEGURIDAD: fuerza a TODOS los usuarios existentes a
     # fijar una contrasena nueva (bajo la politica reforzada) en su proximo acceso —las viejas no
     # se pueden auditar (solo hay hash)—. Junto al MFA obligatorio para todos, la primera vuelta a
     # entrar de cada persona cambia contrasena + inscribe passkey. One-shot; no-op en BD vacia/tests.

@@ -38,8 +38,10 @@ npm run build
 ```
 
 Esto genera el bundle en `../src/keni_consola/webapp/` (`index.html` +
-`assets/*`). Ese bundle **se versiona** (se commitea) para distribuir la consola
-sin necesidad de Node: el paquete Python lo sirve desde el mismo origen.
+`assets/*`). Ese directorio está **gitignored**: no se versiona. En producción/CI
+el SPA se compila desde fuente en el deploy (`deploy/front/Dockerfile`); en local,
+`python -m keni_consola` sirve el bundle si lo compilas (si falta, el back devuelve
+un placeholder amable).
 
 ## Scripts
 
@@ -78,7 +80,7 @@ src/
 El contrato tipado de la API vive en `src/types.ts`. Un **subconjunto estable**
 (estado, configuración, límites/redes, métricas y las respuestas genéricas) ya
 **no se mantiene a mano**: se **genera** desde el backend para que no se
-desincronice en silencio (era el hallazgo H5/E6, #101).
+desincronice en silencio.
 
 - **Fuente única**: `keni_consola.esquema_api` (Python) define esas formas como
   `TypedDict` y emite su **JSON Schema** (`python -m keni_consola.esquema_api`).
@@ -101,7 +103,7 @@ npm run gen:types
 KENI_PYTHON=/ruta/al/venv/bin/python npm run gen:types
 ```
 
-Commitea `src/types.gen.ts` (es un artefacto versionado, como el bundle).
+Commitea `src/types.gen.ts` (es un artefacto versionado).
 
 ### Guard anti-divergencia
 

@@ -1,4 +1,4 @@
-// --- Rota de horarios del equipo (F4 · #144) ---
+// --- Rota de horarios del equipo ---
 
 /** Un miembro del equipo (un usuario de la consola) disponible para la rota.
  *
@@ -145,7 +145,7 @@ export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota> & {
 /** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por el coordinador de la rota). */
 export type EstadoTurnoRota = "propuesto" | "aprobado";
 
-// --- Gestión de turnos: horario de trabajo + ausencias (F4 · #144, ola A) ---
+// --- Gestión de turnos: horario de trabajo + ausencias ---
 
 /** Tipo de una ausencia/vacación. */
 export type TipoAusencia = "vacaciones" | "descanso" | "baja" | "otro";
@@ -488,7 +488,7 @@ export interface RespuestaCrearTurnosLote {
   turnos: TurnoRota[];
 }
 
-// --- Solicitudes de cambio de turno entre compañeros (#175) ----------------
+// --- Solicitudes de cambio de turno entre compañeros -----------------------
 //
 // Flujo: A (solicitante) crea -> B (destinatario) acepta/rechaza -> admin
 // aprueba (ejecuta el swap sobre `rota_turnos_trabajo`) o rechaza. A puede
@@ -505,7 +505,7 @@ export type EstadoSwap =
   | "rechazado_admin"
   | "cancelado";
 
-/** Verbo del cambio de turno (#175): intercambio (trueque de dos turnos) · cesion (doy mi
+/** Verbo del cambio de turno: intercambio (trueque de dos turnos) · cesion (doy mi
  *  turno y me quedo libre) · abierto (turno sin dueño que se reclama del pool). */
 export type TipoSwap = "intercambio" | "cesion" | "abierto";
 
@@ -604,7 +604,7 @@ export interface CuerpoDuplicarEventoRota {
   titulo?: string;
 }
 
-// --- Catálogo de programas (#150, PARRILLA 2026.xlsx) ----------------------
+// --- Catálogo de programas (PARRILLA 2026.xlsx) ----------------------------
 //
 // Cada hoja EVERGREEN del Excel es un PROGRAMA ("Álvaro Fidalgo", "Real Oviedo",
 // "MUNDIAL"...). Se cataloga con color y fechas; las piezas referencian POR NOMBRE

@@ -9,10 +9,9 @@
  *   - Color y FORMA = red social (la forma hace la red legible sin depender del color).
  *
  * Un ÚNICO <Scatter> con el color por punto (así ninguna red tapa a otra) y un jitter
- * pequeño y determinista que separa piezas del mismo día sin falsear su posición. Antes se
- * "aplastaban" al lunes y se agrupaban por banda de alcance, lo que apilaba redes distintas
- * en el centro de la semana y hacía parecer que cada semana era de una sola red. Brillo
- * propio con un glow acotado (se desactiva con muchísimos puntos, por rendimiento).
+ * pequeño y determinista que separa piezas del mismo día sin falsear su posición, para que no
+ * se apilen redes distintas en el centro de la semana. Brillo propio con un glow acotado (se
+ * desactiva con muchísimos puntos, por rendimiento).
  *
  * El panel y los colores se adaptan al TEMA (claro = fondo blanco; oscuro = casi negro con
  * glow), vía las variables del sistema de diseño.

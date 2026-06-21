@@ -3,7 +3,7 @@ limpieza de retención y recolector de colgadas.
 
 Submódulo interno del paquete `generaciones`. El registro YAML es la FUENTE DE VERDAD del
 sondeo; aquí vive todo lo que LEE/ESCRIBE ese store (un `<id>.yaml` por generación) y las
-políticas que lo acotan (limpieza #128, recolector de `ejecutando` colgadas). El `__init__.py`
+políticas que lo acotan (limpieza, recolector de `ejecutando` colgadas). El `__init__.py`
 re-exporta la superficie pública estable (`crear`, `actualizar`, `obtener`, `listar`,
 `contar`, `crear_idempotente`, `purgar_generaciones`, `reclamar_atascadas`, `raiz`,
 `clave_idempotencia`).
@@ -110,7 +110,7 @@ _TIPO = "generacion"
 def _escribir_yaml_atomico(ruta_fichero: Path, datos: dict[str, Any]) -> None:
     """Escribe un dict como YAML de forma ATOMICA (tmp en el mismo dir + os.replace).
 
-    `sellar` estampa la `version` de esquema antes de volcar (#125). Se aplica DESPUES
+    `sellar` estampa la `version` de esquema antes de volcar. Se aplica DESPUES
     de `_cuerpo` (que filtra claves vacias), asi la `version` int siempre sobrevive.
     """
     texto = yaml.safe_dump(
@@ -126,7 +126,7 @@ def _escribir_yaml_atomico(ruta_fichero: Path, datos: dict[str, Any]) -> None:
 def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
     """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
 
-    `migrar` sube de version el dict legado en memoria (#125).
+    `migrar` sube de version el dict legado en memoria.
     """
     try:
         texto = ruta_fichero.read_text(encoding="utf-8")
@@ -294,7 +294,7 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # el ledger `gasto_ia` al cerrar (deriva del contexto por dia). Legados => 0.
         "prompt_chars": _entero_o_cero(datos.get("prompt_chars")),
         "error": _str("error"),
-        # Atribucion por usuario (#130 Fase 1). Ausente en registros legados/anonimos => "".
+        # Atribucion por usuario. Ausente en registros legados/anonimos => "".
         "autor_id": _str("autor_id"),
         "autor_nombre": _str("autor_nombre"),
         "metricas": metricas,
@@ -493,7 +493,7 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
 
     Las generaciones NO viven en el indice SQLite (son estado efimero de ejecucion en
     su propio almacen), asi que el orden/recorte se hace en memoria sobre el glob. El
-    volumen lo ACOTA la limpieza de retencion (`purgar_generaciones`, #128): sin ella el
+    volumen lo ACOTA la limpieza de retencion (`purgar_generaciones`): sin ella el
     almacen y este escaneo crecian sin tope. Con la limpieza activa el conjunto queda en el
     orden de `KENI_GENERACIONES_RETENCION_MAX` (def 2000), un escaneo barato.
 
@@ -583,7 +583,7 @@ def contar() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Limpieza de retencion: acota el almacen de registros (disco + escaneo) #128    #
+# Limpieza de retencion: acota el almacen de registros (disco + escaneo)      #
 # --------------------------------------------------------------------------- #
 
 # Defaults de la politica de retencion. Se leen INLINE de `os.environ` (no por

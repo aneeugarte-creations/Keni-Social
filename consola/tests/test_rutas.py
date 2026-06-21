@@ -1,6 +1,6 @@
 """Tests de la raiz de estado UNICA (`keni_consola.rutas`) y su efecto en los modulos.
 
-Cubre (#130, servicio en contenedor):
+Cubre (servicio en contenedor):
   - Diseno/precedencia de `data_dir()`: env especifica (la resuelve el modulo) >
     `KENI_DATA_DIR` > local (`${XDG_CONFIG_HOME:-~/.config}`).
   - Con `KENI_DATA_DIR` TODO el estado cuelga de esa raiz (config bajo `keni-social/`,
@@ -127,14 +127,14 @@ def test_local_no_cambia_subpaths(monkeypatch, sin_vars, tmp_path):
     assert preferencias.ruta_preferencias() == cfg / "preferencias.toml"
     assert proyectos.ruta_config_consola() == cfg / "consola.toml"
     # generaciones: con XDG SIN fijar el default es el historico ~/.config/keni-social/
-    # generaciones (no se orfanan registros locales tras el fix XDG de #126).
+    # generaciones (no se orfanan registros locales con el manejo de XDG).
     assert generaciones.raiz() == cfg / "generaciones"
     # Contenido editorial: ~/keni-proyectos (NO bajo .config), igual que siempre.
     assert ficheros.raiz_datos() == casa / "keni-proyectos"
 
 
 def test_generaciones_respeta_xdg(monkeypatch, sin_vars, tmp_path):
-    """`generaciones.raiz()` honra `XDG_CONFIG_HOME` (#126), como el resto de recursos."""
+    """`generaciones.raiz()` honra `XDG_CONFIG_HOME`, como el resto de recursos."""
     xdg = tmp_path / "xdg"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     esperada = xdg / "keni-social" / "generaciones"
@@ -152,7 +152,7 @@ def test_var_especifica_gana_a_keni_data_dir(monkeypatch, sin_vars, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Secretos por entorno (#130): inyeccion de la clave de imagen                #
+# Secretos por entorno: inyeccion de la clave de imagen                       #
 # --------------------------------------------------------------------------- #
 
 

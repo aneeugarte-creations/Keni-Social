@@ -512,8 +512,8 @@ def _decidir_nivel(
         )
 
     # Reflejar el estado GLOBAL de la cadena en la pieza y, si juntó los 2 OK, auto-programar.
-    # COLAPSO 2026-06: ya no hay estado de reposo `aprobado`; la cadena aprobada deja la pieza
-    # `en_revision` y es la auto-programación quien la mueve a `programado` al hallar hueco.
+    # No hay estado de reposo `aprobado`: la cadena aprobada deja la pieza `en_revision` y es la
+    # auto-programación quien la mueve a `programado` al hallar hueco.
     cadena = repos.listar_aprobaciones(pieza_id)
     estado_global = colaboracion.estado_cadena(cadena)
     if plat is not None:
@@ -540,7 +540,7 @@ async def decidir_nivel(request: Request) -> Response:
 
     Se decide POR ORDEN (solo el nivel pendiente más bajo). Un `rechazado` para la cadena.
     Cuando todos los niveles quedan `aprobado` (los 2 OK), la pieza se auto-programa al próximo
-    hueco; mientras tanto sigue `en_revision` (ya no hay estado de reposo `aprobado`).
+    hueco; mientras tanto sigue `en_revision` (no hay estado de reposo `aprobado`).
     """
     aprobacion_id = request.path_params["aprobacion_id"]
     datos = await leer_json(request)

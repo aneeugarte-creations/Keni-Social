@@ -254,7 +254,7 @@ def test_landing_es_la_raiz():
 
 
 # --------------------------------------------------------------------------- #
-# #150: el arranque NO emite el token en la URL ni en el log/stdout            #
+# El arranque NO emite el token en la URL ni en el log/stdout                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -265,7 +265,7 @@ def _arrancar_capturando(monkeypatch, capsys):
     abierto: dict[str, str] = {}
     # uvicorn.run BLOQUEA: lo neutralizamos para que `main()` retorne en los tests.
     monkeypatch.setattr(entry.uvicorn, "run", lambda *a, **k: None)
-    # webbrowser.open: capturamos la URL que se abriria (no debe llevar el token, #150).
+    # webbrowser.open: capturamos la URL que se abriria (no debe llevar el token).
     monkeypatch.setattr(entry.webbrowser, "open", lambda u: abierto.setdefault("url", u))
     # El worker en proceso no debe arrancar en el test.
     import keni_consola.worker as worker
@@ -296,7 +296,7 @@ def _arrancar_capturando(monkeypatch, capsys):
 
 
 def test_arranque_no_imprime_token_ni_lo_pone_en_la_url(entorno, monkeypatch, capsys):
-    """#150: con token FIJO, ni el stdout ni la URL del navegador contienen el token."""
+    """Con token FIJO, ni el stdout ni la URL del navegador contienen el token."""
     monkeypatch.setenv("KENI_CONSOLA_TOKEN", "token-secreto-de-mantenimiento-xyz")
     salida, url, token = _arrancar_capturando(monkeypatch, capsys)
     assert token == "token-secreto-de-mantenimiento-xyz"
@@ -308,7 +308,7 @@ def test_arranque_no_imprime_token_ni_lo_pone_en_la_url(entorno, monkeypatch, ca
 
 
 def test_arranque_token_generado_no_se_filtra(entorno, monkeypatch, capsys):
-    """#150: sin KENI_CONSOLA_TOKEN se genera uno, pero NO se imprime ni va en la URL."""
+    """Sin KENI_CONSOLA_TOKEN se genera uno, pero NO se imprime ni va en la URL."""
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     salida, url, _token = _arrancar_capturando(monkeypatch, capsys)
     assert "?token=" not in url

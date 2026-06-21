@@ -1,9 +1,9 @@
-# WORKER de generacion de keni-social (#130 Fase 2 / ADR 0002 Fase B).
+# WORKER de generacion de keni-social (ADR 0002 Fase B).
 #
 # El back ENCOLA y ESTE servicio EJECUTA `claude -p`. Por eso esta imagen SI lleva Node +
 # la CLI `claude` (la del back ya no). Consume la MISMA cola que el back (tabla `jobs` en
 # el Postgres compartido) y corre `python -m keni_consola.worker` (bucle: clava un job,
-# reconstruye prompt+post-procesado desde el `spec` y corre el runner #137: grupo de
+# reconstruye prompt+post-procesado desde el `spec` y corre el runner: grupo de
 # procesos propio, kill del arbol al timeout/cancel, tope de concurrencia, sin procesos sueltos).
 #
 # Comparte el mismo CODIGO y el mismo VOLUMEN de estado que el back (skills bundleadas en
@@ -19,15 +19,13 @@ ENV PYTHONUNBUFFERED=1 \
     # Mismo estado que el back: secretos.toml (0600), media, etc. cuelgan de /data.
     XDG_CONFIG_HOME=/data
 
-# VERSION PINEADA de la CLI de Claude Code. ANTES estaba SIN pinear (`npm install -g
-# @anthropic-ai/claude-code` a secas): cada rebuild traia la ULTIMA publicada y un cambio en
-# el formato de `--stream-json` podia ROMPER en prod el parseo del worker sin que nadie lo
-# pidiera. Fijamos una version concreta para builds REPRODUCIBLES; el upgrade debe ser
+# VERSION PINEADA de la CLI de Claude Code. Sin pinear, cada rebuild traeria la ULTIMA
+# publicada y un cambio en el formato de `--stream-json` podria ROMPER en prod el parseo del
+# worker. Fijamos una version concreta para builds REPRODUCIBLES; el upgrade debe ser
 # DELIBERADO: sube este valor a conciencia, valida el stream-json del worker contra la nueva
 # version y despliega aparte (no lo mezcles con otro cambio). Overridable por build-arg.
-#   ⚠ 2.1.173 = version verificada CORRIENDO en prod (worker container, 2026-06-13).
-#     Se fija a la de prod, NO a "la ultima de npm", para que un rebuild no altere el
-#     comportamiento de stream-json ya validado. Sube a conciencia y valida aparte.
+#   ⚠ 2.1.173 = version verificada CORRIENDO en prod. Se fija a la de prod, NO a "la ultima
+#     de npm", para que un rebuild no altere el comportamiento de stream-json ya validado.
 ARG CLAUDE_CODE_VERSION=2.1.173
 
 # VERSION PINEADA de la CLI de GitHub (`gh`). La usa el carril de AUTO-DESARROLLO (worker-dev /
@@ -66,7 +64,7 @@ WORKDIR /app
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
-# Extras de persistencia HOSTED (#130): [postgres] (psycopg) para leer la cola compartida y
+# Extras de persistencia HOSTED: [postgres] (psycopg) para leer la cola compartida y
 # [s3] (boto3) porque el post-procesado de imagen importa al media (bucket en hosted).
 # Cache de pip en un mount de BuildKit (no viaja a la imagen): un cambio de fuente que invalide
 # esta capa reutiliza los wheels ya bajados en vez de re-descargar todo el árbol de dependencias.
@@ -87,7 +85,7 @@ RUN RN="$(python -c 'import keni_consola, os; print(os.path.join(os.path.dirname
 COPY deploy/worker/entrypoint.sh /usr/local/bin/keni-worker-entrypoint.sh
 RUN chmod +x /usr/local/bin/keni-worker-entrypoint.sh
 
-# HARDENING (#130): el worker NO corre como root. `claude` ya esta instalado globalmente
+# HARDENING: el worker NO corre como root. `claude` ya esta instalado globalmente
 # (RUN anterior, como root) y el usuario solo lo EJECUTA; ademas, fuera de root `claude` NO
 # exige el bypass `--dangerously-skip-permissions`+IS_SANDBOX (esa restriccion es solo para
 # uid 0). Le damos /app (codigo + skills bundleadas), /data (estado compartido con el back)

@@ -420,7 +420,7 @@ async def crear_lote(request: Request) -> Response:
         entrada, error = _validar_nueva(cruda)
         if error is not None:
             return JSONResponse({"error": f"Publicación {i}: {error}"}, status_code=400)
-        # Atribucion por usuario (#130 Fase 1): el lote lo crea el usuario de la peticion.
+        # Atribucion por usuario (Fase 1): el lote lo crea el usuario de la peticion.
         entrada["autor_id"] = autor.get("id", "")
         entrada["autor_nombre"] = autor.get("usuario", "")
         entradas.append(entrada)

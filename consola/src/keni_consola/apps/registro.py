@@ -143,7 +143,7 @@ def entradas_nav_activas(entorno: dict[str, str] | None = None) -> list[dict]:
     Devuelve `[{etiqueta, items: [{ruta, etiqueta, icono, descripcion}, ...]}, ...]`,
     ordenado por bloque de flujo (`grupo_orden`) y, dentro de cada bloque, por `orden`.
     La `etiqueta` del bloque es su encabezado humano (`ETIQUETAS_BLOQUE`); un bloque sin
-    etiqueta declarada va sin encabezado (""). El Shell ya no aporta entradas de nav.
+    etiqueta declarada va sin encabezado (""). El Shell no aporta entradas de nav.
     """
     # Recolecta todas las entradas de nav de las unidades activas.
     todas: list[EntradaNav] = []
@@ -201,7 +201,7 @@ def catalogo(entorno: dict[str, str] | None = None) -> dict:
     """Payload del catálogo para `GET /api/catalogo`: apps activas + nav agrupada.
 
     JSON serializable. `apps` son SOLO las apps de catálogo activas (sin el Shell);
-    `navegacion` agrupa la nav de esas apps por bloque de flujo (el Shell ya no aporta nav).
+    `navegacion` agrupa la nav de esas apps por bloque de flujo (el Shell no aporta nav).
     """
     apps = [
         {

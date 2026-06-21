@@ -245,8 +245,8 @@ function FilaInterruptor({
  * Estado de la máquina como un CHIP compacto en la barra superior (junto al «⋮» de Contexto): un
  * semáforo de estado —En marcha / Pausada / Máquina · off— que al pulsarlo despliega un popover con
  * los dos interruptores: el general «Máquina» (apaga toda la auto-producción) y el maestro del
- * proceso activo (`claveMaestro`). Antes eran dos switches con etiqueta siempre visibles, que
- * apelmazaban la barra; el chip los recoge en un solo control limpio. Sin admin no pinta nada.
+ * proceso activo (`claveMaestro`). El chip recoge ambos interruptores en un solo control limpio,
+ * sin apelmazar la barra. Sin admin no pinta nada.
  */
 export function ControlesMaquina({
   claveMaestro,

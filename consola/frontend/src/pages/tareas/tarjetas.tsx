@@ -826,9 +826,8 @@ export function TarjetaCobertura({
       acciones={accionesCobertura}
       className="space-y-2"
     >
-      {/* Quién cubre: UNA fila por persona (avatar · nombre · rol · semáforo · ×). Antes cada
-          cubridor se pintaba DOS veces (chip «Cubren:» + tarjeta); ahora es una sola fila. El
-          rol cubierto agregado ya vive en la cabecera de la fila (RolesCubiertos), no se repite. */}
+      {/* Quién cubre: UNA fila por persona (avatar · nombre · rol · semáforo · ×). El rol cubierto
+          agregado vive en la cabecera de la fila (RolesCubiertos), no se repite. */}
       {cobertura.cubridores.length > 0 && (
         <div className="space-y-2" data-no-primaria>
           <span className="text-sm text-muted-foreground">Cubren:</span>

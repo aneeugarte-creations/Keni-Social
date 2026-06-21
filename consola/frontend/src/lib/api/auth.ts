@@ -14,7 +14,7 @@ import type {
 export const apiAuth = {
   // --- Autenticación (sesión por cookie) ---
   // El login depende de la cookie de sesión que pone el backend; `api.ts` ya
-  // manda las cabeceras de auth (#134) en cada petición para las mutaciones.
+  // manda las cabeceras de auth en cada petición para las mutaciones.
   // `me` se llama al cargar la app: 200 => sesión viva; 401 => mostrar login.
   // Con MFA activo (flag `KENI_CONSOLA_MFA` ON), el login puede devolver `{mfa_required:true}`
   // en vez de `{usuario}`: el llamante debe entonces correr la ceremonia de passkey

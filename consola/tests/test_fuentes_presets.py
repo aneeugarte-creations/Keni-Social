@@ -364,7 +364,7 @@ def test_post_activar_ssrf_rechaza_ip_privada(cliente):
     # se aplica al activar.)
     from keni_consola.dominio import fuentes_presets as fp
 
-    # Parche temporal: añadimos un preset con URL interna.
+    # Inyectamos un preset con URL interna para ejercitar el guard.
     preset_malo = {
         "id": "_test_ssrf",
         "nombre": "Test SSRF",

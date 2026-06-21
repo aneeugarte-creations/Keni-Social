@@ -5,7 +5,7 @@ El daemon `alertas_rendimiento.py` emite a la bitacora de eventos internos
 
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
 
-Hasta ahora solo se veian via `/api/webhooks` (SOLO ADMIN). Este endpoint los expone al
+Los webhooks (`/api/webhooks`, SOLO ADMIN) tambien los exponen; este endpoint los expone al
 EQUIPO (cualquier usuario autenticado): es LECTURA de avisos del propio tablero, no
 gestion de secretos. La barrera de sesion la aplica el middleware `SeguridadConsola`;
 aqui no se relaja nada (igual que `/api/reciclaje` u otros endpoints de lectura).

@@ -66,7 +66,7 @@ def test_delegado_repos(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Dedup por URL (F3): `url_fuente` persiste y cruza por URL canonica             #
+# Dedup por URL: `url_fuente` persiste y cruza por URL canonica                  #
 # --------------------------------------------------------------------------- #
 
 def test_crear_contenido_persiste_url_fuente(entorno):

@@ -57,16 +57,16 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("noticias_tecnico", "Perfil editorial"),
     ("tuning", "Sistema, limpieza y alertas"),
 )
-# NOTA (auditoría 2026-06, limpiar la UI): los grupos `noticias_orden` y `noticias_breaking`
-# se RETIRARON del catálogo: eran solo pesos/umbrales del algoritmo de ranking/clustering
-# (tunables de ingeniería). Sus claves `KENI_SCORE_*`/`KENI_CLUSTER_BREAKING_*` siguen vivas
-# en el código y se leen de env/defecto (`config._crudo`); simplemente ya no se editan en UI.
+# NOTA: los grupos `noticias_orden` y `noticias_breaking` NO están en el catálogo: son solo
+# pesos/umbrales del algoritmo de ranking/clustering (tunables de ingeniería). Sus claves
+# `KENI_SCORE_*`/`KENI_CLUSTER_BREAKING_*` viven en el código y se leen de env/defecto
+# (`config._crudo`); no se editan en UI.
 
 # Grupos de la sección «Investigación» del drawer del MONITOR: el proceso de investigación (su
 # maestro y sus excepciones por marca) + el MOTOR DE NOTICIAS en lenguaje editorial (qué entra →
-# orden del pool → rendimiento → última hora → producción automática → técnico). Antes se
-# pintaban en el menú ⋮ de Noticias (`NoticiasHub`); la Fase 3 los consolidó en el drawer del
-# Monitor (UN solo sitio para los ajustes de la máquina). `noticias_produccion_marca` (el plan
+# orden del pool → rendimiento → última hora → producción automática → técnico). Viven en el
+# drawer del Monitor (UN solo sitio para los ajustes de la máquina).
+# `noticias_produccion_marca` (el plan
 # diario por marca) NO está aquí: su editor único es el diálogo «Plan y horarios» de
 # Programación. El orden de la tupla es el de las secciones en pantalla.
 GRUPOS_INVESTIGACION: tuple[str, ...] = (
@@ -433,8 +433,8 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         # Automatismos de ingesta extra (también daemons del Monitor): Trends, feeds de algoritmo y
-        # digest de sugerencias. Antes solo se veían como ESTADO en el Monitor; al estar en el
-        # catálogo, sus toggles son REALES (editables desde el Monitor y desde aquí).
+        # digest de sugerencias. Al estar en el catálogo, sus toggles son REALES (editables
+        # desde el Monitor y desde aquí).
         Ajuste(
             clave=config.ENV_TRENDS,
             tipo="bool",
@@ -451,9 +451,8 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # Re-derivación periódica de patrones (antes solo-env, el único gate de daemon fuera
-        # de la UI): re-lee Metricool cada N días y refresca los perfiles de patrones por
-        # marca. Voz/Reglas (criterio humano) jamás se tocan.
+        # Re-derivación periódica de patrones: re-lee Metricool cada N días y refresca los
+        # perfiles de patrones por marca. Voz/Reglas (criterio humano) jamás se tocan.
         Ajuste(
             clave=config.ENV_PATRONES_AUTO,
             tipo="bool",
@@ -586,12 +585,10 @@ def _construir_catalogo() -> list[Ajuste]:
         # salvaguarda técnica de tokens, no un control editorial; el presupuesto diario y el
         # margen manual son los knobs de gasto del operador. Sigue leyéndose de env.)
         # --- Tuning (int/float/select) --------------------------------------------- #
-        # Esfuerzo de razonamiento de TODA la generacion (`claude --effort`). Antes vivia
-        # en el almacen aparte de `preferencias.py` (TOML local) detras de
-        # `/api/config/esfuerzo`; consolidado aqui como select del catalogo (fuente unica;
-        # aquel endpoint queda como shim deprecado). Las opciones/etiquetas salen de
-        # `preferencias` (fuente unica de los niveles validos); "" = predeterminado del
-        # modelo (no se pasa `--effort`).
+        # Esfuerzo de razonamiento de TODA la generacion (`claude --effort`). Select del
+        # catalogo (fuente unica); el endpoint `/api/config/esfuerzo` queda como shim
+        # deprecado. Las opciones/etiquetas salen de `preferencias` (fuente unica de los
+        # niveles validos); "" = predeterminado del modelo (no se pasa `--effort`).
         Ajuste(
             clave=config.ENV_ESFUERZO,
             tipo="select",

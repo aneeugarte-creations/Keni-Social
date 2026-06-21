@@ -55,7 +55,7 @@ def variacion(
 ) -> dict[str, float]:
     """Delta vs. periodo anterior: visualizaciones en %, engagement en puntos.
 
-    El engagement global puede ser None (no comparable entre plataformas, #138):
+    El engagement global puede ser None (no comparable entre plataformas):
     en ese caso, o si no hay engagement anterior, se omite el delta de engagement.
     """
     var: dict[str, float] = {

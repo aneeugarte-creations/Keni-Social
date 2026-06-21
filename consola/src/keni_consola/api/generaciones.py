@@ -14,7 +14,7 @@ terminal:
                                        final `terminal` al acabar. El SPA lo prefiere al
                                        sondeo (menos peticiones, menos latencia percibida) y
                                        DEGRADA al sondeo de 1.2 s si SSE no esta disponible.
-  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en curso (#137): mata el
+  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en curso: mata el
                                        ARBOL del subproceso `claude` y deja el registro
                                        en estado terminal. 404 si no existe.
 
@@ -169,7 +169,7 @@ async def stream_estado(request: Request) -> Response:
 
 
 async def cancelar(request: Request) -> Response:
-    """Cancela un job de generacion EN CURSO (#137).
+    """Cancela un job de generacion EN CURSO.
 
     Mata el ARBOL del subproceso `claude` y deja el registro en estado terminal
     (`error`/`motivo=cancelado`, lo fija el hilo del job). -> `{generacion}` con el

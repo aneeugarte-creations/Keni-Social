@@ -143,7 +143,7 @@ def esquema_json() -> dict[str, Any]:
         "title": "ContratoApiKeni",
         "$comment": (
             "Generado desde keni_consola.esquema_api. NO editar a mano. "
-            "Subconjunto estable del contrato /api/* (#101)."
+            "Subconjunto estable del contrato /api/*."
         ),
         "$defs": defs,
         # Referencia a todos los modelos para que el generador emita cada interface.

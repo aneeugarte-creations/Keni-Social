@@ -1,4 +1,4 @@
-"""Tests de la API Rota (HTTP, vía TestClient). Todo OFFLINE (F4 · #144).
+"""Tests de la API Rota (HTTP, vía TestClient). Todo OFFLINE.
 
 Modelo NUEVO (ola back3, feedback usuario): un TURNO es el horario de un miembro en
 `(fecha, franja)`. NO va atado a un evento. La "cobertura" es DERIVADA: para un evento,
@@ -434,7 +434,7 @@ def test_repetir_sin_dias_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Cobertura + prioridad + reprogramaciones (ola B, #144)                       #
+# Cobertura + prioridad + reprogramaciones                                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -1473,9 +1473,8 @@ def test_copiar_semana_replica_turnos_con_offset(cliente):
 
 
 def test_copiar_semana_preserva_horario_a_medida(cliente):
-    """Copiar arrastra el HORARIO PROPIO del turno, no solo su franja. Regresión: al añadir
-    las columnas inicio/fin a `rota_turnos`, el clon de `copiar_turnos_rota` no las incluía y
-    el INSERT reventaba (KeyError) tumbando toda la copia.
+    """Copiar arrastra el HORARIO PROPIO del turno (columnas inicio/fin de `rota_turnos`), no
+    solo su franja: el clon de `copiar_turnos_rota` las incluye en el INSERT.
     """
     equipo = _crear_equipo(1)
     repos.crear_turno_rota(
@@ -1579,7 +1578,7 @@ def test_semana_nueva_no_se_prellena_para_no_admin(entorno):
 def test_carga_resumen_por_persona(cliente):
     """Cobertura DERIVADA: los turnos que cubren franja+fecha de eventos cuentan.
 
-    Defaults franjas (#185): matutino 08-16, vespertino 16-24.
+    Defaults franjas: matutino 08-16, vespertino 16-24.
     """
     equipo = _crear_equipo(2)
     tescu, luis = equipo[0], equipo[1]
@@ -1765,7 +1764,7 @@ def test_patch_config_franjas_con_marca_ok(entorno):
 
 
 def test_patch_config_franjas_solape_permitido(entorno):
-    """Dos franjas con rangos que SE SOLAPAN son plantilla válida (#185): la cobertura hace UNION.
+    """Dos franjas con rangos que SE SOLAPAN son plantilla válida: la cobertura hace UNION.
 
     El modelo viejo exigia franjas excluyentes; se eliminó. Una franja que termina DESPUÉS de
     que empieza otra es válida -> 200. (Solo se valida `inicio < fin` por franja.)

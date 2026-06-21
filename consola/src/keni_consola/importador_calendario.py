@@ -530,8 +530,8 @@ def extraer_con_claude(
 #
 # El back NO ejecuta `claude -p` (no tiene binario ni token; solo el worker/daemons). El camino
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (`parsear`, sin claude). Solo el camino
-# AGNOSTICO (PDF/Word/imagen/captura), que antes corria `extraer_con_claude` en la peticion, se
-# ENCOLA como un job de generacion (Haiku); el WORKER corre claude y luego este
+# AGNOSTICO (PDF/Word/imagen/captura) se ENCOLA como un job de generacion (Haiku) en vez de
+# correr `extraer_con_claude` en la peticion; el WORKER corre claude y luego este
 # `procesar(salida, metricas)` parsea su salida (`parsear_respuesta_claude`) e IMPORTA al
 # tablero (`importar_a_tablero`). Es la factory que `jobspec.reconstruir_procesar` arma a partir
 # del spec `PROC_IMPORT_CALENDARIO` (mismo patron que `recibir_parse.construir_procesar_insumos`).

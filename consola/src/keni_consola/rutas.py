@@ -1,4 +1,4 @@
-"""Raiz de estado UNICA de la Consola Keni (un solo volumen en contenedor, #130).
+"""Raiz de estado UNICA de la Consola Keni (un solo volumen en contenedor).
 
 Hoy cada modulo de estado resolvia su ruta por su cuenta (su env var especifica y,
 como fallback, `XDG_CONFIG_HOME` o `~/.config`). En un CONTENEDOR el estado debe

@@ -1,4 +1,4 @@
-"""HISTORIAS (Ola B): newsroom story view sobre los clusters + la Mesa de redacción.
+"""HISTORIAS: newsroom story view sobre los clusters + la Mesa de redacción.
 
 Vista por HISTORIA (cluster) del archivo: listar/detalle, la Mesa segmentada por las líneas
 del plan, la promoción al tablero (`usar`), y la curación a escala (descartar/restaurar +
@@ -149,7 +149,7 @@ def _historia_a_dict(
     `{titulo, url, fuente}` (deduplicados por url, preservando orden). `marca_nombre` resuelve
     el nombre humano de la marca dominante.
 
-    TRADUCCIÓN (Ola D): si la historia está `traducido`, se sirve `titulo`/`resumen` YA en ES
+    TRADUCCIÓN: si la historia está `traducido`, se sirve `titulo`/`resumen` YA en ES
     (`titulo_es`/`resumen_es`) y se exponen `titulo_original`/`idioma`/`traducido` para que la UI
     pueda mostrar "traducido de {idioma}". Si no, se sirven los originales. `verificacion` expone
     la corroboración (corroborada / unica_fuente / dudosa).

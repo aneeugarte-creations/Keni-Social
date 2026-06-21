@@ -43,7 +43,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_MAX_JOBS               jobs `claude` simultaneos          def 4   (min 1)
                                   (la cola NO tiene tope: el exceso ESPERA un slot)
 
-  Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B; `cola`, `worker`):
+  Cola + worker de generacion (ADR 0002 Fase B; `cola`, `worker`):
     - KENI_WORKER_EXTERNO         hay un servicio `worker` aparte    def OFF (worker in-proceso)
     - KENI_WORKER_SONDEO_SEGUNDOS intervalo de sondeo de la cola (s) def 0.5  (min 0.05)
 
@@ -70,7 +70,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   fichero de secretos participa en la decision):
     - KENI_IMAGEN_API_KEY, KENI_IMAGEN_PROVEEDOR  (+ OPENROUTER_API_KEY/OPENAI_API_KEY)
 
-  Persistencia (#130 / ADR 0004): la operacional (tareas/comercial/rota/usuarios/sesiones/
+  Persistencia (ADR 0004): la operacional (tareas/comercial/rota/usuarios/sesiones/
   jobs) va SIEMPRE a Postgres -> `DATABASE_URL` es OBLIGATORIA (local o hosted). La media va
   a object storage S3/Garage si se cablean las `S3_*`; si no, sigue en disco. Los NOMBRES
   son los que ya estan en `deploy/docker-compose.yml`/`.env.example` (no se renombran):

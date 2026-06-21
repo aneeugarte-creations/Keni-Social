@@ -107,7 +107,7 @@ def test_guardar_pieza_inexistente_404(cliente, entorno, _render_mock):
 
 
 # --------------------------------------------------------------------------- #
-# BUG 3: pieza_guardar valida plataforma ANTES de renderizar                  #
+# pieza_guardar valida la plataforma ANTES de renderizar                      #
 # --------------------------------------------------------------------------- #
 
 
@@ -122,7 +122,7 @@ def test_guardar_plataforma_no_pertenece_contenido_404(cliente, entorno, _render
 
 
 # --------------------------------------------------------------------------- #
-# BUG 2: Casts inválidos retornan 400, no 500                                 #
+# Casts inválidos retornan 400, no 500                                        #
 # --------------------------------------------------------------------------- #
 
 

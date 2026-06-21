@@ -157,8 +157,8 @@ def test_comparar_total_y_por_marca(cliente):
 
 def test_comparar_totales_mide_b_respecto_a_a_y_recalcula_engagement():
     # A = "antes", B = "actual". La UI pinta B como valor grande y A como "antes", así que
-    # la variación debe medir B respecto a A: subir 170M→236M es +39 %, NO −28 % (bug previo
-    # que invertía base y signo). El engagement se RECALCULA int/vis por periodo (el total no
+    # la variación debe medir B respecto a A: subir 170M→236M es +39 %, NO −28 % (la base es A
+    # y el signo va de A a B). El engagement se RECALCULA int/vis por periodo (el total no
     # lo trae con varias redes) para no salir "—".
     from keni_consola.api.metricas import _comparar_totales
 
@@ -223,15 +223,15 @@ def test_comparar_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
 
 
 def test_analisis_devuelve_narrativa_con_procedencia(cliente):
-    # F6/#146: lectura "qué cambió y por qué" + siguiente paso. La procedencia de los
-    # datos viaja en `fuente` (issue #131; en tests, la fuente offline del paquete).
+    # Lectura "qué cambió y por qué" + siguiente paso. La procedencia de los
+    # datos viaja en `fuente` (en tests, la fuente offline del paquete).
     r = cliente.get("/api/metricas/analisis?rango=semana")
     assert r.status_code == 200
     data = r.json()
     assert data["fuente"] == "muestra"
     assert "es_muestra" not in data
     assert isinstance(data["movimientos"], list)
-    # cierra con un siguiente paso accionable (loop a la acción, UX-roadmap #11)
+    # cierra con un siguiente paso accionable (loop a la acción)
     assert data["siguiente_paso"] is not None
     assert "Pídele a Claude" in data["siguiente_paso"]["texto"]
 
@@ -295,8 +295,7 @@ def test_refrescar_responde_202_y_completa(cliente):
     # bajo la carga del CI (host compartido, varios agentes + Postgres) puede tardar bastante
     # más. Esperamos con un presupuesto AMPLIO (~20 s): el bucle SALE en cuanto `corriendo`
     # baja, así que el camino feliz sigue siendo instantáneo; el tope solo evita colgar el test
-    # si algo va mal. Antes el presupuesto era de 2 s y bajo contención producía un flake
-    # (`assert True is False`) que tumbaba tests-python sin ser una regresión real.
+    # si algo va mal. Un presupuesto corto produciría un flake bajo contención sin medir nada real.
     est = cuerpo
     for _ in range(400):
         est = cliente.get("/api/metricas/estado?rango=mes").json()

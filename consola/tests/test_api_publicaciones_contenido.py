@@ -91,7 +91,7 @@ def test_placa_oculta_no_bool_400(cliente):
 
 def test_fecha_programada_null_limpia(cliente):
     # El SPA manda fecha_programada=null cuando la pieza NO está programada: debe limpiarse, no
-    # dar 400 (regresión: "La fecha programada debe ser texto" bloqueaba guardar cualquier pieza).
+    # dar 400 (un null válido no es un error de tipo).
     pid = _crear(cliente).json()["pieza"]["id"]
     assert cliente.put(f"/api/piezas/{pid}", json={"fecha_programada": "2026-07-01T10:00"}).status_code == 200
     r = cliente.put(f"/api/piezas/{pid}", json={"fecha_programada": None})

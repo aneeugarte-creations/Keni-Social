@@ -1,4 +1,4 @@
-"""Tests del modulo de configuracion CENTRAL (`keni_consola.config`), R-CONFIG-SPRAWL (#126).
+"""Tests del modulo de configuracion CENTRAL (`keni_consola.config`).
 
 Antes ~30 lecturas `os.environ.get("KENI_...")` vivian dispersas por todo el paquete.
 Ahora `config` es la FUENTE UNICA: declara cada nombre `KENI_*` una vez y expone un
@@ -79,7 +79,7 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_CLAUDE_SKIP_PERMISSIONS == "KENI_CLAUDE_SKIP_PERMISSIONS"
     assert config.ENV_DATA_DIR == "KENI_DATA_DIR"
     assert config.ENV_GENERACIONES == "KENI_CONSOLA_GENERACIONES"
-    # Persistencia hosted (#130): NOMBRES EXACTOS de deploy/.env.example (no se renombran).
+    # Persistencia hosted: NOMBRES EXACTOS de deploy/.env.example (no se renombran).
     assert config.ENV_DATABASE_URL == "DATABASE_URL"
     assert config.ENV_PG_USER == "POSTGRES_USER"
     assert config.ENV_PG_PASSWORD == "POSTGRES_PASSWORD"
@@ -94,7 +94,7 @@ def test_nombres_son_la_fuente_unica():
 
 
 # --------------------------------------------------------------------------- #
-# Persistencia hosted: DATABASE_URL + S3_* (#130)                              #
+# Persistencia hosted: DATABASE_URL + S3_*                                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -308,7 +308,7 @@ def test_cookie_secure_precedencia(limpio):
 
 
 # --------------------------------------------------------------------------- #
-# origenes_permitidos(): allowlist CSRF detras de proxy (#130)                 #
+# origenes_permitidos(): allowlist CSRF detras de proxy                        #
 # --------------------------------------------------------------------------- #
 
 

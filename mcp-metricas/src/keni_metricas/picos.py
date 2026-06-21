@@ -35,7 +35,7 @@ def detectar_picos(
             cuentas_parciales.append(c.id)
 
         # 1) piezas que despuntan vs. el engagement medio de la cuenta. Si el
-        # engagement de la cuenta es None (no comparable entre plataformas, #138)
+        # engagement de la cuenta es None (no comparable entre plataformas)
         # no hay baseline contra el que medir: se omite esta deteccion.
         if r.engagement_pct is not None and r.engagement_pct > 0:
             for p in fuente.mejores_piezas(c.id, rango, 5):

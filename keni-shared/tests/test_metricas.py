@@ -1,4 +1,4 @@
-"""Tests de la formula unica de engagement (`metricas.engagement_pct`) — H3/E1."""
+"""Tests de la formula unica de engagement (`metricas.engagement_pct`)."""
 
 from __future__ import annotations
 

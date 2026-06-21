@@ -361,7 +361,7 @@ describe("apps-scope · helpers", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
     // Ordenado por (grupo_orden, orden): contenido(20: /imagen,/texto) · maquina(25: /investigacion,
-    // /produccion, /computo). Producción ya no aporta entradas a "operacion" ni a "datos".
+    // /produccion, /computo). Producción solo aporta entradas a "maquina", no a "operacion" ni "datos".
     expect(rutas).toEqual([
       "/publicaciones/imagen",
       "/publicaciones/texto",

@@ -1,4 +1,4 @@
-"""Tests de ATRIBUCION por usuario del estado compartido (#130 Fase 1, ADR 0001).
+"""Tests de ATRIBUCION por usuario del estado compartido (ADR 0001).
 
 El estado (borradores/piezas, historial de prompts, tareas/pendientes y el
 registro de generaciones) es COMPARTIDO en el servidor; estos tests prueban que cada
@@ -7,7 +7,7 @@ se EXPONE en las respuestas y se RENDERIZA. RETROCOMPATIBILIDAD: un registro leg
 anonimo (creado sin sesion, o antes de la atribucion) se lee como autor vacio ("") =
 "desconocido", sin romper la lectura.
 
-Convive con lo ya cerrado (#134/#130): la auth/CSRF/sesion no se toca. Para atribuir a
+Convive con lo ya cerrado: la auth/CSRF/sesion no se toca. Para atribuir a
 un usuario concreto se hace login real (cookie de sesion); el acceso por TOKEN de
 bootstrap NO tiene usuario asociado, asi que su atribucion es vacia (mantenimiento).
 

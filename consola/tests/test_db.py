@@ -1,8 +1,8 @@
 """Tests del CRUD de tareas (`keni_consola.db`): dato OPERACIONAL.
 
 Tras la ADR 0004 la operacional vive en POSTGRES. La fixture `entorno` apunta a un
-Postgres de pruebas (o salta si no hay). Estos tests cubren el tablero compartido (#145
-F5): responsable, enlace, ciclo de estado intermedio, filtro por proyecto, allowlist de
+Postgres de pruebas (o salta si no hay). Estos tests cubren el tablero compartido:
+responsable, enlace, ciclo de estado intermedio, filtro por proyecto, allowlist de
 campos editables. El CRUD basico y la inyeccion SQL se prueban en `test_db_postgres.py`
 (paridad backend); aqui evitamos duplicar y nos quedamos con los casos de tablero.
 """
@@ -18,7 +18,7 @@ from keni_consola import db
 
 
 # --------------------------------------------------------------------------- #
-# Swaps de turno (#175): esquema idempotente + CRUD basico                      #
+# Swaps de turno: esquema idempotente + CRUD basico                            #
 # --------------------------------------------------------------------------- #
 
 

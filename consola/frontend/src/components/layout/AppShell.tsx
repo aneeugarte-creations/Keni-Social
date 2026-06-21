@@ -69,12 +69,12 @@ export function AppShell() {
   }, [colapsado]);
   const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
 
-  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`, ahora dentro del topbar):
+  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`, dentro del topbar):
   // inicio (título de página plana) y acciones (menú "⋮"). Las páginas portalizan ahí su
   // título/acciones vía contexto, así caen siempre en la misma barra y quedan alineados.
-  // El header siempre está presente (con su propio borde), así que ya no hace falta contar
-  // títulos para decidir la visibilidad de la barra; `registrarTitulo` queda como no-op estable
-  // para no romper el contrato de `<TituloPagina/>`.
+  // El header siempre está presente (con su propio borde), así que su visibilidad no depende
+  // de contar títulos; `registrarTitulo` es un no-op estable que mantiene el contrato de
+  // `<TituloPagina/>`.
   const [slotInicio, setSlotInicio] = React.useState<HTMLElement | null>(null);
   const [slotAcciones, setSlotAcciones] = React.useState<HTMLElement | null>(null);
   // Hueco del FLANCO DERECHO (guardado/exportar del editor, vía `AccionesPaginaFin`). Solo se
@@ -100,7 +100,7 @@ export function AppShell() {
   );
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
-  // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa los valores base
+  // (`GET /api/limites`). Mientras carga, `metaRed().limite` usa los valores base
   // (espejo del backend). Si falla, los valores base siguen siendo válidos (sin romper).
   const limitesQuery = useQuery({
     queryKey: ["limites"],
@@ -152,7 +152,7 @@ export function AppShell() {
           className={cn(
             "relative z-30 flex h-12 shrink-0 items-center gap-3 px-4 lg:px-6",
             // Cromo unificado en TODA la app, editor incluido: blanco translúcido + hairline
-            // inferior + cromo oscuro por defecto. Ya no hay banda naranja en el editor.
+            // inferior + cromo oscuro por defecto.
             "border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           )}
         >

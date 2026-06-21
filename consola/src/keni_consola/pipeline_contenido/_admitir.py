@@ -774,8 +774,7 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     if not temas:
         return []
     try:
-        # WHERE en SQL por marca (antes: tabla `pieza` ENTERA por cada marca
-        # y barrido, filtrada en Python).
+        # Filtra por marca en SQL (no trae la tabla `pieza` entera para filtrarla en Python).
         con_copy = repos.ids_publicacion_con_copy(marca)
     except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de verificación
         con_copy = set()

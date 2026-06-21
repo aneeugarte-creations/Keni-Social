@@ -108,9 +108,9 @@ def main() -> int:
     # Recolector de generaciones colgadas (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
     # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los sueltos del
-    # deploy anterior) y cada N min. Antes solo se cableaba en `__main__` (servidor monolitico);
-    # con el split de servicios (Fase 3) NINGUN proceso hosted corre `__main__`, asi que sin
-    # esto el recolector no corria en produccion y los sueltos quedaban "ejecutando" para siempre.
+    # deploy anterior) y cada N min. Se cablea aqui porque con el split de servicios NINGUN
+    # proceso hosted corre `__main__`; sin esto el recolector no correria en produccion y los
+    # sueltos quedarian "ejecutando" para siempre.
     iniciar_limpiador()
 
     # LISTENER DE CONTROL (gestion de la cuenta de Claude desde el panel admin): solo se
@@ -123,9 +123,9 @@ def main() -> int:
 
     # Los daemons son hilos; el proceso principal queda en un bucle de LATIDO: toca el
     # fichero de liveness cada _LATIDO_SEG para que el healthcheck del contenedor (deploy)
-    # distinga "proceso vivo" de "proceso colgado/atascado" sin depender de la BD. Antes era
-    # un Event().wait() mudo: el contenedor solo se reiniciaba si el proceso MORIA, nunca
-    # si quedaba colgado.
+    # distinga "proceso vivo" de "proceso colgado/atascado" sin depender de la BD. Un
+    # Event().wait() mudo solo reiniciaria el contenedor si el proceso MURIERA, nunca si
+    # quedara colgado.
     from . import latidos
 
     while True:

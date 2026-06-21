@@ -172,7 +172,8 @@ export function posicionTemporal(
 ): PosicionTemporal | null {
   if (!fecha) return null;
   // Sin hora concreta NO hay instante de saque al que anclar una ventana: se sitúa por DÍA CDMX
-  // (futuro → antes, hoy → en curso todo el día, pasado → después). Aquí no hay bug de medianoche.
+  // (futuro → antes, hoy → en curso todo el día, pasado → después). Al situar por día (sin ventana
+  // horaria) el borde de medianoche no aplica.
   if (_aMinutos(hora) == null) {
     const dia = String(fecha).slice(0, 10);
     const hoy = hoyCDMX();

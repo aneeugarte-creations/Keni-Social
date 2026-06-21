@@ -21,8 +21,8 @@ import secrets
 
 from ..estados import ROLES_USUARIO
 
-# Parametros OBJETIVO de scrypt (coste de CPU/memoria). Subidos por encima del suelo de OWASP
-# (`2**14`) a `2**16` (hardening enterprise 2026-06). `dklen=64` => 128 hex en el digest.
+# Parametros OBJETIVO de scrypt (coste de CPU/memoria). Por encima del suelo de OWASP
+# (`2**14`): N=`2**16`. `dklen=64` => 128 hex en el digest.
 # `maxmem`: scrypt necesita ~128*N*r bytes; con maxmem=0 OpenSSL lo capa a 32 MB y `2**16`
 # (~64 MB) fallaria, asi que lo fijamos generoso (acomoda N hasta `2**17`).
 _SCRYPT_N = 2 ** 16
@@ -49,7 +49,7 @@ LONGITUD_MAX_USUARIO = 64
 # una lista exhaustiva tipo HIBP, pero corta lo que un humano elige por pereza. Se
 # compara en minusculas y sin espacios para que "Cambiar " o "ADMIN" tambien caigan, y
 # ademas se chequea SIN digitos finales (ver `_raiz_sin_digitos`) para tumbar la treta de
-# "password2026"/"clarosports1". Lista ampliada (hardening enterprise 2026-06).
+# "password2026"/"clarosports1".
 PASSWORDS_PROHIBIDAS: frozenset[str] = frozenset({
     # Secuencias / repeticiones / teclado.
     "cambiar", "password", "passw0rd", "contrasena", "contraseña", "12345678",

@@ -428,8 +428,8 @@ function PublicacionEtapa({
   }
   if (clave === "redactar") {
     // Solo el bloque IA (prompt | razonamiento + resultado): el copy final por red ya se ve
-    // en la SALIDA del bloque y, sobre todo, en el feed/aprobación (su sitio). Repetir aquí
-    // las tarjetas por red (X/Instagram/Facebook con placa) era contenido duplicado e irrelevante.
+    // en la SALIDA del bloque y, sobre todo, en el feed/aprobación (su sitio). No repetimos aquí
+    // las tarjetas por red (X/Instagram/Facebook con placa): serían contenido duplicado.
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   if (clave === "ilustrar") {

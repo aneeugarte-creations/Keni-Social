@@ -1,4 +1,4 @@
-// Guard del artefacto generado `types.gen.ts` (#101 / H5/E6), lado frontend.
+// Guard del artefacto generado `types.gen.ts`, lado frontend.
 //
 // `types.gen.ts` se DERIVA del backend (`npm run gen:types`); `types.ts` lo
 // re-exporta. Este test no necesita Python: verifica que el artefacto está
@@ -22,7 +22,7 @@ function interfacesDe(texto: string): string[] {
   return [...texto.matchAll(/export interface ([A-Za-z0-9_]+)/g)].map((m) => m[1]);
 }
 
-describe("types.gen.ts (tipos derivados del backend, #101)", () => {
+describe("types.gen.ts (tipos derivados del backend)", () => {
   const gen = readFileSync(GEN, "utf8");
   const types = readFileSync(TYPES, "utf8");
 

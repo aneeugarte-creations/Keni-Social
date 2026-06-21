@@ -8,12 +8,12 @@ imagen, el nombre del proveedor y, opcionalmente, el modelo de imagen elegido po
 UI. Escritura ATOMICA con permisos `0600`
 (temp + os.replace + os.chmod), mismo patron defensivo que el config de metricas.
 
-SECRETOS POR ENTORNO (#130, servicio en contenedor): ademas del fichero, la clave del
+SECRETOS POR ENTORNO (servicio en contenedor): ademas del fichero, la clave del
 proveedor de imagen se puede INYECTAR por variable de entorno, util cuando el secreto lo
 gestiona el orquestador (Compose/CI) y no hay un fichero `0600` persistente. Variables
 leidas (en este orden de precedencia para la clave):
   - `KENI_IMAGEN_API_KEY`  clave del proveedor de imagen (cualquier proveedor).
-  - `OPENROUTER_API_KEY`   clave de OpenRouter (gateway de IA por defecto, #130).
+  - `OPENROUTER_API_KEY`   clave de OpenRouter (gateway de IA por defecto).
   - `OPENAI_API_KEY`       fallback historico.
   - el fichero `secretos.toml` (almacen local persistente).
   - `KENI_IMAGEN_PROVEEDOR` nombre del proveedor de imagen por entorno (def. el del
@@ -38,11 +38,11 @@ from pathlib import Path
 from . import config, rutas
 from .io_atomico import escribir_atomico
 
-# Variables de entorno que pueden INYECTAR el secreto de imagen (ver docstring, #130).
+# Variables de entorno que pueden INYECTAR el secreto de imagen (ver docstring).
 # Nombres canonicos en `config` (fuente unica); re-exportados aqui (tests los referencian).
 ENV_IMAGEN_API_KEY = config.ENV_IMAGEN_API_KEY
 ENV_IMAGEN_PROVEEDOR = config.ENV_IMAGEN_PROVEEDOR
-# Clave de OpenRouter por entorno: gateway de IA por defecto (#130).
+# Clave de OpenRouter por entorno: gateway de IA por defecto.
 ENV_OPENROUTER_API_KEY = "OPENROUTER_API_KEY"
 # Fallback historico: clave de OpenAI por entorno.
 ENV_OPENAI_API_KEY = "OPENAI_API_KEY"
@@ -160,7 +160,7 @@ def borrar_clave_imagen() -> None:
 
 
 def _clave_por_entorno() -> str | None:
-    """Clave del proveedor de imagen inyectada por entorno, o None si no hay (#130).
+    """Clave del proveedor de imagen inyectada por entorno, o None si no hay.
 
     Precedencia: `KENI_IMAGEN_API_KEY` (generica), `OPENROUTER_API_KEY` (gateway por
     defecto) y, como fallback historico, `OPENAI_API_KEY`. Util en contenedor cuando el
@@ -177,8 +177,8 @@ def obtener_clave_imagen() -> str | None:
     """Devuelve la clave del proveedor de imagen, o None si no hay.
 
     Precedencia: el FICHERO de secretos (almacen local, configurado por la UI) gana si
-    tiene clave; si no, se INYECTA por entorno (`KENI_IMAGEN_API_KEY`/`OPENAI_API_KEY`,
-    #130). Uso INTERNO (la consume `media.py`). NUNCA se expone por la API ni se loguea.
+    tiene clave; si no, se INYECTA por entorno (`KENI_IMAGEN_API_KEY`/`OPENAI_API_KEY`).
+    Uso INTERNO (la consume `media.py`). NUNCA se expone por la API ni se loguea.
     """
     clave = _bloque_imagen(_leer()).get("api_key")
     if isinstance(clave, str) and clave.strip():
@@ -189,8 +189,8 @@ def obtener_clave_imagen() -> str | None:
 def obtener_proveedor_imagen() -> str:
     """Devuelve el proveedor de imagen configurado (def. `openrouter`).
 
-    Precedencia: el FICHERO de secretos gana; si no, `KENI_IMAGEN_PROVEEDOR` por entorno
-    (#130); si tampoco, el proveedor por defecto.
+    Precedencia: el FICHERO de secretos gana; si no, `KENI_IMAGEN_PROVEEDOR` por entorno;
+    si tampoco, el proveedor por defecto.
     """
     proveedor = _bloque_imagen(_leer()).get("proveedor")
     if isinstance(proveedor, str) and proveedor.strip():

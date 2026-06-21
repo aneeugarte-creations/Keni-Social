@@ -1,9 +1,9 @@
-"""Util común de escritura atómica (`io_atomico.escribir_atomico`) — H7/N2 · H3/E1.
+"""Util común de escritura atómica (`io_atomico.escribir_atomico`).
 
 Verifica las garantías: el destino nunca queda a medias, el padre se crea,
 el temporal se borra al fallar, y `modo` aplica permisos (p.ej. 0600 para secretos).
 
-La implementación está en `keni_shared.io_atomico` (H3/E1); `keni_consola` la reexporta.
+La implementación está en `keni_shared.io_atomico`; `keni_consola` la reexporta.
 Este test importa por el reexport de la consola (que es como la usan los módulos de dominio)
 y monkeypatchea sobre `keni_shared.io_atomico`.
 """

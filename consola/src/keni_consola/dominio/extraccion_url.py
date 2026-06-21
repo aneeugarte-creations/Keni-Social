@@ -1,6 +1,6 @@
 """Dominio EXTRACCION DESDE URL: descarga una nota/articulo y saca su texto legible.
 
-Es el "paso de extraccion" de F9 (#149: generar copy desde un link). El usuario pega
+Es el "paso de extraccion" (generar copy desde un link). El usuario pega
 una URL; ANTES de generar copy, la Consola descarga la pagina y extrae su texto
 legible EN EL SERVIDOR (no en la skill de Claude: las skills de copy son dry-run y NO
 hacen peticiones de red). El texto extraido se trata SIEMPRE como NO VERIFICADO: lo
@@ -11,7 +11,7 @@ PRIVACIDAD: solo viaja TEXTO. La descarga ocurre aqui (httpx, igual que `api.rss
 Anthropic solo llega el texto ya extraido como contexto de la skill `copy-desde-nota`.
 No se descarga ni se sube audio/video a terceros: si el link es de video/streaming,
 degradamos con honestidad (la transcripcion es whisper LOCAL y vive en `clip-a-copy`
-desde un archivo subido, no desde una URL remota — ver TODO de #149).
+desde un archivo subido, no desde una URL remota).
 
 SEGURIDAD (SSRF): misma defensa que `api.rss`. Solo `http`/`https`; se resuelve el host
 y se RECHAZA si CUALQUIER IP cae en loopback / rango privado / link-local / multicast /
@@ -526,7 +526,7 @@ def extraer_texto(
 
 # Encabezado que envuelve el texto extraido: deja CLARO a la skill (y al humano) que el
 # contenido es ajeno y NO esta verificado, para que marque nombres/cifras/fechas en su
-# auto-verificacion en vez de darlos por buenos. Honestidad / no alucinacion (#149).
+# auto-verificacion en vez de darlos por buenos. Honestidad / no alucinacion.
 _AVISO_NO_VERIFICADO = (
     "AVISO: el siguiente texto se EXTRAJO AUTOMÁTICAMENTE de una página web ajena "
     "({url}). Trátalo como CONTENIDO NO VERIFICADO: la extracción puede traer "

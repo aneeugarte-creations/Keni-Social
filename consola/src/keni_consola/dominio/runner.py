@@ -1,16 +1,16 @@
-"""Runner UNICO de `claude -p` en streaming para los jobs en segundo plano (#116).
+"""Runner UNICO de `claude -p` en streaming para los jobs en segundo plano.
 
 Aqui viven las MECANICAS compartidas (argv, lectura de stream con throttle, espera
 con wall-timeout y kill); cada llamante conserva SU finalizacion (generaciones
 post-procesa y guarda `resultado`; los runs solo guardan el texto).
 
-CONCURRENCIA (#116 / R-NO-LIMIT): sin tope, N peticiones lanzaban N procesos `claude`
+CONCURRENCIA (R-NO-LIMIT): sin tope, N peticiones lanzaban N procesos `claude`
 a la vez (CPU/RAM/rate-limit/coste). `slot()` aplica un semaforo (`KENI_MAX_JOBS`,
 def 4): los jobs que no caben ESPERAN un hueco (quedan en cola). No hay espera
 infinita: cada job tiene wall-timeout (mata el proceso), asi que los slots SIEMPRE
 se liberan.
 
-ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo— con el
+ENDURECIMIENTO PERMANENTE: la generacion se hace —y se SEGUIRA haciendo— con el
 subprocess `claude -p` (ahora en un sandbox por usuario; ver ADR 0001), NO con la API de
 Claude. Por tanto este runner de subprocesos NO desaparece: las medidas de robustez son
 deuda PERMANENTE, no contencion transitoria. Hay que tenerlas bien:
@@ -224,7 +224,7 @@ def lanzar_proc(
 ) -> subprocess.Popen:
     """Arranca `claude` en SU PROPIO grupo de procesos (lider de sesion).
 
-    PERMANENTE (#137): `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
+    PERMANENTE: `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
     `matar_arbol()` puede senalizar al GRUPO entero (padre + herramientas hijas que
     `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba procesos colgados.
     En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
@@ -256,7 +256,7 @@ def lanzar_proc(
 def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
     """Mata el ARBOL COMPLETO del subproceso (su grupo de procesos), no solo el padre.
 
-    PERMANENTE (#137): manda SIGKILL al GRUPO (`os.killpg(getpgid(pid), SIGKILL)`) para
+    PERMANENTE: manda SIGKILL al GRUPO (`os.killpg(getpgid(pid), SIGKILL)`) para
     arrastrar a las herramientas hijas que `claude` haya lanzado. Si el grupo ya no
     existe (carrera con la salida) o la plataforma no soporta `killpg`, degrada a
     `proc.kill()`. Best-effort: nunca propaga. Tras matar, espera al padre para reapear.
@@ -311,10 +311,10 @@ def _loguear_stderr(proc: subprocess.Popen) -> None:
 def esperar(proc: subprocess.Popen, timeout: int) -> bool:
     """Espera al proceso con wall-timeout; si lo supera mata el ARBOL y devuelve True.
 
-    PERMANENTE (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
-    solo el padre, para no dejar herramientas hijas sueltas. Al cerrar, si el proceso
-    acabo con returncode != 0, loguea su stderr (`_loguear_stderr`) para no perder el
-    motivo del fallo (antes iba a DEVNULL).
+    Al superar el timeout mata el GRUPO de procesos (via `matar_arbol`), no solo el
+    padre, para no dejar herramientas hijas sueltas. Al cerrar, si el proceso acabo con
+    returncode != 0, loguea su stderr (`_loguear_stderr`) para no perder el motivo del
+    fallo.
     """
     try:
         proc.wait(timeout=timeout)
@@ -342,7 +342,7 @@ def max_jobs() -> int:
 _sems: dict[int, threading.BoundedSemaphore] = {}
 _sems_lock = threading.Lock()
 
-# ADMISION: contador de jobs ADMITIDOS ahora mismo (esperando un slot + corriendo). YA NO
+# ADMISION: contador de jobs ADMITIDOS ahora mismo (esperando un slot + corriendo). No
 # es un tope (la cola no tiene limite, R-NO-LIMIT): `admitir()` solo lo sube y cada job lo
 # baja al terminar, para inspeccion/tests. La concurrencia real la impone el semaforo de
 # `slot()` (`max_jobs`); el exceso ESPERA, no se rechaza.

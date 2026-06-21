@@ -98,7 +98,7 @@ export function PanelGaleria({
       // Centrado, a media anchura del lienzo, adoptando el ASPECT-RATIO natural de la foto (estilo
       // Canva): caja == foto, sin letterbox ni recorte sorpresa, y el marco de selección la abraza
       // exacto. Las dimensiones se leen del media (ya cacheado por la miniatura); si no decodifica,
-      // cae al cuadrado de antes.
+      // cae a un cuadrado por defecto.
       void (async () => {
         const dims = await leerDimensionesUrl(urlMedia(a.objeto));
         const stN = store.getState();

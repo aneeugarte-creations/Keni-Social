@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Backup LOCAL de keni-social: dump de Postgres (operacional + editorial ESTRUCTURADO) +
-# tar de los TRES volumenes de estado. Versiona en git el keni-backup que ya vivia en el
-# host sin estar trackeado (se habria perdido en una reconstruccion del host) y conserva su
-# diseno: formato de dump y layout/nombres compatibles con los ficheros ya existentes.
+# tar de los TRES volumenes de estado.
 #
 # Cubre:
 #   postgres/keni-<stamp>.dump            pg_dump -Fc (CUSTOM): comprimido y restaurable con
@@ -14,7 +12,7 @@
 #   estado.json                           resultado del ULTIMO run (ok/fallo, bytes,
 #                                         verificacion, duracion) para el panel Sistema.
 #
-# VERIFICACION (audit 2026-06): un backup sin probar no es un backup. Cada run VERIFICA lo
+# VERIFICACION: un backup sin probar no es un backup. Cada run VERIFICA lo
 # que acaba de escribir: el dump con `pg_restore --list` (lee el TOC entero del archivo
 # custom; detecta dumps truncados/corruptos) y cada tar.gz con `gzip -t` (CRC del stream
 # completo). El resultado queda en estado.json (`verificado`) y un fallo de verificacion

@@ -4,16 +4,15 @@
 #   traefik  reverse proxy + TLS (Let's Encrypt). Unico que publica :80/:443.
 #   front    SPA React servido por nginx.            (Traefik: TODO menos /api)
 #   back     gateway Starlette; ENCOLA la generacion. (Traefik: /api)  Sin Node ni `claude`.
-#   worker   consume la cola y corre `claude -p`.    (interno; #130 Fase 2 / ADR 0002 Fase B)
+#   worker   consume la cola y corre `claude -p`.    (interno; ADR 0002 Fase B)
 #   mcp      keni-metricas por HTTP (interno; expon con bearer si lo necesitas).
 #   db       Postgres 16  (CONSUMIDO por el back si DATABASE_URL; si no, SQLite local).
 #   files    Garage S3     (CONSUMIDO por el back si S3_*; si no, media a disco local).
 #
 # El contexto de build de las imagenes propias es la RAIZ del repo (`..`).
 #
-# INGRESS: Traefik es el ingress unico (network_mode: host, dueño de :80/:443).
-# Los sitios legacy code/api.kenitech.io fueron desmantelados (2026-06-12); Traefik
-# ya solo sirve este stack.
+# INGRESS: Traefik es el ingress unico (network_mode: host, dueño de :80/:443) y
+# sirve solo este stack.
 
 name: keni-social
 
@@ -42,7 +41,7 @@ name: keni-social
 #   traefik    512m              —                       1.0
 #   front      256m              —                       1.0
 #
-# El worker corre KENI_MAX_JOBS (def 6, antes 4) jobs `claude -p` EN PARALELO. Cada job
+# El worker corre KENI_MAX_JOBS (def 6) jobs `claude -p` EN PARALELO. Cada job
 # ~1.5–2.5 GiB en pico => 6 × 2.5 + margen ≈ 18–20 GiB. Ver la nota junto al servicio
 # `worker`. Suma de defaults ≈ 37.8 GiB sobre 61 GiB: deja ~23 GiB para host + CI +
 # learn-postgres.
@@ -58,9 +57,9 @@ name: keni-social
 
 services:
   traefik:
-    # Tag FIJADO (antes `traefik:v3` movil): un tag flotante se actualiza solo en cada
-    # `docker pull` del deploy, metiendo cambios de comportamiento sin querer. Fijamos la
-    # version EXACTA que corre hoy (3.7.1) para builds reproducibles; subela a conciencia.
+    # Tag FIJADO (no flotante): un tag flotante se actualiza solo en cada `docker pull`
+    # del deploy, metiendo cambios de comportamiento sin querer. Fijamos la version EXACTA
+    # que corre hoy (3.7.1) para builds reproducibles; subela a conciencia.
     # (v3 ya negocia la API con el daemon; el DOCKER_API_VERSION de abajo cubre Engine 29.)
     image: traefik:v3.7.1
     restart: unless-stopped
@@ -78,8 +77,8 @@ services:
       - --certificatesresolvers.le.acme.storage=/acme/acme.json
       - --certificatesresolvers.le.acme.httpchallenge=true
       - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
-      # Provider de fichero: routers de los 3 sitios legados (learn/api/code) para
-      # el cutover de Caddy -> Traefik. Inertes hasta que Traefik sea el ingress.
+      # Provider de fichero: carga routers dinamicos de /etc/traefik/dynamic (watch en
+      # caliente, sin reiniciar Traefik).
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       # Sin idle-timeout: imprescindible para streaming SSE (generacion token a
@@ -87,9 +86,8 @@ services:
       - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=0
       # - --api.dashboard=true   # opcional: protege con middleware antes de exponer
       # - --log.level=DEBUG
-    # network_mode: host — herencia de cuando Traefik tambien servia los sitios
-    # legacy del host (retirados 2026-06-12). Se mantiene: bind 80/443 directo y
-    # alcanza a front/back por su IP de la red bridge keni-social_edge.
+    # network_mode: host — Traefik es dueño directo de :80/:443 y alcanza a front/back
+    # por su IP en la red bridge keni-social_edge.
     network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -198,7 +196,7 @@ services:
       # VACIO por defecto => el defecto del codigo: openai/gpt-5-image-mini (economico y
       # SI genera personas; Nano Banana/Gemini es mas barato pero BLOQUEA personas).
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
-      # Token interino OPCIONAL (#130): gate EXTRA. La barrera principal es el login
+      # Token interino OPCIONAL: gate EXTRA. La barrera principal es el login
       # multiusuario (sesion) + CSRF; el back queda protegido aunque esto este vacio.
       KENI_CONSOLA_TOKEN_FILE: /run/secrets/consola_token
       # Host(s) externo(s) permitido(s) para el chequeo CSRF detras de Traefik. Igual a
@@ -238,10 +236,10 @@ services:
       # ejecutar la promoción REAL a main (fetch+rebase+push). Puerto = KENI_DEV_PORT (def 8772).
       KENI_DEV_URL: ${KENI_DEV_URL:-http://worker-dev:8772}
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
-      # El back solo ENCOLA (#130 Fase 2): NO arranca su worker in-proceso (lo hace el
+      # El back solo ENCOLA: NO arranca su worker in-proceso (lo hace el
       # servicio `worker`). La credencial de Claude la lleva el worker, no el back.
       KENI_WORKER_EXTERNO: "1"
-      # Persistencia hosted (#130): el back consume Postgres si DATABASE_URL esta puesta y
+      # Persistencia hosted: el back consume Postgres si DATABASE_URL esta puesta y
       # S3/Garage si S3_* lo estan; vacias => SQLite + disco (perfil local). Cutover de datos
       # existentes: `python -m keni_consola.migracion` (ver deploy/README.md).
       # DATABASE_URL es OPCIONAL: si se deja en blanco, el back la DERIVA de POSTGRES_* (con
@@ -377,10 +375,9 @@ services:
     #
     # IMAGEN DEL WORKER (no la del back): los pasos IA INLINE del pool de noticias —fusión
     # semántica de historias, encaje editorial, traducción— corren `claude -p` SÍNCRONO dentro
-    # de ESTE proceso (dominio.fusion_semantica/traduccion), no por la cola. Con la imagen del
-    # back (sin Node/claude) fallaban TODOS los barridos con "El asistente (claude) no está
-    # disponible en el servidor" y la etapa de Fusionar nunca corría en hosted. La imagen del
-    # worker trae claude + el entrypoint que carga el token desde /run/secrets.
+    # de ESTE proceso (dominio.fusion_semantica/traduccion), no por la cola. Necesitan claude +
+    # el entrypoint que carga el token desde /run/secrets, presentes solo en la imagen del
+    # worker (la del back no trae Node/claude).
     build:
       context: ..
       dockerfile: deploy/worker/Dockerfile
@@ -500,7 +497,7 @@ services:
         max-file: "5"
 
   worker:
-    # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): consume la cola (tabla `jobs`
+    # Worker de generacion (ADR 0002 Fase B): consume la cola (tabla `jobs`
     # del Postgres compartido) y corre `claude -p`. SI lleva Node + `claude` (la del back
     # ya no). NO publica puertos ni va por Traefik: solo habla con db/files por la red
     # interna. Reiniciar el back NO mata sus jobs (es otro contenedor). Escalable: subir
@@ -524,9 +521,8 @@ services:
       IS_SANDBOX: "1"
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
       # Concurrencia de `claude` por worker + topes de coste/tiempo (mismos nombres que antes).
-      # El worker corre un POOL de KENI_MAX_JOBS hilos => hasta N jobs `claude` EN PARALELO
-      # (antes el bucle era serial y solo corria 1 a la vez pese a este valor). Default 6
-      # (subido de 4: los jobs son mayormente ESPERA de API y el worker tiene 6 cpus/20 GiB;
+      # El worker corre un POOL de KENI_MAX_JOBS hilos => hasta N jobs `claude` EN PARALELO.
+      # Default 6 (los jobs son mayormente ESPERA de API y el worker tiene 6 cpus/20 GiB;
       # la cola con prioridad aprovecha el hueco extra). OJO: si el .env del operador fija
       # KENI_MAX_JOBS, ese valor MANDA sobre este fallback. El mem_limit/cpus de abajo estan
       # dimensionados para 6 jobs concurrentes.
@@ -923,8 +919,8 @@ services:
     # basicauth y un subdominio (p.ej. mcp.kenitech.io). Ver README.
 
   db:
-    # Tag FIJADO (antes `postgres:16` movil): evita que un `docker pull` del deploy salte
-    # de version menor sin querer. 16.13 = la que corre hoy. Subir de minor a conciencia.
+    # Tag FIJADO (no flotante): evita que un `docker pull` del deploy salte de version
+    # menor sin querer. 16.13 = la que corre hoy. Subir de minor a conciencia.
     image: postgres:16.13
     restart: unless-stopped
     # Tuning para el VPS real (61 GiB, db mem_limit 8g). La app abre MUCHAS conexiones

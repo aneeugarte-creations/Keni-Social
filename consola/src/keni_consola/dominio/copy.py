@@ -420,7 +420,7 @@ def crear_publicaciones_desde_piezas(
                 publicacion_id,
             )
     # FLIP a formato carrusel SOLO si hay carrusel HORNEADO (slides reales). Una sugerencia de
-    # formato sin slides ya NO flip-ea: el post sigue siendo foto hasta que el equipo arme el
+    # formato sin slides no flip-ea: el post sigue siendo foto hasta que el equipo arme el
     # carrusel a mano. Requiere tema (`publicacion_id`): el formato vive en el `contenido` padre.
     quiere_carrusel = bool(publicacion_id) and bool(carrusel_json)
     if quiere_carrusel:
@@ -437,7 +437,7 @@ def crear_publicaciones_desde_piezas(
         redes_filtro = (
             permitidas_carrusel if redes_filtro is None else (redes_filtro & permitidas_carrusel)
         )
-    # El copy unificado se genera SIN hashtags: ya no se inyectan automáticamente. Los hashtags
+    # El copy unificado se genera SIN hashtags: no se inyectan automáticamente. Los hashtags
     # los propone la etapa `sugerir_hashtags` (tras Redactar) y el feed los ofrece en gris para
     # que un humano los acepte; nada los añade al copy sin su criterio.
     descartes: list[str] = []

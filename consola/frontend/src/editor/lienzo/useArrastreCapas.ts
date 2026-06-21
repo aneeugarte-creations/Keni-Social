@@ -45,7 +45,7 @@ const SIN_GUIAS: GuiasArrastre = { x: null, y: null, espX: null, espY: null };
 // Conversión posición de NODO Konva <-> posición del MODELO (la x/y almacenada). Para casi todas
 // las capas coinciden; las excepciones: la ELIPSE (Konva la posiciona por su CENTRO, el modelo por
 // la esquina sup-izq) y el GRUPO (su nodo vive en (0,0) y se mueve como DELTA sobre la bbox del
-// modelo). Volcar el nodo "a pelo" corrompía la y/x de esas capas en cada multi-arrastre.
+// modelo). Volcar el nodo "a pelo" corrompería la y/x de esas capas en cada multi-arrastre.
 function modeloDesdeNodo(c: Capa, nx: number, ny: number): { x: number; y: number } {
   if (c.tipo === "marco" && (c as CapaMarco).forma === "elipse") return { x: nx - c.w / 2, y: ny - c.h / 2 };
   if (c.tipo === "grupo") return { x: c.x + nx, y: c.y + ny };
@@ -155,7 +155,7 @@ export function useArrastreCapas({
       md.ini.forEach((p, sid) => {
         // La capa AGARRADA ya horneó en su propio onDragEnd (CapaNodo convierte nodo -> modelo,
         // y onDragEndGrupo además resetea su nodo a (0,0)): re-escribirla aquí con la posición
-        // cruda del nodo la corrompía (elipse/overlay) o la devolvía al origen (grupo reseteado).
+        // cruda del nodo la corrompería (elipse/overlay) o la devolvería al origen (grupo reseteado).
         if (sid === md.dragId) return;
         const n = stage?.findOne<Konva.Node>(`#${sid}`);
         if (!n) return;
@@ -209,8 +209,8 @@ export function useArrastreCapas({
       dxBase = nodo.x() - start.nx;
       dyBase = nodo.y() - start.ny;
       // La envolvente se construye con las cajas VISIBLES iniciales + delta (la banda del overlay,
-      // el bloque del texto legado, la bbox del grupo): la del modelo metía cajas fantasma que
-      // desbordaban (h - banda) por abajo y el imán/clamp se disparaba donde no hay nada.
+      // el bloque del texto legado, la bbox del grupo): la del modelo metería cajas fantasma que
+      // desbordan (h - banda) por abajo y dispararían el imán/clamp donde no hay nada.
       const cajas: CajaIman[] = [];
       md.ini.forEach((p) => {
         cajas.push({ x: p.vis.x + dxBase, y: p.vis.y + dyBase, w: p.vis.w, h: p.vis.h });

@@ -162,7 +162,7 @@ def motor_de(daemon: str) -> str | None:
 #   - investigacion      -> KENI_INVESTIGACION  (maestro virtual = sus etapas Recolectar+Verificar;
 #                                           el loop gatea con gate_maquina(alguna_etapa_investigacion_activa),
 #                                           que es True sii Recolectar o Verificar lo está. Interruptor PROPIO,
-#                                           independiente de Producción —antes ambos compartían KENI_MAQUINA—.)
+#                                           independiente de Producción.)
 #   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
 #                                           que siempre es True bajo la máquina => su único interruptor de loop
 #                                           ES el maestro de la máquina. Redactar/Ilustrar se gatean dentro.)

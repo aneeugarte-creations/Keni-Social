@@ -1,7 +1,7 @@
 # Woodpecker: EVALS de calidad de la salida de IA (red de regresión de la propuesta de valor).
 #
-# El mayor hueco señalado por el AI Lead: NO había ningún eval de la calidad de la salida de IA.
-# Los prompts de la Biblioteca son editables EN VIVO sin red de regresión. Este pipeline corre el
+# Red de regresión de la calidad de la salida de IA: los prompts de la Biblioteca son editables
+# EN VIVO, así que sin esto su salida no tendría red de regresión. Este pipeline corre el
 # harness determinista (`keni_consola.evals`) sobre los casos golden inicial: si alguien debilita
 # la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_calidad`, límites de red) o mueve
 # los PERFILES MEDIDOS de marca (`patrones_inicial/*.json`), algún caso inicial cambia de veredicto

@@ -554,8 +554,8 @@ def noticias_gc_inactividad_horas() -> int:
 ENV_NOTICIAS_TTL_H = "KENI_NOTICIAS_TTL_H"
 # El TTL del pool se DESACOPLA de la vida de la frescura del score (72h): la frescura caduca el
 # RANKING (una historia vieja deja de subir), pero no debe expulsar la historia del pool antes de
-# que un humano pueda rescatarla. Un slow-burn (tema que cuaja despacio, o que esperó cupo) seguía
-# vivo en el ranking pero podía caducar a `descartado` por inactividad antes de usarse. 7 días da
+# que un humano pueda rescatarla. Un slow-burn (tema que cuaja despacio, o que espera cupo) sigue
+# vivo en el ranking pero podría caducar a `descartado` por inactividad antes de usarse. 7 días da
 # margen para esa recuperación manual sin reabrir la decisión de ranking.
 NOTICIAS_TTL_H_DEF = 168  # 7 días sin actividad: techo de vida en el pool (no la vida de la frescura)
 ENV_NOTICIAS_RETENCION_H = "KENI_NOTICIAS_RETENCION_H"
@@ -695,7 +695,7 @@ def pipeline_activo() -> bool:
     return _crudo(ENV_PIPELINE_REDACTAR).lower() in _VERDADEROS
 
 
-# FLUJO CONTINUO: el pipeline ya no tiene intervalo configurable (tick corto constante en
+# FLUJO CONTINUO: el pipeline no tiene intervalo configurable (tick corto constante en
 # `pipeline_contenido._barrido`) ni topes por etapa (Verificar/Redactar/Ilustrar/Revisar): el volumen lo
 # regulan los DOS knobs de Admitir de abajo + el backpressure de la cola (`KENI_MAX_JOBS`).
 

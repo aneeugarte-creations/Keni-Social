@@ -170,7 +170,7 @@ def test_argv_flujos_de_generacion_conservan_la_web(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# argv de claude: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)        #
+# argv de claude: --max-turns desde KENI_CLAUDE_MAX_TURNS                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -643,7 +643,7 @@ def test_lanzar_job_imagen_no_cataloga_render(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# #137 INTERINO: tope de cola, cancelacion (mata el arbol), log sin tragar      #
+# INTERINO: tope de cola, cancelacion (mata el arbol), log sin tragar          #
 # --------------------------------------------------------------------------- #
 
 
@@ -777,7 +777,7 @@ def test_lanzar_job_claude_no_rechaza_por_tope_de_cola(entorno, monkeypatch):
         generaciones.runner, "lanzar_proc",
         _fake_lanzar_factory_por_intento([[_OK_START, _OK_RESULT]], {"n": 0}),
     )
-    # Saturamos la admision a mano muy por encima de la concurrencia: ANTES esto rechazaba.
+    # Saturamos la admision a mano muy por encima de la concurrencia: la cola no tiene tope.
     for _ in range(5):
         runner.admitir()
     try:
@@ -854,7 +854,7 @@ def test_cancelar_mata_el_arbol_y_marca_cancelado(entorno, monkeypatch):
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
 def test_excepcion_en_hilo_de_post_procesado_se_loggea_no_se_traga(entorno, monkeypatch, caplog):
-    """Si `procesar` revienta, el fallo se LOGUEA con el job-id (#123) y NO se silencia.
+    """Si `procesar` revienta, el fallo se LOGUEA con el job-id y NO se silencia.
 
     Antes era `except Exception: pass` opaco. Ahora deja traza correlacionable al job y
     el registro queda en `error` (mensaje claro, sin traceback al cliente).
@@ -899,7 +899,7 @@ def test_excepcion_en_hilo_de_post_procesado_se_loggea_no_se_traga(entorno, monk
 
 
 def test_fallo_del_job_se_correlaciona_con_el_request_id(entorno, monkeypatch, caplog):
-    """El log del fallo del job lleva el job-id Y el request-id de quien lo lanzo (#123+#137).
+    """El log del fallo del job lleva el job-id Y el request-id de quien lo lanzo.
 
     `lanzar_job_claude` captura `request_id_actual()` al lanzarse (sincronicamente, dentro
     de la peticion); el hilo corre fuera de ese contexto, asi que el id viaja en el mensaje
@@ -945,7 +945,7 @@ def test_fallo_del_job_se_correlaciona_con_el_request_id(entorno, monkeypatch, c
 
 
 # --------------------------------------------------------------------------- #
-# #137 API: 429 cuando la cola esta llena + endpoint de cancelacion           #
+# API: 429 cuando la cola esta llena + endpoint de cancelacion                #
 # --------------------------------------------------------------------------- #
 
 

@@ -19,7 +19,7 @@ class Plataforma(StrEnum):
 
 # Plataformas que exponen "alcance" (usuarios únicos). Solo Meta (FB/IG) lo da
 # en su API de insights; YouTube/X/TikTok NO lo miden y lo reportan AUSENTE
-# (None). Fuente única de esta clasificación (#138).
+# (None). Fuente única de esta clasificación.
 PLATAFORMAS_CON_ALCANCE: frozenset[Plataforma] = frozenset(
     {Plataforma.facebook, Plataforma.instagram}
 )
@@ -36,7 +36,7 @@ class Cuenta(BaseModel):
 class MetricaPlataforma(BaseModel):
     """Métricas normalizadas de UNA plataforma para un periodo.
 
-    Semántica de agregación entre plataformas (#138) — qué se puede sumar y qué no:
+    Semántica de agregación entre plataformas — qué se puede sumar y qué no:
 
     - `interacciones` es la ÚNICA magnitud comparable entre redes: es la misma
       cuenta (likes + comentarios + compartidos + …) en todas. Se AGREGA.
@@ -68,7 +68,7 @@ class MetricaPlataforma(BaseModel):
 
 
 def agregar_alcance(por_plataforma: list[MetricaPlataforma]) -> int | None:
-    """Suma el alcance SOLO de las plataformas que lo miden (#138).
+    """Suma el alcance SOLO de las plataformas que lo miden.
 
     Las plataformas que no miden alcance lo reportan AUSENTE (`None`) y quedan
     excluidas del total. Devuelve `None` si NINGUNA plataforma lo mide (ausencia
@@ -82,7 +82,7 @@ def agregar_engagement(
     por_plataforma: list[MetricaPlataforma], interacciones: int
 ) -> float | None:
     """Engagement global defendible: NO divide sobre bases de visualización
-    heterogéneas (#138).
+    heterogéneas.
 
     - 0 plataformas → `None` (no hay nada que medir).
     - 1 plataforma  → su engagement (base homogénea, coherente).
@@ -133,7 +133,7 @@ class Periodo(BaseModel):
 class ResumenMetricas(BaseModel):
     """Resumen agregado de una cuenta sobre todas sus plataformas.
 
-    Sobre la agregación entre plataformas heterogéneas (#138):
+    Sobre la agregación entre plataformas heterogéneas:
 
     - `visualizaciones`: suma de las visualizaciones de cada plataforma. Es un
       total INFORMATIVO (mezcla impresiones y reproducciones); el desglose real
@@ -193,7 +193,7 @@ class Pieza(BaseModel):
     # OPCIONALES y con default None/0: degradación honesta. Si Metricool no trae
     # el campo a nivel post (la forma de `/v2/analytics/posts/{network}` NO está
     # fijada por el swagger), queda en None, NUNCA se inventa. `interacciones`
-    # sigue siendo el total homogéneo (#138); estos son su desglose cuando viene.
+    # sigue siendo el total homogéneo; estos son su desglose cuando viene.
     likes: int | None = None
     comentarios: int | None = None
     compartidos: int | None = None
@@ -236,7 +236,7 @@ class MetricaPieza(BaseModel):
     # --- Métricas granulares por pieza (issue métricas granulares) -----------
     # OPCIONALES y con default None: degradación honesta. Si Metricool no trae el
     # campo a nivel post, queda en None, NUNCA se inventa. `interacciones` sigue
-    # siendo el total homogéneo (#138); estos son su desglose cuando viene.
+    # siendo el total homogéneo; estos son su desglose cuando viene.
     likes: int | None = None
     comentarios: int | None = None
     compartidos: int | None = None
@@ -388,7 +388,7 @@ class CeldaDesglose(BaseModel):
 
     Campos granulares ausentes (None en la pieza) cuentan como 0 en la suma, pero
     `n_piezas` cuenta TODAS las piezas del grupo. `interacciones` es el total
-    homogéneo (#138); `engagement_pct` = interacciones/visualizaciones*100 (0 si
+    homogéneo; `engagement_pct` = interacciones/visualizaciones*100 (0 si
     no hay visualizaciones).
     """
 
@@ -499,7 +499,7 @@ RANGOS_DIAS: dict[str, int] = {"semana": 7, "7d": 7, "mes": 30, "30d": 30, "anio
 # inmediatamente anterior a la semana en curso, domingo incluido). A diferencia de
 # "semana" (rodante, termina hoy), este NO depende del dia en que se corra: el
 # lunes a las 10 da exactamente la semana que acaba de cerrar. Lo usa el reporte
-# del lunes (issue #141). Son tambien 7 dias, pero su ventana no es relativa a hoy.
+# del lunes. Son tambien 7 dias, pero su ventana no es relativa a hoy.
 RANGO_SEMANA_CERRADA = "semana_cerrada"
 
 # Todos los rangos validos como entrada (rodantes + anclados). El reporte de
@@ -529,7 +529,7 @@ def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:
 
     Devuelve `(lunes, domingo)` de la semana inmediatamente anterior a la que
     contiene `hoy`. Ejemplo: cualquier dia de la semana del 25-31 may 2026 ->
-    (2026-05-18, 2026-05-24). Independiente del dia en que se corra (issue #141).
+    (2026-05-18, 2026-05-24). Independiente del dia en que se corra.
     """
     hoy = hoy or date.today()
     lunes_de_esta_semana = hoy - timedelta(days=hoy.weekday())  # lunes=0 .. domingo=6

@@ -66,7 +66,7 @@ import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 import type { CuerpoCrearPublicacion } from "@/types";
 
 // Mismo padding para el skeleton y el listado real: el propósito de `SkeletonPost` es que el
-// contenido aterrice SIN desplazarse (antes 4px de salto entre p-4 y p-3).
+// contenido aterrice SIN desplazarse al cargar.
 const CLASES_LISTA = "space-y-4 p-4";
 
 /**

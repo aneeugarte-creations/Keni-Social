@@ -37,8 +37,8 @@ _log = logging.getLogger("keni_consola.autogen_redactar")
 # Fuente UNICA del vocabulario: `estados.ORIGENES_AUTOGEN` (modulo neutro), para que los
 # flujos transversales no compitan por este literal. Incluye las fuentes externas historicas
 # (import-calendario, radar-auto, radar, rss) Y el alta creativa del equipo (`equipo`), que
-# la direccion decidio auto-generar SIEMPRE (2026-06-01). El alta TECLEADA legada (origen "")
-# sigue EXCLUIDA a proposito: no auto-generamos lo que el equipo teclea sin marcar como alta.
+# se auto-genera SIEMPRE. El alta TECLEADA legada (origen "") sigue EXCLUIDA a proposito:
+# no auto-generamos lo que el equipo teclea sin marcar como alta.
 ORIGENES_TOPIC: frozenset[str] = frozenset(ORIGENES_AUTOGEN)
 
 # Etiqueta de origen del historial para el copy auto-generado (nota -> piezas por red, con
@@ -142,8 +142,8 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         # muestra y sigue fluyendo por aprobacion/programador), no como contenido suelto.
         publicacion_id=item.get("id") or "",
         # DEDUP AL EXITO (no al encolar): la etiqueta `autogen` la asigna el POST-PROCESADO
-        # del copy al completar con exito. Antes se etiquetaba tras encolar y un copy FALLIDO
-        # jamas se reintentaba (el tema quedaba excluido para siempre de la seleccion).
+        # del copy al completar con exito, NO al encolar, para que un copy FALLIDO no excluya
+        # el tema para siempre de la seleccion y pueda reintentarse.
         # Mientras el job esta EN CURSO no hay doble lanzamiento: la clave de idempotencia
         # de `dominio.generar.lanzar` devuelve el run en curso.
         etiqueta_exito=ETIQUETA_AUTOGEN,

@@ -1,8 +1,8 @@
 // Construcción de la píldora de ACCIONES de la capa seleccionada (alinear / distribuir / orden /
 // duplicar / borrar), extraída como hook. Owns el cálculo del array de acciones según la selección
-// (única o múltiple); el componente solo lo pasa a `BarraAcciones`. Mismas reglas que antes: con
-// multi-selección se alinea el grupo y se habilita distribuir/ordenar (≥3); con selección única se
-// añade traer al frente / enviar al fondo.
+// (única o múltiple); el componente solo lo pasa a `BarraAcciones`. Con multi-selección se alinea
+// el grupo y se habilita distribuir/ordenar (≥3); con selección única se añade traer al frente /
+// enviar al fondo.
 
 import {
   AlignCenterHorizontal,

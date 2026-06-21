@@ -1,4 +1,4 @@
-"""API Auth: login user/pass, logout, sesion actual y cambio de contrasena (#130).
+"""API Auth: login user/pass, logout, sesion actual y cambio de contrasena.
 
 Endpoints (todos bajo `/api/auth`, CONTRATO con el frontend):
 
@@ -43,7 +43,7 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 _MSG_LOGIN_KO = "Usuario o contraseña incorrectos."
 
 # --------------------------------------------------------------------------- #
-# Limite de intentos de login POR IP (ventana deslizante, hardening 2026-06)   #
+# Limite de intentos de login POR IP (ventana deslizante)                     #
 # --------------------------------------------------------------------------- #
 #
 # COMPLEMENTA el lockout POR CUENTA de `auth.usuarios` (que, solo, es un vector de DoS:
@@ -273,7 +273,7 @@ def _set_cookie_sesion(resp: Response, token: str) -> None:
 
     `max_age` acompana a la expiracion server-side para que el navegador la descarte
     cuando caduca. HttpOnly: el JS no la lee (defensa anti-XSS de robo de sesion).
-    `Secure` (cuando va detras de un proxy TLS, #130): la cookie no viaja por HTTP plano.
+    `Secure` (cuando va detras de un proxy TLS): la cookie no viaja por HTTP plano.
     """
     resp.set_cookie(
         auth.COOKIE_SESION,

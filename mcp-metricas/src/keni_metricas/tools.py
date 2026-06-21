@@ -54,7 +54,7 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             "piezas": [p.model_dump(mode="json") for p in piezas],
             "fuente": fuente.nombre,
         }
-        # Degradacion EXPLICITA (antes silenciosa): si alguna plataforma configurada no
+        # Degradacion EXPLICITA: si alguna plataforma configurada no
         # aporto piezas (API caida, sin credenciales, presupuesto), se adjunta la
         # cobertura (mismo modelo que metricas_resumen) y una nota legible. Capacidad
         # opcional de la fuente: muestra y dobles de test no la exponen (sin nota).
@@ -89,8 +89,8 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             )
         # delta de engagement en PUNTOS. Misma clave que historico.variacion y
         # variacion_vs_anterior del esquema: una sola convencion en todo el MCP.
-        # Si alguno de los engagement es None (no comparable entre plataformas,
-        # #138) no hay delta defendible: se omite la clave.
+        # Si alguno de los engagement es None (no comparable entre plataformas)
+        # no hay delta defendible: se omite la clave.
         if a.engagement_pct is not None and b.engagement_pct is not None:
             diferencia["engagement_pct"] = round(a.engagement_pct - b.engagement_pct, 1)
 

@@ -100,7 +100,7 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
         return None
     # Las plantillas EN ROTACIÓN mandan sobre la por defecto: si la marca tiene alguna marcada
     # (`rotar`, activa), el default es la primera de ellas (orden estable de la galería), nunca una
-    # de fuera. Sin rotación marcada, cae al comportamiento de siempre (Placa de marca / la primera).
+    # de fuera. Sin rotación marcada, cae al comportamiento por defecto (Placa de marca / la primera).
     en_rotacion = [p for p in plantillas if p.get("rotar") and p.get("activo")]
     if en_rotacion:
         return en_rotacion[0]

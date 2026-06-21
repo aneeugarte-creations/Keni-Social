@@ -484,8 +484,7 @@ function FilaPieza({
   ].filter(Boolean);
 
   // Modelo item-first: click izquierdo sobre la fila abre el detalle (primaria); el
-  // resto vive en el menú (click derecho · long-press · teclado). "Abrir en la red"
-  // —antes un icono suelto— pasa al menú.
+  // resto vive en el menú (click derecho · long-press · teclado), incluido "Abrir en la red".
   const acciones: EntradaMenuContextual[] = [];
   const urlPieza = pieza.url;
   if (urlPieza) {

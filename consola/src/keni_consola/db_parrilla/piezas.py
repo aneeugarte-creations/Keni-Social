@@ -5,7 +5,7 @@ from ..tiempo import ahora_iso
 from ._comun import ESTADOS_PIEZA_PARRILLA, Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
-# Piezas de la parrilla (#150, PARRILLA 2026.xlsx)                              #
+# Piezas de la parrilla (PARRILLA 2026.xlsx)                                  #
 # --------------------------------------------------------------------------- #
 #
 # En el Excel de Tescu cada FILA es un POST INDIVIDUAL, no un evento. Una transmision

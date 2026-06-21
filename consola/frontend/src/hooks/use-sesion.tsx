@@ -28,7 +28,7 @@ export function marcarSesionExpirada(): void {
  * `iniciarSesion` delega en `POST /api/auth/login` (el backend pone la cookie de
  * sesión); con la respuesta guardamos el usuario. `cerrarSesion` hace logout y
  * limpia el estado. La autenticación va por cookie; las mutaciones siguen
- * mandando las cabeceras de auth que ya añade `api.ts` (#134).
+ * mandando las cabeceras de auth que ya añade `api.ts`.
  */
 export function SesionProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = React.useState<UsuarioSesion | null>(null);

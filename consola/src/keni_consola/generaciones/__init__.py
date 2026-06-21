@@ -3,22 +3,22 @@
 TODA generacion de IA de la consola (copy desde nota, copy desde RSS, hashtags,
 imagen) corre como un TRABAJO en segundo plano en vez de bloquear la peticion HTTP:
 
-  1. El endpoint valida, crea un registro `{estado: "ejecutando"}` y ENCOLA el trabajo
-     (#130 Fase 2): persiste un `spec` serializable en la cola (`cola.py`/tabla `jobs`).
+  1. El endpoint valida, crea un registro `{estado: "ejecutando"}` y ENCOLA el trabajo:
+     persiste un `spec` serializable en la cola (`cola.py`/tabla `jobs`).
   2. El POST responde de INMEDIATO con el registro (no bloquea, no hay timeout de 180 s
      en la peticion). El trabajo sigue aunque el usuario cambie de pestana o de pagina.
   3. Un WORKER (in-proceso en local, servicio aparte en hosted; ver `worker.py`) CLAVA el
      job, reconstruye prompt+post-procesado desde el `spec` y corre `claude -p` con el
-     runner de `lanzar_job_claude` (mismo #137: grupo de procesos, kill del arbol, tope de
+     runner de `lanzar_job_claude` (grupo de procesos, kill del arbol, tope de
      cola, cancelacion). El hilo avanza el registro de forma incremental y ATOMICA: persiste
      el TEXTO en vivo (stream token a token con `--include-partial-messages`) + metricas
      parciales. Al terminar fija el estado terminal (`completado` con el `resultado` ya
      procesado, o `error`).
   4. El frontend SONDEA `GET /api/generaciones/{id}` hasta el estado terminal.
 
-DESACOPLO (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el
+DESACOPLO (ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el
 WORKER EJECUTA (`lanzar_job_claude`). `lanzar_job_claude` NO desaparece: es la primitiva de
-ejecucion del worker (con todo el #137). En el perfil LOCAL el worker corre en un hilo del
+ejecucion del worker. En el perfil LOCAL el worker corre en un hilo del
 propio back (UX de una sola maquina intacta, sin servicio aparte); en HOSTED corre en un
 contenedor `worker` que SI tiene `claude` (la imagen del back ya no lleva Node).
 
@@ -39,7 +39,7 @@ red (NUNCA se llama a `claude` ni a un proveedor de imagen real en tests). El
 SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se repara contra
 traversal al leer; sin shell (argv como lista). Errores en espanol, sin tracebacks.
 
-ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo— con el
+ENDURECIMIENTO PERMANENTE: la generacion se hace —y se SEGUIRA haciendo— con el
 subprocess `claude -p` (ahora en sandbox por usuario; ver ADR 0001), NO con la API de
 Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE:
   - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`)
@@ -50,7 +50,7 @@ Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE
   - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado; el usuario
     la dispara desde la SPA (`POST /api/generaciones/{id}/cancelar`).
   - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN correlacionados por job-id (y
-    por el request-id de la peticion que lo lanzo, #123), ya no se silencian en mudo.
+    por el request-id de la peticion que lo lanzo), ya no se silencian en mudo.
 
 """
 

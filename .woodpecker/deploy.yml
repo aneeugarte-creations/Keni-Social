@@ -41,19 +41,18 @@ steps:
     commands:
       - apk add --no-cache docker-cli-compose rsync flock
       # Sincroniza el checkout al dir estable (preserva .env/.git/venv/node_modules).
-      # `--delete`: los ficheros BORRADOS en git deben desaparecer del dir estable; sin él se
-      # quedaban sueltos y rompían el build (p.ej. un .tsx eliminado seguía ahí y `tsc -b` lo
-      # compilaba -> fallo del deploy) y se acumulaba basura (bundles viejos en webapp/assets).
+      # `--delete`: los ficheros BORRADOS en git deben desaparecer del dir estable; sin él
+      # quedan sueltos (un .tsx eliminado que `tsc -b` seguiría compilando -> fallo del deploy)
+      # y se acumula basura (bundles viejos en webapp/assets).
       # Los excludes PROTEGEN del borrado el estado host-only: secretos (`deploy/.env*`,
       # `deploy/woodpecker/.env`), repos/artefactos (.git, node_modules, .venv*, .ruff_cache,
       # __pycache__) y un worktree de trabajo en el host (`.claude`). Validado con --dry-run:
       # borra solo ficheros sueltos/artefactos, ningún .env.
-      # SERIALIZACION de deploys (audit nocturno 2026-06-10): el agente corre hasta
-      # WOODPECKER_MAX_WORKFLOWS=3 pipelines A LA VEZ, y dos pushes seguidos a main hacian
-      # solaparse dos deploys: el rsync de B MUTA las fuentes del dir estable mientras A
-      # construye (hash/imagen inconsistentes) y el `up -d` de B recrea contenedores
-      # mientras A espera salud -> rollback/pipeline rojo ESPURIO con prod sano (visto 2x
-      # esta noche). `flock` sobre un lockfile del dir estable (mismo fichero de HOST para
+      # SERIALIZACION de deploys: el agente corre hasta WOODPECKER_MAX_WORKFLOWS=3 pipelines
+      # A LA VEZ, y dos pushes seguidos a main solapan dos deploys: el rsync de B MUTA las
+      # fuentes del dir estable mientras A construye (hash/imagen inconsistentes) y el `up -d`
+      # de B recrea contenedores mientras A espera salud -> rollback/pipeline rojo ESPURIO con
+      # prod sano. `flock` sobre un lockfile del dir estable (mismo fichero de HOST para
       # todos los steps concurrentes) serializa rsync+deploy como una unidad; espera hasta
       # 30 min su turno (cola de la noche) y falla claro si no lo consigue. El lockfile
       # va EXCLUIDO del rsync --delete: borrarlo mientras está en uso rompe la semantica de flock

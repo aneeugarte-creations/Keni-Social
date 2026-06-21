@@ -128,7 +128,7 @@ def test_bootstrap_admin_idempotente(pg, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Cola de jobs sobre Postgres (#130 Fase 2): claim FOR UPDATE SKIP LOCKED      #
+# Cola de jobs sobre Postgres: claim FOR UPDATE SKIP LOCKED                    #
 # --------------------------------------------------------------------------- #
 
 

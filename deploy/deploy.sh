@@ -298,10 +298,10 @@ espera_sano_cid() {  # $1 = container id ; $2 = timeout(s)
 
 # BLUE-GREEN del back. Devuelve 0 si el back NUEVO quedó sano y el VIEJO fue retirado; 1 si el
 # NUEVO nunca llegó a sano (en ese caso ya retiró el NUEVO y dejó el VIEJO sirviendo — sin
-# downtime). CLAVE (root-cause del incidente #1775): los contenedores se RETIRAN POR IDENTIDAD
-# (`docker rm -f <id>`), nunca por índice de `--scale`. Con imágenes MIXTAS, `--scale back=1`
-# CONSERVA el que casa la spec deseada (el NUEVO) y borra el otro: en el camino de fallo eso
-# mataba al VIEJO sano. Aquí capturamos el id del VIEJO ANTES de escalar y elegimos a mano.
+# downtime). CLAVE: los contenedores se RETIRAN POR IDENTIDAD (`docker rm -f <id>`), nunca por
+# índice de `--scale`. Con imágenes MIXTAS, `--scale back=1` CONSERVA el que casa la spec
+# deseada (el NUEVO) y borra el otro, lo que en el camino de fallo retiraría al VIEJO sano.
+# Aquí capturamos el id del VIEJO ANTES de escalar y elegimos a mano.
 rodar_back() {
   OLD_IDS="$($DC ps -q back 2>/dev/null || true)"
   if [ -z "$OLD_IDS" ]; then
@@ -378,12 +378,10 @@ else
   echo "==> [6/6] verificacion de salud (back, front, daemons, worker) con rollback automatico"
   # back: healthcheck del Dockerfile = curl /healthz (start_period 120s, interval 30s). El
   # plazo de espera DEBE superar ese start_period + el tiempo de bind de los 2 workers bajo
-  # la carga de varios pipelines de CI a la vez; 300s da margen (180s se quedaba justo y
-  # rollbackeaba con el back a punto de quedar sano).
+  # la carga de varios pipelines de CI a la vez; 300s da margen.
   # daemons: healthcheck por fichero de latido (compose; el proceso lo toca cada 30s).
   # worker: healthcheck por escaneo de /proc (compose). Ambos son imagenes NUESTRAS con
-  # foto :previa, asi que un fallo suyo tambien debe disparar el rollback (antes solo se
-  # verificaban back/front y un daemons/worker roto pasaba en verde).
+  # foto :previa, asi que un fallo suyo tambien debe disparar el rollback.
   # worker-dev / worker-ralph: imagenes NUESTRAS (misma tag WORKER_VERSION), asi que un fallo
   # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
   if espera_sano back 300 && espera_sano front 120 \
@@ -412,10 +410,9 @@ else
     export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION
     $DC up -d || true
     $DC ps || true
-    # RE-VERIFICA que la foto :previa SÍ levanta sana. Antes el rollback hacía `up` y salía
-    # rojo SIN comprobar nada: si la :previa tampoco arrancaba (carga, secreto, schema), prod
-    # quedaba CAÍDO en silencio (Traefik no enruta un back no sano) y nadie se enteraba hasta
-    # que un humano miraba. Ahora se distingue «rollback recuperó» de «rollback TAMPOCO levantó».
+    # RE-VERIFICA que la foto :previa SÍ levanta sana, para distinguir «rollback recuperó» de
+    # «rollback TAMPOCO levantó»: si la :previa tampoco arranca (carga, secreto, schema), prod
+    # queda CAÍDO (Traefik no enruta un back no sano) y hay que avisar, no salir en falso verde.
     if espera_sano back 180 && espera_sano front 120; then
       printf '\033[31m==> ROLLBACK aplicado y VERIFICADO (back+front sanos en :previa). Deploy EN ROJO: revisa por qué la nueva imagen no arrancó (docker logs keni-social-back-1).\033[0m\n' >&2
     else

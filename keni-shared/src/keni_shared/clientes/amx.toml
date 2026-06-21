@@ -1,9 +1,8 @@
 # Paquete de CLIENTE: AMX Contenido (UnoTV / Claro Sports) — el cliente del piloto.
 #
-# Este fichero EXTERNALIZA a configuracion las marcas y cuentas que antes estaban
-# hardcodeadas en la capa base (`marcas.py` / `cuentas.py`). Es el cliente POR
-# DEFECTO: si no se selecciona otro (env `KENI_CLIENTE` / `KENI_CLIENTE_CONFIG`),
-# `keni_shared` carga este, asi que el comportamiento historico no cambia.
+# Este fichero define en configuracion las marcas y cuentas del cliente. Es el
+# cliente POR DEFECTO: si no se selecciona otro (env `KENI_CLIENTE` /
+# `KENI_CLIENTE_CONFIG`), `keni_shared` carga este.
 #
 # ANADIR UN CLIENTE NUEVO = anadir otro `.toml` en este directorio (o apuntar
 # `KENI_CLIENTE_CONFIG` a uno propio) con la misma forma; NO hay que tocar codigo.

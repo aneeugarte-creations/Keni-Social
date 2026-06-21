@@ -1,6 +1,6 @@
 """Dominio verificación EDITORIAL: parseo del informe de revisión de copy (PURO, sin HTTP).
 
-Extraido de `api/verificar_fuente.py` para que el WORKER de generacion (#130 Fase 2) reconstruya
+Extraido de `api/verificar_fuente.py` para que el WORKER de generacion reconstruya
 el post-procesado de un job de verificación SIN importar de `api/` (corre fuera del proceso del back).
 `api/verificar_fuente.py` reexporta estas funciones, asi que su contrato HTTP no cambia.
 

@@ -76,7 +76,7 @@ def _es_admin(request: Request) -> bool:
     """True si la peticion la hace un admin o entro por el token de bootstrap.
 
     Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), compartido
-    con `/api/conexiones` y `/api/usuarios` (#153). Mismo contrato que antes.
+    con `/api/conexiones` y `/api/usuarios`. Mismo contrato que antes.
     """
     return permisos.es_admin(request)
 
@@ -128,7 +128,7 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
         "hora": evento["hora"],
         "contenido": evento["contenido"],
         "nota": evento["nota"],
-        # Ola B (#144): cobertura, prioridad y seguimiento de reprogramaciones.
+        # Cobertura, prioridad y seguimiento de reprogramaciones.
         "tipo_cobertura": evento.get("tipo_cobertura", "transmision"),
         "prioridad": evento.get("prioridad", "media"),
         "cambiado": bool(evento.get("cambiado")),

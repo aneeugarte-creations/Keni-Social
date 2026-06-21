@@ -2,10 +2,10 @@
 
 Si la BD no tiene usuarios, crea un `admin` con la contrasena de
 `KENI_CONSOLA_ADMIN_PASS`. SIN esa env NO se crea nada (y, sobre todo, NUNCA se loguea
-una contrasena: antes se generaba una aleatoria y se MOSTRABA en el log, dejando una
-credencial valida en claro en los logs del contenedor/CI — hardening 2026-06). El camino
+una contrasena: no se genera ninguna credencial aleatoria que pudiera acabar en claro
+en los logs del contenedor/CI). El camino
 de recuperacion sin env sigue existiendo: con la BD vacia, el TOKEN de mantenimiento
-puede crear el primer admin via POST /api/usuarios (ver `api/usuarios`, #150).
+puede crear el primer admin via POST /api/usuarios (ver `api/usuarios`).
 El admin nace con `debe_cambiar_password=True`: debe cambiarla al primer acceso.
 """
 
@@ -44,11 +44,11 @@ def bootstrap_admin() -> None:
 
     Usuario desde `KENI_CONSOLA_ADMIN_USER` (def "admin"). Contrasena desde
     `KENI_CONSOLA_ADMIN_PASS`. SIN esa env NO se crea el admin y NO se loguea ninguna
-    contrasena (una credencial valida en el log del contenedor sobrevive en `docker logs`/
-    agregadores; era el hallazgo del audit 2026-06). En hosted (detras de TLS,
+    contrasena (una credencial valida en el log del contenedor sobreviviria en `docker logs`/
+    agregadores). En hosted (detras de TLS,
     `KENI_CONSOLA_HTTPS=1`) la ausencia es un ERROR de configuracion; en local, un aviso
     con los dos caminos: fijar la env, o crear el primer admin con el token de
-    mantenimiento (POST /api/usuarios con la BD vacia, #150).
+    mantenimiento (POST /api/usuarios con la BD vacia).
     El admin nace con `debe_cambiar_password=True` (debe cambiarla al primer login).
     """
     if hay_usuarios():

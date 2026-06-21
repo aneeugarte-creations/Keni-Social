@@ -1,4 +1,4 @@
-"""Tests del ENDURECIMIENTO de auth tras la revisión de seguridad (#130).
+"""Tests del ENDURECIMIENTO de auth tras la revisión de seguridad.
 
 Cubre los tres must-fix:
   1. Cambiar/resetear la contraseña invalida TODAS las sesiones del usuario (sesión
@@ -66,7 +66,7 @@ def test_reset_de_admin_expulsa_la_sesion_del_objetivo(entorno):
     assert _login(ce, "leo", CLAVE).status_code == 200
     leo_id = auth.autenticar("leo", CLAVE)["id"]
 
-    # El admin REAL (sesion) resetea la contraseña de leo (#150: el token ya no es admin).
+    # El admin REAL (sesion) resetea la contraseña de leo (el token ya no es admin).
     cadmin = _cli()
     assert _login(cadmin, "jefa", CLAVE).status_code == 200
     r = cadmin.patch(f"/api/usuarios/{leo_id}", json={"password": CLAVE_NUEVA}, headers=_ORIGIN)
@@ -108,7 +108,7 @@ def test_token_de_mantenimiento_no_esta_sujeto_a_debe_cambiar(entorno):
     # El gate `debe_cambiar_password` es de un USUARIO de sesion; el token de mantenimiento
     # no tiene usuario, asi que no le aplica. Probamos con una ruta /api normal (no admin):
     # el token la pasa aunque exista una cuenta con el flag activo (no hay "admin fantasma",
-    # #150: el token NO toca /api/usuarios, eso ya es 403 — ver test_auth.py).
+    # el token NO toca /api/usuarios, eso ya es 403 — ver test_auth.py).
     auth.crear_usuario("nueva", CLAVE, "admin", debe_cambiar_password=True)
     assert _cli().get("/api/estado", headers=_ADMIN_TOKEN).status_code == 200
 
@@ -125,7 +125,7 @@ def test_login_rechaza_password_gigante_sin_hashear(entorno):
 
 
 def test_crear_usuario_rechaza_password_y_nombre_gigantes(entorno):
-    # #150: la gestion de usuarios exige un superadmin REAL (el token ya no es admin), asi que
+    # La gestion de usuarios exige un superadmin REAL (el token ya no es admin), asi que
     # creamos un superadmin y entramos por sesion para probar la validacion de tamano.
     auth.crear_usuario("jefa", CLAVE, "admin", superadmin=True)
     c = _cli()

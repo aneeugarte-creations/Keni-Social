@@ -98,9 +98,9 @@ _RED_METRICOOL: dict[Plataforma, str] = {
 # Campo de `/admin/simpleProfiles` -> Plataforma de keni. Un valor "truthy" en ese
 # campo del perfil (id de la página/usuario de la red) significa que la marca TIENE esa
 # red CONECTADA en Metricool. Permite distinguir "no conectada" (la marca no la tiene
-# dada de alta) de "conectada pero sin datos en el rango": antes ambas caían en el mismo
-# "error" engañoso. Confirmado contra la cuenta real del piloto (X no está conectada en
-# ninguna marca; YouTube solo en Claro Sports).
+# dada de alta) de "conectada pero sin datos en el rango", que de otro modo caerían en el
+# mismo "error" engañoso. Confirmado contra la cuenta real del piloto (X no está conectada
+# en ninguna marca; YouTube solo en Claro Sports).
 _PERFIL_RED: dict[str, Plataforma] = {
     "facebook": Plataforma.facebook,
     "instagram": Plataforma.instagram,
@@ -225,8 +225,8 @@ _RE_SHORTCODE_IG = re.compile(r"/(?:p|reel)/([^/?#]+)")
 # sufijo `pageId_storyId` del `postId` de analítica.
 _RE_STORY_FB = re.compile(r"/posts/(\d+)")
 # Metricool sirve los Reels de Facebook/Instagram en un endpoint APARTE de `/posts`;
-# `/posts/{network}` NO los incluye. Sin esto, todo el contenido en VÍDEO vertical
-# (lo que más cross-postea un medio) quedaba invisible: solo se veían en TikTok. La
+# `/posts/{network}` NO los incluye. Sin este endpoint aparte, todo el contenido en VÍDEO
+# vertical (lo que más cross-postea un medio) quedaría invisible: solo se vería en TikTok. La
 # FORMA del reel difiere de un post y entre redes (confirmado contra la API real):
 #   - Instagram: reelId, content (caption), publishedAt, views, impressionsTotal,
 #                interactions, likes/comments/shares/saved, url, averageWatchTime.

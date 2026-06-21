@@ -1,4 +1,4 @@
-"""API Rota · solicitudes de cambio de turno entre companeros (#175)."""
+"""API Rota · solicitudes de cambio de turno entre companeros."""
 from __future__ import annotations
 
 from typing import Any
@@ -70,7 +70,7 @@ def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any
         # GRID POR MARCA: la rejilla del swap (la UI la etiqueta en "Todas").
         "marca": swap.get("marca", "") or "",
         "marca_nombre": marcas.etiqueta_de(swap["marca"]) if swap.get("marca") else "",
-        # VERBO del cambio (#175): intercambio|cesion|abierto.
+        # VERBO del cambio: intercambio|cesion|abierto.
         "tipo": swap.get("tipo", "intercambio") or "intercambio",
     }
 

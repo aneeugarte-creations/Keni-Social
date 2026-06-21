@@ -47,7 +47,7 @@ _FOTOS = [
 
 
 # --------------------------------------------------------------------------- #
-# Regresión de oro: inicial sin editar => composición byte-idéntica a la previa #
+# Oro: inicial sin editar => composición byte-idéntica a la de referencia      #
 # --------------------------------------------------------------------------- #
 
 

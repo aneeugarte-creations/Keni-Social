@@ -247,10 +247,10 @@ export function Lienzo({
     const c = documento.capas.find((x) => x.id === id);
     return !!c && RATIO_FIJO.has(c.tipo);
   });
-  // El grupo solo se mueve (resize/rotación se hacen desagrupando). Se mira TODA la selección:
-  // antes solo la primaria, y un grupo colado en una multi-selección sí recibía escala/rotación
-  // del Transformer — que su nodo (sin onTransformEnd) jamás horneaba en el documento: transform
-  // fantasma que el export ignoraba y la recarga revertía.
+  // El grupo solo se mueve (resize/rotación se hacen desagrupando). Se mira TODA la selección
+  // (no solo la primaria): un grupo colado en una multi-selección recibiría escala/rotación del
+  // Transformer que su nodo (sin onTransformEnd) jamás hornearía en el documento — transform
+  // fantasma que el export ignora y la recarga revierte.
   const hayGrupo = seleccionMulti.some((id) => documento.capas.find((c) => c.id === id)?.tipo === "grupo");
   // Una IMAGEN sola y no bloqueada gana además los 4 tiradores LATERALES (recorte desde ese borde,
   // estilo Canva; ver `iniciarGestoLateral`). Las esquinas siguen escalando proporcional.

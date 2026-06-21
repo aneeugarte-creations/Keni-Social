@@ -1,4 +1,4 @@
-"""API Rota · catálogo de programas evergreen (#150, PARRILLA 2026.xlsx)."""
+"""API Rota · catálogo de programas evergreen (PARRILLA 2026.xlsx)."""
 from __future__ import annotations
 
 from typing import Any

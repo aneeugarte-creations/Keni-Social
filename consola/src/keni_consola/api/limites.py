@@ -4,7 +4,7 @@
 
 El frontend lo consume para hidratar `META_REDES` (en vez de hardcodear los
 topes en `meta.ts`); asi el unico lugar donde se editan los limites es el backend
-(`limites_plataforma.LIMITES`, de donde tambien los toma `redes.py`). Ver #112.
+(`limites_plataforma.LIMITES`, de donde tambien los toma `redes.py`).
 
 Solo lectura, sin estado: devuelve datos puros del catalogo de redes + su tope.
 """

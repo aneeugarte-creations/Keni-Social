@@ -444,7 +444,7 @@ def escribir_config_atomico(ruta: Path, datos: dict, cabecera: str = CABECERA) -
     archivo a medias: se escribe a un temporal en el mismo dir y luego se renombra.
 
     La escritura atomica se delega en `keni_shared.io_atomico.escribir_atomico`
-    (H3/E1: fuente UNICA del patron, antes copiado aqui y en ~10 modulos de la
+    (fuente UNICA del patron, antes copiado aqui y en ~10 modulos de la
     consola). Este modulo sigue siendo dueno del FORMATO (cabecera + TOML) y de los
     permisos 0600 del config local de credenciales.
     """

@@ -1,4 +1,4 @@
-# Cliente de EJEMPLO solo para tests (#135): demuestra que anadir un cliente nuevo es
+# Cliente de EJEMPLO solo para tests: demuestra que anadir un cliente nuevo es
 # anadir/seleccionar un `.toml`, SIN tocar la capa base. Marcas y cuentas distintas a
 # las de AMX, para verificar que el catalogo cambia con la configuracion.
 id = "demo"

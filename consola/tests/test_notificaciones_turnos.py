@@ -1,4 +1,4 @@
-"""Notificaciones in-app del ciclo de vida de un CAMBIO DE TURNO (swap, #175).
+"""Notificaciones in-app del ciclo de vida de un CAMBIO DE TURNO (swap).
 
 Cada transicion del swap deja una notificacion en el "cajon" de la campana del
 destinatario correcto (best-effort, sin tumbar la accion). Reusa los fixtures del test

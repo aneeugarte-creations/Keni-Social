@@ -114,7 +114,7 @@ def test_barrido_postproxy_sin_creds_degrada(entorno, monkeypatch):
 
 
 def test_barrido_metricool_por_defecto_no_toca_postproxy(entorno, monkeypatch):
-    """canal=metricool (default): enruta a Metricool, NO toca Postproxy (regresión)."""
+    """canal=metricool (default): enruta a Metricool, NO toca Postproxy."""
     monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
     pub = _pub_programada(red="x", contenido="Tweet MC")
 

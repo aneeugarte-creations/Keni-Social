@@ -297,8 +297,7 @@ def instruccion_copy_unico(
 
     El ESQUELETO del texto vive en la Prompts (`PROMPT_ENVOLTORIO_COPY_UNICO`); la rama
     elegida (doble/única, con/sin carrusel) la decide el código y va ya montada en
-    `{{VERSIONES}}`/`{{CIERRE_JSON}}`. La composición resultante es byte-idéntica a la
-    versión hardcodeada previa."""
+    `{{VERSIONES}}`/`{{CIERRE_JSON}}`."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
     estrechas = [
         r for r in redes_ids
@@ -308,8 +307,7 @@ def instruccion_copy_unico(
     # TODA generación de copy SUGIERE el formato (`tipo`: post|carrusel). Con 2+ notas, el bloque
     # PANEL pide además los slides + catálogo de fotos (carrusel multi-historia REAL); con un tema
     # único, la sugerencia simple (post vs carrusel) basta —las fotos se ponen después—. El prefijo
-    # (copy_in + tipo) es común; solo cambia el bloque que se anexa, así el caso 2+ notas queda
-    # byte-idéntico al de antes.
+    # (copy_in + tipo) es común; solo cambia el bloque que se anexa según el número de notas.
     cierre_json_copy_in = (
         '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
         '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
@@ -403,9 +401,7 @@ def componer(
     # marca (cuerpo del prompt + instrucciones fijas + editorial de la marca) va ANTES; lo
     # VARIABLE por lanzamiento (la instrucción de redes, que cambia con las redes pedidas, y
     # la nota/transcripción del CONTEXTO) va AL FINAL. Así dos copies de la misma marca
-    # comparten el prefijo y el proveedor puede cachearlo (antes `instruccion_redes` iba
-    # ANTES del bloque editorial y rompía el prefijo común). El contenido del prompt es el
-    # mismo; solo cambia el orden de los bloques.
+    # comparten el prefijo y el proveedor puede cachearlo.
     partes: list[str] = [cuerpo_prompt.strip()]
     if adjuntos:
         # MODELO DE PIEZA (rediseno de la Prompts): los pipelines inyectan la
@@ -430,8 +426,7 @@ def componer(
         # marca el día entero), a diferencia de la instrucción de redes —que VARÍA por tema
         # cuando hay carrusel (catálogo de fotos/`n_notas`)— y del CONTEXTO (cambia por
         # lanzamiento). Por eso van en el PREFIJO estable, ANTES de redes y del contexto: así el
-        # prefijo byte-idéntico por marca llega lo más lejos posible. (Antes iban tras `redes`,
-        # lo que rompía el prefijo en los temas de carrusel; el cambio sólo reordena bloques.)
+        # prefijo byte-idéntico por marca llega lo más lejos posible.
         partes.append("---\n" + indicaciones.strip())
     if redes_ids:
         partes.append(
@@ -511,8 +506,7 @@ def lanzar(
         "marca": marca,
         "etiqueta": f"{titulo} · {nombre_marca(marca)}",
         # Correlación con el TEMA del tablero/pipeline (cuando el trabajo nace de uno): el
-        # feed de Producción suma por `publicacion_id` las métricas de la run. Antes solo
-        # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
+        # feed de Producción suma por `publicacion_id` las métricas de la run.
         "publicacion_id": publicacion_id or "",
         # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
         # copy/arte/manual). La verificación verificación de la fuente lo pasa "investigacion" (motor de noticias).
@@ -566,7 +560,7 @@ def lanzar(
         raise
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos el error en el registro
         # No propagamos (el usuario ve el error reflejado en el registro), pero dejamos
-        # rastro con traceback: antes este fallo al ENCOLAR quedaba completamente mudo.
+        # rastro con traceback para no perder el motivo del fallo al ENCOLAR.
         _log.exception("no se pudo iniciar la generación gen=%s", gen.get("id"))
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)

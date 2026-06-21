@@ -47,9 +47,8 @@ export interface ItemTabHub {
 //   - FUENTES: ajustes de TODOS los canales que alimentan Noticias y Publicaciones
 //     (RSS, buzones, agentes de investigación, eventos/programas, cajón evergreen,
 //     agencias, Trends). Cada fuente declara si alimenta Noticias o Publicaciones.
-// (Termómetro, Cajones, Eventos, Agentes y Cobertura siguen vivos como rutas
-// durante la transición, pero ya NO son pestañas de la subnav; se fusionarán y
-// redirigirán en fases posteriores. Algoritmos pasó a la Texto.)
+// (Termómetro, Cajones, Eventos, Agentes y Cobertura son rutas alcanzables pero
+// NO pestañas de la subnav. Algoritmos vive en la sección Texto.)
 export const TABS_INVESTIGACION: ItemTabHub[] = [
   // `end: true`: comparte prefijo con `/contenidos` y `/fuentes`, así que el tab
   // raíz (Noticias) solo se marca activo en la coincidencia exacta del índice.

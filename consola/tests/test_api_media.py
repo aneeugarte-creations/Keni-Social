@@ -473,7 +473,7 @@ def test_modelo_almacen_vacio_cae_al_env(monkeypatch, entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Seguridad: follow_redirects=False en _proveedor_openrouter (#117)           #
+# Seguridad: follow_redirects=False en _proveedor_openrouter                  #
 # --------------------------------------------------------------------------- #
 
 

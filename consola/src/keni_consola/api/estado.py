@@ -1,7 +1,7 @@
 """API Estado: autodiagnostico del sistema en JSON (el DOCTOR de la consola).
 
 Chequeos en una sola respuesta, todos calculados AQUI sobre las sondas reales del
-sistema (consolidacion del viejo banner del front + conexion de metricas):
+sistema (consolida las sondas del banner del front + conexion de metricas):
 
   - MAQUINA de contenido (`maquina:*`, admin=False): cola de generacion, presupuesto
     de IA, kill switch y daemons de fondo. Reusan las sondas compartidas de

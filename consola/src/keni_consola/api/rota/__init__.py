@@ -1,11 +1,10 @@
 """API Rota: parrilla y horarios del equipo (paquete por áreas).
 
-Refactor de pura reubicación (sin cambio de comportamiento): el antiguo módulo
-`api/rota.py` (~3090 LOC) se troceó en submódulos por área funcional. El descubridor
-de `api/__init__.py` (`pkgutil.iter_modules`) NO desciende dentro de subpaquetes, así
-que la ÚNICA superficie pública sigue siendo la variable `RUTAS` que este `__init__`
-ensambla con EXACTAMENTE las mismas rutas, métodos y ORDEN que antes (el orden importa
-en Starlette para paths solapados: las rutas de lote van ANTES que las paramétricas).
+Paquete dividido en submódulos por área funcional. El descubridor de `api/__init__.py`
+(`pkgutil.iter_modules`) NO desciende dentro de subpaquetes, así que la ÚNICA superficie
+pública es la variable `RUTAS` que este `__init__` ensambla con todas las rutas, métodos
+y ORDEN (el orden importa en Starlette para paths solapados: las rutas de lote van ANTES
+que las paramétricas).
 
   - `_comun.py`    : helpers compartidos (identidad/equipo, marca, serialización, fechas).
   - `eventos.py`   : equipo + CRUD de eventos/transmisiones + duplicar.
@@ -14,9 +13,9 @@ en Starlette para paths solapados: las rutas de lote van ANTES que las paramétr
   - `cobertura.py` : cobertura DERIVADA de un evento (no persistida).
   - `semana.py`    : copia de semana + panel de carga.
   - `export.py`    : exports .csv / .xlsx.
-  - `swaps.py`     : solicitudes de cambio de turno entre compañeros (#175).
-  - `programas.py` : catálogo de programas evergreen (#150).
-  - `franjas.py`   : config de franjas (#185), franjas por semana y coordinación por celda.
+  - `swaps.py`     : solicitudes de cambio de turno entre compañeros.
+  - `programas.py` : catálogo de programas evergreen.
+  - `franjas.py`   : config de franjas, franjas por semana y coordinación por celda.
 """
 
 from __future__ import annotations
@@ -197,16 +196,16 @@ RUTAS = [
     # Exports.
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),
     Route("/api/rota/export.xlsx", export_xlsx, methods=["GET"]),
-    # Piezas (#150 PARRILLA): RETIRADO del API. El tablero de contenido cubre la cobertura
+    # Piezas (PARRILLA): RETIRADO del API. El tablero de contenido cubre la cobertura
     # de eventos (`contenido` con `evento_id`/`flujo='evento'`); `migrar_piezas()` convierte
     # las piezas legadas al arrancar. La tabla `rota_piezas` y su capa db/dominio se
     # conservan (histórico + migración), pero NO se exponen por HTTP.
-    # Catálogo de programas evergreen (#150). Renombrar hace cascada sobre rota_piezas.
+    # Catálogo de programas evergreen. Renombrar hace cascada sobre rota_piezas.
     Route("/api/rota/programas", listar_programas, methods=["GET"]),
     Route("/api/rota/programas", crear_programa, methods=["POST"]),
     Route("/api/rota/programas/{programa_id}", actualizar_programa, methods=["PATCH"]),
     Route("/api/rota/programas/{programa_id}", borrar_programa, methods=["DELETE"]),
-    # Solicitudes de cambio de turno entre companeros (#175).
+    # Solicitudes de cambio de turno entre companeros.
     Route("/api/rota/swaps", listar_swaps, methods=["GET"]),
     Route("/api/rota/swaps", crear_swap, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/aceptar", aceptar_swap, methods=["POST"]),
@@ -214,7 +213,7 @@ RUTAS = [
     Route("/api/rota/swaps/{swap_id}/aprobar", aprobar_swap, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/rechazar-admin", rechazar_swap_admin, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/cancelar", cancelar_swap, methods=["POST"]),
-    # Configuración editorial de FRANJAS de cobertura (#185). GET libre; PATCH solo admin.
+    # Configuración editorial de FRANJAS de cobertura. GET libre; PATCH solo admin.
     Route("/api/rota/config/franjas", obtener_config_franjas, methods=["GET"]),
     Route("/api/rota/config/franjas", guardar_config_franjas, methods=["PATCH"]),
 ]

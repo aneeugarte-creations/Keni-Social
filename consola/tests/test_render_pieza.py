@@ -76,7 +76,7 @@ def test_imagen_bespoke_se_respeta(monkeypatch):
 def test_receta_viva_gana_a_imagen_vieja(monkeypatch):
     # Pieza NO publicada con receta (marca con plantilla de estudio por defecto) + un PNG viejo
     # horneado: la RECETA manda, se RECOMPONE vía `componer_desde_plantilla` (el feed refleja la
-    # plantilla actual, no la placa vieja). Es el bug del feed.
+    # plantilla actual, no la placa vieja).
     _sin_plantilla_de_marca(monkeypatch, True)
     monkeypatch.setattr(
         repos, "listar_plantillas_diseno",

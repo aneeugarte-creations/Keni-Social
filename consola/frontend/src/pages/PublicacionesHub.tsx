@@ -8,7 +8,7 @@
  * cabecera del hub.
  *
  * Fases posteriores fusionarán aquí el resto de superficies de contenido
- * evergreen; por ahora es un envoltorio fino para no perder función.
+ * evergreen; es un envoltorio fino sobre el banco existente.
  */
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";

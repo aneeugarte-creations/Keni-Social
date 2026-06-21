@@ -48,10 +48,10 @@ export const COLOR_PRIORIDAD: Record<PrioridadEvento, string> = {
 // CONVENCIÓN de fechas (la misma que lib/fecha.ts): un `YYYY-MM-DD` se ANCLA a mediodía
 // UTC (`anclar`) —así el día calendario no se desplaza en ninguna zona— y la aritmética
 // usa los getters/setters UTC. "Hoy"/el día de un instante real se resuelve en zona CDMX
-// (`diaCDMX`), no en la del navegador: antes se parseaba `T00:00:00` en zona LOCAL y un
-// navegador fuera de CDMX podía descuadrar la semana alrededor de la medianoche.
+// (`diaCDMX`), no en la del navegador: parsear `T00:00:00` en zona LOCAL descuadraría la
+// semana alrededor de la medianoche para un navegador fuera de CDMX.
 
-/** Ancla un `YYYY-MM-DD` a mediodía UTC (inválido → Date inválido, como antes). */
+/** Ancla un `YYYY-MM-DD` a mediodía UTC (inválido → Date inválido). */
 function anclar(fechaIso: string): Date {
   return new Date(`${fechaIso}T12:00:00Z`);
 }

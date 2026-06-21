@@ -19,7 +19,7 @@ COPY mcp-metricas/ ./mcp-metricas/
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     pip install ./keni-shared ./mcp-metricas
 
-# HARDENING: el MCP NO corre como root (mismo patron que back/worker, #130). El v1 es
+# HARDENING: el MCP NO corre como root (mismo patron que back/worker). El v1 es
 # SOLO lectura y arranca con la fuente `muestra`, asi que no necesita un volumen de estado;
 # le basta con /app (codigo, solo lectura en runtime) y un HOME propio. Mismo uid 10001
 # que back/worker para que los volumenes compartidos (si algun dia los hubiera) casen.

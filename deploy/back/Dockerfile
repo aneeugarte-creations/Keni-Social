@@ -1,6 +1,6 @@
 # Gateway de keni-social: API Starlette (`consola/`) + fallback del SPA.
 #
-# El back ENCOLA la generacion (#130 Fase 2 / ADR 0002 Fase B); ya NO ejecuta `claude -p`.
+# El back ENCOLA la generacion (ADR 0002 Fase B); ya NO ejecuta `claude -p`.
 # Por eso esta imagen NO lleva Node ni la CLI `claude` (eso vive ahora en la imagen del
 # servicio `worker`, ver deploy/worker/Dockerfile). La generacion sigue siendo `claude -p`
 # (ADR 0001): la corre el worker, no el back. El back arranca con KENI_WORKER_EXTERNO=1
@@ -43,8 +43,8 @@ COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
 # El extra [deck] (python-pptx + reportlab) habilita el reporte del lunes: la
-# Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API (#141).
-# Extras de persistencia HOSTED (#130): [postgres] (psycopg) y [s3] (boto3), porque en el
+# Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API.
+# Extras de persistencia HOSTED: [postgres] (psycopg) y [s3] (boto3), porque en el
 # back las vars DATABASE_URL/S3_* estan cableadas y db.py/almacen_media.py las consumen.
 # Cache de descargas/wheels de pip en un mount de BuildKit (NO viaja a la imagen): cuando un
 # cambio de fuente invalida esta capa, pip reutiliza los wheels ya bajados en vez de re-descargar
@@ -61,7 +61,7 @@ RUN RN="$(python -c 'import keni_consola, os; print(os.path.join(os.path.dirname
  && npm --prefix "$RN" ci --omit=dev \
  && npm cache clean --force
 
-# HARDENING (#130): el proceso NO corre como root. Creamos un usuario sin privilegios y le
+# HARDENING: el proceso NO corre como root. Creamos un usuario sin privilegios y le
 # damos /app (codigo, solo lectura en runtime) y /data (estado: SQLite, secretos 0600, media).
 # Crear y CHOWNear /data AQUI cubre el caso de un volumen NUEVO (Docker copia el contenido y
 # los permisos de este punto de montaje al inicializarlo). OJO con un volumen YA EXISTENTE
@@ -75,16 +75,15 @@ USER keni
 EXPOSE 8765
 VOLUME ["/data"]
 
-# Liveness por /healthz: 200 JSON barato, sin token ni BD, y SIN pasar por el
-# servido del SPA. Antes pegabamos a `/` (FileResponse + todo el middleware): bajo
-# carga del unico worker uvicorn podia tardar y fallar el chequeo, marcando el
-# contenedor "unhealthy". Como Traefik NO enruta a contenedores no-sanos, eso tiraba
-# el router `back` y los POST /api caian al nginx del front -> "405 Not Allowed".
+# Liveness por /healthz: 200 JSON barato, sin token ni BD, y SIN pasar por el servido del
+# SPA. Pegar a `/` arrastra FileResponse + todo el middleware, que bajo carga del unico
+# worker uvicorn puede tardar y fallar el chequeo, marcando el contenedor "unhealthy"; como
+# Traefik NO enruta a contenedores no-sanos, eso tiraria el router `back` y los POST /api
+# caerian al nginx del front -> "405 Not Allowed".
 # start-period AMPLIO (120s): durante un deploy el server corre hasta 3 pipelines de CI a
 # la vez (builds tsc/vite + pytest), y arrancar los 2 workers uvicorn bajo esa carga puede
-# tardar >>20s en ligar :8765. Con un start-period corto, esos fallos de arranque marcaban
-# el back "unhealthy", el sidecar autoheal lo REINICIABA a medio bootear, y nunca llegaba a
-# sano -> espera_sano del deploy expiraba -> rollback espurio con el codigo perfectamente OK.
+# tardar >>20s en ligar :8765; un start-period corto los marcaria "unhealthy" y dispararia
+# un rollback espurio con el codigo perfectamente OK.
 # start-interval (5s): durante el start-period se sondea cada 5s (no cada 30s), así el back se
 # marca `healthy` en cuanto liga :8765 y el deploy no espera al siguiente tick de 30s. Tras
 # quedar sano vuelve al interval de 30s normal. Solo adelanta la detección; nunca la retrasa.
@@ -92,7 +91,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=5s 
   CMD curl -fsS http://localhost:8765/healthz >/dev/null || exit 1
 
 # --factory: `crear_app()` resuelve token (KENI_CONSOLA_TOKEN) y bootstrapea el
-#   admin (#130) desde env. Bind 0.0.0.0 es seguro: el contenedor NO publica
+#   admin desde env. Bind 0.0.0.0 es seguro: el contenedor NO publica
 #   puertos al host; solo Traefik lo alcanza por la red interna de Docker.
 # --proxy-headers + --forwarded-allow-ips: confiar en las X-Forwarded-* SOLO desde la red
 #   privada Docker (172.16.0.0/12 cubre los rangos por defecto de bridge/compose), no desde

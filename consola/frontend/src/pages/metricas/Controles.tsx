@@ -156,8 +156,8 @@ export function SelectorTiempo({
       )}
 
       {modo === "mes" && (
-        // En móvil los dos selects comparten la fila a partes iguales (grid); en `sm+`
-        // vuelven a sus anchos naturales. Antes los 140px+100px fijos desbordaban la barra.
+        // En móvil los dos selects comparten la fila a partes iguales (grid) para no desbordar
+        // la barra; en `sm+` vuelven a sus anchos naturales (140px+100px).
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <Select value={String(mes)} onValueChange={(m) => onCambio(tokenMes(anio, Number(m)))}>
             <SelectTrigger className="h-8 w-full text-xs sm:w-[140px]" aria-label="Mes">

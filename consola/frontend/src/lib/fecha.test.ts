@@ -102,7 +102,7 @@ describe("hoyCDMX", () => {
       // 2026-06-05 03:30 UTC = 2026-06-04 21:30 CDMX: el día UTC ya es el 5, CDMX sigue en el 4.
       vi.setSystemTime(new Date("2026-06-05T03:30:00Z"));
       expect(hoyCDMX()).toBe("2026-06-04");
-      expect(new Date().toISOString().slice(0, 10)).toBe("2026-06-05"); // el bug que evita
+      expect(new Date().toISOString().slice(0, 10)).toBe("2026-06-05"); // el día UTC naíf sería el 5; hoyCDMX no
     } finally {
       vi.useRealTimers();
     }

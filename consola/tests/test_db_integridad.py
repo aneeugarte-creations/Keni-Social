@@ -179,12 +179,11 @@ def test_migracion_renombra_verificacion_fuente_legada(pg):
 
 
 def test_check_dropa_el_fosil_ck_contenido_de_la_tabla_renombrada(pg):
-    """Regresion (deploy hosted): `publicacion` se llamo `contenido`; al renombrar la tabla,
-    Postgres conserva el NOMBRE viejo de sus CHECK (`ck_contenido_verificacion_fuente`). La
-    migracion calculaba el nombre como `ck_{tabla}_{columna}` (`ck_publicacion_*`), asi que su
-    DROP no tocaba el fosil: este, con la allowlist VIEJA, rechazaba el valor renombrado
-    `requiere_humano` y tumbaba el deploy con CheckViolation. La migracion debe DROPear tambien
-    el fosil `ck_contenido_<col>` antes de renombrar los valores legados."""
+    """`publicacion` se llamo `contenido`; al renombrar la tabla, Postgres conserva el NOMBRE
+    viejo de sus CHECK (`ck_contenido_verificacion_fuente`). El nombre real es
+    `ck_{tabla_vieja}_{columna}`, no `ck_publicacion_*`, asi que la migracion DROPea tambien el
+    fosil `ck_contenido_<col>` antes de renombrar los valores legados; si no, ese CHECK con la
+    allowlist VIEJA rechaza el valor renombrado `requiere_humano` con CheckViolation."""
     from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
 
     c = db.crear_publicacion(titulo="fosil")
@@ -230,10 +229,9 @@ def test_checks_normalizan_valores_invalidos_preexistentes(pg):
 
 
 def test_check_normaliza_aunque_el_check_viejo_prohiba_el_default(pg):
-    """Regresion (colapso 2026-06): el CHECK heredado prohibia 'borrador' (el valor NUEVO de
-    normalizacion de plataforma). La migracion debe DROPear el CHECK viejo ANTES de normalizar;
-    si no, el UPDATE que escribe 'borrador' falla con CheckViolation sobre el constraint viejo
-    (lo que tumbaba el deploy en hosted)."""
+    """Un CHECK heredado que prohibe 'borrador' (el valor NUEVO de normalizacion de plataforma)
+    se DROPea ANTES de normalizar; si no, el UPDATE que escribe 'borrador' falla con
+    CheckViolation sobre el constraint viejo."""
     from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
 
     c = db.crear_publicacion(titulo="t")

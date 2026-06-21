@@ -12,7 +12,7 @@
  * GENERADOS desde el backend (`../types.gen`) y los tipos a mano repartidos por
  * dominio en ficheros hermanos (`./metricas`, `./piezas`, …).
  *
- * ── Tipos DERIVADOS del backend (#101 / H5/E6) ──────────────────────────────
+ * ── Tipos DERIVADOS del backend ─────────────────────────────────────────────
  * Un SUBCONJUNTO ESTABLE del contrato (estado, config, límites/redes, métricas y
  * las respuestas genéricas) ya NO se mantiene a mano: se GENERA desde el
  * backend (`keni_consola.esquema_api`) a `types.gen.ts` con `npm run gen:types`,

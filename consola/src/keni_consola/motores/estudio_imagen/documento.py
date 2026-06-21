@@ -170,7 +170,7 @@ def _base(c: dict[str, Any]) -> dict[str, Any]:
     if isinstance(nombre, str) and nombre.strip():
         base["nombre"] = nombre.strip()
     # `mezcla` (modo de fusión): solo se persiste si se aparta de "normal" (source-over), para que
-    # los documentos sin él validen y rindan idénticos a antes.
+    # los documentos sin él validen y se rindan en modo normal.
     mezcla = c.get("mezcla")
     if mezcla in _MEZCLAS and mezcla != "normal":
         base["mezcla"] = mezcla
@@ -493,10 +493,9 @@ def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
 
 
 def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:
-    # `alto_frac` (fracción 0..1 de la caja que ocupa la banda) se ACOTA en vez de rechazarse: el
-    # validador histórico aceptaba cualquier float (un `float()` a pelo), así que un rango estricto
-    # brickearía documentos ya guardados al re-validarlos. Lo no numérico sí lanza DocumentoError
-    # (400 en español) como el resto de campos — antes escapaba como ValueError crudo (500).
+    # `alto_frac` (fracción 0..1 de la caja que ocupa la banda) se ACOTA en vez de rechazarse para
+    # no brickear documentos ya guardados con un float fuera de rango al re-validarlos. Lo no
+    # numérico sí lanza DocumentoError (400 en español) como el resto de campos.
     alto_frac = _flotante(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC), "alto_frac", defecto=_spec._DEGRADADO_ALTO_FRAC)
     overlay = {
         **_base(c),

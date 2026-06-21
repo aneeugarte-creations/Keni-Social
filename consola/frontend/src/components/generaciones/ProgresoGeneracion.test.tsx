@@ -60,7 +60,7 @@ describe("ProgresoGeneracion", () => {
     expect(screen.getByText("Pensando…")).toBeInTheDocument();
   });
 
-  it("muestra el botón Cancelar mientras corre y dispara onCancelar (#137)", () => {
+  it("muestra el botón Cancelar mientras corre y dispara onCancelar", () => {
     let cancelaciones = 0;
     render(
       <ProgresoGeneracion

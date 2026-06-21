@@ -1,4 +1,4 @@
-"""WORKER de generacion: clava jobs de la cola y corre `claude -p` (#130 Fase 2 / ADR 0002 Fase B).
+"""WORKER de generacion: clava jobs de la cola y corre `claude -p` (ADR 0002 Fase B).
 
 DOS modos de ejecucion (se elige por entorno; ver `config.worker_externo`):
 
@@ -19,7 +19,7 @@ SU job (`_esperar_terminal`); el POOL da el paralelismo de N vias. Reclamar es c
 seguro (`FOR UPDATE SKIP LOCKED`: dos hilos nunca cogen el mismo job). El semaforo de
 `runner.slot` (BoundedSemaphore(max_jobs)) es un tope adicional al numero de procesos.
 
-POR QUE REUSA `generaciones.lanzar_job_claude`: ahi vive TODO el endurecimiento #137 que
+POR QUE REUSA `generaciones.lanzar_job_claude`: ahi vive TODO el endurecimiento que
 hay que PRESERVAR (grupo de procesos propio, kill del ARBOL al timeout/cancel, tope de
 concurrencia con `slot`, sin procesos sueltos, log correlacionado por job-id). El worker NO
 reimplementa nada de eso: clava el job, reconstruye prompt+post-procesado+cwd desde el
@@ -208,7 +208,7 @@ def _procesar_job_proceso(job_id: str, gen_id: str, spec: dict) -> None:
 
 
 def procesar_job(job: dict, worker_id: str = "") -> None:
-    """Ejecuta UN job ya clavado: reconstruye el trabajo y corre `claude -p` (con #137).
+    """Ejecuta UN job ya clavado: reconstruye el trabajo y corre `claude -p` (con el endurecimiento).
 
     `job` es `{id, gen_id, spec}` (spec ya deserializado, o None si estaba corrupto).
     Espera a que el registro alcance un estado TERMINAL antes de marcar el job terminado
@@ -271,7 +271,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     # (deploy) durante esta fase, el manejador de apagado lo marca interrumpido al instante.
     _marcar_job_en_curso({"id": job_id, "gen_id": gen_id})
     try:
-        # El runner real (con TODO el #137). `ya_admitido=True`: el cupo lo tomo el
+        # El runner real (con TODO el endurecimiento). `ya_admitido=True`: el cupo lo tomo el
         # encolado; `slot` lo libera al terminar el hilo del job. Esto arranca el hilo y
         # vuelve; esperamos al estado terminal del registro para marcar el job terminado.
         generaciones.lanzar_job_claude(

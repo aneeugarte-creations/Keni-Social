@@ -2,7 +2,7 @@
 #
 # Coordinación del trabajo del equipo: rota, pendientes, parrilla, programación y
 # aprobación. La PUBLICACIÓN REAL es una sub-capacidad que enciende con App Review;
-# rota/pendientes/parrilla entran ya con multiusuario (#130).
+# rota/pendientes/parrilla entran ya con multiusuario.
 #
 # Declarativo: lo lee `apps/registro.py`. Claves de nivel superior ANTES de `[[nav]]`.
 

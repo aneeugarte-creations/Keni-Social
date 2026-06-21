@@ -460,7 +460,7 @@ def test_main_solo_mostrar_imprime_recap_sin_tokens(monkeypatch, capsys, tmp_pat
 
 
 # ===========================================================================
-# Ampliacion de cobertura: mas ramas del flujo interactivo (issue #52).
+# Ampliacion de cobertura: mas ramas del flujo interactivo.
 # Sin red ni input() real: se inyectan `entrada=`/`salida=` o se sustituye
 # `flujo_interactivo` en main(). Verificamos COMPORTAMIENTO, no textos fragiles.
 # ===========================================================================

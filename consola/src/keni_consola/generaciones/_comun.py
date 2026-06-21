@@ -62,9 +62,9 @@ __all__ = [
     "descartar_evento_terminal",
 ]
 
-# Logger del lanzador de generaciones: cuelga del logger raiz del paquete (#123), asi
+# Logger del lanzador de generaciones: cuelga del logger raiz del paquete, asi
 # `configurar_logging()` fija nivel/handler para todo. Aqui logueamos los fallos del hilo
-# de generacion CON el job-id en vez de tragarlos (antes `except Exception: pass`).
+# de generacion CON el job-id en vez de tragarlos.
 _log = logging.getLogger("keni_consola.generaciones")
 
 # Estados terminales e intermedio de un trabajo.

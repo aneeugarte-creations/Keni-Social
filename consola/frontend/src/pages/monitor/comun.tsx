@@ -38,7 +38,7 @@ export function tokensDelDia(res: ResultadoDia | null): number {
 /**
  * ECONOMÍA POR PROCESO del día: cuánto cuesta investigar vs producir. Sale de la serie (las
  * generaciones reales con sus métricas), que ya EXCLUYE los marcadores de etapa — así el desglose
- * cuadra con el gasto agregado del ledger (no con los miles de marcadores a coste 0 de antes).
+ * cuadra con el gasto agregado del ledger y no con los marcadores a coste 0.
  */
 export function DesgloseEconomiaProceso({
   res,

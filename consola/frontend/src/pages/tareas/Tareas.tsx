@@ -19,7 +19,7 @@ import { TarjetaCoberturaMia, TarjetaEventoLibre, TarjetaTarea } from "./tarjeta
 import { type Item } from "./tipos";
 import { useTablero } from "./useTablero";
 
-/** Segmento «Todo | Mis tareas» sobre la MISMA lista (antes dos sub-pestañas): «Todo» es la agenda
+/** Segmento «Todo | Mis tareas» sobre la MISMA lista: «Todo» es la agenda
  * de equipo; «Mis tareas» es lo mío agrupado. «Por cubrir» NO es un segmento: vive como el chip
  * ámbar dentro de «Todo». El valor interno «panorama» se conserva; solo la etiqueta es «Todo». */
 type Lente = "panorama" | "mias";

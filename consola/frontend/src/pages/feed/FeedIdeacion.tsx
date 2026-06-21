@@ -325,7 +325,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // SCROLL INFINITO: la idea puede vivir en una página AÚN no cargada. Mientras no aparezca y
   // queden páginas, se encadena la siguiente HASTA `TOPE_PAGINAS_PIEZA`; al hallarla se salta y
   // resalta; al renunciar (tope) o agotar el feed sin verla, se limpia el parámetro y un toast
-  // lo dice (antes el enlace moría en silencio).
+  // lo dice, para que el enlace no muera en silencio.
   const piezaParam = searchParams.get("pieza");
   const [piezaDestacada, setPiezaDestacada] = React.useState<string | null>(null);
   React.useEffect(() => {

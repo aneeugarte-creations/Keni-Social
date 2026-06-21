@@ -2,7 +2,7 @@
  * Infraestructura COMPARTIDA del scroll infinito del feed (escritorio `FeedIdeacion` y móvil
  * `MobileFeed`): el sentinel que pide la siguiente página, el pie de estado del feed y el
  * skeleton con la anatomía real de una tarjeta. Un solo sitio para que ambas superficies se
- * comporten y se vean IGUAL (antes eran copias divergentes).
+ * comporten y se vean IGUAL.
  */
 import * as React from "react";
 

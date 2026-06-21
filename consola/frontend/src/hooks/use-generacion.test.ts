@@ -1,5 +1,5 @@
 /**
- * Tests para useGeneracion (#118 A-1 + SSE):
+ * Tests para useGeneracion (SSE):
  *  - Cuando POST responde ya "completado" (completado-inmediato), el sondeo
  *    NO debe depender de initialData; la query parte de undefined y el estado
  *    local se usa como fallback.
@@ -14,7 +14,7 @@ import type { Generacion } from "@/types";
 
 import { estaEjecutando, instantaneaMasAvanzada } from "./use-generacion";
 
-describe("estaEjecutando (#118 A-1)", () => {
+describe("estaEjecutando", () => {
   it('devuelve true solo para estado "ejecutando"', () => {
     expect(estaEjecutando("ejecutando")).toBe(true);
   });

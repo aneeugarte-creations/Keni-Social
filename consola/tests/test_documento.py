@@ -383,7 +383,7 @@ def test_documento_desde_plantilla_marca_desconocida(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# BUG 1: Límites de validación (DoS)                                          #
+# Límites de validación (DoS)                                                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -446,7 +446,7 @@ def test_validar_documento_limite_capas_con_grupo():
 
 
 # --------------------------------------------------------------------------- #
-# BUG 2: Casts sin guardar -> 500 en vez de 400                               #
+# Casts inválidos -> 400 (no 500)                                             #
 # --------------------------------------------------------------------------- #
 
 

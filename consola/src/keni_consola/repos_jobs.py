@@ -12,7 +12,7 @@ JOB_RECLAMADO = db.JOB_RECLAMADO
 JOB_TERMINADO = db.JOB_TERMINADO
 
 # --------------------------------------------------------------------------- #
-# Cola de jobs de generacion (OPERACIONAL: persistencia via db.py; #130 Fase 2) #
+# Cola de jobs de generacion (OPERACIONAL: persistencia via db.py)              #
 # --------------------------------------------------------------------------- #
 #
 # El back ENCOLA y un WORKER (in-proceso en local, servicio aparte en hosted) clava y

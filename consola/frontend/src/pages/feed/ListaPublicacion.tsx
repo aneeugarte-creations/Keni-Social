@@ -8,10 +8,9 @@ import { GestionPiezas } from "@/pages/piezas/GestionPiezas";
  * Pestaña "Lista" del hub Feed: la SUPERFICIE de contenido en lista.
  *
  * Solo pinta el contenido (panel de reciclaje + `GestionPiezas` en modo lista). La
- * configuración editorial que antes colgaba del menú "Gestionar" se mudó a su sitio: los
- * HORARIOS al hub Calendario (Programación) y las ETIQUETAS / HASHTAGS a Texto ›
- * Estrategia de marcas. Por eso esta pestaña ya no lleva acciones de cabecera. La marca del
- * workspace ES la marca activa global (sin selector local).
+ * configuración editorial vive en su sitio: los HORARIOS en el hub Calendario (Programación)
+ * y las ETIQUETAS / HASHTAGS en Texto › Estrategia de marcas; por eso esta pestaña no lleva
+ * acciones de cabecera. La marca del workspace ES la marca activa global (sin selector local).
  */
 export default function ListaPublicacion() {
   const navigate = useNavigate();

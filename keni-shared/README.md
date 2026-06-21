@@ -20,7 +20,7 @@ importan de el. Los guards verifican contra esta fuente unica.
 ## Que vive aqui
 
 - **`keni_shared.cliente`** — carga del **paquete de cliente** (marcas/cuentas
-  externalizadas a configuracion, #135). Lee un `.toml` declarativo de
+  externalizadas a configuracion). Lee un `.toml` declarativo de
   `clientes/` (uno por cliente). Ver [Multi-cliente](#multi-cliente).
 - **`keni_shared.marcas`** — catalogo canonico de marca (ids `slug-guion`,
   `id_metricas` `guion_bajo`, etiquetas humanas) y los helpers de la frontera con
@@ -50,7 +50,7 @@ El resto de paquetes lo arrastran como dependencia, asi que normalmente basta co
 
 ## Multi-cliente
 
-Las marcas y cuentas NO estan hardcodeadas en la capa base (#135): viven en
+Las marcas y cuentas NO estan hardcodeadas en la capa base: viven en
 ficheros `.toml` declarativos empaquetados en `src/keni_shared/clientes/` (uno por
 cliente), igual que el corpus editorial de skills. El cliente por defecto es
 **AMX** (`clientes/amx.toml`, las 5 marcas del piloto), asi que sin configurar nada

@@ -1,4 +1,4 @@
-"""API Rota · config de franjas (#185), franjas por semana y coordinacion por celda."""
+"""API Rota · config de franjas, franjas por semana y coordinacion por celda."""
 from __future__ import annotations
 
 import re

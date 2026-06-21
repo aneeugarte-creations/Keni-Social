@@ -1,5 +1,5 @@
 /**
- * Lógica de etiqueta de la atribución por usuario (#130 Fase 1). Aparte del componente
+ * Lógica de etiqueta de la atribución por usuario. Aparte del componente
  * para no romper el fast-refresh de React (un módulo que exporta componentes no debe
  * exportar también helpers no-componente).
  */

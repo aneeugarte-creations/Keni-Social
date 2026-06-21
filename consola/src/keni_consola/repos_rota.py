@@ -11,7 +11,7 @@ from ._repos_comun import (
 # Rota de horarios del equipo (OPERACIONAL: Postgres via db.py)                  #
 # --------------------------------------------------------------------------- #
 #
-# Eventos/transmisiones + turnos (asignaciones) de la parrilla del equipo (F4 · #144).
+# Eventos/transmisiones + turnos (asignaciones) de la parrilla del equipo.
 # No es contenido editorial por marca: es dato operacional de coordinacion interna,
 # por eso vive en Postgres. La fachada delega 1:1 en db.py.
 
@@ -296,7 +296,7 @@ def borrar_ausencia_rota(ausencia_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Catalogo de programas (OPERACIONAL: Postgres via db.py; #150)                #
+# Catalogo de programas (OPERACIONAL: Postgres via db.py)                      #
 # --------------------------------------------------------------------------- #
 
 
@@ -347,7 +347,7 @@ def contar_piezas_por_programa(nombre: str) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Solicitudes de cambio de turno entre companeros (OPERACIONAL; #175)          #
+# Solicitudes de cambio de turno entre companeros (OPERACIONAL)                #
 # --------------------------------------------------------------------------- #
 #
 # Cuando un CM (A) le pide a otro (B) intercambiar turnos por un asunto personal y
@@ -444,7 +444,7 @@ def aplicar_swap_turno(
 
 
 # --------------------------------------------------------------------------- #
-# Config de franjas (#185)                                                     #
+# Config de franjas                                                            #
 # --------------------------------------------------------------------------- #
 
 

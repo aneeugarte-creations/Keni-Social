@@ -237,7 +237,7 @@ function NodoImagenAjustada({
   const ref = useRef<Konva.Image | null>(null);
   // Geometría del ajuste (cover/contain + foco + zoom + crop): destino, rect VISIBLE dentro de la
   // caja y sub-rect FUENTE equivalente (helper puro, espejo de `dibujarImagenEnCaja`). El
-  // KonvaImage pinta SOLO el rect visible (con crop de fuente exacto, mismos píxeles que antes):
+  // KonvaImage pinta SOLO el rect visible (con crop de fuente exacto, mismos píxeles que la foto):
   // el bbox de un Group en Konva IGNORA el clip, así que pintar el destino entero hacía que el
   // Transformer (marco de selección) saliera más ancho/alto que la foto cuando cover/zoom
   // desbordaban la caja. Así el marco abraza EXACTAMENTE la foto renderizada, como Canva.
@@ -280,7 +280,7 @@ function NodoImagenAjustada({
 
   // Recorte de la caja según la forma (espejo del clip de `dibujarImagenEnCaja`): catálogo completo
   // de formas (elipse, polígonos, estrella, flecha…) o rect simple/redondeado. Para "rect" sin
-  // radio usamos clipX/Y/W/H (camino rápido idéntico al de antes).
+  // radio usamos clipX/Y/W/H (camino rápido).
   const r = radio ?? 0;
   const recorte =
     formaNoRect(forma, r, radios)
@@ -444,9 +444,9 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       y: nodo.y(),
       rotacion: nodo.rotation(),
     } as Partial<Capa>;
-    // ROTACIÓN PURA o movimiento sin escala (sx=sy=1): solo posición/rotación. Antes pasaba por
-    // el horneado de w/h y sus MÍNIMOS: rotar una línea (h=0) escribía h=8 (quedaba diagonal) y
-    // rotar un texto sin caja lo convertía a modo caja de UNA línea (encogido + "…" en el export).
+    // ROTACIÓN PURA o movimiento sin escala (sx=sy=1): solo posición/rotación, sin pasar por el
+    // horneado de w/h y sus MÍNIMOS. Ese horneado rotaría una línea (h=0) escribiendo h=8 (queda
+    // diagonal) y un texto sin caja a modo caja de UNA línea (encogido + "…" en el export).
     if (sx === 1 && sy === 1) {
       onChange(base);
       return;
@@ -474,8 +474,8 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         return;
       }
       // Conversión modo LÍNEA (h<=0) -> modo CAJA: persistir h ACTIVA la caja. El alto parte del
-      // bloque REALMENTE renderizado por Konva (todas las líneas envueltas, no UNA como antes,
-      // que dejaba el export encogido a tam_min y truncado con "…"). Con ancla "abajo" la `y`
+      // bloque REALMENTE renderizado por Konva (todas las líneas envueltas, no UNA sola, que
+      // dejaría el export encogido a tam_min y truncado con "…"). Con ancla "abajo" la `y`
       // almacenada era el borde INFERIOR y el modo caja la interpreta como SUPERIOR: se rebasa
       // y = y - h' (offset rotado con el pivote (x,y), igual que el export) y se fija
       // valign "abajo" para que el bloque no salte de sitio al exportar.
@@ -779,8 +779,8 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         // Konva posiciona la ELIPSE por su CENTRO (y el export rota la elipse alrededor del
         // centro, "igual que Konva": paridad de pivote, ver dibujarCapa). El modelo almacena la
         // esquina sup-izq, así que los writebacks son DEDICADOS y convierten centro -> esquina:
-        // los genéricos guardaban el centro como x/y y la capa saltaba +w/2,+h/2 en cada gesto
-        // (incluido el clic seco en un tirador, que burlaba la guarda de no-op al comparar el
+        // los genéricos guardarían el centro como x/y y la capa saltaría +w/2,+h/2 en cada gesto
+        // (incluido el clic seco en un tirador, que burlaría la guarda de no-op al comparar el
         // centro del nodo con la esquina del modelo).
         const ex = c.x + c.w / 2;
         const ey = c.y + c.h / 2;

@@ -4,7 +4,7 @@ Requiere OAuth con scope `yt-analytics.readonly`. `handle` = channel ID.
 - refresh: si hay client_id/client_secret/refresh_token, renueva el access_token
   ante un 401 (los access tokens de Google caducan en ~1h).
 - piezas: pide top-N por views (una sola consulta de Analytics; sin paginación).
-- Analytics no expone "alcance": se reporta AUSENTE (None), no 0 (#138).
+- Analytics no expone "alcance": se reporta AUSENTE (None), no 0.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class AdaptadorYouTube(AdaptadorBase):
         return MetricaPlataforma(
             plataforma=self.plataforma,
             visualizaciones=vis,
-            alcance=None,  # YouTube Analytics no expone alcance: AUSENTE, no 0 (#138)
+            alcance=None,  # YouTube Analytics no expone alcance: AUSENTE, no 0
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )

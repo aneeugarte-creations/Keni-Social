@@ -1,4 +1,4 @@
-"""Red de regresión del harness de EVALS (artefacto: el hueco "no hay eval de calidad de IA").
+"""Red de regresión del harness de EVALS: cubre el eval de calidad de IA en la capa medible.
 
 Garantiza que los casos golden INICIAL mantienen su dictamen esperado: un cambio que degrade
 la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_revisar`, límites de red) o los

@@ -124,7 +124,7 @@ function RazonamientoVivo({ texto, ejecutando }: { texto: string; ejecutando: bo
 /**
  * Tarjeta reutilizable de progreso de una generación en segundo plano. Mientras
  * corre muestra el texto en vivo + métricas parciales (y, si se pasa `onCancelar`, un
- * botón "Cancelar" que mata el trabajo en el servidor, #137); al terminar con error,
+ * botón "Cancelar" que mata el trabajo en el servidor); al terminar con error,
  * muestra el mensaje y (si se pasa) un botón para reintentar. El resultado
  * COMPLETADO lo renderiza cada página a su manera (copy, hashtags, imagen…).
  */
@@ -138,7 +138,7 @@ export function ProgresoGeneracion({
   generacion: Generacion;
   /** Si se pasa, se muestra "Reintentar" en el estado de error. */
   onReintentar?: () => void;
-  /** Si se pasa, se muestra "Cancelar" mientras corre (mata el trabajo, #137). */
+  /** Si se pasa, se muestra "Cancelar" mientras corre (mata el trabajo). */
   onCancelar?: () => void;
   /** `true` mientras la cancelación está en curso (deshabilita el botón). */
   cancelando?: boolean;

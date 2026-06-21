@@ -1,4 +1,4 @@
-"""Tests de la lógica de DOMINIO de la rota (F4 · #144): predicados + utilidades.
+"""Tests de la lógica de DOMINIO de la rota: predicados + utilidades.
 
 Módulo PURO (`keni_consola.rota`): no toca SQLite, red ni la app. Aquí se prueban los
 PREDICADOS que la API usa para exigir override en la edición manual de turnos —

@@ -1,4 +1,4 @@
-"""Tests de la API del envelope de PAGINACION (#121). OFFLINE, todo en tmp.
+"""Tests de la API del envelope de PAGINACION. OFFLINE, todo en tmp.
 
 Verifica que los listados pesados devuelven el envelope ADITIVO retrocompatible:
 mantienen su clave de lista (`piezas`/`generaciones`/`runs`) y AÑADEN

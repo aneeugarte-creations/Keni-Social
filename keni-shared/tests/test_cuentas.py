@@ -1,4 +1,4 @@
-"""Tests de las cuentas hermanas (`cuentas`) — H3/E1.
+"""Tests de las cuentas hermanas (`cuentas`).
 
 Las hermanas de Claro Sports NO son marcas del catalogo: este test ancla esa
 invariante contra `keni_shared.marcas` (misma fuente, sin espejos).

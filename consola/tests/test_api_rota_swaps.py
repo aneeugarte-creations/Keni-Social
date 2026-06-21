@@ -1,4 +1,4 @@
-"""Tests de la API de swaps de turno (HTTP, vía TestClient). Todo OFFLINE (#175).
+"""Tests de la API de swaps de turno (HTTP, vía TestClient). Todo OFFLINE.
 
 Flujo: A (sesion) crea una solicitud para B; B acepta/rechaza; admin aprueba (que
 EJECUTA el swap en `rota_turnos_trabajo`) o rechaza; A puede cancelar mientras no sea
@@ -532,7 +532,7 @@ def test_aceptar_swap_inexistente_404(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# BUG J: aprobar cuando el destinatario YA ocupa la celda de origen (409, no 500)
+# Aprobar cuando el destinatario YA ocupa la celda de origen -> 409 (no 500)
 # --------------------------------------------------------------------------- #
 
 
@@ -581,7 +581,7 @@ def test_aprobar_swap_destino_ya_ocupa_celda_origen_409(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# BUG O: la respuesta del swap emite el NOMBRE legible de cada franja            #
+# La respuesta del swap emite el NOMBRE legible de cada franja                   #
 # --------------------------------------------------------------------------- #
 
 

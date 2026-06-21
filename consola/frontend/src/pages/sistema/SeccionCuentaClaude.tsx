@@ -48,7 +48,7 @@ import { colorUso } from "./lib";
 
 // El estado de cuenta + medidor `/usage` se refresca cada HORA: leerlo ejecuta `claude -p
 // /usage` en el servidor (subproceso + roundtrip a Anthropic), y el uso casi no cambia en
-// minutos. Para verlo al momento está el botón de refresco. (Antes iba al pulso del panel, 8s.)
+// minutos. Para verlo al momento está el botón de refresco.
 const INTERVALO_CUENTA_MS = 60 * 60 * 1000;
 
 /** Etiqueta legible del método de auth que reporta el CLI. */

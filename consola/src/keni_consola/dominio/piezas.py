@@ -12,7 +12,7 @@ Este módulo es el punto ÚNICO y explícito por el que otras apps tocan las pie
     borrador en C). Es la ÚNICA puerta de creación que A usa; A no llama a `repos`
     directamente ni decide el estado inicial de la pieza.
 
-Por qué aquí: `pieza_a_dict` ya vivía aquí (subido desde el handler de C tras H6/N7).
+Por qué aquí: `pieza_a_dict` ya vivía aquí (subido desde el handler de C).
 Convertir las lecturas/escrituras cruzadas en funciones-contrato de C —en vez de que A y
 el shell repitan llamadas a `repos.listar_piezas`/`repos.crear_pieza` y
 re-serialicen a mano— hace explícito el seam: el cruce pasa por un símbolo PÚBLICO que C
@@ -213,7 +213,7 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "copy_in": pub.get("copy_in") or "",
         "estado": pub["estado"],
         "revision": pub["revision"],
-        # Atribucion por usuario (#130 Fase 1): quien creo la pieza. "" en piezas
+        # Atribucion por usuario: quien creo la pieza. "" en piezas
         # legadas/anonimas (la UI lo muestra como "desconocido").
         "autor_id": pub.get("autor_id") or "",
         "autor_nombre": pub.get("autor_nombre") or "",

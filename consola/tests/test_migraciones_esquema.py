@@ -217,14 +217,14 @@ def _crear_comercial_campanias_legacy(con) -> None:  # noqa: ANN001
 
 
 def test_recuperar_campanias_fusiona_cuando_ambas_existen(pg):
-    """Estado-bug (el rename inerte dejó las dos tablas): las campañas varadas en
-    `comercial_campanias` se mueven a `campanias` sin pisar lo creado tras el bug, y la
+    """Cuando coexisten ambas tablas (un rename inerte dejó las dos), las campañas varadas
+    en `comercial_campanias` se mueven a `campanias` sin pisar las ya existentes, y la
     tabla vieja se descarta."""
     db.listar_campanias()  # asegura el esquema (crea `campanias` vacía)
     con = motor_db.conectar_cruda()
     try:
         _crear_comercial_campanias_legacy(con)
-        # 4 campañas varadas en la vieja + 1 ya creada en la nueva tras el bug (id distinto).
+        # 4 campañas varadas en la vieja + 1 ya existente en la nueva (id distinto).
         for i in range(4):
             con.execute(
                 "INSERT INTO comercial_campanias (id, nombre, marcas, hashtags) "
@@ -276,8 +276,8 @@ def test_recuperar_campanias_renombra_cuando_solo_existe_la_vieja(pg):
 
 
 def test_resanear_traduccion_envenenada_resetea_solo_envenenados(pg):
-    """0043: devuelve a `traducido=0` los clusters que el bug dejó con el título extranjero pegado
-    en `titulo_es` (== `titulo`), sin tocar las traducciones reales ni el español nativo."""
+    """0043: devuelve a `traducido=0` los clusters con el título extranjero pegado en `titulo_es`
+    (== `titulo`), sin tocar las traducciones reales ni el español nativo."""
     from keni_consola import repos
     from keni_consola._db_core.migraciones_columnas import _resanear_traduccion_envenenada
 
@@ -291,7 +291,7 @@ def test_resanear_traduccion_envenenada_resetea_solo_envenenados(pg):
             "estado": "nuevo", "idioma": idioma,
         })
 
-    # Envenenado: `titulo_es` == `titulo` (extranjero) por el fallback del bug.
+    # Envenenado: `titulo_es` == `titulo` (extranjero), el caso que la migración resanea.
     _sembrar("poison", "Foreign breaking", "en")
     repos.marcar_cluster_traducido("poison", titulo_es="Foreign breaking", resumen_es="Body",
                                    titulo_original="Foreign breaking")

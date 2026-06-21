@@ -153,7 +153,7 @@ def test_pieza_con_copy_sin_imagen_generando_arte():
 
 def test_pieza_con_copy_e_imagen_aunque_pendiente_es_lista():
     # Copy + imagen ya hechos pero todavía en `pendiente` (auto-avance no la movió): está LISTA,
-    # NO "generando copy" (regresión del caso por defecto que mentía con copy e imagen presentes).
+    # NO "generando copy" (el caso por defecto no manda con copy e imagen presentes).
     etapa = pe.etapa_de_pieza(_pieza(estado="pendiente", falta_copy=False, falta_imagen=False))
     assert etapa == pe.ETAPA_LISTA_REVISAR
 

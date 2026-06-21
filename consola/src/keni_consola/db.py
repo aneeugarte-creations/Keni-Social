@@ -7,7 +7,7 @@ migrado a Postgres (piezas, plantillas, fuentes RSS, hashtags, franjas; ADR
 `ficheros.py`, con un indice regenerable `indice.py`). La fachada `repos.py` enruta cada
 cosa a su almacen.
 
-BACKEND (#130 / ADR 0004): UNICO, Postgres. `motor_db.conectar_cruda()` abre Postgres con
+BACKEND (ADR 0004): UNICO, Postgres. `motor_db.conectar_cruda()` abre Postgres con
 `DATABASE_URL` (OBLIGATORIA, local o hosted). Antes el backend se elegia segun esa var
 (sin URL -> SQLite local); la ADR 0004 retira ese SQLite operacional para eliminar el drift
 SQLite<->Postgres. En desarrollo no se usa Postgres local: la ejecucion/validacion se hace
@@ -27,14 +27,14 @@ SEGURIDAD:
 Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre,
     responsable_id, responsable_nombre, enlace)
-    [tablero de pendientes compartido del equipo (#145): autor = quien la creo;
+    [tablero de pendientes compartido del equipo: autor = quien la creo;
     responsable = a quien se le asigna; enlace = ruta/URL opcional para actuar]
   - `campanias`(id, marcas, nombre, hashtags, activa, fecha_creacion, fecha_actualizacion)
     [agrupan piezas YA publicadas por uno o varios hashtags (multimarca); su analitica se
     computa al vuelo en `campanias.py`, no se persiste]
   - `usuarios`(id, usuario UNICO, rol, salt, hash, debe_cambiar_password,
     intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso)
-    [auth multiusuario (#130): el `salt`/`hash` son scrypt; NUNCA texto plano]
+    [auth multiusuario: el `salt`/`hash` son scrypt; NUNCA texto plano]
   - `sesiones`(token, usuario_id, creada, ultimo_uso, expira)
     [sesion server-side por cookie; el token es el de la cookie del navegador]
 
@@ -47,7 +47,7 @@ Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 backend. Cada operacion abre y cierra su propia conexion (mantenerlo simple evita estado
 global y problemas de hilos con el `TestClient`; es una conexion por op).
 
-CONCURRENCIA (servicio compartido, #130): la concurrencia multiusuario/multi-replica es
+CONCURRENCIA (servicio compartido): la concurrencia multiusuario/multi-replica es
 nativa de Postgres (el claim de la cola de jobs usa `FOR UPDATE SKIP LOCKED`); ese fue el
 motivo de migrar y de retirar SQLite (ADR 0004).
 """

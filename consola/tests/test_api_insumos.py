@@ -321,7 +321,7 @@ def test_editar_titulo_reenlaza_la_gemela_del_pool():
     assert gemela is not None
     assert gemela["estado"] == "nuevo"
 
-    # Y ahora Descartar SÍ la aparta (antes del fix quedaba viva: enlace roto por el hash viejo).
+    # Descartar la aparta de verdad: el enlace por clave la encuentra y pasa a `descartado`.
     r = cli.delete(f"/api/insumos/item/{item_id}")
     assert r.status_code == 200, r.text
     gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])

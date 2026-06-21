@@ -1,4 +1,4 @@
-"""dominio.runner: argv unico (con --max-turns) + semaforo de concurrencia (#116).
+"""dominio.runner: argv unico (con --max-turns) + semaforo de concurrencia.
 
 ANTI-CUELGUE: todo acotado (Barrier/Event/Timer/join con timeout) + `pytest-timeout`
 de backstop. Nada puede esperar para siempre.
@@ -141,7 +141,7 @@ def test_admitir_se_libera_en_finally_del_slot(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Grupo de procesos (#137): matar_arbol mata el ARBOL, no solo el padre.       #
+# Grupo de procesos: matar_arbol mata el ARBOL, no solo el padre.             #
 # --------------------------------------------------------------------------- #
 
 

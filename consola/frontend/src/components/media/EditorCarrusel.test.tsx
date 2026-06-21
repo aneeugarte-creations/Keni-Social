@@ -1,8 +1,8 @@
 /**
  * Tests para EditorCarrusel: gestión de los slides extra de un carrusel.
  *
- * - Cada fila expone su menú "⋮" SIEMPRE visible (antes estaba escondido tras click-derecho):
- *   reemplazar / reordenar / quitar son alcanzables con un clic.
+ * - Cada fila expone su menú "⋮" SIEMPRE visible: reemplazar / reordenar / quitar son
+ *   alcanzables con un clic.
  * - "Bajar"/"Quitar" llaman a onCambio con la lista reordenada / recortada.
  * - "Reemplazar media" sube un archivo y SUSTITUYE el media de ESE slide (objeto + tipo),
  *   sin moverlo de sitio.

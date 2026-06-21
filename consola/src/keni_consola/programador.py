@@ -538,16 +538,16 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
     marca_id = pub.get("marca") or ""
     publicar_real_flag = config.publicar_real_para(marca_id)
 
-    # Canon UTC sin offset (ver `tiempo.py`): antes `ahora.isoformat()` de un datetime aware
-    # estampaba "+00:00", que rompia el orden lexicografico contra los timestamps naive.
+    # Canon UTC sin offset (ver `tiempo.py`): un `ahora.isoformat()` de un datetime aware
+    # estamparia "+00:00" y romperia el orden lexicografico contra los timestamps naive.
     campos_base: dict[str, Any] = {"preparado_en": iso_utc(ahora)}
 
     if not publicar_real_flag:
-        # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
+        # DRY-RUN (maestro OFF o marca excluida): solo estampa, no despacha a ningún canal.
         return repos.actualizar_pieza(pub["id"], campos_base)
 
     # --- camino REAL: DESPACHO por canal de publicación de la marca ----------
-    # Default "metricool" (cero regresión): solo una marca con canal=postproxy se desvía.
+    # Default "metricool": solo una marca con canal=postproxy se desvía.
     if config.canal_publicacion_para(marca_id) == _CANAL_POSTPROXY:
         return _preparar_postproxy(pub, ahora, campos_base, marca_id)
 

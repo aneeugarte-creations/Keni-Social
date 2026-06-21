@@ -1,4 +1,4 @@
-"""Versionado de esquema de los YAML del monorepo (#125): `version` por fichero.
+"""Versionado de esquema de los YAML del monorepo: `version` por fichero.
 
 `version: <int>` como clave top-level DENTRO de cada YAML; upgrade PEREZOSO en lectura
 via un registro de migraciones por tipo, reescrito solo al siguiente guardado.

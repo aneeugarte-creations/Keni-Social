@@ -62,7 +62,7 @@ class AdaptadorPlataforma(Protocol):
 
 
 class AdaptadorBase:
-    """Base concreta de los adaptadores reales por plataforma (H4).
+    """Base concreta de los adaptadores reales por plataforma.
 
     Aporta el comportamiento común y deja a cada subclase solo lo específico:
 

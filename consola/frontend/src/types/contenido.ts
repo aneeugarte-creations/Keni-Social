@@ -3,7 +3,7 @@ import type { TemaRadar } from "./fuentes";
 
 // --- Tablero de CONTENIDO unificado (herramienta de community manager) ---
 
-/** Usuario asignable como responsable (#145 F5): solo id + nombre. */
+/** Usuario asignable como responsable: solo id + nombre. */
 export interface UsuarioTarea {
   id: string;
   usuario: string;

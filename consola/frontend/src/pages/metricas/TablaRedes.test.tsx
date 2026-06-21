@@ -14,7 +14,7 @@ const REDES: RedMetrica[] = [
     engagement_pct: 5,
   },
   {
-    // tiktok no mide alcance (#138): null, no 0.
+    // tiktok no mide alcance: null, no 0.
     red: "tiktok",
     visualizaciones: 90000,
     alcance: null,

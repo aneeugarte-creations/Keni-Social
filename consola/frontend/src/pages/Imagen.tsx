@@ -437,8 +437,8 @@ export default function Imagen() {
   // atada a una plantilla, AUTOGUARDA en la plantilla tras 3 s de inactividad (estilo Word).
   //
   // La suscripción depende SOLO de `activa`: renombrar una pestaña o fijar bindings (cambios de
-  // `pestanas`) ya NO re-suscriben ni cancelan los timers pendientes (antes la última edición
-  // podía quedarse sin autoguardar). La pestaña vigente se lee de un ref EN EL MOMENTO de guardar
+  // `pestanas`) no re-suscriben ni cancelan los timers pendientes, para que la última edición no
+  // se quede sin autoguardar. La pestaña vigente se lee de un ref EN EL MOMENTO de guardar
   // (así un «Guardar como» que ata la plantilla a mitad de sesión usa la clave/plantilla nuevas).
   // Al limpiar (cambio de pestaña o desmontaje) se hace FLUSH de lo pendiente.
   const pestanasRef = useRef(pestanas);
@@ -1055,7 +1055,7 @@ export default function Imagen() {
         ) : (
           // GALERÍA del estado vacío (sin pestañas): el MISMO `PublicacionPlantillas` del rail y de
           // la modal, a página completa (una sola fuente de verdad): ocupa TODO el ancho (sin
-          // `max-w` centrado: los lados ya no quedan vacíos), con más columnas en pantallas grandes,
+          // `max-w` centrado, para no dejar los lados vacíos), con más columnas en pantallas grandes,
           // gestión completa, agrupación por marca en «Todas» y «Lienzo en blanco» al final.
           <div className="h-full">
             {plantillasQ.isLoading ? (

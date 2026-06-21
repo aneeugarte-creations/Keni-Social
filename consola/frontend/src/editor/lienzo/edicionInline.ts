@@ -3,9 +3,8 @@
 //
 // Dos decisiones:
 //  · QUÉ texto se edita: el que se VE. Con binding y «Copy de muestra» activo el lienzo pinta el
-//    copy de muestra (muestra.ts), así que la edición escribe AHÍ (antes escribía `capa.texto` y
-//    el cambio no se reflejaba en el lienzo: la edición parecía rota). Sin muestra se edita
-//    `capa.texto`, como siempre.
+//    copy de muestra (muestra.ts), así que la edición escribe AHÍ para que el cambio se refleje
+//    en el lienzo. Sin muestra se edita `capa.texto`.
 //  · QUÉ aspecto tiene el editor: los MISMOS estilos que el texto pintado (familia/peso/cursiva,
 //    tamaño·escala, color, alineación, interlineado, interletra·escala, mayúsculas, valign y
 //    rotación), para escribir "sobre la imagen" y no en una caja genérica. El contorno, la sombra

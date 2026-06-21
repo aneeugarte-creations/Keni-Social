@@ -196,7 +196,7 @@ def test_credencial_vacia_cuenta_como_ausente():
     assert por_plat["facebook"].estado is Estado.AVISO
 
 
-# --- Credenciales agrupadas en UNA linea (UX-roadmap #4) --------------------
+# --- Credenciales agrupadas en UNA linea -----------------------------------
 
 
 def test_resumir_credenciales_muestra_es_una_linea_aviso():
@@ -249,7 +249,7 @@ def test_resumir_credenciales_parcial_es_aviso_y_no_filtra_secreto():
 
 
 def test_ejecutar_chequeos_credenciales_en_una_sola_linea(tmp_path):
-    # Antes habia 5 lineas "Credenciales <plataforma>"; ahora UNA "Credenciales".
+    # Las credenciales se reportan en UNA sola linea "Credenciales", no una por plataforma.
     modelo = tmp_path / "ggml-large-v3-turbo.bin"
     modelo.write_bytes(b"fake")
     resultados = ejecutar_chequeos(
@@ -361,7 +361,7 @@ def test_renderizar_incluye_resumen_y_iconos(tmp_path):
     assert Estado.OK.value in texto
 
 
-# --- Cierre accionable: "que hacer ahora" (UX-roadmap #4) -------------------
+# --- Cierre accionable: "que hacer ahora" --------------------------------
 
 
 def test_cierre_accionable_sin_errores_apunta_al_asistente():
@@ -515,7 +515,7 @@ def test_validar_con_credenciales_marca_adaptador_disponible(monkeypatch):
     assert por_nombre["Conectividad x"].estado is Estado.OK
 
 
-# --- Regresion B1: un config corrupto NO debe tumbar el doctor --------------
+# --- Un config corrupto NO debe tumbar el doctor ----------------------------
 
 
 def test_config_corrupto_se_reporta_como_error_sin_crashear(tmp_path, monkeypatch):

@@ -175,8 +175,8 @@ def test_componer_bytes_no_persiste(entorno, monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # Materializacion de assets con KEY de categoria (almacen por carpetas)        #
-# Regresion: desde que la key trae `<categoria>/` el nombre temporal NO debe   #
-# convertir ese `/` en una subcarpeta inexistente (FileNotFoundError -> 500).  #
+# Una key con `<categoria>/` se aplana al nombre temporal: el `/` NO crea una  #
+# subcarpeta inexistente (que reventaria en FileNotFoundError -> 500).         #
 # --------------------------------------------------------------------------- #
 
 
@@ -199,8 +199,8 @@ def test_materializar_logo_con_key_de_categoria_no_anida(tmp_path, monkeypatch):
 
 
 def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch):
-    # Reproduce el 500 de `/compuesta`: una capa logo cuyo media_id trae prefijo de categoria.
-    # Antes del fix, materializar el asset reventaba con FileNotFoundError. Ahora renderiza.
+    # Una capa logo cuyo media_id trae prefijo de categoria: materializar el asset
+    # lo aplana y el render de `/compuesta` devuelve los bytes sin FileNotFoundError.
     monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-logo")
     monkeypatch.setattr(e, "_fuentes_extra_de_marca", lambda marca, carpeta: {})
 
@@ -226,8 +226,8 @@ def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch)
              "objeto": "fotos/deadbeef.png", "es_foto": True},
         ],
     }
-    # Antes del fix esto reventaba con FileNotFoundError (el `/` de la key creaba una
-    # subcarpeta inexistente); ahora renderiza y devuelve los bytes.
+    # El `/` de la key se aplana en el tmp del documento (sin subcarpeta inexistente):
+    # renderiza y devuelve los bytes.
     datos = e.renderizar_documento_bytes(doc, bindings={"copy_in": "HOLA"})
     assert datos == b"png-doc"
     assert cap["asset_existe"] is True

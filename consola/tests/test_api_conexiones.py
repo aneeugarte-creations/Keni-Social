@@ -6,8 +6,8 @@ configurada") y las credenciales de Metricool POR MARCA (estado/guardar/probar/b
 En "probar" se parchea `_PROBADOR`/`_PROBADOR_MC`/`_PROBADOR_PERFILES`: jamas se llama
 a la red. Ningun secreto debe aparecer en ninguna respuesta de la API.
 
-AUTORIZACION (#153, ESTRICTO por #150): los endpoints de conexiones son SOLO ADMIN y el
-TOKEN de mantenimiento NO es admin (#150). Por eso estos tests funcionales usan un
+AUTORIZACION (ESTRICTO): los endpoints de conexiones son SOLO ADMIN y el
+TOKEN de mantenimiento NO es admin. Por eso estos tests funcionales usan un
 `cliente` que es una SESION admin REAL (no el token): la `fixture cliente` de aqui
 SOBREESCRIBE la de conftest. El gate por rol (editor/token -> 403) se prueba aparte en
 `test_api_conexiones_permisos.py`.
@@ -37,7 +37,7 @@ _CLAVE_SESION = "clave-de-prueba"
 def cliente(entorno):
     """TestClient autenticado por SESION con un ADMIN real (no el token de mantenimiento).
 
-    Conexiones es SOLO ADMIN (#153) y el token NO es admin (#150); estos tests funcionales
+    Conexiones es SOLO ADMIN y el token NO es admin; estos tests funcionales
     necesitan a quien SI puede gestionarlas: un admin con sesion. Sobreescribe el `cliente`
     de conftest (que entra por el token) solo para este modulo.
     """
@@ -483,7 +483,7 @@ def test_parsear_perfiles_defensivo():
 
 
 # --------------------------------------------------------------------------- #
-# Seguridad: follow_redirects=False en _probar_openrouter (#117)              #
+# Seguridad: follow_redirects=False en _probar_openrouter                     #
 # --------------------------------------------------------------------------- #
 
 

@@ -24,14 +24,14 @@ REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +
 `escribir_config_atomico`) para escribir el config.toml de forma atomica y segura;
 NO duplica esa logica. Errores en espanol, sin tracebacks, sin filtrar secretos.
 
-SOLO ADMIN (#153)
+SOLO ADMIN
 =================
 La clave del proveedor de imagen y los tokens de Metricool son SECRETOS GLOBALES y
 COMPARTIDOS (un unico fichero por despliegue). Antes cualquier usuario autenticado
 podia leerlos/mutarlos; eso es una fuga de datos en un servicio multiusuario. Ahora
 TODOS los endpoints de conexiones (lectura Y mutacion) exigen rol ADMIN: un editor
 recibe 403. SOLO una SESION admin real puede gestionarlos; el TOKEN de mantenimiento
-NO es admin (#150) y tambien recibe 403 aqui (no es un backdoor a los secretos). El gate
+NO es admin y tambien recibe 403 aqui (no es un backdoor a los secretos). El gate
 se aplica por handler leyendo el rol que el middleware dejo en `request.state`
 (`keni_consola.permisos.es_admin`, fuente unica y ESTRICTA), igual que `/api/usuarios`.
 El AISLAMIENTO por tenant (un almacen por cliente) queda diferido:
@@ -65,7 +65,7 @@ async def imagen_estado(request: Request) -> Response:
 
     `modelo` es el modelo de imagen EN USO (`media._modelo()`, con su precedencia) y
     `modelos` la lista curada para poblar el dropdown. NUNCA devuelve la clave: solo
-    presencia y la pista `····last4`. SOLO ADMIN (#153): un editor recibe 403.
+    presencia y la pista `····last4`. SOLO ADMIN: un editor recibe 403.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -84,7 +84,7 @@ async def imagen_estado(request: Request) -> Response:
 async def imagen_guardar(request: Request) -> Response:
     """PUT: guarda la clave del proveedor de imagen (JSON `{proveedor?, api_key}`).
 
-    Valida que `api_key` no este vacia. Responde estado (sin la clave). SOLO ADMIN (#153).
+    Valida que `api_key` no este vacia. Responde estado (sin la clave). SOLO ADMIN.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -112,7 +112,7 @@ async def imagen_modelo_guardar(request: Request) -> Response:
     VALIDA que el id este en la lista curada (`media.MODELOS_IMAGEN`); si no, 400 en
     espanol. Persiste SOLO el campo modelo (preserva clave/proveedor). Mismo patron de
     auth que el resto de conexiones: la barrera de sesion + CSRF la aplica el middleware
-    `SeguridadConsola`; ademas, SOLO ADMIN (#153): un editor recibe 403.
+    `SeguridadConsola`; ademas, SOLO ADMIN: un editor recibe 403.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -135,7 +135,7 @@ async def imagen_modelo_guardar(request: Request) -> Response:
 
 
 async def imagen_borrar(request: Request) -> Response:
-    """DELETE: borra la clave guardada del proveedor de imagen. SOLO ADMIN (#153)."""
+    """DELETE: borra la clave guardada del proveedor de imagen. SOLO ADMIN."""
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     try:
@@ -183,7 +183,7 @@ async def imagen_probar(request: Request) -> Response:
     """POST: valida la clave GUARDADA con una llamada barata (sin generar imagen).
 
     Si no hay clave configurada responde `{ok:false, ...}`. La clave nunca sale.
-    SOLO ADMIN (#153): un editor recibe 403 (no puede sondear la clave global).
+    SOLO ADMIN: un editor recibe 403 (no puede sondear la clave global).
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -284,7 +284,7 @@ async def metricool_estado(request: Request) -> Response:
     """GET: estado por marca de Metricool (sin exponer NUNCA el user_token).
 
     Lista TODAS las marcas del catalogo con su estado conectado/desconectado y, si
-    estan, una pista del user_id (no secreto) y el blog_id. SOLO ADMIN (#153).
+    estan, una pista del user_id (no secreto) y el blog_id. SOLO ADMIN.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -308,7 +308,7 @@ async def metricool_guardar(request: Request) -> Response:
     """PUT: guarda las credenciales de UNA marca (JSON `{user_token, user_id, blog_id}`).
 
     No devuelve el token. Valida que `{marca}` es una marca real y que los tres
-    campos vienen no vacios. SOLO ADMIN (#153).
+    campos vienen no vacios. SOLO ADMIN.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -336,7 +336,7 @@ async def metricool_guardar(request: Request) -> Response:
 
 
 async def metricool_borrar(request: Request) -> Response:
-    """DELETE: quita la marca de `[metricool.marcas.<marca>]`. SOLO ADMIN (#153)."""
+    """DELETE: quita la marca de `[metricool.marcas.<marca>]`. SOLO ADMIN."""
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     marca = request.path_params["marca"]
@@ -389,7 +389,7 @@ _PROBADOR_MC = _probar_metricool
 
 
 async def metricool_probar(request: Request) -> Response:
-    """POST: prueba EN VIVO la credencial GUARDADA de una marca. SOLO ADMIN (#153).
+    """POST: prueba EN VIVO la credencial GUARDADA de una marca. SOLO ADMIN.
 
     Usa el token YA guardado de la marca (nunca llega por el body, nunca sale por la
     respuesta). Si falta alguna credencial, responde `{ok:false}` con mensaje claro.
@@ -493,7 +493,7 @@ _PROBADOR_PERFILES = _listar_perfiles
 
 
 async def metricool_perfiles(request: Request) -> Response:
-    """POST: descubre las marcas (blogId) de un token de Metricool. SOLO ADMIN (#153).
+    """POST: descubre las marcas (blogId) de un token de Metricool. SOLO ADMIN.
 
     Body `{user_token, user_id}`. Llama a `GET /admin/simpleProfiles` y devuelve
     `{"marcas": [{"blog_id", "label"}, ...]}`. NO persiste NADA (el config.toml no se
@@ -597,7 +597,7 @@ def estado_postproxy() -> dict:
 
 
 async def postproxy_estado(request: Request) -> Response:
-    """GET: estado de Postproxy (api_key como pista) + grupo por marca. SOLO ADMIN (#153)."""
+    """GET: estado de Postproxy (api_key como pista) + grupo por marca. SOLO ADMIN."""
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     return JSONResponse(estado_postproxy())
@@ -629,7 +629,7 @@ def _escribir_marca_postproxy(marca: str, valores: dict[str, str]) -> None:
 
 
 async def postproxy_guardar(request: Request) -> Response:
-    """PUT: guarda la api_key GLOBAL de Postproxy (JSON `{api_key}`). SOLO ADMIN (#153).
+    """PUT: guarda la api_key GLOBAL de Postproxy (JSON `{api_key}`). SOLO ADMIN.
 
     No la devuelve. Valida que no este vacia.
     """
@@ -649,7 +649,7 @@ async def postproxy_guardar(request: Request) -> Response:
 
 
 async def postproxy_borrar(request: Request) -> Response:
-    """DELETE: borra la api_key GLOBAL de Postproxy. SOLO ADMIN (#153).
+    """DELETE: borra la api_key GLOBAL de Postproxy. SOLO ADMIN.
 
     Solo borra la api_key (preserva los `profile_group_id` por marca).
     """
@@ -677,7 +677,7 @@ _PP_DESCONECTAR = _pp_cliente.desconectar_perfil
 
 
 async def postproxy_probar(request: Request) -> Response:
-    """POST: prueba EN VIVO la api_key GUARDADA (GET /profile_groups). SOLO ADMIN (#153).
+    """POST: prueba EN VIVO la api_key GUARDADA (GET /profile_groups). SOLO ADMIN.
 
     Usa la api_key ya guardada (nunca llega por el body ni sale por la respuesta). Si no
     hay api_key, responde `{ok:false}` con mensaje claro.
@@ -692,7 +692,7 @@ async def postproxy_probar(request: Request) -> Response:
 
 
 async def postproxy_grupo(request: Request) -> Response:
-    """PUT: fija el grupo de perfiles de una marca. SOLO ADMIN (#153).
+    """PUT: fija el grupo de perfiles de una marca. SOLO ADMIN.
 
     Body `{profile_group_id?}`. Si viene, se guarda tal cual. Si NO viene, se CREA un
     grupo en Postproxy (con la etiqueta de la marca) y se guarda su id. Devuelve
@@ -731,7 +731,7 @@ async def postproxy_grupo(request: Request) -> Response:
 
 
 async def postproxy_conectar(request: Request) -> Response:
-    """POST: inicia la conexion OAuth de una red para una marca. SOLO ADMIN (#153).
+    """POST: inicia la conexion OAuth de una red para una marca. SOLO ADMIN.
 
     Body `{platform, redirect_url}`. Valida la plataforma y que haya api_key. Si la marca
     no tiene grupo aun, lo CREA primero. Llama a initialize_connection y devuelve `{url}`.
@@ -777,7 +777,7 @@ async def postproxy_conectar(request: Request) -> Response:
 
 
 async def postproxy_desconectar_perfil(request: Request) -> Response:
-    """DELETE: desconecta un perfil de Postproxy por su id. SOLO ADMIN (#153)."""
+    """DELETE: desconecta un perfil de Postproxy por su id. SOLO ADMIN."""
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     perfil_id = request.path_params["perfil_id"]
@@ -793,7 +793,7 @@ async def postproxy_desconectar_perfil(request: Request) -> Response:
 
 
 async def postproxy_canal(request: Request) -> Response:
-    """PUT: fija el CANAL de publicación de una marca. SOLO ADMIN (#153).
+    """PUT: fija el CANAL de publicación de una marca. SOLO ADMIN.
 
     Body `{canal}` con `canal` ∈ {metricool, postproxy}. Persiste en
     `[postproxy.marcas.<id>].canal` (sin tocar el grupo). El selector decide a qué

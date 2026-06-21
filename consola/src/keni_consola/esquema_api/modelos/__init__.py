@@ -187,7 +187,7 @@ MODELOS = [
     ComparativaPorMarca,
     TotalComparativa,
     CompararMetricas,
-    # Análisis diario con narrativa (F6/#146).
+    # Análisis diario con narrativa.
     PiezaAnalisis,
     MovimientoAnalisis,
     SiguientePasoAnalisis,
@@ -224,7 +224,7 @@ MODELOS = [
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,
-    # Piezas (#101 ampliacion churn).
+    # Piezas (ampliacion churn).
     Pieza,
     RespuestaPiezas,
     RespuestaPieza,

@@ -17,7 +17,7 @@ Endpoints (bajo `/api/ajustes`, CONTRATO con el frontend):
                            400 si la clave no es del catálogo o el valor es inválido.
 
 Autorización: SOLO rol admin (mismo gating que `api/usuarios.py`, vía `keni_consola.permisos`).
-El token de mantenimiento NO cuenta como admin (#150/#153): por sí solo recibe 403.
+El token de mantenimiento NO cuenta como admin: por sí solo recibe 403.
 """
 
 from __future__ import annotations

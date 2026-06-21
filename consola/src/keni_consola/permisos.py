@@ -1,8 +1,8 @@
-"""Permisos por ROL de la Consola Keni: helper unico de "¿es admin?" (#153).
+"""Permisos por ROL de la Consola Keni: helper unico de "¿es admin?".
 
-CONTEXTO (#153, deriva de #130 multiusuario / #145 acotado por permisos)
-========================================================================
-El servicio multiusuario hosted tiene atribucion de autor (#130 Fase 1) pero el
+CONTEXTO
+========
+El servicio multiusuario hosted tiene atribucion de autor pero el
 ESTADO y los SECRETOS globales (clave del proveedor de imagen en `secretos.toml`,
 tokens de redes en el `config.toml` de metricas) viven en UN solo fichero que
 cualquier usuario autenticado podia leer y mutar. El primer bloqueo achacable es
@@ -13,9 +13,9 @@ estaba DUPLICADA inline en `api/usuarios.py` y `api/rota.py` (mismo cuerpo). Es 
 FUENTE UNICA de la decision de rol admin para `/api/usuarios`, `/api/conexiones` y
 `/api/rota`.
 
-CONTRATO ESTRICTO (#150 + #153): el TOKEN de mantenimiento NO es admin
-======================================================================
-Alineado con #150 (CRITICO: el token de mantenimiento NO es un backdoor de admin),
+CONTRATO ESTRICTO: el TOKEN de mantenimiento NO es admin
+========================================================
+CRITICO: el token de mantenimiento NO es un backdoor de admin, asi que
 este helper es ESTRICTO:
 
   - Si hay una SESION de un usuario REAL (`request.state.usuario`), True SOLO si su rol
@@ -34,8 +34,8 @@ trata aparte (no aqui).
 NO inventa una via de auth nueva: solo LEE el estado que `SeguridadConsola` ya dejo
 en `request.state`. El gate de sesion + CSRF lo sigue aplicando el middleware.
 
-ALCANCE (lo que SI y lo que NO cubre #153)
-==========================================
+ALCANCE (lo que SI y lo que NO cubre este helper)
+=================================================
 Hoy el modelo de roles es binario (`admin`/`editor`) y SIN dimension de tenant ni de
 marca/proyecto en la cuenta: por eso el bloqueo achacable es "solo admin" sobre el
 estado/secreto global, no un acotamiento por tenant. El AISLAMIENTO de secretos POR
@@ -60,11 +60,11 @@ MSG_SOLO_ADMIN = "Solo un administrador puede acceder a esta sección."
 def es_admin(request: Request) -> bool:
     """True SOLO si la peticion la hace una SESION de un usuario real con rol admin.
 
-    ESTRICTO (#150 + #153): el token de mantenimiento NO es admin. Lee SOLO el estado que
+    ESTRICTO: el token de mantenimiento NO es admin. Lee SOLO el estado que
     dejo el middleware (`request.state.usuario`); no abre ninguna via de auth nueva. Una
     peticion autenticada UNICAMENTE por el token (`request.state.auth_por_token`, sin
-    usuario de sesion) NO pasa: el token no es un backdoor de admin sobre usuarios/secretos
-    (#150). El bootstrap del primer admin con la BD vacia se trata aparte (`api/usuarios`).
+    usuario de sesion) NO pasa: el token no es un backdoor de admin sobre usuarios/secretos.
+    El bootstrap del primer admin con la BD vacia se trata aparte (`api/usuarios`).
     """
     usuario = getattr(request.state, "usuario", None)
     if not isinstance(usuario, dict):

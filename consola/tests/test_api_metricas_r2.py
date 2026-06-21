@@ -430,7 +430,7 @@ def test_ingesta_detecta_canal_estancado(cliente, monkeypatch):
 
 
 def test_ingesta_no_alerta_baja_cadencia_ni_sin_formato(cliente, monkeypatch):
-    """Regresión de falsos positivos: un canal que el equipo apenas usa (pocas piezas, ritmo
+    """Un canal que el equipo apenas usa (pocas piezas, ritmo
     lento) o el residuo sin formato clasificado SIEMPRE quedan por detrás de una marca que
     publica a diario; no es un atasco de ingesta y no debe disparar la alerta."""
     def _baja_cadencia(rango="mes", marca=None):

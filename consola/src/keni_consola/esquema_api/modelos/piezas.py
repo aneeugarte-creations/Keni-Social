@@ -19,8 +19,8 @@ __all__ = [
     "RespuestaColaAprobacion",
 ]
 
-# Vocabulario ÚNICO de estado de una pieza (COLAPSO 2026-06): el flujo de aprobación de equipo
-# intercala `en_revision` entre el borrador y la salida; ya no hay estado de reposo `aprobado`
+# Vocabulario ÚNICO de estado de una pieza: el flujo de aprobación de equipo intercala
+# `en_revision` entre el borrador y la salida; no hay estado de reposo `aprobado`
 # (juntar los 2 likes auto-programa, no crea un estado intermedio).
 EstadoPieza = Literal["borrador", "en_revision", "programado", "publicado"]
 # Etapa REAL del flujo de IA de una pieza (Flujo C), derivada por
@@ -49,7 +49,7 @@ class Pieza(TypedDict):
 
     `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
     archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
-    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
+    `autor_id`/`autor_nombre` (atribucion por usuario, Fase 1) identifican a quien
     creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
 
     Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
@@ -174,7 +174,7 @@ class Pieza(TypedDict):
 
 
 class RespuestaPiezas(TypedDict):
-    """Listado de `GET /api/piezas` con el envelope de paginacion (#121)."""
+    """Listado de `GET /api/piezas` con el envelope de paginacion."""
 
     piezas: list[Pieza]
     paginacion: Paginacion

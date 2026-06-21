@@ -1,9 +1,9 @@
-"""Guard del esquema tipado del subconjunto estable del contrato `/api/*` (#101).
+"""Guard del esquema tipado del subconjunto estable del contrato `/api/*`.
 
 `keni_consola.esquema_api` define UNA VEZ (como `TypedDict`) las formas mas
 estables del contrato y emite su JSON Schema; el frontend genera de ahi
 `frontend/src/types.gen.ts` (`npm run gen:types`). Estos tests anclan los dos
-extremos para que NO se desincronicen en silencio (el hallazgo H5/E6):
+extremos para que NO se desincronicen en silencio:
 
   - el emisor produce un esquema valido y autoconsistente, y
   - el `types.gen.ts` COMITEADO coincide con el esquema actual del backend
@@ -69,7 +69,7 @@ def test_limite_red_es_nullable():
 
 
 # --------------------------------------------------------------------------- #
-# Areas de churn ampliadas (#120): piezas, runs                         #
+# Areas de churn ampliadas: piezas, runs                                #
 # --------------------------------------------------------------------------- #
 
 
@@ -84,25 +84,25 @@ def test_churn_modelos_presentes():
 
 
 def test_generacion_deferida_no_esta_en_el_subconjunto():
-    """`Generacion` NO se genera (resultado libre, frontend la tipa rico). Ver #120."""
+    """`Generacion` NO se genera (resultado libre, frontend la tipa rico)."""
     defs = set(esquema_json()["$defs"].keys())
     assert "Generacion" not in defs
     assert "RespuestaGeneraciones" not in defs
 
 
 def test_paginacion_envelope_requerido_en_listados():
-    """Los listados pesados (piezas) traen `paginacion` REQUERIDA (#121)."""
+    """Los listados pesados (piezas) traen `paginacion` REQUERIDA."""
     defs = esquema_json()["$defs"]
     assert "paginacion" in defs["RespuestaPiezas"]["required"]
     assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
 
 
 def test_version_interno_no_aparece_en_ningun_modelo():
-    """El `version` de almacenamiento (#125) es INTERNO: nunca en los dicts de la API."""
+    """El `version` de almacenamiento es INTERNO: nunca en los dicts de la API."""
     defs = esquema_json()["$defs"]
     for nombre, esquema in defs.items():
         assert "version" not in esquema.get("properties", {}), (
-            f"`{nombre}` expone `version` (campo interno de #125, no de la API)"
+            f"`{nombre}` expone `version` (campo interno, no de la API)"
         )
 
 

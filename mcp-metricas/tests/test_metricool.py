@@ -515,7 +515,7 @@ def test_interacciones_se_derivan_del_desglose_si_el_agregado_es_cero():
         m = fuente.metricas_de_post("claro_sports", Plataforma.instagram, "fb1")
 
     assert piezas[0].interacciones == 33  # derivado del desglose, no el 0 agregado
-    assert piezas[0].engagement_pct > 0  # ya no es un 0 falso (se redondea a 1 decimal)
+    assert piezas[0].engagement_pct > 0  # engagement real, no un 0 falso (se redondea a 1 decimal)
     assert m is not None and m.interacciones == 33
 
 

@@ -185,7 +185,7 @@ def entorno(monkeypatch, tmp_path):
     # una pausa de generacion escrita en gw2 hacia fallar el corte por presupuesto en
     # gw5 con la excepcion equivocada. Flaky real desde que los knobs son editables.
     monkeypatch.setenv("KENI_CONSOLA_AJUSTES", str(tmp_path / "ajustes.toml"))
-    # Token de sesion (#134): lo borramos del entorno para que `crear_app` use el que
+    # Token de sesion: lo borramos del entorno para que `crear_app` use el que
     # le pasamos (TOKEN_PRUEBA) y no uno del shell del usuario. Determinismo en tests.
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     # MCP operativo APAGADO por defecto en los tests (determinismo): sin bearer, `crear_app`
@@ -193,9 +193,8 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_MCP_BEARER", raising=False)
     monkeypatch.delenv("KENI_MCP_USUARIO", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    # La fuente única por defecto es ahora `metricool` (sin credenciales = estado vacío,
-    # no demo). Los tests del backend usan la fuente de MUESTRA determinista, así que la
-    # fijamos explícita (antes se confiaba en que el default fuera `muestra`).
+    # La fuente única por defecto es `metricool` (sin credenciales = estado vacío, no demo).
+    # Los tests del backend usan la fuente de MUESTRA determinista, así que la fijamos explícita.
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -332,7 +331,7 @@ def lanzador_imagen_ejecuta():
     return lanzar
 
 
-# Token de sesion FIJO para los tests (#134). `_cliente` lo inyecta a `crear_app` y
+# Token de sesion FIJO para los tests. `_cliente` lo inyecta a `crear_app` y
 # lo manda por defecto en CADA peticion del TestClient, asi los ~600 tests existentes
 # de la API pasan la barrera de auth sin cambios. Los tests de seguridad construyen un
 # cliente SIN este header (`_cliente_sin_token`) para probar el rechazo (401/403).
@@ -350,12 +349,12 @@ def _cliente(
     inofensivas para que NUNCA se llame a `claude`, a un proveedor de imagen, ni se abra
     Terminal. Los tests que necesiten un resultado pasan una fake "completa".
 
-    `token` fija el token de sesion de la app (#134). Si `autenticar` (def), el cliente
+    `token` fija el token de sesion de la app. Si `autenticar` (def), el cliente
     manda `Authorization: Bearer <token>` por defecto en cada peticion para que los tests
     de API existentes pasen la auth sin cambios. Pasa `autenticar=False` para probar el
     rechazo sin token.
 
-    `bootstrap` (def False): los tests que NO prueban la auth multiusuario (#130) no
+    `bootstrap` (def False): los tests que NO prueban la auth multiusuario no
     crean el admin inicial, asi evitan el coste del hash scrypt y siguen pasando por la
     via del TOKEN. Los tests de auth/usuarios lo activan (o crean usuarios a mano).
     """
@@ -393,10 +392,10 @@ def cliente(entorno):
 # Marcado por app para el TEST-SCOPING del CI (pipelines `.woodpecker/tests-app-*`)
 # --------------------------------------------------------------------------- #
 #
-# Los pipelines scoped corren un SUBCONJUNTO por app SIN enumerar ficheros (antes
-# listaban rutas a mano en el .woodpecker y se rompian con un "file not found" en cuanto
-# se borraba o renombraba un test). Ahora cada test se asigna aqui a su app por el STEM
-# de su fichero, y el pipeline corre `pytest consola/tests -m "contrato or app_X"`.
+# Los pipelines scoped corren un SUBCONJUNTO por app SIN enumerar ficheros a mano en el
+# .woodpecker (enumerarlos se rompe con un "file not found" al borrar o renombrar un test).
+# Cada test se asigna aqui a su app por el STEM de su fichero, y el pipeline corre
+# `pytest consola/tests -m "contrato or app_X"`.
 #
 # ROBUSTO: un test BORRADO simplemente no se recolecta (no rompe nada). Un test NUEVO de
 # una app: anade su stem abajo para que entre en el scope; si se olvida, NO rompe el CI y

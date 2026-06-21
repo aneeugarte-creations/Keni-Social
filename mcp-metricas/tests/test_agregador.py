@@ -12,7 +12,7 @@ from keni_metricas.schema import MetricaPlataforma, Pieza, Plataforma
 class AdaptadorFalso:
     """Adaptador en memoria para probar la agregacion sin red.
 
-    `alcance` por defecto es None (la mayoria de plataformas no lo miden, #138);
+    `alcance` por defecto es None (la mayoria de plataformas no lo miden);
     se puede fijar explicitamente para simular Meta (que si lo mide).
     """
 
@@ -64,7 +64,7 @@ def _fuente() -> FuenteCompuesta:
 def test_resumen_suma_solo_lo_comparable():
     """interacciones SE suma (homogenea); visualizaciones se suma como total
     informativo; pero el engagement global NO se divide sobre bases heterogeneas
-    (FB impresiones + TikTok reproducciones): es None (#138)."""
+    (FB impresiones + TikTok reproducciones): es None."""
     r = _fuente().resumen("marca", "semana")
     assert r.interacciones == 340  # 20 + 320: misma magnitud en ambas redes
     assert r.visualizaciones == 5000  # total informativo (no se usa como base)
@@ -86,7 +86,7 @@ def test_engagement_una_sola_plataforma_si_se_calcula():
 
 def test_alcance_no_disponible_es_none_no_cero():
     """Las plataformas que no miden alcance lo reportan None (AUSENTE), nunca 0.
-    El agregado suma SOLO las que lo miden; un 0 falso hundiria el total (#138)."""
+    El agregado suma SOLO las que lo miden; un 0 falso hundiria el total."""
     cuenta = CuentaConfig(
         id="m",
         nombre="M",
@@ -130,7 +130,7 @@ def test_visualizaciones_no_es_base_del_engagement_global():
     """Aunque visualizaciones se sume como total, NO se usa como denominador del
     engagement global cuando hay >1 plataforma (no se divide sobre bases mixtas)."""
     r = _fuente().resumen("marca", "semana")
-    # si se dividiera (mal) sobre el total seria 340/5000*100 = 6.8; ahora es None
+    # si se dividiera (mal) sobre el total seria 340/5000*100 = 6.8; el correcto es None
     assert r.engagement_pct is None
     assert r.engagement_pct != 6.8
 

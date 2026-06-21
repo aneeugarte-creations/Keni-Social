@@ -53,8 +53,8 @@ def test_ensamblar_siempre_incluye_los_fijos_de_la_marca():
 
 
 def test_ensamblar_llena_el_cupo_aunque_la_ia_no_de_nada_usable():
-    # Bug papa León: copy sin hashtags y la IA solo propone tags fuera de la biblioteca.
-    # Antes salía vacío; ahora se llena con fijos + relleno por frecuencia.
+    # Copy sin hashtags y la IA solo propone tags fuera de la biblioteca: el cupo se
+    # llena igual con los fijos de marca + relleno por frecuencia.
     out = dom_sh.ensamblar(["#papaleon", "#habemuspapa"], marca=_MARCA, cantidad=5)
     assert len(out) == 5
     assert out[0] == "#unotv"

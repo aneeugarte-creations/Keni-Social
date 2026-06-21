@@ -284,7 +284,7 @@ def referencias_vivas() -> set[str]:
     vivas |= _medias_de_audio()
     piezas = repos.listar_piezas()
     vivas |= _imagenes_de(piezas)
-    # Con render on-demand la FOTO cruda ya no está horneada en `imagen`: protégela también, o
+    # Con render on-demand la FOTO cruda no está horneada en `imagen`: protégela también, o
     # el GC borraría el original del que el render compone.
     vivas |= _fotos_de(piezas)
     # Fotos de collage: varias fotos en huecos distintos, almacenadas como JSON array.

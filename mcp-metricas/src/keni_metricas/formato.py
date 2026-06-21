@@ -30,8 +30,8 @@ FUENTE_MUESTRA = "muestra"
 
 # Aviso DESTACADO de datos de muestra. Va al inicio de cada reporte/salida de
 # texto (no solo en el campo `fuente`) para que sea IMPOSIBLE confundir cifras
-# sinteticas con reales: el miedo #1 del cliente es publicar datos inventados
-# (issue #131). Variantes Markdown y texto plano; el HTML tiene su propio banner.
+# sinteticas con reales: el miedo #1 del cliente es publicar datos inventados.
+# Variantes Markdown y texto plano; el HTML tiene su propio banner.
 AVISO_MUESTRA_MD = (
     "> ⚠️ **DATOS DE MUESTRA — NO SON CIFRAS REALES.** Generados de forma "
     "sintetica para demo/pruebas. **No tomar decisiones ni publicar con estos "
@@ -78,7 +78,7 @@ def miles(n: int | float) -> str:
 
 
 # Texto para una métrica AUSENTE (None): la plataforma/conjunto no la mide. Es
-# distinto de 0 (medido y resultó 0). Ver #138.
+# distinto de 0 (medido y resultó 0).
 NO_DISPONIBLE = "n/d"
 
 
@@ -90,7 +90,7 @@ def cifra(n: int | float | None) -> str:
 
 
 def pct(valor: float | None) -> str:
-    """Formatea un porcentaje; `None` (base incomparable) -> "n/d". Ver #138."""
+    """Formatea un porcentaje; `None` (base incomparable) -> "n/d"."""
     if valor is None:
         return NO_DISPONIBLE
     return f"{valor}%"

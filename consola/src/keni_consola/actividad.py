@@ -116,8 +116,8 @@ _URL_RESULTADO_POR_TIPO = {
     "copy": "/operacion/feed/lista",
     "rss": "/operacion/feed/lista",
     "imagen": "/contenido/estudio",
-    # La página Revisión (revisión editorial + verificación) se retiró: la aprobación vive en línea
-    # en el Feed, así que los resultados de verificación/verificación enlazan ahí.
+    # La aprobación (revisión editorial + verificación) vive en línea en el Feed, no en una
+    # página Revisión aparte, así que los resultados de verificación enlazan ahí.
     "verificacion": "/operacion/feed",
     "revision": "/operacion/feed",
     # Nuevos tipos asíncronos (Ola 6+ y calendario):

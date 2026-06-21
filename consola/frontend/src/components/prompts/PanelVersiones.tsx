@@ -296,7 +296,7 @@ export function PanelVersiones({
                   activa && "bg-accent",
                 )}
               >
-                {/* El punto verde (●) marca la versión EN VIVO; ya no hace falta el texto. */}
+                {/* El punto verde (●) marca la versión EN VIVO (sin etiqueta de texto). */}
                 <span
                   className={cn(
                     "block h-2 w-2 shrink-0 rounded-full",

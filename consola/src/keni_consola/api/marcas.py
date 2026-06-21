@@ -192,7 +192,7 @@ def _construir_dashboard() -> dict:
 
 
 async def dashboard(request: Request) -> Response:
-    """GET /api/marcas: vista única de marcas × redes (estado + números). SOLO ADMIN (#153).
+    """GET /api/marcas: vista única de marcas × redes (estado + números). SOLO ADMIN.
 
     Nunca casca: lo que falte va a null/desconectado. En threadpool: las llamadas a
     Postproxy son síncronas y no deben bloquear el event loop.
@@ -209,7 +209,7 @@ async def dashboard(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# CRUD del CATÁLOGO de marcas (fuente única editable). SOLO ADMIN (#153).      #
+# CRUD del CATÁLOGO de marcas (fuente única editable). SOLO ADMIN.      #
 #                                                                             #
 # La fuente única vive en un fichero editable bajo /data (`keni_shared.marcas`,
 # `ruta_editable()`). El CRUD lo reescribe ENTERO de forma atómica y recarga el

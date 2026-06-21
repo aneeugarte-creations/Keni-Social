@@ -317,8 +317,8 @@ def agregados_runs() -> dict[str, Any]:
 
     Agrega con SUM/GROUP BY sobre la denormalizacion del indice (sin escanear cuerpos).
     El `agente_nombre` (no denormalizado: cambia al renombrar) se resuelve aqui. Cae a
-    disco+reindex si el indice esta vacio/stale para no sub-contar. Los numeros son
-    IDENTICOS al viejo full-scan: misma suma, mismo orden y mismo redondeo a 6 decimales.
+    disco+reindex si el indice esta vacio/stale para no sub-contar. Suma, orden y redondeo
+    a 6 decimales coinciden con un full-scan en disco.
     """
     _asegurar_indice_runs()
     agg = indice.agregados_runs()

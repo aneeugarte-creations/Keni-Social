@@ -1,4 +1,4 @@
-"""Permisos por rol en /api/conexiones (#153): SOLO ADMIN.
+"""Permisos por rol en /api/conexiones: SOLO ADMIN.
 
 La clave del proveedor de imagen (`secretos.toml`) y las credenciales de Metricool
 (`config.toml` de metricas) son SECRETOS GLOBALES y compartidos. Antes cualquier
@@ -6,7 +6,7 @@ usuario autenticado podia leerlos/mutarlos; ahora TODOS los endpoints de conexio
 (lectura Y mutacion) exigen rol admin:
 
   - un EDITOR (sesion) recibe 403 en cada endpoint (GET/PUT/POST/DELETE),
-  - SOLO un ADMIN (sesion) puede; el TOKEN de mantenimiento NO es admin (#150) y
+  - SOLO un ADMIN (sesion) puede; el TOKEN de mantenimiento NO es admin y
     tambien recibe 403 en conexiones (no es un backdoor a los secretos globales).
 
 Mismo aislamiento OFFLINE que el resto: `entorno` aisla `secretos.toml` y el config
@@ -62,7 +62,7 @@ def _cli_como(rol: str) -> TestClient:
 def _cli_token() -> TestClient:
     """TestClient que entra SOLO por el TOKEN de mantenimiento (sin usuario de sesion).
 
-    ESTRICTO (#150): el token NO es admin, asi que en `/api/conexiones/*` recibe 403.
+    ESTRICTO: el token NO es admin, asi que en `/api/conexiones/*` recibe 403.
     """
     c = _cli()
     c.headers.update({"Authorization": f"Bearer {TOKEN_PRUEBA}"})
@@ -147,7 +147,7 @@ def test_editor_no_escribe_secreto_global(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Admin (sesion) -> SI puede; token de mantenimiento -> NO (403, #150)        #
+# Admin (sesion) -> SI puede; token de mantenimiento -> NO (403)              #
 # --------------------------------------------------------------------------- #
 
 
@@ -178,7 +178,7 @@ def test_admin_guarda_credencial_metricool(entorno):
 
 
 def test_token_mantenimiento_no_gestiona_conexiones_403(entorno):
-    """ESTRICTO (#150): el TOKEN de mantenimiento NO es admin -> 403 en conexiones.
+    """ESTRICTO: el TOKEN de mantenimiento NO es admin -> 403 en conexiones.
 
     Pasa la barrera de `/api` (es una credencial de mantenimiento), pero NO da acceso a los
     secretos globales: solo una SESION admin real los gestiona. Ni lectura ni mutacion.

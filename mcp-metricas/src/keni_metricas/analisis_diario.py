@@ -1,4 +1,4 @@
-"""Análisis diario con narrativa: la capa "qué cambió y por qué" (F6 / #146).
+"""Análisis diario con narrativa: la capa "qué cambió y por qué".
 
 Los datos ya existen (`comparar_periodos` + `picos` + `mejores_piezas` los dan);
 lo que falta es la LECTURA: sobre las métricas de un periodo, una narrativa corta
@@ -12,10 +12,10 @@ narrativa NO atribuye causas de coyuntura externas (eso lo pone el humano): se
 limita a "este número se movió y esta pieza lo acompaña", más una sugerencia de
 loop a la acción ("pide copy/clip de lo que rinde").
 
-Honestidad (issue #131): si la fuente es de muestra, el análisis lo MARCA en la
+Honestidad: si la fuente es de muestra, el análisis lo MARCA en la
 estructura misma (`es_muestra`/`aviso`) y en el render, para que sea imposible
 confundir cifras sintéticas con reales. Si una marca no tiene engagement
-comparable (#138) o el reporte viene vacío, degrada sin inventar.
+comparable o el reporte viene vacío, degrada sin inventar.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 # Umbral (en puntos %) a partir del cual una variación de visualizaciones se
 # considera un "movimiento" digno de narrar. Por debajo es ruido: un día a día
 # con ±2% no es noticia. Calibrado conservador para no gritar por cualquier cosa
-# (principio UX #5: señal sobre ruido).
+# (principio UX: señal sobre ruido).
 UMBRAL_MOVIMIENTO_PCT = 5.0
 
 # Cuántos movimientos (marcas) describir como máximo en el resumen. El resto se
@@ -174,19 +174,19 @@ def construir_analisis(
         # incompleta (los ceros de una plataforma omitida no son datos reales).
         "cobertura": rep.get("cobertura") or {"completa": True, "cuentas_parciales": []},
         "nombres": nombres,
-        # siguiente_paso: el loop a la acción (UX-roadmap #11). None si no hay una
+        # siguiente_paso: el loop a la acción. None si no hay una
         # marca líder clara (sin engagement comparable ni piezas): no se inventa.
         "siguiente_paso": _siguiente_paso(lider),
     }
     # Aviso de PRIMER nivel cuando son datos de muestra: que el estado "no es real"
-    # viaje en la estructura misma, no sólo en `fuente` (issue #131).
+    # viaje en la estructura misma, no sólo en `fuente`.
     if es_muestra:
         analisis["aviso"] = AVISO_MUESTRA_TXT
     return analisis
 
 
 def _siguiente_paso(lider: dict | None) -> dict | None:
-    """Sugerencia accionable que cierra el loop hacia la acción (UX-roadmap #11).
+    """Sugerencia accionable que cierra el loop hacia la acción.
 
     Devuelve marca + texto de la sugerencia, o None si no hay una marca líder con
     pieza concreta a la que apuntar. El texto es nuestro lado de la frontera
@@ -234,8 +234,8 @@ def _frase_movimiento(m: dict) -> str:
 def render_markdown(analisis: dict) -> str:
     """Redacta el análisis a Markdown: lectura corta + piezas + siguiente paso.
 
-    El dictamen va arriba; el detalle después (principio UX #1). Si son
-    datos de muestra, antepone el banner (issue #131). Si no hay movimientos que
+    El dictamen va arriba; el detalle después (principio UX). Si son
+    datos de muestra, antepone el banner. Si no hay movimientos que
     narrar, lo dice con honestidad en vez de forzar una narrativa vacía.
     """
     rango = analisis.get("rango", "")

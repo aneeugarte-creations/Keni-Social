@@ -1,4 +1,4 @@
-"""Spec SERIALIZABLE de un job de generacion (#130 Fase 2 / ADR 0002 Fase B).
+"""Spec SERIALIZABLE de un job de generacion (ADR 0002 Fase B).
 
 Un job se serializa como:
   - `prompt` (str): el prompt de `claude -p` YA renderizado por el back.

@@ -9,7 +9,7 @@
 | `traefik` | `traefik:v3` | Reverse proxy + TLS (Let's Encrypt), `network_mode: host` | **:80/:443** |
 | `front` | build `front/` | SPA React (nginx) | vía Traefik (todo menos `/api`) |
 | `back` | build `back/` | Gateway Starlette; **ENCOLA** la generación (sin Node/`claude`) | vía Traefik (`/api`) |
-| `worker` | build `worker/` | Consume la cola y corre **`claude -p`** (#130 Fase 2) | interno |
+| `worker` | build `worker/` | Consume la cola y corre **`claude -p`** | interno |
 | `mcp` | build `mcp/` | `keni-metricas` por HTTP | interno (ver abajo) |
 | `db` | `postgres:16` | Estado compartido + **cola de jobs** | interno |
 | `files` | `dxflrs/garage` | Object storage S3 (media) | interno |
@@ -23,7 +23,7 @@
 
 Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume entera:
 
-- **Postgres (`db`) y Garage (`files`) ya los CONSUME el back (#130).** Tras la **ADR 0004**
+- **Postgres (`db`) y Garage (`files`) ya los CONSUME el back.** Tras la **ADR 0004**
   Postgres es el **backend único** de la operacional (ya no hay SQLite):
   - **`DATABASE_URL` es OBLIGATORIA** en local y en hosted (este stack la cablea). En
     desarrollo no se ofrece Postgres local: la ejecución/validación se hace en el server
@@ -39,10 +39,10 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   **FUERA de alcance:** el contenido editorial YAML (`ficheros.py`,
   `/data/keni-proyectos/<marca>/...`) y su índice regenerable (`indice.py`) **siguen en el
   volumen** (`keni-data`/`KENI_DATA_DIR`); migrarlos a object storage es trabajo futuro.
-- **Generación DESACOPLADA (#130 Fase 2 / ADR 0002 Fase B).** El `back` ya **no** ejecuta
+- **Generación DESACOPLADA (ADR 0002 Fase B).** El `back` ya **no** ejecuta
   `claude -p`: **ENCOLA** un job (tabla `jobs` en Postgres) y responde al instante. El
   servicio **`worker`** clava el job, reconstruye prompt + post-procesado desde el `spec`
-  serializado y corre **`claude -p`** (con todo el endurecimiento #137: grupo de procesos
+  serializado y corre **`claude -p`** (con todo el endurecimiento: grupo de procesos
   propio, kill del árbol al timeout/cancel, tope de concurrencia, sin procesos sueltos). Por eso
   **`worker` lleva Node + la CLI `claude` y `back` ya no** (`KENI_WORKER_EXTERNO=1` en el
   back evita que levante su worker in-proceso). La generación **sigue siendo `claude -p`**
@@ -62,7 +62,7 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   si una superficie llama al motor sin el extra, `keni_consola.transcripcion` degrada con un error
   claro en español.
 - **Expuesto públicamente tras auth (login multiusuario + CSRF; token interino OPCIONAL).**
-  La barrera **principal** de `/api` es el **login multiusuario** user/pass + roles (#130):
+  La barrera **principal** de `/api` es el **login multiusuario** user/pass + roles:
   sesión server-side (cookie `keni_consola_sesion`, HttpOnly+SameSite=Strict). El admin
   inicial se crea desde `KENI_CONSOLA_ADMIN_USER/PASS` (o pass aleatoria logueada). Sobre
   eso, **CSRF en mutaciones** por `Origin`/`Referer`: detrás de Traefik el `Origin` del SPA
@@ -174,7 +174,7 @@ cp .env.example .env
 docker compose build
 docker compose up -d
 docker compose ps
-docker compose logs -f back     # el admin inicial (#130) se loguea aquí en el 1er arranque
+docker compose logs -f back     # el admin inicial se loguea aquí en el 1er arranque
 ```
 
 El primer arranque crea el admin desde `KENI_CONSOLA_ADMIN_USER/PASS` (si la BD no
@@ -224,8 +224,8 @@ próximo reconstruye.
 - **Estado: OFF por defecto.** El kill-switch `KENI_DEPLOY_BLUEGREEN` está **inerte** salvo que
   valga `1`/`yes`/`on`/`true` (en `deploy/.env` o exportado: `KENI_DEPLOY_BLUEGREEN=1 sh
   deploy/deploy.sh .env`). Vacío o cualquier otro valor deja el cutover clásico *stop-the-world*.
-- **Por qué la retirada es por IDENTIDAD y no por `--scale`** (root-cause del incidente del
-  deploy #1775): con imágenes **mixtas** (viejo + nuevo), `docker compose --scale back=1` NO
+- **Por qué la retirada es por IDENTIDAD y no por `--scale`** (root-cause del incidente de
+  deploy): con imágenes **mixtas** (viejo + nuevo), `docker compose --scale back=1` NO
   elige por índice — **conserva** el contenedor que casa la imagen deseada (el NUEVO) y borra
   el otro. En el camino de fallo eso mataba al **viejo sano** y dejaba el **nuevo roto** solo →
   Bad Gateway. v2 captura el id del viejo antes de escalar y hace `docker rm -f` del contenedor
@@ -253,11 +253,11 @@ $G key create keni-back                     # apunta Key ID + Secret
 $G bucket allow --read --write keni-media --key keni-back
 ```
 Pon el Key ID/Secret en `.env` (`S3_ACCESS_KEY`/`S3_SECRET_KEY`) y `docker compose up -d`.
-Con esas vars puestas, el back ya **guarda y sirve la media desde el bucket** (#130).
+Con esas vars puestas, el back ya **guarda y sirve la media desde el bucket**.
 
 ---
 
-## Cutover de media a S3 (#130, vigente) — secuencia, una sola vez
+## Cutover de media a S3 (vigente) — secuencia, una sola vez
 
 > **Histórico:** el cutover de datos SQLite → Postgres se hizo y ya no aplica. La ADR 0004
 > retiró SQLite operacional; ahora la operacional vive **siempre** en Postgres y el comando
@@ -465,14 +465,14 @@ ve en **Fuentes → Todas las fuentes → Agencias de noticias** y en el panel d
 
 ## Gaps a cerrar antes de producción real
 
-- [x] **Auth multiusuario (#130) + `Origin`/CSRF tras Traefik validados (HECHO).** El back se
+- [x] **Auth multiusuario + `Origin`/CSRF tras Traefik validados (HECHO).** El back se
       protege con **login multiusuario (sesión) + CSRF**; el **token interino es OPCIONAL**
       (gate extra). El chequeo CSRF detrás del proxy honra el host público vía
       `KENI_CONSOLA_ORIGENES` (= `KENI_HOST`) además del `Host` de la petición (local intacto:
       127.0.0.1 sin allowlist sigue comparando contra el `Host`). Tests en
       `consola/tests/test_seguridad.py` (sección 7 CSRF tras proxy y 8 token opcional).
 - [ ] `config.toml` real (System User token de Meta) para `KENI_METRICAS_FUENTE=real`.
-- [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(#130, HECHO)**.
+- [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(HECHO)**.
       Tras la **ADR 0004** la operacional es Postgres ÚNICO (`DATABASE_URL` obligatoria,
       local y hosted); el SQLite operacional se retiró. La media va a S3 si las `S3_*`
       están puestas; sin ellas sigue en disco. Pendiente solo el **YAML editorial**
@@ -489,7 +489,7 @@ ve en **Fuentes → Todas las fuentes → Agencias de noticias** y en el panel d
 
 ---
 
-## Hardening / contenedor no-root (#130)
+## Hardening / contenedor no-root
 
 `back` y `worker` corren como un **usuario sin privilegios** (`keni`, uid `10001`), no como
 root. Las imágenes crean ese usuario y le dan `/app` (código) y `/data` (estado:

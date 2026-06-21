@@ -13,19 +13,19 @@ from __future__ import annotations
 from keni_shared import estados as _estados_compartidos
 
 # Estados validos de una tarea/pendiente (operacional; vive en SQLite). El orden
-# es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5).
+# es el ciclo de vida: pendiente -> en curso -> hecha.
 ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 
-# Estados válidos de una pieza/publicación. LISTA CANÓNICA ÚNICA (colapso 2026-06): el
-# vocabulario editorial y el del tablero se fundieron en una sola lista y se retiró
-# `aprobado` (aprobar = juntar los 2 likes -> auto-programa al siguiente hueco):
+# Estados válidos de una pieza/publicación. LISTA CANÓNICA ÚNICA: el vocabulario editorial
+# y el del tablero son una sola lista, sin `aprobado` (aprobar = juntar los 2 likes ->
+# auto-programa al siguiente hueco):
 #
 #   borrador -> en_revision -> programado -> publicado
 #                   |
 #                   +-> (rechazo) -> borrador
 #
 # `borrador` es la fase "en preparación" (detalle = flags `falta_*`). Es la MISMA lista que
-# `ESTADOS_PIEZA` (keni-shared): ya no hay dos vocabularios ni mapeo entre ellos.
+# `ESTADOS_PIEZA` (keni-shared): un único vocabulario, sin mapeo entre listas.
 ESTADO_BORRADOR = "borrador"
 ESTADO_EN_REVISION = "en_revision"
 ESTADO_PROGRAMADO = "programado"
@@ -34,7 +34,7 @@ ESTADO_PUBLICADO = "publicado"
 # `ESTADOS_PIEZA` (lista canónica de estados de una pieza por plataforma) se re-exporta
 # de keni-shared más abajo; no se redefine aquí para no duplicar la tupla.
 
-# Roles de usuario (auth multiusuario, #130). `admin` gestiona usuarios y todo lo
+# Roles de usuario (auth multiusuario). `admin` gestiona usuarios y todo lo
 # demas; `editor` usa la consola pero NO toca /api/usuarios.
 ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")
 ROL_ADMIN = "admin"
@@ -76,7 +76,7 @@ CARGOS_USUARIO: tuple[str, ...] = (
     "disenador",                # diseno grafico (uso futuro)
 )
 
-# Estados de un turno de la rota (F4 · #144): `propuesto` es lo que Keni genera;
+# Estados de un turno de la rota: `propuesto` es lo que Keni genera;
 # `aprobado` es lo que el coordinador de la rota publica al equipo (nada se publica antes de aprobar).
 # Operacional; vive en SQLite. Lo COMPARTEN los turnos de cobertura de eventos
 # (`rota_turnos`) y los turnos de trabajo del horario del equipo (`rota_turnos_trabajo`):
@@ -85,7 +85,7 @@ ESTADOS_ROTA: tuple[str, ...] = ("propuesto", "aprobado")
 ESTADO_ROTA_PROPUESTO = "propuesto"
 ESTADO_ROTA_APROBADO = "aprobado"
 
-# Estados del flujo de SWAPS de turno (intercambios entre companeros, #175). Cuando un
+# Estados del flujo de SWAPS de turno (intercambios entre companeros). Cuando un
 # CM (A) pide a otro (B) cubrirle un turno, la solicitud nace `propuesto`; B `acepta` o
 # `rechaza`; si acepta, el coordinador de la rota (admin) `aprueba` (que aplica el swap en
 # `rota_turnos_trabajo` y la solicitud queda `aplicado`) o `rechazado_admin`. El
@@ -115,7 +115,7 @@ ESTADOS_SWAP_TERMINALES: tuple[str, ...] = (
     ESTADO_SWAP_CANCELADO,
 )
 
-# VERBOS del cambio de turno (#175, Fase 0): discriminador de `rota_swaps_turno.tipo`.
+# VERBOS del cambio de turno: discriminador de `rota_swaps_turno.tipo`.
 #   intercambio -> trueque de dos turnos (el único hasta ahora; DEFAULT).
 #   cesion      -> doy mi turno y me quedo libre; lo reclama un compañero elegible.
 #   abierto     -> turno sin dueño que se reclama del pool.
@@ -152,14 +152,14 @@ FRANJA_VESPERTINO = FRANJA_VESPERTINO_LEGACY
 FRANJA_DESCANSO = FRANJA_DESCANSO_LEGACY
 FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO_LEGACY, FRANJA_VESPERTINO_LEGACY)
 
-# Tipos de una AUSENCIA del horario (F4 · #144): el proponedor los respeta por igual
+# Tipos de una AUSENCIA del horario: el proponedor los respeta por igual
 # (cualquier ausencia que cubra una fecha excluye al miembro ese dia). `vacaciones` es el
 # caso del coordinador de la rota ("las vacaciones, esto por el acomodo"); `descanso` es un dia libre
 # planificado; `baja` una ausencia medica/forzosa; `otro` el cajon de sastre. Operacional;
 # vive en SQLite (`rota_ausencias.tipo`).
 TIPOS_AUSENCIA: tuple[str, ...] = ("vacaciones", "descanso", "baja", "otro")
 
-# Tipo de COBERTURA de un evento del calendario (F4 · #144, ola B). El coordinador de la rota distingue tres
+# Tipo de COBERTURA de un evento del calendario. El coordinador de la rota distingue tres
 # casos reales: `transmision` (sale con senal/transmision), `imagenes` ("algunos no los
 # vamos a transmitir, pero si los cubrimos con imagenes y fotografias") y `no_cubrir` (se
 # trackea en el calendario pero NO se asigna cobertura). DEFAULT `transmision`: un evento
@@ -178,13 +178,13 @@ TIPOS_COBERTURA_ASIGNABLES: tuple[str, ...] = (
 )
 
 # Estados validos de una PIEZA (un post individual asociado a un evento o programa
-# evergreen; #150 PARRILLA 2026). Una transmision como "LIV GOLF Andalucia R1" genera
+# evergreen; PARRILLA 2026). Una transmision como "LIV GOLF Andalucia R1" genera
 # varias piezas (pre-evento FB/IG/X, reel IG/TK, historia dia, post-evento); el flujo de
 # produccion va `pendiente` -> `en_curso` -> `listo` -> `publicado`. Operacional;
 # vive en Postgres (`rota_piezas.estado`).
 ESTADOS_PIEZA_PARRILLA: tuple[str, ...] = ("pendiente", "en_curso", "listo", "publicado")
 
-# Prioridad de un evento del calendario (F4 · #144, ola B): pista visual para que el
+# Prioridad de un evento del calendario: pista visual para que el
 # equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
 PRIORIDADES_EVENTO: tuple[str, ...] = ("alta", "media", "baja")
 PRIORIDAD_EVENTO_DEFECTO = "media"
@@ -260,8 +260,8 @@ TIPO_CONTENIDO_DEFECTO = "ia"
 # único valor en vez de literales sueltos.
 #   - `import-calendario` · `radar-auto` · `radar` · `rss`: fuentes EXTERNAS (lo histórico).
 #   - `equipo`: ALTA CREATIVA del equipo (Fase 1 / Flujo A). El equipo "postea" material
-#     original (foto/nota/idea) con marca; se AUTO-GENERA SIEMPRE (decisión de dirección
-#     2026-06-01: no opt-in). Es DISTINTO del alta tecleada legada (`origen=""`), que sigue
+#     original (foto/nota/idea) con marca; se AUTO-GENERA SIEMPRE (no opt-in). Es DISTINTO
+#     del alta tecleada legada (`origen=""`), que sigue
 #     EXCLUIDA de la auto-generación (la genera quien la crea, si quiere). El endpoint/UI que
 #     da de alta con este origen lo añade el Flujo A; aquí solo se fija el valor y la regla.
 ORIGEN_EQUIPO = "equipo"
@@ -296,9 +296,9 @@ ORIGEN_CLIPS = "clips"
 # Orígenes de FUENTE que la auto-generación de copy trata como "tema redactable" (un
 # borrador se encola solo). Incluye las fuentes externas históricas + el alta creativa del
 # equipo (`equipo`) + las historias curadas desde el panel (`historia`: sin esto, si su
-# lanzamiento síncrono fallaba —cola llena, generación pausada, presupuesto— el tema moría
-# sin copy y SIN REINTENTO, invisible para ambos motores; medido en el piloto con una
-# breaking). El alta tecleada legada (`origen=""`) NO está aquí: queda fuera de la
+# lanzamiento síncrono falla —cola llena, generación pausada, presupuesto— el tema moriría
+# sin copy y SIN REINTENTO, invisible para ambos motores). El alta tecleada legada
+# (`origen=""`) NO está aquí: queda fuera de la
 # auto-generación a propósito.
 ORIGENES_AUTOGEN: tuple[str, ...] = (
     "import-calendario",
@@ -337,9 +337,8 @@ ORIGEN_PIEZA_DEFECTO = "interno"
 # Canonica en keni-shared (re-exportada aqui, ver CLASES_PUBLICACION).
 ESTADOS_PUBLICACION: tuple[str, ...] = _estados_compartidos.ESTADOS_PUBLICACION
 
-# Estado de UNA fila por plataforma (`pieza.estado`). Vocabulario ÚNICO canónico
-# (COLAPSO 2026-06): una sola lista, sin estado de reposo `aprobado` ni estados de trabajo
-# legados (pendiente/en_curso):
+# Estado de UNA fila por plataforma (`pieza.estado`). Vocabulario ÚNICO canónico: una sola
+# lista, sin estado de reposo `aprobado` ni estados de trabajo legados (pendiente/en_curso):
 #
 #   borrador -> en_revision -> programado -> publicado
 #

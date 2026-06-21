@@ -8,7 +8,7 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/reporte`: total consolidado + por cuenta (nombres resueltos).
   - `/api/metricas/comparar`: comparativa A vs B (total + por marca).
   - `/api/metricas/analisis`: análisis diario con narrativa "qué cambió y por qué"
-    + siguiente paso (F6/#146); ensambla reporte + picos en una lectura accionable.
+    + siguiente paso; ensambla reporte + picos en una lectura accionable.
   - `/api/metricas/piezas-export`: descarga del Top 5 / Peores 5 de piezas (csv|md|json).
   - `/api/metricas/piezas-por-etiqueta`: rendimiento del periodo por serie/tipo (cruce
     piezas↔contenido para resolver tipo_contenido + etiquetas; Item C).

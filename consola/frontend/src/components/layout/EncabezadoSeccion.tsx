@@ -7,9 +7,8 @@ import { SelectorSeccion } from "@/components/layout/SelectorSeccion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 
 /**
- * Cabecera de sección UNIFICADA, dentro de la barra superior (donde antes estaban los
- * breadcrumbs), a la izquierda del control de marca/filtros y las notificaciones. Tres zonas
- * contiguas:
+ * Cabecera de sección UNIFICADA, dentro de la barra superior, a la izquierda del control de
+ * marca/filtros y las notificaciones. Tres zonas contiguas:
  *   - SECCIÓN: si la ruta cae en un hub con 2+ pestañas, se pinta de DOS formas según el ancho:
  *       · ESCRITORIO (`md+`): la tira de pestañas horizontal de siempre (la activa muerde el
  *         borde inferior del header).

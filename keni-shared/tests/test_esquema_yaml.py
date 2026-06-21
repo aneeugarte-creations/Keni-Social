@@ -1,4 +1,4 @@
-"""Tests del versionado de esquema de los YAML (#125): `migrar` / `sellar`.
+"""Tests del versionado de esquema de los YAML: `migrar` / `sellar`.
 
 Cubre el contrato del registro: `sellar` estampa la version actual; `migrar` sube
 de version (ausencia => 0 => 1 identidad), es idempotente, no muta la entrada y

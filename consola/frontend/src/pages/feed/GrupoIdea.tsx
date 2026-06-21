@@ -4,8 +4,8 @@
  * diferentes en la misma row": cada idea es su propio bloque y dentro va una rejilla con una celda
  * por red ya GENERADA. Las redes del FORMATO de la idea que aún no tienen pieza se condensan en
  * UNA franja "Falta generar: …" bajo la rejilla (una idea foto va a 3 redes; una video a las 5 —
- * `REDES_POR_FORMATO`—: no se listan redes a las que la idea nunca irá). Antes cada hueco era un
- * placeholder de ~400×600px y una idea podía enseñar más vacío que contenido.
+ * `REDES_POR_FORMATO`—: no se listan redes a las que la idea nunca irá). La franja condensada
+ * evita que una idea enseñe más vacío que contenido.
  *
  * Cabecera del grupo: el TÍTULO de la idea manda (es el ancla de lectura); la marca va DELANTE
  * como metadato (`UnoTV · Solari fue…`); a la DERECHA la FECHA de la nota original (hora CDMX) +

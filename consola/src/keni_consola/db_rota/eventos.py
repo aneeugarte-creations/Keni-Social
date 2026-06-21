@@ -271,7 +271,7 @@ _CAMPOS_REPROGRAMAN_EVENTO: tuple[str, ...] = ("fecha", "hora", "tipo_cobertura"
 def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
     """Edita parcialmente un evento; None si el id no existe.
 
-    Reglas de SEGUIMIENTO DE CAMBIOS (ola B, #144):
+    Reglas de SEGUIMIENTO DE CAMBIOS:
       - `actualizado` SIEMPRE se refresca (toda edicion deja marca temporal).
       - Si la edicion cambia `fecha`, `hora` o `tipo_cobertura` -> `cambiado=1` automatico
         (se reprogramo: el equipo debe re-enterarse). Solo si el valor REALMENTE cambia.

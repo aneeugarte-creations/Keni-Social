@@ -1,6 +1,6 @@
 """Endpoint de análisis diario: `analisis` ("qué cambió y por qué" + siguiente paso).
 
-Ensambla reporte + picos en una lectura accionable (F6/#146). Los helpers de
+Ensambla reporte + picos en una lectura accionable. Los helpers de
 serialización de la pieza, el movimiento y el análisis viven aquí.
 """
 
@@ -53,7 +53,7 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
     """Forma JSON del análisis diario para el SPA: lectura + movimientos + paso.
 
     Resuelve los nombres de marca con el catálogo de la Consola y mantiene
-    `fuente` (procedencia de las cifras, issue #131). El texto narrativo (render
+    `fuente` (procedencia de las cifras). El texto narrativo (render
     Markdown) NO se incluye: el SPA pinta su propia tarjeta a partir de los
     campos estructurados.
     """
@@ -73,7 +73,7 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
         "rango": rango,
         "etiqueta_rango": _etiqueta_rango(rango),
         "marca": marca or "",
-        # Procedencia: nombre de la fuente de los datos (issue #131).
+        # Procedencia: nombre de la fuente de los datos.
         "fuente": analisis.get("fuente") or "",
         "movimientos": [
             _movimiento_serializable(m, nombres) for m in analisis.get("movimientos", [])

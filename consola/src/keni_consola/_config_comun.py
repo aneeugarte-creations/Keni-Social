@@ -41,8 +41,8 @@ ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 # afirmativo activa la elevacion de login (un usuario con >=1 passkey debe completar una
 # ceremonia WebAuthn tras la contrasena) y la seccion de "Llaves de acceso" en "Mi cuenta".
 # Con el flag OFF el login se comporta EXACTAMENTE como hoy (nunca se pide segundo factor).
-# `KENI_CONSOLA_MFA_KEY` es una clave Fernet (base64 url-safe de 32 bytes) que ahora FIRMA y
-# fecha la cookie del CHALLENGE/pre-auth de vida corta (ya no cifra un secreto TOTP: en
+# `KENI_CONSOLA_MFA_KEY` es una clave Fernet (base64 url-safe de 32 bytes) que FIRMA y
+# fecha la cookie del CHALLENGE/pre-auth de vida corta (no cifra ningun secreto: en
 # passkeys el secreto vive en el dispositivo del usuario). Si el flag esta ON pero la clave
 # falta/es invalida, las ceremonias REHUSAN (fail-safe, 503), nunca se media-autentica.
 ENV_MFA = "KENI_CONSOLA_MFA"
@@ -111,7 +111,7 @@ ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 # Concurrencia de jobs (la cola NO tiene tope: el exceso ESPERA, ver R-NO-LIMIT).
 ENV_MAX_JOBS = "KENI_MAX_JOBS"
 
-# Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B).
+# Cola + worker de generacion (ADR 0002 Fase B).
 ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
 ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 
@@ -316,7 +316,7 @@ ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 # publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_REDACTAR` el comportamiento no cambia.
 ENV_PIPELINE_REDACTAR = "KENI_PIPELINE_REDACTAR"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
-# FLUJO CONTINUO: el pipeline ya no barre por tandas (sin intervalo configurable: tick corto
+# FLUJO CONTINUO: el pipeline no barre por tandas (sin intervalo configurable: tick corto
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
 # el volumen lo regula Admitir (gate serial en proceso por marca) + el backpressure de la cola.
 ENV_PIPELINE_EN_PROCESO_MAX = "KENI_PIPELINE_EN_PROCESO_MAX"  # gate serial: temas en proceso por marca
@@ -492,15 +492,15 @@ ENV_AFP_CLIENT_ID = "KENI_AFP_CLIENT_ID"
 ENV_AFP_CLIENT_SECRET = "KENI_AFP_CLIENT_SECRET"
 ENV_AFP_BASE_URL = "KENI_AFP_BASE_URL"
 
-# Persistencia (#130 / ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
+# Persistencia (ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
 # S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
 # `.env.example` (NO se renombran). `DATABASE_URL` (o sus componentes `POSTGRES_*`) es
 # requerida; sin S3 cableado la media sigue en disco.
 ENV_DATABASE_URL = "DATABASE_URL"
 # Componentes de la conexion Postgres (mismos nombres que `deploy/.env.example` y la
 # imagen oficial de Postgres). Sirven para DERIVAR `DATABASE_URL` cuando esta no se fija
-# explicitamente, evitando que la URL "derive" de la password (incidente de prod: la
-# password en `DATABASE_URL` no coincidia con `POSTGRES_PASSWORD`).
+# explicitamente, evitando que la password de `DATABASE_URL` se desincronice de
+# `POSTGRES_PASSWORD`.
 ENV_PG_USER = "POSTGRES_USER"
 ENV_PG_PASSWORD = "POSTGRES_PASSWORD"
 ENV_PG_DB = "POSTGRES_DB"
@@ -543,7 +543,7 @@ ENV_CONFIG = "KENI_CONSOLA_CONFIG"
 ENV_GENERACIONES = "KENI_CONSOLA_GENERACIONES"
 
 # --------------------------------------------------------------------------- #
-# Defaults (constantes; ANTES vivian dispersos en cada modulo).                #
+# Defaults (constantes centralizadas aqui, no dispersas por modulo).           #
 # --------------------------------------------------------------------------- #
 
 HOST_DEF = "127.0.0.1"

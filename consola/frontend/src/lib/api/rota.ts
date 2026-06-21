@@ -59,7 +59,7 @@ import type {
 } from "@/types";
 
 export const apiRota = {
-  // --- Rota de horarios del equipo (F4 · #144) ---
+  // --- Rota de horarios del equipo ---
   rotaEquipo: (signal?: AbortSignal) =>
     peticion<RespuestaEquipoRota>("/rota/equipo", { signal }),
   /**
@@ -196,7 +196,7 @@ export const apiRota = {
       json: cuerpo,
     }),
 
-  // --- Gestión de turnos: ausencias / vacaciones (F4 · #144, ola A) ---
+  // --- Gestión de turnos: ausencias / vacaciones ---
   rotaAusencias: (params: { miembro_id?: string } = {}, signal?: AbortSignal) =>
     peticion<RespuestaAusenciasRota>(`/rota/ausencias${query(params)}`, { signal }),
   crearAusenciaRota: (cuerpo: CuerpoCrearAusenciaRota) =>
@@ -209,7 +209,7 @@ export const apiRota = {
   eliminarAusenciaRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/ausencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
-  // --- Catálogo de programas (#150 PARRILLA 2026.xlsx) ---
+  // --- Catálogo de programas (PARRILLA 2026.xlsx) ---
   // Las piezas referencian programas por NOMBRE; renombrar hace cascada
   // transaccional sobre rota_piezas.programa. Borrar con piezas en uso requiere
   // ?forzar=true (el 409 incluye `piezas_afectadas` y `en_uso:true`).
@@ -240,7 +240,7 @@ export const apiRota = {
   cargaRota: (params: { lunes: string; marca?: string }, signal?: AbortSignal) =>
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
 
-  // --- Configuración editorial de franjas (#185) ---
+  // --- Configuración editorial de franjas ---
   // GRID POR MARCA: la config de franjas es por marca; `marca` viaja como `?marca=`.
   obtenerConfigFranjas: (marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaConfigFranjas>(`/rota/config/franjas${query({ marca })}`, { signal }),
@@ -276,7 +276,7 @@ export const apiRota = {
       { metodo: "DELETE" },
     ),
 
-  // --- Solicitudes de cambio de turno entre compañeros (#175) ---
+  // --- Solicitudes de cambio de turno entre compañeros ---
   // Flujo: A crea -> B acepta/rechaza -> admin aprueba (ejecuta el swap sobre
   // rota_turnos_trabajo) o rechaza. A puede cancelar mientras no sea terminal.
   // El cliente solo informa; las validaciones de permisos y transiciones las

@@ -482,10 +482,10 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
         hoy=hoy_utc(),
     )
 
-    # EN PARALELO: `lanzar_para_topic` ya NO genera la imagen en línea (antes era una llamada HTTP
-    # síncrona al proveedor, segundos por tema); ahora solo SELECCIONA y ENCOLA un job de proceso
-    # (el WORKER genera la imagen en su carril, fuera del barrido). El encolado es barato, pero el
-    # pool no estorba y mantiene el cap por barrido. Cada tema es independiente y best-effort.
+    # EN PARALELO: `lanzar_para_topic` no genera la imagen en línea; solo SELECCIONA y ENCOLA un
+    # job de proceso (el WORKER genera la imagen en su carril, fuera del barrido). El encolado es
+    # barato, pero el pool no estorba y mantiene el cap por barrido. Cada tema es independiente y
+    # best-effort.
     fallidos: list[str] = []  # ids de los temas cuyo ENCOLADO reventó en ESTE ciclo (append es atómico)
 
     def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -531,8 +531,7 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 # NO lo pone el tick sino la ADMISIÓN (gate serial en curso por marca) + el backpressure de la
 # cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro.
 #
-# CADENCIA BASE + BACKOFF (auditoría 2026-06): la base es 30 s (antes 15 s: despertaba ~5.760
-# veces/día por loop aunque no hubiera nada). Cuando el pool está seco, `bucle_gateado` espacia
+# CADENCIA BASE + BACKOFF: la base es 30 s. Cuando el pool está seco, `bucle_gateado` espacia
 # el barrido vacío ×2 hasta `_BACKOFF_MAX_SEGUNDOS`, y vuelve a la base en cuanto un barrido HACE
 # algo (verifica/admite/redacta/avanza) o se fuerza desde el panel. Así el coste ocioso cae sin
 # perder reactividad: el primer barrido con trabajo recupera el ritmo.
