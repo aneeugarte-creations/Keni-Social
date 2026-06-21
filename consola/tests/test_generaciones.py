@@ -343,6 +343,41 @@ def test_acumulador_parcial_no_recuenta_turnos_desde_assistant():
     assert acc.turnos == 1  # no 2
 
 
+def test_acumulador_refusal_en_message_delta_marca_error_terminal():
+    """Un `stop_reason: "refusal"` en el `message_delta` marca el run en error (no exito vacio)."""
+    acc = stream.AcumuladorStream()
+    acc.procesar_linea(_se({"type": "message_start", "message": {}}))
+    acc.procesar_linea(_se({"type": "message_delta", "delta": {"stop_reason": "refusal"},
+                            "usage": {"input_tokens": 3, "output_tokens": 0}}))
+    assert acc.stop_reason == "refusal"
+    assert acc.error is True
+    assert "refusal" in acc.mensaje_error.lower() or "rehus" in acc.mensaje_error.lower()
+
+
+def test_acumulador_refusal_en_assistant_marca_error():
+    """Sin parciales, el `stop_reason` del `assistant.message` tambien dispara el error."""
+    acc = stream.AcumuladorStream()
+    acc.procesar_linea(json.dumps({"type": "assistant",
+                                   "message": {"stop_reason": "refusal",
+                                               "usage": {"input_tokens": 1, "output_tokens": 0}}}))
+    assert acc.error is True
+
+
+def test_acumulador_stop_reason_normal_no_marca_error():
+    """`stop_reason: end_turn` (o ausente) no es rechazo: sin regresion."""
+    acc = stream.AcumuladorStream()
+    acc.procesar_linea(_se({"type": "message_start", "message": {}}))
+    acc.procesar_linea(_se({"type": "content_block_delta", "index": 0,
+                            "delta": {"type": "text_delta", "text": "ok"}}))
+    acc.procesar_linea(_se({"type": "message_delta", "delta": {"stop_reason": "end_turn"},
+                            "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    acc.procesar_linea(json.dumps({"type": "result", "subtype": "success", "result": "ok",
+                                   "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    assert acc.error is False
+    assert acc.stop_reason == "end_turn"
+    assert acc.texto == "ok"
+
+
 # --------------------------------------------------------------------------- #
 # Store de generaciones                                                       #
 # --------------------------------------------------------------------------- #

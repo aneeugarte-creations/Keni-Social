@@ -137,6 +137,36 @@ def test_parsear_error_generico_lanza_generacionerror():
     assert "error" in str(exc.value).lower()
 
 
+def test_parsear_refusal_por_stop_reason_lanza_generacionerror():
+    # Rechazo del modelo: `is_error` puede venir false, pero `stop_reason == "refusal"` marca
+    # el run como fallo terminal -> GeneracionError (no pasa como exito con result vacio).
+    crudo = json.dumps({
+        "type": "result", "subtype": "success", "is_error": False,
+        "stop_reason": "refusal", "result": "",
+    })
+    with pytest.raises(stream.GeneracionError) as exc:
+        stream.parsear_resultado_json(crudo)
+    assert "rehus" in str(exc.value).lower()
+
+
+def test_parsear_refusal_por_subtype_lanza_generacionerror():
+    crudo = json.dumps({"type": "result", "subtype": "refusal", "result": ""})
+    with pytest.raises(stream.GeneracionError):
+        stream.parsear_resultado_json(crudo)
+
+
+def test_parsear_exito_normal_no_es_refusal():
+    # `stop_reason: end_turn` (o ausente) sigue siendo exito: sin regresion.
+    crudo = json.dumps({
+        "type": "result", "subtype": "success", "is_error": False,
+        "stop_reason": "end_turn", "result": "Copy ok.",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    })
+    texto, m = stream.parsear_resultado_json(crudo)
+    assert texto == "Copy ok."
+    assert m is not None
+
+
 def test_parsear_stdout_no_json_devuelve_texto_y_metricas_none():
     texto, m = stream.parsear_resultado_json(_STDOUT_NO_JSON)
     assert texto == _STDOUT_NO_JSON

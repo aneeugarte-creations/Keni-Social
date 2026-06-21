@@ -97,6 +97,21 @@ _ENV_FALLBACK_MODEL = config.ENV_CLAUDE_FALLBACK_MODEL
 # Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
 _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
 
+# Mensaje del error de RECHAZO del modelo (refusal). Es un fallo TERMINAL y NO reintentable:
+# reintentar un refusal no ayuda, y su texto no casa con `_SENALES_TRANSITORIAS`, asi que el
+# job queda en error / revision humana en vez de publicarse como copy vacio.
+MSG_REFUSAL = "El modelo rehusó generar la respuesta (refusal)."
+
+
+def _es_refusal(stop_reason: object) -> bool:
+    """True si `stop_reason` indica un RECHAZO del modelo (`'refusal'`).
+
+    `stop_reason` viaja en el `message` del evento `assistant`/`message_delta` del stream-json y,
+    cuando el envelope `result` lo trae, tambien ahi. No es un error HTTP: sin esta deteccion el
+    run pasaria como exito con `result` vacio.
+    """
+    return isinstance(stop_reason, str) and stop_reason == "refusal"
+
 
 def arg_presupuesto() -> list[str]:
     """Devuelve `['--max-budget-usd', '<n>']` si `KENI_CLAUDE_MAX_USD` es valido; si no, `[]`.
@@ -270,7 +285,13 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
         # No es el objeto de resultado esperado: trata el stdout como texto plano.
         return crudo, None
 
+    # Rechazo del modelo (refusal): NO es un error HTTP (`is_error` puede venir false), pero el
+    # run NO produjo copy válido. Se trata como fallo terminal NO reintentable. El `result` lo
+    # expone via `stop_reason` o `subtype == "refusal"`.
     subtype = datos.get("subtype")
+    if _es_refusal(datos.get("stop_reason")) or (isinstance(subtype, str) and subtype == "refusal"):
+        raise GeneracionError(MSG_REFUSAL)
+
     es_error = bool(datos.get("is_error")) or (subtype not in (None, "success"))
     if es_error:
         if isinstance(subtype, str) and subtype in _SUBTIPOS_PRESUPUESTO:
@@ -389,6 +410,9 @@ class AcumuladorStream:
     terminado: bool = False
     error: bool = False
     mensaje_error: str = ""
+    # `stop_reason` observado en el stream (del `message_delta`/`assistant`). `"refusal"` marca
+    # un RECHAZO del modelo: el run se trata como fallo terminal NO reintentable.
+    stop_reason: str | None = None
     # True en cuanto llega un `stream_event` (modo `--include-partial-messages`): a partir
     # de ahi turnos/tokens se cuentan desde los `stream_event`, no desde `assistant`.
     _vio_stream: bool = False
@@ -425,6 +449,7 @@ class AcumuladorStream:
             modelo = mensaje.get("model")
             if isinstance(modelo, str) and modelo and self.modelo is None:
                 self.modelo = modelo
+            self._registrar_stop_reason(mensaje.get("stop_reason"))
             # En modo parcial los turnos/tokens los cuentan los `stream_event`; aqui solo
             # tomamos el modelo (arriba). Sin parciales, contamos turno + tokens del usage.
             if self._vio_stream:
@@ -482,6 +507,9 @@ class AcumuladorStream:
                 if isinstance(th, str) and th:
                     self.razonamiento = (self.razonamiento + th)[-_MAX_RAZONAMIENTO:]
         elif et == "message_delta":
+            delta = evt.get("delta")
+            if isinstance(delta, dict):
+                self._registrar_stop_reason(delta.get("stop_reason"))
             uso = evt.get("usage")
             if isinstance(uso, dict):
                 ti = _entero(uso.get("input_tokens"))
@@ -490,6 +518,20 @@ class AcumuladorStream:
                     self.tokens_in += ti
                 if to is not None:
                     self.tokens_out += to
+
+    def _registrar_stop_reason(self, valor: object) -> None:
+        """Anota el `stop_reason` del stream y marca error TERMINAL si es un rechazo (refusal).
+
+        Un `"refusal"` se trata como fallo NO reintentable: se fija `error`/`mensaje_error` para
+        que el llamante marque el run en error en vez de publicar el `result` (vacío o de rechazo)
+        como copy. NO sobreescribe un error ya fijado por un `result` previo.
+        """
+        if not isinstance(valor, str) or not valor:
+            return
+        self.stop_reason = valor
+        if _es_refusal(valor) and not self.error:
+            self.error = True
+            self.mensaje_error = MSG_REFUSAL
 
     def metricas_parciales(self) -> MetricasRun | None:
         """Metricas PARCIALES acumuladas hasta ahora (turnos/tokens), o None si aun nada."""
