@@ -27,6 +27,12 @@ Infra compartida (capa de datos del gateway + `keni-shared` + fachada de métric
 NO es de ninguna app: `repos`, `marcas`, `redes`, `estados`, `seguridad`,
 `observabilidad`, `lanzador`, `_http_json`, `db`, etc. no están en ningún manifest,
 así que importarlas nunca cuenta como cruce (siempre permitido, seam #6).
+
+La COLA DE JOBS `generaciones` (encolar `claude -p` en segundo plano + leer estado) es
+esa misma categoría de infra transversal, pero como SÍ es un router (`api/generaciones.py`
+con RUTAS) debe pertenecer a una unidad: vive en el SHELL (`shell.toml`). Importarla es
+app→shell (siempre permitido), no un cruce — por eso sus consumidores (media,
+parrilla_import, publicaciones, sugerencias) ya no necesitan entrada en la allowlist.
 """
 
 from __future__ import annotations
@@ -45,12 +51,6 @@ from keni_consola.apps import registro
 # --------------------------------------------------------------------------- #
 SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
     {
-        # Seam #4 (media shell consumida por A/C): `api/media.py` expone la
-        # generación de imagen como TRABAJO en segundo plano y para ello usa la
-        # infraestructura de jobs `generaciones` (de A). Es el único acoplamiento
-        # shell→app de hoy; queda explícito aquí. T-futura puede moverlo tras la
-        # fachada de jobs del gateway. (ADR 0005.)
-        ("media", "generaciones"),
         # Seam #1 (A→C handoff de borrador): una generación de copy deposita un
         # *borrador* en `piezas` (C) por la función-CONTRATO
         # `dominio.piezas.crear_borrador` (C garantiza el estado inicial `borrador`),
@@ -70,34 +70,19 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # de la auto-programación, a propósito: si el panel calculara sus huecos aparte,
         # mentiría en cuanto divergieran. SOLO LECTURA (no muta nada de C).
         ("produccion", "piezas"),
-        # Seam #7 (operación C usa la infra de jobs de A): `api/parrilla_import.py` (C)
-        # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
-        # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el
-        # estado del job. Mismo acoplamiento que el Seam #4 de `media`, ahora app→app.
-        # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005.)
-        ("parrilla_import", "generaciones"),
-        # Seam #7 (mismo patrón, otra operación C): el router `contenido` (operacion) importa un
-        # CALENDARIO editorial desde un documento con un `claude -p` en SEGUNDO PLANO, y para ello
-        # usa la infraestructura de jobs `generaciones` (A) — encolar y leer el estado del job.
-        # Idéntico acoplamiento app→app que `parrilla_import`/`media`. T-futura puede moverlo tras
-        # la fachada de jobs del gateway. (ADR 0005.) NOTA: `contenido` se partió de
-        # `api/publicaciones.py` a un PAQUETE `api/publicaciones/`; el cruce vive hoy en `contenido/_comun.py`
-        # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
-        ("publicaciones", "generaciones"),
-        # Seam #7 (mismo patrón, motor de auto-desarrollo): el router `sugerencias` (shell)
-        # lanza el pipeline de auto-desarrollo (discovery/construir/checkpoint) como un
-        # `claude -p` en SEGUNDO PLANO, y para ello usa la infraestructura de jobs
-        # `generaciones` (A) — encolar y mapear `ColaLlenaError` a un 429. Idéntico
-        # acoplamiento que `media`/`parrilla_import`/`publicaciones`. T-futura puede moverlo
-        # tras la fachada de jobs del gateway. (ADR 0005.)
-        ("sugerencias", "generaciones"),
         # Seam (shell lee señales de operación para el DOCTOR de salud): `api/estado.py`
         # (shell) absorbió los chequeos del banner (cola, presupuesto, daemons, disco…) y
         # para el de la COLA lee el snapshot de `api.actividad` (produccion) — SOLO LECTURA,
         # mismo patrón que "produccion lee la agenda de C". El health-check es transversal:
         # le importa a todo el equipo, no a una app. (ADR 0005.)
         ("estado", "actividad"),
-        # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
+        # NOTA — seams RETIRADOS de la allowlist (cola-jobs-infra / T1.1 / T1.2 / borra-panel):
+        #   ("media"|"parrilla_import"|"publicaciones"|"sugerencias", "generaciones")
+        #       [cola-jobs-infra]: `generaciones` (la cola de jobs) se reclasificó de módulo
+        #       de A a INFRA TRANSVERSAL del shell (shell.toml). Importarla pasó a ser
+        #       app→shell (siempre permitido), así que estos 4 cruces dejaron de existir y
+        #       sus entradas salieron de la allowlist. Era el síntoma clásico de frontera mal
+        #       cortada: 4 seams al MISMO destino. (ADR 0005.)
         #   ("reciclaje", "piezas")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
         #       de C en su router; pide el universo a la función-contrato de lectura de C
         #       `dominio.piezas.listar_para_reciclaje` a través de su propio

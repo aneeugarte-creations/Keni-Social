@@ -32,7 +32,10 @@ modulos_backend = [
   "prompts",
   "bloques",
   "imagen",
-  "generaciones",
+  # NOTA: la cola de jobs `generaciones` NO vive aquí: es INFRA TRANSVERSAL (varias apps
+  # encolan `claude -p` en segundo plano) y se declara en `shell.toml`. Mapearla a una app
+  # convertía cada consumidor en un cruce de frontera; como servicio del shell, importarla
+  # es app→shell (siempre permitido). Ver ADR 0005.
   "idear",
   "hashtags",
   "historial",

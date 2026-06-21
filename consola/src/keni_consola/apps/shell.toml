@@ -31,6 +31,12 @@ modulos_backend = [
   "marcas",
   "limites",
   "media",
+  # api/generaciones.py: la COLA DE JOBS (infra transversal). Varias apps encolan trabajo
+  # `claude -p` en segundo plano (generación de copy/imagen, import de documentos, auto-
+  # desarrollo) y leen el estado del job. Es base compartida —análoga a repos/db/keni-shared—,
+  # así que vive en el shell: importarla es app→shell (siempre permitido), no un cruce de
+  # frontera. Antes estaba en produccion.toml y obligaba a 4 entradas en SEAMS_PERMITIDOS. ADR 0005.
+  "generaciones",
   "artes",
   "alertas",
   "sugerencias",

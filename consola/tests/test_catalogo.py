@@ -150,7 +150,7 @@ def test_shell_no_es_app_ni_aporta_nav():
 def test_modulo_a_app_cubre_todos_los_routers_sin_solapes():
     mapa = registro.modulo_a_app()
     # Reparto canónico de ADR 0005 (muestra representativa por unidad).
-    assert mapa["generaciones"] == "produccion"
+    assert mapa["generaciones"] == "shell"  # cola de jobs = infra transversal del shell
     assert mapa["metricas"] == "metricas"
     assert mapa["piezas"] == "operacion"
     assert mapa["auth"] == "shell"

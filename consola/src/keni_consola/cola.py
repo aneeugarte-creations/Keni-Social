@@ -1,6 +1,6 @@
 """Cola de jobs de generacion: el back ENCOLA, un WORKER CLAVA y ejecuta.
 
-Capa fina sobre `repos` (persistencia SQLite local / Postgres hosted) + `dominio.jobspec`
+Capa fina sobre `repos` (persistencia en Postgres, local y hosted) + `dominio.jobspec`
 (serializacion del trabajo). Separa el "qué se encola/clava" (aquí) del "cómo se ejecuta"
 (`worker.py`) y del "qué post-procesado" (`dominio.jobspec`). El back llama a `encolar`
 dentro de la peticion (y vuelve al instante); el worker llama a `reclamar`/`terminar`.
