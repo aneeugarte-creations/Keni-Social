@@ -26,6 +26,26 @@ leer_env() {
   printf '%s' "$v"
 }
 
+# ── BLUE-GREEN del back (deploy SIN downtime) — KILL-SWITCH, POR DEFECTO OFF ───────────
+# Con blue-green ON, un cambio de back arranca el contenedor NUEVO junto al viejo (que sigue
+# sirviendo), espera a que el NUEVO esté `healthy` —Traefik solo enruta a sanos— y SOLO
+# entonces retira el VIEJO por IDENTIDAD (su id de contenedor capturado ANTES de escalar),
+# nunca por índice de `--scale`: cero ventana sin back sano. Si el NUEVO no llega a sano se
+# retira el NUEVO (por identidad) y el VIEJO sigue sirviendo: prod NUNCA cae.
+# POR DEFECTO OFF: vacío o cualquier valor que no sea 1/yes/on/true deja el cutover clásico
+# stop-the-world. Pon KENI_DEPLOY_BLUEGREEN=1 (en el .env o exportado) para activarlo.
+# REQUISITO del solape (solo aplica con ON): conviven back VIEJO y NUEVO y la migración de
+# esquema ([4/6]) corre con el viejo aún sirviendo, así que el esquema DEBE ser COMPATIBLE
+# HACIA ATRÁS (expand/contract): la migración de keni-social es ADITIVA e IDEMPOTENTE por
+# diseño (ADR 0004). Una migración destructiva (DROP/RENAME/constraint NOT NULL sin default)
+# rompería al back viejo durante el solape: hazla en dos deploys o con el blue-green OFF.
+BLUEGREEN="$(leer_env KENI_DEPLOY_BLUEGREEN)"
+[ -n "${KENI_DEPLOY_BLUEGREEN:-}" ] && BLUEGREEN="$KENI_DEPLOY_BLUEGREEN"   # export MANDA sobre el .env
+case "$BLUEGREEN" in
+  1|yes|on|true) BLUEGREEN=1 ;;
+  *) BLUEGREEN=0 ;;   # vacío (default) y cualquier otro valor: OFF
+esac
+
 # ── GUARDA: la app NO debe conectar a Postgres como SUPERUSUARIO ──────────────────────
 # Con DATABASE_URL vacia el back DERIVA la URL de POSTGRES_* y conecta como el rol
 # bootstrap (superusuario). En hosted eso es un agujero de minimo privilegio: la app debe
@@ -170,8 +190,12 @@ construir mcp    "keni-social/mcp:$MCP_VERSION"
 # Pasos de ESQUEMA/ESTADO: SOLO cuando cambió el código del back/worker (comparten `consola/`).
 # Un deploy de solo front no toca el esquema ni el volumen de estado (ni para el back).
 if [ "$BACK_CAMBIO" = 1 ]; then
-  echo "==> [2/6] stop back (breve indisponibilidad mientras se aplica el esquema)"
-  $DC stop back || true
+  if [ "$BLUEGREEN" = 1 ]; then
+    echo "==> [2/6] back cambió — blue-green ON: NO se para (el viejo sigue sirviendo durante el solape)"
+  else
+    echo "==> [2/6] stop back (blue-green OFF: breve indisponibilidad mientras se aplica el esquema)"
+    $DC stop back || true
+  fi
 else
   echo "==> [2/6] back sin cambios — no se para (sin indisponibilidad)"
 fi
@@ -218,7 +242,10 @@ if docker image inspect "keni-social/worker:$WORKER_VERSION" >/dev/null 2>&1; th
 fi
 
 if [ "$BACK_CAMBIO" = 1 ]; then
-  echo "==> [4/6] asegura esquema Postgres (idempotente; ADR 0004)"
+  # Con blue-green ON el back VIEJO sigue sirviendo mientras corre esta migración, así que el
+  # esquema debe ser COMPATIBLE HACIA ATRÁS (expand/contract). Lo es por diseño: ADITIVO e
+  # IDEMPOTENTE (ADR 0004). Ver la nota del kill-switch KENI_DEPLOY_BLUEGREEN arriba.
+  echo "==> [4/6] asegura esquema Postgres (idempotente, aditivo; ADR 0004)"
   $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
   # El `back` arranca uvicorn-factory (no pasa por `__main__`), así que la inicialización de la Texto
   # NO corre en su arranque: la materializamos aquí para que los prompts/editorial NUEVOS de la
@@ -255,8 +282,77 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
 }
 foto_previa front; foto_previa back; foto_previa worker; foto_previa transcriptor; foto_previa mcp
 
-echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
-$DC up -d
+# Espera a que un contenedor CONCRETO (por id) quede 'healthy'; timeout $2 s (0 si lo logra).
+# El blue-green identifica el back NUEVO por su id (capturado por diferencia con el VIEJO), así
+# que la espera es POR IDENTIDAD, no por `$DC ps | head` (que en el solape mezcla viejo y nuevo).
+espera_sano_cid() {  # $1 = container id ; $2 = timeout(s)
+  transcurrido=0; est=desconocido
+  while [ "$transcurrido" -le "$2" ]; do
+    est="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo desconocido)"
+    [ "$est" = "healthy" ] && return 0
+    sleep 5; transcurrido=$((transcurrido + 5))
+  done
+  echo "==> back NUEVO ($1) NO healthy tras ${2}s (ultimo estado: $est)" >&2
+  return 1
+}
+
+# BLUE-GREEN del back. Devuelve 0 si el back NUEVO quedó sano y el VIEJO fue retirado; 1 si el
+# NUEVO nunca llegó a sano (en ese caso ya retiró el NUEVO y dejó el VIEJO sirviendo — sin
+# downtime). CLAVE (root-cause del incidente #1775): los contenedores se RETIRAN POR IDENTIDAD
+# (`docker rm -f <id>`), nunca por índice de `--scale`. Con imágenes MIXTAS, `--scale back=1`
+# CONSERVA el que casa la spec deseada (el NUEVO) y borra el otro: en el camino de fallo eso
+# mataba al VIEJO sano. Aquí capturamos el id del VIEJO ANTES de escalar y elegimos a mano.
+rodar_back() {
+  OLD_IDS="$($DC ps -q back 2>/dev/null || true)"
+  if [ -z "$OLD_IDS" ]; then
+    # No hay back viejo en marcha (primer arranque o caído): no hay solape posible ni que
+    # preservar. Arranque directo y espera a que quede sano.
+    echo "==> blue-green: no hay back viejo en marcha — arranque directo (sin solape posible)"
+    $DC up -d --no-deps back
+    espera_sano_cid "$($DC ps -q back 2>/dev/null | head -n1)" 300
+    return
+  fi
+  echo "==> blue-green del back: arranca el contenedor NUEVO junto al viejo (scale=2, sin recrear el viejo)"
+  $DC up -d --no-deps --no-recreate --scale back=2 back
+  $DC ps back
+  # Identifica el NUEVO POR IDENTIDAD: el id que existe AHORA y no estaba en OLD_IDS.
+  NEW_ID=""
+  for cid in $($DC ps -q back 2>/dev/null); do
+    case " $OLD_IDS " in *" $cid "*) : ;; *) NEW_ID="$cid" ;; esac
+  done
+  if [ -z "$NEW_ID" ]; then
+    echo "==> blue-green: no pude identificar el contenedor NUEVO del back; aborto sin tocar el viejo" >&2
+    return 1
+  fi
+  if ! espera_sano_cid "$NEW_ID" 300; then
+    # CAMINO DE FALLO: retira el NUEVO POR IDENTIDAD; el VIEJO sigue sirviendo (sin downtime).
+    echo "==> blue-green: el back NUEVO no llegó a sano — retiro el NUEVO ($NEW_ID); el VIEJO sigue" >&2
+    docker rm -f "$NEW_ID" >/dev/null 2>&1 || true
+    return 1
+  fi
+  echo "==> blue-green del back: nuevo SANO y enrutado; retiro el/los VIEJO(s) POR IDENTIDAD (queda el nuevo sirviendo)"
+  # CAMINO DE ÉXITO: retira el/los VIEJO(s) POR IDENTIDAD (su id capturado antes de escalar).
+  for oid in $OLD_IDS; do docker rm -f "$oid" >/dev/null 2>&1 || true; done
+  return 0
+}
+
+if [ "$BLUEGREEN" = 1 ] && [ "$BACK_CAMBIO" = 1 ]; then
+  echo "==> [5b/6] up de los servicios NO-back + blue-green del back (sin downtime)"
+  NEW="keni-social/back:$BACK_VERSION"
+  # El resto del stack con el up normal (recrea solo lo que cambió); el back se actualiza aparte.
+  otros="$($DC config --services | grep -vx back || true)"
+  # shellcheck disable=SC2086  # $otros es una lista de servicios: word-splitting deliberado
+  [ -n "$otros" ] && $DC up -d $otros
+  if ! rodar_back; then
+    printf '\033[31m==> blue-green: el back NUEVO no llegó a healthy. NUEVO retirado; PROD sigue con el back VIEJO (sin downtime).\033[0m\n' >&2
+    docker rmi "$NEW" >/dev/null 2>&1 || true   # untag: el próximo deploy del mismo contenido RECONSTRUYE
+    printf '\033[31m==> Deploy EN ROJO (back nuevo no arrancó). Revisa: docker logs de un keni-social-back-*. La red :previa queda intacta.\033[0m\n' >&2
+    exit 1
+  fi
+else
+  echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
+  $DC up -d
+fi
 $DC ps
 
 espera_sano() {  # $1 = servicio compose ; $2 = timeout en segundos. 0 si llega a healthy.
