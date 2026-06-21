@@ -26,5 +26,6 @@ desde el panel (Sistema → Cuenta de Claude), sin SSH ni reinicios.
   es fijar la cuenta con un login.
 
 - **El medidor de uso (`/usage`) se parsea a campos estructurados** (sesión / semana, con sus
-  resets). La identidad de la cuenta (email/org) no la expone el CLI en modo headless: no se
-  muestra.
+  resets) y se cachea el último bueno en `/data` para no mostrar nunca la frase genérica. La
+  identidad de la cuenta (email / plan / org) la expone `claude auth status --json` con login por
+  credenciales; el panel la muestra cuando está disponible.

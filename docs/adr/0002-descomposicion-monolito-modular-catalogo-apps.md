@@ -48,8 +48,12 @@ Tres procesos, no N microservicios:
   [ADR 0001](0001-runtime-servicio-compartido.md).
 - **MCP de métricas** — proceso aparte con contrato propio (stdio/HTTP).
 
-Más infra compartida: Postgres (estado), object storage (media) y whisper (transcripción
-en un servicio propio o en local, nunca a una API de terceros).
+Más infra compartida: Postgres (estado), object storage (media) y transcripción por
+whisper (nunca a una API de terceros), que en el stack hosted vive en su propio worker
+(faster-whisper) y en local corre directamente en la máquina (`whisper.cpp`).
 
-Docker/compose con **dos perfiles**, no un enjambre: **local/privacidad** (sin exponer
-red, whisper transcribe en local) y **hosted/equipo** (gateway + worker + MCP + Postgres).
+Dos modos de despliegue, no un enjambre: **local/privacidad** —cada persona corre el MCP
+y la transcripción (`whisper.cpp`) en su máquina, sin exponer red ni sacar datos del
+equipo— y **hosted/equipo** —el stack de `deploy/docker-compose.yml`: gateway (`front` +
+`back`), `worker` de generación, `transcriptor` (whisper), MCP y Postgres tras un ingress
+único—.
