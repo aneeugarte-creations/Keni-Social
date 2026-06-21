@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { confirmar } from "@/components/comunes/confirmar";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -97,27 +96,34 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {CARPETAS.map((c) => (
-            <Button
-              key={c.id || "todas"}
-              type="button"
-              variant={tipo === c.id ? "default" : "outline"}
-              size="sm"
-              className={cn("h-7 px-2.5 text-xs", tipo === c.id && "pointer-events-none")}
-              onClick={() => setTipo(c.id)}
-            >
-              {c.etiqueta}
-            </Button>
-          ))}
+          {CARPETAS.map((c) => {
+            const activo = tipo === c.id;
+            return (
+              <button
+                key={c.id || "todas"}
+                type="button"
+                aria-pressed={activo}
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                  activo
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                onClick={() => setTipo(c.id)}
+              >
+                {c.etiqueta}
+              </button>
+            );
+          })}
         </div>
 
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar…"
-            className="pl-8"
+            className="h-9 rounded-lg border-transparent bg-muted/60 pl-8 placeholder:text-muted-foreground focus-visible:border-border"
             aria-label="Buscar artes"
           />
         </div>
@@ -171,7 +177,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                     }}
                     acciones={acciones}
                   >
-                    <div className="block w-full overflow-hidden rounded-md border border-border bg-muted/20 transition-colors hover:border-keni-300 focus-within:border-keni-300">
+                    <div className="block w-full overflow-hidden rounded-lg border border-border bg-muted/20 transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20 focus-within:ring-1 focus-within:ring-foreground/20">
                       <img
                         src={urlMedia(arte.objeto)}
                         alt={arte.titulo || "Arte de la galería"}

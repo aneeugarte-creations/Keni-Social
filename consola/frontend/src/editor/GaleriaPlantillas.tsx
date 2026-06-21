@@ -258,7 +258,7 @@ export function PublicacionPlantillas({
 
   // Tarjeta de plantilla: miniatura con la relación de aspecto REAL del documento (la caja
   // reserva el alto exacto antes de cargar la imagen: placeholder sin layout shift y altura
-  // variable del masonry) + título/acciones debajo. Hover: elevación + scale sutil (~150ms).
+  // variable del masonry) + título/acciones debajo. Hover: anillo y sombra sutiles (~150ms).
   // Acciones secundarias (Foto de muestra…, Duplicar, Borrar) viven en el kebab «⋮» (visible al
   // hover en modo gestión) y en el menú contextual, accesible por click derecho, long-press,
   // Shift+F10 o teclado (FilaConAcciones).
@@ -345,7 +345,7 @@ export function PublicacionPlantillas({
           <button
             onClick={() => onCargar(p)}
             title={`Cargar «${p.nombre}»`}
-            className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
+            className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[box-shadow] duration-150 hover:shadow-sm hover:ring-1 hover:ring-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
               {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
@@ -366,24 +366,28 @@ export function PublicacionPlantillas({
               )}
             </div>
           </button>
-          {/* Pie: categoría (chip) + título, FUERA de la miniatura para no taparla. El tipo NO se
-              repite por tarjeta: ya lo dice la pestaña Fotos/Miniaturas (la rejilla es siempre de un
-              solo tipo). En gestión la categoría abre el mini-editor (cambiar etiqueta y renombrar);
-              clic en el título renombra inline; la miniatura de arriba abre la plantilla. */}
+          {/* Pie: título y —solo en gestión— el badge de categoría, FUERA de la miniatura para no
+              taparla. El tipo NO se repite por tarjeta: ya lo dice la pestaña Fotos/Miniaturas (la
+              rejilla es siempre de un solo tipo). En gestión el badge abre el mini-editor (cambiar
+              etiqueta y renombrar) y el clic en el título renombra inline; en selector el pie queda
+              solo con el título (la categoría ya la dan las cabeceras de sección y los chips). La
+              miniatura de arriba abre la plantilla. */}
           <div className="flex items-center gap-1 px-1.5 py-1">
-            <BadgeCategoria
-              categoria={p.categoria}
-              onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
-              nombre={p.nombre}
-              onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
-              slugsPresentes={slugsPresentes}
-              catalogo={catalogos?.get(p.marca)}
-              onRenombrarEtiqueta={
-                onRenombrarEtiqueta ? (slug, etiqueta) => onRenombrarEtiqueta(p, slug, etiqueta) : undefined
-              }
-              onCrearEtiqueta={onCrearEtiqueta ? (etiqueta) => onCrearEtiqueta(p, etiqueta) : undefined}
-              onBorrarEtiqueta={onBorrarEtiqueta ? (slug) => onBorrarEtiqueta(p, slug) : undefined}
-            />
+            {onCategorizar && (
+              <BadgeCategoria
+                categoria={p.categoria}
+                onCambiar={(slug) => onCategorizar(p, slug)}
+                nombre={p.nombre}
+                onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
+                slugsPresentes={slugsPresentes}
+                catalogo={catalogos?.get(p.marca)}
+                onRenombrarEtiqueta={
+                  onRenombrarEtiqueta ? (slug, etiqueta) => onRenombrarEtiqueta(p, slug, etiqueta) : undefined
+                }
+                onCrearEtiqueta={onCrearEtiqueta ? (etiqueta) => onCrearEtiqueta(p, etiqueta) : undefined}
+                onBorrarEtiqueta={onBorrarEtiqueta ? (slug) => onBorrarEtiqueta(p, slug) : undefined}
+              />
+            )}
             {onRenombrar && editId === p.id ? (
               <input
                 autoFocus
@@ -426,7 +430,7 @@ export function PublicacionPlantillas({
             <button
               onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
               title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
-              className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
+              className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] transition-colors ${
                 p.rotar
                   ? "text-emerald-600 dark:text-emerald-400"
                   : "text-muted-foreground hover:text-foreground"
@@ -444,18 +448,17 @@ export function PublicacionPlantillas({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       {/* Filtro de tipo (solo si no está fijo): segmented control estilo «Turnos» (Apple/Canva) —
-          track gris con la pestaña activa como píldora BLANCA con sombra (sin la antigua píldora
-          negra `bg-primary`). */}
+          track gris con la pestaña activa como píldora BLANCA con sombra. */}
       {!tipoFijo && (
         <div className={`flex shrink-0 border-b border-border py-2 ${padX}`}>
-          <div className="inline-flex items-center rounded-lg bg-muted p-1">
+          <div className="inline-flex items-center rounded-lg bg-muted p-0.5">
             {(["foto", "miniatura"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setFiltroTipo(t)}
                 className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
                   filtroTipo === t
-                    ? "bg-background text-foreground shadow"
+                    ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -492,7 +495,7 @@ export function PublicacionPlantillas({
             <p className="text-sm text-muted-foreground">Sin resultados para esa búsqueda.</p>
             <button
               onClick={() => { setQ(""); setCategoria(""); }}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               Borrar búsqueda
             </button>
@@ -591,7 +594,7 @@ export function PublicacionPlantillas({
           <div className={`mt-6 grid gap-3 ${claseColumnas(columnas)}`}>
             <button
               onClick={onLienzoBlanco}
-              className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+              className="flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground"
             >
               <Plus className="h-6 w-6" />
               Lienzo en blanco
@@ -651,7 +654,7 @@ export function GaleriaPlantillas({
         className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl"
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Plantillas</h2>
+          <h2 className="text-sm font-medium">Plantillas</h2>
           <button
             onClick={onCerrar}
             aria-label="Cerrar"

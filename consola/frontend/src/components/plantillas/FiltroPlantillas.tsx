@@ -192,7 +192,7 @@ export function BuscadorPlantillas({
         value={valor}
         onChange={(e) => onCambiar(e.target.value)}
         placeholder={placeholder}
-        className="h-8 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+        className="h-9 w-full rounded-lg border border-transparent bg-muted/60 pl-8 pr-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border"
       />
     </div>
   );
@@ -222,10 +222,10 @@ export function ChipsCategoria({
         type="button"
         aria-pressed={activo}
         onClick={() => onCambiar(slug)}
-        className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
           activo
-            ? "border-primary bg-primary text-primary-foreground"
-            : "border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+            ? "bg-secondary text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
         {etiqueta}

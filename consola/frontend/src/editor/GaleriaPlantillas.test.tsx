@@ -218,12 +218,13 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
     expect(screen.getByRole("heading", { name: "Marcador" })).toBeInTheDocument();
   });
 
-  it("el legado 'post' se muestra como badge «General»", () => {
-    render(<GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
+  it("el legado 'post' se muestra como badge «General» (gestión)", () => {
+    // El badge solo se pinta en gestión (con onCategorizar); en selector el pie va sin categoría.
+    render(<GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCategorizar={vi.fn()} onCerrar={vi.fn()} />);
     expect(screen.getByText("General")).toBeInTheDocument();
   });
 
-  it("sin onCategorizar (modo selector) el badge no abre selector", () => {
+  it("sin onCategorizar (modo selector) no se pinta el badge", () => {
     render(<GaleriaPlantillas plantillas={[ULTIMA]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
     expect(screen.queryByTitle("Cambiar categoría")).not.toBeInTheDocument();
   });
@@ -532,12 +533,13 @@ describe("PublicacionPlantillas — masonry y carga perezosa", () => {
     expect(screen.getByTitle("Cargar «Plantilla 29»")).toBeInTheDocument();
   });
 
-  it("hover de tarjeta: elevación + escala sutil en ~150ms y foco visible por teclado", () => {
+  it("hover de tarjeta: anillo y sombra sutiles en ~150ms (sin escala) y foco visible por teclado", () => {
     render(<PublicacionPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
     const tarjeta = screen.getByTitle(`Cargar «${FOTO.nombre}»`);
     expect(tarjeta.className).toContain("duration-150");
-    expect(tarjeta.className).toContain("hover:shadow-lg");
-    expect(tarjeta.className).toContain("motion-safe:hover:scale-[1.02]");
+    expect(tarjeta.className).toContain("hover:shadow-sm");
+    expect(tarjeta.className).toContain("hover:ring-1");
+    expect(tarjeta.className).not.toContain("hover:scale-");
     expect(tarjeta.className).toContain("focus-visible:ring-2");
   });
 });
