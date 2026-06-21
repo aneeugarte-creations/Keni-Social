@@ -399,6 +399,10 @@ export function PanelPresupuesto({
   const marca = presupuesto.marca || "";
   const conCapUsd = presupuesto.presupuesto_usd_dia > 0;
   const pctUsd = presupuesto.pct_usado_usd;
+  const proyeccion = presupuesto.proyeccion_usd_dia;
+  const pctProyectado = presupuesto.pct_proyectado_usd;
+  // Aviso visual cuando la proyección de gasto supera el tope del día.
+  const proyeccionExcede = conCapUsd && proyeccion != null && proyeccion > presupuesto.presupuesto_usd_dia;
   // Claves de ajuste con sufijo por marca cuando hay ámbito de marca (`KENI_*::<marca>`).
   const clavePausa = marca ? `KENI_GENERACION_PAUSADA::${marca}` : "KENI_GENERACION_PAUSADA";
   const claveUsd = marca ? `KENI_PRESUPUESTO_USD_DIA::${marca}` : "KENI_PRESUPUESTO_USD_DIA";
@@ -465,6 +469,16 @@ export function PanelPresupuesto({
           {conCapUsd && pctUsd != null && <span>· {pctUsd.toFixed(0)}% gasto</span>}
           {conCapUsd && pctUsd != null && <BarraPct pct={pctUsd} ancho="w-56" />}
         </div>
+        {/* Proyección de gasto a fin de día (extrapolación del coste actual). Avisa en rojo si
+            la proyección supera el tope. None al arranque del día (no se proyecta). */}
+        {proyeccion != null && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className={cn(proyeccionExcede ? "text-destructive" : "text-muted-foreground")}>
+              Proyección fin de día: {costeUsd(proyeccion)}
+              {conCapUsd && pctProyectado != null && ` · ${pctProyectado.toFixed(0)}% del tope`}
+            </span>
+          </div>
+        )}
         {/* Dos motores lado a lado (apilan en móvil): tokens IN/OUT con su tope por dirección,
             editable por admin. El tope es del ÁMBITO: global en "todas", propio de la marca cuando
             hay marca activa (clave `KENI_*::<marca>`). */}

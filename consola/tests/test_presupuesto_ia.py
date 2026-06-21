@@ -786,3 +786,56 @@ def test_encolar_tope_motor_corta_solo_ese_motor(entorno, monkeypatch):
         prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=jobspec.PRIORIDAD_MANUAL
     )
     assert cola.encolar(_gen(), spec2, proceso="produccion")
+
+
+# --------------------------------------------------------------------------- #
+# Proyeccion de gasto a fin de dia (burn-rate). PURO: sin Postgres ni red.    #
+# --------------------------------------------------------------------------- #
+
+
+def _patch_gasto(monkeypatch, coste_usd: float) -> None:
+    """Fija el gasto del dia (sin tocar Postgres) para las pruebas de proyeccion."""
+    gasto = {"tokens": 0, "tokens_in": 0, "tokens_out": 0,
+             "coste_usd": coste_usd, "generaciones": 1}
+    monkeypatch.setattr(presupuesto_ia, "_gasto_hoy", lambda marca="": gasto)
+    monkeypatch.setattr(presupuesto_ia, "_gasto_por_proceso_hoy",
+                        lambda marca="": presupuesto_ia._gasto_vacio_por_proceso())
+    monkeypatch.setattr(presupuesto_ia, "nivel", lambda marca="": presupuesto_ia.NIVEL_NORMAL)
+
+
+def test_proyeccion_extrapola_coste_segun_fraccion_del_dia(monkeypatch):
+    # A un cuarto del dia con $2.5 gastados, la proyeccion a fin de dia es $10.
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.25)
+    _patch_gasto(monkeypatch, 2.5)
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "8")
+    est = presupuesto_ia.estado()
+    assert est["proyeccion_usd_dia"] == pytest.approx(10.0)
+    # 10 / 8 = 125% del tope (la proyeccion lo supera).
+    assert est["pct_proyectado_usd"] == pytest.approx(125.0)
+
+
+def test_proyeccion_arranque_del_dia_es_none(monkeypatch):
+    # Fraccion ~0: no se proyecta (dividir por casi-cero dispararia la cifra).
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.001)
+    _patch_gasto(monkeypatch, 1.0)
+    monkeypatch.setenv("KENI_PRESUPUESTO_USD_DIA", "8")
+    est = presupuesto_ia.estado()
+    assert est["proyeccion_usd_dia"] is None
+    assert est["pct_proyectado_usd"] is None
+
+
+def test_proyeccion_sin_presupuesto_usd_pct_proyectado_none(monkeypatch):
+    monkeypatch.setattr(presupuesto_ia, "_fraccion_dia_utc", lambda: 0.5)
+    _patch_gasto(monkeypatch, 3.0)
+    monkeypatch.delenv("KENI_PRESUPUESTO_USD_DIA", raising=False)
+    est = presupuesto_ia.estado()
+    assert est["proyeccion_usd_dia"] == pytest.approx(6.0)  # 3.0 / 0.5
+    assert est["pct_proyectado_usd"] is None  # sin cap USD
+
+
+def test_fraccion_dia_utc_deriva_del_reloj_canonico(monkeypatch):
+    # Mediodia UTC -> 0.5 del dia.
+    monkeypatch.setattr(presupuesto_ia, "ahora_iso", lambda: "2026-06-21T12:00:00")
+    assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.5)
+    monkeypatch.setattr(presupuesto_ia, "ahora_iso", lambda: "2026-06-21T00:00:00")
+    assert presupuesto_ia._fraccion_dia_utc() == pytest.approx(0.0)

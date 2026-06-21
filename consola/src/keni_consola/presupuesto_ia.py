@@ -83,6 +83,25 @@ def _hoy_utc() -> str:
     return ahora_iso()[:10]
 
 
+# Segundos de un dia completo, base de la fraccion del dia transcurrida.
+_SEGUNDOS_DIA = 86400
+
+
+def _fraccion_dia_utc() -> float:
+    """Fraccion del dia UTC de HOY ya transcurrida (0.0 a 1.0).
+
+    Misma nocion de "hoy" que `_hoy_utc`/`_gasto_hoy` (dia UTC via `ahora_iso`), para que la
+    proyeccion case con el bucket del gasto. Se deriva del timestamp ISO canonico (HH:MM:SS),
+    asi parchear `ahora_iso` en tests fija tambien la fraccion.
+    """
+    hms = ahora_iso()[11:19]  # "HH:MM:SS" del canon UTC
+    try:
+        h, m, s = (int(p) for p in hms.split(":"))
+    except (ValueError, TypeError):
+        return 0.0
+    return (h * 3600 + m * 60 + s) / _SEGUNDOS_DIA
+
+
 def invalidar_cache() -> None:
     """Invalida la cache del gasto (global y por proceso) y el nivel observado.
 
@@ -387,8 +406,12 @@ def estado(marca: str = "") -> dict[str, Any]:
     Forma (CONTRATO de `/api/actividad/cola`):
       {marca, nivel, pausada, presupuesto_tokens_dia, presupuesto_usd_dia, margen_manual_pct,
        gastado: {tokens, tokens_in, tokens_out, coste_usd, generaciones}, restante_tokens,
-       pct_usado, pct_usado_usd, dia,
+       pct_usado, pct_usado_usd, proyeccion_usd_dia, pct_proyectado_usd, dia,
        por_proceso: {investigacion: {...}, produccion: {...}}}
+
+    `proyeccion_usd_dia` es el coste estimado a fin de dia (coste actual / fraccion del dia UTC
+    transcurrida); None al arranque del dia (fraccion <= 1%). `pct_proyectado_usd` es esa
+    proyeccion sobre el cap de USD; None sin cap o sin proyeccion.
 
     `marca` ("" = GLOBAL; un id = vista POR MARCA): con marca, `gastado`/`por_proceso` traen el
     gasto SOLO de esa marca y los controles son los PROPIOS de la marca (su parada, su cap USD y
@@ -412,6 +435,16 @@ def estado(marca: str = "") -> dict[str, Any]:
     restante = max(0, presupuesto - gastado) if presupuesto > 0 else None
     pct = round(100.0 * gastado / presupuesto, 1) if presupuesto > 0 else None
     pct_usd = round(100.0 * coste / presupuesto_usd, 1) if presupuesto_usd > 0 else None
+    # Proyeccion de gasto a fin de dia: extrapola el coste actual al dia completo segun la
+    # fraccion del dia UTC ya transcurrida. Al arranque del dia (fraccion ~0) NO se proyecta
+    # (None): dividir por casi-cero dispararia la cifra a valores absurdos.
+    fraccion = _fraccion_dia_utc()
+    proyeccion_usd = round(coste / fraccion, 4) if fraccion > 0.01 else None
+    pct_proyectado_usd = (
+        round(100.0 * proyeccion_usd / presupuesto_usd, 1)
+        if proyeccion_usd is not None and presupuesto_usd > 0
+        else None
+    )
     gasto_proc = _gasto_por_proceso_hoy(marca)
     return {
         "marca": marca,
@@ -424,6 +457,8 @@ def estado(marca: str = "") -> dict[str, Any]:
         "restante_tokens": restante,
         "pct_usado": pct,
         "pct_usado_usd": pct_usd,
+        "proyeccion_usd_dia": proyeccion_usd,
+        "pct_proyectado_usd": pct_proyectado_usd,
         "dia": _hoy_utc(),
         "por_proceso": {
             PROCESO_INVESTIGACION: _bloque_proceso(PROCESO_INVESTIGACION, gasto_proc, marca),

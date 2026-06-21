@@ -218,6 +218,11 @@ export interface PresupuestoIA {
   pct_usado: number | null;
   /** % del presupuesto de coste (USD) consumido (null sin presupuesto de USD). */
   pct_usado_usd: number | null;
+  /** Proyección de gasto (USD) a fin de día (coste actual / fracción del día transcurrida).
+   *  null al arranque del día (fracción <= 1%), cuando extrapolar dispararía la cifra. */
+  proyeccion_usd_dia: number | null;
+  /** % del cap de USD que la proyección alcanzaría (null sin cap o sin proyección). */
+  pct_proyectado_usd: number | null;
   /** Día UTC del acumulado (YYYY-MM-DD). */
   dia: string;
   /** Desglose por motor (investigación/producción): gasto in/out + tope propio. Opcional para
