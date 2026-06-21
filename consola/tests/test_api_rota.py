@@ -8,7 +8,7 @@ sin eventos y eventos sin turnos.
 Cubre el CONTRATO de `/api/rota/*`:
   - eventos (CRUD + duplicar + filtros)
   - turnos (CRUD completo: GET semana, POST individual, PATCH, DELETE, lote, duplicar,
-    aprobar) con la regla de override del sábado de trabajo y la cruzada de ausencias.
+    aprobar) con la regla cruzada de ausencias (override).
   - cobertura DERIVADA (`/api/rota/cobertura`, `/api/rota/cobertura/evento/{id}`).
   - copia-semana de turnos, carga del equipo, export csv/xlsx.
 
@@ -29,7 +29,7 @@ from .conftest import TOKEN_PRUEBA
 _ORIGIN = {"Origin": "http://testserver"}
 CLAVE = "clave-de-prueba"
 
-# Sábados consecutivos reales (para la regla de rotacion).
+# Sábados consecutivos reales (fechas de sábado para los tests de turnos en sábado).
 SAB1 = "2026-05-30"
 SAB2 = "2026-06-06"
 LUNES1 = "2026-05-25"
@@ -747,8 +747,8 @@ def test_crear_turno_duplicado_409(cliente):
     assert "turno_existente" in r.json()
 
 
-def test_crear_turno_sabado_exige_override(cliente):
-    """Sabado consecutivo de trabajo sin override -> 409 (regla de aceptacion)."""
+def test_crear_turno_sabado_consecutivo_se_permite(cliente):
+    """Sabados consecutivos de la misma persona: se crean sin friccion (no hay rotacion)."""
     equipo = _crear_equipo(1)
     ana = equipo[0]
     _crear_turno(LUNES1, SAB1, ana, franja="matutino")
@@ -756,26 +756,7 @@ def test_crear_turno_sabado_exige_override(cliente):
         "/api/rota/turnos",
         json={"fecha": SAB2, "miembro_id": ana["id"], "franja": "matutino"},
     )
-    assert r.status_code == 409
-    assert r.json()["requiere_override"] is True
-    # Con override SI se permite.
-    r_ok = cliente.post(
-        "/api/rota/turnos",
-        json={"fecha": SAB2, "miembro_id": ana["id"], "franja": "matutino", "override": True},
-    )
-    assert r_ok.status_code == 201
-
-
-def test_crear_turno_descanso_no_choca_con_sabado_previo(cliente):
-    """Asignar `descanso` en sabado a quien trabajo el sabado previo NO viola la rotacion."""
-    equipo = _crear_equipo(1)
-    ana = equipo[0]
-    _crear_turno(LUNES1, SAB1, ana, franja="matutino")
-    r = cliente.post(
-        "/api/rota/turnos",
-        json={"fecha": SAB2, "miembro_id": ana["id"], "franja": "descanso"},
-    )
-    assert r.status_code == 201
+    assert r.status_code == 201, r.text
 
 
 # --------------------------------------------------------------------------- #
@@ -795,8 +776,8 @@ def test_editar_turno_franja_y_nota(cliente):
     assert r.json()["turno"]["nota_relevo"] == "Dejo pendiente el clip del 2T"
 
 
-def test_editar_turno_sabado_consecutivo_exige_override(cliente):
-    """PATCH con sabado consecutivo de trabajo sin override -> 409."""
+def test_editar_turno_sabado_consecutivo_se_permite(cliente):
+    """PATCH que repite a la persona en sabados consecutivos: 200 (no hay rotacion)."""
     equipo = _crear_equipo(2)
     _crear_turno(LUNES1, SAB1, equipo[0], franja="matutino")
     turno_sab2 = _crear_turno(LUNES2, SAB2, equipo[1], franja="matutino")
@@ -804,14 +785,8 @@ def test_editar_turno_sabado_consecutivo_exige_override(cliente):
         f"/api/rota/turnos/{turno_sab2['id']}",
         json={"miembro_id": equipo[0]["id"]},
     )
-    assert r.status_code == 409
-    assert r.json()["requiere_override"] is True
-    # Con override SI se permite.
-    r_ok = cliente.patch(
-        f"/api/rota/turnos/{turno_sab2['id']}",
-        json={"miembro_id": equipo[0]["id"], "override": True, "motivo": "Cobertura clave"},
-    )
-    assert r_ok.status_code == 200
+    assert r.status_code == 200, r.text
+    assert r.json()["turno"]["miembro_id"] == equipo[0]["id"]
 
 
 def test_editar_turno_miembro_inexistente_400(cliente):
@@ -919,8 +894,8 @@ def test_actualizar_turnos_lote(cliente):
     assert all(t["miembro_id"] == luis["id"] for t in r.json()["turnos"])
 
 
-def test_actualizar_turnos_lote_sabado_exige_override_atomico(cliente):
-    """Lote con un sabado problematico -> 409 sin tocar nada (atomico)."""
+def test_actualizar_turnos_lote_sabado_consecutivo_se_permite(cliente):
+    """Lote que reasigna a una persona un sabado consecutivo: 200 (no hay rotacion)."""
     equipo = _crear_equipo(2)
     ana, beto = equipo[0], equipo[1]
     # Semana 1: ana TRABAJA el sabado.
@@ -928,24 +903,14 @@ def test_actualizar_turnos_lote_sabado_exige_override_atomico(cliente):
     # Semana 2: beto tiene turno el sabado y otro entre semana.
     t_sab2 = _crear_turno(LUNES2, SAB2, beto, franja="matutino")
     t_mar = _crear_turno(LUNES2, "2026-06-02", beto, franja="matutino")
-    # Intentar pasar ambos a ana: el sabado choca. ATOMICO -> 409.
+    # Pasar ambos a ana (incluido el sabado consecutivo) se aplica sin override.
     r = cliente.patch(
         "/api/rota/turnos/lote",
         json={"ids": [t_sab2["id"], t_mar["id"]], "miembro_id": ana["id"]},
     )
-    assert r.status_code == 409
-    assert r.json()["ids_que_requieren_override"] == [t_sab2["id"]]
-    # Con override SI se aplica.
-    r_ok = cliente.patch(
-        "/api/rota/turnos/lote",
-        json={
-            "ids": [t_sab2["id"], t_mar["id"]],
-            "miembro_id": ana["id"],
-            "override": True,
-        },
-    )
-    assert r_ok.status_code == 200
-    assert r_ok.json()["actualizados"] == 2
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 2
+    assert all(t["miembro_id"] == ana["id"] for t in r.json()["turnos"])
 
 
 def test_actualizar_turnos_lote_miembro_vacio_quita_asignacion(cliente):

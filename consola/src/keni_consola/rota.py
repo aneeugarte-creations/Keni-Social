@@ -6,18 +6,11 @@ La capa de persistencia (`db.py`) y la API (`api/rota.py`) construyen sus entrad
 y consumen estas funciones.
 
 DECISION DE PRODUCTO: el coordinador de la rota (Claro Sports / UnoTV) asigna su rota A MANO por criterio
-estrategico ("los sabados los reparto rotando, pero a veces no se cumple, por temas
-estrategicos"). La consola NO propone reparto automatico: solo le muestra los huecos,
-si se repiten sabados y la carga por persona; el coordinador de la rota decide y APRUEBA antes de
-publicarla al equipo. Aqui solo vive lo que respalda esa toma de decision.
-
-REGLA DE ROTACION (predicado): la misma persona NO cubre dos sabados seguidos, salvo
-override explicito. El predicado `viola_rotacion_sabado(*)` se usa en la edicion manual
-de turnos (PATCH `/api/rota/turnos/{id}` y `/api/rota/horario/turnos/{id}`) para exigir
-el override cuando el coordinador de la rota decide repetir intencionalmente. Su variante para el HORARIO
-de trabajo (`viola_rotacion_sabado_trabajo`) aplica la misma idea al turno laboral del
-sabado: tras la migracion a "franjas por semana", un turno SIEMPRE cuenta como jornada
-laboral (el `descanso` paso a ser ausencia implicita y dejo de ser una franja).
+estrategico. La consola NO propone reparto automatico ni impone reglas de rotacion: solo
+le muestra los huecos, la carga por persona y quien trabaja cada sabado; el coordinador
+de la rota decide y APRUEBA antes de publicarla al equipo. Cualquiera puede cubrir
+cualquier dia (incluidos sabados consecutivos) y un mismo turno admite a tantas personas
+como haga falta. Aqui solo vive lo que respalda esa toma de decision.
 
 FRANJAS POR SEMANA (ola "Mundial"): el feedback real del piloto descubrio semanas
 con coberturas atipicas (Mundial, eventos grandes) que requieren MAS de 2 franjas y CON
@@ -192,34 +185,6 @@ def miembro_ausente(ausencias: list[Ausencia], miembro_id: str, fecha_iso: str) 
         if desde <= d <= hasta:
             return True
     return False
-
-
-def viola_rotacion_sabado(
-    sabado_previo: str, sabado_actual: str, *, override: bool
-) -> bool:
-    """True si asignar `sabado_actual` repite a la persona del sabado previo SIN override.
-
-    Es la regla de aceptacion en forma de predicado puro: la API la usa para decidir si
-    una edicion manual necesita marcar `override` (cobertura estrategica del coordinador de la rota).
-    """
-    if override:
-        return False
-    return bool(sabado_previo) and sabado_previo == sabado_actual
-
-
-def viola_rotacion_sabado_trabajo(
-    sabados_previos: set[str], miembro: str, *, override: bool
-) -> bool:
-    """True si poner a `miembro` a TRABAJAR el sabado repite su sabado previo SIN override.
-
-    Tras la migracion a "franjas por semana", todo turno cuenta como jornada laboral (el
-    `descanso` paso a ser ausencia implicita). Por eso este predicado ya no recibe `franja`:
-    cualquier asignacion a un sabado consecutivo del mismo miembro sin override viola la
-    regla de rotacion (el coordinador de la rota debe marcar override si es cobertura estrategica intencional).
-    """
-    if override:
-        return False
-    return bool(miembro) and miembro in sabados_previos
 
 
 # --------------------------------------------------------------------------- #

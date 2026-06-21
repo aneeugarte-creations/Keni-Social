@@ -107,7 +107,7 @@ export class ApiError extends Error {
   readonly status: number;
   /**
    * Cuerpo JSON del error (cuando el back lo envía). Útil para 409s que llevan
-   * datos accionables (p. ej. `ids_que_requieren_override`).
+   * datos accionables (p. ej. `requiere_override` o `turno_existente`).
    */
   readonly cuerpo: Record<string, unknown> | null;
   constructor(mensaje: string, status: number, cuerpo: Record<string, unknown> | null = null) {

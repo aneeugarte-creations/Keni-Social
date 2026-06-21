@@ -72,32 +72,6 @@ def test_dataclasses_son_construibles():
 
 
 # --------------------------------------------------------------------------- #
-# Predicado: rotación de sábados (lo usa la API para exigir override)          #
-# --------------------------------------------------------------------------- #
-
-
-def test_viola_rotacion_sabado():
-    assert r.viola_rotacion_sabado("u0", "u0", override=False) is True
-    # Con override explícito, NO viola (cobertura estratégica del coordinador de la rota).
-    assert r.viola_rotacion_sabado("u0", "u0", override=True) is False
-    # Persona distinta: no viola.
-    assert r.viola_rotacion_sabado("u0", "u1", override=False) is False
-    # Sin sábado previo: no viola.
-    assert r.viola_rotacion_sabado("", "u0", override=False) is False
-
-
-def test_viola_rotacion_sabado_trabajo():
-    """Cualquier turno en sábado cuenta como jornada."""
-    previos = {"u0"}
-    # u0 trabajó el sábado previo: asignarle de nuevo sin override viola.
-    assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=False) is True
-    # Con override, no viola.
-    assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=True) is False
-    # Otra persona: no viola.
-    assert r.viola_rotacion_sabado_trabajo(previos, "u1", override=False) is False
-
-
-# --------------------------------------------------------------------------- #
 # Predicado: ausencias (lo usa la UI/serialización para marcar "Ausente")       #
 # --------------------------------------------------------------------------- #
 

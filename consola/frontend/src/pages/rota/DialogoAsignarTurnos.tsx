@@ -121,8 +121,8 @@ export interface ResumenAsignacion {
   creados: number;
   /** 409 sin `requiere_override`: ya había un turno de esa persona en esa fecha/franja. */
   yaEstaba: number;
-  /** 409 con `requiere_override`: regla de sábado consecutivo / ausencia (no se fuerza aquí). */
-  sabados: number;
+  /** 409 con `requiere_override`: la persona está de ausencia ese día (no se fuerza aquí). */
+  requierenOverride: number;
   fallos: number;
 }
 
@@ -140,7 +140,7 @@ export async function asignarDiasTurno(
   inicio = "",
   fin = "",
 ): Promise<ResumenAsignacion> {
-  const r: ResumenAsignacion = { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 };
+  const r: ResumenAsignacion = { creados: 0, yaEstaba: 0, requierenOverride: 0, fallos: 0 };
   const horas = inicio && fin ? { inicio, fin } : {};
   for (const fecha of fechas) {
     try {
@@ -148,7 +148,7 @@ export async function asignarDiasTurno(
       r.creados++;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        if (e.cuerpo?.requiere_override) r.sabados++;
+        if (e.cuerpo?.requiere_override) r.requierenOverride++;
         else r.yaEstaba++;
       } else {
         r.fallos++;
@@ -180,7 +180,7 @@ export async function asignarPersonasDiasTurno(
   const r: ResumenReparto = {
     creados: 0,
     yaEstaba: 0,
-    sabados: 0,
+    requierenOverride: 0,
     fallos: 0,
     personasConCreados: 0,
   };
@@ -188,7 +188,7 @@ export async function asignarPersonasDiasTurno(
     const p = await asignarDiasTurno(lunes, miembroId, franjaId, fechas, inicio, fin);
     r.creados += p.creados;
     r.yaEstaba += p.yaEstaba;
-    r.sabados += p.sabados;
+    r.requierenOverride += p.requierenOverride;
     r.fallos += p.fallos;
     if (p.creados > 0) r.personasConCreados++;
   }
@@ -203,9 +203,9 @@ export async function asignarPersonasDiasTurno(
  * en Panorama; esto es CAPACIDAD.
  *
  * Va persona-a-persona y día-a-día (no por el endpoint lote) a propósito: el lote es todo-o-nada
- * y un solo choque (sábado consecutivo o un día ya asignado) tumbaría el reparto entero. Así es
- * indulgente: asigna lo que puede, cuenta los que ya estaban y avisa de los sábados que piden
- * override, sin que un choque arrastre al resto de personas ni de días.
+ * y un solo choque (un día ya asignado o una ausencia) tumbaría el reparto entero. Así es
+ * indulgente: asigna lo que puede, cuenta los que ya estaban y avisa de los días que piden
+ * override por ausencia, sin que un choque arrastre al resto de personas ni de días.
  */
 export function DialogoAsignarTurnos({
   abierto,
@@ -301,10 +301,10 @@ export function DialogoAsignarTurnos({
             horasAMedida ? inicio : "",
             horasAMedida ? fin : "",
           )
-        : { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0, personasConCreados: 0 };
+        : { creados: 0, yaEstaba: 0, requierenOverride: 0, fallos: 0, personasConCreados: 0 };
       return { ...resumen, horario: `${inicio}–${fin}` };
     },
-    onSuccess: ({ creados, yaEstaba, sabados, fallos, personasConCreados, horario }) => {
+    onSuccess: ({ creados, yaEstaba, requierenOverride, fallos, personasConCreados, horario }) => {
       onCambio();
       const partes: string[] = [];
       if (creados) {
@@ -315,9 +315,9 @@ export function DialogoAsignarTurnos({
         );
       }
       if (yaEstaba) partes.push(`${yaEstaba} ya estaba${yaEstaba === 1 ? "" : "n"}`);
-      if (sabados)
+      if (requierenOverride)
         partes.push(
-          `${sabados} sábado${sabados === 1 ? "" : "s"} pide override (hazlo desde la celda)`,
+          `${requierenOverride} por ausencia ${requierenOverride === 1 ? "pide" : "piden"} override (hazlo desde la celda)`,
         );
       if (fallos) partes.push(`${fallos} con error`);
       const msg = partes.join(" · ") || "Sin cambios.";

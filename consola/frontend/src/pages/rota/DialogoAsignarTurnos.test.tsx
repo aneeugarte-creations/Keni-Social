@@ -19,12 +19,12 @@ vi.mock("sonner", () => ({
 // El reparto día-a-día es la lógica clave; se prueba aparte de los Select de Radix (que dentro
 // de un Dialog se cuelgan en jsdom), por eso `asignarDiasTurno` está extraído del componente.
 describe("asignarDiasTurno — reparte un turno por día y clasifica el resultado", () => {
-  it("crea / ya-estaba (409) / sábado-override (409) / fallo, en ese orden", async () => {
+  it("crea / ya-estaba (409) / ausencia-override (409) / fallo, en ese orden", async () => {
     const crear = vi
       .spyOn(apiMod.api, "crearTurno")
       .mockResolvedValueOnce({} as never) // creado
       .mockRejectedValueOnce(new ApiError("dup", 409, { id: "x" })) // ya estaba
-      .mockRejectedValueOnce(new ApiError("sáb", 409, { requiere_override: true })) // sábado
+      .mockRejectedValueOnce(new ApiError("aus", 409, { requiere_override: true })) // ausencia
       .mockRejectedValueOnce(new Error("red")); // fallo
     const r = await asignarDiasTurno("2026-06-15", "u-luis", "f-manana", [
       "2026-06-15",
@@ -33,7 +33,7 @@ describe("asignarDiasTurno — reparte un turno por día y clasifica el resultad
       "2026-06-17",
     ]);
     expect(crear).toHaveBeenCalledTimes(4);
-    expect(r).toEqual({ creados: 1, yaEstaba: 1, sabados: 1, fallos: 1 });
+    expect(r).toEqual({ creados: 1, yaEstaba: 1, requierenOverride: 1, fallos: 1 });
     expect(crear).toHaveBeenCalledWith({
       lunes: "2026-06-15",
       fecha: "2026-06-15",
@@ -46,7 +46,7 @@ describe("asignarDiasTurno — reparte un turno por día y clasifica el resultad
     const crear = vi.spyOn(apiMod.api, "crearTurno").mockResolvedValue({} as never);
     const r = await asignarDiasTurno("2026-06-15", "u-luis", "f-manana", []);
     expect(crear).not.toHaveBeenCalled();
-    expect(r).toEqual({ creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 });
+    expect(r).toEqual({ creados: 0, yaEstaba: 0, requierenOverride: 0, fallos: 0 });
   });
 
   it("con horario a medida envía inicio/fin; sin él los omite (hereda la franja)", async () => {
@@ -75,14 +75,14 @@ describe("asignarDiasTurno — reparte un turno por día y clasifica el resultad
 // prueba aparte del componente (los chips de persona ya no son Selects de Radix, pero la
 // agregación es la lógica clave a fijar: que un choque de una persona NO arrastre a las demás).
 describe("asignarPersonasDiasTurno — aplica a varias personas y agrega el resultado", () => {
-  it("suma creados/yaEstaba/sábados/fallos de cada persona; cuenta las que recibieron creados", async () => {
-    // Luis: 2 fechas → ambas creadas. Ana: 2 fechas → 1 ya estaba (409) + 1 sábado (409, override).
+  it("suma creados/yaEstaba/ausencias/fallos de cada persona; cuenta las que recibieron creados", async () => {
+    // Luis: 2 fechas → ambas creadas. Ana: 2 fechas → 1 ya estaba (409) + 1 ausencia (409, override).
     const crear = vi
       .spyOn(apiMod.api, "crearTurno")
       .mockResolvedValueOnce({} as never) // Luis · día 1 creado
       .mockResolvedValueOnce({} as never) // Luis · día 2 creado
       .mockRejectedValueOnce(new ApiError("dup", 409, { id: "x" })) // Ana · día 1 ya estaba
-      .mockRejectedValueOnce(new ApiError("sáb", 409, { requiere_override: true })); // Ana · día 2 sábado
+      .mockRejectedValueOnce(new ApiError("aus", 409, { requiere_override: true })); // Ana · día 2 ausencia
     const r = await asignarPersonasDiasTurno(
       "2026-06-15",
       ["u-luis", "u-ana"],
@@ -94,7 +94,7 @@ describe("asignarPersonasDiasTurno — aplica a varias personas y agrega el resu
     expect(r).toEqual({
       creados: 2,
       yaEstaba: 1,
-      sabados: 1,
+      requierenOverride: 1,
       fallos: 0,
       personasConCreados: 1,
     });
@@ -134,7 +134,7 @@ describe("asignarPersonasDiasTurno — aplica a varias personas y agrega el resu
     expect(vacio).toEqual({
       creados: 0,
       yaEstaba: 0,
-      sabados: 0,
+      requierenOverride: 0,
       fallos: 0,
       personasConCreados: 0,
     });

@@ -33,38 +33,6 @@ from .ausencias import _ausencia_que_cubre
 _MSG_SOLO_ADMIN = "Solo Elías (administrador) puede aprobar y publicar los turnos al equipo."
 
 
-def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
-    """Ids que TRABAJARON el sábado de la semana ANTERIOR a `lunes_iso`.
-
-    Sirve para que la edicion manual del PATCH detecte la repeticion de sabado de
-    trabajo consecutivo y exija un override explicito (`viola_rotacion_sabado_trabajo`).
-    Tras "franjas por semana": un turno cuenta como jornada SALVO si su franja tiene
-    `es_descanso=true`. Se filtran las franjas de descanso usando la lista viva de la
-    semana previa.
-    """
-    if not lunes_iso:
-        return set()
-    from datetime import date, timedelta
-
-    try:
-        previo = (date.fromisoformat(lunes_iso) - timedelta(days=7)).isoformat()
-    except ValueError:
-        return set()
-    # Indexamos las franjas de la semana previa para excluir las de descanso.
-    franjas_previas = repos.listar_franjas_semana(previo)
-    franjas_descanso = {
-        f["id"] for f in franjas_previas if f.get("es_descanso")
-    }
-    ids: set[str] = set()
-    for turno in repos.listar_turnos_rota(semana=previo):
-        if not dominio.es_sabado(turno["fecha"]):
-            continue
-        if turno.get("franja_id", "") in franjas_descanso:
-            continue
-        ids.add(turno["miembro_id"])
-    return ids
-
-
 def _semana_de_turno(lunes_param: str, fecha: str) -> str:
     """Resuelve la `semana` (lunes ISO) del turno. Prefiere el `lunes_param` si es valido.
 
@@ -311,42 +279,6 @@ def _validar_y_resolver_turno(
     return campos, None
 
 
-def _violacion_sabado(
-    fecha: str,
-    semana: str,
-    miembro_id: str,
-    *,
-    override: bool,
-    franja_id: str = "",
-) -> Response | None:
-    """Si la fecha cae en sabado y repite al miembro del sabado previo sin override,
-    devuelve la respuesta 409 ya construida. Si no aplica, devuelve None.
-
-    Tras "franjas por semana": un turno cuenta como jornada laboral SALVO si su franja
-    tiene `es_descanso=true`. Asignar a alguien la franja Descanso del sabado no rompe la
-    rotacion (no esta trabajando ese dia).
-    """
-    if not dominio.es_sabado(fecha):
-        return None
-    if franja_id:
-        franja_def = repos.obtener_franja_semana(franja_id)
-        if franja_def and franja_def.get("es_descanso"):
-            return None
-    previos = _sabados_previos_trabajo(semana)
-    if dominio.viola_rotacion_sabado_trabajo(previos, miembro_id, override=override):
-        return JSONResponse(
-            {
-                "error": (
-                    "Esa persona ya trabajó el sábado anterior. Marca un override "
-                    "explícito si es una cobertura estratégica intencional."
-                ),
-                "requiere_override": True,
-            },
-            status_code=409,
-        )
-    return None
-
-
 def _violacion_ausencia(
     miembro_id: str, fecha: str, *, override: bool, franja_id: str = ""
 ) -> Response | None:
@@ -413,9 +345,6 @@ def _crear_turno(datos: dict[str, Any]) -> Response:
                 status_code=409,
             )
 
-    err = _violacion_sabado(fecha, semana, miembro_id, override=override, franja_id=franja_id)
-    if err is not None:
-        return err
     err = _violacion_ausencia(miembro_id, fecha, override=override, franja_id=franja_id)
     if err is not None:
         return err
@@ -475,11 +404,6 @@ def _actualizar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
     franja_id_final = campos.get("franja_id", actual.get("franja_id", ""))
     override = bool(campos.get("override", actual["override"]))
 
-    err = _violacion_sabado(
-        fecha, actual["semana"], miembro_id, override=override, franja_id=franja_id_final
-    )
-    if err is not None:
-        return err
     err = _violacion_ausencia(
         miembro_id, fecha, override=override, franja_id=franja_id_final
     )
@@ -496,8 +420,8 @@ def _actualizar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
 async def actualizar_turno(request: Request) -> Response:
     """PATCH /api/rota/turnos/{id}: edita un turno (franja_id/miembro/override/motivo/...).
 
-    Si la edicion pone a TRABAJAR el sabado a quien trabajó el sabado previo SIN override,
-    devuelve 409. Si la persona esta de ausencia sin override, 409.
+    Si la edicion pone a TRABAJAR a una persona que esta de ausencia ese dia SIN override,
+    devuelve 409.
     """
     turno_id = request.path_params["turno_id"]
     datos = await leer_json(request)
@@ -579,19 +503,6 @@ def _crear_turnos_lote(entradas: list[Any]) -> Response:
                     "indice": i,
                     "error": "Ya hay un turno para ese miembro en esa fecha y franja.",
                     "clave": {"miembro_id": miembro_id, "fecha": fecha, "franja_id": franja_id},
-                }
-            )
-            continue
-        # Sabado: regla de rotacion.
-        sab = _violacion_sabado(
-            fecha, semana, miembro_id, override=override, franja_id=franja_id
-        )
-        if sab is not None:
-            errores.append(
-                {
-                    "indice": i,
-                    "error": "Esa persona ya trabajó el sábado anterior; usa override.",
-                    "requiere_override": True,
                 }
             )
             continue
@@ -685,7 +596,6 @@ def _actualizar_turnos_lote(datos: dict[str, Any], ids: list[str]) -> Response:
     # Construye los campos a aplicar. `miembro_id` requiere validacion contra el equipo;
     # `franja_id` requiere que la franja exista en BD. Los demas se pasan tal cual.
     campos: dict[str, Any] = {}
-    miembro_id_final: str | None = None
     if "miembro_id" in datos:
         miembro_id = datos["miembro_id"]
         if not isinstance(miembro_id, str) or (miembro_id and miembro_id not in nombres):
@@ -694,7 +604,6 @@ def _actualizar_turnos_lote(datos: dict[str, Any], ids: list[str]) -> Response:
             )
         campos["miembro_id"] = miembro_id
         campos["miembro_nombre"] = nombres.get(miembro_id, "")
-        miembro_id_final = miembro_id
     if "franja_id" in datos:
         franja_id = datos["franja_id"]
         if not isinstance(franja_id, str) or not franja_id.strip():
@@ -718,50 +627,11 @@ def _actualizar_turnos_lote(datos: dict[str, Any], ids: list[str]) -> Response:
             {"error": "Indica al menos un campo a editar."}, status_code=400
         )
 
-    # Carga los turnos pedidos y verifica que todos existan.
-    turnos_objetivo: list[dict[str, Any]] = []
+    # Verifica que todos los turnos pedidos existan (404 si alguno ya no está).
     for tid in ids:
-        t = repos.obtener_turno_rota(tid)
-        if t is None:
+        if repos.obtener_turno_rota(tid) is None:
             return JSONResponse(
                 {"error": f"El turno {tid} ya no existe."}, status_code=404
-            )
-        turnos_objetivo.append(t)
-
-    # Atomico frente a la regla de rotacion: si miembro_id viene en el cambio, comprueba
-    # sabados por semana. Una franja `es_descanso=true` queda fuera (no es jornada).
-    if miembro_id_final and not override:
-        sabados_previos_por_semana: dict[str, set[str]] = {}
-        ids_que_requieren_override: list[str] = []
-        for t in turnos_objetivo:
-            if not dominio.es_sabado(t["fecha"]):
-                continue
-            # Excluye los turnos cuya franja es de descanso (no cuenta como jornada).
-            franja_efectiva = campos.get("franja_id", t.get("franja_id", ""))
-            if franja_efectiva:
-                franja_def = repos.obtener_franja_semana(franja_efectiva)
-                if franja_def and franja_def.get("es_descanso"):
-                    continue
-            semana = t["semana"]
-            if semana not in sabados_previos_por_semana:
-                sabados_previos_por_semana[semana] = _sabados_previos_trabajo(semana)
-            if dominio.viola_rotacion_sabado_trabajo(
-                sabados_previos_por_semana[semana],
-                miembro_id_final,
-                override=False,
-            ):
-                ids_que_requieren_override.append(t["id"])
-        if ids_que_requieren_override:
-            return JSONResponse(
-                {
-                    "error": (
-                        "Hay turnos de sábado que repetirían la persona del sábado anterior; "
-                        "marca override si es una cobertura estratégica intencional."
-                    ),
-                    "requiere_override": True,
-                    "ids_que_requieren_override": ids_que_requieren_override,
-                },
-                status_code=409,
             )
 
     n, turnos = repos.actualizar_turnos_rota_lote(ids, campos)
@@ -783,8 +653,6 @@ async def actualizar_turnos_lote(request: Request) -> Response:
     """PATCH /api/rota/turnos/lote: edita en lote varios turnos.
 
     Cuerpo: `{ids: [...], miembro_id?, franja_id?, override?: bool, motivo?: str, nota_relevo?: str}`.
-    Si algun turno requiere override (sabado consecutivo con el mismo miembro) y no se
-    mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar BD.
     `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
     """
     datos = await leer_json(request)
@@ -880,11 +748,6 @@ def _duplicar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
                 status_code=409,
             )
     override = bool(original.get("override", False))
-    err = _violacion_sabado(
-        fecha, semana, miembro_id, override=override, franja_id=franja_id
-    )
-    if err is not None:
-        return err
     err = _violacion_ausencia(miembro_id, fecha, override=override, franja_id=franja_id)
     if err is not None:
         return err

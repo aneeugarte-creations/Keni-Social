@@ -144,9 +144,9 @@ export function CeldaDeRejilla({
 
 /**
  * Dropdown «Añadir turno» al pie de cada celda del calendario. Da de alta un turno: asigna
- * un CM a la (fecha, franja_id) creando el turno; maneja el 409 `requiere_override` (regla
- * de sábado consecutivo) abriendo un diálogo de confirmación. Avisa inline (ausencia/solape)
- * por candidato sin bloquear: el admin puede forzar.
+ * un CM a la (fecha, franja_id) creando el turno; maneja el 409 `requiere_override` (la
+ * persona está de ausencia ese día) abriendo un diálogo de confirmación. Avisa inline
+ * (ausencia/solape) por candidato sin bloquear: el admin puede forzar.
  */
 export function DropdownAnadirPersona({
   lunes,
@@ -263,9 +263,6 @@ export function DropdownAnadirPersona({
               <DialogTitle>¿Forzar la cobertura?</DialogTitle>
               <DialogDescription>{pendienteOverride.mensaje}</DialogDescription>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              Esta persona cubrió el sábado anterior.
-            </p>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setPendienteOverride(null)}>
                 Cancelar
