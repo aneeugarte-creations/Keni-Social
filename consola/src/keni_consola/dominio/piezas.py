@@ -4,11 +4,11 @@ Este módulo es el punto ÚNICO y explícito por el que otras apps tocan las pie
 (`piezas`). Expone tres clases de contrato, todos nombrados y propiedad de C:
 
   - SERIALIZACIÓN: `pieza_a_dict` (forma pública de una pieza para API/UI).
-  - LECTURA (solo lectura, ADR 0005 §Seams #2/#3): `cola_de_aprobacion` /
+  - LECTURA (solo lectura, ADR 0005): `cola_de_aprobacion` /
     `proximas_programadas` (lo que agrega el `panel` del shell). Devuelven la forma
     pública de C; el consumidor NO arma su propia consulta contra el almacén ni conoce
     los estados internos de C.
-  - HANDOFF A→C (ADR 0005 §Seams #1): `crear_borrador` (una generación de A deposita un
+  - HANDOFF A→C (ADR 0005): `crear_borrador` (una generación de A deposita un
     borrador en C). Es la ÚNICA puerta de creación que A usa; A no llama a `repos`
     directamente ni decide el estado inicial de la pieza.
 
@@ -17,7 +17,7 @@ Convertir las lecturas/escrituras cruzadas en funciones-contrato de C —en vez 
 el shell repitan llamadas a `repos.listar_piezas`/`repos.crear_pieza` y
 re-serialicen a mano— hace explícito el seam: el cruce pasa por un símbolo PÚBLICO que C
 posee, no por las tripas de C. La capa de datos (`repos`/`estados`) es infra compartida
-(ADR 0005 §Seams #6): este módulo la usa por dentro; los consumidores ya no.
+(ADR 0005): este módulo la usa por dentro; los consumidores ya no.
 
 Solo depende de los catalogos `marcas`/`redes` (hoja), la fachada de datos `repos` y las
 constantes neutras `estados` (infra compartida): no importa de `api/`.
@@ -316,7 +316,7 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# CONTRATO DE LECTURA de C (ADR 0005 §Seams #2/#3): solo lectura, sin estado.   #
+# CONTRATO DE LECTURA de C (ADR 0005): solo lectura, sin estado.                #
 # Lo consumen `reciclaje` (A) y el `panel` (shell) en vez de consultar `repos`   #
 # por su cuenta. C decide QUÉ universo expone y con qué forma; el consumidor no   #
 # conoce los estados internos ni arma la query.                                 #
@@ -350,7 +350,7 @@ def proximas_programadas(limite: int) -> tuple[list[dict[str, Any]], int]:
 
 
 # --------------------------------------------------------------------------- #
-# CONTRATO DE HANDOFF A→C (ADR 0005 §Seams #1): A deposita un BORRADOR en C.     #
+# CONTRATO DE HANDOFF A→C (ADR 0005): A deposita un BORRADOR en C.               #
 # Única puerta de creación cruzada: A no llama a `repos.crear_pieza` ni     #
 # decide el estado inicial; C garantiza que el handoff nace siempre `borrador`.  #
 # --------------------------------------------------------------------------- #
@@ -374,7 +374,7 @@ def crear_borrador(
 ) -> dict[str, Any]:
     """Crea un BORRADOR en C a partir de una generación de A y lo devuelve serializado.
 
-    Contrato de handoff A→C (ADR 0005 §Seams #1): una generación de copy/imagen deposita
+    Contrato de handoff A→C (ADR 0005): una generación de copy/imagen deposita
     su resultado como pieza editable en C. El estado inicial SIEMPRE es `borrador`
     (no se expone `estado`: A no puede crear nada ya aprobado/programado por esta vía);
     el resto del flujo (revisión, programación, publicación) es responsabilidad de C.

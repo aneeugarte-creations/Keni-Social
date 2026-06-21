@@ -47,7 +47,7 @@ def test_precalentar_es_subconjunto_estrecho_de_validos(muestra):
 
 
 def test_fuentes_disponibles(muestra):
-    # `metricool` (consumidor de la API REST de Metricool, ADR 0005 §B) se suma a
+    # `metricool` (consumidor de la API REST de Metricool, ADR 0005) se suma a
     # las fuentes válidas junto a `muestra` (demo) y `real` (adaptadores propios).
     assert set(servicio.FUENTES_DISPONIBLES) == {"muestra", "metricool", "real"}
 

@@ -342,7 +342,7 @@ def crear_publicaciones_desde_piezas(
 ) -> list[dict[str, object]]:
     """Crea UNA pieza (borrador) por pieza y devuelve sus dicts serializados.
 
-    HANDOFF A->C (ADR 0005 §Seams #1): cada pieza se deposita como BORRADOR por la
+    HANDOFF A->C (ADR 0005): cada pieza se deposita como BORRADOR por la
     funcion-contrato `dominio.piezas.crear_borrador` (nace `borrador`). Si
     `redes_filtro` no es None, solo se crean las piezas cuya red este en el filtro.
 

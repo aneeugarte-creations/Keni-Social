@@ -489,7 +489,7 @@ def registrar_etapa(
 # importar el barrido (el orquestador) desde la capa API.
 ADMISION_VERIFICACION_ESTADOS = (VERIFICACION_EN_CURSO, VERIFICACION_VERIFICADO, VERIFICACION_SALTADA)
 
-# Verificaciones que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
+# Verificaciones que ADMITEN a producción (ADR 0011): la historia pasó la verificación (`no_verificado`)
 # o la verificación estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
 # promueva SIN verificar) y el barrido de investigación.

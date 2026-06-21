@@ -7,7 +7,7 @@
 
 fuente = "muestra"   # "muestra" | "metricool" | "real"
 
-# --- Fuente `metricool` (B es CONSUMIDOR de Metricool; ADR 0005 §B) -----------
+# --- Fuente `metricool` (B es CONSUMIDOR de Metricool; ADR 0005) -----------
 # Pon fuente = "metricool" para leer dato REAL de la API REST de Metricool (plan
 # Advanced -> API token). Si faltan credenciales, degrada solo a "muestra" (demo),
 # sin inventar dato real. `user_token` va en la cabecera X-Mc-Auth; `user_id` y los

@@ -795,7 +795,7 @@ def verificacion_en_curso_ttl_seg() -> int:
 
 
 def alguna_etapa_investigacion_activa() -> bool:
-    """Gate del loop de INVESTIGACIÓN (ADR 0011 F3): True si hay trabajo de investigación que
+    """Gate del loop de INVESTIGACIÓN (ADR 0011): True si hay trabajo de investigación que
     considerar bajo la máquina.
 
     El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su verificación
@@ -808,7 +808,7 @@ def alguna_etapa_investigacion_activa() -> bool:
 
 
 def alguna_etapa_produccion_activa() -> bool:
-    """Gate del loop de PRODUCCIÓN (ADR 0011 F3): siempre True bajo la máquina.
+    """Gate del loop de PRODUCCIÓN (ADR 0011): siempre True bajo la máquina.
 
     La etapa de AVANCE (borradores completos → cola de revisión) corre INCONDICIONALMENTE, así
     que siempre hay trabajo de producción que considerar y el loop nunca debe quedarse dormido

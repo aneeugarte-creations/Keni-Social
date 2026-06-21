@@ -578,7 +578,7 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
 
 
 def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
-    """ADR 0011 F3: Verificar corre sobre la HISTORIA; una `problema` NO se materializa como contenido."""
+    """ADR 0011: Verificar corre sobre la HISTORIA; una `problema` NO se materializa como contenido."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
@@ -597,7 +597,7 @@ def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
 
 
 def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
-    """ADR 0011 F3: una historia que pasa Verificar se admite y el TEMA HEREDA el verificación del cluster."""
+    """ADR 0011: una historia que pasa Verificar se admite y el TEMA HEREDA el verificación del cluster."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
@@ -616,7 +616,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
 
 
 def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
-    """ADR 0011 F3: la verificación se acota al ADMISION (tope en proceso) — no recorre todo el pool por tick."""
+    """ADR 0011: la verificación se acota al ADMISION (tope en proceso) — no recorre todo el pool por tick."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")  # admision de 1
@@ -805,7 +805,7 @@ def test_verificar_off_no_admite_historia_ajena(entorno, monkeypatch):
 
 
 def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch):
-    """ADR 0011 F3: `ejecutar_investigacion` cubre ADMITIR+VERIFICAR y `ejecutar_produccion` REDACTAR+ILUSTRAR+avance.
+    """ADR 0011: `ejecutar_investigacion` cubre ADMITIR+VERIFICAR y `ejecutar_produccion` REDACTAR+ILUSTRAR+avance.
 
     El barrido combinado (`_ejecutar_barrido`) es la unión exacta de ambos, así el disparo a
     demanda y los tests siguen viendo el resumen completo aunque en producción cada proceso
@@ -918,7 +918,7 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
 
 
 def test_promover_clusters_marca_filtra_sin_verificar_por_defecto(entorno, monkeypatch):
-    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN verificar (verificación
+    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011): un cluster SIN verificar (verificación
     '') NO se promueve aunque gane en score/umbral — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)

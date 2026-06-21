@@ -1,4 +1,4 @@
-"""Barrido del pipeline en DOS procesos independientes (ADR 0011 F3) + daemons.
+"""Barrido del pipeline en DOS procesos independientes (ADR 0011) + daemons.
 
   • INVESTIGACIÓN — caducidad + CI (admisión) → verificación de la fuente. Recolecta del pool rankeado,
     admite por marca y verifica. Loop propio (gate Selección/Validación, lock
@@ -56,7 +56,7 @@ __all__ = [
     "iniciar_pipeline",
 ]
 
-# DOS PROCESOS (ADR 0011 F3): el espinazo noticia→pieza son DOS loops independientes, no uno.
+# DOS PROCESOS (ADR 0011): el espinazo noticia→pieza son DOS loops independientes, no uno.
 #   • INVESTIGACIÓN — caducidad + CI (admisión) + verificación (verificación de la fuente). Recolecta, admite y
 #     VERIFICA. Su gate es `alguna_etapa_investigacion_activa` (Selección/Validación) bajo la
 #     máquina; su lock es `pipeline_investigacion`.
@@ -266,7 +266,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
 
 
 def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase verificación del proceso de INVESTIGACIÓN (ADR 0011 F3): verifica la FUENTE de las HISTORIAS
+    """Fase verificación del proceso de INVESTIGACIÓN (ADR 0011): verifica la FUENTE de las HISTORIAS
     candidatas ANTES de materializar contenido.
 
     Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin verificacion
@@ -356,7 +356,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
-# UN SOLO CAMINO DE verificación (ADR 0011 F3): la verificación corre SOBRE EL CLUSTER, PRE-admisión
+# UN SOLO CAMINO DE verificación (ADR 0011): la verificación corre SOBRE EL CLUSTER, PRE-admisión
 # (`ejecutar_verificar_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
 # Investigación verifica la fuente ANTES de cruzar (cluster → verificacion) y la admisión solo
 # promueve las VERIFICADAS.
@@ -608,7 +608,7 @@ def _trabajo_portal(res: dict[str, Any]) -> bool:
 def iniciar_pipeline(
     intervalo_segundos: float | None = None,
 ) -> tuple[threading.Thread, threading.Thread, threading.Thread]:
-    """Arranca los TRES hilos demonio del pipeline de contenido (ADR 0011 F3, GATEADOS EN VIVO).
+    """Arranca los TRES hilos demonio del pipeline de contenido (ADR 0011, GATEADOS EN VIVO).
 
     Pensado para el servidor real (`daemons`/`__main__`), NO para `crear_app` (los tests no lo
     arrancan, igual que el resto de daemons). Arranca un hilo por proceso:

@@ -1,4 +1,4 @@
-"""Lint de FRONTERAS entre apps (ADR 0002 Fase A · ADR 0005 §Seams · plan §1.4).
+"""Lint de FRONTERAS entre apps (ADR 0002 · ADR 0005).
 
 Regla de oro (ADR 0002): un módulo de una app NUNCA importa los internals de otra
 app. Las apps de producto (A·Producción, B·Métricas, C·Operación) se comunican por
@@ -14,13 +14,13 @@ Cómo lo verifica este test, SIN red ni BD (AST puro):
   3. CLASIFICA el cruce:
        - app → SHELL  : SIEMPRE permitido. El shell es la capa transversal/base que
                         ofrece servicios a A/B/C (auth, config, media, secretos…),
-                        análoga a `keni-shared`. (ADR 0005 §Shell / seams #4,#5,#6.)
+                        análoga a `keni-shared`. (ADR 0005.)
        - app ↔ app    : PROHIBIDO salvo seam explícito (A↔B↔C).
        - shell → app  : PROHIBIDO salvo seam explícito (el shell no debe acoplarse a
                         las tripas de una app salvo los cruces documentados).
   4. FALLA si hay un cruce prohibido fuera de la ALLOWLIST.
 
-La ALLOWLIST codifica los seams de ADR 0005 §Seams (cruces legítimos de HOY) para
+La ALLOWLIST codifica los seams de ADR 0005 (cruces legítimos de HOY) para
 que el lint quede VERDE con el repo actual; cada entrada lleva su justificación.
 
 Infra compartida (capa de datos del gateway + `keni-shared` + fachada de métricas)
@@ -40,7 +40,7 @@ from keni_consola import api
 from keni_consola.apps import registro
 
 # --------------------------------------------------------------------------- #
-# ALLOWLIST de seams (ADR 0005 §Seams). Cada par (router_origen, modulo_destino)  #
+# ALLOWLIST de seams (ADR 0005). Cada par (router_origen, modulo_destino)         #
 # es un cruce de frontera EXPLÍCITAMENTE permitido. Mantener mínima y comentada.  #
 # --------------------------------------------------------------------------- #
 SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
@@ -49,7 +49,7 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # generación de imagen como TRABAJO en segundo plano y para ello usa la
         # infraestructura de jobs `generaciones` (de A). Es el único acoplamiento
         # shell→app de hoy; queda explícito aquí. T-futura puede moverlo tras la
-        # fachada de jobs del gateway. (ADR 0005 §Seams #4.)
+        # fachada de jobs del gateway. (ADR 0005.)
         ("media", "generaciones"),
         # Seam #1 (A→C handoff de borrador): una generación de copy deposita un
         # *borrador* en `piezas` (C) por la función-CONTRATO
@@ -74,13 +74,13 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
         # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el
         # estado del job. Mismo acoplamiento que el Seam #4 de `media`, ahora app→app.
-        # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
+        # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005.)
         ("parrilla_import", "generaciones"),
         # Seam #7 (mismo patrón, otra operación C): el router `contenido` (operacion) importa un
         # CALENDARIO editorial desde un documento con un `claude -p` en SEGUNDO PLANO, y para ello
         # usa la infraestructura de jobs `generaciones` (A) — encolar y leer el estado del job.
         # Idéntico acoplamiento app→app que `parrilla_import`/`media`. T-futura puede moverlo tras
-        # la fachada de jobs del gateway. (ADR 0005 §Seams.) NOTA: `contenido` se partió de
+        # la fachada de jobs del gateway. (ADR 0005.) NOTA: `contenido` se partió de
         # `api/publicaciones.py` a un PAQUETE `api/publicaciones/`; el cruce vive hoy en `contenido/_comun.py`
         # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
         ("publicaciones", "generaciones"),
@@ -89,13 +89,13 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # `claude -p` en SEGUNDO PLANO, y para ello usa la infraestructura de jobs
         # `generaciones` (A) — encolar y mapear `ColaLlenaError` a un 429. Idéntico
         # acoplamiento que `media`/`parrilla_import`/`publicaciones`. T-futura puede moverlo
-        # tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
+        # tras la fachada de jobs del gateway. (ADR 0005.)
         ("sugerencias", "generaciones"),
         # Seam (shell lee señales de operación para el DOCTOR de salud): `api/estado.py`
         # (shell) absorbió los chequeos del banner (cola, presupuesto, daemons, disco…) y
         # para el de la COLA lee el snapshot de `api.actividad` (produccion) — SOLO LECTURA,
         # mismo patrón que "produccion lee la agenda de C". El health-check es transversal:
-        # le importa a todo el equipo, no a una app. (ADR 0005 §Seams.)
+        # le importa a todo el equipo, no a una app. (ADR 0005.)
         ("estado", "actividad"),
         # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
         #   ("reciclaje", "piezas")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
@@ -105,7 +105,7 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         #       permitir. (Era una entrada documental/precautoria; el seam sigue siendo
         #       legítimo pero ya no necesita allowlist porque no toca el router.)
         #   ("panel", "metricas")  [T1.2]: el panel leía B por la FACHADA
-        #       `keni_metricas.servicio` (infra de solo lectura, ADR 0005 §Seams #6), no
+        #       `keni_metricas.servicio` (infra de solo lectura, ADR 0005), no
         #       por el router/internals de `metricas`. Nunca fue un cruce app↔app real;
         #       era una entrada documental.
         #   ("panel", "piezas") [borra-panel]: se retiró el dashboard `/api/panel`
@@ -264,7 +264,7 @@ def test_fronteras_apps_sin_cruces_fuera_de_allowlist():
         if (origen, dest) not in SEAMS_PERMITIDOS
     ]
     assert not violaciones, (
-        "Cruces de frontera entre apps FUERA de la allowlist (ADR 0005 §Seams):\n"
+        "Cruces de frontera entre apps FUERA de la allowlist (ADR 0005):\n"
         + "\n".join(
             f"  - api/{o}.py ({ao}) importa internals de '{d}' ({ad})"
             for (o, ao, d, ad) in violaciones

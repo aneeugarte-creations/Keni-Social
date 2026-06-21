@@ -21,7 +21,7 @@ from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 
 # Valores aceptados para `fuente`:
 #   - `metricool`= FUENTE ÚNICA de métricas (B es consumidor, no motor de ingesta;
-#                  ADR 0005 §B). Consumidor de la API REST de Metricool (plan pagado).
+# ADR 0005). Consumidor de la API REST de Metricool (plan pagado).
 #                  Lee TODO desde Metricool —dashboard por marca/cuenta Y rendimiento
 #                  por pieza— por el MISMO camino, así no hay desfase entre fuentes.
 #                  Sin credenciales degrada con honestidad a estado vacío (no inventa).
@@ -30,7 +30,7 @@ from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 #                  así que la Consola se ve igual en demo sin desfase.
 #   - `real`     = FALLBACK EXPLÍCITO y DESACTIVADO por defecto: adaptadores propios por
 #                  plataforma (Meta/YouTube/X/TikTok). Capacidad HISTÓRICA que NO se usa
-#                  para B (ADR 0005 §B). Solo cubre el dashboard agregado: NO expone
+# para B (ADR 0005). Solo cubre el dashboard agregado: NO expone
 #                  rendimiento por pieza (`metricas_de_post`) ni serie diaria, así que
 #                  conviviría con el tablero leyendo cero —el desfase que esta
 #                  consolidación elimina—. Por eso queda detrás de un flag opt-in

@@ -493,7 +493,7 @@ def test_alguna_etapa_pipeline_activa_siempre_true(limpio, store_aislado):
 
 
 def test_alguna_etapa_produccion_activa_siempre_true_y_alias(limpio, store_aislado):
-    """El loop de PRODUCCIÓN (ADR 0011 F3) corre siempre bajo la máquina (AVANCE incondicional),
+    """El loop de PRODUCCIÓN (ADR 0011) corre siempre bajo la máquina (AVANCE incondicional),
     y `alguna_etapa_pipeline_activa` es su alias retro (mismo objeto)."""
     assert config.alguna_etapa_produccion_activa() is True
     assert config.alguna_etapa_pipeline_activa is config.alguna_etapa_produccion_activa
@@ -503,7 +503,7 @@ def test_alguna_etapa_produccion_activa_siempre_true_y_alias(limpio, store_aisla
 
 
 def test_alguna_etapa_investigacion_activa_gateada_por_recolectar_o_verificar(limpio, store_aislado):
-    """El loop de INVESTIGACIÓN (ADR 0011 F3) solo barre si Recolectar o Verificar están ON; con
+    """El loop de INVESTIGACIÓN (ADR 0011) solo barre si Recolectar o Verificar están ON; con
     ambas OFF duerme (nada que admitir ni verificar). Fusionar/Priorizar viven en el daemon de ingesta."""
     for env in (
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,

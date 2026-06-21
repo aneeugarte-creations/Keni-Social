@@ -1,4 +1,4 @@
-# Manifest de la app A · Producción (ADR 0005 §A).
+# Manifest de la app A · Producción (ADR 0005).
 #
 # El motor editorial: convierte input crudo (nota, clip, URL, tendencia) en
 # contenido publicable y verificado. Es el moat; sin gating (vendible hoy).

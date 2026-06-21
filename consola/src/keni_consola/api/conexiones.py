@@ -17,7 +17,7 @@ se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
     POST   /api/conexiones/metricool/{marca}/probar -> prueba EN VIVO (sin exponer token)
     POST   /api/conexiones/metricool/perfiles     -> descubre las marcas (blogId) de un token
 
-Las metricas se consumen VIA Metricool (ADR 0005 §B): NO hay ingesta propia por
+Las metricas se consumen VIA Metricool (ADR 0005): NO hay ingesta propia por
 plataforma.
 
 REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +

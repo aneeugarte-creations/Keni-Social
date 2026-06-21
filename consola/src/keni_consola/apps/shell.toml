@@ -1,4 +1,4 @@
-# Manifest del Shell · servicios transversales (ADR 0005 §Shell).
+# Manifest del Shell · servicios transversales (ADR 0005).
 #
 # NO es una app de catálogo: agrupa los servicios comunes que el shell ofrece a
 # A/B/C (auth, sesión, catálogo, secretos, media, settings). Sus rutas viven en la

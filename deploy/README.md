@@ -39,7 +39,7 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   **FUERA de alcance:** el contenido editorial YAML (`ficheros.py`,
   `/data/keni-proyectos/<marca>/...`) y su índice regenerable (`indice.py`) **siguen en el
   volumen** (`keni-data`/`KENI_DATA_DIR`); migrarlos a object storage es trabajo futuro.
-- **Generación DESACOPLADA (ADR 0002 Fase B).** El `back` ya **no** ejecuta
+- **Generación DESACOPLADA (ADR 0002).** El `back` ya **no** ejecuta
   `claude -p`: **ENCOLA** un job (tabla `jobs` en Postgres) y responde al instante. El
   servicio **`worker`** clava el job, reconstruye prompt + post-procesado desde el `spec`
   serializado y corre **`claude -p`** (con todo el endurecimiento: grupo de procesos
@@ -477,7 +477,7 @@ ve en **Fuentes → Todas las fuentes → Agencias de noticias** y en el panel d
       local y hosted); el SQLite operacional se retiró. La media va a S3 si las `S3_*`
       están puestas; sin ellas sigue en disco. Pendiente solo el **YAML editorial**
       (`ficheros.py`/`indice.py`), fuera de alcance.
-- [x] Extraer el worker de generación (ADR 0002 Fase B) → Node fuera de `back` **(HECHO)**.
+- [x] Extraer el worker de generación (ADR 0002) → Node fuera de `back` **(HECHO)**.
       El `back` ENCOLA (tabla `jobs` en Postgres); el servicio `worker` corre `claude -p`.
       Pendiente fino: `--scale worker=N` si el piloto necesita más throughput. (El plan
       de sandbox por usuario en `code.kenitech.io` quedó descartado: ese entorno se

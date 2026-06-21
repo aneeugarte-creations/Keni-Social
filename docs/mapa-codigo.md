@@ -90,7 +90,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 
 ## Cola de jobs y worker (generación IA)
 - `cola.py` — cola de jobs: el back ENCOLA, un WORKER clava y ejecuta.
-- `worker.py` — clava jobs de la cola y corre `claude -p` (ADR 0002 Fase 2).
+- `worker.py` — clava jobs de la cola y corre `claude -p` (ADR 0002).
 - `generaciones.py` — dominio GENERACIONES: trabajos de IA seguibles en vivo.
 - `lanzador.py` — lanza Claude Code en una carpeta del proyecto.
 

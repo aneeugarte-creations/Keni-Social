@@ -67,7 +67,7 @@ def test_doc_incluye_procesos_de_transparencia(cliente):
     assert cualq["procesos"] == []
     cat = cliente.post("/api/prompts", json={"titulo": "Verificar", "tipo": "prompt"}).json()["documento"]
     assert cat["id"] == "prompt/verificar"
-    # Vocabulario ADR 0011 §5 (verbos C): la etapa se llama "Verificar" (sin "verificación"/"verificación").
+    # Vocabulario ADR 0011 (verbos C): la etapa se llama "Verificar" (sin "verificación"/"verificación").
     assert cat["procesos"] and any("verificar" in p.lower() for p in cat["procesos"])
     docs = cliente.get("/api/prompts", params={"tipo": "prompt"}).json()["documentos"]
     assert all("procesos" in d for d in docs)

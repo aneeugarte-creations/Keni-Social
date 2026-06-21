@@ -933,7 +933,7 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # clasificador Haiku (breaking sin marca), 0 si vino de los items / vocabulario.
     ("marca_clasificada_por_ia", "INTEGER NOT NULL DEFAULT 0"),
     # VERIFICACIÓN (verificación de la fuente) sobre la HISTORIA, ANTES de materializar contenido de
-    # producción (ADR 0011 F3): "verificado" (✅ sigue a admisión), "requiere_humano" (⚠️ no se admite,
+    # producción (ADR 0011): "verificado" (✅ sigue a admisión), "requiere_humano" (⚠️ no se admite,
     # a la mesa) o "rechazado" (❗ no se admite). `verificar_hallazgos` = JSON de lo encontrado. Hereda
     # al `contenido` al admitir, así la frontera "verificación = investigación" queda alineada. BD
     # vieja -> "" (sin verificacion: aún por verificar).

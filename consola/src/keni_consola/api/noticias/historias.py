@@ -272,7 +272,7 @@ def _listar_historias(
         desplazamiento=desplazamiento,
     )
     # Estado REAL de cara al feed + verificacion verificación (verificación). El verificación vive en la HISTORIA
-    # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
+    # (`noticias_clusters.verificacion_fuente`, ADR 0011): la verificación corre sobre el cluster ANTES de
     # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
     cids = [c.get("publicacion_id") or "" for c in clusters]
@@ -424,7 +424,7 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
 
     cids = [c.get("publicacion_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_publicacion(cids)
-    # Verificacion de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
+    # Verificacion de verificación por historia: NATIVO del cluster (ADR 0011), con fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
     verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
@@ -551,7 +551,7 @@ def _detalle_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
         return 404, {"error": "Esa historia ya no existe."}
     items = repos.items_de_cluster(cluster_id)
     cid = cluster.get("publicacion_id") or ""
-    # Verificacion NATIVO del cluster (ADR 0011 F3: la verificación corre sobre la historia); fallback al
+    # Verificacion NATIVO del cluster (ADR 0011: la verificación corre sobre la historia); fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
     verificacion_fuente = (cluster.get("verificacion_fuente") or "") or (
         repos.verificacion_fuente_por_publicacion([cid]).get(cid, "") if cid else ""

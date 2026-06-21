@@ -135,7 +135,7 @@ def lanzar_verificar_cluster(
     cluster: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
     """verificación de la FUENTE sobre una HISTORIA (cluster) via `claude -p`, ANTES de materializar
-    contenido de producción (ADR 0011 F3).
+    contenido de producción (ADR 0011).
 
     Verifica la nota de origen del cluster (título + resumen + bloques de sus fuentes; los cuerpos
     ARCHIVADOS del feed son el punto de partida, el modelo abre las fuentes y busca en la web) y sella

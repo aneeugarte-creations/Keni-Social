@@ -246,7 +246,7 @@ def clusters_para_promover(
 ) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con UMBRAL y DIVERSIDAD. Best-effort.
 
-    `verificacion_estados` (ADR 0011 F3): el filtro de verificación es OBLIGATORIO — por defecto a las VERIFICADAS
+    `verificacion_estados` (ADR 0011): el filtro de verificación es OBLIGATORIO — por defecto a las VERIFICADAS
     (`VERIFICADAS_OK` = `no_verificado`/`saltada`), así la admisión SIEMPRE verificación: las `problema`
     y las aún sin verificar nunca se materializan como contenido (no existe un camino que promueva
     sin filtrar). Se puede ESTRECHAR a un subconjunto, nunca abrir a "todo": un conjunto vacío
@@ -365,7 +365,7 @@ def clusters_para_promover(
 
 def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca SIN verificar aún (`verificacion_fuente`==''), que
-    pasan el UMBRAL — las candidatas a las que lanzar la verificación de la fuente (ADR 0011 F3).
+    pasan el UMBRAL — las candidatas a las que lanzar la verificación de la fuente (ADR 0011).
 
     El umbral evita gastar `claude -p` verificando historias que jamás se admitirían (score/marca
     bajo umbral). OMITE la FUENTE PROPIA (portal del cliente): no pasa por la fase Verificar —la
@@ -636,7 +636,7 @@ def crear_tema_de_cluster(
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
-            # VERIFICACIÓN HEREDADA (ADR 0011 F3): la verificación corrió sobre la HISTORIA antes de admitir;
+            # VERIFICACIÓN HEREDADA (ADR 0011): la verificación corrió sobre la HISTORIA antes de admitir;
             # el tema NACE con el verificacion de su cluster (`no_verificado`/`saltada`), así la fase
             # de copy lo recoge de inmediato y la frontera "verificación = investigación" queda en los datos.
             verificacion_fuente=(VERIFICACION_SALTADA if portal else (cluster.get("verificacion_fuente") or "").strip()),
@@ -1017,7 +1017,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
 
 
 def caducar_verificacion_clusters_en_curso(*, ahora: datetime | None = None) -> int:
-    """Limpiador de la verificación: resetea los clusters `verificacion_fuente='en_curso'` atascados (ADR 0011 F3).
+    """Limpiador de la verificación: resetea los clusters `verificacion_fuente='en_curso'` atascados (ADR 0011).
 
     Si una verificación de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-verificación ni se admite. Pasado el TTL de `en_curso` (el mismo
@@ -1051,7 +1051,7 @@ def promover_clusters_marca(
 ) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
-    Consume el pool ya fusionado/rankeado (Ola B). El filtro `verificacion_estados` (ADR 0011 F3) es
+    Consume el pool ya fusionado/rankeado (Ola B). El filtro `verificacion_estados` (ADR 0011) es
     OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_OK`): la admisión SIEMPRE verificación, no
     hay camino que promueva sin filtrar por verificacion. Devuelve los temas creados. Best-effort por
     historia.

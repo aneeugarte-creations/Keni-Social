@@ -4,7 +4,7 @@
 #   traefik  reverse proxy + TLS (Let's Encrypt). Unico que publica :80/:443.
 #   front    SPA React servido por nginx.            (Traefik: TODO menos /api)
 #   back     gateway Starlette; ENCOLA la generacion. (Traefik: /api)  Sin Node ni `claude`.
-#   worker   consume la cola y corre `claude -p`.    (interno; ADR 0002 Fase B)
+# worker consume la cola y corre `claude -p`. (interno; ADR 0002)
 #   mcp      keni-metricas por HTTP (interno; expon con bearer si lo necesitas).
 #   db       Postgres 16  (CONSUMIDO por el back si DATABASE_URL; si no, SQLite local).
 #   files    Garage S3     (CONSUMIDO por el back si S3_*; si no, media a disco local).
@@ -497,7 +497,7 @@ services:
         max-file: "5"
 
   worker:
-    # Worker de generacion (ADR 0002 Fase B): consume la cola (tabla `jobs`
+    # Worker de generacion (ADR 0002): consume la cola (tabla `jobs`
     # del Postgres compartido) y corre `claude -p`. SI lleva Node + `claude` (la del back
     # ya no). NO publica puertos ni va por Traefik: solo habla con db/files por la red
     # interna. Reiniciar el back NO mata sus jobs (es otro contenedor). Escalable: subir

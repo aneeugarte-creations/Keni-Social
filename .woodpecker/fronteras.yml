@@ -1,4 +1,4 @@
-# Woodpecker: CONTRATO de fronteras entre apps (ADR 0002 Fase A · ADR 0005 §Seams).
+# Woodpecker: CONTRATO de fronteras entre apps (ADR 0002 · ADR 0005).
 # Espejo del job `fronteras` de .github/workflows/ci.yml.
 #
 # El lint de fronteras (`consola/tests/test_fronteras.py`) + el contrato del catálogo

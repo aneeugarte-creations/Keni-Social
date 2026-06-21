@@ -1,4 +1,4 @@
-"""Spec SERIALIZABLE de un job de generacion (ADR 0002 Fase B).
+"""Spec SERIALIZABLE de un job de generacion (ADR 0002).
 
 Un job se serializa como:
   - `prompt` (str): el prompt de `claude -p` YA renderizado por el back.
@@ -333,7 +333,7 @@ def construir_verificacion_fuente(
 ) -> dict[str, Any]:
     """Spec del post-procesado de la verificación de la FUENTE (pre-copy).
 
-    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): verificación sobre la fuente antes de
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011): verificación sobre la fuente antes de
     materializar contenido (el worker sella `noticias_clusters.verificacion_fuente`).
     """
     return {

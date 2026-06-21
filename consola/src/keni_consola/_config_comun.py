@@ -111,7 +111,7 @@ ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 # Concurrencia de jobs (la cola NO tiene tope: el exceso ESPERA, ver R-NO-LIMIT).
 ENV_MAX_JOBS = "KENI_MAX_JOBS"
 
-# Cola + worker de generacion (ADR 0002 Fase B).
+# Cola + worker de generacion (ADR 0002).
 ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
 ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
 

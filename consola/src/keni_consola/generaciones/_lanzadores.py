@@ -12,7 +12,7 @@ LANZADORES INYECTABLES: `crear_app(...)` REASIGNA `generaciones.encolar_job_clau
 ningún módulo del paquete los llama internamente, así que la reasignación del barrel basta. El
 `procesar` (callback que parsea la salida y crea los artefactos) SÍ corre en los tests.
 
-DESACOPLO (ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el WORKER
+DESACOPLO (ADR 0002): el back ENCOLA (`encolar_job_claude`) y el WORKER
 EJECUTA (`lanzar_job_claude`). `lanzar_job_claude` NO desaparece: es la primitiva de ejecución
 del worker.
 """

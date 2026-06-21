@@ -87,7 +87,7 @@ async def variables(request: Request) -> Response:
 # proceso de Investigación. Fusionar son DOS prompts: la verificación previa
 # (`prompt/fusionar-verificar`) corre por grupo propuesto ANTES de fusionar.
 #
-# TERMINOLOGÍA (ADR 0011 §5 + páginas de proceso de F2): los títulos e ids de las etapas
+# TERMINOLOGÍA (ADR 0011): los títulos e ids de las etapas
 # compartidas casan 1:1 con el flujo de la página Investigación (`/datos/investigacion`:
 # Recolectar · Fusionar · Clasificar · Priorizar · Verificar) y con las etapas que muestra el
 # hub Producción (`/datos/produccion`: Redactar · Ilustrar · Aprobar). Las etapas intermedias que

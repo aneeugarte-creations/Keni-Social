@@ -1,4 +1,4 @@
-"""Tests del DESACOPLO generacion (ADR 0002 Fase B): cola + worker.
+"""Tests del DESACOPLO generacion (ADR 0002): cola + worker.
 
 TODO OFFLINE: nunca se llama a `claude` real (se mockea `runner.lanzar_proc` por un
 subproceso de python que emite NDJSON canned). Cubre:

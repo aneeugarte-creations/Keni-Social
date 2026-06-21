@@ -709,7 +709,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Marca del workspace que disparó el import: se estampa en los `rota_eventos` creados al
     # aplicar, para que la lista de Tareas (filtrada por marca) los muestre. (Import a Tareas.)
     "ALTER TABLE parrilla_propuesta ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''",
-    # Cola de jobs de generacion (ADR 0002 Fase B): el back ENCOLA y un
+    # Cola de jobs de generacion (ADR 0002): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
     # (fuente de verdad del sondeo), `spec` el JSON serializable para reconstruir el job

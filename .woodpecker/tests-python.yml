@@ -4,7 +4,7 @@
 # keni-metricas; se instalan editables en orden de dependencia para que pip resuelva
 # el grafo local.
 #
-# TEST SCOPING (ADR 0005 §Test scoping · plan §1.5): esta es la suite COMPLETA. Corre
+# TEST SCOPING (ADR 0005): esta es la suite COMPLETA. Corre
 # cuando cambia keni-shared (la base común: su contrato afecta a TODAS las apps), o el
 # mcp de métricas, o la fontanería del gateway (app.py, db, repos, motor_db…), o en
 # push a `main` (el deploy depende de este pipeline) y a mano. Los cambios acotados a

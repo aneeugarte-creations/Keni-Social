@@ -1,6 +1,6 @@
 """Tests del catálogo de apps (manifests + registro data-driven).
 
-Verifican el contrato de `apps/registro.py` (ADR 0005 / plan §1) SIN red ni BD:
+Verifican el contrato de `apps/registro.py` (ADR 0005) SIN red ni BD:
   - las 3 apps de producto + el shell se cargan de sus manifests TOML,
   - el catálogo agrupa la nav por MOMENTO DEL FLUJO (Operación / Contenido / Datos),
     con encabezado de bloque visible, en el orden y con las etiquetas esperadas,

@@ -1,4 +1,4 @@
-"""WORKER de generacion: clava jobs de la cola y corre `claude -p` (ADR 0002 Fase B).
+"""WORKER de generacion: clava jobs de la cola y corre `claude -p` (ADR 0002).
 
 DOS modos de ejecucion (se elige por entorno; ver `config.worker_externo`):
 
@@ -11,7 +11,7 @@ DOS modos de ejecucion (se elige por entorno; ver `config.worker_externo`):
     modulo como entry-point), tambien con un POOL de `config.max_jobs()` hilos. Consume la
     MISMA cola (Postgres compartido). El back arranca con `KENI_WORKER_EXTERNO=1` para NO
     arrancar su worker in-proceso. La imagen del worker SI lleva Node + `claude`; la del
-    back ya NO (ADR 0002 Fase B).
+    back ya NO (ADR 0002).
 
 CONCURRENCIA (KENI_MAX_JOBS): el worker corre HASTA `config.max_jobs()` jobs `claude` EN
 PARALELO. Cada hilo del POOL corre su propio bucle reclama->procesa->termina, bloqueando en

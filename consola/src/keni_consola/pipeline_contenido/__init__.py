@@ -1,4 +1,4 @@
-"""Pipeline de contenido por marca (ADR 0011 F3, auto-producción).
+"""Pipeline de contenido por marca (ADR 0011, auto-producción).
 
 BARREL del paquete. La implementación está repartida en submódulos por ETAPA —para que cada
 fase se lea y testee aislada— y este `__init__` REEXPORTA toda la superficie pública (y los
@@ -19,7 +19,7 @@ símbolos privados que algún consumidor importa directamente), de modo que
   - `_barrido`   — orquesta los DOS procesos (investigación / producción) bajo single-flight
                    y arranca sus hilos demonio.
 
-DOS PROCESOS (ADR 0011 F3)
+DOS PROCESOS (ADR 0011)
 ==========================
 El espinazo noticia->pieza son DOS loops independientes, cada uno con su gate, cadencia y
 advisory lock (ver `_barrido`):

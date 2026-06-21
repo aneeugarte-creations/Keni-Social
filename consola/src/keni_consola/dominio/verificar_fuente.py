@@ -244,7 +244,7 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
     historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el verificación +
     hallazgos en el destino:
 
-    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): verificación sobre la fuente ANTES de
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011): verificación sobre la fuente ANTES de
     materializar contenido (`repos.marcar_cluster_verificacion`); la admisión solo promueve las verificadas.
     NO encadena copy (la pieza aún no existe; nace en la admisión).
 
@@ -260,7 +260,7 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         verificacion = str(informe.get("verificacion_fuente") or VERIFICACION_REQUIERE_HUMANO)
-        # verificación sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el verificación vive en el
+        # verificación sobre la HISTORIA (cluster, pre-admisión, ADR 0011): el verificación vive en el
         # cluster. La admisión del barrido de investigación promueve las `verificado` (hereda
         # el verificación al contenido) y deja fuera `requiere_humano`/`rechazado`. NO se encadena
         # copy aquí (la pieza aún no existe; nace en la admisión).

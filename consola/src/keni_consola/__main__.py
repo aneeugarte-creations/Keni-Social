@@ -198,7 +198,7 @@ def main() -> int:
 
     iniciar_alertas_rendimiento()
 
-    # Worker de generacion (ADR 0002 Fase B): el back ENCOLA y un WORKER
+    # Worker de generacion (ADR 0002): el back ENCOLA y un WORKER
     # corre `claude -p`. En el perfil LOCAL / un solo proceso, el worker corre EN PROCESO
     # (hilo daemon) para que la UX de una sola maquina no cambie (no hace falta un servicio
     # aparte). En HOSTED hay un servicio `worker` aparte: el back arranca con

@@ -1,4 +1,4 @@
-"""Cargador del catálogo de apps (ADR 0005 + ADR 0002 Fase A).
+"""Cargador del catálogo de apps (ADR 0005 + ADR 0002).
 
 Parsea los manifests TOML (`apps/<app>.toml`) y expone:
   - `cargar_apps()`        -> lista de `App` (todas las declaradas, ordenadas).

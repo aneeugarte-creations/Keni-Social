@@ -15,7 +15,7 @@ from ._db_comun import (
 from .tiempo import ahora_iso, hoy_utc, iso_o_vacio, iso_utc
 
 # --------------------------------------------------------------------------- #
-# Cola de jobs de generacion (ADR 0002 Fase B)                                  #
+# Cola de jobs de generacion (ADR 0002)                                         #
 # --------------------------------------------------------------------------- #
 #
 # El back ENCOLA (`encolar_job`) y devuelve de inmediato; un WORKER (in-proceso en local,

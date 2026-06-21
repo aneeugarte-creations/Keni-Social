@@ -16,7 +16,7 @@ imagen) corre como un TRABAJO en segundo plano en vez de bloquear la peticion HT
      procesado, o `error`).
   4. El frontend SONDEA `GET /api/generaciones/{id}` hasta el estado terminal.
 
-DESACOPLO (ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el
+DESACOPLO (ADR 0002): el back ENCOLA (`encolar_job_claude`) y el
 WORKER EJECUTA (`lanzar_job_claude`). `lanzar_job_claude` NO desaparece: es la primitiva de
 ejecucion del worker. En el perfil LOCAL el worker corre en un hilo del
 propio back (UX de una sola maquina intacta, sin servicio aparte); en HOSTED corre en un

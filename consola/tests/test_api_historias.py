@@ -621,7 +621,7 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
 
 
 def test_historia_expone_verificacion_nativo_del_cluster_sin_contenido(cliente):
-    """ADR 0011 F3: la verificación vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
+    """ADR 0011: la verificación vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
     expone su verificacion igual — así la Mesa de Investigación la muestra ❗, no como 'sin verificación'."""
     _inicializar_cluster("h-prob", marca="unotv")
     repos.marcar_cluster_verificacion("h-prob", "rechazado", '{"resumen": "dato falso"}')
@@ -638,7 +638,7 @@ def test_historia_expone_verificacion_nativo_del_cluster_sin_contenido(cliente):
 
 
 def test_marcar_cluster_verificacion_persiste_y_no_se_pisa_en_recalc(entorno):
-    """ADR 0011 F3: `marcar_cluster_verificacion` sella el verificacion en la historia y un recalc (upsert) sin
+    """ADR 0011: `marcar_cluster_verificacion` sella el verificacion en la historia y un recalc (upsert) sin
     verificacion NO lo borra (`verificacion_fuente`/`verificar_hallazgos` en `_NO_PISAR`)."""
     _inicializar_cluster("h-v", marca="unotv")
     repos.marcar_cluster_verificacion("h-v", "verificado", '{"resumen":"ok"}')

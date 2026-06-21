@@ -2,7 +2,7 @@
 
 El equipo NO usa skills: la verificación se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La verificación
-corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
+corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011): verifica la NOTA de origen y
 persiste un verificación ESTRUCTURADO (`verificado`/`requiere_humano`/`rechazado`) en el cluster. Aquí cubrimos,
 OFFLINE (mock de claude):
   - `asegurar_documento_verificacion` crea el documento si falta (idempotente).

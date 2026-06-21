@@ -1,4 +1,4 @@
-# Manifest de la app B · Métricas e inteligencia (ADR 0005 §B).
+# Manifest de la app B · Métricas e inteligencia (ADR 0005).
 #
 # Lectura multi-marca / multi-plataforma, consolidación y reportes. Consumidor de
 # Metricool (adapter `FuenteMetricol` detrás de `FuenteMetricas`), NO motor de

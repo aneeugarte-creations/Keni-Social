@@ -43,7 +43,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_MAX_JOBS               jobs `claude` simultaneos          def 4   (min 1)
                                   (la cola NO tiene tope: el exceso ESPERA un slot)
 
-  Cola + worker de generacion (ADR 0002 Fase B; `cola`, `worker`):
+  Cola + worker de generacion (ADR 0002; `cola`, `worker`):
     - KENI_WORKER_EXTERNO         hay un servicio `worker` aparte    def OFF (worker in-proceso)
     - KENI_WORKER_SONDEO_SEGUNDOS intervalo de sondeo de la cola (s) def 0.5  (min 0.05)
 
