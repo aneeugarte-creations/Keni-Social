@@ -430,10 +430,12 @@ export function Calendario({
   }
 
   return (
-    // En «Gestión» el componente RELLENA el alto que le da su contenedor (columna acotada al
-    // viewport, sin scroll de página): cabecera arriba y la rejilla+panel ocupando el resto con
-    // scroll interno. En «Calendario» es flujo normal (`space-y-4`, la rejilla pone su propio alto).
-    <div className={esGestion ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}>
+    // En AMBOS modos el componente RELLENA el viewport (columna flex, cabecera arriba y la
+    // rejilla ocupando el resto con scroll interno). «Gestión» hereda el alto de su contenedor
+    // (`h-full`, lo acota index.tsx); «Calendario» lo fija él mismo a `calc(100dvh-5.5rem)` (=
+    // 100dvh − topbar `h-12` − padding del `<main>`), el mismo presupuesto que Gestión, para que
+    // la rejilla baje hasta el pie de la pantalla y no deje hueco muerto debajo.
+    <div className={`flex min-h-0 flex-col gap-4 ${esGestion ? "h-full" : "h-[calc(100dvh-5.5rem)]"}`}>
       {/* Cabecera. En «Gestión», el navegador de semana + el toggle del panel de reparto + el
           menú «Más»; en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
           La leyenda del calendario se ofrece bajo demanda con el icono "?". */}
@@ -503,11 +505,12 @@ export function Calendario({
           </div>
         </div>
       )}
-      {/* Split: la rejilla ocupa el ancho (flex-1) y, en Gestión con el panel abierto, el reparto
-          se acomoda a la derecha SIN tapar la rejilla (la columna lateral). Cerrado, la rejilla
-          vuelve a ancho completo. En «Calendario» no hay panel: es solo la rejilla. */}
-      <div className={esGestion ? "flex min-h-0 flex-1 gap-4" : "flex items-start gap-4"}>
-        <div className={esGestion ? "flex min-h-0 min-w-0 flex-1 flex-col" : "min-w-0 flex-1"}>
+      {/* Split: la rejilla ocupa el ancho (flex-1) y crece en vertical (min-h-0 flex-1) hasta el pie.
+          En Gestión con el panel abierto, el reparto se acomoda a la derecha SIN tapar la rejilla (la
+          columna lateral); cerrado, la rejilla vuelve a ancho completo. En «Calendario» no hay panel:
+          es solo la rejilla. */}
+      <div className="flex min-h-0 flex-1 gap-4">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
       ) : error ? (
@@ -526,18 +529,14 @@ export function Calendario({
           }
         />
       ) : (
-        <Card className={esGestion ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "overflow-hidden"}>
-          <CardContent className={esGestion ? "flex min-h-0 flex-1 flex-col p-0" : "p-0"}>
-            {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva. En «Calendario»
-                la altura es FIJA `calc(100dvh-14rem)` (no `max-h`) para LLENAR el alto disponible;
-                en «Gestión» rellena (`flex-1`) el hueco de la columna acotada. Las franjas laborales
-                crecen (`grow`) y reparten el sobrante; si la semana es densa, scroll interno aquí.
-                En «Calendario» `min-w-[56rem]` mantiene legibilidad horizontal; en «Gestión» NO hay
-                ancho mínimo (`min-w-0`) para que la rejilla quepa junto al panel sin scroll lateral. */}
-            <div
-              className={esGestion ? "min-h-0 flex-1 overflow-auto" : "overflow-auto"}
-              style={esGestion ? undefined : { height: "calc(100dvh - 14rem)" }}
-            >
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva. En AMBOS modos
+                rellena (`flex-1`) el hueco que le deja la columna flex y guarda su scroll interno;
+                las franjas laborales crecen (`grow`) y reparten el sobrante. En «Calendario»
+                `min-w-[56rem]` mantiene legibilidad horizontal; en «Gestión» NO hay ancho mínimo
+                (`min-w-0`) para que la rejilla quepa junto al panel sin scroll lateral. */}
+            <div className="min-h-0 flex-1 overflow-auto">
               <div className={esGestion ? "flex min-h-full min-w-0 flex-col" : "flex min-h-full min-w-[56rem] flex-col"}>
                 {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
                 <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
