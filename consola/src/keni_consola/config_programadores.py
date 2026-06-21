@@ -12,10 +12,6 @@ from ._config_comun import (
     ENV_ALGORITMOS_AUTO,
     ENV_ALGORITMOS_INTERVALO_HORAS,
     ENV_AUTO_PREAPROBACION,
-    ENV_COMERCIAL_INTERVALO_HORAS,
-    ENV_COMERCIAL_INTERVALO_SEGUNDOS,
-    ENV_INVESTIGADOR,
-    ENV_INVESTIGADOR_INTERVALO_HORAS,
     ENV_METRICAS_HISTORICO_RETENCION_DIAS,
     ENV_METRICAS_PIEZAS_REFRESCO_HORAS,
     ENV_METRICAS_REFRESCO_HORAS,
@@ -25,7 +21,6 @@ from ._config_comun import (
     ENV_TRENDS,
     ENV_TRENDS_GEOS,
     ENV_TRENDS_INTERVALO_MIN,
-    INVESTIGADOR_INTERVALO_HORAS_DEF,
     METRICAS_HISTORICO_RETENCION_DIAS_DEF,
     METRICAS_PIEZAS_REFRESCO_HORAS_DEF,
     METRICAS_REFRESCO_HORAS_DEF,
@@ -43,35 +38,6 @@ from .config_produccion import (
 # --------------------------------------------------------------------------- #
 # Accesores: programadores en segundo plano                                    #
 # --------------------------------------------------------------------------- #
-
-
-def comercial_intervalo_segundos() -> float | None:
-    """Intervalo de la captura comercial en s (`KENI_COMERCIAL_INTERVALO_SEGUNDOS`, min 1.0).
-
-    None si ausente/invalido (el llamante cae a horas/def). Tiene PRIORIDAD sobre horas.
-    """
-    crudo = os.environ.get(ENV_COMERCIAL_INTERVALO_SEGUNDOS)
-    if not crudo:
-        return None
-    try:
-        return max(1.0, float(crudo))
-    except ValueError:
-        return None
-
-
-def comercial_intervalo_horas() -> float | None:
-    """Intervalo de la captura comercial en HORAS (`KENI_COMERCIAL_INTERVALO_HORAS`).
-
-    Devuelve las horas crudas (float, >0); None si ausente/invalido. El minimo de 60 s lo
-    aplica el llamante al convertir a segundos (comportamiento historico).
-    """
-    crudo = os.environ.get(ENV_COMERCIAL_INTERVALO_HORAS)
-    if not crudo:
-        return None
-    try:
-        return float(crudo)
-    except ValueError:
-        return None
 
 
 def metricas_refresco_horas() -> int:
@@ -201,22 +167,6 @@ def min_aprobaciones() -> int:
     aprobada se puede programar, comportamiento legado). Valor no entero -> def. Min 0.
     """
     return _entero(ENV_MIN_APROBACIONES, MIN_APROBACIONES_DEF, minimo=0)
-
-
-def investigador_activo() -> bool:
-    """True si el Investigador (snapshot del Radar por marca) debe materializar (`KENI_INVESTIGADOR`).
-
-    Def OFF (conservador): sin el flag, el daemon arranca pero NO materializa, y los endpoints
-    (Radar/Parrilla) NUNCA leen del snapshot (siguen en vivo, comportamiento de Fase 0 intacto).
-    Con el flag a un valor afirmativo, el daemon escribe el snapshot por marca y los endpoints
-    lo sirven (rapido, sin re-descargar fuentes) mientras este fresco.
-    """
-    return _crudo(ENV_INVESTIGADOR).lower() in _VERDADEROS
-
-
-def investigador_intervalo_horas() -> int:
-    """Cada cuantas horas barre el Investigador (`KENI_INVESTIGADOR_INTERVALO_HORAS`, def 6, min 1)."""
-    return _entero(ENV_INVESTIGADOR_INTERVALO_HORAS, INVESTIGADOR_INTERVALO_HORAS_DEF, minimo=1)
 
 
 def algoritmos_auto_activo() -> bool:

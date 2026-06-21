@@ -34,8 +34,6 @@ _TODAS = (
     config.ENV_CLAUDE_MAX_USD,
     config.ENV_CLAUDE_MAX_TURNS,
     config.ENV_CLAUDE_SKIP_PERMISSIONS,
-    config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
-    config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_DATABASE_URL,
     config.ENV_PG_USER,
     config.ENV_PG_PASSWORD,
@@ -213,8 +211,6 @@ def test_defaults_cuando_no_hay_env(limpio):
     assert config.claude_max_usd() is None
     assert config.claude_max_turns() is None
     assert config.claude_skip_permisos() is True
-    assert config.comercial_intervalo_segundos() is None
-    assert config.comercial_intervalo_horas() is None
 
 
 # --------------------------------------------------------------------------- #
@@ -358,28 +354,6 @@ def test_admin_pass_conserva_espacios(limpio):
     """La contrasena NO se recorta (un espacio puede ser significativo)."""
     limpio.setenv(config.ENV_ADMIN_PASS, "  con espacios  ")
     assert config.admin_pass() == "  con espacios  "
-
-
-# --------------------------------------------------------------------------- #
-# Intervalos de los programadores en segundo plano                             #
-# --------------------------------------------------------------------------- #
-
-
-def test_comercial_intervalo_segundos_min_1(limpio):
-    limpio.setenv(config.ENV_COMERCIAL_INTERVALO_SEGUNDOS, "0.5")
-    assert config.comercial_intervalo_segundos() == 1.0  # clamp min 1.0
-    limpio.setenv(config.ENV_COMERCIAL_INTERVALO_SEGUNDOS, "5")
-    assert config.comercial_intervalo_segundos() == 5.0
-    limpio.setenv(config.ENV_COMERCIAL_INTERVALO_SEGUNDOS, "x")
-    assert config.comercial_intervalo_segundos() is None
-
-
-def test_comercial_intervalo_horas_crudo(limpio):
-    """Devuelve las HORAS crudas (>0); el clamp a 60 s lo hace el llamante."""
-    limpio.setenv(config.ENV_COMERCIAL_INTERVALO_HORAS, "2")
-    assert config.comercial_intervalo_horas() == 2.0
-    limpio.setenv(config.ENV_COMERCIAL_INTERVALO_HORAS, "x")
-    assert config.comercial_intervalo_horas() is None
 
 
 def test_pipeline_admision_default_y_clamp(limpio):

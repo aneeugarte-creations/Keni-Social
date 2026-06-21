@@ -56,9 +56,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   Texto de prompts + linea editorial (`texto`, `dominio.prompts_lanzar`):
     - KENI_PROMPTS_DIR         almacen de documentos markdown     def <dir_config>/texto
 
-  Programadores en segundo plano (`comercial`, `programador`):
-    - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
-    - KENI_COMERCIAL_INTERVALO_HORAS     intervalo captura (h)       def INTERVALO_HORAS_DEF
+  Programadores en segundo plano (`programador`):
     - KENI_METRICAS_REFRESCO_HORAS       refresco cache metricas (h) def 4   (min 1)
     - KENI_METRICAS_PIEZAS_REFRESCO_HORAS refresco cache POR PIEZA (h) def 4 (min 1)
     - KENI_ALERTAS_RENDIMIENTO_HORAS     barrido alertas rendim. (h) def 6   (min 1)
@@ -140,8 +138,6 @@ from ._config_comun import (  # noqa: F401
     ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_VENTANA_H,
-    ENV_COMERCIAL_INTERVALO_HORAS,
-    ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     ENV_CONFIG,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_COOKIE_SECURE,
@@ -176,8 +172,6 @@ from ._config_comun import (  # noqa: F401
     ENV_INGESTA_WORKERS,
     ENV_FUSION_MODELO,
     ENV_INSUMOS_MODELO,
-    ENV_INVESTIGADOR,
-    ENV_INVESTIGADOR_INTERVALO_HORAS,
     ENV_LOG_LEVEL,
     ENV_CONTROL_BEARER,
     ENV_CONTROL_PORT,
@@ -299,7 +293,6 @@ from ._config_comun import (  # noqa: F401
     INGESTA_MAX_ERRORES_DEF,
     INGESTA_MAX_ITEMS_DEF,
     INGESTA_WORKERS_DEF,
-    INVESTIGADOR_INTERVALO_HORAS_DEF,
     LOG_LEVEL_DEF,
     JOBS_MAX_INTENTOS_DEF,
     PROMPT_AVISO_CHARS_DEF,
@@ -554,10 +547,6 @@ from .config_programadores import (  # noqa: F401
     algoritmos_intervalo_horas,
     auto_preaprobacion,
     canal_publicacion_para,
-    comercial_intervalo_horas,
-    comercial_intervalo_segundos,
-    investigador_activo,
-    investigador_intervalo_horas,
     metricas_historico_retencion_dias,
     metricas_piezas_refresco_horas,
     metricas_refresco_horas,

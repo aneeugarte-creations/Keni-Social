@@ -171,8 +171,6 @@ ENV_PROMPTS_DIR = "KENI_PROMPTS_DIR"
 ENV_PROMPTS_DIR_LEGACY = "KENI_TEXTO_DIR"
 
 # Programadores en segundo plano.
-ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
-ENV_COMERCIAL_INTERVALO_HORAS = "KENI_COMERCIAL_INTERVALO_HORAS"
 ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 # Refresco PROACTIVO de la cache de metricas POR PIEZA (tablero) — Fase 3 auto-operativa.
 ENV_METRICAS_PIEZAS_REFRESCO_HORAS = "KENI_METRICAS_PIEZAS_REFRESCO_HORAS"
@@ -215,14 +213,6 @@ ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
 # cada subsistema sigue EXACTAMENTE su propio toggle, como hasta ahora. NO afecta a los daemons
 # de mantenimiento (metricas, alertas, vencimientos, limpiador, GC de media) ni a la pieza.
 ENV_MAQUINA = "KENI_MAQUINA"
-
-# Investigador (Fase 1): daemon que MATERIALIZA por marca un snapshot del Radar (temas
-# consolidados + score/razon/estado) en Postgres, para que la Parrilla y el Radar lean del
-# snapshot (rapido, sin re-descargar fuentes) en vez de golpear Trends/feeds en cada request.
-# CONSERVADOR por defecto (OFF): sin el flag, el snapshot NUNCA se lee (los endpoints siguen
-# en vivo, comportamiento de Fase 0 intacto) y el daemon arranca pero no materializa nada.
-ENV_INVESTIGADOR = "KENI_INVESTIGADOR"
-ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
 
 # Auto-refresco de Algoritmos (inteligencia de plataforma): ingiere periodicamente los
 # feeds de blogs oficiales/agregadores. Gateado OFF por defecto (la pagina Algoritmos tiene
@@ -620,11 +610,6 @@ ALERTAS_INTERVALO_HORAS_DEF = 6
 # Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
 ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0
 
-# Cadencia del barrido del Investigador (Fase 1): materializa el snapshot del Radar por marca
-# cada N horas. Intervalo holgado (def 6h, igual que radar-auto): el snapshot vive con un TTL
-# de ~2 intervalos, asi que con 6h las lecturas sirven datos de a lo sumo medio dia.
-INVESTIGADOR_INTERVALO_HORAS_DEF = 6
-
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
 ALGORITMOS_INTERVALO_HORAS_DEF = 6
@@ -895,8 +880,6 @@ __all__ = [
     'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
     'ENV_CLUSTER_VENTANA_H',
-    'ENV_COMERCIAL_INTERVALO_HORAS',
-    'ENV_COMERCIAL_INTERVALO_SEGUNDOS',
     'ENV_CONFIG',
     'ENV_CONSOLA_URL_PUBLICA',
     'ENV_COOKIE_SECURE',
@@ -933,8 +916,6 @@ __all__ = [
     'ENV_FUSION_MODELO',
     'ENV_HASHTAGS_MODELO',
     'ENV_INSUMOS_MODELO',
-    'ENV_INVESTIGADOR',
-    'ENV_INVESTIGADOR_INTERVALO_HORAS',
     'ENV_LOG_LEVEL',
     'ENV_MAQUINA',
     'ENV_MAX_JOBS',
@@ -1044,7 +1025,6 @@ __all__ = [
     'INGESTA_MAX_ERRORES_DEF',
     'INGESTA_MAX_ITEMS_DEF',
     'INGESTA_WORKERS_DEF',
-    'INVESTIGADOR_INTERVALO_HORAS_DEF',
     'LOG_LEVEL_DEF',
     'JOBS_MAX_INTENTOS_DEF',
     'PROMPT_MAX_CHARS_DEF',
