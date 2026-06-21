@@ -107,11 +107,6 @@ def expandir(texto: str, mapa: dict[str, str]) -> str:
     return expandido.replace("{{", "{").replace("}}", "}")
 
 
-def expandir_para_contenido(texto: str, contenido: dict, *, hoy: date | None = None) -> str:
-    """Atajo: resuelve el mapa del `contenido` y expande `texto` en una sola llamada."""
-    return expandir(texto, resolver_variables(contenido, hoy=hoy))
-
-
 def catalogo() -> list[dict[str, str]]:
     """Catalogo `[{clave, etiqueta, ejemplo}]` de variables para la UI del tablero.
 

@@ -41,7 +41,7 @@ import logging
 from datetime import date
 from typing import Any
 
-from . import config, generaciones, marcas, media, priorizacion, repos
+from . import config, generaciones, media, priorizacion, repos
 from .estados import CLASE_CONTENIDO
 
 _log = logging.getLogger("keni_consola.autogen_ilustrar")
@@ -175,12 +175,6 @@ def prompt_arte(item: dict[str, Any]) -> str:
     titulo = (item.get("titulo") or "").strip()
     descripcion = (item.get("descripcion") or "").strip()
     return f"{titulo}. {descripcion}".strip(". ").strip() if descripcion else titulo
-
-
-def _marca_legible(item: dict[str, Any]) -> str:
-    """Nombre de marca legible si es valida, o "" (solo para el prompt/log; no se confia)."""
-    marca = item.get("marca") or ""
-    return marca if marca and marcas.es_marca(marca) else ""
 
 
 def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:

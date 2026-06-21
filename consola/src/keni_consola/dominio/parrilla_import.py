@@ -255,10 +255,6 @@ class Contexto:
         # Guardamos el mapa id->nombre para exponer el nombre de franja del turno en `actual`.
         self._franjas_nombre = franjas_nombre
 
-    def franja_valida(self, nombre: str) -> bool:
-        """True si `nombre` (normalizado) es un slot de franja valido."""
-        return normaliza_franja(nombre) in self.nombres_franja
-
     def nombre_de_franja(self, franja_id: str) -> str:
         """NOMBRE de la franja `franja_id` de un turno existente ("" si no se conoce)."""
         return self._franjas_nombre.get(str(franja_id or ""), "")

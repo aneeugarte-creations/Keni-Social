@@ -63,11 +63,6 @@ class TransicionInvalida(ValueError):
     """Una transición de estado no permitida por la máquina (origen → destino)."""
 
 
-def categoria_valida(categoria: str) -> bool:
-    """True si `categoria` está en el catálogo de admisión."""
-    return categoria in CATEGORIAS
-
-
 def transicion_valida(origen: str, destino: str) -> bool:
     """True si se puede pasar de `origen` a `destino`.
 
