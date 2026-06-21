@@ -207,7 +207,7 @@ sudo systemctl start keni-janitor.service    # correr ya una vez
 tail -n 30 /var/log/keni-janitor.log
 ```
 
-## Deploy del back SIN downtime (blue-green) — `KENI_DEPLOY_BLUEGREEN` (POR DEFECTO OFF)
+## Deploy del back SIN downtime (blue-green) — `KENI_DEPLOY_BLUEGREEN` (POR DEFECTO ON)
 
 Cuando cambia el **back**, el cutover clásico para el back mientras corre el esquema y el `up`,
 dejando ~1 min sin back sano (Traefik no enruta a contenedores no-sanos y los POST `/api`
@@ -221,9 +221,10 @@ viejo, cuyo id se captura **antes** de escalar). Es seguro porque el back es **s
 identidad y **PROD sigue con el viejo (sin downtime)**; el deploy sale en **rojo** y el
 próximo reconstruye.
 
-- **Estado: OFF por defecto.** El kill-switch `KENI_DEPLOY_BLUEGREEN` está **inerte** salvo que
-  valga `1`/`yes`/`on`/`true` (en `deploy/.env` o exportado: `KENI_DEPLOY_BLUEGREEN=1 sh
-  deploy/deploy.sh .env`). Vacío o cualquier otro valor deja el cutover clásico *stop-the-world*.
+- **Estado: ON por defecto.** Cada cambio de back se despliega sin downtime. El kill-switch
+  `KENI_DEPLOY_BLUEGREEN=0` (o `no`/`off`/`false`, en `deploy/.env` o exportado:
+  `KENI_DEPLOY_BLUEGREEN=0 sh deploy/deploy.sh .env`) **fuerza OFF** y vuelve al cutover clásico
+  *stop-the-world*. Vacío/ausente o cualquier otro valor = ON.
 - **Por qué la retirada es por IDENTIDAD y no por `--scale`** (root-cause del incidente de
   deploy): con imágenes **mixtas** (viejo + nuevo), `docker compose --scale back=1` NO
   elige por índice — **conserva** el contenedor que casa la imagen deseada (el NUEVO) y borra
@@ -234,7 +235,11 @@ próximo reconstruye.
   conviven back **viejo y nuevo**, y la migración de esquema corre con el viejo aún sirviendo.
   El esquema debe ser **aditivo e idempotente** (lo es por diseño, **ADR 0004**). Una migración
   destructiva (DROP/RENAME/constraint NOT NULL sin default) rompería al back viejo durante el
-  solape: hazla en **dos deploys** (expand ahora, contract después) o con el blue-green OFF.
+  solape: hazla en **dos deploys** (expand ahora, contract después) o con el kill-switch
+  `KENI_DEPLOY_BLUEGREEN=0` en **ese** deploy. Las migraciones versionadas son one-shot
+  (journal `schema_migraciones`) y las históricas ya están aplicadas en prod; en régimen
+  estacionario el deploy solo aplica DDL **aditivo** (`ADD COLUMN IF NOT EXISTS`), seguro
+  durante el solape.
 - La red de rollback (`:previa` + verificación de salud [6/6] con re-verificación de la `:previa`)
   sigue **intacta**: si tras el cutover algún servicio no queda sano, se revierte a `:previa`.
   `KENI_DEPLOY_SIN_VERIFICAR=1` salta esa verificación.

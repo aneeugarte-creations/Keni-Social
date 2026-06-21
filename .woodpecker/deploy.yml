@@ -7,9 +7,20 @@
 # los resuelve el daemon EN EL HOST, asi que deben existir en un path real del host. El
 # step sincroniza el checkout a ese dir (preservando .env) y corre deploy.sh desde ahi.
 #
-# AUTO-DEPLOY en push a `main`, DESPUES de que pasen los 3 pipelines de test (depends_on).
-# Un push con tests en rojo NO despliega. Tambien disparable a mano ("manual"). NO
-# despliega en PRs ni en otras ramas.
+# AUTO-DEPLOY en push a `main`, DESPUES de que pasen los DOS gates BARATOS y deterministas
+# (depends_on): `fronteras` (contrato AST + catalogo, sin Postgres, <30s) y `frontend-build`
+# (`tsc -b && vite build`, sin Postgres). Un gate en rojo NO despliega. Tambien disparable a
+# mano ("manual"). NO despliega en PRs ni en otras ramas.
+#
+# POR QUE SOLO LOS GATES BARATOS: el camino prompt-a-prod lo dominaba la SUITE PESADA de
+# Postgres (`tests-python`, ~5 min, caja compartida con prod). Esa suite YA NO gatea el
+# deploy: corre EN PARALELO en cada push a main (su propio pipeline) y su red de seguridad
+# ante un rojo POST-deploy es el rollback `:previa` que deploy.sh aplica solo si la imagen
+# nueva no queda sana. Un rojo de `tests-python` deja constancia (pipeline en rojo) para que
+# un humano/agente lo arregle en `main`, pero NO bloquea el flujo de los demas agentes.
+# REQUISITO para que `fronteras` y `frontend-build` puedan gatear: ambos corren SIEMPRE en
+# push a main (clausula `event: push, branch: main` en sus `when`); si un gate se SALTARA,
+# Woodpecker EXCLUIRIA tambien este deploy (un dep saltado excluye al dependiente).
 #
 # REQUISITO (una vez) en tu instancia de Woodpecker — ver deploy/woodpecker/README.md:
 #   Repo Settings -> General -> seccion "Confiado": activa "Volumenes" (deja que el step
@@ -24,8 +35,8 @@ when:
   - event: manual
 
 depends_on:
+  - fronteras
   - frontend-build
-  - tests-python
 
 steps:
   - name: build-and-deploy

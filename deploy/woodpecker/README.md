@@ -165,13 +165,20 @@ Ademas de los 7 pipelines de CI (tests), hay un pipeline de **despliegue**:
 monta el `docker.sock`, el step construye las imagenes desde el checkout del pipeline
 (sin rsync) y recrea el stack via `deploy/deploy.sh`.
 
-- **Auto-deploy en push a `main`** (`when: event: push, branch: main`), DESPUES de los
-  pipelines de test (via `depends_on`); tambien disparable como *manual*. Un push con
-  tests en rojo NO despliega; NO despliega en PRs ni otras ramas.
-- **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los
-  contenedores corren no-root) -> `migracion --solo-db` (aserto de esquema idempotente
-  sobre Postgres; no-op tras ADR 0004, no destructivo) -> `up -d`. Detalle en
-  `deploy/deploy.sh`.
+- **Auto-deploy en push a `main`** (`when: event: push, branch: main`), DESPUES de los dos
+  gates BARATOS y deterministas (via `depends_on`): `fronteras` (contrato AST + catalogo,
+  sin Postgres) y `frontend-build` (`tsc -b && vite build`, sin Postgres). Un gate en rojo
+  NO despliega; tambien disparable como *manual*. NO despliega en PRs ni otras ramas. La
+  suite PESADA de Postgres (`tests-python`, ~5 min) ya NO gatea el deploy: corre en PARALELO
+  en cada push a main (verificacion, no puerta) para no dominar la latencia prompt-a-prod;
+  un rojo suyo deja constancia pero no bloquea el deploy de los demas. Red de seguridad ante
+  un rojo post-deploy: el rollback `:previa` de `deploy.sh` (arranques no sanos) + forward-fix
+  a main (comportamiento incorrecto que pasó salud).
+- **Hace:** `docker compose build` -> chown del volumen a uid 10001 (los contenedores corren
+  no-root) -> `migracion --solo-db` (aserto de esquema idempotente sobre Postgres; no-op tras
+  ADR 0004, no destructivo) -> cutover del back. El cutover es **blue-green por defecto**
+  (`KENI_DEPLOY_BLUEGREEN` ON salvo `=0`): arranca el back NUEVO junto al viejo y solo retira
+  el viejo cuando el nuevo está healthy (sin downtime). Detalle en `deploy/deploy.sh`.
 
 ### Requisitos (una vez) para que el deploy funcione
 

@@ -26,24 +26,26 @@ leer_env() {
   printf '%s' "$v"
 }
 
-# ── BLUE-GREEN del back (deploy SIN downtime) — KILL-SWITCH, POR DEFECTO OFF ───────────
+# ── BLUE-GREEN del back (deploy SIN downtime) — KILL-SWITCH, POR DEFECTO ON ────────────
 # Con blue-green ON, un cambio de back arranca el contenedor NUEVO junto al viejo (que sigue
 # sirviendo), espera a que el NUEVO esté `healthy` —Traefik solo enruta a sanos— y SOLO
 # entonces retira el VIEJO por IDENTIDAD (su id de contenedor capturado ANTES de escalar),
 # nunca por índice de `--scale`: cero ventana sin back sano. Si el NUEVO no llega a sano se
 # retira el NUEVO (por identidad) y el VIEJO sigue sirviendo: prod NUNCA cae.
-# POR DEFECTO OFF: vacío o cualquier valor que no sea 1/yes/on/true deja el cutover clásico
-# stop-the-world. Pon KENI_DEPLOY_BLUEGREEN=1 (en el .env o exportado) para activarlo.
-# REQUISITO del solape (solo aplica con ON): conviven back VIEJO y NUEVO y la migración de
+# POR DEFECTO ON: vacío/ausente y cualquier valor que no sea 0/no/off/false activa el cutover
+# sin downtime. KILL-SWITCH: KENI_DEPLOY_BLUEGREEN=0 (o no/off/false, en el .env o exportado)
+# fuerza OFF y vuelve al cutover clásico stop-the-world.
+# REQUISITO del solape (siempre aplica con ON): conviven back VIEJO y NUEVO y la migración de
 # esquema ([4/6]) corre con el viejo aún sirviendo, así que el esquema DEBE ser COMPATIBLE
 # HACIA ATRÁS (expand/contract): la migración de keni-social es ADITIVA e IDEMPOTENTE por
 # diseño (ADR 0004). Una migración destructiva (DROP/RENAME/constraint NOT NULL sin default)
-# rompería al back viejo durante el solape: hazla en dos deploys o con el blue-green OFF.
+# rompería al back viejo durante el solape: hazla en dos deploys (expand ahora, contract
+# después) o pon el kill-switch KENI_DEPLOY_BLUEGREEN=0 en ESE deploy.
 BLUEGREEN="$(leer_env KENI_DEPLOY_BLUEGREEN)"
 [ -n "${KENI_DEPLOY_BLUEGREEN:-}" ] && BLUEGREEN="$KENI_DEPLOY_BLUEGREEN"   # export MANDA sobre el .env
 case "$BLUEGREEN" in
-  1|yes|on|true) BLUEGREEN=1 ;;
-  *) BLUEGREEN=0 ;;   # vacío (default) y cualquier otro valor: OFF
+  0|no|off|false) BLUEGREEN=0 ;;   # kill-switch explícito: OFF
+  *) BLUEGREEN=1 ;;                # vacío (default) y cualquier otro valor: ON
 esac
 
 # ── GUARDA: la app NO debe conectar a Postgres como SUPERUSUARIO ──────────────────────

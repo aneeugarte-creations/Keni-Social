@@ -15,6 +15,12 @@ when:
         - "keni-shared/**"
         - "mcp-metricas/**"
         - ".woodpecker/**"
+  # En push a `main` SIEMPRE: este contrato es un GATE del deploy (`deploy.yml depends_on:
+  # fronteras`). En Woodpecker un dep SALTADO excluye al dependiente, asi que debe correr en
+  # CADA push a main aunque ese push no toque sus rutas (p.ej. solo `deploy/**` o `docs/**`),
+  # para que el deploy tenga un veredicto real sobre el que gatear.
+  - event: push
+    branch: main
 
 steps:
   - name: contrato-fronteras

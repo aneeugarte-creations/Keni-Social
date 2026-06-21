@@ -7,9 +7,19 @@
 # TEST SCOPING (ADR 0005): esta es la suite COMPLETA. Corre
 # cuando cambia keni-shared (la base común: su contrato afecta a TODAS las apps), o el
 # mcp de métricas, o la fontanería del gateway (app.py, db, repos, motor_db…), o en
-# push a `main` (el deploy depende de este pipeline) y a mano. Los cambios acotados a
+# push a `main` y a mano. Los cambios acotados a
 # UNA app NO la disparan: usan su pipeline scoped (`tests-app-*`) + el contrato
 # (`fronteras`). Postgres efímero: ejercita el backend HOSTED real (no solo SQLite).
+#
+# NO GATEA EL DEPLOY (a propósito). El deploy depende solo de los gates BARATOS
+# (`fronteras` + `frontend-build`, sin Postgres); esta suite pesada (~5 min, Postgres, caja
+# compartida con prod) se sacó del camino crítico para no dominar la latencia prompt-a-prod.
+# CORRE EN PARALELO en cada push a main: deja un veredicto real, pero un rojo suyo NO bloquea
+# el deploy de los demás agentes. Red de seguridad ante un rojo POST-deploy: si la imagen
+# nueva no arranca sana, el rollback `:previa` de deploy.sh ya la revierte; si arrancó sana
+# pero el comportamiento es incorrecto, el arreglo se promueve a main como un commit más
+# (forward-fix), que redespliega. No hay auto-revert del deploy disparado por esta suite (ver
+# RIESGOS en el informe): sería frágil con ~7 agentes empujando en paralelo.
 when:
   # Suite completa: base común / fontanería del gateway / MCP.
   - event: [push, pull_request]
@@ -23,7 +33,7 @@ when:
         - "consola/tests/conftest.py"
         - "consola/tests/_postgres.py"
         - ".woodpecker/tests-python.yml"
-  # En push a `main` SIEMPRE (el deploy `depends_on: tests-python` necesita que corra).
+  # En push a `main` SIEMPRE: verificación pesada en PARALELO al deploy (ya no lo gatea).
   - event: push
     branch: main
   - event: manual

@@ -7,7 +7,7 @@
 # para NO levantar su worker in-proceso (lo hace el contenedor `worker`).
 #
 # Despliegue: corre en cpuset 0-2 dedicado (ver docker-compose.yml) y se actualiza por
-# blue-green sin downtime cuando KENI_DEPLOY_BLUEGREEN=1 (ver deploy/deploy.sh).
+# blue-green sin downtime por defecto (kill-switch KENI_DEPLOY_BLUEGREEN=0; ver deploy/deploy.sh).
 #
 # Contexto de build: la RAIZ del repo (ver deploy/docker-compose.yml).
 FROM python:3.12-slim
