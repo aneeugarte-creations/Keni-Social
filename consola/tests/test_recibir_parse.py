@@ -308,6 +308,62 @@ def test_extraer_insumos_portal_ejecutor_inyectado():
     assert items[1]["marca"] == "claro-sports"
 
 
+def test_extraer_insumos_usa_structured_output():
+    # El ejecutor devuelve la forma nueva `(texto, structured_output)`: los items validados
+    # vienen en la estructurada y se usan, ignorando el texto libre (aquí ni es JSON).
+    def ej(prompt: str, carpeta: str):
+        estructurado = {"items": [
+            {"titulo": "Nota estructurada", "marca": "unotv"},
+        ]}
+        return "texto libre irrelevante", estructurado
+
+    items, errores = ip.extraer_insumos(
+        b"1.- Nota",
+        nombre="portal.txt",
+        cajon="portal",
+        fecha="2026-06-05",
+        lote_id="lE",
+        ejecutor=ej,
+    )
+    assert errores == []
+    assert len(items) == 1
+    assert items[0]["titulo"] == "Nota estructurada"
+    assert items[0]["marca"] == "unotv"
+
+
+def test_extraer_insumos_sin_structured_output_cae_al_texto():
+    # Forma nueva pero sin estructurada (None): se parsea el JSON del texto `result`.
+    def ej(prompt: str, carpeta: str):
+        return json.dumps({"items": [{"titulo": "Desde texto"}]}), None
+
+    items, errores = ip.extraer_insumos(
+        b"x", nombre="portal.txt", cajon="portal", fecha="2026-06-05", lote_id="lT", ejecutor=ej,
+    )
+    assert errores == []
+    assert items[0]["titulo"] == "Desde texto"
+
+
+def test_parsear_respuesta_haiku_estructurado_prevalece_sobre_texto():
+    # Si llega `estructurado` con items, se usa por encima del JSON del texto.
+    items, errores = ip.parsear_respuesta_haiku(
+        json.dumps({"items": [{"titulo": "Del texto"}]}),
+        cajon="portal", fecha="2026-06-05", lote_id="l1",
+        estructurado={"items": [{"titulo": "De la estructurada"}]},
+    )
+    assert errores == []
+    assert items[0]["titulo"] == "De la estructurada"
+
+
+def test_parsear_respuesta_haiku_estructurada_sin_items_cae_al_texto():
+    items, errores = ip.parsear_respuesta_haiku(
+        json.dumps({"items": [{"titulo": "Del texto"}]}),
+        cajon="portal", fecha="2026-06-05", lote_id="l1",
+        estructurado={"otra_clave": 1},
+    )
+    assert errores == []
+    assert items[0]["titulo"] == "Del texto"
+
+
 def test_extraer_insumos_cajon_desconocido():
     items, errores = ip.extraer_insumos(
         b"texto",

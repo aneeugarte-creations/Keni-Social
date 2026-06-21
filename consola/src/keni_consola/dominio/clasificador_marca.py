@@ -26,8 +26,13 @@ from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.clasificador_marca")
 
-# Misma firma que el ejecutor de traducción/insumos: (prompt, dir_permitido) -> salida.
-Ejecutor = Callable[[str, str], str]
+# Ejecutor de la llamada a `claude`. Misma firma que el de traducción/insumos
+# (`(prompt, dir_permitido) -> salida`), pero puede devolver dos formas:
+#   - `str`: solo el texto `result` (se parsea con `json_llm`, camino histórico).
+#   - `tuple[str, dict | None]`: `(texto_result, structured_output)`, cuando el run usó
+#     `--json-schema` y trajo la salida estructurada YA validada. Si la hay, se usa directa.
+SalidaEjecutor = str | tuple[str, "dict | None"]
+Ejecutor = Callable[[str, str], SalidaEjecutor]
 
 # Tope de caracteres de titulo+resumen al prompt (protege contra notas larguísimas).
 _MAX_CHARS = 600
@@ -94,7 +99,16 @@ def clasificar_marca(
         .replace("{{NOTICIA}}", noticia)
     )
 
-    correr = ejecutor or _ejecutar
+    # Esquema raíz: la salida estructurada debe ser `{"marca": <una de las candidatas>}`.
+    # El enum acota a las ids candidatas, así una marca fuera de lista no valida y cae al
+    # fallback (mismo criterio que el parse de texto).
+    esquema = {
+        "type": "object",
+        "properties": {"marca": {"type": "string", "enum": sorted(ids)}},
+        "required": ["marca"],
+    }
+
+    correr = ejecutor or _con_esquema(esquema)
     try:
         with tempfile.TemporaryDirectory(prefix="keni-clasif-marca-") as carpeta:
             salida = correr(prompt, carpeta)
@@ -102,20 +116,47 @@ def clasificar_marca(
         _log.warning("clasificar_marca: fallo al llamar a claude: %s", e)
         return fallback
 
-    data = json_llm.extraer_json(salida, dict)
+    texto, estructurado = _desempaquetar(salida)
+    # Salida estructurada YA validada por `--json-schema`: úsala directa si trae candidata.
+    if isinstance(estructurado, dict):
+        marca = str(estructurado.get("marca") or "").strip()
+        if marca in ids:
+            return marca
+    # Fallback robusto: parsea el texto libre `result` (camino histórico, ante ausencia o
+    # invalidez de la salida estructurada).
+    data = json_llm.extraer_json(texto, dict)
     if isinstance(data, dict):
         marca = str(data.get("marca") or "").strip()
         if marca in ids:
             return marca
     _log.info(
         "clasificar_marca: sin marca válida en la respuesta (%r) -> fallback %s",
-        (salida or "")[:120], fallback,
+        (texto or "")[:120], fallback,
     )
     return fallback
 
 
-def _ejecutar(prompt: str, carpeta: str) -> str:
-    """Ejecutor real: reutiliza el subproceso `claude -p` de traducción (acumula métricas)."""
-    from .traducir import _ejecutar_claude_json
+def _desempaquetar(salida: SalidaEjecutor) -> tuple[str, dict | None]:
+    """Normaliza la salida del ejecutor a `(texto, structured_output)`.
 
-    return _ejecutar_claude_json(prompt, carpeta)
+    Acepta tanto la forma histórica (`str` = solo texto) como la nueva
+    (`tuple[str, dict | None]`), para no romper los ejecutores que solo devuelven texto.
+    """
+    if isinstance(salida, tuple):
+        texto, estructurado = salida
+        return str(texto or ""), (estructurado if isinstance(estructurado, dict) else None)
+    return str(salida or ""), None
+
+
+def _con_esquema(esquema: dict) -> Ejecutor:
+    """Ejecutor real con `--json-schema`: devuelve `(texto, structured_output)`.
+
+    Reutiliza el subproceso `claude -p` de traducción (acumula métricas). Pasa el esquema raíz
+    para que la salida estructurada venga validada; `claude` la entrega en `structured_output`.
+    """
+    def _ej(prompt: str, carpeta: str) -> tuple[str, dict | None]:
+        from .traducir import _ejecutar_claude_json_estructurado
+
+        return _ejecutar_claude_json_estructurado(prompt, carpeta, json_schema=esquema)
+
+    return _ej

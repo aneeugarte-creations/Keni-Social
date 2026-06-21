@@ -51,8 +51,22 @@ _TIPO_POR_CAJON: dict[str, str] = {
     "contexto": "contexto",
 }
 
-# Tipo del ejecutor inyectable: (prompt, dir_permitido) -> texto final.
-Ejecutor = Callable[[str, str], str]
+# Tipo del ejecutor inyectable. Misma firma `(prompt, dir_permitido) -> salida`, con dos formas:
+#   - `str`: solo el texto `result` (se parsea con `json_llm`, camino histórico).
+#   - `tuple[str, dict | None]`: `(texto_result, structured_output)`, cuando el run usó
+#     `--json-schema` y trajo la lista YA validada en la raíz.
+SalidaEjecutor = str | tuple[str, "dict | None"]
+Ejecutor = Callable[[str, str], SalidaEjecutor]
+
+# Esquema raíz para `--json-schema`: fija la clave raíz `items` como array de objetos. Cada
+# fila es muy variable por cajón (titulo/marca/tipo/hora/lugar/estado_material…), así que no se
+# tipan propiedades estrictas: basta con anclar la forma `{"items": [ {...}, ... ]}`, que es lo
+# que el parser espera. El parser normaliza/valida cada fila después (`_items_desde_registros`).
+_ESQUEMA_INSUMOS: dict[str, Any] = {
+    "type": "object",
+    "properties": {"items": {"type": "array", "items": {"type": "object"}}},
+    "required": ["items"],
+}
 
 # --------------------------------------------------------------------------- #
 # Prompts por cajón                                                            #
@@ -125,29 +139,22 @@ def construir_prompt_texto(cajon: str, texto: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
-    """Corre `claude -p <prompt> --output-format json [--model X] --add-dir <dir>`.
+def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> tuple[str, dict[str, Any] | None]:
+    """Corre `claude -p <prompt> --output-format json --json-schema <esquema> --add-dir <dir>`.
 
-    Síncrono, acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido
-    `CLAUDE_CODE_OAUTH_TOKEN`). No tocar en tests: se inyecta un ejecutor falso.
+    Devuelve `(texto_result, structured_output)`. El esquema raíz (`_ESQUEMA_INSUMOS`) hace que
+    `claude` valide la lista y la entregue en `structured_output` a nivel raíz, SEPARADA del
+    texto libre `result`; el llamante usa la estructurada y, si falta, cae al texto. Síncrono,
+    acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido `CLAUDE_CODE_OAUTH_TOKEN`).
+    No tocar en tests: se inyecta un ejecutor falso.
     """
-    from . import stream  # import perezoso: evita ciclo importador<->dominio
-
     if shutil.which("claude") is None:
         raise RuntimeError("El asistente (claude) no está disponible en el servidor.")
-    modelo = config.insumos_modelo()
-    argv: list[str] = [
-        "claude",
-        "-p",
-        prompt,
-        "--output-format",
-        "json",
-        "--add-dir",
-        dir_permitido,
-        *stream.arg_skip_permisos(),
-    ]
-    if modelo:
-        argv += ["--model", modelo]
+    from .traducir import construir_argv_claude_json
+
+    argv = construir_argv_claude_json(
+        prompt, dir_permitido, config.insumos_modelo(), json_schema=_ESQUEMA_INSUMOS
+    )
     res = subprocess.run(  # noqa: S603 -- argv fijo, sin shell; prompt va como argumento
         argv,
         capture_output=True,
@@ -161,10 +168,14 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
     try:
         envelope = json.loads(res.stdout or "{}")
     except (json.JSONDecodeError, ValueError):
-        return res.stdout or ""
+        return (res.stdout or ""), None
     if isinstance(envelope, dict):
-        return str(envelope.get("result") or "")
-    return res.stdout or ""
+        estructurado = envelope.get("structured_output")
+        return (
+            str(envelope.get("result") or ""),
+            estructurado if isinstance(estructurado, dict) else None,
+        )
+    return (res.stdout or ""), None
 
 
 # --------------------------------------------------------------------------- #
@@ -274,6 +285,18 @@ def _items_desde_registros(
     return items, errores
 
 
+def _items_de_estructurado(estructurado: dict[str, Any] | None) -> list[Any] | None:
+    """Lista `items` de la salida estructurada (validada por `--json-schema`), o None.
+
+    Usa la clave raíz `items` que fija `_ESQUEMA_INSUMOS`; None si no viene (o no es lista),
+    para que el llamante caiga al parse del texto libre.
+    """
+    if not isinstance(estructurado, dict):
+        return None
+    items = estructurado.get("items")
+    return items if isinstance(items, list) else None
+
+
 def parsear_respuesta_haiku(
     texto: str,
     *,
@@ -281,9 +304,17 @@ def parsear_respuesta_haiku(
     fecha: str,
     lote_id: str,
     marca_defecto: str = "",
+    estructurado: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Texto de salida de Haiku -> (ítems normalizados, errores). PURO."""
-    registros = _extraer_json_items(texto)
+    """Salida de Haiku -> (ítems normalizados, errores). PURO.
+
+    `estructurado` (salida ya validada por `--json-schema`): si trae `items`, se usa directa;
+    si falta, cae al JSON dentro del `texto` libre (camino histórico, robusto ante runs sin
+    salida estructurada).
+    """
+    registros = _items_de_estructurado(estructurado)
+    if registros is None:
+        registros = _extraer_json_items(texto)
     if registros is None:
         return [], [{"fila": 0, "motivo": "El asistente no devolvió un JSON legible."}]
     return _items_desde_registros(
@@ -376,7 +407,7 @@ def extraer_insumos(
       cajon     : uno de los cajones (portal/corresponsales/reporteros/eventos_claro/notas/contexto).
       fecha     : día editorial ISO (YYYY-MM-DD).
       lote_id   : id del lote al que pertenecerán los ítems.
-      ejecutor  : función (prompt, dir) -> str; None = subproceso real `claude`.
+      ejecutor  : función (prompt, dir) -> str | (str, structured_output); None = subproceso real.
 
     Devuelve:
       (items, errores) donde items son dicts listos para `db.crear_insumo_items`
@@ -385,7 +416,7 @@ def extraer_insumos(
     if cajon not in CAJONES:
         return [], [{"fila": 0, "motivo": f"Cajón desconocido: {cajon!r}. Válidos: {CAJONES}."}]
     correr = ejecutor or _ejecutar_claude_json
-    salida = ""
+    salida: SalidaEjecutor = ""
     with tempfile.TemporaryDirectory(prefix="keni-insumos-") as carpeta:
         nombre_seguro = os.path.basename(nombre or "") or "insumo.txt"
         ruta = os.path.join(carpeta, nombre_seguro)
@@ -396,4 +427,19 @@ def extraer_insumos(
         except Exception as exc:  # noqa: BLE001 -- cualquier fallo del asistente => error legible
             _log.warning("extraer_insumos [%s] falló: %s", cajon, exc)
             return [], [{"fila": 0, "motivo": f"No se pudo interpretar el archivo con IA: {exc}"}]
-    return parsear_respuesta_haiku(salida, cajon=cajon, fecha=fecha, lote_id=lote_id)
+    texto, estructurado = _desempaquetar(salida)
+    return parsear_respuesta_haiku(
+        texto, cajon=cajon, fecha=fecha, lote_id=lote_id, estructurado=estructurado
+    )
+
+
+def _desempaquetar(salida: SalidaEjecutor) -> tuple[str, dict[str, Any] | None]:
+    """Normaliza la salida del ejecutor a `(texto, structured_output)`.
+
+    Acepta la forma histórica (`str` = solo texto) y la nueva (`tuple[str, dict | None]`),
+    para no romper los ejecutores inyectados que solo devuelven texto.
+    """
+    if isinstance(salida, tuple):
+        texto, estructurado = salida
+        return str(texto or ""), (estructurado if isinstance(estructurado, dict) else None)
+    return str(salida or ""), None

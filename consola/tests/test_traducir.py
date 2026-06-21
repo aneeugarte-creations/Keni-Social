@@ -312,6 +312,46 @@ def test_ejecutar_claude_json_por_defecto_conserva_add_dir_y_sin_tope_de_turnos(
     assert "--max-turns" not in argv
 
 
+def test_argv_sin_json_schema_no_lleva_el_flag():
+    """`construir_argv_claude_json` sin esquema NO añade `--json-schema` (comportamiento intacto)."""
+    import json as _json
+
+    argv = traducir.construir_argv_claude_json("P", "/tmp/x", "haiku")
+    assert "--json-schema" not in argv
+    _ = _json  # silencia el linter si no se usa abajo
+
+
+def test_argv_con_json_schema_serializa_y_sube_turnos():
+    """Con esquema añade `--json-schema <json>` y, si el tope era <2, lo sube a 2 (turno extra)."""
+    import json as _json
+
+    esquema = {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}
+    argv = traducir.construir_argv_claude_json("P", "/tmp/x", "haiku", max_turns=1, json_schema=esquema)
+    assert "--json-schema" in argv
+    serializado = argv[argv.index("--json-schema") + 1]
+    assert _json.loads(serializado) == esquema
+    # El tope de 1 no ahoga la validación: sube a 2.
+    assert argv[argv.index("--max-turns") + 1] == "2"
+
+
+def test_ejecutar_estructurado_devuelve_structured_output(monkeypatch):
+    """`_ejecutar_claude_json_estructurado` devuelve `(result, structured_output)` del envelope."""
+    capturado = _capturar_argv(monkeypatch)
+
+    class _Res:
+        returncode = 0
+        stdout = '{"result": "texto", "structured_output": {"marca": "unotv"}}'
+        stderr = ""
+
+    monkeypatch.setattr(traducir.subprocess, "run", lambda argv, **_kw: capturado.update(argv=argv) or _Res())
+    texto, estructurado = traducir._ejecutar_claude_json_estructurado(
+        "P", "/tmp/x", "haiku", json_schema={"type": "object"}
+    )
+    assert texto == "texto"
+    assert estructurado == {"marca": "unotv"}
+    assert "--json-schema" in capturado["argv"]
+
+
 def test_acumulador_de_metricas_suma_y_resetea():
     """Las llamadas SUMAN en el acumulador del hilo; `tomar_metricas_acumuladas` devuelve la
     suma y RESETEA (la siguiente toma sin llamadas es None)."""

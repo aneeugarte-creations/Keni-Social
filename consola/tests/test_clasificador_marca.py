@@ -97,6 +97,78 @@ def test_sin_texto_no_llama_a_la_ia():
 
 
 # --------------------------------------------------------------------------- #
+# Salida estructurada (`--json-schema`): structured_output preferido           #
+# --------------------------------------------------------------------------- #
+
+
+def _ejecutor_estructurado(texto: str, estructurado):
+    """Ejecutor que devuelve la forma nueva `(texto, structured_output)`."""
+    def _ej(prompt: str, carpeta: str):
+        return texto, estructurado
+
+    return _ej
+
+
+def test_usa_structured_output_cuando_es_valido():
+    # La salida estructurada (validada por --json-schema) trae una candidata válida: se usa
+    # DIRECTA, sin depender del parse del texto libre (que aquí ni siquiera es JSON).
+    ej = _ejecutor_estructurado("texto libre irrelevante", {"marca": "claro-sports"})
+    marca = clasificador_marca.clasificar_marca(
+        "Partido de la Liga MX", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    assert marca == "claro-sports"
+
+
+def test_structured_output_con_marca_no_candidata_cae_al_fallback():
+    ej = _ejecutor_estructurado('{"marca": "claro-sports"}', {"marca": "fundacion"})
+    # La estructurada trae una marca FUERA de candidatas (no valida el enum); pero el texto
+    # libre sí trae una válida -> el fallback de parse de texto la rescata.
+    marca = clasificador_marca.clasificar_marca(
+        "Nota", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    assert marca == "claro-sports"
+
+
+def test_sin_structured_output_cae_al_parse_de_texto():
+    # Forma NUEVA pero sin estructurada (None): se parsea el texto `result` como siempre.
+    ej = _ejecutor_estructurado('{"marca": "nacion-gamer"}', None)
+    marca = clasificador_marca.clasificar_marca(
+        "Lanzamiento de videojuego", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    assert marca == "nacion-gamer"
+
+
+def test_estructurada_y_texto_invalidos_caen_al_fallback():
+    ej = _ejecutor_estructurado("no soy json", {"marca": "marca-inexistente"})
+    marca = clasificador_marca.clasificar_marca(
+        "Nota", "resumen", _CANDIDATAS, fallback="unotv", ejecutor=ej,
+    )
+    assert marca == "unotv"
+
+
+def test_ejecutor_real_pide_json_schema_con_enum_de_candidatas(monkeypatch):
+    # El ejecutor real arma `--json-schema` cuyo enum son las ids candidatas (ordenadas).
+    capturado: dict[str, object] = {}
+
+    def _fake_estructurado(prompt, carpeta, *, json_schema=None):
+        capturado["schema"] = json_schema
+        return '{"marca": "unotv"}', None
+
+    monkeypatch.setattr(
+        "keni_consola.dominio.traducir._ejecutar_claude_json_estructurado", _fake_estructurado
+    )
+    marca = clasificador_marca.clasificar_marca(
+        "Titular", "", _CANDIDATAS, fallback="unotv",  # ejecutor real (None)
+    )
+    assert marca == "unotv"
+    schema = capturado["schema"]
+    assert schema["required"] == ["marca"]
+    assert set(schema["properties"]["marca"]["enum"]) == {
+        "unotv", "claro-sports", "nacion-gamer"
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Config: flag + candidatas + fallback                                        #
 # --------------------------------------------------------------------------- #
 

@@ -111,32 +111,25 @@ def tomar_metricas_acumuladas() -> dict[str, Any] | None:
     return acc or None
 
 
-def _ejecutar_claude_json(
+def construir_argv_claude_json(
     prompt: str,
     dir_permitido: str,
-    modelo: str | None = None,
+    modelo: str | None,
     *,
     max_turns: int | None = None,
     sin_tools: bool = False,
-) -> str:
-    """Corre `claude -p <prompt> --output-format json [--model X] [--add-dir <dir>] [--max-turns N]`.
+    json_schema: dict[str, Any] | None = None,
+) -> list[str]:
+    """argv de `claude -p <prompt> --output-format json [...]`. PURO (no corre nada).
 
-    Síncrono, acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido
-    `CLAUDE_CODE_OAUTH_TOKEN`). `modelo=None` cae al de insumos (`KENI_INSUMOS_MODELO`);
-    un llamante puede fijar el suyo (la fusión usa el de `KENI_FUSION_MODELO`). No tocar
-    en tests: se inyecta un ejecutor falso.
-
-    Para clasificaciones INLINE que no necesitan herramientas, el llamante acota la llamada:
-        - `max_turns`: tope de turnos de agente (p. ej. `1` fuerza una sola respuesta, sin bucle).
-        - `sin_tools=True`: omite `--add-dir`, así `claude` no recibe acceso al filesystem.
-    Por defecto (ambos sin fijar) el comportamiento es el de siempre: `--add-dir` y sin tope de turnos.
+    Compone el comando que ejecuta `_ejecutar_claude_json`. Aislado para poder afirmarlo en
+    tests sin lanzar el subproceso. `json_schema` (cuando viene) añade `--json-schema <json>`:
+    `claude` valida su salida estructurada contra el esquema y la entrega en `structured_output`
+    a nivel raíz del envelope. Validar la salida estructurada cuesta un turno extra (tool_use
+    interno), así que con schema el tope de turnos sube a `>=2` salvo que el llamante pida más.
     """
     from . import stream  # import perezoso: evita ciclo importador<->dominio
 
-    if shutil.which("claude") is None:
-        raise RuntimeError("El asistente (claude) no está disponible en el servidor.")
-    if modelo is None:
-        modelo = config.insumos_modelo()
     argv: list[str] = [
         "claude",
         "-p",
@@ -147,10 +140,74 @@ def _ejecutar_claude_json(
     if not sin_tools:
         argv += ["--add-dir", dir_permitido]
     argv += [*stream.arg_skip_permisos()]
+    if json_schema is not None:
+        argv += ["--json-schema", json.dumps(json_schema, ensure_ascii=False)]
+        # La validación de la salida estructurada gasta un turno extra (tool_use interno):
+        # no la ahogues con un tope de 1. Respeta un tope mayor que pida el llamante.
+        if max_turns is not None and max_turns < 2:
+            max_turns = 2
     if max_turns is not None:
         argv += ["--max-turns", str(max_turns)]
     if modelo:
         argv += ["--model", modelo]
+    return argv
+
+
+def _ejecutar_claude_json(
+    prompt: str,
+    dir_permitido: str,
+    modelo: str | None = None,
+    *,
+    max_turns: int | None = None,
+    sin_tools: bool = False,
+) -> str:
+    """Corre `claude -p` y devuelve solo el texto `result` (compat: ejecutor histórico).
+
+    Atajo del camino sin esquema sobre `_ejecutar_claude_json_estructurado`: descarta la
+    salida estructurada (que siempre es None sin `--json-schema`). Lo siguen usando los pasos
+    que solo necesitan el texto libre (traducción, fusión, perfil editorial).
+    """
+    texto, _ = _ejecutar_claude_json_estructurado(
+        prompt, dir_permitido, modelo, max_turns=max_turns, sin_tools=sin_tools
+    )
+    return texto
+
+
+def _ejecutar_claude_json_estructurado(
+    prompt: str,
+    dir_permitido: str,
+    modelo: str | None = None,
+    *,
+    max_turns: int | None = None,
+    sin_tools: bool = False,
+    json_schema: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any] | None]:
+    """Corre `claude -p ... --output-format json` y devuelve `(texto_result, structured_output)`.
+
+    Síncrono, acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido
+    `CLAUDE_CODE_OAUTH_TOKEN`). `modelo=None` cae al de insumos (`KENI_INSUMOS_MODELO`);
+    un llamante puede fijar el suyo (la fusión usa el de `KENI_FUSION_MODELO`). No tocar
+    en tests: se inyecta un ejecutor falso.
+
+    `json_schema` (opcional): cuando viene, `claude` valida su salida estructurada contra el
+    esquema y la entrega en `structured_output` (objeto, a nivel RAÍZ del envelope, SEPARADO
+    del texto libre `result`). Se devuelve como segundo elemento; es None si no se pidió
+    esquema o si el run no lo trajo. El texto `result` se devuelve siempre para el fallback.
+
+    Para clasificaciones INLINE que no necesitan herramientas, el llamante acota la llamada:
+        - `max_turns`: tope de turnos de agente (p. ej. `1` fuerza una sola respuesta, sin bucle).
+        - `sin_tools=True`: omite `--add-dir`, así `claude` no recibe acceso al filesystem.
+    Por defecto (sin esquema y ambos sin fijar) el comportamiento es el de siempre: `--add-dir`
+    y sin tope de turnos.
+    """
+    if shutil.which("claude") is None:
+        raise RuntimeError("El asistente (claude) no está disponible en el servidor.")
+    if modelo is None:
+        modelo = config.insumos_modelo()
+    argv = construir_argv_claude_json(
+        prompt, dir_permitido, modelo,
+        max_turns=max_turns, sin_tools=sin_tools, json_schema=json_schema,
+    )
     res = subprocess.run(  # noqa: S603 -- argv fijo, sin shell; prompt va como argumento
         argv,
         capture_output=True,
@@ -164,13 +221,17 @@ def _ejecutar_claude_json(
     try:
         envelope = json.loads(res.stdout or "{}")
     except (json.JSONDecodeError, ValueError):
-        return res.stdout or ""
+        return (res.stdout or ""), None
     if isinstance(envelope, dict):
         # Coste REAL de la llamada (tokens/coste/duración): se acumula para que el
         # registro de actividad del paso lo selle (visible en Producción).
         _acumular_metricas(_metricas_de_envelope(envelope))
-        return str(envelope.get("result") or "")
-    return res.stdout or ""
+        estructurado = envelope.get("structured_output")
+        return (
+            str(envelope.get("result") or ""),
+            estructurado if isinstance(estructurado, dict) else None,
+        )
+    return (res.stdout or ""), None
 
 
 # --------------------------------------------------------------------------- #
