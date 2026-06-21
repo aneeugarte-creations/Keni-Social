@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
@@ -274,5 +274,64 @@ describe("DialogoAsignarTurnos (render)", () => {
     // Su propio botón de cerrar devuelve el ancho a la rejilla.
     fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("la pista dice qué falta hasta completar la selección (botón gris explicado)", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DialogoAsignarTurnos
+          incrustado
+          abierto
+          onOpenChange={vi.fn()}
+          lunes="2026-06-15"
+          dias={DIAS}
+          franjas={FRANJAS}
+          cms={CMS}
+          onCambio={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    // Sin nada elegido pide persona; con persona pero sin día pide día; completa, sin pista.
+    expect(screen.getByText("Elige al menos una persona.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    expect(screen.getByText("Elige al menos un día.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: /15$/ }));
+    expect(screen.queryByText(/Elige al menos/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Asignar 1 turno" })).toBeEnabled();
+  });
+
+  it("asignar NO cierra el panel y deja la selección limpia para encadenar otra tanda", async () => {
+    const crear = vi.spyOn(apiMod.api, "crearTurno").mockResolvedValue({} as never);
+    const onOpenChange = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DialogoAsignarTurnos
+          incrustado
+          abierto
+          onOpenChange={onOpenChange}
+          lunes="2026-06-15"
+          dias={DIAS}
+          franjas={FRANJAS}
+          cms={CMS}
+          onCambio={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /15$/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Asignar 1 turno" }));
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    // El panel sigue abierto (no se llama onOpenChange) y la selección queda en blanco: el botón
+    // vuelve a estar deshabilitado y la pista pide persona para la siguiente tanda.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled(),
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    screen
+      .getAllByRole("checkbox")
+      .forEach((c) => expect(c).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByText("Elige al menos una persona.")).toBeInTheDocument();
   });
 });

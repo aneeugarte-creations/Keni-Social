@@ -321,9 +321,17 @@ export function DialogoAsignarTurnos({
         );
       if (fallos) partes.push(`${fallos} con error`);
       const msg = partes.join(" · ") || "Sin cambios.";
-      if (creados > 0) toast.success(msg);
-      else toast.error(msg);
-      onOpenChange(false);
+      // Reparto EN LOTE: el panel NO se cierra al asignar, para encadenar tandas sin reabrir. Tras
+      // una tanda con turnos creados deja la selección limpia (personas + días) y conserva el horario
+      // —que suele repetirse— como punto de partida de la siguiente; si no se creó nada (todo ya
+      // estaba o error), mantiene la selección para ajustarla y reintentar. Cerrar es manual (✕/Cancelar).
+      if (creados > 0) {
+        toast.success(msg);
+        setPersonasSel(new Set());
+        setDiasSel(new Set());
+      } else {
+        toast.error(msg);
+      }
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -335,6 +343,18 @@ export function DialogoAsignarTurnos({
     franjasLaborales.length === 0;
   // Turnos que se intentarán crear: el mismo horario+días aplicado a cada persona marcada.
   const totalTurnos = personasSel.size * diasSel.size;
+  // Por qué el botón está deshabilitado: la PRIMERA pieza que falta. Un botón gris a secas no dice
+  // qué hace falta y deja al usuario atascado («no me deja seguir»); esta pista lo desbloquea.
+  const pistaIncompleta =
+    franjasLaborales.length === 0
+      ? "Esta semana no tiene franjas laborales."
+      : personasSel.size === 0
+        ? "Elige al menos una persona."
+        : diasSel.size === 0
+          ? "Elige al menos un día."
+          : !horasValidas
+            ? "Escribe un horario válido (HH:MM)."
+            : null;
 
   // Cuerpo del formulario MANUAL (personas/horario/días), compartido por el modal y la columna
   // lateral (incrustado). El reparto automático «de un documento» vive aparte, al final del panel
@@ -497,7 +517,14 @@ export function DialogoAsignarTurnos({
           </Button>
         </div>
         {camposManual}
-        <div className="flex justify-end pt-1">{botonAsignar}</div>
+        <div className="flex items-center justify-between gap-2 pt-1">
+          {pistaIncompleta ? (
+            <span className="text-xs text-muted-foreground">{pistaIncompleta}</span>
+          ) : (
+            <span aria-hidden />
+          )}
+          {botonAsignar}
+        </div>
       </div>
     );
   }
@@ -510,6 +537,11 @@ export function DialogoAsignarTurnos({
         </DialogHeader>
         {camposManual}
         <DialogFooter>
+          {pistaIncompleta && (
+            <span className="mr-auto self-center text-xs text-muted-foreground">
+              {pistaIncompleta}
+            </span>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
             Cancelar
           </Button>
