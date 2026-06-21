@@ -7,20 +7,19 @@
 # los resuelve el daemon EN EL HOST, asi que deben existir en un path real del host. El
 # step sincroniza el checkout a ese dir (preservando .env) y corre deploy.sh desde ahi.
 #
-# AUTO-DEPLOY en push a `main`, DESPUES de que pasen los DOS gates BARATOS y deterministas
-# (depends_on): `fronteras` (contrato AST + catalogo, sin Postgres, <30s) y `frontend-build`
-# (`tsc -b && vite build`, sin Postgres). Un gate en rojo NO despliega. Tambien disparable a
-# mano ("manual"). NO despliega en PRs ni en otras ramas.
+# AUTO-DEPLOY en push a `main`, DESPUES de que pasen los pipelines de test (depends_on):
+# `tests-python` (suite COMPLETA con Postgres) y `frontend-build` (`tsc -b && vite build`).
+# Un test en rojo NO despliega. Tambien disparable a mano ("manual"). NO despliega en PRs ni
+# en otras ramas.
 #
-# POR QUE SOLO LOS GATES BARATOS: el camino prompt-a-prod lo dominaba la SUITE PESADA de
-# Postgres (`tests-python`, ~5 min, caja compartida con prod). Esa suite YA NO gatea el
-# deploy: corre EN PARALELO en cada push a main (su propio pipeline) y su red de seguridad
-# ante un rojo POST-deploy es el rollback `:previa` que deploy.sh aplica solo si la imagen
-# nueva no queda sana. Un rojo de `tests-python` deja constancia (pipeline en rojo) para que
-# un humano/agente lo arregle en `main`, pero NO bloquea el flujo de los demas agentes.
-# REQUISITO para que `fronteras` y `frontend-build` puedan gatear: ambos corren SIEMPRE en
-# push a main (clausula `event: push, branch: main` en sus `when`); si un gate se SALTARA,
-# Woodpecker EXCLUIRIA tambien este deploy (un dep saltado excluye al dependiente).
+# POR QUE GATEA LA SUITE COMPLETA (y no solo los checks baratos): el deploy es all-or-nothing
+# —blue-green hace cutover al 100% del trafico, sin canary—, asi que un bug de COMPORTAMIENTO
+# que pase el health-check `/healthz` golpearia a TODOS los usuarios a la vez. El health-check
+# + rollback `:previa` solo cubre la clase "no arranca"; la suite cubre la clase "arranca pero
+# se comporta mal", y por eso debe gatear: prod nunca sirve un bug que la suite atrapa. Para
+# que el gate NO domine la latencia prompt-a-prod, la suite se mantiene RAPIDA subiendo el
+# techo de CPU por step del agente (WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA, ver
+# deploy/woodpecker), NO sacandola del camino critico.
 #
 # REQUISITO (una vez) en tu instancia de Woodpecker — ver deploy/woodpecker/README.md:
 #   Repo Settings -> General -> seccion "Confiado": activa "Volumenes" (deja que el step
@@ -35,8 +34,8 @@ when:
   - event: manual
 
 depends_on:
-  - fronteras
   - frontend-build
+  - tests-python
 
 steps:
   - name: build-and-deploy

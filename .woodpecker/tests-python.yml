@@ -11,15 +11,12 @@
 # UNA app NO la disparan: usan su pipeline scoped (`tests-app-*`) + el contrato
 # (`fronteras`). Postgres efímero: ejercita el backend HOSTED real (no solo SQLite).
 #
-# NO GATEA EL DEPLOY (a propósito). El deploy depende solo de los gates BARATOS
-# (`fronteras` + `frontend-build`, sin Postgres); esta suite pesada (~5 min, Postgres, caja
-# compartida con prod) se sacó del camino crítico para no dominar la latencia prompt-a-prod.
-# CORRE EN PARALELO en cada push a main: deja un veredicto real, pero un rojo suyo NO bloquea
-# el deploy de los demás agentes. Red de seguridad ante un rojo POST-deploy: si la imagen
-# nueva no arranca sana, el rollback `:previa` de deploy.sh ya la revierte; si arrancó sana
-# pero el comportamiento es incorrecto, el arreglo se promueve a main como un commit más
-# (forward-fix), que redespliega. No hay auto-revert del deploy disparado por esta suite (ver
-# RIESGOS en el informe): sería frágil con ~7 agentes empujando en paralelo.
+# GATEA EL DEPLOY (`deploy.yml depends_on: tests-python`): un rojo de esta suite NO despliega,
+# así prod nunca sirve un bug de COMPORTAMIENTO que la suite atrapa (el deploy es all-or-nothing,
+# blue-green al 100% del tráfico sin canary, así que el health-check `/healthz` no basta —solo
+# ve "arranca", no "se comporta bien"—). Para que el gate NO domine la latencia prompt-a-prod, la
+# suite se mantiene RÁPIDA subiendo el techo de CPU por step del agente (4 vCPU,
+# WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA en deploy/woodpecker), no sacándola del camino crítico.
 when:
   # Suite completa: base común / fontanería del gateway / MCP.
   - event: [push, pull_request]
@@ -64,7 +61,8 @@ steps:
       # consola en PARALELO (pytest-xdist): cada worker usa su PROPIA BD Postgres (`keni_test_gwN`,
       # ver tests/_postgres.py), asi el aislamiento por TRUNCATE no choca entre workers. Es el paso
       # dominante del pipeline (la suite monohilo era ~5min en un agente de 12 nucleos).
-      # `-n 6` (no `auto`): el runner self-hosted COMPARTE host con prod (keni-social) y otros
-      # contenedores; `auto`=12 workers, cada uno con su BD + la app cargada, saturaba memoria y
-      # abortaba un worker a mitad de la suite (fallo flaky sin test roto). 6 da margen y sigue rapido.
+      # `-n 6` (no `auto`): el runner self-hosted COMPARTE host con prod. El techo de CPU por step
+      # (4 vCPU, WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA) y el `cpuset 3-11` aislan el CI de los
+      # cores 0-2 del back; 6 workers sobre 4 vCPU solapan la espera de Postgres sin saturar la RAM
+      # del step. `auto`=12 (un worker por hilo del host) saturaba memoria y abortaba workers.
       - python -m pytest consola/tests -q -n 6
