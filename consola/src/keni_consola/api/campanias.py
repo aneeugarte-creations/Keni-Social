@@ -13,20 +13,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import campanias, marcas, redes
+from .. import campanias, marcas
 from .._http_json import leer_json
 
 _MARCAS_IDS = {mid for mid, _ in marcas.opciones()}
-
-
-async def opciones(request: Request) -> Response:
-    """Catálogos para los selects del SPA al crear/editar una campaña: marcas y redes."""
-    return JSONResponse(
-        {
-            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
-            "redes": redes.opciones(),
-        }
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -146,7 +136,6 @@ async def analitica_campania(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/campanias/opciones", opciones, methods=["GET"]),
     Route("/api/campanias", listar_campanias, methods=["GET"]),
     Route("/api/campanias", crear_campania, methods=["POST"]),
     Route("/api/campanias/{campania_id}", detalle_campania, methods=["GET"]),

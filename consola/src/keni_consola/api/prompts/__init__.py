@@ -16,7 +16,7 @@ superficie publica y ENSAMBLA `RUTAS` identico (paths/metodos/orden):
   - `docs`        : CRUD de documentos + papelera + linea editorial (editoriales/validacion/
                     marcas).
   - `pieza` : historial/version/revertir (git) + pieza inmutable + solicitudes.
-  - `pipelines`   : registro/preview de pipelines + variables + la "maquina" + estrategia.
+  - `pipelines`   : atribución editorial + variables + la "maquina" + estrategia.
   - `lanzar`      : `lanzar` (JSON) y `lanzar-archivo` (multipart): disparo de generacion.
   - `_comun`      : helpers compartidos (`_doc_json`, `_MAX_TEXTO`).
 
@@ -65,8 +65,6 @@ from .pipelines import (
     contexto_inyectado,
     estrategia,
     maquina,
-    pipeline_preview,
-    pipelines_listar,
     variables,
 )
 from .pieza import (
@@ -103,8 +101,6 @@ __all__ = [
     "marcas_disponibles",
     "_facetas",
     # pipelines
-    "pipelines_listar",
-    "pipeline_preview",
     "variables",
     "maquina",
     "estrategia",
@@ -153,8 +149,6 @@ RUTAS = [
     Route("/api/prompts/editoriales", editoriales, methods=["GET"]),
     Route("/api/prompts/validacion", validacion, methods=["GET"]),
     Route("/api/prompts/marcas", marcas_disponibles, methods=["GET"]),
-    Route("/api/prompts/pipelines", pipelines_listar, methods=["GET"]),
-    Route("/api/prompts/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
     Route("/api/prompts/lanzar", lanzar, methods=["POST"]),
     Route("/api/prompts/lanzar-archivo", lanzar_archivo, methods=["POST"]),
     # Publicación: catálogo de variables, flujo de la máquina (tres máquinas,

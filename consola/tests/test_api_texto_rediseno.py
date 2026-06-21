@@ -64,17 +64,8 @@ def test_crear_pipeline_invalido_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Registro de pipelines + preview                                            #
+# Atribución editorial por prompt                                              #
 # --------------------------------------------------------------------------- #
-
-
-def test_pipelines_listar(cliente):
-    r = cliente.get("/api/prompts/pipelines")
-    assert r.status_code == 200
-    ids = {p["id"] for p in r.json()["pipelines"]}
-    assert {"redactar", "verificar", "idear", "priorizar"} <= ids
-    copy = next(p for p in r.json()["pipelines"] if p["id"] == "redactar")
-    assert copy["prompt_base_id"] == "prompt/redactar"
 
 
 def test_contexto_inyectado_lista_editoriales_del_prompt(cliente):
@@ -93,25 +84,6 @@ def test_contexto_inyectado_lista_editoriales_del_prompt(cliente):
     r2 = cliente.get("/api/prompts/prompt/envoltorios/redes/contexto", params={"marca": _MARCA})
     assert r2.status_code == 200
     assert r2.json()["inyecta"] is False and r2.json()["adjuntos"] == []
-
-
-def test_pipeline_preview_ensambla(cliente):
-    cliente.post("/api/prompts", json={
-        "titulo": "Copy base", "tipo": "prompt", "cuerpo": "INSTRUCCION", "rol": "redactar", "pipelines": ["redactar"],
-    })
-    cliente.post("/api/prompts", json={"titulo": "Reglas", "tipo": "editorial", "clase": "reglas", "cuerpo": "REGLA"})
-    r = cliente.get(f"/api/prompts/pipelines/redactar/preview", params={"marca": _MARCA, "contexto": "CTX"})
-    assert r.status_code == 200
-    prev = r.json()
-    assert prev["falta_base"] is False
-    assert "INSTRUCCION" in prev["prompt_efectivo"]
-    assert "REGLA" in prev["prompt_efectivo"]
-    assert "CTX" in prev["prompt_efectivo"]
-
-
-def test_pipeline_preview_desconocido_404(cliente):
-    r = cliente.get("/api/prompts/pipelines/nope/preview", params={"marca": _MARCA})
-    assert r.status_code == 404
 
 
 def test_editoriales_filtra_por_pipeline(cliente):

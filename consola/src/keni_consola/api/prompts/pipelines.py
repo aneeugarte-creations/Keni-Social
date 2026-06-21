@@ -1,5 +1,5 @@
-"""Pipelines: registro/atribución, preview del prompt ensamblado, catálogo de variables,
-la "máquina" (flujo de pipelines) y la estrategia editorial por marca.
+"""Pipelines: atribución editorial por prompt, catálogo de variables, la "máquina"
+(flujo de pipelines) y la estrategia editorial por marca.
 
 OJO: nada que ver con `api/pipelines.py` (módulo aparte). Aquí vive el catálogo de procesos
 de generación tal como lo consume el rediseño de la Prompts.
@@ -11,33 +11,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ... import libprompts
-from ._comun import _MAX_TEXTO
 
 # --------------------------------------------------------------------------- #
-# Pipelines: registro, atribucion y preview del prompt ensamblado              #
+# Atribución editorial: qué editoriales inyecta cada prompt                     #
 # --------------------------------------------------------------------------- #
-
-
-async def pipelines_listar(request: Request) -> Response:
-    """`GET /api/prompts/pipelines` -> `{pipelines: [{id, titulo, descripcion, rol, prompt_base_id}]}`.
-
-    Es el catalogo de procesos de generacion: para cada uno, su prompt base EFECTIVO (resuelto
-    por el registro, considerando rebindeos en la Texto). Sostiene la vista de atribucion.
-    """
-    items = []
-    for pid, spec in libprompts.PIPELINES.items():
-        try:
-            base = libprompts.prompt_base_de(pid)
-        except libprompts.PromptsError:
-            base = spec.get("prompt_defecto", "")
-        items.append({
-            "id": pid,
-            "titulo": spec.get("titulo", pid),
-            "descripcion": spec.get("descripcion", ""),
-            "rol": spec.get("rol", ""),
-            "prompt_base_id": base,
-        })
-    return JSONResponse({"pipelines": items})
 
 
 # Prompt -> pipeline del registro cuyo conjunto editorial INYECTA ese prompt. Espejo en código de
@@ -78,20 +55,6 @@ async def contexto_inyectado(request: Request) -> Response:
         "marca": marca,
         "adjuntos": prev["adjuntos"],
     })
-
-
-async def pipeline_preview(request: Request) -> Response:
-    """`GET /api/prompts/pipelines/{pid}/preview?marca=&contexto=` -> prompt ENSAMBLADO.
-
-    "Lo que inyectas es lo que ves": muestra el prompt final (base + editoriales + contexto)
-    que recibiria `claude -p`, SIN lanzar nada. Resuelve de raiz "no se que se inyecta donde".
-    """
-    pid = request.path_params["pid"]
-    if pid not in libprompts.PIPELINES:
-        return JSONResponse({"error": "Pipeline desconocido."}, status_code=404)
-    marca = request.query_params.get("marca") or ""
-    contexto = request.query_params.get("contexto") or ""
-    return JSONResponse(libprompts.previsualizar_pipeline(pid, marca, contexto[:_MAX_TEXTO]))
 
 
 # --------------------------------------------------------------------------- #
