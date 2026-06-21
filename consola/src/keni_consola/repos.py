@@ -93,12 +93,13 @@ def _mapa_exportaciones() -> dict[str, str]:
 
 _EXPORTS = _mapa_exportaciones()
 
-
-def __getattr__(name: str):  # PEP 562
-    modname = _EXPORTS.get(name)
-    if modname is not None:
-        return getattr(importlib.import_module(f"keni_consola.{modname}"), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+# Materializa cada nombre reexpuesto en el namespace del módulo. Los submódulos ya se
+# importaron al derivar `_EXPORTS`, así que esto no añade coste de import. Bind REAL en el
+# `__dict__` (no un `__getattr__` perezoso): así un reexport se comporta como el explícito
+# de toda la vida —`vars(repos)` lo ve y un `monkeypatch.delattr` lo borra de verdad, sin
+# que nada lo resucite—, que es lo que esperan la introspección y los tests.
+for _nombre, _modname in _EXPORTS.items():
+    globals()[_nombre] = getattr(importlib.import_module(f"keni_consola.{_modname}"), _nombre)
 
 
 def __dir__() -> list[str]:
