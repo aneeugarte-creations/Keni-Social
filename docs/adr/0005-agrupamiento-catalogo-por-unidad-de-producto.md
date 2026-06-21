@@ -22,33 +22,43 @@ hardcodea: activar o añadir una app no exige tocar la navegación.
 
 La fuente de verdad del inventario de módulos de cada app son los **manifests**
 (`consola/src/keni_consola/apps/*.toml`, clave `modulos_backend`) y el registro que los
-parsea (`apps/registro.py`), no este documento. El conjunto de apps de producto está fijado
-en código (`APPS_PRODUCTO = {"produccion", "metricas", "operacion"}`).
+parsea (`apps/registro.py`), no este documento. El conjunto de apps de producto de hoy es
+`APPS_PRODUCTO = {"produccion", "metricas", "operacion"}` (en el lint); es la división por
+defecto de esta fase, revisable (ver «Estado» / «Revisar cuando» al final), no una ley fija.
 
 ## Seams permitidos
 
-La regla invariante es: **`app → app` está prohibido**. Un cruce entre apps se resuelve por
-API/fachada del gateway o por `keni-shared`, nunca importando las tripas de otra app. Todo
-puede depender de `keni-shared` (marcas, límites, normalización) y de la fachada de solo
-lectura de Métricas; eso siempre es legítimo.
+La regla por defecto de hoy es: **`app → app` está prohibido**. Un cruce entre apps se
+resuelve por API/fachada del gateway o por `keni-shared`, nunca importando las tripas de otra
+app. Todo puede depender de `keni-shared` (marcas, límites, normalización), de la **infra
+transversal** (capa de datos del gateway, cola de jobs `generaciones`, servicios del shell) y
+de la fachada de solo lectura de Métricas; eso siempre es legítimo (`app → shell` / infra
+compartida nunca cuenta como cruce).
 
 Existe un conjunto cerrado de cruces directos legítimos, codificado como **allowlist
 explícita** en el lint de fronteras (`SEAMS_PERMITIDOS` en
-`consola/tests/test_fronteras.py`) y verificado en CI por contrato. Esa allowlist es la
-fuente de verdad: cualquier import entre apps que no esté en ella hace caer el lint. Los
-cruces que admite responden a patrones estables:
+`consola/tests/test_fronteras.py`) y verificado en CI por contrato. La allowlist es la fuente
+de verdad de los cruces vigentes; cualquier import entre apps que no esté en ella hace caer el
+lint. Hoy se reduce a tres seams legítimos, todos patrones estables:
 
-- **Handoff A → C:** una generación o un import de operación crea un *borrador* de pieza vía
-  el contrato de C, no importando su interior.
-- **Infraestructura de jobs como servicio del shell:** módulos del shell y de operación que
-  encolan trabajo (generación de media, import por Claude, auto-desarrollo) reutilizan la
-  cola de jobs de Producción.
-- **Lecturas read-only transversales:** el panel/estado del shell agrega snapshots de
-  operación y métricas por fachadas de solo lectura.
+- **Handoff A → C** (`historial → piezas`): una generación de copy deposita un *borrador* de
+  pieza vía el contrato de C (`dominio.piezas.crear_borrador`), no importando su interior.
+- **Lectura de la agenda de C** (`produccion → piezas`): el panel «Producción del día» calcula
+  el próximo hueco por red con la MISMA función del encolado/auto-programación. Solo lectura.
+- **Doctor de salud transversal** (`estado → actividad`): el health-check del shell lee el
+  snapshot de la cola de operación. Solo lectura, le importa a todo el equipo.
 
-Para el detalle exacto y vigente de qué pares están permitidos y por qué, leer la allowlist
-en el lint. Cambiar un cruce es cambiar `SEAMS_PERMITIDOS` con justificación, no introducir
-un import nuevo.
+La **cola de jobs `generaciones` NO es un seam**: es infra transversal y vive en el shell
+(`shell.toml`), así que sus consumidores (media, parrilla_import, publicaciones, sugerencias)
+la importan como `app → shell` —siempre permitido— sin entrada en la allowlist. Antes estaba
+clasificada como módulo de A y generaba cuatro entradas al mismo destino; eso era el síntoma de
+una frontera mal cortada, no un caso para ampliar la allowlist (ver «Revisar cuando»).
+
+Para el detalle exacto y vigente leer la allowlist en el lint. **Si necesitas un cruce nuevo,
+pregúntate primero si la frontera sigue bien cortada**: ¿el destino es realmente infra
+transversal (→ reclasifícalo a shell/`keni-shared`)? ¿el cruce puede ir por un contrato del
+gateway o una fachada de solo lectura? Ampliar `SEAMS_PERMITIDOS` es el último recurso, con
+justificación, no el primer reflejo.
 
 ## Métricas complementa, no reemplaza
 
@@ -90,3 +100,10 @@ completa. El CI ejecuta jobs por app en paralelo, marcando los tests por app; `k
 contrato de fronteras (barato: AST + manifests, sin Postgres) corren siempre como base común. El
 aislamiento de apps no es solo claridad de producto: es lo que habilita esta mejora directa del
 tiempo de feedback.
+
+## Estado
+Decisión de fase — producto en validación (piloto AMX). Revisable; no es ley permanente.
+
+## Revisar cuando
+- Dos o más seams apunten al mismo módulo destino → señal de frontera mal cortada: re-clasificar el módulo (como acabamos de hacer con `generaciones`), no ampliar la allowlist.
+- Se cierre el piloto AMX → reevaluar el conjunto `APPS_PRODUCTO` y si la división en apps sigue siendo la correcta.

@@ -10,9 +10,9 @@ despliegue). El **agrupamiento concreto** del catálogo por unidad de producto l
 [ADR 0005](0005-agrupamiento-catalogo-por-unidad-de-producto.md): este ADR define el
 **mecanismo** (catálogo data-driven + fronteras), 0005 define **el contenido**.
 
-## Principios
+## Decisiones (por defecto de hoy)
 
-1. **Catálogo de apps como principio de organización.** Un shell/launcher + apps
+1. **Catálogo de apps como criterio de organización actual.** Un shell/launcher + apps
    registradas por **manifest** (`apps/<app>.toml`: ruta, icono, permisos, módulos
    backend). El catálogo y la navegación se **generan desde los manifests**, no se
    mantienen a mano: añadir una app es declarar su manifest. Es un router de apps, no N
@@ -20,8 +20,8 @@ despliegue). El **agrupamiento concreto** del catálogo por unidad de producto l
 
 2. **Cada app = módulo autocontenido.** Ruta frontend + router backend (`api/<app>.py`)
    + su dominio/almacenamiento. Depende **solo** de `keni-shared` y de los contratos del
-   gateway. **Regla de oro: nunca `app → app`.** Una necesidad cruzada se resuelve por un
-   contrato/seam explícito del gateway, jamás importando las tripas de otra app.
+   gateway. **Por defecto, evitamos `app → app`.** Una necesidad cruzada se resuelve por un
+   contrato/seam explícito del gateway, no importando las tripas de otra app.
 
 3. **Fronteras verificadas en CI.** La disciplina de fronteras —no la topología— es lo
    que evita el mastodonte. Un lint de imports (AST, sin red ni BD) mapea cada router a
@@ -57,3 +57,10 @@ y la transcripción (`whisper.cpp`) en su máquina, sin exponer red ni sacar dat
 equipo— y **hosted/equipo** —el stack de `deploy/docker-compose.yml`: gateway (`front` +
 `back`), `worker` de generación, `transcriptor` (whisper), MCP y Postgres tras un ingress
 único—.
+
+## Estado
+Decisión de fase — producto en validación (piloto AMX). Revisable; no es ley permanente.
+
+## Revisar cuando
+- Al cerrar el piloto AMX se reevalúe la división en apps/deployables.
+- Aparezca una necesidad real (carga, equipo, aislamiento) de separar un nuevo deployable o de fusionar dos.

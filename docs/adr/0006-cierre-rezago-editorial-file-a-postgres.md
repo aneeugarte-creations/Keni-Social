@@ -11,3 +11,10 @@ y `franjas_editoriales`, sin índice de rutas que pueda desincronizarse al recre
 Lo único que sigue file-backed es la prosa editorial por marca (`marca.yaml`, `CLAUDE.md`,
 voces) y el historial de prompts: ficheros versionados, editables a mano, sin estado
 operacional. `ficheros.py` ya no es backend de las entidades estructuradas.
+
+## Estado
+Decisión de fase — producto en validación (piloto AMX). Revisable; no es ley permanente.
+
+## Revisar cuando
+- Una entidad editorial estructurada necesite edición a mano fuera de la app (volvería a tener sentido un fichero versionado).
+- Cambie el modelo de persistencia operacional (ver ADR 0004).

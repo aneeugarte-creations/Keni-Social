@@ -3,11 +3,11 @@
 La generación corre `claude -p` con la cuenta de la máquina. Esa cuenta se gestiona
 desde el panel (Sistema → Cuenta de Claude), sin SSH ni reinicios.
 
-## Principios
+## Decisiones actuales
 
 - **Las credenciales viven en el volumen compartido `/data`, no en la imagen.**
-  `CLAUDE_CONFIG_DIR=/data/claude-cfg` para `worker` y `daemons` (mismo volumen). Son la
-  ÚNICA fuente de la cuenta y persisten a recreaciones de contenedor. La cuenta se fija con
+  `CLAUDE_CONFIG_DIR=/data/claude-cfg` para `worker` y `daemons` (mismo volumen). Hoy son la
+  única fuente de la cuenta y persisten a recreaciones de contenedor. La cuenta se fija con
   `claude auth login` desde el panel, no con un secreto del host. `ANTHROPIC_API_KEY` queda
   como alternativa opcional por API key.
 
@@ -29,3 +29,10 @@ desde el panel (Sistema → Cuenta de Claude), sin SSH ni reinicios.
   resets) y se cachea el último bueno en `/data` para no mostrar nunca la frase genérica. La
   identidad de la cuenta (email / plan / org) la expone `claude auth status --json` con login por
   credenciales; el panel la muestra cuando está disponible.
+
+## Estado
+Decisión de fase — producto en validación (piloto AMX). Revisable; no es ley permanente.
+
+## Revisar cuando
+- Se cambie el modelo de auth de generación (p. ej. a API key con saldo) — ver ADR 0001/0010.
+- Cambie el formato o las rutas de credenciales del CLI de Claude que este ADR asume.

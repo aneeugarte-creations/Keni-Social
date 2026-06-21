@@ -1,7 +1,7 @@
 # ADR 0007 — Histórico de métricas por pieza
 
 Cada pieza publicada mantiene una serie temporal de su rendimiento: una fila por
-pieza por refresco, para TODAS las piezas del catálogo. Esto habilita el análisis
+pieza por refresco, sobre las piezas que el refresco cubre. Esto habilita el análisis
 que el equipo de redes necesita y que un único valor actual no puede dar: a qué
 velocidad acumula interacciones un reel en sus primeras horas, cuál es la curva de
 crecimiento típica por red y formato, si el engagement temprano correlaciona con el
@@ -14,6 +14,12 @@ como un punto en el tiempo —en lugar de descartarlo— da la serie histórica 
 marginal mínimo. La granularidad es la del refresco proactivo del tablero: un post no
 cambia minuto a minuto, y esa cadencia captura bien la fase interesante (las primeras
 horas y días).
+
+La COBERTURA (qué piezas entran), la CADENCIA (cada cuánto se captura) y la RETENCIÓN
+(cuánto se conserva) son parámetros operativos —ya expuestos como variables de
+entorno— y se ajustan según coste y necesidad. No son parte de la decisión. Lo que sí
+fija este ADR es el QUÉ: una serie por pieza, en una tabla separada, con captura
+best-effort.
 
 ## Invariantes
 
@@ -44,3 +50,11 @@ horas y días).
   "valor actual" (rompería su semántica) ni reutilizando un modelo comercial (forzaría
   columnas y ciclos ajenos). Una tabla propia se indexa para lectura por pieza y para
   agregados por marca×red sobre una ventana temporal.
+
+## Estado
+Decisión de fase — producto en validación (piloto AMX). Revisable; no es ley permanente.
+
+## Revisar cuando
+- Metricool (u otra fuente) exponga serie temporal por post → quizá delegar el histórico en vez de re-snapshotear.
+- El coste de cubrir todo el catálogo reciente moleste → ajustar cobertura/cadencia/retención (son parámetros, no invariantes).
+- Se quiera mover el histórico a un TSDB dedicado.
