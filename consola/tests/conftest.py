@@ -397,9 +397,10 @@ def cliente(entorno):
 # entero en push a `main` y en cambios de keni-shared/gateway). `contrato` = fronteras +
 # catalogo, el contrato compartido que TODOS los pipelines scoped ejecutan.
 _APP_POR_STEM: dict[str, str] = {
-    # Contrato compartido (corre en los tres pipelines scoped).
+    # Contrato compartido (corre en los tres pipelines scoped). SIN Postgres.
     "test_fronteras": "contrato",
     "test_catalogo": "contrato",
+    "test_facades": "contrato",
     # App B · Metricas (api/metricas, campanias).
     "test_api_metricas": "app_metricas",
     "test_api_campanias": "app_metricas",

@@ -21,382 +21,88 @@ Uso en las features:
     repos.crear_pieza(marca="unotv", red="x", titulo="Hola")  # -> Postgres
     repos.registrar_historial_prompt(prompt_id, marca, resultado)   # -> ficheros
 """
-# repos.py es un BARREL: la implementación vive en `_repos_comun` + `repos_<dominio>`.
-# `repos.<algo>` / `from .repos import X` siguen funcionando sin cambios.
+# repos.py es un BARREL AUTO-DERIVADO: la implementación vive en `_repos_comun` +
+# `repos_<dominio>`. La fachada NO enumera nombre a nombre: descubre lo público de cada
+# submódulo y lo reexpone vía `__getattr__`/`__dir__`/`__all__`, así nunca se queda atrás
+# cuando un submódulo gana una función. `repos.<algo>` / `from .repos import X` siguen
+# funcionando igual. `test_facades` afirma que el barrel reexpone TODO lo público.
+from __future__ import annotations
 
-from ._repos_comun import (  # noqa: F401
-    ESTADO_ROTA_APROBADO,
-    ESTADO_ROTA_PROPUESTO,
-    ESTADO_SWAP_PROPUESTO,
-    ESTADOS_PIEZA_PARRILLA,
-    ESTADOS_PIEZA,
-    ESTADOS_ROTA,
-    ESTADOS_SWAP,
-    ESTADOS_TAREA,
-    NOMBRE_FRANJA_MANANA_DEFAULT,
-    NOMBRE_FRANJA_TARDE_DEFAULT,
-    TIPOS_AUSENCIA,
-    Any,
-    Iterator,
-    Path,
-    PiezaPublicadaInmutable,
-    annotations,
-    arrancar_persistencia,
-    conectar,
-    db,
-    ficheros,
-    raiz_datos,
-    verificar_publicacion_inmutable,
-)
-from .repos_colaboracion import (  # noqa: F401
-    actualizar_comentario,
-    borrar_comentario,
-    comentarios_sin_resolver,
-    crear_comentario,
-    listar_comentarios,
-    obtener_comentario,
-)
-from .repos_campanias import (  # noqa: F401
-    actualizar_campania,
-    borrar_campania,
-    crear_campania,
-    listar_campanias,
-    obtener_campania,
-)
-from .repos_publicacion import (  # noqa: F401
-    actualizar_publicacion,
-    actualizar_pieza_fila,
-    actualizar_etiqueta,
-    actualizar_evergreen_idea,
-    actualizar_insumo_item,
-    actualizar_insumo_lote,
-    adjuntar_video_a_pieza,
-    ajustar_plataformas_por_formato,
-    asignar_etiqueta,
-    borrar_publicacion,
-    borrar_pieza_fila,
-    borrar_etiqueta,
-    borrar_evergreen_idea,
-    borrar_insumo_item,
-    borrar_insumo_lote,
-    contar_publicacion_origen_desde,
-    crear_publicacion,
-    crear_pieza_fila,
-    crear_etiqueta,
-    crear_evergreen_idea,
-    crear_insumo_items,
-    crear_insumo_lote,
-    dias_con_insumos,
-    estado_pieza_por_publicacion,
-    etiquetas_por_contenido,
-    existe_etiqueta_nombre,
-    existe_publicado_similar,
-    ids_publicacion_con_copy,
-    ids_contenido_con_etiqueta,
-    listar_publicacion,
-    listar_publicaciones_origenes,
-    listar_piezas_fila,
-    listar_etiquetas,
-    listar_evergreen_ideas,
-    listar_insumo_items,
-    listar_lotes,
-    marcar_insumo_item_usado,
-    obtener_publicacion,
-    obtener_pieza_fila,
-    obtener_etiqueta,
-    obtener_etiqueta_por_nombre,
-    obtener_evergreen_idea,
-    obtener_insumo_item,
-    obtener_insumo_lote,
-    quitar_etiqueta,
-    reclamar_publicacion,
-    reparar_lotes_parseando_sueltos,
-    reparar_verificacion_en_curso_sueltos,
-    resumen_plan_por_categoria,
-    titulos_recientes_marca,
-    verificacion_fuente_por_publicacion,
-)
-from .repos_editor import (  # noqa: F401
-    actualizar_audio_artefacto,
-    actualizar_audio_transcripcion,
-    borrar_audio_artefacto,
-    crear_audio_artefacto,
-    listar_audio_artefactos,
-    obtener_audio_artefacto,
-    actualizar_bloque,
-    actualizar_marca_activo,
-    actualizar_media_catalogo,
-    actualizar_plantilla_diseno,
-    actualizar_video_composicion,
-    actualizar_video_subtitulo,
-    borrar_audio_transcripcion,
-    borrar_bloque,
-    borrar_marca_activo,
-    borrar_etiqueta_plantilla,
-    borrar_media_catalogo,
-    borrar_plantilla_diseno,
-    borrar_video_composicion,
-    crear_audio_transcripcion,
-    crear_bloque,
-    crear_documento_version,
-    crear_marca_activo,
-    crear_media_catalogo,
-    crear_plantilla_diseno,
-    crear_video_composicion,
-    crear_video_subtitulo,
-    existe_media_objeto,
-    listar_audio_transcripciones,
-    media_ids_audio_transcripciones,
-    listar_bloques,
-    listar_documento_versiones,
-    listar_etiquetas_plantilla,
-    listar_marca_activos,
-    listar_media_catalogo,
-    listar_plantillas_diseno,
-    listar_video_composiciones,
-    listar_video_subtitulos,
-    obtener_audio_transcripcion,
-    obtener_bloque,
-    obtener_marca_activo,
-    obtener_media_catalogo,
-    obtener_plantilla_diseno,
-    obtener_video_composicion,
-    obtener_video_subtitulo,
-    reordenar_plantillas_diseno,
-    ultima_documento_version,
-    upsert_etiqueta_plantilla,
-)
-from .repos_hashtags_franjas import (  # noqa: F401
-    borrar_franja,
-    crear_franja,
-    listar_franjas,
-)
-from .repos_historial import (  # noqa: F401
-    contar_historial_prompts,
-    listar_historial_prompts,
-    obtener_historial_prompt,
-    registrar_historial_prompt,
-)
-from .repos_jobs import (  # noqa: F401
-    JOB_PENDIENTE,
-    JOB_RECLAMADO,
-    JOB_TERMINADO,
-    cancelar_job,
-    contar_jobs_activos,
-    contar_jobs_por_estado,
-    coste_medio_imagen,
-    encolados_por_dia,
-    encolar_job,
-    gasto_ia_del_dia,
-    gasto_ia_del_dia_por_proceso,
-    gasto_ia_economia_por_proceso,
-    gasto_ia_por_dia,
-    gen_ids_jobs_pendientes,
-    job_cancelado,
-    jobs_activos,
-    priorizar_job,
-    reclamar_job,
-    reencolar_job,
-    reiniciar_intentos_job,
-    registrar_gasto_ia,
-    terminar_job,
-)
-from .db_sugerencias import (  # noqa: F401
-    actualizar_sugerencia,
-    borrar_sugerencia,
-    crear_sugerencia,
-    listar_sugerencias,
-    obtener_sugerencia,
-)
-from .repos_metricas import (  # noqa: F401
-    guardar_metricas_cache,
-    leer_metricas_cache,
-    listar_metricas_cache_por_tipo,
-    listar_snapshots_piezas,
-    purgar_metricas_cache,
-    purgar_snapshots_piezas,
-    registrar_snapshot_pieza,
-    serie_pieza,
-)
-from .repos_noticias import (  # noqa: F401
-    ESTADOS_NOTICIA_CLUSTER,
-    ESTADOS_NOTICIA_ITEM,
-    VERIFICACIONES_CLUSTER,
-    actualizar_fuente_algoritmo,
-    actualizar_fuente_rss,
-    actualizar_noticia_cluster,
-    actualizar_noticia_item,
-    actualizar_scores_clusters,
-    asignar_cluster_item,
-    asignar_cluster_items,
-    borrar_clusters_con_items,
-    borrar_fuente_algoritmo,
-    borrar_fuente_rss,
-    borrar_noticia_cluster,
-    caducar_pool,
-    categoria_promovida_de_contenido,
-    claves_existentes_directas,
-    claves_vistas,
-    cluster_por_contenido,
-    cluster_por_url_canonica,
-    clusters_extranjeros_sin_traducir,
-    clusters_por_contenidos,
-    clusters_por_subtema,
-    clusters_por_tema_macro,
-    clusters_recientes,
-    contar_clusters_admision_verificacion,
-    contar_fuentes_algoritmo,
-    contar_fuentes_rss,
-    conteos_items_recientes,
-    crear_fuente_algoritmo,
-    crear_fuente_rss,
-    crear_noticias_items,
-    cuerpos_de_cluster,
-    feeds_vencidos,
-    guardar_noticia_algoritmo,
-    items_de_cluster,
-    items_sin_cluster,
-    limpiar_items_cluster_colgante,
-    listar_fuentes_algoritmo,
-    listar_fuentes_rss,
-    listar_noticia_clusters,
-    listar_noticias_algoritmo,
-    listar_noticias_items,
-    marcar_cluster_marca_ia,
-    marcar_cluster_verificacion,
-    marcar_cluster_traducido,
-    marcar_clusters_subtema,
-    marcar_clusters_tema_macro,
-    marcar_item,
-    marcar_items_cluster_usados,
-    marcar_noticia_algoritmo,
-    noticia_item_por_clave,
-    obtener_fuente_algoritmo,
-    obtener_fuente_rss,
-    obtener_noticia_algoritmo,
-    obtener_noticia_cluster,
-    obtener_noticia_item,
-    purgar_pool_irrelevante,
-    registrar_salud_fuente_algoritmo,
-    registrar_salud_fuente_rss,
-    registrar_sondeo_feed,
-    reparar_verificacion_clusters_en_curso,
-    resumen_cobertura,
-    salud_feeds,
-    stats_fuentes,
-    upsert_noticia_cluster,
-    vaciar_clusters,
-)
-from .repos_notificaciones import (  # noqa: F401
-    actualizar_aprobacion,
-    contar_notificaciones_no_leidas,
-    crear_cadena_aprobacion,
-    crear_notificacion,
-    duplicar_evento_rota,
-    listar_aprobaciones,
-    listar_copy_versiones,
-    listar_notificaciones,
-    marcar_notificacion_leida,
-    marcar_notificaciones_leidas,
-    obtener_aprobacion,
-    obtener_copy_version,
-    registrar_copy_version,
-)
-from .repos_parrilla import (  # noqa: F401
-    actualizar_pieza_rota,
-    actualizar_propuesta_parrilla,
-    aplicar_propuesta_parrilla,
-    borrar_pieza_rota,
-    borrar_piezas_rota_lote,
-    crear_pieza_rota,
-    crear_propuesta_parrilla,
-    duplicar_pieza_rota,
-    listar_piezas_rota,
-    listar_propuestas_parrilla,
-    obtener_pieza_rota,
-    obtener_propuesta_parrilla,
-)
-from .repos_publicaciones import (  # noqa: F401
-    actualizar_pieza,
-    borrar_pieza,
-    contar_piezas,
-    crear_pieza,
-    crear_publicaciones,
-    decidir_nivel_aprobacion_tx,
-    existe_cadena_aprobacion,
-    listar_piezas,
-    lock_barrido,
-    obtener_pieza,
-    reclamar_preparacion,
-    transicionar_estado_pieza,
-)
-from .repos_rota import (  # noqa: F401
-    actualizar_ausencia_rota,
-    actualizar_coordinador_rota,
-    actualizar_evento_rota,
-    actualizar_franja_semana,
-    actualizar_programa_rota,
-    actualizar_serie_eventos,
-    actualizar_swap_turno,
-    actualizar_turno_rota,
-    actualizar_turnos_rota_lote,
-    aplicar_swap_turno,
-    aprobar_semana_rota,
-    borrar_ausencia_rota,
-    borrar_evento_rota,
-    borrar_franja_semana,
-    borrar_programa_rota,
-    borrar_serie_eventos,
-    borrar_swap_turno,
-    borrar_turno_rota,
-    borrar_turnos_rota_lote,
-    borrar_turnos_semana_rota,
-    contar_piezas_por_programa,
-    contar_turnos_de_franja,
-    convertir_evento_en_serie,
-    copiar_turnos_rota,
-    crear_ausencia_rota,
-    crear_evento_rota,
-    crear_franja_semana,
-    crear_programa_rota,
-    crear_serie_eventos,
-    crear_swap_turno,
-    crear_turno_rota,
-    crear_turnos_rota_lote,
-    desaprobar_semana_rota,
-    duplicar_turno_rota,
-    existe_programa_por_nombre,
-    existe_turno_para,
-    guardar_franjas_config,
-    guardar_plantilla_franjas,
-    inicializar_franjas_por_defecto,
-    listar_ausencias_rota,
-    listar_coordinacion_semana,
-    listar_eventos_rota,
-    listar_franjas_semana,
-    listar_programas_rota,
-    listar_swaps_turno,
-    listar_turnos_rota,
-    listar_turnos_rota_rango,
-    obtener_ausencia_rota,
-    obtener_evento_rota,
-    obtener_franja_semana,
-    obtener_franjas_config,
-    obtener_plantilla_franjas,
-    obtener_programa_rota,
-    obtener_serie_evento,
-    obtener_swap_turno,
-    obtener_turno_rota,
-    quitar_coordinador_rota,
-)
-from .repos_webhooks import (  # noqa: F401
-    actualizar_webhook,
-    borrar_webhook,
-    crear_webhook,
-    listar_eventos_internos,
-    listar_webhooks,
-    listar_webhooks_para,
-    obtener_webhook,
-    obtener_webhook_con_secreto,
-    registrar_evento_interno,
-)
+import ast
+import importlib
+import inspect
+import pkgutil
+
+import keni_consola
+
+
+def _submodulos_repo() -> list[str]:
+    """`_repos_comun` + cada `repos_<dominio>` + `db_sugerencias` del paquete. Son los
+    módulos cuya API pública reexpone este barrel."""
+    nombres = ["_repos_comun"]
+    nombres += sorted(
+        m.name
+        for m in pkgutil.iter_modules(keni_consola.__path__)
+        if m.name.startswith("repos_") or m.name == "db_sugerencias"
+    )
+    return nombres
+
+
+def _nombres_ligados_aqui(arbol: ast.Module) -> set[str]:
+    """Nombres que el módulo DEFINE en su top-level (def/class/asignación), NO los que
+    IMPORTA. Así separamos la API propia del submódulo (`crear_pieza`, `JOB_PENDIENTE`…)
+    de sus dependencias de implementación (`db`, `Any`, `datetime`, `ahora_iso`…), que
+    entran por `import` y no deben reexponerse."""
+    ligados: set[str] = set()
+    for nodo in arbol.body:
+        if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            ligados.add(nodo.name)
+        elif isinstance(nodo, ast.Assign):
+            for destino in nodo.targets:
+                if isinstance(destino, ast.Name):
+                    ligados.add(destino.id)
+        elif isinstance(nodo, ast.AnnAssign) and isinstance(nodo.target, ast.Name):
+            if nodo.value is not None:
+                ligados.add(nodo.target.id)
+    return ligados
+
+
+def _exportaciones_de(modname: str) -> set[str]:
+    """Nombres públicos que reexpone un submódulo.
+
+    `_repos_comun` declara su API en `__all__` (que incluye plumbing publicado a
+    propósito). El resto no tiene `__all__`: se toman los nombres públicos DEFINIDOS en el
+    módulo (no los importados; vía AST), que son su API propia de persistencia."""
+    mod = importlib.import_module(f"keni_consola.{modname}")
+    declarado = getattr(mod, "__all__", None)
+    if declarado is not None:
+        return set(declarado)
+    arbol = ast.parse(inspect.getsource(mod))
+    return {n for n in _nombres_ligados_aqui(arbol) if not n.startswith("_")}
+
+
+def _mapa_exportaciones() -> dict[str, str]:
+    """{nombre_público: submódulo que lo define}. Primer submódulo gana ante colisión
+    (orden de `_submodulos_repo`); en la práctica los nombres son disjuntos."""
+    mapa: dict[str, str] = {}
+    for modname in _submodulos_repo():
+        for nombre in _exportaciones_de(modname):
+            mapa.setdefault(nombre, modname)
+    return mapa
+
+
+_EXPORTS = _mapa_exportaciones()
+
+
+def __getattr__(name: str):  # PEP 562
+    modname = _EXPORTS.get(name)
+    if modname is not None:
+        return getattr(importlib.import_module(f"keni_consola.{modname}"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(_EXPORTS)
+
+
+__all__ = sorted(_EXPORTS)
