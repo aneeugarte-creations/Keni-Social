@@ -122,10 +122,10 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
 
 ### Notas
 
-- **PAT de GitHub minimo (A):** paso de HOST para acotar las credenciales que montan los workers
-  que pushean a `main`. Ver `HARDENING-RUNBOOK.md`. (El deploy del CI sigue por `docker.sock`: en
-  un host unico donde CI y prod comparten maquina, indireccionarlo por SSH a localhost no cierra el
-  camino commit-malicioso->`deploy.sh`-como-root, asi que no compensa la ceremonia.)
+- **Deploy del CI por `docker.sock` (por diseño):** el step de deploy monta el sock del host. En un
+  host unico donde CI y prod comparten maquina es lo natural; indireccionarlo por SSH a localhost no
+  cierra el camino real (un commit malicioso en `main` -> `deploy.sh` corre como root igualmente), asi
+  que no compensa la ceremonia. La imagen del step va pineada por digest (su imagen es TCB).
 
 - **autoheal y el docker.sock (H2, resuelto):** `autoheal` ya NO monta `/var/run/docker.sock`.
   Habla la API Docker por HTTP a `autoheal-docker-proxy` (`tecnativa/docker-socket-proxy`),
