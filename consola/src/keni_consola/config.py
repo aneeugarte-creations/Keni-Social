@@ -87,7 +87,6 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CONSOLA_SECRETOS       secretos.toml
     - KENI_CONSOLA_PREFERENCIAS   preferencias.toml
     - KENI_CONSOLA_SUGERENCIAS    sugerencias.json
-    - KENI_CONSOLA_CONFIG         consola.toml (allowlist de proyectos)
     - KENI_CONSOLA_GENERACIONES   dir de registros de generacion
 """
 # config.py es un BARREL: la implementación vive en `_config_comun` + `config_<dominio>`.
@@ -138,7 +137,6 @@ from ._config_comun import (  # noqa: F401
     ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_VENTANA_H,
-    ENV_CONFIG,
     ENV_CONSOLA_URL_PUBLICA,
     ENV_COOKIE_SECURE,
     ENV_CRITICA_IA,

@@ -529,7 +529,6 @@ ENV_PREFERENCIAS = "KENI_CONSOLA_PREFERENCIAS"
 # este nombre solo sobreescribe la RUTA del fichero (override de maxima prioridad).
 ENV_AJUSTES = "KENI_CONSOLA_AJUSTES"
 ENV_SUGERENCIAS = "KENI_CONSOLA_SUGERENCIAS"
-ENV_CONFIG = "KENI_CONSOLA_CONFIG"
 ENV_GENERACIONES = "KENI_CONSOLA_GENERACIONES"
 
 # --------------------------------------------------------------------------- #
@@ -880,7 +879,6 @@ __all__ = [
     'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
     'ENV_CLUSTER_VENTANA_H',
-    'ENV_CONFIG',
     'ENV_CONSOLA_URL_PUBLICA',
     'ENV_COOKIE_SECURE',
     'ENV_DATABASE_URL',

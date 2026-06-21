@@ -464,8 +464,6 @@ export const router = createBrowserRouter([
       { path: "generacion", element: <Navigate to="/publicaciones/texto" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      { path: "proyectos", element: <Navigate to="/datos/produccion" replace /> },
-      { path: "carpetas", element: <Navigate to="/datos/produccion" replace /> },
 
       // Cualquier otra ruta (URL desconocida, no cubierta por las redirecciones
       // legacy de arriba): página 404 dedicada en vez de rebotar en silencio al
