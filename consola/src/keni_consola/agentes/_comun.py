@@ -5,7 +5,7 @@ Reune lo que comparten los submodulos (`_genericos`, `_contexto`, `_runs`):
   - Excepciones de dominio (en espanol) y constantes de layout/plantillas.
   - Localizacion de la raiz y resolucion de rutas anti-escape (`_raiz`,
     `_ruta_dentro_raiz`).
-  - Plantillas de `CLAUDE.md` (delegan en `api.carpetas`).
+  - Plantillas de `CLAUDE.md` (delegan en `._plantillas`).
   - Escritura/lectura ATOMICA de texto y YAML (delega en `io_atomico`).
   - Utilidades de tiempo/id (`ahora_iso`, `nuevo_run_id`).
 
@@ -27,6 +27,8 @@ from keni_shared.esquema_yaml import migrar, sellar
 from .. import marcas, repos
 from ..io_atomico import escribir_atomico
 from ..tiempo import ahora_iso
+from ._plantillas import PLANTILLAS, render_claude_md
+from ._rutas import NombreAgenteInvalido
 
 # Loader RÁPIDO (libyaml) cuando está disponible: igual que en `generaciones._almacen`, parsear
 # los YAML de los runs con el parser PURO costaba segundos en Actividad IA; CSafeLoader lo baja
@@ -78,11 +80,11 @@ __all__ = [
 ]
 
 # --------------------------------------------------------------------------- #
-# Plantilla de CLAUDE.md por marca (reutiliza las plantillas de api.carpetas)  #
+# Plantilla de CLAUDE.md por marca                                             #
 # --------------------------------------------------------------------------- #
 
-# Mapa marca_id -> id de plantilla de `api.carpetas`. Una marca sin entrada cae a
-# la plantilla "general". Asi el CLAUDE.md inicial encaja con el tipo de la marca.
+# Mapa marca_id -> id de plantilla. Una marca sin entrada cae a la plantilla
+# "general". Asi el CLAUDE.md inicial encaja con el tipo de la marca.
 _PLANTILLA_POR_MARCA: dict[str, str] = {
     "unotv": "noticias",
     "claro-sports": "deportes",
@@ -113,10 +115,6 @@ class AgenteInvalido(ValueError):
     """El id no resuelve a un agente conocido (marca o generico). Mensaje en espanol."""
 
 
-class NombreAgenteInvalido(ValueError):
-    """El nombre de un agente generico esta vacio o produce un slug no permitido."""
-
-
 class AgenteExistente(ValueError):
     """El slug derivado choca con una marca o con un agente generico ya registrado."""
 
@@ -135,15 +133,9 @@ class NombreContextoInvalido(ValueError):
 
 
 def _render_claude_md(marca_id: str) -> str:
-    """Renderiza el CLAUDE.md inicial del agente desde su plantilla por tipo.
-
-    Import LOCAL de `api.carpetas` para no crear un ciclo (carpetas no importa este
-    modulo, pero el dominio no debe depender del paquete `api` a nivel de modulo).
-    """
-    from ..api import carpetas
-
+    """Renderiza el CLAUDE.md inicial del agente desde su plantilla por tipo."""
     plantilla_id = _PLANTILLA_POR_MARCA.get(marca_id, _PLANTILLA_DEF)
-    return carpetas.render_claude_md(plantilla_id, marcas.etiqueta_de(marca_id))
+    return render_claude_md(plantilla_id, marcas.etiqueta_de(marca_id))
 
 
 def _raiz() -> Path:
@@ -166,19 +158,15 @@ def _ruta_dentro_raiz(slug: str) -> Path:
 
 
 def _tipo_plantilla(tipo: object) -> str:
-    """Normaliza el `tipo` a un id de plantilla valido de `api.carpetas` (def 'general')."""
-    from ..api import carpetas
-
-    if isinstance(tipo, str) and tipo in carpetas.PLANTILLAS:
+    """Normaliza el `tipo` a un id de plantilla valido (def 'general')."""
+    if isinstance(tipo, str) and tipo in PLANTILLAS:
         return tipo
     return _PLANTILLA_GENERICA_DEF
 
 
 def _render_claude_md_generico(tipo: str, nombre: str) -> str:
     """Renderiza el CLAUDE.md inicial de un generico desde la plantilla `tipo`."""
-    from ..api import carpetas
-
-    return carpetas.render_claude_md(tipo, nombre)
+    return render_claude_md(tipo, nombre)
 
 
 def nuevo_run_id() -> str:

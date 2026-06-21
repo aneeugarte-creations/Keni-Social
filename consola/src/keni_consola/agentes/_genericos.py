@@ -40,6 +40,7 @@ from ._comun import (
     _tipo_plantilla,
     ahora_iso,
 )
+from ._rutas import resolver_slug_agente
 
 __all__ = [
     "es_agente",
@@ -118,9 +119,9 @@ def _slug_de_nombre(nombre: str) -> str:
 
     Normaliza acentos (NFKD -> ASCII), pasa a minusculas, y colapsa cualquier cosa
     que no sea `[a-z0-9]` en guiones (sin guiones al inicio/fin). El slug resultante
-    se VALIDA aparte con `carpetas.resolver_destino` (anti-escape/caracteres); aqui
-    solo lo construimos. Lanza `NombreAgenteInvalido` si el nombre esta vacio o no
-    deja ningun caracter aprovechable.
+    se VALIDA aparte con `resolver_slug_agente` (anti-escape/caracteres); aqui solo lo
+    construimos. Lanza `NombreAgenteInvalido` si el nombre esta vacio o no deja ningun
+    caracter aprovechable.
     """
     crudo = (nombre or "").strip()
     if not crudo:
@@ -135,19 +136,14 @@ def _slug_de_nombre(nombre: str) -> str:
 
 
 def _slug_seguro(nombre: str) -> str:
-    """Slug derivado del nombre, ya VALIDADO contra el anti-escape de `api.carpetas`.
+    """Slug derivado del nombre, ya VALIDADO contra el anti-escape de agentes.
 
-    Reutiliza `carpetas.resolver_destino` (la misma validacion que crea carpetas de
-    proyecto): el slug debe quedar estrictamente dentro de la raiz, sin `..`, sin
-    separadores ni caracteres peligrosos. Traduce el fallo a `NombreAgenteInvalido`.
+    `resolver_slug_agente` exige que el slug quede estrictamente dentro de la raiz, sin
+    `..`, sin separadores ni caracteres peligrosos. Lanza `NombreAgenteInvalido` si el
+    nombre escaparia o trae un caracter prohibido.
     """
-    from ..api import carpetas
-
     slug = _slug_de_nombre(nombre)
-    try:
-        carpetas.resolver_destino(slug)
-    except carpetas.NombreInvalido as e:  # nombre que escaparia / caracter prohibido
-        raise NombreAgenteInvalido(str(e)) from e
+    resolver_slug_agente(slug, _raiz())
     return slug
 
 

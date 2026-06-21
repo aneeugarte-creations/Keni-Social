@@ -28,8 +28,6 @@ def test_auto_descubrimiento_monta_todas_las_areas():
     for esperada in (
         "/api/estado",
         "/api/ajustes",
-        "/api/proyectos",
-        "/api/carpetas",
         "/api/prompts",
         "/api/publicaciones",
         "/api/metricas/reporte",
@@ -246,7 +244,7 @@ def test_healthz_no_cae_al_spa(entorno, sin_build):
 
 
 def test_landing_es_la_raiz():
-    """La URL de landing pasa a ser la raiz (la SPA), no /proyectos."""
+    """La URL de landing es la raiz (la SPA)."""
     import keni_consola.__main__ as entry
 
     fuente = Path(entry.__file__).read_text(encoding="utf-8")
@@ -315,11 +313,3 @@ def test_arranque_token_generado_no_se_filtra(entorno, monkeypatch, capsys):
     assert "?token=" not in salida
     # Se avisa de que se genero un token de mantenimiento, sin revelar su valor.
     assert "mantenimiento" in salida.lower()
-
-
-def test_lanzador_no_macos_devuelve_aviso(monkeypatch):
-    from keni_consola import lanzador
-
-    monkeypatch.setattr(lanzador.sys, "platform", "linux")
-    mensaje = lanzador.abrir_en_claude_code(Path("/tmp/x"))
-    assert "macos" in mensaje.lower()

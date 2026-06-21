@@ -16,10 +16,8 @@ en local), devuelve un placeholder amable en espanol (200).
 
 Bind SOLO a 127.0.0.1 (ver `__main__.py`).
 
-SEGURIDAD (resumen): el guardado de CLAUDE.md y el "abrir en Claude Code" SOLO
-operan sobre carpetas presentes en consola.toml (allowlist por id estable); sin
-shell=True; SQL parametrizado; los errores salen como JSON en espanol (sin
-tracebacks crudos).
+SEGURIDAD (resumen): sin shell=True; SQL parametrizado; los errores salen como JSON
+en espanol (sin tracebacks crudos).
 """
 
 from __future__ import annotations
@@ -34,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.routing import Mount, Route
 
-from . import api, config, db, proyectos, seguridad
+from . import api, config, db, seguridad
 from ._repos_comun import PiezaPublicadaInmutable
 from .dominio.runner import ColaLlenaError
 from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
@@ -195,7 +193,7 @@ async def _manejar_pieza_inmutable(request: Request, exc: PiezaPublicadaInmutabl
 
 
 def crear_app(
-    abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
+    lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
     token=_TOKEN_NO_ESPECIFICADO, bootstrap=True,
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
@@ -211,18 +209,12 @@ def crear_app(
     `bootstrap`: si True (def), crea el admin inicial si la BD no tiene
     usuarios (idempotente). Los tests lo desactivan por defecto (la mayoria usan
     el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
-    usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
-    por defecto la real. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests, pero se IGNORA.
+    usuario a mano. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests, pero se IGNORA.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
     para lanzar trabajos de IA (copy/RSS/hashtags) en background. `lanzar_imagen`: funcion
     opcional `(gen_id, *, generar)` para trabajos de imagen. Por defecto todas son las
     reales (Popen/hilo/stream-json); los tests pasan mocks que NO tocan `claude` ni la red.
     """
-    if abrir is not None:
-        from .api import proyectos as api_proyectos
-
-        api_proyectos.abrir_en_claude_code = abrir
-
     if lanzar_generacion is not None or lanzar_imagen is not None:
         from . import generaciones as gen_modulo
 
@@ -235,12 +227,6 @@ def crear_app(
             gen_modulo.encolar_job_claude = _encolar_inyectado
         if lanzar_imagen is not None:
             gen_modulo.lanzar_job_imagen = lanzar_imagen
-
-    # Aseguramos que existe el consola.toml (best-effort; no rompe si falla).
-    try:
-        proyectos.crear_config_si_falta()
-    except OSError:
-        pass
 
     # Idempotente y best-effort: corre en back Y daemons (mismo volumen), antes de leer config.
     try:

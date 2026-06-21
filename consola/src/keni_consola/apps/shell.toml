@@ -38,8 +38,6 @@ modulos_backend = [
   # los agentes Ralph). Overlay global transversal del shell (la burbuja), hermano de sistema.
   "ralph",
   "notificaciones",
-  "carpetas",
-  "proyectos",
   # api/catalogo.py: hidrata el sidebar leyendo los manifests via apps/registro. Servicio
   # transversal del shell (el catalogo mismo se autoexcluye de las apps de catalogo).
   "catalogo",

@@ -2,7 +2,6 @@
 
 Aisla en `tmp_path` (env vars) toda la persistencia y configuracion para que
 ningun test toque el disco real del usuario:
-  - `KENI_CONSOLA_CONFIG`  -> consola.toml (allowlist de proyectos)
   - `KENI_CONSOLA_RAIZ`    -> raiz de datos del backend de ficheros (YAML por marca)
   - `KENI_CONSOLA_INDICE`  -> indice SQLite regenerable del backend de ficheros
   - `KENI_CONSOLA_MEDIA`   -> dir de media (imagenes) aislado en tmp
@@ -171,7 +170,6 @@ def entorno(monkeypatch, tmp_path):
                 "POSTGRES_HOST", "POSTGRES_PORT"):
         monkeypatch.delenv(var, raising=False)
 
-    monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
     monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(tmp_path / "datos"))
     monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
     monkeypatch.setenv("KENI_CONSOLA_MEDIA", str(tmp_path / "media"))
@@ -339,15 +337,15 @@ TOKEN_PRUEBA = "token-de-prueba-1234567890"
 
 
 def _cliente(
-    abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
+    lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
     token=TOKEN_PRUEBA, autenticar=True, bootstrap=False,
 ) -> TestClient:
     """TestClient de la app. Ningun lanzador toca nada real (mocks).
 
-    `abrir` (interactivo), `lanzar_run` (runs headless), `lanzar_generacion` (trabajos de
-    copy/RSS/hashtags) y `lanzar_imagen` (imagen) se inyectan por defecto a fakes
-    inofensivas para que NUNCA se llame a `claude`, a un proveedor de imagen, ni se abra
-    Terminal. Los tests que necesiten un resultado pasan una fake "completa".
+    `lanzar_run` (runs headless), `lanzar_generacion` (trabajos de copy/RSS/hashtags) y
+    `lanzar_imagen` (imagen) se inyectan por defecto a fakes inofensivas para que NUNCA se
+    llame a `claude` ni a un proveedor de imagen. Los tests que necesiten un resultado
+    pasan una fake "completa".
 
     `token` fija el token de sesion de la app. Si `autenticar` (def), el cliente
     manda `Authorization: Bearer <token>` por defecto en cada peticion para que los tests
@@ -358,9 +356,6 @@ def _cliente(
     crean el admin inicial, asi evitan el coste del hash scrypt y siguen pasando por la
     via del TOKEN. Los tests de auth/usuarios lo activan (o crean usuarios a mano).
     """
-    if abrir is None:
-        def abrir(_ruta):  # noqa: ANN001
-            return "ok-mock"
     if lanzar_run is None:
         lanzar_run = _lanzador_run_noop
     if lanzar_generacion is None:
@@ -371,7 +366,6 @@ def _cliente(
     cabeceras = {"Authorization": f"Bearer {token}"} if autenticar else None
     return TestClient(
         app_modulo.crear_app(
-            abrir=abrir,
             lanzar_run=lanzar_run,
             lanzar_generacion=lanzar_generacion,
             lanzar_imagen=lanzar_imagen,

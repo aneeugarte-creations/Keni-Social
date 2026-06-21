@@ -24,7 +24,6 @@ from keni_consola import (
     indice,
     media,
     preferencias,
-    proyectos,
     rutas,
     secretos,
 )
@@ -38,7 +37,6 @@ _VARS_ESPECIFICAS = (
     "KENI_CONSOLA_MEDIA",
     "KENI_CONSOLA_SECRETOS",
     "KENI_CONSOLA_PREFERENCIAS",
-    "KENI_CONSOLA_CONFIG",
     "KENI_CONSOLA_GENERACIONES",
 )
 
@@ -96,7 +94,6 @@ def test_keni_data_dir_agrupa_todo_el_estado(monkeypatch, sin_vars, tmp_path):
     assert media.dir_media() == config / "media"
     assert secretos.ruta_secretos() == config / "secretos.toml"
     assert preferencias.ruta_preferencias() == config / "preferencias.toml"
-    assert proyectos.ruta_config_consola() == config / "consola.toml"
     assert generaciones.raiz() == config / "generaciones"
     # Contenido editorial por marca: bajo keni-proyectos/ de la misma raiz.
     assert ficheros.raiz_datos() == raiz / "keni-proyectos"
@@ -105,7 +102,7 @@ def test_keni_data_dir_agrupa_todo_el_estado(monkeypatch, sin_vars, tmp_path):
     for ruta_recurso in (
         indice.ruta_indice(), media.dir_media(), secretos.ruta_secretos(),
         preferencias.ruta_preferencias(),
-        proyectos.ruta_config_consola(), generaciones.raiz(), ficheros.raiz_datos(),
+        generaciones.raiz(), ficheros.raiz_datos(),
     ):
         assert ruta_recurso.is_relative_to(raiz), ruta_recurso
 
@@ -125,7 +122,6 @@ def test_local_no_cambia_subpaths(monkeypatch, sin_vars, tmp_path):
     assert media.dir_media() == cfg / "media"
     assert secretos.ruta_secretos() == cfg / "secretos.toml"
     assert preferencias.ruta_preferencias() == cfg / "preferencias.toml"
-    assert proyectos.ruta_config_consola() == cfg / "consola.toml"
     # generaciones: con XDG SIN fijar el default es el historico ~/.config/keni-social/
     # generaciones (no se orfanan registros locales con el manejo de XDG).
     assert generaciones.raiz() == cfg / "generaciones"

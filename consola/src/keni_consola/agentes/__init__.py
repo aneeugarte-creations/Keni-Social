@@ -34,11 +34,11 @@ LAYOUT (raiz = `KENI_CONSOLA_RAIZ`, def `~/keni-proyectos`; misma que `ficheros.
         contexto/<nombre>.md
         runs/<id>.yaml
 
-SEGURIDAD: todo cae DENTRO de `raiz_permitida()`. El id de una marca se valida
-contra el catalogo; el slug de un generico se DERIVA del nombre reutilizando la
-validacion anti-escape/caracteres de `api.carpetas` (sin `/`, `\\`, `..`, control,
-comodines, ni rutas absolutas) y la ruta resuelta debe quedar estrictamente dentro
-de la raiz (`is_relative_to`). Conectar acepta SOLO el nombre de una subcarpeta
+SEGURIDAD: todo cae DENTRO de la raiz de agentes. El id de una marca se valida
+contra el catalogo; el slug de un generico se DERIVA del nombre y pasa por la
+validacion anti-escape/caracteres de `_rutas.resolver_slug_agente` (sin `/`, `\\`,
+`..`, control, comodines, ni rutas absolutas) y la ruta resuelta debe quedar
+estrictamente dentro de la raiz (`is_relative_to`). Conectar acepta SOLO el nombre de una subcarpeta
 existente (anti-traversal). Borrar es SOLO para genericos y SOLO dentro de la raiz
 (`rmtree` defensivo). La escritura de CLAUDE.md, sub-contextos, runs y manifiesto es
 DEFENSIVA (destino dentro de la carpeta del agente) y ATOMICA (tmp + os.replace)
