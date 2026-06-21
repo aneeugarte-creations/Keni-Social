@@ -280,21 +280,6 @@ def test_responsable_inexistente_se_rechaza(entorno):
     assert r.status_code == 400
 
 
-def test_desde_radar_crea_importante(entorno):
-    c = _cli()
-    r = c.post(
-        "/api/publicaciones/desde-radar",
-        json={"titulo": "Tendencia: Mundial", "redes": ["x", "instagram"], "prioridad": "alta"},
-        headers=_ORIGIN,
-    )
-    assert r.status_code == 200
-    cont = r.json()["contenido"]
-    assert cont["flujo"] == "importante"
-    assert cont["origen"] == "radar"
-    assert cont["prioridad"] == "alta"
-    assert len(cont["plataformas"]) == 2
-
-
 def test_borrar_contenido(entorno):
     c = _cli()
     cont = c.post("/api/publicaciones", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]

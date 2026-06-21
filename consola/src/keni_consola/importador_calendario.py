@@ -11,7 +11,7 @@ que el plan del equipo entra de golpe a la "lista viva" y se ordena con el resto
 DOS CAPAS (como `radar_auto`):
   - SELECCION/PARSEO es PURO y testeable (`parsear`, `_filas_desde_tabla`): bytes -> filas
     normalizadas + lista de errores honesta (una fila mala se reporta, NO rompe la importacion).
-  - ESCRITURA (`importar_a_tablero`) reutiliza el MISMO camino que `desde_radar` /
+  - ESCRITURA (`importar_a_tablero`) reutiliza el MISMO camino que
     `radar_auto.promover_temas`: `repos.crear_publicacion(origen='import-calendario', ...)`. Los
     contenidos marcados "obligatorio" se etiquetan `compromiso` y los de la "evergreen list" del
     equipo se etiquetan `evergreen` (sin tocar el enum de `flujo`).
@@ -561,7 +561,7 @@ def construir_procesar_import(
 
 
 # --------------------------------------------------------------------------- #
-# Escritura al tablero (mismo camino que radar_auto / desde_radar)             #
+# Escritura al tablero (mismo camino que radar_auto)                           #
 # --------------------------------------------------------------------------- #
 
 

@@ -30,7 +30,6 @@ from .plataformas import (
     borrar_plataforma,
 )
 from .post_directo import crear_post_directo
-from .radar import desde_radar
 from .tablero import (
     aceptar,
     actualizar,
@@ -55,7 +54,6 @@ __all__ = [
     "aceptar",
     "cubrir_evento",
     "metricas",
-    "desde_radar",
     "aportar",
     "crear_post_directo",
     "importar",
@@ -72,7 +70,6 @@ RUTAS = [
     Route("/api/publicaciones", listar, methods=["GET"]),
     Route("/api/publicaciones", crear, methods=["POST"]),
     Route("/api/publicaciones/metricas", metricas, methods=["GET"]),
-    Route("/api/publicaciones/desde-radar", desde_radar, methods=["POST"]),
     Route("/api/publicaciones/aportar", aportar, methods=["POST"]),
     Route("/api/publicaciones/cubrir-evento", cubrir_evento, methods=["POST"]),
     Route("/api/publicaciones/post-directo", crear_post_directo, methods=["POST"]),

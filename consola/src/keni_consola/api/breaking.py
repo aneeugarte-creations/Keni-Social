@@ -140,7 +140,7 @@ async def preparar(request: Request) -> Response:
     Crea un DRAFT `contenido` con `origen='breaking'`, `flujo='importante'`,
     `prioridad='alta'` y lanza la generación de copy en segundo plano reusando
     `autogen_redactar.lanzar_para_topic` (el mismo camino que el botón manual del
-    asistente y que `/api/publicaciones/desde-radar`). NUNCA publica: el borrador
+    asistente). NUNCA publica: el borrador
     nace sin aprobación y pasa por el flujo de revisión humana normal.
 
     Devuelve `{ "publicacion_id": str, "generacion_id": str }`.
