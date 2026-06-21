@@ -57,6 +57,7 @@ from .tokens_mcp import (
     crear_token_mcp,
     listar_tokens_mcp,
     revocar_token_mcp,
+    revocar_token_mcp_de_usuario,
     token_mcp_valido,
 )
 from .usuarios import (
@@ -142,6 +143,7 @@ __all__ = [
     "horas_sesion",
     # Tokens del MCP operativo por identidad
     "crear_token_mcp",
+    "revocar_token_mcp_de_usuario",
     "token_mcp_valido",
     "revocar_token_mcp",
     "listar_tokens_mcp",

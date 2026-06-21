@@ -92,6 +92,34 @@ def test_listar_omite_el_secreto_y_refleja_revocado(entorno):
     assert revocado["revocado"] is True
 
 
+def test_listar_expone_id_opaco_y_no_el_secreto(entorno):
+    """Cada item del listado trae un `id` opaco (no el secreto) para poder revocarlo."""
+    uid = _crear_usuario("dueno-id")
+    token = auth.crear_token_mcp(uid, "con-id")
+    item = auth.listar_tokens_mcp(uid)[0]
+    assert isinstance(item["id"], str) and item["id"]
+    # El `id` opaco NUNCA es el valor del token.
+    assert item["id"] != token
+
+
+def test_revocar_de_usuario_por_id(entorno):
+    """`revocar_token_mcp_de_usuario` revoca por `id`, idempotente, y solo del propio dueño."""
+    a = _crear_usuario("dueno-id-a")
+    b = _crear_usuario("dueno-id-b")
+    token_a = auth.crear_token_mcp(a, "de-a")
+    id_a = auth.listar_tokens_mcp(a)[0]["id"]
+    # Otra persona NO puede revocar el token ajeno (no es suyo): False y sigue válido.
+    assert auth.revocar_token_mcp_de_usuario(b, id_a) is False
+    assert auth.token_mcp_valido(token_a) is not None
+    # El dueño sí: revoca, invalida y es idempotente.
+    assert auth.revocar_token_mcp_de_usuario(a, id_a) is True
+    assert auth.token_mcp_valido(token_a) is None
+    assert auth.revocar_token_mcp_de_usuario(a, id_a) is True
+    # Un `id` inexistente o vacío: False.
+    assert auth.revocar_token_mcp_de_usuario(a, "no-existe") is False
+    assert auth.revocar_token_mcp_de_usuario(a, "") is False
+
+
 def test_listar_es_por_usuario(entorno):
     """Cada usuario solo ve SUS tokens."""
     a = _crear_usuario("dueno-a")

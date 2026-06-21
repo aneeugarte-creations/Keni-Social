@@ -4,12 +4,15 @@ import { peticion } from "./_core";
 import type {
   CuerpoActualizarUsuario,
   CuerpoConfiguracionUsuarios,
+  CuerpoCrearTokenMcp,
   CuerpoCrearUsuario,
   OpcionesCeremoniaWebauthn,
   RespuestaActualizarConfiguracion,
   RespuestaConfiguracionUsuarios,
+  RespuestaCrearTokenMcp,
   RespuestaMfaCredenciales,
   RespuestaMfaRegistro,
+  RespuestaTokensMcp,
   RespuestaUsuarios,
   UsuarioAdmin,
 } from "@/types";
@@ -54,6 +57,16 @@ export const apiUsuarios = {
       `/auth/passkey-asistida/${encodeURIComponent(id)}/verificar`,
       { metodo: "POST", json: { credential, nombre } },
     ),
+
+  // --- Tokens del MCP por identidad (self-service de la cuenta en sesión) ---
+  // Cada quien emite/lista/revoca SUS propios tokens del MCP (bearer para `/mcp`). El listado
+  // nunca trae el secreto; `crear` lo devuelve UNA sola vez; `revocar` lo recibe por su valor.
+  tokensMcp: (signal?: AbortSignal) =>
+    peticion<RespuestaTokensMcp>("/usuarios/tokens-mcp", { signal }),
+  crearTokenMcp: (cuerpo: CuerpoCrearTokenMcp) =>
+    peticion<RespuestaCrearTokenMcp>("/usuarios/tokens-mcp", { metodo: "POST", json: cuerpo }),
+  revocarTokenMcp: (token: string) =>
+    peticion<void>(`/usuarios/tokens-mcp/${encodeURIComponent(token)}`, { metodo: "DELETE" }),
 
   // --- Configuración GLOBAL de seguridad (solo superadmin) ---
   configuracionUsuarios: (signal?: AbortSignal) =>

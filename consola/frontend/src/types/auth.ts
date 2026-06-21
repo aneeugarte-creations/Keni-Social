@@ -188,6 +188,38 @@ export interface RespuestaMfaCredenciales {
   credenciales: CredencialPasskey[];
 }
 
+/** Un token del MCP por identidad en `GET /api/usuarios/tokens-mcp` (sin el secreto). */
+export interface TokenMcp {
+  /** Asa opaca y NO secreta del token (para revocarlo). */
+  id: string;
+  etiqueta: string;
+  /** ISO 8601 de emisión. */
+  creado: string;
+  /** ISO 8601 del último uso (null si nunca se ha usado). */
+  ultimo_uso: string | null;
+  /** ISO 8601 de caducidad (null = sin caducidad). */
+  expira: string | null;
+  revocado: boolean;
+}
+
+/** Respuesta de `GET /api/usuarios/tokens-mcp`. */
+export interface RespuestaTokensMcp {
+  tokens: TokenMcp[];
+}
+
+/** Cuerpo de `POST /api/usuarios/tokens-mcp`. */
+export interface CuerpoCrearTokenMcp {
+  etiqueta: string;
+  /** Horas hasta caducar (omitir para sin caducidad). */
+  expira_horas?: number;
+}
+
+/** Respuesta de `POST /api/usuarios/tokens-mcp`: el VALOR del token, una sola vez. */
+export interface RespuestaCrearTokenMcp {
+  token: string;
+  etiqueta: string;
+}
+
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */
 export interface RespuestaSesion {
   usuario: UsuarioSesion;

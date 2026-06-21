@@ -14,6 +14,7 @@ tope FIJO desde la emision. Validar refresca `ultimo_uso` (para auditoria), no l
 from __future__ import annotations
 
 import secrets
+import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -26,7 +27,8 @@ def crear_token_mcp(usuario_id: str, etiqueta: str, expira: float | None = None)
 
     `etiqueta` es la nota humana del emisor ("ralph:<id>", "Claude Code de Ana"). `expira` son
     las HORAS hasta caducar (None = sin caducidad). El valor se devuelve UNA vez: luego solo se
-    valida por igualdad de la fila, nunca se vuelve a leer en claro.
+    valida por igualdad de la fila, nunca se vuelve a leer en claro. Cada fila lleva un `id`
+    opaco y NO secreto (lo expone el listado y lo usa la consola para revocar).
     """
     token = secrets.token_urlsafe(32)
     ahora = _comun.ahora()
@@ -34,9 +36,9 @@ def crear_token_mcp(usuario_id: str, etiqueta: str, expira: float | None = None)
     con = db.conectar()
     try:
         con.execute(
-            "INSERT INTO tokens_mcp (token, usuario_id, etiqueta, creado, ultimo_uso, expira, "
-            "revocado) VALUES (?, ?, ?, ?, ?, ?, 0)",
-            (token, usuario_id, etiqueta, _comun.iso(ahora), None, vence),
+            "INSERT INTO tokens_mcp (token, id, usuario_id, etiqueta, creado, ultimo_uso, expira, "
+            "revocado) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+            (token, str(uuid.uuid4()), usuario_id, etiqueta, _comun.iso(ahora), None, vence),
         )
         con.commit()
     finally:
@@ -108,21 +110,44 @@ def revocar_token_mcp(token: str) -> bool:
         con.close()
 
 
+def revocar_token_mcp_de_usuario(usuario_id: str, token_id: str) -> bool:
+    """Revoca el token `token_id` de `usuario_id` (marca `revocado=1`). Idempotente.
+
+    Revoca por el `id` opaco que expone el listado (no por el secreto), y exige que el token
+    sea de `usuario_id`: nadie puede revocar tokens de otra persona. Devuelve True si existia un
+    token con ese `id` para ese usuario (revocado o no), False si no.
+    """
+    if not token_id:
+        return False
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE tokens_mcp SET revocado = 1 WHERE id = ? AND usuario_id = ?",
+            (token_id, usuario_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def listar_tokens_mcp(usuario_id: str) -> list[dict[str, Any]]:
     """Lista los tokens MCP de `usuario_id`, SIN el valor del token (mas nuevos primero).
 
-    Cada item trae `etiqueta`, `creado`, `ultimo_uso`, `expira` y `revocado` para que la cuenta
-    vea y gestione sus tokens. El secreto NUNCA sale aqui (solo se entrega una vez, al crear).
+    Cada item trae `id` (opaco, para revocar), `etiqueta`, `creado`, `ultimo_uso`, `expira` y
+    `revocado` para que la cuenta vea y gestione sus tokens. El secreto NUNCA sale aqui (solo se
+    entrega una vez, al crear).
     """
     con = db.conectar()
     try:
         filas = con.execute(
-            "SELECT etiqueta, creado, ultimo_uso, expira, revocado FROM tokens_mcp "
+            "SELECT id, etiqueta, creado, ultimo_uso, expira, revocado FROM tokens_mcp "
             "WHERE usuario_id = ? ORDER BY creado DESC",
             (usuario_id,),
         ).fetchall()
         return [
             {
+                "id": f["id"],
                 "etiqueta": f["etiqueta"],
                 "creado": f["creado"],
                 "ultimo_uso": f["ultimo_uso"],

@@ -172,6 +172,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS tokens_mcp (
         token       TEXT PRIMARY KEY,
+        -- Identificador opaco y NO secreto del token (lo expone el listado y lo usa la consola
+        -- para revocar): el valor del token nunca sale tras emitirlo, asi que la UI necesita
+        -- un asa estable distinta del secreto.
+        id          TEXT,
         usuario_id  TEXT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
         etiqueta    TEXT NOT NULL,
         creado      TEXT,
@@ -180,6 +184,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         revocado    INTEGER NOT NULL DEFAULT 0
     )
     """,
+    "ALTER TABLE tokens_mcp ADD COLUMN IF NOT EXISTS id TEXT",
+    # Backfill del `id` opaco en tokens emitidos antes de la columna (uno por fila, estable).
+    "UPDATE tokens_mcp SET id = gen_random_uuid()::text WHERE id IS NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_mcp_id ON tokens_mcp (id)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_mcp_usuario ON tokens_mcp (usuario_id)",
     # Relacion N:M usuarios <-> marcas (organigrama del cliente, transcripciones de la dirección):
     # una persona puede pertenecer a varias verticales/marcas (editorial de YouTube cubre ClaroSports +

@@ -12,11 +12,11 @@ Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
   - DELETE /api/usuarios/{id}       -> 204.
 
 Tokens del MCP (SELF-SERVICE, NO superadmin: cualquier sesión real gestiona los SUYOS):
-  - GET    /api/usuarios/tokens-mcp            -> {tokens: [{etiqueta, creado, ultimo_uso,
-                                                  expira, revocado}]} (sin el valor).
+  - GET    /api/usuarios/tokens-mcp            -> {tokens: [{id, etiqueta, creado, ultimo_uso,
+                                                  expira, revocado}]} (sin el valor; `id` opaco).
   - POST   /api/usuarios/tokens-mcp            {etiqueta, expira_horas?} -> 201 {token, etiqueta}
                                                   (el valor del token, UNA vez).
-  - DELETE /api/usuarios/tokens-mcp/{token_id} -> 204 (revoca por el valor del token).
+  - DELETE /api/usuarios/tokens-mcp/{token_id} -> 204 (revoca el token propio por su `id` opaco).
 
 PATCH: ademas de rol/password, el admin puede actualizar
 `cargo` (allowlist `CARGOS_USUARIO`), `cobertura` (bool) y `marcas` (lista de ids canonicos
@@ -786,8 +786,8 @@ def _rechazo_token_mcp_sesion() -> Response:
 async def listar_tokens_mcp(request: Request) -> Response:
     """GET /api/usuarios/tokens-mcp: tokens MCP de la cuenta en sesión, SIN el secreto.
 
-    Devuelve `{tokens: [{etiqueta, creado, ultimo_uso, expira, revocado}]}`. El valor del token
-    NO se devuelve aquí (solo se entrega una vez, al crearlo).
+    Devuelve `{tokens: [{id, etiqueta, creado, ultimo_uso, expira, revocado}]}`. `id` es el asa
+    opaca para revocar; el valor del token NO se devuelve aquí (solo se entrega al crearlo).
     """
     usuario_id = _usuario_actual_id(request)
     if usuario_id is None:
@@ -830,16 +830,17 @@ async def crear_token_mcp(request: Request) -> Response:
 
 
 async def revocar_token_mcp(request: Request) -> Response:
-    """DELETE /api/usuarios/tokens-mcp/{token_id}: revoca un token MCP por su valor (204).
+    """DELETE /api/usuarios/tokens-mcp/{token_id}: revoca un token MCP propio por su `id` (204).
 
-    404 si no existe ningún token con ese valor. Marca el token `revocado` (no lo borra): el
-    guard de `/mcp` deja de aceptarlo de inmediato.
+    `token_id` es el `id` opaco que devuelve el listado (no el secreto). 404 si la cuenta en
+    sesión no tiene ningún token con ese `id`. Marca el token `revocado` (no lo borra): el guard
+    de `/mcp` deja de aceptarlo de inmediato.
     """
     usuario_id = _usuario_actual_id(request)
     if usuario_id is None:
         return _rechazo_token_mcp_sesion()
-    token = request.path_params.get("token_id", "")
-    if not auth.revocar_token_mcp(token):
+    token_id = request.path_params.get("token_id", "")
+    if not auth.revocar_token_mcp_de_usuario(usuario_id, token_id):
         return JSONResponse({"error": "Ese token no existe."}, status_code=404)
     return Response(status_code=204)
 

@@ -14,7 +14,17 @@
  */
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, KeyRound, Loader2, Pencil, Trash2, User } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Fingerprint,
+  KeyRound,
+  Loader2,
+  Pencil,
+  Plug,
+  Trash2,
+  User,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -22,6 +32,7 @@ import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { TituloPagina } from "@/components/layout/encabezado";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,15 +41,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora as fmtFechaHoraCdmx } from "@/lib/fecha";
 import { MIN_PASSWORD } from "@/lib/password";
 import { SeccionApariencia } from "@/pages/configuracion/SeccionApariencia";
-import type { CredencialPasskey, RolUsuario } from "@/types";
+import type { CredencialPasskey, RolUsuario, TokenMcp } from "@/types";
 
 /** Clave de caché del usuario actual (`me`); se refresca al cambiar la contraseña. */
 const CLAVE_ME = ["sesion", "me"] as const;
@@ -501,6 +527,261 @@ function SeccionLlavesAcceso() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sección: Tokens MCP                                                */
+/* ------------------------------------------------------------------ */
+
+/** Clave de caché de los tokens MCP propios; se recarga al crear o revocar uno. */
+const CLAVE_TOKENS_MCP = ["sesion", "tokens-mcp"] as const;
+
+/** Opciones de caducidad (horas). `null` = sin caducidad. */
+const CADUCIDADES: { valor: string; etiqueta: string; horas: number | null }[] = [
+  { valor: "30d", etiqueta: "30 días", horas: 24 * 30 },
+  { valor: "90d", etiqueta: "90 días", horas: 24 * 90 },
+  { valor: "1y", etiqueta: "1 año", horas: 24 * 365 },
+  { valor: "nunca", etiqueta: "Sin caducidad", horas: null },
+];
+
+/** Estado visible de un token: revocado / caducado / activo (en ese orden de prioridad). */
+function estadoToken(t: TokenMcp): { texto: string; variante: "error" | "aviso" | "ok" } {
+  if (t.revocado) return { texto: "Revocado", variante: "error" };
+  if (t.expira && new Date(t.expira).getTime() <= Date.now())
+    return { texto: "Caducado", variante: "aviso" };
+  return { texto: "Activo", variante: "ok" };
+}
+
+/** Una fila del listado de tokens (sin el secreto): etiqueta, fechas, estado y botón de revocar. */
+function FilaTokenMcp({
+  token,
+  onRevocar,
+  ocupado,
+}: {
+  token: TokenMcp;
+  onRevocar: () => void;
+  ocupado: boolean;
+}) {
+  const estado = estadoToken(token);
+  const vivo = estado.texto === "Activo";
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-medium">{token.etiqueta}</p>
+          <Badge variant={estado.variante}>{estado.texto}</Badge>
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Creado {formatearFechaHora(token.creado)} · Último uso{" "}
+          {formatearFechaHora(token.ultimo_uso)} ·{" "}
+          {token.expira ? `Caduca ${formatearFechaHora(token.expira)}` : "Sin caducidad"}
+        </p>
+      </div>
+      {vivo && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+          disabled={ocupado}
+          onClick={onRevocar}
+          aria-label={`Revocar ${token.etiqueta}`}
+        >
+          {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Diálogo que muestra el secreto recién emitido UNA sola vez, con aviso y botón de copiar. */
+function DialogoTokenNuevo({ token, onCerrar }: { token: string | null; onCerrar: () => void }) {
+  const [copiado, setCopiado] = React.useState(false);
+  React.useEffect(() => {
+    setCopiado(false);
+  }, [token]);
+
+  const copiar = async () => {
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopiado(true);
+      toast.success("Token copiado al portapapeles.");
+    } catch {
+      toast.error("No se pudo copiar el token.");
+    }
+  };
+
+  return (
+    <Dialog open={token !== null} onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Tu token MCP</DialogTitle>
+          <DialogDescription>
+            Cópialo ahora: por seguridad no se vuelve a mostrar. Si lo pierdes, revócalo y emite otro.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-sm">
+            {token}
+          </code>
+          <Button type="button" variant="outline" size="icon" onClick={copiar} aria-label="Copiar token">
+            {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button type="button" onClick={onCerrar}>
+            Ya lo copié
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SeccionTokensMcp() {
+  const queryClient = useQueryClient();
+  const [etiqueta, setEtiqueta] = React.useState("");
+  const [caducidad, setCaducidad] = React.useState("90d");
+  // Secreto recién emitido: se enseña UNA vez en el diálogo y luego se descarta.
+  const [secreto, setSecreto] = React.useState<string | null>(null);
+
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: CLAVE_TOKENS_MCP,
+    queryFn: ({ signal }) => api.tokensMcp(signal),
+  });
+
+  const tokens = data?.tokens ?? [];
+
+  const recargar = () => queryClient.invalidateQueries({ queryKey: CLAVE_TOKENS_MCP });
+
+  const crear = useMutation({
+    mutationFn: () => {
+      const horas = CADUCIDADES.find((c) => c.valor === caducidad)?.horas ?? null;
+      return api.crearTokenMcp({
+        etiqueta: etiqueta.trim(),
+        ...(horas !== null ? { expira_horas: horas } : {}),
+      });
+    },
+    onSuccess: async (resp) => {
+      setSecreto(resp.token);
+      setEtiqueta("");
+      await recargar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const revocar = useMutation({
+    // El listado nunca trae el secreto: se revoca por el `id` opaco que sí expone.
+    mutationFn: (id: string) => api.revocarTokenMcp(id),
+    onSuccess: async () => {
+      toast.success("Token revocado.");
+      await recargar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeCrear = etiqueta.trim().length > 0 && !crear.isPending;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Tokens MCP</CardTitle>
+        <CardDescription>
+          Emite un token para conectar Claude Code (u otro cliente MCP) a la consola con tu
+          identidad. Se presenta como bearer al servidor MCP. Cada token se muestra una sola vez.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isPending ? (
+          <div className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-md" />
+            ))}
+          </div>
+        ) : isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar tus tokens MCP"
+            mensaje={mensajeError(error)}
+            onReintentar={() => void refetch()}
+            cargando={isFetching}
+          />
+        ) : tokens.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+            Aún no tienes ningún token MCP.
+          </p>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {tokens.map((t) => (
+              <div key={t.id} className="px-3">
+                <FilaTokenMcp
+                  token={t}
+                  ocupado={revocar.isPending && revocar.variables === t.id}
+                  onRevocar={() => void alRevocar(t)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (puedeCrear) crear.mutate();
+          }}
+          noValidate
+        >
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="token-etiqueta">Etiqueta</Label>
+            <Input
+              id="token-etiqueta"
+              placeholder="Claude Code de mi laptop…"
+              value={etiqueta}
+              maxLength={120}
+              onChange={(e) => setEtiqueta(e.target.value)}
+              disabled={crear.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="token-caducidad">Caducidad</Label>
+            <Select value={caducidad} onValueChange={setCaducidad} disabled={crear.isPending}>
+              <SelectTrigger id="token-caducidad" className="sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CADUCIDADES.map((c) => (
+                  <SelectItem key={c.valor} value={c.valor}>
+                    {c.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="submit" disabled={!puedeCrear}>
+            {crear.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plug className="h-4 w-4" />
+            )}
+            Crear token
+          </Button>
+        </form>
+      </CardContent>
+
+      <DialogoTokenNuevo token={secreto} onCerrar={() => setSecreto(null)} />
+    </Card>
+  );
+
+  async function alRevocar(t: TokenMcp) {
+    const ok = await confirmar({
+      titulo: "Revocar token MCP",
+      mensaje: `¿Revocar "${t.etiqueta}"? El cliente que lo use dejará de tener acceso de inmediato.`,
+      destructivo: true,
+      textoConfirmar: "Revocar",
+    });
+    if (ok) revocar.mutate(t.id);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -517,6 +798,7 @@ export default function MiCuenta() {
           <SeccionCambiarPassword />
         </div>
         {usuario?.mfa_habilitado && <SeccionLlavesAcceso />}
+        <SeccionTokensMcp />
       </div>
     </>
   );
