@@ -45,6 +45,7 @@ services:
     # (NO recrear los servicios Woodpecker con pipelines en proceso).
     mem_limit: 512m
     cpus: 1.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2): ningun proceso de CI toca al user-facing
     # Sin healthcheck: la imagen es scratch (sin shell/wget/curl).
     labels:
       - traefik.enable=true
@@ -81,6 +82,7 @@ services:
     # mem_limit/cpus top-level: ver nota en woodpecker-server (deploy.resources se ignora sin Swarm).
     mem_limit: 64m
     cpus: 0.5
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
 
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:${WOODPECKER_VERSION:-v3.13.0}
@@ -130,6 +132,7 @@ services:
     # runner a otro host (ver README). Mientras tanto este tope acota al menos el propio agente.
     mem_limit: 4g
     cpus: 4.0
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2): el propio agente nunca compite con el user-facing
 
 volumes:
   # `external: true`: volumenes gestionados FUERA de compose (no los crea/borra). Silencia el
