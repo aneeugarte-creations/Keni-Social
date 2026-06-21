@@ -352,6 +352,70 @@ def test_ejecutar_estructurado_devuelve_structured_output(monkeypatch):
     assert "--json-schema" in capturado["argv"]
 
 
+# --------------------------------------------------------------------------- #
+# `traducir_items` con salida estructurada (--json-schema) vs. fallback         #
+# --------------------------------------------------------------------------- #
+
+
+def _ejecutor_estructurado_ok(prompt: str, dir_permitido: str):
+    """Ejecutor que devuelve `(texto, structured_output)` con el array `traducciones`.
+
+    El texto libre es BASURA a propósito: si el resultado es correcto, prueba que se usó la
+    salida estructurada y NO el parse del texto.
+    """
+    import re
+
+    cola = prompt.partition("## Lista de ítems")[2] or prompt
+    m = re.search(r"\[.*?\]", cola, re.DOTALL)
+    items = json.loads(m.group(0)) if m else []
+    traducciones = [
+        {"id": it["id"], "titulo_es": f"[SO] {it['titulo']}", "resumen_es": ""}
+        for it in items
+    ]
+    return ("basura no parseable", {"traducciones": traducciones})
+
+
+def test_traducir_items_usa_structured_output():
+    """Si el ejecutor devuelve `(texto, {"traducciones": [...]})` se usan las del structured."""
+    items = [{"id": "s1", "titulo": "Hello world", "resumen": "x"}]
+    resultado = traducir.traducir_items(items, ejecutor=_ejecutor_estructurado_ok)
+    assert len(resultado) == 1
+    assert resultado[0]["titulo_es"] == "[SO] Hello world"
+    assert resultado[0]["ok"] is True
+
+
+def test_traducir_items_fallback_a_texto_cuando_str():
+    """Ejecutor que devuelve solo `str` con JSON parseable -> fallback a `_extraer_traducciones`."""
+    items = [{"id": "t1", "titulo": "Breaking news", "resumen": "Summary"}]
+    resultado = traducir.traducir_items(items, ejecutor=_ejecutor_ok)
+    assert resultado[0]["titulo_es"] == "[ES] Breaking news"
+    assert resultado[0]["ok"] is True
+
+
+def test_traducir_items_tupla_sin_structured_cae_al_texto():
+    """`(texto, None)`: sin structured válido, parsea el texto libre (camino histórico)."""
+
+    def _ej(prompt: str, dir_permitido: str):
+        return (_ejecutor_ok(prompt, dir_permitido), None)
+
+    items = [{"id": "t1", "titulo": "Breaking news", "resumen": "Summary"}]
+    resultado = traducir.traducir_items(items, ejecutor=_ej)
+    assert resultado[0]["titulo_es"] == "[ES] Breaking news"
+    assert resultado[0]["ok"] is True
+
+
+def test_traducir_items_structured_invalido_cae_a_originales():
+    """structured sin la clave `traducciones` y texto no-JSON -> originales con `ok=False`."""
+
+    def _ej(prompt: str, dir_permitido: str):
+        return ("texto no json", {"otra_clave": 123})
+
+    items = [{"id": "x1", "titulo": "Original", "resumen": "Summary"}]
+    resultado = traducir.traducir_items(items, ejecutor=_ej)
+    assert resultado[0]["titulo_es"] == "Original"
+    assert resultado[0]["ok"] is False
+
+
 def test_acumulador_de_metricas_suma_y_resetea():
     """Las llamadas SUMAN en el acumulador del hilo; `tomar_metricas_acumuladas` devuelve la
     suma y RESETEA (la siguiente toma sin llamadas es None)."""

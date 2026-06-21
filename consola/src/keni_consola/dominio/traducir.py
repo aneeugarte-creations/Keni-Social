@@ -45,8 +45,13 @@ _CLAUDE_TIMEOUT_S = 90
 # Protección contra prompts enormes (feeds con artículos larguísimos).
 _MAX_CHARS_ITEM = 600
 
-# Tipo del ejecutor inyectable (misma firma que en recibir_parse).
-Ejecutor = Callable[[str, str], str]
+# Ejecutor de la llamada a `claude`. Misma firma que en recibir_parse/clasificador_marca
+# (`(prompt, dir_permitido) -> salida`), pero puede devolver dos formas:
+#   - `str`: solo el texto `result` (se parsea con `_extraer_traducciones`, camino histórico).
+#   - `tuple[str, dict | None]`: `(texto_result, structured_output)`, cuando el run usó
+#     `--json-schema` y trajo la salida estructurada YA validada. Si la hay, se usa directa.
+SalidaEjecutor = str | tuple[str, "dict[str, Any] | None"]
+Ejecutor = Callable[[str, str], SalidaEjecutor]
 
 
 # --------------------------------------------------------------------------- #
@@ -270,10 +275,58 @@ def _construir_prompt(items_json: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
+# Esquema raíz para `--json-schema`: fija la clave canónica `traducciones` como array de
+# objetos `{id, titulo_es, resumen_es}` (los campos que consume `traducir_items` aguas abajo).
+# Con él `claude` valida la salida estructurada y la entrega en `structured_output`, lo que
+# evita el parse heurístico del texto libre; el camino sin esquema sigue cayendo a
+# `_extraer_traducciones`, que tolera además las claves alternativas históricas.
+_ESQUEMA_TRADUCCIONES: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "traducciones": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "titulo_es": {"type": "string"},
+                    "resumen_es": {"type": "string"},
+                },
+                "required": ["id", "titulo_es"],
+            },
+        }
+    },
+    "required": ["traducciones"],
+}
+
+
 def _extraer_traducciones(texto: str) -> list[dict[str, str]] | None:
     """Extrae la lista de traducciones del texto de Claude (extractor compartido)."""
     return json_llm.extraer_lista(
         texto, claves=("traducciones", "items", "translations", "resultados")
+    )
+
+
+def _desempaquetar(salida: SalidaEjecutor) -> tuple[str, dict[str, Any] | None]:
+    """Normaliza la salida del ejecutor a `(texto, structured_output)`.
+
+    Acepta tanto la forma histórica (`str` = solo texto) como la nueva
+    (`tuple[str, dict | None]`), para no romper los ejecutores que solo devuelven texto.
+    """
+    if isinstance(salida, tuple):
+        texto, estructurado = salida
+        return str(texto or ""), (estructurado if isinstance(estructurado, dict) else None)
+    return str(salida or ""), None
+
+
+def _ejecutor_estructurado(prompt: str, carpeta: str) -> tuple[str, dict[str, Any] | None]:
+    """Ejecutor real con `--json-schema`: devuelve `(texto, structured_output)`.
+
+    Pasa el esquema raíz para que la salida estructurada venga validada; `claude` la entrega
+    en `structured_output`. El texto `result` se devuelve siempre para el fallback.
+    """
+    return _ejecutar_claude_json_estructurado(
+        prompt, carpeta, json_schema=_ESQUEMA_TRADUCCIONES
     )
 
 
@@ -291,8 +344,10 @@ def traducir_items(
 
     Parámetros:
         items: lista de dicts con al menos `{id, titulo, resumen}` en idioma extranjero.
-        ejecutor: función `(prompt, dir_permitido) -> str` inyectable (para tests). Si es
-            None se usa el subproceso real.
+        ejecutor: función `(prompt, dir_permitido) -> str | (str, structured_output)`
+            inyectable (para tests). None = subproceso real con `--json-schema`, que entrega
+            la salida estructurada validada; si viene `(texto, structured)` se prefiere el
+            array `traducciones` del structured y se cae al parse del texto si falta.
 
     Devuelve: `[{id, titulo_es, resumen_es, ok}]`. `ok=True` solo cuando hubo traducción
     REAL; ante cualquier fallo (subproceso, timeout, JSON inválido, ítem ausente o sin
@@ -303,7 +358,7 @@ def traducir_items(
     if not items:
         return []
 
-    correr = ejecutor or _ejecutar_claude_json
+    correr = ejecutor or _ejecutor_estructurado
 
     # Construye el payload de entrada, recortando campos largos (truncado centralizado).
     payload: list[dict[str, str]] = []
@@ -345,7 +400,14 @@ def traducir_items(
         _log.warning("traducir_items falló al llamar a claude: %s", e)
         return _fallback()
 
-    traducciones = _extraer_traducciones(salida)
+    texto, estructurado = _desempaquetar(salida)
+    # Salida estructurada YA validada por `--json-schema`: prefiérela si trae el array
+    # canónico `traducciones`. Si falta o no es una lista, cae al parse del texto libre.
+    traducciones: list[dict[str, Any]] | None = None
+    if isinstance(estructurado, dict) and isinstance(estructurado.get("traducciones"), list):
+        traducciones = estructurado["traducciones"]
+    if traducciones is None:
+        traducciones = _extraer_traducciones(texto)
     if traducciones is None:
         _log.warning("traducir_items: no se pudo extraer JSON de la respuesta de Haiku.")
         return _fallback()
