@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
-  Clock,
   Copy,
   Loader2,
   Pencil,
@@ -126,6 +125,11 @@ export function ChipEventoCalendario({
   );
 }
 
+/** "HH:MM" → forma compacta para la celda: la hora en punto pierde ":00" ("14:00"→"14"). */
+function horaCompacta(hhmm: string): string {
+  return hhmm.endsWith(":00") ? String(Number(hhmm.slice(0, 2))) : hhmm;
+}
+
 export function ChipTurnoCM({
   turno,
   equipo,
@@ -201,7 +205,12 @@ export function ChipTurnoCM({
           <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
         )}
         {turno.horario_propio && (
-          <Clock className="h-3 w-3 shrink-0 text-sky-600" aria-label="horario a medida" />
+          <span
+            className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
+            aria-label="horario a medida"
+          >
+            {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
+          </span>
         )}
       </span>
     );
@@ -252,7 +261,12 @@ export function ChipTurnoCM({
           <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
         )}
         {turno.horario_propio && (
-          <Clock className="h-3 w-3 shrink-0 text-sky-600" aria-label="horario a medida" />
+          <span
+            className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
+            aria-label="horario a medida"
+          >
+            {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
+          </span>
         )}
         <button
           type="button"
