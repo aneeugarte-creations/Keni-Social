@@ -606,7 +606,8 @@ export interface Paginacion {
  * Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).
  *
  * El handler las omite (clave a `null`) si el run no produjo metricas (interactivo
- * o CLI sin JSON). Cuando vienen, traen estos seis campos.
+ * o CLI sin JSON). `ttft_ms` (time-to-first-token, ms) y `tokens_por_s` (tokens de
+ * salida por segundo) son de rendimiento y vienen `null` cuando el CLI no los reporta.
  */
 export interface MetricasRun {
   tokens_in: number;
@@ -615,6 +616,8 @@ export interface MetricasRun {
   total_cost_usd: number;
   duration_ms: number;
   modelo: string;
+  ttft_ms: number | null;
+  tokens_por_s: number | null;
 }
 /**
  * Una pieza serializada (`dominio.piezas.pieza_a_dict`).

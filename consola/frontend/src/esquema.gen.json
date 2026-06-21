@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ContratoApiKeni",
-  "$comment": "Generado desde keni_consola.esquema_api. NO editar a mano. Subconjunto estable del contrato /api/* (#101).",
+  "$comment": "Generado desde keni_consola.esquema_api. NO editar a mano. Subconjunto estable del contrato /api/*.",
   "$defs": {
     "ResultadoEstado": {
       "type": "object",
@@ -239,7 +239,7 @@
           "type": "number"
         }
       },
-      "description": "Una red (plataforma) del reporte con sus métricas agregadas entre marcas.\n\nAgrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`\nes el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si\nNINGUNA cuenta mide esa red (#138: no se inventa un 0).",
+      "description": "Una red (plataforma) del reporte con sus métricas agregadas entre marcas.\n\nAgrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`\nes el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si\nNINGUNA cuenta mide esa red (no se inventa un 0).",
       "required": [
         "red",
         "visualizaciones",
@@ -640,7 +640,7 @@
           "type": "string"
         }
       },
-      "description": "Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11).",
+      "description": "Sugerencia accionable que cierra el loop a la acción.",
       "required": [
         "marca_id",
         "marca",
@@ -697,7 +697,7 @@
           "type": "string"
         }
       },
-      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `fuente` marca la procedencia de los\ndatos (issue #131).",
+      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `fuente` marca la procedencia de los\ndatos.",
       "required": [
         "rango",
         "etiqueta_rango",
@@ -2056,7 +2056,7 @@
           "type": "string"
         }
       },
-      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (piezas/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.\n\n`cursor_siguiente` (KEYSET, feed de scroll infinito): clave `\"<creado>|<id>\"` para\npedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay\nmas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).",
+      "description": "Envelope ADITIVO de paginacion (offset-based).\n\nLo añaden los listados pesados (piezas/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.\n\n`cursor_siguiente` (KEYSET, feed de scroll infinito): clave `\"<creado>|<id>\"` para\npedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay\nmas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).",
       "required": [
         "total",
         "limite",
@@ -2084,16 +2084,38 @@
         },
         "modelo": {
           "type": "string"
+        },
+        "ttft_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tokens_por_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "description": "Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).\n\nEl handler las omite (clave a `null`) si el run no produjo metricas (interactivo\no CLI sin JSON). Cuando vienen, traen estos seis campos.",
+      "description": "Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).\n\nEl handler las omite (clave a `null`) si el run no produjo metricas (interactivo\no CLI sin JSON). `ttft_ms` (time-to-first-token, ms) y `tokens_por_s` (tokens de\nsalida por segundo) son de rendimiento y vienen `null` cuando el CLI no los reporta.",
       "required": [
         "tokens_in",
         "tokens_out",
         "num_turns",
         "total_cost_usd",
         "duration_ms",
-        "modelo"
+        "modelo",
+        "ttft_ms",
+        "tokens_por_s"
       ]
     },
     "Pieza": {
@@ -2273,7 +2295,7 @@
           "type": "string"
         }
       },
-      "description": "Una pieza serializada (`dominio.piezas.pieza_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` se estampa\ncuando la pieza se publica de verdad en redes (botón manual, gated por\n`KENI_PUBLICAR_REAL`); \"\" mientras no se haya publicado.",
+      "description": "Una pieza serializada (`dominio.piezas.pieza_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` se estampa\ncuando la pieza se publica de verdad en redes (botón manual, gated por\n`KENI_PUBLICAR_REAL`); \"\" mientras no se haya publicado.",
       "required": [
         "id",
         "publicacion_id",
@@ -2334,7 +2356,7 @@
           "$ref": "#/$defs/Paginacion"
         }
       },
-      "description": "Listado de `GET /api/piezas` con el envelope de paginacion (#121).",
+      "description": "Listado de `GET /api/piezas` con el envelope de paginacion.",
       "required": [
         "piezas",
         "paginacion"

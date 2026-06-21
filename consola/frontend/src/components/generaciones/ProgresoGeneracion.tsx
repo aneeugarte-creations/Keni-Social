@@ -10,7 +10,8 @@ import type { Generacion, MetricasRun } from "@/types";
 
 /**
  * Línea compacta de métricas en vivo de una generación: turnos, tokens (in/out),
- * coste y duración. Se omite si aún no hay métricas (p. ej. recién lanzada).
+ * coste, duración y, cuando el CLI los reporta, rendimiento (TTFT y tokens/s).
+ * Se omite si aún no hay métricas (p. ej. recién lanzada).
  */
 function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
   if (!metricas) return null;
@@ -24,6 +25,22 @@ function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
     { etiqueta: "Coste", valor: costeUsd(metricas.total_cost_usd) },
     { etiqueta: "Duración", valor: duracion(metricas.duration_ms) },
   ];
+  if (metricas.ttft_ms !== null) {
+    items.push({
+      etiqueta: "TTFT",
+      valor: duracion(metricas.ttft_ms),
+      titulo: "Tiempo hasta el primer token",
+    });
+  }
+  if (metricas.tokens_por_s !== null) {
+    items.push({
+      etiqueta: "Velocidad",
+      valor: `${metricas.tokens_por_s.toLocaleString("es-MX", {
+        maximumFractionDigits: 1,
+      })} tok/s`,
+      titulo: "Tokens de salida por segundo",
+    });
+  }
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       {items.map((it) => (
