@@ -475,3 +475,22 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
 MIGRACIONES: tuple[Migracion, ...] = MIGRACIONES_PRE_DDL + MIGRACIONES_POST_DDL
+
+
+def hay_migraciones_pendientes(con: Any) -> bool:
+    """True si, con el journal actual, el arranque aplicaria AL MENOS una migracion.
+
+    Comparte la MISMA logica de id (`_id_migracion`) y el MISMO conjunto que el runner
+    (`MIGRACIONES` = PRE + POST, el orden real del arranque): una migracion esta "pendiente"
+    exactamente cuando su id NO esta en el journal `schema_migraciones` -> la condicion con
+    que `_aplicar_migraciones` decide ejecutarla. Asi "pendiente" no diverge de lo que se aplica.
+
+    El deploy lo usa para decidir si un cutover blue-green es seguro (sin solape sobre un
+    esquema que el back viejo aun no conoce). Exige que el journal ya exista (lo crea el
+    arranque antes de leerlo); si la tabla no existe, `con.execute` lanza y el caller lo trata
+    como fail-safe (asumir pendientes -> stop-the-world).
+    """
+    aplicadas = {
+        fila["id"] for fila in con.execute("SELECT id FROM schema_migraciones").fetchall()
+    }
+    return any(_id_migracion(m) not in aplicadas for m in MIGRACIONES)

@@ -189,6 +189,26 @@ construir worker "keni-social/worker:$WORKER_VERSION"
 construir transcriptor "keni-social/transcriptor:$TRANSCRIPTOR_VERSION"
 construir mcp    "keni-social/mcp:$MCP_VERSION"
 
+# ── GUARDA blue-green: stop-the-world si hay MIGRACIÓN de esquema pendiente ────────────
+# El cutover blue-green deja al back VIEJO sirviendo mientras [4/6] aplica el esquema. Solo es
+# seguro si NO hay migración pendiente (una destructiva/incompatible rompería al viejo durante
+# el solape). Sondeamos con la imagen NUEVA del back (sabe qué migraciones trae): `--hay-pendientes`
+# NO aplica nada (conexión cruda, solo lee el journal) y sale 0 = sin pendientes, 10 = hay
+# pendientes o indeterminable (fail-safe). Si hay/indeterminable, forzamos BLUEGREEN=0 para ESTE
+# deploy: stop-the-world breve aplica el esquema con el viejo ya parado; blue-green se reanuda solo
+# en el siguiente. Las migraciones son raras frente a ~160 code-deploys/día, así que el coste es mínimo.
+if [ "$BLUEGREEN" = 1 ] && [ "$BACK_CAMBIO" = 1 ]; then
+  echo "==> [1b/6] guarda blue-green: ¿migración de esquema pendiente? (sonda de solo lectura con la imagen NUEVA)"
+  RC_PEND=0
+  $DC run --rm --no-deps -T back python -m keni_consola.migracion --hay-pendientes || RC_PEND=$?
+  if [ "$RC_PEND" != 0 ]; then
+    printf '\033[33m==> migración de esquema pendiente (o indeterminable) -> cutover stop-the-world para ESTE deploy (blue-green se reanuda en el siguiente)\033[0m\n' >&2
+    BLUEGREEN=0
+  else
+    echo "==> sin migración pendiente -> blue-green seguro para este deploy"
+  fi
+fi
+
 # Pasos de ESQUEMA/ESTADO: SOLO cuando cambió el código del back/worker (comparten `consola/`).
 # Un deploy de solo front no toca el esquema ni el volumen de estado (ni para el back).
 if [ "$BACK_CAMBIO" = 1 ]; then

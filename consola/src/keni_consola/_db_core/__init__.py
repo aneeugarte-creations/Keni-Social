@@ -82,6 +82,9 @@ from .migraciones import (
 from .migraciones import (
     _id_migracion as _id_migracion,
 )
+from .migraciones import (
+    hay_migraciones_pendientes as hay_migraciones_pendientes,
+)
 from .migraciones_columnas import (
     _COLUMNAS_APROBACIONES_AMPLIADAS as _COLUMNAS_APROBACIONES_AMPLIADAS,
 )
@@ -316,5 +319,6 @@ __all__ = [
     '_tabla_existe',
     'arrancar_persistencia',
     'conectar',
+    'hay_migraciones_pendientes',
     'lock_barrido',
 ]

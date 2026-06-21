@@ -401,6 +401,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_fronteras": "contrato",
     "test_catalogo": "contrato",
     "test_facades": "contrato",
+    "test_migracion_guard": "contrato",
     # App B · Metricas (api/metricas, campanias).
     "test_api_metricas": "app_metricas",
     "test_api_campanias": "app_metricas",

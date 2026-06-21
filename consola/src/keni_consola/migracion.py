@@ -26,7 +26,11 @@ import argparse
 import sys
 from dataclasses import dataclass
 
-from . import almacen_media, config, db
+from . import _db_core, almacen_media, config, db, motor_db
+
+# Codigo de salida de `--hay-pendientes` cuando SI hay migracion de esquema pendiente (o no se
+# puede determinar): el deploy lo interpreta como "cae a stop-the-world para ESTE cutover".
+EXIT_HAY_PENDIENTES = 10
 
 
 @dataclass
@@ -65,6 +69,40 @@ def asegurar_esquema(*, dry_run: bool = False) -> bool:
         return True
     db.arrancar_persistencia()  # crea/migra el esquema; no orfana nada
     return True
+
+
+def hay_migraciones_pendientes() -> int:
+    """Comprueba si hay migracion de esquema pendiente SIN aplicar nada. Devuelve el codigo de salida.
+
+    El deploy lo invoca antes de un cutover blue-green: con blue-green el back VIEJO sigue
+    sirviendo mientras se aplica el esquema, asi que solo es seguro si NO hay migracion pendiente.
+    Abre una conexion CRUDA (`motor_db.conectar_cruda`, NO `db.conectar`, que aplicaria el
+    esquema) y lee el journal sin tocarlo.
+
+    Codigos: 0 = NO hay pendientes (blue-green seguro); `EXIT_HAY_PENDIENTES` (10) = SI hay
+    pendientes. FAIL-SAFE: cualquier fallo al determinarlo (sin `DATABASE_URL`, conexion caida,
+    journal aun inexistente) se trata como "hay pendientes" -> el deploy cae a stop-the-world,
+    que nunca arriesga el solape. Imprime una linea legible en todos los casos.
+    """
+    if config.database_url() is None:
+        print(
+            "Migracion pendiente: INDETERMINABLE (DATABASE_URL no fijada) -> stop-the-world.",
+        )
+        return EXIT_HAY_PENDIENTES
+    try:
+        con = motor_db.conectar_cruda()
+        try:
+            pendientes = _db_core.hay_migraciones_pendientes(con)
+        finally:
+            con.close()
+    except Exception as exc:  # noqa: BLE001 -- fail-safe: indeterminable => asumir pendientes
+        print(f"Migracion pendiente: INDETERMINABLE ({exc}) -> stop-the-world.")
+        return EXIT_HAY_PENDIENTES
+    if pendientes:
+        print("Migracion de esquema PENDIENTE -> stop-the-world para este cutover.")
+        return EXIT_HAY_PENDIENTES
+    print("Sin migracion de esquema pendiente -> blue-green seguro.")
+    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -180,9 +218,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dry-run", action="store_true", help="Cuenta lo que migraria, sin escribir."
     )
+    parser.add_argument(
+        "--hay-pendientes",
+        action="store_true",
+        help=(
+            "NO aplica nada: comprueba si hay migracion de esquema pendiente. "
+            f"Sale 0 si no hay (blue-green seguro), {EXIT_HAY_PENDIENTES} si hay o no se puede "
+            "determinar (el deploy cae a stop-the-world)."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.solo_db and args.solo_media:
         parser.error("--solo-db y --solo-media son mutuamente excluyentes.")
+
+    # Sonda de solo lectura para el deploy: no migra, solo informa el codigo de salida.
+    if args.hay_pendientes:
+        return hay_migraciones_pendientes()
 
     resumen = migrar(solo_db=args.solo_db, solo_media=args.solo_media, dry_run=args.dry_run)
     _imprimir_resumen(resumen, dry_run=args.dry_run)
