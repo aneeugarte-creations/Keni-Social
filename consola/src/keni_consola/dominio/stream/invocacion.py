@@ -31,6 +31,8 @@ class MetricasRun:
     - `num_turns`: turnos del agente; `total_cost_usd`: coste total en USD;
       `duration_ms`: duracion de pared en milisegundos; `session_id`: id de la sesion.
     - `modelo`: el (o los) modelos usados (coma-separados si hubo varios).
+    - `ttft_ms`: time-to-first-token (ms), nativo del `result` del stream-json.
+    - `tokens_por_s`: tokens de salida por segundo (derivado de `tokens_out`/`duration_ms`).
     Todos los campos son opcionales (None si la salida no los trae).
     """
 
@@ -43,6 +45,8 @@ class MetricasRun:
     duration_ms: int | None = None
     session_id: str | None = None
     modelo: str | None = None
+    ttft_ms: int | None = None
+    tokens_por_s: float | None = None
 
 
 # Subconjunto de campos de `MetricasRun` que se persisten (run YAML + historial).
@@ -58,6 +62,8 @@ _CAMPOS_METRICAS_PERSISTIDOS: tuple[str, ...] = (
     "total_cost_usd",
     "duration_ms",
     "modelo",
+    "ttft_ms",
+    "tokens_por_s",
 )
 
 
@@ -84,6 +90,9 @@ _ENV_MAX_USD = config.ENV_CLAUDE_MAX_USD
 _ENV_MAX_TURNS = config.ENV_CLAUDE_MAX_TURNS
 _ENV_SKIP_PERMISOS = config.ENV_CLAUDE_SKIP_PERMISSIONS
 _ENV_DISALLOWED_TOOLS = config.ENV_CLAUDE_DISALLOWED_TOOLS
+_ENV_EXCLUDE_DYNAMIC_SECTIONS = config.ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS
+_ENV_SESSION_PERSISTENCE = config.ENV_CLAUDE_SESSION_PERSISTENCE
+_ENV_FALLBACK_MODEL = config.ENV_CLAUDE_FALLBACK_MODEL
 
 # Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
 _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
@@ -164,6 +173,44 @@ def arg_tools_restringidas() -> list[str]:
     if not tools:
         return []
     return ["--disallowed-tools", *tools]
+
+
+def arg_excluir_secciones_dinamicas() -> list[str]:
+    """`['--exclude-dynamic-system-prompt-sections']` si esta activo (def ON); si no, `[]`.
+
+    El copy no pasa `--system-prompt`, asi que las secciones dinamicas del system prompt de
+    Claude Code (entorno/CWD/git) son ruido. La decision vive en
+    `config.claude_exclude_dynamic_sections` (`KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS` falsy lo apaga).
+    """
+    return (
+        ["--exclude-dynamic-system-prompt-sections"]
+        if config.claude_exclude_dynamic_sections()
+        else []
+    )
+
+
+def arg_session_persistence() -> list[str]:
+    """`['--no-session-persistence']` si NO se persiste la sesion (def); si se persiste, `[]`.
+
+    El copy es one-shot: por defecto no persistimos la sesion. El `session_id` se sigue
+    emitiendo en el stream aunque no se persista. `KENI_CLAUDE_SESSION_PERSISTENCE` truthy la
+    reactiva (no añade flag). La decision vive en `config.claude_session_persistence`.
+    """
+    return [] if config.claude_session_persistence() else ["--no-session-persistence"]
+
+
+def arg_fallback_model(*, omitir: bool = False) -> list[str]:
+    """`['--fallback-model', '<lista>']` si hay fallback configurado; si no, `[]`.
+
+    El CLI acepta varios modelos en UN solo `--fallback-model <lista>` (CSV). El fallback
+    GLOBAL solo aplica cuando el run usa el modelo por defecto: si el job fija su propio
+    `--model` (`omitir=True`), se respeta su eleccion y NO se añade fallback. El parseo/
+    normalizacion vive en `config.claude_fallback_model`.
+    """
+    if omitir:
+        return []
+    lista = config.claude_fallback_model()
+    return ["--fallback-model", lista] if lista else []
 
 
 # --------------------------------------------------------------------------- #
@@ -250,6 +297,16 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
         m = datos.get("model")
         modelo = m if isinstance(m, str) and m else None
 
+    # TTFT nativo del `result` (ms): `ttft_ms`, con `ttft_stream_ms` como fallback.
+    duration_ms = _entero(datos.get("duration_ms"))
+    ttft_ms = _entero(datos.get("ttft_ms"))
+    if ttft_ms is None:
+        ttft_ms = _entero(datos.get("ttft_stream_ms"))
+    # Rendimiento: tokens de salida por segundo, solo si hay ambos valores positivos.
+    tokens_por_s: float | None = None
+    if tokens_out and duration_ms and tokens_out > 0 and duration_ms > 0:
+        tokens_por_s = round(tokens_out / (duration_ms / 1000), 1)
+
     metricas = MetricasRun(
         tokens_in=tokens_in,
         tokens_out=tokens_out,
@@ -257,9 +314,11 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
         cache_creation=_entero(usage.get("cache_creation_input_tokens")),
         num_turns=_entero(datos.get("num_turns")),
         total_cost_usd=_flotante(datos.get("total_cost_usd")),
-        duration_ms=_entero(datos.get("duration_ms")),
+        duration_ms=duration_ms,
         session_id=(datos.get("session_id") if isinstance(datos.get("session_id"), str) else None),
         modelo=modelo,
+        ttft_ms=ttft_ms,
+        tokens_por_s=tokens_por_s,
     )
     return texto, metricas
 

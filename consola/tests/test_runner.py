@@ -202,3 +202,56 @@ def test_esperar_timeout_mata_el_arbol():
         assert proc.poll() is not None, "el proceso debio morir por timeout"
     finally:
         runner.matar_arbol(proc)
+
+
+# --------------------------------------------------------------------------- #
+# Idle-timeout del stream (watchdog): mata el arbol si el proceso NO emite.     #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.skipif(os.name != "posix", reason="grupos de procesos POSIX")
+def test_idle_timeout_mata_el_arbol_si_el_proceso_no_emite():
+    """Un proceso que abre stdout pero queda SILENCIOSO se mata por idle-timeout.
+
+    El subproceso duerme sin escribir nada en stdout: con `idle` corto, el watchdog de
+    `leer_stream` mata el arbol (cierra stdout -> el `for` termina) y el proceso queda muerto.
+    """
+    from keni_consola.dominio import stream as _stream
+
+    proc = runner.lanzar_proc(
+        [sys.executable, "-c", "import time; time.sleep(300)"], cwd=os.getcwd()
+    )
+    acumulador = _stream.AcumuladorStream()
+    try:
+        runner.leer_stream(proc, acumulador, lambda: None, idle=0.5)
+        # `leer_stream` retorna cuando el watchdog mato el arbol (stdout cerrado).
+        for _ in range(50):
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+        assert proc.poll() is not None, "el idle-timeout debio matar el proceso silencioso"
+    finally:
+        runner.matar_arbol(proc)
+
+
+@pytest.mark.timeout(20)
+@pytest.mark.skipif(os.name != "posix", reason="grupos de procesos POSIX")
+def test_idle_desactivado_no_mata_un_proceso_silencioso():
+    """Con `idle=None` (def) NO hay watchdog: un proceso silencioso sigue vivo tras drenar.
+
+    El subproceso emite UNA linea y cierra stdout (sin `result`); `leer_stream` retorna al
+    agotar stdout. Sin watchdog, el comportamiento es el ACTUAL: no se mata por silencio.
+    """
+    from keni_consola.dominio import stream as _stream
+
+    proc = runner.lanzar_proc(
+        [sys.executable, "-c", "print('{}', flush=True)"], cwd=os.getcwd()
+    )
+    acumulador = _stream.AcumuladorStream()
+    try:
+        runner.leer_stream(proc, acumulador, lambda: None)  # idle=None: sin watchdog
+        runner.esperar(proc, timeout=5)
+        assert proc.poll() is not None  # termino solo (no por watchdog)
+    finally:
+        runner.matar_arbol(proc)

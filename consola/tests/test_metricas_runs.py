@@ -210,15 +210,17 @@ def test_metricas_a_dict_omite_none_y_extras():
     m = stream.MetricasRun(
         tokens_in=10, tokens_out=20, cache_read=5, cache_creation=2, num_turns=2,
         total_cost_usd=0.01, duration_ms=100, session_id="s", modelo="mod",
+        ttft_ms=350, tokens_por_s=12.5,
     )
     d = stream.metricas_a_dict(m)
     # cache_read/cache_creation SI se persisten (prompt caching, para medir el ahorro);
-    # session_id NO; las claves None se omiten.
+    # ttft_ms/tokens_por_s SI (rendimiento); session_id NO; las claves None se omiten.
     assert d == {
         "tokens_in": 10, "tokens_out": 20, "cache_read": 5, "cache_creation": 2,
         "num_turns": 2, "total_cost_usd": 0.01, "duration_ms": 100, "modelo": "mod",
+        "ttft_ms": 350, "tokens_por_s": 12.5,
     }
-    # Un run que NO cachea: las claves de cache (None) se omiten, no se fuerzan a 0.
+    # Un run que NO cachea ni reporta rendimiento: esas claves (None) se omiten, no se fuerzan.
     sin_cache = stream.MetricasRun(tokens_in=10, tokens_out=20)
     assert stream.metricas_a_dict(sin_cache) == {"tokens_in": 10, "tokens_out": 20}
     assert stream.metricas_a_dict(None) is None
@@ -308,3 +310,94 @@ def test_dominio_agregados_suma_tokens_in_y_out(entorno):
     assert agg["total"]["tokens"] == 15
     assert agg["total"]["coste_usd"] == pytest.approx(0.02)
     assert agg["total"]["runs"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# M3: TTFT (ttft_ms) + tokens/s derivados del `result` (sin tocar esquema BD)  #
+# --------------------------------------------------------------------------- #
+
+_JSON_CON_TTFT = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "Copy con ttft.",
+        "duration_ms": 2000,
+        "ttft_ms": 420,
+        "usage": {"input_tokens": 50, "output_tokens": 100},
+    }
+)
+
+_JSON_TTFT_FALLBACK = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "Copy con ttft_stream.",
+        "duration_ms": 0,
+        "ttft_stream_ms": 510,
+        "usage": {"input_tokens": 10, "output_tokens": 20},
+    }
+)
+
+
+def test_parsear_lee_ttft_ms_y_deriva_tokens_por_s():
+    _, m = stream.parsear_resultado_json(_JSON_CON_TTFT)
+    assert m is not None
+    assert m.ttft_ms == 420
+    # 100 output_tokens / (2000ms / 1000) = 50.0 tok/s
+    assert m.tokens_por_s == pytest.approx(50.0)
+
+
+def test_parsear_ttft_usa_ttft_stream_ms_como_fallback():
+    _, m = stream.parsear_resultado_json(_JSON_TTFT_FALLBACK)
+    assert m is not None
+    # ttft_ms ausente -> cae a ttft_stream_ms
+    assert m.ttft_ms == 510
+
+
+def test_parsear_tokens_por_s_none_si_duration_cero():
+    # duration_ms=0 -> no se puede derivar tok/s (no se divide por cero).
+    _, m = stream.parsear_resultado_json(_JSON_TTFT_FALLBACK)
+    assert m is not None
+    assert m.tokens_por_s is None
+
+
+def test_parsear_sin_ttft_deja_campos_none():
+    # Los fixtures clasicos no traen ttft -> ttft_ms None; con duration y out, tok/s derivado.
+    _, m = stream.parsear_resultado_json(_JSON_EXITO_SOLO_USAGE)
+    assert m is not None
+    assert m.ttft_ms is None
+    # 33 out / (1000ms / 1000) = 33.0 tok/s
+    assert m.tokens_por_s == pytest.approx(33.0)
+
+
+# --------------------------------------------------------------------------- #
+# Constructores de args nuevos (M5/M4/M1): default + override por env          #
+# --------------------------------------------------------------------------- #
+
+
+def test_arg_excluir_secciones_dinamicas_default_on(monkeypatch):
+    monkeypatch.delenv("KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS", raising=False)
+    assert stream.arg_excluir_secciones_dinamicas() == [
+        "--exclude-dynamic-system-prompt-sections"
+    ]
+    monkeypatch.setenv("KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS", "0")
+    assert stream.arg_excluir_secciones_dinamicas() == []
+
+
+def test_arg_session_persistence_default_no_persiste(monkeypatch):
+    monkeypatch.delenv("KENI_CLAUDE_SESSION_PERSISTENCE", raising=False)
+    assert stream.arg_session_persistence() == ["--no-session-persistence"]
+    monkeypatch.setenv("KENI_CLAUDE_SESSION_PERSISTENCE", "1")
+    assert stream.arg_session_persistence() == []
+
+
+def test_arg_fallback_model_default_y_override(monkeypatch):
+    monkeypatch.delenv("KENI_CLAUDE_FALLBACK_MODEL", raising=False)
+    assert stream.arg_fallback_model() == []
+    monkeypatch.setenv("KENI_CLAUDE_FALLBACK_MODEL", "a, b ,a")
+    # Normaliza (trim, sin duplicados, orden) y va en UN solo flag.
+    assert stream.arg_fallback_model() == ["--fallback-model", "a,b"]
+    # omitir=True (el job fija su modelo): no se añade aunque haya env.
+    assert stream.arg_fallback_model(omitir=True) == []

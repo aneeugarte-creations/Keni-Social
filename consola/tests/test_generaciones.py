@@ -1038,3 +1038,83 @@ def test_proceso_de_deduce_sin_sello():
     assert generaciones.proceso_de({}) == prod
     # El sello SIEMPRE manda sobre la deduccion.
     assert generaciones.proceso_de({"tipo": "copy", "proceso": inv}) == inv
+
+
+# --------------------------------------------------------------------------- #
+# argv de claude: --exclude-dynamic-system-prompt-sections (M5, def ON)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_excluye_secciones_dinamicas_por_defecto(entorno, monkeypatch):
+    # El copy no pasa --system-prompt: por defecto excluimos las secciones dinamicas.
+    monkeypatch.delenv("KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS", raising=False)
+    assert "--exclude-dynamic-system-prompt-sections" in generaciones._argv_claude("hola")
+
+
+def test_argv_secciones_dinamicas_reactivables_por_env(entorno, monkeypatch):
+    # Un valor falsy apaga el flag (vuelven las secciones dinamicas).
+    monkeypatch.setenv("KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS", "0")
+    assert "--exclude-dynamic-system-prompt-sections" not in generaciones._argv_claude("hola")
+
+
+# --------------------------------------------------------------------------- #
+# argv de claude: --no-session-persistence (M4, def: SI añadir la flag)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_no_persiste_sesion_por_defecto(entorno, monkeypatch):
+    # El copy es one-shot: por defecto NO persistimos la sesion (se añade la flag).
+    monkeypatch.delenv("KENI_CLAUDE_SESSION_PERSISTENCE", raising=False)
+    assert "--no-session-persistence" in generaciones._argv_claude("hola")
+
+
+def test_argv_persistencia_de_sesion_reactivable_por_env(entorno, monkeypatch):
+    # Un valor truthy reactiva la persistencia (NO se añade la flag).
+    monkeypatch.setenv("KENI_CLAUDE_SESSION_PERSISTENCE", "1")
+    assert "--no-session-persistence" not in generaciones._argv_claude("hola")
+
+
+# --------------------------------------------------------------------------- #
+# argv de claude: --fallback-model (M1)                                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_sin_fallback_no_pasa_la_bandera(entorno, monkeypatch):
+    # Sin el env (caso por defecto), no se pasa --fallback-model.
+    monkeypatch.delenv("KENI_CLAUDE_FALLBACK_MODEL", raising=False)
+    assert "--fallback-model" not in generaciones._argv_claude("hola")
+
+
+def test_argv_con_fallback_pasa_la_lista_en_un_solo_flag(entorno, monkeypatch):
+    # El CLI acepta varios modelos en UN solo --fallback-model <lista> (CSV normalizado).
+    monkeypatch.setenv("KENI_CLAUDE_FALLBACK_MODEL", "claude-sonnet-4-6, claude-haiku-4")
+    argv = generaciones._argv_claude("hola")
+    i = argv.index("--fallback-model")
+    assert argv[i + 1] == "claude-sonnet-4-6,claude-haiku-4"
+
+
+def test_argv_fallback_omitido_si_el_job_fija_modelo(entorno, monkeypatch):
+    # Si el job fija su propio --model (p.ej. Haiku para parsing), se respeta su eleccion:
+    # el fallback GLOBAL NO se añade.
+    monkeypatch.setenv("KENI_CLAUDE_FALLBACK_MODEL", "claude-sonnet-4-6")
+    argv = generaciones._argv_claude("hola", endurecer={"modelo": "claude-haiku-4"})
+    assert "--fallback-model" not in argv
+    i = argv.index("--model")
+    assert argv[i + 1] == "claude-haiku-4"
+
+
+# --------------------------------------------------------------------------- #
+# Clasificacion: un idle-kill cuenta como fallo TRANSITORIO (M2)                #
+# --------------------------------------------------------------------------- #
+
+
+def test_es_fallo_transitorio_clasifica_un_idle_kill_como_transitorio():
+    # Al matar por idle, returncode != 0 (-9 = SIGKILL) y el acumulador NO esta terminado:
+    # `_es_fallo_transitorio` debe devolver True (la CLI murio sin entregar result -> reintentable).
+    from keni_consola.dominio import stream
+    from keni_consola.generaciones._lanzadores import _es_fallo_transitorio
+
+    acumulador = stream.AcumuladorStream()  # ni terminado ni error: el stream se corto
+    assert _es_fallo_transitorio(acumulador, -9) is True
+    # Un cierre limpio (returncode 0) sin result NO es transitorio.
+    assert _es_fallo_transitorio(acumulador, 0) is False

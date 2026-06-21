@@ -215,6 +215,10 @@ def _argv_claude(
     modelo = str(endurecer.get("modelo") or "").strip()
     arg_modelo = ["--model", modelo] if modelo else []
 
+    # Fallback de modelo (`--fallback-model`): SOLO cuando el run usa el modelo por defecto. Si
+    # el job fija su propio `--model` (p.ej. Haiku para parsing), se respeta su eleccion.
+    arg_fallback = stream.arg_fallback_model(omitir=bool(modelo))
+
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -225,8 +229,15 @@ def _argv_claude(
         # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
         # defecto `Bash`/`Write`/`Edit`, mas las extra del job). Va DESPUES de skip-permisos.
         *arg_tools,
+        # El copy no pasa `--system-prompt`: excluimos las secciones dinamicas (entorno/CWD/git)
+        # del system prompt de Claude Code, que son ruido para la generacion.
+        *stream.arg_excluir_secciones_dinamicas(),
+        # El copy es one-shot: no persistimos la sesion en disco (el `session_id` se sigue
+        # emitiendo en el stream). Reactivable con `KENI_CLAUDE_SESSION_PERSISTENCE`.
+        *stream.arg_session_persistence(),
         *arg_effort,
         *arg_modelo,
+        *arg_fallback,
         *arg_budget,
         *arg_turns,
         *extra,
@@ -603,7 +614,15 @@ def lanzar_job_claude(
                     # Si ya pidieron cancelar entre el spawn y registrar el handle, matamos ya.
                     if cancelado.is_set():
                         runner.matar_arbol(proc)
-                    runner.leer_stream(proc, acumulador, _avance)
+                    # Watchdog de idle-timeout: si el stream queda SILENCIOSO (sin lineas) mas
+                    # de `claude_idle_timeout()` s, el lector mata el arbol (cierra stdout) para
+                    # no quedar bloqueado eternamente. El import de config es perezoso (no esta a
+                    # nivel de modulo en este lanzador).
+                    from .. import config
+
+                    runner.leer_stream(
+                        proc, acumulador, _avance, idle=config.claude_idle_timeout()
+                    )
                     # `runner.esperar` mata el ARBOL si supera el wall-timeout (#137).
                     timed_out = runner.esperar(proc, timeout)
                     # ¿REINTENTAR? Solo un fallo TRANSITORIO (529/overloaded, blip, crash de la

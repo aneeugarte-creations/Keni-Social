@@ -161,19 +161,43 @@ def leer_stream(
     on_avance: Callable[[], None],
     *,
     throttle: float = THROTTLE_S,
+    idle: float | None = None,
 ) -> None:
     """Hilo lector: alimenta el acumulador con el NDJSON y persiste el avance (throttled).
 
     Persiste al cambiar de turno (hito) o cada `throttle` s; NUNCA en la linea terminal
     (`result`), porque el cierre fija el estado final. Tolerante: una linea no JSON se
     ignora y cualquier fallo se traga (el lector nunca propaga; el cierre fija el estado).
+
+    IDLE-TIMEOUT (`idle` s): un stream SILENCIOSO pero con stdout abierto dejaria este `for`
+    bloqueado para siempre (el wall-timeout global de `esperar` nunca se alcanza). Si `idle`
+    es positivo, un hilo daemon vigila el tiempo desde la ultima linea recibida y, si se
+    excede, mata el arbol del proceso (cierra stdout -> el `for` termina). `idle=None` (def)
+    mantiene el comportamiento ACTUAL (sin watchdog), para los otros llamantes.
     """
     if proc.stdout is None:
         return
     ultimo = 0.0
     ultimo_turno = -1
+    ultima_linea = time.monotonic()
+    parar = threading.Event()
+
+    def _watchdog() -> None:
+        while not parar.wait(min(idle, 1.0)):  # type: ignore[arg-type]
+            if time.monotonic() - ultima_linea >= idle:  # type: ignore[operator]
+                _log.warning(
+                    "stream de claude SILENCIOSO > %.0fs (idle-timeout): matando el arbol", idle
+                )
+                matar_arbol(proc)
+                return
+
+    vigilante: threading.Thread | None = None
+    if idle and idle > 0:
+        vigilante = threading.Thread(target=_watchdog, name="gen-idle-watchdog", daemon=True)
+        vigilante.start()
     try:
         for linea in proc.stdout:
+            ultima_linea = time.monotonic()
             acumulador.procesar_linea(linea)
             if acumulador.terminado:
                 continue
@@ -186,6 +210,10 @@ def leer_stream(
                     pass
     except Exception:  # noqa: BLE001 -- el lector nunca propaga, pero deja rastro
         _log.warning("error leyendo el stream de claude (ignorado)", exc_info=True)
+    finally:
+        parar.set()
+        if vigilante is not None:
+            vigilante.join(timeout=2.0)
 
 
 def lanzar_proc(

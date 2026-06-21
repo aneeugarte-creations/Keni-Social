@@ -145,6 +145,25 @@ ENV_CLAUDE_SKIP_PERMISSIONS = "KENI_CLAUDE_SKIP_PERMISSIONS"
 # Herramientas VETADAS en la generacion (`--disallowed-tools`). Defensa contra
 # prompt-injection: la generacion de copy no necesita ejecutar comandos ni navegar.
 ENV_CLAUDE_DISALLOWED_TOOLS = "KENI_CLAUDE_DISALLOWED_TOOLS"
+# Excluir las secciones DINAMICAS del system prompt de Claude Code
+# (`--exclude-dynamic-system-prompt-sections`). El copy no pasa `--system-prompt`: esas
+# secciones (entorno/CWD/git) son ruido para la generacion. Def ON; falsy lo apaga.
+ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS = "KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS"
+# Persistencia de la sesion de Claude Code. El copy es one-shot: no necesita persistir la
+# sesion en disco. Def "0" (NO persistir = SE añade `--no-session-persistence`); truthy la
+# reactiva (NO se añade la flag). El `session_id` se sigue emitiendo en `system/init` y
+# `result` aunque no se persista, asi que la captura de metricas no se ve afectada.
+ENV_CLAUDE_SESSION_PERSISTENCE = "KENI_CLAUDE_SESSION_PERSISTENCE"
+# Modelo(s) de FALLBACK (`--fallback-model`): si el modelo por defecto falla (sobrecarga),
+# `claude` cae a estos en orden. CSV; vacio = sin fallback. El CLI acepta la lista en UN
+# solo `--fallback-model <lista>`. Solo aplica cuando el run usa el modelo por defecto: si
+# el job fija su propio `--model`, se respeta su eleccion (no se añade fallback).
+ENV_CLAUDE_FALLBACK_MODEL = "KENI_CLAUDE_FALLBACK_MODEL"
+# Idle-timeout del stream (watchdog): un stream SILENCIOSO pero con stdout abierto dejaria el
+# lector bloqueado para siempre (el wall-timeout global no se alcanza). Si pasan mas de N s sin
+# una linea nueva, se mata el arbol del proceso (cierra stdout -> el lector termina). Def 90 s;
+# 0 = desactivado.
+ENV_CLAUDE_IDLE_TIMEOUT = "KENI_CLAUDE_IDLE_TIMEOUT"
 
 # Almacen de prompts + linea editorial (almacen unico de documentos markdown).
 ENV_PROMPTS_DIR = "KENI_PROMPTS_DIR"
@@ -556,6 +575,8 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
+# Idle-timeout (s) del watchdog del stream de `claude -p` (def 90; 0 = desactivado).
+CLAUDE_IDLE_TIMEOUT_DEF = 90
 # Verificar la fuente: timeout holgado (abre fuentes y busca en la web con modelo fuerte) y TTL del
 # corrector de temas `en_curso` sueltos (minutos; muy superior al timeout de la verificación).
 VERIFICACION_FUENTE_TIMEOUT_DEF = 600
@@ -831,6 +852,7 @@ __all__ = [
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
     'CLAUDE_TIMEOUT_DEF',
+    'CLAUDE_IDLE_TIMEOUT_DEF',
     'VERIFICACION_EN_CURSO_TTL_MIN_DEF',
     'VERIFICACION_FUENTE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
@@ -860,8 +882,12 @@ __all__ = [
     'ENV_PROMPTS_DIR',
     'ENV_PROMPTS_DIR_LEGACY',
     'ENV_CLAUDE_DISALLOWED_TOOLS',
+    'ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS',
+    'ENV_CLAUDE_FALLBACK_MODEL',
+    'ENV_CLAUDE_IDLE_TIMEOUT',
     'ENV_CLAUDE_MAX_TURNS',
     'ENV_CLAUDE_MAX_USD',
+    'ENV_CLAUDE_SESSION_PERSISTENCE',
     'ENV_CLAUDE_SKIP_PERMISSIONS',
     'ENV_CLAUDE_TIMEOUT',
     'ENV_CLUSTER_BREAKING_FUENTES',

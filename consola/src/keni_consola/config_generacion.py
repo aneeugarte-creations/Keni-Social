@@ -3,13 +3,20 @@ from __future__ import annotations
 
 from ._config_comun import (
     _FALSOS,
+    _VERDADEROS,
+    CLAUDE_IDLE_TIMEOUT_DEF,
     CLAUDE_TIMEOUT_DEF,
     ENV_CLAUDE_DISALLOWED_TOOLS,
+    ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS,
+    ENV_CLAUDE_FALLBACK_MODEL,
+    ENV_CLAUDE_IDLE_TIMEOUT,
     ENV_CLAUDE_MAX_TURNS,
     ENV_CLAUDE_MAX_USD,
+    ENV_CLAUDE_SESSION_PERSISTENCE,
     ENV_CLAUDE_SKIP_PERMISSIONS,
     ENV_CLAUDE_TIMEOUT,
     _crudo,
+    _entero,
     os,
 )
 
@@ -59,6 +66,56 @@ def claude_skip_permisos() -> bool:
     """¿Pasar `--dangerously-skip-permissions`? (def ON; `KENI_CLAUDE_SKIP_PERMISSIONS` falsy lo apaga)."""
     crudo = os.environ.get(ENV_CLAUDE_SKIP_PERMISSIONS, "1").strip().lower()
     return crudo not in _FALSOS
+
+
+def claude_exclude_dynamic_sections() -> bool:
+    """¿Pasar `--exclude-dynamic-system-prompt-sections`? (def ON).
+
+    El copy no pasa `--system-prompt`: las secciones dinamicas del system prompt de Claude
+    Code (entorno/CWD/git) son ruido para la generacion. `KENI_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS`
+    falsy lo apaga.
+    """
+    crudo = os.environ.get(ENV_CLAUDE_EXCLUDE_DYNAMIC_SECTIONS, "1").strip().lower()
+    return crudo not in _FALSOS
+
+
+def claude_session_persistence() -> bool:
+    """¿Persistir la sesion de `claude`? (def OFF = NO persistir).
+
+    El copy es one-shot: no necesita persistir la sesion en disco. Def "0" (NO persistir);
+    `KENI_CLAUDE_SESSION_PERSISTENCE` truthy la reactiva. Cuando es False, el lanzador añade
+    `--no-session-persistence`; cuando es True, no añade nada (comportamiento del CLI por
+    defecto). El `session_id` se sigue emitiendo en el stream aunque no se persista.
+    """
+    crudo = os.environ.get(ENV_CLAUDE_SESSION_PERSISTENCE, "0").strip().lower()
+    return crudo in _VERDADEROS
+
+
+def claude_fallback_model() -> str:
+    """Modelo(s) de fallback (`--fallback-model`) normalizados, o "" si no hay.
+
+    `KENI_CLAUDE_FALLBACK_MODEL` es un CSV; se devuelve una cadena unica (el CLI acepta la
+    lista en un solo `--fallback-model <lista>`). Tolerante: trim de cada pieza, sin
+    duplicados, conservando el orden. Vacio (ausente / solo separadores) => "".
+    """
+    crudo = _crudo(ENV_CLAUDE_FALLBACK_MODEL)
+    vistos: list[str] = []
+    for pieza in crudo.split(","):
+        p = pieza.strip()
+        if p and p not in vistos:
+            vistos.append(p)
+    return ",".join(vistos)
+
+
+def claude_idle_timeout() -> int:
+    """Idle-timeout (s) del watchdog del stream (`KENI_CLAUDE_IDLE_TIMEOUT`, def 90).
+
+    0 = desactivado. Tolerante a basura: un valor ausente/no entero cae al defecto; un
+    negativo se trata como 0 (desactivado). El watchdog mata el arbol del proceso si el
+    stream queda silencioso mas de este tiempo (ver `dominio.runner.leer_stream`).
+    """
+    valor = _entero(ENV_CLAUDE_IDLE_TIMEOUT, CLAUDE_IDLE_TIMEOUT_DEF)
+    return max(0, valor)
 
 
 # Herramientas VETADAS por defecto en la generacion (`--disallowed-tools`). Defensa en
