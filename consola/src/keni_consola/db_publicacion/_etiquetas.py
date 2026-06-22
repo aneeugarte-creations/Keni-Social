@@ -116,8 +116,8 @@ def crear_etiqueta(
         con.commit()
     finally:
         con.close()
-    fila["activo"] = bool(fila["activo"])
-    return fila
+    # Mismo serializador que `obtener`/`listar`: `activo`/`es_evergreen` salen como bool.
+    return _fila_a_etiqueta(fila)
 
 
 def listar_etiquetas(

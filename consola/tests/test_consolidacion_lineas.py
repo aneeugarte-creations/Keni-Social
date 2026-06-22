@@ -33,6 +33,18 @@ def test_etiqueta_defaults_grupo_cadencia(entorno):
     assert leida["cadencia"] == "normal"
 
 
+def test_crear_etiqueta_devuelve_flags_como_bool(entorno):
+    # `crear_etiqueta` homogeneiza con `obtener`/`listar`: `activo`/`es_evergreen` son bool.
+    et = repos.crear_etiqueta(
+        nombre="Evergreen", clase="campania", marca="unotv", es_evergreen=True,
+    )
+    assert et["activo"] is True
+    assert et["es_evergreen"] is True
+    leida = repos.obtener_etiqueta(et["id"])
+    assert leida is not None
+    assert et["activo"] == leida["activo"] and et["es_evergreen"] == leida["es_evergreen"]
+
+
 def test_fuente_roundtrip_linea_id(entorno):
     fr = repos.crear_fuente_rss(
         "Diario", "https://example.com/feed.xml", marca="unotv", linea_id="abc123",

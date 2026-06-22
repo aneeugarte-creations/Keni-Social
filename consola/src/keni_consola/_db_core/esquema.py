@@ -1388,6 +1388,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         verificacion_fuente  TEXT NOT NULL DEFAULT '',
         verificar_hallazgos  TEXT NOT NULL DEFAULT '',
         tema_macro    TEXT NOT NULL DEFAULT '',
+        subtema       TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )

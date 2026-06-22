@@ -277,3 +277,11 @@ def test_reindexar_runs_explicito(base):
     assert indice.contar("run") == 0
     agentes.reindexar_runs()
     assert indice.contar("run") == 6
+
+
+def test_listar_y_obtener_runs_no_crean_la_carpeta_del_agente(base):
+    # Rutas de solo lectura: listar/obtener NO deben materializar la carpeta del agente.
+    carpeta = agentes.carpeta_agente("unotv", crear=False)
+    assert agentes.listar_runs("unotv") == []
+    assert agentes.obtener_run("unotv", "inexistente") is None
+    assert not carpeta.exists()

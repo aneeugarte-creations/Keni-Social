@@ -1,6 +1,8 @@
 """Persistencia — contenido (padre `contenido`). Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
+import logging
+
 from .._db_comun import (
     CLASE_CONTENIDO,
     ESTADOS_PUBLICACION,
@@ -38,6 +40,8 @@ __all__ = [
     "actualizar_publicacion",
     "borrar_publicacion",
 ]
+
+_log = logging.getLogger("keni_consola.db_publicacion.contenido")
 
 # --------------------------------------------------------------------------- #
 # Tablero de CONTENIDO unificado (padre `contenido` + hijos `pieza`)  #
@@ -599,6 +603,9 @@ def existe_publicado_similar(
         cache = publicados_marca_cache(marca)
         return existe_publicado_similar_en_cache(cache, titulo, url, umbral=umbral)
     except Exception:  # noqa: BLE001 -- best-effort: el dedup nunca debe tumbar el pipeline
+        # El dedup se desactiva (devuelve False) si la BD falla; lo registramos para que
+        # esa degradacion silenciosa sea observable (no cambia el flujo de retorno).
+        _log.warning("existe_publicado_similar falló para marca %s; se omite el dedup.", marca)
         return False
 
 

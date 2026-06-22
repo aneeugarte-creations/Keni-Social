@@ -8,7 +8,10 @@ Usa Postgres de pruebas via `entorno` (se SALTA si no hay).
 
 from __future__ import annotations
 
+import logging
+
 from keni_consola import db, repos
+from keni_consola.db_publicacion import _contenido
 
 
 def _publicar(marca: str, titulo: str, *, url_fuente: str = "") -> str:
@@ -58,6 +61,17 @@ def test_no_publicado_no_cuenta(entorno):
 
 def test_sin_contenido_devuelve_false(entorno):
     assert db.existe_publicado_similar("unotv", "Cualquier cosa") is False
+
+
+def test_fallo_de_bd_devuelve_false_pero_deja_warning(monkeypatch, caplog):
+    """Si la consulta de dedup revienta, devuelve False PERO la degradación queda logueada."""
+    def _boom(_marca):
+        raise RuntimeError("bd caída")
+
+    monkeypatch.setattr(_contenido, "publicados_marca_cache", _boom)
+    with caplog.at_level(logging.WARNING, logger="keni_consola.db_publicacion.contenido"):
+        assert db.existe_publicado_similar("unotv", "lo que sea") is False
+    assert any("dedup" in r.message.lower() for r in caplog.records)
 
 
 def test_delegado_repos(entorno):

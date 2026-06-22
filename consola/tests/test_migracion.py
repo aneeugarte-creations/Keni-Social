@@ -53,6 +53,35 @@ def test_asegurar_esquema_dry_run_no_abre_conexion(monkeypatch):
     assert migracion.asegurar_esquema(dry_run=True) is True
 
 
+def test_conectar_descarta_la_conexion_si_falla_el_esquema(monkeypatch):
+    """Si una migración revienta al asegurar el esquema, la conexión NO se fuga: se descarta."""
+    from keni_consola import config, motor_db
+    from keni_consola._db_core import conexion, esquema
+
+    class _ConFalsa:
+        def __init__(self) -> None:
+            self.descartada = False
+
+        def descartar(self) -> None:
+            self.descartada = True
+
+    con = _ConFalsa()
+    url = "postgresql://test-leak@x:1/y"
+
+    def _boom(_con: object) -> None:
+        raise RuntimeError("ddl roto")
+
+    monkeypatch.setattr(motor_db, "conectar_cruda", lambda: con)
+    monkeypatch.setattr(config, "database_url", lambda: url)
+    monkeypatch.setattr(esquema, "_crear_esquema", _boom)
+    conexion._esquemas_asegurados.discard(url)  # URL aún por asegurar en este proceso
+
+    with pytest.raises(RuntimeError):
+        conexion._conectar()
+    assert con.descartada is True
+    assert url not in conexion._esquemas_asegurados
+
+
 # --------------------------------------------------------------------------- #
 # Media: disco -> S3 (moto)                                                   #
 # --------------------------------------------------------------------------- #

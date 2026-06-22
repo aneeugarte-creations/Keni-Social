@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,13 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 # Runs (ejecuciones de un prompt): `runs/<id>.yaml`                            #
 # --------------------------------------------------------------------------- #
+
+# Serializa las MUTACIONES del indice de runs entre hilos del proceso (escrituras del
+# sondeo en vivo y reconstrucciones del monitor conviven). Reentrante: `actualizar_run`
+# lo toma para su read-modify-write y dentro llama a `guardar_run` -> `_indexar_run`, que
+# vuelve a tomarlo. Sin el, `reindexar_runs` (snapshot+swap del tipo "run") puede borrar un
+# `guardar_run` que cae entre el `glob` del disco y el `reemplazar_tipo`.
+_LOCK_RUNS = threading.RLock()
 
 
 def _dir_runs(marca_id: str) -> Path:
@@ -155,7 +163,8 @@ def _entrada_indice_run(
 def _indexar_run(agente_id: str, run_id: str, ruta: Path, cuerpo: dict[str, Any]) -> None:
     """UPSERT de un run en el indice (best-effort: el error nunca rompe la escritura)."""
     try:
-        indice.upsert(_entrada_indice_run(agente_id, run_id, ruta, cuerpo))
+        with _LOCK_RUNS:
+            indice.upsert(_entrada_indice_run(agente_id, run_id, ruta, cuerpo))
     except Exception:  # noqa: BLE001 -- el indice es regenerable; degradar a disco+reindex
         pass
 
@@ -166,20 +175,25 @@ def reindexar_runs() -> None:
     Recorre los `runs/<id>.yaml` de cada agente (marca o generico) y reemplaza el
     tipo `run` en el indice de una tacada. Es el backfill (mirror de
     `ficheros._reindexar_tipo`) y el camino de recuperacion ante un indice vacio/stale.
+
+    El escaneo del disco Y el `reemplazar_tipo` corren bajo `_LOCK_RUNS` para que un
+    `guardar_run` concurrente no caiga en la ventana entre snapshot y swap (su upsert
+    espera al lock y se reaplica tras el swap, en vez de quedar fuera y borrarse).
     """
-    entradas: list[dict[str, Any]] = []
-    for agente_id, _nombre in _agentes_para_runs():
-        carpeta = carpeta_agente(agente_id, crear=False) / _DIR_RUNS
-        if not carpeta.is_dir():
-            continue
-        for ruta in carpeta.glob("*.yaml"):
-            if ruta.name.startswith(".tmp-"):
+    with _LOCK_RUNS:
+        entradas: list[dict[str, Any]] = []
+        for agente_id, _nombre in _agentes_para_runs():
+            carpeta = carpeta_agente(agente_id, crear=False) / _DIR_RUNS
+            if not carpeta.is_dir():
                 continue
-            datos = _leer_yaml(ruta, tipo="run")
-            if datos is None:
-                continue
-            entradas.append(_entrada_indice_run(agente_id, ruta.stem, ruta, datos))
-    indice.reemplazar_tipo("run", entradas)
+            for ruta in carpeta.glob("*.yaml"):
+                if ruta.name.startswith(".tmp-"):
+                    continue
+                datos = _leer_yaml(ruta, tipo="run")
+                if datos is None:
+                    continue
+                entradas.append(_entrada_indice_run(agente_id, ruta.stem, ruta, datos))
+        indice.reemplazar_tipo("run", entradas)
 
 
 def actualizar_run(marca_id: str, run_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
@@ -191,16 +205,20 @@ def actualizar_run(marca_id: str, run_id: str, cambios: dict[str, Any]) -> dict[
     SONDEO en vivo: el hilo lector la usa para avanzar `estado`/`metricas` parciales y,
     al final, fijar el estado terminal. `metricas` se reemplaza por completo cuando
     viene en `cambios` (parciales o finales); las claves ausentes se conservan.
+
+    El read-modify-write (leer + fusionar + reescribir) corre bajo `_LOCK_RUNS` para que
+    dos actualizaciones concurrentes del MISMO run no se pisen (last-write-wins).
     """
-    ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
-    actual = _leer_yaml(ruta, tipo="run") or {}
-    fusion: dict[str, Any] = {"id": run_id, **actual, **cambios}
-    return guardar_run(marca_id, fusion)
+    with _LOCK_RUNS:
+        ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
+        actual = _leer_yaml(ruta, tipo="run") or {}
+        fusion: dict[str, Any] = {"id": run_id, **actual, **cambios}
+        return guardar_run(marca_id, fusion)
 
 
 def listar_runs(marca_id: str) -> list[dict[str, Any]]:
     """Runs del agente, recientes primero (por `fecha_inicio` desc, luego id)."""
-    carpeta = carpeta_agente(marca_id) / _DIR_RUNS
+    carpeta = carpeta_agente(marca_id, crear=False) / _DIR_RUNS
     if not carpeta.is_dir():
         return []
     runs: list[dict[str, Any]] = []
@@ -226,8 +244,8 @@ def obtener_run(marca_id: str, run_id: str) -> dict[str, Any] | None:
     seguro = Path(run_id).name
     if seguro != run_id or seguro in (".", ".."):
         return None
-    ruta = (carpeta_agente(marca_id) / _DIR_RUNS / f"{seguro}.yaml").resolve()
-    base = (carpeta_agente(marca_id) / _DIR_RUNS).resolve()
+    ruta = (carpeta_agente(marca_id, crear=False) / _DIR_RUNS / f"{seguro}.yaml").resolve()
+    base = (carpeta_agente(marca_id, crear=False) / _DIR_RUNS).resolve()
     if ruta.parent != base or not ruta.is_file():
         return None
     datos = _leer_yaml(ruta, tipo="run")

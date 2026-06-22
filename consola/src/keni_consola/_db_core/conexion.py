@@ -50,10 +50,20 @@ def _conectar() -> Any:
         # se rompe difiriendo este import al primer `_conectar` (no al cargar el modulo).
         from .esquema import _crear_esquema
 
-        with _lock_esquemas:
-            if url not in _esquemas_asegurados:
-                _crear_esquema(con)
-                _esquemas_asegurados.add(url)
+        try:
+            with _lock_esquemas:
+                if url not in _esquemas_asegurados:
+                    _crear_esquema(con)
+                    _esquemas_asegurados.add(url)
+        except Exception:  # noqa: BLE001 -- limpiar y re-lanzar: la conexion no debe fugarse
+            # Si una migracion lanza, la conexion recien abierta NO debe fugarse: se descarta
+            # (cierra el socket; el servidor suelta cualquier lock de sesion) antes de propagar.
+            descartar = getattr(con, "descartar", None)
+            if descartar is not None:
+                descartar()
+            else:
+                con.close()
+            raise
     return con
 
 

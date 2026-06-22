@@ -105,7 +105,7 @@ def carpeta_agente(agente_id: str, *, crear: bool = True) -> Path:
         if es_una_marca:
             claude = carpeta / "CLAUDE.md"
             if not claude.exists():
-                claude.write_text(_render_claude_md(agente_id), encoding="utf-8")
+                _escribir_texto_atomico(claude, _render_claude_md(agente_id))
     return carpeta
 
 

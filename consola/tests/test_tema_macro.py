@@ -66,6 +66,25 @@ def test_upsert_no_pisa_tema_macro(entorno):  # noqa: ARG001
     assert cluster["tema_macro"] == "Cumbre del G7"  # pero NO pisa el macro-evento
 
 
+def test_subtema_persiste_desde_el_esquema_declarativo(entorno):  # noqa: ARG001
+    """`noticias_clusters.subtema` (declarado en el CREATE TABLE) sella y vuelve por lote.
+
+    Cubre que la columna existe en el DDL fuente-de-verdad (no solo vía migración): un
+    cluster nuevo guarda subtema "" y `marcar_clusters_subtema` lo sella sin tocar los demás.
+    Requiere Postgres (fixture `entorno`); lo ejecuta el CI, no el dev local.
+    """
+    from keni_consola import repos
+
+    for cid in ("c1", "c2"):
+        repos.upsert_noticia_cluster({"id": cid, "titulo": cid, "marca": "unotv"})
+    assert repos.obtener_noticia_cluster("c1")["subtema"] == ""
+
+    n = repos.marcar_clusters_subtema(["c1"], "Partidos")
+    assert n == 1
+    assert repos.obtener_noticia_cluster("c1")["subtema"] == "Partidos"
+    assert repos.obtener_noticia_cluster("c2")["subtema"] == ""
+
+
 def _columnas_base() -> tuple[str, ...]:
     from keni_consola.db_noticias.clusters import _COLS_NOTICIA_CLUSTER
 
