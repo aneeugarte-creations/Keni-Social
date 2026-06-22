@@ -474,6 +474,16 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_CLASIFICAR_MARCA_IA,
+            tipo="bool",
+            etiqueta="Encaje de marca con IA",
+            ayuda="Clasifica con IA (Haiku) las historias sin marca (Google Trends, agencias) en "
+            "la marca que encaja, o en la de noticias generales como respaldo. Sin esto se quedan "
+            "sin marca, invisibles y sin promover. Gasta tokens; solo afecta a historias sin marca.",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_ALGORITMOS_AUTO,
             tipo="bool",
             etiqueta="Feeds de algoritmo",

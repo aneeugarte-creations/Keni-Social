@@ -58,6 +58,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC,
         config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO,
+        # Encaje de marca con IA para historias sin marca (Trends/agencias).
+        config.ENV_CLASIFICAR_MARCA_IA,
         config.ENV_PATRONES_AUTO,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
@@ -467,6 +469,20 @@ def test_patrones_auto_es_toggle_de_automatismos(store, monkeypatch):
     assert config.patrones_auto_activo() is True
     ajustes.guardar(config.ENV_PATRONES_AUTO, "0")  # el store (UI) gana al env
     assert config.patrones_auto_activo() is False
+
+
+def test_clasificar_marca_ia_es_toggle_de_automatismos(store, monkeypatch):
+    """`KENI_CLASIFICAR_MARCA_IA` (encaje de marca con IA para Trends/agencias) es un bool del
+    grupo `automatismos_generales`, defecto False, editable desde la UI (store > env)."""
+    a = ajustes_catalogo.por_clave(config.ENV_CLASIFICAR_MARCA_IA)
+    assert a is not None, "falta el toggle KENI_CLASIFICAR_MARCA_IA en el catálogo (UI)"
+    assert a.tipo == "bool"
+    assert a.grupo == "automatismos_generales"
+    assert a.defecto is False
+    monkeypatch.delenv(config.ENV_CLASIFICAR_MARCA_IA, raising=False)
+    assert config.clasificar_marca_ia() is False
+    ajustes.guardar(config.ENV_CLASIFICAR_MARCA_IA, "1")  # el store (UI) gana al env
+    assert config.clasificar_marca_ia() is True
 
 
 def test_publicar_real_es_peligroso(store):
