@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   CheckCircle2,
   Coins,
-  GitBranch,
   Hammer,
   Loader2,
   MessageSquareWarning,
@@ -112,7 +111,7 @@ function StreamGeneracion({ genId }: { genId: string }) {
   );
 }
 
-/** Bloque de markdown (spec / plan / diff) a tamaño de subpágina. Nada si vacío. */
+/** Bloque de markdown (spec / plan) a tamaño de subpágina. Nada si vacío. */
 function BloqueMarkdown({ titulo, texto }: { titulo: string; texto: string }) {
   if (!texto.trim()) return null;
   return (
@@ -403,20 +402,12 @@ export default function DetalleSugerenciaPagina() {
             <Markdown className="text-sm text-muted-foreground">{sugerencia.detalle}</Markdown>
           )}
 
-          {(sugerencia.rama || sugerencia.coste_usd > 0) && (
+          {sugerencia.coste_usd > 0 && (
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {sugerencia.rama && (
-                <span className="flex items-center gap-1">
-                  <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
-                  {sugerencia.rama}
-                </span>
-              )}
-              {sugerencia.coste_usd > 0 && (
-                <span className="flex items-center gap-1 tabular-nums">
-                  <Coins className="h-3.5 w-3.5" aria-hidden="true" />
-                  {costeUsd(sugerencia.coste_usd)} acumulado
-                </span>
-              )}
+              <span className="flex items-center gap-1 tabular-nums">
+                <Coins className="h-3.5 w-3.5" aria-hidden="true" />
+                {costeUsd(sugerencia.coste_usd)} acumulado
+              </span>
             </div>
           )}
 
@@ -424,7 +415,6 @@ export default function DetalleSugerenciaPagina() {
 
           <BloqueMarkdown titulo="Spec (discovery)" texto={sugerencia.spec} />
           <BloqueMarkdown titulo="Plan" texto={sugerencia.plan} />
-          <BloqueMarkdown titulo="Diff" texto={sugerencia.diff_resumen} />
 
           {esSuper && enRevision && (
             <Textarea
@@ -488,7 +478,7 @@ export default function DetalleSugerenciaPagina() {
                   </Button>
                 </>
               )}
-              {(estado === "revision" || estado === "hecha") && (
+              {enRevision && (
                 <Button onClick={() => promover.mutate()} disabled={ocupado}>
                   {promover.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -498,7 +488,7 @@ export default function DetalleSugerenciaPagina() {
                   Promover a main
                 </Button>
               )}
-              {!esDescartada && (
+              {!esDescartada && estado !== "hecha" && (
                 <Button
                   variant="ghost"
                   className="text-destructive hover:text-destructive"
