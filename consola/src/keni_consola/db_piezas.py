@@ -310,6 +310,9 @@ def _publicacion_de_filas(
             "imagen_licencia": plat.get("imagen_licencia"),
             "imagen_credito_url": plat.get("imagen_credito_url"),
             "imagen_autorizada": plat.get("imagen_autorizada"),
+            # Keyword de búsqueda de foto (sujeto visual) que propone la etapa Sugerir hashtags;
+            # nace "" en la fila de lote. Sin esta clave el camino del LOTE caía con KeyError.
+            "imagen_clave": plat.get("imagen_clave"),
             "video": plat["video"], "falta_video": plat["falta_video"],
             "revision": plat["revision"], "revisor_id": plat["revisor_id"],
             "revisor_nombre": plat["revisor_nombre"], "revisado_en": plat["revisado_en"],
@@ -640,6 +643,8 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "fotos": "fotos",
     "carrusel": "carrusel",
     "hashtags_sugeridos": "hashtags_sugeridos",
+    # Keyword de búsqueda de foto: la etapa Sugerir hashtags la escribe gemela en todas las redes.
+    "imagen_clave": "imagen_clave",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",

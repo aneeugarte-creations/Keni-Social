@@ -45,10 +45,12 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MAQUINA,
         # Los maestros de la máquina (ADR 0011): «Investigación» y «Producción» (virtuales,
         # agrupan sus etapas) + las etapas FÍSICAS que opera la tira «Pipeline en vivo»
-        # (Recolectar/Verificar/Redactar/Ilustrar; Ilustrar siempre tuvo interruptor propio).
+        # (Recolectar/Verificar/Redactar/Ilustrar/Stock; Ilustrar siempre tuvo interruptor propio).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
+        # Stock: baja una foto de AYUDA (atenuada, sin licencia) a los temas con copy y sin imagen.
+        config.ENV_PIPELINE_STOCK,
         # Crítica IA: nivel opcional de la cadena de aprobación (OFF por defecto).
         config.ENV_CRITICA_IA,
         # Automatismos generales (barridos de mantenimiento; SOLO toggles on/off).
@@ -103,6 +105,8 @@ _MAESTROS_ENV = {
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
     config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
+    # Stock: etapa física que baja una foto de ayuda a los temas con copy y sin imagen.
+    config.ENV_PIPELINE_STOCK,
     # Crítica IA: nivel opcional de la cadena de aprobación (grupo `maestros_produccion`).
     config.ENV_CRITICA_IA,
 }
@@ -124,7 +128,9 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     assert claves == _MAESTROS_ENV
     for a in maestros:
         assert a.tipo == "bool"
-        assert a.defecto is False
+        # Las etapas nacen OFF salvo «Stock»: es ayuda visual segura (atenuada, nunca publicable
+        # sin autorizar) y arranca ON por defecto (ver `config_noticias.stock_busca_activo`).
+        assert a.defecto is (a.clave == config.ENV_PIPELINE_STOCK)
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_INVESTIGACION] == "Investigación"
     assert etiquetas[config.ENV_PRODUCCION] == "Producción"
@@ -132,6 +138,7 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     assert etiquetas[config.ENV_PIPELINE_VERIFICAR] == "Verificar"
     assert etiquetas[config.ENV_PIPELINE_REDACTAR] == "Redactar"
     assert etiquetas[config.ENV_PIPELINE_ILUSTRAR] == "Ilustrar"
+    assert etiquetas[config.ENV_PIPELINE_STOCK] == "Stock"
 
 
 def test_maestros_fan_out_a_sus_etapas(store):
@@ -192,7 +199,7 @@ def test_toggles_por_marca_por_fase(store):
     assert produccion == {
         config.ENV_PRODUCCION,  # maestro virtual del proceso (fan-out)
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_SUGERIR_HASHTAGS,
-        config.ENV_PIPELINE_ILUSTRAR, config.ENV_CRITICA_IA,
+        config.ENV_PIPELINE_ILUSTRAR, config.ENV_PIPELINE_STOCK, config.ENV_CRITICA_IA,
     }
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()
