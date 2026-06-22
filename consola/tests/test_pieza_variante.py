@@ -26,3 +26,14 @@ def test_variante_se_puede_cambiar_a_carrusel(entorno):
     # No arrastra a las hermanas: la variante es por pieza (fila por red).
     otra = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="y")
     assert repos.obtener_pieza(otra["id"])["variante"] == "foto"
+
+
+def test_crear_pieza_variante_carrusel_directo(entorno):
+    # El INSERT acepta variante: el rewind crea piezas variante-carrusel junto a las foto.
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
+    foto = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="x")
+    carr = repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", copy="x", variante="carrusel",
+    )
+    assert repos.obtener_pieza(foto["id"])["variante"] == "foto"
+    assert repos.obtener_pieza(carr["id"])["variante"] == "carrusel"
