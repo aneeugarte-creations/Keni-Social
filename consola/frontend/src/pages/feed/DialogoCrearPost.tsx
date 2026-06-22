@@ -52,18 +52,26 @@ import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 
 import { REDES_POR_FORMATO } from "./formato";
 
-// Etiquetas legibles de las categorías del plan (las claves vienen del backend, derivadas de
-// las franjas configuradas). Fallback: la propia clave capitalizada.
+// Etiquetas legibles de las categorías ESPECIALES del plan (claves fijas, no líneas
+// editoriales). El resto de categorías son IDs de línea vertical y su nombre se resuelve
+// contra el catálogo `lineas` del propio endpoint (ver `etiquetaCategoria`).
 const ETIQUETA_CATEGORIA: Record<string, string> = {
   mx: "México",
   internacional: "Internacional",
   breaking: "Última hora",
   entretenimiento: "Entretenimiento",
-  evergreen: "Atemporal",
+  evergreen: "Evergreen",
   deportes: "Deportes",
 };
-function etiquetaCategoria(c: string): string {
-  return ETIQUETA_CATEGORIA[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
+// Nombre legible de una categoría del plan: primero el rótulo fijo de las especiales, luego
+// el nombre de la línea editorial cuyo ID coincide (es la misma fuente que «Programa/Plan»);
+// si no, la clave capitalizada. Así el dropdown nunca muestra IDs crudos.
+function etiquetaCategoria(c: string, nombresLinea: Record<string, string>): string {
+  return (
+    ETIQUETA_CATEGORIA[c] ??
+    nombresLinea[c] ??
+    c.charAt(0).toUpperCase() + c.slice(1)
+  );
 }
 
 // Primer enlace http(s) dentro del texto pegado. Sirve para enrutar a `url` (el backend lee
@@ -131,6 +139,13 @@ export function DialogoCrearPost({
     () => opcionesQuery.data?.categorias?.[marcaEfectiva] ?? [],
     [opcionesQuery.data, marcaEfectiva],
   );
+  // Mapa id→nombre de las líneas editoriales (mismas que pueblan «Programa/Plan»): resuelve el
+  // nombre legible de las categorías que son una línea, en vez de mostrar su ID.
+  const nombresLinea = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const l of opcionesQuery.data?.lineas ?? []) m[l.id] = l.nombre;
+    return m;
+  }, [opcionesQuery.data]);
 
   const url = primeraUrl(texto);
 
@@ -320,7 +335,7 @@ export function DialogoCrearPost({
               <SelectContent>
                 {categoriasMarca.map((c) => (
                   <SelectItem key={c} value={c}>
-                    {etiquetaCategoria(c)}
+                    {etiquetaCategoria(c, nombresLinea)}
                   </SelectItem>
                 ))}
               </SelectContent>
