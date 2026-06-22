@@ -109,19 +109,19 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
   });
 });
 
-describe("VistaCalendario — huecos del plan solo sobre la foto completa", () => {
+describe("VistaCalendario — kill-switch de huecos del plan", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("con mostrarHuecosPlan=false avisa de que los huecos se ocultan por el filtro", () => {
+  it("con mostrarHuecosPlan=false avisa de que los huecos quedan ocultos", () => {
+    // Los huecos van por red, así que el filtro NO los apaga; el kill-switch solo se usa cuando
+    // la foto no es fiable (p. ej. rango truncado).
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
         <VistaCalendario piezas={[]} onEditar={vi.fn()} mostrarHuecosPlan={false} />
       </QueryClientProvider>,
     );
-    expect(
-      screen.getByText(/Huecos del plan ocultos mientras filtras por red o línea/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Huecos del plan ocultos/)).toBeInTheDocument();
   });
 });
 

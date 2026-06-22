@@ -33,6 +33,12 @@ import {
 
 type Vista = "mes" | "semana" | "dia";
 
+/**
+ * Un HUECO LIBRE del plan, ya expandido POR RED: un slot del plan (día/hora/categoría) que el
+ * plan espera cubrir con la red `red` y para el que no existe pieza de ESA red a esa hora.
+ */
+export type Hueco = { hora: string; categoria: string; etiqueta: string; red: string };
+
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -252,6 +258,8 @@ export function VistaCalendario({
   ancla: anclaProp,
   onAncla,
   mostrarHuecosPlan = true,
+  filtroRed = null,
+  filtroLinea = null,
 }: {
   piezas: Pieza[];
   onEditar: (p: Pieza) => void;
@@ -265,11 +273,16 @@ export function VistaCalendario({
   ancla?: Date;
   onAncla?: React.Dispatch<React.SetStateAction<Date>>;
   /**
-   * Pintar el overlay de HUECOS LIBRES del plan. Solo es FIABLE sobre la foto completa: si
-   * la rejilla está filtrada por red/línea, un slot ocupado por una pieza filtrada fuera
-   * parecería libre (riesgo de doble-reserva). El padre lo apaga cuando hay filtro activo.
+   * Pintar el overlay de HUECOS LIBRES del plan. El padre lo apaga si la foto no es fiable
+   * (p. ej. el rango venía truncado). Los huecos se expanden POR RED, así que un filtro por
+   * red/línea NO obliga a apagarlos: basta acotar los huecos a ese filtro (`filtroRed`/
+   * `filtroLinea`), sin riesgo de doble-reserva.
    */
   mostrarHuecosPlan?: boolean;
+  /** Red activa en el filtro del padre (id canónico), o `null` si no se filtra por red. */
+  filtroRed?: string | null;
+  /** Línea activa en el filtro del padre, o `null` si no se filtra por línea. */
+  filtroLinea?: string | null;
 }) {
   const [vista, setVista] = React.useState<Vista>("semana");
   // Ancla CONTROLADA-O-NO: si el padre la eleva (para acotar la query por rango), manda la
@@ -352,6 +365,7 @@ export function VistaCalendario({
     queryFn: ({ signal }) => api.franjas(signal),
     enabled: Boolean(marca),
   });
+  // El slot del plan es por categoría/hora (sin red): la red la multiplica `huecosDe`.
   const slotsPorDiaCdmx = React.useMemo(() => {
     const mapa = new Map<number, { hora: string; categoria: string; etiqueta: string }[]>();
     if (!marca) return mapa;
@@ -372,22 +386,68 @@ export function VistaCalendario({
     return mapa;
   }, [franjasQuery.data, marca]);
 
-  /** Huecos LIBRES del plan para un día concreto (slots sin pieza a esa misma hora CDMX). */
+  // REDES ESPERADAS DEL PLAN (contrato compartido con GestionPlan): el ajuste
+  // `KENI_PLAN_REDES::<marca>` lleído de `/api/ajustes` (CSV de ids de red canónicos). Si el
+  // ajuste falta o está vacío, fallback a las redes OBSERVADAS entre las piezas visibles de la
+  // marca; si tampoco hay, queda vacío (no se pintan huecos por red, sin romper).
+  const ajustesQuery = useQuery({
+    queryKey: ["ajustes"],
+    queryFn: ({ signal }) => api.ajustes(signal),
+    enabled: Boolean(marca),
+    // `/api/ajustes` es solo-admin: para el resto el 403 cae al fallback de redes observadas;
+    // sin reintentos para no repetir la llamada rechazada en cada carga del calendario.
+    retry: false,
+  });
+  const redesDelPlan = React.useMemo(() => {
+    if (!marca) return [] as string[];
+    const clave = `KENI_PLAN_REDES::${marca}`;
+    let csv = "";
+    for (const g of ajustesQuery.data?.grupos ?? []) {
+      const a = g.ajustes.find((x) => x.clave === clave);
+      if (a) {
+        csv = String(a.valor ?? "");
+        break;
+      }
+    }
+    const delAjuste = csv
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (delAjuste.length > 0) return delAjuste;
+    // Fallback: redes observadas entre las piezas programadas de la marca en el rango.
+    const observadas = new Set<string>();
+    for (const p of programadas) if (p.red) observadas.add(p.red);
+    return [...observadas];
+  }, [ajustesQuery.data, marca, programadas]);
+
+  /**
+   * Huecos LIBRES del plan para un día, EXPANDIDOS por red: por cada slot del plan y cada red
+   * esperada se emite un `Hueco` salvo que exista una pieza de ESA red a esa hora ese día.
+   * `ocupadas` es un set `${hora}|${red}`. Con filtro de red/línea activo se acota a él (los
+   * huecos van por red, así que filtrar no produce falsos "libre").
+   */
   const huecosDe = React.useCallback(
-    (dia: Date): { hora: string; categoria: string; etiqueta: string }[] => {
-      // Con la rejilla filtrada por red/línea, `porDia` es un subconjunto: un slot ocupado por
-      // una pieza filtrada fuera saldría como hueco LIBRE (doble-reserva). No los pintamos.
-      if (!mostrarHuecosPlan) return [];
+    (dia: Date): Hueco[] => {
+      if (!mostrarHuecosPlan || redesDelPlan.length === 0) return [];
       // weekday(): 0=lunes..6=domingo, igual que el backend.
       const diaSemana = (dia.getDay() + 6) % 7;
       const slots = slotsPorDiaCdmx.get(diaSemana) ?? [];
       if (slots.length === 0) return [];
       const ocupadas = new Set(
-        (porDia.get(claveDia(dia)) ?? []).map((p) => hora24Cdmx(p.fecha_programada)),
+        (porDia.get(claveDia(dia)) ?? []).map((p) => `${hora24Cdmx(p.fecha_programada)}|${p.red}`),
       );
-      return slots.filter((sl) => !ocupadas.has(sl.hora));
+      const huecos: Hueco[] = [];
+      for (const sl of slots) {
+        if (filtroLinea && sl.categoria !== filtroLinea) continue;
+        for (const red of redesDelPlan) {
+          if (filtroRed && red !== filtroRed) continue;
+          if (ocupadas.has(`${sl.hora}|${red}`)) continue;
+          huecos.push({ hora: sl.hora, categoria: sl.categoria, etiqueta: sl.etiqueta, red });
+        }
+      }
+      return huecos;
     },
-    [slotsPorDiaCdmx, porDia, mostrarHuecosPlan],
+    [slotsPorDiaCdmx, porDia, mostrarHuecosPlan, redesDelPlan, filtroRed, filtroLinea],
   );
 
   const hoy = hoyCDMX();
@@ -452,8 +512,8 @@ export function VistaCalendario({
         )}
         {!mostrarHuecosPlan && (
           <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Huecos del plan ocultos mientras filtras por red o línea: solo son fiables sobre la
-            programación completa. Quita el filtro para verlos.
+            Huecos del plan ocultos: la programación de esta ventana no está completa, así que un
+            slot vacío podría no serlo de verdad.
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -553,7 +613,7 @@ function VistaMes({
   hoy,
   onAbrirDia,
 }: {
-  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
+  huecosDe: (dia: Date) => Hueco[];
   ancla: Date;
   porDia: Map<string, Pieza[]>;
   hoy: string;
@@ -637,16 +697,18 @@ function VistaMes({
               <div className="space-y-px">
                 {huecosDe(dia).map((h) => {
                   const col = colorLinea(h.categoria);
+                  const IconoRed = iconoRed(h.red);
                   return (
                     <div
-                      key={`${h.hora}-${h.categoria}`}
+                      key={`${h.hora}-${h.categoria}-${h.red}`}
                       className="flex items-center gap-1 truncate text-[9px] leading-tight text-muted-foreground/80"
-                      title={`Hueco del plan: ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
+                      title={`Hueco del plan: falta ${nombreRed(h.red)} · ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
                     >
                       <span
                         className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)}
                         aria-hidden="true"
                       />
+                      <IconoRed className="h-2.5 w-2.5 shrink-0" />
                       <span className="tabular-nums">{h.hora}</span>
                       <span className="truncate">
                         {h.etiqueta || LINEA_CORTA[h.categoria] || h.categoria}
@@ -673,19 +735,21 @@ const LINEA_CORTA: Record<string, string> = {
   evergreen: "Ever.",
 };
 
-/** Chip fantasma de UN hueco libre del plan (hora CDMX + línea). */
-function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string; etiqueta: string } }) {
+/** Chip fantasma de UN hueco libre del plan (hora CDMX + RED que falta + línea). */
+function ChipHueco({ hueco }: { hueco: Hueco }) {
   const nombre = hueco.etiqueta || ETIQUETA_LINEA[hueco.categoria] || hueco.categoria;
   const col = colorLinea(hueco.categoria);
+  const IconoRed = iconoRed(hueco.red);
   return (
     <div
       className={cn(
         CLASES_ENTRADA_CALENDARIO,
         "border-dashed border-border/70 text-muted-foreground",
       )}
-      title={`Hueco del plan: ${nombre} a las ${hueco.hora}`}
+      title={`Hueco del plan: falta ${nombreRed(hueco.red)} · ${nombre} a las ${hueco.hora}`}
     >
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)} aria-hidden="true" />
+      <IconoRed className="h-3 w-3 shrink-0" aria-label={nombreRed(hueco.red)} />
       <span className="tabular-nums">{hueco.hora}</span>
       <span className="truncate">{nombre}</span>
     </div>
@@ -696,9 +760,9 @@ function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string; etique
  *  cada pieza aparece EN su posición del plan, no apilada arriba. */
 function entradasDelDia(
   items: Pieza[],
-  huecos: { hora: string; categoria: string; etiqueta: string }[],
+  huecos: Hueco[],
 ): ({ tipo: "pieza"; hora: string; p: Pieza } | {
-  tipo: "hueco"; hora: string; h: { hora: string; categoria: string; etiqueta: string };
+  tipo: "hueco"; hora: string; h: Hueco;
 })[] {
   return [
     ...items.map((p) => ({
@@ -736,12 +800,15 @@ function VistaSemana({
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
   ocupado: boolean;
-  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
+  huecosDe: (dia: Date) => Hueco[];
 }) {
   return (
-    // MÓVIL: mismo tratamiento que la vista MES — la semana scrollea en horizontal.
+    // La semana llena el alto disponible (espeja el idiom de MES) y NO scrollea por columna:
+    // en días ligeros un `min-h` calc(viewport − chrome) estira la rejilla; en días cargados la
+    // rejilla CRECE y scrollea la PÁGINA (`<main>`), no la columna. `min-w` conserva el scroll
+    // HORIZONTAL en móvil (7 columnas no caben en 360-430px).
     <div className="overflow-x-auto rounded-xl border border-border">
-    <div className="grid min-w-[640px] grid-cols-7 gap-px bg-border/60">
+    <div className="grid min-h-[calc(100dvh-15rem)] min-w-[640px] grid-cols-7 gap-px bg-border/60">
       {dias.map((dia, i) => {
         const clave = claveDia(dia);
         const esHoy = clave === hoy;
@@ -785,7 +852,7 @@ function VistaSemana({
                 <span className="text-[10px] tabular-nums text-muted-foreground">{items.length}</span>
               )}
             </button>
-            <div className="max-h-[28rem] flex-1 space-y-0.5 overflow-y-auto p-1">
+            <div className="flex-1 space-y-0.5 p-1">
               {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}
               {entradasDelDia(items, huecosDe(dia)).map((e) =>
                 e.tipo === "pieza" ? (
@@ -799,7 +866,7 @@ function VistaSemana({
                     ocupado={ocupado}
                   />
                 ) : (
-                  <ChipHueco key={`h-${e.hora}-${e.h.categoria}`} hueco={e.h} />
+                  <ChipHueco key={`h-${e.hora}-${e.h.categoria}-${e.h.red}`} hueco={e.h} />
                 ),
               )}
             </div>
@@ -823,7 +890,7 @@ function VistaDia({
   onVolver,
   ocupado,
 }: {
-  huecosDe: (dia: Date) => { hora: string; categoria: string; etiqueta: string }[];
+  huecosDe: (dia: Date) => Hueco[];
   diaClave: string;
   porDia: Map<string, Pieza[]>;
   onAbrir: (p: Pieza) => void;
@@ -874,7 +941,7 @@ function VistaDia({
                 ocupado={ocupado}
               />
             ) : (
-              <ChipHueco key={`h-${e.hora}-${e.h.categoria}`} hueco={e.h} />
+              <ChipHueco key={`h-${e.hora}-${e.h.categoria}-${e.h.red}`} hueco={e.h} />
             ),
           )}
         </div>
