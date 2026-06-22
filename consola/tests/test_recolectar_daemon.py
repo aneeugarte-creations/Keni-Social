@@ -689,17 +689,18 @@ def test_paso_fusionar_semantica_etiqueta_macro_evento(monkeypatch):
 
 
 def test_paso_fusionar_semantica_macro_reusa_etiqueta_dominante(monkeypatch):
-    """Backstop determinista: si la familia ya tiene una `tema_macro` persistida, se reusa la
-    DOMINANTE (no el sinónimo propuesto), para que el evento no se parta en dos cajas."""
+    """Backstop determinista: cuando un cluster NUEVO sin `tema_macro` se une a una familia que ya
+    tiene etiqueta persistida, se reusa la DOMINANTE (no el sinónimo que propone Haiku), para que el
+    evento no se parta en dos cajas. El cluster sin etiquetar es justo lo que reactiva la pasada de
+    macro (etiquetado incremental): una familia ya toda etiquetada y estable no se reenvía a Haiku."""
     monkeypatch.setattr(recolectar_daemon.config, "fusionar_semantica_activo", lambda: True)
-    # c1/c2 ya etiquetados "Mundial 2026"; c3 con el sinónimo "Copa del Mundo 2026".
+    # c1/c2 ya etiquetados "Mundial 2026"; c3 es nuevo SIN etiqueta y reactiva el etiquetado macro.
     recientes = [
         {"id": "c1", "titulo": "México vs Corea", "estado": "nuevo", "marca": "unotv",
          "tema_macro": "Mundial 2026"},
         {"id": "c2", "titulo": "Adopta un coreano", "estado": "nuevo", "marca": "unotv",
          "tema_macro": "Mundial 2026"},
-        {"id": "c3", "titulo": "CDMX recibe la Copa", "estado": "nuevo", "marca": "unotv",
-         "tema_macro": "Copa del Mundo 2026"},
+        {"id": "c3", "titulo": "CDMX recibe la Copa", "estado": "nuevo", "marca": "unotv"},
     ]
     monkeypatch.setattr(recolectar_daemon.repos, "clusters_recientes",
                         lambda ventana_h, *a, **k: list(recientes))
