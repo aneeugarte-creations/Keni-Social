@@ -343,6 +343,9 @@ def _publicacion_de_filas(
             "plantilla_diseno_id": plat["plantilla_diseno_id"],
             "foto_encuadre": plat["foto_encuadre"], "fotos": plat["fotos"],
             "carrusel": plat["carrusel"],
+            # Variante de formato (foto|carrusel); `_insertar_pieza` la nace en "foto". Sin esta
+            # clave el camino del LOTE caía con KeyError.
+            "variante": plat.get("variante"),
             "hashtags_sugeridos": plat.get("hashtags_sugeridos", "[]"),
             "verificar_auto_hash": plat["verificar_auto_hash"], "pactualizado": plat["actualizado"],
             # `linea_hashtags` es una COLUMNA CALCULADA del SELECT (subconsulta a la etiqueta de
