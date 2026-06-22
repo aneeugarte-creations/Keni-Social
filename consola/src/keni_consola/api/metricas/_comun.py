@@ -10,6 +10,7 @@ transversales de rango/marca. Los submódulos importan de aquí EXPLÍCITAMENTE.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 
 from keni_metricas import servicio
 from keni_shared.metricas import engagement_pct
@@ -46,6 +47,8 @@ __all__ = [
     "_nombre_marca_id",
     "_validar_rango",
     "_validar_red",
+    "_validar_redes",
+    "_conjunto_redes",
     "_rango_opcional",
 ]
 
@@ -144,6 +147,42 @@ def _validar_red(raw: str | None) -> str | None:
         validas = ", ".join(sorted(REDES_VALIDAS))
         raise ValueError(f"Red desconocida {red!r}. Usa una de: {validas}.")
     return red
+
+
+def _validar_redes(raw: str | None) -> tuple[str, ...]:
+    """Valida el filtro `?red=` que puede traer VARIAS redes separadas por coma.
+
+    None/'' = todas (sin filtro) → tupla vacía. Cada id se valida; uno desconocido lanza
+    ValueError (→400), igual que `_validar_red`. Devuelve las redes ÚNICAS en orden de
+    aparición. Así el dashboard combina redes a antojo (`?red=instagram,youtube`).
+    """
+    crudo = (raw or "").strip()
+    if not crudo:
+        return ()
+    elegidas: list[str] = []
+    for parte in crudo.split(","):
+        red = parte.strip()
+        if not red:
+            continue
+        if red not in REDES_VALIDAS:
+            validas = ", ".join(sorted(REDES_VALIDAS))
+            raise ValueError(f"Red desconocida {red!r}. Usa una de: {validas}.")
+        if red not in elegidas:
+            elegidas.append(red)
+    return tuple(elegidas)
+
+
+def _conjunto_redes(red: "str | Iterable[str] | None") -> set[str]:
+    """Normaliza un argumento de filtro de red a un CONJUNTO. None/''/() = vacío (= todas).
+
+    Acepta un único id (str), una colección de ids, o None, para que las funciones de
+    filtro funcionen igual con una red o con varias sin cambiar sus llamadas existentes.
+    """
+    if red is None:
+        return set()
+    if isinstance(red, str):
+        return {red} if red else set()
+    return {r for r in red if r}
 
 
 def _rango_opcional(raw: str | None) -> str | None:

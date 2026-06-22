@@ -14,12 +14,13 @@ from starlette.responses import JSONResponse, Response
 
 from ._comun import (
     RANGOS_PRESET_UI,
+    _conjunto_redes,
     _etiqueta_rango,
     _gate_marca_metricas,
     _log,
     _nombre_marca_id,
     _validar_rango,
-    _validar_red,
+    _validar_redes,
     engagement_pct,
     marcas,
     metricas_cache,
@@ -378,26 +379,27 @@ def _engagement_pct(interacciones, visualizaciones) -> float:
     return engagement_pct(interacciones or 0, visualizaciones or 0)
 
 
-def _filtrar_reporte_por_red(rep: dict, red: str, piezas_red: int) -> dict:
-    """Copia del reporte CRUDO restringida a UNA red, lista para `_reporte_serializable`.
+def _filtrar_reporte_por_red(rep: dict, red, piezas_red: int) -> dict:
+    """Copia del reporte CRUDO restringida a una o VARIAS redes, lista para `_reporte_serializable`.
 
-    Cada cuenta queda con las métricas de ESA red —su entrada de `por_plataforma`, o
-    visualizaciones/interacciones 0 y alcance None si no la tiene— y `por_plataforma`
-    reducido a esa red; la `cobertura` se conserva para que la auditoría siga
-    clasificando la red. El total se re-suma sobre las cuentas filtradas (no se toma el
-    global). `MetricaPlataforma` no cuenta piezas, así que `total.piezas` viene del
-    conteo del LISTADO por red (`piezas_red`), no del global del reporte.
+    `red` admite un id, una colección de ids o None (todas). Cada cuenta queda con las
+    métricas SUMADAS de las redes elegidas —sus entradas de `por_plataforma`, o 0/None si
+    no tiene ninguna— y `por_plataforma` reducido a esas redes; la `cobertura` se conserva
+    para que la auditoría siga clasificando las redes. El total se re-suma sobre las cuentas
+    filtradas (no se toma el global). `MetricaPlataforma` no cuenta piezas, así que
+    `total.piezas` viene del conteo del LISTADO por red (`piezas_red`), no del global.
     """
+    reds = _conjunto_redes(red)
     cuentas: list[dict] = []
     tot_vis = tot_inter = 0
     tot_alc: int | None = None
     for fila in rep.get("cuentas", []):
         r = dict(fila.get("resumen") or {})
-        de_red = [p for p in (r.get("por_plataforma") or []) if p.get("plataforma") == red]
-        entrada = de_red[0] if de_red else {}
-        vis = entrada.get("visualizaciones", 0) or 0
-        inter = entrada.get("interacciones", 0) or 0
-        alc = entrada.get("alcance") if de_red else None
+        de_red = [p for p in (r.get("por_plataforma") or []) if p.get("plataforma") in reds]
+        vis = sum(p.get("visualizaciones", 0) or 0 for p in de_red)
+        inter = sum(p.get("interacciones", 0) or 0 for p in de_red)
+        alcs = [p.get("alcance") for p in de_red if p.get("alcance") is not None]
+        alc = sum(alcs) if alcs else None
         r["visualizaciones"] = vis
         r["interacciones"] = inter
         r["alcance"] = alc
@@ -481,21 +483,21 @@ async def reporte(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        # `red` (id de plataforma) restringe el reporte a UNA red; None = todas (igual que
+        # `red` admite una o VARIAS redes (combinación a antojo); None = todas (igual que
         # antes). Validación primero: una red mal escrita falla limpio (→400).
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
         # En executor: un combo frío golpea la API externa y NO debe bloquear el loop.
         rep, generado_en = await metricas_cache.reporte_async(rango, marca)
-        if red:
+        if redes:
             # El conteo de piezas por red NO está en el resumen (`por_plataforma` no
             # cuenta piezas): se deriva del listado cacheado por (rango, marca) filtrando
             # por plataforma. Mismo coste 0 de API (cache lazy fill).
             listado, _ = await metricas_cache.piezas_listado_async(rango, marca)
             piezas_red = sum(
-                1 for p in (listado.get("piezas") or []) if p.get("red") == red
+                1 for p in (listado.get("piezas") or []) if p.get("red") in redes
             )
-            rep = _filtrar_reporte_por_red(rep, red, piezas_red)
+            rep = _filtrar_reporte_por_red(rep, redes, piezas_red)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente

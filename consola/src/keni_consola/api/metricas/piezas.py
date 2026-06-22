@@ -20,7 +20,7 @@ from ._comun import (
     _gate_marca_metricas,
     _log,
     _validar_rango,
-    _validar_red,
+    _validar_redes,
     marcas,
     metricas_cache,
     metricas_linea,
@@ -53,12 +53,12 @@ async def piezas(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
-        if red:
-            # Vista filtrada por red: recálculo bajo demanda (trabajo bloqueante de la
+        redes = _validar_redes(request.query_params.get("red"))
+        if redes:
+            # Vista filtrada por red(es): recálculo bajo demanda (trabajo bloqueante de la
             # fuente) en threadpool para no congelar el event loop; no usa la cache por combo.
             payload = await run_in_threadpool(
-                servicio.construir_analitica_piezas, rango, marca, red
+                servicio.construir_analitica_piezas, rango, marca, redes
             )
             generado_en = ahora_iso()
         else:
@@ -68,7 +68,7 @@ async def piezas(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception(
             "Fallo al generar la analítica de piezas (rango=%s, marca=%s, red=%s).",
-            rango, marca or "todas", red or "todas",
+            rango, marca or "todas", ",".join(redes) or "todas",
         )
         return JSONResponse({"error": "No se pudo generar la analítica de piezas."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})

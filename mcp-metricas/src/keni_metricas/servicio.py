@@ -256,7 +256,9 @@ _TOPE_PIEZAS = 100_000
 
 
 def construir_analitica_piezas(
-    rango: str = "mes", marca: str | None = None, red: str | None = None
+    rango: str = "mes",
+    marca: str | None = None,
+    red: "str | tuple[str, ...] | list[str] | None" = None,
 ) -> dict:
     """Analítica de piezas del periodo: estadísticas + top 10 + peores 10 + distribución.
 
@@ -272,9 +274,11 @@ def construir_analitica_piezas(
     piezas = []
     for c in fuente.cuentas():
         piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
-    # Filtro por red: el top/peores y las estadísticas se calculan SOLO sobre esa red.
-    if red:
-        piezas = [p for p in piezas if p.plataforma.value == red]
+    # Filtro por red(es): el top/peores y las estadísticas se calculan SOLO sobre las redes
+    # elegidas (una o varias; `red` admite un id o una colección). Vacío = todas.
+    reds = {red} if isinstance(red, str) else set(red or ())
+    if reds:
+        piezas = [p for p in piezas if p.plataforma.value in reds]
 
     top, peores = _estadisticas.top_y_peores(piezas, n=10)
     analitica = AnaliticaPiezas(
@@ -379,7 +383,9 @@ def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
 
 
 def construir_tendencia_diaria(
-    rango: str = "mes", marca: str | None = None, red: str | None = None
+    rango: str = "mes",
+    marca: str | None = None,
+    red: "str | tuple[str, ...] | list[str] | None" = None,
 ) -> dict:
     """Serie diaria del periodo (visualizaciones + interacciones) sumada por cuenta.
 
@@ -397,9 +403,10 @@ def construir_tendencia_diaria(
     desde, hasta, _ = resolver_rango(rango)
     vis: dict = {}
     inter: dict = {}
-    if red:
+    reds = {red} if isinstance(red, str) else set(red or ())
+    if reds:
         for p in _piezas_periodo(fuente, rango):
-            if p.plataforma.value != red:
+            if p.plataforma.value not in reds:
                 continue
             vis[p.publicado] = vis.get(p.publicado, 0) + (p.visualizaciones or 0)
             inter[p.publicado] = inter.get(p.publicado, 0) + (p.interacciones or 0)

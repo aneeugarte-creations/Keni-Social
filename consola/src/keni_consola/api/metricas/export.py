@@ -16,7 +16,7 @@ from ._comun import (
     _gate_marca_metricas,
     _log,
     _validar_rango,
-    _validar_red,
+    _validar_redes,
     metricas_cache,
     servicio,
 )
@@ -184,10 +184,10 @@ async def piezas_export(request: Request) -> Response:
     if fmt not in ("csv", "md", "json"):
         fmt = "csv"
     try:
-        red = _validar_red(request.query_params.get("red"))
-        if red:
+        redes = _validar_redes(request.query_params.get("red"))
+        if redes:
             payload = await run_in_threadpool(
-                servicio.construir_analitica_piezas, rango, marca, red
+                servicio.construir_analitica_piezas, rango, marca, redes
             )
         else:
             payload, _ = await metricas_cache.piezas_async(rango, marca)

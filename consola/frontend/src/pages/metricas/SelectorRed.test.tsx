@@ -1,6 +1,7 @@
 /**
- * Tests del selector de red único: refleja `vistaConfig.red` y, al elegir una red,
- * la escribe en el store (que filtra toda la página). "Todas las redes" la deja en `null`.
+ * Tests del selector de redes MULTI-SELECCIÓN: refleja `vistaConfig.red` (CSV de ids) y, al
+ * marcar/desmarcar redes, las combina en el store (que filtra toda la página). "Todas las
+ * redes" lo deja en `null`.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -9,43 +10,47 @@ import { etiquetaRed, SelectorRed } from "./SelectorRed";
 import { useVistaConfig } from "./vistaConfig";
 
 beforeEach(() => {
+  localStorage.clear();
   useVistaConfig.getState().reset();
 });
 
 describe("etiquetaRed", () => {
-  it("traduce el id de red y rotula 'Todas las redes' cuando es null", () => {
+  it("rotula una, varias o todas las redes", () => {
     expect(etiquetaRed(null)).toBe("Todas las redes");
     expect(etiquetaRed("instagram")).toBe("Instagram");
-    expect(etiquetaRed("youtube")).toBe("YouTube");
+    expect(etiquetaRed("instagram,youtube")).toBe("Instagram + YouTube");
+    expect(etiquetaRed("instagram,youtube,facebook")).toBe("3 redes");
   });
 });
 
 describe("SelectorRed", () => {
   it("arranca en 'Todas las redes' (red = null)", () => {
     render(<SelectorRed />);
-    expect(screen.getByLabelText("Red")).toHaveTextContent("Todas las redes");
+    expect(screen.getByLabelText("Redes")).toHaveTextContent("Todas las redes");
     expect(useVistaConfig.getState().red).toBeNull();
   });
 
-  it("al elegir una red la escribe en el store", async () => {
+  it("combina varias redes a antojo (CSV en el store)", () => {
     render(<SelectorRed />);
+    fireEvent.click(screen.getByLabelText("Redes"));
 
-    // Radix abre con Enter/Espacio y selecciona el item con Enter (jsdom no emite pointerup).
-    fireEvent.keyDown(screen.getByLabelText("Red"), { key: "Enter" });
-    const instagram = await screen.findByRole("option", { name: /Instagram/ });
-    fireEvent.keyDown(instagram, { key: "Enter" });
-
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Instagram/ }));
     expect(useVistaConfig.getState().red).toBe("instagram");
+
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /YouTube/ }));
+    expect(useVistaConfig.getState().red).toBe("instagram,youtube");
+
+    // Desmarcar Instagram deja solo YouTube.
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Instagram/ }));
+    expect(useVistaConfig.getState().red).toBe("youtube");
   });
 
-  it("'Todas las redes' vuelve a dejar la red en null", async () => {
-    useVistaConfig.getState().setRed("tiktok");
+  it("'Todas las redes' limpia la selección (null)", () => {
+    useVistaConfig.getState().setRedes(["tiktok", "x"]);
     render(<SelectorRed />);
+    fireEvent.click(screen.getByLabelText("Redes"));
 
-    fireEvent.keyDown(screen.getByLabelText("Red"), { key: "Enter" });
-    const todas = await screen.findByRole("option", { name: "Todas las redes" });
-    fireEvent.keyDown(todas, { key: "Enter" });
-
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Todas las redes" }));
     expect(useVistaConfig.getState().red).toBeNull();
   });
 });

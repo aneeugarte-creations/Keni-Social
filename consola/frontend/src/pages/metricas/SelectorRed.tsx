@@ -1,24 +1,21 @@
 /**
- * Selector de RED único del dashboard de Métricas (cabecera, junto al de periodo).
+ * Selector de REDES del dashboard de Métricas (cabecera, junto al de periodo).
  *
- * Single-select "Todas las redes" + cada red canónica. Escribe en `useVistaConfig.setRed`
- * (`null` = todas), que filtra TODA la página: cada sub-sección incluye la red en foco en
- * su consulta. Cada opción lleva un punto del color de su red (`coloresRed`) para anclar la
- * lectura cromática del resto de visualizaciones.
+ * MULTI-SELECCIÓN: combina redes a antojo (Instagram + YouTube + …) o "Todas". Escribe en
+ * `useVistaConfig` (`red` = CSV de ids, `null` = todas), que filtra TODA la página: cada
+ * sub-sección incluye las redes en foco en su consulta y el backend (`?red=a,b`) las une.
+ * Cada opción lleva un punto del color de su red (`coloresRed`) para anclar la lectura
+ * cromática del resto de visualizaciones.
  */
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Check, ChevronDown } from "lucide-react";
+import * as React from "react";
+
+import { Button } from "@/components/ui/button";
 import { nombreRed } from "@/lib/formato";
+import { cn } from "@/lib/utils";
 
 import { colorDe } from "./coloresRed";
 import { useVistaConfig } from "./vistaConfig";
-
-const RED_TODAS = "__todas__";
 
 /** Redes en el orden de lectura del piloto (las más activas primero). */
 const ORDEN_REDES = ["instagram", "youtube", "facebook", "tiktok", "x"];
@@ -34,34 +31,101 @@ function PuntoRed({ red }: { red: string }) {
   );
 }
 
-/** Etiqueta legible de la red en foco (o "Todas las redes") para portadas y nombres. */
+/** Etiqueta legible de la(s) red(es) en foco (o "Todas las redes") para portadas y nombres. */
 export function etiquetaRed(red: string | null): string {
-  return red ? nombreRed(red) : "Todas las redes";
+  const ids = red ? red.split(",").filter(Boolean) : [];
+  if (ids.length === 0) return "Todas las redes";
+  if (ids.length === 1) return nombreRed(ids[0]);
+  if (ids.length === 2) return ids.map(nombreRed).join(" + ");
+  return `${ids.length} redes`;
 }
 
 export function SelectorRed() {
   const red = useVistaConfig((s) => s.red);
-  const setRed = useVistaConfig((s) => s.setRed);
+  const toggleRed = useVistaConfig((s) => s.toggleRed);
+  const setRedes = useVistaConfig((s) => s.setRedes);
+  const seleccion = red ? red.split(",").filter(Boolean) : [];
+
+  const [abierto, setAbierto] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!abierto) return;
+    const alClicFuera = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    };
+    const alEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("mousedown", alClicFuera);
+    document.addEventListener("keydown", alEscape);
+    return () => {
+      document.removeEventListener("mousedown", alClicFuera);
+      document.removeEventListener("keydown", alEscape);
+    };
+  }, [abierto]);
 
   return (
-    <Select
-      value={red ?? RED_TODAS}
-      onValueChange={(v) => setRed(v === RED_TODAS ? null : v)}
-    >
-      <SelectTrigger className="h-8 w-full text-xs sm:w-[170px]" aria-label="Red">
-        <SelectValue placeholder="Red" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
-        {ORDEN_REDES.map((r) => (
-          <SelectItem key={r} value={r}>
-            <span className="inline-flex items-center gap-2">
-              <PuntoRed red={r} />
-              {nombreRed(r)}
+    <div ref={ref} className="relative">
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 w-full justify-between gap-2 text-xs sm:w-[180px]"
+        aria-label="Redes"
+        aria-haspopup="menu"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <span className="flex items-center gap-1.5 truncate">
+          {seleccion.length > 0 && (
+            <span className="flex -space-x-1">
+              {seleccion.slice(0, 3).map((r) => (
+                <PuntoRed key={r} red={r} />
+              ))}
             </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+          )}
+          <span className="truncate">{etiquetaRed(red)}</span>
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+      </Button>
+
+      {abierto && (
+        <div
+          role="menu"
+          className="absolute right-0 z-50 mt-1 w-[200px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={seleccion.length === 0}
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+            onClick={() => setRedes([])}
+          >
+            <Check
+              className={cn("h-3.5 w-3.5", seleccion.length === 0 ? "opacity-100" : "opacity-0")}
+            />
+            Todas las redes
+          </button>
+          <div role="separator" className="my-1 h-px bg-border" />
+          {ORDEN_REDES.map((r) => {
+            const activa = seleccion.includes(r);
+            return (
+              <button
+                key={r}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={activa}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent"
+                onClick={() => toggleRed(r)}
+              >
+                <Check className={cn("h-3.5 w-3.5", activa ? "opacity-100" : "opacity-0")} />
+                <PuntoRed red={r} />
+                <span className="truncate">{nombreRed(r)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

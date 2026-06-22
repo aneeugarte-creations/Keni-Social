@@ -24,7 +24,7 @@ export interface ConfigColumnas {
 
 /** Objeto serializable de configuración de vista (lo que guarda/recupera una vista guardada). */
 export interface VistaConfig {
-  /** Red única en foco, o `null` = todas. Id de plataforma (instagram|youtube|facebook|tiktok|x). */
+  /** Redes en foco como CSV de ids (`"instagram,youtube"`), o `null` = todas. Combinación libre. */
   red: string | null;
   /** Visibilidad por id de sección (true/false). Ausente = visible. */
   secciones: Record<string, boolean>;
@@ -60,8 +60,14 @@ function guardarLocal(v: VistaConfig): void {
 }
 
 interface EstadoVista extends VistaConfig {
-  /** Fija la red en foco (`null` = todas). */
+  /** Fija UNA red en foco (`null` = todas). Conveniencia; ver `setRedes` para varias. */
   setRed: (red: string | null) => void;
+  /** Fija el conjunto de redes en foco (combinación a antojo). Vacío = todas. */
+  setRedes: (redes: string[]) => void;
+  /** Añade/quita una red del conjunto en foco. */
+  toggleRed: (id: string) => void;
+  /** Redes en foco como lista (vacía = todas). */
+  redesSeleccionadas: () => string[];
   /** Muestra/oculta una sección por id. */
   setSeccionVisible: (id: string, visible: boolean) => void;
   /** ¿La sección `id` está visible? (ausente = visible). */
@@ -87,7 +93,19 @@ export const useVistaConfig = create<EstadoVista>((set, get) => {
   };
   return {
     ...inicial,
+    // `red` se almacena como CSV de ids (`"instagram,youtube"`) o null = todas, para que
+    // los sub-componentes (que leen `s.red` y lo pasan como `?red=`) y las vistas guardadas
+    // sigan tratándolo como un string opaco; el backend separa el CSV.
     setRed: (red) => persistir({ red }),
+    setRedes: (redes) => persistir({ red: redes.length ? redes.join(",") : null }),
+    toggleRed: (id) => {
+      const actuales = get().red ? get().red!.split(",").filter(Boolean) : [];
+      const siguiente = actuales.includes(id)
+        ? actuales.filter((r) => r !== id)
+        : [...actuales, id];
+      persistir({ red: siguiente.length ? siguiente.join(",") : null });
+    },
+    redesSeleccionadas: () => (get().red ? get().red!.split(",").filter(Boolean) : []),
     setSeccionVisible: (id, visible) =>
       persistir({ secciones: { ...get().secciones, [id]: visible } }),
     seccionVisible: (id) => get().secciones[id] !== false,

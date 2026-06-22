@@ -21,11 +21,12 @@ from starlette.responses import JSONResponse, Response
 
 from ...tiempo import ahora_iso
 from ._comun import (
+    _conjunto_redes,
     _etiqueta_rango,
     _gate_marca_metricas,
     _log,
     _validar_rango,
-    _validar_red,
+    _validar_redes,
     marcas,
     metricas_cache,
     servicio,
@@ -54,42 +55,45 @@ def _fecha(s: str) -> date | None:
         return None
 
 
-def _filtrar_seguidores_por_red(payload: dict, red: str) -> dict:
-    """Restringe la serie de seguidores a UNA red sobre el payload cacheado por (rango, marca).
+def _filtrar_seguidores_por_red(payload: dict, red) -> dict:
+    """Restringe la serie de seguidores a una o VARIAS redes sobre el payload cacheado.
 
-    El payload ya trae el stock por red (`puntos[].por_red`) y el neto por red
-    (`neto_por_red`): por cada día, `total` pasa a ser el stock de ESA red (0 si ese día
-    no la reporta) y `por_red` queda con solo esa red; `neto` toma el de la red (0 si no
-    aparece). Coste 0: no recomputa nada, solo proyecta el desglose que ya existe.
+    `red` admite un id, una colección o None (todas). El payload ya trae el stock por red
+    (`puntos[].por_red`) y el neto por red (`neto_por_red`): por cada día, `total` pasa a
+    ser la SUMA del stock de las redes elegidas y `por_red` queda con solo esas; `neto` es
+    la suma de sus netos. Coste 0: no recomputa nada, solo proyecta el desglose que ya existe.
     """
+    reds = _conjunto_redes(red)
     puntos = []
     for pt in payload.get("puntos") or []:
-        valor = (pt.get("por_red") or {}).get(red)
+        por_red_pt = {r: v for r, v in (pt.get("por_red") or {}).items() if r in reds and v is not None}
         puntos.append(
             {
                 **pt,
-                "total": valor or 0,
-                "por_red": {red: valor} if valor is not None else {},
+                "total": sum(por_red_pt.values()),
+                "por_red": por_red_pt,
             }
         )
-    neto_por_red = payload.get("neto_por_red") or {}
+    neto_por_red_orig = payload.get("neto_por_red") or {}
+    neto_por_red = {r: v for r, v in neto_por_red_orig.items() if r in reds}
     return {
         **payload,
         "puntos": puntos,
-        "neto": neto_por_red.get(red, 0),
-        "neto_por_red": {red: neto_por_red[red]} if red in neto_por_red else {},
+        "neto": sum(neto_por_red.values()),
+        "neto_por_red": neto_por_red,
     }
 
 
-def _filtrar_desglose_por_red(payload: dict, red: str) -> dict:
-    """Restringe el desglose de interacciones a UNA red (celdas + totales re-sumados).
+def _filtrar_desglose_por_red(payload: dict, red) -> dict:
+    """Restringe el desglose de interacciones a una o VARIAS redes (celdas + totales re-sumados).
 
-    El desglose ya es por marca×red: se conservan solo las celdas de ESA red y los
-    `totales` se re-suman sobre ellas (manteniendo las mismas claves del payload, así
-    funciona tanto con la forma real como con la mockeada). `engagement_pct`, si está en
-    los totales, se recalcula sobre el agregado de la red (interacciones/visualizaciones).
+    `red` admite un id, una colección o None. El desglose ya es por marca×red: se conservan
+    solo las celdas de las redes elegidas y los `totales` se re-suman sobre ellas (mismas
+    claves del payload, así funciona con la forma real y la mockeada). `engagement_pct`, si
+    está en los totales, se recalcula sobre el agregado (interacciones/visualizaciones).
     """
-    celdas = [c for c in (payload.get("celdas") or []) if c.get("red") == red]
+    reds = _conjunto_redes(red)
+    celdas = [c for c in (payload.get("celdas") or []) if c.get("red") in reds]
     totales_orig = payload.get("totales") or {}
     totales = {
         clave: sum(int(c.get(clave, 0) or 0) for c in celdas)
@@ -117,10 +121,10 @@ async def tendencia(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
-        if red:
+        redes = _validar_redes(request.query_params.get("red"))
+        if redes:
             payload = await run_in_threadpool(
-                servicio.construir_tendencia_diaria, rango, marca, red
+                servicio.construir_tendencia_diaria, rango, marca, redes
             )
             generado_en = ahora_iso()
         else:
@@ -146,7 +150,7 @@ async def ads(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.ads_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -154,8 +158,8 @@ async def ads(request: Request) -> Response:
         _log.exception("Fallo al leer los ads (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudieron leer las campañas de Ads."}, status_code=500)
     lista = payload.get("ads") or []
-    if red:
-        lista = [a for a in lista if a.get("red") == red]
+    if redes:
+        lista = [a for a in lista if a.get("red") in redes]
     total = {
         "visualizaciones": sum(int(a.get("impresiones") or 0) for a in lista),
         "gasto": round(sum(float(a.get("gasto") or 0.0) for a in lista), 2),
@@ -270,15 +274,15 @@ async def seguidores(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.seguidores_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar la serie de seguidores (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la serie de seguidores."}, status_code=500)
-    if red:
-        payload = _filtrar_seguidores_por_red(payload, red)
+    if redes:
+        payload = _filtrar_seguidores_por_red(payload, redes)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
@@ -293,15 +297,15 @@ async def desglose(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.desglose_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar el desglose (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el desglose de interacciones."}, status_code=500)
-    if red:
-        payload = _filtrar_desglose_por_red(payload, red)
+    if redes:
+        payload = _filtrar_desglose_por_red(payload, redes)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
@@ -316,17 +320,17 @@ async def crosstab(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar el crosstab (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el crosstab."}, status_code=500)
-    if red:
+    if redes:
         payload = {
             **payload,
-            "celdas": [c for c in (payload.get("celdas") or []) if c.get("red") == red],
+            "celdas": [c for c in (payload.get("celdas") or []) if c.get("red") in redes],
         }
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
@@ -342,16 +346,16 @@ async def correlacion(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
-        red = _validar_red(request.query_params.get("red"))
+        redes = _validar_redes(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar la correlación (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la correlación de seguidores."}, status_code=500)
-    if red:
+    if redes:
         payload = {
             **payload,
-            "items": [it for it in (payload.get("items") or []) if it.get("red") == red],
+            "items": [it for it in (payload.get("items") or []) if it.get("red") in redes],
         }
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})

@@ -432,6 +432,49 @@ def test_filtrar_reporte_por_red_marca_sin_esa_red_queda_en_cero():
     assert out["total"]["visualizaciones"] == 0 and out["total"]["alcance"] is None
 
 
+def test_filtrar_reporte_por_red_combina_varias_redes():
+    """Combinación a antojo: con varias redes, cada cuenta SUMA sus plataformas elegidas."""
+    from keni_consola.api.metricas import _filtrar_reporte_por_red
+
+    rep = {
+        "total": {"visualizaciones": 999, "interacciones": 99, "alcance": 5, "piezas": 7},
+        "cuentas": [
+            {
+                "resumen": {
+                    "cuenta": "unotv",
+                    "por_plataforma": [
+                        {"plataforma": "instagram", "visualizaciones": 100,
+                         "alcance": 10, "interacciones": 20, "engagement_pct": 20.0},
+                        {"plataforma": "tiktok", "visualizaciones": 500,
+                         "alcance": None, "interacciones": 5, "engagement_pct": 1.0},
+                        {"plataforma": "youtube", "visualizaciones": 1,
+                         "alcance": 1, "interacciones": 1, "engagement_pct": 1.0},
+                    ],
+                }
+            }
+        ],
+    }
+    out = _filtrar_reporte_por_red(rep, ("instagram", "tiktok"), piezas_red=4)
+    r = out["cuentas"][0]["resumen"]
+    assert {p["plataforma"] for p in r["por_plataforma"]} == {"instagram", "tiktok"}
+    # Suma de instagram + tiktok (no youtube); alcance suma solo los no-null.
+    assert r["visualizaciones"] == 600 and r["interacciones"] == 25 and r["alcance"] == 10
+    assert out["total"]["visualizaciones"] == 600 and out["total"]["piezas"] == 4
+
+
+def test_validar_redes_acepta_csv_y_rechaza_desconocidas():
+    from keni_consola.api.metricas._comun import _validar_redes
+
+    assert _validar_redes(None) == ()
+    assert _validar_redes("") == ()
+    assert _validar_redes("instagram") == ("instagram",)
+    assert _validar_redes("instagram,youtube") == ("instagram", "youtube")
+    # Dedup y orden de aparición.
+    assert _validar_redes("youtube,instagram,youtube") == ("youtube", "instagram")
+    with pytest.raises(ValueError):
+        _validar_redes("instagram,marte")
+
+
 def test_tendencia_serie_diaria(cliente):
     r = cliente.get("/api/metricas/tendencia?rango=rango:2026-05-01_2026-05-07&marca=claro_sports")
     assert r.status_code == 200
