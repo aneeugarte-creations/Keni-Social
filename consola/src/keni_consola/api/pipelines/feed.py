@@ -264,14 +264,27 @@ def _feed(
     if clase:
         todas = [r for r in todas if r["clase"] == clase]
     total = len(todas)
-    # SUMATORIO del universo filtrado (no solo la página): el coste agregado de lo listado.
+    # SUMATORIO del universo filtrado (no solo la página): el coste agregado de lo listado. El
+    # POOL (Fusionar/Priorizar) corre por LOTE de marca, así que es contexto por-TARJETA, no
+    # coste por run: el agregado suma las métricas REALES de cada run (sin pool) y añade el coste
+    # del pool UNA sola vez por marca con runs de pipeline en el filtro (si no, se inflaría ×runs).
     totales = dict(_METRICAS_CERO)
+    marcas_con_runs: set[str] = set()
     for r in todas:
-        m = r.get("metricas") or {}
+        es_run_pool = r["clase"] == "run" and (r.get("origen") or "") == ORIGEN_PIPELINE
+        m = (met_por_run.get(r["id"]) if es_run_pool else r.get("metricas")) or {}
         totales["items"] += int(m.get("items") or 0)
         totales["tokens"] += int(m.get("tokens") or 0)
         totales["coste_usd"] = round(totales["coste_usd"] + (m.get("coste_usd") or 0.0), 6)
         totales["duration_ms"] += int(m.get("duration_ms") or 0)
+        if es_run_pool:
+            marcas_con_runs.add(r.get("marca", "") or "")
+    for marca_run in marcas_con_runs:
+        pool = _con_pool(None, pool_marca.get(marca_run, []))
+        totales["items"] += int(pool.get("items") or 0)
+        totales["tokens"] += int(pool.get("tokens") or 0)
+        totales["coste_usd"] = round(totales["coste_usd"] + (pool.get("coste_usd") or 0.0), 6)
+        totales["duration_ms"] += int(pool.get("duration_ms") or 0)
     pagina = todas[desplazamiento : desplazamiento + limite]
     return {
         "pipelines": pagina,

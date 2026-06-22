@@ -10,6 +10,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -92,7 +93,10 @@ async def importar(request: Request) -> Response:
     # Camino RÁPIDO y determinista: el parser tabular para .xlsx/.csv bien formados (sin claude).
     nombre = archivo.filename or ""
     try:
-        filas, errores = importador_calendario.parsear(data, nombre=nombre)
+        # `parsear` (openpyxl/csv) es trabajo de CPU bloqueante: fuera del event loop.
+        filas, errores = await run_in_threadpool(
+            importador_calendario.parsear, data, nombre=nombre
+        )
     except Exception:  # noqa: BLE001 -- formato no tabular/ilegible: lo encolará al worker abajo
         filas, errores = [], []
 
@@ -129,7 +133,7 @@ async def _importar_con_ia(
     nombre_seguro = Path(nombre or "").name or "calendario"
     ruta = dir_temporal / nombre_seguro
     try:
-        ruta.write_bytes(data)
+        await run_in_threadpool(ruta.write_bytes, data)
     except OSError:
         shutil.rmtree(dir_temporal, ignore_errors=True)
         return JSONResponse({"error": "No se pudo preparar el archivo."}, status_code=500)

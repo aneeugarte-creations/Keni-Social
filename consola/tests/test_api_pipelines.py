@@ -887,3 +887,37 @@ def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
     run_t = _run_por_titulo(cliente, "Tablero sin pool")
     assert run_t["metricas"]["items"] == 1
     assert run_t["metricas"]["tokens"] == 150
+
+
+def test_totales_cuentan_el_pool_una_vez_no_por_run(cliente):
+    """El AGREGADO (`totales`) cuenta el coste del POOL (Fusionar/Priorizar, por LOTE de marca)
+    UNA sola vez, no una por cada run de la marca. Cada TARJETA sí lo lleva (cuadra con sus
+    etapas), pero el sumatorio no lo infla ×(runs de la marca)."""
+    t1 = _tema_pipeline("Run A del pool")
+    _gen_suelta("Copy A", publicacion_id=t1["id"])  # 150 tok · 0.02 · 3000 ms
+    t2 = _tema_pipeline("Run B del pool")
+    _gen_suelta("Copy B", publicacion_id=t2["id"])  # 150 tok · 0.02 · 3000 ms
+    # Pool de la marca (una Fusionar + un Priorizar): 100 tok · 0.01 · 2000 / 50 · 0.005 · 1000.
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 10, "tokens_out": 90, "total_cost_usd": 0.01,
+                     "duration_ms": 2000},
+    })
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Priorizar historias — UnoTV",
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 5, "tokens_out": 45, "total_cost_usd": 0.005,
+                     "duration_ms": 1000},
+    })
+    body = cliente.get("/api/pipelines").json()
+    # Cada TARJETA lleva el pool (copy real + las dos etapas de pool de la marca).
+    runs = {x["titulo"]: x for x in body["pipelines"] if x["clase"] == "run"}
+    assert runs["Run A del pool"]["metricas"]["tokens"] == 150 + 100 + 50
+    assert runs["Run B del pool"]["metricas"]["tokens"] == 150 + 100 + 50
+    # AGREGADO: copy real de AMBAS runs (300) + el pool UNA sola vez (150), no ×2.
+    t = body["totales"]
+    assert t["items"] == 2 + 2  # 2 copies + 2 etapas de pool (una vez)
+    assert t["tokens"] == 300 + 150
+    assert t["coste_usd"] == pytest.approx(0.04 + 0.015)
+    assert t["duration_ms"] == 6000 + 3000

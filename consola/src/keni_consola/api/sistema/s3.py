@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
@@ -132,10 +133,11 @@ async def s3(request: Request) -> Response:
         "error": None,
     }
     try:
-        cliente = _cliente_s3()
-        cliente.head_bucket(Bucket=bucket)
+        # boto3 es síncrono (red): cada llamada va al threadpool para no bloquear el event loop.
+        cliente = await run_in_threadpool(_cliente_s3)
+        await run_in_threadpool(cliente.head_bucket, Bucket=bucket)
         payload["salud"] = "ok"
-        objetos, total_bytes, truncado = _medir_bucket(cliente, bucket)
+        objetos, total_bytes, truncado = await run_in_threadpool(_medir_bucket, cliente, bucket)
         payload["objetos"] = objetos
         payload["bytes"] = total_bytes
         payload["truncado"] = truncado
@@ -181,7 +183,8 @@ async def probar_s3(request: Request) -> Response:
             {"error": "El almacenamiento S3 no está configurado en este servidor."},
             status_code=409,
         )
-    sonda = sonda_s3_salud()
+    # `sonda_s3_salud` hace head_bucket (boto3 síncrono): fuera del event loop.
+    sonda = await run_in_threadpool(sonda_s3_salud)
     return JSONResponse({"salud": sonda["salud"], "error": sonda["error"]})
 
 
@@ -201,6 +204,63 @@ def _migas(prefijo: str) -> list[dict]:
         acumulado = f"{acumulado}{parte}/"
         migas.append({"nombre": parte, "prefijo": acumulado})
     return migas
+
+
+def _navegar_prefijo(bucket: str, prefijo: str) -> tuple[list[str], list[dict]]:
+    """Lista las subcarpetas (CommonPrefixes) y los objetos del nivel `prefijo`.
+
+    Pagina `list_objects_v2` con `Delimiter="/"` hasta `_MAX_PAGINAS_NAV` paginas. Sincrono
+    (boto3 de red): el handler lo corre en threadpool. Devuelve `(carpetas, objetos)`.
+    """
+    cliente = _cliente_s3()
+    carpetas: list[str] = []
+    objetos_lista: list[dict] = []
+    token: str | None = None
+    paginas = 0
+    while paginas < _MAX_PAGINAS_NAV:
+        paginas += 1
+        kwargs: dict = {
+            "Bucket": bucket,
+            "Delimiter": "/",
+            "Prefix": prefijo,
+        }
+        if token:
+            kwargs["ContinuationToken"] = token
+        resp = cliente.list_objects_v2(**kwargs)
+
+        # Subcarpetas (CommonPrefixes): S3 agrupa las keys con "/" como separador.
+        for cp in resp.get("CommonPrefixes", []) or []:
+            p = cp.get("Prefix", "")
+            if p:
+                carpetas.append(p)
+
+        # Objetos del nivel actual (excluimos el "directorio virtual" propio).
+        for item in resp.get("Contents", []) or []:
+            key = item.get("Key", "")
+            if key == prefijo:
+                # Es el "folder marker" (clave identica al prefijo): omitir.
+                continue
+            nombre = os.path.basename(key.rstrip("/")) or key
+            tamano = int(item.get("Size", 0) or 0)
+            modificado_raw = item.get("LastModified")
+            modificado = (
+                modificado_raw.isoformat() if modificado_raw is not None else None
+            )
+            objetos_lista.append(
+                {
+                    "key": key,
+                    "nombre": nombre,
+                    "tamano": tamano,
+                    "modificado": modificado,
+                }
+            )
+
+        if not resp.get("IsTruncated"):
+            break
+        token = resp.get("NextContinuationToken")
+        if not token:
+            break
+    return carpetas, objetos_lista
 
 
 async def s3_objetos(request: Request) -> Response:
@@ -243,52 +303,8 @@ async def s3_objetos(request: Request) -> Response:
     error: str | None = None
 
     try:
-        cliente = _cliente_s3()
-        token: str | None = None
-        paginas = 0
-        while paginas < _MAX_PAGINAS_NAV:
-            paginas += 1
-            kwargs: dict = {
-                "Bucket": bucket,
-                "Delimiter": "/",
-                "Prefix": prefijo,
-            }
-            if token:
-                kwargs["ContinuationToken"] = token
-            resp = cliente.list_objects_v2(**kwargs)
-
-            # Subcarpetas (CommonPrefixes): S3 agrupa las keys con "/" como separador.
-            for cp in resp.get("CommonPrefixes", []) or []:
-                p = cp.get("Prefix", "")
-                if p:
-                    carpetas.append(p)
-
-            # Objetos del nivel actual (excluimos el "directorio virtual" propio).
-            for item in resp.get("Contents", []) or []:
-                key = item.get("Key", "")
-                if key == prefijo:
-                    # Es el "folder marker" (clave identica al prefijo): omitir.
-                    continue
-                nombre = os.path.basename(key.rstrip("/")) or key
-                tamano = int(item.get("Size", 0) or 0)
-                modificado_raw = item.get("LastModified")
-                modificado = (
-                    modificado_raw.isoformat() if modificado_raw is not None else None
-                )
-                objetos_lista.append(
-                    {
-                        "key": key,
-                        "nombre": nombre,
-                        "tamano": tamano,
-                        "modificado": modificado,
-                    }
-                )
-
-            if not resp.get("IsTruncated"):
-                break
-            token = resp.get("NextContinuationToken")
-            if not token:
-                break
+        # boto3 es síncrono (red): la paginación entera va al threadpool, fuera del event loop.
+        carpetas, objetos_lista = await run_in_threadpool(_navegar_prefijo, bucket, prefijo)
     except Exception as e:  # noqa: BLE001 -- boto3/red: degradar, no 500
         _logger.warning("Error al navegar S3/Garage (prefijo=%r): %s", prefijo, e)
         error = "No se pudo listar el almacenamiento. Revisa el endpoint y las credenciales."
@@ -358,8 +374,10 @@ async def s3_objeto(request: Request) -> Response:
     descargar = request.query_params.get("descargar") in ("1", "true", "si", "sí")
 
     try:
-        cliente = _cliente_s3()
-        obj = cliente.get_object(Bucket=config.s3_bucket(), Key=key)
+        # boto3 es síncrono (red): el get_object va al threadpool. El streaming posterior de
+        # los bytes ya lo itera Starlette en su propio threadpool (generador síncrono).
+        cliente = await run_in_threadpool(_cliente_s3)
+        obj = await run_in_threadpool(cliente.get_object, Bucket=config.s3_bucket(), Key=key)
     except Exception as e:  # noqa: BLE001 -- boto3 lanza ClientError(NoSuchKey/404) o red
         # Distinguimos "no existe" (404) del resto (problema de almacenamiento, 502). boto3
         # cuelga el detalle en `e.response` (dict) cuando es un ClientError; si no, es red.
@@ -439,16 +457,17 @@ async def s3_borrar(request: Request) -> Response:
 
     bucket = config.s3_bucket()
     try:
-        cliente = _cliente_s3()
+        # boto3 es síncrono (red): cada llamada va al threadpool, fuera del event loop.
+        cliente = await run_in_threadpool(_cliente_s3)
         # Confirmar que existe ANTES de borrar: delete_object es idempotente (no falla si la
         # key no estaba), pero queremos un 404 honesto y no decir "borrado" de algo ausente.
         try:
-            cliente.head_object(Bucket=bucket, Key=key)
+            await run_in_threadpool(cliente.head_object, Bucket=bucket, Key=key)
         except Exception as e:  # noqa: BLE001 -- 404 -> inexistente; otro -> error real (raise)
             if _es_objeto_inexistente(e):
                 return JSONResponse({"error": "Ese objeto no existe."}, status_code=404)
             raise
-        cliente.delete_object(Bucket=bucket, Key=key)
+        await run_in_threadpool(cliente.delete_object, Bucket=bucket, Key=key)
     except Exception as e:  # noqa: BLE001 -- boto3/red: 502, sin tumbar la pagina
         _logger.warning("No se pudo borrar el objeto S3 %r: %s", key, e)
         return JSONResponse(
@@ -510,9 +529,11 @@ async def s3_borrar_lote(request: Request) -> Response:
     borrados: list[str] = []
     fallidos: list[dict] = []
     try:
-        cliente = _cliente_s3()
+        # boto3 es síncrono (red): cliente + borrado en lote van al threadpool.
+        cliente = await run_in_threadpool(_cliente_s3)
         # delete_objects acepta hasta 1000 keys; _MAX_BORRADO_LOTE garantiza una sola llamada.
-        resp = cliente.delete_objects(
+        resp = await run_in_threadpool(
+            cliente.delete_objects,
             Bucket=bucket,
             Delete={"Objects": [{"Key": k} for k in keys], "Quiet": False},
         )

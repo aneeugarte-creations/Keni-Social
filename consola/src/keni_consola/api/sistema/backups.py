@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -93,4 +94,5 @@ async def backups(request: Request) -> Response:
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
-    return JSONResponse(sonda_backups())
+    # `sonda_backups` lee del disco (open/scandir/stat): fuera del event loop.
+    return JSONResponse(await run_in_threadpool(sonda_backups))

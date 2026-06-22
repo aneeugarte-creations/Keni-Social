@@ -57,8 +57,11 @@ _EVENTO_POR_ESTADO: dict[str, str] = {
 
 
 def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
-    if repos.obtener_pieza_fila(pieza_id) is None:
+    previa = repos.obtener_pieza_fila(pieza_id)
+    if previa is None:
         return 404, {"error": "Esa plataforma ya no existe."}
+    # Estado ANTERIOR (para emitir el evento solo en la TRANSICION, no en cada PATCH).
+    estado_anterior = previa.get("estado")
     campos: dict[str, object] = {}
 
     if "estado" in datos:
@@ -98,10 +101,6 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
 
     if not campos:
         return 400, {"error": "Indica algún campo a actualizar."}
-
-    # Estado ANTERIOR (para emitir el evento solo en la TRANSICION, no en cada PATCH).
-    previa = repos.obtener_pieza_fila(pieza_id)
-    estado_anterior = previa.get("estado") if previa else None
 
     # CONCURRENCIA OPTIMISTA (ADR 0012): `version` opcional del cliente -> 409 si está obsoleta.
     version_esperada = datos.get("version")

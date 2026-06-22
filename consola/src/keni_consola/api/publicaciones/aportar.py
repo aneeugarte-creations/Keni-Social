@@ -186,12 +186,14 @@ async def aportar(request: Request) -> Response:
     titulo_pagina = ""
     url_crudo = form.get("url")
     if isinstance(url_crudo, str) and url_crudo.strip():
-        url_limpia, err_url = extraccion_url.validar_url(url_crudo)
+        # `validar_url` resuelve DNS (getaddrinfo) y `extraer_texto` hace HTTP con reintentos:
+        # IO de red bloqueante, fuera del event loop.
+        url_limpia, err_url = await run_in_threadpool(extraccion_url.validar_url, url_crudo)
         if err_url is not None or url_limpia is None:
             return JSONResponse({"error": err_url or "La URL no es válida."}, status_code=400)
         url = url_limpia
         try:
-            titulo_pagina, cuerpo = extraccion_url.extraer_texto(url)
+            titulo_pagina, cuerpo = await run_in_threadpool(extraccion_url.extraer_texto, url)
         except extraccion_url.ExtraccionError as e:
             if not material and not foto:
                 return JSONResponse({"error": str(e)}, status_code=400)

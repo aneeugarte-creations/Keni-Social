@@ -421,6 +421,16 @@ async def login(request: Request) -> Response:
     if mfa_activo and seguridad.mfa_maquinaria_activa():
         return _elevar_a_segundo_factor(autenticado)
 
+    if mfa_activo and not seguridad.mfa_maquinaria_activa():
+        # FAIL-OPEN anti-lockout: el usuario TIENE passkey, pero sin clave de firma
+        # (KENI_CONSOLA_MFA_KEY) no se puede correr la ceremonia, así que se abre sesión SIN el
+        # segundo factor. Lo registramos para que el bypass sea observable.
+        _logger.warning(
+            "Login SIN segundo factor: usuario con passkey pero KENI_CONSOLA_MFA_KEY "
+            "falta/es invalida (fail-open anti-lockout). usuario=%s",
+            autenticado["usuario"],
+        )
+
     if requiere_mfa and not mfa_activo:
         # GRACIA: se le exige MFA pero aun SIN passkey. No bloqueamos el login: abrimos sesion
         # y marcamos `debe_inscribir_mfa` para que la UI lo fuerce a inscribir una llave ya.
