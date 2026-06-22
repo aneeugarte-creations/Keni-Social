@@ -44,6 +44,7 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ILUSTRAR,
+    ENV_PIPELINE_DECISOR,
     ENV_PIPELINE_SUGERIR_HASHTAGS,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
@@ -890,6 +891,16 @@ def ilustrar_activo() -> bool:
     return _crudo(ENV_PIPELINE_ILUSTRAR).lower() in _VERDADEROS
 
 
+def decisor_activo() -> bool:
+    """True si la ETAPA de Decisor de formato debe correr (`KENI_PIPELINE_DECISOR`, "Decisor").
+
+    Def OFF (conservador): sin el flag, Redactar decide el formato (foto vs carrusel) dentro de su
+    propio prompt, como hoy. Con el flag, una etapa previa (Haiku barato) fija el camino del tema
+    antes de redactar. Ver `dominio/decisor.py` y el gate en `pipeline_contenido/_barrido.py`.
+    """
+    return _crudo(ENV_PIPELINE_DECISOR).lower() in _VERDADEROS
+
+
 def sugerir_hashtags_activo() -> bool:
     """True si la ETAPA de Sugerir hashtags debe proponer (`KENI_PIPELINE_SUGERIR_HASHTAGS`).
 
@@ -949,6 +960,7 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_VERIFICAR: verificar_activo,
             ENV_PIPELINE_SUGERIR_HASHTAGS: sugerir_hashtags_activo,
             ENV_PIPELINE_REDACTAR: pipeline_activo,
+            ENV_PIPELINE_DECISOR: decisor_activo,
             ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
             ENV_PIPELINE_STOCK: stock_busca_activo,
             ENV_CRITICA_IA: critica_ia_activa,
