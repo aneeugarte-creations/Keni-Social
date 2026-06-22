@@ -1,0 +1,15 @@
+# Woodpecker: integridad referencial de la config de CI (always-on, sin filtro de path).
+#
+# Falla si un step de cualquier pipeline (.woodpecker/*.yml o el espejo .github/workflows/*.yml)
+# enumera un fichero de test que ya no existe. Esa deriva (un refactor borra un test y deja la
+# referencia) abortaba `pytest` en collection y quedaba LATENTE tras un filtro `path:` hasta el
+# primer push que tocaba el área — apareciendo en el commit equivocado. Corre en CUALQUIER push
+# para cazarlo en el commit que lo crea. BARATO: solo lee ficheros (sin BD, sin red, sin deps).
+when:
+  - event: [push, pull_request, manual]
+
+steps:
+  - name: lint-ci-refs
+    image: python:3.11-slim
+    commands:
+      - python scripts/lint_ci_refs.py
