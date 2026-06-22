@@ -424,6 +424,7 @@ PROMOVER_MADURACION_MIN_DEF = 45
 ENV_CUPO_DIA = "KENI_CUPO_DIA"
 CUPO_DIA_DEF = 16
 ENV_PLAN_DIA = "KENI_PLAN_DIA"
+ENV_PLAN_REDES = "KENI_PLAN_REDES"
 
 
 def promover_maduracion_min() -> int:
@@ -490,6 +491,35 @@ def plan_dia(marca: str = "") -> dict[str, int]:
         if propio:
             return parsear_plan(propio)
     return parsear_plan(_crudo(ENV_PLAN_DIA))
+
+
+def parsear_redes(crudo: str) -> list[str]:
+    """Parsea una CSV de ids de red a lista de ids CANÓNICOS, en el orden de aparición. PURA.
+
+    Filtra con `redes.es_red`: los ids desconocidos se IGNORAN. Tolera espacios sueltos y
+    duplicados (se conserva la primera aparición). [] si el texto no aporta ninguna red válida.
+    """
+    from . import redes  # perezoso: evita el ciclo config <- redes
+
+    salida: list[str] = []
+    for trozo in (crudo or "").split(","):
+        rid = trozo.strip().lower()
+        if rid and redes.es_red(rid) and rid not in salida:
+            salida.append(rid)
+    return salida
+
+
+def plan_redes(marca: str = "") -> list[str]:
+    """REDES que el plan diario de una marca espera por slot (`KENI_PLAN_REDES[::marca]`).
+
+    CSV de ids de red canónicos (`facebook,instagram`, …). Solo DECLARA las redes esperadas:
+    el calendario las usa para pintar huecos por red; no cambia cómo se generan las piezas.
+    El override por marca SUSTITUYE al global. [] = sin selección. Filtra ids no-red."""
+    if marca:
+        propio = _crudo(f"{ENV_PLAN_REDES}::{marca}")
+        if propio:
+            return parsear_redes(propio)
+    return parsear_redes(_crudo(ENV_PLAN_REDES))
 
 
 # --------------------------------------------------------------------------- #

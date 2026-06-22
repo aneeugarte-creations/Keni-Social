@@ -613,3 +613,45 @@ def test_config_entero_pasa_por_store(store, monkeypatch):
 def test_config_float_pasa_por_store(store):
     ajustes.guardar(config.ENV_ALERTAS_UMBRAL_ENGAGEMENT, "4.5")
     assert config.alertas_umbral_engagement() == 4.5
+
+
+# --------------------------------------------------------------------------- #
+# Redes del plan por marca (`KENI_PLAN_REDES::marca`): clave dinámica del catálogo #
+# --------------------------------------------------------------------------- #
+
+
+def _primera_marca() -> str:
+    from keni_consola import marcas
+
+    return marcas.opciones()[0][0]
+
+
+def test_plan_redes_por_marca_en_catalogo(store):
+    """Cada marca aporta un ajuste `KENI_PLAN_REDES::marca` (texto, grupo del plan diario);
+    `por_clave` resuelve la clave dinámica igual que `KENI_PLAN_DIA::marca`."""
+    mid = _primera_marca()
+    clave = config.clave_por_marca(config.ENV_PLAN_REDES, mid)
+    a = ajustes_catalogo.por_clave(clave)
+    assert a is not None
+    assert a.tipo == "texto"
+    assert a.grupo == "noticias_produccion_marca"
+    # No es un maestro virtual: su única clave física es ella misma.
+    assert ajustes_catalogo.claves_fisicas(clave) == [clave]
+
+
+def test_validar_plan_redes_acepta_csv_de_redes(store):
+    """`validar_valor` acepta una CSV de ids de red válidos y normaliza espacios."""
+    mid = _primera_marca()
+    a = _ajuste(config.clave_por_marca(config.ENV_PLAN_REDES, mid))
+    val, err = ajustes_catalogo.validar_valor(a, "facebook,instagram")
+    assert err is None and val == "facebook,instagram"
+    val, err = ajustes_catalogo.validar_valor(a, "")
+    assert err is None and val == ""
+
+
+def test_validar_plan_redes_rechaza_id_no_red(store):
+    """`validar_valor` rechaza una CSV con un id que no es una red canónica."""
+    mid = _primera_marca()
+    a = _ajuste(config.clave_por_marca(config.ENV_PLAN_REDES, mid))
+    val, err = ajustes_catalogo.validar_valor(a, "facebook,marte")
+    assert val is None and err is not None

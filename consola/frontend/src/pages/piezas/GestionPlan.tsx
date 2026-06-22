@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 
+import { ORDEN_REDES, iconoRed, nombreRed } from "./meta";
 import { SelectorHoras } from "./SelectorHoras";
 
 const RE_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -31,6 +32,19 @@ const RE_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 /** Claves especiales del motor (no son líneas): última hora y reciclaje. */
 const CLAVE_BREAKING = "breaking";
 const CLAVE_EVERGREEN = "evergreen";
+
+/** Redes preseleccionadas cuando la marca aún no ha guardado su selección. */
+const REDES_PLAN_DEFECTO = ["facebook", "instagram"];
+
+/** Parsea la CSV de ids de red del ajuste a un set de ids canónicos conocidos. */
+function parsearRedes(crudo: string): Set<string> {
+  const redes = new Set<string>();
+  for (const trozo of (crudo || "").split(",")) {
+    const id = trozo.trim().toLowerCase();
+    if (id && (ORDEN_REDES as readonly string[]).includes(id)) redes.add(id);
+  }
+  return redes;
+}
 
 /** Parsea el CSV de horas del input ("8:45, 10:45") a "HH:MM" únicos y ordenados (CDMX). */
 function parsearHoras(texto: string): string[] | null {
@@ -75,6 +89,7 @@ interface FilaPlan {
 export function PanelPlan({ marca }: { marca: string }) {
   const queryClient = useQueryClient();
   const clavePlan = `KENI_PLAN_DIA::${marca}`;
+  const claveRedes = `KENI_PLAN_REDES::${marca}`;
 
   const ajustes = useQuery({
     queryKey: ["ajustes"],
@@ -107,6 +122,7 @@ export function PanelPlan({ marca }: { marca: string }) {
   }, [lineasQuery.data]);
 
   const [filas, setFilas] = React.useState<Record<string, Fila>>({});
+  const [redes, setRedes] = React.useState<Set<string>>(new Set());
   const [inicializado, setInicializado] = React.useState(false);
   const [nuevaLinea, setNuevaLinea] = React.useState("");
 
@@ -155,6 +171,7 @@ export function PanelPlan({ marca }: { marca: string }) {
     [ajustes.data],
   );
   const valorPlan = valorAjuste(clavePlan);
+  const valorRedes = valorAjuste(claveRedes);
 
   const franjasMarca = React.useMemo(
     () =>
@@ -183,10 +200,13 @@ export function PanelPlan({ marca }: { marca: string }) {
       };
     }
     setFilas(inicializadas);
+    // Redes esperadas por el plan: las guardadas, o el defecto si la marca aún no eligió.
+    const redesGuardadas = parsearRedes(valorRedes);
+    setRedes(redesGuardadas.size > 0 ? redesGuardadas : new Set(REDES_PLAN_DEFECTO));
     setInicializado(true);
   }, [
     inicializado, ajustes.isPending, franjasQuery.isPending, lineasQuery.isPending,
-    valorPlan, franjasMarca, filasPlan,
+    valorPlan, valorRedes, franjasMarca, filasPlan,
   ]);
 
   const guardar = useMutation({
@@ -209,6 +229,10 @@ export function PanelPlan({ marca }: { marca: string }) {
         .filter(([, n]) => Number.isInteger(n) && n > 0)
         .map(([clave, n]) => `${clave}:${n}`);
       await api.guardarAjuste({ clave: clavePlan, valor: partes.join(",") });
+      // 2b) Redes esperadas por el plan (CSV de ids, orden canónico): solo declara qué redes
+      //     pinta el calendario como huecos; no cambia cómo se generan las piezas.
+      const redesCsv = ORDEN_REDES.filter((id) => redes.has(id)).join(",");
+      await api.guardarAjuste({ clave: claveRedes, valor: redesCsv });
       // 3) Limpia franjas de claves que ya no son filas del plan (líneas borradas).
       const vigentes = new Set(filasPlan.map((f) => f.clave));
       const huerfanas = franjasMarca.filter((f) => !vigentes.has(f.categoria));
@@ -256,6 +280,39 @@ export function PanelPlan({ marca }: { marca: string }) {
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Redes que el plan espera por slot: el calendario las pinta como huecos por red. */}
+          <div className="space-y-2 border-b border-border/60 pb-3">
+            <Label className="text-sm">Redes del plan</Label>
+            <p className="text-xs text-muted-foreground">
+              Las redes que el plan espera cada día; el calendario marca un hueco por cada una.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ORDEN_REDES.map((id) => {
+                const Icono = iconoRed(id);
+                const activa = redes.has(id);
+                return (
+                  <Button
+                    key={id}
+                    type="button"
+                    size="sm"
+                    variant={activa ? "default" : "outline"}
+                    aria-pressed={activa}
+                    onClick={() =>
+                      setRedes((prev) => {
+                        const sig = new Set(prev);
+                        if (sig.has(id)) sig.delete(id);
+                        else sig.add(id);
+                        return sig;
+                      })
+                    }
+                  >
+                    <Icono className="h-4 w-4" />
+                    {nombreRed(id)}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
           {filasPlan.map((fila) => (
             <React.Fragment key={fila.clave}>
             <div className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_auto] items-center gap-3">

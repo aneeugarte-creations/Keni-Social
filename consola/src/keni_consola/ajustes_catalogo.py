@@ -293,6 +293,25 @@ def _plan_por_marca() -> list[Ajuste]:
     ]
 
 
+def _plan_redes_por_marca() -> list[Ajuste]:
+    """REDES del plan diario por marca (`KENI_PLAN_REDES::marca`, CSV de ids de red).
+
+    Declara qué redes espera el plan por slot (`facebook,instagram`, …); el calendario las usa
+    para marcar huecos por red. No cambia cómo se generan las piezas. Vacío = sin selección. Se
+    generan en caliente desde el catálogo de marcas."""
+    return [
+        Ajuste(
+            clave=config.clave_por_marca(config.ENV_PLAN_REDES, mid),
+            tipo="texto",
+            etiqueta=f"{nombre} · redes del plan",
+            ayuda="Ids de red separados por comas; el calendario marca huecos por red.",
+            grupo="noticias_produccion_marca",
+            defecto="",
+        )
+        for mid, nombre in marcas.opciones()
+    ]
+
+
 def _publicacion_por_marca() -> list[Ajuste]:
     """Excepción de PUBLICACIÓN REAL por marca (clave `KENI_PUBLICAR_REAL::marca`). Mismo patrón
     que las etapas: con el maestro encendido, apagar una marca la deja en dry-run mientras el
@@ -791,6 +810,7 @@ def catalogo() -> list[Ajuste]:
         + _construir_catalogo()
         + _ajustes_por_marca()
         + _plan_por_marca()
+        + _plan_redes_por_marca()
         + _publicacion_por_marca()
         + _presupuesto_por_marca()
     )
@@ -960,14 +980,27 @@ def validar_valor(ajuste: Ajuste, valor: Any) -> tuple[str | None, str | None]:
         texto = valor.strip()
         if len(texto) > _TEXTO_MAX:
             return None, f"'{ajuste.clave}' admite hasta {_TEXTO_MAX} caracteres."
+        base_clave = ajuste.clave.split(config.SEP_MARCA, 1)[0]
         # Un PLAN DIARIO se valida por forma: cada segmento no vacío debe ser «categoria:n».
-        if ajuste.clave.split(config.SEP_MARCA, 1)[0] == config.ENV_PLAN_DIA and texto:
+        if base_clave == config.ENV_PLAN_DIA and texto:
             for trozo in texto.split(","):
                 cat, sep, n = trozo.partition(":")
                 if not sep or not cat.strip() or not n.strip().isdigit():
                     return None, (
                         "El plan se escribe como «categoria:n» separados por comas "
                         "(p. ej. «mx:4,internacional:4,breaking:2»)."
+                    )
+        # Las REDES del plan se validan por catálogo: cada id debe ser una red canónica.
+        if base_clave == config.ENV_PLAN_REDES and texto:
+            from . import redes
+
+            for trozo in texto.split(","):
+                rid = trozo.strip().lower()
+                if rid and not redes.es_red(rid):
+                    permitidas = ", ".join(redes.ids())
+                    return None, (
+                        f"'{rid}' no es una red válida; usa ids separados por comas "
+                        f"({permitidas})."
                     )
         return texto, None
 

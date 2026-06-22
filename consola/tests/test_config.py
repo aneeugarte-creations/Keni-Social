@@ -623,3 +623,39 @@ def test_fusion_semantica_max_default_holgado(limpio, store_aislado):
     cubierto (fragmentado en muchos clusters recientes) se funde en UNA pasada."""
     store_aislado.delenv(config.ENV_FUSION_SEMANTICA_MAX, raising=False)
     assert config.fusion_semantica_max() == 80
+
+
+# --------------------------------------------------------------------------- #
+# Redes del plan diario (`KENI_PLAN_REDES[::marca]`): declaran las redes esperadas #
+# --------------------------------------------------------------------------- #
+
+
+def test_parsear_redes_filtra_ids_no_red():
+    """`parsear_redes` conserva solo ids canónicos, en orden, sin duplicados; ignora basura."""
+    assert config.parsear_redes("facebook,instagram") == ["facebook", "instagram"]
+    assert config.parsear_redes(" Facebook , INSTAGRAM ") == ["facebook", "instagram"]
+    assert config.parsear_redes("facebook,foo,instagram,bar") == ["facebook", "instagram"]
+    assert config.parsear_redes("facebook,facebook") == ["facebook"]
+    assert config.parsear_redes("foo,bar") == []
+    assert config.parsear_redes("") == []
+
+
+def test_plan_redes_vacio_sin_ajuste(limpio, store_aislado):
+    """Sin el ajuste (ni en store ni en env), `plan_redes` devuelve []."""
+    store_aislado.delenv(config.ENV_PLAN_REDES, raising=False)
+    assert config.plan_redes() == []
+    assert config.plan_redes("unotv") == []
+
+
+def test_plan_redes_lee_csv_global(limpio, store_aislado):
+    """`plan_redes` parsea la CSV del ajuste global y filtra ids no-red."""
+    store_aislado.setenv(config.ENV_PLAN_REDES, "facebook,instagram,foo")
+    assert config.plan_redes() == ["facebook", "instagram"]
+
+
+def test_plan_redes_override_por_marca_sustituye_al_global(limpio, store_aislado):
+    """El override `KENI_PLAN_REDES::marca` SUSTITUYE al global (no se mezclan)."""
+    store_aislado.setenv(config.ENV_PLAN_REDES, "facebook,instagram")
+    store_aislado.setenv(f"{config.ENV_PLAN_REDES}::unotv", "x,youtube")
+    assert config.plan_redes("unotv") == ["x", "youtube"]
+    assert config.plan_redes() == ["facebook", "instagram"]
