@@ -101,6 +101,21 @@ describe("ProgresoGeneracion", () => {
     expect(screen.queryByRole("button", { name: /Cancelar/ })).toBeNull();
   });
 
+  it("renderiza con métricas PARCIALES (sin ttft/tokens_por_s) sin reventar", () => {
+    // Un run con error guarda métricas parciales: faltan las claves de rendimiento
+    // (`ttft_ms`/`tokens_por_s` llegan undefined, no null). El render no debe lanzar.
+    const metricas = { modelo: "claude-opus-4-8[1m]", num_turns: 1 } as Generacion["metricas"];
+    render(
+      <ProgresoGeneracion
+        generacion={base({ estado: "error", error: "Terminó con error.", metricas })}
+      />,
+    );
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    // Las etiquetas de rendimiento se omiten cuando el dato no viene.
+    expect(screen.queryByText("Velocidad:")).toBeNull();
+    expect(screen.queryByText("TTFT:")).toBeNull();
+  });
+
   it("muestra el error y el botón de reintentar", () => {
     let reintentos = 0;
     render(

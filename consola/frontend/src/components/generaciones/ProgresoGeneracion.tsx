@@ -25,14 +25,17 @@ function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
     { etiqueta: "Coste", valor: costeUsd(metricas.total_cost_usd) },
     { etiqueta: "Duración", valor: duracion(metricas.duration_ms) },
   ];
-  if (metricas.ttft_ms !== null) {
+  // TTFT y tokens/s son campos de rendimiento OPCIONALES: una métrica parcial (run con
+  // error o instantánea temprana del stream) puede no traer la clave (undefined), no solo
+  // `null`. `typeof === "number"` cubre ambos huecos y estrecha el tipo para usarlos.
+  if (typeof metricas.ttft_ms === "number") {
     items.push({
       etiqueta: "TTFT",
       valor: duracion(metricas.ttft_ms),
       titulo: "Tiempo hasta el primer token",
     });
   }
-  if (metricas.tokens_por_s !== null) {
+  if (typeof metricas.tokens_por_s === "number") {
     items.push({
       etiqueta: "Velocidad",
       valor: `${metricas.tokens_por_s.toLocaleString("es-MX", {
