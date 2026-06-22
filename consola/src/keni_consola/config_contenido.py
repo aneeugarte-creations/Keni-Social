@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._config_comun import (
+    ENV_DECISOR_MODELO,
     ENV_FUSION_MODELO,
     ENV_HASHTAGS_MODELO,
     ENV_INSUMOS_MODELO,
@@ -53,6 +54,19 @@ def hashtags_modelo() -> str:
     Mismas semánticas que `insumos_modelo`: "" explícito = sin `--model`.
     """
     raw = os.environ.get(ENV_HASHTAGS_MODELO)
+    if raw is None:
+        return "haiku"
+    return raw.strip()
+
+
+def decisor_modelo() -> str:
+    """Modelo de claude para el Decisor de formato foto/carrusel (`KENI_DECISOR_MODELO`, def "haiku").
+
+    Decidir el camino sobre señales ligeras (titulares, nº de notas/fuentes) es la tarea más
+    acotada del pipeline: salida binaria, contexto mínimo. Por eso va con haiku por defecto.
+    Mismas semánticas que `insumos_modelo`: "" explícito = sin `--model`.
+    """
+    raw = os.environ.get(ENV_DECISOR_MODELO)
     if raw is None:
         return "haiku"
     return raw.strip()

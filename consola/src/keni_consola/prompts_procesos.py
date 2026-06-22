@@ -45,7 +45,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
     # Pipeline de contenido
     "prompt/verificar": ["Investigación · Verificar la fuente (antes del copy)"],
-    "prompt/redactar": ["Producción · Redactar copy desde la nota"],
+    "prompt/decisor": ["Producción · Decisor de formato (foto vs carrusel, antes de Redactar)"],
+    "prompt/redactar": ["Producción · Redactar copy desde la nota (camino foto)"],
+    "prompt/redactar-carrusel": ["Producción · Redactar carrusel (camino carrusel: panel de tarjetas)"],
     "prompt/sugerir-hashtags": [
         "Producción · Keywords: hashtags de la marca + keyword de imagen (etapa tras Redactar)",
     ],

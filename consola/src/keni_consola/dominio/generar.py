@@ -37,6 +37,12 @@ _log = logging.getLogger("keni_consola.generar")
 PROMPT_ENVOLTORIO_REDES = "prompt/envoltorios/redes"
 PROMPT_ENVOLTORIO_CARRUSEL = "prompt/envoltorios/carrusel"
 PROMPT_ENVOLTORIO_COPY_UNICO = "prompt/envoltorios/copy-unico"
+# Camino CARRUSEL de Redactar (cuando el Decisor lo eligió): DIRECTIVA imperativa (arma el panel),
+# no una decisión. Reusa la misma maquinaria de `_bloque_decision_carrusel` (catálogo de fotos),
+# solo cambia la plantilla. El camino FOTO no inyecta bloque de formato (post normal).
+PROMPT_REDACTAR_CARRUSEL = "prompt/redactar-carrusel"
+# Decisor de formato (etapa previa a Redactar): elige foto|carrusel sobre señales ligeras.
+PROMPT_DECISOR = "prompt/decisor"
 
 
 def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
@@ -199,7 +205,12 @@ UMBRAL_COPY_ESTRECHO = 600
 MAX_SLIDES_CARRUSEL = 9
 
 
-def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -> str:
+def _bloque_decision_carrusel(
+    n_notas: int,
+    fotos_notas: list[dict[str, str]],
+    *,
+    plantilla_slug: str = PROMPT_ENVOLTORIO_CARRUSEL,
+) -> str:
     """Bloque del prompt que pide DECIDIR entre DOS tipos de output: `post` o `carrusel`.
 
     El carrusel es EDITORIAL (una placa por SUB-HISTORIA, no una foto por slide): la portada
@@ -223,7 +234,7 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
         )
     else:
         catalogo = "FOTOS DISPONIBLES: ninguna (todos los slides salen como placa de solo texto)."
-    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_CARRUSEL)
+    plantilla = _plantilla_envoltorio(plantilla_slug)
     return (
         plantilla
         .replace("{{N_NOTAS}}", str(n_notas))
@@ -272,12 +283,20 @@ _SUGERENCIA_FORMATO_SIMPLE = (
     "de cada tarjeta las añade el equipo después."
 )
 
+# Camino FOTO ya decidido por el Decisor: el formato está FIJADO, no se decide. El modelo solo
+# redacta el post (sin slides). Sustituye a la sugerencia/decisión cuando el Decisor ya eligió.
+_DIRECTIVA_FOTO = (
+    'El formato YA está decidido: declara `"tipo": "post"` en el json y NO incluyas "slides" '
+    "(es un único post de foto)."
+)
+
 
 def instruccion_copy_unico(
     redes_ids: list[str],
     *,
     n_notas: int = 0,
     fotos_notas: list[dict[str, str]] | None = None,
+    camino: str = "",
 ) -> str:
     """Instrucción ADITIVA (copy UNIFICADO): un copy + un texto-en-imagen, SIN encoger IG/FB a X.
 
@@ -308,16 +327,26 @@ def instruccion_copy_unico(
     # PANEL pide además los slides + catálogo de fotos (carrusel multi-historia REAL); con un tema
     # único, la sugerencia simple (post vs carrusel) basta —las fotos se ponen después—. El prefijo
     # (copy_in + tipo) es común; solo cambia el bloque que se anexa según el número de notas.
+    # Bloque de FORMATO al final del cierre json. Con el Decisor (camino fijado) NO se decide:
+    # `carrusel` inyecta la DIRECTIVA de panel (arma slides), `foto` fija el post. Sin Decisor
+    # (`camino=""`, comportamiento de hoy) se mantiene la decisión dentro del prompt: bloque PANEL
+    # con 2+ notas, sugerencia simple si no.
+    if camino == "carrusel":
+        bloque_formato = _bloque_decision_carrusel(
+            n_notas, list(fotos_notas or []), plantilla_slug=PROMPT_REDACTAR_CARRUSEL
+        )
+    elif camino == "foto":
+        bloque_formato = _DIRECTIVA_FOTO
+    elif n_notas >= 2:
+        bloque_formato = _bloque_decision_carrusel(n_notas, list(fotos_notas or []))
+    else:
+        bloque_formato = _SUGERENCIA_FORMATO_SIMPLE
     cierre_json_copy_in = (
         '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
         '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
         "SOBRE la imagen (en un carrusel, el titular PARAGUAS de la PORTADA), distinto del "
         "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta. "
-        + (
-            _bloque_decision_carrusel(n_notas, list(fotos_notas or []))
-            if n_notas >= 2
-            else _SUGERENCIA_FORMATO_SIMPLE
-        )
+        + bloque_formato
     )
     if estrechas and amplias:
         tope_corto = min(limites_plataforma.limite_de(r) for r in estrechas)
@@ -377,6 +406,7 @@ def componer(
     copy_unico: bool = False,
     n_notas: int = 0,
     fotos_notas: list[dict[str, str]] | None = None,
+    camino: str = "",
     indicaciones: str = "",
     fecha_redaccion: str = "",
 ) -> str:
@@ -430,7 +460,7 @@ def componer(
         partes.append("---\n" + indicaciones.strip())
     if redes_ids:
         partes.append(
-            instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas)
+            instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas, camino=camino)
             if copy_unico
             else instruccion_redes(redes_ids)
         )
@@ -455,7 +485,7 @@ def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
 
 # Tipos de generacion que son TRABAJO DE FONDO (los lanza el propio pipeline/autogen, no una
 # persona esperando): en la cola del worker ceden el paso a los lanzamientos manuales.
-_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen", "sugerir-hashtags"})
+_TIPOS_FONDO: frozenset[str] = frozenset({"pipeline", "autogen", "sugerir-hashtags", "decisor"})
 
 
 def lanzar(
@@ -695,6 +725,7 @@ def componer_copy(
     redes_ids: list[str],
     n_notas: int = 0,
     fotos_notas: list[dict[str, str]] | None = None,
+    camino: str = "",
 ) -> str:
     """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
 
@@ -717,6 +748,7 @@ def componer_copy(
     return componer(
         cuerpo, adjuntos_copy(marca), contexto,
         redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
+        camino=camino,
         indicaciones=indicaciones_dom.bloque_para_marca(marca),
         fecha_redaccion=fecha_es(),
     )
@@ -742,6 +774,7 @@ def lanzar_copy(
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     n_notas: int = 0,
+    camino: str = "",
     tipo_contenido: str = "",
     revision_inicial: str = "",
     url_fuente: str = "",
@@ -791,7 +824,7 @@ def lanzar_copy(
     # La política de emojis del copy vive en el prompt + editorial adjunta (única fuente).
     prompt = componer_copy(
         cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
-        n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos,
+        n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos, camino=camino,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
@@ -806,6 +839,7 @@ def lanzar_copy(
         tipo_contenido=tipo_contenido or "",
         revision_inicial=revision_inicial or "",
         url_fuente=url_fuente or "",
+        camino=camino or "",
         # Dedup AL EXITO (pipeline/autogen): limpiar `copy_pendiente` / etiquetar `autogen`
         # cuando los borradores YA existen, no al encolar (un copy fallido se reintenta).
         limpiar_pendiente=bool(limpiar_pendiente),

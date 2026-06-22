@@ -341,6 +341,13 @@ ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 # ON: la sugerencia es READ-ONLY y barata, y no toca el copy ni publica nada.
 ENV_PIPELINE_SUGERIR_HASHTAGS = "KENI_PIPELINE_SUGERIR_HASHTAGS"
 
+# Etapa de Decisor del pipeline (PREVIA a Redactar): un agente barato (Haiku) decide el CAMINO de
+# cada tema —`foto` o `carrusel`— a partir de señales ligeras (nº de sub-historias, titulares,
+# fuentes, evento, marca), ANTES de redactar. El camino elegido se guarda en `copy_pendiente` y
+# Redactar usa el prompt del camino (foto o carrusel). CONSERVADOR por defecto (OFF): sin el flag,
+# Redactar decide el formato dentro de su propio prompt (comportamiento de hoy).
+ENV_PIPELINE_DECISOR = "KENI_PIPELINE_DECISOR"
+
 # Etapa de Revisar del COPY del pipeline: "Revisar" (`KENI_PIPELINE_REVISAR`, toggle de etapa).
 # ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
 # adentro" revisa el copy generado: verificación de VOZ contra los patrones medidos de
@@ -447,6 +454,10 @@ ENV_FUSION_MODELO = "KENI_FUSION_MODELO"
 # acotada, así que va con haiku por defecto (no necesita el modelo grande). Def "haiku"; "" = sin
 # --model. Ver `dominio/sugerir_hashtags.py`.
 ENV_HASHTAGS_MODELO = "KENI_HASHTAGS_MODELO"
+# Modelo del Decisor de formato (foto vs carrusel): decisión binaria sobre señales ligeras, la
+# tarea más acotada del pipeline, así que va con haiku por defecto. Def "haiku"; "" = sin --model.
+# Ver `dominio/decisor.py`.
+ENV_DECISOR_MODELO = "KENI_DECISOR_MODELO"
 
 # Traducir + tropicalización MX de temas extranjeros en el Radar (Ola 4). Traducir es
 # SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de Recolectar, gateada por
@@ -878,6 +889,7 @@ __all__ = [
     'ENV_PEXELS_API_KEY',
     'ENV_PIXABAY_API_KEY',
     'ENV_PIPELINE_SUGERIR_HASHTAGS',
+    'ENV_PIPELINE_DECISOR',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
@@ -932,6 +944,7 @@ __all__ = [
     'ENV_INGESTA_WORKERS',
     'ENV_FUSION_MODELO',
     'ENV_HASHTAGS_MODELO',
+    'ENV_DECISOR_MODELO',
     'ENV_INSUMOS_MODELO',
     'ENV_LOG_LEVEL',
     'ENV_MAQUINA',

@@ -94,6 +94,11 @@ PROC_SUGERIR_HASHTAGS = "sugerir-hashtags"
 # `carrusel` JSON en todas las piezas gemelas del contenido (la portada se conserva). Solo el
 # `publicacion_id` viaja: el copy va DENTRO del prompt (autocontenido), igual que sugerir-hashtags.
 PROC_CARRUSEL = "carrusel"
+# Decisor de FORMATO (PREVIO a Redactar): `claude -p` READ-ONLY y barato (Haiku) que decide el
+# camino del tema —`foto` o `carrusel`— sobre señales ligeras; el post-procesado guarda el camino en
+# `copy_pendiente` del tema (sin migración) para que Redactar use el prompt del camino. Solo el
+# `publicacion_id` viaja: las señales van DENTRO del prompt (autocontenido).
+PROC_DECISOR = "decisor"
 
 # ------------------------------------------------------------------------------------------- #
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
@@ -254,6 +259,7 @@ def construir_copy(
     url_fuente: str = "",
     limpiar_pendiente: bool = False,
     etiqueta_exito: str = "",
+    camino: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de PIEZAS (copy/RSS): parsea piezas + crea borradores.
 
@@ -300,6 +306,10 @@ def construir_copy(
         "url_fuente": url_fuente or "",
         "limpiar_pendiente": bool(limpiar_pendiente),
         "etiqueta_exito": etiqueta_exito or "",
+        # Camino elegido por el Decisor (foto|carrusel). "" = el modelo decide el formato dentro del
+        # prompt (comportamiento de hoy, sin Decisor). El post-procesado lo usa para hornear o no
+        # el carrusel sin depender del `tipo` que devuelva el modelo.
+        "camino": camino or "",
     }
 
 
@@ -443,6 +453,16 @@ def construir_sugerir_hashtags(*, publicacion_id: str) -> dict[str, Any]:
     reconstruye el callback (que toca `repos`) vía `dominio.sugerir_hashtags`.
     """
     return {"kind": PROC_SUGERIR_HASHTAGS, "publicacion_id": publicacion_id}
+
+
+def construir_decisor(*, publicacion_id: str) -> dict[str, Any]:
+    """Spec del post-procesado del DECISOR de formato: guarda el camino elegido en el tema.
+
+    `publicacion_id` es el tema (contenido): el decisor parsea `{"camino": "foto"|"carrusel"}` y
+    lo persiste en `contenido.copy_pendiente` (JSON, sin migración) para que la etapa de Redactar
+    lo lea. El worker reconstruye el callback (que toca `repos`) vía `dominio.decisor`.
+    """
+    return {"kind": PROC_DECISOR, "publicacion_id": publicacion_id}
 
 
 def construir_carrusel(*, publicacion_id: str, max_slides: int) -> dict[str, Any]:
@@ -687,6 +707,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             publicacion_id=p["publicacion_id"], max_slides=int(p.get("max_slides") or 9),
         )
 
+    if kind == PROC_DECISOR:
+        # Import perezoso: el factory toca BD (`repos`) para guardar el camino en `copy_pendiente`.
+        from . import decisor as dom_decisor
+
+        return dom_decisor.construir_procesar_decisor(
+            publicacion_id=p["publicacion_id"]
+        )
+
     if kind == PROC_DEV_DISCOVERY:
         # Import perezoso: el factory toca BD (`sugerencias`/`db_sugerencias`); `sugerencias`
         # vive en el paquete raiz (no en `dominio`), por eso el import sube un nivel.
@@ -727,6 +755,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             tipo_contenido=p.get("tipo_contenido", "") or "",
             revision_inicial=p.get("revision_inicial", "") or "",
             url_fuente=p.get("url_fuente", "") or "",
+            camino=p.get("camino", "") or "",
         )
         fuente_id = p.get("fuente_id") or ""
         clave = p.get("clave") or ""

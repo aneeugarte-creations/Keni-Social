@@ -25,6 +25,7 @@ from ._comun import (
     VERIFICACION_SALTADA,
     VERIFICACION_VERIFICADO,
     VERIFICADAS_OK,
+    _copy_pendiente_leido,
     _log,
     anotar_intento,
     en_backoff,
@@ -389,12 +390,40 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
     # OFF no se genera copy (aunque el daemon barra por otra etapa). Por marca se filtra abajo.
     if not config.pipeline_activo():
         return []
+    # Import perezoso (evita ciclos en la carga del paquete): el Decisor toca `dominio.generar`.
+    from ..dominio import decisor as decisor_dom
+
     lanzados: list[dict[str, Any]] = []
     for tema in temas_para_redactar():
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla). Misma FUENTE ÚNICA que la vista/catálogo.
         if not config.etapa_activa(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
             continue
+        # DECISOR (etapa PREVIA): si está activo para la marca y el tema aún no tiene camino, decide
+        # primero (foto|carrusel) y redacta en el siguiente tick (el camino se guarda en
+        # `copy_pendiente`, que lee `lanzar_redactar_de_tema`). Acotado por intentos: si el Decisor
+        # falla repetidamente, se redacta directo (camino="" → el modelo decide) para no bloquear el
+        # tema. Sin el flag (`KENI_PIPELINE_DECISOR` OFF), se redacta directo como hoy.
+        if (
+            config.etapa_activa(config.ENV_PIPELINE_DECISOR, tema.get("marca") or "")
+            and not str(_copy_pendiente_leido(tema).get("camino") or "").strip()
+            and intentos_de(tema, "decisor_intentos") < _MAX_INTENTOS_ETAPA
+        ):
+            try:
+                gen = decisor_dom.lanzar_para_tema(tema)
+            except generaciones.ColaLlenaError as e:
+                _log.info("pipeline: Decisor en pausa por admisión (%s); el resto entra en el próximo tick.", e)
+                return lanzados
+            except Exception:  # noqa: BLE001 -- un fallo del Decisor no debe matar la fase
+                _log.exception(
+                    "pipeline: fallo el Decisor del tema %s (marca %s).",
+                    tema.get("id", ""), tema.get("marca", ""),
+                )
+            else:
+                if gen:
+                    anotar_intento(tema, "decisor_intentos")
+                    lanzados.append(gen)
+                    continue  # decide ahora; redacta en el siguiente tick
         # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
         # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
         if intentos_de(tema, "redactar_intentos") >= _MAX_INTENTOS_ETAPA:

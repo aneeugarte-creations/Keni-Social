@@ -210,6 +210,7 @@ from ._config_comun import (  # noqa: F401
     ENV_PIPELINE_ILUSTRAR,
     ENV_PIPELINE_STOCK,
     ENV_PIPELINE_SUGERIR_HASHTAGS,
+    ENV_PIPELINE_DECISOR,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
     ENV_PIPELINE_EN_PROCESO_MAX,
@@ -384,6 +385,7 @@ from .config_auth import (  # noqa: F401
     token,
 )
 from .config_contenido import (  # noqa: F401
+    decisor_modelo,
     fusion_modelo,
     hashtags_modelo,
     insumos_modelo,

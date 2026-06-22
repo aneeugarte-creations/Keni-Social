@@ -124,6 +124,20 @@ export const QUEUE_INVESTIGACION: Record<string, string> = {
 /** Las fases del MOTOR de auto-producción, en orden de flujo. */
 export const FASES_PRODUCCION: readonly FasePipeline[] = [
   {
+    // Decisor de FORMATO: agente barato (Haiku) que, ANTES de Redactar, elige el camino del tema
+    // —foto o carrusel— sobre señales ligeras (titulares, nº de notas/fuentes, evento, marca). El
+    // camino elegido dirige a Redactar (foto) o a Carrusel. OFF por defecto: sin él, Redactar
+    // decide el formato dentro de su propio prompt.
+    nombre: "Decisor",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_DECISOR", MAESTRO_PRODUCCION],
+    ayuda: "Elige el camino de la pieza —foto o carrusel— antes de redactarla",
+    doc: "prompt/decisor",
+    contextoMarca: true,
+    queue: "decisor",
+    etapa: "decisor",
+  },
+  {
     nombre: "Redactar",
     es_ia: true,
     claves: ["KENI_PIPELINE_REDACTAR", MAESTRO_PRODUCCION],
@@ -138,13 +152,25 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       nota: "Apagar «Producción» en una marca la deja sin copy automático.",
     },
     // Los envoltorios NO son agentes sueltos: son fragmentos que `generar.componer()` inyecta
-    // en este prompt según las redes pedidas (una pieza por red / copy único / decisión de
-    // carrusel). Cuelgan de Redactar para editarlos donde se usan.
+    // en este prompt según las redes pedidas (una pieza por red / copy único). La DECISIÓN de
+    // formato ya no vive aquí: la toma el Decisor (fase previa) y el camino carrusel tiene su
+    // propia fase. Cuelgan de Redactar para editarlos donde se usan.
     subPrompts: [
       { nombre: "Redes", doc: "prompt/envoltorios/redes", ayuda: "Una pieza por red" },
       { nombre: "Unificado", doc: "prompt/envoltorios/copy-unico", ayuda: "El mismo copy para todas las redes" },
-      { nombre: "Carrusel", doc: "prompt/envoltorios/carrusel", ayuda: "Decisión de carrusel" },
     ],
+  },
+  {
+    // Camino CARRUSEL de Redactar: cuando el Decisor elige carrusel, el copy se redacta con este
+    // prompt (panel editorial: portada paraguas + un slide por sub-historia) en vez del de foto.
+    // Comparte el motor de copy de Redactar (su flag/cola); por eso solo cuelga del maestro y no
+    // pinta switch propio. Su prompt es editable aquí.
+    nombre: "Carrusel",
+    es_ia: true,
+    claves: [MAESTRO_PRODUCCION],
+    ayuda: "Redacta el copy como carrusel (panel de tarjetas) cuando el Decisor elige ese camino",
+    doc: "prompt/redactar-carrusel",
+    contextoMarca: true,
   },
   {
     nombre: "Keywords",
@@ -194,6 +220,7 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
 
 /** Tipo de job → fase con cola (Producción). */
 export const QUEUE_PRODUCCION: Record<string, string> = {
+  decisor: "decisor",
   copy: "redactar",
   autogen: "redactar",
   "sugerir-hashtags": "sugerir-hashtags",

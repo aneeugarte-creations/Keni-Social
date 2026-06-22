@@ -572,6 +572,7 @@ def construir_procesar_copy(
     tipo_contenido: str = "",
     revision_inicial: str = "",
     url_fuente: str = "",
+    camino: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
@@ -608,12 +609,13 @@ def construir_procesar_copy(
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
         if avisos_voz:
             _avisar_voz(avisos_voz, publicacion_id=publicacion_id, marca=marca)
-        # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo=carrusel`) Y emitió 2+ slides (un
-        # panel multi-historia; una sola tarjeta no es panel). Cada slide resuelve su foto por NÚMERO
-        # contra el catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
-        # Una sugerencia de carrusel SIN panel horneable NO cambia el formato: el post sigue siendo
-        # foto y el equipo arma el carrusel a mano (acción «Carrusel» del feed).
-        es_carrusel = parsed.get("tipo") == "carrusel"
+        # CARRUSEL EDITORIAL: con el Decisor (camino fijado) lo manda el CAMINO; sin Decisor
+        # (`camino=""`, hoy) lo decide el MODELO con `tipo=carrusel`. En ambos casos requiere 2+
+        # slides reales (un panel; una sola tarjeta no es panel): cada slide resuelve su foto por
+        # NÚMERO contra el catálogo, y la portada sigue viajando como `imagen_fuente`. Un carrusel
+        # SIN panel horneable NO cambia el formato: el post sigue siendo foto y el equipo lo arma a
+        # mano (acción «Carrusel» del feed).
+        es_carrusel = (camino == "carrusel") if camino else (parsed.get("tipo") == "carrusel")
         slides_resueltos: list[dict[str, str]] = []
         if es_carrusel:
             urls = [str(f.get("imagen") or "") for f in (fotos_notas or [])]

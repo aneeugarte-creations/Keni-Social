@@ -80,6 +80,10 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         n_notas = max(1, int(pend.get("n_notas") or 1))
     except (TypeError, ValueError):
         n_notas = 1
+    # CAMINO elegido por el Decisor (etapa previa): "foto"|"carrusel". Lo guardó el Decisor en
+    # `copy_pendiente`. "" (sin Decisor / flag OFF) = Redactar decide el formato dentro de su prompt
+    # (comportamiento de hoy).
+    camino = (pend.get("camino") or "").strip()
     tipo_contenido = "fuente" if imagen else ""
     fuente_id = (pend.get("fuente_id") or "").strip() or None
     clave = (pend.get("clave") or "").strip() or None
@@ -100,6 +104,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         imagen_fuente=imagen,
         fotos_notas=fotos_notas,
         n_notas=n_notas,
+        camino=camino,
         tipo_contenido=tipo_contenido,
         # Revisión inicial según el veredicto de FUENTE: `verificado` (la IA la confirmó a fondo)
         # -> pieza sin aviso (sujeta al chequeo de voz); `saltada` (fuente propia, sin verificar por
