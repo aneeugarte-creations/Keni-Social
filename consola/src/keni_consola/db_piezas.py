@@ -298,6 +298,15 @@ def _publicacion_de_filas(
             "pid": plat["id"], "red": plat["red"], "pestado": plat["estado"],
             "copy": plat["copy"], "copy_in": plat["copy_in"], "imagen": plat["imagen"],
             "imagen_fuente": plat["imagen_fuente"], "foto": plat["foto"],
+            # PROCEDENCIA/AUTORIZACIÓN de imagen (fotos de stock): la fila de lote no las trae
+            # (pieza recién creada sin foto de stock) -> `.get` => None, que `_fila_a_publicacion`
+            # resuelve a "" / False. Sin estas claves el camino del LOTE caía con KeyError.
+            "imagen_origen": plat.get("imagen_origen"),
+            "imagen_proveedor": plat.get("imagen_proveedor"),
+            "imagen_autor": plat.get("imagen_autor"),
+            "imagen_licencia": plat.get("imagen_licencia"),
+            "imagen_credito_url": plat.get("imagen_credito_url"),
+            "imagen_autorizada": plat.get("imagen_autorizada"),
             "video": plat["video"], "falta_video": plat["falta_video"],
             "revision": plat["revision"], "revisor_id": plat["revisor_id"],
             "revisor_nombre": plat["revisor_nombre"], "revisado_en": plat["revisado_en"],

@@ -46,7 +46,7 @@ def _marcar_stock(pieza_id: str, *, autorizada: bool = False) -> None:
     )
 
 
-def test_put_pieza_a_programado_se_bloquea_si_stock_sin_autorizar():
+def test_put_pieza_a_programado_se_bloquea_si_stock_sin_autorizar(entorno):
     cli = _cli()
     pieza = _crear_borrador(cli)
     _marcar_stock(pieza["id"], autorizada=False)
@@ -59,7 +59,7 @@ def test_put_pieza_a_programado_se_bloquea_si_stock_sin_autorizar():
     assert "SIN LICENCIA" in r.json().get("error", "")
 
 
-def test_patch_plataforma_a_programado_se_bloquea_si_stock_sin_autorizar():
+def test_patch_plataforma_a_programado_se_bloquea_si_stock_sin_autorizar(entorno):
     cli = _cli()
     pieza = _crear_borrador(cli)
     _marcar_stock(pieza["id"], autorizada=False)
@@ -72,7 +72,7 @@ def test_patch_plataforma_a_programado_se_bloquea_si_stock_sin_autorizar():
     assert "SIN LICENCIA" in r.json().get("error", "")
 
 
-def test_patch_plataforma_a_programado_pasa_tras_autorizar():
+def test_patch_plataforma_a_programado_pasa_tras_autorizar(entorno):
     cli = _cli()
     pieza = _crear_borrador(cli)
     _marcar_stock(pieza["id"], autorizada=True)
