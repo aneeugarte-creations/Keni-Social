@@ -1,7 +1,9 @@
-// Vista SEMANAL de Gestión con el diseño del calendario MENSUAL: una columna por día (lun→dom)
-// y, dentro de cada día, sus franjas en texto («Mañana · 08:00–16:00» + los nombres debajo) en
-// vez de la matriz franja×día con avatares. Sigue siendo editable: cada persona lleva su × (al
-// pasar el ratón) y cada franja su «+ Añadir»; la cabecera del día abre el «Resumen del día».
+// Vista SEMANAL de Gestión con el MISMO lenguaje visual que el calendario mensual: una columna
+// por día (lun→dom) y, dentro de cada día, sus franjas en texto («Mañana · 08:00–16:00» + los
+// nombres debajo). Comparte la paleta del mes: bloque naranja `keni-50` para la franja con gente
+// (el chip de turno de la plataforma), hueco discontinuo neutro para la vacía, anillo `keni-500`
+// + número naranja para «hoy». Sigue siendo editable: cada persona lleva su × (al pasar el ratón)
+// y cada franja su «+ Añadir»; la cabecera del día abre el «Resumen del día».
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +16,6 @@ import {
   ChipAusenciaDia,
   formatearFechaCorta,
   MasAusencias,
-  presentacionFranja,
   type ConflictoCandidato,
 } from "./comun";
 
@@ -76,11 +77,7 @@ export function SemanaPorDias({
               key={fecha}
               className={cn(
                 "flex flex-col gap-1 border-b border-r px-2 py-2",
-                esHoy
-                  ? "bg-keni-50/70 ring-1 ring-inset ring-keni-500/40 dark:bg-keni-900/20"
-                  : finde
-                    ? "bg-muted/50 dark:bg-muted/20"
-                    : "",
+                finde && !esHoy && "bg-muted/40 dark:bg-muted/15",
               )}
             >
               <button
@@ -91,18 +88,25 @@ export function SemanaPorDias({
               >
                 <span
                   className={cn(
-                    "text-xs font-semibold capitalize",
-                    esHoy && "text-keni-700 dark:text-keni-300",
+                    "text-[11px] font-medium uppercase tracking-wide",
+                    esHoy ? "text-keni-700 dark:text-keni-300" : "text-muted-foreground",
                   )}
                 >
                   {diaCorto(fecha)}
                   {esHoy && (
-                    <span className="ml-1 font-normal normal-case text-keni-600 dark:text-keni-300">
+                    <span className="ml-1 font-normal text-keni-600 dark:text-keni-300">
                       · Hoy
                     </span>
                   )}
                 </span>
-                <span className="text-xs tabular-nums text-muted-foreground">
+                <span
+                  className={cn(
+                    "text-xs tabular-nums",
+                    esHoy
+                      ? "font-semibold text-keni-700 dark:text-keni-300"
+                      : "text-muted-foreground",
+                  )}
+                >
                   {fecha.slice(8, 10)}
                 </span>
               </button>
@@ -130,27 +134,45 @@ export function SemanaPorDias({
               className={cn(
                 "min-h-[16rem] min-w-0 space-y-1.5 border-b border-r p-1.5",
                 !esHoy && finde && "bg-muted/30 dark:bg-muted/10",
-                esHoy && "bg-keni-50/30 dark:bg-keni-900/10",
+                esHoy && "ring-1 ring-inset ring-keni-500/50",
               )}
             >
-              {franjasLaborales.map((franja, idx) => {
-                const meta = presentacionFranja(franja, idx);
+              {franjasLaborales.map((franja) => {
                 const personas = personasPorCelda.get(`${franja.id}|${fecha}`) ?? [];
                 const yaEnCelda = new Set(personas.map((t) => t.miembro_id));
                 const cmsDisponibles = cms.filter((m) => !yaEnCelda.has(m.id));
+                // Mismo lenguaje visual que el calendario mensual: una franja CON gente es un
+                // bloque naranja `keni-50` (el chip de turno de la plataforma); vacía, un hueco
+                // de contorno discontinuo neutro («añadir aquí»). El naranja significa «hay turno».
+                const tienePersonas = personas.length > 0;
                 return (
                   <div
                     key={franja.id}
                     className={cn(
-                      "rounded-md border border-l-[3px] px-1.5 py-1",
-                      meta.banda,
-                      meta.fondo,
+                      "rounded px-1.5 py-1",
+                      tienePersonas
+                        ? "bg-keni-50 dark:bg-keni-900/30"
+                        : "border border-dashed border-border bg-muted/20 dark:bg-muted/10",
                     )}
                   >
                     <div className="mb-0.5 flex items-baseline justify-between gap-1">
-                      <span className="truncate text-[11px] font-semibold leading-tight text-foreground/90">
+                      <span
+                        className={cn(
+                          "truncate text-[11px] font-medium leading-tight",
+                          tienePersonas
+                            ? "text-keni-800 dark:text-keni-200"
+                            : "text-muted-foreground",
+                        )}
+                      >
                         {franja.nombre}
-                        <span className="ml-1 font-normal tabular-nums text-muted-foreground">
+                        <span
+                          className={cn(
+                            "ml-1 font-normal tabular-nums",
+                            tienePersonas
+                              ? "text-keni-700/70 dark:text-keni-300/70"
+                              : "text-muted-foreground/70",
+                          )}
+                        >
                           · {franja.inicio}–{franja.fin}
                         </span>
                       </span>
@@ -163,8 +185,8 @@ export function SemanaPorDias({
                         </Badge>
                       ) : null}
                     </div>
-                    {personas.length > 0 && (
-                      <div className="space-y-px text-foreground/80">
+                    {tienePersonas && (
+                      <div className="space-y-px text-keni-800/90 dark:text-keni-200/90">
                         {personas.map((t) => (
                           <ChipTurnoCM
                             key={t.id}
@@ -180,7 +202,7 @@ export function SemanaPorDias({
                       </div>
                     )}
                     {editable && (
-                      <div className="mt-1">
+                      <div className={tienePersonas ? "mt-1" : "mt-0.5"}>
                         <DropdownAnadirPersona
                           lunes={lunes}
                           fecha={fecha}
@@ -188,7 +210,7 @@ export function SemanaPorDias({
                           cmsDisponibles={cmsDisponibles}
                           conflictoCandidato={conflictoCandidato}
                           onCambio={onCambio}
-                          placeholder={personas.length === 0 ? "Añadir turno" : "Añadir"}
+                          placeholder={tienePersonas ? "Añadir" : "Añadir turno"}
                         />
                       </div>
                     )}
