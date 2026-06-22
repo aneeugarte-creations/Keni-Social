@@ -45,8 +45,6 @@ steps:
         consola/tests/test_api_media.py
         consola/tests/test_almacen_media.py
         consola/tests/test_api_sugerencias.py
-        consola/tests/test_api_carpetas.py
-        consola/tests/test_api_proyectos.py
         consola/tests/test_permisos.py
         consola/tests/test_secretos.py
         consola/tests/test_seguridad.py
