@@ -21,7 +21,7 @@ import logging
 import re
 from typing import Any
 
-from .. import marcas, repos
+from .. import marcas, redes, repos
 from . import copy as dom_copy
 from . import generar, jobspec
 
@@ -120,14 +120,19 @@ def _componer_prompt(
     return cuerpo + directiva + _contexto_editorial(marca)
 
 
-def lanzar_para_pieza(pieza_id: str, longitud: str = LONGITUD_DEFECTO) -> dict[str, Any]:
+def lanzar_para_pieza(
+    pieza_id: str, longitud: str = LONGITUD_DEFECTO, *, como_variante: bool = False
+) -> dict[str, Any]:
     """ENCOLA la generación del carrusel a partir del copy de una pieza. Devuelve el registro.
 
     Lee el copy + el titular de portada de la pieza, compone el prompt (autocontenido) y lanza un
-    `claude -p` READ-ONLY cuyo post-procesado hornea los slides y los escribe en TODO el contenido
-    (todas las piezas gemelas). `longitud` ∈ {corto (4-5 slides), largo (8-9)}; cae al defecto si
-    no es válida. Idempotente por `carrusel:{publicacion_id}:{longitud}` (corto y largo son runs
-    distintos). Lanza `CarruselError` si la pieza no existe o no hay copy del que partir.
+    `claude -p` READ-ONLY. `longitud` ∈ {corto (4-5 slides), largo (8-9)}; cae al defecto si no es
+    válida. Lanza `CarruselError` si la pieza no existe o no hay copy del que partir.
+
+    `como_variante` False (legado): el post-procesado hornea los slides y los ESCRIBE en las piezas
+    existentes (sobrescribe); idempotente por `carrusel:{publicacion_id}:{longitud}`. True
+    (conversión NO destructiva): crea piezas `variante='carrusel'` HERMANAS junto a las foto;
+    idempotente por `carrusel:variante:{publicacion_id}:{longitud}` (run distinto del legado).
     """
     pieza = repos.obtener_pieza(pieza_id)
     if pieza is None:
@@ -143,20 +148,24 @@ def lanzar_para_pieza(pieza_id: str, longitud: str = LONGITUD_DEFECTO) -> dict[s
     longitud = longitud if longitud in LONGITUDES else LONGITUD_DEFECTO
     min_slides, max_slides = _rango_longitud(longitud)
 
-    procesar_spec = jobspec.construir_carrusel(publicacion_id=publicacion_id, max_slides=max_slides)
+    procesar_spec = jobspec.construir_carrusel(
+        publicacion_id=publicacion_id, max_slides=max_slides, como_variante=como_variante,
+    )
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
     prompt = _componer_prompt(
         copy=copy, copy_in=copy_in, marca=marca, min_slides=min_slides, max_slides=max_slides,
     )
+    prefijo = "Variante carrusel" if como_variante else "Carrusel"
+    clave = f"carrusel:variante:{publicacion_id}:{longitud}" if como_variante else f"carrusel:{publicacion_id}:{longitud}"
     return generar.lanzar(
         tipo="carrusel",
-        titulo=f"Carrusel {longitud} · {pieza.get('titulo', '') or 'post'}",
+        titulo=f"{prefijo} {longitud} · {pieza.get('titulo', '') or 'post'}",
         marca=marca,
         prompt=prompt,
         procesar=procesar,
         procesar_spec=procesar_spec,
         endurecer=_endurecer(),
-        clave_idem=f"carrusel:{publicacion_id}:{longitud}",
+        clave_idem=clave,
         publicacion_id=publicacion_id,
     )
 
@@ -245,15 +254,77 @@ def aplicar_carrusel(publicacion_id: str, titulares: list[str]) -> list[dict[str
     return slides
 
 
-def construir_procesar_carrusel(*, publicacion_id: str, max_slides: int = MAX_SLIDES):  # noqa: ANN201
+def crear_variante_carrusel(publicacion_id: str, titulares: list[str]) -> list[dict[str, str]]:
+    """Conversión NO DESTRUCTIVA: crea piezas `variante='carrusel'` HERMANAS de las foto.
+
+    Hornea los slides una vez y, por cada red de formato carrusel (IG/FB) que tenga pieza FOTO,
+    crea una pieza nueva `variante='carrusel'` en borrador copiando el copy/copy_in/foto de la foto
+    y con los slides horneados — SIN tocar la pieza foto (sigue viva; el feed muestra ambas como
+    tarjetas hermanas). Idempotente: si ya existe la variante carrusel de una red, RE-HORNEA sus
+    slides en vez de duplicarla. Devuelve los slides ([] si no hay piezas foto editables o ninguno
+    compuso).
+    """
+    filas = repos.listar_piezas_fila(publicacion_id=publicacion_id) or []
+    foto = [
+        f for f in filas
+        if (str(f.get("variante") or "foto")) == "foto"
+        and str(f.get("estado") or "") in ESTADOS_EDITABLES
+    ]
+    if not foto:
+        return []
+    marca = str(foto[0].get("marca") or "")
+    slides = hornear_slides(marca, titulares)
+    if not slides:
+        _log.warning(
+            "carrusel: sin slides componibles para el contenido %s; no se crea variante", publicacion_id
+        )
+        return []
+    payload = json.dumps(slides, ensure_ascii=False)
+    redes_carrusel = set(redes.redes_de_formato(redes.FORMATO_CARRUSEL))
+    existentes = {
+        str(f.get("red") or ""): f
+        for f in filas
+        if (str(f.get("variante") or "foto")) == "carrusel"
+    }
+    for f in foto:
+        red = str(f.get("red") or "")
+        if red not in redes_carrusel:
+            continue  # la variante carrusel solo va a las redes de su formato (IG/FB)
+        ya = existentes.get(red)
+        if ya is not None:
+            repos.actualizar_pieza(str(ya.get("id") or ""), {"carrusel": payload})
+            continue
+        repos.crear_pieza_fila(
+            publicacion_id=publicacion_id,
+            red=red,
+            marca=marca,
+            estado="borrador",
+            copy=str(f.get("copy") or ""),
+            copy_in=str(f.get("copy_in") or ""),
+            foto=str(f.get("foto") or ""),
+            imagen=str(f.get("imagen") or ""),
+            imagen_fuente=str(f.get("imagen_fuente") or ""),
+            carrusel=payload,
+            variante="carrusel",
+        )
+    return slides
+
+
+def construir_procesar_carrusel(
+    *, publicacion_id: str, max_slides: int = MAX_SLIDES, como_variante: bool = False
+):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job (corre en el worker).
 
-    `max_slides` acota cuántos titulares se aceptan (el tope de la longitud elegida).
+    `max_slides` acota cuántos titulares se aceptan (el tope de la longitud elegida). `como_variante`
+    True crea piezas carrusel hermanas (no destructivo); False (legado) sobrescribe las existentes.
     """
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
         titulares = _parsear_slides(salida, max_slides)
-        slides = aplicar_carrusel(publicacion_id, titulares)
+        if como_variante:
+            slides = crear_variante_carrusel(publicacion_id, titulares)
+        else:
+            slides = aplicar_carrusel(publicacion_id, titulares)
         return {"carrusel": {"slides": slides}}
 
     return procesar

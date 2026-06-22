@@ -67,7 +67,10 @@ def test_longitudes_y_rango():
 
 def test_jobspec_carrusel_roundtrip():
     spec = jobspec.construir_carrusel(publicacion_id="c1", max_slides=5)
-    assert spec == {"kind": jobspec.PROC_CARRUSEL, "publicacion_id": "c1", "max_slides": 5}
+    assert spec == {
+        "kind": jobspec.PROC_CARRUSEL, "publicacion_id": "c1", "max_slides": 5,
+        "como_variante": False,
+    }
     # El worker reconstruye un callback ejecutable a partir del spec serializado.
     proc = jobspec.reconstruir_procesar({"procesar": spec})
     assert callable(proc)
@@ -135,6 +138,38 @@ def test_aplicar_carrusel_ignora_programado_y_publicado(entorno, monkeypatch):
     repos.transicionar_estado_pieza(ids[0], "borrador", "en_revision")
     repos.transicionar_estado_pieza(ids[0], "en_revision", "programado")
     assert dom_carrusel.aplicar_carrusel(pid, ["Idea"]) == []
+
+
+def test_crear_variante_carrusel_no_destructivo(entorno, monkeypatch):
+    # La conversión crea piezas variante='carrusel' HERMANAS sin tocar la foto.
+    monkeypatch.setattr(
+        dom_copy, "_COMPONER_SLIDE",
+        lambda marca, titular, foto: {"objeto": f"media-{titular}", "foto": ""},
+    )
+    pid, _ids = _crear_contenido(["instagram", "facebook"], "Cuerpo del post")
+    slides = dom_carrusel.crear_variante_carrusel(pid, ["Uno", "Dos"])
+    assert len(slides) == 2
+    filas = repos.listar_piezas_fila(publicacion_id=pid)
+    foto = [f for f in filas if f["variante"] == "foto"]
+    carr = [f for f in filas if f["variante"] == "carrusel"]
+    # La foto sigue intacta (sin carrusel); se crearon variantes carrusel con los slides + copy heredado.
+    assert len(foto) == 2 and all((f.get("carrusel") or "") == "" for f in foto)
+    assert len(carr) == 2 and all(f.get("carrusel") for f in carr)
+    assert all(f["copy"] == "Cuerpo del post" for f in carr)
+
+
+def test_crear_variante_carrusel_idempotente(entorno, monkeypatch):
+    # Re-ejecutar NO duplica: re-hornea los slides de la variante existente de esa red.
+    monkeypatch.setattr(
+        dom_copy, "_COMPONER_SLIDE",
+        lambda marca, titular, foto: {"objeto": f"media-{titular}", "foto": ""},
+    )
+    pid, _ids = _crear_contenido(["instagram"], "Cuerpo")
+    dom_carrusel.crear_variante_carrusel(pid, ["Uno"])
+    dom_carrusel.crear_variante_carrusel(pid, ["Uno", "Dos"])
+    carr = [f for f in repos.listar_piezas_fila(publicacion_id=pid) if f["variante"] == "carrusel"]
+    assert len(carr) == 1
+    assert len(json.loads(carr[0]["carrusel"])) == 2
 
 
 def test_lanzar_para_pieza_compone_el_prompt_y_encola(entorno, monkeypatch):

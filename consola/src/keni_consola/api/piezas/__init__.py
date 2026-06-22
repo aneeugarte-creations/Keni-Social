@@ -33,6 +33,7 @@ from .composicion import (
     aplicar_plantilla,
     componer_slide,
     compuesta,
+    convertir_carrusel,
     generar_carrusel,
     integrar_foto,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "componer_slide",
     "compuesta",
     "generar_carrusel",
+    "convertir_carrusel",
     # Espejo
     "_propagar_espejo",
     # Helpers compartidos / consumidos por tests
@@ -131,6 +133,7 @@ RUTAS = [
     Route("/api/piezas/{pieza_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/componer-slide", componer_slide, methods=["POST"]),
     Route("/api/piezas/{pieza_id}/generar-carrusel", generar_carrusel, methods=["POST"]),
+    Route("/api/piezas/{pieza_id}/convertir-carrusel", convertir_carrusel, methods=["POST"]),
     Route("/api/piezas/{pieza_id}", detalle, methods=["GET"]),
     Route("/api/piezas/{pieza_id}", actualizar, methods=["PUT"]),
     Route("/api/piezas/{pieza_id}", borrar, methods=["DELETE"]),

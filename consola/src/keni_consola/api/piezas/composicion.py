@@ -272,3 +272,28 @@ async def generar_carrusel(request: Request) -> Response:
         estado = 404 if "ya no existe" in str(e) else 400
         return JSONResponse({"error": str(e)}, status_code=estado)
     return JSONResponse({"generacion": gen})
+
+
+async def convertir_carrusel(request: Request) -> Response:
+    """Conversión NO DESTRUCTIVA a carrusel: crea una VARIANTE hermana. -> `{generacion}`.
+
+    `POST /api/piezas/{id}/convertir-carrusel`: como `generar-carrusel`, pero el post-procesado NO
+    sobrescribe el post — crea piezas `variante='carrusel'` junto a las foto (la foto sigue viva; el
+    feed muestra ambas como tarjetas hermanas y el equipo elige cuál publica). El SPA sondea
+    `GET /api/generaciones/{id}` y recarga el feed (la tarjeta carrusel nueva aparece). El cuerpo
+    opcional `{longitud}` elige corto (4-5 slides) o largo (8-9); ausente/inválida = largo.
+    `ColaLlenaError` se PROPAGA (manejador central -> 429). -> `{generacion}` | 400 | 404.
+    """
+    from ...dominio import carrusel
+
+    pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request)
+    longitud = datos.get("longitud") if isinstance(datos.get("longitud"), str) else ""
+    try:
+        gen = carrusel.lanzar_para_pieza(
+            pieza_id, longitud or carrusel.LONGITUD_DEFECTO, como_variante=True,
+        )
+    except carrusel.CarruselError as e:
+        estado = 404 if "ya no existe" in str(e) else 400
+        return JSONResponse({"error": str(e)}, status_code=estado)
+    return JSONResponse({"generacion": gen})
