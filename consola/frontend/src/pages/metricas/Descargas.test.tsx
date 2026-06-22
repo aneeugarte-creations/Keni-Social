@@ -1,10 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
 
-import { ItemsDescargas } from "./Descargas";
+import { BotonesDescarga } from "./Descargas";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -16,51 +15,40 @@ beforeAll(() => {
   }
 });
 
-/** Renderiza los items dentro del menú "⋮" de página (como en Metricas) y lo abre. */
-function renderYAbrir(props: { rango: string; marca?: string }) {
-  render(
-    <MenuAcciones>
-      <ItemsDescargas {...props} />
-    </MenuAcciones>,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Acciones" }));
-  return screen.getByRole("menu");
-}
+const PROPS_BASE = {
+  marcaEtiqueta: "UnoTV",
+  redEtiqueta: "Todas las redes",
+  periodoEtiqueta: "junio 2026",
+};
 
-describe("ItemsDescargas (menú ⋮ de Métricas)", () => {
-  it("ofrece los dos grupos (reporte y top/peores piezas) separados", () => {
-    vi.spyOn(api, "exportarMetricas").mockImplementation(() => {});
-    vi.spyOn(api, "exportarPiezas").mockImplementation(() => {});
-    renderYAbrir({ rango: "semana", marca: "unotv" });
+describe("BotonesDescarga (acciones de Métricas)", () => {
+  it("muestra exactamente dos botones: CSV y PDF", () => {
+    render(<BotonesDescarga rango="semana" marca="unotv" {...PROPS_BASE} />);
 
-    for (const etiqueta of ["CSV", "Markdown", "JSON"]) {
-      expect(
-        screen.getByRole("menuitem", { name: `Reporte (${etiqueta})` }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("menuitem", { name: `Top y peores piezas (${etiqueta})` }),
-      ).toBeInTheDocument();
-    }
-    expect(screen.getByRole("separator")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /CSV/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /PDF/ })).toBeInTheDocument();
+    // Sin rastro de los formatos antiguos.
+    expect(screen.queryByText(/Markdown/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
   });
 
-  it("descarga el top/peores de piezas con el combo activo (rango, marca)", () => {
-    const espia = vi.spyOn(api, "exportarPiezas").mockImplementation(() => {});
-    renderYAbrir({ rango: "semana", marca: "unotv" });
+  it("CSV delega en exportarMetricas con el combo activo (rango, marca)", () => {
+    const espia = vi.spyOn(api, "exportarMetricas").mockImplementation(() => {});
+    render(<BotonesDescarga rango="semana" marca="unotv" {...PROPS_BASE} />);
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Top y peores piezas (CSV)" }));
+    fireEvent.click(screen.getByRole("button", { name: /CSV/ }));
 
     expect(espia).toHaveBeenCalledWith("csv", { rango: "semana", marca: "unotv" });
   });
 
-  it("el reporte sigue delegando en exportarMetricas (sin marca = todas)", () => {
-    const reporte = vi.spyOn(api, "exportarMetricas").mockImplementation(() => {});
-    const piezas = vi.spyOn(api, "exportarPiezas").mockImplementation(() => {});
-    renderYAbrir({ rango: "mes" });
+  it("CSV sin marca exporta el agregado (marca = undefined)", () => {
+    const espia = vi.spyOn(api, "exportarMetricas").mockImplementation(() => {});
+    render(
+      <BotonesDescarga rango="mes" {...PROPS_BASE} marcaEtiqueta="Todas las marcas" />,
+    );
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Reporte (Markdown)" }));
+    fireEvent.click(screen.getByRole("button", { name: /CSV/ }));
 
-    expect(reporte).toHaveBeenCalledWith("md", { rango: "mes", marca: undefined });
-    expect(piezas).not.toHaveBeenCalled();
+    expect(espia).toHaveBeenCalledWith("csv", { rango: "mes", marca: undefined });
   });
 });
