@@ -178,7 +178,7 @@ export function NavegadorSemana({
   return (
     <div className="flex items-center gap-2">
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         aria-label="Semana anterior"
         onClick={() => setLunes(lunesSiguiente(lunes, -1))}
@@ -190,7 +190,7 @@ export function NavegadorSemana({
         {formatearRango(inicio, fin) || "Semana"}
       </div>
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         aria-label="Semana siguiente"
         onClick={() => setLunes(lunesSiguiente(lunes, 1))}

@@ -458,12 +458,16 @@ export function Calendario({
           navegador de semana + el toggle del panel de reparto + el menú «Más»; en «Calendario», el
           conmutador Semana|Mes + navegador + avisos de la semana. La leyenda se ofrece con el "?". */}
       {esGestion ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        // MISMA barra de tres zonas que el modo «Mes» (izquierda = modo de vista · centro = el
+        // navegador, foco · derecha = estado + acciones): grid 1fr·auto·1fr en md+; en móvil apila.
+        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+          <div className="flex flex-wrap items-center gap-2 md:justify-self-start">
             {conmutadorVista}
+          </div>
+          <div className="md:justify-self-center">
             <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 md:justify-self-end">
             {marcadorSalud}
             {/* Oculta/muestra el panel de reparto (columna lateral, no un modal). Arranca abierto:
                 lo asignado ya lo ve el equipo (sin paso de aprobación), así que repartir es la
