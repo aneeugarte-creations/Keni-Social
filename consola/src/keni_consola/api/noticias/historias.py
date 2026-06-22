@@ -411,8 +411,74 @@ def _grupos_ordenados(etiquetas: list[dict[str, Any]]) -> list[str]:
     return en_orden + sorted(g for g in presentes if g not in _ORDEN_GRUPOS)
 
 
-def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
+# Clave de la línea «fuera del plan» en el reparto por línea de la Mesa (marcas sin grupos).
+_LINEA_FUERA = "__fuera__"
+
+
+def _linea_de_cluster_plan(
+    marca: str, cluster: dict[str, Any], plan: dict[str, int], vert_etiquetas: list[dict[str, Any]]
+) -> str:
+    """Clave de LÍNEA del plan con la que una candidata compite (marcas SIN grupos).
+
+    La MISMA clasificación de la Mesa por plan: una historia compite por la línea de su feed
+    (id); si el slug del feed no cae en una línea del plan, se clasifica por CONTENIDO (keywords).
+    Devuelve la línea del plan o `_LINEA_FUERA` si no cae en ninguna. PURA (recibe plan/líneas).
+    """
     from ...pipeline_contenido import _admitir as _pc_ingesta
+
+    cat = _pc_ingesta.linea_de_cluster(marca, cluster, vert_etiquetas)
+    return cat if cat in plan else _LINEA_FUERA
+
+
+def _linea_de_cluster_grupo(
+    cluster: dict[str, Any], vert_etiquetas: list[dict[str, Any]]
+) -> str:
+    """Id de LÍNEA vertical de una candidata por LÉXICO (marcas CON grupos, p. ej. Claro Sports).
+
+    La MISMA clasificación de la barra de grupos: clasifica el texto contra las líneas de la
+    marca. '' si nada casa. PURA (recibe las líneas ya leídas).
+    """
+    from ...dominio import clasificador_lineas
+
+    texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
+    return clasificador_lineas.clasificar(texto, vert_etiquetas) or ""
+
+
+def _serializar_historias(
+    lote: list[dict[str, Any]],
+    *,
+    resumen_pieza: dict[str, str],
+    verificacion_map: dict[str, str],
+    vocab_memo: dict[str, frozenset[str]],
+    gate_memo: dict[str, bool],
+) -> list[dict[str, Any]]:
+    """Serializa un lote de clusters al contrato `Historia` (estado de pieza + verificación + umbral).
+
+    El MISMO enriquecimiento batch que usa la Mesa: verificación NATIVA del cluster con fallback al
+    contenido heredado, estado REAL de pieza y promovible honesto. Los memos (vocabulario/gate por
+    marca) se comparten entre llamadas para no releer por historia.
+    """
+    salida: list[dict[str, Any]] = []
+    for c in lote:
+        enriquecido = {
+            **c,
+            "verificacion_fuente": (c.get("verificacion_fuente") or "")
+            or verificacion_map.get(c.get("publicacion_id") or "", ""),
+        }
+        salida.append(
+            _historia_a_dict(
+                enriquecido,
+                repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+                pieza_estado=_pieza_estado(
+                    c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
+                ),
+                umbral=_evaluar_promovible(enriquecido, vocab_memo, gate_memo),
+            )
+        )
+    return salida
+
+
+def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     from ...tiempo import inicio_dia_cdmx_iso_utc
 
     plan = config.plan_dia(marca)  # dict ordenado categoria -> cupo ({} sin plan)
@@ -448,10 +514,10 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     # historia compite por la línea de su feed (id); si el slug del feed no cae en una línea del
     # plan, se clasifica por CONTENIDO (keywords) — así un feed mixto (divulgación) reparte cada
     # nota a su línea. Las marcas con grupos clasifican aparte (abajo) y aquí no reclasifican.
+    etiquetas_fallback = [] if grupos_orden else vert_etiquetas
     por_linea_pool: dict[str, list[dict[str, Any]]] = {}
     for c in clusters:
-        cat = _pc_ingesta.linea_de_cluster(marca, c, [] if grupos_orden else vert_etiquetas)
-        destino = cat if cat in plan else "__fuera__"
+        destino = _linea_de_cluster_plan(marca, c, plan, etiquetas_fallback)
         por_linea_pool.setdefault(destino, []).append(c)
 
     # Barra de GRUPOS (navegación temática): solo marcas con grupos definidos (p. ej. Claro
@@ -462,12 +528,9 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     conteo_grupo: dict[str, int] = dict.fromkeys(grupos_orden, 0)
     conteo_linea: dict[str, int] = {}
     if grupos_orden:
-        from ...dominio import clasificador_lineas
-
         grupo_de_linea = {e["id"]: (e.get("grupo") or "") for e in vert_etiquetas}
         for c in clusters:
-            texto = f"{c.get('titulo', '')} {c.get('resumen', '')}"
-            lid = clasificador_lineas.clasificar(texto, vert_etiquetas) or ""
+            lid = _linea_de_cluster_grupo(c, vert_etiquetas)
             grupo = grupo_de_linea.get(lid, "")
             grupo_por_cluster[c["id"]] = grupo
             linea_por_cluster[c["id"]] = lid
@@ -494,24 +557,13 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
 
     def _historias(lote: list[dict[str, Any]], limite: int | None = None) -> list[dict[str, Any]]:
         tope = por_linea if limite is None else limite
-        salida: list[dict[str, Any]] = []
-        for c in lote[:tope]:
-            enriquecido = {
-                **c,
-                "verificacion_fuente": (c.get("verificacion_fuente") or "")
-                or verificacion_map.get(c.get("publicacion_id") or "", ""),
-            }
-            salida.append(
-                _historia_a_dict(
-                    enriquecido,
-                    repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
-                    pieza_estado=_pieza_estado(
-                        c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
-                    ),
-                    umbral=_evaluar_promovible(enriquecido, vocab_memo, gate_memo),
-                )
-            )
-        return salida
+        return _serializar_historias(
+            lote[:tope],
+            resumen_pieza=resumen_pieza,
+            verificacion_map=verificacion_map,
+            vocab_memo=vocab_memo,
+            gate_memo=gate_memo,
+        )
 
     # Breaking primero (si el plan lo contempla), luego el orden del plan.
     orden = (["breaking"] if "breaking" in plan else []) + [c for c in plan if c != "breaking"]
@@ -615,6 +667,98 @@ async def mesa(request: Request) -> Response:
     por_linea = max(1, min(por_linea, _MESA_POR_LINEA_MAX))
 
     cuerpo = await run_in_threadpool(_mesa, marca, por_linea)
+    return JSONResponse(cuerpo)
+
+
+# Pool entero de la marca que la paginación por línea clasifica (el pool está acotado por el TTL,
+# ≈300-400 candidatas, nunca miles: clasificar el pool completo en cada request es barato).
+_MESA_LINEA_POOL_MAX = 2000
+# Página de la lista paginada por línea (mismo tamaño que la lista plana de la vista admin).
+_MESA_LINEA_LIMIT_DEF = 30
+_MESA_LINEA_LIMIT_MAX = 60
+
+
+def _clusters_de_linea(
+    marca: str, linea: str, clusters: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Filtra el pool a la LÍNEA pedida, REUSANDO la clasificación de la Mesa.
+
+    Si la marca usa grupos (Claro Sports) clasifica por LÉXICO (`_linea_de_cluster_grupo`); si no,
+    por el reparto del plan (`_linea_de_cluster_plan`, que incluye `breaking` y `_LINEA_FUERA`). La
+    `linea` pedida casa la clave de ese reparto: un id de etiqueta vertical, `breaking`/`evergreen`,
+    o `__fuera__` (alias `fuera`). El pool ya viene rankeado por score, así que la salida también.
+    """
+    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    grupos_orden = _grupos_ordenados(vert_etiquetas)
+    objetivo = _LINEA_FUERA if linea in (_LINEA_FUERA, "fuera") else linea
+    if grupos_orden:
+        return [c for c in clusters if _linea_de_cluster_grupo(c, vert_etiquetas) == objetivo]
+    plan = config.plan_dia(marca)
+    return [
+        c for c in clusters if _linea_de_cluster_plan(marca, c, plan, vert_etiquetas) == objetivo
+    ]
+
+
+def _mesa_linea(marca: str, linea: str, desplazamiento: int, limite: int) -> dict[str, Any]:
+    """Candidatas de UNA línea, PAGINADAS: la página (offset/limit) + el TOTAL real de la línea.
+
+    Trae el pool entero de la marca (`estado='nuevo'`, acotado por el TTL), lo clasifica con la
+    MISMA lógica de la Mesa y filtra a `linea`. Devuelve `{historias, total}` con cada historia en
+    el contrato `Historia` (mismo `_historia_a_dict`: promovible honesto, score, fuentes…).
+    """
+    clusters, _ = repos.listar_noticia_clusters(
+        marca=marca, estado="nuevo", limite=_MESA_LINEA_POOL_MAX
+    )
+    de_linea = _clusters_de_linea(marca, linea, clusters)
+    total = len(de_linea)
+    pagina = de_linea[desplazamiento : desplazamiento + limite]
+
+    cids = [c.get("publicacion_id") or "" for c in pagina]
+    resumen_pieza = repos.estado_pieza_por_publicacion(cids)
+    verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
+    historias = _serializar_historias(
+        pagina,
+        resumen_pieza=resumen_pieza,
+        verificacion_map=verificacion_map,
+        vocab_memo={},
+        gate_memo={},
+    )
+    return {"historias": historias, "total": total}
+
+
+async def mesa_linea(request: Request) -> Response:
+    """GET /api/noticias/mesa/linea?marca=&linea=&offset=&limit=: candidatas de UNA línea, PAGINADAS.
+
+    El complemento navegable de la Mesa: mientras `mesa` resume el top-N por línea, esto recorre
+    TODAS las candidatas (`estado='nuevo'`) de una marca+línea, rankeadas por score, en páginas
+    (offset/limit, def 30). `linea` es la clave del reparto de la Mesa: un id de etiqueta vertical,
+    `breaking`/`evergreen`, o `__fuera__` (alias `fuera`) para lo que el plan no contempla. Devuelve
+    `{historias, total}` (el total es el de la línea entera, no el de la página) con el contrato
+    `Historia` completo. Marca obligatoria; sin `linea` es 400.
+    """
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    if not marca:
+        return JSONResponse(
+            {"error": "La mesa es por marca: elige una marca concreta."}, status_code=400
+        )
+    linea = (request.query_params.get("linea") or "").strip()
+    if not linea:
+        return JSONResponse({"error": "Falta la línea a paginar."}, status_code=400)
+
+    try:
+        limite = int(request.query_params.get("limit") or _MESA_LINEA_LIMIT_DEF)
+    except ValueError:
+        limite = _MESA_LINEA_LIMIT_DEF
+    limite = max(1, min(limite, _MESA_LINEA_LIMIT_MAX))
+    try:
+        desplazamiento = int(request.query_params.get("offset") or 0)
+    except ValueError:
+        desplazamiento = 0
+    desplazamiento = max(0, desplazamiento)
+
+    cuerpo = await run_in_threadpool(_mesa_linea, marca, linea, desplazamiento, limite)
     return JSONResponse(cuerpo)
 
 

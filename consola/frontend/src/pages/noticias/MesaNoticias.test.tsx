@@ -264,6 +264,15 @@ describe("chipsDeLineas", () => {
     expect(chips.map((c) => c.en_pool)).toEqual([9, 6, 2, 0, 1]);
     // Sin sub-líneas: chips planos (sin desplegable).
     expect(chips.every((c) => c.lineas === undefined)).toBe(true);
+    // Cada chip lleva la CLAVE de reparto de su línea (`lineaId`) para paginar TODO su pool;
+    // «Fuera del plan» usa el alias '__fuera__'.
+    expect(chips.map((c) => c.lineaId)).toEqual([
+      "breaking",
+      "nac",
+      "int",
+      "evergreen",
+      "__fuera__",
+    ]);
     // Cada historia queda etiquetada con su línea -> el filtro por chip funciona.
     expect(historiasDelGrupo(browse, "Nacional").map((h) => h.id)).toEqual(["b", "c"]);
     expect(historiasDelGrupo(browse, "Fuera del plan").map((h) => h.id)).toEqual(["e"]);

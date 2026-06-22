@@ -5,6 +5,7 @@ import type {
   Historia,
   RespuestaHistorias,
   RespuestaMesa,
+  RespuestaMesaLinea,
   RespuestaNoticias,
   RespuestaStatsFuentes,
   ResumenCobertura,
@@ -120,6 +121,26 @@ export const apiNoticias = {
         `/noticias/mesa${query({
           marca: params.marca,
           por_linea: params.porLinea != null ? String(params.porLinea) : undefined,
+        })}`,
+        { signal },
+      ),
+
+    /**
+     * Candidatas de UNA línea de la Mesa, PAGINADAS: recorre TODO el pool de la línea
+     * (no solo el top-N de la Mesa), rankeadas por score. `linea` es la clave del reparto
+     * de la Mesa: id de etiqueta vertical, 'breaking'/'evergreen', o '__fuera__' ('fuera').
+     * GET /api/noticias/mesa/linea?marca=&linea=&offset=&limit=  →  { historias, total }
+     */
+    mesaLinea: (
+      params: { marca: string; linea: string; offset?: number; limit?: number },
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaMesaLinea>(
+        `/noticias/mesa/linea${query({
+          marca: params.marca,
+          linea: params.linea,
+          offset: params.offset != null ? String(params.offset) : undefined,
+          limit: params.limit != null ? String(params.limit) : undefined,
         })}`,
         { signal },
       ),

@@ -287,3 +287,95 @@ def test_mesa_sin_grupos_no_trae_barra(cliente):
     _inicializar("c1", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["grupos"] == [] and datos["historias_grupo"] == []
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/noticias/mesa/linea — candidatas de UNA línea, PAGINADAS            #
+# --------------------------------------------------------------------------- #
+
+
+def test_mesa_linea_requiere_marca_y_linea(cliente):
+    # Sin marca o sin línea -> 400 (la paginación es por marca+línea concreta).
+    assert cliente.get("/api/noticias/mesa/linea").status_code == 400
+    assert (
+        cliente.get("/api/noticias/mesa/linea", params={"marca": "unotv"}).status_code == 400
+    )
+    assert (
+        cliente.get(
+            "/api/noticias/mesa/linea", params={"marca": "nope", "linea": "x"}
+        ).status_code
+        == 400
+    )
+
+
+def test_mesa_linea_pagina_todo_el_pool_de_la_linea(cliente, monkeypatch):
+    """La lista paginada de una línea recorre TODAS sus candidatas (no el top-N de la Mesa):
+    devuelve el TOTAL real de la línea y la PÁGINA pedida, rankeada por score.
+    """
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    # 7 candidatas en la línea Nacional + ruido de otra línea/estado que NO debe contar.
+    for i in range(7):
+        _inicializar(f"n{i}", score=0.9 - i * 0.05, categoria="mx", titulo=f"Nacional {i}")
+    _inicializar("otra", score=0.99, categoria="gaming", titulo="Fuera de la línea")
+    _inicializar("usada", score=0.99, categoria="mx", estado="usado", titulo="Ya usada")
+
+    # Página 1 (offset 0, limit 3): el total es 7 (toda la línea), la página son las top-3.
+    p1 = cliente.get(
+        "/api/noticias/mesa/linea",
+        params={"marca": "unotv", "linea": nac, "offset": 0, "limit": 3},
+    ).json()
+    assert p1["total"] == 7
+    assert [h["id"] for h in p1["historias"]] == ["n0", "n1", "n2"]
+    # Contrato Historia completo (mismo `_historia_a_dict`).
+    assert "promovible" in p1["historias"][0] and "score" in p1["historias"][0]
+    assert "fuentes" in p1["historias"][0]
+
+    # Página 3 (offset 6): la cola de la línea, sin desbordar el total.
+    p3 = cliente.get(
+        "/api/noticias/mesa/linea",
+        params={"marca": "unotv", "linea": nac, "offset": 6, "limit": 3},
+    ).json()
+    assert p3["total"] == 7
+    assert [h["id"] for h in p3["historias"]] == ["n6"]
+
+
+def test_mesa_linea_breaking_y_fuera_de_plan(cliente, monkeypatch):
+    # 'breaking' y '__fuera__' son claves de reparto válidas para paginar (incluye el alias 'fuera').
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,breaking:1")
+    _inicializar("br", score=0.8, categoria="futbol", breaking=1, titulo="Última hora")
+    _inicializar("g1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
+
+    br = cliente.get(
+        "/api/noticias/mesa/linea", params={"marca": "unotv", "linea": "breaking"}
+    ).json()
+    assert br["total"] == 1 and br["historias"][0]["id"] == "br"
+
+    fuera = cliente.get(
+        "/api/noticias/mesa/linea", params={"marca": "unotv", "linea": "__fuera__"}
+    ).json()
+    assert fuera["total"] == 1 and fuera["historias"][0]["id"] == "g1"
+    # Alias 'fuera' equivale a '__fuera__'.
+    alias = cliente.get(
+        "/api/noticias/mesa/linea", params={"marca": "unotv", "linea": "fuera"}
+    ).json()
+    assert [h["id"] for h in alias["historias"]] == ["g1"]
+
+
+def test_mesa_linea_marca_con_grupos_filtra_por_linea(cliente):
+    """Para una marca con grupos (Claro Sports), la paginación por línea clasifica el pool por
+    LÉXICO (la misma clasificación que la barra de grupos) y filtra a la línea (id de etiqueta).
+    """
+    bootstrap_lineas.inicializar_lineas()
+    box = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")["id"]
+    _inicializar("box1", score=0.9, marca="claro-sports", categoria="otros-deportes",
+                 titulo="Canelo Álvarez confirma su próxima pelea de box")
+    _inicializar("f1", score=0.8, marca="claro-sports", categoria="motor",
+                 titulo="Checo Pérez debuta con Cadillac en la Fórmula 1")
+
+    datos = cliente.get(
+        "/api/noticias/mesa/linea", params={"marca": "claro-sports", "linea": box}
+    ).json()
+    assert datos["total"] == 1
+    assert [h["id"] for h in datos["historias"]] == ["box1"]

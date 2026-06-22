@@ -254,6 +254,12 @@ export interface GrupoMesa {
    * Ausente en payloads sin grupos; la UI degrada a la barra de grupos a secas.
    */
   lineas?: LineaGrupo[];
+  /**
+   * Solo en chips DERIVADOS de líneas del plan (marca sin grupos): la CLAVE de reparto de la
+   * línea ('breaking'/id de etiqueta/'__fuera__') para paginar TODO su pool. No la trae el back;
+   * la rellena `chipsDeLineas`. No dispara el desplegable (eso es `lineas`).
+   */
+  lineaId?: string;
 }
 
 /** Respuesta de `GET /api/noticias/mesa?marca=`: el pool segmentado por el plan. */
@@ -275,6 +281,15 @@ export interface RespuestaMesa {
   grupos?: GrupoMesa[];
   /** Candidatas (top por score) con su `grupo`, para navegar por la barra. */
   historias_grupo?: Historia[];
+}
+
+/**
+ * Respuesta de `GET /api/noticias/mesa/linea?marca=&linea=`: la página de candidatas de UNA
+ * línea (rankeadas por score) + el TOTAL real de la línea (no el de la página).
+ */
+export interface RespuestaMesaLinea {
+  historias: Historia[];
+  total: number;
 }
 
 /**

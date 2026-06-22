@@ -10,11 +10,12 @@
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Layers, Newspaper, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Layers, Newspaper, X } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,12 +29,20 @@ import { TarjetaHistoria } from "./TarjetaHistoria";
 /** Refresco automático de la mesa (sensación "live", igual que la lista clásica). */
 const REFETCH_INTERVAL_MS = 45_000;
 
-/** Candidatas visibles por sección, plegado/expandido ("Ver las N" pide más al back). */
+/** Candidatas visibles por sección en el resumen de la Mesa (el resto se recorre paginado). */
 const POR_LINEA_PLEGADO = 5;
-const POR_LINEA_EXPANDIDO = 20;
+
+/** Candidatas por página en la lista paginada de una línea (igual que la lista plana admin). */
+const PAGE_SIZE = 30;
+
+/** Clave del reparto de la Mesa para «Fuera del plan» (el back acepta este alias). */
+const LINEA_FUERA = "__fuera__";
 
 export const CLAVE_MESA = (marca: string, porLinea: number) =>
   ["noticias", "mesa", marca, porLinea] as const;
+
+export const CLAVE_MESA_LINEA = (marca: string, linea: string, offset: number) =>
+  ["noticias", "mesa", "linea", marca, linea, offset] as const;
 
 // ── Barra de navegación por GRUPO (con 2º nivel de LÍNEAS) ─────────────────────
 
@@ -341,11 +350,12 @@ export function chipsDeLineas(
   const browse: Historia[] = [];
   for (const l of lineas) {
     const etiqueta = l.etiqueta || etiquetaLinea(l.linea);
-    if (l.en_pool > 0 || l.cupo > 0) chips.push({ grupo: etiqueta, en_pool: l.en_pool });
+    if (l.en_pool > 0 || l.cupo > 0)
+      chips.push({ grupo: etiqueta, en_pool: l.en_pool, lineaId: l.linea });
     for (const h of l.historias) browse.push({ ...h, grupo: etiqueta });
   }
   if (fuera.en_pool > 0) {
-    chips.push({ grupo: "Fuera del plan", en_pool: fuera.en_pool });
+    chips.push({ grupo: "Fuera del plan", en_pool: fuera.en_pool, lineaId: LINEA_FUERA });
     for (const h of fuera.historias) browse.push({ ...h, grupo: "Fuera del plan" });
   }
   return { chips, browse };
@@ -460,21 +470,128 @@ function ListaHistorias({ historias }: { historias: Historia[] }) {
   );
 }
 
+// ── Lista paginada de UNA línea (recorre TODO el pool de la línea) ─────────────
+
+/**
+ * La LÍNEA al completo, PAGINADA: recorre TODAS las candidatas de la marca+línea (no el top-N
+ * del resumen), 30 por página con anterior/siguiente y «X–Y de N» real. Reusa el patrón de
+ * paginación de la lista plana admin contra el endpoint `mesa/linea`. `linea` es la clave del
+ * reparto de la Mesa (id de etiqueta vertical, 'breaking'/'evergreen' o '__fuera__').
+ */
+function LineaPaginada({
+  marca,
+  linea,
+  etiqueta,
+  onVolver,
+}: {
+  marca: string;
+  linea: string;
+  etiqueta: string;
+  onVolver: () => void;
+}) {
+  const [offset, setOffset] = React.useState(0);
+  // Cambiar de línea reinicia la paginación (otra lista, otro total).
+  React.useEffect(() => {
+    setOffset(0);
+  }, [marca, linea]);
+
+  const query = useQuery({
+    queryKey: CLAVE_MESA_LINEA(marca, linea, offset),
+    queryFn: ({ signal }) =>
+      api.noticias.mesaLinea({ marca, linea, offset, limit: PAGE_SIZE }, signal),
+    staleTime: 20_000,
+    refetchInterval: REFETCH_INTERVAL_MS,
+    placeholderData: keepPreviousData,
+  });
+
+  const historias = query.data?.historias ?? [];
+  const total = query.data?.total ?? 0;
+  const hayMas = offset + PAGE_SIZE < total;
+  const hayAnterior = offset > 0;
+
+  return (
+    <div className="space-y-4" data-testid={`linea-paginada-${linea}`}>
+      <div className="flex flex-wrap items-baseline gap-2 border-b pb-1">
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
+          onClick={onVolver}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {etiqueta}
+        </button>
+        {query.data && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {total.toLocaleString("es-MX")} en el pool
+          </span>
+        )}
+        {query.isFetching && !query.isPending && (
+          <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
+        )}
+      </div>
+
+      {query.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar la línea"
+          mensaje={mensajeError(query.error)}
+          onReintentar={() => void query.refetch()}
+        />
+      ) : query.isPending ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : historias.length === 0 ? (
+        <EstadoVacio icono={Newspaper} titulo="Sin candidatas en esta línea" />
+      ) : (
+        <ListaHistorias historias={historias} />
+      )}
+
+      {(hayAnterior || hayMas) && (
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hayAnterior}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+            aria-label="Página anterior de la línea"
+          >
+            Anterior
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} de {total.toLocaleString("es-MX")}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hayMas}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+            aria-label="Página siguiente de la línea"
+            data-testid="btn-siguiente-linea"
+          >
+            Siguiente
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Sección por línea ─────────────────────────────────────────────────────────
 
 function SeccionLinea({
   linea,
-  expandida,
-  onToggleExpandida,
+  onAbrirLinea,
 }: {
   linea: MesaLinea;
-  expandida: boolean;
-  onToggleExpandida: () => void;
+  onAbrirLinea: (linea: string, etiqueta: string) => void;
 }) {
   const etiqueta = linea.etiqueta || etiquetaLinea(linea.linea);
-  const hayMas = linea.en_pool > linea.historias.length || expandida;
-  // La sección muestra las top candidatas; el resto sigue en el pool (no todas se materializan).
+  // La sección resume las top candidatas; el botón abre la lista paginada con TODO el pool de la
+  // línea (cuando hay más candidatas que las visibles del resumen).
   const visibles = Math.min(linea.historias.length, linea.en_pool);
+  const hayMas = linea.en_pool > linea.historias.length;
   return (
     <section className="space-y-2" data-testid={`seccion-${linea.linea}`}>
       <div className="flex flex-wrap items-baseline gap-2 border-b pb-1">
@@ -487,13 +604,13 @@ function SeccionLinea({
             · {visibles} de {linea.en_pool} en el pool
           </span>
         )}
-        {hayMas && linea.en_pool > 0 && (
+        {hayMas && (
           <button
             type="button"
             className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
-            onClick={onToggleExpandida}
+            onClick={() => onAbrirLinea(linea.linea, etiqueta)}
           >
-            {expandida ? "Ver menos" : `Ver las ${linea.en_pool} del pool`}
+            {`Ver las ${linea.en_pool} del pool`}
           </button>
         )}
       </div>
@@ -509,9 +626,11 @@ function SeccionLinea({
 // ── La mesa ───────────────────────────────────────────────────────────────────
 
 export function MesaNoticias({ marca }: { marca: string; nombre: string | null }) {
-  // "Ver las N" por sección: con cualquier sección expandida se piden más por línea (el
-  // payload es uno solo; las plegadas siguen mostrando 5).
-  const [expandidas, setExpandidas] = React.useState<Set<string>>(() => new Set());
+  // Línea abierta en su lista PAGINADA (`{ linea, etiqueta }` = clave de reparto + rótulo) o null
+  // = el resumen de la Mesa. La abre «Ver las N del pool» / un chip de línea / una línea del menú.
+  const [lineaAbierta, setLineaAbierta] = React.useState<{ linea: string; etiqueta: string } | null>(
+    null,
+  );
   const [fueraAbierto, setFueraAbierto] = React.useState(false);
   // Categoría seleccionada en la barra de grupos ('' = Todas) y línea dentro de ella ('' = todas
   // las del grupo). Solo aplican a marcas con grupos.
@@ -522,20 +641,32 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
   React.useEffect(() => {
     setGrupoSel("");
     setLineaSel("");
-    setExpandidas(new Set());
+    setLineaAbierta(null);
     setFueraAbierto(false);
   }, [marca]);
-  const porLinea = expandidas.size > 0 || fueraAbierto ? POR_LINEA_EXPANDIDO : POR_LINEA_PLEGADO;
-  const clave = CLAVE_MESA(marca, porLinea);
+  const clave = CLAVE_MESA(marca, POR_LINEA_PLEGADO);
 
   const query = useQuery({
     queryKey: clave,
-    queryFn: ({ signal }) => api.noticias.mesa({ marca, porLinea }, signal),
+    queryFn: ({ signal }) => api.noticias.mesa({ marca, porLinea: POR_LINEA_PLEGADO }, signal),
     staleTime: 20_000,
     refetchInterval: REFETCH_INTERVAL_MS,
     // El refetch no debe "bailar" las tarjetas bajo el cursor: conserva el dato anterior.
     placeholderData: keepPreviousData,
   });
+
+  // La lista paginada de una línea es una vista de takeover: se monta sobre cualquier layout
+  // (resumen del plan o navegación por chips) y vuelve con su botón.
+  if (lineaAbierta) {
+    return (
+      <LineaPaginada
+        marca={marca}
+        linea={lineaAbierta.linea}
+        etiqueta={lineaAbierta.etiqueta}
+        onVolver={() => setLineaAbierta(null)}
+      />
+    );
+  }
 
   if (query.isError) {
     return (
@@ -571,6 +702,20 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
   if (chips.length > 0) {
     const total = chips.reduce((acc, g) => acc + g.en_pool, 0);
     const visibles = historiasDelGrupo(browse, grupoSel, lineaSel);
+    // ¿La selección actual es UNA línea concreta? Entonces se recorre PAGINADA (todo su pool), no
+    // el browse en memoria. Marca con grupos: la línea del menú (`lineaSel` = id). Marca sin grupos:
+    // el chip seleccionado ES una línea (`chip.lineaId`).
+    const chipSel = chips.find((g) => g.grupo === grupoSel);
+    let lineaActiva: { linea: string; etiqueta: string } | null = null;
+    if (grupos.length > 0) {
+      if (lineaSel)
+        lineaActiva = {
+          linea: lineaSel,
+          etiqueta: chipSel?.lineas?.find((l) => l.linea === lineaSel)?.nombre ?? lineaSel,
+        };
+    } else if (chipSel?.lineaId) {
+      lineaActiva = { linea: chipSel.lineaId, etiqueta: chipSel.grupo };
+    }
     return (
       <div className="space-y-4" data-testid="mesa-grupos">
         <NavGruposLineas
@@ -587,29 +732,35 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
             setLineaSel(linea);
           }}
         />
-        {query.isFetching && !query.isPending && (
-          <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
-        )}
-        {visibles.length === 0 ? (
-          <EstadoVacio
-            icono={Newspaper}
-            titulo={lineaSel ? "Sin candidatas en esta línea" : "Sin candidatas en esta categoría"}
-            texto="Prueba con otra categoría o espera a que lleguen nuevas."
+        {lineaActiva ? (
+          <LineaPaginada
+            marca={marca}
+            linea={lineaActiva.linea}
+            etiqueta={lineaActiva.etiqueta}
+            onVolver={() => {
+              setGrupoSel("");
+              setLineaSel("");
+            }}
           />
         ) : (
-          <ListaHistorias historias={visibles} />
+          <>
+            {query.isFetching && !query.isPending && (
+              <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
+            )}
+            {visibles.length === 0 ? (
+              <EstadoVacio
+                icono={Newspaper}
+                titulo="Sin candidatas en esta categoría"
+                texto="Prueba con otra categoría o espera a que lleguen nuevas."
+              />
+            ) : (
+              <ListaHistorias historias={visibles} />
+            )}
+          </>
         )}
       </div>
     );
   }
-
-  const alternarExpandida = (linea: string) =>
-    setExpandidas((prev) => {
-      const next = new Set(prev);
-      if (next.has(linea)) next.delete(linea);
-      else next.add(linea);
-      return next;
-    });
 
   const fuera = data.fuera_de_plan;
   const vacia =
@@ -635,23 +786,31 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
           <SeccionLinea
             key={l.linea}
             linea={l}
-            expandida={expandidas.has(l.linea)}
-            onToggleExpandida={() => alternarExpandida(l.linea)}
+            onAbrirLinea={(linea, etiqueta) => setLineaAbierta({ linea, etiqueta })}
           />
         ))}
 
       {/* Fuera del plan (plegado por defecto): líneas de feed que el plan no contempla. */}
       {fuera.en_pool > 0 && (
         <section data-testid="seccion-fuera-de-plan">
-          <button
-            type="button"
-            className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
-            onClick={() => setFueraAbierto((v) => !v)}
-            aria-expanded={fueraAbierto}
-          >
-            {fueraAbierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            Fuera del plan · {fuera.en_pool} candidata{fuera.en_pool !== 1 ? "s" : ""}
-          </button>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
+              onClick={() => setFueraAbierto((v) => !v)}
+              aria-expanded={fueraAbierto}
+            >
+              {fueraAbierto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              Fuera del plan · {fuera.en_pool} candidata{fuera.en_pool !== 1 ? "s" : ""}
+            </button>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              onClick={() => setLineaAbierta({ linea: LINEA_FUERA, etiqueta: "Fuera del plan" })}
+            >
+              {`Ver las ${fuera.en_pool} del pool`}
+            </button>
+          </div>
           {fueraAbierto && (
             <div className="mt-2">
               <ListaHistorias historias={fuera.historias} />
