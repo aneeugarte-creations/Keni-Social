@@ -1,10 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Bell, Building2 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 
+import { PanelActualizando } from "@/components/comunes/PanelActualizando";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { Card } from "@/components/ui/card";
 import { MarcaActivaContexto, type ValorMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { UsuarioSesion } from "@/types";
@@ -62,81 +61,6 @@ const MARCA: ValorMarcaActiva = {
 const queryClient = new QueryClient();
 queryClient.setQueryData(["catalogo"], CATALOGO);
 
-// Tiempo medio aproximado que tarda el front en volver a estar sano tras un deploy. La barra se
-// arrastra hacia ~94% con esta escala (curva que frena al final, nunca llega a 100% sola): da
-// sensación de avance honesta sin prometer un final que no controla. El 100% lo pone SOLO la
-// señal real de que el front volvió.
-const DURACION_ESTIMADA_MS = 22000;
-// Sondeo de disponibilidad real: mientras el front está caído, `/version.json` lo sirve el
-// contenedor de mantenimiento (503, no-ok); cuando el front vuelve, Traefik enruta a él y responde
-// 200. En cuanto es 200 -> barra al 100% y recarga (el SPA ya está sirviéndose). Backstop: si el
-// sondeo fallara siempre, una recarga a los 90s reintenta con una página fresca.
-const INTERVALO_SONDEO_MS = 2000;
-const BACKSTOP_RECARGA_MS = 90000;
-
-/**
- * Barra de progreso de la actualización. Avance estimado por curva (frena cerca del 94%) +
- * detección REAL de la vuelta del front por sondeo de `/version.json`: al recibir 200, completa
- * y recarga. Sustituye al spinner; va DEBAJO del texto.
- */
-function ProgresoActualizacion() {
-  const [pct, setPct] = useState(0);
-  const [completo, setCompleto] = useState(false);
-
-  // Arranca la animación al siguiente frame: la transición CSS larga lleva la barra de 0 -> 94%.
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setPct(94));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  // Sondeo de disponibilidad real del front + backstop de recarga.
-  useEffect(() => {
-    let vivo = true;
-    let pendiente: number | undefined;
-    const sondear = async () => {
-      try {
-        const r = await fetch("/version.json", { cache: "no-store" });
-        if (vivo && r.ok) {
-          setCompleto(true);
-          setPct(100);
-          window.setTimeout(() => window.location.reload(), 500);
-          return;
-        }
-      } catch {
-        // Sin respuesta (front aún cayendo / red): se reintenta abajo.
-      }
-      if (vivo) pendiente = window.setTimeout(sondear, INTERVALO_SONDEO_MS);
-    };
-    pendiente = window.setTimeout(sondear, INTERVALO_SONDEO_MS);
-    const backstop = window.setTimeout(() => window.location.reload(), BACKSTOP_RECARGA_MS);
-    return () => {
-      vivo = false;
-      window.clearTimeout(pendiente);
-      window.clearTimeout(backstop);
-    };
-  }, []);
-
-  return (
-    <div
-      className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-      role="progressbar"
-      aria-label="Progreso de la actualización"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(pct)}
-    >
-      <div
-        className="h-full rounded-full bg-foreground ease-out"
-        style={{
-          width: `${pct}%`,
-          // Avance lento por curva; el salto al 100% (señal real) es rápido.
-          transition: `width ${completo ? 500 : DURACION_ESTIMADA_MS}ms ${completo ? "ease-out" : "cubic-bezier(0,0.6,0.2,1)"}`,
-        }}
-      />
-    </div>
-  );
-}
-
 export function ShellCongelado() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -173,23 +97,20 @@ export function ShellCongelado() {
                   </div>
                 </header>
 
-                {/* Lienzo con la tarjeta viva (mensaje), sobre la app atenuada. */}
+                {/* Lienzo con la tarjeta viva (mensaje), sobre la app atenuada. La tarjeta y su
+                    barra son el componente compartido `PanelActualizando` (el mismo de la puerta de
+                    sesión y el velo in-app del back). Aquí sondea `/version.json`: mientras el front
+                    está caído lo sirve este contenedor (503, no-ok); cuando vuelve, responde 200 ->
+                    barra al 100% y recarga (el SPA ya se sirve). */}
                 <main className="relative min-w-0 flex-1 overflow-hidden">
                   <div className="absolute inset-0 bg-background/40 backdrop-blur-[1px]" aria-hidden="true" />
                   <div className="relative grid h-full place-items-center p-6">
-                    <Card
-                      role="status"
-                      aria-live="polite"
-                      className="w-full max-w-sm p-8 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_30px_rgba(0,0,0,0.06)]"
-                    >
-                      <h2 className="mb-6 text-base font-light uppercase tracking-[0.3em] text-foreground">
-                        <span className="inline-block [margin-right:-0.3em]">KENI</span>
-                      </h2>
-                      <h1 className="text-lg font-semibold text-foreground">
-                        Estamos actualizando la consola
-                      </h1>
-                      <ProgresoActualizacion />
-                    </Card>
+                    <PanelActualizando
+                      sondearListo={async () =>
+                        (await fetch("/version.json", { cache: "no-store" })).ok
+                      }
+                      onListo={() => window.location.reload()}
+                    />
                   </div>
                 </main>
               </div>

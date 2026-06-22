@@ -4,7 +4,7 @@ import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { FronteraError } from "@/components/comunes/FronteraError";
-import { BannerConexion } from "@/components/layout/BannerConexion";
+import { PanelActualizando } from "@/components/comunes/PanelActualizando";
 import { CampanaNotificaciones } from "@/components/layout/CampanaNotificaciones";
 import { ControlContexto } from "@/components/layout/ControlContexto";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
+import { useConexionDegradada } from "@/lib/estado-red";
 import { cn } from "@/lib/utils";
 import { useDetectorActualizacion } from "@/lib/version";
 import { hidratarLimites } from "@/pages/piezas/meta";
@@ -50,6 +51,11 @@ export function AppShell() {
 
   // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
   useDetectorActualizacion();
+
+  // Back desplegando/caído (varias queries seguidas fallan por red/proxy): un ÚNICO velo calmado
+  // "Estamos actualizando" cubre el contenido. Sustituye al banner ámbar y, con el guard de
+  // `BloqueError`, garantiza que NUNCA aparezca un muro de errores rojos por sección.
+  const conexionDegradada = useConexionDegradada();
 
   // Estado colapsado del sidebar (rail de solo iconos), persistido en
   // localStorage para que sobreviva al refresco. Inicializa leyéndolo (lazy).
@@ -141,7 +147,7 @@ export function AppShell() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
         {/* `relative z-30`: el topbar y todo su subárbol (incluido el cajón de
             notificaciones, que se despliega hacia el contenido) deben pintar SOBRE el
             `<main>`. El `backdrop-blur` del header ya crea un contexto de apilamiento
@@ -225,10 +231,6 @@ export function AppShell() {
           )}
         </header>
 
-        {/* Banner de conexión degradada: aparece bajo el header cuando varias queries seguidas
-            fallan por red/proxy (back desplegando o caído) y se retira al primer éxito. */}
-        <BannerConexion />
-
         {/* Acciones de página en MÓVIL: fila propia bajo el header (el portal de
             `AccionesPagina` apunta aquí bajo `md`). `empty:hidden` la colapsa del todo
             en páginas sin acciones; `flex-wrap` deja que selectores y botones respiren
@@ -260,6 +262,17 @@ export function AppShell() {
             </ProveedorEncabezado>
           </div>
         </main>
+
+        {/* VELO "Estamos actualizando": cubre el contenido (no el topbar ni el sidebar reales)
+            mientras el back está caído/desplegando. Es el equivalente in-app de la página de
+            mantenimiento del front; la barra avanza por curva y el velo se retira solo en cuanto
+            una query vuelve a responder (el detector apaga `conexionDegradada`). z-20: bajo el
+            topbar (z-30) y los overlays en portal (menú móvil z-40, diálogos z-50). */}
+        {conexionDegradada && (
+          <div className="absolute inset-x-0 bottom-0 top-12 z-20 grid place-items-center bg-background/80 p-6 backdrop-blur">
+            <PanelActualizando />
+          </div>
+        )}
       </div>
     </div>
     </PaletaProvider>

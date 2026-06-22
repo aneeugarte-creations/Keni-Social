@@ -133,7 +133,7 @@ describe("PuertaSesion · guard de sesión", () => {
     );
     renderPuerta();
 
-    expect(await screen.findByText(/No podemos conectar con la consola/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Estamos actualizando la consola/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe("PuertaSesion · guard de sesión", () => {
     stubFetch({ me: { status: 503 } });
     renderPuerta();
 
-    expect(await screen.findByText(/No podemos conectar con la consola/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Estamos actualizando la consola/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
   });
 
@@ -161,11 +161,11 @@ describe("PuertaSesion · guard de sesión", () => {
     );
     renderPuerta();
 
-    await screen.findByText(/No podemos conectar con la consola/i);
+    await screen.findByText(/Estamos actualizando la consola/i);
     caido = false;
     fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
 
     expect(await screen.findByText("CONTENIDO PROTEGIDO")).toBeInTheDocument();
-    expect(screen.queryByText(/No podemos conectar con la consola/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Estamos actualizando la consola/i)).not.toBeInTheDocument();
   });
 });

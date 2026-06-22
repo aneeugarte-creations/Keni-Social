@@ -2,6 +2,7 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useConexionDegradada } from "@/lib/estado-red";
 import { cn } from "@/lib/utils";
 
 /**
@@ -9,6 +10,13 @@ import { cn } from "@/lib/utils";
  * "Reintentar".
  *
  * El mensaje cae a un texto genérico si no se proporciona uno.
+ *
+ * NUNCA durante una indisponibilidad del back: si la conexión está degradada (back desplegando/
+ * caído), CUALQUIER sección que falle al leer su dato NO debe pintar un error rojo alarmante —el
+ * AppShell ya muestra un único velo "Estamos actualizando" sobre el contenido—. Una actualización
+ * es esperada, no un fallo; nada de un muro de tarjetas rojas ("No se pudo leer X"). Devolvemos
+ * `null` y dejamos que el velo global hable por todas. El error rojo se reserva para fallos REALES
+ * de una sección con el back sano.
  */
 export function BloqueError({
   titulo,
@@ -24,6 +32,7 @@ export function BloqueError({
   cargando?: boolean;
   className?: string;
 }) {
+  if (useConexionDegradada()) return null;
   return (
     <Card className={className}>
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
