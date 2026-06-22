@@ -84,6 +84,22 @@ def test_sin_reencuadre_no_toca_foco(monkeypatch):
     assert "foco" not in fondo and "zoom" not in fondo
 
 
+def test_collage_foco_zoom_malformados_no_revientan(monkeypatch):
+    """Una fila de `fotos` (collage) con foco/zoom no numéricos se ignora sin tumbar el render."""
+    capturado: dict = {}
+    monkeypatch.setattr(
+        ei, "renderizar_documento",
+        lambda doc, bindings=None: (capturado.update(doc=doc), {"id": "o.png", "url": "/x"})[1],
+    )
+    fotos = [{"objeto": "real.png", "foco": ["x", "y"], "zoom": "mucho"}]
+    res = ei.componer_desde_plantilla(_doc(), copy_in="", fotos=fotos)
+    assert res["id"] == "o.png"
+    fondo = next(c for c in capturado["doc"]["capas"] if c["tipo"] == "imagen")
+    assert fondo["objeto"] == "real.png"
+    # Reencuadre inválido -> se descarta (la capa no gana foco/zoom basura).
+    assert "foco" not in fondo and "zoom" not in fondo
+
+
 def test_no_pisa_logo_pequeno_sin_hueco(monkeypatch):
     """Plantilla de solo texto + logo pequeño (sin hueco de foto): la foto NO entra, el logo queda."""
     capturado: dict = {}

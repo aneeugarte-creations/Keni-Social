@@ -48,7 +48,9 @@ async def integrar_foto(request: Request) -> Response:
     final = imagen
     if estudio_imagen.marca_tiene_plantilla(marca):
         try:
-            resultado = estudio_imagen.componer(
+            # Render bloqueante (subprocess.run); en threadpool para no bloquear el event loop.
+            resultado = await run_in_threadpool(
+                estudio_imagen.componer,
                 imagen,
                 marca=marca,
                 formato=estudio_imagen.formato_por_red(pub.get("red") or ""),
@@ -101,7 +103,9 @@ async def aplicar_plantilla(request: Request) -> Response:
     # foto/copy_in antes de fijarla, SIN persistir nada (no genera registros sueltos). La imagen se
     # renderiza on-demand y efímera desde la receta (`/compuesta`); no se hornea en `imagen`.
     try:
-        estudio_imagen.componer_desde_plantilla_bytes(
+        # Render bloqueante (subprocess.run); en threadpool para no bloquear el event loop.
+        await run_in_threadpool(
+            estudio_imagen.componer_desde_plantilla_bytes,
             plantilla.get("documento") or "{}",
             copy_in=copy_in,
             foto=foto,

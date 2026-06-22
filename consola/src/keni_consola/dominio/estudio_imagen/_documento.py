@@ -228,12 +228,21 @@ def _doc_plantilla_con_fotos(
         if not isinstance(spec, dict):
             continue
         hueco["objeto"] = str(spec.get("objeto") or "")
+        # `foco`/`zoom` vienen del JSON crudo de `fotos`: blindamos el cast como en `parsear_encuadre`
+        # (una fila malformada no debe tumbar el render; se ignora el reencuadre inválido).
         foco = spec.get("foco")
         if isinstance(foco, (list, tuple)) and len(foco) == 2:
-            hueco["foco"] = [float(foco[0]), float(foco[1])]
+            try:
+                hueco["foco"] = [float(foco[0]), float(foco[1])]
+            except (ValueError, TypeError):
+                pass
         zoom = spec.get("zoom")
-        if zoom and float(zoom) > 0:
-            hueco["zoom"] = float(zoom)
+        try:
+            zoom = float(zoom) if zoom else 0.0
+        except (ValueError, TypeError):
+            zoom = 0.0
+        if zoom > 0:
+            hueco["zoom"] = zoom
     return doc
 
 
