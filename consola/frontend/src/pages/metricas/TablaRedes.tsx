@@ -6,10 +6,10 @@
  * cuenta por plataforma; cuando hay una marca filtrada, el reporte solo trae sus
  * cuentas, así que esta tabla queda acotada a esa marca (deseado). Las columnas
  * numéricas van alineadas a la derecha con cifras tabulares para la lectura
- * comparada y son ORDENABLES (clic en la cabecera). Al pie, una fila de TOTALES, y
- * bajo la tabla un mini-reparto "% de vistas por red" (barra), como en
- * GraficaMarcas. `alcance` es `null` cuando ninguna cuenta mide alcance en esa red
- * se muestra "—" en vez de un 0 falso.
+ * comparada y son ORDENABLES (clic en la cabecera). Qué columnas se ven y en qué
+ * orden lo decide el panel "Configurar vista" (`vistaConfig.columnas.redes`). Al pie,
+ * una fila de TOTALES. Cada red canónica sin datos aparece igualmente como fila con
+ * "—" (incluida X, no contratada en el piloto), nunca un 0 falso.
  */
 import * as React from "react";
 
@@ -32,19 +32,21 @@ import { nombreRed, numeroCompleto, porcentaje, redCanonica, REDES_CANONICAS } f
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import { idsColumnas, TABLA_REDES } from "./columnasMeta";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
 const RED_TODAS = "__todas__";
 
 type ClaveRed = "visualizaciones" | "interacciones" | "engagement_pct";
 
-/** Columnas numéricas en el mismo orden y formato que la tabla por marca. */
-const COLUMNAS: Array<{ clave: ClaveRed; etiqueta: string }> = [
-  { clave: "visualizaciones", etiqueta: "Vistas" },
-  { clave: "interacciones", etiqueta: "Interacciones" },
-  { clave: "engagement_pct", etiqueta: "Engagement" },
-];
+/** Etiqueta legible de cada columna numérica (misma forma que la tabla por marca). */
+const ETIQUETA_METRICA: Record<ClaveRed, string> = {
+  visualizaciones: "Vistas",
+  interacciones: "Interacciones",
+  engagement_pct: "Engagement",
+};
 
 /** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
 const ACCESORES: Record<ClaveRed, (r: RedMetrica) => number> = {
@@ -52,6 +54,8 @@ const ACCESORES: Record<ClaveRed, (r: RedMetrica) => number> = {
   interacciones: (r) => r.interacciones,
   engagement_pct: (r) => r.engagement_pct,
 };
+
+const IDS_BASE = idsColumnas(TABLA_REDES);
 
 /** Formatea el valor de una columna. */
 function valorCelda(r: RedMetrica, clave: ClaveRed): string {
@@ -86,6 +90,10 @@ export function TablaRedes({
   // puede enfocar cualquiera y, si no tiene datos en el rango, la tabla lo dice con "—".
   const redesDisponibles = REDES_CANONICAS;
 
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_REDES]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+
   // Filas tras aplicar el filtro de red (cliente). `visibles` alimenta orden, totales y reparto.
   const visibles = redFiltro === RED_TODAS ? redes : redes.filter((r) => r.red === redFiltro);
 
@@ -104,6 +112,76 @@ export function TablaRedes({
   const conDatos = new Set(visibles.map((r) => redCanonica(r.red)));
   const redesFaltantes = objetivoRedes.filter((r) => !conDatos.has(r));
 
+  const encabezado = (id: string) => {
+    if (id === "red") {
+      return (
+        <TableHead key={id} className="pl-6">
+          Red
+        </TableHead>
+      );
+    }
+    const clave = id as ClaveRed;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear="right"
+        className="pr-6 last:pr-6"
+      >
+        {ETIQUETA_METRICA[clave]}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (r: RedMetrica, id: string) => {
+    if (id === "red") {
+      return (
+        <TableCell key={id} className="pl-6 font-medium">
+          {nombreRed(r.red)}
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
+        {valorCelda(r, id as ClaveRed)}
+      </TableCell>
+    );
+  };
+
+  const celdaFaltante = (red: string, id: string) => {
+    if (id === "red") {
+      return (
+        <TableCell key={id} className="pl-6 font-medium">
+          {nombreRed(red)}
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
+        —
+      </TableCell>
+    );
+  };
+
+  const celdaTotal = (id: string) => {
+    if (id === "red") {
+      return (
+        <TableCell key={id} className="pl-6">
+          Total
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
+        {id === "engagement_pct"
+          ? porcentaje(totales.engagement_pct)
+          : numeroCompleto(totales[id as "visualizaciones" | "interacciones"])}
+      </TableCell>
+    );
+  };
+
   const filtroRed = (
     <Select value={redFiltro} onValueChange={setRedFiltro}>
       <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
@@ -121,68 +199,25 @@ export function TablaRedes({
   );
 
   const cuerpo = (
-      <>
-      <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Red</TableHead>
-              {COLUMNAS.map((c) => (
-                <CabeceraOrdenable
-                  key={c.clave}
-                  activa={estado.clave === c.clave}
-                  direccion={estado.direccion}
-                  onClick={() => alClicar(c.clave)}
-                  alinear="right"
-                  className="pr-6 last:pr-6"
-                >
-                  {c.etiqueta}
-                </CabeceraOrdenable>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filasOrdenadas.map((r) => (
-              <TableRow key={r.red}>
-                <TableCell className="pl-6 font-medium">{nombreRed(r.red)}</TableCell>
-                {COLUMNAS.map((c) => (
-                  <TableCell
-                    key={c.clave}
-                    className="pr-6 text-right tabular-nums last:pr-6"
-                  >
-                    {valorCelda(r, c.clave)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-            {/* Redes sin datos en el periodo: fila presente con "—" (no se omiten). */}
-            {redesFaltantes.map((red) => (
-              <TableRow key={red} className="text-muted-foreground">
-                <TableCell className="pl-6 font-medium">{nombreRed(red)}</TableCell>
-                {COLUMNAS.map((c) => (
-                  <TableCell key={c.clave} className="pr-6 text-right tabular-nums last:pr-6">
-                    —
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-            {visibles.length > 0 && (
-              <TableRow className="border-t-2 font-medium">
-                <TableCell className="pl-6">Total</TableCell>
-                {COLUMNAS.map((c) => (
-                  <TableCell
-                    key={c.clave}
-                    className="pr-6 text-right tabular-nums last:pr-6"
-                  >
-                    {c.clave === "engagement_pct"
-                      ? porcentaje(totales.engagement_pct)
-                      : numeroCompleto(totales[c.clave])}
-                  </TableCell>
-                ))}
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </>
+    <Table>
+      <TableHeader>
+        <TableRow>{columnas.map(encabezado)}</TableRow>
+      </TableHeader>
+      <TableBody>
+        {filasOrdenadas.map((r) => (
+          <TableRow key={r.red}>{columnas.map((id) => celda(r, id))}</TableRow>
+        ))}
+        {/* Redes sin datos en el periodo: fila presente con "—" (no se omiten). */}
+        {redesFaltantes.map((red) => (
+          <TableRow key={red} className="text-muted-foreground">
+            {columnas.map((id) => celdaFaltante(red, id))}
+          </TableRow>
+        ))}
+        {visibles.length > 0 && (
+          <TableRow className="border-t-2 font-medium">{columnas.map(celdaTotal)}</TableRow>
+        )}
+      </TableBody>
+    </Table>
   );
 
   if (desnudo) {

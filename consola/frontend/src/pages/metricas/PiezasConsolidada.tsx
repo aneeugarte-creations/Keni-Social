@@ -73,8 +73,9 @@ import {
 import type { MarcaDisponible, PiezaListado } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import { idsColumnas, TABLA_PIEZAS } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { DetallePieza } from "./DetallePieza";
 import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 import { useOrdenTabla } from "./useOrdenTabla";
@@ -112,6 +113,11 @@ const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: Luci
   { clave: "guardados", etiqueta: "Guardados", icono: Bookmark },
   { clave: "clics_enlace", etiqueta: "Clics a enlace", icono: MousePointerClick },
 ];
+
+/** Columnas de interacción (icono + número) indexadas por id, para render por columna. */
+const META_INTERACCION = new Map(COLS_INTERACCION.map((c) => [c.clave as string, c]));
+
+const IDS_PIEZAS_BASE = idsColumnas(TABLA_PIEZAS);
 
 const TODAS = "__todas__";
 const SIN_LINEA = "Sin línea";
@@ -154,6 +160,9 @@ export function PiezasConsolidada({
 }) {
   const marca_ = marcaParam(marcaActual);
   const redGlobal = useVistaConfig((s) => s.red);
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_PIEZAS]);
+  const cfgCols = cfgGuardada ?? { orden: IDS_PIEZAS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_PIEZAS_BASE, cfgCols);
   const [busqueda, setBusqueda] = React.useState("");
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
@@ -246,6 +255,47 @@ export function PiezasConsolidada({
   }
 
   const variasMarcas = marcasDisponibles.length > 1;
+
+  // Cabecera de una columna por su id (orden/visibilidad del panel "Configurar vista").
+  // "pieza" no es ordenable; el resto reusa `CabeceraOrdenable`.
+  const encabezadoPieza = (id: string) => {
+    if (id === "pieza") {
+      return <TableHead key={id}>Pieza</TableHead>;
+    }
+    const inter = META_INTERACCION.get(id);
+    if (inter) {
+      const Icono = inter.icono;
+      return (
+        <CabeceraOrdenable
+          key={id}
+          activa={estado.clave === inter.clave}
+          direccion={estado.direccion}
+          onClick={() => alClicar(inter.clave)}
+          alinear="right"
+          className="hidden text-right sm:table-cell"
+        >
+          <span className="inline-flex items-center" title={inter.etiqueta}>
+            <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="sr-only">{inter.etiqueta}</span>
+          </span>
+        </CabeceraOrdenable>
+      );
+    }
+    const etiqueta = id === "publicado" ? "Día" : id === "visualizaciones" ? "Vistas" : "Engagement";
+    const clave = id as ClaveOrden;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear="right"
+        className="text-right"
+      >
+        {etiqueta}
+      </CabeceraOrdenable>
+    );
+  };
 
   return (
     <>
@@ -343,57 +393,14 @@ export function PiezasConsolidada({
           <>
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Pieza</TableHead>
-                  <CabeceraOrdenable
-                    activa={estado.clave === "publicado"}
-                    direccion={estado.direccion}
-                    onClick={() => alClicar("publicado")}
-                    alinear="right"
-                    className="text-right"
-                  >
-                    Día
-                  </CabeceraOrdenable>
-                  <CabeceraOrdenable
-                    activa={estado.clave === "visualizaciones"}
-                    direccion={estado.direccion}
-                    onClick={() => alClicar("visualizaciones")}
-                    alinear="right"
-                    className="text-right"
-                  >
-                    Vistas
-                  </CabeceraOrdenable>
-                  <CabeceraOrdenable
-                    activa={estado.clave === "engagement_pct"}
-                    direccion={estado.direccion}
-                    onClick={() => alClicar("engagement_pct")}
-                    alinear="right"
-                    className="text-right"
-                  >
-                    Engagement
-                  </CabeceraOrdenable>
-                  {COLS_INTERACCION.map(({ clave, etiqueta, icono: Icono }) => (
-                    <CabeceraOrdenable
-                      key={clave}
-                      activa={estado.clave === clave}
-                      direccion={estado.direccion}
-                      onClick={() => alClicar(clave)}
-                      alinear="right"
-                      className="hidden text-right sm:table-cell"
-                    >
-                      <span className="inline-flex items-center" title={etiqueta}>
-                        <Icono className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span className="sr-only">{etiqueta}</span>
-                      </span>
-                    </CabeceraOrdenable>
-                  ))}
-                </TableRow>
+                <TableRow>{columnas.map(encabezadoPieza)}</TableRow>
               </TableHeader>
               <TableBody>
                 {filasMostradas.map((p) => (
                   <FilaPieza
                     key={p.id}
                     pieza={p}
+                    columnas={columnas}
                     marcas={marcas}
                     mostrarMarca={variasMarcas}
                     onAbrir={() => abrir(p)}
@@ -466,11 +473,14 @@ export function PiezasConsolidada({
 
 function FilaPieza({
   pieza,
+  columnas,
   marcas,
   mostrarMarca,
   onAbrir,
 }: {
   pieza: PiezaListado;
+  /** Ids de columna en el orden/visibilidad efectivos ("Configurar vista"). */
+  columnas: string[];
   marcas: MarcaDisponible[];
   mostrarMarca: boolean;
   onAbrir: () => void;
@@ -497,6 +507,65 @@ function FilaPieza({
     });
   }
 
+  const celda = (id: string) => {
+    if (id === "pieza") {
+      return (
+        <TableCell key={id} className="max-w-[20rem]">
+          <span className="block max-w-full truncate font-medium" title={titulo}>
+            {titulo}
+          </span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>{partes.join(" · ")}</span>
+            {pieza.rendimiento_relativo != null && (
+              <Badge
+                variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
+                title="Cómo se compara esta pieza contra el promedio de su red y marca"
+              >
+                {rendimientoRel(pieza.rendimiento_relativo)}
+              </Badge>
+            )}
+          </span>
+        </TableCell>
+      );
+    }
+    if (id === "publicado") {
+      return (
+        <TableCell
+          key={id}
+          className="whitespace-nowrap text-right text-xs text-muted-foreground tabular-nums"
+        >
+          {etiquetaDiaCorto(pieza.publicado)}
+        </TableCell>
+      );
+    }
+    if (id === "visualizaciones") {
+      return (
+        <TableCell key={id} className="text-right tabular-nums">
+          {numeroCompleto(pieza.visualizaciones)}
+        </TableCell>
+      );
+    }
+    if (id === "engagement_pct") {
+      return (
+        <TableCell key={id} className="text-right tabular-nums">
+          {porcentaje(pieza.engagement_pct)}
+        </TableCell>
+      );
+    }
+    // Columnas de interacción (comentarios/compartidos/guardados/clics_enlace): se ocultan
+    // en móvil (sm:table-cell), como la cabecera.
+    const valor = pieza[id as ClaveOrden] as number | null;
+    return (
+      <TableCell
+        key={id}
+        className="hidden text-right tabular-nums sm:table-cell"
+        title={valor == null ? undefined : numeroCompleto(valor)}
+      >
+        {valor == null ? "—" : numeroCompacto(valor)}
+      </TableCell>
+    );
+  };
+
   return (
     <FilaConAcciones
       como="tr"
@@ -505,43 +574,7 @@ function FilaPieza({
       etiquetaAcciones={`Acciones de ${titulo}`}
       kebab="nunca"
     >
-      <TableCell className="max-w-[20rem]">
-        <span className="block max-w-full truncate font-medium" title={titulo}>
-          {titulo}
-        </span>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>{partes.join(" · ")}</span>
-          {pieza.rendimiento_relativo != null && (
-            <Badge
-              variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
-              title="Cómo se compara esta pieza contra el promedio de su red y marca"
-            >
-              {rendimientoRel(pieza.rendimiento_relativo)}
-            </Badge>
-          )}
-        </span>
-      </TableCell>
-      <TableCell className="whitespace-nowrap text-right text-xs text-muted-foreground tabular-nums">
-        {etiquetaDiaCorto(pieza.publicado)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {numeroCompleto(pieza.visualizaciones)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {porcentaje(pieza.engagement_pct)}
-      </TableCell>
-      {COLS_INTERACCION.map(({ clave }) => {
-        const valor = pieza[clave] as number | null;
-        return (
-          <TableCell
-            key={clave}
-            className="hidden text-right tabular-nums sm:table-cell"
-            title={valor == null ? undefined : numeroCompleto(valor)}
-          >
-            {valor == null ? "—" : numeroCompacto(valor)}
-          </TableCell>
-        );
-      })}
+      {columnas.map(celda)}
     </FilaConAcciones>
   );
 }

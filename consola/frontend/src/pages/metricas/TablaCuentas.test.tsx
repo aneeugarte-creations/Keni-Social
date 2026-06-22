@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CuentaMetrica } from "@/types";
 
 import { TablaCuentas } from "./TablaCuentas";
+import { useVistaConfig } from "./vistaConfig";
+
+afterEach(() => {
+  // La config de columnas es un singleton global: restáurala entre tests.
+  useVistaConfig.getState().reset();
+});
 
 const CUENTAS: CuentaMetrica[] = [
   {
@@ -74,6 +80,31 @@ describe("TablaCuentas", () => {
 
     fireEvent.click(screen.getByTitle("Ver piezas de UnoTV"));
     expect(onVerPiezas).toHaveBeenCalledWith("unotv");
+  });
+
+  it("oculta una columna marcada como oculta en la config de vista", () => {
+    useVistaConfig.getState().setColumnas("cuentas", {
+      orden: ["marca", "visualizaciones", "interacciones", "engagement_pct"],
+      ocultas: ["interacciones"],
+    });
+    renderTabla();
+
+    expect(screen.getByText("Vistas")).toBeInTheDocument();
+    expect(screen.queryByText("Interacciones")).not.toBeInTheDocument();
+  });
+
+  it("respeta el orden de columnas de la config de vista", () => {
+    useVistaConfig.getState().setColumnas("cuentas", {
+      orden: ["marca", "engagement_pct", "visualizaciones", "interacciones"],
+      ocultas: [],
+    });
+    renderTabla();
+
+    const cabeceras = screen
+      .getAllByRole("columnheader")
+      .map((th) => th.textContent?.trim());
+    // Marca primero, luego Engagement antes que Vistas (orden reconfigurado).
+    expect(cabeceras.indexOf("Engagement")).toBeLessThan(cabeceras.indexOf("Vistas"));
   });
 
   it("dice con honestidad cuando no hay marcas", () => {

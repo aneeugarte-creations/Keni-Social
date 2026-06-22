@@ -3,10 +3,12 @@
  *
  * Las columnas numéricas van alineadas a la derecha con cifras tabulares para
  * facilitar la lectura comparada entre filas, y son ORDENABLES (clic en la
- * cabecera, asc/desc con indicador visual). Al pie, una fila de TOTALES: suma de
- * vistas/alcance/interacciones y engagement global (interacciones ÷ vistas). Cada
- * fila ofrece además, en su menú de acciones (kebab / click derecho), "Generar
- * copy", que abre esa marca ya preseleccionada en Generar copy.
+ * cabecera, asc/desc con indicador visual). Qué columnas se ven y en qué orden lo
+ * decide el panel "Configurar vista" (`vistaConfig.columnas.cuentas`); la ordenación
+ * por columna es independiente. Al pie, una fila de TOTALES: suma de
+ * vistas/interacciones y engagement global (interacciones ÷ vistas). Cada fila ofrece
+ * además, en su menú de acciones (kebab / click derecho), "Generar copy", que abre esa
+ * marca ya preseleccionada en Generar copy.
  */
 import { Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -26,11 +28,13 @@ import { numeroCompleto, porcentaje } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import { idsColumnas, TABLA_CUENTAS } from "./columnasMeta";
 import { METRICAS, valorMetrica, type ClaveMetrica } from "./metricas-meta";
 import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
 /** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
 const ACCESORES: Record<ClaveMetrica, (c: CuentaMetrica) => number> = {
@@ -38,6 +42,11 @@ const ACCESORES: Record<ClaveMetrica, (c: CuentaMetrica) => number> = {
   interacciones: (c) => c.interacciones,
   engagement_pct: (c) => c.engagement_pct,
 };
+
+/** Metadatos de métrica por clave (para resolver etiqueta/formato desde un id de columna). */
+const META_POR_CLAVE = new Map(METRICAS.map((m) => [m.clave, m]));
+
+const IDS_BASE = idsColumnas(TABLA_CUENTAS);
 
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
 function calcularTotales(cuentas: CuentaMetrica[]): {
@@ -69,6 +78,10 @@ export function TablaCuentas({
 }) {
   const navigate = useNavigate();
 
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_CUENTAS]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CuentaMetrica, ClaveMetrica>(
     cuentas,
     ACCESORES,
@@ -79,102 +92,125 @@ export function TablaCuentas({
   // Recorte a 5 filas (sobre el conjunto YA ORDENADO): el "top 5" sigue el orden activo.
   const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
 
-  const tabla = (
-      <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Marca</TableHead>
-              {METRICAS.map((m) => (
-                <CabeceraOrdenable
-                  key={m.clave}
-                  activa={estado.clave === m.clave}
-                  direccion={estado.direccion}
-                  onClick={() => alClicar(m.clave)}
-                  alinear="right"
-                >
-                  {m.etiqueta}
-                </CabeceraOrdenable>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {cuentas.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={METRICAS.length + 1}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  No hay marcas para mostrar en este periodo.
-                </TableCell>
-              </TableRow>
-            ) : (
-              <>
-                {visibles.map((c) => {
-                  const acciones: EntradaMenuContextual[] = [
-                    {
-                      etiqueta: "Generar copy",
-                      icono: Sparkles,
-                      onClick: () =>
-                        navigate("/generacion", {
-                          state: { marca: marcaCanonicaDesdeMetricas(c.marca_id) },
-                        }),
-                    },
-                  ];
-                  return (
-                    <FilaConAcciones
-                      key={c.marca_id}
-                      como="tr"
-                      acciones={acciones}
-                      etiquetaAcciones={`Acciones de ${c.marca}`}
-                      kebab="nunca"
-                    >
-                      <TableCell className="pl-6 font-medium">
-                        {onVerPiezas ? (
-                          <button
-                            type="button"
-                            onClick={() => onVerPiezas(c.marca_id)}
-                            className="text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
-                            title={`Ver piezas de ${c.marca}`}
-                          >
-                            {c.marca}
-                          </button>
-                        ) : (
-                          c.marca
-                        )}
-                      </TableCell>
-                      {METRICAS.map((m) => (
-                        <TableCell key={m.clave} className="text-right tabular-nums">
-                          {m.completo(valorMetrica(c, m.clave))}
-                        </TableCell>
-                      ))}
-                    </FilaConAcciones>
-                  );
-                })}
-                {/* Fila de totales: suma de las brutas + engagement global derivado. */}
-                <TableRow className="border-t-2 font-medium">
-                  <TableCell className="pl-6">Total</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(totales.visualizaciones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(totales.interacciones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {porcentaje(totales.engagement_pct)}
-                  </TableCell>
-                  <TableCell className="pr-6" />
-                </TableRow>
-              </>
-            )}
-          </TableBody>
-          {hayMas && (
-            <PieMostrarMas
-              expandido={expandido}
-              onAlternar={alternar}
-              colSpan={METRICAS.length + 2}
-            />
+  const encabezado = (id: string) => {
+    if (id === "marca") {
+      return (
+        <TableHead key={id} className="pl-6">
+          Marca
+        </TableHead>
+      );
+    }
+    const m = META_POR_CLAVE.get(id as ClaveMetrica)!;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === m.clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(m.clave)}
+        alinear="right"
+      >
+        {m.etiqueta}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (c: CuentaMetrica, id: string) => {
+    if (id === "marca") {
+      return (
+        <TableCell key={id} className="pl-6 font-medium">
+          {onVerPiezas ? (
+            <button
+              type="button"
+              onClick={() => onVerPiezas(c.marca_id)}
+              className="text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
+              title={`Ver piezas de ${c.marca}`}
+            >
+              {c.marca}
+            </button>
+          ) : (
+            c.marca
           )}
-        </Table>
+        </TableCell>
+      );
+    }
+    const m = META_POR_CLAVE.get(id as ClaveMetrica)!;
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        {m.completo(valorMetrica(c, m.clave))}
+      </TableCell>
+    );
+  };
+
+  const celdaTotal = (id: string) => {
+    if (id === "marca") {
+      return (
+        <TableCell key={id} className="pl-6">
+          Total
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        {id === "engagement_pct"
+          ? porcentaje(totales.engagement_pct)
+          : numeroCompleto(totales[id as "visualizaciones" | "interacciones"])}
+      </TableCell>
+    );
+  };
+
+  const tabla = (
+    <Table>
+      <TableHeader>
+        <TableRow>{columnas.map(encabezado)}</TableRow>
+      </TableHeader>
+      <TableBody>
+        {cuentas.length === 0 ? (
+          <TableRow>
+            <TableCell
+              colSpan={columnas.length}
+              className="py-8 text-center text-muted-foreground"
+            >
+              No hay marcas para mostrar en este periodo.
+            </TableCell>
+          </TableRow>
+        ) : (
+          <>
+            {visibles.map((c) => {
+              const acciones: EntradaMenuContextual[] = [
+                {
+                  etiqueta: "Generar copy",
+                  icono: Sparkles,
+                  onClick: () =>
+                    navigate("/generacion", {
+                      state: { marca: marcaCanonicaDesdeMetricas(c.marca_id) },
+                    }),
+                },
+              ];
+              return (
+                <FilaConAcciones
+                  key={c.marca_id}
+                  como="tr"
+                  acciones={acciones}
+                  etiquetaAcciones={`Acciones de ${c.marca}`}
+                  kebab="nunca"
+                >
+                  {columnas.map((id) => celda(c, id))}
+                </FilaConAcciones>
+              );
+            })}
+            {/* Fila de totales: suma de las brutas + engagement global derivado. */}
+            <TableRow className="border-t-2 font-medium">{columnas.map(celdaTotal)}</TableRow>
+          </>
+        )}
+      </TableBody>
+      {hayMas && (
+        <PieMostrarMas
+          expandido={expandido}
+          onAlternar={alternar}
+          colSpan={columnas.length}
+        />
+      )}
+    </Table>
   );
 
   if (desnudo) return tabla;
