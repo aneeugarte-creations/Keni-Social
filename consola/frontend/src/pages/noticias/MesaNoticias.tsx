@@ -15,6 +15,7 @@ import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
@@ -400,26 +401,32 @@ function GrupoMacro({
 }) {
   const [abierto, setAbierto] = React.useState(false);
   return (
-    <div
-      className="space-y-2 rounded-lg border border-border bg-muted/30 p-2"
-      data-testid="grupo-macro"
-      data-tema-macro={tema}
-    >
-      <button
-        type="button"
-        className="flex w-full items-center gap-1.5 px-1 text-xs font-semibold text-foreground"
-        onClick={() => setAbierto((v) => !v)}
-        aria-expanded={abierto}
-      >
-        {abierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <Layers className="h-3.5 w-3.5" />
-        <span>{tema}</span>
-        <span className="font-normal tabular-nums text-muted-foreground">
-          · {historias.length} historias
-        </span>
-      </button>
+    <div className="space-y-2" data-testid="grupo-macro" data-tema-macro={tema}>
+      {/* Cabecera con el MISMO peso visual que una tarjeta de historia: misma Card, mismo
+          padding y tamaño de título, para que el macro-evento no pase desapercibido. */}
+      <Card className="text-sm transition hover:border-keni-300 focus-within:border-keni-300">
+        <CardContent className="pt-3 pb-3">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 text-left"
+            onClick={() => setAbierto((v) => !v)}
+            aria-expanded={abierto}
+          >
+            {abierto ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="font-medium leading-snug">{tema}</span>
+            <span className="font-normal tabular-nums text-muted-foreground">
+              · {historias.length} historias
+            </span>
+          </button>
+        </CardContent>
+      </Card>
       {abierto && (
-        <div className="space-y-2">
+        <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-2">
           {historias.map((h) => (
             <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
           ))}

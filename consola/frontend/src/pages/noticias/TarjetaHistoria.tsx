@@ -190,7 +190,7 @@ export function TarjetaHistoria({
       <Card
         className={`text-sm transition hover:border-keni-300 focus-within:border-keni-300 ${esDescartada ? "opacity-60" : ""} ${
           seleccionada ? "ring-2 ring-primary/40" : ""
-        } ${esUltimaHora ? "border-red-500/60" : ""}`}
+        }`}
         data-testid="historia-item"
       >
         <CardContent className="pt-3 pb-3 space-y-1.5">
@@ -219,13 +219,11 @@ export function TarjetaHistoria({
               <div className="min-w-0 flex-1 space-y-0.5">
                 <p className="font-medium leading-snug min-w-0">
                   {esUltimaHora && (
-                    <Badge
-                      className="mr-1.5 gap-1 align-middle text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
+                    <Zap
+                      className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-middle text-red-600"
+                      aria-label="Última hora"
                       data-testid="badge-ultima-hora"
-                    >
-                      <Zap className="h-3 w-3" />
-                      ÚLTIMA HORA
-                    </Badge>
+                    />
                   )}
                   <button
                     type="button"
