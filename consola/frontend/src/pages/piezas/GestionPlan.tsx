@@ -1,7 +1,7 @@
 /**
- * «Plan y horarios» de la página Programación: EL sitio donde se configura, por marca, cuántos
- * contenidos salen al día de cada LÍNEA y a qué horas (CDMX). Es una SECCIÓN INLINE del panel
- * de ajustes (capa base, colapsable), no un diálogo.
+ * Pestaña «Horarios» de Plan (hub Programa): EL sitio donde se configura, por marca, cuántos
+ * contenidos salen al día de cada LÍNEA y a qué horas (CDMX), más las redes del plan y el
+ * alta/baja de líneas. El hashtag y los keywords de cada línea viven en la pestaña «Keywords».
  *
  * Las LÍNEAS son las REALES de la marca (etiquetas `vertical`, las mismas de métricas y feeds):
  * se leen de `/api/etiquetas?clase=vertical`. Más dos filas especiales del motor: «Última hora»
@@ -13,14 +13,13 @@
  * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Save, Tags, X } from "lucide-react";
+import { Loader2, Plus, Save, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 
@@ -82,10 +81,6 @@ interface FilaPlan {
   etiqueta: string;
   conHorario: boolean;
   esLinea: boolean;
-  /** Palabras clave (CSV) con que el clasificador asigna esta línea. Solo en líneas reales. */
-  keywords: string;
-  /** Hashtag (cuerpo, sin '#') de la línea, derivado de su nombre. Solo en líneas reales. */
-  hashtag: string;
 }
 
 export function PanelPlan({ marca }: { marca: string }) {
@@ -114,13 +109,11 @@ export function PanelPlan({ marca }: { marca: string }) {
       etiqueta: l.grupo ? `${l.grupo} · ${l.nombre}` : l.nombre,
       conHorario: true,
       esLinea: true,
-      keywords: l.keywords ?? "",
-      hashtag: l.hashtags ?? "",
     }));
     return [
-      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false, esLinea: false, keywords: "", hashtag: "" },
+      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false, esLinea: false },
       ...lineas,
-      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true, esLinea: false, keywords: "", hashtag: "" },
+      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true, esLinea: false },
     ];
   }, [lineasQuery.data]);
 
@@ -149,20 +142,6 @@ export function PanelPlan({ marca }: { marca: string }) {
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  // Edición de las PALABRAS CLAVE de una línea (lo que el clasificador usa). Inline, sin pop-up.
-  const [editando, setEditando] = React.useState<string | null>(null);
-  const [kwDraft, setKwDraft] = React.useState("");
-  const editarKeywords = useMutation({
-    mutationFn: ({ id, keywords }: { id: string; keywords: string }) =>
-      api.actualizarEtiqueta(id, { keywords }),
-    onSuccess: () => {
-      setEditando(null);
-      void queryClient.invalidateQueries({ queryKey: claveLineas });
-      toast.success("Palabras clave guardadas.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const valorAjuste = React.useCallback(
     (clave: string) => {
       for (const g of ajustes.data?.grupos ?? []) {
@@ -275,9 +254,8 @@ export function PanelPlan({ marca }: { marca: string }) {
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
         Las líneas de esta marca: cuántos contenidos al día publica cada una y a qué horas (CDMX).
-        Cada línea muestra su hashtag (derivado del nombre, va siempre en sus piezas) y el icono{" "}
-        <Tags className="inline h-3 w-3 align-text-bottom" /> abre sus palabras clave del
-        clasificador. Añade o quita líneas aquí mismo.
+        Añade o quita líneas aquí mismo. El hashtag de cada línea y sus palabras clave del
+        clasificador se editan en la pestaña «Keywords».
       </p>
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -319,21 +297,11 @@ export function PanelPlan({ marca }: { marca: string }) {
             </div>
           </div>
           {filasPlan.map((fila) => (
-            <React.Fragment key={fila.clave}>
-            <div className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_auto] items-center gap-3">
-              <div className="min-w-0">
-                <Label className="text-sm">{fila.etiqueta}</Label>
-                {/* Hashtag de la línea: derivado del nombre (1:1), solo lectura. Va siempre en sus
-                    piezas para que las métricas desglosen por línea. */}
-                {fila.esLinea && fila.hashtag && (
-                  <span
-                    className="block truncate font-mono text-xs text-muted-foreground"
-                    title="Hashtag de la línea (derivado del nombre)"
-                  >
-                    #{fila.hashtag}
-                  </span>
-                )}
-              </div>
+            <div
+              key={fila.clave}
+              className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_auto] items-center gap-3"
+            >
+              <Label className="text-sm">{fila.etiqueta}</Label>
               <Input
                 type="number"
                 min={0}
@@ -364,67 +332,21 @@ export function PanelPlan({ marca }: { marca: string }) {
                 </span>
               )}
               {fila.esLinea ? (
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    aria-label={`Palabras clave de ${fila.etiqueta}`}
-                    onClick={() => {
-                      setEditando(editando === fila.clave ? null : fila.clave);
-                      setKwDraft(fila.keywords);
-                    }}
-                  >
-                    <Tags className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    aria-label={`Quitar ${fila.etiqueta}`}
-                    disabled={quitarLinea.isPending}
-                    onClick={() => quitarLinea.mutate(fila.clave)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  aria-label={`Quitar ${fila.etiqueta}`}
+                  disabled={quitarLinea.isPending}
+                  onClick={() => quitarLinea.mutate(fila.clave)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               ) : (
                 <span />
               )}
             </div>
-            {fila.esLinea && editando === fila.clave && (
-              <div className="ml-[12rem] space-y-2 rounded-md border border-dashed border-border p-3">
-                <Label className="text-xs">
-                  Palabras clave — el clasificador asigna a esta línea las piezas que las contengan.
-                </Label>
-                <Textarea
-                  value={kwDraft}
-                  onChange={(e) => setKwDraft(e.target.value)}
-                  rows={2}
-                  placeholder="liga, gol, partido, jornada"
-                />
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditando(null)}>
-                    Cancelar
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={editarKeywords.isPending}
-                    onClick={() => editarKeywords.mutate({ id: fila.clave, keywords: kwDraft })}
-                  >
-                    {editarKeywords.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    Guardar
-                  </Button>
-                </div>
-              </div>
-            )}
-            </React.Fragment>
           ))}
 
           {/* Añadir una LÍNEA nueva a esta marca (la crea de verdad; aparece como fila). */}

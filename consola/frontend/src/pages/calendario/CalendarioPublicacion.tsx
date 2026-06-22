@@ -2,10 +2,9 @@ import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 // Grupos del catálogo que gobiernan la publicación (global + por marca).
 const GRUPOS_PIEZA = ["pieza", "publicacion_marca"] as const;
-import { CalendarDays } from "lucide-react";
 import { Navigate, useSearchParams } from "react-router-dom";
 
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { GestionPiezas } from "@/pages/piezas/GestionPiezas";
 
@@ -25,7 +24,7 @@ export default function CalendarioPublicacion() {
 
   return (
     <>
-      <TituloPagina titulo="Programación" icono={CalendarDays} />
+      {/* El título lo pinta la subnav del hub (pestaña «Programación»); aquí no se repite. */}
       <AccionesPagina>
         <MenuAcciones
           ajustesTitulo="Ajustes de programación"
