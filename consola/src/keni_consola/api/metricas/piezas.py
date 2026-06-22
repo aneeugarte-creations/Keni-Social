@@ -20,6 +20,7 @@ from ._comun import (
     _gate_marca_metricas,
     _log,
     _validar_rango,
+    _validar_red,
     marcas,
     metricas_cache,
     metricas_linea,
@@ -38,27 +39,21 @@ __all__ = [
 ]
 
 
-# Redes auditables para el filtro por red del top/peores (mismas que la cobertura).
-_REDES_FILTRO: frozenset[str] = frozenset({"facebook", "instagram", "x", "tiktok", "youtube"})
-
-
 async def piezas(request: Request) -> Response:
     """GET /api/metricas/piezas: estadísticas + top 10 + peores 10 + distribución.
 
     `?marca=` acota a una marca (sus piezas); sin marca, agrega todas (tab "Todas").
-    `?red=` acota a UNA red (top/peores/estadísticas SOLO de esa red). Sin `red` se sirve
-    de cache (lazy fill); CON `red` se recomputa al vuelo (en executor) — es una vista
-    filtrada bajo demanda, no se cachea cada combinación marca×red. Incluye
+    `?red=` acota a UNA red (top/peores/estadísticas SOLO de esa red; red desconocida →400).
+    Sin `red` se sirve de cache (lazy fill); CON `red` se recomputa al vuelo (en executor)
+    — es una vista filtrada bajo demanda, no se cachea cada combinación marca×red. Incluye
     `etiqueta_rango` y `generado_en`.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
-    red = request.query_params.get("red") or None
-    if red not in _REDES_FILTRO:
-        red = None  # red desconocida o ausente -> todas (sin filtro)
     try:
+        red = _validar_red(request.query_params.get("red"))
         if red:
             # Vista filtrada por red: recálculo bajo demanda (trabajo bloqueante de la
             # fuente) en threadpool para no congelar el event loop; no usa la cache por combo.

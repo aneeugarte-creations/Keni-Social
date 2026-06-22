@@ -39,11 +39,13 @@ __all__ = [
     "_log",
     "RANGOS_VALIDOS",
     "RANGOS_PRESET_UI",
+    "REDES_VALIDAS",
     # Helpers transversales.
     "_gate_marca_metricas",
     "_etiqueta_rango",
     "_nombre_marca_id",
     "_validar_rango",
+    "_validar_red",
     "_rango_opcional",
 ]
 
@@ -119,6 +121,29 @@ def _validar_rango(rango: str) -> str:
     if len(rango) == 7 and rango[:4].isdigit() and rango[4] == "-" and rango[5:].isdigit():
         return f"mes:{rango}"
     return "mes"
+
+
+# Redes (ids de plataforma) que el dashboard puede filtrar. Misma lista que la
+# auditoría de cobertura y el filtro de top/peores: el universo de redes de analítica.
+REDES_VALIDAS: frozenset[str] = frozenset(
+    {"facebook", "instagram", "x", "tiktok", "youtube"}
+)
+
+
+def _validar_red(raw: str | None) -> str | None:
+    """Valida el filtro `?red=`: None/'' = todas (sin filtro); id válido = esa red.
+
+    Un valor NO vacío y desconocido lanza ValueError (→400, mismo estilo que
+    `resolver_rango`): así un id mal escrito falla limpio en vez de devolver un
+    agregado silencioso que el operador creería filtrado.
+    """
+    red = (raw or "").strip()
+    if not red:
+        return None
+    if red not in REDES_VALIDAS:
+        validas = ", ".join(sorted(REDES_VALIDAS))
+        raise ValueError(f"Red desconocida {red!r}. Usa una de: {validas}.")
+    return red
 
 
 def _rango_opcional(raw: str | None) -> str | None:

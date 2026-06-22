@@ -7,6 +7,7 @@ MISMO cache que la pantalla `/api/metricas/piezas` (no recalcula nada nuevo).
 
 from __future__ import annotations
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 
@@ -15,6 +16,7 @@ from ._comun import (
     _gate_marca_metricas,
     _log,
     _validar_rango,
+    _validar_red,
     metricas_cache,
     servicio,
 )
@@ -169,7 +171,10 @@ async def piezas_export(request: Request) -> Response:
 
     Reusa el cache de `/api/metricas/piezas` (lazy fill en executor): no recalcula nada
     nuevo, solo serializa `top` + `peores` del combo (rango, marca) en el formato pedido.
-    `fmt` desconocido cae a csv (igual criterio tolerante que el resto de la API).
+    `?red=` acota a UNA red (Top/Peores SOLO de esa red; red desconocida →400): igual que
+    `/api/metricas/piezas`, sin `red` se sirve de cache y con `red` se recomputa al vuelo
+    (en executor), no se cachea cada combinación marca×red. `fmt` desconocido cae a csv
+    (igual criterio tolerante que el resto de la API).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -179,7 +184,13 @@ async def piezas_export(request: Request) -> Response:
     if fmt not in ("csv", "md", "json"):
         fmt = "csv"
     try:
-        payload, _ = await metricas_cache.piezas_async(rango, marca)
+        red = _validar_red(request.query_params.get("red"))
+        if red:
+            payload = await run_in_threadpool(
+                servicio.construir_analitica_piezas, rango, marca, red
+            )
+        else:
+            payload, _ = await metricas_cache.piezas_async(rango, marca)
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente

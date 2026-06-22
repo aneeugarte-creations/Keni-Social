@@ -61,6 +61,42 @@ def test_reporte_trae_cobertura_por_marca_con_todas_las_redes(cliente):
                 assert red["motivo"]
 
 
+def test_reporte_filtra_por_red(cliente):
+    # Con `?red=`, el reporte queda restringido a ESA red: por_red solo trae esa red,
+    # cobertura_redes lista solo esa red por marca, y los totales se re-suman sobre ella.
+    full = cliente.get("/api/metricas/reporte?rango=mes").json()
+    red = full["por_red"][0]["red"]  # una red con datos en la muestra
+    r = cliente.get(f"/api/metricas/reporte?rango=mes&red={red}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["red"] == red
+    assert [x["red"] for x in data["por_red"]] == [red]
+    for marca in data["cobertura_redes"]:
+        assert {x["red"] for x in marca["redes"]} == {red}
+    # El total de la red nunca supera el global (es un subconjunto).
+    assert data["total"]["visualizaciones"] <= full["total"]["visualizaciones"]
+    # El conteo de piezas de la red sale del LISTADO filtrado por plataforma (no del
+    # resumen, que no cuenta piezas por red).
+    listado = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    esperado = sum(1 for p in listado["piezas"] if p["plataforma"] == red)
+    assert data["total"]["piezas"] == esperado
+
+
+def test_reporte_sin_red_no_lleva_campo_red(cliente):
+    # Sin filtro, la respuesta es idéntica a la de siempre: ni campo `red` ni recorte.
+    data = cliente.get("/api/metricas/reporte?rango=mes").json()
+    assert "red" not in data
+    auditables = {"facebook", "instagram", "x", "tiktok", "youtube"}
+    for marca in data["cobertura_redes"]:
+        assert {x["red"] for x in marca["redes"]} == auditables
+
+
+def test_reporte_red_invalida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/reporte?rango=mes&red=linkedin")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 def test_cobertura_por_marca_clasifica_los_cuatro_estados():
     from keni_consola.api.metricas import _cobertura_por_marca
 
@@ -324,6 +360,78 @@ def test_piezas_global_sin_marca(cliente):
     assert r.json()["cuenta"] is None
 
 
+def test_piezas_filtra_por_red(cliente):
+    full = cliente.get("/api/metricas/piezas?rango=mes").json()
+    red = full["top"][0]["plataforma"]  # una red presente sin filtrar
+    r = cliente.get(f"/api/metricas/piezas?rango=mes&red={red}")
+    assert r.status_code == 200
+    data = r.json()
+    assert all(p["plataforma"] == red for p in data["top"])
+    assert all(p["plataforma"] == red for p in data["peores"])
+    assert data["total"] <= full["total"]
+
+
+def test_piezas_red_invalida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/piezas?rango=mes&red=mastodon")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_filtrar_reporte_por_red_resume_solo_esa_red():
+    from keni_consola.api.metricas import _filtrar_reporte_por_red
+
+    rep = {
+        "total": {"visualizaciones": 999, "interacciones": 99, "alcance": 5, "piezas": 7},
+        "cuentas": [
+            {
+                "resumen": {
+                    "cuenta": "unotv",
+                    "por_plataforma": [
+                        {"plataforma": "instagram", "visualizaciones": 100,
+                         "alcance": 10, "interacciones": 20, "engagement_pct": 20.0},
+                        {"plataforma": "tiktok", "visualizaciones": 500,
+                         "alcance": None, "interacciones": 5, "engagement_pct": 1.0},
+                    ],
+                }
+            }
+        ],
+    }
+    out = _filtrar_reporte_por_red(rep, "instagram", piezas_red=3)
+    r = out["cuentas"][0]["resumen"]
+    assert [p["plataforma"] for p in r["por_plataforma"]] == ["instagram"]
+    assert r["visualizaciones"] == 100 and r["interacciones"] == 20 and r["alcance"] == 10
+    # Total re-sumado sobre la red, NO el global; piezas vienen del listado (no del resumen).
+    assert out["total"]["visualizaciones"] == 100
+    assert out["total"]["interacciones"] == 20
+    assert out["total"]["alcance"] == 10
+    assert out["total"]["piezas"] == 3
+
+
+def test_filtrar_reporte_por_red_marca_sin_esa_red_queda_en_cero():
+    from keni_consola.api.metricas import _filtrar_reporte_por_red
+
+    rep = {
+        "total": {"visualizaciones": 500, "interacciones": 5, "alcance": None, "piezas": 2},
+        "cuentas": [
+            {
+                "resumen": {
+                    "cuenta": "unotv",
+                    "por_plataforma": [
+                        {"plataforma": "tiktok", "visualizaciones": 500,
+                         "alcance": None, "interacciones": 5, "engagement_pct": 1.0},
+                    ],
+                }
+            }
+        ],
+    }
+    out = _filtrar_reporte_por_red(rep, "instagram", piezas_red=0)
+    r = out["cuentas"][0]["resumen"]
+    # La cuenta no tiene esa red: métricas en 0 / alcance None, sin inventar datos.
+    assert r["por_plataforma"] == []
+    assert r["visualizaciones"] == 0 and r["interacciones"] == 0 and r["alcance"] is None
+    assert out["total"]["visualizaciones"] == 0 and out["total"]["alcance"] is None
+
+
 def test_tendencia_serie_diaria(cliente):
     r = cliente.get("/api/metricas/tendencia?rango=rango:2026-05-01_2026-05-07&marca=claro_sports")
     assert r.status_code == 200
@@ -431,6 +539,23 @@ def test_piezas_export_fmt_desconocido_cae_a_csv(cliente):
     r = cliente.get("/api/metricas/piezas-export?rango=mes&fmt=xml")
     assert r.status_code == 200
     assert "text/csv" in r.headers["content-type"]
+
+
+def test_piezas_export_filtra_por_red(cliente):
+    import json
+
+    full = cliente.get("/api/metricas/piezas?rango=mes").json()
+    red = full["top"][0]["plataforma"]
+    r = cliente.get(f"/api/metricas/piezas-export?rango=mes&red={red}&fmt=json")
+    assert r.status_code == 200
+    data = json.loads(r.text)
+    assert all(p["plataforma"] == red for p in data["top"])
+    assert all(p["plataforma"] == red for p in data["peores"])
+
+
+def test_piezas_export_red_invalida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/piezas-export?rango=mes&red=nope")
+    assert r.status_code == 400
 
 
 # --------------------------------------------------------------------------- #

@@ -19,6 +19,7 @@ from ._comun import (
     _log,
     _nombre_marca_id,
     _validar_rango,
+    _validar_red,
     engagement_pct,
     marcas,
     metricas_cache,
@@ -31,6 +32,7 @@ __all__ = [
     "_comparar_totales",
     "_suma_clics",
     "_cobertura_por_marca",
+    "_filtrar_reporte_por_red",
 ]
 
 
@@ -376,6 +378,48 @@ def _engagement_pct(interacciones, visualizaciones) -> float:
     return engagement_pct(interacciones or 0, visualizaciones or 0)
 
 
+def _filtrar_reporte_por_red(rep: dict, red: str, piezas_red: int) -> dict:
+    """Copia del reporte CRUDO restringida a UNA red, lista para `_reporte_serializable`.
+
+    Cada cuenta queda con las métricas de ESA red —su entrada de `por_plataforma`, o
+    visualizaciones/interacciones 0 y alcance None si no la tiene— y `por_plataforma`
+    reducido a esa red; la `cobertura` se conserva para que la auditoría siga
+    clasificando la red. El total se re-suma sobre las cuentas filtradas (no se toma el
+    global). `MetricaPlataforma` no cuenta piezas, así que `total.piezas` viene del
+    conteo del LISTADO por red (`piezas_red`), no del global del reporte.
+    """
+    cuentas: list[dict] = []
+    tot_vis = tot_inter = 0
+    tot_alc: int | None = None
+    for fila in rep.get("cuentas", []):
+        r = dict(fila.get("resumen") or {})
+        de_red = [p for p in (r.get("por_plataforma") or []) if p.get("plataforma") == red]
+        entrada = de_red[0] if de_red else {}
+        vis = entrada.get("visualizaciones", 0) or 0
+        inter = entrada.get("interacciones", 0) or 0
+        alc = entrada.get("alcance") if de_red else None
+        r["visualizaciones"] = vis
+        r["interacciones"] = inter
+        r["alcance"] = alc
+        r["por_plataforma"] = de_red
+        cuentas.append({**fila, "resumen": r})
+        tot_vis += vis
+        tot_inter += inter
+        if alc is not None:
+            tot_alc = (tot_alc or 0) + alc
+    nuevo = dict(rep)
+    nuevo["cuentas"] = cuentas
+    nuevo["total"] = {
+        **(rep.get("total") or {}),
+        "visualizaciones": tot_vis,
+        "alcance": tot_alc,
+        "interacciones": tot_inter,
+        "engagement_pct": None,
+        "piezas": piezas_red,
+    }
+    return nuevo
+
+
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     """Forma JSON del reporte para el SPA: total + cuentas con nombres resueltos."""
     nombres = rep.get("nombres") or {}
@@ -437,15 +481,35 @@ async def reporte(request: Request) -> Response:
     if rechazo is not None:
         return rechazo
     try:
+        # `red` (id de plataforma) restringe el reporte a UNA red; None = todas (igual que
+        # antes). Validación primero: una red mal escrita falla limpio (→400).
+        red = _validar_red(request.query_params.get("red"))
         # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
         # En executor: un combo frío golpea la API externa y NO debe bloquear el loop.
         rep, generado_en = await metricas_cache.reporte_async(rango, marca)
+        if red:
+            # El conteo de piezas por red NO está en el resumen (`por_plataforma` no
+            # cuenta piezas): se deriva del listado cacheado por (rango, marca) filtrando
+            # por plataforma. Mismo coste 0 de API (cache lazy fill).
+            listado, _ = await metricas_cache.piezas_listado_async(rango, marca)
+            piezas_red = sum(
+                1 for p in (listado.get("piezas") or []) if p.get("red") == red
+            )
+            rep = _filtrar_reporte_por_red(rep, red, piezas_red)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar el reporte (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el reporte."}, status_code=500)
     salida = _reporte_serializable(rep, rango, marca)
+    if red:
+        # Con filtro de red, la auditoría de cobertura muestra SOLO esa red por marca
+        # (la vista "solo de Instagram" no lista el resto de redes).
+        salida["red"] = red
+        salida["cobertura_redes"] = [
+            {**m, "redes": [r for r in m["redes"] if r["red"] == red]}
+            for m in salida["cobertura_redes"]
+        ]
     salida["generado_en"] = generado_en
     return JSONResponse(salida)
 
