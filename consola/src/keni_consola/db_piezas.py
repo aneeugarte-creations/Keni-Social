@@ -340,6 +340,10 @@ def _publicacion_de_filas(
             "carrusel": plat["carrusel"],
             "hashtags_sugeridos": plat.get("hashtags_sugeridos", "[]"),
             "verificar_auto_hash": plat["verificar_auto_hash"], "pactualizado": plat["actualizado"],
+            # `linea_hashtags` es una COLUMNA CALCULADA del SELECT (subconsulta a la etiqueta de
+            # línea del contenido), no una columna real: una pieza recién creada por lote aún no
+            # tiene línea editorial -> "". Sin esta clave el camino del LOTE caía con KeyError.
+            "linea_hashtags": "",
             "cid": padre["id"], "titulo": padre["titulo"], "marca": padre["marca"],
             "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
             "responsable_id": padre.get("responsable_id"),
