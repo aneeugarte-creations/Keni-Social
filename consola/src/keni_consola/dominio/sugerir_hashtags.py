@@ -38,7 +38,9 @@ PROMPT_SUGERIR = "prompt/sugerir-hashtags"
 # sugerencia; `publicado` tampoco (no se reescribe lo que ya salió).
 ESTADOS_SUGERIBLES = ("borrador", "en_revision")
 
-# Un hashtag en el caption: MISMO patrón que `piezas._falta_hashtags` (saber si ya hay alguno).
+# Un hashtag en el caption: saber si ya hay ALGUNO (gate de LANZAMIENTO de la sugerencia, que solo
+# corre cuando el copy no trae ninguno). Distinto del gate de AVANCE (`piezas._falta_hashtags`), que
+# además exige el hashtag de la línea: aquí solo nos importa si falta arrancar la propuesta.
 _PAT_HASHTAG = re.compile(r"#\w+", re.UNICODE)
 
 # Tope de candidatos que viajan en el prompt: la biblioteca está ordenada por frecuencia, así que
@@ -75,7 +77,9 @@ def _endurecer() -> dict[str, Any]:
 
 
 def falta_hashtags(pub: dict[str, Any]) -> bool:
-    """True si el copy (caption) NO lleva ningún hashtag. Mismo criterio que el feed."""
+    """True si el copy (caption) NO lleva ningún hashtag: gate de LANZAMIENTO de la sugerencia (solo
+    se arranca para un copy que no trae ninguno). El gate de AVANCE de la pieza vive en
+    `piezas._falta_hashtags` y es más estricto (exige también el hashtag de la línea)."""
     return not _PAT_HASHTAG.search(str(pub.get("contenido") or ""))
 
 

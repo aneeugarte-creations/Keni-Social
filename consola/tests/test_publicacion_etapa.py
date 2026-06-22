@@ -140,6 +140,37 @@ def test_en_revision_con_hashtags_es_lista():
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
+def test_falta_el_hashtag_de_la_linea_aunque_haya_otros():
+    # La pieza lleva hashtags, pero NO el de su LÍNEA (`linea_hashtags`): el de la sección es
+    # obligatorio (métricas por línea), así que sigue gateada en `falta_hashtags`.
+    d = pieza_a_dict(
+        _pub(
+            estado="en_revision", contenido="Texto #UnoTV #Mexico", copy_in="TITULAR",
+            foto="bg.png", linea_hashtags="cienciatech",
+        )
+    )
+    assert d["etapa_ia"] == "falta_hashtags"
+
+
+def test_con_el_hashtag_de_la_linea_esta_lista():
+    # Mismo caso pero el caption ya incluye el hashtag de la línea (case-insensitive): pasa el gate.
+    d = pieza_a_dict(
+        _pub(
+            estado="en_revision", contenido="Texto #CienciaTech #UnoTV", copy_in="TITULAR",
+            foto="bg.png", linea_hashtags="cienciatech",
+        )
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+
+
+def test_sin_linea_basta_con_cualquier_hashtag():
+    # Contenido sin línea (o línea sin hashtag fijado): el gate solo exige que haya ALGÚN hashtag.
+    d = pieza_a_dict(
+        _pub(estado="en_revision", contenido="Texto #Mexico", copy_in="TITULAR", foto="bg.png")
+    )
+    assert d["etapa_ia"] == "lista_para_revisar"
+
+
 def test_hashtags_gatean_en_borrador():
     # Los hashtags GATEAN igual que copy/foto: en borrador, una pieza completa (copy+foto+placa)
     # pero SIN hashtags NO está "lista" -> falta_hashtags. Nada sale sin hashtag.

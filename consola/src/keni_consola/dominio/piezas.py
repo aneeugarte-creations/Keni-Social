@@ -38,10 +38,32 @@ from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 _PAT_HASHTAG = re.compile(r"#\w+", re.UNICODE)
 
 
+def _cuerpos_hashtags(texto: str) -> set[str]:
+    """Cuerpos (sin '#', en minúscula) de los hashtags presentes en un caption."""
+    return {m.group(0).lstrip("#").lower() for m in _PAT_HASHTAG.finditer(str(texto or ""))}
+
+
 def _falta_hashtags(pub: dict[str, Any]) -> bool:
-    """True si el copy (caption) NO lleva ningún hashtag. Los hashtags son clave para
-    monitorizar campañas y líneas de contenido; el equipo los pone en la fase de revisión."""
-    return not _PAT_HASHTAG.search(str(pub.get("contenido") or ""))
+    """True si al caption le FALTAN hashtags y por eso la pieza no puede avanzar. Dos casos:
+
+      - no lleva NINGÚN hashtag, o
+      - lleva hashtags pero NO el de su LÍNEA editorial (`linea_hashtags`): el de la sección es
+        obligatorio (alimenta las métricas por línea), así que tener otros no basta.
+
+    Los hashtags son clave para monitorizar campañas y líneas de contenido; el equipo los pone en
+    la fase de revisión. Si el contenido no tiene línea (o esta no fija hashtag), solo aplica el
+    primer caso."""
+    presentes = _cuerpos_hashtags(pub.get("contenido") or "")
+    if not presentes:
+        return True
+    requeridos = [
+        c for crudo in re.split(r"[,\s]+", str(pub.get("linea_hashtags") or ""))
+        if (c := crudo.strip().lstrip("#").strip().lower())
+    ]
+    if not requeridos:
+        return False
+    # La línea puede declarar varios hashtags (sinónimos): basta con que el caption lleve UNO.
+    return not any(req in presentes for req in requeridos)
 
 
 def _hashtags_sugeridos(pub: dict[str, Any]) -> list[str]:

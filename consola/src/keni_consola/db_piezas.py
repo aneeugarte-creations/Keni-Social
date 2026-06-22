@@ -66,7 +66,14 @@ _SELECT_PUBLICACION = (
     "c.fecha_fuente AS fecha_fuente, "
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
-    "c.formato AS formato, c.espejo AS espejo "
+    "c.formato AS formato, c.espejo AS espejo, "
+    # Hashtags de la LÍNEA editorial del contenido (etiqueta activa clase 'vertical'): columna
+    # calculada en el mismo SELECT (no un query por pieza) para que el gate `falta_hashtags` exija
+    # también el hashtag de la sección sin N+1. "" si el contenido no tiene línea o esta no lo fija.
+    "(SELECT e.hashtags FROM publicacion_etiquetas pe "
+    "JOIN etiquetas e ON pe.etiqueta_id = e.id "
+    "WHERE pe.publicacion_id = c.id AND e.clase = 'vertical' AND e.activo = 1 "
+    "ORDER BY e.id LIMIT 1) AS linea_hashtags "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
     # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
@@ -168,6 +175,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # '[]' por defecto; la etapa la rellena tras Redactar y `pieza_a_dict` la parsea a lista.
         "hashtags_sugeridos": f["hashtags_sugeridos"] or "[]",
         "verificar_auto_hash": f["verificar_auto_hash"] or "",
+        # Hashtags (CSV, sin '#') de la LÍNEA editorial del contenido: el gate `falta_hashtags`
+        # los exige en el caption (no basta con tener hashtags cualesquiera). "" si no hay línea.
+        "linea_hashtags": f["linea_hashtags"] or "",
     }
 
 
