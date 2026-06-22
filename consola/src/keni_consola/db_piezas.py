@@ -110,9 +110,11 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # Origen de la imagen: `tipo_contenido` ('ia'|'galeria'|'fuente') y, si es 'fuente',
         # la URL original del artículo en `imagen_fuente` (el editor ofrece "usar original").
         "tipo_contenido": f["tipo_contenido"] or "ia",
-        # FORMATO de la pieza (foto|video): heredado del `contenido` padre. Decide a qué redes
-        # va (`redes.redes_de_formato`). BD vieja / sin valor -> 'foto' (el flujo automático).
-        "formato": f["formato"] or "foto",
+        # FORMATO EFECTIVO de la pieza. Una variante 'carrusel' ES formato carrusel SIEMPRE, con
+        # independencia del formato del padre (que es el de la variante foto/vídeo): así la variante
+        # carrusel va a sus redes (IG/FB) sin tocar la foto hermana. El resto hereda el `contenido`
+        # padre (foto|video). Decide a qué redes va (`redes.redes_de_formato`). Sin valor -> 'foto'.
+        "formato": "carrusel" if (f["variante"] or "foto") == "carrusel" else (f["formato"] or "foto"),
         # VARIANTE de la pieza (foto|carrusel): qué versión es dentro del mismo contenido. La
         # conversión a carrusel crea una variante nueva junto a la foto (no la pisa). BD vieja /
         # sin valor -> 'foto'.

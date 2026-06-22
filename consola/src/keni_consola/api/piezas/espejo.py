@@ -41,8 +41,14 @@ def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
     publicacion_id = pub.get("publicacion_id") or ""
     if not publicacion_id:
         return
+    variante = pub.get("variante") or "foto"
     for plat in repos.listar_piezas_fila(publicacion_id):
         if plat["id"] == pub["id"]:
+            continue
+        # El espejo NO cruza variantes: una pieza foto y su hermana carrusel son generaciones
+        # independientes del mismo contenido. Editar el copy de la foto no debe pisar el del
+        # carrusel (ni al revés). Solo se replica entre piezas de la MISMA variante.
+        if (plat.get("variante") or "foto") != variante:
             continue
         hermana = repos.obtener_pieza(plat["id"])
         if hermana is None or (hermana.get("estado") or "") == ESTADO_PUBLICADO:
