@@ -48,6 +48,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # (Recolectar/Verificar/Redactar/Ilustrar/Stock; Ilustrar siempre tuvo interruptor propio).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        # Clasificar marca con IA: modo IA (Haiku) del paso Clasificar (global, no per-marca).
+        config.ENV_CLASIFICAR_MARCA_IA,
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
         # Stock: baja una foto de AYUDA (atenuada, sin licencia) a los temas con copy y sin imagen.
         config.ENV_PIPELINE_STOCK,
@@ -58,8 +60,6 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC,
         config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO,
-        # Encaje de marca con IA para historias sin marca (Trends/agencias).
-        config.ENV_CLASIFICAR_MARCA_IA,
         config.ENV_PATRONES_AUTO,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
@@ -471,13 +471,13 @@ def test_patrones_auto_es_toggle_de_automatismos(store, monkeypatch):
     assert config.patrones_auto_activo() is False
 
 
-def test_clasificar_marca_ia_es_toggle_de_automatismos(store, monkeypatch):
-    """`KENI_CLASIFICAR_MARCA_IA` (encaje de marca con IA para Trends/agencias) es un bool del
-    grupo `automatismos_generales`, defecto False, editable desde la UI (store > env)."""
+def test_clasificar_marca_ia_es_toggle_de_investigacion(store, monkeypatch):
+    """`KENI_CLASIFICAR_MARCA_IA` (modo IA del paso Clasificar, para Trends/agencias) es un bool del
+    grupo `maestros_investigacion`, defecto False, editable desde la UI (store > env)."""
     a = ajustes_catalogo.por_clave(config.ENV_CLASIFICAR_MARCA_IA)
     assert a is not None, "falta el toggle KENI_CLASIFICAR_MARCA_IA en el catálogo (UI)"
     assert a.tipo == "bool"
-    assert a.grupo == "automatismos_generales"
+    assert a.grupo == "maestros_investigacion"
     assert a.defecto is False
     monkeypatch.delenv(config.ENV_CLASIFICAR_MARCA_IA, raising=False)
     assert config.clasificar_marca_ia() is False
