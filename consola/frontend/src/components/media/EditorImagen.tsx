@@ -43,6 +43,7 @@ import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import {
   type DatosStock,
+  keywordBusqueda,
   MENSAJE_BLOQUEO_STOCK,
   nombreProveedor,
   stockAutorizado,
@@ -89,6 +90,9 @@ export interface EditorImagenProps {
   stock?: DatosStock;
   imagenFuente?: string;
   titulo?: string;
+  /** Keyword visual que propone Sugerir hashtags (`imagen_clave`): consulta por defecto del buscador
+   *  de stock; cae al tema del título si no la hay. */
+  imagenClave?: string;
   /** Notifica que la imagen de stock cambió (adjuntar/autorizar): el padre recarga la pieza. */
   onStockCambio?: (plataforma: PlataformaStock) => void;
 }
@@ -105,6 +109,7 @@ export function EditorImagen({
   stock,
   imagenFuente,
   titulo,
+  imagenClave,
   onStockCambio,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -360,7 +365,7 @@ export function EditorImagen({
                 <BadgeStock
                   proveedor={proveedor}
                   autorizada={autorizada}
-                  className="absolute left-1.5 top-1.5"
+                  className="absolute bottom-1.5 right-1.5"
                 />
               )}
             </div>
@@ -429,7 +434,7 @@ export function EditorImagen({
           onCerrar={() => setBuscadorStock(false)}
           piezaId={piezaId}
           imagenFuente={imagenFuente}
-          consultaInicial={(titulo || copy || "").slice(0, 80)}
+          consultaInicial={keywordBusqueda({ imagen_clave: imagenClave, titulo })}
           onAdjuntada={(plataforma) => onStockCambio?.(plataforma)}
         />
       )}

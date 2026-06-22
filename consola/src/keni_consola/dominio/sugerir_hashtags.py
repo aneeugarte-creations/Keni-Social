@@ -169,10 +169,10 @@ def lanzar_para_contenido(publicacion_id: str, twins: list[dict[str, Any]]) -> d
 # --------------------------------------------------------------------------- #
 
 
-def _parsear_hashtags(salida: str) -> list[str]:
-    """Extrae `hashtags` del JSON de la salida de claude. [] si no es legible."""
+def _parsear_salida(salida: str) -> dict[str, Any]:
+    """Extrae el objeto JSON de la salida de claude ({} si no es legible)."""
     if not salida:
-        return []
+        return {}
     texto = salida.strip()
     valla = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", texto, re.DOTALL)
     crudo = valla.group(1) if valla else None
@@ -181,15 +181,24 @@ def _parsear_hashtags(salida: str) -> list[str]:
         fin = texto.rfind("}")
         crudo = texto[ini : fin + 1] if ini != -1 and fin > ini else None
     if not crudo:
-        return []
+        return {}
     try:
         datos = json.loads(crudo)
     except (ValueError, TypeError):
-        return []
-    if not isinstance(datos, dict):
-        return []
-    lista = datos.get("hashtags")
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def _parsear_hashtags(salida: str) -> list[str]:
+    """Extrae `hashtags` del JSON de la salida de claude. [] si no es legible."""
+    lista = _parsear_salida(salida).get("hashtags")
     return [str(x) for x in lista] if isinstance(lista, list) else []
+
+
+def _parsear_imagen_clave(salida: str) -> str:
+    """Extrae `imagen_clave` (keyword para buscar foto) del JSON de la salida. "" si no hay."""
+    valor = _parsear_salida(salida).get("imagen_clave")
+    return str(valor).strip()[:120] if isinstance(valor, str) else ""
 
 
 def _normalizar(tag: str) -> str:
@@ -234,13 +243,16 @@ def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
     return salida
 
 
-def aplicar_sugerencia(publicacion_id: str, propuestos: list[str]) -> list[str]:
+def aplicar_sugerencia(
+    publicacion_id: str, propuestos: list[str], imagen_clave: str = ""
+) -> list[str]:
     """Arma la sugerencia del contenido y la escribe IDÉNTICA en todas sus piezas SUGERIBLES (gemelas).
 
     Los hashtags son gemelos entre redes: se calcula una vez (cantidad = máximo entre las redes del
     contenido) y se persiste el mismo JSON en cada pieza en `ESTADOS_SUGERIBLES` (borrador o en
-    revisión: una pieza pudo avanzar sola a revisión mientras el job corría). Devuelve la lista
-    guardada ([] si no toca).
+    revisión: una pieza pudo avanzar sola a revisión mientras el job corría). La `imagen_clave`
+    (keyword para buscar foto de stock) viaja en el mismo paso, también gemela. Devuelve la lista
+    de hashtags guardada ([] si no toca).
     """
     filas = repos.listar_piezas_fila(publicacion_id=publicacion_id) or []
     elegibles = [f for f in filas if str(f.get("estado") or "") in ESTADOS_SUGERIBLES]
@@ -251,8 +263,12 @@ def aplicar_sugerencia(publicacion_id: str, propuestos: list[str]) -> list[str]:
     cantidad = cantidad_contenido(marca, redes)
     lista = ensamblar(propuestos, marca=marca, cantidad=cantidad)
     payload = json.dumps(lista, ensure_ascii=False)
+    campos: dict[str, Any] = {"hashtags_sugeridos": payload}
+    # Solo escribe `imagen_clave` si la IA dio una (no piso una previa con vacío).
+    if imagen_clave.strip():
+        campos["imagen_clave"] = imagen_clave.strip()[:120]
     for f in elegibles:
-        repos.actualizar_pieza(str(f.get("id") or ""), {"hashtags_sugeridos": payload})
+        repos.actualizar_pieza(str(f.get("id") or ""), campos)
     return lista
 
 
@@ -260,8 +276,10 @@ def construir_procesar_sugerir_hashtags(*, publicacion_id: str):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job (corre en el worker)."""
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
-        propuestos = _parsear_hashtags(salida)
-        guardados = aplicar_sugerencia(publicacion_id, propuestos)
-        return {"sugerir_hashtags": {"hashtags": guardados}}
+        datos = _parsear_salida(salida)
+        propuestos = [str(x) for x in datos.get("hashtags", [])] if isinstance(datos.get("hashtags"), list) else []
+        imagen_clave = _parsear_imagen_clave(salida)
+        guardados = aplicar_sugerencia(publicacion_id, propuestos, imagen_clave)
+        return {"sugerir_hashtags": {"hashtags": guardados, "imagen_clave": imagen_clave}}
 
     return procesar

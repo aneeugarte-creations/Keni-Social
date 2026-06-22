@@ -269,6 +269,9 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "imagen_licencia": pub.get("imagen_licencia") or "",
         "imagen_credito_url": pub.get("imagen_credito_url") or "",
         "imagen_autorizada": bool(pub.get("imagen_autorizada")),
+        # Keyword de búsqueda de foto (sujeto visual) que propone la etapa Sugerir hashtags; es la
+        # consulta por defecto del buscador de stock (en vez del titular largo que no encuentra nada).
+        "imagen_clave": pub.get("imagen_clave") or "",
         # Checklist de producción por red (Copy/Imagen/Revisión/Publicar pendientes). El
         # editor unificado lo muestra como checks marcables; default True (pendiente).
         "falta_copy": bool(pub.get("falta_copy", True)),

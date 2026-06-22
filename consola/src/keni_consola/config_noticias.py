@@ -908,6 +908,7 @@ def _accesor_global_de_etapa(env_flag: str):
             ENV_PIPELINE_SUGERIR_HASHTAGS: sugerir_hashtags_activo,
             ENV_PIPELINE_REDACTAR: pipeline_activo,
             ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
+            ENV_PIPELINE_STOCK: stock_busca_activo,
             ENV_CRITICA_IA: critica_ia_activa,
         }[env_flag]
     except KeyError:
@@ -994,13 +995,17 @@ def pixabay_api_key() -> str | None:
 
 
 def stock_busca_activo() -> bool:
-    """True si la ETAPA de arte de STOCK del pipeline debe buscar (`KENI_PIPELINE_STOCK`).
+    """True si la ETAPA de Stock del pipeline debe buscar (`KENI_PIPELINE_STOCK`).
 
-    Def OFF (conservador, como Ilustrar): la etapa que propone fotos de stock como alternativa
-    (atenuadas y con watermark "SIN LICENCIA", nunca publicables sin autorizar) solo corre con el
-    flag. Sin proveedores gratuitos disponibles degrada a no hacer nada.
+    Def ON: a los temas con copy pero SIN imagen les baja una foto de ayuda (1º la ORIGINAL del
+    RSS, fallback a una API gratuita) para que el feed no salga en gris. La foto es solo ayuda
+    visual (atenuada/"SIN LICENCIA", nunca publicable sin autorizar), así que es segura por
+    defecto. Se apaga con un valor falsy explícito (`KENI_PIPELINE_STOCK=0`).
     """
-    return _crudo(ENV_PIPELINE_STOCK).lower() in _VERDADEROS
+    crudo = _crudo(ENV_PIPELINE_STOCK).strip().lower()
+    if not crudo:
+        return True
+    return crudo in _VERDADEROS
 
 
 def stock_max_por_barrido() -> int:

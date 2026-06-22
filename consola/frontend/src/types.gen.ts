@@ -668,6 +668,7 @@ export interface Pieza {
   imagen_licencia?: string;
   imagen_credito_url?: string;
   imagen_autorizada?: boolean;
+  imagen_clave?: string;
   falta_copy: boolean;
   falta_imagen: boolean;
   falta_revision: boolean;

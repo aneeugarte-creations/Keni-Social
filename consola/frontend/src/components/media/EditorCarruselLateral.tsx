@@ -36,6 +36,8 @@ export function EditorCarruselLateral({
   piezaId,
   plantillas,
   copy = "",
+  titulo,
+  imagenClave,
   imagenFuente,
   portadaFotos,
   onPortadaFotos,
@@ -55,6 +57,11 @@ export function EditorCarruselLateral({
   plantillas: PlantillaDiseno[];
   /** Copy del post: sugerencia del prompt al generar foto con IA. */
   copy?: string;
+  /** Título del TEMA de la pieza: respaldo de la consulta inicial del buscador de fotos por slide. */
+  titulo?: string;
+  /** Keyword visual que propone Sugerir hashtags (`imagen_clave`): consulta por defecto del buscador
+   *  de stock por slide; cae al tema del título si no la hay. */
+  imagenClave?: string;
   /** Imagen original (RSS) de respaldo del hueco 0 de la PORTADA. */
   imagenFuente?: string;
   // PORTADA (slide 0): estado del padre, persistido por su autoguardado.
@@ -392,6 +399,8 @@ export function EditorCarruselLateral({
             copyIn={portadaCopyIn}
             onCopyInCambio={onPortadaCopyIn}
             copy={copy}
+            titulo={titulo}
+            imagenClave={imagenClave}
             fotos={portadaFotos}
             onFotosCambio={onPortadaFotos}
             imagenFuente={imagenFuente}
@@ -408,6 +417,8 @@ export function EditorCarruselLateral({
             copyIn={slideExtra?.titular ?? ""}
             onCopyInCambio={(t) => editarExtra(activo - 1, { titular: t })}
             copy={copy}
+            titulo={titulo}
+            imagenClave={imagenClave}
             fotos={fotosExtra}
             onFotosCambio={(f) => {
               const f0 = f[0];

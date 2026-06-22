@@ -38,6 +38,15 @@ def test_parseo_basura_devuelve_vacio():
     assert dom_sh._parsear_hashtags("") == []
 
 
+def test_parsear_imagen_clave():
+    assert (
+        dom_sh._parsear_imagen_clave('{"hashtags": ["#x"], "imagen_clave": "niño usando tablet"}')
+        == "niño usando tablet"
+    )
+    assert dom_sh._parsear_imagen_clave('{"hashtags": ["#x"]}') == ""  # sin clave -> ""
+    assert dom_sh._parsear_imagen_clave("no hay json") == ""
+
+
 def test_normaliza_un_solo_almohadilla_y_minuscula():
     assert dom_sh._normalizar("##Mexico") == "#mexico"
     assert dom_sh._normalizar("CDMX") == "#cdmx"
@@ -135,6 +144,21 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     # GEMELO: las dos piezas del contenido llevan EXACTAMENTE la misma lista.
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
     assert listas[0] == listas[1] == guardados
+
+
+def test_aplicar_sugerencia_guarda_imagen_clave_gemela(entorno):
+    pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
+    dom_sh.aplicar_sugerencia(pid, ["#mexico"], "bandera de mexico")
+    # La keyword de búsqueda de foto se guarda IDÉNTICA en todas las gemelas (como los hashtags).
+    claves = [repos.obtener_pieza(i)["imagen_clave"] for i in ids]
+    assert claves[0] == claves[1] == "bandera de mexico"
+
+
+def test_aplicar_sugerencia_no_pisa_imagen_clave_con_vacio(entorno):
+    pid, ids = _crear_contenido(["instagram"], "Cuerpo sin hashtags")
+    dom_sh.aplicar_sugerencia(pid, ["#mexico"], "estadio de futbol")
+    dom_sh.aplicar_sugerencia(pid, ["#mexico"], "")  # sin clave nueva: conserva la anterior
+    assert repos.obtener_pieza(ids[0])["imagen_clave"] == "estadio de futbol"
 
 
 def test_aplicar_sugerencia_cubre_borrador_y_revision(entorno):

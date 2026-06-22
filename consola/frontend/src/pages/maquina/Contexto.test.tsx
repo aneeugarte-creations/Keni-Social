@@ -88,11 +88,13 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
-  it("en la pestaña Producción muestra sus fases (Redactar/Sugerir hashtags/Ilustrar/Crítica), sin Aprobar/Publicar ni Idear", () => {
+  it("en la pestaña Producción muestra sus fases (Redactar/Sugerir hashtags/Ilustrar/Stock/Crítica), sin Aprobar/Publicar ni Idear", () => {
     renderContexto("/maquina/contexto?proceso=produccion");
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Sugerir hashtags")).toBeInTheDocument();
     expect(screen.getByText("Ilustrar")).toBeInTheDocument();
+    // «Stock»: respaldo inline de imagen (foto de banco gratuito sin licencia) tras Ilustrar.
+    expect(screen.getByText("Stock")).toBeInTheDocument();
     // «Crítica» (nivel IA de la cadena de aprobación) vive ahora como fase de Producción, separada
     // de la secuencia automática por un divisor que deja claro CUÁNDO corre.
     expect(screen.getByText("Crítica")).toBeInTheDocument();

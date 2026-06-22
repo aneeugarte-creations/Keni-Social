@@ -47,6 +47,7 @@ _COLS_PIEZA = (
     "imagen_licencia",
     "imagen_credito_url",
     "imagen_autorizada",
+    "imagen_clave",
     "video",
     "revision",
     "revisor_id",
@@ -289,6 +290,8 @@ def _insertar_pieza(
         "imagen_licencia": "",
         "imagen_credito_url": "",
         "imagen_autorizada": 0,
+        # La keyword de búsqueda la rellena la etapa Sugerir hashtags tras redactar; nace vacía.
+        "imagen_clave": "",
         "video": video or "",
         "revision": revision or "",
         "revisor_id": revisor_id or "",

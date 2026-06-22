@@ -46,6 +46,7 @@ _SELECT_PUBLICACION = (
     "cp.imagen_origen AS imagen_origen, cp.imagen_proveedor AS imagen_proveedor, "
     "cp.imagen_autor AS imagen_autor, cp.imagen_licencia AS imagen_licencia, "
     "cp.imagen_credito_url AS imagen_credito_url, cp.imagen_autorizada AS imagen_autorizada, "
+    "cp.imagen_clave AS imagen_clave, "
     "cp.video AS video, cp.falta_video AS falta_video, "
     "cp.revision AS revision, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
@@ -120,6 +121,8 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "imagen_licencia": f["imagen_licencia"] or "",
         "imagen_credito_url": f["imagen_credito_url"] or "",
         "imagen_autorizada": bool(f["imagen_autorizada"]),
+        # Keyword de búsqueda de foto (sujeto visual) que propone la etapa Sugerir hashtags.
+        "imagen_clave": f["imagen_clave"] or "",
         # Checklist de producción por red (el editor lo expone como checks marcables).
         "falta_copy": bool(f["falta_copy"]),
         "falta_imagen": bool(f["falta_imagen"]),

@@ -49,6 +49,7 @@ import { ENCUADRE_DEFECTO, normalizarEncuadre } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { familiaRealDe } from "@/lib/placa/render";
 import {
+  keywordBusqueda,
   MENSAJE_BLOQUEO_STOCK,
   nombreProveedor,
   stockAutorizado,
@@ -67,6 +68,8 @@ export function EditorPlacaInline({
   copyIn,
   onCopyInCambio,
   copy = "",
+  titulo,
+  imagenClave,
   fotos,
   onFotosCambio,
   imagenFuente,
@@ -626,7 +629,7 @@ export function EditorPlacaInline({
           <BadgeStock
             proveedor={proveedor}
             autorizada={autorizada}
-            className="pointer-events-none absolute left-3 top-3"
+            className="pointer-events-none absolute bottom-3 right-3"
           />
         )}
       </div>
@@ -707,7 +710,7 @@ export function EditorPlacaInline({
           onCerrar={() => setBuscadorStock(false)}
           piezaId={piezaId}
           imagenFuente={imagenFuente}
-          consultaInicial={(copyIn || copy || "").slice(0, 80)}
+          consultaInicial={keywordBusqueda({ imagen_clave: imagenClave, titulo })}
           onAdjuntada={(plataforma) => {
             cambiarFotoActiva(plataforma.foto);
             onStockCambio?.(plataforma);

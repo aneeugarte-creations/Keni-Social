@@ -27,10 +27,17 @@ La FIRMA de la marca (su nombre y su portal, p. ej. su handle) se añade SOLA, n
 2. Cubre, cuando encajen y estén en la lista: la SECCIÓN o categoría del contenido (p. ej. nacional, internacional, espectáculos, deportes, economía), el lugar o país, y las entidades o personas clave de la noticia.
 3. Ordénalos del más relevante al menos. Si de verdad ninguno encaja, devuelve una lista vacía. Nunca propongas un hashtag que no esté en la lista.
 
+## Imagen clave (para buscar una foto)
+
+Da además una **imagen clave**: de 2 a 4 palabras que describan LITERALMENTE qué FOTO buscar en un banco de imágenes para ilustrar este contenido. Es un término de BÚSQUEDA, no el titular ni una frase: el sujeto visual concreto y genérico, en español, fácil de encontrar en bancos como Openverse/Wikimedia.
+
+- Bien: "niño usando tablet", "bandera de Irán", "estadio de fútbol", "termómetro calor".
+- Mal: copiar el titular ("Acercarlos a la tecnología no es dejarlos solos…"), frases largas, o nombres propios poco fotografiables. Prefiere el concepto visible (lugar, objeto, símbolo, escena) sobre la idea abstracta.
+
 ## Salida
 
 Devuelve SOLO un objeto JSON, sin prosa ni explicación, con esta forma exacta:
 
-{"hashtags": ["#ejemplo", "#otro"]}
+{"hashtags": ["#ejemplo", "#otro"], "imagen_clave": "sujeto visual a buscar"}
 
-Cada hashtag CON su '#' delante. Como mucho {{CANTIDAD}} elementos. Solo hashtags de la lista de arriba.
+Cada hashtag CON su '#' delante. Como mucho {{CANTIDAD}} hashtags, solo de la lista de arriba. `imagen_clave` es una cadena corta (2-4 palabras); si de verdad no se te ocurre un sujeto fotografiable, déjala como "".

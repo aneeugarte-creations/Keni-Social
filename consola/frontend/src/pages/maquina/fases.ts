@@ -171,6 +171,15 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     },
   },
   {
+    // Respaldo de imagen cuando Ilustrar no aplica: descarga inline una foto de stock (banco
+    // gratuito) como ayuda visual SIN LICENCIA, no publicable hasta autorizarla. Es determinista
+    // (no lanza `claude -p`): no encola jobs ni deja runs, por eso no tiene `queue` ni `etapa`.
+    nombre: "Stock",
+    es_ia: false,
+    claves: ["KENI_PIPELINE_STOCK", MAESTRO_PRODUCCION],
+    ayuda: "Adjunta una foto de stock como referencia sin licencia para los temas sin imagen",
+  },
+  {
     // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras
     // los OK humanos, NO justo tras Ilustrar), no encola etapa propia. Switch propio
     // (`KENI_CRITICA_IA`), OFF por defecto. `seccion` la separa de la secuencia automática anterior.

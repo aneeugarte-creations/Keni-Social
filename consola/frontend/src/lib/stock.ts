@@ -58,6 +58,24 @@ export function nombreProveedor(proveedor: string | undefined): string {
   return nombres[p] || (p ? p.charAt(0).toUpperCase() + p.slice(1) : "Stock");
 }
 
+/**
+ * Consulta inicial del buscador de stock a partir del TÍTULO del tema de la pieza. El título suele
+ * traer un sufijo " — <vertical>" (p. ej. "Negociaciones EE.UU.-Irán — Diplomacia"): lo cortamos y
+ * usamos solo el tema, para que las APIs gratuitas devuelvan fotos relevantes y no aleatorias.
+ */
+export function temaDeTitulo(titulo: string | undefined): string {
+  return (titulo ?? "").split(" — ")[0].trim();
+}
+
+/**
+ * Consulta por defecto del buscador de fotos de stock: prefiere la KEYWORD visual que propone
+ * Sugerir hashtags (`imagen_clave`, sujeto visual de 2-4 palabras), y cae al TEMA del título si no
+ * la hay. Así la primera búsqueda da fotos del sujeto, no del titular largo.
+ */
+export function keywordBusqueda(p: { imagen_clave?: string; titulo?: string }): string {
+  return p.imagen_clave?.trim() || temaDeTitulo(p.titulo);
+}
+
 /** Pie de atribución de una candidata/imagen de stock: "autor · licencia · proveedor". */
 export function atribucionStock(d: {
   autor?: string;

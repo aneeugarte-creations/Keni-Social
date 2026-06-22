@@ -693,6 +693,8 @@ export function DialogoEditar({
                   piezaId={pieza.id}
                   plantillas={plantillas}
                   copy={contenido}
+                  titulo={pieza.titulo}
+                  imagenClave={pieza.imagen_clave}
                   imagenFuente={pieza.imagen_fuente}
                   portadaFotos={fotos}
                   onPortadaFotos={setFotos}
@@ -723,6 +725,8 @@ export function DialogoEditar({
                 copyIn={copyIn}
                 onCopyInCambio={setCopyIn}
                 copy={contenido}
+                titulo={pieza.titulo}
+                imagenClave={pieza.imagen_clave}
                 fotos={fotos}
                 onFotosCambio={setFotos}
                 imagenFuente={pieza.imagen_fuente}
@@ -746,6 +750,7 @@ export function DialogoEditar({
                 red={pieza.red}
                 copy={contenido}
                 titulo={pieza.titulo}
+                imagenClave={pieza.imagen_clave}
                 imagenFuente={pieza.imagen_fuente}
                 stock={stock}
                 onStockCambio={onStockCambio}

@@ -239,7 +239,7 @@ function TarjetaPieza({
                 <BadgeStock
                   proveedor={nombreProveedor(pieza.imagen_proveedor)}
                   autorizada={!!pieza.imagen_autorizada}
-                  className="absolute -bottom-1 left-0 z-10 scale-90"
+                  className="absolute bottom-0.5 right-0.5 z-10 scale-90"
                 />
               )}
             </div>

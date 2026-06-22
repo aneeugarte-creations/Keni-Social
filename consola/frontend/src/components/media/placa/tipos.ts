@@ -23,6 +23,11 @@ export interface EditorPlacaInlineProps {
   onCopyInCambio?: (valor: string) => void;
   /** Copy de la pieza (contenido del post): se usa como SUGERENCIA del prompt al generar con IA. */
   copy?: string;
+  /** Título del TEMA de la pieza: respaldo de la consulta inicial del buscador de fotos de stock. */
+  titulo?: string;
+  /** Keyword visual que propone Sugerir hashtags (`imagen_clave`): consulta por defecto del buscador
+   *  de stock; cae al tema del título si no la hay. */
+  imagenClave?: string;
   /** Una foto por HUECO (collage), en orden de `capas`. `fotos[i]` va al hueco `es_foto` i. */
   fotos: FotoCollage[];
   /** Notifica un cambio en el array de fotos (foto/reencuadre de algún hueco). */

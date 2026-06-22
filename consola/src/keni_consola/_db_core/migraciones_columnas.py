@@ -643,6 +643,8 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("imagen_licencia", "TEXT NOT NULL DEFAULT ''"),
     ("imagen_credito_url", "TEXT NOT NULL DEFAULT ''"),
     ("imagen_autorizada", "INTEGER NOT NULL DEFAULT 0"),
+    # Keyword de búsqueda de foto que propone la etapa Sugerir hashtags (sujeto visual a buscar).
+    ("imagen_clave", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

@@ -56,6 +56,7 @@ vi.mock("@/lib/api", () => ({
             aj("KENI_PRODUCCION", "Producción"),
             aj("KENI_PIPELINE_REDACTAR", "Redactar"),
             aj("KENI_PIPELINE_ILUSTRAR", "Ilustrar"),
+            aj("KENI_PIPELINE_STOCK", "Stock"),
             aj("KENI_CRITICA_IA", "Crítica"),
           ],
         },

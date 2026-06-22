@@ -165,6 +165,16 @@ def _maestros_etapa() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_PIPELINE_STOCK,
+            tipo="bool",
+            etiqueta="Stock",
+            ayuda="Para los temas con copy y sin imagen, baja una foto de AYUDA (la original del "
+            "RSS o una de bancos gratuitos) para que el feed no salga en gris. Es solo ayuda "
+            "visual (atenuada, «SIN LICENCIA»): nunca se publica sin autorizar. ON por defecto.",
+            grupo="maestros_produccion",
+            defecto=True,
+        ),
+        Ajuste(
             clave=config.ENV_CRITICA_IA,
             tipo="bool",
             etiqueta="Crítica",
@@ -201,6 +211,7 @@ _FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_REDACTAR, "Redactar"),
     (config.ENV_PIPELINE_SUGERIR_HASHTAGS, "Sugerir hashtags"),
     (config.ENV_PIPELINE_ILUSTRAR, "Ilustrar"),
+    (config.ENV_PIPELINE_STOCK, "Stock"),
     (config.ENV_CRITICA_IA, "Crítica"),
 )
 

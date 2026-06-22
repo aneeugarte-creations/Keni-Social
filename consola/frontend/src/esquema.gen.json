@@ -2229,6 +2229,9 @@
         "imagen_autorizada": {
           "type": "boolean"
         },
+        "imagen_clave": {
+          "type": "string"
+        },
         "falta_copy": {
           "type": "boolean"
         },

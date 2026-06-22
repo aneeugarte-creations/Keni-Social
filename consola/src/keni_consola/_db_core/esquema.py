@@ -454,6 +454,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- 1 = un humano REVISÓ derechos y autorizó publicar esta imagen 'stock'. Hasta entonces
         -- el bloqueo infranqueable impide programarla/publicarla. Default 0 (no autorizada).
         imagen_autorizada     INTEGER NOT NULL DEFAULT 0,
+        -- KEYWORD de búsqueda de foto (sujeto visual, 2-4 palabras) que propone la etapa Sugerir
+        -- hashtags junto a los hashtags. Es la consulta por defecto del buscador de stock (manual
+        -- y daemon), en vez del titular largo que no encuentra nada. "" si no hay.
+        imagen_clave          TEXT NOT NULL DEFAULT '',
         -- `video`: clave del asset de video en el almacen de media (`videos/<sha256>.<ext>`),
         -- espejo de `imagen`. "" = sin video adjunto. Lo usa el programador para publicar
         -- `TipoMedia.video` cuando la pieza es `formato='video'`.

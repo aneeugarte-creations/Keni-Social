@@ -125,6 +125,9 @@ class Pieza(TypedDict):
     # True = un humano revisó derechos y AUTORIZÓ publicar esta foto de stock. Hasta entonces el
     # bloqueo infranqueable impide programarla/publicarla. Opcional (legado / no-stock = False).
     imagen_autorizada: NotRequired[bool]
+    # KEYWORD de búsqueda de foto (sujeto visual, 2-4 palabras) que propone la etapa Sugerir
+    # hashtags. Consulta por defecto del buscador de stock (en vez del titular largo). "" si no hay.
+    imagen_clave: NotRequired[str]
     # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar/Video. El
     # editor unificado los expone como checks marcables (PATCH a la fila por plataforma). `falta_video`
     # solo cuenta en piezas formato=video (espejo de `falta_imagen`); en piezas foto es False (N/A).

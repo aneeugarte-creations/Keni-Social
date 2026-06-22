@@ -110,24 +110,53 @@ def adjuntar_candidata(
 
     ÚNICA puerta para marcar una foto de stock: deja `imagen_origen='stock'`,
     `imagen_autorizada=0` y `falta_imagen=1` (sigue faltando imagen real). Devuelve la fila
-    actualizada o None si la pieza no existe. Propaga `extraccion_url.ExtraccionError` si la
-    descarga falla o el contenido no es una imagen.
+    objetivo actualizada o None si la pieza no existe. Propaga `extraccion_url.ExtraccionError`
+    si la descarga falla o el contenido no es una imagen.
+
+    ESPEJO: la misma foto + sus flags de stock se aplican a TODAS las redes hermanas (cuando el
+    `espejo` del tema esta activo, el caso normal), no solo a la pieza tocada. Si no, una red
+    saldria con la foto SIN LICENCIA pero sin el aviso, que es justo lo peligroso a evitar.
     """
     nombre = extraccion_url.descargar_imagen_a_media(url)
-    return repos.actualizar_pieza_fila(
-        pieza_id,
-        {
-            "foto": nombre,
-            "imagen": "",
-            "falta_imagen": True,
-            "imagen_origen": licencia_imagen.ORIGEN_STOCK,
-            "imagen_proveedor": (proveedor or "stock")[:60],
-            "imagen_autor": (autor or "")[:200],
-            "imagen_licencia": (licencia or "")[:200],
-            "imagen_credito_url": (credito_url or "")[:500],
-            "imagen_autorizada": False,
-        },
-    )
+    campos = {
+        "foto": nombre,
+        "imagen": "",
+        "falta_imagen": True,
+        "imagen_origen": licencia_imagen.ORIGEN_STOCK,
+        "imagen_proveedor": (proveedor or "stock")[:60],
+        "imagen_autor": (autor or "")[:200],
+        "imagen_licencia": (licencia or "")[:200],
+        "imagen_credito_url": (credito_url or "")[:500],
+        "imagen_autorizada": False,
+    }
+    objetivo = repos.actualizar_pieza_fila(pieza_id, campos)
+    if objetivo is None:
+        return None
+    _propagar_a_hermanas(pieza_id, campos)
+    return objetivo
+
+
+def _propagar_a_hermanas(pieza_id: str, campos: dict[str, Any]) -> None:
+    """Aplica los mismos `campos` de stock a las redes hermanas si el espejo del tema esta on.
+
+    Salta las hermanas YA PUBLICADAS (lo que salio a la red no se toca). Best-effort: un fallo
+    por hermana no rompe el adjuntado de la pieza objetivo.
+    """
+    pieza = repos.obtener_pieza(pieza_id)
+    if pieza is None or not pieza.get("espejo", True):
+        return
+    pub_id = pieza.get("publicacion_id") or ""
+    if not pub_id:
+        return
+    for hermana in repos.listar_piezas_fila(pub_id):
+        if hermana.get("id") == pieza_id:
+            continue
+        if (hermana.get("estado") or "") == "publicado":
+            continue
+        try:
+            repos.actualizar_pieza_fila(hermana["id"], campos)
+        except Exception:  # noqa: BLE001 -- una hermana borrada/en carrera no rompe el resto
+            _log.debug("auto-stock: no se pudo espejar el stock a la hermana.", exc_info=True)
 
 
 def _marcar_procesado(item_id: str) -> None:
@@ -163,12 +192,14 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     fuente = (objetivo.get("imagen_fuente") or "").strip()
     if fuente:
         candidatas.append({"url": fuente, "proveedor": "rss", "autor": "", "licencia": "", "credito_url": fuente})
-    titulo = (item.get("titulo") or "").strip()
-    if titulo:
+    # Consulta de las APIs: la KEYWORD de la etapa Sugerir hashtags (`imagen_clave`); si aún no la
+    # hay, el TEMA (`titulo`). NUNCA el copy/titular largo (no encuentra nada en los bancos).
+    consulta = (objetivo.get("imagen_clave") or "").strip() or (item.get("titulo") or "").strip()
+    if consulta:
         try:
-            candidatas.extend(stock_fotos.buscar_todos(titulo, limite_por=2))
+            candidatas.extend(stock_fotos.buscar_todos(consulta, limite_por=2))
         except Exception:  # noqa: BLE001 -- una API caída no rompe el barrido
-            _log.debug("auto-stock: fallo buscando en APIs para %r.", titulo, exc_info=True)
+            _log.debug("auto-stock: fallo buscando en APIs para %r.", consulta, exc_info=True)
 
     for cand in candidatas:
         try:
@@ -189,12 +220,13 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def ejecutar_stock() -> list[dict[str, Any]]:
-    """Etapa de arte de stock del barrido: adjunta fotos de ayuda a temas con copy sin imagen.
+    """Etapa de Stock del pipeline: adjunta fotos de ayuda a temas con copy sin imagen.
 
-    Gateada por `KENI_PIPELINE_STOCK` (def OFF). Sin proveedores gratuitos disponibles degrada a
-    no hacer nada. Devuelve la lista de piezas a las que adjuntó una foto (para el log del tick).
+    Gateada por el maestro `KENI_MAQUINA` + su toggle `KENI_PIPELINE_STOCK` (def ON), igual que
+    Ilustrar. Sin proveedores gratuitos disponibles degrada a no hacer nada. Devuelve la lista de
+    piezas a las que adjuntó una foto (para el log del tick).
     """
-    if not config.stock_busca_activo():
+    if not config.gate_maquina(config.stock_busca_activo)():
         return []
     if not stock_fotos.proveedores_disponibles():
         return []

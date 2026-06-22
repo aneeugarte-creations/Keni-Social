@@ -37,7 +37,7 @@ export interface BuscadorStockProps {
   piezaId: string;
   /** URL original del artículo de la fuente (RSS): si la hay, se ofrece "Usar foto original". */
   imagenFuente?: string;
-  /** Texto inicial de búsqueda (p.ej. el titular de la pieza), opcional. */
+  /** Texto inicial de búsqueda: el TEMA de la pieza (su título), no el copy/titular largo. Opcional. */
   consultaInicial?: string;
   /** Tras adjuntar (candidata o fuente): la fila por plataforma actualizada, para refrescar. */
   onAdjuntada: (plataforma: PlataformaStock) => void;
@@ -56,7 +56,7 @@ export function BuscadorStock({
   // Proveedor activo ("" = todos).
   const [proveedor, setProveedor] = React.useState("");
 
-  // Al abrir, parte de la consulta inicial (titular de la pieza) para una primera búsqueda útil.
+  // Al abrir, parte de la consulta inicial (el tema de la pieza) para una primera búsqueda útil.
   useEffect(() => {
     if (open) {
       setQ(consultaInicial);
