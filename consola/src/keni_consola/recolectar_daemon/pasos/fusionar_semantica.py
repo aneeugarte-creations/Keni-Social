@@ -219,13 +219,15 @@ def paso_fusionar_semantica(
                 etapa="Fusionar",
             )
 
-        # Etiquetado INCREMENTAL: solo se invoca el LLM de macro-evento si hay clusters SIN
-        # `tema_macro`. Si TODO el lote ya está etiquetado no hay familia nueva que formar, y
-        # `marcar_clusters_tema_macro`/`_subtema` cuentan filas EMPAREJADAS (no cambiadas): re-correr
-        # sobre lo ya etiquetado reescribiría la misma etiqueta y pagaría un Haiku de macro + uno de
-        # subtema por familia en CADA barrido. El bloque macro es lo último del cuerpo: `continue` lo
-        # omite. Un cluster nuevo (sin `tema_macro`) reactiva la pasada y se une a su familia.
-        if not any(not str(c.get("tema_macro") or "").strip() for c in lote):
+        # Etiquetado INCREMENTAL: el LLM de macro-evento solo se invoca si hay algo que CAMBIAR —
+        # un cluster SIN `tema_macro` (familia nueva por formar) o ≥2 etiquetas distintas en el lote
+        # (posible sinónimo que el backstop de `_etiqueta_canonica` debe unificar a la dominante).
+        # Si TODO el lote ya comparte una sola etiqueta no hay familia nueva ni split que reconciliar,
+        # y `marcar_clusters_tema_macro`/`_subtema` cuentan filas EMPAREJADAS (no cambiadas): re-correr
+        # reescribiría la misma etiqueta y pagaría un Haiku de macro + uno de subtema por familia en
+        # CADA barrido. El bloque macro es lo último del cuerpo: `continue` lo omite.
+        temas_lote = {str(c.get("tema_macro") or "").strip() for c in lote}
+        if "" not in temas_lote and len(temas_lote) == 1:
             continue
 
         # MACRO-EVENTO (Fase A): además de FUNDIR duplicados, ETIQUETA familias de clusters
