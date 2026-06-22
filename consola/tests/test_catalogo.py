@@ -21,9 +21,9 @@ from keni_consola.apps import registro
 _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints del flujo de contenido que el equipo toca cada día. Investigación
     # (el pool de noticias que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el
-    # bloque, ENCIMA del Feed; luego el Feed (red social interna + lista) y la Programación
-    # (calendario de publicaciones). «Trabajo» y «Calendario» NO van aquí: tienen su propio bloque.
-    ["Investigación", "Feed", "Programación"],
+    # bloque, ENCIMA del Feed; luego el Feed (red social interna + lista) y «Programa» (hub:
+    # Programación —calendario— + Plan —líneas). «Trabajo»/«Calendario» NO van aquí: bloque propio.
+    ["Investigación", "Feed", "Programa"],
     # "Equipo": quién trabaja y cuándo, entre Operación y Contenido. «Trabajo» (eventos/tareas y su
     # cobertura: la demanda) + «Calendario» (el horario de turnos: la capacidad). Es otra clase de
     # cosa que el flujo de contenido, así que se separa de él.
