@@ -165,6 +165,25 @@ export function DialogoEditar({
     [pieza, iniciarGenCarrusel],
   );
 
+  // Conversión NO DESTRUCTIVA a carrusel: crea una VARIANTE hermana (no toca la foto). Reusa el
+  // mismo polling que `lanzarCarrusel`; `conversionVarianteRef` marca la gen para que el efecto de
+  // completado tome la rama "no recargues esta pieza, refresca el feed" (los slides están en la
+  // pieza carrusel NUEVA, no en esta —que sigue siendo foto—).
+  const conversionVarianteRef = React.useRef(false);
+  const convertirAVarianteCarrusel = React.useCallback(
+    async (longitud: "corto" | "largo") => {
+      if (!pieza) return;
+      try {
+        const r = await api.convertirCarrusel(pieza.id, longitud);
+        conversionVarianteRef.current = true;
+        iniciarGenCarrusel(r.generacion);
+      } catch (e) {
+        toast.error(mensajeError(e));
+      }
+    },
+    [pieza, iniciarGenCarrusel],
+  );
+
   // Botón de la barra (post YA en carrusel): pregunta la longitud en el MISMO diálogo y (re)genera.
   // `regenerar` solo cambia el texto (ya hay slides que se reemplazan).
   const pedirLongitudYGenerar = React.useCallback(
@@ -196,6 +215,17 @@ export function DialogoEditar({
     procesadoGenRef.current = idGenCarrusel;
     if (estadoGenCarrusel === "error") {
       toast.error("No se pudo generar el carrusel.");
+      conversionVarianteRef.current = false;
+      limpiarGenCarrusel();
+      return;
+    }
+    // Conversión a VARIANTE: los slides están en la pieza carrusel NUEVA, no en esta (sigue foto).
+    // No recargamos esta pieza; refrescamos el feed para que aparezca la tarjeta carrusel hermana.
+    if (conversionVarianteRef.current) {
+      conversionVarianteRef.current = false;
+      toast("Variante carrusel creada: revísala en el feed, junto a la foto.");
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
       limpiarGenCarrusel();
       return;
     }
@@ -258,19 +288,20 @@ export function DialogoEditar({
     // Pasar a CARRUSEL sin slides: el mismo diálogo confirma el cambio Y pregunta la longitud
     // (corto 4-5 / largo 8-9). Al elegir, flipea y genera ya con ella; Cancelar no hace nada.
     if (nuevo === "carrusel" && slides.length === 0) {
+      // NO DESTRUCTIVO: crea una VARIANTE carrusel junto a la foto (no la pisa ni la manda a
+      // borrador). El feed muestra ambas como tarjetas hermanas y el equipo elige cuál publica.
       const longitud = (await elegir({
-        titulo: "Cambiar a carrusel",
+        titulo: "Crear carrusel",
         mensaje:
-          "Se generará el carrusel a partir del copy del post (la portada se conserva). La " +
-          "pieza volverá a borrador y se quitará la plantilla actual. Elige la longitud:",
+          "Se creará una VARIANTE carrusel a partir del copy del post, junto a la foto (la foto se " +
+          "conserva intacta; el feed mostrará ambas y eliges cuál publicar). Elige la longitud:",
         opciones: [
           { valor: "corto", etiqueta: "Corto", descripcion: "4–5 tarjetas" },
           { valor: "largo", etiqueta: "Largo", descripcion: "8–9 tarjetas" },
         ],
       })) as "corto" | "largo" | null;
       if (!longitud) return;
-      longitudPendienteRef.current = longitud;
-      flipFormato.mutate(nuevo);
+      void convertirAVarianteCarrusel(longitud);
       return;
     }
     const etiqueta = nuevo === "video" ? "video" : nuevo === "carrusel" ? "carrusel" : "foto";

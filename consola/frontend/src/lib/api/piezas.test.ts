@@ -40,3 +40,23 @@ describe("apiPiezas.generarCarrusel", () => {
     expect(JSON.parse(init.body as string)).toEqual({ longitud: "largo" });
   });
 });
+
+describe("apiPiezas.convertirCarrusel", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hace POST a convertir-carrusel (conversión no destructiva) con la longitud", async () => {
+    const generacion = { id: "g1", estado: "ejecutando" };
+    const fetchMock = vi.fn().mockResolvedValue(respuestaJson({ generacion }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await apiPiezas.convertirCarrusel("p1", "corto");
+
+    expect(r.generacion).toEqual(generacion);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/piezas/p1/convertir-carrusel");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ longitud: "corto" });
+  });
+});

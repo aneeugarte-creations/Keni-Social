@@ -104,6 +104,18 @@ export const apiPiezas = {
       json: { longitud },
     }),
 
+  /**
+   * Conversión NO DESTRUCTIVA a carrusel: crea una VARIANTE carrusel HERMANA junto a la foto en vez
+   * de sobrescribir el post (la foto sigue viva; el feed muestra ambas como tarjetas aparte y el
+   * equipo elige cuál publica). Responde al instante con `{generacion}`; el SPA la sondea y, al
+   * terminar, refresca el feed (la tarjeta carrusel nueva aparece). NO flip-ea el formato del post.
+   */
+  convertirCarrusel: (id: string, longitud: "corto" | "largo") =>
+    peticion<RespuestaGeneracion>(`/piezas/${encodeURIComponent(id)}/convertir-carrusel`, {
+      metodo: "POST",
+      json: { longitud },
+    }),
+
   // --- Aprobación de PIEZAS (#9): cola de revisión + decisión + programación ---
   // Programar NO es aprobación (es programación) y NO publica de verdad: el posteo real
   // vía Metricool está gated por `KENI_PUBLICAR_REAL`.
