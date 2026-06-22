@@ -3,8 +3,9 @@
  *
  * Cubre:
  *   1. Con marca activa, la vista por defecto es la MESA (GET /api/noticias/mesa):
- *      plan del día (chips + progreso), secciones por línea (última hora primero),
- *      tarjetas editoriales (frase de corroboración, ÚLTIMA HORA, prioridad).
+ *      chips de navegación por línea (última hora primero) y tarjetas editoriales
+ *      colapsables (colapsadas: titular/hora/fuente; expandidas: corroboración, estado,
+ *      prioridad).
  *   2. Acciones de la tarjeta: Empujar/Adelantar (click izquierdo, gated por confirmar()) →
  *      usarHistoria; Descartar (menú contextual) → descartarHistoria.
  *   3. Pestañas: «En marcha» (estado=usado) y «Descartadas» (estado=descartado + Devolver
@@ -243,8 +244,8 @@ afterEach(() => {
 
 // ── Tests: la Mesa (vista por defecto con marca activa) ───────────────────────
 
-describe("Cobertura · Mesa — plan del día", () => {
-  it("pide la mesa de la marca activa y pinta el plan del día con sus chips", async () => {
+describe("Cobertura · Mesa", () => {
+  it("pide la mesa de la marca activa y muestra los chips de navegación por línea", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() =>
       expect(mockMesa).toHaveBeenCalledWith(
@@ -252,12 +253,9 @@ describe("Cobertura · Mesa — plan del día", () => {
         expect.anything(),
       ),
     );
-    await waitFor(() => expect(screen.getByTestId("barra-plan-dia")).toBeTruthy());
-    expect(screen.getByTestId("barra-plan-dia").textContent).toMatch(/Plan de hoy — UnoTV/);
-    expect(screen.getByTestId("barra-plan-dia").textContent).toMatch(/2 de 4/);
-    expect(screen.getByTestId("chip-linea-mx").textContent).toMatch(/Nacional 1\/2/);
-    // Línea completa: lleva check.
-    expect(screen.getByTestId("chip-linea-internacional").textContent).toMatch(/1\/1 ✓/);
+    // La mesa segmenta por líneas con chips de navegación (sin barra de progreso).
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
+    expect(screen.getByTestId("chip-grupo-Internacional")).toBeTruthy();
   });
 
   it("última hora va primero y su tarjeta lleva el tratamiento ÚLTIMA HORA", async () => {
@@ -269,7 +267,8 @@ describe("Cobertura · Mesa — plan del día", () => {
       .map((n) => n.closest('[role="button"]') as HTMLElement);
     const breaking = within(cards[0]);
     expect(breaking.getByTestId("badge-ultima-hora")).toBeTruthy();
-    // Frase editorial de última hora: la confirmaron casi a la vez.
+    // La frase de corroboración vive en la zona expandida: abrimos la tarjeta.
+    fireEvent.click(breaking.getByTestId("btn-expandir"));
     expect(breaking.getByTestId("frase-corroboracion").textContent).toMatch(
       /Reuters y AP la confirmaron casi a la vez/,
     );
@@ -283,6 +282,8 @@ describe("Cobertura · Mesa — plan del día", () => {
       '[role="button"]',
     ) as HTMLElement;
     const mx = within(hostMx);
+    // Frase y score viven en la zona expandida: abrimos la tarjeta.
+    fireEvent.click(mx.getByTestId("btn-expandir"));
     const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
     expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
     expect(frase).toMatch(/la abrió Reforma/);
@@ -356,7 +357,10 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
       }),
     );
     renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("badge-sale-sola")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("historia-item")).toBeTruthy());
+    // El badge "Sale sola al feed" vive en la zona expandida: abrimos la tarjeta.
+    fireEvent.click(screen.getByTestId("btn-expandir"));
+    expect(screen.getByTestId("badge-sale-sola")).toBeTruthy();
     // Empujar al feed ya NO es item de menú: es la acción de click izquierdo, gated por
     // `confirmar()`. En una promovible, el texto de confirmar pasa a «Adelantar».
     const host = screen.getByTestId("historia-item").closest('[role="button"]');
@@ -388,7 +392,10 @@ describe("Cobertura · pestañas de flujo", () => {
         expect.anything(),
       ),
     );
-    await waitFor(() => expect(screen.getByText(/En el feed/i)).toBeTruthy());
+    // El estado de la pieza vive en la zona expandida: abrimos la tarjeta.
+    const card = await screen.findByTestId("historia-item");
+    fireEvent.click(within(card).getByTestId("btn-expandir"));
+    expect(screen.getByText(/En el feed/i)).toBeTruthy();
     // Ya en marcha: no ofrece Empujar.
     expect(screen.queryByTestId("btn-empujar")).toBeNull();
   });
@@ -504,7 +511,10 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
       total: 1,
     });
     renderConProviders(<Cobertura />, usuario(), null);
-    await waitFor(() => expect(screen.getByText(/En cola/i)).toBeTruthy());
+    // El estado de la pieza vive en la zona expandida: abrimos la tarjeta.
+    const card = await screen.findByTestId("historia-item");
+    fireEvent.click(within(card).getByTestId("btn-expandir"));
+    expect(screen.getByText(/En cola/i)).toBeTruthy();
     expect(screen.queryByText(/En el feed/i)).toBeNull();
   });
 

@@ -1,28 +1,26 @@
 /**
  * MesaNoticias — la vista de CANDIDATAS segmentada por las líneas del plan.
  *
- * El layout ES el plan del día: una cabecera con el progreso ("4 de 12 hoy" + chips por
- * línea) y una sección por línea con sus top candidatas rankeadas. Última hora va primero
- * con sus tarjetas en rojo; lo que el plan no contempla queda plegado en "Fuera del plan".
- * Una sección con cupo sin cubrir y pocas candidatas ES la alerta visual: ahí hay que mirar.
+ * El layout ES el plan del día: una sección por línea con sus top candidatas rankeadas.
+ * Última hora va primero con sus tarjetas en rojo; lo que el plan no contempla queda
+ * plegado en "Fuera del plan". Una sección con cupo sin cubrir y pocas candidatas ES la
+ * alerta visual: ahí hay que mirar.
  *
  * Datos: GET /api/noticias/mesa (un solo payload con líneas + cupos + progreso + top-N).
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Layers, Newspaper, Target, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, Newspaper, X } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaLinea } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
-import type { GrupoMesa, Historia, LineaGrupo, MesaLinea, RespuestaMesa } from "@/types";
+import type { GrupoMesa, Historia, LineaGrupo, MesaLinea } from "@/types";
 
 import { TarjetaHistoria } from "./TarjetaHistoria";
 
@@ -35,58 +33,6 @@ const POR_LINEA_EXPANDIDO = 20;
 
 export const CLAVE_MESA = (marca: string, porLinea: number) =>
   ["noticias", "mesa", marca, porLinea] as const;
-
-// ── Cabecera: el plan de hoy ──────────────────────────────────────────────────
-
-function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | null }) {
-  if (!data.plan) return null;
-  const objetivo = Math.max(1, data.total_objetivo);
-  const avance = Math.min(100, (data.total_generados / objetivo) * 100);
-  const exceso = data.total_generados > data.total_objetivo;
-  const completo = data.total_generados >= data.total_objetivo;
-  return (
-    <div className="mb-4 space-y-2" data-testid="barra-plan-dia">
-      <div className="flex flex-wrap items-center gap-2">
-        <Target className="h-4 w-4 text-foreground" />
-        <span className="text-sm font-medium">Plan de hoy{nombre ? ` — ${nombre}` : ""}</span>
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {data.total_generados} de {data.total_objetivo}
-        </span>
-        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all",
-              exceso ? "bg-amber-500" : completo ? "bg-emerald-500" : "bg-sky-500",
-            )}
-            style={{ width: `${avance}%` }}
-          />
-        </div>
-        <Link
-          to="/operacion/programacion"
-          className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
-        >
-          Ajustar plan →
-        </Link>
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {data.lineas.map((l) => {
-          const completa = l.generados >= l.cupo;
-          return (
-            <Badge
-              key={l.linea}
-              variant={completa ? "ok" : "outline"}
-              className="gap-1 text-xs tabular-nums"
-              data-testid={`chip-linea-${l.linea}`}
-            >
-              {(l.etiqueta || etiquetaLinea(l.linea))} {l.generados}/{l.cupo}
-              {completa ? " ✓" : ""}
-            </Badge>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ── Barra de navegación por GRUPO (con 2º nivel de LÍNEAS) ─────────────────────
 
@@ -376,8 +322,8 @@ export function historiasDelGrupo(
  * Para una marca SIN grupos (UnoTV, Fundación…), deriva los chips de navegación de las LÍNEAS del
  * plan: cada línea (+ «Fuera del plan» si tiene candidatas) es un chip PLANO (sin desplegable), y
  * cada candidata se etiqueta con su línea para que el filtro funcione igual que con los grupos.
- * Así la barra de chips es la misma en todas las marcas; la muestra de progreso del plan
- * (`BarraPlanDia`) se mantiene aparte. Un chip aparece si la línea tiene cupo o candidatas.
+ * Así la barra de chips es la misma en todas las marcas. Un chip aparece si la línea tiene
+ * cupo o candidatas.
  */
 export function chipsDeLineas(
   lineas: MesaLinea[],
@@ -439,8 +385,53 @@ export function agruparPorMacro(historias: Historia[]): BloqueLista[] {
 }
 
 /**
- * Renderiza una lista de historias agrupando las que comparten macro-evento bajo un
- * sub-encabezado con su nombre y un conteo ("Cumbre del G7 · 4 historias").
+ * Caja de un macro-evento: cabecera colapsable con su nombre y un conteo ("Cumbre del G7 ·
+ * 4 historias"). Plegada por defecto (solo la cabecera); al abrir lista sus sub-historias,
+ * que a su vez salen en su forma compacta (titular/hora/fuente) y se expanden una a una.
+ */
+function GrupoMacro({
+  tema,
+  historias,
+  clave,
+}: {
+  tema: string;
+  historias: Historia[];
+  clave: readonly unknown[];
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-border bg-muted/30 p-2"
+      data-testid="grupo-macro"
+      data-tema-macro={tema}
+    >
+      <button
+        type="button"
+        className="flex w-full items-center gap-1.5 px-1 text-xs font-semibold text-foreground"
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+      >
+        {abierto ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <Layers className="h-3.5 w-3.5" />
+        <span>{tema}</span>
+        <span className="font-normal tabular-nums text-muted-foreground">
+          · {historias.length} historias
+        </span>
+      </button>
+      {abierto && (
+        <div className="space-y-2">
+          {historias.map((h) => (
+            <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renderiza una lista de historias agrupando las que comparten macro-evento en una caja
+ * colapsable (`GrupoMacro`); las historias sin macro-evento salen como tarjetas sueltas.
  */
 function ListaHistorias({
   historias,
@@ -456,25 +447,7 @@ function ListaHistorias({
         b.tipo === "suelta" ? (
           <TarjetaHistoria key={b.historia.id} historia={b.historia} clavesAInvalidar={[clave]} />
         ) : (
-          <div
-            key={`macro:${b.tema}`}
-            className="space-y-2 rounded-lg border border-border bg-muted/30 p-2"
-            data-testid="grupo-macro"
-            data-tema-macro={b.tema}
-          >
-            <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-foreground">
-              <Layers className="h-3.5 w-3.5" />
-              <span>{b.tema}</span>
-              <span className="font-normal tabular-nums text-muted-foreground">
-                · {b.historias.length} historias
-              </span>
-            </div>
-            <div className="space-y-2">
-              {b.historias.map((h) => (
-                <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
-              ))}
-            </div>
-          </div>
+          <GrupoMacro key={`macro:${b.tema}`} tema={b.tema} historias={b.historias} clave={clave} />
         ),
       )}
     </div>
@@ -524,7 +497,7 @@ function SeccionLinea({
 
 // ── La mesa ───────────────────────────────────────────────────────────────────
 
-export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string | null }) {
+export function MesaNoticias({ marca }: { marca: string; nombre: string | null }) {
   // "Ver las N" por sección: con cualquier sección expandida se piden más por línea (el
   // payload es uno solo; las plegadas siguen mostrando 5).
   const [expandidas, setExpandidas] = React.useState<Set<string>>(() => new Set());
@@ -568,8 +541,7 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
 
   // NAVEGACIÓN POR CHIPS (todas las marcas): barra de categorías + lista filtrada. Los chips son los
   // GRUPOS si la marca los usa (Claro Sports: con desplegable de líneas) o las LÍNEAS del plan
-  // directamente si no (UnoTV/Fundación: chips planos, sin desplegable). La muestra de progreso del
-  // plan (`BarraPlanDia`) se mantiene encima en ambos casos.
+  // directamente si no (UnoTV/Fundación: chips planos, sin desplegable).
   const grupos = data.grupos ?? [];
   const { chips, browse } =
     grupos.length > 0
@@ -582,7 +554,6 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
     const visibles = historiasDelGrupo(browse, grupoSel, lineaSel);
     return (
       <div className="space-y-4" data-testid="mesa-grupos">
-        {data.plan && <BarraPlanDia data={data} nombre={nombre} />}
         <NavGruposLineas
           grupos={chips}
           total={total}
@@ -627,7 +598,6 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
 
   return (
     <div className="space-y-6">
-      <BarraPlanDia data={data} nombre={nombre} />
       {query.isFetching && !query.isPending && (
         <Spinner className="h-3 w-3 text-muted-foreground" label="Actualizando" />
       )}

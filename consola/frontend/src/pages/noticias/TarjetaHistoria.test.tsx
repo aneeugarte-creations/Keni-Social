@@ -6,7 +6,7 @@
  *     'no_verificado' → «Verificada»; 'problema' → «Problema en la fuente»; '' → nada.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Historia } from "@/types";
@@ -39,11 +39,15 @@ function historia(overrides: Partial<Historia> = {}): Historia {
 
 function renderTarjeta(h: Historia) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const r = render(
     <QueryClientProvider client={client}>
       <TarjetaHistoria historia={h} clavesAInvalidar={[["x"]]} />
     </QueryClientProvider>,
   );
+  // La tarjeta arranca colapsada (titular + hora + fuente); marca, verificación, resumen,
+  // meta y enlaces viven en la zona expandida. La abrimos para afirmar esos badges.
+  fireEvent.click(screen.getByTestId("btn-expandir"));
+  return r;
 }
 
 describe("TarjetaHistoria · badges de Investigación", () => {
