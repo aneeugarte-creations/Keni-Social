@@ -209,6 +209,9 @@ export function SaludFeeds() {
             </TableHeader>
             <TableBody>
               {feedsOrdenados.map(({ feed, est }) => {
+                // La mutación es de tabla (una para todas las filas): aísla disabled/spinner a la
+                // fila en curso por sus `variables` para no girar el spinner de TODOS los feeds.
+                const reactivando = reactivarMut.isPending && reactivarMut.variables === feed.id;
                 return (
                   <TableRow key={feed.id} className={est.fila}>
                     <TableCell className="font-medium text-xs">{feed.nombre}</TableCell>
@@ -216,7 +219,7 @@ export function SaludFeeds() {
                     <TableCell className="text-xs">{feed.marca_nombre || feed.marca || "—"}</TableCell>
                     <TableCell className="text-right text-xs">{feed.items_24h}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {feed.ultimo_filtrados ? feed.ultimo_filtrados : "—"}
+                      {feed.ultimo_filtrados ?? "—"}
                     </TableCell>
                     <TableCell className="text-right text-xs">{frescuraTexto(feed.frescura_min)}</TableCell>
                     <TableCell>
@@ -233,12 +236,12 @@ export function SaludFeeds() {
                           size="sm"
                           variant="outline"
                           className="h-7 gap-1 px-2 text-xs"
-                          disabled={reactivarMut.isPending}
+                          disabled={reactivando}
                           onClick={() => reactivarMut.mutate(feed.id)}
                           data-testid={`btn-reactivar-${feed.id}`}
                           aria-label={`Reactivar feed ${feed.nombre}`}
                         >
-                          {reactivarMut.isPending ? (
+                          {reactivando ? (
                             <Spinner className="h-3 w-3" />
                           ) : (
                             <RefreshCw className="h-3 w-3" />

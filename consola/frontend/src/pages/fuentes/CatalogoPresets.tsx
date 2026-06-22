@@ -121,7 +121,15 @@ export function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
           Feeds curados listos para activar
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
+          <Select
+            value={categoriaFiltro}
+            onValueChange={(v) => {
+              // La selección de la categoría anterior queda oculta al filtrar: límpiala para no
+              // activar feeds que ya no se ven marcados.
+              setCategoriaFiltro(v);
+              setSeleccionados(new Set());
+            }}
+          >
             <SelectTrigger className="w-44" aria-label="Filtrar por categoría">
               <SelectValue placeholder="Categoría" />
             </SelectTrigger>

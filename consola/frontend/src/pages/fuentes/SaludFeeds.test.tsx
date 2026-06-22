@@ -218,4 +218,30 @@ describe("SaludFeeds · tabla de feeds", () => {
       expect(mockReactivar).toHaveBeenCalledWith("feed-2");
     });
   });
+
+  it("reactivar un feed solo deshabilita SU botón, no el de los demás auto-desactivados", async () => {
+    const salud: SaludCobertura = {
+      ...SALUD_COBERTURA,
+      feeds: [
+        SALUD_COBERTURA.feeds[1], // feed-2 (auto-desactivado)
+        { ...SALUD_COBERTURA.feeds[1], id: "feed-3", nombre: "Otro caído" },
+      ],
+    };
+    mockSalud.mockResolvedValue(salud);
+    // Reactivación que no resuelve: deja la mutación en `isPending` para inspeccionar el estado.
+    mockReactivar.mockReturnValue(new Promise(() => {}));
+    renderSalud();
+    await waitFor(() => {
+      expect(screen.getByTestId("btn-reactivar-feed-2")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("btn-reactivar-feed-2"));
+    await waitFor(() => {
+      expect(
+        (screen.getByTestId("btn-reactivar-feed-2") as HTMLButtonElement).disabled,
+      ).toBe(true);
+    });
+    expect(
+      (screen.getByTestId("btn-reactivar-feed-3") as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
 });
