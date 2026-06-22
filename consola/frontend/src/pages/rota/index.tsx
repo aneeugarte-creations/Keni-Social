@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
-  CalendarCheck,
   CalendarDays,
   CheckCircle2,
   Settings2,
@@ -18,7 +17,6 @@ import type { FiltrosSwaps } from "@/types";
 
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
-import { Hoy } from "./Hoy";
 import { VistaMensualTurnos } from "./MisTurnos";
 import { PanelCoordinacion, useSenalesCoordinacion } from "./PanelCoordinacion";
 import { contarSwapsPendientes } from "./comun";
@@ -27,9 +25,9 @@ import { contarSwapsPendientes } from "./comun";
 // ===========================================================================
 
 /** Valores válidos de pestaña (orden = el de la barra). «Horario» (el calendario MENSUAL de turnos)
- *  es la home (default). «Gestión» es admin-only. El TRABAJO (eventos/tareas/cobertura) ya no es
- *  pestaña: vive en su propio destino del sidebar (`/operacion/trabajo`). */
-const VALORES_PESTANA = ["hoy", "calendario", "gestion", "cambios-ausencias"];
+ *  es la home (default). «Gestión» es admin-only. El TRABAJO (eventos/tareas/cobertura) vive en su
+ *  propio destino del sidebar (`/operacion/trabajo`); el resumen del día «Hoy» se retiró. */
+const VALORES_PESTANA = ["calendario", "gestion", "cambios-ausencias"];
 
 /** Normaliza el `?tab=`. El legacy `mis-turnos` (antigua pestaña «Mi jornada») cae en «Horario»,
  *  que YA es el calendario mensual de turnos. */
@@ -80,7 +78,7 @@ export default function Rota() {
   // ese tab cae en «Gestión».
   const pestaniaEfectiva =
     pestania === "gestion" && !esAdmin
-      ? "hoy"
+      ? "calendario"
       : pestania === "cambios-ausencias" && esAdmin
         ? "gestion"
         : pestania;
@@ -111,9 +109,8 @@ export default function Rota() {
   // La subnav vive en el topbar (como Métricas). «Gestión» es admin-only; la insignia de
   // «Cambios y ausencias» cuelga de su pestaña (nº de cambios que esperan MI acción).
   const pestanas: PestanaSeccion[] = [
-    // «Horario» = el calendario de turnos (Yo/Equipo · Semana/Mes); es la home de esta sección.
+    // «Horario» = el calendario mensual de turnos (Yo/Equipo); es la home de esta sección.
     { valor: "calendario", etiqueta: "Horario", icono: CalendarDays },
-    { valor: "hoy", etiqueta: "Hoy", icono: CalendarCheck },
     // Admin → «Gestión» (que ya incluye «Cambios y ausencias» en su panel). Trabajador → la
     // pestaña «Cambios y ausencias» (su único sitio para pedir/responder cambios y ausencias,
     // porque «Gestión» es admin-only). Son excluyentes: cada rol ve una de las dos.
@@ -140,10 +137,6 @@ export default function Rota() {
   return (
     <>
       <PestanasSeccion pestanas={pestanas} activo={pestaniaEfectiva} onSelect={setPestania} />
-
-      {/* «Hoy»: resumen del día (próximo turno + por-cubrir-hoy + lo-mío-hoy). «Ver toda la
-          agenda» salta al destino «Trabajo» (eventos/tareas/cobertura), ya fuera de esta sección. */}
-      {pestaniaEfectiva === "hoy" && <Hoy onVerAgenda={() => navigate("/operacion/trabajo")} />}
 
       {/* «Horario»: el calendario MENSUAL de turnos (Yo/Equipo · Imprimir/PDF), de CONSULTA. Solo
           jornada — sin eventos ni cobertura (`mostrarCobertura={false}`): eso vive en «Trabajo». No

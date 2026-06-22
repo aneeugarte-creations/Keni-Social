@@ -147,7 +147,7 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
     );
   });
 
-  it("abre en «Horario» (el calendario) por defecto; «Hoy» disponible; el trabajo ya NO es pestaña", async () => {
+  it("abre en «Horario» (el calendario) por defecto; el trabajo y «Hoy» ya NO son pestaña", async () => {
     renderRota();
     // La subnav unificada (topbar) son botones de sección con `aria-current`, agrupados en
     // el landmark «Secciones»; la activa lleva aria-current="page".
@@ -156,22 +156,22 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
       "aria-current",
       "page",
     );
-    expect(within(nav).getByRole("button", { name: "Hoy" })).not.toHaveAttribute("aria-current");
-    // El trabajo (eventos/tareas/cobertura) salió a su propio destino del sidebar: no es pestaña aquí.
+    // «Hoy» (resumen del día) se retiró; el trabajo (eventos/tareas/cobertura) tiene su propio destino.
+    expect(within(nav).queryByRole("button", { name: "Hoy" })).toBeNull();
     expect(within(nav).queryByRole("button", { name: "Cobertura" })).toBeNull();
     expect(within(nav).queryByRole("button", { name: "Trabajo" })).toBeNull();
   });
 
-  it("el admin ve 3 pestañas (Horario · Hoy · Gestión); «Cambios y ausencias», «Trabajo» y «Mi jornada» ya NO son pestaña", async () => {
+  it("el admin ve 2 pestañas (Horario · Gestión); «Hoy», «Cambios y ausencias», «Trabajo» y «Mi jornada» ya NO son pestaña", async () => {
     renderRota();
     // «Horario» es la home. «Cambios y ausencias» vive en el panel de Gestión (no es pestaña para
-    // el admin). «Mi jornada» sigue fundida en el modo «Mes». El trabajo tiene su propio destino.
+    // el admin). El trabajo tiene su propio destino. «Hoy» (resumen del día) se retiró.
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
     const tabs = within(nav).getAllByRole("button");
-    expect(tabs).toHaveLength(3);
-    expect(tabs.map((t) => t.textContent)).toEqual(["Horario", "Hoy", "Gestión"]);
+    expect(tabs).toHaveLength(2);
+    expect(tabs.map((t) => t.textContent)).toEqual(["Horario", "Gestión"]);
+    expect(within(nav).queryByRole("button", { name: "Hoy" })).toBeNull();
     expect(within(nav).queryByRole("button", { name: /Cambios y ausencias/ })).toBeNull();
-    expect(within(nav).queryByRole("button", { name: "Mi jornada" })).toBeNull();
     expect(within(nav).queryByRole("button", { name: "Trabajo" })).toBeNull();
   });
 
@@ -246,120 +246,6 @@ describe("interaccionEnCapaHija (guarda del diálogo de cobertura)", () => {
   });
 });
 
-describe("Turnos — home «Hoy»", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  });
-
-  it("HERO: muestra tu turno de hoy (franja + horario)", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({
-      misTurnosMes: {
-        mis_turnos: [
-          { id: "tn1", fecha: "2026-06-15", franja_nombre: "Matutina", inicio: "08:00", fin: "14:00", miembro_nombre: "yo" },
-        ],
-        miembro_nombre: "yo",
-      },
-    });
-    fireEvent.click(
-      within(await screen.findByRole("navigation", { name: "Secciones" })).getByRole("button", {
-        name: "Hoy",
-      }),
-    );
-    expect(await screen.findByText("Matutina")).toBeInTheDocument();
-    expect(screen.getByText("08:00–14:00")).toBeInTheDocument();
-    expect(screen.getByText("Tu turno hoy")).toBeInTheDocument();
-  });
-
-  it("HERO: si hoy no hay turno, el hero NO se muestra (sin cartel de «libras»)", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({ misTurnosMes: { mis_turnos: [] } });
-    fireEvent.click(
-      within(await screen.findByRole("navigation", { name: "Secciones" })).getByRole("button", {
-        name: "Hoy",
-      }),
-    );
-    // Espera a que la página cargue (la sección «Lo mío hoy» siempre está) y comprueba que el hero
-    // del turno no aparece: ni el cartel de «libras» ni los rótulos de turno.
-    await screen.findByText(/Lo mío hoy/);
-    expect(screen.queryByText(/Hoy libras/)).toBeNull();
-    expect(screen.queryByText("Tu turno hoy")).toBeNull();
-    expect(screen.queryByText("Tu próximo turno")).toBeNull();
-  });
-
-  it("POR CUBRIR HOY: un evento de hoy sin dueño ni turno se cuenta en el aviso de huecos", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({
-      rotaEventos: {
-        eventos: [
-          { id: "ev1", titulo: "Rueda de prensa", fecha: "2026-06-15", hora: "12:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
-        ],
-      },
-      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
-    });
-    fireEvent.click(
-      within(await screen.findByRole("navigation", { name: "Secciones" })).getByRole("button", {
-        name: "Hoy",
-      }),
-    );
-    // «Hoy» arranca COLAPSADO: muestra el conteo como aviso, sin listar los huecos todavía.
-    expect(await screen.findByText(/1 por cubrir hoy/i)).toBeInTheDocument();
-    expect(screen.queryByText("Rueda de prensa")).not.toBeInTheDocument();
-  });
-
-  it("POR CUBRIR HOY: al expandir el aviso, lista los huecos de hoy para coger sin salir de «Hoy»", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({
-      rotaEventos: {
-        eventos: [
-          { id: "ev1", titulo: "Rueda de prensa", fecha: "2026-06-15", hora: "12:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
-        ],
-      },
-      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
-    });
-    fireEvent.click(
-      within(await screen.findByRole("navigation", { name: "Secciones" })).getByRole("button", {
-        name: "Hoy",
-      }),
-    );
-    // Pulsar el aviso revela la lista de huecos in situ (progressive disclosure), sin ir a «Trabajo».
-    const aviso = await screen.findByRole("button", { name: /coger lo que falta por cubrir hoy/i });
-    fireEvent.click(aviso);
-    expect(await screen.findByText("Rueda de prensa")).toBeInTheDocument();
-  });
-
-  it("LO MÍO HOY: una cobertura del usuario, de hoy, aparece bajo «Lo mío hoy»", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({
-      rotaEventos: {
-        eventos: [
-          { id: "ev2", titulo: "Partido España", fecha: "2026-06-15", hora: "20:00", tipo_cobertura: "transmision", prioridad: "media", cambiado: false },
-        ],
-      },
-      contenido: {
-        contenidos: [
-          { id: "t1", clase: "tarea", evento_id: "ev2", titulo: "Partido España", responsable_id: "u1", responsable_nombre: "yo", fecha_objetivo: "2026-06-15", hora_objetivo: "20:00", estado: "pendiente", formato: "video" },
-        ],
-        catalogos: { usuarios: [{ id: "u1", usuario: "yo" }] },
-      },
-      listarTurnos: { turnos: [], aprobada: false, franjas: [] },
-    });
-    fireEvent.click(
-      within(await screen.findByRole("navigation", { name: "Secciones" })).getByRole("button", {
-        name: "Hoy",
-      }),
-    );
-    const seccion = (await screen.findByRole("heading", { name: /Lo mío hoy/ })).closest("section")!;
-    expect(within(seccion).getByText("Partido España")).toBeInTheDocument();
-  });
-});
-
 describe("Turnos — Calendario: gating de coordinador", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -399,8 +285,8 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(within(nav).queryByRole("button", { name: "Gestión" })).toBeNull();
     // Gestión es admin-only; el trabajador conserva su pestaña para pedir/responder cambios y ausencias.
     expect(within(nav).getByRole("button", { name: /Cambios y ausencias/ })).toBeInTheDocument();
-    // Trabajador: Horario · Hoy · Cambios y ausencias (el trabajo salió a su propio destino).
-    expect(within(nav).getAllByRole("button")).toHaveLength(3);
+    // Trabajador: Horario · Cambios y ausencias (sin «Hoy»; el trabajo salió a su propio destino).
+    expect(within(nav).getAllByRole("button")).toHaveLength(2);
   });
 
   it("«Gestión» abre en el calendario MENSUAL del equipo (overview); el conmutador lo marca", async () => {
@@ -454,10 +340,10 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.queryByText("Franja")).toBeNull();
   });
 
-  it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {
+  it("deep-link ?tab=gestion para un no-admin cae en «Horario»", async () => {
     renderRotaConTab("gestion", { rol: "editor" });
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
-    expect(within(nav).getByRole("button", { name: "Hoy" })).toHaveAttribute(
+    expect(within(nav).getByRole("button", { name: "Horario" })).toHaveAttribute(
       "aria-current",
       "page",
     );
