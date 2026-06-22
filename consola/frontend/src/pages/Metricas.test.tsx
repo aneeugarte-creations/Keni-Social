@@ -24,6 +24,7 @@ import * as apiMod from "@/lib/api";
 import type { OpcionesMetricas, ReporteMetricas } from "@/types";
 
 import Metricas from "./Metricas";
+import { useVistaConfig } from "./metricas/vistaConfig";
 
 // ── Stubs de los hijos pesados (queries/gráficas propias) ────────────────────
 
@@ -122,6 +123,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // La config de vista es un singleton global: restáurala para no contaminar otros tests.
+  useVistaConfig.getState().reset();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -133,6 +136,15 @@ describe("Metricas · cuerpo del dashboard", () => {
     expect(await screen.findByText("Por marca")).toBeInTheDocument();
     expect(screen.queryByText("Corte de prueba (1–7 jun)")).not.toBeInTheDocument();
     expect(screen.queryByText(/datos de muestra/i)).not.toBeInTheDocument();
+  });
+
+  it("oculta una sección cuando la config la marca como no visible", async () => {
+    useVistaConfig.getState().setSeccionVisible("por-marca", false);
+    renderMetricas();
+
+    // El resto del dashboard sigue ahí; solo desaparece la sección oculta y su encabezado.
+    expect(await screen.findByText("Por red")).toBeInTheDocument();
+    expect(screen.queryByText("Por marca")).not.toBeInTheDocument();
   });
 });
 
