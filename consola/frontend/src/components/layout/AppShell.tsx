@@ -69,9 +69,10 @@ export function AppShell() {
   }, [colapsado]);
   const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
 
-  // Huecos de la barra de cabecera unificada (`EncabezadoSeccion`, dentro del topbar):
-  // inicio (título de página plana) y acciones (menú "⋮"). Las páginas portalizan ahí su
-  // título/acciones vía contexto, así caen siempre en la misma barra y quedan alineados.
+  // Huecos de la barra superior que las páginas rellenan por portal (vía contexto): inicio
+  // (título de página plana, junto a las pestañas en `EncabezadoSeccion`) y acciones (el menú
+  // "⋮" y demás controles, en el flanco derecho de la barra, antes del contexto global). Así
+  // caen siempre en la misma barra y quedan alineados.
   // El header siempre está presente (con su propio borde), así que su visibilidad no depende
   // de contar títulos; `registrarTitulo` es un no-op estable que mantiene el contrato de
   // `<TituloPagina/>`.
@@ -197,12 +198,26 @@ export function AppShell() {
             </>
           ) : (
             <>
-              <EncabezadoSeccion refInicio={setSlotInicio} refAcciones={setSlotAcciones} />
+              {/* La cabecera de sección (pestañas/título) ocupa la IZQUIERDA y CRECE para empujar
+                  el flanco derecho a la esquina. */}
+              <div className="flex h-full min-w-0 flex-1 items-center">
+                <EncabezadoSeccion refInicio={setSlotInicio} />
+              </div>
 
-              {/* A la derecha de la topbar: el control de CONTEXTO unificado (marca + red + línea
-                  en un solo dropdown; los filtros de red/línea solo se ofrecen en sus rutas) y las
-                  notificaciones. */}
-              <div className="ml-auto flex items-center gap-2">
+              {/* Flanco derecho, de dentro hacia la esquina: las ACCIONES de la página que ésta
+                  portalice (el menú "⋮", los controles de la máquina…) y, pegado al borde, el
+                  contexto GLOBAL persistente (marca + red + línea en un dropdown; los filtros de
+                  red/línea solo en sus rutas) + las notificaciones. Sacar las acciones aquí, lejos
+                  de las pestañas, evita que el "⋮" caiga en el camino de lectura de la navegación. */}
+              <div className="flex items-center gap-2">
+                <div ref={setSlotAcciones} className="peer flex min-w-0 items-center gap-1 empty:hidden" />
+                {/* Hairline entre las acciones de SECCIÓN y el contexto GLOBAL: marca el límite de
+                    grupo sin añadir otra medida de gap. Solo cuando hay acciones (el `peer` no está
+                    vacío) y en escritorio. */}
+                <div
+                  aria-hidden
+                  className="hidden h-5 w-px bg-[hsl(var(--foreground)/0.15)] md:peer-[:not(:empty)]:block"
+                />
                 <ControlContexto />
                 <CampanaNotificaciones />
               </div>

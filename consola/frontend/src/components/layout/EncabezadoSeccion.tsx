@@ -7,28 +7,24 @@ import { SelectorSeccion } from "@/components/layout/SelectorSeccion";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 
 /**
- * Cabecera de sección UNIFICADA, dentro de la barra superior, a la izquierda del control de
- * marca/filtros y las notificaciones. Tres zonas contiguas:
+ * Cabecera de sección UNIFICADA, dentro de la barra superior, a la izquierda del flanco derecho
+ * (acciones de página + control de marca/filtros + notificaciones). Dos zonas contiguas:
  *   - SECCIÓN: si la ruta cae en un hub con 2+ pestañas, se pinta de DOS formas según el ancho:
  *       · ESCRITORIO (`md+`): la tira de pestañas horizontal de siempre (la activa muerde el
  *         borde inferior del header).
  *       · MÓVIL (`<md`): un DROPDOWN compacto (`SelectorSeccion`), que no ocupa una fila entera.
  *   - Hueco de TÍTULO: si es una página plana, su `<TituloPagina/>` se portaliza aquí.
  *     (Hub y título son excluyentes por diseño.)
- *   - Hueco de ACCIONES: el menú "⋮" (vertical) o los controles que la página portalice, JUNTO
- *     a la sección/título.
  *
- * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`).
- * `refAcciones` es OPCIONAL: en las rutas del editor el AppShell coloca el hueco de acciones
- * en un carril CENTRADO de la barra (patrón Canva) en vez de junto al título; entonces esta
- * cabecera no pinta su hueco propio.
+ * El hueco de TÍTULO lo entrega el `AppShell` por contexto (ref `refInicio`). Las ACCIONES de la
+ * página (el menú "⋮", los controles de la máquina…) NO viven aquí: el AppShell las portaliza en
+ * el flanco derecho de la barra, separadas de las pestañas para que el "⋮" no caiga en el camino
+ * de lectura de la navegación ni compita con ella.
  */
 export function EncabezadoSeccion({
   refInicio,
-  refAcciones,
 }: {
   refInicio: (el: HTMLElement | null) => void;
-  refAcciones?: (el: HTMLElement | null) => void;
 }) {
   const { pathname } = useLocation();
   const { marcaActiva, marcaActivaEsNoticias, etiquetaInvestigacion } = useMarcaActiva();
@@ -77,10 +73,6 @@ export function EncabezadoSeccion({
           deja ENCOGER el hueco en móvil para que el `truncate` del título actúe (sin esto
           el control de marca de la derecha lo pisaba). */}
       <div ref={refInicio} className="flex min-w-0 items-center" />
-
-      {/* Hueco de acciones, JUNTO a la sección/título (portal). En el editor no se pinta:
-          el AppShell ofrece el carril centrado en su lugar. */}
-      {refAcciones && <div ref={refAcciones} className="flex min-w-0 items-center" />}
     </nav>
   );
 }

@@ -68,7 +68,10 @@ export function MenuAcciones({
       {abierto && (
         <div
           role="menu"
-          className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+          // El "⋮" vive en el flanco DERECHO de la barra (escritorio): el panel se ancla a su
+          // borde derecho y crece hacia dentro para no salirse del viewport. En móvil el "⋮" cae
+          // a la izquierda de su fila propia, así que ahí abre alineado a la izquierda.
+          className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md md:left-auto md:right-0"
           onClick={() => setAbierto(false)}
         >
           {ajustes && (
