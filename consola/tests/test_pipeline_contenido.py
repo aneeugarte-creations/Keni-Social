@@ -899,6 +899,101 @@ def test_promover_usa_titulo_es_del_cluster_traducido(entorno, monkeypatch):
     assert "Fed decision shakes" not in (temas[0].get("descripcion") or "")[:80]  # la nota arranca en ES
 
 
+def test_texto_es_extranjero_distingue_ingles_de_espanol():
+    """El detector mira el TEXTO real, no el metadato: inglés -> True, español/ambiguo -> False."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    assert _admitir._texto_es_extranjero("Markets tumble as the Fed signals higher rates") is True
+    assert _admitir._texto_es_extranjero("El gobierno de México anuncia medidas de seguridad") is False
+    assert _admitir._texto_es_extranjero("") is False  # sin señal: no se fuerza traducción
+
+
+def test_falta_traduccion_idioma_vacio_decide_por_texto():
+    """Con `idioma` vacío, `_falta_traduccion` decide por el TEXTO del título (Hueco A): un titular
+    en inglés sin idioma queda pendiente; uno en español no bloquea."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    assert _admitir._falta_traduccion(
+        {"idioma": "", "titulo": "Tribes decry the New Mexico rule on newborns", "traducido": 0}
+    ) is True
+    assert _admitir._falta_traduccion(
+        {"idioma": "", "titulo": "El gobierno anuncia nuevas medidas en la capital", "traducido": 0}
+    ) is False
+
+
+def test_crear_tema_tropicaliza_titulo_ingles_con_idioma_vacio(entorno, monkeypatch):
+    """RED DE SEGURIDAD (Hueco A): un cluster con título en INGLÉS e `idioma` vacío y sin `titulo_es`
+    se tropicaliza EN EL ACTO al materializar el tema — el feed nunca recibe el título en inglés."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    # La traducción real (Haiku) se mockea: devuelve la tropicalización a ES MX.
+    monkeypatch.setattr(
+        _admitir, "traducir_par_ahora",
+        lambda titulo, resumen: ("Los niños indígenas pertenecen a sus comunidades", "Resumen en español"),
+    )
+    cluster = _inicializar_cluster(
+        "en-vacio",
+        titulo="Tribes decry the New Mexico rule on drug-exposed newborns in Native communities",
+        idioma="", titulo_es="", score=0.7,
+    )
+
+    tema = pc.crear_tema_de_cluster(cluster, [], claves_vistas=set())
+
+    assert tema is not None
+    assert tema["titulo"] == "Los niños indígenas pertenecen a sus comunidades"  # ES, no inglés
+    # La traducción se PERSISTE en el cluster (mismo destino que el paso Traducir del daemon).
+    assert repos.obtener_noticia_cluster("en-vacio")["titulo_es"] == "Los niños indígenas pertenecen a sus comunidades"
+
+
+def test_crear_tema_tropicaliza_titulo_ingles_mal_etiquetado_es(entorno, monkeypatch):
+    """RED DE SEGURIDAD (Hueco B): un titular en INGLÉS mal etiquetado `idioma='es'` (override de
+    preset) también se tropicaliza al materializar — la decisión es por TEXTO, no por metadato."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(
+        _admitir, "traducir_par_ahora",
+        lambda titulo, resumen: ("Los mercados caen tras la señal de la Fed", "Resumen"),
+    )
+    cluster = _inicializar_cluster(
+        "es-malo",
+        titulo="Markets tumble as the Fed signals higher rates for longer",
+        idioma="es", titulo_es="", score=0.7,
+    )
+
+    tema = pc.crear_tema_de_cluster(cluster, [], claves_vistas=set())
+
+    assert tema is not None
+    assert tema["titulo"] == "Los mercados caen tras la señal de la Fed"
+
+
+def test_crear_tema_no_traduce_titulo_ya_en_espanol(entorno, monkeypatch):
+    """Un título en español con `idioma` vacío NO dispara traducción (no se gasta Haiku en balde):
+    el texto ya es español, se usa tal cual."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    llamado = {"n": 0}
+
+    def _no_debe_traducir(titulo, resumen):
+        llamado["n"] += 1
+        return ("NO DEBERÍA", "")
+
+    monkeypatch.setattr(_admitir, "traducir_par_ahora", _no_debe_traducir)
+    cluster = _inicializar_cluster(
+        "es-ok",
+        titulo="El gobierno de México anuncia nuevas medidas de seguridad en la capital",
+        idioma="", titulo_es="", score=0.7,
+    )
+
+    tema = pc.crear_tema_de_cluster(cluster, [], claves_vistas=set())
+
+    assert tema is not None
+    assert tema["titulo"].startswith("El gobierno de México")
+    assert llamado["n"] == 0  # texto español: no se tradujo
+
+
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)

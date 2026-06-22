@@ -231,6 +231,7 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     _inicializar_cluster_idioma("en1", idioma="en")  # extranjero sin traducir -> candidato
     _inicializar_cluster_idioma("es1", idioma="es")  # español -> excluido por el NOT LIKE 'es%'
     _inicializar_cluster_idioma("en2", idioma="en", traducido=1)  # ya traducido -> excluido
+    _inicializar_cluster_idioma("sin", idioma="")  # idioma sin detectar -> candidato (Hueco A)
 
     # Ventana enorme para que el corte temporal no descarte la inicial; min_score bajo.
     candidatos = repos.clusters_extranjeros_sin_traducir(24 * 365 * 100, min_score=0.0, limite=40)
@@ -238,6 +239,7 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     assert "en1" in ids
     assert "es1" not in ids  # el `NOT LIKE 'es%'` filtra el español
     assert "en2" not in ids  # ya traducido
+    assert "sin" in ids  # idioma vacío entra a la cola: el daemon lo tropicaliza, no se cuela en inglés
 
 
 

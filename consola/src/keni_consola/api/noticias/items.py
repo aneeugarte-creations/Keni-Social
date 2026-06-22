@@ -172,18 +172,21 @@ async def usar(request: Request) -> Response:
     redes_iniciales = _redes_iniciales(datos.get("redes"))
 
     # Una noticia extranjera no baja al tablero en inglés: la traducimos EN EL ACTO a ES MX antes
-    # de crear la pieza. Si tiene HISTORIA (cluster), traducimos+persistimos ahí (Traducir opera
-    # por cluster y beneficia a toda la historia); si va suelta, traducimos su par en memoria.
+    # de crear la pieza. Es extranjera si su `idioma` lo declara O si el TEXTO del titular lo delata
+    # (esto último cubre el idioma vacío y el mal etiquetado 'es'). Si tiene HISTORIA (cluster),
+    # traducimos+persistimos ahí (Traducir opera por cluster y beneficia a toda la historia); si va
+    # suelta, traducimos su par en memoria.
     titulo_src = (item.get("titulo") or "").strip()
     resumen_src = (item.get("resumen") or "").strip()
     idioma_l = (item.get("idioma") or "").strip().lower()
-    if idioma_l and not idioma_l.startswith("es"):
-        from ...pipeline_contenido import _admitir as _pc_ingesta
+    from ...pipeline_contenido import _admitir as _pc_ingesta
 
+    extranjero = (bool(idioma_l) and not idioma_l.startswith("es")) or _pc_ingesta._texto_es_extranjero(titulo_src)
+    if extranjero:
         cid = item.get("cluster_id") or ""
         cluster = await run_in_threadpool(repos.obtener_noticia_cluster, cid) if cid else None
         if cluster is not None:
-            if _pc_ingesta._falta_traduccion(cluster):
+            if not (cluster.get("titulo_es") or "").strip():
                 cluster = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
             if cluster is None:
                 return JSONResponse(

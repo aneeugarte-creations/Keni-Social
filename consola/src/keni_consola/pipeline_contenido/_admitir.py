@@ -36,6 +36,7 @@ __all__ = [
     "_copy_pendiente_de",
     "_AVISO_SIN_LINEA",
     "_auto_etiquetar_linea",
+    "asegurar_cluster_es",
     "crear_tema_de_cluster",
     "clusters_para_promover",
     "clusters_pendientes_verificar",
@@ -195,12 +196,54 @@ def _resumen_es(cluster: dict[str, Any]) -> str:
     return (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
 
 
+# Vecinos ROMANCES con los que langdetect confunde al español en titulares cortos (suele
+# devolver it/pt/ca/gl por un titular en español de pocas palabras). Para ellos NO basta el
+# código de langdetect: se confirma con la heurística de palabras funcionales antes de tratar el
+# texto como extranjero, para no disparar una traducción es->es por una falsa detección.
+_ROMANCES_CONFUNDIBLES = frozenset({"it", "pt", "ca", "gl", "fr", "ro", "la", "oc"})
+
+
+def _texto_es_extranjero(texto: str) -> bool:
+    """True si el TEXTO está en un idioma EXTRANJERO (no español), mirando el CONTENIDO real y no
+    el metadato `idioma`: así cubre el feed/preset que no declara idioma o lo etiqueta mal como
+    'es'. Reusa los detectores existentes de `dominio.ingesta` (langdetect + heurística de
+    palabras funcionales es/en).
+
+    Conservador para no traducir español en balde: un texto vacío/sin señal NO es extranjero; si
+    las palabras funcionales ya lo ven español, tampoco; y un código romance de langdetect (it/pt/
+    ca/gl…, los que confunde con un titular corto en español) solo cuenta como extranjero si la
+    heurística de palabras lo confirma (inglés). El caso objetivo —titulares en inglés que se
+    colaban al feed— sí se marca (langdetect distingue bien en de es)."""
+    from ..dominio.ingesta import _idioma_por_palabras, detectar_idioma
+
+    t = (texto or "").strip()
+    if not t:
+        return False
+    idioma = detectar_idioma(t).strip().lower().split("-")[0]
+    if not idioma or idioma == "es":
+        return False
+    pista = _idioma_por_palabras(t).lower()
+    if pista.startswith("es"):
+        return False
+    if idioma in _ROMANCES_CONFUNDIBLES:
+        return pista.startswith("en")
+    return True
+
+
 def _falta_traduccion(cluster: dict[str, Any]) -> bool:
     """True si el cluster es de idioma EXTRANJERO y AÚN no está traducido: NO debe auto-producirse
-    (saldría en inglés). Espera a la fase Traducir, que corre con prioridad por score. Un idioma
-    vacío (sin detectar) o que empieza por `es` no bloquea."""
+    (saldría en inglés). Espera a la fase Traducir, que corre con prioridad por score.
+
+    Con `idioma` declarado se decide por el metadato (un código que empieza por `es` no bloquea).
+    Con `idioma` VACÍO (el feed no lo declara y la heurística no dio señal al archivar) se decide
+    por el TEXTO del título: un titular en inglés sin idioma queda pendiente; uno en español o sin
+    señal clara no bloquea. La red de seguridad de la materialización (`asegurar_cluster_es`)
+    resuelve el caso vacío traduciéndolo en el acto, así que esto nunca crea un punto muerto."""
     idioma = (cluster.get("idioma") or "").strip().lower()
-    es_extranjero = bool(idioma) and not idioma.startswith("es")
+    if idioma:
+        es_extranjero = not idioma.startswith("es")
+    else:
+        es_extranjero = _texto_es_extranjero(cluster.get("titulo") or "")
     return es_extranjero and not bool(cluster.get("traducido"))
 
 
@@ -238,6 +281,25 @@ def traducir_cluster_ahora(cluster: dict[str, Any]) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 -- persistir no debe tumbar el "usar"; ya está traducido en memoria
         _log.exception("traducir_cluster_ahora: no se pudo persistir la traducción de %s", cid)
     return {**cluster, "titulo_es": titulo_es, "resumen_es": resumen_es, "traducido": 1}
+
+
+def asegurar_cluster_es(cluster: dict[str, Any]) -> dict[str, Any]:
+    """RED DE SEGURIDAD de la materialización: devuelve el cluster con título/resumen GARANTIZADOS
+    en español antes de fijar el título de un tema. Decide por el TEXTO del título, no por el
+    metadato `idioma`, así cubre los dos huecos por los que se colaba el inglés al feed: el
+    `idioma` vacío (fuera de la cola de Traducir) y el mal etiquetado 'es' por un preset de fuente.
+
+    Si ya hay `titulo_es`, o el texto original ya es español (o ambiguo), devuelve el cluster sin
+    tocar. Si el texto es extranjero y no hay traducción, la dispara EN EL ACTO (`traducir_cluster_ahora`,
+    Haiku) y devuelve el cluster ya en ES; si la traducción falla, devuelve el original (no bloquea
+    la materialización: el título caerá al original, pero el caso se reintenta en barridos siguientes).
+    BLOQUEANTE (subproceso): el llamante async debe envolverlo en un threadpool."""
+    if (cluster.get("titulo_es") or "").strip():
+        return cluster
+    if not _texto_es_extranjero(cluster.get("titulo") or ""):
+        return cluster
+    traducido = traducir_cluster_ahora(cluster)
+    return traducido if traducido is not None else cluster
 
 
 def clusters_para_promover(
@@ -551,6 +613,9 @@ def crear_tema_de_cluster(
     marca = (cluster.get("marca") or "").strip()
     if not marca or not marcas.es_marca(marca):
         return None
+    # RED DE SEGURIDAD: el título del tema sale al feed; tropicaliza en el acto si el TEXTO sigue en
+    # idioma extranjero (idioma vacío o mal etiquetado 'es'), para que nunca se materialice en inglés.
+    cluster = asegurar_cluster_es(cluster)
     titulo = _titulo_es(cluster)
     if not titulo and items:
         titulo = ((items[0].get("titulo") or items[0].get("url")) or "").strip()
@@ -681,6 +746,9 @@ def _crear_carrusel_de_familia(
     familia_con_items: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
     cuerpos_por_cluster: dict[str, dict[str, str]] = {}
     for c in familia:
+        # RED DE SEGURIDAD: cada sub-historia aporta su título a la nota del carrusel; si el TEXTO
+        # sigue en idioma extranjero, se tropicaliza en el acto para que la nota no arranque en inglés.
+        c = asegurar_cluster_es(c)
         cid_f = c.get("id") or ""
         items_f = repos.items_de_cluster(cid_f, limite=_MAX_ENLACES_CLUSTER)
         familia_con_items.append((c, items_f))

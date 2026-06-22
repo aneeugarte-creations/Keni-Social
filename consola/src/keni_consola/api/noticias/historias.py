@@ -675,7 +675,13 @@ async def usar_historia(request: Request) -> Response:
 
     # Una historia extranjera aún sin traducir NO baja al tablero en inglés: la traducimos EN EL
     # ACTO (y la persistimos) antes de crear la pieza, en vez de esperar al barrido del daemon.
-    if _pc_ingesta._falta_traduccion(cluster):
+    # Es extranjera si su `idioma` lo declara O si el TEXTO del título lo delata (cubre el idioma
+    # vacío y el mal etiquetado 'es'). Sin `titulo_es` aún -> hay que traducir.
+    idioma_l = (cluster.get("idioma") or "").strip().lower()
+    extranjera = (bool(idioma_l) and not idioma_l.startswith("es")) or _pc_ingesta._texto_es_extranjero(
+        cluster.get("titulo") or ""
+    )
+    if not (cluster.get("titulo_es") or "").strip() and extranjera:
         traducido = await run_in_threadpool(_pc_ingesta.traducir_cluster_ahora, cluster)
         if traducido is None:
             return JSONResponse(

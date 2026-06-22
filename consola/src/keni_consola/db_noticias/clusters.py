@@ -388,22 +388,24 @@ def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[st
 def clusters_extranjeros_sin_traducir(
     ventana_h: int, *, min_score: float = 0.0, limite: int = 40
 ) -> list[dict[str, Any]]:
-    """Clusters EXTRANJEROS recientes aún sin traducir (Ola D), para el paso de traducir.
+    """Clusters EXTRANJEROS (o sin idioma detectado) recientes aún sin traducir (Ola D), para el paso de traducir.
 
-    Selecciona clusters con `traducido = 0`, `idioma` no vacío y distinto de español
-    (no empieza por 'es'), `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado
-    distinto de `descartado`. MÁS RELEVANTES primero (`score DESC`), `limite` acota el lote por
-    barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
+    Selecciona clusters con `traducido = 0`, `idioma` VACÍO o distinto de español (no empieza por
+    'es'), `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado distinto de
+    `descartado`. Incluir el idioma vacío cierra el hueco por el que un titular en inglés sin idioma
+    declarado se quedaba fuera de la cola y se materializaba en inglés; una rara historia en español
+    sin idioma se re-tropicaliza a MX (inocuo). MÁS RELEVANTES primero (`score DESC`), `limite` acota
+    el lote por barrido (el backlog se procesa en barridos sucesivos; sin tope artificial). PURA salvo I/O.
     """
     corte = iso_utc(datetime.now(UTC) - timedelta(hours=max(1, int(ventana_h))))
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 AND idioma <> '' "
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE traducido = 0 "
             # `es%%`: el `%` literal va DOBLADO porque psycopg interpreta `%` como inicio de
             # placeholder (el shim `?`->`%s` no escapa los `%` del SQL). En Postgres `%%`->`%`
             # (un comodín LIKE); en SQLite `%%` son dos comodines contiguos (equivalentes a uno).
-            "AND idioma NOT LIKE 'es%%' AND score >= ? AND ultimo_visto >= ? "
+            "AND (idioma = '' OR idioma NOT LIKE 'es%%') AND score >= ? AND ultimo_visto >= ? "
             "AND estado <> 'descartado' "
             "ORDER BY score DESC, ultimo_visto DESC LIMIT ?",
             (float(min_score), corte, max(1, int(limite))),
