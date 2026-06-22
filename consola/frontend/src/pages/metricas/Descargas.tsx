@@ -1,32 +1,30 @@
 /**
- * Descargas del dashboard de Métricas: DOS acciones, CSV y PDF presentación.
+ * Descargas del dashboard de Métricas: DOS comandos del menú "⋮" de la página, CSV y PDF.
  *
- *   - "CSV": TODO lo que está en pantalla volcado a un único CSV (KPIs, por marca, por red,
- *     cobertura, tendencia, seguidores, desglose, cruces, correlación, líneas, publicidad y
- *     las listas de piezas), leído de las queries ACTIVAS de la caché de React Query con el
- *     filtro de marca/red/periodo ya aplicado. Ver `exportarCsv.ts`.
- *   - "PDF": un deck 16:9 "presentación" generado en el navegador a partir del ESTADO VIVO
- *     de la página, capturando los bloques `[data-slide]` del cuerpo. Ver `exportarPdf.ts`.
+ *   - "Descargar CSV": TODO lo que está en pantalla volcado a un único CSV (KPIs, por marca,
+ *     por red, cobertura, tendencia, seguidores, desglose, cruces, correlación, líneas,
+ *     publicidad y las listas de piezas), leído de las queries ACTIVAS de la caché de React
+ *     Query con el filtro de marca/red/periodo ya aplicado. Ver `exportarCsv.ts`.
+ *   - "Descargar PDF (presentación)": maqueta el dashboard como deck horizontal y abre
+ *     "Guardar como PDF" del navegador (motor de impresión nativo: gráficas vectoriales,
+ *     idéntico a pantalla, sin rasterizar). Ver `exportarPdf.ts`.
  *
- * Reemplaza al antiguo menú de 6 formatos (reporte/piezas × csv/md/json): el equipo de AMX
- * solo necesita un CSV completo para hojas de cálculo y un PDF listo para presentar a dirección.
+ * Viven en el "⋮" (no como botones sueltos) para no saturar la barra superior: la cabecera
+ * deja sitio a los FILTROS (periodo, red) y a Configurar vista / Vistas guardadas.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, Loader2, Presentation } from "lucide-react";
-import * as React from "react";
+import { FileSpreadsheet, Presentation } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { ItemMenu } from "@/components/layout/MenuAcciones";
 
 import { construirCsvCompleto, descargarTexto } from "./exportarCsv";
-import { exportarPresentacion } from "./exportarPdf";
+import { imprimirPresentacion } from "./exportarPdf";
 
-interface BotonesDescargaProps {
+interface ItemsDescargaProps {
   rango: string;
   /** `undefined` cuando está seleccionada la opción "Todas las marcas". */
   marca?: string;
-  /** Red en foco (id de plataforma), o `undefined` cuando son "Todas las redes". */
-  red?: string;
   /** Etiqueta legible de la marca activa (o "Todas las marcas"). */
   marcaEtiqueta: string;
   /** Etiqueta legible de la red activa (o "Todas las redes"). */
@@ -47,30 +45,18 @@ function slug(texto: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-/** Los dos botones de descarga (CSV + PDF) para la barra de acciones de la página. */
-export function BotonesDescarga({
+/** Comandos de descarga (CSV + PDF) para meter DENTRO de un `<MenuAcciones/>`. */
+export function ItemsDescarga({
   rango,
   marca,
   marcaEtiqueta,
   redEtiqueta,
   periodoEtiqueta,
   generadoEn,
-}: BotonesDescargaProps) {
-  const [generandoPdf, setGenerandoPdf] = React.useState(false);
+}: ItemsDescargaProps) {
   const qc = useQueryClient();
 
-  const nombreArchivo = React.useMemo(
-    () =>
-      [marca ?? "todas", redEtiqueta, rango]
-        .map((p) => slug(String(p)))
-        .filter(Boolean)
-        .join("-"),
-    [marca, redEtiqueta, rango],
-  );
-
-  // CSV completo: vuelca las queries ACTIVAS de métricas (= las secciones montadas en
-  // pantalla), con el filtro de marca/red/periodo ya aplicado. Síncrono y al instante.
-  const descargarCsv = React.useCallback(() => {
+  const descargarCsv = () => {
     const entradas = qc.getQueriesData({ queryKey: ["metricas"], type: "active" }) as Array<
       [readonly unknown[], unknown]
     >;
@@ -85,59 +71,32 @@ export function BotonesDescarga({
       periodo: periodoEtiqueta,
       generadoEn,
     });
-    descargarTexto(`analiticas-${nombreArchivo}.csv`, csv, "text/csv;charset=utf-8");
+    const nombre = [marca ?? "todas", redEtiqueta, rango].map(slug).filter(Boolean).join("-");
+    descargarTexto(`analiticas-${nombre}.csv`, csv, "text/csv;charset=utf-8");
     toast.success("CSV completo descargado.");
-  }, [qc, marcaEtiqueta, redEtiqueta, periodoEtiqueta, generadoEn, nombreArchivo]);
+  };
 
-  const descargarPdf = React.useCallback(async () => {
-    const raiz = document.querySelector<HTMLElement>("[data-deck-root]");
-    if (!raiz) {
-      toast.error("No se encontró el contenido del dashboard.");
-      return;
-    }
-    setGenerandoPdf(true);
+  const exportarPdf = () => {
     try {
-      await exportarPresentacion({
-        raiz,
+      imprimirPresentacion({
         marca: marcaEtiqueta,
         red: redEtiqueta,
         periodo: periodoEtiqueta,
         generadoEn,
-        nombreArchivo,
       });
-      toast.success("PDF de presentación generado.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF.");
-    } finally {
-      setGenerandoPdf(false);
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar el PDF.");
     }
-  }, [marcaEtiqueta, redEtiqueta, periodoEtiqueta, generadoEn, nombreArchivo]);
+  };
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1.5 text-xs"
-        onClick={descargarCsv}
-      >
-        <FileSpreadsheet className="h-4 w-4" />
-        CSV
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 gap-1.5 text-xs"
-        onClick={() => void descargarPdf()}
-        disabled={generandoPdf}
-      >
-        {generandoPdf ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Presentation className="h-4 w-4" />
-        )}
-        PDF
-      </Button>
+      <ItemMenu icono={FileSpreadsheet} onClick={descargarCsv}>
+        Descargar CSV (todo)
+      </ItemMenu>
+      <ItemMenu icono={Presentation} onClick={exportarPdf}>
+        Descargar PDF (presentación)
+      </ItemMenu>
     </>
   );
 }

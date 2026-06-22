@@ -1,15 +1,17 @@
 /**
- * Exportación del dashboard de Métricas a un PDF "presentación" (deck 16:9).
+ * Exportación del dashboard de Métricas a PDF "presentación" (deck horizontal).
  *
- * No re-renderiza nada: captura los bloques YA pintados de la página (los nodos con
- * `data-slide` dentro del contenedor `data-deck-root`), de modo que el PDF refleja el
- * ESTADO VIVO —marca, periodo, red, filtros y orden de columnas aplicados—. Cada bloque
- * es una diapositiva: portada y bandas de título van en vectorial (texto nítido); el
- * contenido del bloque se rasteriza con html2canvas y se encaja en la diapositiva
- * conservando su proporción. Los colores (fondo/texto) se leen del tema vivo para que el
- * deck se sienta idéntico a la página en claro y en oscuro.
+ * Usa el MOTOR DE IMPRESIÓN del navegador (Chromium): `window.print()` con una hoja de
+ * estilo de impresión que aísla el cuerpo del dashboard, lo maqueta como diapositivas
+ * (una por bloque `[data-slide]`) en horizontal y le antepone una portada. Frente a
+ * rasterizar el DOM (html2canvas), esto:
+ *   - conserva las GRÁFICAS como vectores nítidos e idénticos a la pantalla,
+ *   - no corre render en JS en el hilo principal → no satura memoria ni "explota",
+ *   - es instantáneo (lo hace el navegador) y el usuario guarda como PDF.
+ *
+ * El PDF refleja el ESTADO VIVO (marca, red, periodo, filtros y orden de columnas), porque
+ * imprime lo que está pintado. La portada recibe las etiquetas legibles.
  */
-import { COLOR_RED } from "./coloresRed";
 import { diasDePeriodo, partesMes, partesRango } from "./rango";
 import type { RangoMetrica } from "@/types";
 
@@ -30,32 +32,54 @@ export function etiquetaPeriodo(token: string, rangos: RangoMetrica[]): string {
   return dias != null ? `Últimos ${dias} días` : token;
 }
 
+const CLASE_IMPRESION = "keni-imprimiendo-metricas";
+const ID_ESTILO = "keni-estilo-impresion-metricas";
+const ID_PORTADA = "keni-portada-impresion";
+
 interface OpcionesDeck {
-  /** Contenedor con los nodos `[data-slide]` a capturar (el cuerpo del dashboard). */
-  raiz: HTMLElement;
-  /** Etiqueta de marca (o "Todas las marcas"). */
   marca: string;
-  /** Etiqueta de red (o "Todas las redes"). */
   red: string;
-  /** Etiqueta del periodo. */
   periodo: string;
-  /** ISO de generación del reporte, si lo hay. */
   generadoEn?: string;
-  /** Sufijo del nombre de archivo (marca/red/periodo ya normalizados). */
-  nombreArchivo: string;
 }
 
-/** Parse de un `rgb(r, g, b)` / `rgba(...)` a triplete. Cae a negro si no parsea. */
-function aRgb(color: string): [number, number, number] {
-  const m = color.match(/(\d+(?:\.\d+)?)/g);
-  if (!m || m.length < 3) return [0, 0, 0];
-  return [Number(m[0]), Number(m[1]), Number(m[2])];
+/** Hoja de estilo de impresión: aísla el deck, lo pagina por diapositivas y lo pone horizontal. */
+function cssImpresion(): string {
+  return `
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  /* Aísla el cuerpo del dashboard: oculta el chrome de la app, deja solo el deck. */
+  body.${CLASE_IMPRESION} * { visibility: hidden !important; }
+  body.${CLASE_IMPRESION} #${ID_PORTADA},
+  body.${CLASE_IMPRESION} #${ID_PORTADA} *,
+  body.${CLASE_IMPRESION} [data-deck-root],
+  body.${CLASE_IMPRESION} [data-deck-root] * { visibility: visible !important; }
+  body.${CLASE_IMPRESION} [data-deck-root] {
+    position: absolute !important; left: 0; top: 0; width: 100% !important;
+    margin: 0 !important; padding: 0 !important;
+  }
+  /* Una diapositiva por bloque marcado; nunca se parte a mitad. */
+  body.${CLASE_IMPRESION} [data-slide] {
+    break-before: page; break-inside: avoid; padding-top: 6mm;
+  }
+  body.${CLASE_IMPRESION} [data-slide]::before {
+    content: attr(data-slide);
+    display: block; font-weight: 700; font-size: 15pt; margin: 0 0 6pt;
+  }
+  /* Imprime fondos y colores tal cual (no los descarta el navegador). */
+  body.${CLASE_IMPRESION} * {
+    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  }
+}
+`;
 }
 
-/** Color de acento del deck: el de la red elegida, o violeta neutro si son todas. */
-function acento(red: string): [number, number, number] {
-  const id = Object.keys(COLOR_RED).find((k) => red.toLowerCase().includes(k));
-  return aRgb(id ? COLOR_RED[id] : "#a855f7");
+function inyectarEstilo(): void {
+  if (document.getElementById(ID_ESTILO)) return;
+  const el = document.createElement("style");
+  el.id = ID_ESTILO;
+  el.textContent = cssImpresion();
+  document.head.appendChild(el);
 }
 
 function fechaLegible(iso?: string): string {
@@ -67,136 +91,53 @@ function fechaLegible(iso?: string): string {
   });
 }
 
-/**
- * Genera y descarga el PDF presentación. Lanza si no hay diapositivas que capturar.
- * Devuelve el nombre del archivo generado.
- */
-export async function exportarPresentacion(opts: OpcionesDeck): Promise<string> {
-  const nodos = Array.from(
-    opts.raiz.querySelectorAll<HTMLElement>("[data-slide]"),
-  ).filter((n) => n.offsetWidth > 0 && n.offsetHeight > 0);
-  if (nodos.length === 0) throw new Error("No hay contenido visible para exportar.");
-
-  // Carga diferida: jspdf + html2canvas son pesados y solo hacen falta al exportar, así que
-  // no lastran el bundle de la página de métricas (van a su propio chunk bajo demanda).
-  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-    import("html2canvas"),
-    import("jspdf"),
-  ]);
-
-  const estiloBody = getComputedStyle(document.body);
-  const fondo = aRgb(estiloBody.backgroundColor);
-  const texto = aRgb(estiloBody.color);
-  const tenue: [number, number, number] = [
-    Math.round((fondo[0] + texto[0]) / 2),
-    Math.round((fondo[1] + texto[1]) / 2),
-    Math.round((fondo[2] + texto[2]) / 2),
-  ];
-  const ac = acento(opts.red);
-
-  const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [1280, 720] });
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-  const M = 48; // margen
-  const fondoHex = fondo;
-
-  const pintarFondo = () => {
-    doc.setFillColor(fondoHex[0], fondoHex[1], fondoHex[2]);
-    doc.rect(0, 0, W, H, "F");
-  };
-
-  // --- Portada (vectorial) ---
-  pintarFondo();
-  doc.setFillColor(ac[0], ac[1], ac[2]);
-  doc.rect(M, H / 2 - 84, 6, 168, "F"); // barra de acento
-  doc.setTextColor(texto[0], texto[1], texto[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(54);
-  doc.text(opts.marca, M + 28, H / 2 - 28);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(24);
-  doc.setTextColor(tenue[0], tenue[1], tenue[2]);
-  doc.text(`${opts.red}  ·  ${opts.periodo}`, M + 28, H / 2 + 14);
-  doc.setFontSize(14);
+/** Crea la portada (primera diapositiva), con los colores del tema vivo. */
+function crearPortada(raiz: HTMLElement, opts: OpcionesDeck): HTMLElement {
+  const estilo = getComputedStyle(document.body);
+  const portada = document.createElement("div");
+  portada.id = ID_PORTADA;
+  portada.style.cssText = [
+    "break-after: page",
+    "padding: 24mm 0 0",
+    `color: ${estilo.color}`,
+    "font-family: inherit",
+  ].join(";");
   const pie = ["Keni Social — Analíticas", fechaLegible(opts.generadoEn)]
     .filter(Boolean)
     .join("  ·  ");
-  doc.text(pie, M + 28, H / 2 + 56);
+  portada.innerHTML = `
+    <div style="border-left:6px solid currentColor;padding-left:16px;opacity:.95">
+      <div style="font-size:34pt;font-weight:800;line-height:1.1">${opts.marca}</div>
+      <div style="font-size:16pt;margin-top:8px;opacity:.75">${opts.red}  ·  ${opts.periodo}</div>
+      <div style="font-size:10pt;margin-top:16px;opacity:.6">${pie}</div>
+    </div>`;
+  raiz.insertBefore(portada, raiz.firstChild);
+  return portada;
+}
 
-  // --- Diapositivas de contenido (rasterizadas) ---
-  // Límites de canvas del navegador: superarlos cuelga la pestaña o devuelve un canvas
-  // vacío. Acotamos la escala de captura por dimensión y por área para que NINGÚN bloque
-  // (p. ej. una tabla virtualizada muy alta) genere un canvas inviable.
-  const MAX_DIM = 8000;
-  const MAX_AREA = 20_000_000;
-  const fondoCss = estiloBody.backgroundColor;
-  let paginas = 0;
-  for (const nodo of nodos) {
-    const titulo = nodo.getAttribute("data-slide") || "";
-    let canvas: HTMLCanvasElement;
-    try {
-      const w0 = nodo.scrollWidth || nodo.offsetWidth || 1;
-      const h0 = nodo.scrollHeight || nodo.offsetHeight || 1;
-      let escalaCaptura = 2;
-      escalaCaptura = Math.min(escalaCaptura, MAX_DIM / Math.max(w0, h0));
-      escalaCaptura = Math.min(escalaCaptura, Math.sqrt(MAX_AREA / (w0 * h0)));
-      escalaCaptura = Math.max(0.4, Math.min(2, escalaCaptura));
-      canvas = await html2canvas(nodo, {
-        scale: escalaCaptura,
-        backgroundColor: fondoCss,
-        useCORS: true,
-        // Nunca esperar indefinidamente por una imagen (cross-origin sin CORS colgaría).
-        imageTimeout: 5000,
-        logging: false,
-      });
-    } catch {
-      // Un bloque problemático NO debe abortar todo el PDF: se omite y se sigue.
-      continue;
-    }
-    if (!canvas.width || !canvas.height) continue;
+/**
+ * Abre el diálogo "Guardar como PDF" del navegador con el dashboard maquetado como deck.
+ * No descarga en silencio (eso requeriría un Chromium en servidor): el usuario elige
+ * destino. Lanza si no encuentra el cuerpo del dashboard.
+ */
+export function imprimirPresentacion(opts: OpcionesDeck): void {
+  const raiz = document.querySelector<HTMLElement>("[data-deck-root]");
+  if (!raiz) throw new Error("No se encontró el contenido del dashboard.");
 
-    doc.addPage();
-    pintarFondo();
+  inyectarEstilo();
+  const portada = crearPortada(raiz, opts);
+  document.body.classList.add(CLASE_IMPRESION);
 
-    const bandaY = M;
-    if (titulo) {
-      doc.setTextColor(texto[0], texto[1], texto[2]);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(26);
-      doc.text(titulo, M, bandaY + 12);
-      doc.setDrawColor(ac[0], ac[1], ac[2]);
-      doc.setLineWidth(3);
-      doc.line(M, bandaY + 26, M + 56, bandaY + 26);
-    }
+  const limpiar = () => {
+    document.body.classList.remove(CLASE_IMPRESION);
+    portada.remove();
+    window.removeEventListener("afterprint", limpiar);
+  };
+  window.addEventListener("afterprint", limpiar);
+  // Fallback: si `afterprint` no llega (algún navegador), limpia igualmente.
+  window.setTimeout(() => {
+    if (document.body.classList.contains(CLASE_IMPRESION)) limpiar();
+  }, 60_000);
 
-    // Área disponible bajo la banda de título.
-    const areaY = bandaY + (titulo ? 48 : 0);
-    const areaW = W - 2 * M;
-    const areaH = H - areaY - M;
-    const escala = Math.min(areaW / canvas.width, areaH / canvas.height);
-    const w = canvas.width * escala;
-    const h = canvas.height * escala;
-    const x = M + (areaW - w) / 2;
-    // JPEG (calidad alta) en vez de PNG: un canvas grande en PNG dispara el tamaño del
-    // PDF y la memoria; JPEG mantiene el archivo manejable sin pérdida perceptible.
-    doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", x, areaY, w, h, undefined, "FAST");
-    paginas++;
-
-    // Pie de página discreto.
-    doc.setTextColor(tenue[0], tenue[1], tenue[2]);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`${opts.marca} · ${opts.red} · ${opts.periodo}`, M, H - 18);
-
-    // Cede el hilo entre diapositivas: la UI respira (spinner/toast) y no se "cuelga".
-    await new Promise((r) => setTimeout(r, 0));
-  }
-
-  if (paginas === 0) {
-    throw new Error("No se pudo capturar ninguna sección para el PDF.");
-  }
-
-  const nombre = `presentacion-${opts.nombreArchivo}.pdf`;
-  doc.save(nombre);
-  return nombre;
+  window.print();
 }

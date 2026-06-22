@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BotonesDescarga } from "./Descargas";
+import { MenuAcciones } from "@/components/layout/MenuAcciones";
+
+import { ItemsDescarga } from "./Descargas";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -12,9 +14,10 @@ beforeAll(() => {
       disconnect() {}
     };
   }
-  // jsdom no implementa la creación de object URLs: la stubeamos para la descarga blob.
   URL.createObjectURL = vi.fn(() => "blob:test");
   URL.revokeObjectURL = vi.fn();
+  // jsdom no implementa print: lo stubeamos para el PDF (motor de impresión del navegador).
+  window.print = vi.fn();
 });
 
 const PROPS_BASE = {
@@ -29,45 +32,59 @@ const PROPS_BASE = {
 function ActivarReporte() {
   useQuery({
     queryKey: ["metricas", "reporte", "mes", "claro_sports"],
-    queryFn: async () => ({ total: { visualizaciones: 1000, interacciones: 50 } }),
-    // `initialData` deja el dato disponible y la query ACTIVA desde el primer render.
-    initialData: { total: { visualizaciones: 1000, interacciones: 50 } },
+    queryFn: async () => ({ total: { visualizaciones: 1000 } }),
+    initialData: { total: { visualizaciones: 1000 } },
     staleTime: Infinity,
     gcTime: Infinity,
   });
   return null;
 }
 
-function renderConCache() {
+/** Renderiza los items dentro del menú "⋮" (como en Metricas) + un deck simulado, y lo abre. */
+function renderYAbrir() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <ActivarReporte />
-      <BotonesDescarga {...PROPS_BASE} />
+      <div data-deck-root>
+        <div data-slide="Resumen">contenido</div>
+      </div>
+      <MenuAcciones>
+        <ItemsDescarga {...PROPS_BASE} />
+      </MenuAcciones>
     </QueryClientProvider>,
   );
+  fireEvent.click(screen.getByRole("button", { name: "Acciones" }));
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("BotonesDescarga (acciones de Métricas)", () => {
-  it("muestra exactamente dos botones: CSV y PDF (sin formatos antiguos)", () => {
-    renderConCache();
-    expect(screen.getByRole("button", { name: /CSV/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /PDF/ })).toBeInTheDocument();
+describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
+  it("ofrece CSV y PDF (sin formatos antiguos)", () => {
+    renderYAbrir();
+    expect(screen.getByRole("menuitem", { name: /Descargar CSV/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Descargar PDF/ })).toBeInTheDocument();
     expect(screen.queryByText(/Markdown/)).not.toBeInTheDocument();
     expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
   });
 
   it("CSV vuelca las queries activas a un archivo descargado", async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
-    renderConCache();
+    renderYAbrir();
 
-    fireEvent.click(screen.getByRole("button", { name: /CSV/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar CSV/ }));
 
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(URL.createObjectURL).toHaveBeenCalled();
+  });
+
+  it("PDF lanza la impresión del navegador", async () => {
+    renderYAbrir();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF/ }));
+
+    await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1));
   });
 });

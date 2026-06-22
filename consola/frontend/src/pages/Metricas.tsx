@@ -32,7 +32,7 @@ import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
-import { BotonesDescarga } from "./metricas/Descargas";
+import { ItemsDescarga } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { etiquetaPeriodo } from "./metricas/exportarPdf";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
@@ -239,18 +239,18 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           cambiarRango(periodo);
         }}
       />
-      {/* Descargar es una ACCIÓN global de la página: dos botones, CSV (hoja de cálculo) y
-          PDF (presentación 16:9 del estado vivo). Actualizar vive en el menú "⋮". */}
-      <BotonesDescarga
-        rango={rango}
-        marca={marca_}
-        red={red ?? undefined}
-        marcaEtiqueta={marcaEtiqueta}
-        redEtiqueta={redEtiqueta}
-        periodoEtiqueta={periodoEtiqueta}
-        generadoEn={reporteQuery.data?.generado_en}
-      />
+      {/* El "⋮" agrupa las ACCIONES (descargar CSV/PDF, actualizar) para no saturar la barra:
+          inline quedan solo los FILTROS (periodo, red) y Configurar vista / Vistas guardadas. */}
       <MenuAcciones>
+        <ItemsDescarga
+          rango={rango}
+          marca={marca_}
+          marcaEtiqueta={marcaEtiqueta}
+          redEtiqueta={redEtiqueta}
+          periodoEtiqueta={periodoEtiqueta}
+          generadoEn={reporteQuery.data?.generado_en}
+        />
+        <div role="separator" aria-orientation="horizontal" className="my-1 h-px bg-border" />
         <ItemActualizarMetricas
           actualizar={refresco.actualizar}
           deshabilitado={refresco.deshabilitado}
