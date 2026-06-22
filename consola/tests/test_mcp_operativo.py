@@ -285,7 +285,37 @@ def test_tools_registradas(entorno):
         "keni_noticias_cobertura",
         "keni_franjas", "keni_evergreen_ideas",
         "keni_algoritmos",
-        "keni_cola_estado", "keni_verificar_video",
+        "keni_cola_estado", "keni_verificar_video", "keni_verificar_estado",
+        # Generación de copy (biblioteca de prompts).
+        "keni_lanzar_copy", "keni_listar_prompts", "keni_leer_prompt",
+        "keni_prompts_editoriales", "keni_estrategia_marca", "keni_prompt_variables",
+        # Piezas (copy con historial + gestión).
+        "keni_guardar_copy", "keni_copy_versiones", "keni_revertir_copy",
+        "keni_clonar_pieza", "keni_borrar_pieza", "keni_piezas_opciones",
+        # Tablero (gestión de la pieza de contenido).
+        "keni_borrar_publicacion", "keni_asignar_publicacion", "keni_coger_publicacion",
+        "keni_soltar_publicacion", "keni_aceptar_publicacion", "keni_etiquetar_publicacion",
+        "keni_agregar_red", "keni_comentar", "keni_comentarios", "keni_deshacer_aprobacion",
+        # Noticias: mesa, historias y breaking.
+        "keni_mesa_noticias", "keni_listar_historias", "keni_detalle_historia",
+        "keni_usar_historia", "keni_descartar_historia", "keni_breaking",
+        "keni_preparar_breaking",
+        # Evergreen / sugerencias / insumos.
+        "keni_crear_evergreen", "keni_actualizar_evergreen", "keni_borrar_evergreen",
+        "keni_generar_evergreen", "keni_listar_sugerencias", "keni_crear_sugerencia",
+        "keni_detalle_sugerencia", "keni_actualizar_sugerencia", "keni_construir_sugerencia",
+        "keni_listar_insumos", "keni_insumos_dias", "keni_aportar_insumo", "keni_usar_insumo",
+        "keni_actualizar_insumo", "keni_borrar_insumo",
+        # Campañas / etiquetas / notificaciones.
+        "keni_listar_campanias", "keni_crear_campania", "keni_detalle_campania",
+        "keni_actualizar_campania", "keni_borrar_campania", "keni_listar_etiquetas",
+        "keni_crear_etiqueta", "keni_actualizar_etiqueta", "keni_borrar_etiqueta",
+        "keni_notificaciones", "keni_notificaciones_contador", "keni_marcar_notificacion",
+        "keni_marcar_todas_leidas",
+        # Rota del equipo (turnos y canjes).
+        "keni_rota_semana", "keni_mis_turnos", "keni_rota_mes", "keni_rota_cobertura",
+        "keni_listar_swaps", "keni_crear_swap", "keni_aceptar_swap", "keni_rechazar_swap",
+        "keni_cancelar_swap",
     }
     faltan = esperadas - tools
     assert not faltan, f"faltan tools: {faltan}"

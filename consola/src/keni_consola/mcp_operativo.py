@@ -163,6 +163,12 @@ class ClienteConsola:
     async def patch(self, ruta: str, cuerpo: dict | None = None) -> dict:
         return await self._request("PATCH", ruta, json=cuerpo or {})
 
+    async def put(self, ruta: str, cuerpo: dict | None = None) -> dict:
+        return await self._request("PUT", ruta, json=cuerpo or {})
+
+    async def delete(self, ruta: str) -> dict:
+        return await self._request("DELETE", ruta)
+
     async def aclose(self) -> None:
         await self._http.aclose()
 
@@ -294,13 +300,18 @@ class ServidorMcp:
             transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
             instructions=(
                 "Operación de redes sociales de keni-social (piloto AMX: UnoTV / Claro "
-                "Sports). Con estas tools puedes consultar el catálogo de marcas y redes, "
-                "crear y gestionar contenido, trabajar el pool de noticias (usar/descartar), "
-                "generar copy, verificar la voz de un texto contra los patrones medidos de "
-                "su marca, mover piezas por el flujo de aprobación (hasta aprobar/rechazar), "
-                "leer métricas (incl. líneas editoriales, comparativas y Ads) y vigilar la "
-                "cola de generación. Empieza por `keni_contexto` para conocer marcas, redes "
-                "y estados válidos."
+                "Sports). Cubre la gestión del día a día de un usuario normal: catálogo de "
+                "marcas y redes; crear/editar/gestionar contenido (asignar, coger/soltar, "
+                "etiquetar, comentar, clonar, editar copy con historial); trabajar el pool de "
+                "noticias e historias (mesa de redacción, usar/descartar) y breaking; generar "
+                "copy con la biblioteca de prompts y verificar la voz contra los patrones "
+                "medidos; ideas evergreen, sugerencias e insumos; campañas, etiquetas y "
+                "notificaciones; mover piezas por el flujo de aprobación (hasta aprobar/"
+                "rechazar/deshacer); leer métricas (incl. líneas, comparativas y Ads); y la "
+                "rota del equipo (turnos y canjes). NO cubre, a propósito: administración de "
+                "usuarios, publicar/programar real (eso es de la UI) y la edición de media "
+                "(audio, vídeo, imagen). Empieza por `keni_contexto` para conocer marcas, "
+                "redes y estados válidos."
             ),
         )
         _registrar_tools(self._mcp, self.holder)
@@ -779,3 +790,760 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.post("/api/verificar", {"enlace": enlace, "contexto": contexto})
+
+    @mcp.tool()
+    async def keni_verificar_estado() -> dict:
+        """Salud de los motores de verificación de vídeo (binarios disponibles, si puede
+        verificar, qué falta). Consúltalo antes de lanzar `keni_verificar_video`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/verificar/estado")
+
+    # ---- Generación de copy (biblioteca de prompts) --------------------- #
+
+    @mcp.tool()
+    async def keni_lanzar_copy(
+        marca: str, target_tipo: str = "contenido", target_valor: str = "",
+        prompt_id: str = "", texto: str = "", titulo: str = "",
+        redes: list[str] | None = None, adjuntos: list[str] | None = None,
+    ) -> dict:
+        """Genera copy con la máquina de prompts. `marca` obligatoria. Indica QUÉ ejecutar con
+        `prompt_id` (un prompt de la biblioteca, ver `keni_listar_prompts`) o `texto` (prompt
+        ad-hoc). `target_tipo` ∈ {contenido,area,url,ninguno} y `target_valor` su id/URL (p.
+        ej. tipo=contenido + valor=<publicacion_id> para escribir sobre una pieza existente).
+        `redes` acota plataformas. Corre en segundo plano: devuelve una generación; sigue su
+        avance con `keni_estado_generacion`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        target: dict[str, Any] = {"tipo": target_tipo}
+        if target_valor:
+            target["valor"] = target_valor
+        cuerpo: dict[str, Any] = {
+            "marca": marca, "target": target, "prompt_id": prompt_id, "texto": texto,
+            "titulo": titulo, "redes": redes or [], "adjuntos": adjuntos or [],
+        }
+        return await cli.post("/api/prompts/lanzar", cuerpo)
+
+    @mcp.tool()
+    async def keni_listar_prompts(
+        tipo: str = "", carpeta: str = "", q: str = "", marca: str = "", pipeline: str = ""
+    ) -> dict:
+        """Biblioteca de prompts disponibles (con sus carpetas y facetas). `q` busca por texto;
+        `marca`/`tipo`/`pipeline` filtran. Devuelve cada documento con su id (úsalo como
+        `prompt_id` en `keni_lanzar_copy`)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/prompts", tipo=tipo, carpeta=carpeta, q=q, marca=marca, pipeline=pipeline
+        )
+
+    @mcp.tool()
+    async def keni_leer_prompt(doc_id: str) -> dict:
+        """Contenido de UN prompt de la biblioteca por su id (ver `keni_listar_prompts`)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/prompts/{doc_id}")
+
+    @mcp.tool()
+    async def keni_prompts_editoriales(marca: str, pipeline: str = "") -> dict:
+        """Documentos editoriales de una marca que se auto-adjuntan al generar copy (contexto
+        de voz/estrategia). `pipeline` los acota a un pipeline."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/prompts/editoriales", marca=marca, pipeline=pipeline)
+
+    @mcp.tool()
+    async def keni_estrategia_marca(marca: str = "") -> dict:
+        """Pilares editoriales de una marca (marca, voz, tropicalización, plataforma, reglas) y
+        su completitud: qué contexto hay definido para escribir bien y qué falta."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/prompts/estrategia", marca=marca)
+
+    @mcp.tool()
+    async def keni_prompt_variables() -> dict:
+        """Catálogo de variables `{{VAR}}` que la Consola sustituye al inyectar un prompt
+        (nombre, descripción, ejemplo y origen de cada una)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/prompts/variables")
+
+    # ---- Piezas (gestión del copy y del post por plataforma) ------------ #
+
+    @mcp.tool()
+    async def keni_guardar_copy(pieza_id: str, copy: str, nota: str = "") -> dict:
+        """Guarda el copy de una pieza (un post por plataforma), versionando el anterior en su
+        historial. `nota` documenta el cambio. No hace nada si el copy no cambia."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/plataformas/{pieza_id}/copy", {"copy": copy, "nota": nota})
+
+    @mcp.tool()
+    async def keni_copy_versiones(pieza_id: str) -> dict:
+        """Historial de copy de una pieza (versiones, más reciente primero) y el copy actual."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/plataformas/{pieza_id}/copy/versiones")
+
+    @mcp.tool()
+    async def keni_revertir_copy(pieza_id: str, version_id: str) -> dict:
+        """Revierte el copy de una pieza a una versión de su historial (`version_id`, ver
+        `keni_copy_versiones`), versionando antes el copy actual."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            f"/api/plataformas/{pieza_id}/copy/revertir", {"version_id": version_id}
+        )
+
+    @mcp.tool()
+    async def keni_clonar_pieza(pieza_id: str, red: str) -> dict:
+        """Clona el contenido de una pieza a otra red (`red`, id del catálogo): crea la pieza
+        hermana o sobrescribe la existente (no si ya está publicada)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/piezas/{pieza_id}/clonar", {"red": red})
+
+    @mcp.tool()
+    async def keni_borrar_pieza(pieza_id: str) -> dict:
+        """Borra una pieza (un post por plataforma) por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/piezas/{pieza_id}")
+
+    @mcp.tool()
+    async def keni_piezas_opciones() -> dict:
+        """Catálogos para gestionar piezas: redes, estados, marcas, líneas editoriales y
+        categorías válidas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/piezas/opciones")
+
+    # ---- Tablero (gestión de la pieza de contenido) --------------------- #
+
+    @mcp.tool()
+    async def keni_borrar_publicacion(publicacion_id: str) -> dict:
+        """Borra una pieza de contenido del tablero por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/publicaciones/{publicacion_id}")
+
+    @mcp.tool()
+    async def keni_asignar_publicacion(publicacion_id: str, responsable_id: str) -> dict:
+        """Asigna una pieza de contenido a una persona (`responsable_id`, ver `keni_contexto`).
+        Requiere rol admin."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            f"/api/publicaciones/{publicacion_id}/asignar", {"responsable_id": responsable_id}
+        )
+
+    @mcp.tool()
+    async def keni_coger_publicacion(publicacion_id: str) -> dict:
+        """Reclama una pieza de contenido libre para ti (claim atómico: falla si ya la tiene
+        alguien)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/publicaciones/{publicacion_id}/coger")
+
+    @mcp.tool()
+    async def keni_soltar_publicacion(publicacion_id: str) -> dict:
+        """Libera una pieza de contenido que tenías cogida (vuelve a quedar disponible)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/publicaciones/{publicacion_id}/soltar")
+
+    @mcp.tool()
+    async def keni_aceptar_publicacion(publicacion_id: str) -> dict:
+        """Acepta una tarea-propuesta y la promueve al calendario de contenido."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/publicaciones/{publicacion_id}/aceptar")
+
+    @mcp.tool()
+    async def keni_etiquetar_publicacion(publicacion_id: str, etiqueta_id: str) -> dict:
+        """Asigna una etiqueta (`etiqueta_id`, ver `keni_listar_etiquetas`) a una pieza de
+        contenido."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            f"/api/publicaciones/{publicacion_id}/etiquetas", {"etiqueta_id": etiqueta_id}
+        )
+
+    @mcp.tool()
+    async def keni_agregar_red(publicacion_id: str, red: str) -> dict:
+        """Añade una plataforma/red (`red`, id del catálogo) a una pieza de contenido: crea su
+        post para esa red."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/publicaciones/{publicacion_id}/plataformas", {"red": red})
+
+    @mcp.tool()
+    async def keni_comentar(
+        publicacion_id: str, texto: str, pieza_id: str = "", menciones: list[str] | None = None
+    ) -> dict:
+        """Añade un comentario al hilo de una pieza de contenido. `pieza_id` lo acota a una
+        plataforma; `menciones` son ids de usuario a notificar."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"texto": texto}
+        if pieza_id:
+            cuerpo["pieza_id"] = pieza_id
+        if menciones:
+            cuerpo["menciones"] = menciones
+        return await cli.post(f"/api/publicaciones/{publicacion_id}/comentarios", cuerpo)
+
+    @mcp.tool()
+    async def keni_comentarios(publicacion_id: str, pieza_id: str = "") -> dict:
+        """Lista los comentarios del hilo de una pieza de contenido (filtrable por `pieza_id`
+        de plataforma)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/publicaciones/{publicacion_id}/comentarios", pieza_id=pieza_id)
+
+    # ---- Aprobación: deshacer la propia decisión ------------------------ #
+
+    @mcp.tool()
+    async def keni_deshacer_aprobacion(pieza_id: str) -> dict:
+        """Retira TU decisión (OK o rechazo) sobre una pieza en revisión: su nivel vuelve a
+        pendiente. No publica nada."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/aprobacion/{pieza_id}/deshacer")
+
+    # ---- Noticias: mesa de redacción, historias y breaking -------------- #
+
+    @mcp.tool()
+    async def keni_mesa_noticias(marca: str, por_linea: int = 5) -> dict:
+        """Mesa de redacción de una marca: el pool de historias segmentado por las LÍNEAS de su
+        plan editorial, con cupos, generados/publicados y candidatas por línea (`por_linea`,
+        máx 20). Para decidir qué cubrir hoy y dónde hay hueco."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/noticias/mesa", marca=marca, por_linea=por_linea)
+
+    @mcp.tool()
+    async def keni_listar_historias(
+        marca: str = "", estado: str = "", desde: str = "", limite: int = 50, offset: int = 0
+    ) -> dict:
+        """Historias (clusters de noticias) rankeadas por score, con su umbral de
+        promovibilidad. `estado` ∈ {nuevo,usado,descartado}; `desde` fecha ISO. Convierte una
+        en contenido con `keni_usar_historia`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/noticias/historias", marca=marca, estado=estado, desde=desde,
+            limit=limite, offset=offset,
+        )
+
+    @mcp.tool()
+    async def keni_detalle_historia(cluster_id: str) -> dict:
+        """Detalle de una historia por su id: la historia y todos sus items de archivo."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/noticias/historias/{cluster_id}")
+
+    @mcp.tool()
+    async def keni_usar_historia(
+        cluster_id: str, redes: list[str] | None = None, generar: bool = True
+    ) -> dict:
+        """Lleva una historia al tablero: crea el borrador (origen=historia) y, si `generar`
+        (def True) y hay marca, encola el copy. Idempotente si ya estaba usada."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"generar": generar}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post(f"/api/noticias/historias/{cluster_id}/usar", cuerpo)
+
+    @mcp.tool()
+    async def keni_descartar_historia(cluster_id: str) -> dict:
+        """Descarta una historia (irreversible): no volverá a aparecer como candidata."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/noticias/historias/{cluster_id}/descartar")
+
+    @mcp.tool()
+    async def keni_breaking(marca: str, geo: str = "MX") -> dict:
+        """Temas de BREAKING de una marca (señales calientes del momento), ordenados por
+        señal, con el estado de su borrador si ya se preparó."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/breaking", marca=marca, geo=geo)
+
+    @mcp.tool()
+    async def keni_preparar_breaking(
+        titulo: str, marca: str, redes: list[str] | None = None
+    ) -> dict:
+        """Prepara un breaking: crea el borrador de alta prioridad y encola su copy (dedup por
+        título+marca). NUNCA publica."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"titulo": titulo, "marca": marca}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post("/api/breaking/preparar", cuerpo)
+
+    # ---- Evergreen (ideas reutilizables) -------------------------------- #
+
+    @mcp.tool()
+    async def keni_crear_evergreen(
+        marca: str, titulo: str, descripcion: str = "", origen: str = "manual"
+    ) -> dict:
+        """Crea una idea evergreen (contenido reutilizable sin caducidad) para una marca."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            "/api/evergreen/ideas",
+            {"marca": marca, "titulo": titulo, "descripcion": descripcion, "origen": origen},
+        )
+
+    @mcp.tool()
+    async def keni_actualizar_evergreen(
+        idea_id: str, estado: str = "", titulo: str = "", descripcion: str = ""
+    ) -> dict:
+        """Actualiza una idea evergreen (solo los campos que pases)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo = {"estado": estado, "titulo": titulo, "descripcion": descripcion}
+        cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
+        if not cuerpo:
+            return {"error": "Indica algún campo a actualizar."}
+        return await cli.patch(f"/api/evergreen/ideas/{idea_id}", cuerpo)
+
+    @mcp.tool()
+    async def keni_borrar_evergreen(idea_id: str) -> dict:
+        """Borra una idea evergreen por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/evergreen/ideas/{idea_id}")
+
+    @mcp.tool()
+    async def keni_generar_evergreen(idea_id: str, redes: list[str] | None = None) -> dict:
+        """Lleva una idea evergreen al tablero y encola su copy. `redes` acota plataformas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post(f"/api/evergreen/ideas/{idea_id}/generar", cuerpo)
+
+    # ---- Sugerencias de producto/contenido ------------------------------ #
+
+    @mcp.tool()
+    async def keni_listar_sugerencias() -> dict:
+        """Lista las sugerencias (con sus categorías y estados válidos)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/sugerencias")
+
+    @mcp.tool()
+    async def keni_crear_sugerencia(titulo: str, detalle: str = "", categoria: str = "") -> dict:
+        """Crea una sugerencia con título y, opcionalmente, detalle y categoría."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            "/api/sugerencias", {"titulo": titulo, "detalle": detalle, "categoria": categoria}
+        )
+
+    @mcp.tool()
+    async def keni_detalle_sugerencia(sugerencia_id: str) -> dict:
+        """Detalle de una sugerencia por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/sugerencias/{sugerencia_id}")
+
+    @mcp.tool()
+    async def keni_actualizar_sugerencia(
+        sugerencia_id: str, estado: str = "", titulo: str = "", detalle: str = "",
+        categoria: str = "",
+    ) -> dict:
+        """Actualiza una sugerencia (solo los campos que pases). Cambiar `estado` puede requerir
+        rol superadmin."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo = {
+            "estado": estado, "titulo": titulo, "detalle": detalle, "categoria": categoria,
+        }
+        cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
+        if not cuerpo:
+            return {"error": "Indica algún campo a actualizar."}
+        return await cli.patch(f"/api/sugerencias/{sugerencia_id}", cuerpo)
+
+    @mcp.tool()
+    async def keni_construir_sugerencia(sugerencia_id: str, complejidad: str = "") -> dict:
+        """Lanza la construcción (generación) de una sugerencia. Devuelve la generación; sigue
+        su avance con `keni_estado_generacion`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            f"/api/sugerencias/{sugerencia_id}/construir", {"complejidad": complejidad}
+        )
+
+    # ---- Insumos (materia prima del día) -------------------------------- #
+
+    @mcp.tool()
+    async def keni_listar_insumos(
+        fecha: str = "", cajon: str = "", marca: str = "", solo_frescos: bool = False
+    ) -> dict:
+        """Insumos (materia prima volcada por el equipo) agrupados por cajón. `fecha`
+        YYYY-MM-DD (def hoy); `solo_frescos` deja solo los sin usar."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/insumos", fecha=fecha, cajon=cajon, marca=marca,
+            solo_frescos=("1" if solo_frescos else ""),
+        )
+
+    @mcp.tool()
+    async def keni_insumos_dias() -> dict:
+        """Días con insumos y cuántos hay por cajón (para navegar el histórico)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/insumos/dias")
+
+    @mcp.tool()
+    async def keni_aportar_insumo(
+        cajon: str, texto: str, fecha: str = "", marca: str = ""
+    ) -> dict:
+        """Aporta un insumo de TEXTO a un cajón (crea el lote y lo procesa). `fecha`
+        YYYY-MM-DD (def hoy); `marca` lo etiqueta."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            "/api/insumos/aportar",
+            {"cajon": cajon, "texto": texto, "fecha": fecha, "marca": marca},
+        )
+
+    @mcp.tool()
+    async def keni_usar_insumo(
+        item_id: str, redes: list[str] | None = None, generar: bool = True
+    ) -> dict:
+        """Lleva un insumo al tablero: crea el contenido y, si `generar` (def True), encola el
+        copy. `redes` acota plataformas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"generar": generar}
+        if redes:
+            cuerpo["redes"] = redes
+        return await cli.post(f"/api/insumos/item/{item_id}/usar", cuerpo)
+
+    @mcp.tool()
+    async def keni_actualizar_insumo(
+        item_id: str, titulo: str = "", resumen: str = "", marca: str = "", linea: str = "",
+        hora: str = "", lugar: str = "", estado_material: str = "", tipo: str = "",
+    ) -> dict:
+        """Actualiza un item de insumo (solo los campos que pases)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo = {
+            "titulo": titulo, "resumen": resumen, "marca": marca, "linea": linea,
+            "hora": hora, "lugar": lugar, "estado_material": estado_material, "tipo": tipo,
+        }
+        cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
+        if not cuerpo:
+            return {"error": "Indica algún campo a actualizar."}
+        return await cli.patch(f"/api/insumos/item/{item_id}", cuerpo)
+
+    @mcp.tool()
+    async def keni_borrar_insumo(item_id: str) -> dict:
+        """Descarta/borra un item de insumo por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/insumos/item/{item_id}")
+
+    # ---- Campañas ------------------------------------------------------- #
+
+    @mcp.tool()
+    async def keni_listar_campanias(marca: str = "") -> dict:
+        """Lista las campañas (agrupaciones de hashtags por marca). `marca` filtra."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/campanias", marca=marca)
+
+    @mcp.tool()
+    async def keni_crear_campania(
+        nombre: str, hashtags: list[str] | None = None,
+        marcas: list[str] | None = None, marca: str = "",
+    ) -> dict:
+        """Crea una campaña con `nombre` y sus `hashtags`. Indica su alcance con `marcas`
+        (varias) o `marca` (una)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {"nombre": nombre, "hashtags": hashtags or []}
+        if marcas:
+            cuerpo["marcas"] = marcas
+        elif marca:
+            cuerpo["marca"] = marca
+        return await cli.post("/api/campanias", cuerpo)
+
+    @mcp.tool()
+    async def keni_detalle_campania(campania_id: str) -> dict:
+        """Detalle de una campaña por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(f"/api/campanias/{campania_id}")
+
+    @mcp.tool()
+    async def keni_actualizar_campania(
+        campania_id: str, nombre: str = "", hashtags: list[str] | None = None,
+        marcas: list[str] | None = None, activa: bool | None = None,
+    ) -> dict:
+        """Actualiza una campaña (solo los campos que pases): `nombre`, `hashtags`, `marcas` o
+        `activa`."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {}
+        if nombre:
+            cuerpo["nombre"] = nombre
+        if hashtags is not None:
+            cuerpo["hashtags"] = hashtags
+        if marcas is not None:
+            cuerpo["marcas"] = marcas
+        if activa is not None:
+            cuerpo["activa"] = activa
+        if not cuerpo:
+            return {"error": "Indica algún campo a actualizar."}
+        return await cli.put(f"/api/campanias/{campania_id}", cuerpo)
+
+    @mcp.tool()
+    async def keni_borrar_campania(campania_id: str) -> dict:
+        """Borra una campaña por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/campanias/{campania_id}")
+
+    # ---- Etiquetas ------------------------------------------------------ #
+
+    @mcp.tool()
+    async def keni_listar_etiquetas(
+        marca: str = "", clase: str = "", solo_activas: bool = False
+    ) -> dict:
+        """Catálogo de etiquetas (con sus clases). `marca`/`clase` filtran; `solo_activas` deja
+        las vigentes."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/etiquetas", marca=marca, clase=clase,
+            activas=("1" if solo_activas else ""),
+        )
+
+    @mcp.tool()
+    async def keni_crear_etiqueta(
+        nombre: str, clase: str = "", marca: str = "", color: str = "",
+        keywords: str = "", hashtags: str = "", grupo: str = "",
+    ) -> dict:
+        """Crea una etiqueta. `nombre` obligatorio; `clase` (p. ej. vertical), `marca`,
+        `color`, `keywords`, `hashtags` y `grupo` opcionales."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo = {
+            "nombre": nombre, "clase": clase, "marca": marca, "color": color,
+            "keywords": keywords, "hashtags": hashtags, "grupo": grupo,
+        }
+        cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
+        return await cli.post("/api/etiquetas", cuerpo)
+
+    @mcp.tool()
+    async def keni_actualizar_etiqueta(
+        etiqueta_id: str, nombre: str = "", clase: str = "", marca: str = "", color: str = "",
+        keywords: str = "", hashtags: str = "", grupo: str = "", activo: bool | None = None,
+    ) -> dict:
+        """Actualiza una etiqueta (solo los campos que pases). `activo` la activa/desactiva."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        cuerpo: dict[str, Any] = {
+            "nombre": nombre, "clase": clase, "marca": marca, "color": color,
+            "keywords": keywords, "hashtags": hashtags, "grupo": grupo,
+        }
+        cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
+        if activo is not None:
+            cuerpo["activo"] = activo
+        if not cuerpo:
+            return {"error": "Indica algún campo a actualizar."}
+        return await cli.patch(f"/api/etiquetas/{etiqueta_id}", cuerpo)
+
+    @mcp.tool()
+    async def keni_borrar_etiqueta(etiqueta_id: str) -> dict:
+        """Borra una etiqueta por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.delete(f"/api/etiquetas/{etiqueta_id}")
+
+    # ---- Notificaciones ------------------------------------------------- #
+
+    @mcp.tool()
+    async def keni_notificaciones(marca_id: str = "") -> dict:
+        """Buzón de notificaciones del usuario (acotado a `marca_id` si se pasa), con el conteo
+        de no leídas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/notificaciones", marca_id=marca_id)
+
+    @mcp.tool()
+    async def keni_notificaciones_contador(marca_id: str = "") -> dict:
+        """Solo el número de notificaciones no leídas (para un vistazo rápido)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/notificaciones/contador", marca_id=marca_id)
+
+    @mcp.tool()
+    async def keni_marcar_notificacion(notificacion_id: str) -> dict:
+        """Marca UNA notificación como leída por su id."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/notificaciones/{notificacion_id}/leer")
+
+    @mcp.tool()
+    async def keni_marcar_todas_leidas(marca_id: str = "") -> dict:
+        """Marca TODAS las notificaciones como leídas (acotado a `marca_id` si se pasa)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post("/api/notificaciones/leer-todas", {"marca_id": marca_id})
+
+    # ---- Rota del equipo (turnos y canjes) ------------------------------ #
+
+    @mcp.tool()
+    async def keni_rota_semana(lunes: str = "", marca: str = "") -> dict:
+        """Horario del equipo de una semana (con sus franjas). `lunes` YYYY-MM-DD del lunes de
+        la semana (def la actual)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/rota/turnos", lunes=lunes, marca=marca)
+
+    @mcp.tool()
+    async def keni_mis_turnos(lunes: str = "", marca: str = "") -> dict:
+        """Solo TUS turnos de una semana. `lunes` YYYY-MM-DD (def la actual)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/rota/mis-turnos", lunes=lunes, marca=marca)
+
+    @mcp.tool()
+    async def keni_rota_mes(mes: str = "", marca: str = "") -> dict:
+        """Calendario mensual de turnos de TODO el equipo. `mes` YYYY-MM (def el actual)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/rota/turnos/mes", mes=mes, marca=marca)
+
+    @mcp.tool()
+    async def keni_rota_cobertura(lunes: str = "", marca: str = "") -> dict:
+        """Cobertura de los eventos de la semana (qué eventos quedan cubiertos por la rota y
+        cuáles no). `lunes` YYYY-MM-DD (def la actual)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/rota/cobertura", lunes=lunes, marca=marca)
+
+    @mcp.tool()
+    async def keni_listar_swaps(estado: str = "", mio: bool = False, marca: str = "") -> dict:
+        """Solicitudes de canje de turno. `estado` ∈ {propuesto,aceptado,rechazado,
+        rechazado_admin,cancelado,aplicado}; `mio` deja solo las tuyas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get(
+            "/api/rota/swaps", estado=estado, marca=marca, mio=("true" if mio else "")
+        )
+
+    @mcp.tool()
+    async def keni_crear_swap(
+        destinatario_id: str, fecha_a: str, franja_a: str, fecha_b: str, franja_b: str,
+        motivo: str = "",
+    ) -> dict:
+        """Solicita un canje de turno con otra persona: ofreces tu turno (`fecha_a`/`franja_a`)
+        a cambio del suyo (`fecha_b`/`franja_b`). Fechas YYYY-MM-DD."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(
+            "/api/rota/swaps",
+            {
+                "destinatario_id": destinatario_id, "fecha_a": fecha_a, "franja_a": franja_a,
+                "fecha_b": fecha_b, "franja_b": franja_b, "motivo": motivo,
+            },
+        )
+
+    @mcp.tool()
+    async def keni_aceptar_swap(swap_id: str, respuesta: str = "") -> dict:
+        """Acepta un canje de turno del que eres destinatario (queda pendiente de visto bueno
+        del admin)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/rota/swaps/{swap_id}/aceptar", {"respuesta": respuesta})
+
+    @mcp.tool()
+    async def keni_rechazar_swap(swap_id: str, respuesta: str = "") -> dict:
+        """Rechaza un canje de turno del que eres destinatario."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/rota/swaps/{swap_id}/rechazar", {"respuesta": respuesta})
+
+    @mcp.tool()
+    async def keni_cancelar_swap(swap_id: str) -> dict:
+        """Cancela un canje de turno que TÚ solicitaste (mientras no esté aplicado)."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.post(f"/api/rota/swaps/{swap_id}/cancelar")
