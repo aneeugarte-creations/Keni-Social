@@ -111,8 +111,14 @@ BACK_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas conso
 WORKER_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/worker)"
 TRANSCRIPTOR_VERSION="$(hash_entradas "consola/frontend/" keni-shared mcp-metricas consola deploy/transcriptor)"
 MCP_VERSION="$(hash_entradas "" keni-shared mcp-metricas deploy/mcp)"
-export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION
-echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION transcriptor=$TRANSCRIPTOR_VERSION mcp=$MCP_VERSION"
+# La página de mantenimiento es un cascarón de la Consola CONGELADO, horneado del MISMO frontend
+# (entry mantenimiento.html) para ser píxel-idéntico a la app. Por eso su imagen depende de
+# consola/frontend (el shell que reproduce) + deploy/mantenimiento (Dockerfile/nginx): se
+# reconstruye cuando cambia el shell, en sincronía con él. El prune de hash_entradas ya descarta
+# node_modules/webapp/dist, así que no entra basura de build en el hash.
+MANTENIMIENTO_VERSION="$(hash_entradas "" consola/frontend deploy/mantenimiento)"
+export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION
+echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION transcriptor=$TRANSCRIPTOR_VERSION mcp=$MCP_VERSION mantenimiento=$MANTENIMIENTO_VERSION"
 
 # Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
 # ./secrets/<n> en /run/secrets; si no existieran al instanciar contenedores, Compose
@@ -169,9 +175,10 @@ render_secret GARAGE_ADMIN_TOKEN       garage_admin_token       0:0          400
 # de esquema/estado. La detección va SEPARADA del build a propósito: así un fallo de `$DC build`
 # aborta el deploy por `set -e` (sin `|| true` que lo enmascare) y deja prod intacto.
 cambio() { ! docker image inspect "$1" >/dev/null 2>&1; }  # 0 (true) si la imagen NO existe aún
-BACK_CAMBIO=0; WORKER_CAMBIO=0
+BACK_CAMBIO=0; WORKER_CAMBIO=0; FRONT_CAMBIO=0
 cambio "keni-social/back:$BACK_VERSION"     && BACK_CAMBIO=1   || true
 cambio "keni-social/worker:$WORKER_VERSION" && WORKER_CAMBIO=1 || true
+cambio "keni-social/front:$FRONT_VERSION"   && FRONT_CAMBIO=1  || true
 
 construir() {  # $1 = servicio compose ; $2 = imagen:tag esperada (keni-social/<svc>:<hash>)
   if docker image inspect "$2" >/dev/null 2>&1; then
@@ -188,6 +195,7 @@ construir back   "keni-social/back:$BACK_VERSION"
 construir worker "keni-social/worker:$WORKER_VERSION"
 construir transcriptor "keni-social/transcriptor:$TRANSCRIPTOR_VERSION"
 construir mcp    "keni-social/mcp:$MCP_VERSION"
+construir mantenimiento "keni-social/mantenimiento:$MANTENIMIENTO_VERSION"
 
 # ── GUARDA blue-green: stop-the-world si hay MIGRACIÓN de esquema pendiente ────────────
 # El cutover blue-green deja al back VIEJO sirviendo mientras [4/6] aplica el esquema. Solo es
@@ -303,6 +311,7 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
   if [ -n "$id" ]; then docker tag "$id" "keni-social/$1:previa"; fi
 }
 foto_previa front; foto_previa back; foto_previa worker; foto_previa transcriptor; foto_previa mcp
+foto_previa mantenimiento
 
 # Espera a que un contenedor CONCRETO (por id) quede 'healthy'; timeout $2 s (0 si lo logra).
 # El blue-green identifica el back NUEVO por su id (capturado por diferencia con el VIEJO), así
@@ -314,62 +323,84 @@ espera_sano_cid() {  # $1 = container id ; $2 = timeout(s)
     [ "$est" = "healthy" ] && return 0
     sleep 5; transcurrido=$((transcurrido + 5))
   done
-  echo "==> back NUEVO ($1) NO healthy tras ${2}s (ultimo estado: $est)" >&2
+  echo "==> contenedor NUEVO ($1) NO healthy tras ${2}s (ultimo estado: $est)" >&2
   return 1
 }
 
-# BLUE-GREEN del back. Devuelve 0 si el back NUEVO quedó sano y el VIEJO fue retirado; 1 si el
-# NUEVO nunca llegó a sano (en ese caso ya retiró el NUEVO y dejó el VIEJO sirviendo — sin
-# downtime). CLAVE: los contenedores se RETIRAN POR IDENTIDAD (`docker rm -f <id>`), nunca por
-# índice de `--scale`. Con imágenes MIXTAS, `--scale back=1` CONSERVA el que casa la spec
-# deseada (el NUEVO) y borra el otro, lo que en el camino de fallo retiraría al VIEJO sano.
-# Aquí capturamos el id del VIEJO ANTES de escalar y elegimos a mano.
-rodar_back() {
-  OLD_IDS="$($DC ps -q back 2>/dev/null || true)"
+# BLUE-GREEN de un servicio CON healthcheck (back o front). Devuelve 0 si el NUEVO quedó sano y
+# el VIEJO fue retirado; 1 si el NUEVO nunca llegó a sano (en ese caso ya retiró el NUEVO y dejó
+# el VIEJO sirviendo — sin downtime). CLAVE: los contenedores se RETIRAN POR IDENTIDAD
+# (`docker rm -f <id>`), nunca por índice de `--scale`. Con imágenes MIXTAS, `--scale <svc>=1`
+# CONSERVA el que casa la spec deseada (el NUEVO) y borra el otro, lo que en el camino de fallo
+# retiraría al VIEJO sano. Aquí capturamos el id del VIEJO ANTES de escalar y elegimos a mano.
+# El front es seguro de solapar: no toca esquema y, durante el solape, el detector de versión del
+# SPA (version.json) reconcilia al cliente; el hueco es de segundos.
+rodar_servicio() {  # $1 = servicio (back|front) ; $2 = timeout(s) de salud del NUEVO
+  svc="$1"; tmo="$2"
+  OLD_IDS="$($DC ps -q "$svc" 2>/dev/null || true)"
   if [ -z "$OLD_IDS" ]; then
-    # No hay back viejo en marcha (primer arranque o caído): no hay solape posible ni que
-    # preservar. Arranque directo y espera a que quede sano.
-    echo "==> blue-green: no hay back viejo en marcha — arranque directo (sin solape posible)"
-    $DC up -d --no-deps back
-    espera_sano_cid "$($DC ps -q back 2>/dev/null | head -n1)" 300
+    # No hay viejo en marcha (primer arranque o caído): no hay solape posible ni que preservar.
+    echo "==> blue-green ($svc): no hay viejo en marcha — arranque directo (sin solape posible)"
+    $DC up -d --no-deps "$svc"
+    espera_sano_cid "$($DC ps -q "$svc" 2>/dev/null | head -n1)" "$tmo"
     return
   fi
-  echo "==> blue-green del back: arranca el contenedor NUEVO junto al viejo (scale=2, sin recrear el viejo)"
-  $DC up -d --no-deps --no-recreate --scale back=2 back
-  $DC ps back
+  echo "==> blue-green ($svc): arranca el contenedor NUEVO junto al viejo (scale=2, sin recrear el viejo)"
+  $DC up -d --no-deps --no-recreate --scale "$svc"=2 "$svc"
+  $DC ps "$svc"
   # Identifica el NUEVO POR IDENTIDAD: el id que existe AHORA y no estaba en OLD_IDS.
   NEW_ID=""
-  for cid in $($DC ps -q back 2>/dev/null); do
+  for cid in $($DC ps -q "$svc" 2>/dev/null); do
     case " $OLD_IDS " in *" $cid "*) : ;; *) NEW_ID="$cid" ;; esac
   done
   if [ -z "$NEW_ID" ]; then
-    echo "==> blue-green: no pude identificar el contenedor NUEVO del back; aborto sin tocar el viejo" >&2
+    echo "==> blue-green ($svc): no pude identificar el contenedor NUEVO; aborto sin tocar el viejo" >&2
     return 1
   fi
-  if ! espera_sano_cid "$NEW_ID" 300; then
+  if ! espera_sano_cid "$NEW_ID" "$tmo"; then
     # CAMINO DE FALLO: retira el NUEVO POR IDENTIDAD; el VIEJO sigue sirviendo (sin downtime).
-    echo "==> blue-green: el back NUEVO no llegó a sano — retiro el NUEVO ($NEW_ID); el VIEJO sigue" >&2
+    echo "==> blue-green ($svc): el NUEVO no llegó a sano — retiro el NUEVO ($NEW_ID); el VIEJO sigue" >&2
     docker rm -f "$NEW_ID" >/dev/null 2>&1 || true
     return 1
   fi
-  echo "==> blue-green del back: nuevo SANO y enrutado; retiro el/los VIEJO(s) POR IDENTIDAD (queda el nuevo sirviendo)"
+  echo "==> blue-green ($svc): nuevo SANO y enrutado; retiro el/los VIEJO(s) POR IDENTIDAD (queda el nuevo sirviendo)"
   # CAMINO DE ÉXITO: retira el/los VIEJO(s) POR IDENTIDAD (su id capturado antes de escalar).
   for oid in $OLD_IDS; do docker rm -f "$oid" >/dev/null 2>&1 || true; done
   return 0
 }
 
-if [ "$BLUEGREEN" = 1 ] && [ "$BACK_CAMBIO" = 1 ]; then
-  echo "==> [5b/6] up de los servicios NO-back + blue-green del back (sin downtime)"
-  NEW="keni-social/back:$BACK_VERSION"
-  # El resto del stack con el up normal (recrea solo lo que cambió); el back se actualiza aparte.
-  otros="$($DC config --services | grep -vx back || true)"
+# Servicios que van por blue-green en ESTE deploy: back y/o front, solo si cambiaron y blue-green
+# está ON. El front es independiente del esquema, así que su cutover sin downtime aplica también
+# cuando la guarda de migración forzó stop-the-world para el back (deploy de solo front: la guarda
+# ni corre). El resto del stack va por el `up` normal; el contenedor `mantenimiento` (red de
+# seguridad) cubre el hueco de cualquier front que SÍ caiga a stop-the-world (blue-green OFF).
+if [ "$BLUEGREEN" = 1 ] && { [ "$BACK_CAMBIO" = 1 ] || [ "$FRONT_CAMBIO" = 1 ]; }; then
+  bg_svcs=""
+  [ "$BACK_CAMBIO" = 1 ]  && bg_svcs="back"
+  [ "$FRONT_CAMBIO" = 1 ] && bg_svcs="${bg_svcs:+$bg_svcs }front"
+  echo "==> [5b/6] up de los servicios sin solape + blue-green de: $bg_svcs (sin downtime)"
+  # El resto del stack con el up normal (recrea solo lo que cambió); los de blue-green aparte.
+  patron="$(echo "$bg_svcs" | tr ' ' '|')"
+  otros="$($DC config --services | grep -vxE "$patron" || true)"
   # shellcheck disable=SC2086  # $otros es una lista de servicios: word-splitting deliberado
   [ -n "$otros" ] && $DC up -d $otros
-  if ! rodar_back; then
-    printf '\033[31m==> blue-green: el back NUEVO no llegó a healthy. NUEVO retirado; PROD sigue con el back VIEJO (sin downtime).\033[0m\n' >&2
-    docker rmi "$NEW" >/dev/null 2>&1 || true   # untag: el próximo deploy del mismo contenido RECONSTRUYE
-    printf '\033[31m==> Deploy EN ROJO (back nuevo no arrancó). Revisa: docker logs de un keni-social-back-*. La red :previa queda intacta.\033[0m\n' >&2
-    exit 1
+  if [ "$BACK_CAMBIO" = 1 ]; then
+    NEW="keni-social/back:$BACK_VERSION"
+    if ! rodar_servicio back 300; then
+      printf '\033[31m==> blue-green: el back NUEVO no llegó a healthy. NUEVO retirado; PROD sigue con el back VIEJO (sin downtime).\033[0m\n' >&2
+      docker rmi "$NEW" >/dev/null 2>&1 || true   # untag: el próximo deploy del mismo contenido RECONSTRUYE
+      printf '\033[31m==> Deploy EN ROJO (back nuevo no arrancó). Revisa: docker logs de un keni-social-back-*. La red :previa queda intacta.\033[0m\n' >&2
+      exit 1
+    fi
+  fi
+  if [ "$FRONT_CAMBIO" = 1 ]; then
+    NEWF="keni-social/front:$FRONT_VERSION"
+    if ! rodar_servicio front 120; then
+      printf '\033[31m==> blue-green: el front NUEVO no llegó a healthy. NUEVO retirado; PROD sigue con el front VIEJO (sin downtime).\033[0m\n' >&2
+      docker rmi "$NEWF" >/dev/null 2>&1 || true   # untag: el próximo deploy del mismo contenido RECONSTRUYE
+      printf '\033[31m==> Deploy EN ROJO (front nuevo no arrancó). Revisa: docker logs de un keni-social-front-*.\033[0m\n' >&2
+      exit 1
+    fi
   fi
 else
   echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
@@ -406,11 +437,13 @@ else
   # foto :previa, asi que un fallo suyo tambien debe disparar el rollback.
   # worker-dev / worker-ralph: imagenes NUESTRAS (misma tag WORKER_VERSION), asi que un fallo
   # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
+  # mantenimiento: imagen NUESTRA y red de seguridad del 404; si no queda sana, Traefik no
+  # enrutaría el catch-all y el hueco del front volvería a ser 404, así que también gatea.
   if espera_sano back 300 && espera_sano front 120 \
       && espera_sano daemons 150 && espera_sano worker 120 \
-      && espera_sano transcriptor 120 \
+      && espera_sano transcriptor 120 && espera_sano mantenimiento 60 \
       && espera_sano worker-dev 120 && espera_sano worker-ralph 120; then
-    echo "==> salud OK (back, front, daemons, worker, transcriptor, worker-dev y worker-ralph healthy)"
+    echo "==> salud OK (back, front, daemons, worker, transcriptor, mantenimiento, worker-dev y worker-ralph healthy)"
     # db y files: si NO estan sanos el problema es de CONFIG/estado (sus imagenes son
     # upstream y no entran en el rollback :previa), asi que NO se intenta rollback —
     # pero el pipeline DEBE quedar rojo para que un operador mire (p.ej. un cambio de
@@ -423,13 +456,15 @@ else
     printf '\033[31m==> VERIFICACION FALLIDA: rollback a las imagenes :previa\033[0m\n' >&2
     FRONT_NUEVA="$FRONT_VERSION"; BACK_NUEVA="$BACK_VERSION"
     WORKER_NUEVA="$WORKER_VERSION"; MCP_NUEVA="$MCP_VERSION"; TRANSCRIPTOR_NUEVA="$TRANSCRIPTOR_VERSION"
+    MANTENIMIENTO_NUEVA="$MANTENIMIENTO_VERSION"
     hay_previa() { docker image inspect "keni-social/$1:previa" >/dev/null 2>&1; }
     hay_previa front  && FRONT_VERSION=previa
     hay_previa back   && BACK_VERSION=previa
     hay_previa worker && WORKER_VERSION=previa
     hay_previa transcriptor && TRANSCRIPTOR_VERSION=previa
     hay_previa mcp    && MCP_VERSION=previa
-    export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION
+    hay_previa mantenimiento && MANTENIMIENTO_VERSION=previa
+    export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION
     $DC up -d || true
     $DC ps || true
     # RE-VERIFICA que la foto :previa SÍ levanta sana, para distinguir «rollback recuperó» de
@@ -447,6 +482,7 @@ else
     [ "$WORKER_VERSION" = previa ] && docker rmi "keni-social/worker:$WORKER_NUEVA" >/dev/null 2>&1 || true
     [ "$TRANSCRIPTOR_VERSION" = previa ] && docker rmi "keni-social/transcriptor:$TRANSCRIPTOR_NUEVA" >/dev/null 2>&1 || true
     [ "$MCP_VERSION" = previa ]    && docker rmi "keni-social/mcp:$MCP_NUEVA"       >/dev/null 2>&1 || true
+    [ "$MANTENIMIENTO_VERSION" = previa ] && docker rmi "keni-social/mantenimiento:$MANTENIMIENTO_NUEVA" >/dev/null 2>&1 || true
     exit 1
   fi
 fi

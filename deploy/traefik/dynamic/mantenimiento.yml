@@ -1,0 +1,29 @@
+# Router de RED DE SEGURIDAD del deploy (file-provider, watch en caliente).
+#
+# POR QUÉ AQUÍ Y NO EN LABELS: el router del `front` vive en las labels de SU contenedor
+# (docker-compose.yml). Cuando el front se recrea en un deploy, sus labels desaparecen del
+# daemon unos segundos y Traefik se queda SIN router para el host -> respondería 404 crudo.
+# Este router vive en el file-provider, que es ESTÁTICO: NO depende de ningún contenedor de
+# la app, así que SOBREVIVE a la recreación del front. Es la malla que convierte ese hueco
+# en una página honesta "actualizando" en vez de un 404.
+#
+# CÓMO GANA SOLO EN EL HUECO: `priority` mínima (1). El router `front` (priority 2) y el
+# `back` (10) /`back-subidas` (20) son SIEMPRE más prioritarios, así que en operación normal
+# este catch-all NUNCA gana. Solo cuando el router `front` no existe (recreación/rollback/
+# crash) este queda como único match del host -> sirve la página de mantenimiento.
+#
+# HostRegexp(`.+`): el server es mono-host; el cert TLS de KENI_HOST ya está en el store
+# (lo provisiona ACME para los routers front/back), y Traefik lo sirve por SNI. `tls: {}`
+# habilita TLS sin pedir un cert para el regex.
+#
+# El SERVICIO lo resuelve el provider docker desde las labels del contenedor `mantenimiento`
+# (mantenimiento@docker): así Traefik llega a su IP de la red `edge` sin IP fija en fichero.
+http:
+  routers:
+    mantenimiento:
+      rule: "HostRegexp(`.+`)"
+      priority: 1
+      entryPoints:
+        - websecure
+      service: mantenimiento@docker
+      tls: {}

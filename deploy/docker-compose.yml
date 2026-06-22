@@ -120,9 +120,12 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
-      # Catch-all del host: el SPA. Prioridad BAJA para no tapar /api del back.
+      # Catch-all del host: el SPA. Prioridad BAJA para no tapar /api del back, pero por
+      # ENCIMA del router `mantenimiento` (priority 1, file-provider): en operación normal
+      # el front gana; solo cuando el front se recrea y este router desaparece, el catch-all
+      # de mantenimiento queda como único match del host y sirve la página "actualizando".
       - traefik.http.routers.front.rule=Host(`${KENI_HOST}`)
-      - traefik.http.routers.front.priority=1
+      - traefik.http.routers.front.priority=2
       - traefik.http.routers.front.entrypoints=websecure
       - traefik.http.routers.front.tls.certresolver=le
       # nginx no-root (nginxinc/nginx-unprivileged) escucha en 8080, no en 80.
@@ -168,6 +171,48 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+  # RED DE SEGURIDAD del deploy: nginx SIEMPRE-VIVO que sirve un cascarón de la Consola CONGELADO
+  # (mantenimiento.html, horneado del frontend real para ser píxel-idéntico a la app). Traefik lo
+  # enruta SOLO cuando el router `front` no existe (recreación del front, rollback, crash): el
+  # router catch-all de prioridad mínima vive en el file-provider (traefik/dynamic/mantenimiento.yml),
+  # que NO depende de ningún contenedor de la app y por eso SOBREVIVE a la recreación del front. Sin
+  # esto, ese hueco de unos segundos devuelve 404 crudo (el router del front está en SUS labels y
+  # desaparece al recrearse). Su imagen va por hash de consola/frontend + deploy/mantenimiento (ver
+  # deploy.sh): se reconstruye cuando cambia el shell, en sincronía con él; en los deploys donde el
+  # front va por blue-green (lo normal), su breve recreación no abre hueco.
+  mantenimiento:
+    build:
+      context: ..
+      dockerfile: deploy/mantenimiento/Dockerfile
+    image: keni-social/mantenimiento:${MANTENIMIENTO_VERSION:-latest}
+    restart: unless-stopped
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=keni-social_edge
+      # SOLO declara el SERVICIO (puerto 8080); el ROUTER vive en el file-provider para
+      # sobrevivir a la recreación del front. El router lo referencia como mantenimiento@docker.
+      - traefik.http.services.mantenimiento.loadbalancer.server.port=8080
+      - autoheal=true  # vigilado por el sidecar autoheal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    mem_limit: 64m
+    cpus: 0.5
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   back:
     build:

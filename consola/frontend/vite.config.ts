@@ -56,6 +56,14 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
+      // Multi-página: el SPA (`index.html`) y la página de MANTENIMIENTO (`mantenimiento.html`),
+      // un cascarón congelado que reutiliza los componentes y el CSS REALES del shell para ser
+      // píxel-idéntico a la app. La sirve un contenedor aparte (deploy/mantenimiento) cuando el
+      // front se está recreando, así que se hornea en el MISMO build para no desincronizarse.
+      input: {
+        index: path.resolve(__dirname, "index.html"),
+        mantenimiento: path.resolve(__dirname, "mantenimiento.html"),
+      },
       output: {
         // Las librerias PESADAS solo las usan rutas concretas (todas cargadas con React.lazy):
         // aisladas en su propio vendor-chunk se descargan SOLO al entrar en esas rutas y, al no

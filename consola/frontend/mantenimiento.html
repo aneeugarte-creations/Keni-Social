@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <!-- Tema aplicado antes de pintar (sin parpadeo), ESPEJO EXACTO del de index.html: respeta
+         keni-consola-tema (localStorage) y, si no, la preferencia del SO. El fondo se fija aquí
+         para que ni siquiera el lienzo blanco asome antes de que cargue el CSS del bundle. -->
+    <script>
+      try {
+        var t = window.localStorage.getItem("keni-consola-tema");
+        var oscuro =
+          t === "oscuro" ||
+          (t !== "claro" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (oscuro) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
+    <style>
+      html { background: #fafafa; }
+      html.dark { background: #0a0a0a; }
+    </style>
+    <!-- Geist: la tipografía del sistema de diseño (igual que index.html). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap"
+      rel="stylesheet"
+    />
+    <title>KENI · Actualizando la consola</title>
+    <!-- El sondeo de disponibilidad y la recarga los gestiona la barra de progreso del cascarón
+         (src/mantenimiento/ShellCongelado.tsx): recarga en cuanto el front vuelve a responder. -->
+  </head>
+  <body>
+    <div id="mantenimiento"></div>
+    <script type="module" src="/src/mantenimiento/main.tsx"></script>
+  </body>
+</html>
