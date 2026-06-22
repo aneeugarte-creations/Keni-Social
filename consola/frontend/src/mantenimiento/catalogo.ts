@@ -50,11 +50,11 @@ export const CATALOGO: Catalogo = {
             "El feed de ideación del equipo (piezas como posts, aprobación en línea) y la lista de contenido.",
         },
         {
-          ruta: "/operacion/programacion",
-          etiqueta: "Programación",
+          ruta: "/operacion/programa",
+          etiqueta: "Programa",
           icono: "CalendarDays",
           descripcion:
-            "Calendario de publicaciones programadas, por marca. La cadencia por red alimenta esta rejilla.",
+            "Calendario de publicaciones y el plan de líneas (hashtag y keywords), por marca.",
         },
         {
           ruta: "/operacion/trabajo",

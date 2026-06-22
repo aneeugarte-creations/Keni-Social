@@ -35,6 +35,7 @@ const Trabajo = lazy(() => import("@/pages/Trabajo"));
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 const ListaPublicacion = lazy(() => import("@/pages/feed/ListaPublicacion"));
 const CalendarioPublicacion = lazy(() => import("@/pages/calendario/CalendarioPublicacion"));
+const ProgramaPlan = lazy(() => import("@/pages/programa/ProgramaPlan"));
 
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
@@ -205,17 +206,29 @@ export const router = createBrowserRouter([
           // Programación (calendario de piezas, por marca activa) y Turnos (rota de
           // cobertura del equipo, por marca activa). Ambas respetan el switch global de marca;
           // "Todas" agrega. Las rutas legacy /operacion/calendario/* redirigen abajo.
-          { path: "programacion", element: <CalendarioPublicacion /> },
+          // «Programa»: hub con dos pestañas — Programación (la rejilla mensual) y Plan (las líneas
+          // de la marca: su hashtag derivado y los keywords del clasificador). El índice aterriza en
+          // Programación (la vista de trabajo).
+          {
+            path: "programa",
+            children: [
+              { index: true, element: <Navigate to="/operacion/programa/programacion" replace /> },
+              { path: "programacion", element: <CalendarioPublicacion /> },
+              { path: "plan", element: <ProgramaPlan /> },
+            ],
+          },
+          // Compat: la página plana «Programación» pasó a ser el hub «Programa».
+          { path: "programacion", element: <Navigate to="/operacion/programa/programacion" replace /> },
           { path: "turnos", element: <Rota /> },
           // Compat: el antiguo hub `/operacion/calendario/*` (Programación/Turnos como pestañas)
-          // se separó en las dos páginas planas de arriba. Redirigimos sus sub-rutas.
+          // se separó. Redirigimos sus sub-rutas al hub Programa / a Turnos.
           {
             path: "calendario",
             children: [
-              { index: true, element: <Navigate to="/operacion/programacion" replace /> },
-              { path: "calendario", element: <Navigate to="/operacion/programacion" replace /> },
+              { index: true, element: <Navigate to="/operacion/programa/programacion" replace /> },
+              { path: "calendario", element: <Navigate to="/operacion/programa/programacion" replace /> },
               { path: "turnos", element: <Navigate to="/operacion/turnos" replace /> },
-              { path: "*", element: <Navigate to="/operacion/programacion" replace /> },
+              { path: "*", element: <Navigate to="/operacion/programa/programacion" replace /> },
             ],
           },
           // Compat (#cal-feed): el antiguo hub `/operacion/parrilla/*` se separó en

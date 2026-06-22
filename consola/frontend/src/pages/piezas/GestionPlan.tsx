@@ -84,6 +84,8 @@ interface FilaPlan {
   esLinea: boolean;
   /** Palabras clave (CSV) con que el clasificador asigna esta línea. Solo en líneas reales. */
   keywords: string;
+  /** Hashtag (cuerpo, sin '#') de la línea, derivado de su nombre. Solo en líneas reales. */
+  hashtag: string;
 }
 
 export function PanelPlan({ marca }: { marca: string }) {
@@ -113,11 +115,12 @@ export function PanelPlan({ marca }: { marca: string }) {
       conHorario: true,
       esLinea: true,
       keywords: l.keywords ?? "",
+      hashtag: l.hashtags ?? "",
     }));
     return [
-      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false, esLinea: false, keywords: "" },
+      { clave: CLAVE_BREAKING, etiqueta: "Última hora", conHorario: false, esLinea: false, keywords: "", hashtag: "" },
       ...lineas,
-      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true, esLinea: false, keywords: "" },
+      { clave: CLAVE_EVERGREEN, etiqueta: "Evergreen", conHorario: true, esLinea: false, keywords: "", hashtag: "" },
     ];
   }, [lineasQuery.data]);
 
@@ -271,8 +274,10 @@ export function PanelPlan({ marca }: { marca: string }) {
   return (
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
-        Las líneas de esta marca: cuántos contenidos al día publica cada una y a qué horas
-        (CDMX). Añade o quita líneas aquí mismo.
+        Las líneas de esta marca: cuántos contenidos al día publica cada una y a qué horas (CDMX).
+        Cada línea muestra su hashtag (derivado del nombre, va siempre en sus piezas) y el icono{" "}
+        <Tags className="inline h-3 w-3 align-text-bottom" /> abre sus palabras clave del
+        clasificador. Añade o quita líneas aquí mismo.
       </p>
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -316,7 +321,19 @@ export function PanelPlan({ marca }: { marca: string }) {
           {filasPlan.map((fila) => (
             <React.Fragment key={fila.clave}>
             <div className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_auto] items-center gap-3">
-              <Label className="text-sm">{fila.etiqueta}</Label>
+              <div className="min-w-0">
+                <Label className="text-sm">{fila.etiqueta}</Label>
+                {/* Hashtag de la línea: derivado del nombre (1:1), solo lectura. Va siempre en sus
+                    piezas para que las métricas desglosen por línea. */}
+                {fila.esLinea && fila.hashtag && (
+                  <span
+                    className="block truncate font-mono text-xs text-muted-foreground"
+                    title="Hashtag de la línea (derivado del nombre)"
+                  >
+                    #{fila.hashtag}
+                  </span>
+                )}
+              </div>
               <Input
                 type="number"
                 min={0}

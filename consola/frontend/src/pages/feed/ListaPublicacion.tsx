@@ -16,9 +16,8 @@ export default function ListaPublicacion() {
   const navigate = useNavigate();
 
   // Encolar sin franjas de horario devuelve 400: llevamos al usuario a configurar
-  // los horarios (en el calendario de Programación), que es el camino vigente.
-  const irAConfigurarHorarios = () =>
-    navigate("/operacion/programacion?horarios=1");
+  // los horarios (la pestaña «Plan» del hub Programa), que es el camino vigente.
+  const irAConfigurarHorarios = () => navigate("/operacion/programa/plan");
 
   return (
     <>

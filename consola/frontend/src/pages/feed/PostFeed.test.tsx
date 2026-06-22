@@ -529,7 +529,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     const enlace = screen.getByRole("link", {
       name: `Programada para ${completa} — ver en Programación`,
     });
-    expect(enlace).toHaveAttribute("href", "/operacion/programacion");
+    expect(enlace).toHaveAttribute("href", "/operacion/programa/programacion");
     expect(enlace).toHaveTextContent(corta);
     expect(enlace.className).toContain("text-muted-foreground");
     expect(enlace.className).not.toContain("amber");

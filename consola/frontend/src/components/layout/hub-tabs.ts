@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   BookText,
+  CalendarDays,
   Coins,
   Cpu,
   LayoutGrid,
@@ -10,6 +11,7 @@ import {
   Newspaper,
   Rss,
   Sparkles,
+  Tags,
   Target,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +64,14 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/campanias", etiqueta: "Campañas", icono: Megaphone },
 ];
 
+// Programa: el «qué/cuándo» de publicación de una marca. Programación (la rejilla mensual) es la
+// pestaña de aterrizaje; Plan es la taxonomía de líneas (su hashtag derivado + los keywords del
+// clasificador, además del cupo/día y los horarios).
+export const TABS_PROGRAMA: ItemTabHub[] = [
+  { ruta: "/operacion/programa/programacion", etiqueta: "Programación", icono: CalendarDays },
+  { ruta: "/operacion/programa/plan", etiqueta: "Plan", icono: Tags },
+];
+
 export const TABS_FEED: ItemTabHub[] = [
   { ruta: "/operacion/feed/feed", etiqueta: "Feed", icono: LayoutGrid },
   // Portal: clon del Feed acotado al canal `origen="portal"` (auto-producidos de fuente propia).
@@ -95,6 +105,7 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/investigacion": TABS_INVESTIGACION,
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
+  "/operacion/programa": TABS_PROGRAMA,
   // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
   // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
   "/publicaciones/texto": TABS_TEXTO,

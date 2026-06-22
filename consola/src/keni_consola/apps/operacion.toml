@@ -48,6 +48,12 @@ rutas_frontend = [
   "/operacion/feed",
   "/operacion/feed/feed",
   "/operacion/feed/lista",
+  # «Programa» (hub) con dos pestañas: «Programación» (calendario) y «Plan» (líneas: su hashtag y
+  # los keywords del clasificador). La ruta plana legacy `/operacion/programacion` se conserva para
+  # que su redirección (ver router.tsx) resuelva dentro de la app.
+  "/operacion/programa",
+  "/operacion/programa/programacion",
+  "/operacion/programa/plan",
   "/operacion/programacion",
   "/operacion/turnos",
   "/operacion/trabajo",
@@ -76,12 +82,13 @@ orden = 20
 # sidebar: Programación (calendario de publicaciones, por marca) y Turnos (rota de cobertura
 # del equipo, por marca). Ambas respetan la marca activa del workspace; "Todas" agrega.
 
-# Programación: la rejilla mensual de publicaciones programadas, por marca activa.
+# Programa: hub con dos pestañas — «Programación» (calendario de publicaciones, por marca) y «Plan»
+# (las líneas de la marca: su hashtag derivado y los keywords del clasificador). Por marca activa.
 [[nav]]
-ruta = "/operacion/programacion"
-etiqueta = "Programación"
+ruta = "/operacion/programa"
+etiqueta = "Programa"
 icono = "CalendarDays"
-descripcion = "Calendario de publicaciones programadas, por marca. La cadencia por red alimenta esta rejilla."
+descripcion = "Calendario de publicaciones y el plan de líneas (hashtag y keywords), por marca."
 grupo = "operacion"
 grupo_orden = 10
 orden = 25

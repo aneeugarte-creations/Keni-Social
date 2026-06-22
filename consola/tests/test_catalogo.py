@@ -105,7 +105,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/contenido/video"] == "Clapperboard"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
-    assert iconos["/operacion/programacion"] == "CalendarDays"
+    assert iconos["/operacion/programa"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
     assert iconos["/operacion/trabajo"] == "ClipboardList"
     # Investigación (el cockpit operativo del pool) vive en «Operación»; «Contexto» (el pipeline de

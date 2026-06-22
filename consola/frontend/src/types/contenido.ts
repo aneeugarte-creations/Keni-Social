@@ -102,6 +102,11 @@ export interface Etiqueta {
   color: string;
   /** CSV de palabras clave para auto-clasificar piezas en esta etiqueta. */
   keywords: string;
+  /**
+   * Hashtag(s) de la etiqueta (CSV, sin '#'). En una LÍNEA se DERIVA de su nombre (1:1, no
+   * editable); en una campaña lo fija el equipo. La etapa Keywords lo exige en el caption.
+   */
+  hashtags: string;
   activo: boolean;
   /** Días que un ítem de esta línea se considera fresco. 0 = sin caducidad / evergreen. */
   ttl_dias: number;

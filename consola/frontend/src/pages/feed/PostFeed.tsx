@@ -608,7 +608,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           (etapa === "programada" ? (
             <Tooltip label="Ver en Programación">
               <Link
-                to="/operacion/programacion"
+                to="/operacion/programa/programacion"
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 rounded-md text-xs tabular-nums text-muted-foreground hover:text-foreground"
                 aria-label={`Programada para ${formatearFechaHora(pieza.fecha_programada)} — ver en Programación`}

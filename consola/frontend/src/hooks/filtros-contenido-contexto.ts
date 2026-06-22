@@ -77,13 +77,13 @@ export function claveLineaActiva(usuarioId: string): string {
  * Rutas donde APLICAN (y se pintan) los selectores globales de Red y Línea: las
  * superficies de contenido/feed que antes llevaban esos filtros por página —el Feed
  * de ideación (`/operacion/feed/feed`), la Lista de contenido (`/operacion/feed/lista`)
- * y la Programación (`/operacion/programacion`)—. En métricas/ajustes/usuarios NO se
+ * y la Programación (`/operacion/programa/programacion`)—. En métricas/ajustes/usuarios NO se
  * muestran (el provider sigue siendo global; solo se oculta la UI).
  */
 export const RUTAS_FILTROS_CONTENIDO = [
   "/operacion/feed/feed",
   "/operacion/feed/lista",
-  "/operacion/programacion",
+  "/operacion/programa/programacion",
 ];
 
 /** ¿La ruta actual usa los filtros globales de contenido (Red/Línea)? */
