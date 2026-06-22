@@ -264,16 +264,17 @@ def _reconciliar_linea(
     *, nombre: str, marca: str, ttl_dias: int, es_evergreen: bool,
     grupo: str = "", cadencia: str = "normal", keywords: str = "", hashtags: str = "",
 ) -> bool:
-    """Reconcilia una línea YA existente con su definición del seed. Guarded. True si tocó algo.
+    """Reconcilia una línea YA existente con su definición del seed. True si tocó algo.
 
-    Cinco ejes, cada uno con su guarda (nunca pisa una edición del equipo):
+    La mayoría de ejes son guarded (nunca pisan una edición del equipo); el hashtag NO:
       - ttl/es_evergreen: solo si la línea sigue en defaults (ttl 0 / es_evergreen False).
       - grupo: re-mapea a la taxonomía canónica del seed SOLO si el grupo actual lo administra el
         bootstrap (`_grupos_gestionados`); un grupo puesto a mano se respeta. Lleva el re-grupado
         (p. ej. Transversal->Actualidad, Otros deportes->Motor/NFL/…) a líneas ya sembradas.
       - cadencia: solo si sigue en 'normal'.
       - keywords: siembra el catálogo SOLO si la línea aún no tiene keywords.
-      - hashtags: siembra el hashtag de la línea SOLO si aún no tiene ninguno.
+      - hashtags: se FUERZA al slug del nombre (línea = hueco de programación = hashtag, 1:1; no es
+        un campo libre). Mantiene en sincronía todas las líneas existentes.
     """
     et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
     if et is None:
@@ -289,7 +290,7 @@ def _reconciliar_linea(
         cambios["cadencia"] = cadencia
     if keywords and not (et.get("keywords") or "").strip():
         cambios["keywords"] = keywords
-    if hashtags and not (et.get("hashtags") or "").strip():
+    if hashtags and (et.get("hashtags") or "") != hashtags:
         cambios["hashtags"] = hashtags
     if cambios:
         repos.actualizar_etiqueta(et["id"], cambios)

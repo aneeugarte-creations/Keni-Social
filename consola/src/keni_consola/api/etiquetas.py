@@ -36,6 +36,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, repos
+from ..bootstrap_lineas import slug_hashtag
 from .._http_json import leer_json
 from ..estados import (
     CADENCIA_LINEA_DEFECTO,
@@ -176,6 +177,10 @@ def _crear(
 ) -> tuple[int, dict]:
     if repos.existe_etiqueta_nombre(nombre, clase, marca):
         return 409, {"error": "Ya existe una etiqueta con ese nombre."}
+    # LÍNEA = hashtag (1:1, línea = hueco de programación = hashtag): el hashtag de una línea se
+    # DERIVA del nombre, no es un campo libre. Para campañas/otras clases lo edita el equipo.
+    if clase == "vertical":
+        hashtags = slug_hashtag(nombre)
     etiqueta = repos.crear_etiqueta(
         nombre=nombre,
         clase=clase,
@@ -269,6 +274,10 @@ def _actualizar(etiqueta_id: str, datos: dict) -> tuple[int, dict]:
     nombre_f = str(campos.get("nombre", actual["nombre"]))
     clase_f = str(campos.get("clase", actual["clase"]))
     marca_f = str(campos.get("marca", actual["marca"]))
+    # LÍNEA = hashtag (1:1): el hashtag de una línea se DERIVA del nombre, no se edita a mano.
+    # Lo refuerza en cada update (y lo re-sincroniza al renombrar), pisando lo que llegue en `datos`.
+    if clase_f == "vertical":
+        campos["hashtags"] = slug_hashtag(nombre_f)
     if repos.existe_etiqueta_nombre(nombre_f, clase_f, marca_f, excluir_id=etiqueta_id):
         return 409, {"error": "Ya existe una etiqueta con ese nombre."}
 

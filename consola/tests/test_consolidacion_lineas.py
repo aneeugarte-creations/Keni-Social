@@ -97,14 +97,49 @@ def test_bootstrap_siembra_hashtag_de_linea(entorno):
     assert nacional is not None and nacional["hashtags"] == "nacional"
 
 
-def test_bootstrap_no_pisa_hashtag_de_linea_editado(entorno):
-    # Guarded: si el equipo ya puso un hashtag a mano, el bootstrap no lo reescribe.
+def test_bootstrap_fuerza_el_hashtag_de_linea_aunque_difiera(entorno):
+    # Línea = hashtag (1:1, derivado del nombre): NO es un campo libre. El bootstrap reconcilia
+    # forzando el slug aunque una línea existente tuviera otro valor (lo mantiene en sincronía).
     repos.crear_etiqueta(
-        nombre="Salud", clase="vertical", marca="fundacion", hashtags="SaludConCausa",
+        nombre="Salud", clase="vertical", marca="fundacion", hashtags="otracosa",
     )
     bootstrap_lineas.inicializar_lineas()
     salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
-    assert salud is not None and salud["hashtags"] == "SaludConCausa"
+    assert salud is not None and salud["hashtags"] == "salud"
+
+
+def test_crear_linea_deriva_el_hashtag_del_nombre_e_ignora_lo_enviado(entorno):
+    # Una línea nueva (clase vertical) deriva su hashtag del nombre, pase lo que pase en `hashtags`.
+    from keni_consola.api.etiquetas import _crear
+
+    status, cuerpo = _crear(
+        nombre="Ciencia/Tech", clase="vertical", marca="fundacion", color="",
+        keywords="", hashtags="loquesea", ttl_dias=0, es_evergreen=True, grupo="", cadencia="evergreen",
+    )
+    assert status == 200 and cuerpo["etiqueta"]["hashtags"] == "cienciatech"
+
+
+def test_crear_campania_respeta_el_hashtag_del_equipo(entorno):
+    # Las campañas NO derivan: el equipo fija sus hashtags (puede llevar varios, su casing).
+    from keni_consola.api.etiquetas import _crear
+
+    _status, cuerpo = _crear(
+        nombre="Mundial", clase="campania", marca="unotv", color="",
+        keywords="", hashtags="Mundial2026", ttl_dias=0, es_evergreen=False, grupo="", cadencia="normal",
+    )
+    assert cuerpo["etiqueta"]["hashtags"] == "Mundial2026"
+
+
+def test_renombrar_linea_resincroniza_su_hashtag(entorno):
+    # Renombrar una línea re-sincroniza su hashtag (línea = hashtag, 1:1).
+    from keni_consola.api.etiquetas import _actualizar, _crear
+
+    _status, c = _crear(
+        nombre="Salud", clase="vertical", marca="fundacion", color="",
+        keywords="", hashtags="", ttl_dias=0, es_evergreen=True, grupo="", cadencia="evergreen",
+    )
+    status, cuerpo = _actualizar(c["etiqueta"]["id"], {"nombre": "Medio ambiente"})
+    assert status == 200 and cuerpo["etiqueta"]["hashtags"] == "medioambiente"
 
 
 def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
