@@ -183,7 +183,7 @@ def test_teardown_borra_worktree_rama_y_preview(monkeypatch, tmp_path):
     assert ("worktree", "remove", "--force", str(wt)) in fake.llamadas
     assert ("branch", "-D", "dev/sug-z") in fake.llamadas
     assert prefijos == ["previews/sug-z/"]
-    assert avances == [("z", {"worktree": ""})]
+    assert avances == [("z", {"worktree": "", "preview_listo": False})]
 
 
 def test_teardown_idempotente_sin_worktree(monkeypatch, tmp_path):
@@ -241,3 +241,53 @@ def test_ids_con_restos_une_worktrees_ramas_y_previews(monkeypatch, tmp_path):
     )
 
     assert worker_dev._ids_con_restos() == {"a", "b", "c"}
+
+
+# --------------------------------------------------------------------------- #
+# Construcción del preview: vite build -> sube el bundle a previews/sug-<id>/  #
+# --------------------------------------------------------------------------- #
+
+
+def _preparar_front(tmp_path):
+    front = tmp_path / "consola" / "frontend"
+    (front / "node_modules").mkdir(parents=True)  # evita el npm ci
+    (front / "package.json").write_text("{}")
+    return front
+
+
+def test_construir_preview_compila_y_sube_el_bundle(monkeypatch, tmp_path):
+    front = _preparar_front(tmp_path)
+
+    def fake_cmd(argv, *, cwd, timeout=900):
+        if argv[:2] == ["npx", "vite"]:
+            # vite build con --base correcto escribe el bundle en dist-preview.
+            assert "--base" in argv and argv[argv.index("--base") + 1] == "/api/preview/sug-z/"
+            (front / "dist-preview" / "assets").mkdir(parents=True)
+            (front / "dist-preview" / "index.html").write_text("<html>")
+            (front / "dist-preview" / "assets" / "app.js").write_text("//js")
+        return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(worker_dev, "_correr_cmd", fake_cmd)
+    monkeypatch.setattr(worker_dev.almacen_media, "borrar_prefijo", lambda _p: 0)
+    subidos: dict[str, str] = {}
+    monkeypatch.setattr(
+        worker_dev.almacen_media, "guardar_crudo",
+        lambda clave, datos, *, content_type: subidos.__setitem__(clave, content_type),
+    )
+
+    assert worker_dev._construir_preview(tmp_path, "z") is True
+    assert "previews/sug-z/index.html" in subidos
+    assert "previews/sug-z/assets/app.js" in subidos
+
+
+def test_construir_preview_build_falla_devuelve_false(monkeypatch, tmp_path):
+    _preparar_front(tmp_path)
+    monkeypatch.setattr(
+        worker_dev, "_correr_cmd",
+        lambda argv, *, cwd, timeout=900: subprocess.CompletedProcess(argv, 1, "", "boom"),
+    )
+    assert worker_dev._construir_preview(tmp_path, "z") is False
+
+
+def test_construir_preview_sin_frontend_devuelve_false(tmp_path):
+    assert worker_dev._construir_preview(tmp_path, "z") is False

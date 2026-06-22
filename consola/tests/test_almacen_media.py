@@ -83,6 +83,21 @@ def test_borrar_prefijo_vacio_es_noop(disco):
     assert almacen_media.borrar_prefijo("") == 0
 
 
+def test_disco_guardar_y_leer_crudo_anidado(disco):
+    almacen_media.guardar_crudo(
+        "previews/sug-x/assets/app.js", b"//js", content_type="text/javascript"
+    )
+    assert almacen_media.leer_crudo("previews/sug-x/assets/app.js") == b"//js"
+    assert almacen_media.leer_crudo("previews/sug-x/noexiste.js") is None
+
+
+def test_crudo_rechaza_traversal(disco):
+    with pytest.raises(ValueError):
+        almacen_media.guardar_crudo("previews/../escapa.js", b"x", content_type="text/plain")
+    assert almacen_media.leer_crudo("previews/../escapa.js") is None
+    assert almacen_media.leer_crudo("/etc/passwd") is None
+
+
 def test_disco_objeto_existe(disco):
     assert almacen_media.objeto_existe("y.png") is False
     almacen_media.guardar_objeto("y.png", b"y", content_type="image/png")
@@ -181,6 +196,16 @@ def test_s3_borrar_prefijo(s3):
     restantes = {k for (k, _m) in almacen_media.listar_objetos()}
     assert not any(k.startswith("previews/sug-x/") for k in restantes)
     assert "foto.png" in restantes  # el resto del bucket intacto
+
+
+def test_s3_guardar_y_leer_crudo_anidado(s3):
+    almacen_media.guardar_crudo(
+        "previews/sug-x/assets/app.js", b"//js", content_type="text/javascript"
+    )
+    assert almacen_media.leer_crudo("previews/sug-x/assets/app.js") == b"//js"
+    assert almacen_media.leer_crudo("previews/sug-x/falta.js") is None
+    obj = s3.get_object(Bucket="keni-media", Key="previews/sug-x/assets/app.js")
+    assert obj["ContentType"] == "text/javascript"
 
 
 def test_s3_prefijo_desconocido_o_traversal_rechazado(s3):

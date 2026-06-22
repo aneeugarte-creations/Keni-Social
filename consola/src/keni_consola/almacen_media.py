@@ -436,3 +436,53 @@ def borrar_prefijo(prefijo: str) -> int:
     contados = sum(1 for p in objetivo.rglob("*") if p.is_file())
     shutil.rmtree(objetivo, ignore_errors=True)
     return contados
+
+
+def _clave_cruda_valida(clave: str) -> bool:
+    """True si `clave` es una key CRUDA segura: no vacia, sin `..`, sin barra inicial ni `\\`."""
+    if not clave or clave.startswith("/") or "\\" in clave:
+        return False
+    return ".." not in clave.split("/")
+
+
+def guardar_crudo(clave: str, datos: bytes, *, content_type: str) -> None:
+    """Guarda `datos` con una clave CRUDA multinivel (p.ej. `previews/sug-x/assets/app.js`).
+
+    A diferencia de `guardar_objeto`, NO pasa por el esquema `<categoria>/<nombre>`: la usan los
+    bundles de preview del carril dev, con rutas anidadas. Sigue siendo defensiva: rechaza claves
+    con `..` o vacias, y en disco ancla el destino DENTRO del dir de media (anti-traversal).
+    """
+    if not _clave_cruda_valida(clave):
+        raise ValueError(f"clave cruda invalida: {clave!r}")
+    if s3_activo():
+        _s3().put_object(Bucket=config.s3_bucket(), Key=clave, Body=datos, ContentType=content_type)
+        return
+    base = asegurar_dir().resolve()
+    destino = (base / clave).resolve()
+    if not destino.is_relative_to(base):
+        raise ValueError(f"clave cruda invalida: {clave!r}")
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(datos)
+
+
+def leer_crudo(clave: str) -> bytes | None:
+    """Lee los bytes de una clave CRUDA multinivel; None si no existe o es invalida.
+
+    Pareja de `guardar_crudo`: la usa `api/preview.py` para servir los assets del bundle.
+    """
+    if not _clave_cruda_valida(clave):
+        return None
+    if s3_activo():
+        try:
+            resp = _s3().get_object(Bucket=config.s3_bucket(), Key=clave)
+        except Exception:  # noqa: BLE001 -- NoSuchKey u otro fallo de lectura -> None
+            return None
+        return resp["Body"].read()
+    base = asegurar_dir().resolve()
+    destino = (base / clave).resolve()
+    if not destino.is_relative_to(base) or not destino.is_file():
+        return None
+    try:
+        return destino.read_bytes()
+    except OSError:
+        return None

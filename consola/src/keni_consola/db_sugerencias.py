@@ -33,6 +33,7 @@ _COLS_SUGERENCIA = (
     "worktree",
     "diff_resumen",
     "coste_usd",
+    "preview_listo",
     "creada",
     "actualizada",
 )
@@ -54,13 +55,15 @@ _CAMPOS_EDITABLES_SUGERENCIA: tuple[str, ...] = (
     "worktree",
     "diff_resumen",
     "coste_usd",
+    "preview_listo",
 )
 
 
 def _fila_a_sugerencia(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `sugerencias` en dict (coste_usd como float)."""
+    """Convierte una fila de `sugerencias` en dict (coste_usd float, preview_listo bool)."""
     s = {col: fila[col] for col in _COLS_SUGERENCIA}
     s["coste_usd"] = float(s["coste_usd"] or 0)
+    s["preview_listo"] = bool(s["preview_listo"])
     return s
 
 
@@ -107,6 +110,7 @@ def crear_sugerencia(
         "worktree": worktree or "",
         "diff_resumen": diff_resumen or "",
         "coste_usd": float(coste_usd or 0),
+        "preview_listo": False,
         "creada": creada or ahora,
         "actualizada": actualizada or ahora,
     }

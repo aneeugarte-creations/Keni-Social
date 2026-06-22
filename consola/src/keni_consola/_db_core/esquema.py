@@ -1207,6 +1207,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         worktree      TEXT NOT NULL DEFAULT '',
         diff_resumen  TEXT NOT NULL DEFAULT '',
         coste_usd     DOUBLE PRECISION NOT NULL DEFAULT 0,
+        preview_listo BOOLEAN NOT NULL DEFAULT FALSE,
         creada        TEXT NOT NULL DEFAULT '',
         actualizada   TEXT NOT NULL DEFAULT ''
     )
@@ -1219,6 +1220,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # suyas (filtradas por este id). Índice para el filtrado por dueño.
     "ALTER TABLE sugerencias ADD COLUMN IF NOT EXISTS autor_id TEXT NOT NULL DEFAULT ''",
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_autor_id ON sugerencias (autor_id)",
+    # `preview_listo`: hay un bundle navegable del cambio publicado en `previews/sug-<id>/` y
+    # servido en `/api/preview/<id>/`. Lo pone el worker tras construirlo y lo resetea el
+    # teardown de la promocion/descarte.
+    "ALTER TABLE sugerencias ADD COLUMN IF NOT EXISTS preview_listo BOOLEAN NOT NULL DEFAULT FALSE",
     # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
     # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
     # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.

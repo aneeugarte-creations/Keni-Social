@@ -40,6 +40,9 @@ modulos_backend = [
   "artes",
   "alertas",
   "sugerencias",
+  # api/preview.py: sirve el preview navegable de una propuesta (assets del bundle desde el
+  # almacen + proxy SOLO-GET a la API real). Transversal del shell, hermano de sugerencias.
+  "preview",
   # api/ralph.py: proxy admin-gated hacia worker-ralph (sesiones claude persistentes de
   # los agentes Ralph). Overlay global transversal del shell (la burbuja), hermano de sistema.
   "ralph",

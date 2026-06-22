@@ -27,6 +27,7 @@ El worker de CONTENIDO (`worker.py`) EXCLUYE el carril `dev` al reclamar.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 import shutil
 import signal
@@ -178,6 +179,61 @@ def _diff_resumen(worktree: Path) -> str:
     return (res.stdout or "").strip()
 
 
+def _correr_cmd(argv: list[str], *, cwd: Path, timeout: int = 900) -> subprocess.CompletedProcess:
+    """Corre un comando (npm/npx) y devuelve el proceso. Helper aparte de `_git` para parchearlo en tests."""
+    return subprocess.run(  # noqa: S603 -- argv lista, sin shell
+        argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout,
+    )
+
+
+def _construir_preview(worktree: Path, sugerencia_id: str) -> bool:
+    """Compila el frontend de la rama y sube el bundle a `previews/sug-<id>/`. Devuelve si quedo listo.
+
+    El bundle se compila con `base=/api/preview/sug-<id>/` para que sus assets y su cliente API
+    cuelguen de ese prefijo (lo sirve `api/preview.py`). NO lanza: un fallo de build/instalacion
+    se loguea y devuelve False (el preview es un extra, no debe tumbar la fase). Reupload limpio:
+    borra el prefijo antes de subir para que un bundle que encoge no deje assets viejos.
+    """
+    front = worktree / "consola" / "frontend"
+    if not (front / "package.json").is_file():
+        return False
+    salida = front / "dist-preview"
+    base = f"/api/preview/sug-{sugerencia_id}/"
+    try:
+        if not (front / "node_modules").is_dir():
+            dep = _correr_cmd(["npm", "ci", "--prefer-offline", "--no-audit"], cwd=front, timeout=1200)
+            if dep.returncode != 0:
+                _log.warning("preview: npm ci falló (%s): %s", sugerencia_id, (dep.stderr or "")[:300])
+                return False
+        build = _correr_cmd(
+            ["npx", "vite", "build", "--base", base, "--outDir", str(salida), "--emptyOutDir"],
+            cwd=front, timeout=900,
+        )
+        if build.returncode != 0:
+            _log.warning("preview: vite build falló (%s): %s", sugerencia_id, (build.stderr or "")[:300])
+            return False
+    except (OSError, subprocess.SubprocessError) as e:
+        _log.warning("preview: no se pudo construir el bundle de %s: %s", sugerencia_id, e)
+        return False
+
+    almacen_media.borrar_prefijo(f"{_PREFIJO_PREVIEW}sug-{sugerencia_id}/")
+    subidos = 0
+    for fichero in salida.rglob("*"):
+        if not fichero.is_file():
+            continue
+        rel = fichero.relative_to(salida).as_posix()
+        ct = mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        try:
+            almacen_media.guardar_crudo(
+                f"{_PREFIJO_PREVIEW}sug-{sugerencia_id}/{rel}", fichero.read_bytes(), content_type=ct
+            )
+            subidos += 1
+        except Exception:  # noqa: BLE001 -- un fichero que falla no aborta el bundle
+            _log.warning("preview: no se pudo subir %s de %s", rel, sugerencia_id, exc_info=True)
+    shutil.rmtree(salida, ignore_errors=True)
+    return subidos > 0
+
+
 def _teardown(sugerencia_id: str) -> None:
     """Elimina TODO rastro de una sugerencia: worktree, rama local y preview en S3/disco.
 
@@ -202,7 +258,7 @@ def _teardown(sugerencia_id: str) -> None:
     except Exception:  # noqa: BLE001 -- limpieza best-effort
         _log.warning("worker_dev: fallo al borrar el preview de %s", sugerencia_id, exc_info=True)
     try:
-        sugerencias.actualizar_avance(sugerencia_id, {"worktree": ""})
+        sugerencias.actualizar_avance(sugerencia_id, {"worktree": "", "preview_listo": False})
     except Exception:  # noqa: BLE001 -- reflejar el campo es secundario
         _log.warning("worker_dev: fallo al limpiar el campo worktree de %s", sugerencia_id, exc_info=True)
 
@@ -526,6 +582,10 @@ def _procesar_job(job: dict) -> None:
                 avance["coste_usd"] = float(sug.get("coste_usd") or 0) + coste
             if avance:
                 sugerencias.actualizar_avance(sugerencia_id, avance)
+            # Tras construir, compila el frontend de la rama y publica un preview navegable.
+            if kind == jobspec.PROC_DEV_FASE and fase == desarrollo.FASE_BUILD:
+                listo = _construir_preview(worktree, sugerencia_id)
+                sugerencias.actualizar_avance(sugerencia_id, {"preview_listo": listo})
             generaciones.actualizar(gen_id, {
                 "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
                 "salida": texto, "metricas": resultado["metricas"], "error": "",
