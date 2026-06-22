@@ -764,11 +764,13 @@ export function Calendario({
         {/* Panel de Gestión como columna lateral (solo admin). Cerrado no pinta nada (la rejilla
             recupera el ancho). Tres bloques, de más usado a menos: reparto MANUAL (comparte estado
             con la rejilla → cada turno aparece al instante), «Cambios y ausencias», y al FINAL el
-            reparto automático desde un documento (la última opción). */}
+            reparto automático desde un documento (la última opción). El panel ENTERO cabe en el
+            alto del viewport: el reparto y el import quedan fijos y solo la LISTA de cambios hace
+            scroll dentro de su recuadro, así nunca hay que deslizar el panel para llegar a ellos. */}
         {esGestion && abrirAsignar && (
           <aside
             aria-label="Asignar turnos"
-            className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col gap-4 overflow-y-auto"
+            className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col gap-4"
           >
             <DialogoAsignarTurnos
               incrustado
@@ -782,22 +784,23 @@ export function Calendario({
             />
             <section
               aria-label="Cambios y ausencias"
-              className="rounded-lg border bg-card p-4 shadow-sm"
+              className="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card p-4"
             >
-              <h2 className="mb-3 text-base font-semibold">Cambios y ausencias</h2>
-              <CambiosYAusencias esAdmin={esAdmin} />
+              <h2 className="mb-3 shrink-0 text-base font-semibold">Cambios y ausencias</h2>
+              {/* Solo la lista (no la cabecera del panel) hace scroll: la franja de filtros y
+                  «Nueva solicitud» viajan con ella, pero el recuadro queda acotado al hueco libre. */}
+              <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
+                <CambiosYAusencias esAdmin={esAdmin} />
+              </div>
             </section>
-            {/* Reparto automático: la ÚLTIMA opción, al fondo. Sube una parrilla/Excel/foto y Keni
-                propone los turnos; al aplicar, la rejilla se refresca (no cierra el panel). */}
-            <div className="space-y-2 rounded-lg border border-dashed border-border p-4">
+            {/* Reparto automático: la ÚLTIMA opción, al fondo y compacta (la acción vive en su propio
+                diálogo). Sube una parrilla/Excel/foto y Keni propone los turnos; al aplicar, la
+                rejilla se refresca (no cierra el panel). */}
+            <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-dashed border-border p-3">
               <div className="flex items-center gap-1.5 text-sm font-medium">
                 <Sparkles className="h-4 w-4 text-primary" />
                 Automático: de un documento
               </div>
-              <p className="text-xs text-muted-foreground">
-                ¿Tienes una parrilla, un Excel o una foto? Súbela y Keni propone los turnos; los
-                revisas antes de aplicar. Es la última opción si no quieres repartir a mano.
-              </p>
               <ImportarDocumentoParrilla marca={marcaActiva ?? ""} onAplicado={invalidar} />
             </div>
           </aside>

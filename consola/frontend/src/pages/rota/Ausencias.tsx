@@ -222,10 +222,10 @@ export function TarjetaAusencia({
     : [];
 
   return (
-    // Misma ficha flotante que la tarjeta de cambio (rounded-lg + shadow-sm) para que la
-    // lista fusionada se lea como un solo sistema; padding en el contenido con `pr-10` para
-    // que el texto no toque el borde y reservar el hueco del kebab de acciones.
-    <Card className="rounded-lg shadow-sm">
+    // Misma ficha plana que la tarjeta de cambio (rounded-lg, sin sombra) para que la lista
+    // fusionada se lea como un solo sistema; padding en el contenido con `pr-10` para que el
+    // texto no toque el borde y reservar el hueco del kebab de acciones.
+    <Card className="rounded-lg">
       <FilaConAcciones
         como="div"
         realce={puedeGestionar}
