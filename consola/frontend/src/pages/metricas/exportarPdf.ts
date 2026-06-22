@@ -124,16 +124,36 @@ export async function exportarPresentacion(opts: OpcionesDeck): Promise<string> 
   doc.text(pie, M + 28, H / 2 + 56);
 
   // --- Diapositivas de contenido (rasterizadas) ---
+  // Límites de canvas del navegador: superarlos cuelga la pestaña o devuelve un canvas
+  // vacío. Acotamos la escala de captura por dimensión y por área para que NINGÚN bloque
+  // (p. ej. una tabla virtualizada muy alta) genere un canvas inviable.
+  const MAX_DIM = 8000;
+  const MAX_AREA = 20_000_000;
   const fondoCss = estiloBody.backgroundColor;
+  let paginas = 0;
   for (const nodo of nodos) {
     const titulo = nodo.getAttribute("data-slide") || "";
-    const canvas = await html2canvas(nodo, {
-      scale: 2,
-      backgroundColor: fondoCss,
-      useCORS: true,
-      logging: false,
-      windowWidth: nodo.scrollWidth,
-    });
+    let canvas: HTMLCanvasElement;
+    try {
+      const w0 = nodo.scrollWidth || nodo.offsetWidth || 1;
+      const h0 = nodo.scrollHeight || nodo.offsetHeight || 1;
+      let escalaCaptura = 2;
+      escalaCaptura = Math.min(escalaCaptura, MAX_DIM / Math.max(w0, h0));
+      escalaCaptura = Math.min(escalaCaptura, Math.sqrt(MAX_AREA / (w0 * h0)));
+      escalaCaptura = Math.max(0.4, Math.min(2, escalaCaptura));
+      canvas = await html2canvas(nodo, {
+        scale: escalaCaptura,
+        backgroundColor: fondoCss,
+        useCORS: true,
+        // Nunca esperar indefinidamente por una imagen (cross-origin sin CORS colgaría).
+        imageTimeout: 5000,
+        logging: false,
+      });
+    } catch {
+      // Un bloque problemático NO debe abortar todo el PDF: se omite y se sigue.
+      continue;
+    }
+    if (!canvas.width || !canvas.height) continue;
 
     doc.addPage();
     pintarFondo();
@@ -157,13 +177,23 @@ export async function exportarPresentacion(opts: OpcionesDeck): Promise<string> 
     const w = canvas.width * escala;
     const h = canvas.height * escala;
     const x = M + (areaW - w) / 2;
-    doc.addImage(canvas.toDataURL("image/png"), "PNG", x, areaY, w, h, undefined, "FAST");
+    // JPEG (calidad alta) en vez de PNG: un canvas grande en PNG dispara el tamaño del
+    // PDF y la memoria; JPEG mantiene el archivo manejable sin pérdida perceptible.
+    doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", x, areaY, w, h, undefined, "FAST");
+    paginas++;
 
     // Pie de página discreto.
     doc.setTextColor(tenue[0], tenue[1], tenue[2]);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
     doc.text(`${opts.marca} · ${opts.red} · ${opts.periodo}`, M, H - 18);
+
+    // Cede el hilo entre diapositivas: la UI respira (spinner/toast) y no se "cuelga".
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  if (paginas === 0) {
+    throw new Error("No se pudo capturar ninguna sección para el PDF.");
   }
 
   const nombre = `presentacion-${opts.nombreArchivo}.pdf`;

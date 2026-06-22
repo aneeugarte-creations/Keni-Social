@@ -1,21 +1,24 @@
 /**
  * Descargas del dashboard de Métricas: DOS acciones, CSV y PDF presentación.
  *
- *   - "CSV": el reporte agregado del periodo (`api.exportarMetricas`), descarga del backend.
+ *   - "CSV": TODO lo que está en pantalla volcado a un único CSV (KPIs, por marca, por red,
+ *     cobertura, tendencia, seguidores, desglose, cruces, correlación, líneas, publicidad y
+ *     las listas de piezas), leído de las queries ACTIVAS de la caché de React Query con el
+ *     filtro de marca/red/periodo ya aplicado. Ver `exportarCsv.ts`.
  *   - "PDF": un deck 16:9 "presentación" generado en el navegador a partir del ESTADO VIVO
- *     de la página (marca, periodo, red, filtros y orden de columnas aplicados), capturando
- *     los bloques `[data-slide]` del cuerpo del dashboard. Ver `exportarPdf.ts`.
+ *     de la página, capturando los bloques `[data-slide]` del cuerpo. Ver `exportarPdf.ts`.
  *
  * Reemplaza al antiguo menú de 6 formatos (reporte/piezas × csv/md/json): el equipo de AMX
- * solo necesita un CSV para hojas de cálculo y un PDF listo para presentar a dirección.
+ * solo necesita un CSV completo para hojas de cálculo y un PDF listo para presentar a dirección.
  */
+import { useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, Loader2, Presentation } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
 
+import { construirCsvCompleto, descargarTexto } from "./exportarCsv";
 import { exportarPresentacion } from "./exportarPdf";
 
 interface BotonesDescargaProps {
@@ -48,13 +51,43 @@ function slug(texto: string): string {
 export function BotonesDescarga({
   rango,
   marca,
-  red,
   marcaEtiqueta,
   redEtiqueta,
   periodoEtiqueta,
   generadoEn,
 }: BotonesDescargaProps) {
   const [generandoPdf, setGenerandoPdf] = React.useState(false);
+  const qc = useQueryClient();
+
+  const nombreArchivo = React.useMemo(
+    () =>
+      [marca ?? "todas", redEtiqueta, rango]
+        .map((p) => slug(String(p)))
+        .filter(Boolean)
+        .join("-"),
+    [marca, redEtiqueta, rango],
+  );
+
+  // CSV completo: vuelca las queries ACTIVAS de métricas (= las secciones montadas en
+  // pantalla), con el filtro de marca/red/periodo ya aplicado. Síncrono y al instante.
+  const descargarCsv = React.useCallback(() => {
+    const entradas = qc.getQueriesData({ queryKey: ["metricas"], type: "active" }) as Array<
+      [readonly unknown[], unknown]
+    >;
+    const conDatos = entradas.filter(([, d]) => d != null);
+    if (conDatos.length === 0) {
+      toast.error("No hay datos cargados que exportar.");
+      return;
+    }
+    const csv = construirCsvCompleto(conDatos, {
+      marca: marcaEtiqueta,
+      red: redEtiqueta,
+      periodo: periodoEtiqueta,
+      generadoEn,
+    });
+    descargarTexto(`analiticas-${nombreArchivo}.csv`, csv, "text/csv;charset=utf-8");
+    toast.success("CSV completo descargado.");
+  }, [qc, marcaEtiqueta, redEtiqueta, periodoEtiqueta, generadoEn, nombreArchivo]);
 
   const descargarPdf = React.useCallback(async () => {
     const raiz = document.querySelector<HTMLElement>("[data-deck-root]");
@@ -64,10 +97,6 @@ export function BotonesDescarga({
     }
     setGenerandoPdf(true);
     try {
-      const nombreArchivo = [marca ?? "todas", redEtiqueta, rango]
-        .map((p) => slug(String(p)))
-        .filter(Boolean)
-        .join("-");
       await exportarPresentacion({
         raiz,
         marca: marcaEtiqueta,
@@ -82,7 +111,7 @@ export function BotonesDescarga({
     } finally {
       setGenerandoPdf(false);
     }
-  }, [marca, marcaEtiqueta, redEtiqueta, periodoEtiqueta, rango, generadoEn]);
+  }, [marcaEtiqueta, redEtiqueta, periodoEtiqueta, generadoEn, nombreArchivo]);
 
   return (
     <>
@@ -90,7 +119,7 @@ export function BotonesDescarga({
         variant="outline"
         size="sm"
         className="h-8 gap-1.5 text-xs"
-        onClick={() => api.exportarMetricas("csv", { rango, marca, red })}
+        onClick={descargarCsv}
       >
         <FileSpreadsheet className="h-4 w-4" />
         CSV
