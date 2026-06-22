@@ -21,9 +21,10 @@ from keni_consola.apps import registro
 _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints que el equipo toca cada día. Investigación (el pool de noticias
     # que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el bloque, ENCIMA del Feed;
-    # luego el Feed (red social interna + lista), la Programación (calendario de publicaciones), el
-    # «Calendario» (horario de turnos del equipo) y el «Trabajo» (eventos/tareas y su cobertura).
-    ["Investigación", "Feed", "Programación", "Calendario", "Trabajo"],
+    # luego el Feed (red social interna + lista), la Programación (calendario de publicaciones) y el
+    # «Trabajo» (eventos/tareas y su cobertura). El «Calendario» (horario) NO va aquí: tiene su
+    # propio bloque al fondo (ver abajo).
+    ["Investigación", "Feed", "Programación", "Trabajo"],
     # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
     # (estudio de video) y Audio (gestor audio→texto: transcripción whisper + agentes de Claude).
     # La página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
@@ -35,10 +36,14 @@ _SIDEBAR_BLOQUES = [
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.
     ["Analíticas"],
+    # «Calendario» (horario de turnos): su PROPIO bloque al fondo (grupo `turnos`, headerless), para
+    # no mezclarlo con el flujo de contenido. Es el último bloque del sidebar.
+    ["Calendario"],
 ]
 
-# Encabezados humanos de cada bloque, en el mismo orden.
-_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Máquina", "Datos"]
+# Encabezados humanos de cada bloque, en el mismo orden. El último bloque (turnos/Calendario) no
+# declara etiqueta en `ETIQUETAS_BLOQUE` → va sin encabezado ("", solo un divisor).
+_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Máquina", "Datos", ""]
 
 
 def _entorno(**flags: str) -> dict[str, str]:

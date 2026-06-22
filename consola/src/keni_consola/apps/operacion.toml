@@ -87,13 +87,16 @@ grupo_orden = 10
 orden = 25
 
 # Calendario: el horario de turnos del equipo (capacidad). Yo/Equipo · Semana/Mes, por marca activa.
+# Va en su PROPIO bloque al fondo del sidebar (grupo `turnos`, sin encabezado = solo un divisor):
+# el horario del equipo es otra clase de cosa que el flujo de contenido (Feed/Programación/Trabajo),
+# así que se separa de él en vez de mezclarse.
 [[nav]]
 ruta = "/operacion/turnos"
 etiqueta = "Calendario"
 icono = "CalendarClock"
 descripcion = "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca."
-grupo = "operacion"
-grupo_orden = 10
+grupo = "turnos"
+grupo_orden = 40
 orden = 28
 
 # Trabajo: eventos editoriales y tareas con su cobertura (qué hay que hacer y quién lo coge), por marca.
