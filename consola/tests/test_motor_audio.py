@@ -113,6 +113,28 @@ def test_ejecutor_audio_happy_path_escribe_transcrito(entorno, monkeypatch):
     assert "00:00:00,000 --> 00:00:01,500" in srt["contenido"]
 
 
+def test_ejecutor_audio_segmento_sin_fin_ms_no_revienta(entorno, monkeypatch):
+    """Un segmento ASR sin `fin_ms` no tumba el cierre: la duración cae al total transcrito."""
+    fila = repos.crear_audio_transcripcion(
+        marca=_MARCA, media_id="audios/y.mp4", nombre="grabacion.mp4", idioma="es-MX"
+    )
+    monkeypatch.setattr(media, "leer_objeto", lambda nombre: b"fake-bytes")
+    segs = [
+        {"inicio_ms": 0, "fin_ms": 1500, "texto": "Hola mundo", "palabras": []},
+        {"inicio_ms": 2000, "texto": "adiós", "palabras": []},  # sin `fin_ms`
+    ]
+    _mock_motor(monkeypatch, duracion_s=2.4, segs=segs)
+
+    audio.ejecutar_transcripcion_audio(
+        "g9", {"transcripcion_id": fila["id"], "media_id": "audios/y.mp4", "idioma": "es-MX"}
+    )
+
+    out = repos.obtener_audio_transcripcion(fila["id"])
+    assert out["estado"] == "transcrito"
+    assert out["duracion_ms"] == 2400  # respaldo al total tras transcribir
+    assert generaciones.obtener("g9")["estado"] == generaciones.ESTADO_COMPLETADO
+
+
 def test_ejecutor_audio_reanuda_desde_checkpoint(entorno, monkeypatch):
     """Con un checkpoint a medias, REANUDA: solo transcribe el tramo restante y no duplica el SRT."""
     # Audio de 600 s, ya transcrito hasta 300 s (un segmento guardado).

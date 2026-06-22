@@ -162,7 +162,7 @@ def ejecutar_transcripcion_audio(gen_id: str, spec: dict) -> None:
             inicio_s = fin_s
 
         texto = " ".join(s.get("texto", "") for s in segmentos).strip()
-        duracion_ms = int(segmentos[-1]["fin_ms"]) if segmentos else total_ms
+        duracion_ms = int(segmentos[-1].get("fin_ms", total_ms)) if segmentos else total_ms
 
         # 3) Persistir el borrador con timestamps (estado 'transcrito').
         repos.actualizar_audio_transcripcion(
