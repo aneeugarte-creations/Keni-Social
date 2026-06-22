@@ -8,7 +8,7 @@
  * campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Download, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -40,6 +40,13 @@ import { SelectorTiempo } from "./metricas/Controles";
  * semanas o meses, así que no basta con la ventana de 30 días: un post con el hashtag
  * publicado hace 2 meses (p. ej. de un evento) debe poder verse ampliando el periodo.
  */
+// Formatos de descarga ofrecidos en el menú (CSV para Excel/Sheets, Markdown legible, JSON crudo).
+const FORMATOS_DESCARGA: Array<{ formato: "csv" | "md" | "json"; etiqueta: string }> = [
+  { formato: "csv", etiqueta: "CSV" },
+  { formato: "md", etiqueta: "Markdown" },
+  { formato: "json", etiqueta: "JSON" },
+];
+
 function tokenUltimosDias(hoy: string, n: number): string {
   // Aritmética de días anclada a mediodía UTC para que no desplace el día calendario.
   const d = new Date(`${hoy}T12:00:00Z`);
@@ -172,6 +179,20 @@ export default function Campanias() {
                   >
                     Eliminar campaña
                   </ItemMenu>
+                  {/* Descargas de la analítica del periodo activo. Respeta el modo cliente
+                      (`ocultarAds`): si está activo, el archivo sale sin rastro de pauta. */}
+                  <div role="separator" className="my-1 h-px bg-border" />
+                  {FORMATOS_DESCARGA.map(({ formato, etiqueta }) => (
+                    <ItemMenu
+                      key={`descarga-${formato}`}
+                      icono={Download}
+                      onClick={() =>
+                        api.exportarCampania(campaniaActual.id, formato, { rango, ocultarAds })
+                      }
+                    >
+                      {`Descargar (${etiqueta})`}
+                    </ItemMenu>
+                  ))}
                   {/* Modo cliente: ajuste de vista persistente, como toggle directo del menú
                       (oculta Ads y suma sus visualizaciones a las orgánicas). */}
                   <div role="separator" className="my-1 h-px bg-border" />

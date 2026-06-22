@@ -1,6 +1,6 @@
 // Fragmento del cliente API: dominio «campañas» (agrupan piezas por hashtag; analítica al
 // vuelo). El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
-import { peticion, query } from "./_core";
+import { descargar, peticion, query } from "./_core";
 import type {
   AnaliticaCampania,
   CuerpoActualizarCampania,
@@ -33,5 +33,19 @@ export const apiCampanias = {
       // La 1a carga de un combo frío descarga miles de posts+reels de Metricool (luego se
       // cachea y es instantánea). Techo amplio para que no la corte el timeout por defecto.
       { signal, timeoutMs: 90_000 },
+    ),
+  // Descarga la analítica de la campaña en csv|md|json (mismo dato que el panel; el backend
+  // abre la URL con cabecera de descarga). `ocultarAds` replica el "modo cliente" (sin pauta).
+  exportarCampania: (
+    id: string,
+    formato: "csv" | "md" | "json",
+    params: { rango?: string; ocultarAds?: boolean } = {},
+  ) =>
+    descargar(
+      `/campanias/${encodeURIComponent(id)}/export${query({
+        fmt: formato,
+        rango: params.rango,
+        ocultar_ads: params.ocultarAds ? "1" : undefined,
+      })}`,
     ),
 };

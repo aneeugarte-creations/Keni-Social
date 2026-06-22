@@ -345,3 +345,96 @@ def test_comparativa_piezas_cuenta_inorganico_en_ambos_periodos(cliente, monkeyp
 def test_analitica_campania_inexistente_es_404(cliente):
     r = cliente.get("/api/campanias/nada/analitica")
     assert r.status_code == 404
+
+
+# --- Descarga de la analítica (export csv|md|json) ----------------------------
+
+
+def _pieza_falsa(**extra):
+    base = {
+        "id": "ig1", "red": "instagram", "titulo": "Reportaje sierra",
+        "texto": "Gran reportaje en la sierra tarahumara #Chihuahua", "publicado": "2026-06-01",
+        "url": "https://ejemplo/ig1", "formato": "reel", "engagement_pct": 5.0,
+        "interacciones": 100, "visualizaciones": 1000, "cuenta": "unotv",
+    }
+    return {**base, **extra}
+
+
+def test_export_csv_trae_filas_de_piezas(cliente, monkeypatch):
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(
+        campanias.servicio, "construir_listado_piezas", lambda *a, **k: [_pieza_falsa()]
+    )
+    r = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=csv&rango=mes")
+    assert r.status_code == 200, r.text
+    assert "text/csv" in r.headers["content-type"]
+    assert "attachment" in r.headers["content-disposition"]
+    cuerpo = r.text
+    # Cabecera con las columnas (incluidas las de pauta en modo normal) + la fila de la pieza.
+    assert "Vistas" in cuerpo and "Ads" in cuerpo and "Origen" in cuerpo
+    assert "Reportaje sierra" in cuerpo and "1000" in cuerpo
+
+
+def test_export_md_es_reporte_legible(cliente, monkeypatch):
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    r = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=md&rango=mes")
+    assert r.status_code == 200
+    assert "text/markdown" in r.headers["content-type"]
+    cuerpo = r.text
+    assert cuerpo.startswith("# Chihuahua")
+    assert "## Resumen" in cuerpo and "## Piezas del periodo" in cuerpo
+
+
+def test_export_json_devuelve_el_payload(cliente, monkeypatch):
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    r = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=json&rango=mes")
+    assert r.status_code == 200
+    assert "application/json" in r.headers["content-type"]
+    datos = r.json()  # texto JSON parseable
+    assert datos["campania"]["id"] == cam["id"]
+    assert "kpis" in datos and "piezas" in datos
+
+
+def test_export_fmt_desconocido_cae_a_csv(cliente, monkeypatch):
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    r = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=pdf&rango=mes")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+
+
+def test_export_modo_cliente_oculta_la_pauta(cliente, monkeypatch):
+    """ocultar_ads=1: el archivo no lleva rastro de pauta (sin columnas Ads/Origen, sin
+    bloque inorgánico, y las vistas pagadas fundidas en las orgánicas)."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
+
+    def _listado_falso(rango, marca=None):
+        return [_pieza_falsa(texto=f"{cuerpo} #Chihuahua", cuenta="claro_sports")]
+
+    def _ads_falso(rango, marca=None):
+        return [{
+            "nombre": f'Publicación: "{cuerpo}"', "red": "facebook", "impresiones": 5000,
+            "gasto": 300.0, "clics": 100, "moneda": "MXN", "inicio": "2026-06-01",
+            "es_post_impulsado": True, "caption": cuerpo, "cuenta": "claro_sports",
+        }]
+
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
+    monkeypatch.setattr(campanias.servicio, "construir_ads", _ads_falso)
+
+    normal = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=csv&rango=mes").text
+    assert "Ads" in normal and "Inorgánico" in normal  # el boost se ve como fila inorgánica
+
+    cli = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=csv&rango=mes&ocultar_ads=1").text
+    assert "Ads" not in cli and "Origen" not in cli
+
+    j = cliente.get(f"/api/campanias/{cam['id']}/export?fmt=json&rango=mes&ocultar_ads=1").json()
+    assert "inorganico" not in j
+    assert all("visualizaciones_pagadas" not in p for p in j["piezas"])
+
+
+def test_export_campania_inexistente_es_404(cliente):
+    r = cliente.get("/api/campanias/nada/export?fmt=csv")
+    assert r.status_code == 404
