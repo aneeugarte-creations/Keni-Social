@@ -92,3 +92,47 @@ describe("SelectorTiempo — modo mes", () => {
     expect(onCambio).toHaveBeenCalledWith("mes:2026-06");
   });
 });
+
+describe("SelectorTiempo — preset frente a fechas exactas", () => {
+  // Atajos con forma de token `rango:` (los que ofrece Campañas para abarcar 90 días/6 meses).
+  const RANGOS_TOKEN = [
+    { id: "semana", etiqueta: "Última semana" },
+    { id: "mes", etiqueta: "Últimos 30 días" },
+    { id: "rango:2026-03-13_2026-06-10", etiqueta: "Últimos 90 días" },
+  ];
+
+  it("un preset con forma `rango:` se queda en Periodos comunes, no salta a Fechas exactas", () => {
+    render(
+      <SelectorTiempo
+        rangos={RANGOS_TOKEN}
+        valor="rango:2026-03-13_2026-06-10"
+        onCambio={vi.fn()}
+      />,
+    );
+
+    // El modo sigue en "atajos": se ve el desplegable de presets, no los inputs de fecha.
+    expect(screen.getByLabelText("Periodo")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+  });
+
+  it("un preset de id plano también se queda en Periodos comunes", () => {
+    render(<SelectorTiempo rangos={RANGOS_TOKEN} valor="mes" onCambio={vi.fn()} />);
+
+    expect(screen.getByLabelText("Periodo")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+  });
+
+  it("un token `rango:` que NO es preset sí abre Fechas exactas", () => {
+    render(
+      <SelectorTiempo
+        rangos={RANGOS_TOKEN}
+        valor="rango:2026-01-01_2026-01-31"
+        onCambio={vi.fn()}
+      />,
+    );
+
+    // Token arbitrario (no está en `rangos`): el selector muestra los inputs de fecha.
+    expect(screen.getByLabelText("Desde")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Periodo")).not.toBeInTheDocument();
+  });
+});

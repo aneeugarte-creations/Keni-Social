@@ -98,10 +98,22 @@ export function SelectorTiempo({
   valor: string;
   onCambio: (token: string) => void;
 }) {
-  const [modo, setModo] = React.useState<ModoTiempo>(() => modoDesdeToken(valor));
+  // Modo que corresponde a `valor`: si coincide con el id de un preset recibido por
+  // props se queda en "atajos" aunque ese id tenga forma de token (p. ej. Campañas
+  // ofrece atajos `rango:AAAA-MM-DD_…`); en caso contrario lo deriva del token.
+  const esPreset = React.useCallback(
+    (v: string) => rangos.some((r) => r.id === v),
+    [rangos],
+  );
+  const modoDeValor = React.useCallback(
+    (v: string): ModoTiempo => (esPreset(v) ? "atajos" : modoDesdeToken(v)),
+    [esPreset],
+  );
+
+  const [modo, setModo] = React.useState<ModoTiempo>(() => modoDeValor(valor));
 
   // Preset por defecto al volver a "Periodos comunes" (el valor actual si es preset, si no el 1º).
-  const presetActual = modoDesdeToken(valor) === "atajos" ? valor : (rangos[0]?.id ?? "mes");
+  const presetActual = modoDeValor(valor) === "atajos" ? valor : (rangos[0]?.id ?? "mes");
 
   // Mes/año por defecto: los de HOY en CDMX (no la zona del navegador, que entre las
   // 18:00 y la medianoche CDMX ya iría un día —y a fin de mes, un MES— por delante).
@@ -118,11 +130,11 @@ export function SelectorTiempo({
   // cuando cambia el periodo visible arriba). Sin esto, modo/desde/hasta solo nacían
   // del valor inicial y el selector mostraba un periodo que NO era el consultado.
   React.useEffect(() => {
-    setModo(modoDesdeToken(valor));
+    setModo(modoDeValor(valor));
     const r = partesRango(valor);
     setDesde(r?.desde ?? "");
     setHasta(r?.hasta ?? "");
-  }, [valor]);
+  }, [valor, modoDeValor]);
 
   function cambiarModo(nuevo: ModoTiempo) {
     setModo(nuevo);
