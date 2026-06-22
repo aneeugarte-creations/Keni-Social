@@ -434,6 +434,56 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(soltar).toHaveBeenCalledWith("c-mia"));
   });
 
+  it("Equipo: un manager ve el trabajo de cada persona agrupado bajo su nombre", async () => {
+    renderTareas(
+      [
+        tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis", estado: "pendiente" }),
+        tarea({ id: "t-ana", titulo: "Foto de Ana", responsable_id: "u-ana", responsable_nombre: "ana", estado: "pendiente" }),
+      ],
+      [],
+      usuario("admin", "u-admin"),
+    );
+    // El Panorama es la vista por defecto; ambas tareas se ven antes de cambiar de lente.
+    await screen.findByText("Clip de Luis");
+
+    fireEvent.click(screen.getByRole("button", { name: "Equipo" }));
+    // Una sección por persona (region con nombre accesible): cada quien con SOLO lo suyo.
+    const seccionLuis = await screen.findByRole("region", { name: "Trabajo de luis" });
+    const seccionAna = screen.getByRole("region", { name: "Trabajo de ana" });
+    expect(within(seccionLuis).getByText("Clip de Luis")).toBeInTheDocument();
+    expect(within(seccionLuis).queryByText("Foto de Ana")).toBeNull();
+    expect(within(seccionAna).getByText("Foto de Ana")).toBeInTheDocument();
+  });
+
+  it("Equipo: un editor NO ve la lente «Equipo» (es solo de coordinación)", async () => {
+    renderTareas(
+      [tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" })],
+      [],
+      usuario("editor", "u2"),
+    );
+    await screen.findByText("Clip de Luis");
+    expect(screen.queryByRole("button", { name: "Equipo" })).toBeNull();
+  });
+
+  it("Equipo: una cobertura compartida sale en la sección de cada cubridor con SU propio rol", async () => {
+    renderTareas(
+      [
+        tarea({ id: "t-luis", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-luis", responsable_nombre: "luis", formato: "foto", fecha_objetivo: "2099-07-01", hora_objetivo: "20:00" }),
+        tarea({ id: "t-ana", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-ana", responsable_nombre: "ana", formato: "video", fecha_objetivo: "2099-07-01", hora_objetivo: "20:00" }),
+      ],
+      [],
+      usuario("admin", "u-admin"),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Equipo" }));
+    const seccionLuis = await screen.findByRole("region", { name: "Trabajo de luis" });
+    const seccionAna = screen.getByRole("region", { name: "Trabajo de ana" });
+    // Cada quien ve el partido con SU rol (luis→Foto, ana→Video), no el del otro.
+    expect(within(seccionLuis).getByText("Foto")).toBeInTheDocument();
+    expect(within(seccionLuis).queryByText("Video")).toBeNull();
+    expect(within(seccionAna).getByText("Video")).toBeInTheDocument();
+    expect(within(seccionAna).queryByText("Foto")).toBeNull();
+  });
+
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama

@@ -5,7 +5,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup } from "@/components/ui/toggle-group";
+import { ToggleGroup, type OpcionToggle } from "@/components/ui/toggle-group";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
@@ -13,16 +13,18 @@ import { mensajeError } from "@/lib/api";
 import { posicionTemporal } from "@/lib/fecha";
 
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
+import { VistaEquipo } from "./equipo";
 import { KpiCobertura } from "./KpiCobertura";
 import { PanoramaAgenda } from "./PanoramaAgenda";
 import { TarjetaCoberturaMia, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
 import { type Item } from "./tipos";
 import { useTablero } from "./useTablero";
 
-/** Segmento «Todo | Mis tareas» sobre la MISMA lista: «Todo» es la agenda
- * de equipo; «Mis tareas» es lo mío agrupado. «Por cubrir» NO es un segmento: vive como el chip
- * ámbar dentro de «Todo». El valor interno «panorama» se conserva; solo la etiqueta es «Todo». */
-type Lente = "panorama" | "mias";
+/** Segmento «Todo | Mis tareas | Equipo» sobre la MISMA lista: «Todo» es la agenda de equipo;
+ * «Mis tareas» es lo mío agrupado; «Equipo» (solo manager) desglosa lo de cada persona. «Por
+ * cubrir» NO es un segmento: vive como el chip ámbar dentro de «Todo». El valor interno «panorama»
+ * se conserva; solo la etiqueta es «Todo». */
+type Lente = "panorama" | "mias" | "equipo";
 
 /**
  * TABLERO de Tareas del equipo: la lista compartida que sustituye al WhatsApp. Cuerpo reutilizable
@@ -34,6 +36,8 @@ type Lente = "panorama" | "mias";
 export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inline" }) {
   const { marcaActiva } = useMarcaActiva();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  // «Equipo» es una lente de coordinación: la ve quien reparte (mismo gate que «Asignar a…»).
+  const esManager = usuario?.rol === "admin";
   const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
   const [lente, setLente] = React.useState<Lente>("panorama");
   const [crearAbierto, setCrearAbierto] = React.useState(false);
@@ -118,6 +122,12 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
     </Button>
   );
 
+  const opcionesLente: OpcionToggle<Lente>[] = [
+    { valor: "panorama", etiqueta: "Todo" },
+    { valor: "mias", etiqueta: "Mis tareas" },
+    ...(esManager ? [{ valor: "equipo" as const, etiqueta: "Equipo" }] : []),
+  ];
+
   return (
     <>
       {acciones === "barra" && <AccionesPagina>{botonAnadir}</AccionesPagina>}
@@ -128,10 +138,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
             ariaLabel="Vista de cobertura"
             valor={lente}
             onCambio={setLente}
-            opciones={[
-              { valor: "panorama", etiqueta: "Todo" },
-              { valor: "mias", etiqueta: "Mis tareas" },
-            ]}
+            opciones={opcionesLente}
           />
           {acciones === "inline" && botonAnadir}
         </div>
@@ -173,6 +180,8 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 filtro={filtroPanorama}
                 setFiltro={setFiltroPanorama}
               />
+            ) : lente === "equipo" ? (
+              <VistaEquipo items={items} />
             ) : (
               listaAgrupada
             )}
