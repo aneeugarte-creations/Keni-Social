@@ -509,8 +509,10 @@ describe("Turnos — Calendario: gating de coordinador", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     await screen.findByRole("button", { name: "Semana", pressed: true });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
-    // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión».
+    // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión», en su rejilla
+    // SEMANAL (Gestión abre en «Mes»; el conmutador lleva a la Semana con el menú de coordinador).
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
     expect(await screen.findByRole("button", { name: "Más acciones" })).toBeInTheDocument();
   });
 });
@@ -530,23 +532,37 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(within(nav).getAllByRole("button")).toHaveLength(4);
   });
 
-  it("«Gestión» tiene «Asignar turnos»; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
+  it("«Gestión» abre en el calendario MENSUAL del equipo (overview); el conmutador lo marca", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    // Vista de apertura = «Mes» (overview de la jornada del equipo), con su Imprimir/PDF; «Semana»
+    // queda a un clic para repartir.
+    expect(await screen.findByRole("button", { name: "Mes", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Semana", pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Imprimir/ })).toBeInTheDocument();
+  });
+
+  it("«Gestión» tiene «Asignar turnos» en su Semana; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Calendario" }));
     await screen.findByRole("button", { name: "Semana", pressed: true });
     expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
+    // Gestión abre en «Mes»; el reparto vive en su rejilla SEMANAL (un clic en el conmutador).
+    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
     expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
     // Sin paso de aprobación: lo asignado ya lo ve el equipo, no hay «Aprobar y publicar» ni «Despublicar».
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Despublicar" })).toBeNull();
   });
 
-  it("en «Gestión», el panel de reparto arranca abierto (columna lateral, no un modal)", async () => {
+  it("en la Semana de «Gestión», el panel de reparto arranca abierto (columna lateral, no un modal)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    // Abierto SIN clic previo: el reparto está junto a la rejilla (un <aside>, NO un role=dialog que la tape).
+    // Gestión abre en «Mes»; al pasar a «Semana» el reparto está abierto sin clic previo.
+    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
+    // El reparto está junto a la rejilla (un <aside>, NO un role=dialog que la tape).
     const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
     expect(within(panel).getByText("Horario")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();

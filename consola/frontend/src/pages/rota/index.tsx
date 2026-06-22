@@ -153,13 +153,14 @@ export default function Rota() {
       {pestaniaEfectiva === "cobertura" && <TareasBoard acciones="inline" />}
 
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden
-          decisión (huecos sin cubrir, cambios/ausencias, conflictos), y debajo la rejilla de la
-          SEMANA con su panel de reparto (asignar/franjas/copiar/carga/export). Ambos comparten
-          `lunes` con el Calendario.
+          decisión (huecos sin cubrir, cambios/ausencias, conflictos), y debajo el Calendario, que
+          ABRE en modo «Mes» (overview mensual del equipo). El conmutador Semana|Mes salta a la
+          rejilla SEMANAL, que trae el panel de reparto (asignar/franjas/copiar/carga/export). Ambos
+          comparten `lunes`/`marcaActiva` con el Calendario.
           Gestión CABE en una pantalla: columna que llena el alto útil de `<main>` (= 100dvh − topbar
           `h-12` − padding pt/pb del contenedor ≈ 5.5rem). `overflow-hidden` corta el scroll de
-          PÁGINA; el «Necesita tu decisión» va arriba a su alto natural y la rejilla+panel rellenan
-          el resto con scroll INTERNO. */}
+          PÁGINA; el «Necesita tu decisión» va arriba a su alto natural y el calendario rellena el
+          resto con scroll INTERNO. */}
       {pestaniaEfectiva === "gestion" && (
         <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-4 overflow-hidden">
           <PanelCoordinacion
@@ -170,7 +171,13 @@ export default function Rota() {
             onIr={setPestania}
           />
           <div className="min-h-0 flex-1">
-            <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} modo="gestion" />
+            <Calendario
+              lunes={lunes}
+              setLunes={setLunes}
+              esAdmin={esAdmin}
+              modo="gestion"
+              vistaInicial="mes"
+            />
           </div>
         </div>
       )}

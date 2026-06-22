@@ -176,9 +176,10 @@ export function Calendario({
   // Resumen "Carga del equipo": se abre bajo demanda desde el menú "Más" (popup), para no
   // alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
-  // «Asignar turnos»: reparte la semana (persona → franja → días) sin ir celda por celda. En
-  // «Gestión» el panel arranca ABIERTO (columna lateral): repartir es la acción principal de esa
-  // pestaña, no hace falta un clic previo. El botón de la cabecera solo lo oculta/muestra.
+  // «Asignar turnos»: reparte la semana (persona → franja → días) sin ir celda por celda. En la
+  // rejilla SEMANAL de «Gestión» el panel arranca ABIERTO (columna lateral): al pasar del overview
+  // mensual a «Semana», repartir es la acción directa, sin un clic previo. El botón de la cabecera
+  // solo lo oculta/muestra.
   const [abrirAsignar, setAbrirAsignar] = React.useState(modo === "gestion");
 
   // Copiar la semana anterior. GRID POR MARCA: muta UNA rejilla -> exige marca concreta; en
@@ -419,12 +420,20 @@ export function Calendario({
   const esGestion = modo === "gestion";
 
   // Modo «Mes»: el calendario MENSUAL de jornada (la antigua «Mi jornada»), con su Yo/Equipo e
-  // imprimir/PDF intactos. El conmutador queda arriba; el vacío de «Yo» salta a «Semana».
+  // imprimir/PDF intactos. Es la vista de APERTURA de «Gestión» (overview del mes): ahí llena el
+  // alto de su contenedor con el conmutador fijo arriba y el mes con scroll interno; en
+  // «Calendario» crece a su alto natural y la página hace scroll. El vacío de «Yo» salta a «Semana».
   if (vista === "mes") {
-    return (
+    const mensual = <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />;
+    return esGestion ? (
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
+        <div className="min-h-0 flex-1 overflow-auto">{mensual}</div>
+      </div>
+    ) : (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
-        <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />
+        {mensual}
       </div>
     );
   }
@@ -436,12 +445,15 @@ export function Calendario({
     // 100dvh − topbar `h-12` − padding del `<main>`), el mismo presupuesto que Gestión, para que
     // la rejilla baje hasta el pie de la pantalla y no deje hueco muerto debajo.
     <div className={`flex min-h-0 flex-col gap-4 ${esGestion ? "h-full" : "h-[calc(100dvh-5.5rem)]"}`}>
-      {/* Cabecera. En «Gestión», el navegador de semana + el toggle del panel de reparto + el
-          menú «Más»; en «Calendario», el conmutador Semana|Mes + navegador + avisos de la semana.
-          La leyenda del calendario se ofrece bajo demanda con el icono "?". */}
+      {/* Cabecera. En «Gestión», el conmutador Semana|Mes (para volver al overview mensual) +
+          navegador de semana + el toggle del panel de reparto + el menú «Más»; en «Calendario», el
+          conmutador Semana|Mes + navegador + avisos de la semana. La leyenda se ofrece con el "?". */}
       {esGestion ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+          <div className="flex items-center gap-2">
+            {conmutadorVista}
+            <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             {/* Oculta/muestra el panel de reparto (columna lateral, no un modal). Arranca abierto:
                 lo asignado ya lo ve el equipo (sin paso de aprobación), así que repartir es la
