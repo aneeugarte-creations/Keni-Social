@@ -86,6 +86,7 @@ export function Calendario({
   esAdmin,
   vistaInicial = "semana",
   modo = "calendario",
+  marcadorSalud,
 }: {
   lunes: string;
   setLunes: (l: string) => void;
@@ -97,6 +98,10 @@ export function Calendario({
    *  admin de la semana (asignar/franjas/copiar/carga/export). Lo monta
    *  index.tsx en su pestaña admin-only; comparte `lunes`/`marcaActiva` y la misma queryKey de turnos. */
   modo?: "calendario" | "gestion";
+  /** Solo «gestion»: marcador de SALUD de la semana (✓ «Al día») que se pinta a la derecha de la
+   *  fila Semana|Mes cuando no hay nada pendiente. Lo trae index.tsx, que es quien deriva las
+   *  señales de coordinación; vacío cuando hay pendientes (entonces el panel los muestra arriba). */
+  marcadorSalud?: React.ReactNode;
 }) {
   // Conmutador Semana|Mes: la rejilla semanal vive aquí; el modo «Mes» reutiliza la vista
   // mensual de jornada. Su valor inicial puede venir de un deep-link legacy (?tab=mis-turnos).
@@ -428,7 +433,10 @@ export function Calendario({
     const mensual = <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />;
     return esGestion ? (
       <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {conmutadorVista}
+          {marcadorSalud}
+        </div>
         <div className="min-h-0 flex-1 overflow-auto">{mensual}</div>
       </div>
     ) : (
@@ -456,6 +464,7 @@ export function Calendario({
             <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {marcadorSalud}
             {/* Oculta/muestra el panel de reparto (columna lateral, no un modal). Arranca abierto:
                 lo asignado ya lo ve el equipo (sin paso de aprobación), así que repartir es la
                 acción directa de esta pestaña. */}

@@ -3,6 +3,7 @@ import {
   ArrowLeftRight,
   CalendarCheck,
   CalendarDays,
+  CheckCircle2,
   Settings2,
 } from "lucide-react";
 import * as React from "react";
@@ -18,7 +19,7 @@ import type { FiltrosSwaps } from "@/types";
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { Hoy } from "./Hoy";
-import { PanelCoordinacion } from "./PanelCoordinacion";
+import { PanelCoordinacion, useSenalesCoordinacion } from "./PanelCoordinacion";
 import { contarSwapsPendientes } from "./comun";
 
 
@@ -97,6 +98,24 @@ export default function Rota() {
     }
   }, [tabParam]);
 
+  // Señales de coordinación de la semana (huecos/cambios/conflictos): solo se derivan en «Gestión».
+  // Alimentan el `PanelCoordinacion` (que solo se pinta si hay pendientes) y, cuando NO hay nada, el
+  // marcador ✓ «Al día» de la cabecera del calendario — el cockpit desaparece y el mes sube (SOSIEGO).
+  const senalesCoord = useSenalesCoordinacion({
+    lunes,
+    marcaActiva,
+    usuarioId: usuario?.id ?? "",
+    esAdmin,
+    activo: pestaniaEfectiva === "gestion",
+  });
+  const marcadorSalud =
+    !senalesCoord.cargando && senalesCoord.todoEnOrden ? (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        Al día
+      </span>
+    ) : undefined;
+
   // La subnav vive en el topbar (como Métricas). «Gestión» es admin-only; la insignia de
   // «Cambios y ausencias» cuelga de su pestaña (nº de cambios que esperan MI acción).
   const pestanas: PestanaSeccion[] = [
@@ -159,10 +178,8 @@ export default function Rota() {
       {pestaniaEfectiva === "gestion" && (
         <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-4 overflow-hidden">
           <PanelCoordinacion
-            lunes={lunes}
-            marcaActiva={marcaActiva}
-            esAdmin={esAdmin}
-            usuarioId={usuario?.id ?? ""}
+            senales={senalesCoord.senales}
+            cargando={senalesCoord.cargando}
             onIr={(destino) =>
               destino === "cobertura" ? navigate("/operacion/trabajo") : setPestania(destino)
             }
@@ -174,6 +191,7 @@ export default function Rota() {
               esAdmin={esAdmin}
               modo="gestion"
               vistaInicial="mes"
+              marcadorSalud={marcadorSalud}
             />
           </div>
         </div>

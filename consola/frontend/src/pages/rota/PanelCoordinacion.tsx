@@ -4,7 +4,7 @@
 // lectura: reusa los mismos endpoints y derivaciones que el resto de Turnos; no añade backend ni
 // chrome nuevo (outline gris de plataforma, color solo con significado: amarillo = pide decisión).
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeftRight, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ArrowRight, UserPlus } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -110,54 +110,56 @@ function Fila({
 }
 
 /**
- * Panel de coordinación de la semana en vista. Solo se usa en la pestaña «Gestión» (admin-only),
- * encima del panel de la semana. `lunes`/`marcaActiva` los comparte con el Calendario para mirar la
- * MISMA semana; `onIr` cambia de pestaña dentro de Turnos (sin inventar rutas). Si no es admin no
- * pinta nada (defensa en profundidad: la pestaña ya está gateada).
+ * Hook: deriva las señales de coordinación de la semana (huecos sin cubrir, cambios/ausencias
+ * pendientes, conflictos) desde los MISMOS endpoints que el resto de Turnos (cache compartida por
+ * queryKey, sin tráfico extra). `activo` lo gatea junto a `esAdmin` para que solo corra en la
+ * pestaña «Gestión». Lo consume index.tsx para, con una sola derivación, alimentar el
+ * `PanelCoordinacion` Y decidir el marcador ✓ «Al día» de la cabecera del calendario.
  */
-export function PanelCoordinacion({
+export function useSenalesCoordinacion({
   lunes,
   marcaActiva,
-  esAdmin,
   usuarioId,
-  onIr,
+  esAdmin,
+  activo,
 }: {
   lunes: string;
   /** Marca activa del workspace; `null` = «Todas» (sin filtro). */
   marcaActiva: string | null;
-  esAdmin: boolean;
   usuarioId: string;
-  /** Salta a otra pestaña de Turnos (p. ej. «cambios-ausencias»). */
-  onIr: (pestania: string) => void;
-}) {
+  esAdmin: boolean;
+  /** Solo dispara las queries cuando la vista que lo necesita (Gestión) está activa. */
+  activo: boolean;
+}): { senales: SenalesCoordinacion; todoEnOrden: boolean; cargando: boolean } {
   const marca = marcaActiva ?? undefined;
+  const habilitado = esAdmin && activo;
 
   // Misma queryKey que el Calendario (turnos/franjas/aprobada de la semana) y que el tablero de
   // Cobertura (tareas + eventos): la cache se comparte y el panel late con el resto de Turnos.
   const turnosQ = useQuery({
     queryKey: ["rota", "turnos", lunes, marcaActiva] as const,
     queryFn: ({ signal }) => api.listarTurnos({ lunes, marca }, signal),
-    enabled: esAdmin,
+    enabled: habilitado,
   });
   const coberturaQ = useQuery({
     queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
     queryFn: ({ signal }) => api.cobertura({ lunes, marca }, signal),
-    enabled: esAdmin,
+    enabled: habilitado,
   });
   const tareasQ = useQuery({
     queryKey: [...CLAVE_TAREAS, "tareas", marcaActiva ?? "todas"],
     queryFn: ({ signal }) => api.contenido({ clase: "tarea", marca }, signal),
-    enabled: esAdmin,
+    enabled: habilitado,
   });
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
-    enabled: esAdmin,
+    enabled: habilitado,
   });
   const swapsQ = useQuery({
     queryKey: ["rota", "swaps", marca ? { marca } : {}] as const,
     queryFn: ({ signal }) => api.listarSwaps(marca ? { marca } : {}, signal),
-    enabled: esAdmin,
+    enabled: habilitado,
   });
 
   const semana = turnosQ.data;
@@ -187,10 +189,29 @@ export function PanelCoordinacion({
     ],
   );
 
-  if (!esAdmin) return null;
+  const cargando = turnosQ.isPending || coberturaQ.isPending || tareasQ.isPending;
+  const todoEnOrden =
+    senales.sinCubrir === 0 && senales.cambiosPendientes === 0 && senales.conflictos === 0;
+  return { senales, todoEnOrden, cargando };
+}
 
-  const cargando =
-    turnosQ.isPending || coberturaQ.isPending || tareasQ.isPending;
+/**
+ * Panel de coordinación de la semana (PRESENTACIONAL): pinta solo las señales que PIDEN decisión
+ * (huecos sin cubrir, cambios pendientes, conflictos). SOSIEGO: cuando no hay NADA pendiente no
+ * pinta nada —el cockpit desaparece y el calendario sube—; la confirmación «al día» la da el
+ * marcador ✓ de la cabecera del calendario, no una banda. Las señales y el estado de carga los
+ * trae el llamante (index.tsx) vía {@link useSenalesCoordinacion}.
+ */
+export function PanelCoordinacion({
+  senales,
+  cargando,
+  onIr,
+}: {
+  senales: SenalesCoordinacion;
+  cargando: boolean;
+  /** Salta a otra pestaña de Turnos (p. ej. «cambios-ausencias»). */
+  onIr: (pestania: string) => void;
+}) {
   if (cargando) {
     return (
       <div className="space-y-2">
@@ -201,18 +222,13 @@ export function PanelCoordinacion({
   }
 
   const { sinCubrir, cambiosPendientes, conflictos } = senales;
-  const todoEnOrden = sinCubrir === 0 && cambiosPendientes === 0 && conflictos === 0;
+  // SOSIEGO: en orden el cockpit desaparece por completo (el ✓ «Al día» de la cabecera basta).
+  if (sinCubrir === 0 && cambiosPendientes === 0 && conflictos === 0) return null;
 
   return (
     <section aria-label="Panel de coordinación" className="space-y-2">
       <h3 className="text-sm font-medium text-muted-foreground">Necesita tu decisión</h3>
-      {todoEnOrden ? (
-        <p className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          Todo en orden esta semana: nada pendiente de tu decisión.
-        </p>
-      ) : (
-        <ul className="space-y-2">
+      <ul className="space-y-2">
           {sinCubrir > 0 && (
             <Fila
               destacar
@@ -266,7 +282,6 @@ export function PanelCoordinacion({
             />
           )}
         </ul>
-      )}
     </section>
   );
 }
