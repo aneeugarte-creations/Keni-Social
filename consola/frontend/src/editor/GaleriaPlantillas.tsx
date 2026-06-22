@@ -447,37 +447,45 @@ export function PublicacionPlantillas({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {/* Filtro de tipo (solo si no está fijo): segmented control estilo «Turnos» (Apple/Canva) —
-          track gris con la pestaña activa como píldora BLANCA con sombra. */}
-      {!tipoFijo && (
-        <div className={`flex shrink-0 border-b border-border py-2 ${padX}`}>
-          <div className="inline-flex items-center rounded-lg bg-muted p-0.5">
-            {(["foto", "miniatura"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setFiltroTipo(t)}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
-                  filtroTipo === t
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t === "foto" ? (
-                  <><Image className="h-3.5 w-3.5" />Fotos</>
-                ) : (
-                  <><Video className="h-3.5 w-3.5" />Miniaturas</>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Búsqueda + chips de categoría: FIJOS arriba (fuera del área con scroll, estilo Canva). */}
-      {plantillasTipo.length > 0 && (
+      {/* UNA sola barra de cabecera (estilo Canva, fija fuera del scroll): el segmented de tipo y el
+          buscador comparten línea —el buscador llena el ancho que el toggle dejaba vacío— y los chips
+          de categoría caen debajo. Con `flex-wrap` el buscador baja a su propia línea cuando no cabe
+          (panel estrecho del editor): un mismo layout sirve a página completa, modal y rail. */}
+      {(!tipoFijo || plantillasTipo.length > 0) && (
         <div className={`shrink-0 space-y-2 border-b border-border bg-background py-2 ${padX}`}>
-          <BuscadorPlantillas valor={q} onCambiar={setQ} />
-          <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} catalogo={catalogoUnico} />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filtro de tipo (solo si no está fijo): segmented control estilo «Turnos» (Apple/Canva)
+                — track gris con la pestaña activa como píldora BLANCA con sombra. */}
+            {!tipoFijo && (
+              <div className="inline-flex shrink-0 items-center rounded-lg bg-muted p-0.5">
+                {(["foto", "miniatura"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setFiltroTipo(t)}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
+                      filtroTipo === t
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t === "foto" ? (
+                      <><Image className="h-3.5 w-3.5" />Fotos</>
+                    ) : (
+                      <><Video className="h-3.5 w-3.5" />Miniaturas</>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            {plantillasTipo.length > 0 && (
+              <div className="min-w-[12rem] flex-1">
+                <BuscadorPlantillas valor={q} onCambiar={setQ} />
+              </div>
+            )}
+          </div>
+          {plantillasTipo.length > 0 && (
+            <ChipsCategoria categorias={presentes} activa={categoria} onCambiar={setCategoria} catalogo={catalogoUnico} />
+          )}
         </div>
       )}
 
