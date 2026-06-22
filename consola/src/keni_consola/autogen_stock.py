@@ -6,13 +6,17 @@ adjunta a la pieza como `imagen_origen='stock'`, `imagen_autorizada=0`, `falta_i
 feed no sale en blanco, pero la foto se ve atenuada y con watermark "SIN LICENCIA" (front) y el
 bloqueo infranqueable impide publicarla hasta que un humano REVISE derechos y la autorice.
 
-La etapa va GATEADA por `KENI_PIPELINE_STOCK` (def OFF, como Ilustrar) y acota cuántos temas por
-barrido con `KENI_STOCK_MAX_BARRIDO`. La SELECCIÓN (`topics_sin_stock`) es PURA y testeable.
-El dedup por etiqueta `autogen-stock` evita re-procesar un tema en cada barrido.
+La etapa va GATEADA por `KENI_PIPELINE_STOCK` (def ON) + el maestro `KENI_MAQUINA`, y acota
+cuántos temas por barrido con `KENI_STOCK_MAX_BARRIDO`. La SELECCIÓN (`topics_sin_stock`) es PURA.
 
-`adjuntar_candidata` es la ÚNICA puerta para fijar una foto de stock en una pieza (la usan tanto
-esta etapa como el endpoint manual `api/artes` de "Buscar foto"), para que los campos de
-procedencia/autorización se escriban siempre igual.
+PROPAGACIÓN ROBUSTA Y RETROACTIVA (no depende del frágil toggle `espejo`): la foto de stock es
+ayuda del TEMA, así que `propagar_stock` la reparte a TODA red del tema que esté en gris (sin
+pisar imágenes propias ni publicadas). El barrido REPARA temas a medias copiando, gratis, la foto
+que ya tenga una red a las que aún no la tienen; solo BUSCA en APIs (con coste) cuando ninguna red
+del tema tiene foto, y marca `autogen-stock` tras intentarlo para no re-buscar lo no encontrable.
+
+`adjuntar_candidata` es la ÚNICA puerta para fijar una foto de stock (la usan esta etapa y el
+endpoint manual `api/artes` de "Buscar foto") y SIEMPRE reparte a las hermanas vacías.
 """
 
 from __future__ import annotations
@@ -64,6 +68,57 @@ def _sin_imagen(plataforma: dict[str, Any]) -> bool:
     return not (plataforma.get("imagen") or "").strip() and not (plataforma.get("foto") or "").strip()
 
 
+def _es_stock(plataforma: dict[str, Any]) -> bool:
+    """True si la plataforma YA tiene una foto de stock adjunta (para repartirla a sus hermanas)."""
+    return (plataforma.get("imagen_origen") or "") == licencia_imagen.ORIGEN_STOCK and bool(
+        (plataforma.get("foto") or "").strip()
+    )
+
+
+def _campos_desde(plataforma: dict[str, Any]) -> dict[str, Any]:
+    """Campos de stock a ESPEJAR desde una pieza que ya tiene la foto (la copia a las vacías).
+
+    Conserva proveedor/autor/licencia/crédito de la foto original; `imagen_autorizada` SIEMPRE
+    nace False en la copia (la autorización es una decisión humana por pieza, no se hereda sola).
+    """
+    return {
+        "foto": plataforma.get("foto") or "",
+        "imagen": "",
+        "falta_imagen": True,
+        "imagen_origen": licencia_imagen.ORIGEN_STOCK,
+        "imagen_proveedor": (plataforma.get("imagen_proveedor") or "stock")[:60],
+        "imagen_autor": (plataforma.get("imagen_autor") or "")[:200],
+        "imagen_licencia": (plataforma.get("imagen_licencia") or "")[:200],
+        "imagen_credito_url": (plataforma.get("imagen_credito_url") or "")[:500],
+        "imagen_autorizada": False,
+    }
+
+
+def propagar_stock(publicacion_id: str, campos: dict[str, Any]) -> int:
+    """Aplica `campos` (foto de stock) a TODA red del tema que aún NO tiene imagen. Robusto.
+
+    Independiente del toggle `espejo` (la foto de stock es ayuda del TEMA, no edición por red):
+    rellena solo las redes SIN imagen propia ni foto (no pisa una imagen real ya elegida) y salta
+    las publicadas. Idempotente: una red ya con foto no se vuelve a tocar. Devuelve cuántas rellenó.
+    Es el núcleo de "propaga en las que todavía no la tienen", usado por el adjuntado manual y el
+    barrido (incluida la reparación retroactiva de temas que quedaron a medias).
+    """
+    if not publicacion_id:
+        return 0
+    rellenadas = 0
+    for hermana in repos.listar_piezas_fila(publicacion_id):
+        if (hermana.get("estado") or "") == "publicado":
+            continue
+        if not _sin_imagen(hermana):
+            continue
+        try:
+            repos.actualizar_pieza_fila(hermana["id"], campos)
+            rellenadas += 1
+        except Exception:  # noqa: BLE001 -- una hermana borrada/en carrera no rompe el resto
+            _log.debug("auto-stock: no se pudo espejar el stock a una hermana.", exc_info=True)
+    return rellenadas
+
+
 def topics_sin_stock(
     items: list[dict[str, Any]],
     *,
@@ -71,10 +126,15 @@ def topics_sin_stock(
     ya_procesados: set[str],
     maximo: int,
 ) -> list[dict[str, Any]]:
-    """Subconjunto de `items` que deben recibir una foto de stock de ayuda (PURA, testeable).
+    """Subconjunto de `items` que deben recibir/repartir una foto de stock (PURA, testeable).
 
-    Reglas: clase 'contenido', estado != 'hecha', con título, con ALGUNA plataforma con copy y
-    SIN imagen ni foto, no ya procesados (dedup `autogen-stock`), recortado a `maximo`.
+    Reglas: clase 'contenido', estado != 'hecha', con título, marca no apagada, y con ALGUNA red
+    con copy y SIN imagen. Sobre eso, RETROACTIVO y robusto:
+      - si el tema YA tiene una foto de stock en alguna red, se elige SIEMPRE (para repartirla a
+        las redes que aún están en gris), aunque ya estuviera procesado;
+      - si NO la tiene, se elige solo si aún no se intentó (`autogen-stock`), para no re-buscar en
+        las APIs un tema sin foto encontrable en cada barrido.
+    Recortado a `maximo`.
     """
     elegidos: list[dict[str, Any]] = []
     for item in items:
@@ -88,12 +148,16 @@ def topics_sin_stock(
             continue
         if config.marca_apagada(config.ENV_PIPELINE_STOCK, item.get("marca") or ""):
             continue
-        if item.get("id") in ya_procesados:
-            continue
         plataformas = plataformas_por_item.get(item.get("id"), [])
-        if not any(_tiene_copy(p) and _sin_imagen(p) for p in plataformas):
+        hay_vacia = any(_tiene_copy(p) and _sin_imagen(p) for p in plataformas)
+        if not hay_vacia:
             continue
-        elegidos.append(item)
+        hay_stock = any(_es_stock(p) for p in plataformas)
+        ya = item.get("id") in ya_procesados
+        # Repartir una foto ya existente (reparación) no gasta APIs: se permite aunque esté
+        # procesado. Buscar una nueva sí cuesta: solo si no se intentó antes.
+        if hay_stock or not ya:
+            elegidos.append(item)
     return elegidos
 
 
@@ -132,31 +196,10 @@ def adjuntar_candidata(
     objetivo = repos.actualizar_pieza_fila(pieza_id, campos)
     if objetivo is None:
         return None
-    _propagar_a_hermanas(pieza_id, campos)
+    # Reparte la MISMA foto a las redes del tema que aún están en gris (robusto, no depende del
+    # toggle `espejo`): así nunca queda una red con la foto SIN LICENCIA sin su aviso, ni en gris.
+    propagar_stock(str(objetivo.get("publicacion_id") or ""), campos)
     return objetivo
-
-
-def _propagar_a_hermanas(pieza_id: str, campos: dict[str, Any]) -> None:
-    """Aplica los mismos `campos` de stock a las redes hermanas si el espejo del tema esta on.
-
-    Salta las hermanas YA PUBLICADAS (lo que salio a la red no se toca). Best-effort: un fallo
-    por hermana no rompe el adjuntado de la pieza objetivo.
-    """
-    pieza = repos.obtener_pieza(pieza_id)
-    if pieza is None or not pieza.get("espejo", True):
-        return
-    pub_id = pieza.get("publicacion_id") or ""
-    if not pub_id:
-        return
-    for hermana in repos.listar_piezas_fila(pub_id):
-        if hermana.get("id") == pieza_id:
-            continue
-        if (hermana.get("estado") or "") == "publicado":
-            continue
-        try:
-            repos.actualizar_pieza_fila(hermana["id"], campos)
-        except Exception:  # noqa: BLE001 -- una hermana borrada/en carrera no rompe el resto
-            _log.debug("auto-stock: no se pudo espejar el stock a la hermana.", exc_info=True)
 
 
 def _marcar_procesado(item_id: str) -> None:
@@ -170,10 +213,15 @@ def _marcar_procesado(item_id: str) -> None:
 
 
 def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
-    """Adjunta a un tema una foto de stock: 1º la original del RSS, luego una API gratuita.
+    """Da a un tema su foto de stock y la reparte a todas sus redes en gris.
 
-    Devuelve la fila actualizada, o None si no había candidata (sin foto de fuente y sin
-    resultados de las APIs) o falló la descarga. Marca el tema `autogen-stock` al éxito.
+    Dos caminos, REPARACIÓN antes que búsqueda:
+      1. Si alguna red del tema YA tiene una foto de stock, se REPARTE a las redes vacías (sin
+         tocar APIs ni descargar): repara retroactivamente los temas que quedaron a medias.
+      2. Si NINGUNA la tiene, se BUSCA (1º la original del RSS, luego APIs gratuitas), se adjunta
+         y `adjuntar_candidata` ya la reparte a todas. Se marca `autogen-stock` tras intentarlo,
+         para no re-buscar en cada barrido un tema sin foto encontrable.
+    Devuelve la fila rellenada (o None si no había nada que repartir ni candidata).
     """
     item_id = item.get("id")
     if not item_id:
@@ -187,7 +235,14 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     if objetivo is None:
         return None
 
-    # CANDIDATAS, en orden de preferencia: original del artículo (RSS) y luego APIs gratuitas.
+    # Camino 1 — REPARACIÓN: ya hay foto de stock en el tema; repártela a las vacías (gratis).
+    ya_con_stock = next((p for p in plataformas if _es_stock(p)), None)
+    if ya_con_stock is not None:
+        if propagar_stock(str(item_id), _campos_desde(ya_con_stock)):
+            return repos.obtener_pieza_fila(str(objetivo.get("id") or ""))
+        return None
+
+    # Camino 2 — BÚSQUEDA. CANDIDATAS: original del artículo (RSS) y luego APIs gratuitas.
     candidatas: list[dict[str, str]] = []
     fuente = (objetivo.get("imagen_fuente") or "").strip()
     if fuente:
@@ -216,6 +271,9 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         if actualizada is not None:
             _marcar_procesado(str(item_id))
             return actualizada
+    # Se intentó buscar y no sirvió ninguna candidata: marca el tema para no re-buscar en cada
+    # barrido (la selección igual lo retomará si algún día aparece una foto de stock que repartir).
+    _marcar_procesado(str(item_id))
     return None
 
 

@@ -467,12 +467,23 @@ def _autorizar_stock(pieza_id: str, autorizar: bool) -> tuple[int, dict]:
     if (plat.get("imagen_origen") or "") != licencia_imagen.ORIGEN_STOCK:
         return 400, {"error": "Esta pieza no tiene una imagen de stock que autorizar."}
     # Autorizar: la imagen pasa a contar como real (limpia `falta_imagen`). Revocar: vuelve a faltar.
-    actualizada = repos.actualizar_pieza_fila(
-        pieza_id,
-        {"imagen_autorizada": bool(autorizar), "falta_imagen": not autorizar},
-    )
+    campos = {"imagen_autorizada": bool(autorizar), "falta_imagen": not autorizar}
+    actualizada = repos.actualizar_pieza_fila(pieza_id, campos)
     if actualizada is None:
         return 404, {"error": "Esa pieza ya no existe."}
+    # ESPEJO de la decisión: la MISMA foto en otras redes son los mismos derechos, así que
+    # autorizar/revocar una vez se aplica a las hermanas que comparten esa `foto` (no se obliga a
+    # autorizar red por red). Solo toca stock con la misma foto; no pisa imágenes propias.
+    foto = (actualizada.get("foto") or "").strip()
+    pub_id = (actualizada.get("publicacion_id") or "").strip()
+    if foto and pub_id:
+        for hermana in repos.listar_piezas_fila(pub_id):
+            if hermana.get("id") == pieza_id or (hermana.get("estado") or "") == "publicado":
+                continue
+            if (hermana.get("imagen_origen") or "") == licencia_imagen.ORIGEN_STOCK and (
+                hermana.get("foto") or ""
+            ).strip() == foto:
+                repos.actualizar_pieza_fila(hermana["id"], campos)
     return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
 
 

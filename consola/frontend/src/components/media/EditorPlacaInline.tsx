@@ -25,7 +25,7 @@ import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
 import { BuscadorStock } from "@/components/media/BuscadorStock";
-import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
+import { BadgeStock } from "@/components/media/OverlaySinLicencia";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
 import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
@@ -593,46 +593,47 @@ export function EditorPlacaInline({
       )}
 
       {/* Lienzo + tratamiento de stock superpuesto. El overlay "SIN LICENCIA" y el badge son DOM
-          absolutos sobre el área del canvas (NO se dibujan en el canvas), así al autorizar
+          absolutos sobre el área EXACTA del canvas (NO se dibujan en el canvas), así al autorizar
           desaparecen limpio. `pointer-events-none` para no robar clics al lienzo. */}
-      <div className="relative">
-        <LienzoPlaca
-          canvasRef={canvasRef}
-          lienzo={lienzo}
-          fuentesListas={fuentesListas}
-          hayFotoActiva={hayFotoActiva}
-          onPointerDown={onPointerDownFoto}
-          onPointerMove={onPointerMoveFoto}
-          onPointerUp={onPointerUpFoto}
-          copyIn={copyIn}
-          onCopyInCambio={onCopyInCambio}
-          editandoTitular={editandoTitular}
-          onTerminarTitular={() => setEditandoTitular(false)}
-          cajaTitular={cajaTitular}
-          esCollage={esCollage}
-          titularEditable={titularEditable}
-          faltan={faltan}
-          nHuecos={nHuecos}
-        />
-        {sinLicencia && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-2">
-            <OverlaySinLicencia
-              activo
-              tamano="md"
-              className="max-h-[22rem] w-auto rounded-md"
-            >
-              <div className="h-[22rem] max-h-[22rem]" style={{ aspectRatio: `${lienzo.w} / ${lienzo.h}` }} />
-            </OverlaySinLicencia>
-          </div>
-        )}
-        {(sinLicencia || autorizada) && (
-          <BadgeStock
-            proveedor={proveedor}
-            autorizada={autorizada}
-            className="pointer-events-none absolute bottom-3 right-3"
-          />
-        )}
-      </div>
+      <LienzoPlaca
+        canvasRef={canvasRef}
+        lienzo={lienzo}
+        fuentesListas={fuentesListas}
+        hayFotoActiva={hayFotoActiva}
+        onPointerDown={onPointerDownFoto}
+        onPointerMove={onPointerMoveFoto}
+        onPointerUp={onPointerUpFoto}
+        copyIn={copyIn}
+        onCopyInCambio={onCopyInCambio}
+        editandoTitular={editandoTitular}
+        onTerminarTitular={() => setEditandoTitular(false)}
+        cajaTitular={cajaTitular}
+        esCollage={esCollage}
+        titularEditable={titularEditable}
+        faltan={faltan}
+        nHuecos={nHuecos}
+        superpuesto={
+          <>
+            {sinLicencia && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center"
+              >
+                <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
+                  Sin licencia
+                </span>
+              </div>
+            )}
+            {(sinLicencia || autorizada) && (
+              <BadgeStock
+                proveedor={proveedor}
+                autorizada={autorizada}
+                className="pointer-events-none absolute bottom-2 right-2"
+              />
+            )}
+          </>
+        }
+      />
 
       {autorizada && piezaId && (
         <div className="flex items-center justify-end">

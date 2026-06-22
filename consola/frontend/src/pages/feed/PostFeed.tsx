@@ -40,7 +40,7 @@ import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar } from "@/components/comunes/confirmar";
 import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
-import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
+import { BadgeStock } from "@/components/media/OverlaySinLicencia";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -548,30 +548,41 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.)
           STOCK SIN LICENCIA: la previa se atenúa con watermark y un badge la rotula como ayuda
           visual no publicable; si la foto de stock ya está autorizada, badge sutil sin overlay. */}
-      <div className="relative">
-        <OverlaySinLicencia activo={bloqueoStock} tamano="md">
-          <VistaPreviaRed
-            red={pieza.red}
-            marca={pieza.marca_nombre}
-            contenido={cuerpo}
-            copy_in={pieza.copy_in}
-            imagen_url={imagen || undefined}
-            carrusel={pieza.carrusel}
-            titulo={pieza.titulo}
-            onAbrir={() => void abrirEditor()}
-            captionExpandido={captionExpandido}
-            onAlternarCaption={() => setCaptionExpandido((v) => !v)}
-            variante="limpia"
-          />
-        </OverlaySinLicencia>
-        {(bloqueoStock || stockAutorizado(pieza)) && (
-          <BadgeStock
-            proveedor={nombreProveedor(pieza.imagen_proveedor)}
-            autorizada={!!pieza.imagen_autorizada}
-            className="absolute bottom-2 right-2 z-10"
-          />
-        )}
-      </div>
+      <VistaPreviaRed
+        red={pieza.red}
+        marca={pieza.marca_nombre}
+        contenido={cuerpo}
+        copy_in={pieza.copy_in}
+        imagen_url={imagen || undefined}
+        carrusel={pieza.carrusel}
+        titulo={pieza.titulo}
+        onAbrir={() => void abrirEditor()}
+        captionExpandido={captionExpandido}
+        onAlternarCaption={() => setCaptionExpandido((v) => !v)}
+        variante="limpia"
+        overlayImagen={
+          bloqueoStock || stockAutorizado(pieza) ? (
+            <>
+              {/* Marca central "SIN LICENCIA" sobre la FOTO (no la tarjeta), discreta. */}
+              {bloqueoStock && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+                >
+                  <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
+                    Sin licencia
+                  </span>
+                </div>
+              )}
+              <BadgeStock
+                proveedor={nombreProveedor(pieza.imagen_proveedor)}
+                autorizada={!!pieza.imagen_autorizada}
+                className="pointer-events-none absolute bottom-2 right-2 z-10"
+              />
+            </>
+          ) : undefined
+        }
+      />
 
       {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). El
           espacio LIBRE de esta fila expande/pliega el caption (la "parte baja" de la tarjeta);

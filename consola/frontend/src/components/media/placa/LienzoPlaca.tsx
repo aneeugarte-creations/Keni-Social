@@ -37,6 +37,11 @@ export interface LienzoPlacaProps {
   faltan: number;
   /** Nº total de huecos del diseño. */
   nHuecos: number;
+  /**
+   * Capa(s) DOM superpuestas sobre el área EXACTA del canvas (el wrapper `relative` que ciñe el
+   * lienzo): tratamiento "SIN LICENCIA" y badge de fuente. Se ancla a la foto, no a la tarjeta.
+   */
+  superpuesto?: React.ReactNode;
 }
 
 export function LienzoPlaca({
@@ -56,6 +61,7 @@ export function LienzoPlaca({
   titularEditable,
   faltan,
   nHuecos,
+  superpuesto,
 }: LienzoPlacaProps) {
   return (
     <>
@@ -67,10 +73,10 @@ export function LienzoPlaca({
             <Spinner className="h-5 w-5 text-muted-foreground" />
           </div>
         ) : (
-          <div className="relative">
+          <div className="relative inline-block">
             <canvas
               ref={canvasRef}
-              className="max-h-[22rem] w-auto rounded-md"
+              className="block max-h-[22rem] w-auto rounded-md"
               style={{
                 aspectRatio: `${lienzo.w} / ${lienzo.h}`,
                 cursor: hayFotoActiva ? "move" : "pointer",
@@ -81,6 +87,8 @@ export function LienzoPlaca({
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
             />
+            {/* Tratamiento de stock anclado a la FOTO (el lienzo), no a la tarjeta. */}
+            {superpuesto}
             {editandoTitular && cajaTitular && (
               <textarea
                 autoFocus

@@ -79,6 +79,12 @@ export interface VistaPreviaRedProps {
    * pie "Mockup aproximado".
    */
   variante?: "completa" | "limpia";
+  /**
+   * Variante `"limpia"`: capa(s) DOM superpuestas sobre el área EXACTA de la imagen (su
+   * contenedor `relative` 4:5), p. ej. el badge de fuente de una foto de stock. Anclado a la
+   * FOTO, no a la tarjeta ni al copy.
+   */
+  overlayImagen?: React.ReactNode;
 }
 
 /** Deriva un @handle a partir del nombre de la marca. */
@@ -269,12 +275,15 @@ function CarruselLimpio({
   titulo,
   onAbrir,
   slides,
+  overlayPortada,
 }: {
   portada: string;
   copyIn?: string;
   titulo?: string;
   onAbrir?: () => void;
   slides: SlideCarrusel[];
+  /** Capa superpuesta sobre la PORTADA (badge de fuente de stock), anclada a la foto. */
+  overlayPortada?: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [indice, setIndice] = React.useState(0);
@@ -338,6 +347,7 @@ function CarruselLimpio({
             <PlaceholderImagen className="h-full w-full" />
           )}
           <CapaCopyIn texto={portada ? "" : copyIn} />
+          {overlayPortada}
         </div>
         {/* Slides EN CRUDO, en su orden de publicación. Las IMÁGENES abren el editor al
             hacer clic (igual que la portada); los VIDEOS no: ahí el clic controla la
@@ -703,6 +713,7 @@ export function VistaPreviaRed({
   captionExpandido,
   onAlternarCaption,
   variante = "completa",
+  overlayImagen,
 }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
   const Icono = iconoRed(red);
@@ -724,6 +735,7 @@ export function VistaPreviaRed({
             titulo={titulo}
             onAbrir={onAbrir}
             slides={slides}
+            overlayPortada={overlayImagen}
           />
           <div className="px-4 pb-1 pt-3">
             <CopyConLeerMas
@@ -775,6 +787,7 @@ export function VistaPreviaRed({
           )}
           {/* El copy-in solo cuando NO hay imagen: si hay placa compuesta, el texto va horneado. */}
           <CapaCopyIn texto={imagen ? "" : copy_in} />
+          {overlayImagen}
         </div>
         {/* Copy (caption) bajo la imagen, idéntico para toda red: recortado a 2 líneas con "leer
             más" estilo red social, y alto reservado para que todas las tarjetas midan igual. */}
