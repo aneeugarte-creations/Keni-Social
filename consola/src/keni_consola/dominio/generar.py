@@ -504,6 +504,7 @@ def lanzar(
     urgente: bool = False,
     publicacion_id: str = "",
     proceso: str = generaciones.PROCESO_PRODUCCION,
+    al_fallar: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
@@ -566,6 +567,7 @@ def lanzar(
             if tipo in _TIPOS_FONDO
             else jobspec.PRIORIDAD_MANUAL
         ),
+        al_fallar=al_fallar,
     )
     try:
         generaciones.encolar_job_claude(

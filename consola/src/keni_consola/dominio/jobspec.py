@@ -526,6 +526,7 @@ def construir(
     endurecer: dict[str, Any] | None = None,
     prioridad: int = PRIORIDAD_MANUAL,
     carril: str = CARRIL_INFERENCIA,
+    al_fallar: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal).
 
@@ -537,8 +538,11 @@ def construir(
     por S3, no por un disco compartido entre back y worker).
     `carril` (def `inferencia`): el POOL de workers que puede reclamar el job. Los jobs de
     auto-desarrollo lo ponen a `dev` para que SOLO `worker_dev` los reclame (ver `carril`).
+    `al_fallar` (opcional): acciones de limpieza que el worker ejecuta SOLO si el job termina
+    en ERROR (ver `reconstruir_al_fallar`). Lo usa la generación evergreen para borrar la pieza
+    desechable que quedaría huérfana y revertir su idea a `aprobada`. Ausente = sin limpieza.
     """
-    return {
+    spec: dict[str, Any] = {
         "version": VERSION,
         "prompt": prompt,
         "cwd_kind": cwd_kind,
@@ -549,6 +553,9 @@ def construir(
         "prioridad": int(prioridad),
         "carril": carril or CARRIL_INFERENCIA,
     }
+    if al_fallar:
+        spec["al_fallar"] = dict(al_fallar)
+    return spec
 
 
 def prioridad(spec: dict[str, Any]) -> int:
@@ -844,3 +851,37 @@ def _asignar_etiqueta_por_nombre(publicacion_id: str, nombre: str) -> None:
         et_id = repos.crear_etiqueta(nombre=nombre).get("id", "")
     if et_id:
         repos.asignar_etiqueta(publicacion_id, et_id)
+
+
+def reconstruir_al_fallar(spec: dict[str, Any]):  # noqa: ANN201 -- Callable | None (evita ciclo de tipos)
+    """Reconstruye la limpieza `al_fallar` del spec, o `None` si no la lleva.
+
+    `al_fallar` (opcional, a nivel raíz del spec) declara acciones a ejecutar SOLO cuando el job
+    termina en ERROR. Soporta:
+      - `borrar_publicacion`: id de una pieza DESECHABLE creada para este trabajo (la pieza
+        evergreen), que sin copy quedaría huérfana. Borra la pieza y su subárbol (cascada).
+      - `revertir_idea_evergreen`: id de la idea evergreen que lanzó el trabajo; vuelve a
+        `aprobada` y se desenlaza para poder reintentar.
+    Solo lo llevan los specs que crean una pieza desechable (la generación evergreen). El resto
+    (copy de pipeline/RSS sobre un tema EXISTENTE) NO lo lleva, así nunca se borra un tema real.
+    """
+    acciones = spec.get("al_fallar")
+    if not isinstance(acciones, dict):
+        return None
+    borrar_pub = str(acciones.get("borrar_publicacion") or "")
+    revertir_idea = str(acciones.get("revertir_idea_evergreen") or "")
+    if not (borrar_pub or revertir_idea):
+        return None
+
+    def limpiar() -> None:
+        from .. import repos
+        from ..estados import ESTADO_EVERGREEN_APROBADA
+
+        if borrar_pub:
+            repos.borrar_publicacion(borrar_pub)
+        if revertir_idea:
+            repos.actualizar_evergreen_idea(
+                revertir_idea, {"estado": ESTADO_EVERGREEN_APROBADA, "publicacion_id": ""}
+            )
+
+    return limpiar

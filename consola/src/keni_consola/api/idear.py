@@ -27,6 +27,7 @@ SEGURIDAD / VALIDACION:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from starlette.concurrency import run_in_threadpool
@@ -48,6 +49,8 @@ from ..estados import (
     ORIGENES_EVERGREEN_IDEA_MANUAL,
 )
 from ..seguridad import autor_de_peticion
+
+_log = logging.getLogger("keni_consola.idear")
 
 _MAX_TITULO = 200
 _MAX_DESCRIPCION = 2000
@@ -273,6 +276,10 @@ def _generar_pieza(
         autor=autor,
     )
 
+    # La pieza es DESECHABLE: si la generación falla o se cancela, el worker la borra y revierte
+    # la idea a `aprobada` (ver `jobspec.reconstruir_al_fallar`). Así un fallo nunca deja una
+    # pieza huérfana sin copy ni una idea atascada en `generada`.
+    al_fallar = {"borrar_publicacion": contenido["id"], "revertir_idea_evergreen": idea_id}
     try:
         gen = gen_dom.lanzar_copy(
             tipo="evergreen",
@@ -285,11 +292,25 @@ def _generar_pieza(
             texto_base=nota,
             autor=autor,
             publicacion_id=contenido["id"],
+            al_fallar=al_fallar,
         )
     except generaciones.ColaLlenaError:
+        # No se lanzó nada: no dejes la pieza huérfana.
+        repos.borrar_publicacion(contenido["id"])
         return 429, {
             "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
         }
+    except Exception:  # noqa: BLE001 -- cualquier fallo al lanzar no debe dejar pieza huérfana
+        repos.borrar_publicacion(contenido["id"])
+        _log.exception("evergreen: no se pudo lanzar el copy de la idea %s", idea_id)
+        return 500, {"error": "No se pudo iniciar la generación."}
+
+    # El lanzamiento pudo reflejar el fallo en el PROPIO registro (encolado rechazado sin lanzar
+    # excepción): ahí el worker nunca corre, así que la idea sigue `aprobada` (reintentable) y la
+    # pieza se borra aquí para no dejarla huérfana.
+    if gen.get("estado") == generaciones.ESTADO_ERROR:
+        repos.borrar_publicacion(contenido["id"])
+        return 200, {"idea": _idea_a_dict(idea), "generacion": gen}
 
     # TERMINAL feliz: la idea pasa a `generada` (cajón histórico del taller, sin más
     # acciones) y queda enlazada a su pieza. Volver a generarla = duplicar contenido.

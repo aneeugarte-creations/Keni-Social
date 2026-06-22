@@ -120,6 +120,26 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
     )
 
 
+def _limpiar_si_fallo(gen_id: str, spec: dict) -> None:
+    """Si el job terminó en ERROR, ejecuta la limpieza `al_fallar` del spec (best-effort).
+
+    Para una pieza evergreen lanzada desde una idea: la generación falla (o se cancela) y la
+    pieza queda sin copy. Borramos esa pieza huérfana y revertimos la idea a `aprobada` para
+    poder reintentar (ver `jobspec.reconstruir_al_fallar`). Sin `al_fallar` en el spec —el caso
+    del resto de generaciones— es un no-op. Nunca rompe el cierre del job.
+    """
+    limpiar = jobspec.reconstruir_al_fallar(spec)
+    if limpiar is None:
+        return
+    reg = generaciones.obtener(gen_id)
+    if not reg or reg.get("estado") != generaciones.ESTADO_ERROR:
+        return
+    try:
+        limpiar()
+    except Exception:  # noqa: BLE001 -- limpieza best-effort; nunca rompe el cierre del job
+        _log.exception("worker: falló la limpieza al_fallar del job (gen %s)", gen_id)
+
+
 def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> None:
     """Hilo vigia: sondea el flag de cancelacion de la cola y propaga al runner local.
 
@@ -279,6 +299,9 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
             dir_temporal=dir_temporal, ya_admitido=True, endurecer=endurecer,
         )
         _esperar_terminal(gen_id)
+        # Si terminó en error/cancelado, limpia lo que el spec declare desechable (pieza
+        # evergreen huérfana + revertir su idea). No-op para el resto de generaciones.
+        _limpiar_si_fallo(gen_id, spec)
     finally:
         _desmarcar_job_en_curso(job_id)
         parar.set()

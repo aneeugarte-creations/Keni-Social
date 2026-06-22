@@ -164,3 +164,143 @@ def test_generar_pieza_sella_la_idea_como_generada(cliente, monkeypatch):
     assert cliente.post(
         f"/api/evergreen/ideas/{idea['id']}/generar", json={}
     ).status_code == 400
+
+
+def test_generar_pieza_borra_pieza_si_lanzar_revienta(cliente, monkeypatch):
+    """Si `lanzar_copy` revienta, la pieza NO queda huérfana y la idea sigue aprobada."""
+    from keni_consola import repos
+    from keni_consola.api import idear as api_evergreen
+
+    creadas: list[str] = []
+    orig_crear = repos.crear_publicacion
+
+    def crear_spy(**kw):
+        pieza = orig_crear(**kw)
+        creadas.append(pieza["id"])
+        return pieza
+
+    monkeypatch.setattr(api_evergreen.repos, "crear_publicacion", crear_spy)
+
+    def explota(**kw):
+        raise RuntimeError("boom al lanzar")
+
+    monkeypatch.setattr(api_evergreen.gen_dom, "lanzar_copy", explota)
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
+    )
+    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
+    assert r.status_code == 500, r.text
+    # La idea sigue aprobada y sin enlazar: se puede reintentar.
+    idea2 = repos.obtener_evergreen_idea(idea["id"])
+    assert idea2["estado"] == "aprobada"
+    assert not idea2.get("publicacion_id")
+    # La pieza creada NO quedó huérfana.
+    assert creadas and repos.obtener_publicacion(creadas[0]) is None
+
+
+def test_generar_pieza_no_sella_si_lanzamiento_reflejo_error(cliente, monkeypatch):
+    """Si el lanzamiento vuelve con el registro YA en error, la idea no se sella y la pieza se borra."""
+    from keni_consola import generaciones, repos
+    from keni_consola.api import idear as api_evergreen
+
+    creadas: list[str] = []
+    orig_crear = repos.crear_publicacion
+
+    def crear_spy(**kw):
+        pieza = orig_crear(**kw)
+        creadas.append(pieza["id"])
+        return pieza
+
+    monkeypatch.setattr(api_evergreen.repos, "crear_publicacion", crear_spy)
+    monkeypatch.setattr(
+        api_evergreen.gen_dom,
+        "lanzar_copy",
+        lambda **kw: {"id": "gen-x", "estado": generaciones.ESTADO_ERROR, "error": "cola llena"},
+    )
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
+    )
+    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
+    assert r.status_code == 200, r.text
+    assert r.json()["generacion"]["estado"] == generaciones.ESTADO_ERROR
+    idea2 = repos.obtener_evergreen_idea(idea["id"])
+    assert idea2["estado"] == "aprobada"
+    assert not idea2.get("publicacion_id")
+    assert creadas and repos.obtener_publicacion(creadas[0]) is None
+
+
+def test_reconstruir_al_fallar_sin_acciones_es_none():
+    """Sin `al_fallar` (o con acciones vacías), no hay limpieza: el resto de jobs no se tocan."""
+    from keni_consola.dominio import jobspec
+
+    assert jobspec.reconstruir_al_fallar({}) is None
+    assert jobspec.reconstruir_al_fallar({"al_fallar": {}}) is None
+    assert (
+        jobspec.reconstruir_al_fallar(
+            {"al_fallar": {"borrar_publicacion": "", "revertir_idea_evergreen": ""}}
+        )
+        is None
+    )
+
+
+def test_reconstruir_al_fallar_borra_pieza_y_revierte_idea(entorno):
+    """La limpieza `al_fallar` borra la pieza desechable y revierte la idea a aprobada."""
+    from keni_consola import repos
+    from keni_consola.dominio import jobspec
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
+    )
+    pieza = repos.crear_publicacion(
+        clase="contenido", flujo="evergreen", titulo="X", marca="unotv", origen="evergreen"
+    )
+    repos.actualizar_evergreen_idea(
+        idea["id"], {"estado": "generada", "publicacion_id": pieza["id"]}
+    )
+
+    limpiar = jobspec.reconstruir_al_fallar(
+        {"al_fallar": {"borrar_publicacion": pieza["id"], "revertir_idea_evergreen": idea["id"]}}
+    )
+    assert limpiar is not None
+    limpiar()
+
+    assert repos.obtener_publicacion(pieza["id"]) is None
+    idea2 = repos.obtener_evergreen_idea(idea["id"])
+    assert idea2["estado"] == "aprobada"
+    assert not idea2.get("publicacion_id")
+
+
+def test_worker_limpia_al_fallar_solo_en_error(entorno, monkeypatch):
+    """El worker ejecuta la limpieza `al_fallar` SOLO si el job terminó en error."""
+    from keni_consola import generaciones, repos, worker
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
+    )
+    pieza = repos.crear_publicacion(
+        clase="contenido", flujo="evergreen", titulo="X", marca="unotv", origen="evergreen"
+    )
+    repos.actualizar_evergreen_idea(
+        idea["id"], {"estado": "generada", "publicacion_id": pieza["id"]}
+    )
+    spec = {
+        "al_fallar": {"borrar_publicacion": pieza["id"], "revertir_idea_evergreen": idea["id"]}
+    }
+
+    # Terminó COMPLETADO: no toca nada.
+    monkeypatch.setattr(
+        worker.generaciones, "obtener", lambda _gid: {"estado": generaciones.ESTADO_COMPLETADO}
+    )
+    worker._limpiar_si_fallo("gen-x", spec)
+    assert repos.obtener_publicacion(pieza["id"]) is not None
+    assert repos.obtener_evergreen_idea(idea["id"])["estado"] == "generada"
+
+    # Terminó en ERROR: borra la pieza y revierte la idea.
+    monkeypatch.setattr(
+        worker.generaciones, "obtener", lambda _gid: {"estado": generaciones.ESTADO_ERROR}
+    )
+    worker._limpiar_si_fallo("gen-x", spec)
+    assert repos.obtener_publicacion(pieza["id"]) is None
+    assert repos.obtener_evergreen_idea(idea["id"])["estado"] == "aprobada"
