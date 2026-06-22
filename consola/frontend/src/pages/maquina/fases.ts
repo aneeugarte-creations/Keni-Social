@@ -167,26 +167,30 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       base: MAESTRO_PRODUCCION,
       nota: "Apagar «Producción» en una marca la deja sin copy automático.",
     },
+    // RAMA del Decisor: Redactar (foto) y Carrusel son los dos caminos PARALELOS entre los que el
+    // Decisor enruta; comparten fila horizontal (como Recolectar + Google Trends en ingesta).
+    paralelo: "redactar",
     // Los envoltorios NO son agentes sueltos: son fragmentos que `generar.componer()` inyecta
     // en este prompt según las redes pedidas (una pieza por red / copy único). La DECISIÓN de
-    // formato ya no vive aquí: la toma el Decisor (fase previa) y el camino carrusel tiene su
-    // propia fase. Cuelgan de Redactar para editarlos donde se usan.
+    // formato ya no vive aquí: la toma el Decisor (fase previa) y el camino carrusel es su rama
+    // paralela. Cuelgan de Redactar para editarlos donde se usan.
     subPrompts: [
       { nombre: "Redes", doc: "prompt/envoltorios/redes", ayuda: "Una pieza por red" },
       { nombre: "Unificado", doc: "prompt/envoltorios/copy-unico", ayuda: "El mismo copy para todas las redes" },
     ],
   },
   {
-    // Camino CARRUSEL de Redactar: cuando el Decisor elige carrusel, el copy se redacta con este
-    // prompt (panel editorial: portada paraguas + un slide por sub-historia) en vez del de foto.
-    // Comparte el motor de copy de Redactar (su flag/cola); por eso solo cuelga del maestro y no
-    // pinta switch propio. Su prompt es editable aquí.
+    // Camino CARRUSEL de Redactar: RAMA PARALELA a Redactar (mismo `paralelo` id → comparten fila).
+    // Cuando el Decisor elige carrusel, el copy se redacta con este prompt (panel editorial: portada
+    // paraguas + un slide por sub-historia) en vez del de foto. Comparte el motor de copy de Redactar
+    // (su flag/cola); por eso solo cuelga del maestro y no pinta switch propio. Su prompt es editable aquí.
     nombre: "Carrusel",
     es_ia: true,
     claves: [MAESTRO_PRODUCCION],
     ayuda: "Redacta el copy como carrusel (panel de tarjetas) cuando el Decisor elige ese camino",
     doc: "prompt/redactar-carrusel",
     contextoMarca: true,
+    paralelo: "redactar",
   },
   {
     nombre: "Keywords",

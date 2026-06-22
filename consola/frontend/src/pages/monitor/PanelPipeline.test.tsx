@@ -214,6 +214,15 @@ describe("PanelPipeline · fuentes de ingesta paralelas", () => {
     expect(screen.getByText("Cotejar").closest("li")).not.toBe(liRecolectar);
   });
 
+  it("Redactar y Carrusel comparten una fila (ramas paralelas del Decisor)", () => {
+    renderProduccion();
+    const liRedactar = screen.getByText("Redactar").closest("li");
+    expect(screen.getByText("Carrusel").closest("li")).toBe(liRedactar);
+    // El Decisor (fase previa) y Keywords (siguiente) NO comparten fila con las ramas.
+    expect(screen.getByText("Decisor").closest("li")).not.toBe(liRedactar);
+    expect(screen.getByText("Keywords").closest("li")).not.toBe(liRedactar);
+  });
+
   it("Google Trends es navegable (su daemon le da subpágina de logs)", () => {
     const onAbrir = renderInvestigacion();
     within(filaDe("Google Trends"))
@@ -233,7 +242,8 @@ describe("PanelPipeline · solo las filas con contenido son clicables", () => {
     ).toBeInTheDocument();
 
     // Redactar tiene prompt + contexto + cola + etapa: su fila es clicable (role button) y navega.
-    within(filaDe("Redactar")).getByRole("button").click();
+    // Comparte fila (grupo paralelo) con Carrusel, así que se desambigua por nombre.
+    within(filaDe("Redactar")).getByRole("button", { name: /Redactar/ }).click();
     expect(onAbrir).toHaveBeenCalledTimes(1);
     expect(onAbrir.mock.calls[0][0].nombre).toBe("Redactar");
 
