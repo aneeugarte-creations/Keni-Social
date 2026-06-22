@@ -469,7 +469,13 @@ function FilaIdea({
         redes: redes.length > 0 ? redes.map((r) => r.id) : undefined,
       }),
     onSuccess: (data) => iniciar(data.generacion),
-    onError: (e) => toast.error(mensajeError(e)),
+    onError: (e) => {
+      // Si el estado derivó (la idea ya se generó en otra pestaña/sesión, o se reintenta
+      // tras un fallo), el back rechaza con 400. Refrescamos para que la ficha se corrija
+      // sola —el botón desaparece— en vez de dejar al usuario reintentando contra el error.
+      invalidar();
+      toast.error(mensajeError(e));
+    },
   });
 
   const terminalRef = React.useRef<string | null>(null);
@@ -487,6 +493,9 @@ function FilaIdea({
       });
     } else if (generacion.estado === "error") {
       terminalRef.current = generacion.id;
+      // La idea quedó `generada` al lanzarse (terminal en el taller): refrescamos para que el
+      // botón no reaparezca y la ficha pase al histórico; el detalle del fallo va en el toast.
+      invalidar();
       toast.error(generacion.error || "No se pudo generar la pieza.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
