@@ -617,14 +617,20 @@ function DialogoTokenNuevo({ token, onCerrar }: { token: string | null; onCerrar
         <DialogHeader>
           <DialogTitle>Conecta Claude Code</DialogTitle>
           <DialogDescription>
-            Copia este comando, pégalo en tu terminal y pulsa Enter. Cópialo ahora: por seguridad no
-            se vuelve a mostrar.
+            Cópialo ahora: por seguridad no se vuelve a mostrar.
           </DialogDescription>
         </DialogHeader>
 
         <code className="block max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted px-3 py-2 font-mono text-xs">
           {comando}
         </code>
+
+        <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+          <li>Pulsa "Copiar comando y cerrar".</li>
+          <li>Abre la app Terminal de tu Mac (Cmd + Espacio, escribe "Terminal" y Enter).</li>
+          <li>Pega el comando (Cmd + V) y pulsa Enter.</li>
+          <li>Abre Claude Code: keni-social ya estará conectado.</li>
+        </ol>
 
         <DialogFooter>
           <Button type="button" onClick={() => void copiarYCerrar()}>
