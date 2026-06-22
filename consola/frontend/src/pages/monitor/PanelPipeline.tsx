@@ -79,6 +79,14 @@ export interface FasePipeline {
    *  esta etiqueta. Marca que lo que sigue NO corre en la secuencia automática anterior (p. ej.
    *  «Cadena de aprobación»: la Crítica IA corre tras los OK humanos, no justo tras Ilustrar). */
   seccion?: string;
+  /** Daemon de sistema cuyos BARRIDOS son los logs de esta fase
+   *  (`GET /api/sistema/daemons/{daemon}/barridos`). Hace la fase navegable: su subpágina muestra el
+   *  log por barrido del daemon (p. ej. Google Trends → daemon `trends`). */
+  daemon?: string;
+  /** Id de GRUPO PARALELO: las fases CONSECUTIVAS con el mismo id son fuentes que alimentan el
+   *  mismo pool y se pintan LADO A LADO en una fila, con un solo conector ↓ antes del grupo (p. ej.
+   *  Recolectar + Google Trends, ambas de ingesta). */
+  paralelo?: string;
 }
 
 function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<string, number> {
@@ -427,56 +435,123 @@ export function PanelPipeline({
   const enCurso = cola ? contar(cola.en_curso, queuePorTipo) : {};
   const esperando = cola ? contar(cola.esperando, queuePorTipo) : {};
 
+  // La FILA de una fase (icono + nombre + ayuda + conteos/switch + su diálogo de excepciones), SIN
+  // el conector: lo pinta el grupo, para compartir un solo ↓ entre las fases paralelas.
+  const renderFila = (e: FasePipeline, i: number): React.ReactNode => {
+    const claveEfectiva = efectivas[i];
+    // Con marca concreta, el switch opera sobre la variante por marca (`clave::marca`) si
+    // existe en el catálogo; si no (fase pre-marca como Clasificar), cae al global. La
+    // ESTRUCTURA (dueña/seguidora/maestro) se sigue resolviendo por la clave global.
+    const claveSwitch =
+      claveEfectiva && marcaActiva && porClave.has(`${claveEfectiva}::${marcaActiva}`)
+        ? `${claveEfectiva}::${marcaActiva}`
+        : claveEfectiva;
+    const ajuste = claveSwitch ? porClave.get(claveSwitch) : undefined;
+    // El switch de la fila es editable SOLO si la fase es la DUEÑA de su clave efectiva y esa
+    // clave NO es el maestro de proceso (compartido): así Recolectar/Verificar/Redactar/Ilustrar
+    // controlan cada uno SU clave y el maestro queda como control único de la cabecera. El resto
+    // SIGUE a otro control (el maestro, o la fase dueña de un flag granular compartido).
+    const esMaestroProceso = claveEfectiva !== undefined && claveEfectiva === claveMaestro;
+    const esDuena = claveEfectiva !== undefined && duenoDeClave.get(claveEfectiva) === i;
+    const switchEditable = Boolean(ajuste) && esDuena && !esMaestroProceso;
+    const deEtapa = e.excepciones
+      ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
+      : [];
+    const acciones: ItemMenuContextual[] = [];
+    if (ajuste && e.excepciones && deEtapa.length > 0) {
+      acciones.push({
+        etiqueta: `Excepciones por marca de ${e.nombre}`,
+        icono: Users,
+        onClick: () => setExcepNombre(e.nombre),
+      });
+    }
+    // Una fila SOLO es clicable/navegable si la fase tiene contenido propio que mostrar en su
+    // subpágina (Prompt · Contexto · Logs). Las que solo tienen toggle (p. ej. Publicar) se
+    // pintan como fila CON su switch, pero sin click izquierdo (su detalle no aportaría nada).
+    const navegableFase = navegable && tieneContenido(e);
+    const conCola = e.queue !== undefined;
+    const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
+    const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
+    const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
+    return (
+      <>
+        <FilaFasePipeline
+          esIa={e.es_ia}
+          nombre={e.nombre}
+          precaucion={e.precaucion}
+          ayuda={
+            <>
+              {e.ayuda}
+              {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
+            </>
+          }
+          onPrimaria={navegableFase ? () => onAbrirFase!(e) : undefined}
+          acciones={acciones}
+          etiquetaAcciones={`Acciones de ${e.nombre}`}
+          derecha={
+            <>
+              {conCola && (
+                <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+                  <span className={enCursoN > 0 ? "font-medium text-foreground" : undefined}>
+                    {enCursoN} en curso
+                  </span>{" "}
+                  · {esperaN} en cola
+                  {admision && <> · admision {admision.en_proceso}</>}
+                </span>
+              )}
+              {switchEditable && ajuste && (
+                <SwitchAjuste
+                  ajuste={ajuste}
+                  ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
+                />
+              )}
+            </>
+          }
+        />
+        {ajuste && e.excepciones && deEtapa.length > 0 && (
+          <DialogoExcepciones
+            etiqueta={e.nombre}
+            base={e.excepciones.base}
+            nota={e.excepciones.nota}
+            deEtapa={deEtapa}
+            etapaActiva={Boolean(ajuste.valor)}
+            abierto={excepNombre === e.nombre}
+            onOpenChange={(v) => setExcepNombre(v ? e.nombre : null)}
+          />
+        )}
+      </>
+    );
+  };
+
+  // Agrupa las fases CONSECUTIVAS que comparten el mismo `paralelo` id: cada grupo es una fila
+  // (lado a lado); las fases secuenciales quedan como grupos de una sola.
+  const grupos: number[][] = [];
+  fases.forEach((e, i) => {
+    const previa = i > 0 ? fases[i - 1] : undefined;
+    if (e.paralelo && previa && previa.paralelo === e.paralelo) {
+      grupos[grupos.length - 1].push(i);
+    } else {
+      grupos.push([i]);
+    }
+  });
+
   return (
     <section data-testid="panel-pipeline">
-      {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. */}
+      {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. Las
+          fuentes de ingesta paralelas comparten una fila horizontal y un solo conector. */}
       <ol className="w-full">
-        {fases.map((e, i) => {
-          const claveEfectiva = efectivas[i];
-          // Con marca concreta, el switch opera sobre la variante por marca (`clave::marca`) si
-          // existe en el catálogo; si no (fase pre-marca como Clasificar), cae al global. La
-          // ESTRUCTURA (dueña/seguidora/maestro) se sigue resolviendo por la clave global.
-          const claveSwitch =
-            claveEfectiva && marcaActiva && porClave.has(`${claveEfectiva}::${marcaActiva}`)
-              ? `${claveEfectiva}::${marcaActiva}`
-              : claveEfectiva;
-          const ajuste = claveSwitch ? porClave.get(claveSwitch) : undefined;
-          // El switch de la fila es editable SOLO si la fase es la DUEÑA de su clave efectiva y esa
-          // clave NO es el maestro de proceso (compartido): así Recolectar/Verificar/Redactar/Ilustrar
-          // controlan cada uno SU clave y el maestro queda como control único de la cabecera. El resto
-          // SIGUE a otro control (el maestro, o la fase dueña de un flag granular compartido).
-          const esMaestroProceso = claveEfectiva !== undefined && claveEfectiva === claveMaestro;
-          const esDuena = claveEfectiva !== undefined && duenoDeClave.get(claveEfectiva) === i;
-          const switchEditable = Boolean(ajuste) && esDuena && !esMaestroProceso;
-          const deEtapa = e.excepciones
-            ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
-            : [];
-          const acciones: ItemMenuContextual[] = [];
-          if (ajuste && e.excepciones && deEtapa.length > 0) {
-            acciones.push({
-              etiqueta: `Excepciones por marca de ${e.nombre}`,
-              icono: Users,
-              onClick: () => setExcepNombre(e.nombre),
-            });
-          }
-          // Una fila SOLO es clicable/navegable si la fase tiene contenido propio que mostrar en su
-          // subpágina (Prompt · Contexto · Logs). Las que solo tienen toggle (p. ej. Publicar) se
-          // pintan como fila CON su switch, pero sin click izquierdo (su detalle no aportaría nada).
-          const navegableFase = navegable && tieneContenido(e);
-          const conCola = e.queue !== undefined;
-          const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
-          const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
-          const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
+        {grupos.map((grupo, gi) => {
+          const primera = fases[grupo[0]];
           return (
-            <li key={e.nombre}>
-              {/* Entre fases: un conector ↓ (misma secuencia) o, si la fase abre una etapa distinta
-                  (`seccion`), un divisor etiquetado que rompe la lectura secuencial. */}
-              {i > 0 &&
-                (e.seccion ? (
+            <li key={grupo.map((i) => fases[i].nombre).join("+")}>
+              {/* Antes del grupo: un conector ↓ (misma secuencia) o, si su primera fase abre una
+                  etapa distinta (`seccion`), un divisor etiquetado que rompe la lectura secuencial. */}
+              {gi > 0 &&
+                (primera.seccion ? (
                   <div className="flex items-center gap-2 py-2">
                     <div className="h-px flex-1 bg-border" />
                     <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {e.seccion}
+                      {primera.seccion}
                     </span>
                     <div className="h-px flex-1 bg-border" />
                   </div>
@@ -485,49 +560,17 @@ export function PanelPipeline({
                     <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
                   </div>
                 ))}
-              <FilaFasePipeline
-                esIa={e.es_ia}
-                nombre={e.nombre}
-                precaucion={e.precaucion}
-                ayuda={
-                  <>
-                    {e.ayuda}
-                    {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
-                  </>
-                }
-                onPrimaria={navegableFase ? () => onAbrirFase!(e) : undefined}
-                acciones={acciones}
-                etiquetaAcciones={`Acciones de ${e.nombre}`}
-                derecha={
-                  <>
-                    {conCola && (
-                      <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
-                        <span className={enCursoN > 0 ? "font-medium text-foreground" : undefined}>
-                          {enCursoN} en curso
-                        </span>{" "}
-                        · {esperaN} en cola
-                        {admision && <> · admision {admision.en_proceso}</>}
-                      </span>
-                    )}
-                    {switchEditable && ajuste && (
-                      <SwitchAjuste
-                        ajuste={ajuste}
-                        ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
-                      />
-                    )}
-                  </>
-                }
-              />
-              {ajuste && e.excepciones && deEtapa.length > 0 && (
-                <DialogoExcepciones
-                  etiqueta={e.nombre}
-                  base={e.excepciones.base}
-                  nota={e.excepciones.nota}
-                  deEtapa={deEtapa}
-                  etapaActiva={Boolean(ajuste.valor)}
-                  abierto={excepNombre === e.nombre}
-                  onOpenChange={(v) => setExcepNombre(v ? e.nombre : null)}
-                />
+              {grupo.length > 1 ? (
+                // Fila de fuentes PARALELAS: lado a lado, mismo alto (`items-stretch` + `h-full`).
+                <div className="flex items-stretch gap-2">
+                  {grupo.map((i) => (
+                    <div key={fases[i].nombre} className="flex-1 [&>*]:h-full">
+                      {renderFila(fases[i], i)}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                renderFila(primera, grupo[0])
               )}
             </li>
           );

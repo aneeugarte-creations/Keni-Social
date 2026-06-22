@@ -6,8 +6,9 @@
  *     p. ej. los envoltorios de red) y el editorial por marca que inyecta. Cada elemento ABRE SU
  *     PROPIA SUBPÁGINA (`/maquina/contexto/doc/<id>`), con el mismo control que el maestro; sin
  *     pop-ups. En Investigación el editorial son las líneas/orígenes (CRUD inline, sin subpágina).
- *   · Logs     — el HISTÓRICO real de runs paradas en esta etapa (`GET /api/pipelines?etapa=`)
- *     cuando la fase tiene `etapa`; si no, los trabajos en vivo de su cola.
+ *   · Logs     — el log por barrido del daemon de la fase (`daemon`), o el HISTÓRICO real de runs
+ *     paradas en esta etapa (`GET /api/pipelines?etapa=`) cuando la fase tiene `etapa`; si no, los
+ *     trabajos en vivo de su cola.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
@@ -25,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
+import { LogBarridos } from "@/pages/maquina/LogBarridos";
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 import {
   type AccionesPublicarSubpagina,
@@ -60,7 +62,8 @@ function FilaCola({ job }: { job: ColaJob }) {
   );
 }
 
-/** Logs de la fase: histórico real por etapa (`api.pipelines`) o, sin etapa, la cola viva. */
+/** Logs de la fase: barridos de su daemon (`LogBarridos`), histórico real por etapa
+ *  (`api.pipelines`) o, sin nada de eso, la cola viva. */
 function LogsFase({
   fase,
   marca,
@@ -78,6 +81,11 @@ function LogsFase({
       api.pipelines({ marca: marca ?? undefined, etapa: fase.etapa, limite: 12 }, signal),
     enabled: !!fase.etapa,
   });
+
+  // Fases respaldadas por un daemon (p. ej. Google Trends): sus logs son el log por barrido.
+  if (fase.daemon) {
+    return <LogBarridos daemon={fase.daemon} />;
+  }
 
   if (fase.etapa) {
     if (historico.isPending) return <Skeleton className="h-24 w-full" />;

@@ -188,6 +188,42 @@ describe("PanelPipeline · toggles independientes", () => {
   });
 });
 
+/** PanelPipeline de Investigación con navegación, para inspeccionar el grupo de ingesta. */
+function renderInvestigacion(onAbrirFase = vi.fn()) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <PanelPipeline
+        fases={FASES_INVESTIGACION}
+        queuePorTipo={{}}
+        claveMaestro={MAESTRO_INVESTIGACION}
+        onAbrirFase={onAbrirFase}
+      />
+    </QueryClientProvider>,
+  );
+  return onAbrirFase;
+}
+
+describe("PanelPipeline · fuentes de ingesta paralelas", () => {
+  it("Recolectar y Google Trends comparten una fila (grupo paralelo)", () => {
+    renderInvestigacion();
+    const liRecolectar = screen.getByText("Recolectar").closest("li");
+    const liTrends = screen.getByText("Google Trends").closest("li");
+    expect(liTrends).toBe(liRecolectar);
+    // Una fase secuencial (Cotejar) NO comparte fila con la ingesta.
+    expect(screen.getByText("Cotejar").closest("li")).not.toBe(liRecolectar);
+  });
+
+  it("Google Trends es navegable (su daemon le da subpágina de logs)", () => {
+    const onAbrir = renderInvestigacion();
+    within(filaDe("Google Trends"))
+      .getByRole("button", { name: /Google Trends/ })
+      .click();
+    expect(onAbrir).toHaveBeenCalledTimes(1);
+    expect(onAbrir.mock.calls[0][0].nombre).toBe("Google Trends");
+  });
+});
+
 describe("PanelPipeline · solo las filas con contenido son clicables", () => {
   it("las fases con contenido (Redactar, Ilustrar) son clicables y navegan a su detalle", async () => {
     const onAbrir = renderProduccion();

@@ -13,17 +13,20 @@ export function slugFase(nombre: string): string {
   return nombre
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-");
 }
 
 /**
  * Una fase TIENE CONTENIDO propio (algo que mostrar en su subpágina Prompt · Contexto · Logs) si
  * tiene prompt (`doc`), contexto editorial de marca (`contextoMarca`), histórico de runs por etapa
- * (`etapa`) o cola viva (`queue`). Sin nada de esto la subpágina no aporta: no es navegable y, si
- * además no tiene toggle propio, NO es una etapa (no debe pintarse como fila).
+ * (`etapa`), cola viva (`queue`) o un daemon cuyos barridos son sus logs (`daemon`). Sin nada de
+ * esto la subpágina no aporta: no es navegable y, si además no tiene toggle propio, NO es una etapa
+ * (no debe pintarse como fila).
  */
 export function tieneContenido(fase: FasePipeline): boolean {
-  return Boolean(fase.doc || fase.contextoMarca || fase.etapa || fase.queue);
+  return Boolean(fase.doc || fase.contextoMarca || fase.etapa || fase.queue || fase.daemon);
 }
 
 /** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
@@ -34,21 +37,25 @@ export const MAESTRO_PRODUCCION = "KENI_PRODUCCION";
 /** El flujo COMPLETO de Investigación (ADR 0011), de ENTRADA a SALIDA. */
 export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
-    // Fuente de ingesta PARALELA a las RSS: un daemon propio descarga las tendencias de Google
-    // y las mete al pool. Global (no per-marca), con su switch propio (`KENI_TRENDS`); sin cola
-    // ni histórico de jobs (solo añade material, no ejecuta IA).
-    nombre: "Google Trends",
-    es_ia: false,
-    claves: ["KENI_TRENDS", MAESTRO_INVESTIGACION],
-    ayuda: "Ingiere las tendencias de Google al pool, como fuente extra junto a las fuentes RSS",
-  },
-  {
     nombre: "Recolectar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
     ayuda: "Recolecta artículos de las fuentes y agrupa las notas idénticas (misma url o titular)",
     queue: "recolectar",
     excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
+    paralelo: "ingesta",
+  },
+  {
+    // Fuente de ingesta PARALELA a las RSS: un daemon propio descarga las tendencias de Google
+    // y las mete al pool. Global (no per-marca), con su switch propio (`KENI_TRENDS`); sin cola
+    // ni histórico de jobs (solo añade material, no ejecuta IA). Su subpágina muestra el log por
+    // barrido del daemon `trends`.
+    nombre: "Google Trends",
+    es_ia: false,
+    claves: ["KENI_TRENDS", MAESTRO_INVESTIGACION],
+    ayuda: "Ingiere las tendencias de Google al pool, como fuente extra junto a las fuentes RSS",
+    daemon: "trends",
+    paralelo: "ingesta",
   },
   {
     // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora del flag de
