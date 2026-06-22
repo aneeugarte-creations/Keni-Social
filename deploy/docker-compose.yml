@@ -130,7 +130,14 @@ services:
       - traefik.http.routers.front.tls.certresolver=le
       # nginx no-root (nginxinc/nginx-unprivileged) escucha en 8080, no en 80.
       - traefik.http.services.front.loadbalancer.server.port=8080
-      - traefik.http.routers.front.middlewares=keni-sec
+      # SWAP SIN COSTURA: durante el blue-green conviven front VIEJO y NUEVO; al retirar el viejo,
+      # Traefik puede tardar un instante en sacarlo del balanceo y enrutar una petición al
+      # contenedor que ya muere -> connection refused/reset. `retry` la reintenta en un backend
+      # sano (solo ante fallo de CONEXIÓN, antes de recibir respuesta: seguro también para POST,
+      # la petición no llegó a procesarse). Convierte la ventana de swap en transparente.
+      - traefik.http.middlewares.keni-retry.retry.attempts=2
+      - traefik.http.middlewares.keni-retry.retry.initialinterval=120ms
+      - traefik.http.routers.front.middlewares=keni-sec,keni-retry
       - autoheal=true  # vigilado por el sidecar autoheal
       # Cabeceras de seguridad para TODO social.kenitech.io (front Y back, ver router back):
       # HSTS (fuerza HTTPS en visitas siguientes), nosniff, X-Frame-Options: DENY (anti
@@ -390,7 +397,7 @@ services:
       - traefik.http.middlewares.keni-errores-back.errors.service=front
       - traefik.http.middlewares.keni-errores-back.errors.query=/_errores/consola-no-disponible
       - traefik.http.middlewares.keni-errores-back.errors.statusRewrites.502-504=503
-      - traefik.http.routers.back.middlewares=keni-sec,keni-errores-back,keni-ratelimit,keni-inflightreq  # cabeceras + degradacion honesta + limites
+      - traefik.http.routers.back.middlewares=keni-sec,keni-errores-back,keni-ratelimit,keni-inflightreq,keni-retry  # cabeceras + degradacion honesta + limites + reintento en swap
       # TOPE DE BODY para SUBIDAS (videos de hasta ~300 MB): middleware buffering con techo
       # de 350 MB, aplicado SOLO al router de subidas (POST /api/media*). NO se aplica al
       # router general del back a proposito: buffering almacena la respuesta antes de

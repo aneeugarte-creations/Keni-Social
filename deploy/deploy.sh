@@ -363,9 +363,20 @@ rodar_servicio() {  # $1 = servicio (back|front) ; $2 = timeout(s) de salud del 
     docker rm -f "$NEW_ID" >/dev/null 2>&1 || true
     return 1
   fi
-  echo "==> blue-green ($svc): nuevo SANO y enrutado; retiro el/los VIEJO(s) POR IDENTIDAD (queda el nuevo sirviendo)"
-  # CAMINO DE ÉXITO: retira el/los VIEJO(s) POR IDENTIDAD (su id capturado antes de escalar).
-  for oid in $OLD_IDS; do docker rm -f "$oid" >/dev/null 2>&1 || true; done
+  echo "==> blue-green ($svc): nuevo SANO; margen para que Traefik lo registre antes de retirar el viejo"
+  # El contenedor está sano, pero Traefik registra el backend nuevo de forma asíncrona (evento
+  # docker + sondeo): retirar el viejo en el MISMO instante deja una ventana en que el balanceo
+  # aún apunta solo al viejo. Un margen breve evita esa carrera (junto al `retry` de Traefik).
+  sleep 3
+  echo "==> blue-green ($svc): retiro el/los VIEJO(s) POR IDENTIDAD con GRACIA (drena en vuelo)"
+  # CAMINO DE ÉXITO: retira el/los VIEJO(s) POR IDENTIDAD (su id capturado antes de escalar). Con
+  # `docker stop` (no `rm -f`/SIGKILL): el proxy recibe el evento de parada y deja de enrutar al
+  # viejo, y nginx termina las peticiones EN VUELO en vez de cortarlas a media respuesta (lo que
+  # provocaba 502/504 puntuales en cada deploy). Tras parar, se elimina.
+  for oid in $OLD_IDS; do
+    docker stop "$oid" >/dev/null 2>&1 || true
+    docker rm "$oid" >/dev/null 2>&1 || true
+  done
   return 0
 }
 
