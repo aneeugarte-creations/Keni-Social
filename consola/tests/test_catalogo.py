@@ -21,9 +21,9 @@ from keni_consola.apps import registro
 _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints que el equipo toca cada día. Investigación (el pool de noticias
     # que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el bloque, ENCIMA del Feed;
-    # luego el Feed (red social interna + lista), la Programación (calendario) y los Turnos (rota;
-    # el tablero de Tareas vive dentro de Turnos como «Cobertura», sin entrada propia).
-    ["Investigación", "Feed", "Programación", "Turnos"],
+    # luego el Feed (red social interna + lista), la Programación (calendario de publicaciones), el
+    # «Calendario» (horario de turnos del equipo) y el «Trabajo» (eventos/tareas y su cobertura).
+    ["Investigación", "Feed", "Programación", "Calendario", "Trabajo"],
     # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
     # (estudio de video) y Audio (gestor audio→texto: transcripción whisper + agentes de Claude).
     # La página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
@@ -80,8 +80,8 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # por delante de Imagen (contenido 20/10).
     assert porid["produccion"]["nav"][0]["ruta"] == "/maquina/investigacion"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es
-    # Feed (el tablero de Tareas ya no tiene entrada: vive dentro de Turnos como «Cobertura»).
+    # La app "operacion" aporta CUATRO entradas (Feed, Programación, Calendario, Trabajo); la 1ª
+    # por orden es Feed.
     assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
 
@@ -102,6 +102,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
+    assert iconos["/operacion/trabajo"] == "ClipboardList"
     # Investigación (el cockpit operativo del pool) vive en «Operación»; «Contexto» (el pipeline de
     # ambos motores) en «Máquina». La vieja entrada «Producción» se retiró (su pipeline está en
     # Contexto); `/maquina/produccion` redirige a `/maquina/contexto`.

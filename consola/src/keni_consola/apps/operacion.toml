@@ -50,6 +50,7 @@ rutas_frontend = [
   "/operacion/feed/lista",
   "/operacion/programacion",
   "/operacion/turnos",
+  "/operacion/trabajo",
   "/operacion/calendario",
   "/operacion/calendario/turnos",
   "/operacion/calendario/calendario",
@@ -57,8 +58,9 @@ rutas_frontend = [
   "/webhooks",
 ]
 
-# El tablero de Tareas del equipo (clase='tarea') ya NO tiene entrada propia: vive integrado
-# como pestaña «Cobertura» dentro de Turnos (`/operacion/turnos`). La ruta vieja redirige allí.
+# Dos destinos hermanos: «Calendario» (`/operacion/turnos`) = el horario del equipo (capacidad:
+# Yo/Equipo, Semana/Mes); «Trabajo» (`/operacion/trabajo`) = eventos/tareas y su cobertura. La
+# ruta vieja `/operacion/tareas` redirige a «Trabajo» (ver router.tsx).
 
 # Feed: la superficie diaria del equipo (red social interna + lista de contenido).
 [[nav]]
@@ -84,12 +86,22 @@ grupo = "operacion"
 grupo_orden = 10
 orden = 25
 
-# Turnos: la rota de cobertura del equipo (semana a semana), por marca activa.
+# Calendario: el horario de turnos del equipo (capacidad). Yo/Equipo · Semana/Mes, por marca activa.
 [[nav]]
 ruta = "/operacion/turnos"
-etiqueta = "Turnos"
+etiqueta = "Calendario"
 icono = "CalendarClock"
-descripcion = "Turnos y cobertura del equipo, semana a semana, por marca. 'Todas' agrega todas las marcas."
+descripcion = "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca."
 grupo = "operacion"
 grupo_orden = 10
 orden = 28
+
+# Trabajo: eventos editoriales y tareas con su cobertura (qué hay que hacer y quién lo coge), por marca.
+[[nav]]
+ruta = "/operacion/trabajo"
+etiqueta = "Trabajo"
+icono = "ClipboardList"
+descripcion = "Eventos y tareas del equipo con su cobertura: qué hay que cubrir y quién lo coge, por marca."
+grupo = "operacion"
+grupo_orden = 10
+orden = 29

@@ -29,6 +29,8 @@ const Campanias = lazy(() => import("@/pages/Campanias"));
 const Marcas = lazy(() => import("@/pages/Marcas"));
 
 const Rota = lazy(() => import("@/pages/rota"));
+// Trabajo: el tablero de cobertura (eventos/tareas) como destino propio, hermano del calendario.
+const Trabajo = lazy(() => import("@/pages/Trabajo"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 const ListaPublicacion = lazy(() => import("@/pages/feed/ListaPublicacion"));
@@ -153,9 +155,11 @@ export const router = createBrowserRouter([
         path: "operacion",
         children: [
           { index: true, element: <Navigate to="/operacion/feed" replace /> },
-          // El tablero de Tareas se integró como pestaña «Cobertura» dentro de Turnos; la ruta
-          // vieja redirige allí (compat con enlaces/marcadores).
-          { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
+          // El tablero de cobertura (eventos/tareas) es ahora el destino «Trabajo»; la ruta vieja
+          // `/operacion/tareas` redirige allí (compat con enlaces/marcadores).
+          { path: "tareas", element: <Navigate to="/operacion/trabajo" replace /> },
+          // «Trabajo»: eventos/tareas y su cobertura (Panorama · Mis tareas · Por cubrir), por marca.
+          { path: "trabajo", element: <Trabajo /> },
           // El antiguo hub "Parrilla" se separó en DOS (#cal-feed):
           // Hub Feed: feed de ideación (formato red social) + Portal + Lista de contenido.
           {
