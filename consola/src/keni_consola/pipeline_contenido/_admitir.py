@@ -201,38 +201,20 @@ def _resumen_es(cluster: dict[str, Any]) -> str:
     return (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
 
 
-# Vecinos ROMANCES con los que langdetect confunde al español en titulares cortos (suele
-# devolver it/pt/ca/gl por un titular en español de pocas palabras). Para ellos NO basta el
-# código de langdetect: se confirma con la heurística de palabras funcionales antes de tratar el
-# texto como extranjero, para no disparar una traducción es->es por una falsa detección.
-_ROMANCES_CONFUNDIBLES = frozenset({"it", "pt", "ca", "gl", "fr", "ro", "la", "oc"})
-
-
 def _texto_es_extranjero(texto: str) -> bool:
-    """True si el TEXTO está en un idioma EXTRANJERO (no español), mirando el CONTENIDO real y no
-    el metadato `idioma`: así cubre el feed/preset que no declara idioma o lo etiqueta mal como
-    'es'. Reusa los detectores existentes de `dominio.ingesta` (langdetect + heurística de
-    palabras funcionales es/en).
+    """True si el TEXTO trae señal POSITIVA de INGLÉS por sus palabras funcionales ('the', 'as',
+    'with'…). El caso objetivo son titulares en inglés colados al feed (con `idioma` vacío o mal
+    etiquetado 'es'); mira el CONTENIDO, no el metadato.
 
-    Conservador para no traducir español en balde: un texto vacío/sin señal NO es extranjero; si
-    las palabras funcionales ya lo ven español, tampoco; y un código romance de langdetect (it/pt/
-    ca/gl…, los que confunde con un titular corto en español) solo cuenta como extranjero si la
-    heurística de palabras lo confirma (inglés). El caso objetivo —titulares en inglés que se
-    colaban al feed— sí se marca (langdetect distingue bien en de es)."""
-    from ..dominio.ingesta import _idioma_por_palabras, detectar_idioma
+    Decide SOLO por la heurística de palabras funcionales (`dominio.ingesta._idioma_por_palabras`)
+    y NO por langdetect: sobre texto CORTO langdetect es ruido —devuelve 'en' para 'Historia 1',
+    'no'/'de' para 'Urgente'—, así que fiarse de su código marcaría noticias españolas como
+    extranjeras y dispararía traducciones es->es (los breaking en español suelen ser cortos). Las
+    palabras funcionales inglesas son una señal positiva fiable que no confunde un titular español
+    corto. Sin señal de inglés (español, ambiguo o vacío) -> NO extranjero."""
+    from ..dominio.ingesta import _idioma_por_palabras
 
-    t = (texto or "").strip()
-    if not t:
-        return False
-    idioma = detectar_idioma(t).strip().lower().split("-")[0]
-    if not idioma or idioma == "es":
-        return False
-    pista = _idioma_por_palabras(t).lower()
-    if pista.startswith("es"):
-        return False
-    if idioma in _ROMANCES_CONFUNDIBLES:
-        return pista.startswith("en")
-    return True
+    return _idioma_por_palabras(texto or "").strip().lower().startswith("en")
 
 
 def _falta_traduccion(cluster: dict[str, Any]) -> bool:

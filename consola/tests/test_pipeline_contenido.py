@@ -927,14 +927,14 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     assert len(inv["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
 
-    # PRODUCCIÓN: copy (CD) + Ilustrar + avance. Solo expone {lanzados, artes, avances}. La
-    # sugerencia de hashtags ya no es un paso del tick: la encadena el post-proceso del copy.
+    # PRODUCCIÓN: copy (CD) + Ilustrar + stock + avance. Expone {lanzados, artes, stock, avances}.
+    # La sugerencia de hashtags ya no es un paso del tick: la encadena el post-proceso del copy.
     prod = pc._ejecutar_produccion()
-    assert set(prod) == {"lanzados", "artes", "avances"}
+    assert set(prod) == {"lanzados", "artes", "stock", "avances"}
 
     # El combinado es la unión de las claves de ambos procesos.
     combinado = pc._ejecutar_barrido()
-    assert set(combinado) == {"temas", "verificados", "lanzados", "artes", "avances"}
+    assert set(combinado) == {"temas", "verificados", "lanzados", "artes", "stock", "avances"}
 
 
 def test_promover_omite_extranjera_sin_traducir(entorno, monkeypatch):
@@ -1008,6 +1008,11 @@ def test_texto_es_extranjero_distingue_ingles_de_espanol():
     assert _admitir._texto_es_extranjero("Markets tumble as the Fed signals higher rates") is True
     assert _admitir._texto_es_extranjero("El gobierno de México anuncia medidas de seguridad") is False
     assert _admitir._texto_es_extranjero("") is False  # sin señal: no se fuerza traducción
+    # Títulos CORTOS en español: langdetect devuelve ruido ('no'/'de'/…), pero sin evidencia de
+    # inglés NO son extranjeros (regresión: antes se excluían/traducían noticias españolas).
+    assert _admitir._texto_es_extranjero("Urgente persistida") is False
+    assert _admitir._texto_es_extranjero("Urgente") is False
+    assert _admitir._texto_es_extranjero("Nacional") is False
 
 
 def test_falta_traduccion_idioma_vacio_decide_por_texto():
