@@ -7,9 +7,9 @@ nunca divergen. Cuando un contenido recién redactado NO tiene hashtags (`falta_
 etapa ENCOLA un `claude -p` READ-ONLY que, a partir del copy + la voz de la marca, elige de la
 `hashtags_biblioteca` de la marca los más relevantes al tema. El post-procesado ARMA la lista
 final: los FIJOS de la marca (su firma: nombre/portal — van siempre, no los elige la IA porque no
-dependen del tema), los temáticos que propuso la IA, y relleno por frecuencia hasta la cantidad
-típica; todo del pool de la marca. Se persiste en `pieza.hashtags_sugeridos` (JSON, cada tag con
-'#') de cada pieza gemela.
+dependen del tema) y los temáticos que propuso la IA, recortados a la cantidad típica; todos del
+pool de la marca y todos relevantes al tema (no se rellena por frecuencia). Se persiste en
+`pieza.hashtags_sugeridos` (JSON, cada tag con '#') de cada pieza gemela.
 
 El humano tiene la última palabra: el feed muestra esa sugerencia en GRIS junto al copy para
 aceptarla (se inyecta) o descartarla de un clic; nada se publica ni se reescribe solo. Gateado
@@ -213,10 +213,11 @@ def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
       1. FIJOS de la marca (su firma: nombre/portal) — SIEMPRE, no dependen del tema; se reserva
          al menos un hueco para algo temático cuando hay sitio.
       2. Temáticos que propuso la IA, en su orden de relevancia (los de fuera del pool se descartan).
-      3. Relleno por frecuencia (los más usados de la marca) hasta llegar a la cantidad típica.
 
-    Dedup por el cuerpo sin '#' en minúscula. Garantiza que la firma esté y que el cupo se llene
-    aunque la IA devuelva poco o nada usable (era el bug: copy sin hashtags y sugerencia vacía).
+    Dedup por el cuerpo sin '#' en minúscula. `cantidad` es un TOPE, no un cupo a llenar: la lista
+    son la firma más los temáticos que la IA juzgó relevantes, y nada más. NO se rellena con los
+    hashtags más usados de la marca, para que una pieza off-topic (p. ej. una curiosidad en una
+    marca de fútbol) no arrastre los tags genéricos de la marca que no encajan con su tema.
     """
     if cantidad <= 0:
         return []
@@ -238,8 +239,6 @@ def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
         add(cuerpo)
     for tag in propuestos:
         add(tag)
-    for cuerpo in pool:
-        add(cuerpo)
     return salida
 
 

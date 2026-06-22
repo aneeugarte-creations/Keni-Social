@@ -4,7 +4,7 @@ vez por contenido y se escriben idénticos en todas sus piezas.
 
 Los helpers de parseo/armado son PUROS (sin BD); el gating y la persistencia usan Postgres
 (fixture `entorno`). La lista final = FIJOS de la marca (firma) + temáticos de la IA (filtrados a
-la biblioteca) + relleno por frecuencia hasta la cantidad típica.
+la biblioteca), recortada a la cantidad típica; NO se rellena por frecuencia.
 """
 
 from __future__ import annotations
@@ -61,14 +61,12 @@ def test_ensamblar_siempre_incluye_los_fijos_de_la_marca():
     assert "#internacional" in out
 
 
-def test_ensamblar_llena_el_cupo_aunque_la_ia_no_de_nada_usable():
-    # Copy sin hashtags y la IA solo propone tags fuera de la biblioteca: el cupo se
-    # llena igual con los fijos de marca + relleno por frecuencia.
+def test_ensamblar_no_rellena_por_frecuencia_cuando_la_ia_no_da_nada_usable():
+    # La IA solo propone tags fuera de la biblioteca: se descartan y NO se rellena con los
+    # hashtags más usados de la marca. Solo queda la firma (lo único garantizado).
     out = dom_sh.ensamblar(["#papaleon", "#habemuspapa"], marca=_MARCA, cantidad=5)
-    assert len(out) == 5
-    assert out[0] == "#unotv"
+    assert out == ["#unotv"]  # solo la firma; nada de relleno por frecuencia
     assert "#portalunotv" not in out
-    assert all(t.lstrip("#") in set(hb.candidatos(_MARCA)) for t in out)
 
 
 def test_ensamblar_descarta_inventados_y_dedup():
@@ -136,11 +134,12 @@ def _crear_contenido(reds: list[str], copy: str) -> tuple[str, list[str]]:
 def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional", "#noexiste123", "#mexico"])
-    # Firma de la marca al frente, temáticos válidos, cupo lleno (5), inventado descartado.
+    # Firma de la marca al frente + solo los temáticos válidos de la IA (sin relleno), inventado fuera.
     assert guardados[0] == "#unotv"
     assert "#portalunotv" not in guardados  # tag máquina de ingesta web, nunca
     assert "#internacional" in guardados and "#mexico" in guardados
-    assert "#noexiste123" not in guardados and len(guardados) == 5
+    assert "#noexiste123" not in guardados
+    assert guardados == ["#unotv", "#internacional", "#mexico"]  # firma + temáticos, nada más
     # GEMELO: las dos piezas del contenido llevan EXACTAMENTE la misma lista.
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
     assert listas[0] == listas[1] == guardados
