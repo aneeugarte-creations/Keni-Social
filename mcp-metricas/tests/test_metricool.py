@@ -10,7 +10,7 @@ SIN red real: toda llamada HTTP va mockeada con respx. Cubren:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 import httpx
 import pytest
@@ -277,6 +277,31 @@ def test_mejores_piezas_mapea_posts():
     assert p1.alcance == 4500
     # cada pieza se sella con su marca (para estratificar top/peores por marca).
     assert all(p.cuenta == "claro_sports" for p in piezas)
+
+
+@respx.mock
+def test_mejores_piezas_url_no_string_se_coacciona():
+    """Un post con `url` no-string (p.ej. numérica) NO rompe la tool: se coacciona a str."""
+    posts = {
+        "data": [
+            {
+                "id": "p1",
+                "publishedAt": "2026-05-20T12:00:00",
+                "impressions": 1000,
+                "interactions": 50,
+                "text": "x",
+                "url": 12345,  # no-string: sin coacción lanzaría ValidationError y tumbaría la tool
+            }
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 5)
+
+    assert [p.id for p in piezas] == ["p1"]
+    assert piezas[0].url == "12345"
 
 
 def _mock_reels(net: str, reels: list[dict]) -> None:
@@ -670,6 +695,9 @@ def test_fecha_parsea_objeto_publishedAt_y_no_fabrica():
     assert _fecha("2026-05-20T12:00:00") == date(2026, 5, 20)  # string ISO con hora
     assert _fecha("2026-05-20") == date(2026, 5, 20)  # string fecha
     assert isinstance(_fecha(1716163200), date)  # epoch segundos
+    # Epoch se interpreta en UTC, no en la TZ local del runner: un instante tras la
+    # medianoche UTC cae en SU día UTC aunque el runner esté en una zona con offset negativo.
+    assert _fecha(int(datetime(2026, 5, 20, 0, 30, tzinfo=UTC).timestamp())) == date(2026, 5, 20)
     # Sin fecha reconocible -> None (NO se fabrica una fecha de hoy).
     assert _fecha(None) is None
     assert _fecha("") is None

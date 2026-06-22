@@ -60,6 +60,26 @@ def test_tiktok_pagina_dos_paginas():
 
 
 @respx.mock
+def test_tiktok_corta_si_cursor_no_avanza():
+    """has_more=True pero cursor None: corta el bucle (no re-pagina la misma página)."""
+    def vid(i, vc):
+        return {
+            "id": i, "view_count": vc, "like_count": 0,
+            "comment_count": 0, "share_count": 0, "create_time": TS_EN_RANGO,
+        }
+
+    respx.post("https://open.tiktokapis.com/v2/video/list/").mock(
+        side_effect=[
+            httpx.Response(200, json={"data": {"videos": [vid("1", 100)], "has_more": True}}),  # sin cursor
+            httpx.Response(200, json={"data": {"videos": [vid("1", 100)], "has_more": False}}),  # no debe pedirse
+        ]
+    )
+    m = AdaptadorTikTok({"access_token": "t"}).metricas("h", DESDE, HASTA)
+    assert m is not None
+    assert m.visualizaciones == 100  # una sola página: sin cursor no se repagina ni duplica
+
+
+@respx.mock
 def test_meta_piezas_pagina_via_paging_next():
     def post(pid, vis, eng, dia):
         return {

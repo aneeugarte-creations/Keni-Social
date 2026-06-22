@@ -392,6 +392,35 @@ def test_metricool_correlacion_usa_serie_y_marca_nota():
     assert it["post_estrella"] is None
 
 
+def test_correlacion_ignora_snapshot_parcial():
+    """La correlación consume la serie SANEADA: un día con snapshot incompleto (followers
+    ~0, sin consolidar) arrastra el último válido y da delta 0, no un precipicio absurdo."""
+
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "stub"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def serie_seguidores(self, cuenta_id, rango):
+            return [
+                {"fecha": "2026-05-28", "por_red": {"facebook": 8_700_000}},
+                {"fecha": "2026-05-29", "por_red": {"facebook": 8_710_000}},
+                {"fecha": "2026-05-30", "por_red": {"facebook": 0}},  # incompleto, sin consolidar
+            ]
+
+        def mejores_piezas(self, cuenta_id, rango, n):
+            return []
+
+    c = servicio.correlacion_seguidores_desde_fuente(_Fuente(), "mes:2026-05")
+    deltas = {it["fecha"]: it["seguidores_ganados"] for it in c["items"]}
+    assert deltas["2026-05-29"] == 10_000  # crecimiento real
+    assert deltas["2026-05-30"] == 0  # el 0 se descarta -> arrastra 8.71M (NO −8.71M)
+
+
 def test_serie_seguidores_neto_por_red_ignora_huecos():
     """Una red con dato al inicio pero AUSENTE el último día no debe restar su stock.
 

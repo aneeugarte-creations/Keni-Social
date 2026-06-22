@@ -77,7 +77,10 @@ class AdaptadorTikTok(AdaptadorBase):
                     out.append(v)
             if not data.get("has_more"):
                 break
-            cursor = data.get("cursor")
+            siguiente = data.get("cursor")
+            if siguiente is None or siguiente == cursor:  # sin avance: corta para no repetir página
+                break
+            cursor = siguiente
         return out
 
     @staticmethod

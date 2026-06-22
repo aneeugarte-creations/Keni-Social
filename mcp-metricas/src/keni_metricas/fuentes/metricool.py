@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 
@@ -481,7 +481,7 @@ def _fecha(v) -> date | None:
             ts = float(v)
             if ts > 1e11:  # epoch en milisegundos
                 ts /= 1000.0
-            return datetime.fromtimestamp(ts).date()
+            return datetime.fromtimestamp(ts, tz=UTC).date()
         except (ValueError, OSError, OverflowError):
             return None
     if isinstance(v, str):
@@ -983,7 +983,11 @@ class FuenteMetricool:
         ventana; sin esto se colaban en top/peores/stats/agregados)."""
         piezas: list[Pieza] = []
         for post in posts:
-            pieza = self._pieza_desde_post(post, plat, cuenta_id)
+            try:
+                pieza = self._pieza_desde_post(post, plat, cuenta_id)
+            except Exception as e:  # noqa: BLE001 — un post malformado no tumba al resto del lote
+                log.warning("metricool: post %s/%s no parseable: %s", plat.value, cuenta_id, e)
+                continue
             if pieza is not None and desde <= pieza.publicado <= hasta:
                 piezas.append(pieza)
         return piezas
@@ -1152,7 +1156,7 @@ class FuenteMetricool:
             visualizaciones=vis,
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
-            url=_primero(post, _ALIAS_URL),
+            url=str(u) if (u := _primero(post, _ALIAS_URL)) is not None else None,
             cuenta=cuenta_id,
             alcance=_a_int_opt(_primero(post, _ALIAS_ALCANCE)),
             **gran,

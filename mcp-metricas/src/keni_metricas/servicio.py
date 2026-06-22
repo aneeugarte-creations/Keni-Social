@@ -463,6 +463,71 @@ def _serie_seguidores_cuentas(fuente, rango: str) -> dict[str, list[dict]]:
     return out
 
 
+def _serie_seguidores_saneada(
+    fuente, rango: str
+) -> tuple[list[str], dict[tuple[str, str], dict[str, int]]]:
+    """Serie de followers SANEADA por (cuenta, red): validez + carry-forward + backfill.
+
+    Devuelve `(fechas, stock)` con `fechas` ordenadas y `stock[(cuenta, red)][fecha]` = el
+    stock YA arrastrado de esa cuenta×red ese día. Fuente ÚNICA de saneamiento de followers:
+    la consumen la serie agregada (`serie_seguidores_desde_fuente`) y la correlación
+    (`correlacion_seguidores_desde_fuente`), que necesitan el stock saneado, no el crudo
+    (los snapshots parciales daban deltas absurdos sobre la serie sin sanear).
+    """
+    series = _serie_seguidores_cuentas(fuente, rango)
+
+    # Stock REPORTADO por (cuenta, red) y fecha (lo que trajo la fuente ese día, si lo trajo).
+    reportado: dict[tuple[str, str], dict[str, int]] = {}
+    for cuenta, puntos in series.items():
+        for punto in puntos:
+            fecha = punto["fecha"]
+            for red, valor in (punto.get("por_red") or {}).items():
+                reportado.setdefault((cuenta, red), {})[fecha] = int(valor)
+
+    fechas = sorted({f for fv in reportado.values() for f in fv})
+
+    # VALIDEZ de un punto: la serie de followers es un STOCK enorme y estable; un valor 0 o
+    # ANÓMALAMENTE BAJO (< la mitad de la mediana de SU serie) es un día INCOMPLETO de la
+    # fuente —típicamente HOY, aún sin consolidar—, no una pérdida real de seguidores.
+    # El umbral es POR CUENTA×RED, no por red agregada: cuando a una cuenta grande le faltan
+    # snapshots (p.ej. el TikTok de una marca deja de reportar 2 semanas) la suma de la red
+    # baja un 30-40% —por encima de cualquier umbral agregado— y el total pintaba precipicios
+    # falsos de millones; mirando cada cuenta por separado el hueco es inconfundible (ausente).
+    umbral: dict[tuple[str, str], float] = {
+        clave: (0.5 * statistics.median(list(fv.values())) if fv else 0.0)
+        for clave, fv in reportado.items()
+    }
+
+    def _valido(clave: tuple[str, str], v: int) -> bool:
+        return v > 0 and v >= umbral.get(clave, 0.0)
+
+    # CARRY-FORWARD por cuenta×red: los followers PERSISTEN día a día; si una cuenta no
+    # reporta (o reporta un valor inválido) se arrastra su último valor válido en vez de
+    # hundir el total. BACKFILL del borde inicial: cada cuenta aporta su PRIMER valor válido
+    # también en los días ANTERIORES a su primera aparición. Sin esto, conectar una cuenta a
+    # mitad de ventana mete su stock entero de golpe el día del alta y la curva pinta un
+    # escalón que parece crecimiento sin serlo; con el baseline constante el neto no cambia.
+    primer_valido: dict[tuple[str, str], int] = {}
+    claves_orden = sorted(reportado)
+    for clave in claves_orden:
+        for f in fechas:
+            v = reportado[clave].get(f)
+            if v is not None and _valido(clave, v):
+                primer_valido[clave] = v
+                break
+
+    stock: dict[tuple[str, str], dict[str, int]] = {}
+    ultimo: dict[tuple[str, str], int] = dict(primer_valido)  # baseline desde el primer día
+    for f in fechas:
+        for clave in claves_orden:
+            v = reportado[clave].get(f)
+            if v is not None and _valido(clave, v):
+                ultimo[clave] = v
+            if clave in ultimo:
+                stock.setdefault(clave, {})[f] = ultimo[clave]
+    return fechas, stock
+
+
 def construir_serie_seguidores(rango: str = "mes", marca: str | None = None) -> dict:
     """Crecimiento de seguidores POR DÍA y por red (suma de las cuentas en alcance).
 
@@ -479,63 +544,13 @@ def construir_serie_seguidores(rango: str = "mes", marca: str | None = None) -> 
 def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) -> dict:
     """Worker de `construir_serie_seguidores` sobre una `fuente` explícita (lo usa el MCP)."""
     desde, hasta, _ = resolver_rango(rango)
-    series = _serie_seguidores_cuentas(fuente, rango)
+    fechas, stock = _serie_seguidores_saneada(fuente, rango)
 
-    # Stock REPORTADO por (cuenta, red) y fecha (lo que trajo Metricool ese día, si lo trajo).
-    reportado: dict[tuple[str, str], dict[str, int]] = {}
-    for cuenta, puntos in series.items():
-        for punto in puntos:
-            fecha = punto["fecha"]
-            for red, valor in (punto.get("por_red") or {}).items():
-                reportado.setdefault((cuenta, red), {})[fecha] = int(valor)
-
-    fechas = sorted({f for fv in reportado.values() for f in fv})
-
-    # VALIDEZ de un punto: la serie de followers es un STOCK enorme y estable; un valor 0 o
-    # ANÓMALAMENTE BAJO (< la mitad de la mediana de SU serie) es un día INCOMPLETO de
-    # Metricool —típicamente HOY, aún sin consolidar—, no una pérdida real de seguidores.
-    # El umbral es POR CUENTA×RED, no por red agregada: cuando a una cuenta grande le faltan
-    # snapshots (p.ej. el TikTok de una marca deja de reportar 2 semanas) la suma de la red
-    # baja un 30-40% —por encima de cualquier umbral agregado— y el total pintaba precipicios
-    # falsos de millones; mirando cada cuenta por separado el hueco es inconfundible (ausente).
-    umbral: dict[tuple[str, str], float] = {
-        clave: (0.5 * statistics.median(list(fv.values())) if fv else 0.0)
-        for clave, fv in reportado.items()
-    }
-
-    def _valido(clave: tuple[str, str], v: int) -> bool:
-        return v > 0 and v >= umbral.get(clave, 0.0)
-
-    # Chart: CARRY-FORWARD por cuenta×red ANTES de sumar. Los followers PERSISTEN día a día;
-    # si una cuenta no reporta (o reporta un valor inválido) se arrastra su último valor
-    # válido en vez de hundir el total de la red.
-    #
-    # BACKFILL del borde inicial: cada cuenta aporta su PRIMER valor válido también en los
-    # días ANTERIORES a su primera aparición. Sin esto, conectar una cuenta a mitad de
-    # ventana mete su stock entero de golpe el día del alta y el total pinta un escalón que
-    # parece crecimiento sin serlo. Con el baseline constante, `neto_por_red` no cambia
-    # (primer y último día comparten ese valor) y se mantiene el invariante
-    # neto == total[-1] − total[0].
-    primer_valido: dict[tuple[str, str], int] = {}
-    claves_orden = sorted(reportado)
-    for clave in claves_orden:
-        for f in fechas:
-            v = reportado[clave].get(f)
-            if v is not None and _valido(clave, v):
-                primer_valido[clave] = v
-                break
-
-    arrastrado: dict[str, dict[str, int]] = {}  # fecha -> red -> suma de cuentas arrastradas
-    ultimo: dict[tuple[str, str], int] = dict(primer_valido)  # baseline desde el primer día
-    for f in fechas:
-        dest = arrastrado.setdefault(f, {})
-        for clave in claves_orden:
-            v = reportado[clave].get(f)
-            if v is not None and _valido(clave, v):
-                ultimo[clave] = v
-            if clave in ultimo:
-                red = clave[1]
-                dest[red] = dest.get(red, 0) + ultimo[clave]
+    # Suma por RED y día sobre la serie YA saneada (cada fecha presente, aun si vacía).
+    arrastrado: dict[str, dict[str, int]] = {f: {} for f in fechas}
+    for (_cuenta, red), por_fecha in stock.items():
+        for f, valor in por_fecha.items():
+            arrastrado[f][red] = arrastrado[f].get(red, 0) + valor
 
     puntos_out: list[PuntoSeguidores] = [
         PuntoSeguidores(
@@ -551,7 +566,7 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
     # ya no resta su stock al total). El neto global = suma de los netos por red. Una red con
     # un solo día -> 0 (sin variación medible), pero SE CONSERVA para el desglose del gráfico.
     neto_por_red: dict[str, int] = {}
-    for red in sorted({red for _cuenta, red in reportado}):
+    for red in sorted({red for _cuenta, red in stock}):
         valores = [arrastrado[f][red] for f in fechas if red in arrastrado[f]]
         neto_por_red[red] = (valores[-1] - valores[0]) if len(valores) >= 2 else 0
     neto = sum(neto_por_red.values())
@@ -728,14 +743,14 @@ def construir_correlacion_seguidores(rango: str = "mes", marca: str | None = Non
 def correlacion_seguidores_desde_fuente(fuente, rango: str) -> dict:
     """Worker de `construir_correlacion_seguidores` sobre una `fuente` explícita (MCP)."""
     desde, hasta, _ = resolver_rango(rango)
-    series = _serie_seguidores_cuentas(fuente, rango)
+    fechas, stock = _serie_seguidores_saneada(fuente, rango)
     base = dict(
         rango=rango,
         etiqueta_rango=etiqueta_rango(rango),
         periodo=Periodo(desde=desde, hasta=hasta),
         fuente=fuente.nombre,
     )
-    if not series:
+    if not stock:
         return CorrelacionSeguidores(**base, items=[], nota=_NOTA_SIN_SERIE).model_dump(mode="json")
 
     # Piezas indexadas por (marca, red, fecha) para contar posts y hallar la estrella.
@@ -746,43 +761,42 @@ def correlacion_seguidores_desde_fuente(fuente, rango: str) -> dict:
         por_dia.setdefault(clave, []).append(p)
 
     items: list[ItemCorrelacion] = []
-    for cuenta_id, puntos in series.items():
-        # delta diario de followers por red: punto N − N-1 (la serie es un STOCK).
-        anterior: dict[str, int] = {}
-        for idx, punto in enumerate(puntos):
-            fecha = punto["fecha"]
-            por_red = punto.get("por_red") or {}
-            for red, stock in por_red.items():
-                if idx == 0 or red not in anterior:
-                    # Primer punto (o primera vez que vemos esa red): no hay delta previo.
-                    anterior[red] = stock
-                    continue
-                ganados = int(stock) - anterior[red]
-                anterior[red] = stock
-                piezas_dia = por_dia.get((cuenta_id, red, fecha), [])
-                n_posts = len(piezas_dia)
-                estrella = None
-                if piezas_dia:
-                    mejor = max(piezas_dia, key=lambda x: x.engagement_pct)
-                    estrella = PostEstrella(
-                        id=mejor.id,
-                        titulo=mejor.titulo,
-                        engagement_pct=mejor.engagement_pct,
-                        url=mejor.url,
-                    )
-                items.append(
-                    ItemCorrelacion(
-                        marca=cuenta_id,
-                        red=red,
-                        fecha=fecha,
-                        seguidores_ganados=ganados,
-                        n_posts=n_posts,
-                        seguidores_por_post=(
-                            round(ganados / n_posts, 2) if n_posts > 0 else None
-                        ),
-                        post_estrella=estrella,
-                    )
+    for (cuenta_id, red), por_fecha in stock.items():
+        # delta diario de followers sobre el stock SANEADO: punto N − N-1 (no el crudo).
+        anterior: int | None = None
+        for fecha in fechas:
+            stock_dia = por_fecha.get(fecha)
+            if stock_dia is None:
+                continue
+            if anterior is None:
+                anterior = stock_dia  # primer día con valor: no hay delta previo.
+                continue
+            ganados = stock_dia - anterior
+            anterior = stock_dia
+            piezas_dia = por_dia.get((cuenta_id, red, fecha), [])
+            n_posts = len(piezas_dia)
+            estrella = None
+            if piezas_dia:
+                mejor = max(piezas_dia, key=lambda x: x.engagement_pct)
+                estrella = PostEstrella(
+                    id=mejor.id,
+                    titulo=mejor.titulo,
+                    engagement_pct=mejor.engagement_pct,
+                    url=mejor.url,
                 )
+            items.append(
+                ItemCorrelacion(
+                    marca=cuenta_id,
+                    red=red,
+                    fecha=fecha,
+                    seguidores_ganados=ganados,
+                    n_posts=n_posts,
+                    seguidores_por_post=(
+                        round(ganados / n_posts, 2) if n_posts > 0 else None
+                    ),
+                    post_estrella=estrella,
+                )
+            )
 
     items.sort(key=lambda it: (it.fecha.isoformat(), it.marca, it.red))
     return CorrelacionSeguidores(**base, items=items, nota=_NOTA_CORRELACION).model_dump(
