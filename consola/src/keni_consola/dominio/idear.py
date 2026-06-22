@@ -1,8 +1,8 @@
 """Ideación EVERGREEN / brainstorming: lanzar la PROPUESTA de ideas evergreen + su post-procesado.
 
 CONCEPTO: la IA NO genera contenido evergreen a ciegas. PROPONE una lista de IDEAS; una
-persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
-(`flujo='evergreen'` en el tablero). Este modulo cubre el primer paso (proponer ideas):
+persona las APRUEBA o las DESCARTA; y al aprobar se lanza una INVESTIGACION que produce el tema
+del pipeline. Este modulo cubre el primer paso (proponer ideas):
 
   - `parsear_ideas`: dominio PURO. Saca las ideas del `{"ideas":[{"titulo","descripcion"}]}`
     que devuelve `claude -p` (tolera bloques ```json cercados y razonamiento alrededor), las
@@ -13,8 +13,8 @@ persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
     salida y crea las filas `evergreen_ideas` (estado `propuesta`, origen `ia`), enlazadas al
     `generacion_id` del lote para trazabilidad.
 
-La generacion de la PIEZA de una idea aprobada NO vive aqui: la dispara `api/evergreen` con el
-lanzador de copy existente (`generar.lanzar_copy`, `flujo='evergreen'`).
+La INVESTIGACION de una idea aprobada NO vive aqui: la dispara `api/idear` al aprobar, vía
+`pipeline_contenido._investigar_evergreen` (crea un tema verificado del pipeline).
 """
 
 from __future__ import annotations

@@ -302,7 +302,7 @@ def test_tools_registradas(entorno):
         "keni_preparar_breaking",
         # Evergreen / sugerencias / insumos.
         "keni_crear_evergreen", "keni_actualizar_evergreen", "keni_borrar_evergreen",
-        "keni_generar_evergreen", "keni_listar_sugerencias", "keni_crear_sugerencia",
+        "keni_listar_sugerencias", "keni_crear_sugerencia",
         "keni_detalle_sugerencia", "keni_actualizar_sugerencia", "keni_construir_sugerencia",
         "keni_listar_insumos", "keni_insumos_dias", "keni_aportar_insumo", "keni_usar_insumo",
         "keni_actualizar_insumo", "keni_borrar_insumo",

@@ -25,6 +25,7 @@ from ... import libprompts
 _PIPELINE_EDITORIAL_POR_PROMPT: dict[str, str] = {
     "prompt/redactar": "redactar",
     "prompt/verificar": "verificar",
+    "prompt/investigar-evergreen": "verificar",
     "prompt/idear": "idear",
     "prompt/priorizar": "priorizar",
     "prompt/critica": "redactar",  # la crítica de pieza usa el mismo conjunto que redactar (adjuntos_copy)

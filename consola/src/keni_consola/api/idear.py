@@ -1,21 +1,20 @@
 """API del TALLER EVERGREEN / brainstorming: ideas de contenido EVERGREEN.
 
 CONCEPTO (pedido por el cliente): la IA NO genera contenido evergreen a ciegas. En su lugar,
-PROPONE una LISTA de ideas; una persona las APRUEBA o las DESCARTA; y solo para las aprobadas
-se GENERA el contenido (una pieza `flujo='evergreen'` en el tablero). Es un pequeño taller de
-brainstorming con un humano en el bucle.
+PROPONE una LISTA de ideas; una persona las APRUEBA o las DESCARTA. Al APROBAR una idea se lanza
+una INVESTIGACIÓN con `claude -p` (web) que produce MATERIAL VERIFICADO; al completar nace un TEMA
+del pipeline (`origen='pipeline'`, `flujo='evergreen'`, verificación `verificado`) que PRODUCCIÓN
+recoge igual que una historia de noticias. Espejo del motor de noticias, con un humano en el bucle.
 
 RECURSOS:
   - `GET    /api/evergreen/ideas?marca=&estado=`     catálogo de ideas (filtros opcionales).
   - `POST   /api/evergreen/ideas`                    crea una idea MANUAL {marca, titulo, descripcion}.
   - `PATCH  /api/evergreen/ideas/{id}`               cambia estado (aprobar/descartar) y/o edita texto.
+                                                 Aprobar LANZA la investigación de la idea.
   - `DELETE /api/evergreen/ideas/{id}`               borra una idea.
   - `POST   /api/evergreen/proponer`                 {marca, contexto?} lanza la generación de IDEAS
                                                  (IA): crea las filas como `propuesta`/`ia` cuando
                                                  el job completa (en el worker).
-  - `POST   /api/evergreen/ideas/{id}/generar`       SOLO si `estado='aprobada'`: crea una pieza
-                                                 `flujo='evergreen'` en el tablero y lanza su copy;
-                                                 guarda `publicacion_id` en la idea.
 
 SEGURIDAD / VALIDACION:
   - Multiusuario via middleware (sesión o token), igual que el resto del tablero.
@@ -35,17 +34,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, permisos, redes, repos
+from .. import generaciones, marcas, permisos, repos
 from .._http_json import leer_json
 from ..dominio import idear as dom_idear
-from ..dominio import generar as gen_dom
-from ..dominio import stream
 from ..estados import (
     ESTADO_EVERGREEN_APROBADA,
-    ESTADO_EVERGREEN_GENERADA,
     ESTADO_EVERGREEN_PROPUESTA,
     ESTADOS_EVERGREEN_IDEA,
-    FLUJO_EVERGREEN,
     ORIGENES_EVERGREEN_IDEA_MANUAL,
 )
 from ..seguridad import autor_de_peticion
@@ -148,16 +143,18 @@ def _crear(*, marca: str, titulo: str, descripcion: str, origen: str) -> dict:
 async def actualizar(request: Request) -> Response:
     """PATCH /api/evergreen/ideas/{id}: cambia `estado` (aprobar/descartar) y/o edita texto.
 
-    `estado` debe ser de la allowlist. `titulo`/`descripcion` son opcionales (edición). 404 si
-    la idea ya no existe.
+    `estado` debe ser de la allowlist. `titulo`/`descripcion` son opcionales (edición). APROBAR
+    una idea (transición a `aprobada`) LANZA su investigación con `claude -p`. 404 si la idea ya
+    no existe.
     """
     idea_id = request.path_params["idea_id"]
     datos = await leer_json(request)
-    status, cuerpo = await run_in_threadpool(_actualizar, idea_id, datos)
+    autor = autor_de_peticion(request)
+    status, cuerpo = await run_in_threadpool(_actualizar, idea_id, datos, autor)
     return JSONResponse(cuerpo, status_code=status)
 
 
-def _actualizar(idea_id: str, datos: dict) -> tuple[int, dict]:
+def _actualizar(idea_id: str, datos: dict, autor: dict[str, str] | None) -> tuple[int, dict]:
     idea_actual = repos.obtener_evergreen_idea(idea_id)
     if idea_actual is None:
         return 404, {"error": "Esa idea ya no existe."}
@@ -185,7 +182,33 @@ def _actualizar(idea_id: str, datos: dict) -> tuple[int, dict]:
     idea = repos.actualizar_evergreen_idea(idea_id, campos)
     if idea is None:
         return 404, {"error": "Esa idea ya no existe."}
-    return 200, {"idea": _idea_a_dict(idea)}
+
+    # APROBAR = lanzar la investigación. Se lanza cuando el PATCH pone `aprobada` y la idea aún no
+    # tiene tema (primera aprobación o REINTENTO tras un fallo). Editar texto sin `estado` no relanza;
+    # una idea ya `generada` (con `publicacion_id`) tampoco. Un re-lanzamiento con una investigación
+    # en vuelo devuelve ese mismo run (idempotencia por `idea_id`), no arranca otro.
+    aprueba_ahora = (
+        campos.get("estado") == ESTADO_EVERGREEN_APROBADA
+        and not (idea.get("publicacion_id") or "")
+    )
+    if not aprueba_ahora:
+        return 200, {"idea": _idea_a_dict(idea)}
+
+    from ..pipeline_contenido import _investigar_evergreen as inv
+
+    try:
+        gen = inv.lanzar_investigar_idea(idea, autor=autor)
+    except generaciones.ColaLlenaError:
+        return 429, {
+            "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
+        }
+    except Exception:  # noqa: BLE001 -- un fallo al lanzar deja la idea aprobada (reintentable)
+        _log.exception("evergreen: no se pudo lanzar la investigación de la idea %s", idea_id)
+        return 200, {"idea": _idea_a_dict(idea)}
+
+    if gen is None:
+        return 200, {"idea": _idea_a_dict(idea)}
+    return 200, {"idea": _idea_a_dict(idea), "generacion": gen}
 
 
 def _borrar(idea_id: str) -> tuple[int, dict]:
@@ -225,99 +248,8 @@ async def proponer(request: Request) -> Response:
 def _proponer(marca: str, contexto: str, autor: dict[str, str] | None) -> dict:
     # `proponer` no crea NADA antes de encolar (solo valida): deja propagar `ColaLlenaError`
     # al manejador CENTRAL (`_manejar_cola_llena`), que responde 429 + `Retry-After` consistente.
-    # No la atrapamos aquí (no hay efecto que limpiar, a diferencia de `generar_pieza`).
     gen = dom_idear.lanzar_propuesta(marca=marca, contexto=contexto, autor=autor)
     return {"generacion": gen}
-
-
-async def generar_pieza(request: Request) -> Response:
-    """POST /api/evergreen/ideas/{id}/generar -> `{idea, generacion}`.
-
-    SOLO si la idea está `aprobada`: crea una pieza `flujo='evergreen'` en el tablero
-    (`repos.crear_publicacion`), lanza su copy con el lanzador existente (`generar.lanzar_copy`,
-    EN SEGUNDO PLANO) anidado bajo esa pieza, y guarda el `publicacion_id` en la idea. Opcional:
-    `{redes:[..]}` para acotar las redes del copy (por defecto, todas las canónicas).
-    """
-    idea_id = request.path_params["idea_id"]
-    datos = await leer_json(request)
-    crudas = datos.get("redes")
-    redes_ids = stream.normalizar_redes(
-        crudas if isinstance(crudas, list) else None, canonicas=redes.ids()
-    )
-    autor = autor_de_peticion(request)
-    status, cuerpo = await run_in_threadpool(_generar_pieza, idea_id, redes_ids, autor)
-    return JSONResponse(cuerpo, status_code=status)
-
-
-def _generar_pieza(
-    idea_id: str, redes_ids: list[str], autor: dict[str, str] | None
-) -> tuple[int, dict]:
-    idea = repos.obtener_evergreen_idea(idea_id)
-    if idea is None:
-        return 404, {"error": "Esa idea ya no existe."}
-    if idea["estado"] != ESTADO_EVERGREEN_APROBADA:
-        return 400, {"error": "Solo se puede generar contenido de una idea aprobada."}
-    if not gen_dom.marca_valida(idea["marca"]):
-        return 400, {"error": "Marca no permitida."}
-
-    titulo = idea["titulo"]
-    descripcion = idea.get("descripcion", "")
-    # La nota de la pieza es la idea aprobada (título + descripción): es el material a redactar.
-    nota = "\n\n".join(p for p in (titulo, descripcion) if p)[: gen_dom.MAX_TEXTO]
-
-    # Pieza padre del tablero: evergreen, origen "evergreen" (taller de brainstorming).
-    contenido = repos.crear_publicacion(
-        clase="contenido",
-        flujo=FLUJO_EVERGREEN,
-        titulo=titulo,
-        descripcion=descripcion,
-        marca=idea["marca"],
-        origen="evergreen",
-        autor=autor,
-    )
-
-    # La pieza es DESECHABLE: si la generación falla o se cancela, el worker la borra y revierte
-    # la idea a `aprobada` (ver `jobspec.reconstruir_al_fallar`). Así un fallo nunca deja una
-    # pieza huérfana sin copy ni una idea atascada en `generada`.
-    al_fallar = {"borrar_publicacion": contenido["id"], "revertir_idea_evergreen": idea_id}
-    try:
-        gen = gen_dom.lanzar_copy(
-            tipo="evergreen",
-            origen_historial="brainstorming-evergreen",
-            marca=idea["marca"],
-            contexto=nota,
-            redes_ids=redes_ids,
-            titulo=titulo,
-            titulo_dado=titulo,
-            texto_base=nota,
-            autor=autor,
-            publicacion_id=contenido["id"],
-            al_fallar=al_fallar,
-        )
-    except generaciones.ColaLlenaError:
-        # No se lanzó nada: no dejes la pieza huérfana.
-        repos.borrar_publicacion(contenido["id"])
-        return 429, {
-            "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
-        }
-    except Exception:  # noqa: BLE001 -- cualquier fallo al lanzar no debe dejar pieza huérfana
-        repos.borrar_publicacion(contenido["id"])
-        _log.exception("evergreen: no se pudo lanzar el copy de la idea %s", idea_id)
-        return 500, {"error": "No se pudo iniciar la generación."}
-
-    # El lanzamiento pudo reflejar el fallo en el PROPIO registro (encolado rechazado sin lanzar
-    # excepción): ahí el worker nunca corre, así que la idea sigue `aprobada` (reintentable) y la
-    # pieza se borra aquí para no dejarla huérfana.
-    if gen.get("estado") == generaciones.ESTADO_ERROR:
-        repos.borrar_publicacion(contenido["id"])
-        return 200, {"idea": _idea_a_dict(idea), "generacion": gen}
-
-    # TERMINAL feliz: la idea pasa a `generada` (cajón histórico del taller, sin más
-    # acciones) y queda enlazada a su pieza. Volver a generarla = duplicar contenido.
-    actualizada = repos.actualizar_evergreen_idea(
-        idea_id, {"publicacion_id": contenido["id"], "estado": ESTADO_EVERGREEN_GENERADA}
-    )
-    return 200, {"idea": _idea_a_dict(actualizada or idea), "generacion": gen}
 
 
 RUTAS = [
@@ -326,5 +258,4 @@ RUTAS = [
     Route("/api/evergreen/ideas/{idea_id}", actualizar, methods=["PATCH"]),
     Route("/api/evergreen/ideas/{idea_id}", borrar, methods=["DELETE"]),
     Route("/api/evergreen/proponer", proponer, methods=["POST"]),
-    Route("/api/evergreen/ideas/{idea_id}/generar", generar_pieza, methods=["POST"]),
 ]

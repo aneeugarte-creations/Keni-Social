@@ -1132,7 +1132,11 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
     async def keni_actualizar_evergreen(
         idea_id: str, estado: str = "", titulo: str = "", descripcion: str = ""
     ) -> dict:
-        """Actualiza una idea evergreen (solo los campos que pases)."""
+        """Actualiza una idea evergreen (solo los campos que pases).
+
+        Aprobarla (estado='aprobada') LANZA su investigación con IA; al completar nace un tema del
+        pipeline que producción recoge igual que una historia verificada.
+        """
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
@@ -1149,17 +1153,6 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.delete(f"/api/evergreen/ideas/{idea_id}")
-
-    @mcp.tool()
-    async def keni_generar_evergreen(idea_id: str, redes: list[str] | None = None) -> dict:
-        """Lleva una idea evergreen al tablero y encola su copy. `redes` acota plataformas."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        cuerpo: dict[str, Any] = {}
-        if redes:
-            cuerpo["redes"] = redes
-        return await cli.post(f"/api/evergreen/ideas/{idea_id}/generar", cuerpo)
 
     # ---- Sugerencias de producto/contenido ------------------------------ #
 

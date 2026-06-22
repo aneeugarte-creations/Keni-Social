@@ -4,7 +4,6 @@ import { peticion, query } from "./_core";
 import type {
   CuerpoActualizarIdeaEvergreen,
   CuerpoCrearIdeaEvergreen,
-  CuerpoGenerarIdeaEvergreen,
   CuerpoProponerEvergreen,
   RespuestaGeneracion,
   RespuestaIdeaEvergreen,
@@ -15,7 +14,8 @@ import type {
 export const apiEvergreen = {
   // --- Evergreen: banco de ideas de contenido evergreen (evergreen) por marca ---
   // Las ideas se proponen a mano o con IA (`proponerEvergreen` lanza un trabajo en 2º plano que
-  // se SONDEA con `useGeneracion`); al aprobar una idea se puede generar la pieza evergreen.
+  // se SONDEA con `useGeneracion`); aprobar una idea (`actualizarIdeaEvergreen` con
+  // `{estado:'aprobada'}`) dispara su investigación y devuelve la generación en curso.
   ideasEvergreen: (
     params: { marca?: string; estado?: string } = {},
     signal?: AbortSignal,
@@ -31,10 +31,4 @@ export const apiEvergreen = {
     peticion<RespuestaMensaje>(`/evergreen/ideas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   proponerEvergreen: (cuerpo: CuerpoProponerEvergreen) =>
     peticion<RespuestaGeneracion>("/evergreen/proponer", { metodo: "POST", json: cuerpo }),
-  generarIdeaEvergreen: (id: string, cuerpo: CuerpoGenerarIdeaEvergreen = {}) =>
-    peticion<RespuestaGeneracion>(`/evergreen/ideas/${encodeURIComponent(id)}/generar`, {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-
 };

@@ -9,6 +9,8 @@ Dos bloques:
 
 from __future__ import annotations
 
+import json
+
 from keni_consola import db
 from keni_consola.dominio import idear
 
@@ -136,99 +138,141 @@ def test_borrar_evergreen_idea(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Generar pieza desde una idea: terminal feliz `generada`                      #
+# Aprobar una idea LANZA su investigación                                      #
 # --------------------------------------------------------------------------- #
 
 
-def test_generar_pieza_sella_la_idea_como_generada(cliente, monkeypatch):
-    """POST /generar crea la pieza y deja la idea en `generada` + enlazada: sale del flujo
-    activo del taller (sin botones de Generar/Descartar; cajón histórico)."""
+def test_aprobar_lanza_investigacion(cliente, monkeypatch):
+    """PATCH {estado:'aprobada'} lanza la investigación y devuelve la generación; idea queda aprobada."""
     from keni_consola import repos
-    from keni_consola.api import idear as api_evergreen
+    from keni_consola.pipeline_contenido import _investigar_evergreen as inv
 
-    monkeypatch.setattr(
-        api_evergreen.gen_dom, "lanzar_copy", lambda **kw: {"id": "gen-stub"}
-    )
+    lanzadas: list[str] = []
+
+    def fake_lanzar(idea, *, autor):
+        lanzadas.append(idea["id"])
+        return {"id": "gen-x", "estado": "ejecutando"}
+
+    monkeypatch.setattr(inv, "lanzar_investigar_idea", fake_lanzar)
+
     idea = repos.crear_evergreen_idea(
-        marca="unotv", titulo="Explicador RFC", descripcion="guía", estado="aprobada"
+        marca="unotv", titulo="Explicador VAR", descripcion="cómo funciona", estado="propuesta"
     )
-    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
+    r = cliente.patch(f"/api/evergreen/ideas/{idea['id']}", json={"estado": "aprobada"})
     assert r.status_code == 200, r.text
     datos = r.json()
-    assert datos["idea"]["estado"] == "generada"
-    assert datos["idea"]["publicacion_id"]
-    # La pieza nace evergreen con su LÍNEA del plan persistida (cuenta y hereda horarios).
-    cont = repos.obtener_publicacion(datos["idea"]["publicacion_id"])
-    assert cont["flujo"] == "evergreen" and cont["categoria"] == "evergreen"
-    # Una idea ya generada NO se puede volver a generar (no está `aprobada`).
-    assert cliente.post(
-        f"/api/evergreen/ideas/{idea['id']}/generar", json={}
-    ).status_code == 400
+    assert datos["idea"]["estado"] == "aprobada"
+    assert datos["generacion"]["id"] == "gen-x"
+    assert lanzadas == [idea["id"]]
 
 
-def test_generar_pieza_borra_pieza_si_lanzar_revienta(cliente, monkeypatch):
-    """Si `lanzar_copy` revienta, la pieza NO queda huérfana y la idea sigue aprobada."""
+def test_editar_texto_no_relanza(cliente, monkeypatch):
+    """Editar texto (PATCH sin `estado`) de una idea aprobada NO relanza la investigación."""
     from keni_consola import repos
-    from keni_consola.api import idear as api_evergreen
+    from keni_consola.pipeline_contenido import _investigar_evergreen as inv
 
-    creadas: list[str] = []
-    orig_crear = repos.crear_publicacion
-
-    def crear_spy(**kw):
-        pieza = orig_crear(**kw)
-        creadas.append(pieza["id"])
-        return pieza
-
-    monkeypatch.setattr(api_evergreen.repos, "crear_publicacion", crear_spy)
-
-    def explota(**kw):
-        raise RuntimeError("boom al lanzar")
-
-    monkeypatch.setattr(api_evergreen.gen_dom, "lanzar_copy", explota)
-
-    idea = repos.crear_evergreen_idea(
-        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
-    )
-    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
-    assert r.status_code == 500, r.text
-    # La idea sigue aprobada y sin enlazar: se puede reintentar.
-    idea2 = repos.obtener_evergreen_idea(idea["id"])
-    assert idea2["estado"] == "aprobada"
-    assert not idea2.get("publicacion_id")
-    # La pieza creada NO quedó huérfana.
-    assert creadas and repos.obtener_publicacion(creadas[0]) is None
-
-
-def test_generar_pieza_no_sella_si_lanzamiento_reflejo_error(cliente, monkeypatch):
-    """Si el lanzamiento vuelve con el registro YA en error, la idea no se sella y la pieza se borra."""
-    from keni_consola import generaciones, repos
-    from keni_consola.api import idear as api_evergreen
-
-    creadas: list[str] = []
-    orig_crear = repos.crear_publicacion
-
-    def crear_spy(**kw):
-        pieza = orig_crear(**kw)
-        creadas.append(pieza["id"])
-        return pieza
-
-    monkeypatch.setattr(api_evergreen.repos, "crear_publicacion", crear_spy)
+    lanzadas: list[str] = []
     monkeypatch.setattr(
-        api_evergreen.gen_dom,
-        "lanzar_copy",
-        lambda **kw: {"id": "gen-x", "estado": generaciones.ESTADO_ERROR, "error": "cola llena"},
+        inv, "lanzar_investigar_idea",
+        lambda idea, *, autor: lanzadas.append(idea["id"]) or {"id": "gen-x"},
     )
-
     idea = repos.crear_evergreen_idea(
         marca="unotv", titulo="X", descripcion="y", estado="aprobada"
     )
-    r = cliente.post(f"/api/evergreen/ideas/{idea['id']}/generar", json={})
+    r = cliente.patch(f"/api/evergreen/ideas/{idea['id']}", json={"descripcion": "z"})
     assert r.status_code == 200, r.text
-    assert r.json()["generacion"]["estado"] == generaciones.ESTADO_ERROR
+    assert "generacion" not in r.json()
+    assert lanzadas == []
+
+
+def test_reaprobar_sin_tema_reintenta(cliente, monkeypatch):
+    """Re-aprobar una idea aprobada SIN tema (reintento tras un fallo) relanza la investigación."""
+    from keni_consola import repos
+    from keni_consola.pipeline_contenido import _investigar_evergreen as inv
+
+    lanzadas: list[str] = []
+    monkeypatch.setattr(
+        inv, "lanzar_investigar_idea",
+        lambda idea, *, autor: lanzadas.append(idea["id"]) or {"id": "gen-x", "estado": "ejecutando"},
+    )
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="X", descripcion="y", estado="aprobada"
+    )
+    r = cliente.patch(f"/api/evergreen/ideas/{idea['id']}", json={"estado": "aprobada"})
+    assert r.status_code == 200, r.text
+    assert r.json()["generacion"]["id"] == "gen-x"
+    assert lanzadas == [idea["id"]]
+
+
+# --------------------------------------------------------------------------- #
+# Post-procesado de la investigación: viable crea tema recogible por producción #
+# --------------------------------------------------------------------------- #
+
+_SALIDA_VIABLE = (
+    "🟢 Hay material verificado suficiente.\n\n"
+    "Brief: la efeméride es real.\n\n"
+    '```json\n{"viable": true, "material": "hechos verificados sobre el tema",'
+    ' "fuentes": ["https://fuente-1", "https://fuente-2"]}\n```\n'
+)
+_SALIDA_NO_VIABLE = (
+    "🟡 Material flojo, no corroborable.\n\n"
+    '```json\n{"viable": false, "material": "", "fuentes": []}\n```\n'
+)
+
+
+def test_investigar_viable_crea_tema_recogible_por_produccion(entorno):
+    """Una investigación VIABLE crea un tema verificado del pipeline que producción recoge."""
+    from keni_consola import repos
+    from keni_consola.pipeline_contenido import _investigar_evergreen as inv
+    from keni_consola.pipeline_contenido import _redactar
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="Efeméride futbolera", descripcion="qué pasó", estado="aprobada"
+    )
+    procesar = inv.construir_procesar_investigar_evergreen(
+        idea["id"], "unotv", "Efeméride futbolera", None
+    )
+    resultado = procesar(_SALIDA_VIABLE, None)
+    assert resultado["viable"] is True
+    tema_id = resultado["publicacion_id"]
+
+    tema = repos.obtener_publicacion(tema_id)
+    assert tema["origen"] == "pipeline"
+    assert tema["flujo"] == "evergreen"
+    assert tema["verificacion_fuente"] == "verificado"
+    assert tema["descripcion"] == "hechos verificados sobre el tema"
+    # El material viaja en `copy_pendiente` (la NOTA) para que producción lo redacte sin re-investigar.
+    pend = json.loads(tema["copy_pendiente"])
+    assert pend["nota"] == "hechos verificados sobre el tema"
+
+    # La idea queda `generada` y enlazada al tema.
     idea2 = repos.obtener_evergreen_idea(idea["id"])
-    assert idea2["estado"] == "aprobada"
-    assert not idea2.get("publicacion_id")
-    assert creadas and repos.obtener_publicacion(creadas[0]) is None
+    assert idea2["estado"] == "generada"
+    assert idea2["publicacion_id"] == tema_id
+
+    # Producción lo recoge igual que una historia verificada (verificado + copy_pendiente + sin copy).
+    ids = {t["id"] for t in _redactar.temas_para_redactar("unotv")}
+    assert tema_id in ids
+
+
+def test_investigar_no_viable_no_crea_tema(entorno):
+    """Una investigación NO VIABLE no crea tema; la idea sigue `aprobada` (reintentable)."""
+    from keni_consola import repos
+    from keni_consola.pipeline_contenido import _investigar_evergreen as inv
+
+    idea = repos.crear_evergreen_idea(
+        marca="unotv", titulo="Tema flojo", descripcion="poco", estado="aprobada"
+    )
+    antes = {p["id"] for p in repos.listar_publicacion(marca="unotv")}
+    procesar = inv.construir_procesar_investigar_evergreen(
+        idea["id"], "unotv", "Tema flojo", None
+    )
+    resultado = procesar(_SALIDA_NO_VIABLE, None)
+    assert resultado == {"viable": False, "piezas": []}
+
+    despues = {p["id"] for p in repos.listar_publicacion(marca="unotv")}
+    assert despues == antes  # no nació ningún tema
+    assert repos.obtener_evergreen_idea(idea["id"])["estado"] == "aprobada"
 
 
 def test_reconstruir_al_fallar_sin_acciones_es_none():

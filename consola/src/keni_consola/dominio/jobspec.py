@@ -67,8 +67,13 @@ PROC_AUDIO_ARTEFACTO = "audio-artefacto"
 PROC_PARRILLA_IMPORT = "parrilla-import"
 # Taller EVERGREEN / brainstorming: parsea el JSON `{"ideas":[...]}` de claude y crea filas
 # `evergreen_ideas` en estado `propuesta` (origen `ia`) para que el equipo las apruebe/descarte.
-# NO genera contenido todavia: solo PROPONE ideas (la generacion ocurre al aprobar+generar).
+# NO genera contenido todavia: solo PROPONE ideas (la generacion ocurre al aprobar+investigar).
 PROC_EVERGREEN_IDEAS = "evergreen-ideas"
+# Investigar una idea EVERGREEN aprobada (con web): parsea el JSON `{viable, material, fuentes}` de
+# claude. Si es viable, CREA un tema del pipeline (`origen='pipeline'`, `flujo='evergreen'`,
+# verificación `verificado` + el material en `copy_pendiente`) que producción recoge igual que una
+# historia verificada; si no, revierte la idea a `aprobada` (reintentable). Solo viaja la idea.
+PROC_INVESTIGAR_EVERGREEN = "investigar-evergreen"
 # Insumos del dia (cajones): parsea el JSON `{"items":[...]}` de claude (Haiku), normaliza e
 # INSERTA `insumos_item`, y deja el lote en estado `listo`/`error`. El back ya NO ejecuta
 # `claude -p` (no tiene binario ni token): el WORKER corre el parseo. Mismo patron que copy.
@@ -398,6 +403,23 @@ def construir_evergreen_ideas(
     }
 
 
+def construir_investigar_evergreen(
+    *, idea_id: str, marca: str, titulo: str, autor: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """Spec del post-procesado de la INVESTIGACION de una idea evergreen.
+
+    `idea_id` es la idea aprobada que se investiga; `marca`/`titulo` se usan al crear el tema. El
+    worker parsea `{viable, material, fuentes}` y crea el tema verificado (o revierte la idea).
+    """
+    return {
+        "kind": PROC_INVESTIGAR_EVERGREEN,
+        "idea_id": idea_id,
+        "marca": marca,
+        "titulo": titulo,
+        "autor": _autor_spec(autor),
+    }
+
+
 def construir_insumos(
     *, lote_id: str, cajon: str, fecha: str, marca_defecto: str = ""
 ) -> dict[str, Any]:
@@ -680,6 +702,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return dom_idear.construir_procesar_evergreen_ideas(
             marca=p.get("marca", "") or "",
             generacion_id=p.get("generacion_id", "") or "",
+        )
+
+    if kind == PROC_INVESTIGAR_EVERGREEN:
+        # Import perezoso: el factory toca BD (`repos`) y vive en `pipeline_contenido`.
+        from ..pipeline_contenido import _investigar_evergreen as dom_inv
+
+        return dom_inv.construir_procesar_investigar_evergreen(
+            p["idea_id"], p["marca"], p.get("titulo", ""), autor,
         )
 
     if kind == PROC_INSUMOS:

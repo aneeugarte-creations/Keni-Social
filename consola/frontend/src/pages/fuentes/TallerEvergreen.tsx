@@ -5,8 +5,9 @@
  *   1. "Proponer ideas": elige marca + contexto opcional y lanza la IA (`/evergreen/proponer`),
  *      que propone ideas en segundo plano. Se sigue con `useGeneracion` (igual que el resto
  *      de generaciones de la consola) y al terminar se refresca la lista.
- *   2. Lista de ideas con filtro por estado y acciones: Aprobar / Descartar y, cuando una
- *      idea está aprobada, Generar la pieza evergreen (`/evergreen/ideas/{id}/generar`).
+ *   2. Lista de ideas con filtro por estado y acciones: Aprobar / Descartar. Aprobar una idea
+ *      dispara su investigación y se sigue en vivo con `ProgresoGeneracion`; al completarse la
+ *      idea pasa a `generada` y baja al histórico.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -84,7 +85,6 @@ const ORIGEN_LABEL: Record<string, string> = {
 
 export function TallerEvergreen({
   marcas,
-  redes,
 }: {
   marcas: MarcaDisponible[];
   redes: RedPieza[];
@@ -155,7 +155,6 @@ export function TallerEvergreen({
           <ListaIdeas
             ideas={ideas}
             marcas={marcas}
-            redes={redes}
             separarHistorico={estadoFiltro === ESTADO_TODOS}
           />
         )}
@@ -377,12 +376,10 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
 function ListaIdeas({
   ideas,
   marcas,
-  redes,
   separarHistorico,
 }: {
   ideas: IdeaEvergreen[];
   marcas: MarcaDisponible[];
-  redes: RedPieza[];
   separarHistorico: boolean;
 }) {
   const historico = separarHistorico
@@ -392,7 +389,7 @@ function ListaIdeas({
   return (
     <div className="space-y-3">
       {activas.map((idea) => (
-        <FilaIdea key={idea.id} idea={idea} marcas={marcas} redes={redes} />
+        <FilaIdea key={idea.id} idea={idea} marcas={marcas} />
       ))}
       {activas.length === 0 && historico.length > 0 && (
         <EstadoVacioTexto
@@ -407,7 +404,7 @@ function ListaIdeas({
           </summary>
           <div className="space-y-3 p-3 pt-1">
             {historico.map((idea) => (
-              <FilaIdea key={idea.id} idea={idea} marcas={marcas} redes={redes} />
+              <FilaIdea key={idea.id} idea={idea} marcas={marcas} />
             ))}
           </div>
         </details>
@@ -416,15 +413,13 @@ function ListaIdeas({
   );
 }
 
-/** Una idea con su estado y acciones (aprobar / descartar / generar / borrar). */
+/** Una idea con su estado y acciones (aprobar / descartar / borrar). */
 function FilaIdea({
   idea,
   marcas,
-  redes,
 }: {
   idea: IdeaEvergreen;
   marcas: MarcaDisponible[];
-  redes: RedPieza[];
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -435,20 +430,31 @@ function FilaIdea({
   const invalidar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_IDEAS });
 
+  // Investigación de la idea aprobada: aprobar la lanza y la seguimos en vivo.
+  const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion();
+
   const cambiarEstado = useMutation({
     mutationFn: (estado: EstadoIdeaEvergreen) =>
       api.actualizarIdeaEvergreen(idea.id, { estado }),
-    onSuccess: (_d, estado) => {
+    onSuccess: (data, estado) => {
       invalidar();
+      // Aprobar dispara la investigación: el back devuelve la generación en curso y la
+      // seguimos en vivo (ProgresoGeneracion), igual que el resto de generaciones.
+      if (estado === "aprobada" && data.generacion) iniciar(data.generacion);
       toast.success(
         estado === "aprobada"
-          ? "Idea aprobada."
+          ? data.generacion
+            ? "Investigando la idea…"
+            : "Idea aprobada."
           : estado === "descartada"
             ? "Idea descartada."
             : "Idea actualizada.",
       );
     },
-    onError: (e) => toast.error(mensajeError(e)),
+    onError: (e) => {
+      invalidar();
+      toast.error(mensajeError(e));
+    },
   });
 
   const borrar = useMutation({
@@ -458,24 +464,6 @@ function FilaIdea({
       toast.success(res?.mensaje ?? "Idea borrada.");
     },
     onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  // Generación de la pieza evergreen (solo si la idea está aprobada).
-  const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion();
-
-  const generar = useMutation({
-    mutationFn: () =>
-      api.generarIdeaEvergreen(idea.id, {
-        redes: redes.length > 0 ? redes.map((r) => r.id) : undefined,
-      }),
-    onSuccess: (data) => iniciar(data.generacion),
-    onError: (e) => {
-      // Si el estado derivó (la idea ya se generó en otra pestaña/sesión, o se reintenta
-      // tras un fallo), el back rechaza con 400. Refrescamos para que la ficha se corrija
-      // sola —el botón desaparece— en vez de dejar al usuario reintentando contra el error.
-      invalidar();
-      toast.error(mensajeError(e));
-    },
   });
 
   const terminalRef = React.useRef<string | null>(null);
@@ -493,22 +481,24 @@ function FilaIdea({
       });
     } else if (generacion.estado === "error") {
       terminalRef.current = generacion.id;
-      // La idea quedó `generada` al lanzarse (terminal en el taller): refrescamos para que el
-      // botón no reaparezca y la ficha pase al histórico; el detalle del fallo va en el toast.
+      // La investigación falló: la idea sigue `aprobada` (reintentable). Refrescamos para
+      // que la acción Aprobar reaparezca; el detalle del fallo va en el toast.
       invalidar();
       toast.error(generacion.error || "No se pudo generar la pieza.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generacion, navigate, queryClient]);
 
-  const generando = generar.isPending || ejecutando;
   const generada = esGenerada(idea);
   const aprobada = idea.estado === "aprobada" && !generada;
   const descartada = idea.estado === "descartada";
+  // Aprobar dispara la investigación. Disponible mientras la idea no esté generada ni
+  // descartada y no haya una investigación en curso: así reaparece para REINTENTAR si la
+  // generación terminó en error (la idea sigue `aprobada`).
+  const puedeAprobar = !descartada && !generada && !ejecutando;
 
   const acciones: EntradaMenuContextual[] = [
-    // Aprobar: visible si está propuesta (no aprobada y no descartada)
-    ...(!aprobada && !descartada
+    ...(puedeAprobar
       ? [
           {
             etiqueta: "Aprobar",
@@ -596,20 +586,6 @@ function FilaIdea({
       <p className="font-medium leading-snug">{idea.titulo}</p>
       {idea.descripcion && (
         <p className="line-clamp-3 text-sm text-muted-foreground">{idea.descripcion}</p>
-      )}
-
-      {aprobada && !generada && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => generar.mutate()}
-            disabled={generando}
-          >
-            {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
-            {generando ? "Generando…" : "Generar contenido"}
-          </Button>
-        </div>
       )}
 
       {generacion && (ejecutando || generacion.estado === "error") && (

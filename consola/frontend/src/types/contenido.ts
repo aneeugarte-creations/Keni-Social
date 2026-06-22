@@ -1,3 +1,4 @@
+import type { Generacion } from "./generaciones";
 import type { PrioridadEvento } from "./rota";
 import type { TemaRadar } from "./fuentes";
 
@@ -218,12 +219,13 @@ export interface CuerpoProponerEvergreen {
   contexto?: string;
 }
 
-export interface CuerpoGenerarIdeaEvergreen {
-  redes?: string[];
-}
-
 export interface RespuestaIdeaEvergreen {
   idea: IdeaEvergreen;
+  /**
+   * Aprobar una idea (`{estado:'aprobada'}`) dispara su investigación: el backend devuelve
+   * la generación en curso para seguirla en vivo. Ausente en el resto de cambios de estado.
+   */
+  generacion?: Generacion;
 }
 
 // --- Métrica por línea (vertical) y por origen -------------------------------
