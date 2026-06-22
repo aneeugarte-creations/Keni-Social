@@ -482,6 +482,15 @@ ENV_AFP_CLIENT_ID = "KENI_AFP_CLIENT_ID"
 ENV_AFP_CLIENT_SECRET = "KENI_AFP_CLIENT_SECRET"
 ENV_AFP_BASE_URL = "KENI_AFP_BASE_URL"
 
+# Fotos de STOCK (ayuda visual, nunca publicable sin autorizar): APIs gratuitas para proponer
+# fotos como alternativa a galería/subir/IA. Solo Pexels y Pixabay necesitan clave; Wikimedia,
+# NASA y Openverse no. La etapa de arte que las busca va GATEADA por `KENI_PIPELINE_STOCK`
+# (def OFF, como Ilustrar) y acota cuántos temas por barrido con `KENI_STOCK_MAX_BARRIDO`.
+ENV_PEXELS_API_KEY = "KENI_PEXELS_API_KEY"
+ENV_PIXABAY_API_KEY = "KENI_PIXABAY_API_KEY"
+ENV_PIPELINE_STOCK = "KENI_PIPELINE_STOCK"
+ENV_STOCK_MAX_BARRIDO = "KENI_STOCK_MAX_BARRIDO"
+
 # Persistencia (ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
 # S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
 # `.env.example` (NO se renombran). `DATABASE_URL` (o sus componentes `POSTGRES_*`) es
@@ -859,6 +868,10 @@ __all__ = [
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
     'ENV_PIPELINE_ILUSTRAR',
+    'ENV_PIPELINE_STOCK',
+    'ENV_STOCK_MAX_BARRIDO',
+    'ENV_PEXELS_API_KEY',
+    'ENV_PIXABAY_API_KEY',
     'ENV_PIPELINE_SUGERIR_HASHTAGS',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',

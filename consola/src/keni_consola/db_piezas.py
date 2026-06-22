@@ -43,6 +43,9 @@ _SELECT_PUBLICACION = (
     "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
     "cp.copy_in AS copy_in, "
     "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, cp.foto AS foto, "
+    "cp.imagen_origen AS imagen_origen, cp.imagen_proveedor AS imagen_proveedor, "
+    "cp.imagen_autor AS imagen_autor, cp.imagen_licencia AS imagen_licencia, "
+    "cp.imagen_credito_url AS imagen_credito_url, cp.imagen_autorizada AS imagen_autorizada, "
     "cp.video AS video, cp.falta_video AS falta_video, "
     "cp.revision AS revision, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
@@ -108,6 +111,15 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
         "foto": f["foto"] or "",
+        # PROCEDENCIA + AUTORIZACIÓN de la imagen adjunta (fotos de stock como ayuda visual).
+        # `imagen_origen='stock'` => foto externa con watermark "SIN LICENCIA" que NO se publica
+        # hasta `imagen_autorizada=True`; el resto es crédito/licencia/atribución para el badge.
+        "imagen_origen": f["imagen_origen"] or "",
+        "imagen_proveedor": f["imagen_proveedor"] or "",
+        "imagen_autor": f["imagen_autor"] or "",
+        "imagen_licencia": f["imagen_licencia"] or "",
+        "imagen_credito_url": f["imagen_credito_url"] or "",
+        "imagen_autorizada": bool(f["imagen_autorizada"]),
         # Checklist de producción por red (el editor lo expone como checks marcables).
         "falta_copy": bool(f["falta_copy"]),
         "falta_imagen": bool(f["falta_imagen"]),

@@ -3,15 +3,19 @@
 import { peticion, query } from "./_core";
 import type {
   CosteMedioArte,
+  CuerpoAdjuntarStock,
+  CuerpoAutorizarStock,
   CuerpoGenerarArte,
   CuerpoGenerarMedia,
   CuerpoGuardarArte,
   RespuestaArte,
   RespuestaArtes,
+  RespuestaBuscarStock,
   RespuestaGenerarArte,
   RespuestaGeneracion,
   RespuestaMedia,
   RespuestaMensaje,
+  RespuestaStock,
 } from "@/types";
 
 export const apiMedia = {
@@ -61,5 +65,28 @@ export const apiMedia = {
   // Coste medio por imagen (USD) para estimar el gasto ANTES de lanzar (`modelo` opcional).
   costeMedioArte: (modelo?: string, signal?: AbortSignal) =>
     peticion<CosteMedioArte>(`/artes/coste-medio${query({ modelo })}`, { signal }),
+
+  // --- Fotos de STOCK (ayuda visual NUNCA publicable sin autorizar) ---
+  // Busca candidatas en APIs gratuitas (Pexels/Pixabay/Wikimedia/NASA/Openverse). Devuelve los
+  // proveedores con su disponibilidad (chips) y las candidatas (referencias, aún sin descargar).
+  buscarStock: (
+    filtros: { q?: string; proveedor?: string; limite?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaBuscarStock>(
+      `/artes/stock/buscar${query({
+        q: filtros.q,
+        proveedor: filtros.proveedor,
+        limite: filtros.limite != null ? String(filtros.limite) : undefined,
+      })}`,
+      { signal },
+    ),
+  // Descarga una candidata (o la imagen original de la fuente con `usar_fuente`) y la adjunta a la
+  // pieza como AYUDA VISUAL: queda `imagen_origen="stock"`, sin autorizar y con `falta_imagen` activo.
+  adjuntarStock: (cuerpo: CuerpoAdjuntarStock) =>
+    peticion<RespuestaStock>("/artes/stock/adjuntar", { metodo: "POST", json: cuerpo }),
+  // Confirma (o revoca) los derechos para publicar una foto de stock. Autorizar limpia `falta_imagen`.
+  autorizarStock: (cuerpo: CuerpoAutorizarStock) =>
+    peticion<RespuestaStock>("/artes/stock/autorizar", { metodo: "POST", json: cuerpo }),
 
 };

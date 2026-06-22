@@ -119,7 +119,14 @@ def _hay_imagen_real(pub: dict[str, Any]) -> bool:
     real sigue necesitando foto (badge "Falta imagen") aunque traiga `imagen_fuente` —el
     equipo debe poner la foto propia—. En piezas de MARCA, `imagen` es solo la placa compuesta
     y tampoco cuenta como foto real.
+
+    Una foto de STOCK sin autorizar (`imagen_origen='stock'`, `imagen_autorizada=False`) TAMPOCO
+    cuenta como imagen real: es solo ayuda visual (atenuada + "SIN LICENCIA"), así la pieza sigue
+    "Falta imagen" y no avanza/publica hasta sustituirla o autorizarla. Al autorizarla, su `foto`
+    pasa a contar como real y la pieza se completa.
     """
+    if (pub.get("imagen_origen") or "") == "stock" and not bool(pub.get("imagen_autorizada")):
+        return False
     marca = str(pub.get("marca") or "").strip()
     return (
         bool(str(pub.get("foto") or "").strip())
@@ -253,6 +260,15 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
         # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
         "foto": pub.get("foto") or "",
+        # PROCEDENCIA + AUTORIZACIÓN de la imagen adjunta (fotos de stock como ayuda visual).
+        # `imagen_origen='stock'` => el front la pinta atenuada + "SIN LICENCIA" y bloquea publicar
+        # hasta `imagen_autorizada=True`; el resto es crédito/licencia/atribución para el badge.
+        "imagen_origen": pub.get("imagen_origen") or "",
+        "imagen_proveedor": pub.get("imagen_proveedor") or "",
+        "imagen_autor": pub.get("imagen_autor") or "",
+        "imagen_licencia": pub.get("imagen_licencia") or "",
+        "imagen_credito_url": pub.get("imagen_credito_url") or "",
+        "imagen_autorizada": bool(pub.get("imagen_autorizada")),
         # Checklist de producción por red (Copy/Imagen/Revisión/Publicar pendientes). El
         # editor unificado lo muestra como checks marcables; default True (pendiente).
         "falta_copy": bool(pub.get("falta_copy", True)),

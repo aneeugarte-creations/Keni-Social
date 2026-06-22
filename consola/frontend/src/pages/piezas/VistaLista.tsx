@@ -22,9 +22,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ImagenMedia } from "@/components/comunes/ImagenMedia";
+import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
 import { confirmar } from "@/components/comunes/confirmar";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
+import {
+  MENSAJE_BLOQUEO_STOCK,
+  nombreProveedor,
+  stockAutorizado,
+  stockNoAutorizado,
+} from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
 
@@ -60,6 +67,9 @@ function TarjetaPieza({
   const imagen = urlMedia(pieza.imagen_url || pieza.imagen);
   // "Aprobar" solo tiene sentido en una pieza pendiente de decisión (borrador o en revisión).
   const puedeAprobar = pieza.estado === "borrador" || pieza.estado === "en_revision";
+  // STOCK SIN LICENCIA: foto de stock sin autorizar. Bloquea programar/publicar (defensa en UI; el
+  // back devuelve 409) y dispara el tratamiento "SIN LICENCIA" en la miniatura.
+  const bloqueoStock = stockNoAutorizado(pieza);
 
   // Registra tu OK en la cadena (mismo motor que el pulgar del feed): un OK puede cerrar la
   // cadena (queda lista/programada) o ser 1 de 2 (sigue en revisión hasta el segundo OK). El
@@ -153,10 +163,18 @@ function TarjetaPieza({
             deshabilitado: encolar.isPending,
           },
           {
-            etiqueta: "Programar en Metricool",
+            etiqueta: bloqueoStock
+              ? "Programar en Metricool (imagen sin licencia)"
+              : "Programar en Metricool",
             icono: Send,
-            onClick: () => programarMetricool.mutate(),
-            deshabilitado: programarMetricool.isPending,
+            onClick: () => {
+              if (bloqueoStock) {
+                toast.error(MENSAJE_BLOQUEO_STOCK);
+                return;
+              }
+              programarMetricool.mutate();
+            },
+            deshabilitado: programarMetricool.isPending || bloqueoStock,
           },
         ]
       : pieza.estado === "publicado"
@@ -208,12 +226,23 @@ function TarjetaPieza({
       >
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (
-            <ImagenMedia
-              nombreOUrl={imagen}
-              alt=""
-              ancho={160}
-              className="h-16 w-16 shrink-0 rounded-md border border-border bg-muted object-cover"
-            />
+            <div className="relative h-16 w-16 shrink-0">
+              <OverlaySinLicencia activo={bloqueoStock} tamano="sm" className="rounded-md">
+                <ImagenMedia
+                  nombreOUrl={imagen}
+                  alt=""
+                  ancho={160}
+                  className="h-16 w-16 rounded-md border border-border bg-muted object-cover"
+                />
+              </OverlaySinLicencia>
+              {(bloqueoStock || stockAutorizado(pieza)) && (
+                <BadgeStock
+                  proveedor={nombreProveedor(pieza.imagen_proveedor)}
+                  autorizada={!!pieza.imagen_autorizada}
+                  className="absolute -bottom-1 left-0 z-10 scale-90"
+                />
+              )}
+            </div>
           )}
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">

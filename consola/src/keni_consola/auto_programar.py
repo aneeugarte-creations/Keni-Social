@@ -27,7 +27,7 @@ import logging
 from typing import Any
 
 from . import config, repos
-from .dominio import colaboracion
+from .dominio import colaboracion, licencia_imagen
 from .estados import ESTADO_EN_REVISION
 
 _log = logging.getLogger("keni_consola.auto_programar")
@@ -46,6 +46,10 @@ def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
 
     pub = repos.obtener_pieza(pieza_id)
     if pub is None or pub.get("estado") != ESTADO_EN_REVISION:
+        return None
+
+    # Gate STOCK (infranqueable): una imagen de stock SIN LICENCIA no autorizada no se auto-programa.
+    if licencia_imagen.es_stock_sin_autorizar(pub):
         return None
 
     # Gate A (gobernanza): la pieza debe tener su cadena de likes cumpliendo el mínimo (los 2 OK).

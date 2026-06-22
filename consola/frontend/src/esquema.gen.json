@@ -2211,6 +2211,24 @@
         "foto": {
           "type": "string"
         },
+        "imagen_origen": {
+          "type": "string"
+        },
+        "imagen_proveedor": {
+          "type": "string"
+        },
+        "imagen_autor": {
+          "type": "string"
+        },
+        "imagen_licencia": {
+          "type": "string"
+        },
+        "imagen_credito_url": {
+          "type": "string"
+        },
+        "imagen_autorizada": {
+          "type": "boolean"
+        },
         "falta_copy": {
           "type": "boolean"
         },

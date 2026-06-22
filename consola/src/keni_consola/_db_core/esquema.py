@@ -437,6 +437,23 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         imagen                TEXT NOT NULL DEFAULT '',
         imagen_fuente         TEXT NOT NULL DEFAULT '',
         foto                  TEXT NOT NULL DEFAULT '',
+        -- PROCEDENCIA de la imagen ADJUNTA (no la del artículo, que va en `imagen_fuente`).
+        -- `imagen_origen` ∈ ''|ia|galeria|subida|stock. 'stock' marca una foto traída de una
+        -- fuente externa (RSS original o API gratuita) que es SOLO ayuda visual: lleva watermark
+        -- "SIN LICENCIA", `falta_imagen` sigue activo y NINGÚN camino la publica salvo que un
+        -- humano la autorice (`imagen_autorizada=1`). El bloqueo se dispara por
+        -- `imagen_origen='stock' AND imagen_autorizada=0` (ver `dominio.licencia_imagen`).
+        imagen_origen         TEXT NOT NULL DEFAULT '',
+        -- Proveedor de una imagen 'stock': pexels|pixabay|wikimedia|nasa|openverse|rss.
+        imagen_proveedor      TEXT NOT NULL DEFAULT '',
+        -- Crédito del autor/fotógrafo y licencia declarada por la fuente (badge + atribución).
+        imagen_autor          TEXT NOT NULL DEFAULT '',
+        imagen_licencia       TEXT NOT NULL DEFAULT '',
+        -- URL de la página de origen (atribución / verificar derechos antes de autorizar).
+        imagen_credito_url    TEXT NOT NULL DEFAULT '',
+        -- 1 = un humano REVISÓ derechos y autorizó publicar esta imagen 'stock'. Hasta entonces
+        -- el bloqueo infranqueable impide programarla/publicarla. Default 0 (no autorizada).
+        imagen_autorizada     INTEGER NOT NULL DEFAULT 0,
         -- `video`: clave del asset de video en el almacen de media (`videos/<sha256>.<ext>`),
         -- espejo de `imagen`. "" = sin video adjunto. Lo usa el programador para publicar
         -- `TipoMedia.video` cuando la pieza es `formato='video'`.

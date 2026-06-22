@@ -662,6 +662,12 @@ export interface Pieza {
   imagen_fuente: string;
   video: string;
   foto: string;
+  imagen_origen?: string;
+  imagen_proveedor?: string;
+  imagen_autor?: string;
+  imagen_licencia?: string;
+  imagen_credito_url?: string;
+  imagen_autorizada?: boolean;
   falta_copy: boolean;
   falta_imagen: boolean;
   falta_revision: boolean;

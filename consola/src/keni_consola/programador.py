@@ -52,6 +52,7 @@ from typing import Any
 import httpx
 
 from . import config, marcas, repos
+from .dominio import licencia_imagen
 from .estados import ESTADO_PROGRAMADO
 from .tiempo import iso_utc
 
@@ -534,6 +535,16 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         siguiente barrido la reintente: antes quedaba estampada y `piezas_vencidas`
         la excluia PARA SIEMPRE (pieza programada que nunca salia, en silencio).
     """
+    # GATE STOCK (backstop final del posteo real): los gates de programación ya impiden que una
+    # imagen de stock SIN LICENCIA no autorizada llegue a `programado`; si una se colara igual,
+    # aquí NO se publica. Se deja en `programado` (sin estampar `preparado_en`) para reintentar
+    # tras autorizarla o sustituir la imagen.
+    if licencia_imagen.es_stock_sin_autorizar(pub):
+        _log.error(
+            "Pieza %r: imagen de stock SIN LICENCIA no autorizada; NO se publica.", pub.get("id")
+        )
+        return None
+
     # Gate maestro + excepción por marca: el maestro global debe estar ON y la marca NO excluida.
     marca_id = pub.get("marca") or ""
     publicar_real_flag = config.publicar_real_para(marca_id)

@@ -40,6 +40,7 @@ import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar } from "@/components/comunes/confirmar";
 import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
+import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -48,6 +49,12 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
+import {
+  MENSAJE_BLOQUEO_STOCK,
+  nombreProveedor,
+  stockAutorizado,
+  stockNoAutorizado,
+} from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import {
   CLAVE_PIEZAS,
@@ -298,23 +305,28 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // decisivo) se programa de inmediato (~5 min). Se avisa con un distintivo de rayo rojo para
   // que el OK humano sea consciente de que postea ya.
   const esBreaking = (pieza.categoria ?? "").trim().toLowerCase() === "breaking";
+  // STOCK SIN LICENCIA: la pieza lleva una foto de stock que nadie ha autorizado. Bloquea publicar
+  // (defensa en UI; el back también devuelve 409) con su mensaje propio en cualquier etapa pendiente.
+  const bloqueoStock = stockNoAutorizado(pieza);
   const motivoBloqueo = yaAprobada
     ? pieza.revisor_nombre
       ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
       : ""
-    : enRevision
-      ? cadenaQuery.isError
-        ? "No se pudo cargar el estado de aprobación; reintenta."
-        : cadenaCargando
-          ? "Cargando el estado de aprobación…"
-          : motivo || "Espera tu turno para dar el OK."
-      : etapa === "generando_copy"
-        ? "Falta el copy: la IA aún lo está redactando."
-        : etapa === "generando_arte"
-          ? esVideo
-            ? "Falta el video: ábrela y sube el clip."
-            : "Falta la imagen: ábrela y súbela."
-          : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
+    : bloqueoStock
+      ? MENSAJE_BLOQUEO_STOCK
+      : enRevision
+        ? cadenaQuery.isError
+          ? "No se pudo cargar el estado de aprobación; reintenta."
+          : cadenaCargando
+            ? "Cargando el estado de aprobación…"
+            : motivo || "Espera tu turno para dar el OK."
+        : etapa === "generando_copy"
+          ? "Falta el copy: la IA aún lo está redactando."
+          : etapa === "generando_arte"
+            ? esVideo
+              ? "Falta el video: ábrela y sube el clip."
+              : "Falta la imagen: ábrela y súbela."
+            : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
   // Tooltip del "me gusta" cuando SÍ puedes; bloqueado, manda `motivoBloqueo` (fuente única).
   const tituloLike = puedeDar ? "Dale tu OK (me gusta) a esta pieza" : motivoBloqueo;
 
@@ -330,6 +342,14 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     }
     if (miReaccion === "dislike") {
       deshacer.mutate("like"); // retira tu dislike antes de poder dar el OK
+      return;
+    }
+    // STOCK SIN LICENCIA: nunca se aprueba/publica sin autorizar la imagen. El toast manda al editor
+    // (donde está el botón Autorizar o se sustituye la foto).
+    if (bloqueoStock) {
+      toast(MENSAJE_BLOQUEO_STOCK, {
+        action: { label: "Abrir", onClick: () => void abrirEditor() },
+      });
       return;
     }
     if (!puedeDar) {
@@ -525,20 +545,33 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       {/* El post tal como se verá en la red: variante LIMPIA = tarjeta uniforme (imagen 4:5 a
           ancho completo con distintivo de plataforma + copy debajo), igual para toda red. La
           imagen va a sangre (sin gutter); el copy ya trae su propio padding interno. (El título
-          del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.) */}
-      <VistaPreviaRed
-        red={pieza.red}
-        marca={pieza.marca_nombre}
-        contenido={cuerpo}
-        copy_in={pieza.copy_in}
-        imagen_url={imagen || undefined}
-        carrusel={pieza.carrusel}
-        titulo={pieza.titulo}
-        onAbrir={() => void abrirEditor()}
-        captionExpandido={captionExpandido}
-        onAlternarCaption={() => setCaptionExpandido((v) => !v)}
-        variante="limpia"
-      />
+          del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.)
+          STOCK SIN LICENCIA: la previa se atenúa con watermark y un badge la rotula como ayuda
+          visual no publicable; si la foto de stock ya está autorizada, badge sutil sin overlay. */}
+      <div className="relative">
+        <OverlaySinLicencia activo={bloqueoStock} tamano="md">
+          <VistaPreviaRed
+            red={pieza.red}
+            marca={pieza.marca_nombre}
+            contenido={cuerpo}
+            copy_in={pieza.copy_in}
+            imagen_url={imagen || undefined}
+            carrusel={pieza.carrusel}
+            titulo={pieza.titulo}
+            onAbrir={() => void abrirEditor()}
+            captionExpandido={captionExpandido}
+            onAlternarCaption={() => setCaptionExpandido((v) => !v)}
+            variante="limpia"
+          />
+        </OverlaySinLicencia>
+        {(bloqueoStock || stockAutorizado(pieza)) && (
+          <BadgeStock
+            proveedor={nombreProveedor(pieza.imagen_proveedor)}
+            autorizada={!!pieza.imagen_autorizada}
+            className="absolute left-2 top-2 z-10"
+          />
+        )}
+      </div>
 
       {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). El
           espacio LIBRE de esta fila expande/pliega el caption (la "parte baja" de la tarjeta);

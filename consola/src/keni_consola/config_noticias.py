@@ -57,6 +57,9 @@ from ._config_comun import (
     ENV_VERIFICACION_FUENTE_ESFUERZO,
     ENV_VERIFICACION_FUENTE_MODELO,
     ENV_VERIFICACION_FUENTE_TIMEOUT,
+    ENV_PEXELS_API_KEY,
+    ENV_PIPELINE_STOCK,
+    ENV_PIXABAY_API_KEY,
     ENV_PRIORIZAR_PERFIL_IA,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
@@ -70,6 +73,7 @@ from ._config_comun import (
     ENV_SCORE_PESO_RENDIMIENTO,
     ENV_SCORE_PESO_VELOCIDAD,
     ENV_SCORE_PESO_VIRALIDAD,
+    ENV_STOCK_MAX_BARRIDO,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
     ENV_TRADUCCION_MAX,
@@ -977,6 +981,34 @@ def reuters_base_url() -> str:
 def reuters_configurado() -> bool:
     """True si Reuters tiene credencial: la fuente puede descargar (si no, queda pendiente)."""
     return bool(reuters_api_key())
+
+
+def pexels_api_key() -> str | None:
+    """API key de Pexels (`KENI_PEXELS_API_KEY`); None si no está (proveedor de stock apagado)."""
+    return _crudo(ENV_PEXELS_API_KEY) or None
+
+
+def pixabay_api_key() -> str | None:
+    """API key de Pixabay (`KENI_PIXABAY_API_KEY`); None si no está (proveedor de stock apagado)."""
+    return _crudo(ENV_PIXABAY_API_KEY) or None
+
+
+def stock_busca_activo() -> bool:
+    """True si la ETAPA de arte de STOCK del pipeline debe buscar (`KENI_PIPELINE_STOCK`).
+
+    Def OFF (conservador, como Ilustrar): la etapa que propone fotos de stock como alternativa
+    (atenuadas y con watermark "SIN LICENCIA", nunca publicables sin autorizar) solo corre con el
+    flag. Sin proveedores gratuitos disponibles degrada a no hacer nada.
+    """
+    return _crudo(ENV_PIPELINE_STOCK).lower() in _VERDADEROS
+
+
+def stock_max_por_barrido() -> int:
+    """Cuántos temas ilustra con stock por barrido (`KENI_STOCK_MAX_BARRIDO`, def 3; acota coste/rate)."""
+    try:
+        return max(1, int(_crudo(ENV_STOCK_MAX_BARRIDO) or "3"))
+    except ValueError:
+        return 3
 
 
 def afp_client_id() -> str | None:

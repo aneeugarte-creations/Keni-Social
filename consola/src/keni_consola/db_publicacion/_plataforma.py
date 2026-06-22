@@ -40,6 +40,13 @@ _COLS_PIEZA = (
     "imagen",
     "imagen_fuente",
     "foto",
+    # Procedencia + autorización de la imagen adjunta (fotos de stock como ayuda visual).
+    "imagen_origen",
+    "imagen_proveedor",
+    "imagen_autor",
+    "imagen_licencia",
+    "imagen_credito_url",
+    "imagen_autorizada",
     "video",
     "revision",
     "revisor_id",
@@ -79,6 +86,7 @@ _BOOLS_PIEZA = (
     "es_publicacion",
     "copy_in_exento",
     "placa_oculta",
+    "imagen_autorizada",
 )
 # Campos editables de una fila por plataforma (lista blanca). `id`, `publicacion_id`,
 # `red`, `marca`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
@@ -273,6 +281,14 @@ def _insertar_pieza(
         "imagen": imagen or "",
         "imagen_fuente": imagen_fuente or "",
         "foto": foto or "",
+        # Una pieza nace SIN imagen de stock: la procedencia/autorización las fija el flujo de
+        # "Buscar foto" (api/artes) al adjuntar una candidata externa, nunca la creación normal.
+        "imagen_origen": "",
+        "imagen_proveedor": "",
+        "imagen_autor": "",
+        "imagen_licencia": "",
+        "imagen_credito_url": "",
+        "imagen_autorizada": 0,
         "video": video or "",
         "revision": revision or "",
         "revisor_id": revisor_id or "",

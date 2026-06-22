@@ -112,6 +112,19 @@ class Pieza(TypedDict):
     # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
     # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
     foto: str
+    # PROCEDENCIA de la imagen ADJUNTA: ""|"ia"|"galeria"|"subida"|"stock". "stock" = foto externa
+    # (RSS original o API gratuita) usada como AYUDA VISUAL: el front la pinta ATENUADA + watermark
+    # "SIN LICENCIA" y bloquea publicar hasta autorizarla. Opcional (legado / piezas sin stock = "").
+    imagen_origen: NotRequired[str]
+    # Proveedor de una imagen "stock": "pexels"|"pixabay"|"wikimedia"|"nasa"|"openverse"|"rss".
+    imagen_proveedor: NotRequired[str]
+    # Crédito del autor/fotógrafo, licencia declarada y URL de origen (badge + atribución).
+    imagen_autor: NotRequired[str]
+    imagen_licencia: NotRequired[str]
+    imagen_credito_url: NotRequired[str]
+    # True = un humano revisó derechos y AUTORIZÓ publicar esta foto de stock. Hasta entonces el
+    # bloqueo infranqueable impide programarla/publicarla. Opcional (legado / no-stock = False).
+    imagen_autorizada: NotRequired[bool]
     # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar/Video. El
     # editor unificado los expone como checks marcables (PATCH a la fila por plataforma). `falta_video`
     # solo cuenta en piezas formato=video (espejo de `falta_imagen`); en piezas foto es False (N/A).

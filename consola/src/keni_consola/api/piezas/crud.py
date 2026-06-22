@@ -18,6 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ... import marcas, permisos, redes, repos
+from ...dominio import licencia_imagen
 from ..._http_json import (
     cursor_query,
     envoltura_paginacion,
@@ -485,6 +486,10 @@ def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, An
                     f"a '{estado}'."
                 )
             }
+        # GATE STOCK (infranqueable): el PUT puede saltar directo a programado/publicado; una
+        # imagen de stock SIN LICENCIA no autorizada no pasa por este atajo tampoco.
+        if licencia_imagen.bloquea_estado(pieza, estado):
+            return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")

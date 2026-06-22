@@ -107,6 +107,79 @@ export interface RespuestaArte {
   arte: Arte;
 }
 
+// --- Fotos de STOCK (ayuda visual NUNCA publicable sin autorizar) ---
+
+/** Estado de un proveedor de fotos de stock (lo declara `GET /api/artes/stock/buscar`). */
+export interface ProveedorStock {
+  proveedor: string;
+  nombre: string;
+  /** `false` si el proveedor no se puede usar ahora (falta clave / caído): chip deshabilitado. */
+  disponible: boolean;
+  /** Motivo de la indisponibilidad, para el tooltip del chip. */
+  motivo?: string;
+  /** El proveedor exige una clave de API que no está configurada. */
+  requiere_clave?: boolean;
+}
+
+/** Una foto candidata propuesta por la búsqueda de stock (referencia, aún sin descargar). */
+export interface CandidataStock {
+  proveedor: string;
+  /** URL de la imagen a tamaño completo (lo que se descargaría al adjuntar). */
+  url: string;
+  /** Miniatura para el grid. */
+  thumb: string;
+  autor?: string;
+  licencia?: string;
+  credito_url?: string;
+  titulo?: string;
+}
+
+/** Respuesta de `GET /api/artes/stock/buscar`. */
+export interface RespuestaBuscarStock {
+  proveedores: ProveedorStock[];
+  candidatos: CandidataStock[];
+}
+
+/** Cuerpo de `POST /api/artes/stock/adjuntar`: una candidata elegida o la foto original de la fuente. */
+export interface CuerpoAdjuntarStock {
+  pieza_id: string;
+  url?: string;
+  proveedor?: string;
+  autor?: string;
+  licencia?: string;
+  credito_url?: string;
+  /** `true` = baja la imagen original del artículo (`imagen_fuente`) en vez de una candidata. */
+  usar_fuente?: boolean;
+}
+
+/** Cuerpo de `POST /api/artes/stock/autorizar`: confirma/revoca derechos para publicar el stock. */
+export interface CuerpoAutorizarStock {
+  pieza_id: string;
+  autorizar: boolean;
+}
+
+/**
+ * Subconjunto de campos de la fila por plataforma que devuelven los endpoints de stock
+ * (`_plataforma_stock_a_dict`): lo justo para refrescar la imagen y su estado de licencia.
+ */
+export interface PlataformaStock {
+  id: string;
+  imagen_url: string;
+  foto: string;
+  falta_imagen: boolean;
+  imagen_origen: string;
+  imagen_proveedor: string;
+  imagen_autor: string;
+  imagen_licencia: string;
+  imagen_credito_url: string;
+  imagen_autorizada: boolean;
+}
+
+/** Respuesta de `POST /api/artes/stock/{adjuntar,autorizar}`. */
+export interface RespuestaStock {
+  plataforma: PlataformaStock;
+}
+
 // --- Lanzamiento manual de ARTE (genera N imágenes a mano para una marca) ---
 
 /** Cuerpo de `POST /api/artes/generar`: lanza N imágenes de arte a mano. */

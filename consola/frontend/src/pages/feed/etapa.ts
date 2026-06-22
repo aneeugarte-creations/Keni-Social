@@ -151,8 +151,11 @@ function etapaBruta(p: Pieza): EtapaIa {
   } else {
     // Foto: la foto cruda propia (`foto`) o —solo en piezas SIN marca— la imagen bespoke
     // (`imagen`). La imagen del artículo de origen (`imagen_fuente`) NO cuenta: es una URL de
-    // referencia, no la foto inyectada en la pieza.
-    const hayImagenReal = !!p.foto || (!p.marca && !!p.imagen);
+    // referencia, no la foto inyectada en la pieza. Una foto de STOCK no autorizada TAMPOCO cuenta
+    // como imagen real: es ayuda visual no publicable hasta que un humano confirme derechos.
+    const hayImagenReal =
+      (!!p.foto || (!p.marca && !!p.imagen)) &&
+      !(p.imagen_origen === "stock" && !p.imagen_autorizada);
     if (!hayImagenReal) return "generando_arte";
   }
   // Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE.

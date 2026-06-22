@@ -633,6 +633,16 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto
     # del `copy` que acompana a la pieza. Se genera por marca con sus reglas/plantilla.
     ("copy_in", "TEXT NOT NULL DEFAULT ''"),
+    # PROCEDENCIA + AUTORIZACIÓN de la imagen ADJUNTA (fotos de stock como ayuda visual):
+    # `imagen_origen`='stock' marca una foto externa con watermark "SIN LICENCIA" que el bloqueo
+    # infranqueable NO deja publicar hasta `imagen_autorizada=1`. Las demás llevan crédito/
+    # licencia/atribución para el badge. Legado -> '' / 0 (no es stock, publica como siempre).
+    ("imagen_origen", "TEXT NOT NULL DEFAULT ''"),
+    ("imagen_proveedor", "TEXT NOT NULL DEFAULT ''"),
+    ("imagen_autor", "TEXT NOT NULL DEFAULT ''"),
+    ("imagen_licencia", "TEXT NOT NULL DEFAULT ''"),
+    ("imagen_credito_url", "TEXT NOT NULL DEFAULT ''"),
+    ("imagen_autorizada", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 

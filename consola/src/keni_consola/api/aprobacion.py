@@ -31,7 +31,7 @@ from starlette.routing import Route
 
 from .. import config, db, permisos, repos
 from .._http_json import leer_json
-from ..dominio import colaboracion
+from ..dominio import colaboracion, licencia_imagen
 from ..dominio.piezas import pieza_a_dict
 from ..estados import (
     DECISION_APROBADO,
@@ -608,6 +608,10 @@ def _programar(
         return 404, {"error": "Esa publicación ya no existe."}
     if pub.get("estado") != ESTADO_EN_REVISION:
         return 409, {"error": "Solo se puede programar una pieza en revisión con sus likes."}
+
+    # GATE STOCK (infranqueable): una imagen de stock SIN LICENCIA no autorizada no se programa.
+    if licencia_imagen.es_stock_sin_autorizar(pub):
+        return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
 
     # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
     # cadena (def 2, "cuatro ojos" reales). El gate SOLO aplica si la pieza tiene una CADENA

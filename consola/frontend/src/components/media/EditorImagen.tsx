@@ -2,10 +2,12 @@
  * Editor de imagen para piezas sin marca: el usuario elige o sube una foto/fondo sin procesamiento
  * de placa. Se adjunta tal cual a la pieza.
  *
- * Tres orígenes de imagen:
+ * Cuatro orígenes de imagen:
  *   - **Galería de artes**: elegir un arte ya guardado (`SelectorArtes`).
  *   - **Subir**: un archivo del equipo (`POST /api/media`).
  *   - **Generar con IA**: a partir de un prompt (`POST /api/media/generar`).
+ *   - **Buscar foto**: una foto de STOCK de bancos gratuitos o la original de la fuente
+ *     (`BuscadorStock`). Entra como AYUDA VISUAL no publicable hasta autorizarla.
  *
  * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin imagen)
  * y lo incluye al guardar la pieza.
@@ -15,6 +17,8 @@ import {
   ImagePlus,
   Library,
   Save,
+  ScanSearch,
+  ShieldCheck,
   Trash2,
   Upload,
   Wand2,
@@ -28,6 +32,8 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import { BuscadorStock } from "@/components/media/BuscadorStock";
+import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,8 +41,15 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
+import {
+  type DatosStock,
+  MENSAJE_BLOQUEO_STOCK,
+  nombreProveedor,
+  stockAutorizado,
+  stockNoAutorizado,
+} from "@/lib/stock";
 import { nombreRed, tamanoRed } from "@/pages/piezas/meta";
-import type { Arte, TipoArte } from "@/types";
+import type { Arte, PlataformaStock, TipoArte } from "@/types";
 
 /** Convierte una relación tipo "16:9" o "1.91:1" en un número (ancho/alto). */
 function ratioDe(txt: string): number | null {
@@ -68,6 +81,16 @@ export interface EditorImagenProps {
   piezaId?: string;
   red?: string;
   copy?: string;
+  /**
+   * Estado de imagen de STOCK de la pieza (origen/proveedor/autorización) + datos para el buscador
+   * (título de la pieza como consulta inicial, imagen original de la fuente). Si se pasa con
+   * `piezaId`, el editor habilita "Buscar foto", el tratamiento "SIN LICENCIA" y autorizar.
+   */
+  stock?: DatosStock;
+  imagenFuente?: string;
+  titulo?: string;
+  /** Notifica que la imagen de stock cambió (adjuntar/autorizar): el padre recarga la pieza. */
+  onStockCambio?: (plataforma: PlataformaStock) => void;
 }
 
 export function EditorImagen({
@@ -79,6 +102,10 @@ export function EditorImagen({
   piezaId,
   red,
   copy,
+  stock,
+  imagenFuente,
+  titulo,
+  onStockCambio,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
@@ -86,9 +113,43 @@ export function EditorImagen({
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
   // Galería de artes.
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
+  // Buscador de fotos de stock (4ª vía de imagen).
+  const [buscadorStock, setBuscadorStock] = React.useState(false);
   // Fondo elegido en esta sesión.
   const [fondo, setFondo] = React.useState<Fondo | null>(null);
   const src = urlMedia(imagenUrl || imagen);
+
+  // Estado de stock de la pieza: condiciona el tratamiento "SIN LICENCIA" y el bloqueo de publicar.
+  const sinLicencia = !!stock && stockNoAutorizado(stock);
+  const autorizada = !!stock && stockAutorizado(stock);
+  const proveedor = nombreProveedor(stock?.imagen_proveedor);
+
+  // Autorizar / revocar la foto de stock (decisión HUMANA de derechos). Autorizar limpia
+  // `falta_imagen` en el back y retira el overlay; revocar vuelve a bloquearla.
+  const autorizarStock = useMutation({
+    mutationFn: (autorizar: boolean) => {
+      if (!piezaId) throw new Error("Sin pieza");
+      return api.autorizarStock({ pieza_id: piezaId, autorizar });
+    },
+    onSuccess: (res, autorizar) => {
+      onStockCambio?.(res.plataforma);
+      toast.success(autorizar ? "Imagen autorizada para publicar." : "Autorización retirada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const onAutorizar = async () => {
+    if (autorizada) {
+      autorizarStock.mutate(false);
+      return;
+    }
+    const ok = await confirmar({
+      titulo: "Autorizar imagen de stock",
+      mensaje:
+        "Confirmas que tienes derechos para publicar esta imagen. Bajo tu responsabilidad.",
+      textoConfirmar: "Autorizar",
+    });
+    if (ok) autorizarStock.mutate(true);
+  };
 
   // Aspect-ratio real de la imagen (medido al cargar) frente al recomendado de la red.
   const [ratioReal, setRatioReal] = React.useState<number | null>(null);
@@ -181,7 +242,10 @@ export function EditorImagen({
     subir.isPending ||
     generar.isPending ||
     generandoIA;
-  const ocupado = trabajando || !!disabled;
+  const ocupado = trabajando || autorizarStock.isPending || !!disabled;
+
+  // "Buscar foto" (stock) solo cuando hay pieza donde adjuntar la foto descargada.
+  const puedeBuscarStock = !!piezaId;
 
   const fuente = (
     <FuenteFondo
@@ -195,6 +259,7 @@ export function EditorImagen({
       onSubir={() => inputRef.current?.click()}
       onTexto={() => setGaleriaAbierta(true)}
       onGenerar={() => generar.mutate()}
+      onBuscarStock={puedeBuscarStock ? () => setBuscadorStock(true) : undefined}
       avisoGenerar={avisoGenerar}
     />
   );
@@ -280,16 +345,63 @@ export function EditorImagen({
             }
           >
             <div className="relative inline-block">
-              <img
-                src={src}
-                alt="Imagen de la publicación"
-                onLoad={(e) =>
-                  setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
-                }
-                className="max-h-56 w-auto rounded-md border border-border object-contain transition-colors hover:border-keni-300 focus-within:border-keni-300"
-              />
+              {/* Stock SIN LICENCIA: la preview se atenúa con watermark "SIN LICENCIA". */}
+              <OverlaySinLicencia activo={sinLicencia} tamano="md" className="inline-block rounded-md">
+                <img
+                  src={src}
+                  alt="Imagen de la publicación"
+                  onLoad={(e) =>
+                    setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
+                  }
+                  className="max-h-56 w-auto rounded-md border border-border object-contain transition-colors hover:border-keni-300 focus-within:border-keni-300"
+                />
+              </OverlaySinLicencia>
+              {(sinLicencia || autorizada) && (
+                <BadgeStock
+                  proveedor={proveedor}
+                  autorizada={autorizada}
+                  className="absolute left-1.5 top-1.5"
+                />
+              )}
             </div>
           </FilaConAcciones>
+
+          {/* Stock: bloqueo de publicar + control de autorizar (decisión humana de derechos). */}
+          {sinLicencia && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+              <span className="flex-1 font-medium">{MENSAJE_BLOQUEO_STOCK}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 px-2.5 text-xs"
+                onClick={() => void onAutorizar()}
+                disabled={ocupado}
+              >
+                {autorizarStock.isPending ? (
+                  <Spinner className="h-3.5 w-3.5" />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                )}
+                Autorizar
+              </Button>
+            </div>
+          )}
+          {autorizada && piezaId && (
+            <div className="flex items-center justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => void onAutorizar()}
+                disabled={ocupado}
+              >
+                {autorizarStock.isPending ? <Spinner className="h-3.5 w-3.5" /> : null}
+                Revocar autorización
+              </Button>
+            </div>
+          )}
 
           {aspectoFueraDeEstandar && tamRed && red && (
             <Aviso>
@@ -310,11 +422,22 @@ export function EditorImagen({
         onCerrar={() => setGaleriaAbierta(false)}
         onSeleccionar={elegirArte}
       />
+
+      {piezaId && (
+        <BuscadorStock
+          open={buscadorStock}
+          onCerrar={() => setBuscadorStock(false)}
+          piezaId={piezaId}
+          imagenFuente={imagenFuente}
+          consultaInicial={(titulo || copy || "").slice(0, 80)}
+          onAdjuntada={(plataforma) => onStockCambio?.(plataforma)}
+        />
+      )}
     </div>
   );
 }
 
-/** Selector de origen del fondo: texto · subir · generar con IA. */
+/** Selector de origen del fondo: galería · subir · buscar foto (stock) · generar con IA. */
 function FuenteFondo({
   idPrefijo,
   compacto,
@@ -326,6 +449,7 @@ function FuenteFondo({
   onSubir,
   onTexto,
   onGenerar,
+  onBuscarStock,
   avisoGenerar,
 }: {
   idPrefijo: string;
@@ -338,6 +462,8 @@ function FuenteFondo({
   onSubir: () => void;
   onTexto: () => void;
   onGenerar: () => void;
+  /** Abre el buscador de fotos de stock; ausente si no hay pieza donde adjuntarla. */
+  onBuscarStock?: () => void;
   avisoGenerar: string;
 }) {
   return (
@@ -356,6 +482,18 @@ function FuenteFondo({
           {subiendo ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
           Subir foto
         </Button>
+        {onBuscarStock && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBuscarStock}
+            disabled={ocupado}
+          >
+            <ScanSearch className="h-4 w-4" />
+            Buscar foto
+          </Button>
+        )}
         <span className="text-xs text-muted-foreground">o genera con IA:</span>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">

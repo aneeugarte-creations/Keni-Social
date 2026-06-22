@@ -337,15 +337,21 @@ def _ejecutar_produccion() -> dict[str, Any]:
     # Etapa de Ilustrar (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
     # toggle "Generar arte" (KENI_PIPELINE_ILUSTRAR) + máquina; si está OFF, devuelve [].
     artes = ejecutar_ilustrar()
+    # Etapa de arte de STOCK (paralela a Ilustrar): a los temas con copy y sin imagen les adjunta
+    # una foto de ayuda (original del RSS o API gratuita) atenuada + "SIN LICENCIA", nunca
+    # publicable sin autorizar. Gateada por KENI_PIPELINE_STOCK (def OFF); si está OFF devuelve [].
+    from .. import autogen_stock
+
+    stock = autogen_stock.ejecutar_stock()
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
     # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
-    if lanzados or artes or avances:
+    if lanzados or artes or stock or avances:
         _log.info(
-            "producción: %d copy (CD), %d arte(s) (Ilustrar), %d avance(s).",
-            len(lanzados), len(artes), len(avances),
+            "producción: %d copy (CD), %d arte(s) (Ilustrar), %d stock, %d avance(s).",
+            len(lanzados), len(artes), len(stock), len(avances),
         )
-    return {"lanzados": lanzados, "artes": artes, "avances": avances}
+    return {"lanzados": lanzados, "artes": artes, "stock": stock, "avances": avances}
 
 
 def _ejecutar_barrido() -> dict[str, Any]:

@@ -29,8 +29,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import almacen_media, libprompts, marcas, media, repos
+from .. import almacen_media, autogen_stock, libprompts, marcas, media, repos, stock_fotos
 from .._http_json import leer_json
+from ..dominio import extraccion_url, licencia_imagen
 from ..seguridad import autor_de_peticion
 from .media import lanzar_generacion_imagen
 
@@ -365,10 +366,153 @@ async def coste_medio(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
+# --------------------------------------------------------------------------- #
+# FOTOS DE STOCK (ayuda visual, NUNCA publicable sin autorizar)                 #
+# --------------------------------------------------------------------------- #
+# Buscar fotos en APIs gratuitas para PROPONERLAS como alternativa a galería/subir/IA.
+# Al adjuntar una, la pieza queda marcada `imagen_origen='stock'` y `imagen_autorizada=0`:
+# se ve como ayuda visual (atenuada + watermark "SIN LICENCIA" en el front), `falta_imagen`
+# sigue activo y el bloqueo infranqueable impide publicarla hasta que un humano la autorice.
+
+# Tope de candidatas por proveedor en una búsqueda manual (la UI muestra varias para elegir).
+_STOCK_LIMITE_DEF = 4
+_STOCK_LIMITE_MAX = 12
+
+
+def _buscar_stock(query: str, proveedor: str, limite: int) -> dict:
+    """Busca candidatas en proveedores gratuitos. Degradación honesta (nunca lanza al cliente)."""
+    proveedores = [
+        stock_fotos.estado_fuente(p) for p in stock_fotos.proveedores_disponibles()
+    ]
+    if not query.strip():
+        return {"proveedores": proveedores, "candidatos": []}
+    try:
+        if proveedor:
+            candidatos = stock_fotos.buscar(query, proveedor, limite=limite)
+        else:
+            candidatos = stock_fotos.buscar_todos(query, limite_por=limite)
+    except Exception:  # noqa: BLE001 -- una API caída no rompe la búsqueda; devolvemos lo que haya
+        _log.exception("Fallo buscando fotos de stock (q=%r proveedor=%r).", query, proveedor)
+        candidatos = []
+    return {"proveedores": proveedores, "candidatos": candidatos}
+
+
+async def buscar_stock(request: Request) -> Response:
+    """GET /api/artes/stock/buscar?q=&proveedor=&limite= -> {proveedores, candidatos}."""
+    q = (request.query_params.get("q") or "").strip()
+    proveedor = (request.query_params.get("proveedor") or "").strip().lower()
+    try:
+        limite = int(request.query_params.get("limite") or _STOCK_LIMITE_DEF)
+    except ValueError:
+        limite = _STOCK_LIMITE_DEF
+    limite = max(1, min(_STOCK_LIMITE_MAX, limite))
+    cuerpo = await run_in_threadpool(_buscar_stock, q, proveedor, limite)
+    return JSONResponse(cuerpo)
+
+
+def _adjuntar_stock(pieza_id: str, datos: dict) -> tuple[int, dict]:
+    """Descarga una foto de stock (o la original del RSS) y la adjunta como AYUDA VISUAL.
+
+    `usar_fuente=True` baja la imagen original del artículo (`imagen_fuente` de la pieza);
+    si no, baja la `url` de la candidata elegida. En ambos casos la pieza queda
+    `imagen_origen='stock'`, `imagen_autorizada=0` y `falta_imagen=1`: visible pero no publicable.
+    """
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+
+    usar_fuente = bool(datos.get("usar_fuente"))
+    if usar_fuente:
+        url = (plat.get("imagen_fuente") or "").strip()
+        proveedor = "rss"
+        if not url:
+            return 400, {"error": "La pieza no trae imagen original de la fuente."}
+    else:
+        url = (datos.get("url") or "").strip()
+        proveedor = (datos.get("proveedor") or "").strip().lower() or "stock"
+        if not url:
+            return 400, {"error": "Falta la URL de la foto a adjuntar."}
+
+    try:
+        actualizada = autogen_stock.adjuntar_candidata(
+            pieza_id,
+            url=url,
+            proveedor=proveedor,
+            autor=(datos.get("autor") or "").strip(),
+            licencia=(datos.get("licencia") or "").strip(),
+            credito_url=(datos.get("credito_url") or "").strip() or (url if usar_fuente else ""),
+        )
+    except extraccion_url.ExtraccionError as e:
+        return 400, {"error": str(e)}
+    if actualizada is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
+
+
+async def adjuntar_stock(request: Request) -> Response:
+    """POST /api/artes/stock/adjuntar {pieza_id, url|usar_fuente, proveedor, autor, licencia, credito_url}."""
+    datos = await leer_json(request)
+    pieza_id = (datos.get("pieza_id") or "").strip()
+    if not pieza_id:
+        return JSONResponse({"error": "Falta la pieza."}, status_code=400)
+    status, cuerpo = await run_in_threadpool(_adjuntar_stock, pieza_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _autorizar_stock(pieza_id: str, autorizar: bool) -> tuple[int, dict]:
+    """Marca/desmarca una foto de stock como autorizada para publicar (decisión HUMANA de derechos)."""
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    if (plat.get("imagen_origen") or "") != licencia_imagen.ORIGEN_STOCK:
+        return 400, {"error": "Esta pieza no tiene una imagen de stock que autorizar."}
+    # Autorizar: la imagen pasa a contar como real (limpia `falta_imagen`). Revocar: vuelve a faltar.
+    actualizada = repos.actualizar_pieza_fila(
+        pieza_id,
+        {"imagen_autorizada": bool(autorizar), "falta_imagen": not autorizar},
+    )
+    if actualizada is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
+
+
+async def autorizar_stock(request: Request) -> Response:
+    """POST /api/artes/stock/autorizar {pieza_id, autorizar=true}: confirma derechos y desbloquea."""
+    datos = await leer_json(request)
+    pieza_id = (datos.get("pieza_id") or "").strip()
+    if not pieza_id:
+        return JSONResponse({"error": "Falta la pieza."}, status_code=400)
+    autorizar = datos.get("autorizar", True)
+    autor = autor_de_peticion(request)
+    _log.info("Autorización de imagen de stock pieza=%s autorizar=%s por=%s", pieza_id, autorizar, autor)
+    status, cuerpo = await run_in_threadpool(_autorizar_stock, pieza_id, bool(autorizar))
+    return JSONResponse(cuerpo, status_code=status)
+
+
+def _plataforma_stock_a_dict(plat: dict | None) -> dict:
+    """Subconjunto de campos de stock de una fila por plataforma (lo que la UI refresca)."""
+    plat = plat or {}
+    return {
+        "id": plat.get("id", ""),
+        "imagen_url": plat.get("imagen_url", ""),
+        "foto": plat.get("foto", ""),
+        "falta_imagen": bool(plat.get("falta_imagen")),
+        "imagen_origen": plat.get("imagen_origen", ""),
+        "imagen_proveedor": plat.get("imagen_proveedor", ""),
+        "imagen_autor": plat.get("imagen_autor", ""),
+        "imagen_licencia": plat.get("imagen_licencia", ""),
+        "imagen_credito_url": plat.get("imagen_credito_url", ""),
+        "imagen_autorizada": bool(plat.get("imagen_autorizada")),
+    }
+
+
 RUTAS = [
     Route("/api/artes", listar, methods=["GET"]),
     Route("/api/artes", crear, methods=["POST"]),
     Route("/api/artes/generar", generar_arte, methods=["POST"]),
     Route("/api/artes/coste-medio", coste_medio, methods=["GET"]),
+    Route("/api/artes/stock/buscar", buscar_stock, methods=["GET"]),
+    Route("/api/artes/stock/adjuntar", adjuntar_stock, methods=["POST"]),
+    Route("/api/artes/stock/autorizar", autorizar_stock, methods=["POST"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),
 ]

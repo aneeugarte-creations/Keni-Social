@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ...db_publicacion import ConflictoVersion
+from ...dominio import licencia_imagen
 from ._comun import (
     _MAX_TEXTO,
     ESTADOS_PIEZA,
@@ -67,6 +68,11 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
     if "estado" in datos:
         if datos["estado"] not in ESTADOS_PIEZA:
             return 400, {"error": "Estado de plataforma inválido."}
+        # GATE STOCK (infranqueable): cubre el PATCH directo y el MCP tablero (`mover_pieza`),
+        # que entran por aquí sin pasar por los gates de aprobación. Una imagen de stock SIN
+        # LICENCIA no autorizada no puede ir a programado/publicado por ningún atajo.
+        if licencia_imagen.bloquea_estado(previa, datos["estado"]):
+            return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
         campos["estado"] = datos["estado"]
     for flag in (
         "falta_copy",

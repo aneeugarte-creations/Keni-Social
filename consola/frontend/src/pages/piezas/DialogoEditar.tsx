@@ -4,6 +4,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
@@ -38,7 +39,12 @@ import {
   serializarEncuadre,
   serializarFotos,
 } from "@/lib/placa/encuadre";
-import type { CuerpoActualizarPieza, Pieza } from "@/types";
+import {
+  type DatosStock,
+  MENSAJE_BLOQUEO_STOCK,
+  stockNoAutorizado,
+} from "@/lib/stock";
+import type { CuerpoActualizarPieza, PlataformaStock, Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
 import { metaRed } from "./meta";
@@ -62,6 +68,9 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
+  // Estado de imagen de STOCK (origen/proveedor/autorización): condiciona el tratamiento
+  // "SIN LICENCIA" y el bloqueo de publicar mientras no esté autorizada.
+  const [stock, setStock] = React.useState<DatosStock>({});
   // "Quitar plantilla": publicar solo la foto, sin placa. Se persiste en la pieza (`placa_oculta`).
   const [placaOculta, setPlacaOculta] = React.useState(false);
   // Plantilla del estudio elegida ("" = placa de marca por defecto / editor en vivo). La pieza la
@@ -326,6 +335,14 @@ export function DialogoEditar({
     setCopyIn(pieza.copy_in ?? "");
     setImagen(pieza.imagen ?? "");
     setImagenUrl(pieza.imagen_url ?? "");
+    setStock({
+      imagen_origen: pieza.imagen_origen,
+      imagen_proveedor: pieza.imagen_proveedor,
+      imagen_autor: pieza.imagen_autor,
+      imagen_licencia: pieza.imagen_licencia,
+      imagen_credito_url: pieza.imagen_credito_url,
+      imagen_autorizada: pieza.imagen_autorizada,
+    });
     setPlacaOculta(pieza.placa_oculta ?? false);
     setPlantillaId(pieza.plantilla_diseno_id ?? "");
     setEspejo(pieza.espejo ?? true);
@@ -356,6 +373,29 @@ export function DialogoEditar({
   // que el back la congela (409). En vez de dejar editar y fallar, el editor abre inerte: no se
   // autoguarda nada y los controles quedan deshabilitados (no hay PATCH que rechazar).
   const publicada = pieza?.estado === "publicado";
+
+  // STOCK SIN LICENCIA: una foto de stock no autorizada bloquea publicar. El auto-envío a revisión
+  // se inhibe mientras esté así (defensa en UI; el back también lo bloquea con 409).
+  const bloqueoStock = stockNoAutorizado(stock);
+
+  // Foto de stock adjuntada/autorizada: refresca la imagen y su estado de licencia EN VIVO
+  // (la preview y el bloqueo responden al instante) y propaga el cambio a los listados.
+  const onStockCambio = React.useCallback(
+    (plataforma: PlataformaStock) => {
+      setImagenUrl(plataforma.imagen_url ?? "");
+      setStock({
+        imagen_origen: plataforma.imagen_origen,
+        imagen_proveedor: plataforma.imagen_proveedor,
+        imagen_autor: plataforma.imagen_autor,
+        imagen_licencia: plataforma.imagen_licencia,
+        imagen_credito_url: plataforma.imagen_credito_url,
+        imagen_autorizada: plataforma.imagen_autorizada,
+      });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    },
+    [queryClient],
+  );
 
   // Persiste la pieza. NO cierra el diálogo: lo comparten el autoguardado y el cierre.
   const persistir = React.useCallback(async () => {
@@ -400,8 +440,11 @@ export function DialogoEditar({
     const huecosDoc = documentoSel ? capasFotoDoc(documentoSel).length : 1;
     const llenos = fotos.filter((f, i) => f.objeto || (i === 0 && !!pieza.imagen_fuente)).length;
     const fotosCompletas = llenos >= Math.max(1, huecosDoc);
+    // STOCK SIN LICENCIA: no auto-avanza (no se puede publicar sin autorizar). `etapaDePieza`
+    // ya lo refleja con los datos del back; el flag local cubre el adjuntar recién hecho.
     if (
       fotosCompletas &&
+      !bloqueoStock &&
       actualizada.estado === "borrador" &&
       etapaDePieza(actualizada) === "lista_para_revisar"
     ) {
@@ -411,7 +454,7 @@ export function DialogoEditar({
         /* carrera / ya en revisión: lo ignoramos (el feed reflejará el estado real) */
       }
     }
-  }, [pieza, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel, formato, slides]);
+  }, [pieza, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel, formato, slides, bloqueoStock]);
 
   // Solo se autoguarda cuando hay contenido (el copy del post) y la pieza NO está publicada
   // (publicada = inmutable: nada que persistir). Sin título: ya no lo exige.
@@ -497,6 +540,11 @@ export function DialogoEditar({
             <p className="self-start rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
               Ya publicada · solo lectura
             </p>
+          )}
+          {/* Stock SIN LICENCIA: aviso del bloqueo de publicar (vale para todo formato; el control
+              para autorizar vive junto a la imagen en el editor sin marca). */}
+          {bloqueoStock && !publicada && (
+            <Aviso className="self-start">{MENSAJE_BLOQUEO_STOCK}</Aviso>
           )}
         </DialogHeader>
 
@@ -695,6 +743,10 @@ export function DialogoEditar({
                 piezaId={pieza.id}
                 red={pieza.red}
                 copy={contenido}
+                titulo={pieza.titulo}
+                imagenFuente={pieza.imagen_fuente}
+                stock={stock}
+                onStockCambio={onStockCambio}
               />
             ) : null}
 
