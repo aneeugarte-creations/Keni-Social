@@ -266,6 +266,59 @@ def listar_noticia_clusters(
     return [_fila_a_noticia_cluster(f) for f in filas], total
 
 
+def clusters_con_fuente_propia(
+    marca: str, *, estado: str = "nuevo", limite: int = 200
+) -> list[dict[str, Any]]:
+    """Clusters de `marca` (en `estado`) de FUENTE PROPIA, MÁS RECIENTES primero (`ultimo_visto` desc).
+
+    Un cluster es PROPIO si AL MENOS UN item suyo viene de una fuente RSS `propia=1` (o su
+    `primera_fuente` lo es). Fuente de verdad del canal PORTAL: first-party, se auto-produce
+    ENTERO sin depender del ranking por SCORE (no hay recorte por relevancia que hunda una nota
+    propia monofuente bajo las historias de agencia corroboradas). Orden por RECENCIA
+    (`ultimo_visto`); `limite` acota el lote. PURA salvo I/O. [] si `marca` vacía.
+    """
+    if not marca:
+        return []
+    cols = ", ".join(f"c.{col}" for col in _COLS_NOTICIA_CLUSTER)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- columnas de allowlist; valores parametrizados
+            f"SELECT DISTINCT {cols} FROM noticias_clusters c "
+            "LEFT JOIN noticias_items i ON i.cluster_id = c.id "
+            "LEFT JOIN fuentes_rss fi ON fi.id = i.fuente_id "
+            "LEFT JOIN fuentes_rss fp ON fp.id = c.primera_fuente "
+            "WHERE c.marca = ? AND c.estado = ? AND (fi.propia = 1 OR fp.propia = 1) "
+            "ORDER BY c.ultimo_visto DESC, c.id DESC LIMIT ?",
+            (marca, estado, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_cluster(f) for f in filas]
+
+
+def ids_clusters_con_fuente_propia(marca: str, *, estado: str = "nuevo") -> set[str]:
+    """IDs de clusters de `marca` (en `estado`) con AL MENOS un item de fuente RSS `propia=1`.
+
+    Lo consume la admisión del pipeline para OMITIR del camino normal (umbral/verificación) las
+    historias que el canal PORTAL admite aparte: evita la doble admisión con un criterio simétrico
+    al del Portal (pertenencia por ITEM propio, no por `primera_fuente`). `set()` si `marca` vacía.
+    """
+    if not marca:
+        return set()
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT DISTINCT c.id FROM noticias_clusters c "
+            "JOIN noticias_items i ON i.cluster_id = c.id "
+            "JOIN fuentes_rss f ON f.id = i.fuente_id "
+            "WHERE c.marca = ? AND c.estado = ? AND f.propia = 1",
+            (marca, estado),
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["id"] for f in filas}
+
+
 def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
     """Una historia por id (None si no existe)."""
     con = _conectar()

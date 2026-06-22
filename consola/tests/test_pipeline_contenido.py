@@ -518,6 +518,23 @@ def test_imagen_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
     ) == ""
 
 
+def test_imagen_de_cluster_sigue_iterando_si_el_primero_no_resuelve_og(entorno, monkeypatch):
+    """Bug 2: si el PRIMER item propia no resuelve og:image, sigue probando los demás propios."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    propia = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
+    # El primer artículo (/1) no trae og:image; el segundo (/2) sí.
+    monkeypatch.setattr(
+        pc, "_FETCH_OG_IMAGE",
+        lambda enlace: "https://casa.test/2.jpg" if enlace.endswith("/2") else "",
+    )
+    items = [
+        {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/1"},
+        {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/2"},
+    ]
+    assert _admitir._imagen_de_cluster(items) == "https://casa.test/2.jpg"
+
+
 def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
     """REDACTAR: `fotos_notas`/`n_notas` del copy_pendiente viajan a `lanzar_copy` (habilitan el carrusel)."""
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
@@ -673,6 +690,39 @@ def test_portal_admite_fuente_propia_directo(entorno, monkeypatch):
     # La propia queda `usado` (no se re-admite); la ajena sigue en el pool.
     assert repos.obtener_noticia_cluster("c-propia")["estado"] == "usado"
     assert repos.obtener_noticia_cluster("c-ajena")["estado"] == "nuevo"
+
+
+def test_portal_admite_cluster_con_item_propio_aunque_primera_fuente_ajena(entorno, monkeypatch):
+    """Bug 3B: la pertenencia al Portal es por ALGÚN item de fuente PROPIA, no por `primera_fuente`.
+
+    Si una agencia abrió la historia (la canónica fusionada quedó con `primera_fuente` AJENA) pero
+    UnoTV también la cubrió, el cluster SIGUE siendo del Portal: lo decide tener un item propio."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _mock_og_image(monkeypatch, "https://casa.test/og.jpg")
+    propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
+    ajena = repos.crear_fuente_rss("Agencia", "https://otro.test/feed.xml", marca="unotv")
+    # Score bajo y `primera_fuente` AJENA: por el camino viejo (filtro por primera_fuente + corte
+    # por score) NO entraba al Portal.
+    _inicializar_cluster(
+        "c-mixto", titulo="Nota cubierta por ambos", score=0.03, primera_fuente=ajena["id"]
+    )
+    repos.crear_noticias_items([
+        {"fuente_id": ajena["id"], "fuente_nombre": "Agencia", "marca": "unotv",
+         "titulo": "Versión agencia", "url": "https://otro.test/1",
+         "url_canonica": "otro.test/1", "clave": "k-ajena", "cluster_id": "c-mixto"},
+        {"fuente_id": propia["id"], "fuente_nombre": "Portal propio", "marca": "unotv",
+         "titulo": "Versión UnoTV", "url": "https://casa.test/1",
+         "url_canonica": "casa.test/1", "clave": "k-propia", "cluster_id": "c-mixto"},
+    ])
+
+    # Camino normal: lo OMITE (no doble admisión), porque tiene un item propio. Se comprueba
+    # ANTES de admitir (la admisión lo deja `usado` y sale del set de `nuevo`).
+    assert "c-mixto" in repos.ids_clusters_con_fuente_propia("unotv")
+
+    res = pc.ejecutar_portal()
+
+    assert "Nota cubierta por ambos" in [t["titulo"] for t in res["temas"]]
 
 
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):

@@ -56,6 +56,10 @@ __all__ = [
 # Tope de enlaces corroborantes que se anexan a la nota de un tema promovido de un cluster.
 _MAX_ENLACES_CLUSTER = 6
 
+# Ventana (más amplia que la nota) para buscar la foto PROPIA de la portada: un item propio
+# puede quedar fuera de los items recientes de la nota si hay agencias capturadas por encima.
+_MAX_ITEMS_FOTO = 40
+
 # Contexto del PRODUCTOR: ventana y tope de piezas YA en el feed del mismo macro-evento que se
 # le recuerdan al copy para que no repita ángulos (memoria de evento, "más IA hacia adentro").
 _DIAS_CONTEXTO_FEED = 7
@@ -356,6 +360,7 @@ def clusters_para_promover(
     aptas: list[dict[str, Any]] = []
     bajo_umbral = 0
     cache_propia: dict[str, bool] = {}
+    propios_ids = _ids_clusters_propios(marca)
     # CADENCIA POR EVENTO: las facetas (evento, subtema) que YA salieron hoy no vuelven a
     # auto-producirse. N subtemas activos -> N piezas, sin tope numérico fijo (sentido común).
     cubiertos_hoy = _eventos_cubiertos_hoy(marca)
@@ -372,8 +377,8 @@ def clusters_para_promover(
             continue
         # FUENTE PROPIA (portal del cliente): NO la maneja investigación — la admite DIRECTO el
         # daemon Portal (canal aparte, sin umbral ni verificación). Aquí se omite para no admitirla
-        # dos veces.
-        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
+        # dos veces. Pertenencia por ALGÚN item propio (`propios_ids`) o por `primera_fuente`.
+        if (c.get("id") or "") in propios_ids or _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
             continue
         try:
             supera, motivo = noticias_umbral.evaluar(c)
@@ -450,6 +455,7 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         return []
     pendientes: list[dict[str, Any]] = []
     cache_propia: dict[str, bool] = {}
+    propios_ids = _ids_clusters_propios(marca)
     for c in clusters:
         if (c.get("verificacion_fuente") or "").strip():
             continue  # ya verificada / en curso
@@ -458,7 +464,8 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         if _falta_traduccion(c):
             continue
         # FUENTE PROPIA: la maneja el canal Portal (directo, sin verificación) -> se omite aquí.
-        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
+        # Pertenencia por ALGÚN item propio (`propios_ids`) o por `primera_fuente`.
+        if (c.get("id") or "") in propios_ids or _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
             continue
         try:
             supera, _motivo = noticias_umbral.evaluar(c)
@@ -481,9 +488,23 @@ def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
         try:
             fuente = repos.obtener_fuente_rss(fuente_id)
         except Exception:  # noqa: BLE001 -- sin la fuente, no la tratamos como propia
+            _log.warning("pipeline: no se pudo leer la fuente %s (se trata como ajena)", fuente_id, exc_info=True)
             fuente = None
         cache[fuente_id] = bool(fuente and fuente.get("propia"))
     return cache[fuente_id]
+
+
+def _ids_clusters_propios(marca: str) -> set[str]:
+    """IDs de clusters `nuevo` de `marca` con ALGÚN item de fuente propia (los admite el Portal).
+
+    La admisión normal los OMITE para no duplicar lo que el canal Portal admite aparte —criterio
+    simétrico al del Portal (pertenencia por item propio, no por `primera_fuente`)—. Best-effort:
+    set() ante un fallo (se cae al filtro por `primera_fuente`, como antes)."""
+    try:
+        return repos.ids_clusters_con_fuente_propia(marca, estado="nuevo")
+    except Exception:  # noqa: BLE001 -- sin lectura fiable, se omite solo por primera_fuente
+        _log.warning("pipeline: no se pudieron leer clusters de fuente propia (%s)", marca, exc_info=True)
+        return set()
 
 
 # Tope de fotos de fuente por historia: los carruseles nativos de IG/FB admiten 10 slides,
@@ -537,8 +558,9 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
             resuelta = (_ref._FETCH_OG_IMAGE(enlace) or "").strip()
         except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe el barrido
             resuelta = ""
-        # Un solo intento por historia (el primer artículo propia con URL).
-        return resuelta
+        # Sigue probando los demás artículos propios si este no resolvió og:image.
+        if resuelta:
+            return resuelta
     return ""
 
 
@@ -675,6 +697,15 @@ def crear_tema_de_cluster(
             + _contexto_feed_evento(marca, tema_macro))[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
     imagen = _imagen_de_cluster(items)
+    if not imagen and cid:
+        # Amplía la ventana de la PORTADA más allá de los items de la nota: un item PROPIO (con
+        # derechos de imagen) queda fuera si hay agencias más recientes encima.
+        try:
+            items_foto = repos.items_de_cluster(cid, limite=_MAX_ITEMS_FOTO)
+        except Exception:  # noqa: BLE001 -- la ampliación de la portada es best-effort
+            items_foto = []
+        if items_foto:
+            imagen = _imagen_de_cluster(items_foto)
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
     # `n_notas` (cuántas SUB-HISTORIAS agrupa) + `fotos_notas` (foto propia por nota) habilitan
     # el output CARRUSEL en la fase CD (una placa por sub-historia; Claude decide).
@@ -1150,26 +1181,21 @@ def promover_clusters_marca(
 def clusters_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     """Historias (`estado='nuevo'`) de la marca de FUENTE PROPIA, para el canal PORTAL.
 
-    SIN umbral ni verificación: el portal del cliente es first-party y se auto-produce TODO. Lee el
-    pool rankeado y se queda con las cuyo origen primario es una fuente `propia=1`. Ordenadas por
-    score (el pool ya viene rankeado); recortadas a `maximo`. Best-effort: [] ante fallo o maximo<=0.
+    SIN umbral ni verificación: el portal del cliente es first-party y se auto-produce TODO. La
+    pertenencia al Portal la decide la BD por FUENTE PROPIA —cualquier item del cluster de una
+    fuente `propia=1`, o su `primera_fuente`— y por RECENCIA (`ultimo_visto`), NO por el ranking
+    de score: una nota propia monofuente puntúa menos que una historia de agencia corroborada, y
+    el portal debe admitirse entero sin competir por relevancia. Recortadas a `maximo`.
+    Best-effort: [] ante fallo o maximo<=0.
     """
     if maximo <= 0:
         return []
-    limite = max(maximo * 4, 80)
     try:
-        clusters, _total = repos.listar_noticia_clusters(marca=marca, estado="nuevo", limite=limite)
+        propias = repos.clusters_con_fuente_propia(marca, estado="nuevo", limite=maximo)
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no aporta al Portal este tick
         _log.warning("portal: no se pudieron leer historias propias (%s)", marca, exc_info=True)
         return []
-    cache_propia: dict[str, bool] = {}
-    propias: list[dict[str, Any]] = []
-    for c in clusters:
-        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
-            propias.append(c)
-            if len(propias) >= maximo:
-                break
-    return propias
+    return propias[:maximo]
 
 
 def promover_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:

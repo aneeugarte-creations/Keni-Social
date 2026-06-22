@@ -281,6 +281,16 @@ def clusters_por_subtema(
     return db.clusters_por_subtema(tema_macro, subtema, marca, solo_nuevos=solo_nuevos)
 
 
+def clusters_con_fuente_propia(
+    marca: str, *, estado: str = "nuevo", limite: int = 200
+) -> list[dict[str, Any]]:
+    return db.clusters_con_fuente_propia(marca, estado=estado, limite=limite)
+
+
+def ids_clusters_con_fuente_propia(marca: str, *, estado: str = "nuevo") -> set[str]:
+    return db.ids_clusters_con_fuente_propia(marca, estado=estado)
+
+
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
     return db.items_de_cluster(cluster_id, limite=limite)
 
