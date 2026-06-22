@@ -372,7 +372,9 @@ def _set_coordinador_de_celda(
         }
     # GRID POR MARCA: la celda hereda la marca de su franja (fuente de verdad de la rejilla).
     franja_def = repos.obtener_franja_semana(franja_id)
-    marca_celda = (franja_def or {}).get("marca", "") or ""
+    if franja_def is None:
+        return 400, {"error": "La franja indicada no existe."}
+    marca_celda = franja_def.get("marca", "") or ""
     registro = repos.actualizar_coordinador_rota(
         lunes, fecha, franja_id, coordinador_id, marca_celda
     )

@@ -68,34 +68,24 @@ def actualizar_coordinador_rota(
     marca; `marca` se denormaliza para filtrar/etiquetar sin join).
     """
     ahora = ahora_iso()
+    nuevo_id = uuid.uuid4().hex[:12]
     con = _conectar()
     try:
-        fila_existente = con.execute(
-            "SELECT id FROM rota_coordinacion WHERE fecha = ? AND franja_id = ?",
-            (fecha, franja_id),
-        ).fetchone()
-        if fila_existente is not None:
-            con.execute(
-                "UPDATE rota_coordinacion SET coordinador_id = ?, lunes = ?, marca = ?, "
-                "actualizado = ? WHERE id = ?",
-                (coordinador_id, lunes, marca or "", ahora, fila_existente["id"]),
-            )
-            con.commit()
-            fila = con.execute(
-                f"{_SELECT_COORDINACION} WHERE id = ?", (fila_existente["id"],)
-            ).fetchone()
-            return _fila_a_coordinacion(fila)
-        nuevo_id = uuid.uuid4().hex[:12]
-        con.execute(
+        # UPSERT atomico por UNIQUE(fecha, franja_id): un solo statement inserta o reemplaza
+        # el coordinador y devuelve la fila resultante (`RETURNING`), sin ventana de carrera
+        # entre el chequeo y la escritura. `creado` solo se fija al insertar (el DO UPDATE no
+        # lo toca, conserva el original).
+        fila = con.execute(
             "INSERT INTO rota_coordinacion "
             "(id, lunes, fecha, franja_id, coordinador_id, creado, actualizado, marca) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (fecha, franja_id) DO UPDATE SET "
+            "coordinador_id = EXCLUDED.coordinador_id, lunes = EXCLUDED.lunes, "
+            "marca = EXCLUDED.marca, actualizado = EXCLUDED.actualizado "
+            f"RETURNING {', '.join(_COLS_COORDINACION)}",
             (nuevo_id, lunes, fecha, franja_id, coordinador_id, ahora, ahora, marca or ""),
-        )
-        con.commit()
-        fila = con.execute(
-            f"{_SELECT_COORDINACION} WHERE id = ?", (nuevo_id,)
         ).fetchone()
+        con.commit()
         return _fila_a_coordinacion(fila)
     finally:
         con.close()

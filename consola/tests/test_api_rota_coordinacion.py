@@ -177,6 +177,27 @@ def test_put_coordinacion_upsert_reemplaza(entorno):
     assert lista[0]["coordinador_id"] == b["id"]
 
 
+def test_actualizar_coordinador_rota_doble_upsert_no_rompe(entorno):
+    """El upsert atómico de coordinación devuelve la fila COMPLETA y reemplaza sin romper.
+
+    Antes el SELECT→INSERT/UPDATE no atómico podía duplicar la celda o devolver `None`; el
+    `INSERT ... ON CONFLICT(fecha, franja_id) DO UPDATE ... RETURNING` lo resuelve en un
+    solo statement.
+    """
+    app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    a = auth.crear_usuario("ana", CLAVE, "editor", puede_coordinar=True)
+    b = auth.crear_usuario("beto", CLAVE, "editor", puede_coordinar=True)
+    primero = repos.actualizar_coordinador_rota(LUNES, FECHA, "fr-1", a["id"], MARCA)
+    assert primero["coordinador_id"] == a["id"]
+    assert primero["marca"] == MARCA
+    segundo = repos.actualizar_coordinador_rota(LUNES, FECHA, "fr-1", b["id"], MARCA)
+    assert segundo["coordinador_id"] == b["id"]
+    # Una sola fila para la celda: el segundo upsert REEMPLAZA, no duplica.
+    lista = repos.listar_coordinacion_semana(LUNES, MARCA)
+    assert len(lista) == 1
+    assert lista[0]["coordinador_id"] == b["id"]
+
+
 def test_put_coordinacion_usuario_sin_flag_400(entorno):
     """PUT con un coordinador_id de un usuario SIN `puede_coordinar=true` -> 400."""
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
@@ -210,6 +231,23 @@ def test_put_coordinacion_usuario_inexistente_400(entorno):
         headers=_ORIGIN,
     )
     assert r.status_code == 400
+
+
+def test_put_coordinacion_franja_inexistente_400(entorno):
+    """PUT con una `franja_id` que no existe -> 400 (no crea un coordinador huérfano)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    coord = auth.crear_usuario("c", CLAVE, "editor", puede_coordinar=True)
+    r = cli.put(
+        "/api/rota/coordinacion",
+        json={
+            "lunes": LUNES, "fecha": FECHA, "franja_id": "no-existe",
+            "coordinador_id": coord["id"],
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+    assert "franja" in r.json()["error"].lower()
 
 
 def test_put_coordinacion_sin_admin_403(cliente):

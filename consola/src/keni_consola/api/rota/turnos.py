@@ -410,7 +410,15 @@ def _actualizar_turno(turno_id: str, datos: dict[str, Any]) -> Response:
     if err is not None:
         return err
 
-    turno = repos.actualizar_turno_rota(turno_id, campos)
+    try:
+        turno = repos.actualizar_turno_rota(turno_id, campos)
+    except IntegrityError:
+        # El cambio mueve el turno a un `(miembro, fecha, franja)` ya ocupado; el indice
+        # unico `idx_rota_turnos_uniq` lo corta -> 409 accionable (no 500).
+        return JSONResponse(
+            {"error": "Ya hay un turno para ese miembro en esa fecha y franja."},
+            status_code=409,
+        )
     if turno is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
     _franjas_lista, franjas_por_id = _franjas_de_semana(actual["semana"])
@@ -628,13 +636,52 @@ def _actualizar_turnos_lote(datos: dict[str, Any], ids: list[str]) -> Response:
         )
 
     # Verifica que todos los turnos pedidos existan (404 si alguno ya no está).
+    actuales: list[dict[str, Any]] = []
     for tid in ids:
-        if repos.obtener_turno_rota(tid) is None:
+        actual = repos.obtener_turno_rota(tid)
+        if actual is None:
             return JSONResponse(
                 {"error": f"El turno {tid} ya no existe."}, status_code=404
             )
+        actuales.append(actual)
 
-    n, turnos = repos.actualizar_turnos_rota_lote(ids, campos)
+    # Ausencia (misma regla que el PATCH 1:1): si la edicion cambia miembro o franja, valida
+    # que el `(miembro, fecha, override, franja)` final de cada turno no ponga a trabajar a una
+    # persona ausente sin override. La fecha no es editable en lote, asi que se toma de cada
+    # turno. Reune los conflictos y devuelve 409 sin tocar BD (estilo `_crear_turnos_lote`).
+    if "miembro_id" in campos or "franja_id" in campos:
+        conflictos: list[dict[str, Any]] = []
+        for actual in actuales:
+            miembro_final = campos.get("miembro_id", actual["miembro_id"])
+            franja_final = campos.get("franja_id", actual.get("franja_id", ""))
+            override_final = bool(campos.get("override", actual["override"]))
+            if _violacion_ausencia(
+                miembro_final, actual["fecha"], override=override_final, franja_id=franja_final
+            ) is not None:
+                conflictos.append({"id": actual["id"], "fecha": actual["fecha"]})
+        if conflictos:
+            return JSONResponse(
+                {
+                    "error": "Algún turno deja a una persona ausente ese día sin override.",
+                    "requiere_override": True,
+                    "conflictos": conflictos,
+                    "actualizados": 0,
+                },
+                status_code=409,
+            )
+
+    try:
+        n, turnos = repos.actualizar_turnos_rota_lote(ids, campos)
+    except IntegrityError:
+        # El cambio mueve algún turno a un `(miembro, fecha, franja)` ya ocupado; el indice
+        # unico `idx_rota_turnos_uniq` corta el lote -> 409 accionable (no 500).
+        return JSONResponse(
+            {
+                "error": "Algún turno choca con otro para ese miembro en esa fecha y franja.",
+                "actualizados": 0,
+            },
+            status_code=409,
+        )
     # Componer franjas de las semanas afectadas para serializar `franja_nombre`.
     semanas_tocadas = {t["semana"] for t in turnos}
     franjas_global: dict[str, dict[str, Any]] = {}

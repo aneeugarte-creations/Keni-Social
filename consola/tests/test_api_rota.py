@@ -821,6 +821,20 @@ def test_editar_turno_persona_ausente_exige_override(cliente):
     assert r.json()["ausencia"]["tipo"] == "vacaciones"
 
 
+def test_editar_turno_choque_409(cliente):
+    """PATCH que mueve un turno a un `(miembro, fecha, franja)` ya ocupado -> 409 (no 500)."""
+    equipo = _crear_equipo(1)
+    luis = equipo[0]
+    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino")
+    otro = _crear_turno(LUNES1, "2026-05-26", luis, franja="matutino")
+    # Mover `otro` al 25 lo hace chocar con el primero (mismo miembro, fecha y franja).
+    r = cliente.patch(
+        f"/api/rota/turnos/{otro['id']}",
+        json={"fecha": "2026-05-25"},
+    )
+    assert r.status_code == 409, r.text
+
+
 # --------------------------------------------------------------------------- #
 # Turnos: DELETE                                                               #
 # --------------------------------------------------------------------------- #
@@ -925,6 +939,43 @@ def test_actualizar_turnos_lote_miembro_vacio_quita_asignacion(cliente):
     assert r.status_code == 200, r.text
     assert r.json()["actualizados"] == 2
     assert all(t["miembro_id"] == "" for t in r.json()["turnos"])
+
+
+def test_actualizar_turnos_lote_persona_ausente_exige_override(cliente):
+    """Reasignar en lote a alguien AUSENTE ese día sin override -> 409 (igual que el PATCH 1:1)."""
+    equipo = _crear_equipo(2)
+    ana, beto = equipo[0], equipo[1]
+    repos.crear_ausencia_rota(
+        ana["id"], "2026-05-25", "2026-05-31",
+        miembro_nombre=ana["usuario"], tipo="vacaciones",
+    )
+    turno = _crear_turno(LUNES1, "2026-05-27", beto, franja="matutino")
+    r = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={"ids": [turno["id"]], "miembro_id": ana["id"]},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["requiere_override"] is True
+    # Con override explícito sí pasa.
+    r = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={"ids": [turno["id"]], "miembro_id": ana["id"], "override": True},
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_actualizar_turnos_lote_choque_409(cliente):
+    """Lote que mueve un turno a un `(miembro, fecha, franja)` ya ocupado -> 409 (no 500)."""
+    equipo = _crear_equipo(2)
+    luis, tescu = equipo[0], equipo[1]
+    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino")
+    otro = _crear_turno(LUNES1, "2026-05-25", tescu, franja="matutino")
+    # Reasignar `otro` a luis lo hace chocar con el turno existente de luis.
+    r = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={"ids": [otro["id"]], "miembro_id": luis["id"]},
+    )
+    assert r.status_code == 409, r.text
 
 
 def test_borrar_turnos_lote(cliente):
@@ -1497,6 +1548,27 @@ def test_copiar_semana_reemplazar(cliente):
     semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
     assert semana2["total"] == 1
     assert semana2["turnos"][0]["franja"] == "matutino"
+
+
+def test_copiar_semana_dos_veces_no_duplica_huecos(cliente):
+    """Re-copiar una semana con un turno-HUECO (sin miembro) no lo duplica en destino.
+
+    El índice único parcial `idx_rota_turnos_uniq` solo cubre turnos CON miembro, así que el
+    `ON CONFLICT` no arbitra los huecos: `copiar_turnos_rota` los deduplica aparte.
+    """
+    repos.crear_turno_rota(
+        LUNES1, "2026-05-25",
+        miembro_id="", miembro_nombre="", franja="matutino", marca=MARCA,
+    )
+    for _ in range(2):
+        r = cliente.post(
+            "/api/rota/copiar-semana",
+            json={"de_lunes": LUNES1, "a_lunes": LUNES2, "marca": MARCA},
+        )
+        assert r.status_code == 200, r.text
+    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
+    huecos = [t for t in semana2["turnos"] if t["miembro_id"] == ""]
+    assert len(huecos) == 1
 
 
 def test_semana_nueva_se_prellena_desde_anterior(entorno):

@@ -555,6 +555,18 @@ def copiar_turnos_rota(
                 f"DELETE FROM rota_turnos WHERE semana = ?{clausula_marca}",  # noqa: S608 -- fragmento fijo
                 (a_lunes, marca) if marca else (a_lunes,),
             )
+        # Los turnos-hueco (miembro_id == '') quedan FUERA del indice unico parcial
+        # `idx_rota_turnos_uniq` (su `WHERE miembro_id <> ''` no los cubre), asi que el
+        # `ON CONFLICT` no los arbitra. Indexamos los huecos ya presentes en la semana destino
+        # para no acumular duplicados al re-copiar (la lista refleja el estado tras `reemplazar`).
+        huecos_destino: set[tuple[str, str]] = {
+            (f["fecha"], f["franja_id"])
+            for f in con.execute(
+                f"SELECT fecha, franja_id FROM rota_turnos "  # noqa: S608 -- fragmento fijo
+                f"WHERE semana = ?{clausula_marca} AND miembro_id = ''",
+                (a_lunes, marca) if marca else (a_lunes,),
+            ).fetchall()
+        }
         filas = con.execute(
             f"{_SELECT_TURNO_ROTA} WHERE semana = ?{clausula_marca} ORDER BY fecha ASC, franja_id ASC",  # noqa: S608 -- fragmento fijo
             (de_lunes, marca) if marca else (de_lunes,),
@@ -573,6 +585,13 @@ def copiar_turnos_rota(
             if not franja_id_dest:
                 # Sin franja destino no podemos enlazar el turno: lo saltamos (defensa).
                 continue
+            if fila["miembro_id"] == "":
+                # Hueco: lo arbitra esta `set` (el indice unico no lo cubre). Salta si ya hay
+                # un hueco en esa celda destino; si no, lo registra para el resto del lote.
+                clave_hueco = (nueva_fecha, franja_id_dest)
+                if clave_hueco in huecos_destino:
+                    continue
+                huecos_destino.add(clave_hueco)
             nuevo = {
                 "id": uuid.uuid4().hex[:12],
                 "semana": a_lunes,
