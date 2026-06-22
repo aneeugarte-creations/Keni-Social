@@ -107,6 +107,14 @@ def _migrar_columnas_pieza(con: Any) -> None:
             "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS carrusel TEXT NOT NULL DEFAULT ''"
         )
+    # `variante` (foto|carrusel): qué versión de la pieza es dentro de un mismo contenido. Una
+    # conversión a carrusel crea una variante NUEVA junto a la foto (no la sobrescribe). Toda pieza
+    # legada es 'foto'. Default 'foto' backfillea las filas existentes sin tocar nada más.
+    if "variante" not in cols:
+        con.execute(
+            "ALTER TABLE pieza "
+            "ADD COLUMN IF NOT EXISTS variante TEXT NOT NULL DEFAULT 'foto'"
+        )
     # `hashtags_sugeridos`: sugerencia de la etapa `sugerir_hashtags` (tras Redactar). JSON array
     # de strings CON '#' que el feed propone en gris para aceptar/rechazar. '[]' = sin sugerencia.
     if "hashtags_sugeridos" not in cols:

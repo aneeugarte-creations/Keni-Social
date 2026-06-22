@@ -57,6 +57,7 @@ _SELECT_PUBLICACION = (
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
     "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
     "cp.foto_encuadre AS foto_encuadre, cp.fotos AS fotos, cp.carrusel AS carrusel, "
+    "cp.variante AS variante, "
     "cp.hashtags_sugeridos AS hashtags_sugeridos, "
     "cp.verificar_auto_hash AS verificar_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
@@ -112,6 +113,10 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # FORMATO de la pieza (foto|video): heredado del `contenido` padre. Decide a qué redes
         # va (`redes.redes_de_formato`). BD vieja / sin valor -> 'foto' (el flujo automático).
         "formato": f["formato"] or "foto",
+        # VARIANTE de la pieza (foto|carrusel): qué versión es dentro del mismo contenido. La
+        # conversión a carrusel crea una variante nueva junto a la foto (no la pisa). BD vieja /
+        # sin valor -> 'foto'.
+        "variante": f["variante"] or "foto",
         # ESPEJO entre redes (propiedad del padre, default ON): editar el contenido de esta
         # pieza propaga los mismos campos a sus redes hermanas (api/piezas lo aplica).
         "espejo": bool(f["espejo"]) if f["espejo"] is not None else True,
@@ -656,6 +661,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "foto_encuadre": "foto_encuadre",
     "fotos": "fotos",
     "carrusel": "carrusel",
+    "variante": "variante",
     "hashtags_sugeridos": "hashtags_sugeridos",
     # Keyword de búsqueda de foto: la etapa Sugerir hashtags la escribe gemela en todas las redes.
     "imagen_clave": "imagen_clave",

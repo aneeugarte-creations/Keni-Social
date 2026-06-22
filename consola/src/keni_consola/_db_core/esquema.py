@@ -482,6 +482,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- imagen compuesta de siempre). JSON array `[{"tipo":"imagen"|"video","objeto":id}, …]`
         -- en el ORDEN de publicación; "" = sin slides extra (o pieza de otro formato).
         carrusel              TEXT NOT NULL DEFAULT '',
+        -- `variante`: qué VERSIÓN de la pieza es, dentro de un mismo `contenido` (foto|carrusel).
+        -- Una conversión a carrusel NO sobrescribe la foto: crea una variante NUEVA junto a ella;
+        -- el feed muestra ambas como hermanas y el equipo elige cuál publica. Default 'foto' (toda
+        -- pieza legada y el flujo normal son foto). El formato de cada variante se deriva de aquí.
+        variante              TEXT NOT NULL DEFAULT 'foto',
         -- `hashtags_sugeridos`: sugerencia de la etapa `sugerir_hashtags` (tras Redactar). JSON
         -- array de strings CON '#' que el feed propone en gris para aceptar/rechazar de un clic.
         -- '[]' = sin sugerencia (o la pieza ya lleva hashtags). No es parte del copy hasta que un
