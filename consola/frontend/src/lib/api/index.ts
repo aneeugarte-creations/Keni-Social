@@ -46,6 +46,7 @@ import { apiNoticias } from "./noticias";
 import { apiFuentesAcciones } from "./fuentesAcciones";
 import { apiMarcas } from "./marcas";
 import { apiRalph } from "./ralph";
+import { apiVistas } from "./vistas";
 
 /** Cliente fetch tipado de la Consola Keni: composición de todos los fragmentos. */
 export const api = {
@@ -94,6 +95,7 @@ export const api = {
   ...apiFuentesAcciones,
   ...apiMarcas,
   ...apiRalph,
+  ...apiVistas,
 };
 
 // Helpers + clase de error que consumen páginas/componentes vía `@/lib/api`.

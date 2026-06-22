@@ -119,6 +119,8 @@ beforeEach(() => {
     etiqueta_rango: "Corte de prueba (1–7 jun)",
     generado_en: "2026-06-10T12:00:00Z",
   });
+  // El control de Vistas guardadas (cabecera) lista al montar; sin datos en estos tests.
+  vi.spyOn(apiMod.api, "vistas").mockResolvedValue({ vistas: [] });
 });
 
 afterEach(() => {

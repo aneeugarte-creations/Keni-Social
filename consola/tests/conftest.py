@@ -405,6 +405,7 @@ _APP_POR_STEM: dict[str, str] = {
     # App B · Metricas (api/metricas, campanias).
     "test_api_metricas": "app_metricas",
     "test_api_campanias": "app_metricas",
+    "test_api_vistas": "app_metricas",
     # App C · Operacion (piezas, aprobacion, franjas, rota...).
     "test_api_publicaciones": "app_operacion",
     "test_api_publicaciones_contenido": "app_operacion",

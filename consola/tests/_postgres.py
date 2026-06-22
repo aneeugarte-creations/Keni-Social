@@ -41,6 +41,7 @@ _TABLAS = (
     "tokens_mcp",
     "usuarios",
     "campanias",
+    "vistas_metricas",
     "gasto_ia",
     "metricas_pieza_snapshots",
     "rota_turnos",

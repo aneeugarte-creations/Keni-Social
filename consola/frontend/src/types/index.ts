@@ -101,3 +101,4 @@ export * from "./catalogo";
 export * from "./prompts";
 export * from "./noticias";
 export * from "./marcas";
+export * from "./vistas";

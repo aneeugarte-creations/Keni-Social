@@ -79,6 +79,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON enlaces_publicos_campania (token)",
     "CREATE INDEX IF NOT EXISTS idx_enlaces_publicos_campania_campania "
     "ON enlaces_publicos_campania (campania_id)",
+    # Vistas guardadas del dashboard de Analíticas: presets nombrados que congelan la
+    # configuración de vista (`config`, el `VistaConfig` serializable de la capa de
+    # presentación: red en foco, secciones visibles, orden/ocultas de columnas) MÁS la
+    # marca (id canónico; '' = todas) y el periodo (token de `?periodo=`), para recuperar de
+    # un clic un corte completo (p. ej. "Claro Sports IG dirección"). Son COMPARTIDAS por el
+    # equipo (piloto AMX): cualquiera las ve, aplica y borra; `autor_*` es solo atribución.
+    """
+    CREATE TABLE IF NOT EXISTS vistas_metricas (
+        id                   TEXT PRIMARY KEY,
+        nombre               TEXT NOT NULL DEFAULT '',
+        marca                TEXT NOT NULL DEFAULT '',
+        periodo              TEXT NOT NULL DEFAULT '',
+        config               TEXT NOT NULL DEFAULT '{}',
+        autor_id             TEXT NOT NULL DEFAULT '',
+        autor_nombre         TEXT NOT NULL DEFAULT '',
+        fecha_creacion       TEXT NOT NULL DEFAULT '',
+        fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+    )
+    """,
     # Histórico de métricas por pieza para TODAS las piezas (no solo el módulo
     # comercial): una fila por pieza por refresco del daemon, para análisis temporales
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de

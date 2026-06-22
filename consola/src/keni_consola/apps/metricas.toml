@@ -18,6 +18,7 @@ permisos = ["editor", "admin"]
 modulos_backend = [
   "metricas",
   "campanias",
+  "vistas",
 ]
 
 rutas_frontend = [

@@ -126,6 +126,13 @@ from .db_enlaces_publicos import (  # noqa: F401
     listar_enlaces_de_campania,
     obtener_enlace_por_token,
 )
+from .db_vistas import (  # noqa: F401
+    actualizar_vista,
+    borrar_vista,
+    crear_vista,
+    listar_vistas,
+    obtener_vista,
+)
 from .db_publicacion import (  # noqa: F401
     ConflictoVersion,
     actualizar_publicacion,

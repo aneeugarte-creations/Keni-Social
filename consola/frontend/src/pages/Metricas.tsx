@@ -48,6 +48,7 @@ import { SeccionAds } from "./metricas/SeccionAds";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
+import { VistasGuardadas } from "./metricas/VistasGuardadas";
 
 /**
  * Dashboard de Métricas multi-marca.
@@ -229,6 +230,15 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       <SelectorRed />
       {/* Panel "Configurar vista": qué secciones se muestran y orden/visibilidad de columnas. */}
       <ConfiguracionVista />
+      {/* Vistas guardadas: presets nombrados (config de vista + marca + periodo). */}
+      <VistasGuardadas
+        marcaActual={marcaActiva}
+        periodoActual={rango}
+        onAplicar={(marca, periodo) => {
+          cambiarMarca(marca);
+          cambiarRango(periodo);
+        }}
+      />
       {/* Descargar es una ACCIÓN global de la página: dos botones, CSV (hoja de cálculo) y
           PDF (presentación 16:9 del estado vivo). Actualizar vive en el menú "⋮". */}
       <BotonesDescarga
