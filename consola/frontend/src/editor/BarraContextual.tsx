@@ -113,7 +113,8 @@ function Stepper({ valor, onChange, min = 1, max = 9999, paso = 1, ancho = "w-12
 
   const fija = (v: number) => onChange(Math.max(min, Math.min(max, v)));
   const commitear = () => {
-    const v = Number(edicion);
+    // Campo vacío: no lo trates como 0 (saltaría al mínimo); restablece el valor actual.
+    const v = edicion.trim() === "" ? NaN : Number(edicion);
     if (!isNaN(v)) fija(v);
     setEdicion(String(Math.round(valor)));
   };
@@ -258,7 +259,8 @@ function FilaSlider({ etiqueta, valor, min, max, paso, decimales = 0, onChange }
   const fija = (v: number) => onChange(Math.max(min, Math.min(max, v)));
   const commitear = () => {
     if (edicion !== null) {
-      const v = Number(edicion);
+      // Campo vacío: no lo trates como 0 (saltaría al mínimo); conserva el valor actual.
+      const v = edicion.trim() === "" ? NaN : Number(edicion);
       if (!isNaN(v)) fija(v);
     }
     setEdicion(null);

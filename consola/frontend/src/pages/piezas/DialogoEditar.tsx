@@ -200,7 +200,11 @@ export function DialogoEditar({
           toast("La IA no vio material para un carrusel; añade los slides a mano.");
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // La recarga falló: avisa y deja que el refetch de la lista traiga los slides horneados.
+        toast.error("No se pudieron recargar los slides; refrescando la lista.");
+        void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
+      })
       .finally(() => limpiarGenCarrusel());
     void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });

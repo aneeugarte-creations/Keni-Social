@@ -370,6 +370,7 @@ export function crearStoreEditor(inicial: Documento) {
         if (sel.length < 3) return;
         aplicar((doc) => {
           const elegidas = doc.capas.filter((c) => sel.includes(c.id));
+          if (elegidas.length < 3) return doc;
           // Reparte los ORÍGENES VISIBLES (cajaVisual: la banda del overlay, el bloque del texto
           // legado), no la esquina del modelo: el resultado en pantalla queda uniforme y la
           // conversión se deshace al escribir (contrato de almacenamiento intacto).

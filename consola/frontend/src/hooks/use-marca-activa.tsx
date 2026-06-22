@@ -47,10 +47,10 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
   const marcaPrimaria = marcasUsuario[0] ?? null;
 
-  // Catálogo canónico de marcas (id → nombre). Se cachea indefinidamente: es el
-  // mismo que ya consumen Estudio/Piezas, así que no añade carga.
+  // Catálogo canónico de marcas (id → nombre). Mismo endpoint y queryKey que las páginas de
+  // Piezas/Estudio (`["piezas","opciones"]`): comparten caché y se resuelve una sola vez.
   const catalogoQuery = useQuery({
-    queryKey: ["marcas-catalogo"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     staleTime: Infinity,
   });

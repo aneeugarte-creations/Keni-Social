@@ -33,17 +33,15 @@ function subFixture(): Subtitulo {
   };
 }
 
-function renderEditor() {
+function renderEditor(composicionId = "comp-7") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const tree = (id: string) => (
     <QueryClientProvider client={client}>
-      <EditorSubtitulos
-        composicionId="comp-7"
-        baseMediaId="videos/abc.mp4"
-        onSubtituloLigado={vi.fn()}
-      />
-    </QueryClientProvider>,
+      <EditorSubtitulos composicionId={id} baseMediaId="videos/abc.mp4" onSubtituloLigado={vi.fn()} />
+    </QueryClientProvider>
   );
+  const utils = render(tree(composicionId));
+  return { ...utils, cambiarComposicion: (id: string) => utils.rerender(tree(id)) };
 }
 
 describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
@@ -101,6 +99,33 @@ describe("EditorSubtitulos (respaldo de correcciones sin guardar)", () => {
     await waitFor(() =>
       expect(screen.queryByText(/cambios sin guardar/i)).not.toBeInTheDocument(),
     );
+  });
+
+  it("al cambiar de composición resetea el estado y no cruza correcciones", async () => {
+    vi.spyOn(apiMod.api.video, "subtitulosDe").mockImplementation(async (id: string) =>
+      id === "comp-7"
+        ? { subtitulo: subFixture() }
+        : {
+            subtitulo: {
+              ...subFixture(),
+              id: "sub-9",
+              composicion_id: "comp-9",
+              segmentos: [{ id: "seg-0", inicio: 0, fin: 2, texto: "otra composicion" }],
+            },
+          },
+    );
+    const { cambiarComposicion } = renderEditor("comp-7");
+    const caja = await screen.findByDisplayValue("ola desde mejico");
+    fireEvent.change(caja, { target: { value: "Hola desde México" } });
+    await screen.findByDisplayValue("Hola desde México");
+
+    cambiarComposicion("comp-9");
+
+    // Aparece el texto de la nueva composición; la corrección de la anterior no se cuela.
+    expect(await screen.findByDisplayValue("otra composicion")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Hola desde México")).not.toBeInTheDocument();
+    // El respaldo de comp-9 no hereda las correcciones de comp-7.
+    expect(sessionStorage.getItem("keni:video:subs:comp-9")).toBeNull();
   });
 
   it("un respaldo corrupto se descarta con console.warn y gana el dato del servidor", async () => {

@@ -173,27 +173,44 @@ export const useRalphStore = create<EstadoRalphStore>((set, get) => {
       const limpio = texto.trim();
       if (!limpio) return;
       // Eco optimista del mensaje del humano; la respuesta del Ralph llega por SSE.
+      const msgId = nuevoIdMensaje();
       set((s) => ({
         conversaciones: {
           ...s.conversaciones,
           [id]: [
             ...(s.conversaciones[id] ?? []),
-            { id: nuevoIdMensaje(), autor: "tu", texto: limpio, creado: new Date().toISOString() },
+            { id: msgId, autor: "tu", texto: limpio, creado: new Date().toISOString() },
           ],
         },
       }));
       conectar(id);
-      await apiRalph.mensajeRalph(id, limpio);
+      try {
+        await apiRalph.mensajeRalph(id, limpio);
+      } catch (e) {
+        // El envío falló: retira el eco para no mostrarlo como entregado y propaga el error.
+        set((s) => ({
+          conversaciones: {
+            ...s.conversaciones,
+            [id]: (s.conversaciones[id] ?? []).filter((m) => m.id !== msgId),
+          },
+        }));
+        throw new Error(mensajeError(e));
+      }
     },
 
     matar: async (id) => {
-      await apiRalph.killRalph(id);
-      desconectar(id);
-      set((s) => ({
-        ralphs: s.ralphs.filter((r) => r.id !== id),
-        seleccionado: s.seleccionado === id ? null : s.seleccionado,
-        escribiendo: { ...s.escribiendo, [id]: false },
-      }));
+      try {
+        await apiRalph.killRalph(id);
+      } finally {
+        // Cierra el stream y limpia el estado del Ralph pase lo que pase: si killRalph
+        // rechaza, el EventSource no debe quedar colgado.
+        desconectar(id);
+        set((s) => ({
+          ralphs: s.ralphs.filter((r) => r.id !== id),
+          seleccionado: s.seleccionado === id ? null : s.seleccionado,
+          escribiendo: { ...s.escribiendo, [id]: false },
+        }));
+      }
     },
 
     appendDelta: (id, delta) =>

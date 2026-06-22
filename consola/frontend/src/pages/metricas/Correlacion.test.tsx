@@ -157,7 +157,7 @@ describe("Correlacion (seguidores vs publicación)", () => {
     );
 
     expect(
-      await screen.findByText(/Insuficientes observaciones \(n < 10\)/),
+      await screen.findByText(/Insuficientes observaciones \(n < 8\)/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/ρ de Spearman/)).not.toBeInTheDocument();
   });

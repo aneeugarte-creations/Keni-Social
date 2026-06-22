@@ -16,7 +16,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
-import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
+import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
 import { colorLinea, ETIQUETA_LINEA } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
@@ -390,7 +390,7 @@ export function VistaCalendario({
     [slotsPorDiaCdmx, porDia, mostrarHuecosPlan],
   );
 
-  const hoy = claveDia(new Date());
+  const hoy = hoyCDMX();
 
   /** Mueve la pieza al día `diaClave` conservando su hora; no-op si ya está ese día. */
   function moverADia(diaClave: string, idArrastrada: string) {

@@ -99,7 +99,7 @@ function ResumenCorrelacion({ items }: { items: ItemCorrelacion[] }) {
   const pares = plural(n, "par día–red", "pares día–red");
   const texto =
     n < N_MINIMA_CORRELACION
-      ? `Insuficientes observaciones (n < 10)`
+      ? `Insuficientes observaciones (n < ${N_MINIMA_CORRELACION})`
       : rho == null
         ? `Correlación no calculable: sin variación en los datos (${pares}).`
         : `Correlación (ρ de Spearman, robusta a valores extremos): ${rho.toLocaleString(

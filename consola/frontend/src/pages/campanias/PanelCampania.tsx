@@ -215,20 +215,23 @@ type ClaveOrdenRed =
   | "guardados"
   | "engagement_pct";
 
+// Identidad estable: es dependencia del `useMemo` de `useOrdenTabla` (un literal inline lo anularía).
+const ACCESORES_RED: Record<ClaveOrdenRed, (f: DesgloseRedCampania) => number> = {
+  piezas: (f) => f.piezas,
+  visualizaciones: (f) => f.visualizaciones,
+  interacciones: (f) => f.interacciones,
+  likes: (f) => f.likes,
+  comentarios: (f) => f.comentarios,
+  compartidos: (f) => f.compartidos,
+  guardados: (f) => f.guardados,
+  engagement_pct: (f) => f.engagement_pct,
+};
+
 /** Tabla de agregados por red: dónde y cómo rinde la campaña (ordenable por columna). */
 function DesgloseRedTabla({ filas }: { filas: DesgloseRedCampania[] }) {
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<DesgloseRedCampania, ClaveOrdenRed>(
     filas,
-    {
-      piezas: (f) => f.piezas,
-      visualizaciones: (f) => f.visualizaciones,
-      interacciones: (f) => f.interacciones,
-      likes: (f) => f.likes,
-      comentarios: (f) => f.comentarios,
-      compartidos: (f) => f.compartidos,
-      guardados: (f) => f.guardados,
-      engagement_pct: (f) => f.engagement_pct,
-    },
+    ACCESORES_RED,
     { clave: "visualizaciones", direccion: "desc" },
   );
 
@@ -340,19 +343,25 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
     [piezas, red, formato],
   );
 
+  // Identidad estable (dependencia del `useMemo` de `useOrdenTabla`); solo cambia con `ocultarAds`,
+  // del que depende el accesor de visualizaciones.
+  const accesores = React.useMemo(
+    () => ({
+      titulo: (p: PiezaCampania) => p.titulo.toLowerCase(),
+      red: (p: PiezaCampania) => nombreRed(p.red),
+      marca: (p: PiezaCampania) => p.marca,
+      formato: (p: PiezaCampania) => nombreFormato(p.formato),
+      publicado: (p: PiezaCampania) => p.publicado,
+      visualizaciones: (p: PiezaCampania) => visEfectivas(p, ocultarAds),
+      visualizaciones_pagadas: (p: PiezaCampania) => p.visualizaciones_pagadas,
+      interacciones: (p: PiezaCampania) => p.interacciones,
+      engagement_pct: (p: PiezaCampania) => p.engagement_pct,
+    }),
+    [ocultarAds],
+  );
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<PiezaCampania, ClaveOrdenPieza>(
     filtradas,
-    {
-      titulo: (p) => p.titulo.toLowerCase(),
-      red: (p) => nombreRed(p.red),
-      marca: (p) => p.marca,
-      formato: (p) => nombreFormato(p.formato),
-      publicado: (p) => p.publicado,
-      visualizaciones: (p) => visEfectivas(p, ocultarAds),
-      visualizaciones_pagadas: (p) => p.visualizaciones_pagadas,
-      interacciones: (p) => p.interacciones,
-      engagement_pct: (p) => p.engagement_pct,
-    },
+    accesores,
     { clave: "visualizaciones", direccion: "desc" },
   );
 

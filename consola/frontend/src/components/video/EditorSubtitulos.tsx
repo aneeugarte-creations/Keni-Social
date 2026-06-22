@@ -47,7 +47,13 @@ const ETIQUETA_ESTADO: Record<EstadoSubtitulos, string> = {
   listo: "Listo",
 };
 
-export function EditorSubtitulos({
+export function EditorSubtitulos(props: EditorSubtitulosProps) {
+  // Cada composición tiene sus propios subtítulos: keyamos por su identidad para que el editor
+  // arranque con estado limpio al cambiar de composición y nunca crucen correcciones entre ellas.
+  return <EditorSubtitulosComposicion key={props.composicionId ?? "sin-composicion"} {...props} />;
+}
+
+function EditorSubtitulosComposicion({
   composicionId,
   baseMediaId,
   onSubtituloLigado,

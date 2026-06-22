@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { hoyCDMX } from "@/lib/fecha";
 import { api, mensajeError } from "@/lib/api";
 import type { Campania } from "@/types";
 
@@ -34,32 +35,34 @@ import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
 
 /**
- * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye hoy), en fecha
- * LOCAL. El backend (`resolver_rango`) lo entiende igual que los presets. Las campañas
- * abarcan semanas o meses, así que no basta con la ventana de 30 días: un post con el
- * hashtag publicado hace 2 meses (p. ej. de un evento) debe poder verse ampliando el periodo.
+ * Token `rango:AAAA-MM-DD_AAAA-MM-DD` de los últimos `n` días (incluye `hoy`, día CDMX).
+ * El backend (`resolver_rango`) lo entiende igual que los presets. Las campañas abarcan
+ * semanas o meses, así que no basta con la ventana de 30 días: un post con el hashtag
+ * publicado hace 2 meses (p. ej. de un evento) debe poder verse ampliando el periodo.
  */
-function tokenUltimosDias(n: number): string {
-  const hasta = new Date();
-  const desde = new Date();
-  desde.setDate(desde.getDate() - (n - 1));
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return `rango:${iso(desde)}_${iso(hasta)}`;
+function tokenUltimosDias(hoy: string, n: number): string {
+  // Aritmética de días anclada a mediodía UTC para que no desplace el día calendario.
+  const d = new Date(`${hoy}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - (n - 1));
+  return `rango:${d.toISOString().slice(0, 10)}_${hoy}`;
 }
-
-// Periodos ofrecidos para la analítica (tokens que entiende el backend). Los más largos
-// se calculan al cargar como rango personalizado; el backend acota a 366 días.
-const RANGOS: { id: string; etiqueta: string }[] = [
-  { id: "semana", etiqueta: "Última semana" },
-  { id: "mes", etiqueta: "Últimos 30 días" },
-  { id: tokenUltimosDias(90), etiqueta: "Últimos 90 días" },
-  { id: tokenUltimosDias(180), etiqueta: "Últimos 6 meses" },
-];
 
 export default function Campanias() {
   const queryClient = useQueryClient();
   const [rango, setRango] = React.useState("mes");
+
+  // Periodos ofrecidos para la analítica (tokens que entiende el backend). Los más largos se
+  // calculan respecto al día CDMX de HOY; recalcula al cambiar de día (no congelados al cargar).
+  const hoy = hoyCDMX();
+  const RANGOS = React.useMemo(
+    () => [
+      { id: "semana", etiqueta: "Última semana" },
+      { id: "mes", etiqueta: "Últimos 30 días" },
+      { id: tokenUltimosDias(hoy, 90), etiqueta: "Últimos 90 días" },
+      { id: tokenUltimosDias(hoy, 180), etiqueta: "Últimos 6 meses" },
+    ],
+    [hoy],
+  );
   const [seleccionada, setSeleccionada] = React.useState<string | null>(null);
   // Modo cliente: oculta TODO lo de Ads (el cliente no debe ver que se usó pauta) y suma las
   // visualizaciones pagadas a las orgánicas. Persiste para que aguante al recargar/compartir.
