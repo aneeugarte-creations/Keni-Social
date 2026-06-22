@@ -8,7 +8,7 @@
  * campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckSquare, Download, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
+import { CheckSquare, Download, Link2, Megaphone, Pencil, Plus, Square, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -31,6 +31,7 @@ import type { Campania } from "@/types";
 
 import { CLAVE_CAMPANIAS } from "./campanias/claves";
 import { DialogoCampania } from "./campanias/DialogoCampania";
+import { DialogoEnlacesPublicos } from "./campanias/DialogoEnlacesPublicos";
 import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
 
@@ -81,6 +82,7 @@ export default function Campanias() {
   }, [ocultarAds]);
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState<Campania | null>(null);
+  const [enlacesAbierto, setEnlacesAbierto] = React.useState(false);
 
   // Las campañas son MULTIMARCA: no se acotan al switch de marca de la barra; se listan
   // todas. La elección de marcas vive en el diálogo (sobre las marcas de la persona).
@@ -179,6 +181,12 @@ export default function Campanias() {
                   >
                     Eliminar campaña
                   </ItemMenu>
+                  {/* Enlace público: capability-URL de solo lectura para compartir SOLO esta
+                      campaña (sin login). Congela el periodo y el modo actuales. */}
+                  <div role="separator" className="my-1 h-px bg-border" />
+                  <ItemMenu icono={Link2} onClick={() => setEnlacesAbierto(true)}>
+                    Enlace público…
+                  </ItemMenu>
                   {/* Descargas de la analítica del periodo activo. Respeta el modo cliente
                       (`ocultarAds`): si está activo, el archivo sale sin rastro de pauta. */}
                   <div role="separator" className="my-1 h-px bg-border" />
@@ -245,6 +253,14 @@ export default function Campanias() {
         abierto={dialogoAbierto}
         campania={editando}
         onCerrar={() => setDialogoAbierto(false)}
+      />
+
+      <DialogoEnlacesPublicos
+        abierto={enlacesAbierto}
+        campania={campaniaActual}
+        rango={rango}
+        ocultarAds={ocultarAds}
+        onCerrar={() => setEnlacesAbierto(false)}
       />
     </>
   );

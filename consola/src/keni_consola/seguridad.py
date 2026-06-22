@@ -348,6 +348,22 @@ def _es_media_publica(metodo: str, ruta: str) -> bool:
         and ruta not in _MEDIA_NO_PUBLICA
     )
 
+
+# GET del informe PUBLICO de una campania (`/api/publico/campania/<token>`) SIN credencial:
+# es una CAPABILITY URL como la de media. El token (token_urlsafe, indescifrable) es la unica
+# llave y mapea a UNA campania de solo lectura; el handler no expone ninguna otra. Solo GET:
+# crear/revocar enlaces (POST/DELETE bajo `/api/campanias/...`) sigue exigiendo sesion.
+_PREFIJO_PUBLICO_CAMPANIA = "/api/publico/campania/"
+
+
+def _es_publica_campania(metodo: str, ruta: str) -> bool:
+    """True si es el GET publico del informe de una campania por token (capability URL)."""
+    return (
+        metodo == "GET"
+        and ruta.startswith(_PREFIJO_PUBLICO_CAMPANIA)
+        and len(ruta) > len(_PREFIJO_PUBLICO_CAMPANIA)
+    )
+
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
 # servidor, no solo en el frontend). El token de mantenimiento NO tiene usuario asociado,
@@ -407,7 +423,11 @@ class SeguridadConsola:
         estado["usuario"] = None
         estado["auth_por_token"] = False
 
-        publica = ruta in _RUTAS_API_PUBLICAS or _es_media_publica(metodo, ruta)
+        publica = (
+            ruta in _RUTAS_API_PUBLICAS
+            or _es_media_publica(metodo, ruta)
+            or _es_publica_campania(metodo, ruta)
+        )
         if not publica:
             # 1) Credencial: sesion valida (cookie) O token interino (si esta configurado).
             usuario = self._usuario_de_sesion(scope)

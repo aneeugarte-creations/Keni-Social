@@ -106,6 +106,19 @@ def test_get_de_objeto_de_media_es_publico(entorno):
     assert c.get("/api/media/generar").status_code in (401, 405)
 
 
+def test_get_publico_de_campania_es_publico(entorno):
+    """`GET /api/publico/campania/<token>` pasa SIN credencial (capability URL del informe de
+    una campania). Un token inexistente da 404 del handler, NUNCA 401 de auth. Crear/listar/
+    revocar enlaces (bajo `/api/campanias/...`) SI exige sesion."""
+    c = _cli_sin_auth()
+    # Token inexistente: el middleware lo deja pasar (404 del handler, no 401 de auth).
+    assert c.get("/api/publico/campania/token-que-no-existe").status_code == 404
+    # La gestion de enlaces NO es publica: exige sesion (GET/POST/DELETE).
+    assert c.get("/api/campanias/x/enlaces").status_code in (401, 403)
+    assert c.post("/api/campanias/x/enlaces").status_code in (401, 403)
+    assert c.delete("/api/campanias/x/enlaces/y").status_code in (401, 403)
+
+
 # --------------------------------------------------------------------------- #
 # 2) Proteccion CSRF en mutaciones (Origin/Referer)                            #
 # --------------------------------------------------------------------------- #

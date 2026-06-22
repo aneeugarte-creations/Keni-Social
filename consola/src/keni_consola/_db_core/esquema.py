@@ -59,6 +59,26 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fecha_actualizacion  TEXT NOT NULL DEFAULT ''
     )
     """,
+    # Enlaces PÚBLICOS de una campaña: capability-URL de solo lectura. El `token`
+    # (indescifrable) es la única llave: resuelve a UNA campaña y un periodo+modo CONGELADOS
+    # (`rango` absoluto + `ocultar_ads`), nada más. `expira` (ISO UTC, '' = sin caducidad) y
+    # `desactivado` permiten caducar/revocar. Mismo modelo de autorización que `/api/media/<id>`.
+    """
+    CREATE TABLE IF NOT EXISTS enlaces_publicos_campania (
+        id            TEXT PRIMARY KEY,
+        campania_id   TEXT NOT NULL,
+        token         TEXT NOT NULL UNIQUE,
+        rango         TEXT NOT NULL DEFAULT 'mes',
+        ocultar_ads   INTEGER NOT NULL DEFAULT 1,
+        creado        TEXT NOT NULL DEFAULT '',
+        expira        TEXT NOT NULL DEFAULT '',
+        desactivado   INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_enlaces_publicos_campania_token "
+    "ON enlaces_publicos_campania (token)",
+    "CREATE INDEX IF NOT EXISTS idx_enlaces_publicos_campania_campania "
+    "ON enlaces_publicos_campania (campania_id)",
     # Histórico de métricas por pieza para TODAS las piezas (no solo el módulo
     # comercial): una fila por pieza por refresco del daemon, para análisis temporales
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de

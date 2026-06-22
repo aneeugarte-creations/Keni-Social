@@ -18,8 +18,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import secrets
 import unicodedata
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from keni_metricas import servicio
@@ -526,3 +527,83 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "piezas": tabla,
         "generado_en": ahora_iso(),
     }
+
+
+# --- Enlaces públicos (capability-URL de solo lectura) ------------------------
+#
+# Un enlace mapea un token indescifrable a UNA campaña y un periodo+modo CONGELADOS. El
+# destinatario abre el enlace (sin login) y ve SOLO esa campaña; el token es la única llave
+# y no permite listar ni saltar a otra. Caduca (def. 90 días) y se puede revocar.
+
+DIAS_CADUCIDAD_ENLACE = 90
+
+
+def _rango_congelado(rango: str) -> str:
+    """Convierte un rango (incl. presets rodantes como 'mes') a un token ABSOLUTO
+    `rango:desde_hasta`, para que el enlace muestre siempre la misma ventana que el PDF."""
+    desde, hasta, _dias = servicio.resolver_rango(rango)
+    return f"rango:{desde.isoformat()}_{hasta.isoformat()}"
+
+
+def _enlace_publico(e: dict[str, Any]) -> dict[str, Any]:
+    """Forma de salida de un enlace (sin exponer nada que no sea su metadato)."""
+    return {
+        "id": e["id"],
+        "token": e["token"],
+        "campania_id": e["campania_id"],
+        "rango": e["rango"],
+        "ocultar_ads": bool(e["ocultar_ads"]),
+        "creado": e["creado"],
+        "expira": e["expira"],
+        "desactivado": bool(e["desactivado"]),
+        "vigente": _esta_vigente(e),
+    }
+
+
+def _esta_vigente(e: dict[str, Any]) -> bool:
+    """True si el enlace no está revocado ni caducado."""
+    if e["desactivado"]:
+        return False
+    expira = e.get("expira") or ""
+    return not expira or ahora_iso() < expira
+
+
+def crear_enlace_publico(
+    campania_id: str, *, rango: str = RANGO_DEF, ocultar_ads: bool = True
+) -> dict[str, Any] | None:
+    """Crea un enlace público para una campaña (None si la campaña no existe).
+
+    El periodo se CONGELA a fechas absolutas y se guarda el modo (`ocultar_ads`): el enlace
+    muestra exactamente lo que se decidió compartir. Caduca en `DIAS_CADUCIDAD_ENLACE` días.
+    """
+    if obtener_campania(campania_id) is None:
+        return None
+    expira = (
+        datetime.now(UTC).replace(tzinfo=None) + timedelta(days=DIAS_CADUCIDAD_ENLACE)
+    ).isoformat(timespec="seconds")
+    e = repos.crear_enlace_publico(
+        campania_id=campania_id,
+        token=secrets.token_urlsafe(32),
+        rango=_rango_congelado(rango),
+        ocultar_ads=bool(ocultar_ads),
+        expira=expira,
+    )
+    return _enlace_publico(e)
+
+
+def listar_enlaces_publicos(campania_id: str) -> list[dict[str, Any]]:
+    """Enlaces de una campaña (más recientes primero), con su estado de vigencia."""
+    return [_enlace_publico(e) for e in repos.listar_enlaces_de_campania(campania_id)]
+
+
+def revocar_enlace_publico(enlace_id: str, campania_id: str) -> bool:
+    """Revoca un enlace (corta el acceso a todos al instante). True si existía."""
+    return repos.desactivar_enlace_publico(enlace_id, campania_id)
+
+
+def enlace_publico_vigente(token: str) -> dict[str, Any] | None:
+    """Devuelve el enlace si el token existe y está vigente (ni revocado ni caducado)."""
+    e = repos.obtener_enlace_por_token(token)
+    if e is None or not _esta_vigente(e):
+        return None
+    return _enlace_publico(e)

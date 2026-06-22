@@ -76,6 +76,10 @@ const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
 // AppShell: se abre, avisa al panel y se cierra. No se registra en el catálogo de apps.
 const OauthConectado = lazy(() => import("@/pages/OauthConectado"));
 
+// Informe PÚBLICO de campaña (`/c/:token`): capability-URL de solo lectura, sin login ni
+// sidebar. Vive FUERA del AppShell (layout propio); el token es la única llave.
+const InformePublico = lazy(() => import("@/pages/InformePublico"));
+
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const DetalleSugerenciaPagina = lazy(
@@ -139,6 +143,24 @@ export const router = createBrowserRouter([
           }
         >
           <OauthConectado />
+        </Suspense>
+      </FronteraError>
+    ),
+  },
+  // Informe público de campaña: ruta hermana del AppShell (sin sesión ni sidebar). El token
+  // (capability-URL) es la única llave; la página marca `noindex`.
+  {
+    path: "/c/:token",
+    element: (
+      <FronteraError>
+        <Suspense
+          fallback={
+            <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+            </div>
+          }
+        >
+          <InformePublico />
         </Suspense>
       </FronteraError>
     ),

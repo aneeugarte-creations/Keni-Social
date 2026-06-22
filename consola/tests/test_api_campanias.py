@@ -438,3 +438,110 @@ def test_export_modo_cliente_oculta_la_pauta(cliente, monkeypatch):
 def test_export_campania_inexistente_es_404(cliente):
     r = cliente.get("/api/campanias/nada/export?fmt=csv")
     assert r.status_code == 404
+
+
+# --- Enlaces públicos (capability-URL de solo lectura) ------------------------
+
+
+def _crear_enlace(cliente, campania_id, **cuerpo):
+    return cliente.post(f"/api/campanias/{campania_id}/enlaces", json=cuerpo)
+
+
+def test_enlace_publico_crear_y_ver(cliente, monkeypatch):
+    """Crear un enlace y abrir `/api/publico/campania/{token}` devuelve la analítica de ESA
+    campaña (solo lectura), con la cabecera `noindex`."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(
+        campanias.servicio,
+        "construir_listado_piezas",
+        lambda *a, **k: [{
+            "id": "ig1", "red": "instagram", "titulo": "Post", "texto": "x #Chihuahua",
+            "publicado": "2026-06-01", "url": "", "formato": "foto", "engagement_pct": 5.0,
+            "interacciones": 100, "visualizaciones": 1000, "cuenta": "unotv",
+        }],
+    )
+    r = _crear_enlace(cliente, cam["id"])
+    assert r.status_code == 201, r.text
+    token = r.json()["enlace"]["token"]
+    assert r.json()["enlace"]["vigente"] is True
+    # El periodo se congela a fechas absolutas (token `rango:desde_hasta`).
+    assert r.json()["enlace"]["rango"].startswith("rango:")
+
+    pub = cliente.get(f"/api/publico/campania/{token}")
+    assert pub.status_code == 200, pub.text
+    assert pub.headers.get("x-robots-tag") == "noindex"
+    datos = pub.json()
+    assert datos["campania"]["id"] == cam["id"]
+    assert datos["kpis"]["visualizaciones"] == 1000
+
+
+def test_enlace_publico_modo_cliente_no_filtra_pauta(cliente, monkeypatch):
+    """Un enlace con `ocultar_ads` (def.) NO envía rastro de pauta: inorgánico a cero y sin
+    `visualizaciones_pagadas` positivas; lo pagado se funde en las vistas."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
+
+    monkeypatch.setattr(
+        campanias.servicio, "construir_listado_piezas",
+        lambda *a, **k: [{
+            "id": "ig1", "red": "instagram", "titulo": "Reportaje", "texto": f"{cuerpo} #Chihuahua",
+            "publicado": "2026-06-01", "url": "", "formato": "reel", "engagement_pct": 5.0,
+            "interacciones": 100, "visualizaciones": 1000, "cuenta": "claro_sports",
+        }],
+    )
+    monkeypatch.setattr(
+        campanias.servicio, "construir_ads",
+        lambda *a, **k: [{
+            "nombre": f'Publicación: "{cuerpo}"', "red": "facebook", "impresiones": 5000,
+            "gasto": 300.0, "clics": 100, "moneda": "MXN", "inicio": "2026-06-01",
+            "es_post_impulsado": True, "caption": cuerpo, "cuenta": "claro_sports",
+        }],
+    )
+    token = _crear_enlace(cliente, cam["id"]).json()["enlace"]["token"]
+    datos = cliente.get(f"/api/publico/campania/{token}").json()
+
+    assert datos["ocultar_ads"] is True
+    assert datos["inorganico"]["visualizaciones"] == 0
+    assert all(p["visualizaciones_pagadas"] == 0 for p in datos["piezas"])
+    # El boost se fundió como una pieza normal de 5000 vistas; ninguna fila marca inorgánico.
+    assert any(p["visualizaciones"] == 5000 for p in datos["piezas"])
+    assert all(not p["es_inorganico"] for p in datos["piezas"])
+
+
+def test_enlace_publico_con_ads_si_los_muestra(cliente, monkeypatch):
+    """Si el enlace se crea con `ocultar_ads=false`, el payload SÍ trae el inorgánico."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    token = _crear_enlace(cliente, cam["id"], ocultar_ads=False).json()["enlace"]["token"]
+    datos = cliente.get(f"/api/publico/campania/{token}").json()
+    assert datos["ocultar_ads"] is False
+    assert "inorganico" in datos
+
+
+def test_enlace_publico_token_invalido_es_404(cliente):
+    assert cliente.get("/api/publico/campania/no-existe").status_code == 404
+
+
+def test_enlace_publico_revocado_corta_el_acceso(cliente, monkeypatch):
+    """Revocar un enlace lo invalida: el token deja de servir (404) y la lista lo marca."""
+    cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    creado = _crear_enlace(cliente, cam["id"]).json()["enlace"]
+    token, enlace_id = creado["token"], creado["id"]
+    assert cliente.get(f"/api/publico/campania/{token}").status_code == 200
+
+    rev = cliente.delete(f"/api/campanias/{cam['id']}/enlaces/{enlace_id}")
+    assert rev.status_code == 200, rev.text
+    assert cliente.get(f"/api/publico/campania/{token}").status_code == 404
+
+    enlaces = cliente.get(f"/api/campanias/{cam['id']}/enlaces").json()["enlaces"]
+    assert any(e["id"] == enlace_id and not e["vigente"] for e in enlaces)
+
+
+def test_revocar_enlace_inexistente_es_404(cliente):
+    cam = _crear(cliente).json()["campania"]
+    assert cliente.delete(f"/api/campanias/{cam['id']}/enlaces/nada").status_code == 404
+
+
+def test_enlace_publico_de_campania_inexistente_es_404(cliente):
+    assert _crear_enlace(cliente, "nada").status_code == 404

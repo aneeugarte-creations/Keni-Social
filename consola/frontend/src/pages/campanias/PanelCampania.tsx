@@ -96,19 +96,24 @@ export function PanelCampania({
   campaniaId,
   rango,
   ocultarAds = false,
+  datos: datosProp,
 }: {
-  campaniaId: string;
-  rango: string;
+  campaniaId?: string;
+  rango?: string;
   /** Modo cliente: oculta TODO lo de Ads y suma las visualizaciones pagadas a las orgánicas
    * (el cliente no debe ver que se usó pauta). */
   ocultarAds?: boolean;
+  /** Analítica ya cargada (p. ej. la vista pública por token): si viene, no se vuelve a pedir
+   * ni se monta la query; el panel solo la pinta. */
+  datos?: AnaliticaCampania;
 }) {
   const consulta = useQuery({
     queryKey: [...CLAVE_CAMPANIAS, "analitica", campaniaId, rango],
-    queryFn: ({ signal }) => api.analiticaCampania(campaniaId, { rango }, signal),
+    queryFn: ({ signal }) => api.analiticaCampania(campaniaId ?? "", { rango }, signal),
+    enabled: datosProp === undefined,
   });
 
-  if (consulta.isPending) {
+  if (datosProp === undefined && consulta.isPending) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -121,7 +126,7 @@ export function PanelCampania({
       </div>
     );
   }
-  if (consulta.isError) {
+  if (datosProp === undefined && consulta.isError) {
     return (
       <BloqueError
         titulo="No se pudo cargar la analítica de la campaña"
@@ -132,7 +137,9 @@ export function PanelCampania({
     );
   }
 
-  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas } = consulta.data;
+  const datos = datosProp ?? consulta.data;
+  if (!datos) return null;
+  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas } = datos;
 
   return (
     <div className="space-y-6">

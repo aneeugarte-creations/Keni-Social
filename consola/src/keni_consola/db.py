@@ -120,6 +120,12 @@ from .db_campanias import (  # noqa: F401
     listar_campanias,
     obtener_campania,
 )
+from .db_enlaces_publicos import (  # noqa: F401
+    crear_enlace_publico,
+    desactivar_enlace_publico,
+    listar_enlaces_de_campania,
+    obtener_enlace_por_token,
+)
 from .db_publicacion import (  # noqa: F401
     ConflictoVersion,
     actualizar_publicacion,

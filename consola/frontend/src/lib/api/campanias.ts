@@ -3,10 +3,14 @@
 import { descargar, peticion, query } from "./_core";
 import type {
   AnaliticaCampania,
+  AnaliticaCampaniaPublica,
   CuerpoActualizarCampania,
   CuerpoCrearCampania,
+  CuerpoCrearEnlacePublico,
   RespuestaCampania,
   RespuestaCampanias,
+  RespuestaEnlacePublico,
+  RespuestaEnlacesPublicos,
   RespuestaMensaje,
 } from "@/types";
 
@@ -47,5 +51,28 @@ export const apiCampanias = {
         rango: params.rango,
         ocultar_ads: params.ocultarAds ? "1" : undefined,
       })}`,
+    ),
+
+  // --- Enlaces públicos (capability-URL de solo lectura) ---
+  // Analítica de UNA campaña por token PÚBLICO (sin sesión): la vista `/c/:token`.
+  analiticaPublica: (token: string, signal?: AbortSignal) =>
+    peticion<AnaliticaCampaniaPublica>(
+      `/publico/campania/${encodeURIComponent(token)}`,
+      { signal, timeoutMs: 90_000 },
+    ),
+  enlacesCampania: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaEnlacesPublicos>(
+      `/campanias/${encodeURIComponent(id)}/enlaces`,
+      { signal },
+    ),
+  crearEnlaceCampania: (id: string, cuerpo: CuerpoCrearEnlacePublico = {}) =>
+    peticion<RespuestaEnlacePublico>(`/campanias/${encodeURIComponent(id)}/enlaces`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  revocarEnlaceCampania: (id: string, enlaceId: string) =>
+    peticion<RespuestaMensaje>(
+      `/campanias/${encodeURIComponent(id)}/enlaces/${encodeURIComponent(enlaceId)}`,
+      { metodo: "DELETE" },
     ),
 };

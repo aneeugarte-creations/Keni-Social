@@ -110,6 +110,38 @@ export interface AnaliticaCampania {
   generado_en: string;
 }
 
+/** Analítica servida por el enlace PÚBLICO: igual que `AnaliticaCampania` pero el backend
+ * añade `ocultar_ads` (el modo congelado del enlace) y, si está activo, ya viene sin pauta. */
+export type AnaliticaCampaniaPublica = AnaliticaCampania & { ocultar_ads: boolean };
+
+/** Enlace público (capability-URL) de una campaña: token + periodo/modo congelados. */
+export interface EnlacePublicoCampania {
+  id: string;
+  token: string;
+  campania_id: string;
+  rango: string;
+  ocultar_ads: boolean;
+  creado: string;
+  /** ISO UTC; "" si no caduca. */
+  expira: string;
+  desactivado: boolean;
+  /** Ni revocado ni caducado. */
+  vigente: boolean;
+}
+
+export interface RespuestaEnlacesPublicos {
+  enlaces: EnlacePublicoCampania[];
+}
+
+export interface RespuestaEnlacePublico {
+  enlace: EnlacePublicoCampania;
+}
+
+export interface CuerpoCrearEnlacePublico {
+  rango?: string;
+  ocultar_ads?: boolean;
+}
+
 export interface CuerpoCrearCampania {
   marcas: string[];
   nombre: string;

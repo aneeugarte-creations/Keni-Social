@@ -365,6 +365,98 @@ async def exportar_campania(request: Request) -> Response:
     return _descarga(_export_csv(datos, ocultar_ads), nombre, "text/csv; charset=utf-8")
 
 
+# --------------------------------------------------------------------------- #
+# Enlaces públicos (capability-URL de solo lectura)                             #
+# --------------------------------------------------------------------------- #
+#
+# Un token indescifrable mapea a UNA campaña y un periodo+modo congelados. El endpoint
+# `/api/publico/campania/{token}` es PÚBLICO (exento del gate de sesión en `seguridad.py`):
+# devuelve SOLO esa analítica, marcado `noindex`. Crear/listar/revocar enlaces exige sesión.
+
+_CABECERAS_PUBLICAS = {"X-Robots-Tag": "noindex"}
+
+
+def _publico_modo_cliente(datos: dict[str, Any]) -> dict[str, Any]:
+    """Versión SIN rastro de pauta CONSERVANDO la forma del payload (el panel la consume):
+    funde lo pagado en las vistas (KPI + por pieza) y deja Ads/inorgánico a cero. A diferencia
+    de `_payload_modo_cliente` (export), no borra claves: el panel público las espera."""
+    inorg_vis = int(datos.get("inorganico", {}).get("visualizaciones") or 0)
+    kpis = dict(datos.get("kpis", {}))
+    kpis["visualizaciones"] = int(kpis.get("visualizaciones") or 0) + inorg_vis
+    piezas = []
+    for p in datos.get("piezas", []):
+        q = dict(p)
+        q["visualizaciones"] = _vistas(p, ocultar_ads=True)
+        q["visualizaciones_pagadas"] = 0
+        q["es_inorganico"] = False
+        piezas.append(q)
+    return {
+        **datos,
+        "kpis": kpis,
+        "piezas": piezas,
+        "inorganico": {"visualizaciones": 0, "gasto": 0, "clics": 0, "campanias": 0, "moneda": ""},
+    }
+
+
+async def analitica_publica(request: Request) -> Response:
+    """GET /api/publico/campania/{token}: analítica de UNA campaña, sin login (solo lectura).
+
+    El token resuelve a la campaña + periodo + modo congelados; si está revocado/caducado o no
+    existe -> 404. Aplica el modo cliente del enlace (sin pauta). `noindex` para que no se indexe.
+    """
+    enlace = campanias.enlace_publico_vigente(request.path_params["token"])
+    if enlace is None:
+        return JSONResponse(
+            {"error": "Este enlace ya no es válido."}, status_code=404, headers=_CABECERAS_PUBLICAS
+        )
+    try:
+        datos = await campanias.analitica_campania(enlace["campania_id"], enlace["rango"])
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al público
+        return JSONResponse(
+            {"error": "No se pudo cargar el informe."},
+            status_code=500,
+            headers=_CABECERAS_PUBLICAS,
+        )
+    if datos is None:
+        return JSONResponse(
+            {"error": "Esta campaña ya no existe."}, status_code=404, headers=_CABECERAS_PUBLICAS
+        )
+    if enlace["ocultar_ads"]:
+        datos = _publico_modo_cliente(datos)
+    return JSONResponse(
+        {**datos, "ocultar_ads": bool(enlace["ocultar_ads"])}, headers=_CABECERAS_PUBLICAS
+    )
+
+
+async def crear_enlace_publico(request: Request) -> Response:
+    """POST /api/campanias/{id}/enlaces: crea un enlace público `{rango?, ocultar_ads?}`."""
+    campania_id = request.path_params["campania_id"]
+    datos = await leer_json(request)
+    rango = datos.get("rango") or campanias.RANGO_DEF
+    if not isinstance(rango, str):
+        return JSONResponse({"error": "El rango debe ser texto."}, status_code=400)
+    ocultar_ads = bool(datos.get("ocultar_ads", True))
+    enlace = campanias.crear_enlace_publico(campania_id, rango=rango, ocultar_ads=ocultar_ads)
+    if enlace is None:
+        return JSONResponse({"error": "Esa campaña ya no existe."}, status_code=404)
+    return JSONResponse({"enlace": enlace}, status_code=201)
+
+
+async def listar_enlaces_publicos(request: Request) -> Response:
+    """GET /api/campanias/{id}/enlaces: enlaces públicos de la campaña (gestión)."""
+    campania_id = request.path_params["campania_id"]
+    return JSONResponse({"enlaces": campanias.listar_enlaces_publicos(campania_id)})
+
+
+async def revocar_enlace_publico(request: Request) -> Response:
+    """DELETE /api/campanias/{id}/enlaces/{enlace_id}: revoca un enlace (corta el acceso)."""
+    campania_id = request.path_params["campania_id"]
+    enlace_id = request.path_params["enlace_id"]
+    if not campanias.revocar_enlace_publico(enlace_id, campania_id):
+        return JSONResponse({"error": "Ese enlace ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Enlace revocado."})
+
+
 RUTAS = [
     Route("/api/campanias", listar_campanias, methods=["GET"]),
     Route("/api/campanias", crear_campania, methods=["POST"]),
@@ -380,5 +472,14 @@ RUTAS = [
         "/api/campanias/{campania_id}/export",
         exportar_campania,
         methods=["GET"],
+    ),
+    # Enlaces públicos: el endpoint de lectura es PÚBLICO (exento en seguridad.py); gestión con sesión.
+    Route("/api/publico/campania/{token}", analitica_publica, methods=["GET"]),
+    Route("/api/campanias/{campania_id}/enlaces", listar_enlaces_publicos, methods=["GET"]),
+    Route("/api/campanias/{campania_id}/enlaces", crear_enlace_publico, methods=["POST"]),
+    Route(
+        "/api/campanias/{campania_id}/enlaces/{enlace_id}",
+        revocar_enlace_publico,
+        methods=["DELETE"],
     ),
 ]
