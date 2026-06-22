@@ -144,11 +144,11 @@ export function DetalleHistoria({
           <TimelineFuentes fuentes={historia.fuentes ?? []} />
         </div>
 
-        {historia.enlaces.length > 0 && (
+        {(historia.enlaces?.length ?? 0) > 0 && (
           <div className="space-y-1.5">
             <h4 className="text-sm font-semibold">Artículos</h4>
             <ul className="space-y-1">
-              {historia.enlaces.map((e, i) => (
+              {historia.enlaces?.map((e, i) => (
                 <li key={i} className="text-xs flex items-start gap-1">
                   <a
                     href={e.url}

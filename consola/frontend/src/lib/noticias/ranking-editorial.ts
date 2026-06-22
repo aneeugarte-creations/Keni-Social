@@ -140,7 +140,7 @@ export function calculoScore(h: Historia): { lineas: LineaCalculo[]; total: numb
   const lineas: LineaCalculo[] = [];
   let total = 0;
   for (const { clave, etiqueta } of SENALES_CALCULO) {
-    const peso = Number(pesos[clave] ?? 0);
+    const peso = Number(pesos[clave] ?? 0) || 0;
     if (peso <= 0) continue;
     const senal = Number(d[clave] ?? 0) || 0;
     const aporte = senal * peso;

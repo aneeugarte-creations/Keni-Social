@@ -506,6 +506,14 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
   // las del grupo). Solo aplican a marcas con grupos.
   const [grupoSel, setGrupoSel] = React.useState<string>("");
   const [lineaSel, setLineaSel] = React.useState<string>("");
+  // Al cambiar de marca, los filtros de la marca anterior no aplican (sus grupos/líneas no existen
+  // aquí): resetéalos para no mostrar "Sin candidatas" sobre una selección huérfana.
+  React.useEffect(() => {
+    setGrupoSel("");
+    setLineaSel("");
+    setExpandidas(new Set());
+    setFueraAbierto(false);
+  }, [marca]);
   const porLinea = expandidas.size > 0 || fueraAbierto ? POR_LINEA_EXPANDIDO : POR_LINEA_PLEGADO;
   const clave = CLAVE_MESA(marca, porLinea);
 

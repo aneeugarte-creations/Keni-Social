@@ -146,4 +146,21 @@ describe("calculoScore", () => {
     const { lineas } = calculoScore(historia({ score_pesos: undefined }));
     expect(lineas).toEqual([]);
   });
+
+  it("un peso malformado (NaN) se ignora y no contamina el total con NaN", () => {
+    const { lineas, total } = calculoScore(
+      historia({
+        score_desglose: { corroboracion: 0.5, velocidad: 1.0 },
+        score_pesos: {
+          corroboracion: "x" as unknown as number, // valor inválido del back
+          velocidad: 0.2,
+        },
+      }),
+    );
+    const porEtiqueta = Object.fromEntries(lineas.map((l) => [l.etiqueta, l]));
+    expect(porEtiqueta["Corroboración"]).toBeUndefined(); // peso NaN: no cuenta
+    expect(porEtiqueta["Velocidad"].aporte).toBeCloseTo(0.2);
+    expect(Number.isNaN(total)).toBe(false);
+    expect(total).toBeCloseTo(0.2);
+  });
 });
