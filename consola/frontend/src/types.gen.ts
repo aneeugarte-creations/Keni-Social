@@ -693,6 +693,7 @@ export interface Pieza {
   imagen_url: string;
   evergreen: boolean;
   hashtags_sugeridos?: string[];
+  hashtags_linea?: string[];
   falta_hashtags?: boolean;
   copy_in_exento?: boolean;
   placa_oculta?: boolean;

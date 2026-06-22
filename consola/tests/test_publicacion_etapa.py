@@ -171,6 +171,13 @@ def test_sin_linea_basta_con_cualquier_hashtag():
     assert d["etapa_ia"] == "lista_para_revisar"
 
 
+def test_expone_hashtags_linea_para_la_sugerencia_roja():
+    # El hashtag de la línea (de `linea_hashtags`, CSV) se expone APARTE, con '#', para el feed.
+    d = pieza_a_dict(_pub(contenido="Texto", linea_hashtags="cienciatech, salud"))
+    assert d["hashtags_linea"] == ["#cienciatech", "#salud"]
+    assert pieza_a_dict(_pub(contenido="Texto"))["hashtags_linea"] == []  # sin línea: vacío
+
+
 def test_hashtags_gatean_en_borrador():
     # Los hashtags GATEAN igual que copy/foto: en borrador, una pieza completa (copy+foto+placa)
     # pero SIN hashtags NO está "lista" -> falta_hashtags. Nada sale sin hashtag.

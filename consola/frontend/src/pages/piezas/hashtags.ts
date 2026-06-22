@@ -27,6 +27,16 @@ export function parsearHashtags(texto: string): string[] {
 }
 
 /**
+ * ¿El contenido ya lleva este hashtag? Compara el cuerpo en minúscula (insensible a
+ * mayúsculas, sensible a acentos: mismo criterio que el gate `falta_hashtags` del backend).
+ */
+export function contieneHashtag(contenido: string, tag: string): boolean {
+  const objetivo = normalizarHashtag(tag).toLowerCase();
+  if (!objetivo) return false;
+  return parsearHashtags(contenido).some((h) => h.toLowerCase() === objetivo);
+}
+
+/**
  * Añade hashtags al final de un contenido evitando duplicados. Inserta un par
  * de saltos de línea de separación si el contenido ya tenía texto.
  */

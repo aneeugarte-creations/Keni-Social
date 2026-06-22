@@ -2294,6 +2294,12 @@
             "type": "string"
           }
         },
+        "hashtags_linea": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "falta_hashtags": {
           "type": "boolean"
         },

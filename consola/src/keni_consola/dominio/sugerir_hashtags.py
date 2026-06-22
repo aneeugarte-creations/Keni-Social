@@ -6,11 +6,12 @@ Los hashtags son GEMELOS en todas las redes de un contenido: se calculan UNA vez
 nunca divergen. Cuando un contenido recién redactado NO tiene hashtags (`falta_hashtags`), esta
 etapa ENCOLA un `claude -p` READ-ONLY que, a partir del copy + la voz de la marca, elige de la
 `hashtags_biblioteca` de la marca los más relevantes al tema. El post-procesado ARMA la lista
-final: el hashtag de la LÍNEA editorial de la pieza (la firma de su sección, alimenta las métricas
-por línea — va siempre, al frente), los FIJOS de la marca (su firma: nombre/portal — van siempre,
-no los elige la IA porque no dependen del tema) y los temáticos que propuso la IA, recortados a la
-cantidad típica; los temáticos salen del pool de la marca y son relevantes al tema (no se rellena
-por frecuencia). Se persiste en `pieza.hashtags_sugeridos` (JSON, cada tag con '#') de cada pieza gemela.
+final: los FIJOS de la marca (su firma: nombre/portal — van siempre, no los elige la IA porque no
+dependen del tema) y los temáticos que propuso la IA, recortados a la cantidad típica; los temáticos
+salen del pool de la marca y son relevantes al tema (no se rellena por frecuencia). Se persiste en
+`pieza.hashtags_sugeridos` (JSON, cada tag con '#') de cada pieza gemela. El hashtag de la LÍNEA
+editorial NO va aquí: se propone APARTE y en rojo (`pieza.hashtags_linea`, derivado de la etiqueta
+de línea), y el gate `falta_hashtags` lo exige en el caption.
 
 El humano tiene la última palabra: el feed muestra esa sugerencia en GRIS junto al copy para
 aceptarla (se inyecta) o descartarla de un clic; nada se publica ni se reescribe solo. Gateado
@@ -22,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from typing import Any
 
 from .. import config, hashtags_biblioteca, marcas, repos
@@ -212,41 +214,46 @@ def _normalizar(tag: str) -> str:
     return f"#{cuerpo}" if cuerpo else ""
 
 
-def ensamblar(
-    propuestos: list[str], *, marca: str, cantidad: int, linea_tags: list[str] | None = None
-) -> list[str]:
-    """ARMA la sugerencia final del contenido, hasta `cantidad`:
+def _plegar(cuerpo: str) -> str:
+    """Pliega un cuerpo de hashtag para comparar: sin acentos y en minúscula. Así un tag que la IA
+    propone sin tilde ("futbolconcausa") casa con el del pool ("fútbolconcausa")."""
+    base = unicodedata.normalize("NFKD", str(cuerpo or "").strip().lstrip("#").strip().lower())
+    return "".join(c for c in base if not unicodedata.combining(c))
 
-      1. Hashtags de la LÍNEA editorial de la pieza (`linea_tags`) — SIEMPRE, al frente; son la
-         firma de la sección (alimentan las métricas por línea) y NO se filtran por el pool.
-      2. FIJOS de la marca (su firma: nombre/portal) — no dependen del tema; se reserva al menos
+
+def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
+    """ARMA la sugerencia GRIS del contenido, hasta `cantidad`:
+
+      1. FIJOS de la marca (su firma: nombre/portal) — no dependen del tema; se reserva al menos
          un hueco para algo temático cuando hay sitio.
-      3. Temáticos que propuso la IA, en su orden de relevancia (los de fuera del pool se descartan).
+      2. Temáticos que propuso la IA, en su orden de relevancia (los de fuera del pool se descartan).
 
-    Dedup por el cuerpo sin '#' en minúscula. `cantidad` es un TOPE, no un cupo a llenar: la lista
-    son la línea, la firma y los temáticos que la IA juzgó relevantes, y nada más. NO se rellena con
-    los hashtags más usados de la marca, para que una pieza off-topic (p. ej. una curiosidad en una
-    marca de fútbol) no arrastre los tags genéricos de la marca que no encajan con su tema.
+    Cada propuesto se casa con el pool PLEGANDO acentos (la IA suele devolver el tag sin tilde) y se
+    guarda con la ORTOGRAFÍA del pool: así no se pierde un tag relevante por un diacrítico (era el
+    bug de "salían 2 de 5"). Dedup por el cuerpo plegado. `cantidad` es un TOPE, no un cupo a llenar:
+    NO se rellena con los hashtags más usados de la marca, para que una pieza off-topic no arrastre
+    los tags genéricos que no encajan con su tema. El hashtag de la LÍNEA NO va aquí: se propone
+    aparte (es la firma de la sección, no un temático del pool).
     """
     if cantidad <= 0:
         return []
     pool = hashtags_biblioteca.candidatos(marca)
-    permitidos = set(pool)
+    # Plegado (sin acentos) -> ortografía canónica del pool: recupera el tag aunque la IA lo
+    # proponga sin tilde y lo emite tal y como la marca lo escribe de verdad.
+    canon: dict[str, str] = {}
+    for cuerpo in pool:
+        canon.setdefault(_plegar(cuerpo), cuerpo)
     salida: list[str] = []
     vistos: set[str] = set()
 
-    def add(crudo: str, *, en_pool: bool = True) -> None:
-        cuerpo = str(crudo or "").strip().lstrip("#").strip().lower()
-        if not cuerpo or cuerpo in vistos or len(salida) >= cantidad:
+    def add(crudo: str) -> None:
+        plegado = _plegar(crudo)
+        canonico = canon.get(plegado)
+        if not canonico or plegado in vistos or len(salida) >= cantidad:
             return
-        # Los temáticos/firma deben salir del pool de la marca; los de línea son autoritativos.
-        if en_pool and cuerpo not in permitidos:
-            return
-        vistos.add(cuerpo)
-        salida.append(f"#{cuerpo}")
+        vistos.add(plegado)
+        salida.append(f"#{canonico}")
 
-    for tag in linea_tags or []:
-        add(tag, en_pool=False)
     fijos = hashtags_biblioteca.fijos(marca)
     reserva_tematica = 1 if cantidad >= 2 else 0
     for cuerpo in fijos[: max(0, cantidad - reserva_tematica)]:
@@ -254,25 +261,6 @@ def ensamblar(
     for tag in propuestos:
         add(tag)
     return salida
-
-
-def _hashtags_de_linea(publicacion_id: str) -> list[str]:
-    """Hashtags (cuerpos, sin '#') de la(s) LÍNEA(s) editorial(es) del contenido. [] si no hay.
-
-    La línea es una etiqueta de clase 'vertical' del contenido; su campo `hashtags` (CSV) es la
-    firma de la sección, que la sugerencia inyecta SIEMPRE para que el desglose de métricas por
-    línea exista también en el caption. Solo cuenta líneas activas.
-    """
-    tags: list[str] = []
-    for eid in repos.etiqueta_ids_de_contenido(publicacion_id):
-        et = repos.obtener_etiqueta(eid)
-        if not et or str(et.get("clase") or "") != "vertical" or not et.get("activo", True):
-            continue
-        for crudo in re.split(r"[,\s]+", str(et.get("hashtags") or "")):
-            cuerpo = crudo.strip().lstrip("#").strip()
-            if cuerpo:
-                tags.append(cuerpo)
-    return tags
 
 
 def aplicar_sugerencia(
@@ -293,8 +281,7 @@ def aplicar_sugerencia(
     marca = str(elegibles[0].get("marca") or "")
     redes = sorted({str(f.get("red") or "") for f in elegibles if f.get("red")})
     cantidad = cantidad_contenido(marca, redes)
-    linea_tags = _hashtags_de_linea(publicacion_id)
-    lista = ensamblar(propuestos, marca=marca, cantidad=cantidad, linea_tags=linea_tags)
+    lista = ensamblar(propuestos, marca=marca, cantidad=cantidad)
     payload = json.dumps(lista, ensure_ascii=False)
     campos: dict[str, Any] = {"hashtags_sugeridos": payload}
     # Solo escribe `imagen_clave` si la IA dio una (no piso una previa con vacío).

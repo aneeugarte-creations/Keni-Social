@@ -165,8 +165,12 @@ class Pieza(TypedDict):
     # hashtags. Solo se inyecta en el copy cuando un humano la acepta. Opcional: los productores
     # legados no lo traen y el feed lo lee como [].
     hashtags_sugeridos: NotRequired[list[str]]
-    # ¿El caption NO lleva ningún hashtag? Gate de la sugerencia en el feed (solo se ofrece cuando
-    # faltan). Derivado del contenido real (mismo criterio que `falta_hashtags` de la etapa IA).
+    # Hashtag(s) de la LÍNEA editorial de la pieza (lista CON '#'). Es la firma de la sección: el
+    # feed lo propone APARTE y en ROJO (sin él las analíticas no desglosan bien por línea), y el
+    # gate `falta_hashtags` lo exige en el caption. [] si el contenido no tiene línea con hashtag.
+    hashtags_linea: NotRequired[list[str]]
+    # ¿Al caption le FALTAN hashtags (ninguno, o tiene pero no el de su línea)? Gate de la sugerencia
+    # en el feed. Derivado del contenido real (mismo criterio que `falta_hashtags` de la etapa IA).
     # Opcional: el front lo deriva igual del `contenido`, así que un payload legado sin él no rompe.
     falta_hashtags: NotRequired[bool]
     # Auto-avance: la pieza esta EXENTA de copy-in (imagen dramatica/autoexplicativa que no lo

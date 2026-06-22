@@ -66,6 +66,18 @@ def _falta_hashtags(pub: dict[str, Any]) -> bool:
     return not any(req in presentes for req in requeridos)
 
 
+def _hashtags_linea(pub: dict[str, Any]) -> list[str]:
+    """Hashtag(s) de la LÍNEA editorial (lista CON '#'), de `linea_hashtags` (CSV). [] si no hay.
+
+    Es la firma de la sección: el feed lo propone APARTE y en rojo (sin él las analíticas no
+    desglosan bien por línea), y el gate `falta_hashtags` lo exige en el caption. Conserva la
+    ortografía con que el equipo lo guardó (la comparación del gate es insensible a mayúsculas)."""
+    return [
+        f"#{c}" for crudo in re.split(r"[,\s]+", str(pub.get("linea_hashtags") or ""))
+        if (c := crudo.strip().lstrip("#").strip())
+    ]
+
+
 def _hashtags_sugeridos(pub: dict[str, Any]) -> list[str]:
     """Lista de hashtags sugeridos (`pieza.hashtags_sugeridos`, JSON con '#'). [] si vacía/ilegible.
 
@@ -350,8 +362,11 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # feed propone en gris para aceptar/rechazar de un clic. [] si no hay sugerencia o la pieza
         # ya lleva hashtags. La acepta un humano: solo entonces se inyecta en el copy.
         "hashtags_sugeridos": _hashtags_sugeridos(pub),
-        # ¿El caption no lleva ningún hashtag? Gate de la sugerencia en el feed (solo se ofrece
-        # cuando faltan). Derivado del contenido real, no de un flag almacenado.
+        # Hashtag(s) de la LÍNEA editorial: el feed los propone APARTE y en rojo (firma de la
+        # sección, clave para el desglose de métricas por línea). [] si el contenido no tiene línea.
+        "hashtags_linea": _hashtags_linea(pub),
+        # ¿Al caption le faltan hashtags (ninguno, o tiene pero no el de su línea)? Gate de la
+        # sugerencia en el feed. Derivado del contenido real, no de un flag almacenado.
         "falta_hashtags": _falta_hashtags(pub),
     }
 

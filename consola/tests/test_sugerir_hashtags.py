@@ -3,9 +3,9 @@ aún no los lleva, sin tocar el copy. Los hashtags son GEMELOS en todas las rede
 vez por contenido y se escriben idénticos en todas sus piezas.
 
 Los helpers de parseo/armado son PUROS (sin BD); el gating y la persistencia usan Postgres
-(fixture `entorno`). La lista final = hashtag de la LÍNEA editorial (firma de la sección) + FIJOS
-de la marca (firma) + temáticos de la IA (filtrados a la biblioteca), recortada a la cantidad
-típica; NO se rellena por frecuencia.
+(fixture `entorno`). La sugerencia GRIS = FIJOS de la marca (firma) + temáticos de la IA (casados
+con el pool plegando acentos), recortada a la cantidad típica; NO se rellena por frecuencia. El
+hashtag de la LÍNEA va aparte (`hashtags_linea`), no en el gris.
 """
 
 from __future__ import annotations
@@ -70,19 +70,12 @@ def test_ensamblar_no_rellena_por_frecuencia_cuando_la_ia_no_da_nada_usable():
     assert "#portalunotv" not in out
 
 
-def test_ensamblar_inyecta_hashtag_de_linea_al_frente():
-    # El hashtag de la LÍNEA va PRIMERO y se salta el filtro del pool (es autoritativo, no un tag
-    # histórico de la marca). La firma y los temáticos van detrás.
-    out = dom_sh.ensamblar(["#internacional"], marca=_MARCA, cantidad=5, linea_tags=["#cienciatech"])
-    assert out[0] == "#cienciatech"  # la línea, al frente, aunque no esté en el pool
-    assert "cienciatech" not in set(hb.candidatos(_MARCA))  # de verdad no es del pool
-    assert "#unotv" in out and "#internacional" in out
-
-
-def test_ensamblar_hashtag_de_linea_dedup_y_respeta_tope():
-    # Con tope 1 solo entra la línea (máxima prioridad); aunque la IA también la proponga, no dobla.
-    out = dom_sh.ensamblar(["#cienciatech"], marca=_MARCA, cantidad=1, linea_tags=["#cienciatech"])
-    assert out == ["#cienciatech"]
+def test_ensamblar_casa_propuestos_sin_acento_con_la_ortografia_del_pool():
+    # La IA suele devolver el tag SIN tilde; debe casar con el del pool (que sí la lleva) y emitirse
+    # con la ortografía de la marca, no descartarse por el diacrítico (era el bug de "salían 2 de 5").
+    assert "fútbolconcausa" in set(hb.candidatos("fundacion"))  # el pool lo tiene CON acento
+    out = dom_sh.ensamblar(["#futbolconcausa", "#salud"], marca="fundacion", cantidad=5)
+    assert "#fútbolconcausa" in out and "#salud" in out
 
 
 def test_ensamblar_descarta_inventados_y_dedup():
@@ -161,18 +154,17 @@ def test_aplicar_sugerencia_escribe_identica_en_todas_las_gemelas(entorno):
     assert listas[0] == listas[1] == guardados
 
 
-def test_aplicar_sugerencia_inyecta_hashtag_de_la_linea(entorno):
-    # La línea editorial del contenido (etiqueta vertical con `hashtags`) va SIEMPRE al frente de
-    # la sugerencia, antes que la firma y los temáticos, para alimentar las métricas por línea.
+def test_aplicar_sugerencia_no_mete_la_linea_en_el_gris(entorno):
+    # El hashtag de la LÍNEA NO va en la sugerencia gris (`hashtags_sugeridos`): se propone aparte
+    # y en rojo. El gris es solo firma + temáticos del pool.
     pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     et = repos.crear_etiqueta(
         nombre="Ciencia/Tech", clase="vertical", marca=_MARCA, hashtags="cienciatech",
     )
     repos.asignar_etiqueta(pid, et["id"])
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional"])
-    assert guardados[0] == "#cienciatech"  # la línea, primero
-    assert "#unotv" in guardados and "#internacional" in guardados
-    # GEMELO: la línea viaja idéntica a todas las piezas del contenido.
+    assert "#cienciatech" not in guardados  # la línea no se mezcla con el gris
+    assert guardados == ["#unotv", "#internacional"]  # solo firma + temático
     listas = [json.loads(repos.obtener_pieza(i)["hashtags_sugeridos"]) for i in ids]
     assert listas[0] == listas[1] == guardados
 
