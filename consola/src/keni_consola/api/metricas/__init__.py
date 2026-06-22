@@ -59,6 +59,7 @@ from .piezas import (
 from .reporte import (
     _cobertura_por_marca,
     _comparar_totales,
+    _filtrar_reporte_por_red,
     _suma_clics,
     comparar,
     opciones,
@@ -66,10 +67,10 @@ from .reporte import (
 )
 from .series import ads, correlacion, crosstab, desglose, ingesta, seguidores, tendencia
 
-# `_comparar_totales`, `_suma_clics` y `_cobertura_por_marca` se re-exportan porque la
-# suite (`test_api_metricas.py`) los importa de `keni_consola.api.metricas`; no son
-# superficie de la API HTTP, solo helpers verificados por unidad. El resto de helpers
-# privados viven en sus submódulos.
+# `_comparar_totales`, `_suma_clics`, `_cobertura_por_marca` y `_filtrar_reporte_por_red` se
+# re-exportan porque la suite (`test_api_metricas.py`) los importa de
+# `keni_consola.api.metricas`; no son superficie de la API HTTP, solo helpers verificados por
+# unidad. El resto de helpers privados viven en sus submódulos.
 __all__ = [
     "RUTAS",
     "opciones",
@@ -98,6 +99,7 @@ __all__ = [
     "_comparar_totales",
     "_suma_clics",
     "_cobertura_por_marca",
+    "_filtrar_reporte_por_red",
 ]
 
 
