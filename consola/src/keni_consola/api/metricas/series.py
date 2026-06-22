@@ -15,16 +15,20 @@ from __future__ import annotations
 from datetime import date
 from statistics import median
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...tiempo import ahora_iso
 from ._comun import (
     _etiqueta_rango,
     _gate_marca_metricas,
     _log,
     _validar_rango,
+    _validar_red,
     marcas,
     metricas_cache,
+    servicio,
 )
 
 __all__ = ["tendencia", "seguidores", "desglose", "crosstab", "correlacion", "ads", "ingesta"]
@@ -50,18 +54,77 @@ def _fecha(s: str) -> date | None:
         return None
 
 
+def _filtrar_seguidores_por_red(payload: dict, red: str) -> dict:
+    """Restringe la serie de seguidores a UNA red sobre el payload cacheado por (rango, marca).
+
+    El payload ya trae el stock por red (`puntos[].por_red`) y el neto por red
+    (`neto_por_red`): por cada día, `total` pasa a ser el stock de ESA red (0 si ese día
+    no la reporta) y `por_red` queda con solo esa red; `neto` toma el de la red (0 si no
+    aparece). Coste 0: no recomputa nada, solo proyecta el desglose que ya existe.
+    """
+    puntos = []
+    for pt in payload.get("puntos") or []:
+        valor = (pt.get("por_red") or {}).get(red)
+        puntos.append(
+            {
+                **pt,
+                "total": valor or 0,
+                "por_red": {red: valor} if valor is not None else {},
+            }
+        )
+    neto_por_red = payload.get("neto_por_red") or {}
+    return {
+        **payload,
+        "puntos": puntos,
+        "neto": neto_por_red.get(red, 0),
+        "neto_por_red": {red: neto_por_red[red]} if red in neto_por_red else {},
+    }
+
+
+def _filtrar_desglose_por_red(payload: dict, red: str) -> dict:
+    """Restringe el desglose de interacciones a UNA red (celdas + totales re-sumados).
+
+    El desglose ya es por marca×red: se conservan solo las celdas de ESA red y los
+    `totales` se re-suman sobre ellas (manteniendo las mismas claves del payload, así
+    funciona tanto con la forma real como con la mockeada). `engagement_pct`, si está en
+    los totales, se recalcula sobre el agregado de la red (interacciones/visualizaciones).
+    """
+    celdas = [c for c in (payload.get("celdas") or []) if c.get("red") == red]
+    totales_orig = payload.get("totales") or {}
+    totales = {
+        clave: sum(int(c.get(clave, 0) or 0) for c in celdas)
+        for clave in totales_orig
+        if clave != "engagement_pct"
+    }
+    if "engagement_pct" in totales_orig:
+        vis = totales.get("visualizaciones", 0)
+        totales["engagement_pct"] = (
+            round(totales.get("interacciones", 0) / vis * 100, 2) if vis else 0.0
+        )
+    return {**payload, "celdas": celdas, "totales": totales}
+
+
 async def tendencia(request: Request) -> Response:
     """GET /api/metricas/tendencia: serie diaria del periodo (visualizaciones + interacciones).
 
-    `?marca=` acota el ámbito (suma de sus cuentas); sin marca, todas. Servido desde
-    cache (lazy fill). `puntos` vacío = la fuente activa no expone serie diaria.
+    `?marca=` acota el ámbito (suma de sus cuentas); sin marca, todas. `?red=` acota a UNA
+    red (red desconocida →400): la serie por red se deriva de las piezas de esa red, así
+    que CON `red` se recomputa al vuelo (en executor), no se cachea cada marca×red. Sin
+    `red` se sirve de cache (lazy fill). `puntos` vacío = la fuente no expone serie diaria.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
-        payload, generado_en = await metricas_cache.tendencia_async(rango, marca)
+        red = _validar_red(request.query_params.get("red"))
+        if red:
+            payload = await run_in_threadpool(
+                servicio.construir_tendencia_diaria, rango, marca, red
+            )
+            generado_en = ahora_iso()
+        else:
+            payload, generado_en = await metricas_cache.tendencia_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -74,14 +137,16 @@ async def ads(request: Request) -> Response:
     """GET /api/metricas/ads: campañas de publicidad PAGADA del periodo (Meta/TikTok Ads).
 
     El INORGÁNICO a nivel marca: lista de campañas (impresiones, gasto, clics) + totales.
-    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill). Lista
-    vacía = sin Ads conectado o sin entrega en el periodo (degradación honesta).
+    `?marca=` acota a una marca; sin marca, todas. `?red=` conserva solo las campañas de
+    esa red y re-suma los totales (red desconocida →400). Servido desde cache (lazy fill).
+    Lista vacía = sin Ads conectado o sin entrega en el periodo (degradación honesta).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
+        red = _validar_red(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.ads_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -89,6 +154,8 @@ async def ads(request: Request) -> Response:
         _log.exception("Fallo al leer los ads (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudieron leer las campañas de Ads."}, status_code=500)
     lista = payload.get("ads") or []
+    if red:
+        lista = [a for a in lista if a.get("red") == red]
     total = {
         "visualizaciones": sum(int(a.get("impresiones") or 0) for a in lista),
         "gasto": round(sum(float(a.get("gasto") or 0.0) for a in lista), 2),
@@ -193,75 +260,98 @@ async def ingesta(request: Request) -> Response:
 async def seguidores(request: Request) -> Response:
     """GET /api/metricas/seguidores: serie de seguidores del periodo (total + por red).
 
-    `?marca=` acota el ámbito; sin marca, todas. Servido desde cache (lazy fill).
-    `puntos` vacío = la fuente activa no expone serie de seguidores (degradación honesta).
+    `?marca=` acota el ámbito; sin marca, todas. `?red=` acota a UNA red (red desconocida
+    →400): proyecta el stock/neto de esa red sobre el payload cacheado (no recomputa).
+    Servido desde cache (lazy fill). `puntos` vacío = la fuente no expone serie de
+    seguidores (degradación honesta).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
+        red = _validar_red(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.seguidores_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar la serie de seguidores (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la serie de seguidores."}, status_code=500)
+    if red:
+        payload = _filtrar_seguidores_por_red(payload, red)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
 async def desglose(request: Request) -> Response:
     """GET /api/metricas/desglose: desglose de interacciones por marca×red.
 
-    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    `?marca=` acota a una marca; sin marca, todas. `?red=` acota a UNA red (red desconocida
+    →400): conserva solo sus celdas y re-suma los totales. Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
+        red = _validar_red(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.desglose_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar el desglose (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el desglose de interacciones."}, status_code=500)
+    if red:
+        payload = _filtrar_desglose_por_red(payload, red)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
 async def crosstab(request: Request) -> Response:
     """GET /api/metricas/crosstab: rendimiento cruzado marca×red×formato.
 
-    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    `?marca=` acota a una marca; sin marca, todas. `?red=` conserva solo las celdas de esa
+    red (red desconocida →400). Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
+        red = _validar_red(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar el crosstab (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el crosstab."}, status_code=500)
+    if red:
+        payload = {
+            **payload,
+            "celdas": [c for c in (payload.get("celdas") or []) if c.get("red") == red],
+        }
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
 async def correlacion(request: Request) -> Response:
     """GET /api/metricas/correlacion: correlación seguidores ganados ↔ piezas publicadas.
 
-    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    `?marca=` acota a una marca; sin marca, todas. `?red=` conserva solo los items de esa
+    red (red desconocida →400). Servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
     try:
+        red = _validar_red(request.query_params.get("red"))
         payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar la correlación (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la correlación de seguidores."}, status_code=500)
+    if red:
+        payload = {
+            **payload,
+            "items": [it for it in (payload.get("items") or []) if it.get("red") == red],
+        }
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})

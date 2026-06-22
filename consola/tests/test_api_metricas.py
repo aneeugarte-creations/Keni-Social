@@ -441,6 +441,22 @@ def test_tendencia_serie_diaria(cliente):
     assert data["generado_en"]
 
 
+def test_tendencia_filtra_por_red(cliente):
+    full = cliente.get("/api/metricas/piezas?rango=mes&marca=claro_sports").json()
+    red = full["top"][0]["plataforma"]
+    r = cliente.get(f"/api/metricas/tendencia?rango=mes&marca=claro_sports&red={red}")
+    assert r.status_code == 200
+    data = r.json()
+    assert "puntos" in data
+    assert data["generado_en"]
+
+
+def test_tendencia_red_invalida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/tendencia?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 def test_piezas_acepta_token_mes(cliente):
     r = cliente.get("/api/metricas/piezas?rango=mes:2026-05&marca=claro_sports")
     assert r.status_code == 200

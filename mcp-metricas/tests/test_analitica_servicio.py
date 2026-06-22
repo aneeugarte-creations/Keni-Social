@@ -76,6 +76,19 @@ def test_tendencia_diaria_muestra(muestra):
     assert p0["visualizaciones"] >= 0 and p0["interacciones"] >= 0
 
 
+def test_tendencia_diaria_filtra_por_red(muestra):
+    # La serie por red se deriva de las piezas de ESA red: su suma de visualizaciones
+    # debe coincidir con la suma de las piezas de esa red en el listado del periodo.
+    listado = servicio.construir_listado_piezas("mes", "claro_sports")
+    red = listado[0]["red"]
+    esperado_vis = sum(p["visualizaciones"] for p in listado if p["red"] == red)
+    esperado_int = sum(p["interacciones"] for p in listado if p["red"] == red)
+    t = servicio.construir_tendencia_diaria("mes", "claro_sports", red)
+    assert t["cuenta"] == "claro_sports"
+    assert sum(p["visualizaciones"] for p in t["puntos"]) == esperado_vis
+    assert sum(p["interacciones"] for p in t["puntos"]) == esperado_int
+
+
 def test_analitica_piezas_filtra_por_red(muestra):
     # El filtro por red calcula top/peores/estadísticas SOLO sobre las piezas de esa red.
     todas = servicio.construir_analitica_piezas("mes", "claro_sports")

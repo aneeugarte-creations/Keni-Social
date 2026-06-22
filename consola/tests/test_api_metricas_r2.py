@@ -171,6 +171,25 @@ def test_seguidores_degrada_con_honestidad_si_vacio(cliente, monkeypatch):
     assert data["neto_por_red"] == {}
 
 
+def test_seguidores_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_serie_seguidores=_serie_seguidores)
+    r = cliente.get("/api/metricas/seguidores?rango=mes&marca=claro_sports&red=facebook")
+    assert r.status_code == 200
+    data = r.json()
+    # El neto y el stock por día quedan proyectados a la red pedida.
+    assert data["neto"] == 5
+    assert data["neto_por_red"] == {"facebook": 5}
+    assert data["puntos"][0]["total"] == 600
+    assert data["puntos"][0]["por_red"] == {"facebook": 600}
+
+
+def test_seguidores_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_serie_seguidores=_serie_seguidores)
+    r = cliente.get("/api/metricas/seguidores?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 # --------------------------------------------------------------------------- #
 # /api/metricas/desglose                                                       #
 # --------------------------------------------------------------------------- #
@@ -203,6 +222,35 @@ def test_desglose_degrada_sin_celdas(cliente, monkeypatch):
     assert r.json()["celdas"] == []
 
 
+def test_desglose_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_desglose_interacciones=_desglose)
+    r = cliente.get("/api/metricas/desglose?rango=mes&red=facebook")
+    assert r.status_code == 200
+    data = r.json()
+    assert all(c["red"] == "facebook" for c in data["celdas"])
+    # Totales re-sumados sobre la red (la única celda de la muestra es facebook).
+    assert data["totales"]["interacciones"] == 135
+    assert data["totales"]["likes"] == 100
+    assert data["totales"]["engagement_pct"] == 6.75
+
+
+def test_desglose_red_sin_celdas_queda_vacio(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_desglose_interacciones=_desglose)
+    r = cliente.get("/api/metricas/desglose?rango=mes&red=instagram")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["celdas"] == []
+    assert data["totales"]["interacciones"] == 0
+    assert data["totales"]["engagement_pct"] == 0.0
+
+
+def test_desglose_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_desglose_interacciones=_desglose)
+    r = cliente.get("/api/metricas/desglose?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 # --------------------------------------------------------------------------- #
 # /api/metricas/crosstab                                                       #
 # --------------------------------------------------------------------------- #
@@ -220,6 +268,22 @@ def test_crosstab_200_y_shape_con_nullables(cliente, monkeypatch):
     nulo = data["celdas"][1]
     assert nulo["formato"] is None and nulo["rendimiento_relativo_medio"] is None
     assert data["generado_en"]
+
+
+def test_crosstab_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_crosstab=_crosstab)
+    r = cliente.get("/api/metricas/crosstab?rango=mes&red=instagram")
+    assert r.status_code == 200
+    data = r.json()
+    assert all(c["red"] == "instagram" for c in data["celdas"])
+    assert len(data["celdas"]) == 1
+
+
+def test_crosstab_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_crosstab=_crosstab)
+    r = cliente.get("/api/metricas/crosstab?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
 
 
 # --------------------------------------------------------------------------- #
@@ -252,6 +316,23 @@ def test_correlacion_degrada_sin_items(cliente, monkeypatch):
     r = cliente.get("/api/metricas/correlacion?rango=30d")
     assert r.status_code == 200
     assert r.json()["items"] == []
+
+
+def test_correlacion_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_correlacion_seguidores=_correlacion)
+    r = cliente.get("/api/metricas/correlacion?rango=mes&red=instagram")
+    assert r.status_code == 200
+    data = r.json()
+    assert all(it["red"] == "instagram" for it in data["items"])
+    assert len(data["items"]) == 1
+    assert data["nota"]  # la nota de caveat se conserva
+
+
+def test_correlacion_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_correlacion_seguidores=_correlacion)
+    r = cliente.get("/api/metricas/correlacion?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
 
 
 # --------------------------------------------------------------------------- #
@@ -383,6 +464,27 @@ def test_ads_vacio_sin_inversion(cliente, monkeypatch):
     data = r.json()
     assert data["ads"] == [] and data["total"]["campanias"] == 0
     assert data["total"]["visualizaciones"] == 0
+
+
+def test_ads_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_ads=_ads)
+    # Ambas campañas de la muestra son de facebook: el filtro las conserva...
+    r = cliente.get("/api/metricas/ads?rango=mes&red=facebook")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["ads"]) == 2 and data["total"]["campanias"] == 2
+    # ...y deja vacía una red sin campañas (totales re-sumados a 0).
+    r2 = cliente.get("/api/metricas/ads?rango=mes&red=instagram")
+    data2 = r2.json()
+    assert data2["ads"] == [] and data2["total"]["campanias"] == 0
+    assert data2["total"]["visualizaciones"] == 0
+
+
+def test_ads_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_ads=_ads)
+    r = cliente.get("/api/metricas/ads?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
 
 
 # --------------------------------------------------------------------------- #

@@ -378,28 +378,43 @@ def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
     return salida
 
 
-def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> dict:
+def construir_tendencia_diaria(
+    rango: str = "mes", marca: str | None = None, red: str | None = None
+) -> dict:
     """Serie diaria del periodo (visualizaciones + interacciones) sumada por cuenta.
 
     Dispatch por capacidad: usa `fuente.serie_diaria` si la fuente activa la expone
     (muestra/Metricool); si no (fuentes 'real' compuestas), degrada a serie vacía sin
     romper. Devuelve un dict JSON-serializable (`SerieDiaria`).
+
+    `red` (id de plataforma) acota la serie a UNA red. Como `serie_diaria` agrega las
+    redes (no las desglosa), la serie por red se DERIVA de las piezas de esa red del
+    periodo, sumando sus visualizaciones/interacciones por fecha de publicación (mismas
+    piezas que ya descarga el dashboard, coste 0 de API). None = todas las redes
+    (camino y semántica de siempre, vía `serie_diaria`).
     """
     fuente = _fuente(marca)
     desde, hasta, _ = resolver_rango(rango)
-    serie_fn = getattr(fuente, "serie_diaria", None)
     vis: dict = {}
     inter: dict = {}
-    if serie_fn is not None:
-        for c in fuente.cuentas():
-            try:
-                puntos = serie_fn(c.id, rango)
-            except AttributeError:
-                # La fuente envuelta no la implementa (FuenteScoped lo propaga): degrada.
-                puntos = []
-            for p in puntos:
-                vis[p.fecha] = vis.get(p.fecha, 0) + p.visualizaciones
-                inter[p.fecha] = inter.get(p.fecha, 0) + p.interacciones
+    if red:
+        for p in _piezas_periodo(fuente, rango):
+            if p.plataforma.value != red:
+                continue
+            vis[p.publicado] = vis.get(p.publicado, 0) + (p.visualizaciones or 0)
+            inter[p.publicado] = inter.get(p.publicado, 0) + (p.interacciones or 0)
+    else:
+        serie_fn = getattr(fuente, "serie_diaria", None)
+        if serie_fn is not None:
+            for c in fuente.cuentas():
+                try:
+                    puntos = serie_fn(c.id, rango)
+                except AttributeError:
+                    # La fuente envuelta no la implementa (FuenteScoped lo propaga): degrada.
+                    puntos = []
+                for p in puntos:
+                    vis[p.fecha] = vis.get(p.fecha, 0) + p.visualizaciones
+                    inter[p.fecha] = inter.get(p.fecha, 0) + p.interacciones
 
     fechas = sorted(set(vis) | set(inter))
     puntos = [
