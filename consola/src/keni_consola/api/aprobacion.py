@@ -48,6 +48,37 @@ from .colaboracion import montar_cadena_aprobacion
 
 _log = logging.getLogger("keni_consola.api.aprobacion")
 
+
+def _retirar_variantes_hermanas(pieza: dict[str, Any]) -> None:
+    """Al programar/publicar una pieza, RETIRA la variante hermana de su red (anti doble publicación).
+
+    Un contenido puede tener dos variantes (foto y carrusel) de la misma red como tarjetas hermanas
+    en el feed; el equipo elige cuál publica. Cuando una se programa, la otra (misma red, OTRA
+    variante) deja de ser candidata: se borra si sigue en borrador/en_revisión. NUNCA toca algo ya
+    `programado`/`publicado` (lo que ya se decidió/salió no se retira). Best-effort: un fallo aquí
+    no rompe la programación, que ya está sellada.
+    """
+    publicacion_id = str(pieza.get("publicacion_id") or "")
+    red = str(pieza.get("red") or "")
+    variante = str(pieza.get("variante") or "foto")
+    if not publicacion_id or not red:
+        return
+    try:
+        hermanas = repos.listar_piezas_fila(publicacion_id=publicacion_id) or []
+    except Exception:  # noqa: BLE001 -- el retiro es un extra; nunca rompe la programación
+        return
+    for h in hermanas:
+        if str(h.get("red") or "") != red:
+            continue
+        if str(h.get("variante") or "foto") == variante:
+            continue  # misma variante (incluida la propia pieza): no se toca
+        if str(h.get("estado") or "") in ("programado", "publicado"):
+            continue  # lo ya decidido/salido no se retira
+        try:
+            repos.borrar_pieza(str(h.get("id") or ""))
+        except Exception:  # noqa: BLE001 -- best-effort por hermana
+            _log.warning("aprobacion: no se pudo retirar la variante hermana %s", h.get("id"), exc_info=True)
+
 # Tope de seguridad de la cola de revisión: `en_revision` es un estado transitorio (el equipo lo
 # vacía revisando), así que la cola real es pequeña; el cap solo acota un estado patológico para
 # que la serialización nunca recorra el histórico entero. No trunca en operación normal.
@@ -663,6 +694,8 @@ def _programar(
     if actualizada is None:
         # El CAS no aplicó: la pieza ya no está `en_revision` (transición concurrente) o se borró.
         return 409, {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."}
+    # Programar una variante RETIRA la hermana de su red (foto vs carrusel): solo sale la elegida.
+    _retirar_variantes_hermanas(actualizada)
     return 200, {"pieza": pieza_a_dict(actualizada)}
 
 
