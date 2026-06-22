@@ -67,6 +67,26 @@ def test_avance_envia_borrador_completo_y_monta_cadena(entorno, monkeypatch):
     assert _avance.ejecutar_avance() == []
 
 
+def test_avance_revierte_si_falla_el_montaje_de_cadena(entorno, monkeypatch):
+    """Todo-o-nada: si el montaje de la cadena lanza, la pieza vuelve a borrador sin cadena.
+
+    Si quedara en en_revision sin cadena nunca se reintentaría (`piezas_para_avance` solo
+    recoge borradores); revertirla la deja lista para un barrido futuro."""
+    _encender(monkeypatch)
+    pub = _crear_borrador(_cli_usuario())
+
+    def _explota(*_a, **_k):
+        raise RuntimeError("montaje caído")
+
+    monkeypatch.setattr("keni_consola.api.colaboracion.montar_cadena_aprobacion", _explota)
+
+    assert _avance.ejecutar_avance() == []  # el fallo no cuenta como enviada
+    actual = repos.obtener_pieza(pub["id"])
+    assert actual["estado"] == "borrador"  # revertida, lista para reintentar
+    assert not actual["enviado_a_revision_en"]  # sello de envío limpio
+    assert not repos.listar_aprobaciones(pub["id"])  # sin cadena huérfana
+
+
 def test_avance_no_toca_incompletas(entorno, monkeypatch):
     """Sin foto real, sin copy o SIN HASHTAGS la pieza NO está completa: se queda en borrador."""
     _encender(monkeypatch)

@@ -29,7 +29,7 @@ REGLAS DE SELECCIÓN (`piezas_para_avance`, pura):
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .. import config, repos
@@ -39,7 +39,7 @@ from ..estados import ESTADO_EN_REVISION
 from ..tiempo import ahora_iso
 from . import _revisar
 
-__all__ = ["ejecutar_avance", "piezas_para_avance"]
+__all__ = ["ejecutar_avance", "enviar_a_revision", "piezas_para_avance"]
 
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
@@ -52,17 +52,27 @@ _REPOSO_MINUTOS = 10
 _MAX_POR_BARRIDO = 50
 
 
+def _a_naive_utc(dt: datetime) -> datetime:
+    """Normaliza un datetime a naive-UTC; un aware se convierte a UTC antes de soltar el offset."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
+
+
 def _en_reposo(pub: dict[str, Any], ahora: str) -> bool:
     """True si la pieza lleva al menos `_REPOSO_MINUTOS` sin ediciones (o sin timestamp legible)."""
     ts = str(pub.get("fecha_actualizacion") or pub.get("fecha_creacion") or "").strip()
     if not ts:
         return True
     try:
-        return datetime.fromisoformat(ahora) - datetime.fromisoformat(ts) >= timedelta(
-            minutes=_REPOSO_MINUTOS
+        # Normaliza ambos lados a naive-UTC: un `ts` aware restado de `ahora` naive lanzaría
+        # TypeError y daría un reposo falso (anularía la espera).
+        transcurrido = _a_naive_utc(datetime.fromisoformat(ahora)) - _a_naive_utc(
+            datetime.fromisoformat(ts)
         )
     except (TypeError, ValueError):
         return True
+    return transcurrido >= timedelta(minutes=_REPOSO_MINUTOS)
 
 
 def piezas_para_avance(
@@ -84,12 +94,18 @@ def piezas_para_avance(
     return elegidas
 
 
-def _enviar(pub: dict[str, Any]) -> bool:
+def enviar_a_revision(pub: dict[str, Any]) -> bool:
     """Transición borrador -> en_revision + cadena simple (idéntico al envío humano).
 
-    Mismo CAS que `api/aprobacion.enviar_a_revision`: si otro flujo movió la pieza entre
-    el snapshot y la escritura, no toca nada (False; no es un error). El autor de la pieza
-    queda como remitente (vive en el contenido padre, fijado al crearla).
+    Fuente de verdad del avance, reusada por el daemon y por el ESPEJO entre redes. Mismo CAS
+    que `api/aprobacion.enviar_a_revision`: si otro flujo movió la pieza entre el snapshot y la
+    escritura, no toca nada (False; no es un error). El autor de la pieza queda como remitente
+    (vive en el contenido padre, fijado al crearla).
+
+    TODO-O-NADA: la transición y el montaje de la cadena van juntos. Si el montaje lanza, la
+    pieza vuelve a `borrador` (con su sello de envío limpio) para que un barrido futuro la
+    reintente; nunca queda en `en_revision` sin cadena, fuera del alcance del avance (que solo
+    recoge borradores).
     """
     actualizada = repos.transicionar_estado_pieza(
         pub["id"],
@@ -109,7 +125,23 @@ def _enviar(pub: dict[str, Any]) -> bool:
     from ..api.colaboracion import montar_cadena_aprobacion
 
     plat = repos.obtener_pieza_fila(pub["id"])
-    montar_cadena_aprobacion(pub["id"], plat or {}, colaboracion.cadena_simple(), con_cargos=False)
+    try:
+        montar_cadena_aprobacion(
+            pub["id"], plat or {}, colaboracion.cadena_simple(), con_cargos=False
+        )
+    except Exception:
+        repos.transicionar_estado_pieza(
+            pub["id"],
+            ESTADO_EN_REVISION,
+            "borrador",
+            {
+                "enviado_a_revision_en": "",
+                "revisor_id": "",
+                "revisor_nombre": "",
+                "revisado_en": "",
+            },
+        )
+        raise
     return True
 
 
@@ -142,7 +174,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
         if verificacion_calidad:
             _revisar.verificar_calidad_pieza(pub)
         try:
-            if _enviar(pub):
+            if enviar_a_revision(pub):
                 enviadas.append(pub)
         except Exception:  # noqa: BLE001 -- una pieza que falla no aborta la etapa
             _log.exception(
