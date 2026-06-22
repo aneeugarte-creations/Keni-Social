@@ -116,6 +116,8 @@ export function FilaFranjaSemana({
   const [inicio, setInicio] = React.useState(franja.inicio);
   const [fin, setFin] = React.useState(franja.fin);
   const [orden, setOrden] = React.useState(String(franja.orden));
+  const ordenNum = Number.parseInt(orden, 10);
+  const ordenValido = Number.isFinite(ordenNum);
 
   const actualizar = useMutation({
     mutationFn: () =>
@@ -123,10 +125,7 @@ export function FilaFranjaSemana({
         nombre: nombre !== franja.nombre ? nombre : undefined,
         inicio: inicio !== franja.inicio ? inicio : undefined,
         fin: fin !== franja.fin ? fin : undefined,
-        orden:
-          Number.parseInt(orden, 10) !== franja.orden
-            ? Number.parseInt(orden, 10)
-            : undefined,
+        orden: ordenNum !== franja.orden ? ordenNum : undefined,
       }),
     onSuccess: () => {
       toast.success("Franja actualizada.");
@@ -169,7 +168,7 @@ export function FilaFranjaSemana({
     nombre !== franja.nombre ||
     inicio !== franja.inicio ||
     fin !== franja.fin ||
-    Number.parseInt(orden, 10) !== franja.orden;
+    ordenNum !== franja.orden;
 
   return (
     <div
@@ -218,13 +217,14 @@ export function FilaFranjaSemana({
           value={orden}
           onChange={(e) => setOrden(e.target.value)}
           className="h-8"
+          aria-invalid={!ordenValido}
         />
       </div>
       <Button
         size="sm"
         variant="outline"
         onClick={() => actualizar.mutate()}
-        disabled={!cambiada || actualizar.isPending}
+        disabled={!cambiada || !ordenValido || actualizar.isPending}
       >
         Guardar
       </Button>
@@ -325,6 +325,9 @@ export function FormCrearFranjaSemana({
  * equipo puede definir 2, 3 o N franjas — p. ej. añadir «Nocturna». Es el molde del que parten
  * las semanas NUEVAS; «Descanso» la añade siempre la siembra, así que no se edita aquí. Se
  * guarda toda la lista de una vez (PATCH que reemplaza la plantilla). */
+/** Fila de la plantilla con `_id` estable local (no se envía al backend), para usar como `key`. */
+type FilaPlantilla = PlantillaFranja & { _id: string };
+
 function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
@@ -334,20 +337,26 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
       api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
   });
   const inicial = q.data?.franjas;
-  const [filas, setFilas] = React.useState<PlantillaFranja[]>([]);
+  // `_id` estable por fila para usarlo como `key`: sobrevive a quitar/añadir en cualquier posición.
+  const idFila = React.useRef(0);
+  const [filas, setFilas] = React.useState<FilaPlantilla[]>([]);
 
   React.useEffect(() => {
-    if (inicial) setFilas(inicial.map((f) => ({ ...f })));
+    if (inicial)
+      setFilas(inicial.map((f) => ({ ...f, _id: `f${idFila.current++}` })));
   }, [inicial]);
 
-  const editar = (i: number, campo: keyof PlantillaFranja, valor: string) =>
+  const editar = (id: string, campo: keyof PlantillaFranja, valor: string) =>
     setFilas((prev) =>
-      prev.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)),
+      prev.map((f) => (f._id === id ? { ...f, [campo]: valor } : f)),
     );
-  const quitar = (i: number) =>
-    setFilas((prev) => prev.filter((_, j) => j !== i));
+  const quitar = (id: string) =>
+    setFilas((prev) => prev.filter((f) => f._id !== id));
   const añadir = () =>
-    setFilas((prev) => [...prev, { nombre: "", inicio: "00:00", fin: "08:00" }]);
+    setFilas((prev) => [
+      ...prev,
+      { nombre: "", inicio: "00:00", fin: "08:00", _id: `f${idFila.current++}` },
+    ]);
 
   const guardar = useMutation({
     // GRID POR MARCA: la plantilla es por marca; en "Todas" el backend responde 400 accionable.
@@ -374,7 +383,9 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
     (f) => f.nombre.trim() && f.inicio.trim() && f.fin.trim(),
   );
   const sinCambios =
-    !!inicial && JSON.stringify(filas) === JSON.stringify(inicial);
+    !!inicial &&
+    JSON.stringify(filas.map(({ _id: _, ...f }) => f)) ===
+      JSON.stringify(inicial);
   const puedeGuardar = filas.length > 0 && completas && !sinCambios;
 
   return (
@@ -395,17 +406,16 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
         />
       ) : (
         <div className="space-y-2">
-          {filas.map((f, i) => (
+          {filas.map((f) => (
             <div
-              // Índice como key: la lista es local y se reordena sólo al añadir/quitar al final.
-              key={i}
+              key={f._id}
               className="flex flex-wrap items-end gap-2 rounded border px-2 py-2"
             >
               <div className="min-w-32 flex-1">
                 <Label className="text-xs text-muted-foreground">Nombre</Label>
                 <Input
                   value={f.nombre}
-                  onChange={(e) => editar(i, "nombre", e.target.value)}
+                  onChange={(e) => editar(f._id, "nombre", e.target.value)}
                   placeholder="Mañana"
                   className="h-8"
                 />
@@ -414,7 +424,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
                 <Label className="text-xs text-muted-foreground">Inicio</Label>
                 <Input
                   value={f.inicio}
-                  onChange={(e) => editar(i, "inicio", e.target.value)}
+                  onChange={(e) => editar(f._id, "inicio", e.target.value)}
                   placeholder="HH:MM"
                   className="h-8"
                 />
@@ -423,7 +433,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
                 <Label className="text-xs text-muted-foreground">Fin</Label>
                 <Input
                   value={f.fin}
-                  onChange={(e) => editar(i, "fin", e.target.value)}
+                  onChange={(e) => editar(f._id, "fin", e.target.value)}
                   placeholder="HH:MM"
                   className="h-8"
                 />
@@ -432,7 +442,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
                 size="sm"
                 variant="ghost"
                 className="text-destructive"
-                onClick={() => quitar(i)}
+                onClick={() => quitar(f._id)}
                 disabled={filas.length <= 1}
                 title={
                   filas.length <= 1

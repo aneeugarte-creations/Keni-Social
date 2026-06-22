@@ -461,14 +461,15 @@ export function ausenciaTocaDia(a: AusenciaRota, fecha: string): boolean {
 }
 
 /**
- * Convierte "HH:MM" a minutos desde 00:00. Devuelve `null` si no parsea.
+ * Convierte "HH:MM" a minutos desde 00:00 (00:00–23:59), con «24:00» = 1440 (fin
+ * exclusivo de jornada, igual que el backend y `aMinutos24`). Devuelve `null` si no parsea.
  */
 export function horaAMinutos(s: string): number | null {
-  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  const m = s.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
   const h = Number(m[1]);
   const mi = Number(m[2]);
-  if (!Number.isFinite(h) || !Number.isFinite(mi)) return null;
+  if (h === 24) return mi === 0 ? 1440 : null;
   if (h < 0 || h > 23 || mi < 0 || mi > 59) return null;
   return h * 60 + mi;
 }

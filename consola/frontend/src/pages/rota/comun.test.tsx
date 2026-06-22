@@ -4,7 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import { lunesDeSemana } from "@/lib/rota-calendario";
 import type { FranjaSemana, SwapTurno } from "@/types";
 
-import { contarSwapsPendientes, eventosFueraDeFranja, NavegadorSemana } from "./comun";
+import {
+  contarSwapsPendientes,
+  eventosFueraDeFranja,
+  franjaIdParaHoraEvento,
+  franjasSolapan,
+  horaAMinutos,
+  horaEnRangoFranja,
+  NavegadorSemana,
+} from "./comun";
 
 function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
   return {
@@ -81,6 +89,45 @@ describe("contarSwapsPendientes", () => {
       swap({ estado: "rechazado_admin", destinatario_id: "yo" }),
     ];
     expect(contarSwapsPendientes(swaps, "yo", true)).toBe(0);
+  });
+});
+
+describe("horaAMinutos", () => {
+  it("parsea horas normales", () => {
+    expect(horaAMinutos("00:00")).toBe(0);
+    expect(horaAMinutos("16:00")).toBe(960);
+    expect(horaAMinutos("23:59")).toBe(1439);
+  });
+
+  it("acepta «24:00» como 1440 (fin exclusivo de jornada), igual que el backend", () => {
+    expect(horaAMinutos("24:00")).toBe(1440);
+  });
+
+  it("rechaza «24:30» y horas malformadas", () => {
+    expect(horaAMinutos("24:30")).toBeNull();
+    expect(horaAMinutos("25:00")).toBeNull();
+    expect(horaAMinutos("ab:cd")).toBeNull();
+    expect(horaAMinutos("12:60")).toBeNull();
+  });
+});
+
+describe("franja Tarde 16:00–24:00 (regresión: «24:00» no debe romper el bucketizado)", () => {
+  const tarde = franja({ id: "f-tarde", inicio: "16:00", fin: "24:00", orden: 1 });
+
+  it("horaEnRangoFranja contiene 16:00–23:59 y no degenera", () => {
+    expect(horaEnRangoFranja("16:00", tarde.inicio, tarde.fin)).toBe(true);
+    expect(horaEnRangoFranja("23:59", tarde.inicio, tarde.fin)).toBe(true);
+    expect(horaEnRangoFranja("15:59", tarde.inicio, tarde.fin)).toBe(false);
+  });
+
+  it("franjaIdParaHoraEvento manda los eventos de la tarde a la franja Tarde", () => {
+    const manana = franja({ id: "f-manana", inicio: "08:00", fin: "16:00", orden: 0 });
+    expect(franjaIdParaHoraEvento("20:00", [manana, tarde])).toBe("f-tarde");
+  });
+
+  it("franjasSolapan detecta el solape Mañana/Tarde si comparten el corte", () => {
+    const manana = franja({ id: "f-manana", inicio: "08:00", fin: "16:30", orden: 0 });
+    expect(franjasSolapan(manana, tarde)).toBe(true);
   });
 });
 

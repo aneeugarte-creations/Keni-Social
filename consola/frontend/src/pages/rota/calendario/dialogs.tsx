@@ -93,6 +93,9 @@ export function DialogEditarEvento({
   const [contenido, setPublicacion] = React.useState(evento.contenido);
   // Recurrencia para CONVERTIR un evento suelto en serie (solo si aún no pertenece a una).
   const [recurrencia, setRecurrencia] = React.useState<ValorRecurrencia | null>(null);
+  // Bloquea reentradas mientras se espera el diálogo de alcance/confirmación, antes de que
+  // `isPending` de la mutación tome el relevo.
+  const [enviando, setEnviando] = React.useState(false);
 
   const vinculadas = tareasVinculadas ?? [];
   const esSerie = Boolean(evento.serie_id);
@@ -278,21 +281,26 @@ export function DialogEditarEvento({
             variant="outline"
             className="text-destructive hover:text-destructive"
             onClick={async () => {
-              if (esSerie) {
-                const alcance = await elegirAlcance("Borrar");
-                if (alcance) borrar.mutate(alcance);
-                return;
+              setEnviando(true);
+              try {
+                if (esSerie) {
+                  const alcance = await elegirAlcance("Borrar");
+                  if (alcance) borrar.mutate(alcance);
+                  return;
+                }
+                if (
+                  await confirmar({
+                    mensaje: mensajeBorrar,
+                    destructivo: true,
+                    textoConfirmar: "Borrar",
+                  })
+                )
+                  borrar.mutate(undefined);
+              } finally {
+                setEnviando(false);
               }
-              if (
-                await confirmar({
-                  mensaje: mensajeBorrar,
-                  destructivo: true,
-                  textoConfirmar: "Borrar",
-                })
-              )
-                borrar.mutate(undefined);
             }}
-            disabled={borrar.isPending}
+            disabled={enviando || borrar.isPending}
           >
             {borrar.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -307,11 +315,16 @@ export function DialogEditarEvento({
             </Button>
             <Button
               onClick={async () => {
-                const alcance = await elegirAlcance("Editar");
-                if (alcance === null) return; // canceló el diálogo de alcance
-                guardar.mutate(alcance);
+                setEnviando(true);
+                try {
+                  const alcance = await elegirAlcance("Editar");
+                  if (alcance === null) return; // canceló el diálogo de alcance
+                  guardar.mutate(alcance);
+                } finally {
+                  setEnviando(false);
+                }
               }}
-              disabled={guardar.isPending || recurrenciaIncompleta}
+              disabled={enviando || guardar.isPending || recurrenciaIncompleta}
             >
               {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Guardar
