@@ -52,28 +52,6 @@ import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 
 import { REDES_POR_FORMATO } from "./formato";
 
-// Etiquetas legibles de las categorías ESPECIALES del plan (claves fijas, no líneas
-// editoriales). El resto de categorías son IDs de línea vertical y su nombre se resuelve
-// contra el catálogo `lineas` del propio endpoint (ver `etiquetaCategoria`).
-const ETIQUETA_CATEGORIA: Record<string, string> = {
-  mx: "México",
-  internacional: "Internacional",
-  breaking: "Última hora",
-  entretenimiento: "Entretenimiento",
-  evergreen: "Evergreen",
-  deportes: "Deportes",
-};
-// Nombre legible de una categoría del plan: primero el rótulo fijo de las especiales, luego
-// el nombre de la línea editorial cuyo ID coincide (es la misma fuente que «Programa/Plan»);
-// si no, la clave capitalizada. Así el dropdown nunca muestra IDs crudos.
-function etiquetaCategoria(c: string, nombresLinea: Record<string, string>): string {
-  return (
-    ETIQUETA_CATEGORIA[c] ??
-    nombresLinea[c] ??
-    c.charAt(0).toUpperCase() + c.slice(1)
-  );
-}
-
 // Primer enlace http(s) dentro del texto pegado. Sirve para enrutar a `url` (el backend lee
 // la página) y para avisar al equipo de que lo voy a leer. Heurística deliberadamente simple.
 const RE_URL = /(https?:\/\/[^\s]+)/i;
@@ -139,13 +117,6 @@ export function DialogoCrearPost({
     () => opcionesQuery.data?.categorias?.[marcaEfectiva] ?? [],
     [opcionesQuery.data, marcaEfectiva],
   );
-  // Mapa id→nombre de las líneas editoriales (mismas que pueblan «Programa/Plan»): resuelve el
-  // nombre legible de las categorías que son una línea, en vez de mostrar su ID.
-  const nombresLinea = React.useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const l of opcionesQuery.data?.lineas ?? []) m[l.id] = l.nombre;
-    return m;
-  }, [opcionesQuery.data]);
 
   const url = primeraUrl(texto);
 
@@ -230,7 +201,7 @@ export function DialogoCrearPost({
   // Si la categoría elegida no existe para la marca efectiva (cambió de marca en "Todas"), se
   // limpia: no se manda una categoría que no casa con ninguna franja de esa marca.
   React.useEffect(() => {
-    if (categoria && !categoriasMarca.includes(categoria)) setCategoria("");
+    if (categoria && !categoriasMarca.some((c) => c.id === categoria)) setCategoria("");
   }, [categoriasMarca, categoria]);
   React.useEffect(() => {
     if (!abierto || redesInicializadas || redesCatalogo.length === 0) return;
@@ -334,8 +305,8 @@ export function DialogoCrearPost({
               </SelectTrigger>
               <SelectContent>
                 {categoriasMarca.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {etiquetaCategoria(c, nombresLinea)}
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>

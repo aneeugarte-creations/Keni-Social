@@ -67,15 +67,23 @@ export interface LineaEditorialOpcion {
   marca: string;
 }
 
+/** Una categoría del plan (la que tiene franja): su `id` y su `nombre` legible (resuelto en
+ *  el backend). El `id` es lo que viaja al crear la pieza; el `nombre` es lo que se muestra. */
+export interface CategoriaPlanOpcion {
+  id: string;
+  nombre: string;
+}
+
 export interface OpcionesPiezas {
   redes: RedPieza[];
   estados: EstadoOpcion[];
   marcas: MarcaOpcion[];
   /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
   lineas: LineaEditorialOpcion[];
-  /** Categorías del plan con franja, POR marca (id → categorías). Pueblan el dropdown
-   *  obligatorio de «Crear post» para que la pieza encuentre hueco al programarse. */
-  categorias: Record<string, string[]>;
+  /** Categorías del plan con franja, POR marca. Cada una llega con su `nombre` legible ya
+   *  resuelto en el backend (líneas por su nombre de BD; señales del motor por su rótulo):
+   *  pueblan el dropdown obligatorio de «Crear post» y el SPA pinta el nombre tal cual. */
+  categorias: Record<string, CategoriaPlanOpcion[]>;
   /**
    * Gate maestro `KENI_PUBLICAR_REAL`. Si es `false`, las piezas programadas NO salen
    * solas (el programador opera en dry-run): el SPA avisa cuando hay programadas en cola.

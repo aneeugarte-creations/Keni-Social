@@ -18,8 +18,13 @@ const OPCIONES = {
     { id: "aprobado", nombre: "Aprobado" },
   ],
   marcas: [{ id: "unotv", nombre: "Uno TV" }],
-  // Categorías con franja por marca: pueblan el dropdown OBLIGATORIO de «Crear post».
-  categorias: { unotv: ["mx", "internacional"] },
+  // Categorías con franja por marca ({id, nombre}): pueblan el dropdown OBLIGATORIO de «Crear post».
+  categorias: {
+    unotv: [
+      { id: "mx", nombre: "Nacional" },
+      { id: "internacional", nombre: "Internacional" },
+    ],
+  },
 };
 
 const PIEZA = {

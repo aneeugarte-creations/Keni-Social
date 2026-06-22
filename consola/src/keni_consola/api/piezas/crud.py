@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import marcas, permisos, redes, repos
+from ... import bootstrap_lineas, marcas, permisos, redes, repos
 from ...dominio import licencia_imagen
 from ..._http_json import (
     cursor_query,
@@ -181,8 +181,15 @@ def _opciones() -> dict[str, Any]:
         m = (f.get("marca") or "").strip()
         if cat and m:
             cats_por_marca.setdefault(m, set()).add(cat)
+    # Nombre legible de cada categoría resuelto EN EL BACKEND (única fuente de verdad): las
+    # líneas vía su nombre de BD, las señales del motor ('breaking'/'evergreen') vía
+    # `etiqueta_categoria`. El SPA pinta `nombre` tal cual; no traduce ids.
+    nombres_linea = {ln["id"]: ln["nombre"] for ln in lineas}
     categorias = {
-        m.id: sorted(cats_por_marca.get(m.id, set()) | cats_globales)
+        m.id: [
+            {"id": c, "nombre": bootstrap_lineas.etiqueta_categoria(c, nombres_linea)}
+            for c in sorted(cats_por_marca.get(m.id, set()) | cats_globales)
+        ]
         for m in marcas.catalogo()
     }
     from ... import config

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import unicodedata
+from collections.abc import Mapping
 from typing import Any
 
 from . import repos
@@ -391,6 +392,31 @@ _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
 #   - 'breaking' = última hora (prioridad), '' = genérico (cualquier pieza).
 #   - 'evergreen' = flujo de reciclaje (lo llena su automatismo diario).
 _CLAVES_NO_LINEA: frozenset[str] = frozenset({"", "breaking", "evergreen"})
+
+# ÚNICA fuente de verdad del nombre legible de las señales del motor (las claves de plan que
+# NO son una línea editorial). El nombre del resto de categorías —ids de línea— lo da la BD
+# (la etiqueta vertical). La consume cualquier superficie que muestre una categoría de plan
+# (franjas, producción, mesa de noticias, dropdown de «Crear post»): así no se duplica el rótulo.
+ETIQUETAS_CLAVE_NO_LINEA: dict[str, str] = {
+    "breaking": "Última hora",
+    "evergreen": "Evergreen",
+}
+
+
+def etiqueta_categoria(categoria: str, lineas: Mapping[str, str]) -> str:
+    """Nombre legible de una categoría de plan/franja.
+
+    - señal del motor ('breaking'/'evergreen') -> su rótulo fijo;
+    - id de línea -> su nombre (vía el mapa `lineas` id->nombre);
+    - '' -> genérico (cadena vacía);
+    - desconocida -> la propia clave (último recurso, nunca un id crudo si está en `lineas`).
+    """
+    if not categoria:
+        return ""
+    rotulo = ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
+    if rotulo is not None:
+        return rotulo
+    return lineas.get(categoria, categoria)
 
 
 def linea_id_de_slug(marca: str, clave: str) -> str:

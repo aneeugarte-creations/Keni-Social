@@ -42,7 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import config, marcas, redes, repos
+from .. import bootstrap_lineas, config, marcas, redes, repos
 from ..tiempo import ahora_iso, inicio_dia_cdmx_iso_utc
 
 _log = logging.getLogger("keni_consola.api.produccion")
@@ -178,10 +178,9 @@ def _dia(marca: str) -> dict:
 
         def _etiqueta_clave(clave: str) -> str:
             """Nombre legible de una clave de plan: id de línea -> su nombre; señales con su rótulo."""
-            if clave == "breaking":
-                return "Última hora"
-            if clave == "evergreen":
-                return "Evergreen"
+            rotulo = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(clave)
+            if rotulo is not None:
+                return rotulo
             et = repos.obtener_etiqueta(clave)
             return (et or {}).get("nombre") or clave
 

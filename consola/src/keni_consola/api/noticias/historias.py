@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_redactar, config, estados, marcas, repos
+from ... import autogen_redactar, bootstrap_lineas, config, estados, marcas, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
@@ -540,10 +540,9 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
                 conteo_linea[lid] = conteo_linea.get(lid, 0) + 1
 
     def _etiqueta_linea(clave: str) -> str:
-        if clave == "breaking":
-            return "Última hora"
-        if clave == "evergreen":
-            return "Evergreen"
+        rotulo = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(clave)
+        if rotulo is not None:
+            return rotulo
         et = repos.obtener_etiqueta(clave)
         return (et or {}).get("nombre") or clave
 

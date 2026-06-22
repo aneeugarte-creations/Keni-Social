@@ -24,10 +24,16 @@ def test_opciones(cliente):
     datos = cliente.get("/api/piezas/opciones").json()
     assert {"redes", "estados", "marcas", "categorias"} <= set(datos)
     # `categorias`: mapa marca -> categorías con franja (pueblan el dropdown obligatorio de
-    # «Crear post»). Sin franjas configuradas en el entorno de test el mapa puede ir vacío por
-    # marca, pero la forma (dict de listas) es estable.
+    # «Crear post»). Cada categoría llega ya con su nombre legible resuelto en el backend
+    # ({id, nombre}); el SPA no traduce ids. Sin franjas en el entorno de test el mapa puede ir
+    # vacío por marca, pero la forma (dict de listas de {id, nombre}) es estable.
     assert isinstance(datos["categorias"], dict)
     assert all(isinstance(v, list) for v in datos["categorias"].values())
+    assert all(
+        isinstance(c, dict) and {"id", "nombre"} <= set(c)
+        for v in datos["categorias"].values()
+        for c in v
+    )
     # redes en orden fijo con limite
     ids = [r["id"] for r in datos["redes"]]
     assert ids == ["x", "instagram", "facebook", "tiktok", "youtube"]
