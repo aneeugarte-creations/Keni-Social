@@ -175,8 +175,15 @@ def _crear(
     grupo: str,
     cadencia: str,
 ) -> tuple[int, dict]:
-    if repos.existe_etiqueta_nombre(nombre, clase, marca):
-        return 409, {"error": "Ya existe una etiqueta con ese nombre."}
+    existente = repos.obtener_etiqueta_por_nombre(nombre, clase, marca)
+    if existente is not None:
+        if existente["activo"]:
+            return 409, {"error": "Ya existe una etiqueta con ese nombre."}
+        # Quitar una etiqueta (la ×) la OCULTA (activo=False), no la borra, para conservar el
+        # histórico de las piezas que ya clasificó. Re-añadir el mismo nombre la resucita en su
+        # sitio (con sus keywords/hashtag previos) en vez de chocar con la copia oculta.
+        etiqueta = repos.actualizar_etiqueta(existente["id"], {"activo": True})
+        return 200, {"etiqueta": _etiqueta_a_dict(etiqueta)}
     # LÍNEA = hashtag (1:1, línea = hueco de programación = hashtag): el hashtag de una línea se
     # DERIVA del nombre, no es un campo libre. Para campañas/otras clases lo edita el equipo.
     if clase == "vertical":
