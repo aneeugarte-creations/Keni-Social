@@ -8,7 +8,7 @@ recalcula n_fuentes/score. La fusión está gateada por `KENI_PIPELINE_FUSIONAR`
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -273,6 +273,56 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
     assert len(repos.items_de_cluster("c1")) == 2                # ambos items reasignados
 
 
+def test_paso_macro_omite_el_llm_si_todo_el_lote_ya_esta_etiquetado(entorno, monkeypatch):
+    """Lote 100% etiquetado (tema_macro + subtema) -> NO se llama al LLM de macro ni de subtema.
+
+    Etiquetado INCREMENTAL: re-correr macro/subtema sobre familias estables en cada barrido era el
+    grueso del gasto del pool (`marcar_*` cuenta filas emparejadas, no cambiadas, así que el código
+    viejo no detectaba que ya estaba todo etiquetado). Postgres (CI)."""
+    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
+    _inicializar("c1")
+    _inicializar("c2")
+    repos.marcar_clusters_tema_macro(["c1", "c2"], "Mundial 2026")
+    repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
+
+    llamadas = {"macro": 0, "subtema": 0}
+    monkeypatch.setattr(fusionar_semantica, "proponer_macro_eventos",
+                        lambda *a, **k: llamadas.__setitem__("macro", llamadas["macro"] + 1) or [])
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas",
+                        lambda *a, **k: llamadas.__setitem__("subtema", llamadas["subtema"] + 1) or [])
+
+    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+    assert llamadas == {"macro": 0, "subtema": 0}
+
+
+def test_paso_macro_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
+    """Con un cluster nuevo SIN etiquetar el macro corre, pero el subtema solo se re-propone para la
+    familia que tiene un cluster sin subtema; la familia ya faceteada se omite. Postgres (CI)."""
+    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
+    for cid in ("c1", "c2", "c3", "c4"):
+        _inicializar(cid)
+    # Familia A: ya etiquetada y faceteada (estable, no debe re-faceterarse).
+    repos.marcar_clusters_tema_macro(["c1", "c2"], "Mundial 2026")
+    repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
+    # c3, c4: nuevos, sin tema_macro ni subtema -> reactivan la pasada de macro-evento.
+
+    macro_out = [
+        {"tema": "Mundial 2026", "ids": ["c1", "c2"]},
+        {"tema": "Elecciones 2026", "ids": ["c3", "c4"]},
+    ]
+    monkeypatch.setattr(fusionar_semantica, "proponer_macro_eventos", lambda *a, **k: macro_out)
+    faceteadas: list[list[str]] = []
+
+    def fake_subtemas(familia, **_kw):
+        faceteadas.append(sorted(str(c["id"]) for c in familia))
+        return []
+
+    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", fake_subtemas)
+
+    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+    assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía a Haiku
+
+
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
     # Def ON: para apagar hay que fijarlo EXPLÍCITO a "0" (no basta con no setearlo).
     monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "0")
@@ -346,3 +396,33 @@ def test_construir_prompt_inserta_historias_y_contrato():
     assert '[{"id":"a"}]' in p
     assert fusionar_semantica._MARCA_HISTORIAS not in p
     assert "grupos" in p
+
+
+# --------------------------------------------------------------------------- #
+# Frescura del lote (`_fresco_para_fusion`): solo lo VIVO entra al LLM (puro)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_fresco_para_fusion_excluye_lo_rancio_e_incluye_lo_vivo():
+    """Un cluster sin actividad dentro de la ventana de fusión NO entra al lote (ya se digirió)."""
+    from keni_consola.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
+
+    ahora = datetime.now(UTC)
+    corte = ahora - timedelta(hours=48)
+    vivo = {"ultimo_visto": (ahora - timedelta(hours=10)).isoformat()}
+    rancio = {"ultimo_visto": (ahora - timedelta(hours=60)).isoformat()}
+    assert _fresco_para_fusion(vivo, corte) is True
+    assert _fresco_para_fusion(rancio, corte) is False
+
+
+def test_fresco_para_fusion_tolera_canon_sin_offset_y_marca_ilegible():
+    """`fromisoformat` lee el canon de `iso_utc` (naive=UTC); marca vacía/ilegible -> conservador (se procesa)."""
+    from keni_consola.recolectar_daemon.pasos.fusionar_semantica import _fresco_para_fusion
+    from keni_consola.tiempo import iso_utc
+
+    ahora = datetime.now(UTC)
+    corte = ahora - timedelta(hours=48)
+    vivo_naive = {"ultimo_visto": iso_utc(ahora - timedelta(hours=1))}  # sin offset (naive)
+    assert _fresco_para_fusion(vivo_naive, corte) is True
+    assert _fresco_para_fusion({"ultimo_visto": "basura"}, corte) is True  # ilegible -> no excluye
+    assert _fresco_para_fusion({}, corte) is True  # sin marca -> no excluye

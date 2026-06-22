@@ -625,6 +625,14 @@ def test_fusion_semantica_max_default_holgado(limpio, store_aislado):
     assert config.fusion_semantica_max() == 80
 
 
+def test_fusion_ventana_h_default_mas_corta_que_agrupacion(limpio, store_aislado):
+    """El lote de fusión/macro solo mira lo VIVO (48h), ventana más corta que la de agrupación
+    (72h): un cluster ya digerido y sin items nuevos no se reprocesa con el LLM en cada barrido."""
+    store_aislado.delenv(config.ENV_FUSION_VENTANA_H, raising=False)
+    assert config.fusion_ventana_h() == 48
+    assert config.fusion_ventana_h() < config.cluster_ventana_h()
+
+
 # --------------------------------------------------------------------------- #
 # Redes del plan diario (`KENI_PLAN_REDES[::marca]`): declaran las redes esperadas #
 # --------------------------------------------------------------------------- #

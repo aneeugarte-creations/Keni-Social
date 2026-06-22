@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import keni_consola.recolectar_daemon as _pkg
@@ -12,6 +12,34 @@ from ... import config, marcas, repos
 from ...dominio import fusionar_semantica, traducir
 from .. import _comun
 from .._comun import _log
+
+
+def _fresco_para_fusion(cluster: dict[str, Any], corte: datetime) -> bool:
+    """True si el cluster tuvo actividad (`ultimo_visto`) en/tras `corte` (ventana de fusión).
+
+    Lee `ultimo_visto` con `fromisoformat` (tolera el canon sin offset de `iso_utc` y el ISO con
+    offset; naive se ASUME UTC, convención del sistema). Si la marca no es legible, NO excluye el
+    cluster (conservador: ante la duda, se procesa).
+    """
+    crudo = str(cluster.get("ultimo_visto") or "").strip()
+    if not crudo:
+        return True
+    try:
+        visto = datetime.fromisoformat(crudo)
+    except ValueError:
+        return True
+    if visto.tzinfo is None:
+        visto = visto.replace(tzinfo=UTC)
+    return visto >= corte
+
+
+def _falta_subtema(ids: list[str], por_id: dict[str, dict[str, Any]]) -> bool:
+    """True si algún cluster de la familia aún no tiene `subtema` (etiquetado incremental).
+
+    Una familia con TODOS sus clusters ya faceteados no se reenvía a Haiku: re-proponer subtemas
+    sobre una familia estable reescribiría la misma etiqueta y pagaría un Haiku por barrido.
+    """
+    return any(not str((por_id.get(i) or {}).get("subtema") or "").strip() for i in ids)
 
 
 def _etiqueta_canonica(ids: list[str], por_id: dict[str, dict[str, Any]], propuesta: str) -> str:
@@ -111,6 +139,13 @@ def paso_fusionar_semantica(
 
     nuevos = [c for c in recientes_todas if (c.get("estado") or "nuevo") == "nuevo"]
 
+    # Frescura del lote: solo lo VIVO entra al LLM. Un cluster `nuevo` sin actividad en la ventana
+    # de fusión (más corta que la de agrupación) ya se digirió; reenviarlo a fusión/macro en cada
+    # barrido reprocesaría historias de hace días sin nada que cambiar. Si recibe un item nuevo su
+    # `ultimo_visto` avanza y reentra. También estabiliza la huella (no se mueve por lo rancio).
+    corte_fusion = ahora - timedelta(hours=config.fusion_ventana_h())
+    nuevos = [c for c in nuevos if _fresco_para_fusion(c, corte_fusion)]
+
     # Skip-if-unchanged: si el conjunto candidato no cambió desde la última pasada evaluada,
     # no hay nada nuevo que fusionar/etiquetar -> no se llama al LLM (ahorro de tokens). Un
     # cluster nuevo o uno con items nuevos mueve la huella y re-evalúa el LOTE COMPLETO (un
@@ -184,6 +219,15 @@ def paso_fusionar_semantica(
                 etapa="Fusionar",
             )
 
+        # Etiquetado INCREMENTAL: solo se invoca el LLM de macro-evento si hay clusters SIN
+        # `tema_macro`. Si TODO el lote ya está etiquetado no hay familia nueva que formar, y
+        # `marcar_clusters_tema_macro`/`_subtema` cuentan filas EMPAREJADAS (no cambiadas): re-correr
+        # sobre lo ya etiquetado reescribiría la misma etiqueta y pagaría un Haiku de macro + uno de
+        # subtema por familia en CADA barrido. El bloque macro es lo último del cuerpo: `continue` lo
+        # omite. Un cluster nuevo (sin `tema_macro`) reactiva la pasada y se une a su familia.
+        if not any(not str(c.get("tema_macro") or "").strip() for c in lote):
+            continue
+
         # MACRO-EVENTO (Fase A): además de FUNDIR duplicados, ETIQUETA familias de clusters
         # DISTINTOS que cubren un mismo gran evento (cumbre, desastre, torneo…) SIN fusionarlos:
         # cada sub-historia conserva su cluster y su corroboración real. Producción usa `tema_macro`
@@ -218,8 +262,10 @@ def paso_fusionar_semantica(
                 familias_desc.append(f"{tema} ({n})")
             # SUBTEMA (Fase A.2): parte la familia en facetas coherentes (partidos, espectáculo…)
             # para que cada carrusel sea de un tipo y la cadencia sea por subtema, no por evento.
-            # Best-effort: un fallo no aborta el etiquetado del macro-evento.
-            _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
+            # Incremental: solo si ALGÚN cluster de la familia aún no tiene subtema (una familia ya
+            # faceteada no se reenvía a Haiku). Best-effort: un fallo no aborta el etiquetado macro.
+            if _falta_subtema(ids, por_id):
+                _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
         if etiquetadas:
             macro_total += etiquetadas
             resumen_macro = (

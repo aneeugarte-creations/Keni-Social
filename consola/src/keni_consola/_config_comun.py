@@ -424,6 +424,7 @@ ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 # cuántas historias por marca se mandan a Haiku por barrido (coste/contexto).
 ENV_PIPELINE_FUSIONAR = "KENI_PIPELINE_FUSIONAR"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
+ENV_FUSION_VENTANA_H = "KENI_FUSION_VENTANA_H"
 
 # Señal de RENDIMIENTO en la priorización (Fase 2c): prioriza historias de las líneas editoriales que
 # MEJOR funcionan en redes (Metricool). GATEADO por `KENI_RENDIMIENTO_RANKING` (def OFF). Anti-sesgo:
@@ -735,6 +736,10 @@ PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 # distintos) y todos son recientes a la vez; un cap holgado los funde en UNA pasada en vez de
 # dejar la cola para la siguiente (donde cada fragmento compite por separado con corroboración ~0).
 FUSION_SEMANTICA_MAX_DEF = 80
+# Ventana de FRESCURA (horas) del lote de fusión/macro-evento: más corta que la de agrupación
+# (72h). Un cluster sin actividad nueva en esta ventana ya se digirió y no se reenvía al LLM de
+# fusión/macro en cada barrido; si recibe un item nuevo su `ultimo_visto` avanza y reentra.
+FUSION_VENTANA_H_DEF = 48
 
 # Rendimiento en la priorización (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
 SCORE_PESO_RENDIMIENTO_DEF = 0.15
@@ -903,6 +908,7 @@ __all__ = [
     'ENV_FEED_SLA_MIN',
     'ENV_PIPELINE_FUSIONAR',
     'ENV_FUSION_SEMANTICA_MAX',
+    'ENV_FUSION_VENTANA_H',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
     'ENV_GENERACIONES',
@@ -1022,6 +1028,7 @@ __all__ = [
     'FFMPEG_BIN_DEF',
     'FUENTES_BAJA_CONFIANZA_DEF',
     'FUSION_SEMANTICA_MAX_DEF',
+    'FUSION_VENTANA_H_DEF',
     'GENERACIONES_TTL_HORAS_DEF',
     'HOST_DEF',
     'INGESTA_BACKOFF_TOPE_SEG',

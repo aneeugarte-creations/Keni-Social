@@ -26,6 +26,7 @@ from ._config_comun import (
     ENV_FEED_SLA_MIN,
     ENV_FUENTES_BAJA_CONFIANZA,
     ENV_FUSION_SEMANTICA_MAX,
+    ENV_FUSION_VENTANA_H,
     ENV_INGESTA_BATCH,
     ENV_INGESTA_INTERVALO_BREAKING,
     ENV_INGESTA_INTERVALO_DEFECTO,
@@ -80,6 +81,7 @@ from ._config_comun import (
     FEED_SLA_MIN_DEF,
     FUENTES_BAJA_CONFIANZA_DEF,
     FUSION_SEMANTICA_MAX_DEF,
+    FUSION_VENTANA_H_DEF,
     INGESTA_BATCH_DEF,
     INGESTA_INTERVALO_BREAKING_DEF,
     INGESTA_INTERVALO_DEFECTO_DEF,
@@ -655,6 +657,16 @@ def fusion_semantica_max() -> int:
     (`KENI_FUSION_SEMANTICA_MAX`, def 80, min 2). Acota coste y tamaño de contexto."""
     return _entero(ENV_FUSION_SEMANTICA_MAX, FUSION_SEMANTICA_MAX_DEF, minimo=2)
 
+
+def fusion_ventana_h() -> int:
+    """Ventana de FRESCURA (horas) del lote de fusión/macro-evento (`KENI_FUSION_VENTANA_H`, def 48, min 1).
+
+    Más corta que la ventana de agrupación (`KENI_CLUSTER_VENTANA_H`, 72h): solo los clusters con
+    actividad (`ultimo_visto`) dentro de esta ventana entran al LLM de fusión/macro. Un cluster ya
+    digerido y sin items nuevos sale del lote (no se reprocesa en cada barrido); si recibe un item
+    nuevo su `ultimo_visto` avanza y reentra. Acota el lote a lo VIVO, no a todo el feed reciente.
+    """
+    return _entero(ENV_FUSION_VENTANA_H, FUSION_VENTANA_H_DEF, minimo=1)
 
 
 # --------------------------------------------------------------------------- #
