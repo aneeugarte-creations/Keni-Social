@@ -7,9 +7,8 @@ puede mutar el tablero. Toda salida es un dict JSON-serializable; los errores sa
 `{"error": "..."}` en espanol (nunca un traceback).
 
 Estados de una fila por plataforma (el "carril" del tablero):
-    pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
-"mover" una pieza = cambiar el estado de su fila por plataforma. Cruzar a `aprobado`/
-`publicado` dispara los eventos internos/webhooks de la Consola (no hay que hacer nada extra).
+    borrador -> en_revision -> programado -> publicado
+"mover" una pieza = cambiar el estado de su fila por plataforma.
 """
 
 from __future__ import annotations
@@ -29,6 +28,10 @@ from .cliente import ClienteConsola, ErrorConsola
 # Las allowlists del tablero (CLASES/ESTADOS_*/FLUJOS) vienen de keni-shared
 # (`keni_shared.estados`), la MISMA fuente que re-exporta `keni_consola.estados`.
 # Se valida aqui para dar un error claro ANTES de tocar la red.
+
+# `prioridad` no es un estado del tablero (no vive en keni-shared); su catalogo es el
+# del back (alta|media|baja). Se valida aqui para cortar antes de tocar la red.
+PRIORIDADES: tuple[str, ...] = ("alta", "media", "baja")
 
 
 def _resumen_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +127,8 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
             return {"error": f"Flujo invalido. Usa uno de: {', '.join(FLUJOS)}."}
         if clase not in CLASES:
             return {"error": f"Clase invalida. Usa una de: {', '.join(CLASES)}."}
+        if prioridad and prioridad not in PRIORIDADES:
+            return {"error": f"Prioridad invalida. Usa una de: {', '.join(PRIORIDADES)}."}
         cuerpo: dict[str, Any] = {
             "titulo": titulo.strip(),
             "clase": clase,
@@ -145,10 +150,9 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
     @mcp.tool()
     def mover_pieza(publicacion_id: str, pieza_id: str, estado: str) -> dict:
         """Mueve una pieza (una fila por plataforma) a otro estado del carril:
-        pendiente|en_curso|en_revision|aprobado|programado|publicado. Es el equivalente a
-        arrastrar la tarjeta en el tablero. Pasar a `aprobado` o `publicado` dispara los
-        eventos internos/webhooks de la Consola. Usa `listar_tablero` para conocer
-        `publicacion_id` y `pieza_id`."""
+        borrador|en_revision|programado|publicado. Es el equivalente a arrastrar la
+        tarjeta en el tablero. Usa `listar_tablero` para conocer `publicacion_id` y
+        `pieza_id`."""
         if estado not in ESTADOS_PLATAFORMA:
             return {"error": f"Estado invalido. Usa uno de: {', '.join(ESTADOS_PLATAFORMA)}."}
         try:

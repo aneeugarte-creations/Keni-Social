@@ -17,7 +17,14 @@ import pytest
 from mcp.server.fastmcp import FastMCP
 
 from keni_tablero.cliente import ErrorConsola
-from keni_tablero.tools import CLASES, ESTADOS_PUBLICACION, ESTADOS_PLATAFORMA, FLUJOS, registrar
+from keni_tablero.tools import (
+    CLASES,
+    ESTADOS_PUBLICACION,
+    ESTADOS_PLATAFORMA,
+    FLUJOS,
+    PRIORIDADES,
+    registrar,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -108,6 +115,14 @@ async def test_crear_contenido_clase_invalida():
     out = await _llamar(cliente, "crear_publicacion", titulo="Pieza", clase="epica")
     assert "Clase invalida" in out["error"]
     assert cliente.llamadas == []
+
+
+async def test_crear_contenido_prioridad_invalida():
+    cliente = ClienteFalso()
+    out = await _llamar(cliente, "crear_publicacion", titulo="Pieza", prioridad="urgente")
+    assert "Prioridad invalida" in out["error"]
+    assert cliente.llamadas == []
+    assert set(PRIORIDADES) == {"alta", "media", "baja"}
 
 
 async def test_mover_pieza_estado_invalido():
