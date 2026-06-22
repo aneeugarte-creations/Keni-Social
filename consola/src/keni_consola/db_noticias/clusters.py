@@ -14,6 +14,11 @@ from .items import _SELECT_NOTICIA_ITEM, _fila_a_noticia_item
 # --- Clustering de HISTORIAS (Ola B): noticias_clusters -------------------- #
 # Una historia = la misma noticia contada por varias fuentes y en el tiempo. El daemon de
 # ingesta asigna `cluster_id` a los items recién insertados y `upsert`ea el cluster recalculado.
+# Estados válidos de un cluster. `descartado` se CONSERVA en el vocabulario por compatibilidad
+# (validación de query params de la API, filtro de `borrar-todo`, datos heredados), pero un cluster
+# YA NO queda `descartado`: descartar/caducar BORRAN la fila del cluster y dejan sus items como
+# lápida `descartado` (`ESTADOS_NOTICIA_ITEM` sí usa el valor). El valor sigue siendo aceptable como
+# filtro, simplemente no hay clusters vivos que lo lleven.
 ESTADOS_NOTICIA_CLUSTER: tuple[str, ...] = ("nuevo", "usado", "descartado")
 
 _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
@@ -902,5 +907,29 @@ def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
             (publicacion_id, cluster_id),
         )
         con.commit()
+    finally:
+        con.close()
+
+
+def descartar_cluster(cluster_id: str) -> bool:
+    """DESCARTE definitivo de una historia: BORRA la fila del cluster y deja sus items como lápida.
+
+    Descartar = borrado de la historia de la UI/ranking SIN riesgo de reaparición al re-recolectar.
+    En una sola escritura: marca sus `noticias_items` como `estado='descartado'` (la LÁPIDA que
+    sobrevive y bloquea el `ON CONFLICT (fuente_id, clave)` de la re-ingesta, y que el clustering
+    ya excluye por sus filtros `<> 'descartado'`) y BORRA la fila del cluster (desaparece del panel
+    sin dejar estado `descartado` a nivel de cluster). Idempotente: True si el cluster existía.
+    """
+    if not cluster_id:
+        return False
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET estado = 'descartado' WHERE cluster_id = ?",
+            (cluster_id,),
+        )
+        cur = con.execute("DELETE FROM noticias_clusters WHERE id = ?", (cluster_id,))
+        con.commit()
+        return cur.rowcount > 0
     finally:
         con.close()

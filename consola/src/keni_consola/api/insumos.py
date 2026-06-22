@@ -168,7 +168,9 @@ def _descartar_gemela_pool(item: dict[str, Any]) -> None:
             and not cluster.get("publicacion_id")
             and int(cluster.get("n_fuentes") or 0) <= 1
         ):
-            repos.actualizar_noticia_cluster(cid, estado="descartado")
+            # Misma semántica que descartar una historia: se BORRA la fila del cluster (sus items
+            # quedan `descartado` como lápida anti-reaparición), no se marca `descartado`.
+            repos.descartar_cluster(cid)
     except Exception:  # noqa: BLE001 -- el descarte del pool es aditivo; nunca frena al llamante
         _log.warning(
             "insumos: no se pudo descartar la gemela del pool (%s)",

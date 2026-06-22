@@ -374,6 +374,10 @@ def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
     return db.marcar_items_cluster_usados(cluster_id, publicacion_id)
 
 
+def descartar_cluster(cluster_id: str) -> bool:
+    return db.descartar_cluster(cluster_id)
+
+
 def claves_vistas(fuente_id: str) -> set[str]:
     return db.claves_vistas(fuente_id)
 

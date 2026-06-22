@@ -1,8 +1,8 @@
 """HISTORIAS: newsroom story view sobre los clusters + la Mesa de redacción.
 
 Vista por HISTORIA (cluster) del archivo: listar/detalle, la Mesa segmentada por las líneas
-del plan, la promoción al tablero (`usar`), y la curación a escala (descartar/restaurar +
-lotes de descarte/borrado/vaciado). Aquí viven sus handlers y los helpers de serialización de
+del plan, la promoción al tablero (`usar`), y la curación a escala (descartar + lotes de
+descarte/borrado/vaciado). Aquí viven sus handlers y los helpers de serialización de
 una historia (`_historia_a_dict` y satélites: estado de pieza, umbral de producción, pesos del
 score, timeline de fuentes). El pool a nivel de ITEM vive en `items.py`.
 """
@@ -117,6 +117,50 @@ def _evaluar_umbral(
         return False, "no evaluable"
 
 
+def _auto_promocion_activa(marca: str, gate_memo: dict[str, bool]) -> bool:
+    """¿La auto-promoción (admisión CI «Crear noticias») está encendida para `marca`? Memoizado.
+
+    Es el MISMO gate que abre/cierra la admisión real del barrido de investigación
+    (`config.etapa_activa(ENV_PIPELINE_RECOLECTAR, marca)`: maestro global ON y marca no excluida).
+    Se lee UNA vez por marca y por request (vía `gate_memo`), no por historia. Best-effort: ante un
+    fallo de config se reporta apagada (el badge no promete de más).
+    """
+    if marca not in gate_memo:
+        try:
+            gate_memo[marca] = config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca)
+        except Exception:  # noqa: BLE001 -- sin gate legible, no prometemos "sale sola"
+            gate_memo[marca] = False
+    return gate_memo[marca]
+
+
+def _evaluar_promovible(
+    cluster: dict[str, Any],
+    vocab_memo: dict[str, frozenset[str]],
+    gate_memo: dict[str, bool],
+) -> tuple[bool, str]:
+    """¿Esta historia se auto-promovería AHORA DE VERDAD? `(promovible, motivo)`.
+
+    Paridad HONESTA con la auto-promoción real (no solo el umbral de score/marca). Una historia
+    «sale sola al feed» solo si las TRES condiciones se cumplen:
+      1. la máquina de admisión está ENCENDIDA para su marca (`_auto_promocion_activa`); si no, el
+         umbral da igual: nada se admite. Es la causa habitual de un badge que mentía (la máquina
+         suele estar apagada por defecto).
+      2. su `verificacion_fuente` está en `VERIFICADAS_OK` (la admisión filtra por verificación: una
+         historia que ahí se descartaría NO es realmente promovible).
+      3. supera el umbral de score/marca/maduración/no-dudosa (`_evaluar_umbral`).
+    El gate y la verificación se comprueban ANTES del umbral para dar el motivo más útil.
+    """
+    from ...pipeline_contenido._comun import VERIFICADAS_OK
+
+    marca = str(cluster.get("marca") or "")
+    if not _auto_promocion_activa(marca, gate_memo):
+        return False, "auto-promoción apagada"
+    verificacion = (cluster.get("verificacion_fuente") or "").strip()
+    if verificacion not in VERIFICADAS_OK:
+        return False, "pendiente de verificación de la fuente"
+    return _evaluar_umbral(cluster, vocab_memo)
+
+
 def _pesos_score_publicos() -> dict[str, float]:
     """Los PESOS vivos de la fórmula del ranking, para que la UI enseñe el cálculo.
 
@@ -220,8 +264,10 @@ def _historia_a_dict(
         # persiste el daemon al puntuar; ver `agrupar.puntuar_detalle`).
         "score_razon": cluster.get("score_razon") or "",
         "score_desglose": cluster.get("score_desglose") or {},
-        # UMBRAL de producción automática (la MISMA evaluación que la promoción CI): si esta
-        # historia dispararía verificación+copy solos, y el porqué (o el porqué no), legible.
+        # "Sale sola al feed" HONESTO: True solo si esta historia se auto-promovería AHORA de
+        # verdad — máquina de admisión ENCENDIDA para la marca + `verificacion_fuente` OK + umbral
+        # de score/marca (lo calcula `_evaluar_promovible`). `promovible_motivo` lo explica
+        # (p. ej. "auto-promoción apagada" si la máquina está OFF).
         "promovible": bool(umbral[0]) if umbral else False,
         "promovible_motivo": (umbral[1] if umbral else ""),
         "breaking": int(cluster.get("breaking") or 0),
@@ -279,21 +325,24 @@ def _listar_historias(
     resumen_pieza = repos.estado_pieza_por_publicacion(cids)
     verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
-    historias = [
-        _historia_a_dict(
-            {
-                **c,
-                "verificacion_fuente": (c.get("verificacion_fuente") or "")
-                or verificacion_map.get(c.get("publicacion_id") or "", ""),
-            },
-            repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
-            pieza_estado=_pieza_estado(
-                c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
-            ),
-            umbral=_evaluar_umbral(c, vocab_memo),
+    gate_memo: dict[str, bool] = {}  # gate de auto-promoción por marca, 1 lectura por request
+    historias = []
+    for c in clusters:
+        enriquecido = {
+            **c,
+            "verificacion_fuente": (c.get("verificacion_fuente") or "")
+            or verificacion_map.get(c.get("publicacion_id") or "", ""),
+        }
+        historias.append(
+            _historia_a_dict(
+                enriquecido,
+                repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+                pieza_estado=_pieza_estado(
+                    c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
+                ),
+                umbral=_evaluar_promovible(enriquecido, vocab_memo, gate_memo),
+            )
         )
-        for c in clusters
-    ]
     return {"historias": historias, "total": total}
 
 
@@ -337,10 +386,11 @@ async def listar_historias(request: Request) -> Response:
 _MESA_POR_LINEA_DEF = 5
 _MESA_POR_LINEA_MAX = 20
 # Muestra del pool que se reparte por línea (el pool viene rankeado por score: con cientos
-# de historias vivas la muestra cubre de sobra el top de cada línea).
+# de historias vivas la muestra cubre de sobra el top de cada línea). Los conteos `en_pool` se
+# escalan al COUNT(*) real del pool, así no mienten cuando el pool supera la muestra.
 _MESA_MUESTRA = 300
 # Tope de candidatas (rankeadas por score) que viajan en la lista de navegación por GRUPO.
-# El conteo por grupo (`en_pool`) usa la muestra completa; esta lista es solo el browse visible.
+# El conteo por grupo (`en_pool`) se escala al pool real; esta lista es solo el browse visible.
 _MESA_GRUPO_TOPE = 60
 
 # Orden de los GRUPOS en la barra de navegación de la Mesa (mayor prioridad primero), según el
@@ -376,9 +426,21 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- sin contador, la mesa muestra progreso 0 (no falla)
             resumen_plan = {}
 
-    clusters, _total = repos.listar_noticia_clusters(
+    clusters, total_pool = repos.listar_noticia_clusters(
         marca=marca, estado="nuevo", limite=_MESA_MUESTRA
     )
+    # CONTEO HONESTO: `total_pool` es el COUNT(*) REAL del pool de la marca. La clasificación por
+    # línea/grupo solo puede correr sobre la MUESTRA topada (`_MESA_MUESTRA`), que es lo que se
+    # renderiza como top-N. Si el pool real supera la muestra, los conteos de la muestra
+    # subestiman: se ESCALAN al total real (factor = total_pool / muestra) para que cada `en_pool`
+    # sea representativo del pool entero y no del recorte (el "300 vs 13"). Sin tope (muestra ⊇
+    # pool) el factor es 1.0 y los conteos son exactos. `historias[]` sigue siendo top-N por línea.
+    _factor = (total_pool / len(clusters)) if clusters else 1.0
+
+    def _en_pool(n_muestra: int) -> int:
+        """Escala un conteo de la MUESTRA al pool REAL (exacto si la muestra no se topó)."""
+        return n_muestra if _factor == 1.0 else round(n_muestra * _factor)
+
     # Líneas (vertical) de la marca: el reparto al plan y la barra de grupos las reusan.
     vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
     grupos_orden = _grupos_ordenados(vert_etiquetas)
@@ -428,24 +490,28 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
     verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
+    gate_memo: dict[str, bool] = {}  # gate de auto-promoción por marca, 1 lectura por request
 
     def _historias(lote: list[dict[str, Any]], limite: int | None = None) -> list[dict[str, Any]]:
         tope = por_linea if limite is None else limite
-        return [
-            _historia_a_dict(
-                {
-                    **c,
-                    "verificacion_fuente": (c.get("verificacion_fuente") or "")
-                    or verificacion_map.get(c.get("publicacion_id") or "", ""),
-                },
-                repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
-                pieza_estado=_pieza_estado(
-                    c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
-                ),
-                umbral=_evaluar_umbral(c, vocab_memo),
+        salida: list[dict[str, Any]] = []
+        for c in lote[:tope]:
+            enriquecido = {
+                **c,
+                "verificacion_fuente": (c.get("verificacion_fuente") or "")
+                or verificacion_map.get(c.get("publicacion_id") or "", ""),
+            }
+            salida.append(
+                _historia_a_dict(
+                    enriquecido,
+                    repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+                    pieza_estado=_pieza_estado(
+                        c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
+                    ),
+                    umbral=_evaluar_promovible(enriquecido, vocab_memo, gate_memo),
+                )
             )
-            for c in lote[:tope]
-        ]
+        return salida
 
     # Breaking primero (si el plan lo contempla), luego el orden del plan.
     orden = (["breaking"] if "breaking" in plan else []) + [c for c in plan if c != "breaking"]
@@ -464,7 +530,7 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
                 "generados": generados,
                 "publicados": int(contadores.get("publicados", 0)),
                 "restante": max(0, int(plan[cat]) - generados),
-                "en_pool": len(pool),
+                "en_pool": _en_pool(len(pool)),
                 "historias": _historias(pool),
             }
         )
@@ -491,13 +557,13 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
                 {
                     "linea": e["id"],
                     "nombre": e.get("nombre") or e["id"],
-                    "en_pool": conteo_linea.get(e["id"], 0),
+                    "en_pool": _en_pool(conteo_linea.get(e["id"], 0)),
                 }
             )
         grupos = [
             {
                 "grupo": g,
-                "en_pool": conteo_grupo.get(g, 0),
+                "en_pool": _en_pool(conteo_grupo.get(g, 0)),
                 "lineas": sorted(lineas_por_grupo.get(g, []), key=lambda li: -li["en_pool"]),
             }
             for g in grupos_orden
@@ -507,9 +573,12 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
         "plan": bool(plan),
         "lineas": lineas,
         "fuera_de_plan": {
-            "en_pool": len(fuera),
+            "en_pool": _en_pool(len(fuera)),
             "historias": [] if grupos_orden else _historias(fuera),
         },
+        # Tamaño REAL del pool (COUNT(*), no la muestra topada): el número honesto de candidatas
+        # vivas de la marca. Los `en_pool` por línea/grupo se escalan a este total.
+        "en_pool_total": total_pool,
         "total_objetivo": sum(int(v) for v in plan.values()),
         "total_generados": total_generados,
         "grupos": grupos,
@@ -527,6 +596,10 @@ async def mesa(request: Request) -> Response:
     `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que Admitir (CI)).
     Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
     lista plana). Orden de líneas: breaking primero, luego el orden del plan.
+
+    CONTEO HONESTO: `en_pool_total` es el COUNT(*) REAL del pool; los `en_pool` por línea/grupo se
+    escalan a ese total (la clasificación corre sobre una muestra topada). `historias[]` son SIEMPRE
+    el top-N por línea, no el pool entero (para el resto, "Ver todas" pagina contra /historias).
     """
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
@@ -556,9 +629,10 @@ def _detalle_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
     verificacion_fuente = (cluster.get("verificacion_fuente") or "") or (
         repos.verificacion_fuente_por_publicacion([cid]).get(cid, "") if cid else ""
     )
+    enriquecido = {**cluster, "verificacion_fuente": verificacion_fuente}
     historia = _historia_a_dict(
-        {**cluster, "verificacion_fuente": verificacion_fuente}, items, pieza_estado=_pieza_estado_de(cluster),
-        umbral=_evaluar_umbral(cluster, {}),
+        enriquecido, items, pieza_estado=_pieza_estado_de(cluster),
+        umbral=_evaluar_promovible(enriquecido, {}, {}),
     )
     return 200, {"historia": historia, "items": [_item_a_dict(it) for it in items]}
 
@@ -702,52 +776,27 @@ async def usar_historia(request: Request) -> Response:
 
 
 def _descartar_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
-    if repos.obtener_noticia_cluster(cluster_id) is None:
+    cluster = repos.obtener_noticia_cluster(cluster_id)
+    if cluster is None:
         return 404, {"error": "Esa historia ya no existe."}
-    cluster = repos.actualizar_noticia_cluster(cluster_id, estado="descartado")
-    items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA) if cluster else []
-    historia = (
-        _historia_a_dict(cluster, items, pieza_estado=_pieza_estado_de(cluster))
-        if cluster
-        else None
+    # Descartar BORRA la historia (no la marca): la fila del cluster se elimina y sus items quedan
+    # como lápida `descartado` para que no reaparezca al re-recolectar. La respuesta devuelve la
+    # historia tal como quedó (sin fila ya), con `estado='descartado'` por contrato del front.
+    repos.descartar_cluster(cluster_id)
+    historia = _historia_a_dict(
+        {**cluster, "estado": "descartado"}, [], pieza_estado="descartada"
     )
     return 200, {"historia": historia}
 
 
 async def descartar_historia(request: Request) -> Response:
-    """POST /api/noticias/historias/{id}/descartar: marca la historia `estado=descartado`."""
-    cluster_id = request.path_params["cluster_id"]
-    status, cuerpo = await run_in_threadpool(_descartar_historia, cluster_id)
-    return JSONResponse(cuerpo, status_code=status)
+    """POST /api/noticias/historias/{id}/descartar: BORRA la historia (irreversible, sin reaparición).
 
-
-def _restaurar_historia(cluster_id: str) -> tuple[int, dict[str, Any]]:
-    cluster = repos.obtener_noticia_cluster(cluster_id)
-    if cluster is None:
-        return 404, {"error": "Esa historia ya no existe."}
-    estado = cluster.get("estado") or "nuevo"
-    if estado == "usado" or (cluster.get("publicacion_id") or ""):
-        return 400, {"error": "Esa historia ya se usó: vive en el tablero, no en el pool."}
-    if estado == "descartado":
-        cluster = repos.actualizar_noticia_cluster(cluster_id, estado="nuevo") or cluster
-    items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
-    historia = _historia_a_dict(
-        cluster, items, pieza_estado=_pieza_estado_de(cluster),
-        umbral=_evaluar_umbral(cluster, {}),
-    )
-    return 200, {"historia": historia}
-
-
-async def restaurar_historia(request: Request) -> Response:
-    """POST /api/noticias/historias/{id}/restaurar: devuelve una DESCARTADA al pool.
-
-    El deshacer del flujo rápido de curación (descartar es 1 clic sin confirmación porque
-    existe esto). Solo restaura historias `descartado` sin contenido enlazado; una `usado`
-    ya vive en el tablero (404/400 explicables). Idempotente-amistoso: restaurar una que ya
-    está `nuevo` devuelve la historia tal cual.
+    Elimina la fila del cluster y deja sus items como lápida `descartado` (bloquea la re-ingesta y
+    el clustering). El front pide confirmación; aquí solo se es idempotente (404 si ya no existe).
     """
     cluster_id = request.path_params["cluster_id"]
-    status, cuerpo = await run_in_threadpool(_restaurar_historia, cluster_id)
+    status, cuerpo = await run_in_threadpool(_descartar_historia, cluster_id)
     return JSONResponse(cuerpo, status_code=status)
 
 
@@ -757,25 +806,23 @@ _MAX_LOTE_DESCARTE = 500
 
 def _descartar_historias_lote(ids: list) -> dict[str, Any]:
     descartadas = 0
-    for cid in dict.fromkeys(ids):  # dedup preservando orden; evita doble update del mismo id
+    for cid in dict.fromkeys(ids):  # dedup preservando orden; evita doble borrado del mismo id
         if not isinstance(cid, str) or not cid:
             continue
         if descartadas >= _MAX_LOTE_DESCARTE:
             break
-        if repos.obtener_noticia_cluster(cid) is None:
-            continue
-        repos.actualizar_noticia_cluster(cid, estado="descartado")
-        descartadas += 1
+        if repos.descartar_cluster(cid):
+            descartadas += 1
     return {"descartadas": descartadas}
 
 
 async def descartar_historias_lote(request: Request) -> Response:
     """POST /api/noticias/historias/descartar-lote: descarta VARIAS historias de una (papelera).
 
-    Cuerpo `{ids: [cluster_id, ...]}`. Marca cada cluster existente `estado=descartado`
-    (idempotente: ignora silenciosamente los ids vacíos, repetidos o que ya no existen). Es el
-    motor del multi-selección estilo correo de Investigación: seleccionar (o "todos") + descartar.
-    Devuelve `{descartadas: n}` (cuántas se marcaron de verdad).
+    Cuerpo `{ids: [cluster_id, ...]}`. BORRA cada cluster existente (sus items quedan como lápida
+    `descartado` anti-reaparición); idempotente: ignora ids vacíos, repetidos o que ya no existen.
+    Es el motor del multi-selección estilo correo de Investigación: seleccionar (o "todos") +
+    descartar. Devuelve `{descartadas: n}` (cuántas se borraron de verdad).
     """
     datos = await leer_json(request)
     ids = datos.get("ids")

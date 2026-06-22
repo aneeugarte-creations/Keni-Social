@@ -14,8 +14,9 @@ def paso_caducidad(*, forzar: bool = False) -> dict[str, Any]:
     """Caduca el pool por edad (TTL) y purga lo caducado tras la retención. Best-effort, THROTTLED.
 
     El feed es perecedero POR DISEÑO: una historia `nuevo` sin actividad en `KENI_NOTICIAS_TTL_H`
-    (def 72h, la vida de la frescura del score) caduca sola a `descartado` (sale del panel, del
-    priorización y de la promoción; lo usado nunca caduca), y lo caducado sin usar se borra tras
+    (def 72h, la vida de la frescura del score) caduca sola y se BORRA (sale del panel, del
+    priorización y de la promoción; sus items quedan como lápida `descartado` anti-reaparición; lo
+    usado nunca caduca), y las lápidas/sueltos viejos se purgan del todo tras
     `KENI_NOTICIAS_RETENCION_H` (def 14 días). Corre DENTRO del barrido de recolección: donde se
     construye el feed, se limpia el feed (no depende de que el GC por relevancia esté encendido).
     La lógica vive en `db_noticias.caducar_pool`; aquí solo el throttle y el log.

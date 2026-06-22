@@ -1,8 +1,7 @@
-"""Tests de la MESA DE REDACCIÓN (/api/noticias/mesa) y del restaurar. OFFLINE, sin red.
+"""Tests de la MESA DE REDACCIÓN (/api/noticias/mesa). OFFLINE, sin red.
 
 La mesa devuelve el pool segmentado por las líneas del plan editorial diario de la marca
-(cupo + progreso de 24 h + top-N candidatas por línea) y un bloque `fuera_de_plan`. El
-restaurar es el deshacer del descarte rápido (descartada -> pool).
+(cupo + progreso de 24 h + top-N candidatas por línea) y un bloque `fuera_de_plan`.
 """
 
 from __future__ import annotations
@@ -165,6 +164,31 @@ def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
     assert [h["id"] for h in linea["historias"]] == ["m0", "m1"]  # top-N rankeado
 
 
+def test_mesa_conteo_honesto_escala_al_pool_real(cliente, monkeypatch):
+    """El "300 vs 13": con el pool por encima de la muestra topada, `en_pool` refleja el pool REAL
+    (escalado), no el recorte. `en_pool_total` es el COUNT(*) real; `historias[]` sigue siendo top-N.
+    """
+    from keni_consola.api.noticias import historias as _h
+
+    nac = _linea_nacional()
+    monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2")
+    # 6 candidatas en la línea Nacional, pero la muestra se topa a 3: el reparto/render ve 3.
+    monkeypatch.setattr(_h, "_MESA_MUESTRA", 3)
+    for i in range(6):
+        _inicializar(f"m{i}", score=0.9 - i * 0.05, categoria="mx", titulo=f"Nacional {i}")
+
+    datos = cliente.get(
+        "/api/noticias/mesa", params={"marca": "unotv", "por_linea": 2}
+    ).json()
+    # Pool real honesto: 6 (no la muestra de 3).
+    assert datos["en_pool_total"] == 6
+    linea = datos["lineas"][0]
+    # `en_pool` escalado al pool real (3 de la muestra · factor 6/3 = 6), no el recorte.
+    assert linea["en_pool"] == 6
+    # `historias[]` sigue siendo top-N por línea (top-2 rankeado), no el pool entero.
+    assert [h["id"] for h in linea["historias"]] == ["m0", "m1"]
+
+
 def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
     monkeypatch.delenv("KENI_PLAN_DIA", raising=False)
     monkeypatch.delenv("KENI_PLAN_DIA::unotv", raising=False)
@@ -263,33 +287,3 @@ def test_mesa_sin_grupos_no_trae_barra(cliente):
     _inicializar("c1", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["grupos"] == [] and datos["historias_grupo"] == []
-
-
-# --------------------------------------------------------------------------- #
-# POST /api/noticias/historias/{id}/restaurar                                  #
-# --------------------------------------------------------------------------- #
-
-
-def test_restaurar_devuelve_descartada_al_pool(cliente):
-    _inicializar("c1", estado="nuevo")
-    cliente.post("/api/noticias/historias/c1/descartar")
-    assert repos.obtener_noticia_cluster("c1")["estado"] == "descartado"
-    r = cliente.post("/api/noticias/historias/c1/restaurar")
-    assert r.status_code == 200
-    assert r.json()["historia"]["estado"] == "nuevo"
-    assert repos.obtener_noticia_cluster("c1")["estado"] == "nuevo"
-
-
-def test_restaurar_es_idempotente_sobre_una_nueva(cliente):
-    _inicializar("c1", estado="nuevo")
-    r = cliente.post("/api/noticias/historias/c1/restaurar")
-    assert r.status_code == 200
-    assert r.json()["historia"]["estado"] == "nuevo"
-
-
-def test_restaurar_usada_400_e_inexistente_404(cliente):
-    _inicializar("c1", estado="nuevo")
-    cont = repos.crear_publicacion(clase="contenido", titulo="Tema", marca="unotv")
-    repos.actualizar_noticia_cluster("c1", estado="usado", publicacion_id=cont["id"])
-    assert cliente.post("/api/noticias/historias/c1/restaurar").status_code == 400
-    assert cliente.post("/api/noticias/historias/nope/restaurar").status_code == 404

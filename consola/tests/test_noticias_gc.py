@@ -99,19 +99,31 @@ def test_purga_items_sueltos_viejos(entorno):
 
 
 def test_caducar_pool_expira_lo_viejo_y_conserva_lo_vivo(entorno):
-    """Una historia `nuevo` sin actividad en el TTL caduca (descartado); lo usado/reciente no."""
+    """Una historia `nuevo` sin actividad en el TTL caduca (se BORRA); lo usado/reciente no.
+
+    Caducar = descartar: la fila del cluster desaparece y sus items quedan LÁPIDA `descartado`
+    (anti-reaparición), no se marca el cluster `descartado` (ese estado a nivel de cluster ya no
+    existe)."""
     _cluster("vieja", ultimo_visto=_VIEJO, score=0.9, n_fuentes=3)  # ni el score alto la salva
     _cluster("reciente", ultimo_visto=_ahora())
     _cluster("usada", ultimo_visto=_VIEJO, estado="usado")
     _cluster("ligada", ultimo_visto=_VIEJO, publicacion_id="c123")
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "Item de la vieja", "clave": "k-vieja",
+         "cluster_id": "vieja", "capturado_en": _VIEJO},
+    ])
 
     resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=0)
 
     assert resumen["caducadas"] == 1
-    assert repos.obtener_noticia_cluster("vieja")["estado"] == "descartado"
+    assert repos.obtener_noticia_cluster("vieja") is None  # la fila se borró
     assert repos.obtener_noticia_cluster("reciente")["estado"] == "nuevo"
     assert repos.obtener_noticia_cluster("usada")["estado"] == "usado"
     assert repos.obtener_noticia_cluster("ligada")["estado"] == "nuevo"  # ligada al tablero
+    # El item de la caducada sobrevive como lápida `descartado` (bloquea la re-ingesta).
+    items, _ = repos.listar_noticias_items(limite=500)
+    por_clave = {it["clave"]: it for it in items}
+    assert por_clave["k-vieja"]["estado"] == "descartado"
 
 
 def test_caducar_pool_ttl_cero_es_noop(entorno):
@@ -122,10 +134,10 @@ def test_caducar_pool_ttl_cero_es_noop(entorno):
     assert repos.obtener_noticia_cluster("vieja")["estado"] == "nuevo"
 
 
-def test_caducar_pool_retencion_purga_lo_caducado_con_sus_items(entorno):
-    """Lo `descartado` sin usar y sin actividad en la retención se borra, con sus items."""
-    _cluster("caducada", ultimo_visto=_VIEJO, estado="descartado")
-    _cluster("caducada_fresca", ultimo_visto=_ahora(), estado="descartado")  # descartada a mano hoy
+def test_caducar_pool_retencion_borra_lapidas_e_items_sueltos_viejos(entorno):
+    """La retención borra del todo las lápidas viejas (cluster ya inexistente) y los sueltos viejos."""
+    # Cluster viejo: el TTL lo borra y deja su item como lápida; la retención borra la lápida.
+    _cluster("caducada", ultimo_visto=_VIEJO)
     repos.crear_noticias_items([
         {"fuente_id": "f", "titulo": "Item de la caducada", "clave": "k1",
          "cluster_id": "caducada", "capturado_en": _VIEJO},
@@ -136,16 +148,24 @@ def test_caducar_pool_retencion_purga_lo_caducado_con_sus_items(entorno):
 
     resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=336)
 
-    assert resumen["purgadas"] == 1
-    assert resumen["items_purgados"] == 2  # el del cluster + el suelto viejo
+    assert resumen["caducadas"] == 1
     assert repos.obtener_noticia_cluster("caducada") is None
-    assert repos.obtener_noticia_cluster("caducada_fresca") is not None  # dentro de la retención
+    # Ambos items (la lápida de la caducada + el suelto viejo) se purgan en la misma pasada.
+    assert resumen["items_purgados"] == 2
     items, _ = repos.listar_noticias_items(limite=500)
     assert {it["clave"] for it in items} == set()
 
 
-def test_caducar_pool_retencion_cero_no_borra(entorno):
-    _cluster("caducada", ultimo_visto=_VIEJO, estado="descartado")
+def test_caducar_pool_retencion_cero_no_borra_lapidas(entorno):
+    """Con retención 0 el TTL borra el cluster pero su item lápida sobrevive (no se purga)."""
+    _cluster("caducada", ultimo_visto=_VIEJO)
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "titulo": "Item de la caducada", "clave": "k1",
+         "cluster_id": "caducada", "capturado_en": _VIEJO},
+    ])
     resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=0)
-    assert resumen["purgadas"] == 0
-    assert repos.obtener_noticia_cluster("caducada") is not None
+    assert resumen["caducadas"] == 1
+    assert resumen["items_purgados"] == 0
+    assert repos.obtener_noticia_cluster("caducada") is None
+    items, _ = repos.listar_noticias_items(limite=500)
+    assert {it["clave"] for it in items} == {"k1"}  # la lápida sigue ahí

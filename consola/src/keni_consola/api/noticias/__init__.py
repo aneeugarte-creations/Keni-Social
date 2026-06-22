@@ -27,7 +27,7 @@ de subpaquetes, así que la ÚNICA superficie pública sigue siendo la variable 
   - `items.py`    : pool de ÍTEMS del archivo (`listar`/`usar`/`descartar`) + monitor de
                     salud/stats de fuentes (`cobertura`/`salud`/`stats_fuentes_handler`).
   - `historias.py`: HISTORIAS (clusters): `listar_historias`, `mesa`, `detalle_historia`,
-                    `usar_historia`, `descartar_historia`, `restaurar_historia` y los lotes
+                    `usar_historia`, `descartar_historia` y los lotes
                     (`descartar-lote`/`borrar-lote`/`borrar-todo`).
 ================================================================================
 """
@@ -51,7 +51,6 @@ from .historias import (
     detalle_historia,
     listar_historias,
     mesa,
-    restaurar_historia,
     usar_historia,
 )
 from .items import (
@@ -82,7 +81,6 @@ __all__ = [
     "detalle_historia",
     "usar_historia",
     "descartar_historia",
-    "restaurar_historia",
     "descartar_historias_lote",
     "borrar_historias_lote",
     "borrar_todas_historias",
@@ -118,7 +116,6 @@ RUTAS = [
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}/descartar", descartar_historia, methods=["POST"]),
-    Route("/api/noticias/historias/{cluster_id}/restaurar", restaurar_historia, methods=["POST"]),
     Route("/api/noticias/{item_id}/usar", usar, methods=["POST"]),
     Route("/api/noticias/{item_id}/descartar", descartar, methods=["POST"]),
 ]

@@ -437,16 +437,29 @@ def test_usar_extranjera_traducida_usa_titulo_es(cliente):
     assert r.json()["contenido"]["titulo"] == "Taiwán espera que el paquete de armas de EE. UU. se apruebe pronto"
 
 
-def test_descartar_marca_descartada(cliente):
-    _inicializar_cluster("c1")
+def test_descartar_borra_la_historia_y_deja_lapida(cliente):
+    # Descartar = BORRADO: la fila del cluster desaparece y sus items quedan como lápida
+    # `descartado` (anti-reaparición). La respuesta reporta `estado='descartado'` por contrato.
+    _inicializar_cluster("c1", items=[{"url": "https://a.com/1", "titulo": "Titular A"}])
     r = cliente.post("/api/noticias/historias/c1/descartar")
     assert r.status_code == 200, r.text
     assert r.json()["historia"]["estado"] == "descartado"
-    assert repos.obtener_noticia_cluster("c1")["estado"] == "descartado"
+    assert repos.obtener_noticia_cluster("c1") is None  # la fila se borró
+    # El item sobrevive como lápida `descartado` (bloquea la re-ingesta).
+    items, _ = repos.listar_noticias_items(limite=500)
+    lapidas = [it for it in items if it["cluster_id"] == "c1"]
+    assert lapidas and all(it["estado"] == "descartado" for it in lapidas)
 
 
 def test_descartar_inexistente_404(cliente):
     assert cliente.post("/api/noticias/historias/nope/descartar").status_code == 404
+
+
+def test_descartar_idempotente_si_ya_no_existe(cliente):
+    # Doble descarte (o cluster ya purgado): el primero borra, el segundo es 404 amistoso.
+    _inicializar_cluster("c1")
+    assert cliente.post("/api/noticias/historias/c1/descartar").status_code == 200
+    assert cliente.post("/api/noticias/historias/c1/descartar").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
@@ -464,8 +477,9 @@ def test_descartar_lote_marca_solo_las_pasadas(cliente):
     assert r.status_code == 200, r.text
     # 'a' deduplicada (no cuenta doble) y 'nope' inexistente (ignorada): solo a + b.
     assert r.json() == {"descartadas": 2}
-    assert repos.obtener_noticia_cluster("a")["estado"] == "descartado"
-    assert repos.obtener_noticia_cluster("b")["estado"] == "descartado"
+    # Descartar = BORRADO: las filas de a y b desaparecen; c intacta.
+    assert repos.obtener_noticia_cluster("a") is None
+    assert repos.obtener_noticia_cluster("b") is None
     assert repos.obtener_noticia_cluster("c")["estado"] == "nuevo"  # intacta
 
 
@@ -474,7 +488,7 @@ def test_descartar_lote_lista_vacia_no_borra_nada(cliente):
     r = cliente.post("/api/noticias/historias/descartar-lote", json={"ids": []})
     assert r.status_code == 200
     assert r.json() == {"descartadas": 0}
-    assert repos.obtener_noticia_cluster("a")["estado"] == "nuevo"
+    assert repos.obtener_noticia_cluster("a")["estado"] == "nuevo"  # intacta
 
 
 def test_descartar_lote_ids_no_lista_400(cliente):
@@ -539,8 +553,8 @@ def test_borrar_todo_marca_invalida_400(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_historias_exponen_explicacion_y_umbral(cliente):
-    """Cada historia trae score_razon/score_desglose persistidos y la evaluación del umbral."""
+def _sembrar_expl(verificacion_fuente="verificado"):
+    """Una historia fresca + corroborada + con encaje de marca, verificada (cumple umbral)."""
     from datetime import UTC, datetime
 
     repos.upsert_noticia_cluster({
@@ -548,7 +562,7 @@ def test_historias_exponen_explicacion_y_umbral(cliente):
         "resumen": "El gobierno de México activa el protocolo", "marca": "unotv",
         "categoria": "mx", "geo": "MX", "clave": "t:expl", "n_items": 2, "n_fuentes": 3,
         "idiomas": ["es"], "senal": 100, "score": 0.7, "breaking": 0,
-        "verificacion": "corroborada",
+        "verificacion": "corroborada", "verificacion_fuente": verificacion_fuente,
         "score_razon": "3 fuentes · reciente · relevante para la marca (cdmx, sismo)",
         "score_desglose": {"corroboracion": 0.48, "frescura": 1.0, "viralidad": 0.33,
                             "marca": 0.67, "rendimiento": 0.0, "breaking": 0,
@@ -558,29 +572,58 @@ def test_historias_exponen_explicacion_y_umbral(cliente):
         "estado": "nuevo",
     })
 
+
+def test_historias_exponen_explicacion_y_umbral(cliente, monkeypatch):
+    """Con la máquina ON + historia verificada que cumple umbral, `promovible=True`."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")  # auto-promoción ENCENDIDA
+    _sembrar_expl()
+
     datos = cliente.get("/api/noticias/historias").json()
     h = next(x for x in datos["historias"] if x["id"] == "expl")
 
     # Explicación persistida del score (razón humana + desglose por señal).
     assert "relevante para la marca" in h["score_razon"]
     assert h["score_desglose"]["palabras"] == ["cdmx", "sismo"]
-    # Umbral: la MISMA evaluación que la promoción CI (fresca+corroborada+con marca → supera).
+    # "Sale sola al feed" HONESTO: máquina ON + verificada + umbral → promovible.
     assert h["promovible"] is True
     assert h["promovible_motivo"]
 
 
-def test_historias_umbral_no_promovible_explica_por_que(cliente):
-    """Una historia sin encaje de marca expone promovible=False con el motivo legible.
+def test_historias_promovible_false_si_maquina_apagada(cliente, monkeypatch):
+    """El badge es HONESTO: con la máquina APAGADA (default), nada sale solo aunque cumpla umbral."""
+    monkeypatch.delenv("KENI_PIPELINE_RECOLECTAR", raising=False)
+    _sembrar_expl()
+    datos = cliente.get("/api/noticias/historias").json()
+    h = next(x for x in datos["historias"] if x["id"] == "expl")
+    assert h["promovible"] is False
+    assert "apagada" in h["promovible_motivo"]
+
+
+def test_historias_promovible_false_si_sin_verificar(cliente, monkeypatch):
+    """Aunque la máquina esté ON, una historia sin verificar (la admisión la filtraría) no es promovible."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    _sembrar_expl(verificacion_fuente="")  # pendiente de verificación
+    datos = cliente.get("/api/noticias/historias").json()
+    h = next(x for x in datos["historias"] if x["id"] == "expl")
+    assert h["promovible"] is False
+    assert "verificación" in h["promovible_motivo"]
+
+
+def test_historias_umbral_no_promovible_explica_por_que(cliente, monkeypatch):
+    """Con la máquina ON y verificada pero sin encaje de marca, falla el UMBRAL: motivo legible.
 
     Sin vocabulario de marca el score RECALCULADO no alcanza el umbral de producción, así
     que la PRIMERA regla que falla es la del score (`evaluar_umbral` rules 3<4): el motivo
     legible lo explica."""
     from datetime import UTC, datetime
 
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")  # máquina ON: aislamos el fallo al umbral
     _inicializar_cluster(
         "sin-encaje", titulo="Celebrity gossip from Hollywood",
         ultimo_visto=datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
     )
+    # Verificada para pasar el gate de verificación y aislar el fallo del umbral.
+    repos.marcar_cluster_verificacion("sin-encaje", "verificado")
     datos = cliente.get("/api/noticias/historias").json()
     h = next(x for x in datos["historias"] if x["id"] == "sin-encaje")
     assert h["promovible"] is False

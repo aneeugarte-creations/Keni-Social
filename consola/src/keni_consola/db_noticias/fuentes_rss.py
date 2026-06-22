@@ -331,19 +331,22 @@ def purgar_pool_irrelevante(
 def caducar_pool(
     *, ttl_horas: int, retencion_horas: int = 0
 ) -> dict[str, int]:
-    """CADUCIDAD del pool: lo viejo expira SOLO (TTL), y lo expirado se purga tras la retención.
+    """CADUCIDAD del pool: lo viejo expira y se BORRA (el feed es perecedero por diseño).
 
     Complementa al GC por relevancia (`purgar_pool_irrelevante`, que es selectivo y gateado):
-    esto es el RELOJ del feed — un feed de noticias es perecedero por diseño.
+    esto es el RELOJ del feed.
 
-      1. TTL (soft): historias `estado='nuevo'`, SIN `publicacion_id`, sin actividad en
-         `ttl_horas` (su `ultimo_visto` —o `creado` si nunca vieron item— quedó atrás)
-         pasan a `estado='descartado'`: salen del panel, del ranking y de la promoción.
-         REVERSIBLE (es un estado) y conservador: lo usado/ligado al tablero NUNCA caduca.
-      2. RETENCIÓN (hard): historias `descartado` SIN `publicacion_id` y sin actividad en
-         `retencion_horas` se BORRAN junto a sus items, y los items sueltos `nuevo` sin
-         contenido más viejos que la retención también (el archivo no crece sin techo).
-         `retencion_horas=0` desactiva el borrado (solo TTL).
+      1. TTL (hard): historias `estado='nuevo'`, SIN `publicacion_id`, sin actividad en
+         `ttl_horas` (su `ultimo_visto` —o `creado` si nunca vieron item— quedó atrás) se
+         BORRAN (la fila del cluster desaparece). Sus items se conservan como LÁPIDA
+         `descartado`: bloquean la re-ingesta (`ON CONFLICT (fuente_id, clave)`) y los excluye
+         el clustering (`<> 'descartado'`), así la historia caducada no reaparece al re-recolectar.
+         Conservador: lo usado/ligado al tablero NUNCA caduca. Esto reemplaza el antiguo estado
+         `descartado` a nivel de cluster (que ya no existe): caducar = descartar.
+      2. RETENCIÓN (hard): los items LÁPIDA `descartado` SIN `publicacion_id` y sin actividad en
+         `retencion_horas` se BORRAN del todo (ya superaron la ventana de clustering: ni
+         reagrupan ni vuelven), igual que los items sueltos `nuevo` sin contenido viejos — el
+         archivo no crece sin techo. `retencion_horas=0` desactiva el borrado (solo TTL).
 
     `ttl_horas <= 0` = no-op total. Devuelve `{caducadas, purgadas, items_purgados}`.
     """
@@ -353,46 +356,42 @@ def caducar_pool(
     corte_ttl = iso_utc(ahora - timedelta(hours=int(ttl_horas)))
     con = _conectar()
     try:
-        cur_ttl = con.execute(
-            "UPDATE noticias_clusters SET estado = 'descartado', actualizado = ? "
-            "WHERE estado = 'nuevo' AND (publicacion_id IS NULL OR publicacion_id = '') "
+        # Historias caducadas: sus items se marcan LÁPIDA `descartado` (anti-reaparición) y la fila
+        # del cluster se BORRA. El orden importa: el UPDATE usa la pertenencia al cluster antes de
+        # que el DELETE lo elimine.
+        cond_ttl = (
+            "estado = 'nuevo' AND (publicacion_id IS NULL OR publicacion_id = '') "
             "AND ((ultimo_visto <> '' AND ultimo_visto < ?) "
-            "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))",
-            (ahora_iso(), corte_ttl, corte_ttl),
+            "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))"
         )
-        purgadas = 0
+        con.execute(  # noqa: S608 -- condición estática; valores parametrizados
+            "UPDATE noticias_items SET estado = 'descartado' WHERE cluster_id IN "
+            f"(SELECT id FROM noticias_clusters WHERE {cond_ttl})",
+            (corte_ttl, corte_ttl),
+        )
+        cur_ttl = con.execute(  # noqa: S608 -- idem
+            f"DELETE FROM noticias_clusters WHERE {cond_ttl}", (corte_ttl, corte_ttl)
+        )
         items_purgados = 0
         if int(retencion_horas) > 0:
             corte_ret = iso_utc(ahora - timedelta(hours=int(retencion_horas)))
-            # Items de las historias a purgar (la historia se borra con TODO su rastro).
-            cond_purga = (
-                "estado = 'descartado' AND (publicacion_id IS NULL OR publicacion_id = '') "
-                "AND ((ultimo_visto <> '' AND ultimo_visto < ?) "
-                "     OR (ultimo_visto = '' AND creado <> '' AND creado < ?))"
-            )
-            cur_items = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
-                "DELETE FROM noticias_items WHERE cluster_id IN "
-                f"(SELECT id FROM noticias_clusters WHERE {cond_purga})",
-                (corte_ret, corte_ret),
-            )
-            items_purgados += cur_items.rowcount or 0
-            cur_purga = con.execute(  # noqa: S608 -- idem
-                f"DELETE FROM noticias_clusters WHERE {cond_purga}", (corte_ret, corte_ret)
-            )
-            purgadas = cur_purga.rowcount or 0
-            # Items SUELTOS (sin cluster) `nuevo` sin contenido más viejos que la retención:
-            # nunca volverán a clusterizar (fuera de la ventana) ni a usarse; techo del archivo.
+            # Items LÁPIDA/sueltos sin contenido más viejos que la retención: sin cluster vivo
+            # (suelto, o lápida de un cluster ya borrado) están fuera de la ventana de clustering,
+            # ni reagrupan ni se usan; techo del archivo. Se borran de verdad.
             cur_sueltos = con.execute(
-                "DELETE FROM noticias_items WHERE cluster_id = '' AND estado = 'nuevo' "
-                "AND (publicacion_id IS NULL OR publicacion_id = '') "
-                "AND capturado_en <> '' AND capturado_en < ?",
+                "DELETE FROM noticias_items "
+                "WHERE (publicacion_id IS NULL OR publicacion_id = '') "
+                "AND estado IN ('nuevo', 'descartado') "
+                "AND capturado_en <> '' AND capturado_en < ? "
+                "AND (cluster_id = '' OR cluster_id NOT IN (SELECT id FROM noticias_clusters))",
                 (corte_ret,),
             )
             items_purgados += cur_sueltos.rowcount or 0
         con.commit()
+        # `purgadas` (clusters borrados por retención) ya no aplica: el TTL los borra directamente.
         return {
             "caducadas": cur_ttl.rowcount or 0,
-            "purgadas": purgadas,
+            "purgadas": 0,
             "items_purgados": items_purgados,
         }
     finally:
