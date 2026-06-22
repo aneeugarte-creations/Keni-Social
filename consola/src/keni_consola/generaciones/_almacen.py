@@ -18,7 +18,7 @@ import hashlib
 import os
 import re
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -705,7 +705,9 @@ def reclamar_atascadas(max_edad_seg: float, *, ahora: datetime | None = None) ->
     veria el registro terminal y cerraria el job SIN ejecutarlo (trabajo perdido). Best-
     effort: si la cola no se puede leer, se asume vacia (comportamiento anti-colgadas previo).
     """
-    referencia = ahora if ahora is not None else datetime.now()
+    # `fecha_inicio` se sella en UTC naive (`ahora_iso`); la referencia debe serlo también para
+    # que la resta mida edad real y no el sesgo de la zona local del proceso.
+    referencia = ahora if ahora is not None else datetime.now(timezone.utc).replace(tzinfo=None)
     try:
         from .. import repos
 
