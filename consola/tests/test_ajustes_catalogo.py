@@ -106,6 +106,8 @@ _MAESTROS_ENV = {
     # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+    # Clasificar marca con IA: modo IA del paso Clasificar (grupo `maestros_investigacion`).
+    config.ENV_CLASIFICAR_MARCA_IA,
     config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
     # Stock: etapa física que baja una foto de ayuda a los temas con copy y sin imagen.
     config.ENV_PIPELINE_STOCK,
