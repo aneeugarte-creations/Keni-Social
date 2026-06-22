@@ -1064,6 +1064,9 @@ export default function Imagen() {
               <PublicacionPlantillas
                 plantillas={plantillas}
                 agruparPorMarca={marcaActiva === null}
+                // CRESTA: a página completa el conmutador Fotos/Miniaturas sube al topbar (junto a la
+                // marca) y el cuerpo queda en una sola banda fina. El rail/modal lo dejan en línea.
+                tipoEnCabecera
                 onCargar={abrirPlantilla}
                 onBorrar={(p) => void pedirBorrarPlantilla(p)}
                 onDuplicar={(p) => duplicarPlantilla.mutate(p)}

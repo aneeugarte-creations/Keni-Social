@@ -25,6 +25,7 @@ import {
 } from "@/components/plantillas/FiltroPlantillas";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
+import { AccionesPaginaFin } from "@/components/layout/encabezado";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 import {
   agruparPorCategoria,
@@ -108,6 +109,13 @@ interface PropsPublicacion {
   onReordenar?: (ids: string[]) => void;
   /** Si se pasa, el selector de tipo queda fijo y no se puede cambiar (ej: DialogoEditar). */
   tipoFijo?: "foto" | "miniatura";
+  /**
+   * Sube el conmutador Fotos/Miniaturas al topbar (flanco derecho, junto a la marca) vía
+   * `AccionesPaginaFin`, dejando el cuerpo en UNA sola banda fina (buscador + chips). Solo para la
+   * galería a página completa (Imagen), donde hay cabecera unificada y `slotAccionesFin` libre; el
+   * rail y la modal lo dejan en `false` (conmutador en línea, no tienen topbar propio).
+   */
+  tipoEnCabecera?: boolean;
   /** Modo PANEL estrecho (columna del rail ~350px): rejilla fija de 2 columnas y padding menor. */
   compacto?: boolean;
   /** Tope de columnas (la modal, de ancho fijo, lo capa para no amontonar en pantallas grandes). */
@@ -138,6 +146,7 @@ export function PublicacionPlantillas({
   onReordenar,
   maxColumnas,
   tipoFijo,
+  tipoEnCabecera,
   compacto,
   agruparPorMarca,
   onLienzoBlanco,
@@ -445,38 +454,46 @@ export function PublicacionPlantillas({
     );
   };
 
+  // Conmutador Fotos/Miniaturas (definido una vez; se coloca en el topbar o en línea según
+  // `tipoEnCabecera`). Sin `tipoFijo` no se usa (el tipo viene impuesto por el llamante).
+  const segmentadoTipo = (
+    <div className="inline-flex shrink-0 items-center rounded-lg bg-muted p-0.5">
+      {(["foto", "miniatura"] as const).map((t) => (
+        <button
+          key={t}
+          onClick={() => setFiltroTipo(t)}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
+            filtroTipo === t
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {t === "foto" ? (
+            <><Image className="h-3.5 w-3.5" />Fotos</>
+          ) : (
+            <><Video className="h-3.5 w-3.5" />Miniaturas</>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {/* UNA sola barra de cabecera (estilo Canva, fija fuera del scroll): el segmented de tipo y el
-          buscador comparten línea —el buscador llena el ancho que el toggle dejaba vacío— y los chips
-          de categoría caen debajo. Con `flex-wrap` el buscador baja a su propia línea cuando no cabe
-          (panel estrecho del editor): un mismo layout sirve a página completa, modal y rail. */}
-      {(!tipoFijo || plantillasTipo.length > 0) && (
+      {/* Conmutador de tipo (segmented estilo «Turnos» Apple/Canva: track gris, activo = píldora
+          BLANCA con sombra). Es ÚNICO; cambia solo dónde se coloca:
+            - `tipoEnCabecera` (galería a página completa): SUBE al topbar vía `AccionesPaginaFin`
+              —junto a la marca— y el cuerpo queda en una sola banda fina (buscador + chips).
+            - si no (rail/modal, sin topbar propio): vive EN LÍNEA con el buscador. */}
+      {!tipoFijo && tipoEnCabecera && <AccionesPaginaFin>{segmentadoTipo}</AccionesPaginaFin>}
+
+      {/* Banda de cabecera de la galería (fija fuera del scroll). El conmutador en línea va aquí solo
+          cuando NO sube al topbar; el buscador llena el ancho restante (`flex-wrap` lo baja a su
+          propia línea en el panel estrecho); los chips de categoría caen debajo. */}
+      {((!tipoFijo && !tipoEnCabecera) || plantillasTipo.length > 0) && (
         <div className={`shrink-0 space-y-2 border-b border-border bg-background py-2 ${padX}`}>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Filtro de tipo (solo si no está fijo): segmented control estilo «Turnos» (Apple/Canva)
-                — track gris con la pestaña activa como píldora BLANCA con sombra. */}
-            {!tipoFijo && (
-              <div className="inline-flex shrink-0 items-center rounded-lg bg-muted p-0.5">
-                {(["foto", "miniatura"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setFiltroTipo(t)}
-                    className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-all ${
-                      filtroTipo === t
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t === "foto" ? (
-                      <><Image className="h-3.5 w-3.5" />Fotos</>
-                    ) : (
-                      <><Video className="h-3.5 w-3.5" />Miniaturas</>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            {!tipoFijo && !tipoEnCabecera && segmentadoTipo}
             {plantillasTipo.length > 0 && (
               <div className="min-w-[12rem] flex-1">
                 <BuscadorPlantillas valor={q} onCambiar={setQ} />
