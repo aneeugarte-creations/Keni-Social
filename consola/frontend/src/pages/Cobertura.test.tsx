@@ -2,18 +2,15 @@
  * Tests de la página Cobertura — la MESA DE REDACCIÓN de Noticias.
  *
  * Cubre:
- *   1. Con marca activa, la vista por defecto es la MESA (GET /api/noticias/mesa):
- *      chips de navegación por línea (última hora primero) y tarjetas editoriales
- *      colapsables (colapsadas: titular/hora/fuente; expandidas: corroboración, estado,
- *      prioridad).
- *   2. Acciones de la tarjeta: Empujar/Adelantar (click izquierdo, gated por confirmar()) →
- *      usarHistoria; Descartar (menú contextual) → descartarHistoria.
- *   3. Pestañas: «En marcha» (estado=usado) y «Descartadas» (estado=descartado + Devolver
- *      al pool por click izquierdo confirmado → restaurarHistoria).
- *   4. «Fuera del plan» plegado por defecto; se expande al clic.
- *   5. AvisoSalud: una línea ámbar SOLO si hay fuentes con error (el detalle vive en Fuentes).
- *   6. Vista «Todas» (sin marca): lista plana clásica con filtros + selección múltiple +
- *      borrado hard + pieza_estado sin mentir (en_feed / en_cola / generando).
+ *   1. Con marca activa, la vista ÚNICA es la MESA (GET /api/noticias/mesa): chips de
+ *      navegación por línea (última hora primero) y tarjetas editoriales LIMPIAS
+ *      (titular/hora/fuente/score), cuya única acción es abrir la subpágina de detalle.
+ *      Ya NO hay pestañas «En marcha»/«Descartadas» ni acciones de empujar/descartar en la
+ *      tarjeta (viven en la subpágina).
+ *   2. «Fuera del plan» es un chip que filtra sus candidatas.
+ *   3. AvisoSalud: una línea ámbar SOLO si hay fuentes con error (el detalle vive en Fuentes).
+ *   4. Vista «Todas» (sin marca): lista plana clásica con filtros + selección múltiple +
+ *      borrado hard; la tarjeta dice la verdad de la pieza sin desplegar (en_feed/en_cola).
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -199,12 +196,6 @@ let mockMesa: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockHistorias: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockUsarHistoria: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockDescartarHistoria: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockRestaurarHistoria: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarLote: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockBorrarLote: any;
@@ -217,15 +208,6 @@ beforeEach(() => {
   mockHistorias = vi
     .spyOn(apiMod.api.noticias, "historias")
     .mockResolvedValue(RESPUESTA_HISTORIAS_VACIA);
-  mockUsarHistoria = vi
-    .spyOn(apiMod.api.noticias, "usarHistoria")
-    .mockResolvedValue({ ok: true, publicacion_id: "c-hist-nuevo" });
-  mockDescartarHistoria = vi
-    .spyOn(apiMod.api.noticias, "descartarHistoria")
-    .mockResolvedValue({ ok: true });
-  mockRestaurarHistoria = vi
-    .spyOn(apiMod.api.noticias, "restaurarHistoria")
-    .mockResolvedValue({ historia: historiaItem() });
   mockDescartarLote = vi
     .spyOn(apiMod.api.noticias, "descartarHistoriasLote")
     .mockResolvedValue({ descartadas: 1 });
@@ -233,8 +215,6 @@ beforeEach(() => {
     .spyOn(apiMod.api.noticias, "borrarHistoriasLote")
     .mockResolvedValue({ borradas: 1 });
   vi.spyOn(apiMod.api.noticias, "borrarTodasHistorias").mockResolvedValue({ borradas: 3 });
-  // Por defecto el usuario confirma: empujar/adelantar/devolver son click izquierdo
-  // gated por `confirmar()`. Los tests que necesiten cancelar lo sobrescriben.
   vi.mocked(confirmar).mockResolvedValue(true);
 });
 
@@ -242,7 +222,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ── Tests: la Mesa (vista por defecto con marca activa) ───────────────────────
+// ── Tests: la Mesa (vista única con marca activa) ─────────────────────────────
 
 describe("Cobertura · Mesa", () => {
   it("pide la mesa de la marca activa y muestra los chips de navegación por línea", async () => {
@@ -256,95 +236,40 @@ describe("Cobertura · Mesa", () => {
     // La mesa segmenta por líneas con chips de navegación (sin barra de progreso).
     await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
     expect(screen.getByTestId("chip-grupo-Internacional")).toBeTruthy();
+    // Ya no hay pestañas de flujo.
+    expect(screen.queryByTestId("tab-en_marcha")).toBeNull();
+    expect(screen.queryByTestId("tab-descartadas")).toBeNull();
   });
 
-  it("última hora va primero y su tarjeta lleva el tratamiento ÚLTIMA HORA", async () => {
+  it("última hora va primero y su tarjeta lleva el rayito de ÚLTIMA HORA", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("badge-ultima-hora")).toBeTruthy());
     // Última hora abre la lista (orden de ranking): la primera tarjeta es la breaking.
-    const cards = screen
-      .getAllByTestId("historia-item")
-      .map((n) => n.closest('[role="button"]') as HTMLElement);
+    const cards = screen.getAllByTestId("historia-item");
     const breaking = within(cards[0]);
     expect(breaking.getByTestId("badge-ultima-hora")).toBeTruthy();
-    // La frase de corroboración vive en la zona expandida: abrimos la tarjeta.
-    fireEvent.click(breaking.getByTestId("btn-expandir"));
-    expect(breaking.getByTestId("frase-corroboracion").textContent).toMatch(
-      /Reuters y AP la confirmaron casi a la vez/,
-    );
   });
 
-  it("la tarjeta normal cuenta la corroboración como frase (quién la abrió)", async () => {
+  it("la tarjeta limpia muestra el score como pastilla, sin desplegar", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
     fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
-    const hostMx = (await screen.findByTestId("historia-item")).closest(
-      '[role="button"]',
-    ) as HTMLElement;
-    const mx = within(hostMx);
-    // Frase y score viven en la zona expandida: abrimos la tarjeta.
-    fireEvent.click(mx.getByTestId("btn-expandir"));
-    const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
-    expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
-    expect(frase).toMatch(/la abrió Reforma/);
-    // El SCORE es visible; el cálculo completo vive en su pop-up (menú contextual → Ver score).
-    expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
-    fireEvent.contextMenu(hostMx);
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Ver score/i }));
-    await waitFor(() => expect(screen.getByTestId("popup-calculo")).toBeTruthy());
-    expect(screen.getByTestId("calculo-score")).toBeTruthy();
+    const card = within(await screen.findByTestId("historia-item"));
+    expect(card.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
+    // La tarjeta ya no expande inline: nada de chevron ni desglose.
+    expect(card.queryByTestId("btn-expandir")).toBeNull();
   });
 
-  it("una línea con cupo pendiente y sin candidatas no muestra el aviso redundante", async () => {
-    // internacional: cupo 2 sin candidatas → hueco pendiente, pero sin aviso redundante.
-    mockMesa.mockResolvedValue(
-      mesaFixture({
-        lineas: [
-          {
-            linea: "internacional", cupo: 2, generados: 0, publicados: 0, restante: 2,
-            en_pool: 0, historias: [],
-          },
-        ],
-      }),
-    );
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("chip-grupo-Internacional")).toBeTruthy());
-    // El aviso redundante fue eliminado; el KPI visual ya lo indica.
-    expect(screen.queryByText(/sin candidatas en el pool/)).toBeNull();
-  });
-
-  it("«Fuera del plan» es un chip que filtra sus candidatas", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("chip-grupo-Fuera del plan")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("chip-grupo-Fuera del plan"));
-    await waitFor(() => expect(screen.getAllByTestId("historia-item")).toHaveLength(1));
-    expect(screen.getByText("Gaming sin línea")).toBeTruthy();
-  });
-});
-
-describe("Cobertura · Mesa — acciones de la tarjeta", () => {
-  it("Empujar/Adelantar llama a usarHistoria", async () => {
+  it("la tarjeta navega a la subpágina de detalle al pulsar el titular", async () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
     fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
-    const host = (await screen.findByTestId("historia-item")).closest('[role="button"]');
-    fireEvent.click(host!);
-    await waitFor(() =>
-      expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true }),
-    );
+    const card = await screen.findByTestId("historia-item");
+    // El botón del titular es la única acción de la tarjeta (abre la subpágina).
+    expect(within(card).getByTestId("btn-detalle")).toBeTruthy();
   });
 
-  it("Descartar llama a descartarHistoria", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => expect(screen.getByTestId("chip-grupo-Nacional")).toBeTruthy());
-    fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
-    const host = (await screen.findByTestId("historia-item")).closest('[role="button"]');
-    fireEvent.contextMenu(host!);
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Descartar/ }));
-    await waitFor(() => expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1"));
-  });
-
-  it("una promovible anuncia que sale sola al feed y su confirmación de click izquierdo dice «Adelantar»", async () => {
+  it("una promovible muestra el indicador «Sale sola al feed» en la tarjeta", async () => {
     mockMesa.mockResolvedValue(
       mesaFixture({
         lineas: [
@@ -358,74 +283,15 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     );
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("historia-item")).toBeTruthy());
-    // El badge "Sale sola al feed" vive en la zona expandida: abrimos la tarjeta.
-    fireEvent.click(screen.getByTestId("btn-expandir"));
     expect(screen.getByTestId("badge-sale-sola")).toBeTruthy();
-    // Empujar al feed ya NO es item de menú: es la acción de click izquierdo, gated por
-    // `confirmar()`. En una promovible, el texto de confirmar pasa a «Adelantar».
-    const host = screen.getByTestId("historia-item").closest('[role="button"]');
-    fireEvent.click(host!);
-    await waitFor(() =>
-      expect(confirmar).toHaveBeenCalledWith(
-        expect.objectContaining({ textoConfirmar: "Adelantar" }),
-      ),
-    );
-    await waitFor(() => expect(mockUsarHistoria).toHaveBeenCalled());
-  });
-});
-
-// ── Tests: pestañas En marcha / Descartadas ───────────────────────────────────
-
-describe("Cobertura · pestañas de flujo", () => {
-  it("«En marcha» lista las usadas (estado=usado) con su pieza_estado", async () => {
-    mockHistorias.mockResolvedValue({
-      historias: [
-        historiaItem({ estado: "usado", publicacion_id: "c-1", pieza_estado: "en_feed" }),
-      ],
-      total: 1,
-    });
-    renderConProviders(<Cobertura />);
-    fireEvent.click(screen.getByTestId("tab-en_marcha"));
-    await waitFor(() =>
-      expect(mockHistorias).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "unotv", estado: "usado" }),
-        expect.anything(),
-      ),
-    );
-    // El estado de la pieza vive en la zona expandida: abrimos la tarjeta.
-    const card = await screen.findByTestId("historia-item");
-    fireEvent.click(within(card).getByTestId("btn-expandir"));
-    expect(screen.getByText(/En el feed/i)).toBeTruthy();
-    // Ya en marcha: no ofrece Empujar.
-    expect(screen.queryByTestId("btn-empujar")).toBeNull();
   });
 
-  it("«Descartadas»: el click izquierdo confirma y llama a restaurarHistoria", async () => {
-    mockHistorias.mockResolvedValue({
-      historias: [
-        historiaItem({ id: "h-desc", estado: "descartado", pieza_estado: "descartada" }),
-      ],
-      total: 1,
-    });
+  it("«Fuera del plan» es un chip que filtra sus candidatas", async () => {
     renderConProviders(<Cobertura />);
-    fireEvent.click(screen.getByTestId("tab-descartadas"));
-    await waitFor(() =>
-      expect(mockHistorias).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: "descartado" }),
-        expect.anything(),
-      ),
-    );
-    // «Devolver al pool» ya NO es item de menú: es la acción de click izquierdo, gated
-    // por `confirmar()` (mockeado a true). Click en la tarjeta → restaurarHistoria.
-    const card = await screen.findByTestId("historia-item");
-    const host = card.closest('[role="button"]');
-    fireEvent.click(host!);
-    await waitFor(() =>
-      expect(confirmar).toHaveBeenCalledWith(
-        expect.objectContaining({ textoConfirmar: "Devolver" }),
-      ),
-    );
-    await waitFor(() => expect(mockRestaurarHistoria).toHaveBeenCalledWith("h-desc"));
+    await waitFor(() => expect(screen.getByTestId("chip-grupo-Fuera del plan")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("chip-grupo-Fuera del plan"));
+    await waitFor(() => expect(screen.getAllByTestId("historia-item")).toHaveLength(1));
+    expect(screen.getByText("Gaming sin línea")).toBeTruthy();
   });
 });
 
@@ -503,7 +369,7 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
     expect(mockBorrarLote).not.toHaveBeenCalled();
   });
 
-  it("la tarjeta dice la verdad de la pieza: 'En cola' cuando aún no hay pieza en el feed", async () => {
+  it("la tarjeta dice la verdad de la pieza SIN desplegar: 'En cola'", async () => {
     mockHistorias.mockResolvedValue({
       historias: [
         historiaItem({ estado: "usado", publicacion_id: "c-98", pieza_estado: "en_cola" }),
@@ -511,24 +377,9 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
       total: 1,
     });
     renderConProviders(<Cobertura />, usuario(), null);
-    // El estado de la pieza vive en la zona expandida: abrimos la tarjeta.
-    const card = await screen.findByTestId("historia-item");
-    fireEvent.click(within(card).getByTestId("btn-expandir"));
+    // El estado de la pieza es visible directamente en la tarjeta limpia.
+    await screen.findByTestId("historia-item");
     expect(screen.getByText(/En cola/i)).toBeTruthy();
     expect(screen.queryByText(/En el feed/i)).toBeNull();
-  });
-
-  it("expande la lista de enlaces al hacer clic en 'Ver fuentes'", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />, usuario(), null);
-    await waitFor(() => expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy());
-    const card = screen.getByTestId("historia-item");
-    const host = card.closest('[role="button"]');
-    fireEvent.contextMenu(host!);
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Ver.*fuentes/i }));
-    await waitFor(() => expect(screen.getByTestId("lista-enlaces")).toBeTruthy());
-    const lista = within(screen.getByTestId("lista-enlaces"));
-    expect(lista.getByText("Fuente 1")).toBeTruthy();
-    expect(lista.getByText(/Reforma/)).toBeTruthy();
   });
 });

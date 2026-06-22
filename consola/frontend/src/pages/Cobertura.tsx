@@ -1,12 +1,12 @@
 /**
  * Cobertura — la MESA DE REDACCIÓN de Noticias.
  *
- * Con una marca activa, la vista por defecto es la mesa: el pool segmentado por las líneas
- * del plan editorial diario (cupo + progreso + top candidatas por línea; última hora en
- * rojo y primero). Pestañas «En marcha» (promovidas hoy) y «Descartadas» (con deshacer)
- * completan el flujo. La salud de feeds se redujo a UNA línea condicional (el detalle vive
- * en Fuentes). Con la vista «Todas» (admin, sin marca) se degrada a la lista plana clásica
- * con filtros y selección múltiple.
+ * Con una marca activa, la vista ÚNICA es la mesa de Candidatas: el pool segmentado por las
+ * líneas del plan editorial diario (cupo + progreso + top candidatas por línea; última hora
+ * en rojo y primero). El empujar/descartar de cada historia vive en su subpágina de detalle.
+ * La salud de feeds se redujo a UNA línea condicional (el detalle vive en Fuentes). Con la
+ * vista «Todas» (admin, sin marca) se degrada a la lista plana clásica con filtros y
+ * selección múltiple.
  *
  * Contrato: docs/maquina-contenido/A-motor-ingesta.md
  *           docs/maquina-contenido/B-clustering-historias.md
@@ -54,23 +54,19 @@ const CLAVE_HISTORIAS = (
 ) => ["noticias", "historias", marcaActiva ?? "", estado, offset] as const;
 
 // ── Vista: lista plana de historias ───────────────────────────────────────────
-// La usan las pestañas «En marcha»/«Descartadas» (estado fijo) y la vista «Todas»
-// (admin, sin marca: filtros completos + selección múltiple + borrado hard).
+// La usa la vista «Todas» (admin, sin marca: filtros completos + selección múltiple +
+// borrado hard).
 
 interface PropsVistaHistorias {
   marcaActiva: string | null;
-  /** Estado FIJO de la vista (oculta el filtro): 'usado' | 'descartado'. */
-  estadoFijo?: string;
 }
 
-function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
-  const [estadoLibre, setEstadoLibre] = React.useState("");
-  const estado = estadoFijo ?? estadoLibre;
+function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
+  const [estado, setEstado] = React.useState("");
   const [offset, setOffset] = React.useState(0);
   // Selección estilo correo (papelera): ids marcados para descartar/borrar en lote.
   const [seleccion, setSeleccion] = React.useState<Set<string>>(() => new Set());
   const queryClient = useQueryClient();
-  const conSeleccion = !estadoFijo; // la limpieza en lote es de la vista plana completa
 
   React.useEffect(() => {
     setOffset(0);
@@ -192,28 +188,25 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
 
   return (
     <>
-      {/* Filtros (solo la vista plana completa; con estado fijo la pestaña ya lo dice) */}
+      {/* Filtros de la vista plana (admin, sin marca). */}
       <div className="mb-5 flex flex-wrap items-end gap-3">
-        {!estadoFijo && (
-          <Select
-            value={estado || "__todos__"}
-            onValueChange={(v) => setEstadoLibre(v === "__todos__" ? "" : v)}
+        <Select
+          value={estado || "__todos__"}
+          onValueChange={(v) => setEstado(v === "__todos__" ? "" : v)}
+        >
+          <SelectTrigger
+            className="w-36"
+            aria-label="Filtrar por estado"
+            data-testid="filtro-estado-historias"
           >
-            <SelectTrigger
-              className="w-36"
-              aria-label="Filtrar por estado"
-              data-testid="filtro-estado-historias"
-            >
-              <SelectValue placeholder="Estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__todos__">Todos los estados</SelectItem>
-              <SelectItem value="nuevo">Nuevo</SelectItem>
-              <SelectItem value="usado">Usado</SelectItem>
-              <SelectItem value="descartado">Descartado</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__todos__">Todos los estados</SelectItem>
+            <SelectItem value="nuevo">Nuevo</SelectItem>
+            <SelectItem value="usado">Usado</SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Totales (la acción "Borrar todo" vive en el menú ⋮ de la página) */}
         <div className="ml-auto flex items-center gap-3 self-center">
@@ -232,7 +225,7 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
           pool, irreversible): es una acción EN LOTE de esta vista, junto a Descartar/Borrar la
           selección — ya no en un "⋮" propio de la barra superior (la cabecera la posee el "⋮"
           único de la página, con los Ajustes). */}
-      {conSeleccion && !query.isError && historias.length > 0 && (
+      {!query.isError && historias.length > 0 && (
         <div
           className="mb-3 flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2"
           data-testid="barra-seleccion-historias"
@@ -328,31 +321,15 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
       {!query.isLoading && !query.isError && (
         <>
           {historias.length === 0 ? (
-            <EstadoVacio
-              icono={Newspaper}
-              titulo={
-                estadoFijo === "descartado"
-                  ? "Nada descartado"
-                  : estadoFijo === "usado"
-                    ? "Nada en marcha todavía"
-                    : "Sin historias por ahora"
-              }
-              texto={estadoFijo ? "Lo que descartes o empujes desde Candidatas aparecerá aquí." : undefined}
-            />
+            <EstadoVacio icono={Newspaper} titulo="Sin historias por ahora" />
           ) : (
             <div className="space-y-2">
               {historias.map((h) => (
                 <TarjetaHistoria
                   key={h.id}
                   historia={h}
-                  clavesAInvalidar={[clave]}
-                  conRestaurar={estadoFijo === "descartado"}
-                  {...(conSeleccion
-                    ? {
-                        seleccionada: seleccion.has(h.id),
-                        onToggleSeleccion: (checked: boolean) => alternarUna(h.id, checked),
-                      }
-                    : {})}
+                  seleccionada={seleccion.has(h.id)}
+                  onToggleSeleccion={(checked: boolean) => alternarUna(h.id, checked)}
                 />
               ))}
             </div>
@@ -393,17 +370,8 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
-const VISTAS = [
-  { id: "candidatas", etiqueta: "Candidatas" },
-  { id: "en_marcha", etiqueta: "En marcha" },
-  { id: "descartadas", etiqueta: "Descartadas" },
-] as const;
-
-type Vista = (typeof VISTAS)[number]["id"];
-
 export default function Cobertura() {
   const { marcaActiva, nombreActiva } = useMarcaActiva();
-  const [vista, setVista] = React.useState<Vista>("candidatas");
 
   // Vista «Todas» (admin, sin marca concreta): el plan es por marca, así que la mesa no
   // aplica — lista plana clásica con filtros y limpieza en lote.
@@ -416,43 +384,11 @@ export default function Cobertura() {
     );
   }
 
+  // Con marca activa, la vista ÚNICA es la mesa de Candidatas.
   return (
     <>
       <AvisoSalud />
-
-      {/* Pestañas de flujo: Candidatas (la mesa) · En marcha · Descartadas. Control SEGMENTADO,
-          mismo tratamiento que el primitivo `ui/tabs` y el «Semana | Mes» del Calendario. */}
-      <div
-        className="mb-4 inline-flex items-center rounded-md border p-0.5"
-        role="tablist"
-        aria-label="Vista del pool"
-      >
-        {VISTAS.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            role="tab"
-            aria-selected={vista === v.id}
-            className={`inline-flex items-center justify-center whitespace-nowrap rounded px-3 py-1 text-sm font-medium transition-colors ${
-              vista === v.id
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setVista(v.id)}
-            data-testid={`tab-${v.id}`}
-          >
-            {v.etiqueta}
-          </button>
-        ))}
-      </div>
-
-      {vista === "candidatas" && <MesaNoticias marca={marcaActiva} nombre={nombreActiva} />}
-      {vista === "en_marcha" && (
-        <VistaHistorias marcaActiva={marcaActiva} estadoFijo="usado" />
-      )}
-      {vista === "descartadas" && (
-        <VistaHistorias marcaActiva={marcaActiva} estadoFijo="descartado" />
-      )}
+      <MesaNoticias marca={marcaActiva} nombre={nombreActiva} />
     </>
   );
 }

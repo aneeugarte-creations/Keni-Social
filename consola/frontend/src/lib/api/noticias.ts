@@ -149,22 +149,13 @@ export const apiNoticias = {
       ),
 
     /**
-     * Descarta una historia (estado=descartado). No se borra del archivo.
+     * Descarta una historia: la BORRA (irreversible). Deja una lápida a nivel de item
+     * para que la noticia no reaparezca al re-recolectar.
      * POST /api/noticias/historias/{id}/descartar
      */
     descartarHistoria: (id: string) =>
       peticion<{ ok: boolean }>(
         `/noticias/historias/${encodeURIComponent(id)}/descartar`,
-        { metodo: "POST", muestrear: false },
-      ),
-
-    /**
-     * Devuelve una historia DESCARTADA al pool (el deshacer del descarte rápido).
-     * POST /api/noticias/historias/{id}/restaurar
-     */
-    restaurarHistoria: (id: string) =>
-      peticion<{ historia: Historia }>(
-        `/noticias/historias/${encodeURIComponent(id)}/restaurar`,
         { metodo: "POST", muestrear: false },
       ),
 

@@ -1,12 +1,15 @@
 /**
- * Tests de los badges de Investigación por historia en TarjetaHistoria (ADR 0011, C3):
- *   - La MARCA de la historia se pinta como chip (marca_nombre, con fallback a marca).
- *   - El mini-badge «IA» aparece solo si `marca_clasificada_por_ia`.
- *   - La VERIFICACIÓN de la fuente (`verificacion_fuente`) se pinta como badge solo si no está vacío:
- *     'no_verificado' → «Verificada»; 'problema' → «Problema en la fuente»; '' → nada.
+ * Tests de la tarjeta LIMPIA de una historia de la Mesa (`TarjetaHistoria`):
+ *   - Lo esencial visible: titular, hora·fuente y el score como pastilla.
+ *   - ⚡ última hora: el rayito rojo solo si `breaking` y no descartada.
+ *   - Su ÚNICA acción es NAVEGAR a la subpágina de detalle; el checkbox de selección NO navega.
+ *   - Indicador de estado discreto (En feed/En cola/Generando/Sale sola) según `pieza_estado`.
+ *
+ * El desglose del score, las fuentes y las acciones (empujar/descartar) ya no viven en la
+ * tarjeta: están en la subpágina `DetalleHistoriaPagina`.
  */
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import type { Historia } from "@/types";
@@ -37,66 +40,78 @@ function historia(overrides: Partial<Historia> = {}): Historia {
   };
 }
 
-function renderTarjeta(h: Historia) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const r = render(
-    <QueryClientProvider client={client}>
-      <TarjetaHistoria historia={h} clavesAInvalidar={[["x"]]} />
-    </QueryClientProvider>,
-  );
-  // La tarjeta arranca colapsada (titular + hora + fuente); marca, verificación, resumen,
-  // meta y enlaces viven en la zona expandida. La abrimos para afirmar esos badges.
-  fireEvent.click(screen.getByTestId("btn-expandir"));
-  return r;
+/** Espía la URL actual: deja el detalle de la historia en el DOM cuando se navega. */
+function SondaUbicacion() {
+  const loc = useLocation();
+  return <div data-testid="ubicacion">{loc.pathname}</div>;
 }
 
-describe("TarjetaHistoria · badges de Investigación", () => {
-  it("pinta la marca de la historia como chip", () => {
+function renderTarjeta(
+  h: Historia,
+  props: Partial<Parameters<typeof TarjetaHistoria>[0]> = {},
+) {
+  return render(
+    <MemoryRouter initialEntries={["/maquina/investigacion"]}>
+      <Routes>
+        <Route path="*" element={<TarjetaHistoria historia={h} {...props} />} />
+      </Routes>
+      <SondaUbicacion />
+    </MemoryRouter>,
+  );
+}
+
+describe("TarjetaHistoria · tarjeta limpia", () => {
+  it("muestra titular, hora·fuente y el score como pastilla", () => {
+    renderTarjeta(historia({ primera_fuente_nombre: "Reforma" }));
+    expect(screen.getByText("Historia de prueba")).toBeTruthy();
+    expect(screen.getByTestId("hora-fuente").textContent).toMatch(/Reforma/);
+    expect(screen.getByTestId("punto-prioridad").textContent).toMatch(/Score 50/);
+  });
+
+  it("⚡ última hora: el rayito solo aparece en una breaking no descartada", () => {
+    renderTarjeta(historia({ breaking: 1 }));
+    expect(screen.getByTestId("badge-ultima-hora")).toBeTruthy();
+  });
+
+  it("no pinta el rayito de última hora en una historia normal", () => {
     renderTarjeta(historia());
-    expect(screen.getByTestId("chip-marca").textContent).toMatch(/UnoTV/);
-    // Sin clasificar por IA: no hay mini-badge.
-    expect(screen.queryByTestId("badge-marca-ia")).toBeNull();
+    expect(screen.queryByTestId("badge-ultima-hora")).toBeNull();
   });
 
-  it("cae a `marca` cuando falta `marca_nombre`", () => {
-    renderTarjeta(historia({ marca_nombre: "", marca: "claro-sports" }));
-    expect(screen.getByTestId("chip-marca").textContent).toMatch(/claro-sports/);
+  it("al pulsar el titular navega a la subpágina de detalle", () => {
+    renderTarjeta(historia({ id: "h-42" }));
+    fireEvent.click(screen.getByTestId("btn-detalle"));
+    expect(screen.getByTestId("ubicacion").textContent).toBe(
+      "/maquina/investigacion/historia/h-42",
+    );
   });
 
-  it("añade el mini-badge «IA» si la marca la asignó el clasificador", () => {
-    renderTarjeta(historia({ marca_clasificada_por_ia: true }));
-    expect(screen.getByTestId("badge-marca-ia").textContent).toMatch(/IA/);
+  it("el checkbox de selección NO navega", () => {
+    let marcado = false;
+    renderTarjeta(historia(), {
+      seleccionada: false,
+      onToggleSeleccion: (c) => {
+        marcado = c;
+      },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(marcado).toBe(true);
+    // Sin navegación: seguimos en la mesa.
+    expect(screen.getByTestId("ubicacion").textContent).toBe("/maquina/investigacion");
   });
 
-  it("no pinta verificacion cuando `verificacion_fuente` está vacío", () => {
-    renderTarjeta(historia({ verificacion_fuente: "" }));
-    expect(screen.queryByTestId("badge-verificacion-verificada")).toBeNull();
-    expect(screen.queryByTestId("badge-verificacion-rechazada")).toBeNull();
-    expect(screen.queryByTestId("badge-verificacion-requiere-humano")).toBeNull();
-  });
-
-  it("'verificado' → badge «Verificada»", () => {
-    renderTarjeta(historia({ verificacion_fuente: "verificado" }));
-    expect(screen.getByTestId("badge-verificacion-verificada").textContent).toMatch(/Verificada/);
-  });
-
-  it("'requiere_humano' → badge «Requiere revisión» (la IA no pudo verificar)", () => {
-    renderTarjeta(historia({ verificacion_fuente: "requiere_humano" }));
-    expect(screen.getByTestId("badge-verificacion-requiere-humano").textContent).toMatch(/Requiere revisión/);
-  });
-
-  it("'rechazado' → badge «Rechazada en la fuente»", () => {
-    renderTarjeta(historia({ verificacion_fuente: "rechazado" }));
-    expect(screen.getByTestId("badge-verificacion-rechazada").textContent).toMatch(/Rechazada en la fuente/);
-  });
-
-  it("nunca pinta un badge suelto de macro-evento, ni siquiera con `tema_macro` (la caja de grupo lo cubre)", () => {
-    renderTarjeta(historia({ tema_macro: "Cumbre del G7" }));
-    expect(screen.queryByTestId("badge-tema-macro")).toBeNull();
-  });
-
-  it("una extranjera sin traducir muestra «Traduciendo…» en vez del titular en idioma original", () => {
+  it("una extranjera sin traducir muestra «Traduciendo…» en vez del titular original", () => {
     renderTarjeta(historia({ traduciendo: true, titulo: "Traduciendo…" }));
     expect(screen.getByTestId("btn-detalle").textContent).toMatch(/Traduciendo/);
+  });
+
+  it("una promovible muestra el indicador «Sale sola al feed»", () => {
+    renderTarjeta(historia({ promovible: true, promovible_motivo: "score 0.5 ≥ 0.35" }));
+    expect(screen.getByTestId("badge-sale-sola")).toBeTruthy();
+  });
+
+  it("una pieza en el feed muestra el indicador «En el feed»", () => {
+    renderTarjeta(historia({ estado: "usado", publicacion_id: "c-1", pieza_estado: "en_feed" }));
+    expect(screen.getByText(/En el feed/i)).toBeTruthy();
   });
 });

@@ -70,7 +70,14 @@ function ChipGrupo({
       )}
     >
       <span>{etiqueta}</span>
-      {n > 0 && <span className="tabular-nums text-xs text-muted-foreground/55">{n}</span>}
+      {n > 0 && (
+        <span
+          className="tabular-nums text-xs text-muted-foreground/55"
+          title={`${n} en el pool`}
+        >
+          {n}
+        </span>
+      )}
       {despliega && (
         <ChevronDown
           className={cn(
@@ -393,11 +400,9 @@ export function agruparPorMacro(historias: Historia[]): BloqueLista[] {
 function GrupoMacro({
   tema,
   historias,
-  clave,
 }: {
   tema: string;
   historias: Historia[];
-  clave: readonly unknown[];
 }) {
   const [abierto, setAbierto] = React.useState(false);
   return (
@@ -428,7 +433,7 @@ function GrupoMacro({
       {abierto && (
         <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-2">
           {historias.map((h) => (
-            <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
+            <TarjetaHistoria key={h.id} historia={h} />
           ))}
         </div>
       )}
@@ -440,21 +445,15 @@ function GrupoMacro({
  * Renderiza una lista de historias agrupando las que comparten macro-evento en una caja
  * colapsable (`GrupoMacro`); las historias sin macro-evento salen como tarjetas sueltas.
  */
-function ListaHistorias({
-  historias,
-  clave,
-}: {
-  historias: Historia[];
-  clave: readonly unknown[];
-}) {
+function ListaHistorias({ historias }: { historias: Historia[] }) {
   const bloques = React.useMemo(() => agruparPorMacro(historias), [historias]);
   return (
     <div className="space-y-2">
       {bloques.map((b) =>
         b.tipo === "suelta" ? (
-          <TarjetaHistoria key={b.historia.id} historia={b.historia} clavesAInvalidar={[clave]} />
+          <TarjetaHistoria key={b.historia.id} historia={b.historia} />
         ) : (
-          <GrupoMacro key={`macro:${b.tema}`} tema={b.tema} historias={b.historias} clave={clave} />
+          <GrupoMacro key={`macro:${b.tema}`} tema={b.tema} historias={b.historias} />
         ),
       )}
     </div>
@@ -465,17 +464,17 @@ function ListaHistorias({
 
 function SeccionLinea({
   linea,
-  clave,
   expandida,
   onToggleExpandida,
 }: {
   linea: MesaLinea;
-  clave: readonly unknown[];
   expandida: boolean;
   onToggleExpandida: () => void;
 }) {
   const etiqueta = linea.etiqueta || etiquetaLinea(linea.linea);
   const hayMas = linea.en_pool > linea.historias.length || expandida;
+  // La sección muestra las top candidatas; el resto sigue en el pool (no todas se materializan).
+  const visibles = Math.min(linea.historias.length, linea.en_pool);
   return (
     <section className="space-y-2" data-testid={`seccion-${linea.linea}`}>
       <div className="flex flex-wrap items-baseline gap-2 border-b pb-1">
@@ -483,20 +482,25 @@ function SeccionLinea({
         <span className="text-xs tabular-nums text-muted-foreground">
           {linea.generados} de {linea.cupo} hoy
         </span>
+        {linea.en_pool > 0 && (
+          <span className="text-xs tabular-nums text-muted-foreground/70">
+            · {visibles} de {linea.en_pool} en el pool
+          </span>
+        )}
         {hayMas && linea.en_pool > 0 && (
           <button
             type="button"
             className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
             onClick={onToggleExpandida}
           >
-            {expandida ? "Ver menos" : `Ver las ${linea.en_pool}`}
+            {expandida ? "Ver menos" : `Ver las ${linea.en_pool} del pool`}
           </button>
         )}
       </div>
       {linea.historias.length === 0 ? (
         <p className="text-xs text-muted-foreground">Sin candidatas por ahora.</p>
       ) : (
-        <ListaHistorias historias={linea.historias} clave={clave} />
+        <ListaHistorias historias={linea.historias} />
       )}
     </section>
   );
@@ -593,7 +597,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
             texto="Prueba con otra categoría o espera a que lleguen nuevas."
           />
         ) : (
-          <ListaHistorias historias={visibles} clave={clave} />
+          <ListaHistorias historias={visibles} />
         )}
       </div>
     );
@@ -631,7 +635,6 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
           <SeccionLinea
             key={l.linea}
             linea={l}
-            clave={clave}
             expandida={expandidas.has(l.linea)}
             onToggleExpandida={() => alternarExpandida(l.linea)}
           />
@@ -651,7 +654,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
           </button>
           {fueraAbierto && (
             <div className="mt-2">
-              <ListaHistorias historias={fuera.historias} clave={clave} />
+              <ListaHistorias historias={fuera.historias} />
             </div>
           )}
         </section>

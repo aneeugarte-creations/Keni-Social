@@ -43,6 +43,8 @@ const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 // (Investigación · Producción, esqueletos por ahora) y la Cola compartida (la vista global
 // del worker/cola).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
+// Detalle de UNA historia de la Mesa como SUBPÁGINA (URL propia, deep-link).
+const DetalleHistoriaPagina = lazy(() => import("@/pages/noticias/DetalleHistoriaPagina"));
 // «Contexto» (`/maquina/contexto`): la página única de la máquina — el pipeline de cada motor como
 // estructura, con cada fase desplegable a Prompt · Contexto · Logs y su on/off.
 const Contexto = lazy(() => import("@/pages/maquina/Contexto"));
@@ -365,6 +367,8 @@ export const router = createBrowserRouter([
           { path: "contexto/doc/*", element: <DocumentoContexto /> },
           { path: "contexto/:proceso/:fase", element: <FaseDetalle /> },
           { path: "investigacion", element: <CockpitInvestigacion /> },
+          // Detalle de una historia de la Mesa (deep-link directo por URL).
+          { path: "investigacion/historia/:id", element: <DetalleHistoriaPagina /> },
           // El cockpit de Producción se fusionó en «Contexto» (su pipeline + ajustes); redirige allí.
           { path: "produccion", element: <Navigate to="/maquina/contexto?proceso=produccion" replace /> },
           // La LISTA «Agentes» se retiró (redundante con los dos cockpits): redirige al hub.
