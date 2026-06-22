@@ -209,7 +209,7 @@ _FASES_MARCA_INVESTIGACION: tuple[tuple[str, str], ...] = (
 )
 _FASES_MARCA_PRODUCCION: tuple[tuple[str, str], ...] = (
     (config.ENV_PIPELINE_REDACTAR, "Redactar"),
-    (config.ENV_PIPELINE_SUGERIR_HASHTAGS, "Sugerir hashtags"),
+    (config.ENV_PIPELINE_SUGERIR_HASHTAGS, "Keywords"),
     (config.ENV_PIPELINE_ILUSTRAR, "Ilustrar"),
     (config.ENV_PIPELINE_STOCK, "Stock"),
     (config.ENV_CRITICA_IA, "Crítica"),

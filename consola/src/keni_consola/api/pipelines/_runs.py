@@ -262,7 +262,7 @@ def _etapas_de_run(
     else:
         hash_estado, hash_detalle = _ESTADO_SALTADA, ""
     hashtags = {
-        "clave": "sugerir_hashtags", "nombre": "Sugerir hashtags",
+        "clave": "sugerir_hashtags", "nombre": "Keywords",
         "estado": hash_estado, "detalle": hash_detalle, "ts": "",
     }
 

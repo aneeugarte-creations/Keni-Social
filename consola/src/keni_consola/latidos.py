@@ -257,7 +257,7 @@ PROMPTS: dict[str, list[dict[str, str]]] = {
     "investigacion": [{"etiqueta": "Verificar", "doc": "prompt/verificar"}],
     "produccion": [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
-        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
+        {"etiqueta": "Keywords", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ],
 }

@@ -147,11 +147,11 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     ],
   },
   {
-    nombre: "Sugerir hashtags",
+    nombre: "Keywords",
     es_ia: true,
     claves: ["KENI_PIPELINE_SUGERIR_HASHTAGS", MAESTRO_PRODUCCION],
     ayuda:
-      "Saca del historial de la marca los hashtags habituales y, al revisar la pieza, sugiere en gris los más relevantes para aceptar o rechazar de un clic. Solo cuando al copy le faltan",
+      "Propone los hashtags habituales de la marca (en gris, para aceptar o rechazar de un clic al revisar) y una imagen clave (keyword del sujeto visual) que alimenta el buscador de fotos de stock. Solo cuando al copy le faltan",
     doc: "prompt/sugerir-hashtags",
     contextoMarca: true,
     queue: "sugerir-hashtags",

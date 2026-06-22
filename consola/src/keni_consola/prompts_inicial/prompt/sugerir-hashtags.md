@@ -1,6 +1,6 @@
 ---
-titulo: "Sugerir hashtags"
-descripcion: "Tras Redactar, propone los hashtags TEMÁTICOS de un contenido que aún no los lleva, eligiéndolos SOLO de la biblioteca de la marca (los que de verdad usa en redes). Son gemelos en todas las redes; la firma de la marca (su nombre/portal) se añade aparte. La sugerencia se ofrece en gris en el feed para aceptar/rechazar de un clic; no toca el copy hasta que un humano la acepta."
+titulo: "Keywords"
+descripcion: "Tras Redactar, propone dos cosas para un contenido: los hashtags TEMÁTICOS (eligiéndolos SOLO de la biblioteca de la marca, gemelos en todas las redes) y una IMAGEN CLAVE (keyword de 2-4 palabras del sujeto visual a buscar en bancos de foto). Los hashtags se ofrecen en gris en el feed para aceptar/rechazar; la imagen clave alimenta el buscador de stock. No toca el copy hasta que un humano lo acepta."
 tipo: prompt
 carpeta: ""
 creado: 2026-06-17T00:00:00+00:00

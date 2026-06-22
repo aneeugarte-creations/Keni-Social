@@ -58,7 +58,7 @@ _ETAPAS = (
     ("admitir", "Admitir"),
     ("verificar", "Verificar"),
     ("redactar", "Redactar"),
-    ("sugerir_hashtags", "Sugerir hashtags"),
+    ("sugerir_hashtags", "Keywords"),
     ("ilustrar", "Ilustrar"),
     ("aprobar", "Aprobar"),
     ("critica", "Crítica"),

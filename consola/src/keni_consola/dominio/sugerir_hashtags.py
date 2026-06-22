@@ -153,7 +153,7 @@ def lanzar_para_contenido(publicacion_id: str, twins: list[dict[str, Any]]) -> d
     prompt = _componer_prompt(copy=copy, marca=marca, redes=redes, candidatos=candidatos, cantidad=cantidad)
     return generar.lanzar(
         tipo="sugerir-hashtags",
-        titulo=f"Sugerir hashtags · {twins[0].get('titulo', '') or 'contenido'}",
+        titulo=f"Keywords · {twins[0].get('titulo', '') or 'contenido'}",
         marca=marca,
         prompt=prompt,
         procesar=procesar,

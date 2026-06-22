@@ -505,7 +505,7 @@ def test_prompts_de_solo_los_agentes_ia():
     ]
     assert latidos.prompts_de("produccion") == [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
-        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
+        {"etiqueta": "Keywords", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ]
     for d in ("ingesta", "trends", "patrones", "metricas", "limpiador", "daemon_nuevo"):
@@ -541,7 +541,7 @@ def test_endpoint_daemons_expone_etiqueta_y_prompts(entorno):
     assert por_nombre["produccion"]["etiqueta"] == "Producción"
     assert por_nombre["produccion"]["prompts"] == [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
-        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
+        {"etiqueta": "Keywords", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ]
     assert por_nombre["ingesta"]["etiqueta"] == "Recolección de noticias"

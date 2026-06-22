@@ -713,7 +713,7 @@ _ETAPA_POR_TIPO = {
     "verificacion": "Verificar", "revision": "Revisión editorial",
     # Producción
     "copy": "Redactar", "autogen": "Redactar", "evergreen": "Redactar",
-    "sugerir-hashtags": "Sugerir hashtags",
+    "sugerir-hashtags": "Keywords",
     "imagen": "Ilustrar",
     "critica-ia": "Crítica",
     "carrusel": "Carrusel",
