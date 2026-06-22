@@ -58,9 +58,9 @@ rutas_frontend = [
   "/webhooks",
 ]
 
-# Dos destinos hermanos: «Calendario» (`/operacion/turnos`) = el horario del equipo (capacidad:
-# Yo/Equipo, Semana/Mes); «Trabajo» (`/operacion/trabajo`) = eventos/tareas y su cobertura. La
-# ruta vieja `/operacion/tareas` redirige a «Trabajo» (ver router.tsx).
+# Dos destinos hermanos en el bloque «Equipo»: «Trabajo» (`/operacion/trabajo`) = eventos/tareas y
+# su cobertura (la demanda); «Calendario» (`/operacion/turnos`) = el horario de turnos del equipo
+# (la capacidad: Yo/Equipo, Semana/Mes). La ruta vieja `/operacion/tareas` redirige a «Trabajo».
 
 # Feed: la superficie diaria del equipo (red social interna + lista de contenido).
 [[nav]]
@@ -86,18 +86,9 @@ grupo = "operacion"
 grupo_orden = 10
 orden = 25
 
-# Calendario: el horario de turnos del equipo (capacidad). Yo/Equipo · Semana/Mes, por marca activa.
-# Va en su PROPIO bloque al fondo del sidebar (grupo `turnos`, sin encabezado = solo un divisor):
-# el horario del equipo es otra clase de cosa que el flujo de contenido (Feed/Programación/Trabajo),
-# así que se separa de él en vez de mezclarse.
-[[nav]]
-ruta = "/operacion/turnos"
-etiqueta = "Calendario"
-icono = "CalendarClock"
-descripcion = "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca."
-grupo = "turnos"
-grupo_orden = 40
-orden = 28
+# Bloque «Equipo» (grupo `equipo`, entre Operación y Contenido): quién trabaja y cuándo. Reúne
+# «Trabajo» (la demanda: qué hay que cubrir y quién lo coge) y «Calendario» (la capacidad: el
+# horario de turnos). Es otra clase de cosa que el flujo de contenido, así que va en su propio bloque.
 
 # Trabajo: eventos editoriales y tareas con su cobertura (qué hay que hacer y quién lo coge), por marca.
 [[nav]]
@@ -105,6 +96,16 @@ ruta = "/operacion/trabajo"
 etiqueta = "Trabajo"
 icono = "ClipboardList"
 descripcion = "Eventos y tareas del equipo con su cobertura: qué hay que cubrir y quién lo coge, por marca."
-grupo = "operacion"
-grupo_orden = 10
-orden = 29
+grupo = "equipo"
+grupo_orden = 15
+orden = 10
+
+# Calendario: el horario de turnos del equipo (capacidad). Yo/Equipo · Semana/Mes, por marca activa.
+[[nav]]
+ruta = "/operacion/turnos"
+etiqueta = "Calendario"
+icono = "CalendarClock"
+descripcion = "El horario de turnos del equipo: tu calendario y el del equipo, semana o mes, por marca."
+grupo = "equipo"
+grupo_orden = 15
+orden = 20

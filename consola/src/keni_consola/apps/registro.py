@@ -43,6 +43,10 @@ _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 # sin encabezado), así un manifest nuevo no rompe aunque estrene un bloque.
 ETIQUETAS_BLOQUE: dict[str, str] = {
     "operacion": "Operación",
+    # `equipo` = quién trabaja y cuándo: «Trabajo» (eventos/tareas y su cobertura, la demanda) +
+    # «Calendario» (el horario de turnos, la capacidad). Va entre Operación y Contenido: es otra
+    # clase de cosa que el flujo de contenido, así que se separa de él en su propio bloque.
+    "equipo": "Equipo",
     "contenido": "Contenido",
     # `maquina` = la máquina de generación (dos cockpits + la Cola compartida): el motor
     # automático que convierte señales en contenido; se sitúa entre Contenido y Datos.

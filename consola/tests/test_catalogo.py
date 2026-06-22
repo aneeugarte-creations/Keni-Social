@@ -16,15 +16,18 @@ from __future__ import annotations
 
 from keni_consola.apps import registro
 
-# Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
+# Estructura ESPERADA del sidebar: 5 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Operación": los checkpoints que el equipo toca cada día. Investigación (el pool de noticias
-    # que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el bloque, ENCIMA del Feed;
-    # luego el Feed (red social interna + lista), la Programación (calendario de publicaciones) y el
-    # «Trabajo» (eventos/tareas y su cobertura). El «Calendario» (horario) NO va aquí: tiene su
-    # propio bloque al fondo (ver abajo).
-    ["Investigación", "Feed", "Programación", "Trabajo"],
+    # "Operación": los checkpoints del flujo de contenido que el equipo toca cada día. Investigación
+    # (el pool de noticias que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el
+    # bloque, ENCIMA del Feed; luego el Feed (red social interna + lista) y la Programación
+    # (calendario de publicaciones). «Trabajo» y «Calendario» NO van aquí: tienen su propio bloque.
+    ["Investigación", "Feed", "Programación"],
+    # "Equipo": quién trabaja y cuándo, entre Operación y Contenido. «Trabajo» (eventos/tareas y su
+    # cobertura: la demanda) + «Calendario» (el horario de turnos: la capacidad). Es otra clase de
+    # cosa que el flujo de contenido, así que se separa de él.
+    ["Trabajo", "Calendario"],
     # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
     # (estudio de video) y Audio (gestor audio→texto: transcripción whisper + agentes de Claude).
     # La página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
@@ -36,14 +39,11 @@ _SIDEBAR_BLOQUES = [
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.
     ["Analíticas"],
-    # «Calendario» (horario de turnos): su PROPIO bloque al fondo (grupo `turnos`, headerless), para
-    # no mezclarlo con el flujo de contenido. Es el último bloque del sidebar.
-    ["Calendario"],
 ]
 
-# Encabezados humanos de cada bloque, en el mismo orden. El último bloque (turnos/Calendario) no
-# declara etiqueta en `ETIQUETAS_BLOQUE` → va sin encabezado ("", solo un divisor).
-_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Máquina", "Datos", ""]
+# Encabezados humanos de cada bloque, en el mismo orden. Todos declaran etiqueta en
+# `ETIQUETAS_BLOQUE`, así que todos llevan encabezado visible.
+_ETIQUETAS_BLOQUES = ["Operación", "Equipo", "Contenido", "Máquina", "Datos"]
 
 
 def _entorno(**flags: str) -> dict[str, str]:
@@ -85,8 +85,8 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # por delante de Imagen (contenido 20/10).
     assert porid["produccion"]["nav"][0]["ruta"] == "/maquina/investigacion"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta CUATRO entradas (Feed, Programación, Calendario, Trabajo); la 1ª
-    # por orden es Feed.
+    # La app "operacion" aporta CUATRO entradas (Feed, Programación, Trabajo, Calendario); el
+    # `nav` por app va ordenado por bloque de flujo (grupo_orden, orden), así que la 1ª es Feed.
     assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
 
