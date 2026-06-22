@@ -80,6 +80,8 @@ describe("Contexto · la máquina en una página", () => {
     // Importación dejó de ser una pestaña: sus agentes viven ahora dentro de Herramientas.
     expect(screen.queryByRole("button", { name: "Importación" })).not.toBeInTheDocument();
     // Pestaña por defecto = Investigación: sus fases se leen en orden (incl. el nuevo «Cotejar»).
+    // Google Trends es una fuente de ingesta del flujo, junto a Recolectar.
+    expect(screen.getByText("Google Trends")).toBeInTheDocument();
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
     expect(screen.getByText("Cotejar")).toBeInTheDocument();
     expect(screen.getByText("Macro-evento")).toBeInTheDocument();

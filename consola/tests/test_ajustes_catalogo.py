@@ -48,6 +48,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # (Recolectar/Verificar/Redactar/Ilustrar/Stock; Ilustrar siempre tuvo interruptor propio).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
         config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        # Google Trends: fuente de ingesta del pool (con Investigación, no con los automatismos).
+        config.ENV_TRENDS,
         # Clasificar marca con IA: modo IA (Haiku) del paso Clasificar (global, no per-marca).
         config.ENV_CLASIFICAR_MARCA_IA,
         config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
@@ -59,7 +61,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_ALERTAS_ACTIVAS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC,
-        config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO,
+        config.ENV_ALGORITMOS_AUTO,
         config.ENV_PATRONES_AUTO,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
@@ -106,6 +108,8 @@ _MAESTROS_ENV = {
     # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
     config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+    # Google Trends: fuente de ingesta del pool, paso del flujo de Investigación (no automatismo).
+    config.ENV_TRENDS,
     # Clasificar marca con IA: modo IA del paso Clasificar (grupo `maestros_investigacion`).
     config.ENV_CLASIFICAR_MARCA_IA,
     config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
@@ -118,7 +122,8 @@ _MAESTROS_ENV = {
 
 def test_maestros_son_investigacion_produccion_y_arte(store):
     """Los maestros (grupos `maestros_investigacion`/`maestros_produccion`) son EXACTAMENTE
-    los dos virtuales de proceso + las cuatro etapas físicas de la tira (ADR 0011).
+    los dos virtuales de proceso + las etapas físicas de la tira + los pasos GLOBALES de ingesta y
+    clasificación (Google Trends, Clasificar marca con IA), que no van en el fan-out por marca.
 
     «Investigación» y «Producción» son claves VIRTUALES (`KENI_INVESTIGACION`/`KENI_PRODUCCION`):
     agrupan sus etapas internas con fan-out (ver `claves_fisicas`) y se conservan para las

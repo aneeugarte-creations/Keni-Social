@@ -34,6 +34,15 @@ export const MAESTRO_PRODUCCION = "KENI_PRODUCCION";
 /** El flujo COMPLETO de Investigación (ADR 0011), de ENTRADA a SALIDA. */
 export const FASES_INVESTIGACION: readonly FasePipeline[] = [
   {
+    // Fuente de ingesta PARALELA a las RSS: un daemon propio descarga las tendencias de Google
+    // y las mete al pool. Global (no per-marca), con su switch propio (`KENI_TRENDS`); sin cola
+    // ni histórico de jobs (solo añade material, no ejecuta IA).
+    nombre: "Google Trends",
+    es_ia: false,
+    claves: ["KENI_TRENDS", MAESTRO_INVESTIGACION],
+    ayuda: "Ingiere las tendencias de Google al pool, como fuente extra junto a las fuentes RSS",
+  },
+  {
     nombre: "Recolectar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],

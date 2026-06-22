@@ -130,6 +130,15 @@ def _maestros_etapa() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_TRENDS,
+            tipo="bool",
+            etiqueta="Google Trends",
+            ayuda="Fuente de ingesta extra: un daemon ingiere las tendencias de Google (con sus "
+            "noticias) al pool, en paralelo a las fuentes RSS de Recolectar.",
+            grupo="maestros_investigacion",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_PIPELINE_VERIFICAR,
             tipo="bool",
             etiqueta="Verificar",
@@ -473,17 +482,9 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # Automatismos de ingesta extra (también daemons del Monitor): Trends, feeds de algoritmo y
-        # digest de sugerencias. Al estar en el catálogo, sus toggles son REALES (editables
-        # desde el Monitor y desde aquí).
-        Ajuste(
-            clave=config.ENV_TRENDS,
-            tipo="bool",
-            etiqueta="Google Trends",
-            ayuda="Ingiere tendencias (con sus noticias) al pool de noticias.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
+        # Automatismos de ingesta extra (también daemons del Monitor): feeds de algoritmo y digest
+        # de sugerencias. Al estar en el catálogo, sus toggles son REALES (editables desde el
+        # Monitor y desde aquí). Google Trends, por ser ingesta del pool, vive con Investigación.
         Ajuste(
             clave=config.ENV_ALGORITMOS_AUTO,
             tipo="bool",
