@@ -8,10 +8,12 @@ reubicacion, sin cambio de comportamiento).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ... import repos
-from ...estados import ESTADO_PUBLICADO
+from ...dominio.piezas import pieza_a_dict
+from ...estados import ESTADO_BORRADOR, ESTADO_PUBLICADO
 from ._comun import (
     _CAMPOS_ESPEJO,
     _RESET_APROBACIONES,
@@ -19,6 +21,8 @@ from ._comun import (
     _limpiar_cadena,
     _pierde_aprobaciones,
 )
+
+_log = logging.getLogger("keni_consola.api.piezas")
 
 
 def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
@@ -50,7 +54,35 @@ def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
         # El estado de readiness (falta copy/imagen) SÍ se actualiza en el espejo aunque la
         # aprobación no: la hermana hereda el contenido, así que sus flags reflejan lo heredado.
         _inyectar_flags_falta(hermana, campos_h)
-        if repos.actualizar_pieza(plat["id"], campos_h) is None:
+        actualizada = repos.actualizar_pieza(plat["id"], campos_h)
+        if actualizada is None:
             continue  # borrada en paralelo: nada que espejar
         if resetear:
             _limpiar_cadena(plat["id"])
+        _promover_si_completa(actualizada)
+
+
+def _promover_si_completa(hermana: dict[str, Any]) -> None:
+    """Envía la hermana a revisión si quedó completa en `borrador`, igual que el daemon de avance.
+
+    Tras heredar el contenido por el espejo, una hermana ya LISTA (copy + asset del formato, la
+    misma derivación del feed: `etapa_ia == "lista_para_revisar"`) entra sola a la cola de
+    revisión con su cadena, sin esperar a que un humano abra y cierre su editor. Reúsa la
+    transición CAS + montaje de cadena del avance (fuente de verdad). Best-effort: un fallo de
+    la promoción no rompe la edición que disparó el espejo.
+    """
+    if (hermana.get("estado") or "") != ESTADO_BORRADOR:
+        return
+    if pieza_a_dict(hermana).get("etapa_ia") != "lista_para_revisar":
+        return
+    # Import tardío: la fuente de verdad del avance vive en el pipeline; se carga al promover.
+    from ...pipeline_contenido._avance import enviar_a_revision
+
+    try:
+        enviar_a_revision(hermana)
+    except Exception:  # noqa: BLE001 -- la promoción es best-effort; nunca rompe la edición
+        _log.warning(
+            "espejo: no se pudo promover la hermana %s a revisión",
+            hermana.get("id", ""),
+            exc_info=True,
+        )

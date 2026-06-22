@@ -118,6 +118,41 @@ def test_espejo_resetea_hermana_con_aprobaciones(cliente):
     assert hermana["estado"] == "borrador"
 
 
+def test_espejo_promueve_hermana_completa_a_revision(cliente):
+    """Al heredar el contenido COMPLETO (copy con hashtag + foto) por el espejo, la hermana
+    entra SOLA a revisión con su cadena —igual que el daemon de avance—, sin que un humano
+    abra su editor. La hermana INCOMPLETA se queda en borrador (no hay nada que promover)."""
+    from keni_consola import repos
+
+    _cont, por_red = _crear_idea(cliente)
+    r = cliente.put(
+        f"/api/piezas/{por_red['x']}",
+        json={"contenido": "Copy completo #keni", "foto": "f1.webp"},
+    )
+    assert r.status_code == 200, r.text
+
+    hermana = _pub(cliente, por_red["instagram"])
+    assert hermana["estado"] == "en_revision"  # promovida sola tras heredar el contenido
+    assert repos.listar_aprobaciones(por_red["instagram"])  # con su cadena montada
+
+
+def test_espejo_no_promueve_hermana_incompleta(cliente):
+    """Sin hashtag (copy incompleto para el avance), la hermana hereda pero NO se promueve."""
+    from keni_consola import repos
+
+    _cont, por_red = _crear_idea(cliente)
+    r = cliente.put(
+        f"/api/piezas/{por_red['x']}",
+        json={"contenido": "Copy sin tags", "foto": "f1.webp"},
+    )
+    assert r.status_code == 200, r.text
+
+    hermana = _pub(cliente, por_red["instagram"])
+    assert hermana["contenido"] == "Copy sin tags"
+    assert hermana["estado"] == "borrador"
+    assert not repos.listar_aprobaciones(por_red["instagram"])
+
+
 def test_espejo_no_propaga_estado_ni_fecha(cliente):
     _cont, por_red = _crear_idea(cliente)
     r = cliente.put(f"/api/piezas/{por_red['x']}", json={"estado": "en_revision"})
