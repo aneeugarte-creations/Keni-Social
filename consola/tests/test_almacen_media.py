@@ -60,6 +60,29 @@ def test_disco_borrar(disco):
     assert almacen_media.leer_objeto("x.png") is None
 
 
+def test_disco_borrar_prefijo(disco):
+    """Borra un bundle anidado (claves multinivel) y no toca el resto de la media."""
+    almacen_media.guardar_objeto("a.png", b"a", content_type="image/png")
+    base = almacen_media.asegurar_dir()
+    (base / "previews" / "sug-x" / "assets").mkdir(parents=True)
+    (base / "previews" / "sug-x" / "index.html").write_bytes(b"<html>")
+    (base / "previews" / "sug-x" / "assets" / "app.js").write_bytes(b"//js")
+
+    n = almacen_media.borrar_prefijo("previews/sug-x/")
+
+    assert n == 2
+    assert not (base / "previews" / "sug-x").exists()
+    assert almacen_media.leer_objeto("a.png") == b"a"  # el resto intacto
+
+
+def test_disco_borrar_prefijo_inexistente_es_noop(disco):
+    assert almacen_media.borrar_prefijo("previews/sug-nada/") == 0
+
+
+def test_borrar_prefijo_vacio_es_noop(disco):
+    assert almacen_media.borrar_prefijo("") == 0
+
+
 def test_disco_objeto_existe(disco):
     assert almacen_media.objeto_existe("y.png") is False
     almacen_media.guardar_objeto("y.png", b"y", content_type="image/png")
@@ -144,6 +167,20 @@ def test_s3_guarda_content_type(s3):
 
 def test_s3_leer_inexistente_none(s3):
     assert almacen_media.leer_objeto("noexiste.png") is None
+
+
+def test_s3_borrar_prefijo(s3):
+    """En S3, `borrar_prefijo` borra claves anidadas crudas (lo que `borrar_objeto` rechaza)."""
+    s3.put_object(Bucket="keni-media", Key="previews/sug-x/index.html", Body=b"<html>")
+    s3.put_object(Bucket="keni-media", Key="previews/sug-x/assets/app.js", Body=b"//js")
+    almacen_media.guardar_objeto("foto.png", b"img", content_type="image/png")
+
+    n = almacen_media.borrar_prefijo("previews/sug-x/")
+
+    assert n == 2
+    restantes = {k for (k, _m) in almacen_media.listar_objetos()}
+    assert not any(k.startswith("previews/sug-x/") for k in restantes)
+    assert "foto.png" in restantes  # el resto del bucket intacto
 
 
 def test_s3_prefijo_desconocido_o_traversal_rechazado(s3):

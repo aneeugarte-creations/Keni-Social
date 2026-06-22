@@ -25,6 +25,7 @@ El cliente S3 (boto3) se importa de forma DIFERIDA: en local no es necesario (ex
 from __future__ import annotations
 
 import re
+import shutil
 import threading
 from pathlib import Path
 
@@ -386,3 +387,52 @@ def borrar_objeto(nombre: str) -> None:
     destino = resolver_media(nombre)
     if destino is not None:
         destino.unlink(missing_ok=True)
+
+
+def borrar_prefijo(prefijo: str) -> int:
+    """Borra TODOS los objetos cuya clave empieza por `prefijo`. Idempotente, best-effort.
+
+    A diferencia de `borrar_objeto`, opera sobre claves CRUDAS multinivel: la usa la limpieza de
+    los bundles de preview del carril dev (`previews/sug-<id>/...`), cuyas rutas anidadas quedan
+    fuera del esquema `<categoria>/<nombre>` del resto de la media. Devuelve cuantos borro.
+    """
+    if not prefijo:
+        return 0
+    if s3_activo():
+        cliente = _s3()
+        bucket = config.s3_bucket()
+        borrados = 0
+        token: str | None = None
+        while True:
+            kwargs: dict[str, object] = {"Bucket": bucket, "Prefix": prefijo}
+            if token:
+                kwargs["ContinuationToken"] = token
+            try:
+                resp = cliente.list_objects_v2(**kwargs)
+            except Exception:  # noqa: BLE001 -- listado best-effort
+                return borrados
+            lote = [{"Key": it["Key"]} for it in (resp.get("Contents") or []) if it.get("Key")]
+            if lote:
+                try:
+                    cliente.delete_objects(Bucket=bucket, Delete={"Objects": lote, "Quiet": True})
+                    borrados += len(lote)
+                except Exception:  # noqa: BLE001 -- caida a borrado uno-a-uno
+                    for obj in lote:
+                        try:
+                            cliente.delete_object(Bucket=bucket, Key=obj["Key"])
+                            borrados += 1
+                        except Exception:  # noqa: BLE001 -- best-effort por clave
+                            pass
+            if not resp.get("IsTruncated"):
+                return borrados
+            token = resp.get("NextContinuationToken")
+            if not token:
+                return borrados
+    # Disco: borra el subarbol bajo el prefijo, anclado DENTRO del dir de media (anti-traversal).
+    base = asegurar_dir().resolve()
+    objetivo = (base / prefijo).resolve()
+    if objetivo == base or not objetivo.is_relative_to(base) or not objetivo.exists():
+        return 0
+    contados = sum(1 for p in objetivo.rglob("*") if p.is_file())
+    shutil.rmtree(objetivo, ignore_errors=True)
+    return contados

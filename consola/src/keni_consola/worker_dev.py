@@ -28,13 +28,14 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import threading
 import uuid
 from pathlib import Path
 
-from . import cola, config, generaciones, presupuesto_ia, sugerencias
+from . import almacen_media, cola, config, generaciones, presupuesto_ia, sugerencias
 from .dominio import desarrollo, jobspec, runner, stream
 from .generaciones import _lanzadores as _gl
 
@@ -42,6 +43,15 @@ _log = logging.getLogger("keni_consola.worker_dev")
 
 # Carriles que ESTE worker reclama: solo desarrollo (jamás contenido).
 _CARRILES_DEV: set[str] = {jobspec.CARRIL_DEV}
+
+# Prefijo de los bundles de preview en el almacen de media (`previews/sug-<id>/...`).
+_PREFIJO_PREVIEW = "previews/"
+
+# Estados de los que YA no nace trabajo: el reaper puede limpiar sus restos sin riesgo.
+_ESTADOS_TERMINALES_DEV: set[str] = {"hecha", "descartada"}
+
+# Cada cuanto barre el reaper de fondo restos de sugerencias terminadas (s).
+_INTERVALO_REAPER_S = 600.0
 
 # Repositorio que el carril dev clona/empuja (slug de GitHub).
 _REPO_SLUG = "kenitech-io/keni-social"
@@ -168,6 +178,35 @@ def _diff_resumen(worktree: Path) -> str:
     return (res.stdout or "").strip()
 
 
+def _teardown(sugerencia_id: str) -> None:
+    """Elimina TODO rastro de una sugerencia: worktree, rama local y preview en S3/disco.
+
+    Idempotente y best-effort: cada paso tolera que ya no exista, y un fallo de uno no aborta
+    los demas (la promocion NUNCA debe romperse por la limpieza; el reaper reintenta lo que
+    quede). Lo llaman la promocion (sincrona, tras el push OK) y el reaper de fondo.
+    """
+    repo = _repo()
+    rama = f"dev/sug-{sugerencia_id}"
+    wt = _dir_worktrees() / f"sug-{sugerencia_id}"
+    try:
+        if wt.exists():
+            res = _git("worktree", "remove", "--force", str(wt), cwd=repo)
+            if res.returncode != 0 and wt.exists():
+                shutil.rmtree(wt, ignore_errors=True)
+        _git("worktree", "prune", cwd=repo)
+        _git("branch", "-D", rama, cwd=repo)
+    except Exception:  # noqa: BLE001 -- limpieza best-effort; el reaper reintenta
+        _log.warning("worker_dev: fallo al limpiar worktree/rama de %s", sugerencia_id, exc_info=True)
+    try:
+        almacen_media.borrar_prefijo(f"{_PREFIJO_PREVIEW}sug-{sugerencia_id}/")
+    except Exception:  # noqa: BLE001 -- limpieza best-effort
+        _log.warning("worker_dev: fallo al borrar el preview de %s", sugerencia_id, exc_info=True)
+    try:
+        sugerencias.actualizar_avance(sugerencia_id, {"worktree": ""})
+    except Exception:  # noqa: BLE001 -- reflejar el campo es secundario
+        _log.warning("worker_dev: fallo al limpiar el campo worktree de %s", sugerencia_id, exc_info=True)
+
+
 # --------------------------------------------------------------------------- #
 # Promoción REAL a main (la ejecuta el listener `dev_control`)                  #
 # --------------------------------------------------------------------------- #
@@ -211,7 +250,86 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
     if push.returncode != 0:
         return {"ok": False, "detalle": f"El push a main falló: {(push.stderr or '').strip()[:300]}", "rama": rama}
 
+    # Promovida: el cambio ya vive en `main`. Limpia el worktree, la rama local y el preview
+    # para no dejar artefactos huerfanos en el worker ni en S3.
+    _teardown(sugerencia_id)
     return {"ok": True, "detalle": f"Rama «{rama}» promovida a main.", "rama": rama}
+
+
+# --------------------------------------------------------------------------- #
+# Reaper de fondo: purga restos de sugerencias terminadas (descartes/crashes)  #
+# --------------------------------------------------------------------------- #
+
+
+def _ids_con_restos() -> set[str]:
+    """IDs de sugerencias con algun resto material: worktree, rama local o preview en S3.
+
+    Une las tres fuentes para que el reaper alcance restos parciales (p.ej. una rama cuyo
+    worktree ya se borro, o un preview sin worktree). Best-effort: una fuente que falle no
+    impide enumerar las demas.
+    """
+    ids: set[str] = set()
+    try:
+        for d in _dir_worktrees().glob("sug-*"):
+            if d.is_dir():
+                ids.add(d.name[len("sug-"):])
+    except OSError:
+        pass
+    try:
+        res = _git("branch", "--list", "dev/sug-*", cwd=_repo())
+        for linea in (res.stdout or "").splitlines():
+            nombre = linea.replace("*", "").strip()
+            if nombre.startswith("dev/sug-"):
+                ids.add(nombre[len("dev/sug-"):])
+    except Exception:  # noqa: BLE001 -- enumeracion best-effort
+        pass
+    try:
+        pref = f"{_PREFIJO_PREVIEW}sug-"
+        for clave, _mtime in almacen_media.listar_objetos():
+            if clave.startswith(pref):
+                sid = clave[len(pref):].split("/", 1)[0]
+                if sid:
+                    ids.add(sid)
+    except Exception:  # noqa: BLE001 -- enumeracion best-effort
+        pass
+    return ids
+
+
+def _reapear() -> int:
+    """Una pasada del reaper: limpia restos de sugerencias terminadas o ya inexistentes.
+
+    Una sugerencia en estado terminal (`hecha`/`descartada`) o que ya no existe en BD no va a
+    generar mas trabajo, asi que su worktree/rama/preview son basura. Las que siguen vivas
+    (building, revision, ...) se RESPETAN. Devuelve cuantas limpio.
+    """
+    limpiadas = 0
+    for sid in _ids_con_restos():
+        try:
+            sug = sugerencias.obtener(sid)
+        except Exception:  # noqa: BLE001 -- un fallo por id no detiene al resto
+            continue
+        estado = sug.get("estado") if isinstance(sug, dict) else None
+        if sug is None or estado in _ESTADOS_TERMINALES_DEV:
+            _teardown(sid)
+            limpiadas += 1
+    return limpiadas
+
+
+def _bucle_reaper(parar: threading.Event) -> None:
+    """Reaper de fondo: cada `_INTERVALO_REAPER_S` purga restos huerfanos.
+
+    Backstop de la limpieza sincrona de la promocion: cubre descartes, borrados y crashes a
+    medio camino. Corre una pasada al arrancar y luego en bucle hasta el apagado.
+    """
+    while True:
+        try:
+            n = _reapear()
+            if n:
+                _log.info("worker_dev: reaper limpio %d sugerencia(s) terminada(s).", n)
+        except Exception:  # noqa: BLE001 -- el reaper nunca debe morir por una pasada
+            _log.warning("worker_dev: fallo en la pasada del reaper", exc_info=True)
+        if parar.wait(_INTERVALO_REAPER_S):
+            return
 
 
 # --------------------------------------------------------------------------- #
@@ -546,9 +664,11 @@ def main() -> int:
 
     signal.signal(signal.SIGTERM, _al_apagar)
     signal.signal(signal.SIGINT, _al_apagar)
+    reaper = threading.Thread(target=_bucle_reaper, args=(parar,), name="dev-reaper", daemon=True)
     for h in hilos:
         h.start()
-    _log.info("worker_dev iniciado: pool de %d hilos (carril dev).", len(hilos))
+    reaper.start()
+    _log.info("worker_dev iniciado: pool de %d hilos (carril dev) + reaper de limpieza.", len(hilos))
     try:
         while not parar.wait(timeout=1.0):
             pass
@@ -556,6 +676,7 @@ def main() -> int:
         parar.set()
     for h in hilos:
         h.join(timeout=5.0)
+    reaper.join(timeout=5.0)
     return 0
 
 

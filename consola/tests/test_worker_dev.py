@@ -89,29 +89,38 @@ class _FakeGit:
         )
 
 
-def _parchear(monkeypatch, sug, fallos=()):
+def _parchear(monkeypatch, sug, tmp_path, fallos=()):
+    # En el servidor KENI_DATA_DIR siempre está; sin él, `_dir_worktrees()` cae a una ruta no
+    # escribible. Lo anclamos en tmp para que la limpieza tras el push opere en un dir real.
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
     fake = _FakeGit(fallos)
     monkeypatch.setattr(worker_dev, "_git", fake)
     monkeypatch.setattr(worker_dev, "_setup_git_credenciales", lambda: None)
     monkeypatch.setattr(worker_dev.sugerencias, "obtener", lambda _id: sug)
+    # La promocion limpia tras el push: neutraliza los efectos colaterales (S3 + BD).
+    monkeypatch.setattr(worker_dev.almacen_media, "borrar_prefijo", lambda *_a, **_k: 0)
+    monkeypatch.setattr(worker_dev.sugerencias, "actualizar_avance", lambda *_a, **_k: None)
     return fake
 
 
 def test_promover_sugerencia_ok(monkeypatch, tmp_path):
     sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    fake = _parchear(monkeypatch, sug)
+    fake = _parchear(monkeypatch, sug, tmp_path)
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is True
     assert res["rama"] == "dev/sug-x"
-    # Hizo fetch -> rebase -> push, en ese orden.
+    # Hizo fetch -> rebase -> push, en ese orden, antes de cualquier limpieza.
     subcomandos = [c[0] for c in fake.llamadas]
-    assert subcomandos == ["fetch", "rebase", "push"]
-    assert fake.llamadas[-1] == ("push", "origin", "dev/sug-x:main")
+    assert subcomandos[:3] == ["fetch", "rebase", "push"]
+    assert fake.llamadas[2] == ("push", "origin", "dev/sug-x:main")
+    # Tras el push OK limpia el worktree (prune) y borra la rama local.
+    assert ("worktree", "prune") in fake.llamadas
+    assert ("branch", "-D", "dev/sug-x") in fake.llamadas
 
 
 def test_promover_sugerencia_no_revision(monkeypatch, tmp_path):
     sug = {"estado": "building", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    _parchear(monkeypatch, sug)
+    _parchear(monkeypatch, sug, tmp_path)
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is False
     assert "lista para promover" in res["detalle"]
@@ -119,7 +128,7 @@ def test_promover_sugerencia_no_revision(monkeypatch, tmp_path):
 
 def test_promover_sugerencia_sin_worktree(monkeypatch, tmp_path):
     sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path / "no-existe")}
-    _parchear(monkeypatch, sug)
+    _parchear(monkeypatch, sug, tmp_path)
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is False
     assert "worktree" in res["detalle"].lower()
@@ -133,7 +142,7 @@ def test_promover_sugerencia_inexistente(monkeypatch):
 
 def test_promover_sugerencia_rebase_conflicto(monkeypatch, tmp_path):
     sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    fake = _parchear(monkeypatch, sug, fallos={"rebase"})
+    fake = _parchear(monkeypatch, sug, tmp_path, fallos={"rebase"})
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is False
     assert "rebase" in res["detalle"].lower()
@@ -145,7 +154,90 @@ def test_promover_sugerencia_rebase_conflicto(monkeypatch, tmp_path):
 
 def test_promover_sugerencia_push_falla(monkeypatch, tmp_path):
     sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    _parchear(monkeypatch, sug, fallos={"push"})
+    _parchear(monkeypatch, sug, tmp_path, fallos={"push"})
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is False
     assert "push" in res["detalle"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# Teardown: borra worktree + rama local + preview                              #
+# --------------------------------------------------------------------------- #
+
+
+def test_teardown_borra_worktree_rama_y_preview(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    wt = tmp_path / "dev-worktrees" / "sug-z"
+    wt.mkdir(parents=True)
+    fake = _FakeGit()
+    monkeypatch.setattr(worker_dev, "_git", fake)
+    prefijos: list[str] = []
+    monkeypatch.setattr(worker_dev.almacen_media, "borrar_prefijo", lambda p: prefijos.append(p) or 0)
+    avances: list[tuple] = []
+    monkeypatch.setattr(
+        worker_dev.sugerencias, "actualizar_avance", lambda sid, c: avances.append((sid, c))
+    )
+
+    worker_dev._teardown("z")
+
+    assert ("worktree", "remove", "--force", str(wt)) in fake.llamadas
+    assert ("branch", "-D", "dev/sug-z") in fake.llamadas
+    assert prefijos == ["previews/sug-z/"]
+    assert avances == [("z", {"worktree": ""})]
+
+
+def test_teardown_idempotente_sin_worktree(monkeypatch, tmp_path):
+    """Sin worktree en disco no intenta `worktree remove`, pero sí poda y borra rama/preview."""
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    fake = _FakeGit()
+    monkeypatch.setattr(worker_dev, "_git", fake)
+    monkeypatch.setattr(worker_dev.almacen_media, "borrar_prefijo", lambda _p: 0)
+    monkeypatch.setattr(worker_dev.sugerencias, "actualizar_avance", lambda *_a, **_k: None)
+
+    worker_dev._teardown("nada")
+
+    subcomandos = [c[:2] for c in fake.llamadas]
+    assert ("worktree", "remove") not in subcomandos
+    assert ("worktree", "prune") in subcomandos
+    assert ("branch", "-D") in subcomandos
+
+
+# --------------------------------------------------------------------------- #
+# Reaper: limpia terminales/huérfanas, respeta las vivas                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_reaper_limpia_terminales_e_inexistentes_respeta_vivas(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    base = tmp_path / "dev-worktrees"
+    for sid in ("a", "b", "c"):
+        (base / f"sug-{sid}").mkdir(parents=True)
+    # `branch --list` y el listado de previews no aportan ids nuevos en este caso.
+    monkeypatch.setattr(worker_dev, "_git", _FakeGit())
+    monkeypatch.setattr(worker_dev.almacen_media, "listar_objetos", lambda: [])
+    estados = {"a": {"estado": "hecha"}, "b": {"estado": "building"}}  # 'c' -> None (ya no existe)
+    monkeypatch.setattr(worker_dev.sugerencias, "obtener", lambda sid: estados.get(sid))
+    limpiadas: list[str] = []
+    monkeypatch.setattr(worker_dev, "_teardown", lambda sid: limpiadas.append(sid))
+
+    n = worker_dev._reapear()
+
+    assert n == 2
+    assert set(limpiadas) == {"a", "c"}  # terminal + inexistente; 'b' (building) se respeta
+
+
+def test_ids_con_restos_une_worktrees_ramas_y_previews(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    (tmp_path / "dev-worktrees" / "sug-a").mkdir(parents=True)
+
+    class _GitRamas:
+        def __call__(self, *args, cwd=None, timeout=120):
+            salida = "  dev/sug-b\n* dev/sug-a\n" if args[:2] == ("branch", "--list") else ""
+            return subprocess.CompletedProcess(args=list(args), returncode=0, stdout=salida, stderr="")
+
+    monkeypatch.setattr(worker_dev, "_git", _GitRamas())
+    monkeypatch.setattr(
+        worker_dev.almacen_media, "listar_objetos", lambda: [("previews/sug-c/index.html", 0.0)]
+    )
+
+    assert worker_dev._ids_con_restos() == {"a", "b", "c"}
