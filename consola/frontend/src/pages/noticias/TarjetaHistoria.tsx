@@ -254,10 +254,11 @@ export function TarjetaHistoria({
               </div>
             </div>
 
-            {/* Estado visual (solo expandida) — sin botones de acción; van al menú contextual */}
-            {expandida && (
-              <div className="flex shrink-0 items-center gap-1">
-                {piezaEstado === "en_feed" ? (
+            {/* Flanco derecho: el SCORE va SIEMPRE visible (escaneable sin desplegar);
+                los badges de estado solo al expandir, a su izquierda. */}
+            <div className="mt-0.5 flex shrink-0 items-center gap-2">
+              {expandida &&
+                (piezaEstado === "en_feed" ? (
                   <Badge variant="ok" className="gap-1 text-xs">
                     <CheckCircle2 className="h-3 w-3" />
                     En el feed
@@ -306,9 +307,16 @@ export function TarjetaHistoria({
                       <Spinner className="h-3 w-3 text-muted-foreground" />
                     )}
                   </>
-                )}
-              </div>
-            )}
+                ))}
+              {/* Score (siempre visible): dato escaneable; "Ver score" en el menú abre el desglose. */}
+              <span
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
+                data-testid="punto-prioridad"
+              >
+                <span className={`h-2 w-2 rounded-full ${COLOR_PRIORIDAD[prioridad]}`} />
+                Score {Math.round(historia.score * 100)}
+              </span>
+            </div>
           </div>
 
           {expandida && (
@@ -332,20 +340,11 @@ export function TarjetaHistoria({
                 </p>
               )}
 
-              {/* Fila de meta: marca + resultado de verificación + prioridad + traducción */}
+              {/* Fila de meta: marca + resultado de verificación + traducción (el score va arriba) */}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <ChipMarca historia={historia} />
 
                 <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />
-
-                {/* Score: dato visual inline; "Ver score" en el menú contextual abre el desglose. */}
-                <span
-                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
-                  data-testid="punto-prioridad"
-                >
-                  <span className={`h-2 w-2 rounded-full ${COLOR_PRIORIDAD[prioridad]}`} />
-                  Score {Math.round(historia.score * 100)}
-                </span>
 
                 {historia.traducido && historia.idioma && (
                   <Tooltip
