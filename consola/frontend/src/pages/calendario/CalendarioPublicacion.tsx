@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { PanelPlan } from "@/pages/piezas/GestionPlan";
 import { GestionPiezas } from "@/pages/piezas/GestionPiezas";
-import { PanelLineasPlan } from "@/pages/piezas/PanelLineasPlan";
 
 /**
  * Página "Programación" (`/operacion/programacion`): la rejilla mensual de piezas
@@ -84,14 +83,6 @@ export default function CalendarioPublicacion() {
           }
         />
       </AccionesPagina>
-
-      {/* El pulso del plan diario por línea (generados · publicados / objetivo): vive aquí,
-          junto a la parrilla que alimenta. Solo con marca activa y plan configurado. */}
-      {marcaActiva && (
-        <div className="mb-8 border-b border-border pb-6">
-          <PanelLineasPlan marca={marcaActiva} />
-        </div>
-      )}
 
       <GestionPiezas modo="calendario" />
     </>

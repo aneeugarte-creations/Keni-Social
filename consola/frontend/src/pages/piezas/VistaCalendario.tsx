@@ -17,8 +17,7 @@ import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
-import { colorLinea } from "@/lib/lineas";
-import { ETIQUETA_LINEA } from "@/pages/piezas/PanelLineasPlan";
+import { colorLinea, ETIQUETA_LINEA } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
 
@@ -36,6 +35,12 @@ type Vista = "mes" | "semana" | "dia";
 
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+// Caja compartida por las entradas de las columnas semana/día (piezas y huecos del plan):
+// fija tamaño de fuente, padding y borde idénticos para que TODAS las filas midan lo mismo.
+// Cada entrada añade encima su color e identidad (sólida vs. punteada).
+const CLASES_ENTRADA_CALENDARIO =
+  "flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs";
 
 /** Clave YYYY-MM-DD en hora CDMX de una pieza programada ("" si no aplica). */
 function diaCdmx(p: Pieza): string {
@@ -207,7 +212,8 @@ function PildoraPub({
               : `${pieza.titulo} (${nombreRed(pieza.red)}) · arrastra para mover · más acciones en el menú contextual (clic derecho)`
         }
         className={cn(
-          "flex w-full items-center gap-1 truncate rounded border border-transparent px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          CLASES_ENTRADA_CALENDARIO,
+          "w-full truncate border-transparent text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
@@ -673,7 +679,10 @@ function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string; etique
   const col = colorLinea(hueco.categoria);
   return (
     <div
-      className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+      className={cn(
+        CLASES_ENTRADA_CALENDARIO,
+        "border-dashed border-border/70 text-muted-foreground",
+      )}
       title={`Hueco del plan: ${nombre} a las ${hueco.hora}`}
     >
       <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)} aria-hidden="true" />
