@@ -23,14 +23,18 @@ export function AvatarPersona({
   id,
   nombre,
   size = "md",
+  titulo,
 }: {
   id: string;
   nombre: string;
   size?: "sm" | "md";
+  /** Tooltip (atributo `title`) a mostrar; por defecto el nombre. Lo usa la pila de reparto para
+   *  llevar el conteo por persona al hover («nombre · N»), que ya no se pinta como texto. */
+  titulo?: string;
 }) {
   return (
     <span
-      title={nombre}
+      title={titulo ?? nombre}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-medium text-white",
         colorPersona(id),

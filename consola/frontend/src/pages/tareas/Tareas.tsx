@@ -152,14 +152,32 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       )}
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <ToggleGroup
             ariaLabel="Vista de cobertura"
             valor={lente}
             onCambio={setLente}
             opciones={opcionesLente}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* «Cobertura de hoy» como lectura inline colgada del margen de las pestañas (sustituye
+                la tarjeta-KPI suelta de antes). Solo con datos ya cargados: durante la carga aún no
+                hay resumen, y con error-sin-caché manda el bloque de error. */}
+            {!cargando && !(hayError && sinDatos) && (
+              <KpiCobertura
+                variant="linea"
+                eventos={eventosHoy}
+                claims={claimsCobertura}
+                turnos={turnosHoy}
+                franjas={franjasHoy}
+                ausencias={ausencias}
+                hechas={hechasHoy}
+                onIrASinCubrir={() => {
+                  setLente("panorama");
+                  setFiltroPanorama("__pool__");
+                }}
+              />
+            )}
             {acciones === "inline" && campanaPropuestas}
             {acciones === "inline" && botonAnadir}
           </div>
@@ -178,36 +196,20 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
               <Skeleton key={i} className="h-24 w-full rounded-lg" />
             ))}
           </div>
+        ) : lente === "panorama" ? (
+          <PanoramaAgenda
+            tareas={tareas}
+            eventos={eventosCoverables}
+            catalogos={catalogos}
+            marca={marca}
+            cubiertosPorTurno={cubiertosPorTurno}
+            filtro={filtroPanorama}
+            setFiltro={setFiltroPanorama}
+          />
+        ) : lente === "equipo" ? (
+          <VistaEquipo items={items} />
         ) : (
-          <>
-            <KpiCobertura
-              eventos={eventosHoy}
-              claims={claimsCobertura}
-              turnos={turnosHoy}
-              franjas={franjasHoy}
-              ausencias={ausencias}
-              hechas={hechasHoy}
-              onIrASinCubrir={() => {
-                setLente("panorama");
-                setFiltroPanorama("__pool__");
-              }}
-            />
-            {lente === "panorama" ? (
-              <PanoramaAgenda
-                tareas={tareas}
-                eventos={eventosCoverables}
-                catalogos={catalogos}
-                marca={marca}
-                cubiertosPorTurno={cubiertosPorTurno}
-                filtro={filtroPanorama}
-                setFiltro={setFiltroPanorama}
-              />
-            ) : lente === "equipo" ? (
-              <VistaEquipo items={items} />
-            ) : (
-              listaAgrupada
-            )}
-          </>
+          listaAgrupada
         )}
       </div>
 

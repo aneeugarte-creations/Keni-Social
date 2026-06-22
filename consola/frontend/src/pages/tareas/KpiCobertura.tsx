@@ -42,6 +42,7 @@ export function KpiCobertura({
   ausencias = [],
   hechas = 0,
   onIrASinCubrir,
+  variant = "tarjeta",
 }: {
   eventos: EventoRota[];
   claims: Publicacion[];
@@ -54,12 +55,69 @@ export function KpiCobertura({
   hechas?: number;
   /** Si se pasa, el corte «N sin cubrir» se vuelve un botón que filtra el Panorama a «Por cubrir». */
   onIrASinCubrir?: () => void;
+  /** "tarjeta" (recuadro con barra de progreso) o "linea": lectura inline, sin recuadro ni barra de
+   *  segmentos, para colgarla del margen de la fila de pestañas («4/4 · N en vivo · Todo cubierto»). */
+  variant?: "tarjeta" | "linea";
 }) {
   const r = resumenCobertura(eventos, claims, turnos, franjas, undefined, ausencias);
   if (r.total === 0) return null;
 
   const llenos = Math.round((r.cubiertos / r.total) * SEGMENTOS);
   const etiqueta = `Cobertura de hoy: ${r.cubiertos} de ${r.total} cubiertos, ${r.enVivo} en vivo, ${r.sinCubrir} sin cubrir${hechas > 0 ? `, ${hechas} hechas` : ""}`;
+
+  // Cortes con color de significado (verde=en vivo/cubierto, rojo=hueco), SIEMPRE con icono+texto:
+  // compartidos por la tarjeta y la línea (mismo lenguaje que el semáforo de las tarjetas).
+  const enVivo = r.enVivo > 0 && (
+    <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_VERDE)}>
+      <Radio className="h-3.5 w-3.5" aria-hidden />
+      {r.enVivo} en vivo
+    </span>
+  );
+  const corteDecision =
+    r.sinCubrir > 0 ? (
+      onIrASinCubrir ? (
+        // «N sin cubrir» como botón: filtra el Panorama a «Por cubrir» (el único hueco accionable).
+        <button
+          type="button"
+          onClick={onIrASinCubrir}
+          className={cn(
+            "inline-flex items-center gap-1 rounded font-medium underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
+            TEXTO_ROJO,
+          )}
+        >
+          <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+          {r.sinCubrir} sin cubrir
+        </button>
+      ) : (
+        <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_ROJO)}>
+          <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+          {r.sinCubrir} sin cubrir
+        </span>
+      )
+    ) : (
+      <span className={cn("font-medium", TEXTO_VERDE)}>Todo cubierto</span>
+    );
+
+  // LÍNEA: la misma lectura, sin recuadro ni barra de segmentos, para colgarla del margen de la fila
+  // de pestañas. Sin la etiqueta «Cobertura de hoy» (el contexto es la cabecera): el conteo accesible
+  // vive en el `aria-label`.
+  if (variant === "linea") {
+    return (
+      <span
+        role="status"
+        aria-label={etiqueta}
+        className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs"
+      >
+        <span className="tabular-nums text-sm font-medium text-foreground">
+          {r.cubiertos}
+          <span className="text-muted-foreground">/{r.total}</span>
+        </span>
+        {enVivo}
+        {corteDecision}
+        {hechas > 0 && <span className="text-muted-foreground">· {hechas} hechas</span>}
+      </span>
+    );
+  }
 
   return (
     <div
@@ -88,40 +146,10 @@ export function KpiCobertura({
         <span className="text-muted-foreground">/{r.total}</span>
       </span>
 
-      {/* Cortes con color de significado (rojo=hueco, verde=en vivo), SIEMPRE con icono+texto. El
-          verde de «en vivo» habla el mismo lenguaje que el semáforo de las tarjetas (ámbar queda
-          reservado a «empieza pronto», que el KPI no muestra). La versión larga (separadores ·) se
-          oculta en móvil para no apretar la barra. */}
+      {/* La versión larga (separadores ·) se oculta en móvil para no apretar la barra. */}
       <span className="hidden items-center gap-3 text-xs sm:flex">
-        {r.enVivo > 0 && (
-          <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_VERDE)}>
-            <Radio className="h-3.5 w-3.5" aria-hidden />
-            {r.enVivo} en vivo
-          </span>
-        )}
-        {r.sinCubrir > 0 ? (
-          onIrASinCubrir ? (
-            // «N sin cubrir» como botón: filtra el Panorama a «Por cubrir» (el único hueco accionable).
-            <button
-              type="button"
-              onClick={onIrASinCubrir}
-              className={cn(
-                "inline-flex items-center gap-1 rounded font-medium underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
-                TEXTO_ROJO,
-              )}
-            >
-              <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-              {r.sinCubrir} sin cubrir
-            </button>
-          ) : (
-            <span className={cn("inline-flex items-center gap-1 font-medium", TEXTO_ROJO)}>
-              <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-              {r.sinCubrir} sin cubrir
-            </span>
-          )
-        ) : (
-          <span className={cn("font-medium", TEXTO_VERDE)}>Todo cubierto</span>
-        )}
+        {enVivo}
+        {corteDecision}
       </span>
 
       {/* «Hechas hoy»: dato NEUTRO secundario (gris, solo texto) al final de la línea —no otra

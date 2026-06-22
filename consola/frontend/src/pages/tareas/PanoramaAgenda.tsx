@@ -95,58 +95,55 @@ function AnadirRapido({ marca }: { marca: string }) {
   };
 
   return (
+    // Barra-píldora fina (una sola línea, ~36px): el atajo cabe junto al reparto en la misma fila.
+    // Esquinas suaves de la plataforma (`rounded-lg`) y sin sombra: sutil, no una pastilla flotante.
     <form
       onSubmit={enviar}
-      className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card p-1.5 shadow-sm"
+      className="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-lg border border-border bg-card pl-3 pr-1"
     >
-      {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. En móvil
-          ocupa toda la fila (los controles bajan debajo) para no asfixiarse a 3-4 letras. */}
+      {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. */}
       <Input
         value={titulo}
         onChange={(e) => setTitulo(e.target.value)}
         placeholder="¿Qué hay que cubrir?"
         aria-label="¿Qué hay que cubrir?"
-        className="w-full min-w-0 border-0 bg-transparent shadow-none focus-visible:ring-0 sm:flex-1"
+        className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
       />
-      {/* Hora + acciones: su propia fila en móvil (`w-full`), comparten fila con el campo en sm+. */}
-      <div className="flex w-full items-center gap-1.5 sm:w-auto">
-        <Input
-          type="time"
-          value={hora}
-          onChange={(e) => setHora(e.target.value)}
-          aria-label="Hora (opcional)"
-          className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 sm:w-[7rem] sm:flex-none"
-        />
-        {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en amarillo sutil.
-            El texto se oculta en móvil (queda el icono) para no apretar la fila de acciones. */}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn(
-            "shrink-0",
-            urgente && "border-yellow-500/50 bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
-          )}
-          aria-label="Urgente"
-          aria-pressed={urgente}
-          title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
-          onClick={() => setUrgente((v) => !v)}
-        >
-          <Zap className="h-4 w-4 sm:mr-1" />
-          <span className="hidden sm:inline">Urgente</span>
-        </Button>
-        <Button
-          type="submit"
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          aria-label="Añadir a Por cubrir"
-          disabled={!titulo.trim() || crear.isPending}
-        >
-          <Plus className="h-4 w-4 sm:mr-1" />
-          <span className="hidden sm:inline">{crear.isPending ? "Añadiendo…" : "Añadir"}</span>
-        </Button>
-      </div>
+      <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
+      <Input
+        type="time"
+        value={hora}
+        onChange={(e) => setHora(e.target.value)}
+        aria-label="Hora (opcional)"
+        className="h-7 w-[5.5rem] shrink-0 border-0 bg-transparent px-1 text-xs tabular-nums text-muted-foreground shadow-none focus-visible:ring-0"
+      />
+      {/* «Urgente» plegado en un botón-icono fantasma; activo, teñido en amarillo sutil. */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-7 w-7 shrink-0 text-muted-foreground",
+          urgente && "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300",
+        )}
+        aria-label="Urgente"
+        aria-pressed={urgente}
+        title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
+        onClick={() => setUrgente((v) => !v)}
+      >
+        <Zap className="h-4 w-4" />
+      </Button>
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        className="h-7 shrink-0"
+        aria-label="Añadir a Por cubrir"
+        disabled={!titulo.trim() || crear.isPending}
+      >
+        <Plus className="h-4 w-4 sm:mr-1" />
+        <span className="hidden sm:inline">{crear.isPending ? "Añadiendo…" : "Añadir"}</span>
+      </Button>
     </form>
   );
 }
@@ -785,60 +782,73 @@ export function PanoramaAgenda({
 
   return (
     <div className="space-y-4">
-      {/* Atajo de 5 segundos para meter algo a cubrir (todos), antes de la agenda. Solo con marca
-          concreta: sin ella crearía eventos sin marca que se pierden de las vistas por marca. */}
-      {marca && <AnadirRapido marca={marca} />}
+      {/* UNA línea: el atajo de añadir (izquierda) + el reparto plegado (derecha). El atajo solo con
+          marca concreta (sin ella crearía eventos sin marca que se pierden de las vistas por marca);
+          `flex-wrap` baja el reparto bajo el atajo en móvil. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        {marca && <AnadirRapido marca={marca} />}
 
-      {/* Carga por persona (avatar + conteo) que además filtra la agenda. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          aria-label="Ver solo lo por cubrir"
-          onClick={() => setFiltro(filtro === "__pool__" ? null : "__pool__")}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
-            filtro === "__pool__"
-              ? "border-yellow-500 bg-yellow-100/60 dark:bg-yellow-950/30"
-              : "border-yellow-500/40 hover:bg-accent",
-          )}
-        >
-          <Hand className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
-          Por cubrir
-          <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
-            {nPorCubrir}
-          </Badge>
-        </button>
-        {cargas.map((c) => (
+        {/* Reparto: «Por cubrir» (pool) + la pila de avatares por persona; ambos FILTRAN la agenda. */}
+        <div className="flex shrink-0 items-center gap-2">
           <button
-            key={c.id}
             type="button"
-            aria-label={`Ver solo lo de ${c.nombre}`}
-            onClick={() => setFiltro(filtro === c.id ? null : c.id)}
+            aria-label="Ver solo lo por cubrir"
+            onClick={() => setFiltro(filtro === "__pool__" ? null : "__pool__")}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs",
-              filtro === c.id ? "border-foreground/40 bg-accent" : "border-border hover:bg-accent",
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+              filtro === "__pool__"
+                ? "border-yellow-500 bg-yellow-100/60 dark:bg-yellow-950/30"
+                : "border-yellow-500/40 hover:bg-accent",
             )}
           >
-            <AvatarPersona id={c.id} nombre={c.nombre} size="sm" />
-            <span className="font-medium">{c.nombre}</span>
-            <Badge
-              variant="outline"
-              className={cn("px-1.5 py-0 tabular-nums", c.n === 0 && "text-muted-foreground")}
-            >
-              {c.n}
+            <Hand className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
+            Por cubrir
+            <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
+              {nPorCubrir}
             </Badge>
           </button>
-        ))}
-        {filtro && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => setFiltro(null)}
-          >
-            Ver todo
-          </Button>
-        )}
+
+          {/* Pila de avatares solapados: cada uno FILTRA por su persona. El nombre+conteo («nombre ·
+              N») viaja en el tooltip al hover —ya no como texto— para que el reparto quepa en la
+              línea; el nombre accesible del botón sigue siendo la acción («Ver solo lo de …»). */}
+          {cargas.length > 0 && (
+            <div className="flex items-center">
+              {cargas.map((c, i) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-label={`Ver solo lo de ${c.nombre}`}
+                  aria-pressed={filtro === c.id}
+                  title={`${c.nombre} · ${c.n}`}
+                  onClick={() => setFiltro(filtro === c.id ? null : c.id)}
+                  className={cn(
+                    "relative rounded-full ring-2 ring-background transition-transform hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-foreground",
+                    i > 0 && "-ml-1.5",
+                    filtro === c.id && "z-10 -translate-y-0.5 ring-foreground",
+                  )}
+                >
+                  <AvatarPersona
+                    id={c.id}
+                    nombre={c.nombre}
+                    size="sm"
+                    titulo={`${c.nombre} · ${c.n}`}
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filtro && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => setFiltro(null)}
+            >
+              Ver todo
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* BANDA «URGENTE AHORA» (breaking): por ENCIMA de la agenda por día. Solo si hay urgentes

@@ -310,9 +310,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     const chipLuis = await screen.findByRole("button", { name: "Ver solo lo de luis" });
     const chipAna = await screen.findByRole("button", { name: "Ver solo lo de ana" });
-    // luis: su único partido ya pasó → 0 (pero la fila sigue en la agenda). ana: futuro → 1.
-    expect(chipLuis).toHaveTextContent(/0/);
-    expect(chipAna).toHaveTextContent(/1/);
+    // El conteo por persona ya no es texto del chip: la pila de avatares lo lleva al tooltip
+    // («nombre · N»). luis: su único partido ya pasó → 0 (pero la fila sigue en la agenda); ana: futuro → 1.
+    expect(chipLuis).toHaveAttribute("title", "luis · 0");
+    expect(chipAna).toHaveAttribute("title", "ana · 1");
     // El partido pasado SIGUE visible en el calendario (no se elimina, solo deja de contar).
     expect(screen.getAllByText("Partido viejo").length).toBeGreaterThan(0);
   });
