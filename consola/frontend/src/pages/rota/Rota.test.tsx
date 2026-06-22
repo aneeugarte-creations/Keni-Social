@@ -133,17 +133,16 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
     vi.useRealTimers();
   });
 
-  it("abre en la semana ACTUAL (la que contiene hoy), no en la siguiente", async () => {
+  it("«Horario» abre en el MES ACTUAL (el que contiene hoy), no en otro", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // lunes 15 jun 2026 (CDMX)
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // junio 2026 (CDMX)
     renderRota();
-    // «Horario» es el default: el calendario monta su rejilla (y pide los turnos) al arrancar.
-    // El calendario pide los turnos de la semana por defecto: el lunes de HOY (no el siguiente).
+    // «Horario» es la home (mensual del equipo para el admin): pide los turnos del MES de hoy.
     await vi.waitFor(() =>
       expect(
         vi
-          .mocked(apiMod.api.listarTurnos)
-          .mock.calls.some(([arg]) => (arg as { lunes?: string })?.lunes === "2026-06-15"),
+          .mocked(apiMod.api.turnosMes)
+          .mock.calls.some(([arg]) => (arg as { mes?: string })?.mes === "2026-06"),
       ).toBe(true),
     );
   });
@@ -176,48 +175,29 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
     expect(within(nav).queryByRole("button", { name: "Trabajo" })).toBeNull();
   });
 
-  it("el Calendario abre en modo «Semana» y ofrece el conmutador Semana|Mes", async () => {
+  it("«Horario» es el calendario MENSUAL de turnos (Equipo/Yo + Imprimir), sin vista Semana", async () => {
     renderRota();
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    // Conmutador con PALABRAS (no iconos crípticos): «Semana» activo por defecto.
-    expect(
-      await screen.findByRole("button", { name: "Semana", pressed: true }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Mes", pressed: false }),
-    ).toBeInTheDocument();
-  });
-
-  it("conmutar a «Mes» muestra la vista mensual de jornada (Yo/Equipo + Imprimir)", async () => {
-    renderRota();
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
-    // El modo «Mes» = la antigua «Mi jornada»: su selector de ámbito y su Imprimir/PDF.
+    // «Horario» es la home; ya muestra el mensual de jornada directamente.
     expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Yo" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Imprimir \/ PDF/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Imprimir \/ PDF/ })).toBeInTheDocument();
+    // Ya NO hay conmutador Semana|Mes: la rejilla semanal editable vive en «Gestión».
+    expect(screen.queryByRole("button", { name: "Semana" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mes" })).toBeNull();
   });
 
-  it("deep-link legacy ?tab=mis-turnos cae en el Calendario en modo «Mes»", async () => {
+  it("deep-link legacy ?tab=mis-turnos cae en «Horario» (el calendario mensual)", async () => {
     renderRotaConTab("mis-turnos");
-    // No hay pestaña «Mi jornada»: el Calendario queda activo y abierto en «Mes».
     expect(await screen.findByRole("button", { name: "Horario" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(
-      await screen.findByRole("button", { name: "Mes", pressed: true }),
-    ).toBeInTheDocument();
-    // Y la vista mensual de jornada ya está montada (su ámbito Yo/Equipo).
+    // «Horario» ya ES el mensual de jornada (su ámbito Yo/Equipo).
     expect(await screen.findByRole("button", { name: "Equipo" })).toBeInTheDocument();
   });
 
-  it("para el admin, el modo «Mes» del Calendario abre en «Equipo» (turnos de todos)", async () => {
+  it("para el admin, «Horario» abre en «Equipo» (turnos de todos)", async () => {
     renderRota();
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El admin no está en la rota: arranca en «Equipo» (jornada de todo el equipo), no en «Yo».
     expect(
       await screen.findByRole("button", { name: "Equipo", pressed: true }),
@@ -227,10 +207,8 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
     ).toBeInTheDocument();
   });
 
-  it("para un editor, el modo «Mes» del Calendario abre en «Yo» (su propia jornada)", async () => {
+  it("para un editor, «Horario» abre en «Yo» (su propia jornada)", async () => {
     renderRota({ rol: "editor" });
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Mes", pressed: false }));
     // El editor sí está en la rota: arranca en «Yo» (su jornada), no en «Equipo».
     expect(
       await screen.findByRole("button", { name: "Yo", pressed: true }),
@@ -240,119 +218,6 @@ describe("Turnos — la sección «Calendario» (horario; el trabajo vive en su 
     ).toBeInTheDocument();
   });
 
-  it("en el Calendario, clicar el chip de un evento abre su tarjeta de COBERTURA (no la edición)", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // lunes 15 jun 2026 (CDMX)
-    // Un evento «Por cubrir» (sin tarea de cobertura) en la semana en vista, a una hora que
-    // cae en la franja Mañana → se bucketea a una celda y pinta su chip clicable.
-    renderRota({
-      cobertura: {
-        eventos: [
-          {
-            id: "ev-int",
-            titulo: "España vs Cabo Verde",
-            fecha: "2026-06-16",
-            hora: "10:00",
-            tipo_cobertura: "transmision",
-            prioridad: "media",
-            cambiado: false,
-          },
-        ],
-      },
-      // Sin las franjas vivas el evento no se bucketea a ninguna celda y el chip no aparece.
-      listarTurnos: {
-        turnos: [],
-        aprobada: false,
-        franjas: [
-          {
-            id: "f-manana",
-            lunes: "2026-06-15",
-            nombre: "Mañana",
-            inicio: "08:00",
-            fin: "14:00",
-            orden: 0,
-            es_descanso: false,
-            marca: "claro-sports",
-            marca_nombre: "Claro Sports",
-          },
-        ],
-      },
-      // Sin tareas de cobertura → el evento queda «Por cubrir» (TarjetaEventoLibre).
-      contenido: { contenidos: [], catalogos: { usuarios: [] } },
-    });
-
-    // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    // El chip de evento es clicable (su aria-label arranca por «Cubrir …»).
-    const chip = await screen.findByRole("button", { name: /España vs Cabo Verde/ });
-    fireEvent.click(chip);
-
-    // Se abre un diálogo de COBERTURA (no el editor de evento): contiene la tarjeta «Por
-    // cubrir» con su badge «Sin cubrir» y el menú de acciones (Asignar/Editar/Borrar).
-    const dialogo = await screen.findByRole("dialog");
-    expect(dialogo).toBeInTheDocument();
-    expect(within(dialogo).getByText("Sin cubrir")).toBeInTheDocument();
-    expect(
-      within(dialogo).getByRole("button", { name: "Más acciones" }),
-    ).toBeInTheDocument();
-  });
-
-  it("Calendario → «Asignar a…» del chip abre el diálogo de asignar y encarga a la persona", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
-    renderRota({
-      cobertura: {
-        eventos: [
-          {
-            id: "ev-int",
-            titulo: "España vs Cabo Verde",
-            fecha: "2026-06-16",
-            hora: "10:00",
-            tipo_cobertura: "transmision",
-            prioridad: "media",
-            cambiado: false,
-          },
-        ],
-      },
-      listarTurnos: {
-        turnos: [],
-        aprobada: false,
-        franjas: [
-          {
-            id: "f-manana",
-            lunes: "2026-06-15",
-            nombre: "Mañana",
-            inicio: "08:00",
-            fin: "14:00",
-            orden: 0,
-            es_descanso: false,
-            marca: "claro-sports",
-            marca_nombre: "Claro Sports",
-          },
-        ],
-      },
-      // Con una persona en el catálogo: el «Asignar a…» del manager debe poder encargársela.
-      contenido: { contenidos: [], catalogos: { usuarios: [{ id: "u-ana", usuario: "ana" }] } },
-    });
-    const cubrir = vi
-      .spyOn(apiMod.api, "cubrirEvento")
-      .mockResolvedValue({ contenido: { responsable_nombre: "ana" } } as never);
-
-    // «Hoy» es el default: activamos «Calendario» para montar la rejilla con el chip del evento.
-    fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    // Abrir el chip → su diálogo de cobertura, y desde el menú elegir «Asignar a…».
-    fireEvent.click(await screen.findByRole("button", { name: /España vs Cabo Verde/ }));
-    const dialogo = await screen.findByRole("dialog");
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Más acciones" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Asignar a…" }));
-
-    // El sub-diálogo de asignar aparece (el diálogo del chip NO se cierra al pulsar el menú) y
-    // deja elegir el ROL con que se encarga: elegir «Video» + persona la encarga con ESE rol
-    // (antes caía siempre a «foto», sin selector).
-    fireEvent.click(await screen.findByRole("button", { name: "Video" }));
-    fireEvent.click(screen.getByRole("button", { name: "ana" }));
-    await vi.waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev-int", "u-ana", "video"));
-  });
 });
 
 // El diálogo de cobertura es modal y sus acciones (kebab, «Asignar a…»/«Editar», borrar) se
@@ -504,15 +369,15 @@ describe("Turnos — Calendario: gating de coordinador", () => {
   it("el trabajador (no-admin) NO ve el menú ⋯ de coordinador", async () => {
     renderRota({ rol: "editor" });
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    // Calendario montado (conmutador visible) y SIN el menú ⋯ (Carga/Export son de coordinador).
-    await screen.findByRole("button", { name: "Semana", pressed: true });
+    // «Horario» (mensual de jornada) montado y SIN el menú ⋯ (Carga/Export son de Gestión).
+    await screen.findByRole("button", { name: "Equipo" });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
   });
 
   it("el admin tampoco ve el ⋯ en el Calendario: ahora vive en «Gestión»", async () => {
     renderRota(); // admin por defecto
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    await screen.findByRole("button", { name: "Semana", pressed: true });
+    await screen.findByRole("button", { name: "Equipo" });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
     // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión», en su rejilla
     // SEMANAL (Gestión abre en «Mes»; el conmutador lleva a la Semana con el menú de coordinador).
@@ -551,7 +416,7 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
   it("«Gestión» tiene «Asignar turnos» en su Semana; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
-    await screen.findByRole("button", { name: "Semana", pressed: true });
+    await screen.findByRole("button", { name: "Equipo" });
     expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));

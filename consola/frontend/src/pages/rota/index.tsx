@@ -19,24 +19,24 @@ import type { FiltrosSwaps } from "@/types";
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { Hoy } from "./Hoy";
+import { VistaMensualTurnos } from "./MisTurnos";
 import { PanelCoordinacion, useSenalesCoordinacion } from "./PanelCoordinacion";
 import { contarSwapsPendientes } from "./comun";
 
 
 // ===========================================================================
 
-/** Valores válidos de pestaña (orden = el de la barra). «Horario» (el calendario) es la home
- *  (default). «Gestión» es admin-only. «Mi jornada» dejó de ser pestaña: es el modo «Mes» del
- *  calendario; el legacy `mis-turnos` se normaliza abajo. El TRABAJO (eventos/tareas/cobertura)
- *  ya no es pestaña: vive en su propio destino del sidebar (`/operacion/trabajo`). */
+/** Valores válidos de pestaña (orden = el de la barra). «Horario» (el calendario MENSUAL de turnos)
+ *  es la home (default). «Gestión» es admin-only. El TRABAJO (eventos/tareas/cobertura) ya no es
+ *  pestaña: vive en su propio destino del sidebar (`/operacion/trabajo`). */
 const VALORES_PESTANA = ["hoy", "calendario", "gestion", "cambios-ausencias"];
 
-/** El deep-link legacy a la antigua pestaña «Mi jornada» (`?tab=mis-turnos`) cae en el
- *  calendario abierto en su modo «Mes» (la misma vista mensual de jornada). */
-function normalizarTab(tab: string | null): { pestania: string; vistaCalendario: "semana" | "mes" } {
-  if (tab === "mis-turnos") return { pestania: "calendario", vistaCalendario: "mes" };
-  if (tab && VALORES_PESTANA.includes(tab)) return { pestania: tab, vistaCalendario: "semana" };
-  return { pestania: "calendario", vistaCalendario: "semana" };
+/** Normaliza el `?tab=`. El legacy `mis-turnos` (antigua pestaña «Mi jornada») cae en «Horario»,
+ *  que YA es el calendario mensual de turnos. */
+function normalizarTab(tab: string | null): string {
+  if (tab === "mis-turnos") return "calendario";
+  if (tab && VALORES_PESTANA.includes(tab)) return tab;
+  return "calendario";
 }
 
 export default function Rota() {
@@ -74,7 +74,7 @@ export default function Rota() {
   // home). El valor legacy `mis-turnos` (antigua pestaña «Mi jornada») se normaliza al modo «Mes».
   const [params] = useSearchParams();
   const tabParam = params.get("tab");
-  const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam).pestania);
+  const [pestania, setPestania] = React.useState(() => normalizarTab(tabParam));
   // «Gestión» es admin-only: un no-admin que llegue con `?tab=gestion` cae en «Hoy». «Cambios y
   // ausencias» ya NO es pestaña para el admin (vive en su panel de Gestión): un deep-link admin a
   // ese tab cae en «Gestión».
@@ -84,18 +84,10 @@ export default function Rota() {
       : pestania === "cambios-ausencias" && esAdmin
         ? "gestion"
         : pestania;
-  // Modo de apertura del Calendario para los deep-links legacy a «Mi jornada».
-  const [vistaCalendario, setVistaCalendario] = React.useState<"semana" | "mes">(
-    () => normalizarTab(tabParam).vistaCalendario,
-  );
   // Si el `?tab=` cambia con la página ya montada (clic en la campana estando en Turnos),
-  // sincroniza la pestaña activa (y el modo del Calendario para el deep-link legacy).
+  // sincroniza la pestaña activa.
   React.useEffect(() => {
-    const { pestania: p, vistaCalendario: v } = normalizarTab(tabParam);
-    if (tabParam) {
-      setPestania(p);
-      setVistaCalendario(v);
-    }
+    if (tabParam) setPestania(normalizarTab(tabParam));
   }, [tabParam]);
 
   // Señales de coordinación de la semana (huecos/cambios/conflictos): solo se derivan en «Gestión».
@@ -153,17 +145,11 @@ export default function Rota() {
           agenda» salta al destino «Trabajo» (eventos/tareas/cobertura), ya fuera de esta sección. */}
       {pestaniaEfectiva === "hoy" && <Hoy onVerAgenda={() => navigate("/operacion/trabajo")} />}
 
-      {/* `key`={vistaCalendario}: un deep-link legacy a «Mi jornada» (?tab=mis-turnos) que llegue con
-          la página ya montada fuerza el remonte del Calendario en modo «Mes» (su `vistaInicial` solo
-          se lee al montar). El uso normal no cambia este valor. */}
+      {/* «Horario»: el calendario MENSUAL de turnos (Yo/Equipo · Imprimir/PDF), de CONSULTA. Solo
+          jornada — sin eventos ni cobertura (`mostrarCobertura={false}`): eso vive en «Trabajo». No
+          tiene vista Semana; la rejilla editable + reparto están en «Gestión». */}
       {pestaniaEfectiva === "calendario" && (
-        <Calendario
-          key={vistaCalendario}
-          lunes={lunes}
-          setLunes={setLunes}
-          esAdmin={esAdmin}
-          vistaInicial={vistaCalendario}
-        />
+        <VistaMensualTurnos esAdmin={esAdmin} mostrarCobertura={false} />
       )}
 
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden

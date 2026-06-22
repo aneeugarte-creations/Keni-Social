@@ -98,7 +98,7 @@ export function derivarCoberturaPorDia(
  * para que el corte «en vivo» avance solo. NO reusa `useTablero` (infra del cockpit): es un hook
  * aislado a escala de mes.
  */
-export function useTableroMes(mes: string, marca: string | undefined) {
+export function useTableroMes(mes: string, marca: string | undefined, enabled = true) {
   useRelojVivo();
 
   const semanas = React.useMemo(() => semanasDelMes(mes).map((s) => s[0]!), [mes]);
@@ -106,20 +106,24 @@ export function useTableroMes(mes: string, marca: string | undefined) {
   // Fin EXCLUSIVO: el día siguiente al último de la rejilla (cubre toda la cola del mes vecino).
   const hasta = lunesSiguiente(semanas[semanas.length - 1]!, 1);
 
+  // `enabled=false` (p. ej. el «Horario» de turnos puro, sin cobertura) no dispara NINGÚN fetch.
   const eventosQuery = useQuery({
     queryKey: [...CLAVE_TAREAS, "mes-eventos", marca ?? "todas", desde, hasta],
     queryFn: ({ signal }) => api.rotaEventos({ desde, hasta, marca }, signal),
     ...REFRESCO,
+    enabled,
   });
   const claimsQuery = useQuery({
     queryKey: [...CLAVE_TAREAS, "tareas", marca ?? "todas"],
     queryFn: ({ signal }) => api.contenido({ clase: "tarea", marca }, signal),
     ...REFRESCO,
+    enabled,
   });
   const ausenciasQuery = useQuery({
     queryKey: ["rota", "ausencias"],
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
     ...REFRESCO,
+    enabled,
   });
 
   // Una rota por cada lunes que toca la rejilla del mes (4–6); fetch en paralelo con `useQueries`.
@@ -129,6 +133,7 @@ export function useTableroMes(mes: string, marca: string | undefined) {
       queryFn: ({ signal }: { signal?: AbortSignal }) =>
         api.listarTurnos({ lunes, marca }, signal),
       ...REFRESCO,
+      enabled,
     })),
   });
   const porLunes = new Map<string, RotaSemana>();

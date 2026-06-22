@@ -11,6 +11,7 @@ import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-context
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { mensajeError } from "@/lib/api";
 import { posicionTemporal } from "@/lib/fecha";
+import { PropuestasCalendario } from "@/pages/rota/PropuestasCalendario";
 
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
 import { VistaEquipo } from "./equipo";
@@ -51,6 +52,19 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   } = useTablero(marca, usuario?.id ?? null);
 
   const visibles = items.filter((i) => (lente === "mias" ? esMio(i) : true));
+
+  // PROPUESTAS de calendario: tareas sueltas CON fecha (sin evento) aún sin terminar. Esperan en
+  // la campana hasta que un coordinador las ACEPTA (se promueven a evento «Por cubrir»). Es el
+  // mismo criterio que el `aceptar` del backend; antes vivía en la cabecera del calendario de
+  // Turnos, ahora aquí (los eventos/tareas viven en «Trabajo»). Solo manager.
+  const propuestas = React.useMemo(
+    () =>
+      tareas.filter(
+        (t) => !t.evento_id && (t.fecha_objetivo || "").trim() !== "" && t.estado !== "hecha",
+      ),
+    [tareas],
+  );
+  const campanaPropuestas = esManager ? <PropuestasCalendario propuestas={propuestas} /> : null;
 
   // Una cobertura cuyo evento YA pasó está hecha: cae a «Hechas», no «En marcha».
   const coberturaPasada = (i: Item) =>
@@ -130,7 +144,12 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
 
   return (
     <>
-      {acciones === "barra" && <AccionesPagina>{botonAnadir}</AccionesPagina>}
+      {acciones === "barra" && (
+        <AccionesPagina>
+          {campanaPropuestas}
+          {botonAnadir}
+        </AccionesPagina>
+      )}
 
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
@@ -140,7 +159,10 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
             onCambio={setLente}
             opciones={opcionesLente}
           />
-          {acciones === "inline" && botonAnadir}
+          <div className="flex items-center gap-2">
+            {acciones === "inline" && campanaPropuestas}
+            {acciones === "inline" && botonAnadir}
+          </div>
         </div>
 
         {hayError && sinDatos ? (

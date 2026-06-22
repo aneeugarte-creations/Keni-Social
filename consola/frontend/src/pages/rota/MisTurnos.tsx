@@ -49,11 +49,15 @@ type Ambito = "equipo" | "yo";
 export function VistaMensualTurnos({
   esAdmin = false,
   onVerSemana,
+  mostrarCobertura = true,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
   /** Salta a la rejilla SEMANAL del mismo Calendario (lo ofrece el vacío de «Yo» a quien gestiona). */
   onVerSemana?: () => void;
+  /** Superpone el estado de cobertura por día («N ev · M sin cubrir») + el «Resumen del día». En
+   *  «Horario» (calendario de turnos puro) va `false`: solo jornada. En Gestión queda `true`. */
+  mostrarCobertura?: boolean;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -62,8 +66,11 @@ export function VistaMensualTurnos({
   const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
 
   // Cobertura del mes (eventos + estado por día) superpuesta sobre la jornada. Hook propio a
-  // escala de mes; NO toca `useTablero` (infra del cockpit).
-  const { porDia } = useTableroMes(mes, marcaActiva ?? undefined);
+  // escala de mes; NO toca `useTablero` (infra del cockpit). Con `mostrarCobertura=false` (Horario
+  // = turnos puros) NO dispara ningún fetch de eventos/cobertura.
+  const { porDia } = useTableroMes(mes, marcaActiva ?? undefined, mostrarCobertura);
+  const cobertura = mostrarCobertura ? porDia : undefined;
+  const onAbrirDia = mostrarCobertura ? setDiaResumen : undefined;
 
   return (
     <div className="space-y-4">
@@ -83,14 +90,14 @@ export function VistaMensualTurnos({
       </div>
 
       {ambito === "equipo" ? (
-        <VistaMesEquipo mes={mes} cobertura={porDia} onAbrirDia={setDiaResumen} />
+        <VistaMesEquipo mes={mes} cobertura={cobertura} onAbrirDia={onAbrirDia} />
       ) : (
         <VistaMesYo
           mes={mes}
           esAdmin={esAdmin}
           onVerSemana={onVerSemana}
-          cobertura={porDia}
-          onAbrirDia={setDiaResumen}
+          cobertura={cobertura}
+          onAbrirDia={onAbrirDia}
         />
       )}
 
