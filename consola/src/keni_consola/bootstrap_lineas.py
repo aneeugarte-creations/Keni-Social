@@ -25,12 +25,22 @@ equipo edite (nombres, keywords). Pensada para correr en el bootstrap del arranq
 from __future__ import annotations
 
 import logging
+import unicodedata
 from typing import Any
 
 from . import repos
 from .dominio import fuentes_pesos, fuentes_presets
 
 _log = logging.getLogger(__name__)
+
+
+def slug_hashtag(nombre: str) -> str:
+    """Cuerpo (sin '#') del hashtag de una LÍNEA, derivado de su nombre: sin acentos, en
+    minúscula y solo alfanumérico. "Ciencia/Tech" -> "cienciatech", "Medio ambiente" ->
+    "medioambiente", "LaLiga (España)" -> "laligaespana". "" si el nombre no deja nada."""
+    base = unicodedata.normalize("NFKD", str(nombre or ""))
+    base = "".join(c for c in base if not unicodedata.combining(c))
+    return "".join(c for c in base.lower() if c.isalnum())
 
 # Líneas (clase 'vertical') por marca. SOLO las reales dadas por el equipo. El resto vacío.
 # Formato: (nombre, ttl_dias, es_evergreen, grupo, cadencia)
@@ -215,11 +225,13 @@ _LINEAS_RETIRADAS: dict[str, list[str]] = {
 
 def _crear_si_falta(
     *, nombre: str, clase: str, marca: str, ttl_dias: int = 0, es_evergreen: bool = False,
-    grupo: str = "", cadencia: str = "normal", keywords: str = "",
+    grupo: str = "", cadencia: str = "normal", keywords: str = "", hashtags: str = "",
 ) -> bool:
     """Crea la etiqueta si no existe (nombre+clase+marca). True si la creó.
 
     `keywords` (CSV) siembra el clasificador léxico; '' deja la línea sin auto-etiquetado.
+    `hashtags` (CSV, sin '#') es el hashtag de la línea que la etapa Keywords inyecta en sus
+    piezas (para que el desglose de métricas por línea exista también en el caption).
     """
     if repos.existe_etiqueta_nombre(nombre, clase, marca):
         return False
@@ -228,6 +240,7 @@ def _crear_si_falta(
         clase=clase,
         marca=marca,
         keywords=keywords,
+        hashtags=hashtags,
         ttl_dias=ttl_dias,
         es_evergreen=es_evergreen,
         grupo=grupo,
@@ -249,17 +262,18 @@ def _grupos_gestionados(marca: str) -> set[str]:
 
 def _reconciliar_linea(
     *, nombre: str, marca: str, ttl_dias: int, es_evergreen: bool,
-    grupo: str = "", cadencia: str = "normal", keywords: str = "",
+    grupo: str = "", cadencia: str = "normal", keywords: str = "", hashtags: str = "",
 ) -> bool:
     """Reconcilia una línea YA existente con su definición del seed. Guarded. True si tocó algo.
 
-    Cuatro ejes, cada uno con su guarda (nunca pisa una edición del equipo):
+    Cinco ejes, cada uno con su guarda (nunca pisa una edición del equipo):
       - ttl/es_evergreen: solo si la línea sigue en defaults (ttl 0 / es_evergreen False).
       - grupo: re-mapea a la taxonomía canónica del seed SOLO si el grupo actual lo administra el
         bootstrap (`_grupos_gestionados`); un grupo puesto a mano se respeta. Lleva el re-grupado
         (p. ej. Transversal->Actualidad, Otros deportes->Motor/NFL/…) a líneas ya sembradas.
       - cadencia: solo si sigue en 'normal'.
       - keywords: siembra el catálogo SOLO si la línea aún no tiene keywords.
+      - hashtags: siembra el hashtag de la línea SOLO si aún no tiene ninguno.
     """
     et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
     if et is None:
@@ -275,6 +289,8 @@ def _reconciliar_linea(
         cambios["cadencia"] = cadencia
     if keywords and not (et.get("keywords") or "").strip():
         cambios["keywords"] = keywords
+    if hashtags and not (et.get("hashtags") or "").strip():
+        cambios["hashtags"] = hashtags
     if cambios:
         repos.actualizar_etiqueta(et["id"], cambios)
         return True
@@ -292,18 +308,20 @@ def inicializar_lineas() -> int:
     for marca, lineas in LINEAS_POR_MARCA.items():
         for nombre, ttl_dias, es_evergreen, grupo, cadencia in lineas:
             kw = KEYWORDS_POR_LINEA.get(marca, {}).get(nombre, "")
+            ht = slug_hashtag(nombre)
             try:
                 if _crear_si_falta(
                     nombre=nombre, clase="vertical", marca=marca, ttl_dias=ttl_dias,
                     es_evergreen=es_evergreen, grupo=grupo, cadencia=cadencia, keywords=kw,
+                    hashtags=ht,
                 ):
                     creadas += 1
                 else:
-                    # Línea ya existe: reconcilia guarded (taxonomía + keywords si faltan).
+                    # Línea ya existe: reconcilia guarded (taxonomía + keywords/hashtags si faltan).
                     if _reconciliar_linea(
                         nombre=nombre, marca=marca,
                         ttl_dias=ttl_dias, es_evergreen=es_evergreen,
-                        grupo=grupo, cadencia=cadencia, keywords=kw,
+                        grupo=grupo, cadencia=cadencia, keywords=kw, hashtags=ht,
                     ):
                         actualizadas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto

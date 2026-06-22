@@ -199,6 +199,19 @@ def etiquetas_por_contenido() -> dict[str, list[str]]:
     return mapa
 
 
+def etiqueta_ids_de_contenido(publicacion_id: str) -> list[str]:
+    """Ids de etiqueta asignadas a un contenido. [] si ninguna."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT etiqueta_id FROM publicacion_etiquetas WHERE publicacion_id = ?",
+            (publicacion_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [f["etiqueta_id"] for f in filas]
+
+
 def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
     """Ids de contenido que llevan la etiqueta dada (para filtrar el tablero)."""
     con = _conectar()

@@ -78,6 +78,35 @@ def test_bootstrap_siembra_keywords_de_fundacion(entorno):
     assert "vacuna" in (salud["keywords"] or "")
 
 
+def test_slug_hashtag_normaliza_nombre_de_linea():
+    # El hashtag de una línea es el slug de su nombre: sin acentos, minúscula, solo alfanumérico.
+    assert bootstrap_lineas.slug_hashtag("Ciencia/Tech") == "cienciatech"
+    assert bootstrap_lineas.slug_hashtag("Medio ambiente") == "medioambiente"
+    assert bootstrap_lineas.slug_hashtag("LaLiga (España)") == "laligaespana"
+    assert bootstrap_lineas.slug_hashtag("Educación") == "educacion"
+    assert bootstrap_lineas.slug_hashtag("  ") == ""
+
+
+def test_bootstrap_siembra_hashtag_de_linea(entorno):
+    # Cada línea recibe su hashtag (slug del nombre): la firma de la sección que la etapa Keywords
+    # inyecta siempre, para que el desglose de métricas por línea exista también en el caption.
+    bootstrap_lineas.inicializar_lineas()
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
+    assert ciencia is not None and ciencia["hashtags"] == "cienciatech"
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    assert nacional is not None and nacional["hashtags"] == "nacional"
+
+
+def test_bootstrap_no_pisa_hashtag_de_linea_editado(entorno):
+    # Guarded: si el equipo ya puso un hashtag a mano, el bootstrap no lo reescribe.
+    repos.crear_etiqueta(
+        nombre="Salud", clase="vertical", marca="fundacion", hashtags="SaludConCausa",
+    )
+    bootstrap_lineas.inicializar_lineas()
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
+    assert salud is not None and salud["hashtags"] == "SaludConCausa"
+
+
 def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
     bootstrap_lineas.inicializar_lineas()
 

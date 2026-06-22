@@ -529,6 +529,10 @@ def etiquetas_por_contenido() -> dict[str, list[str]]:
     return db.etiquetas_por_contenido()
 
 
+def etiqueta_ids_de_contenido(publicacion_id: str) -> list[str]:
+    return db.etiqueta_ids_de_contenido(publicacion_id)
+
+
 def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
     return db.ids_contenido_con_etiqueta(etiqueta_id)
 

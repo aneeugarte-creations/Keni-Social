@@ -218,6 +218,7 @@ from .db_idear import (  # noqa: F401
     asignar_etiqueta,
     borrar_evergreen_idea,
     crear_evergreen_idea,
+    etiqueta_ids_de_contenido,
     etiquetas_por_contenido,
     ids_contenido_con_etiqueta,
     listar_evergreen_ideas,
