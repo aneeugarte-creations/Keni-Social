@@ -729,6 +729,8 @@ export function DialogoEditar({
                 sinPlantilla={placaOculta}
                 onAlternarSinPlantilla={() => setPlacaOculta((v) => !v)}
                 onAbrirGaleria={() => setGaleriaPlantillas(true)}
+                stock={stock}
+                onStockCambio={onStockCambio}
               />
             ) : pieza ? (
               // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.

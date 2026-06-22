@@ -3,7 +3,7 @@
  * TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO ACTIVO (lo gobierna el
  * componente padre vía callbacks).
  */
-import { Library, Upload } from "lucide-react";
+import { Library, ScanSearch, Upload } from "lucide-react";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -41,6 +41,8 @@ export interface DialogoFuenteFotoProps {
   onAbrirGaleria: () => void;
   /** Abre el selector de archivo ("Subir"). */
   onSubir: () => void;
+  /** Abre el buscador de fotos de stock ("Buscar foto"); ausente si no hay pieza donde adjuntarla. */
+  onBuscarStock?: () => void;
   /** Lanza la generación con IA. */
   onGenerar: () => void;
 }
@@ -59,6 +61,7 @@ export function DialogoFuenteFoto({
   avisoGenerar,
   onAbrirGaleria,
   onSubir,
+  onBuscarStock,
   onGenerar,
 }: DialogoFuenteFotoProps) {
   return (
@@ -91,6 +94,18 @@ export function DialogoFuenteFoto({
               {subiendo ? <Spinner className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
               Subir
             </Button>
+            {onBuscarStock && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onBuscarStock}
+                disabled={ocupado}
+              >
+                <ScanSearch className="h-4 w-4" />
+                Buscar foto
+              </Button>
+            )}
           </div>
           <div className="space-y-1.5">
             <span className="text-xs text-muted-foreground">

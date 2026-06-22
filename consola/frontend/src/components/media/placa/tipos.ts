@@ -4,6 +4,8 @@
  */
 import type { Documento } from "@/editor/documento";
 import type { FotoCollage } from "@/lib/placa/docPieza";
+import type { DatosStock } from "@/lib/stock";
+import type { PlataformaStock } from "@/types";
 
 /** Lienzo por defecto del post de foto (4:5) cuando no hay plantilla (foto cruda). */
 export const LIENZO_4_5 = { w: 1080, h: 1350, safe_top: 0, safe_bottom: 0 };
@@ -33,4 +35,11 @@ export interface EditorPlacaInlineProps {
   onAlternarSinPlantilla: () => void;
   /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
   onAbrirGaleria?: () => void;
+  /**
+   * Estado de imagen de STOCK de la pieza (origen/proveedor/autorización). Con `piezaId`, habilita
+   * "Buscar foto", el tratamiento "SIN LICENCIA" sobre el lienzo y el control de autorizar.
+   */
+  stock?: DatosStock;
+  /** Notifica que la imagen de stock cambió (adjuntar/autorizar): el padre recarga la pieza. */
+  onStockCambio?: (plataforma: PlataformaStock) => void;
 }

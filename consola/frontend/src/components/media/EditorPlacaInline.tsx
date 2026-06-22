@@ -19,9 +19,13 @@
  * helpers puros y los tipos en `placa/lib.ts` y `placa/tipos.ts`.
  */
 import { useMutation } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
+import { BuscadorStock } from "@/components/media/BuscadorStock";
+import { BadgeStock, OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
 import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
@@ -44,6 +48,14 @@ import {
 import { ENCUADRE_DEFECTO, normalizarEncuadre } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { familiaRealDe } from "@/lib/placa/render";
+import {
+  MENSAJE_BLOQUEO_STOCK,
+  nombreProveedor,
+  stockAutorizado,
+  stockNoAutorizado,
+} from "@/lib/stock";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import type { Arte } from "@/types";
 
 export type { EditorPlacaInlineProps } from "@/components/media/placa/tipos";
@@ -61,10 +73,14 @@ export function EditorPlacaInline({
   sinPlantilla,
   onAlternarSinPlantilla,
   onAbrirGaleria,
+  stock,
+  onStockCambio,
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
+  // Buscador de fotos de stock (4ª vía de imagen del hueco activo).
+  const [buscadorStock, setBuscadorStock] = React.useState(false);
   // Opciones de ORIGEN de la foto (Texto / Subir / Generar con IA): se abren al TOCAR un hueco
   // (fuera del titular), no como bloque permanente en el panel de edición. El origen elegido se
   // escribe en el HUECO ACTIVO (`slotActivo`).
@@ -127,6 +143,38 @@ export function EditorPlacaInline({
     },
     [cambiarHueco, slotActivo],
   );
+
+  // Estado de stock de la pieza: condiciona el tratamiento "SIN LICENCIA" y el bloqueo de publicar.
+  const sinLicencia = !!stock && stockNoAutorizado(stock);
+  const autorizada = !!stock && stockAutorizado(stock);
+  const proveedor = nombreProveedor(stock?.imagen_proveedor);
+
+  // Autorizar / revocar la foto de stock (decisión HUMANA de derechos). Autorizar limpia
+  // `falta_imagen` en el back y retira el overlay; revocar vuelve a bloquearla.
+  const autorizarStock = useMutation({
+    mutationFn: (autorizar: boolean) => {
+      if (!piezaId) throw new Error("Sin pieza");
+      return api.autorizarStock({ pieza_id: piezaId, autorizar });
+    },
+    onSuccess: (res, autorizar) => {
+      onStockCambio?.(res.plataforma);
+      toast.success(autorizar ? "Imagen autorizada para publicar." : "Autorización retirada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const onAutorizar = async () => {
+    if (autorizada) {
+      autorizarStock.mutate(false);
+      return;
+    }
+    const ok = await confirmar({
+      titulo: "Autorizar imagen de stock",
+      mensaje:
+        "Confirmas que tienes derechos para publicar esta imagen. Bajo tu responsabilidad.",
+      textoConfirmar: "Autorizar",
+    });
+    if (ok) autorizarStock.mutate(true);
+  };
 
   // Edición IN PLACE del titular: la capa de texto del copy-in (si la plantilla la tiene).
   const capaTitular = activo && documento ? capaTitularDoc(documento) : null;
@@ -518,24 +566,86 @@ export function EditorPlacaInline({
         onDescargar={() => void descargar()}
       />
 
-      <LienzoPlaca
-        canvasRef={canvasRef}
-        lienzo={lienzo}
-        fuentesListas={fuentesListas}
-        hayFotoActiva={hayFotoActiva}
-        onPointerDown={onPointerDownFoto}
-        onPointerMove={onPointerMoveFoto}
-        onPointerUp={onPointerUpFoto}
-        copyIn={copyIn}
-        onCopyInCambio={onCopyInCambio}
-        editandoTitular={editandoTitular}
-        onTerminarTitular={() => setEditandoTitular(false)}
-        cajaTitular={cajaTitular}
-        esCollage={esCollage}
-        titularEditable={titularEditable}
-        faltan={faltan}
-        nHuecos={nHuecos}
-      />
+      {/* Stock SIN LICENCIA: bloqueo de publicar + control de autorizar (decisión humana de
+          derechos). Va en el chrome del editor, NO sobre el canvas. */}
+      {sinLicencia && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+          <span className="flex-1 font-medium">{MENSAJE_BLOQUEO_STOCK}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 px-2.5 text-xs"
+            onClick={() => void onAutorizar()}
+            disabled={autorizarStock.isPending}
+          >
+            {autorizarStock.isPending ? (
+              <Spinner className="h-3.5 w-3.5" />
+            ) : (
+              <ShieldCheck className="h-3.5 w-3.5" />
+            )}
+            Autorizar
+          </Button>
+        </div>
+      )}
+
+      {/* Lienzo + tratamiento de stock superpuesto. El overlay "SIN LICENCIA" y el badge son DOM
+          absolutos sobre el área del canvas (NO se dibujan en el canvas), así al autorizar
+          desaparecen limpio. `pointer-events-none` para no robar clics al lienzo. */}
+      <div className="relative">
+        <LienzoPlaca
+          canvasRef={canvasRef}
+          lienzo={lienzo}
+          fuentesListas={fuentesListas}
+          hayFotoActiva={hayFotoActiva}
+          onPointerDown={onPointerDownFoto}
+          onPointerMove={onPointerMoveFoto}
+          onPointerUp={onPointerUpFoto}
+          copyIn={copyIn}
+          onCopyInCambio={onCopyInCambio}
+          editandoTitular={editandoTitular}
+          onTerminarTitular={() => setEditandoTitular(false)}
+          cajaTitular={cajaTitular}
+          esCollage={esCollage}
+          titularEditable={titularEditable}
+          faltan={faltan}
+          nHuecos={nHuecos}
+        />
+        {sinLicencia && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-2">
+            <OverlaySinLicencia
+              activo
+              tamano="md"
+              className="max-h-[22rem] w-auto rounded-md"
+            >
+              <div className="h-[22rem] max-h-[22rem]" style={{ aspectRatio: `${lienzo.w} / ${lienzo.h}` }} />
+            </OverlaySinLicencia>
+          </div>
+        )}
+        {(sinLicencia || autorizada) && (
+          <BadgeStock
+            proveedor={proveedor}
+            autorizada={autorizada}
+            className="pointer-events-none absolute left-3 top-3"
+          />
+        )}
+      </div>
+
+      {autorizada && piezaId && (
+        <div className="flex items-center justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => void onAutorizar()}
+            disabled={autorizarStock.isPending}
+          >
+            {autorizarStock.isPending ? <Spinner className="h-3.5 w-3.5" /> : null}
+            Revocar autorización
+          </Button>
+        </div>
+      )}
 
       {/* Reencuadre: arrastra la foto del hueco activo + zoom. Solo si ese hueco tiene foto. */}
       {hayFotoActiva && (
@@ -577,6 +687,7 @@ export function EditorPlacaInline({
           setGaleriaAbierta(true);
         }}
         onSubir={() => inputRef.current?.click()}
+        onBuscarStock={piezaId ? () => setBuscadorStock(true) : undefined}
         onGenerar={iniciarGeneracion}
       />
 
@@ -586,6 +697,24 @@ export function EditorPlacaInline({
         onSeleccionar={elegirArte}
         marca={marca}
       />
+
+      {/* Buscador de fotos de stock: al adjuntar una candidata, el back deja la pieza en stock no
+          autorizado y devuelve la plataforma con la foto (media id) ya colocada en el hueco; la
+          fijamos en el hueco activo del lienzo y notificamos al padre para refrescar la pieza. */}
+      {piezaId && (
+        <BuscadorStock
+          open={buscadorStock}
+          onCerrar={() => setBuscadorStock(false)}
+          piezaId={piezaId}
+          imagenFuente={imagenFuente}
+          consultaInicial={(copyIn || copy || "").slice(0, 80)}
+          onAdjuntada={(plataforma) => {
+            cambiarFotoActiva(plataforma.foto);
+            onStockCambio?.(plataforma);
+            setBuscadorStock(false);
+          }}
+        />
+      )}
     </div>
   );
 }
