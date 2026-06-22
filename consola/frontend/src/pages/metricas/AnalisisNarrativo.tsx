@@ -34,6 +34,7 @@ import { nombreRed, numeroCompacto, plural, porcentaje, variacion } from "@/lib/
 import type { AnalisisDiario, MovimientoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 
 /** Enlace externo a una pieza (nueva pestaña), con el icono de "sale de la app". */
 function EnlacePieza({ url, children }: { url: string; children: React.ReactNode }) {
@@ -180,10 +181,11 @@ export function AnalisisNarrativo({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "analisis", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasAnalisis({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "analisis", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasAnalisis({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: misma frescura que el resto de secciones; "Actualizar" invalida igualmente.
     staleTime: 2 * 60_000,

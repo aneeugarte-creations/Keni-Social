@@ -39,6 +39,7 @@ import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useFilasPlegables } from "./useFilasPlegables";
@@ -66,10 +67,11 @@ export function Crosstab({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "crosstab", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasCrosstab({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "crosstab", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasCrosstab({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

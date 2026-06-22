@@ -25,6 +25,8 @@ import {
 } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
+import { SelectorRed, etiquetaRed } from "./metricas/SelectorRed";
+import { useVistaConfig } from "./metricas/vistaConfig";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
@@ -96,6 +98,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // Analíticas no tiene selector propio: respeta el global. `marcaActiva` es el id
   // canónico (o null = "Todas", agregado solo para admin).
   const { marcaActiva, cambiarMarca } = useMarcaActiva();
+  // Red única en foco (switch propio de Analíticas, persistido en `vistaConfig`): `null`
+  // = todas. Filtra TODA la página (cada sub-sección la incluye en su consulta).
+  const red = useVistaConfig((s) => s.red);
 
   // Deep-link: si llegamos con una marca en el `state` de navegación (canónica), la
   // fijamos en el switch global una vez y limpiamos el state para que no reaparezca al
@@ -145,12 +150,11 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   const marca_ = marcaParam(marca);
 
-  // Etiquetas legibles para la portada del PDF y los nombres de archivo. La red aún no
-  // se filtra en esta capa (llega en una rebanada posterior): de momento, "Todas las redes".
+  // Etiquetas legibles para la portada del PDF y los nombres de archivo.
   const marcaEtiqueta = marca_
     ? (marcas.find((m) => m.id === marca_)?.nombre ?? marca_)
     : "Todas las marcas";
-  const redEtiqueta = "Todas las redes";
+  const redEtiqueta = etiquetaRed(red);
   const periodoEtiqueta = etiquetaPeriodo(rango, rangos);
 
   // Drill-down: al clicar una marca en "Por marca", enfocamos TODO el dashboard en esa
@@ -166,8 +170,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   );
 
   const reporteQuery = useQuery({
-    queryKey: ["metricas", "reporte", rango, marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasReporte({ rango, marca: marca_ }, signal),
+    queryKey: ["metricas", "reporte", rango, marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) =>
+      api.metricasReporte({ rango, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rango),
     // El dato se sirve de la cache del backend (refresco en 2º plano); no hace falta
     // re-pedirlo cada 30 s. El botón "Actualizar" lo invalida cuando hay dato fresco.
@@ -204,11 +209,14 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
+      {/* Selector de RED único: filtra toda la página (escribe en `vistaConfig.red`). */}
+      <SelectorRed />
       {/* Descargar es una ACCIÓN global de la página: dos botones, CSV (hoja de cálculo) y
           PDF (presentación 16:9 del estado vivo). Actualizar vive en el menú "⋮". */}
       <BotonesDescarga
         rango={rango}
         marca={marca_}
+        red={red ?? undefined}
         marcaEtiqueta={marcaEtiqueta}
         redEtiqueta={redEtiqueta}
         periodoEtiqueta={periodoEtiqueta}

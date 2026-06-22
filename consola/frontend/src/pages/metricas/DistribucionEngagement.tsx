@@ -23,6 +23,7 @@ import { numeroCompacto, numeroCompleto, plural, porcentaje } from "@/lib/format
 import type { AnaliticaPiezas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Punto de color del tooltip, coherente con el `emerald` del BarChart (Tremor). */
@@ -46,10 +47,11 @@ export function DistribucionEngagement({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasPiezas({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "piezas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasPiezas({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: mismo criterio que el resto de secciones de Métricas; el botón
     // "Actualizar" invalida igualmente.

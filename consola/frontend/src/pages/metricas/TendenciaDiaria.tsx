@@ -25,6 +25,7 @@ import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { PuntoSerie } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 type Metrica = "visualizaciones" | "interacciones";
@@ -77,11 +78,12 @@ export function TendenciaDiaria({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   const [metrica, setMetrica] = React.useState<Metrica>("visualizaciones");
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "tendencia", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasTendencia({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "tendencia", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasTendencia({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: el conmutador de métrica/marca no debe re-pegar a la fuente en cada cambio,
     // pero tampoco queremos serie rancia; "Actualizar" invalida igualmente.

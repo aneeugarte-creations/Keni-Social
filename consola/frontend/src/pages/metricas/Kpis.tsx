@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import type { TotalMetricas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { InsigniaComparativa } from "./InsigniaComparativa";
 import { numeroCompleto } from "./formato";
 import { METRICAS, valorMetrica } from "./metricas-meta";
@@ -38,6 +39,7 @@ export function Kpis({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   // Par A/B de la MISMA duración (guarda de comparabilidad): para un mes en curso,
   // B son los días transcurridos y A los mismos días del mes anterior. null = no
   // hay comparación honesta posible (token irresoluble o periodo futuro).
@@ -46,10 +48,10 @@ export function Kpis({
   const { data } = useQuery({
     // MISMA forma que CompararPeriodos (["metricas","comparar",A,B,marca]): si la
     // sección de comparar mira el mismo par, comparten entrada de caché.
-    queryKey: ["metricas", "comparar", par?.rangoA, par?.rangoB, marca_ ?? "todas"],
+    queryKey: ["metricas", "comparar", par?.rangoA, par?.rangoB, marca_ ?? "todas", red ?? "todas"],
     queryFn: ({ signal }) =>
       api.metricasComparar(
-        { rango_a: par!.rangoA, rango_b: par!.rangoB, marca: marca_ },
+        { rango_a: par!.rangoA, rango_b: par!.rangoB, marca: marca_, red: red ?? undefined },
         signal,
       ),
     enabled: Boolean(par),

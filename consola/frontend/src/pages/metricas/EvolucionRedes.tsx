@@ -29,6 +29,7 @@ import type { PiezaListado } from "@/types";
 
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Orden canónico de redes (color y apilado estables). */
@@ -143,12 +144,13 @@ export function EvolucionRedes({
   desnudo?: boolean;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   // MISMA queryKey que PiezasConsolidada => caché compartida (sin coste extra).
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas"],
+    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasListado({ rango: rangoActual, marca: marca_ }, signal),
+      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

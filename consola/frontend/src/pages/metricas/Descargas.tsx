@@ -22,6 +22,8 @@ interface BotonesDescargaProps {
   rango: string;
   /** `undefined` cuando está seleccionada la opción "Todas las marcas". */
   marca?: string;
+  /** Red en foco (id de plataforma), o `undefined` cuando son "Todas las redes". */
+  red?: string;
   /** Etiqueta legible de la marca activa (o "Todas las marcas"). */
   marcaEtiqueta: string;
   /** Etiqueta legible de la red activa (o "Todas las redes"). */
@@ -46,6 +48,7 @@ function slug(texto: string): string {
 export function BotonesDescarga({
   rango,
   marca,
+  red,
   marcaEtiqueta,
   redEtiqueta,
   periodoEtiqueta,
@@ -87,7 +90,7 @@ export function BotonesDescarga({
         variant="outline"
         size="sm"
         className="h-8 gap-1.5 text-xs"
-        onClick={() => api.exportarMetricas("csv", { rango, marca })}
+        onClick={() => api.exportarMetricas("csv", { rango, marca, red })}
       >
         <FileSpreadsheet className="h-4 w-4" />
         CSV

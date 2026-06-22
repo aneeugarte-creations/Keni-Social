@@ -24,6 +24,7 @@ import { numeroCompacto, numeroCompleto, plural, porcentaje } from "@/lib/format
 import type { SeriePorEtiqueta } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 export function GraficaPorSerie({
@@ -36,11 +37,12 @@ export function GraficaPorSerie({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-por-etiqueta", rangoActual ?? "", marca_ ?? "todas"],
+    queryKey: ["metricas", "piezas-por-etiqueta", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasPorEtiqueta({ rango: rangoActual, marca: marca_ }, signal),
+      api.metricasPiezasPorEtiqueta({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: al cambiar marca/rango se repinta pronto sin re-pegar en cada toque.
     staleTime: 2 * 60_000,

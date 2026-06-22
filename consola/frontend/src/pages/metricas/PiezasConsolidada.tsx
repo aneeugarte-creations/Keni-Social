@@ -74,6 +74,7 @@ import type { MarcaDisponible, PiezaListado } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { DetallePieza } from "./DetallePieza";
 import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
 import { useOrdenTabla } from "./useOrdenTabla";
@@ -152,6 +153,7 @@ export function PiezasConsolidada({
   marcas: MarcaDisponible[];
 }) {
   const marca_ = marcaParam(marcaActual);
+  const redGlobal = useVistaConfig((s) => s.red);
   const [busqueda, setBusqueda] = React.useState("");
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
@@ -159,9 +161,9 @@ export function PiezasConsolidada({
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas"],
+    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", redGlobal ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasListado({ rango: rangoActual, marca: marca_ }, signal),
+      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: redGlobal ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

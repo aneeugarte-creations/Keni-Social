@@ -23,6 +23,7 @@ import type { PuntoSeguidores } from "@/types";
 
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Neto de seguidores con signo: es un CONTEO (`+1.2K` / `−5K`), NO un porcentaje. */
@@ -46,11 +47,12 @@ export function CrecimientoSeguidores({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   const [porRed, setPorRed] = React.useState(false);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "seguidores", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasSeguidores({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "seguidores", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasSeguidores({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

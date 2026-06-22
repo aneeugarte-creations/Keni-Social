@@ -29,6 +29,7 @@ import type { FilaMetricaLinea } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { PieMostrarMas } from "./PieMostrarMas";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useFilasPlegables } from "./useFilasPlegables";
@@ -52,11 +53,12 @@ export function MetricaPorLinea({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "lineas", rangoActual ?? "", marca_ ?? "todas"],
+    queryKey: ["metricas", "lineas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasLineas({ rango: rangoActual, marca: marca_ }, signal),
+      api.metricasLineas({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

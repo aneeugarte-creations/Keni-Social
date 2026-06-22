@@ -61,6 +61,7 @@ import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { N_MINIMA_CORRELACION, spearman } from "./estadistica";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
@@ -135,11 +136,12 @@ export function Correlacion({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "correlacion", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasCorrelacion({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "correlacion", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasCorrelacion({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

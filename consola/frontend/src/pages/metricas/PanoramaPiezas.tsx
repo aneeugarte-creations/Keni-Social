@@ -50,6 +50,7 @@ import type { PiezaListado } from "@/types";
 
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { tokenRango } from "./rango";
 import { SeccionColapsable } from "./SeccionColapsable";
 
@@ -257,6 +258,7 @@ export function PanoramaPiezas({
   desnudo?: boolean;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
 
   // El Panorama tiene su PROPIO selector de periodo (no usa el rango global de arriba): pide
   // los últimos `dias` días (máx. 366 por el límite del backend). Por eso usa su propia queryKey.
@@ -272,9 +274,9 @@ export function PanoramaPiezas({
   }, [dias, hoyDia]);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-listado-periodo", rangoPeriodo, marca_ ?? "todas"],
+    queryKey: ["metricas", "piezas-listado-periodo", rangoPeriodo, marca_ ?? "todas", red ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasListado({ rango: rangoPeriodo, marca: marca_ }, signal),
+      api.metricasPiezasListado({ rango: rangoPeriodo, marca: marca_, red: red ?? undefined }, signal),
     staleTime: 2 * 60_000,
   });
 

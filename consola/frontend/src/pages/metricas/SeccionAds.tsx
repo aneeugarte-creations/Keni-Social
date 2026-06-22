@@ -26,6 +26,7 @@ import type { CampaniaAdsMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
@@ -50,9 +51,10 @@ export function SeccionAds({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "ads", rangoActual ?? "", marca_ ?? "todas"],
-    queryFn: ({ signal }) => api.metricasAds({ rango: rangoActual, marca: marca_ }, signal),
+    queryKey: ["metricas", "ads", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasAds({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });
