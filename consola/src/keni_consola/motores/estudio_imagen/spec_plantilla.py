@@ -21,6 +21,7 @@ mismo JSON. Los mensajes de error salen en español (la API los devuelve como 40
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 # Versión del esquema (para migraciones futuras vía `migrar`).
@@ -93,6 +94,44 @@ def _exige(cond: bool, msg: str) -> None:
         raise SpecError(msg)
 
 
+def _entero(valor: Any, campo: str, minimo: int | None = None, maximo: int | None = None, defecto: int = 0) -> int:
+    """Convierte un valor a entero o lanza `SpecError` (español) si no es un número válido.
+
+    Blinda la entrada del editor: un valor no numérico devuelve 400 (SpecError), no un 500 por
+    `ValueError` crudo. Valida rango [minimo, maximo] si se especifican.
+    """
+    if valor is None or valor == "":
+        return defecto
+    # Solo el CAST va en el try: `SpecError` hereda de `ValueError`, así que las comprobaciones de
+    # rango van fuera para no recazarlas como "número válido" y perder su mensaje de límite.
+    try:
+        num = int(valor)
+    except (ValueError, TypeError, OverflowError):
+        raise SpecError(f"'{campo}' debe ser un número entero válido.")
+    if minimo is not None and num < minimo:
+        raise SpecError(f"'{campo}' no puede ser menor a {minimo}.")
+    if maximo is not None and num > maximo:
+        raise SpecError(f"'{campo}' no puede ser mayor a {maximo}.")
+    return num
+
+
+def _flotante(valor: Any, campo: str, minimo: float | None = None, maximo: float | None = None, defecto: float = 0.0) -> float:
+    """Convierte un valor a flotante o lanza `SpecError` (español) si no es un número válido."""
+    if valor is None or valor == "":
+        return defecto
+    try:
+        num = float(valor)
+    except (ValueError, TypeError, OverflowError):
+        raise SpecError(f"'{campo}' debe ser un número válido.")
+    if not math.isfinite(num):
+        raise SpecError(f"'{campo}' debe ser un número válido.")
+    if minimo is not None and num < minimo:
+        raise SpecError(f"'{campo}' no puede ser menor a {minimo}.")
+    if maximo is not None and num > maximo:
+        raise SpecError(f"'{campo}' no puede ser mayor a {maximo}.")
+    return num
+
+
 def _validar_fondo(fondo: Any) -> dict[str, Any]:
     _exige(isinstance(fondo, dict), "El fondo debe ser un objeto.")
     tipo = fondo.get("tipo")
@@ -107,7 +146,7 @@ def _validar_fondo(fondo: Any) -> dict[str, Any]:
                "El degradado de fondo necesita colores 'desde' y 'hasta' hex.")
         deg = {
             "desde": g["desde"], "hasta": g["hasta"],
-            "angulo": float(g.get("angulo", 180)),
+            "angulo": _flotante(g.get("angulo", 180), "fondo.degradado.angulo", defecto=180.0),
         }
         # `tipo` (lineal/radial) y `stops` (multi-parada) son aditivos y retrocompatibles: solo se
         # persisten si se apartan del default lineal 2-stop, para no ensuciar specs viejos.
@@ -151,7 +190,7 @@ def _validar_foto_slot(s: Any) -> dict[str, Any]:
         **caja,
         "ajuste": s.get("ajuste") if s.get("ajuste") in _AJUSTES else "cover",
         "foco": [float(foco[0]), float(foco[1])],
-        "z": int(s.get("z", 0)),
+        "z": _entero(s.get("z", 0), "foto_slot.z", defecto=0),
     }
 
 
@@ -169,10 +208,10 @@ def _validar_logo(lg: Any) -> dict[str, Any]:
             "color": wm["color"] if _es_hex(wm.get("color")) else "#FFFFFF",
             "fondo": wm["fondo"] if _es_hex(wm.get("fondo")) else "#E30613",
             "familia": wm["familia"] if isinstance(wm.get("familia"), str) and wm.get("familia") else "sans",
-            "peso": int(wm.get("peso", 700)),
+            "peso": _entero(wm.get("peso", 700), "logo.wordmark.peso", defecto=700),
         },
         **caja,
-        "z": int(lg.get("z", 30)),
+        "z": _entero(lg.get("z", 30), "logo.z", defecto=30),
     }
 
 
@@ -188,15 +227,16 @@ def _validar_texto(t: Any) -> dict[str, Any]:
         _exige(_es_hex(chip.get("color")), "El color del chip debe ser hex #RRGGBB.")
         chip_limpio = {
             "color": chip["color"],
-            "pad_x": int(chip.get("pad_x", _CHIP_PAD_X)),
-            "pad_y": int(chip.get("pad_y", _CHIP_PAD_Y)),
-            "radio": int(chip.get("radio", 0)),
+            "pad_x": _entero(chip.get("pad_x", _CHIP_PAD_X), "chip.pad_x", defecto=_CHIP_PAD_X),
+            "pad_y": _entero(chip.get("pad_y", _CHIP_PAD_Y), "chip.pad_y", defecto=_CHIP_PAD_Y),
+            "radio": _entero(chip.get("radio", 0), "chip.radio", defecto=0),
         }
     sombra = t.get("sombra")
     sombra_limpia = None
     if isinstance(sombra, dict):
         sombra_limpia = {
-            "dx": int(sombra.get("dx", 2)), "dy": int(sombra.get("dy", 2)),
+            "dx": _entero(sombra.get("dx", 2), "sombra.dx", defecto=2),
+            "dy": _entero(sombra.get("dy", 2), "sombra.dy", defecto=2),
             "color": sombra["color"] if _es_hex(sombra.get("color")) else "#000000",
         }
     aj = t.get("auto_ajuste") or {}
@@ -208,22 +248,22 @@ def _validar_texto(t: Any) -> dict[str, Any]:
         "texto": str(t.get("texto", "")),
         "x": caja["x"], "y": caja["y"], "w": caja["w"],
         "familia": familia,
-        "tamano": int(t.get("tamano", 64)),
-        "peso": int(t.get("peso", 700)),
+        "tamano": _entero(t.get("tamano", 64), "tamano", defecto=64),
+        "peso": _entero(t.get("peso", 700), "peso", defecto=700),
         "color": t["color"],
         "alineacion": t.get("alineacion") if t.get("alineacion") in _ALINEACIONES else "izquierda",
         "mayusculas": bool(t.get("mayusculas", False)),
-        "interlineado": float(t.get("interlineado", 1.14)),
+        "interlineado": _flotante(t.get("interlineado", 1.14), "interlineado", defecto=1.14),
         "auto_ajuste": {
-            "max_lineas": int(aj.get("max_lineas", 4)),
-            "tam_min": int(aj.get("tam_min", 40)),
+            "max_lineas": _entero(aj.get("max_lineas", 4), "auto_ajuste.max_lineas", defecto=4),
+            "tam_min": _entero(aj.get("tam_min", 40), "auto_ajuste.tam_min", defecto=40),
         },
         "sombra": sombra_limpia,
         "chip": chip_limpio,
         # Borde de anclaje vertical del bloque: "abajo" => `y` es el borde INFERIOR y el
         # bloque crece hacia arriba (no se desborda aunque tenga más líneas). Default "arriba".
         "ancla": t.get("ancla") if t.get("ancla") in ("arriba", "abajo") else "arriba",
-        "z": int(t.get("z", 20)),
+        "z": _entero(t.get("z", 20), "texto.z", defecto=20),
     }
 
 
@@ -236,10 +276,10 @@ def _validar_formato(nombre: str, f: Any) -> dict[str, Any]:
            "Cada formato admite como máximo 3 bloques de texto.")
     return {
         "lienzo": {
-            "w": int(lienzo.get("w", base["w"])),
-            "h": int(lienzo.get("h", base["h"])),
-            "safe_top": int(lienzo.get("safe_top", base["safe_top"])),
-            "safe_bottom": int(lienzo.get("safe_bottom", base["safe_bottom"])),
+            "w": _entero(lienzo.get("w", base["w"]), "formato.lienzo.w", defecto=base["w"]),
+            "h": _entero(lienzo.get("h", base["h"]), "formato.lienzo.h", defecto=base["h"]),
+            "safe_top": _entero(lienzo.get("safe_top", base["safe_top"]), "formato.lienzo.safe_top", defecto=base["safe_top"]),
+            "safe_bottom": _entero(lienzo.get("safe_bottom", base["safe_bottom"]), "formato.lienzo.safe_bottom", defecto=base["safe_bottom"]),
         },
         "fondo": _validar_fondo(f.get("fondo") or {"tipo": "color", "color": "#111315"}),
         "foto_slot": _validar_foto_slot(f.get("foto_slot") or _foto_slot_full(base)),
@@ -254,8 +294,8 @@ def _validar_overlay(ov: Any) -> dict[str, Any] | None:
         return None
     return {
         "color": ov["color"] if _es_hex(ov.get("color")) else "#111315",
-        "alto_frac": float(ov.get("alto_frac", _DEGRADADO_ALTO_FRAC)),
-        "alpha": int(ov.get("alpha", _DEGRADADO_ALPHA)),
+        "alto_frac": _flotante(ov.get("alto_frac", _DEGRADADO_ALTO_FRAC), "overlay.alto_frac", defecto=_DEGRADADO_ALTO_FRAC),
+        "alpha": _entero(ov.get("alpha", _DEGRADADO_ALPHA), "overlay.alpha", defecto=_DEGRADADO_ALPHA),
     }
 
 

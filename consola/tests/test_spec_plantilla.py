@@ -97,3 +97,24 @@ def test_validar_limita_a_tres_textos():
                                           dict(t, id="kicker"), dict(t, id="titular")]
     with pytest.raises(sp.SpecError):
         sp.validar(spec)
+
+
+@pytest.mark.parametrize("ruta,valor", [
+    (("textos", 0, "tamano"), "grande"),       # int no numérico
+    (("textos", 0, "interlineado"), "ancho"),  # float no numérico
+    (("lienzo", "w"), "mil"),                  # lienzo no numérico
+    (("overlay_inferior", "alpha"), "opaco"),  # overlay no numérico
+])
+def test_validar_entrada_numerica_invalida_es_specerror(ruta, valor):
+    """Un número de editor inválido lanza `SpecError` (la API lo traduce a 400), no `ValueError` crudo."""
+    spec = sp.spec_por_defecto("unotv", _plana())
+    feed = spec["formatos"]["feed"]
+    if ruta[0] == "overlay_inferior":
+        feed["overlay_inferior"] = {"color": "#111315", "alpha": valor}
+        spec["formatos"]["feed"] = feed
+    elif ruta[0] == "lienzo":
+        feed["lienzo"][ruta[1]] = valor
+    else:  # textos
+        feed["textos"][ruta[1]][ruta[2]] = valor
+    with pytest.raises(sp.SpecError):
+        sp.validar(spec)
