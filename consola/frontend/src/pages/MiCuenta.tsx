@@ -15,14 +15,12 @@
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Check,
   Copy,
   Fingerprint,
   KeyRound,
   Loader2,
   Pencil,
   Plug,
-  Terminal,
   Trash2,
   User,
 } from "lucide-react";
@@ -592,103 +590,45 @@ function FilaTokenMcp({
   );
 }
 
-/** Diálogo que muestra el secreto recién emitido UNA sola vez: el token, el comando listo
- *  para conectar Claude Code y cómo hacerlo desde otro cliente MCP. */
+/** Diálogo del token recién emitido (se muestra UNA vez): un comando listo para pegar y un
+ *  único botón que lo copia y cierra. Pensado para gente no técnica: cuanto más simple, mejor. */
 function DialogoTokenNuevo({ token, onCerrar }: { token: string | null; onCerrar: () => void }) {
-  // Qué artefacto se acaba de copiar (para el tick de confirmación); se reinicia con cada token.
-  const [copiado, setCopiado] = React.useState<"token" | "comando" | null>(null);
-  React.useEffect(() => {
-    setCopiado(null);
-  }, [token]);
-
-  // El MCP operativo se sirve en `/mcp` de esta misma instancia, tras bearer por identidad.
-  const endpoint = `${window.location.origin}/mcp`;
+  // El MCP operativo se sirve en `/mcp` de esta misma instancia; el comando lleva el token dentro.
   const comando = token
-    ? `claude mcp add --transport http keni-social ${endpoint} --header "Authorization: Bearer ${token}"`
+    ? `claude mcp add --transport http keni-social ${window.location.origin}/mcp --header "Authorization: Bearer ${token}"`
     : "";
 
-  const copiar = async (texto: string, cual: "token" | "comando") => {
-    if (!texto) return false;
-    try {
-      await navigator.clipboard.writeText(texto);
-      setCopiado(cual);
-      toast.success(cual === "token" ? "Token copiado." : "Comando copiado.");
-      return true;
-    } catch {
-      toast.error("No se pudo copiar al portapapeles.");
-      return false;
-    }
-  };
-
-  // Acción principal: copia el comando (que ya lleva el token) y cierra el diálogo.
+  // Único botón: copia el comando y cierra.
   const copiarYCerrar = async () => {
-    await copiar(comando, "comando");
+    if (comando) {
+      try {
+        await navigator.clipboard.writeText(comando);
+        toast.success("Comando copiado.");
+      } catch {
+        toast.error("No se pudo copiar al portapapeles.");
+      }
+    }
     onCerrar();
   };
 
   return (
     <Dialog open={token !== null} onOpenChange={(v) => !v && onCerrar()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tu token MCP</DialogTitle>
+          <DialogTitle>Conecta Claude Code</DialogTitle>
           <DialogDescription>
-            Cópialo ahora: por seguridad no se vuelve a mostrar. Si lo pierdes, revócalo y emite otro.
+            Copia este comando, pégalo en tu terminal y pulsa Enter. Cópialo ahora: por seguridad no
+            se vuelve a mostrar.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1.5">
-          <Label>Token</Label>
-          <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 font-mono text-sm">
-              {token}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={() => void copiar(token ?? "", "token")}
-              aria-label="Copiar token"
-            >
-              {copiado === "token" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
-        <div className="space-y-2 rounded-md border bg-muted/40 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Terminal className="h-4 w-4" />
-            Conéctalo a Claude Code
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Pega este comando en tu terminal. Conecta esta consola como servidor MCP con tu
-            identidad; ya lleva tu token incrustado.
-          </p>
-          <div className="flex items-start gap-2">
-            <code className="min-w-0 flex-1 whitespace-pre-wrap break-all rounded-md border bg-background px-3 py-2 font-mono text-xs">
-              {comando}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="shrink-0"
-              onClick={() => void copiar(comando, "comando")}
-              aria-label="Copiar comando"
-            >
-              {copiado === "comando" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Luego, en Claude Code, ejecuta <code className="font-mono">/mcp</code> para comprobar que{" "}
-            <code className="font-mono">keni-social</code> aparece conectado. ¿Otro cliente MCP? Usa
-            transporte HTTP contra <code className="font-mono">{endpoint}</code> con la cabecera{" "}
-            <code className="font-mono">Authorization: Bearer &lt;token&gt;</code>.
-          </p>
-        </div>
+        <code className="block max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted px-3 py-2 font-mono text-xs">
+          {comando}
+        </code>
 
         <DialogFooter>
           <Button type="button" onClick={() => void copiarYCerrar()}>
+            <Copy className="h-4 w-4" />
             Copiar comando y cerrar
           </Button>
         </DialogFooter>
