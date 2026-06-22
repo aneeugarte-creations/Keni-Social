@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Coins,
+  ExternalLink,
   Hammer,
   Loader2,
   MessageSquareWarning,
@@ -415,6 +416,15 @@ export default function DetalleSugerenciaPagina() {
 
           <BloqueMarkdown titulo="Spec (discovery)" texto={sugerencia.spec} />
           <BloqueMarkdown titulo="Plan" texto={sugerencia.plan} />
+
+          {sugerencia.preview_listo && (
+            <Button variant="outline" asChild>
+              <a href={`/api/preview/${sugerencia.id}/`} target="_blank" rel="noopener">
+                <ExternalLink className="h-4 w-4" />
+                Ver preview
+              </a>
+            </Button>
+          )}
 
           {esSuper && enRevision && (
             <Textarea

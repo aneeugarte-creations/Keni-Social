@@ -39,6 +39,8 @@ export interface Sugerencia {
   rama: string;
   diff_resumen: string;
   coste_usd: number;
+  /** Hay un preview navegable del cambio publicado en `/api/preview/<id>/`. */
+  preview_listo?: boolean;
   creada: string;
   actualizada: string;
 }

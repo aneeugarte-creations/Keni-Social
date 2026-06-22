@@ -17,7 +17,11 @@ import type { ErrorApi } from "@/types";
 
 import { type NombreContrato, validarContrato } from "../contrato";
 
-export const BASE_API = "/api";
+// Base de la API, derivada del `base` del bundle (`import.meta.env.BASE_URL`). En la app normal
+// `BASE_URL` es "/" => "/api" (sin cambio). Un bundle de preview se compila con
+// `base=/api/preview/<id>/`, así que su `BASE_URL` ya trae ese prefijo y la API cuelga de
+// `/api/preview/<id>/api`: el mismo cliente sirve para la app y para su preview servido aparte.
+export const BASE_API = `${import.meta.env.BASE_URL}api`.replace(/\/{2,}/g, "/");
 
 /**
  * Token de sesion de la Consola. El backend lo inyecta en el index del SPA
