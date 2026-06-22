@@ -430,20 +430,20 @@ export function Calendario({
   // alto de su contenedor con el conmutador fijo arriba y el mes con scroll interno; en
   // «Calendario» crece a su alto natural y la página hace scroll. El vacío de «Yo» salta a «Semana».
   if (vista === "mes") {
-    const mensual = <VistaMensualTurnos esAdmin={esAdmin} onVerSemana={() => setVista("semana")} />;
+    // El conmutador Semana|Mes y el ✓ «Al día» se inyectan EN la barra del mensual (una sola fila de
+    // tres zonas), en vez de una fila propia encima: la cabecera queda como un único instrumento.
+    const mensual = (
+      <VistaMensualTurnos
+        esAdmin={esAdmin}
+        onVerSemana={() => setVista("semana")}
+        controlesPre={conmutadorVista}
+        marcadorSalud={marcadorSalud}
+      />
+    );
     return esGestion ? (
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {conmutadorVista}
-          {marcadorSalud}
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto">{mensual}</div>
-      </div>
+      <div className="h-full min-h-0 overflow-auto">{mensual}</div>
     ) : (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">{conmutadorVista}</div>
-        {mensual}
-      </div>
+      mensual
     );
   }
 

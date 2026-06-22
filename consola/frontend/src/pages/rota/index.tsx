@@ -101,7 +101,7 @@ export default function Rota() {
   const marcadorSalud =
     !senalesCoord.cargando && senalesCoord.todoEnOrden ? (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground">
-        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
         Al día
       </span>
     ) : undefined;

@@ -50,6 +50,8 @@ export function VistaMensualTurnos({
   esAdmin = false,
   onVerSemana,
   mostrarCobertura = true,
+  controlesPre,
+  marcadorSalud,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
@@ -58,6 +60,11 @@ export function VistaMensualTurnos({
   /** Superpone el estado de cobertura por día («N ev · M sin cubrir») + el «Resumen del día». En
    *  «Horario» (calendario de turnos puro) va `false`: solo jornada. En Gestión queda `true`. */
   mostrarCobertura?: boolean;
+  /** Controles antepuestos a «Equipo|Yo» en la zona izquierda de la barra: el Calendario inyecta aquí
+   *  su conmutador Semana|Mes en Gestión. En «Horario» va vacío (no hay vista Semana). */
+  controlesPre?: React.ReactNode;
+  /** Marcador de estado (✓ «Al día») a la derecha, junto a «Imprimir». Lo inyecta Gestión (SOSIEGO). */
+  marcadorSalud?: React.ReactNode;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -74,19 +81,30 @@ export function VistaMensualTurnos({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* UNA barra de tres zonas: izquierda (modo de vista) · centro (el mes, foco) · derecha
+          (estado + acción). En md+ es un grid 1fr·auto·1fr para centrar ópticamente el mes; en móvil
+          las tres zonas se apilan. */}
+      <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+        <div className="flex flex-wrap items-center gap-2 md:justify-self-start">
+          {controlesPre}
           <SelectorAmbito ambito={ambito} setAmbito={setAmbito} />
+        </div>
+        <div className="md:justify-self-center">
           <NavegadorMes mes={mes} setMes={setMes} />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={imprimirMes}
-          title="Imprimir o guardar como PDF"
-        >
-          <Printer className="mr-1.5 h-4 w-4" /> Imprimir / PDF
-        </Button>
+        <div className="flex items-center gap-2 md:justify-self-end">
+          {marcadorSalud}
+          {/* «Imprimir»: solo el icono, botón-icono outline (el icon-button de la app). */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={imprimirMes}
+            title="Imprimir o guardar como PDF"
+            aria-label="Imprimir / PDF"
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {ambito === "equipo" ? (
@@ -175,19 +193,21 @@ function NavegadorMes({
   return (
     <div className="flex items-center gap-2">
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         aria-label="Mes anterior"
         onClick={() => setMes(mesSiguiente(mes, -1))}
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <div className="min-w-[11rem] text-center text-sm font-medium capitalize">
+      {/* Sin `capitalize`: title-caseaba cada palabra y dejaba «Junio De 2026»; «junio de 2026» es la
+          forma correcta es-MX que devuelve `nombreMes`. */}
+      <div className="min-w-[11rem] text-center text-sm font-medium">
         <CalendarDays className="mr-1.5 inline h-4 w-4 text-muted-foreground" />
         {nombreMes(mes)}
       </div>
       <Button
-        variant="outline"
+        variant="ghost"
         size="icon"
         aria-label="Mes siguiente"
         onClick={() => setMes(mesSiguiente(mes, 1))}
