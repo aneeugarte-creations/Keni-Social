@@ -68,6 +68,7 @@ import { CambiosYAusencias } from "./CambiosYAusencias";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas } from "./Franjas";
 import { VistaMensualTurnos } from "./MisTurnos";
+import { SemanaPorDias } from "./SemanaPorDias";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { TarjetaCobertura, TarjetaEventoLibre } from "@/pages/tareas/tarjetas";
@@ -539,6 +540,26 @@ export function Calendario({
             ausenciasQ.isFetching ||
             equipoQ.isFetching
           }
+        />
+      ) : esGestion ? (
+        // «Gestión» (vista Semana): el diseño del calendario mensual aplicado a UNA semana —
+        // columnas por día con las franjas en texto y la gente debajo, en vez de la matriz de
+        // avatares. Sigue siendo editable (× + «Añadir» + «Resumen del día»).
+        <SemanaPorDias
+          dias={dias}
+          franjasSemana={franjasSemana}
+          personasPorCelda={personasPorCelda}
+          ausenciasPorDia={ausenciasPorDia}
+          lunes={lunes}
+          equipo={equipo}
+          cms={cms}
+          editable={editable}
+          marcaActiva={marcaActiva}
+          hoy={hoy}
+          ausenciaDe={ausenciaDe}
+          conflictoCandidato={conflictoCandidato}
+          onResumenDia={setDiaResumen}
+          onCambio={invalidar}
         />
       ) : (
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">

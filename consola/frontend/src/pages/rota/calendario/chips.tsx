@@ -137,6 +137,7 @@ export function ChipTurnoCM({
   ausencia,
   editable,
   onCambio,
+  variante = "avatar",
 }: {
   turno: TurnoRota;
   /** Equipo de la rota (para que `DialogEditarTurno` pueda reasignar). */
@@ -146,6 +147,9 @@ export function ChipTurnoCM({
   ausencia?: AusenciaRota;
   editable: boolean;
   onCambio: () => void;
+  /** "avatar" = círculo con la inicial (rejilla densa); "texto" = el nombre escrito (vista por
+   *  días, estilo del calendario mensual). En ambas: × para quitar y menú editar/duplicar/eliminar. */
+  variante?: "avatar" | "texto";
 }) {
   const [editandoDetalles, setEditandoDetalles] = React.useState(false);
 
@@ -191,30 +195,62 @@ export function ChipTurnoCM({
   const tieneTooltip = tooltipPartes.length > 0;
   const etiquetaTooltip = tooltipPartes.join(" · ");
 
+  const esTexto = variante === "texto";
+  // Iconos de estado, comunes a ambas variantes (override forzado / ausente ese día).
+  const indicadores = (
+    <>
+      {turno.override && (
+        <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
+      )}
+      {ausencia && !turno.override && (
+        <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+      )}
+    </>
+  );
+  // Identidad + horario a medida según la variante: avatar redondo (rejilla densa) o el nombre
+  // escrito con sus horas (vista por días, estilo del mensual).
+  const identidad = esTexto ? (
+    <>
+      <span className="truncate">{turno.miembro_nombre}</span>
+      {turno.horario_propio && (
+        <span className="shrink-0 tabular-nums text-sky-700/80" aria-label="horario a medida">
+          · {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
+        </span>
+      )}
+      {indicadores}
+    </>
+  ) : (
+    <>
+      <AvatarPersona id={turno.miembro_id} nombre={turno.miembro_nombre} size="sm" />
+      {indicadores}
+      {turno.horario_propio && (
+        <span
+          className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
+          aria-label="horario a medida"
+        >
+          {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
+        </span>
+      )}
+    </>
+  );
+
   if (!editable) {
-    // Cabecera del recuadro = SOLO el avatar redondo (color + inicial; nombre en su
-    // `title`). El nombre escrito ya vive en los chips de evento de debajo, así que el
-    // píldora gris «👤 nombre» sobraba: una persona = su avatar, sin texto repetido.
+    // Solo lectura: la identidad (avatar o nombre) con sus iconos; el horario completo y el
+    // motivo viven en el rótulo (tooltip flotante en "avatar"; `title` nativo en "texto", que
+    // se apila en bloque y no admite el envoltorio inline del Tooltip).
     const chip = (
-      <span className="inline-flex max-w-full items-center gap-1 text-xs">
-        <AvatarPersona id={turno.miembro_id} nombre={turno.miembro_nombre} size="sm" />
-        {turno.override && (
-          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
-        )}
-        {ausencia && !turno.override && (
-          <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
-        )}
-        {turno.horario_propio && (
-          <span
-            className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
-            aria-label="horario a medida"
-          >
-            {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
-          </span>
-        )}
+      <span
+        title={esTexto && tieneTooltip ? etiquetaTooltip : undefined}
+        className={
+          esTexto
+            ? "flex w-full items-center gap-1 text-[11px] leading-tight"
+            : "inline-flex max-w-full items-center gap-1 text-xs"
+        }
+      >
+        {identidad}
       </span>
     );
-    return tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip;
+    return !esTexto && tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip;
   }
 
   const itemsMenu: EntradaMenuContextual[] = [
@@ -250,24 +286,19 @@ export function ChipTurnoCM({
 
   const chip = (
     <MenuContextual items={itemsMenu} disparador="ambos">
-      {/* Igual que en solo-lectura: solo el avatar (sin «👤 nombre»), + la × para
-          quitar el turno. El click en el avatar abre el menú (editar/duplicar/borrar). */}
-      <span className="inline-flex max-w-full cursor-pointer items-center gap-1 rounded-full text-xs hover:opacity-80">
-        <AvatarPersona id={turno.miembro_id} nombre={turno.miembro_nombre} size="sm" />
-        {turno.override && (
-          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
-        )}
-        {ausencia && !turno.override && (
-          <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
-        )}
-        {turno.horario_propio && (
-          <span
-            className="shrink-0 text-[10px] font-medium tabular-nums text-sky-600"
-            aria-label="horario a medida"
-          >
-            {horaCompacta(turno.inicio)}–{horaCompacta(turno.fin)}
-          </span>
-        )}
+      {/* La identidad (avatar o nombre) + la × para quitar el turno. El click en ella abre el
+          menú (editar/duplicar/borrar). En "texto" la × aparece al pasar el ratón. */}
+      <span
+        title={esTexto && tieneTooltip ? etiquetaTooltip : undefined}
+        className={
+          esTexto
+            ? "group flex w-full cursor-pointer items-center justify-between gap-1 rounded px-1 py-px text-[11px] leading-tight hover:bg-black/[0.04]"
+            : "inline-flex max-w-full cursor-pointer items-center gap-1 rounded-full text-xs hover:opacity-80"
+        }
+      >
+        <span className={esTexto ? "inline-flex min-w-0 items-center gap-1" : "contents"}>
+          {identidad}
+        </span>
         <button
           type="button"
           aria-label={`Borrar turno de ${turno.miembro_nombre}`}
@@ -284,7 +315,11 @@ export function ChipTurnoCM({
               borrar.mutate();
           }}
           disabled={borrar.isPending}
-          className="ml-0.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-50"
+          className={
+            esTexto
+              ? "shrink-0 rounded text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-70 disabled:opacity-50"
+              : "ml-0.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-50"
+          }
         >
           {borrar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
         </button>
@@ -294,7 +329,7 @@ export function ChipTurnoCM({
 
   return (
     <>
-      {tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip}
+      {!esTexto && tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip}
       {editandoDetalles && (
         <DialogEditarTurno
           turno={turno}

@@ -574,6 +574,15 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(await screen.findByRole("complementary", { name: "Asignar turnos" })).toBeInTheDocument();
   });
 
+  it("la Semana de «Gestión» usa el diseño por días del mensual (sin la columna «Franja» de la matriz)", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
+    // La rejilla por-días no tiene la cabecera «Franja» de la matriz (esa vive en «Calendario»).
+    await screen.findByRole("complementary", { name: "Asignar turnos" });
+    expect(screen.queryByText("Franja")).toBeNull();
+  });
+
   it("deep-link ?tab=gestion para un no-admin cae en «Hoy»", async () => {
     renderRotaConTab("gestion", { rol: "editor" });
     const nav = await screen.findByRole("navigation", { name: "Secciones" });
