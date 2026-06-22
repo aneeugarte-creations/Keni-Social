@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { TurnoRota } from "@/types";
 
+import { presentacionTurnoPorHora } from "./comun";
 import { ResumenDia } from "./ResumenDia";
 import { type ResumenDiaCobertura, useTableroMes } from "./useTableroMes";
 
@@ -470,15 +471,21 @@ function ChipTurnoMes({ turno, atenuado }: { turno: TurnoRota; atenuado?: boolea
       </div>
     );
   }
+  // El color del bloque indica el PERIODO del turno (mañana/tarde/noche), igual que la rejilla
+  // semanal: misma `presentacionTurnoPorHora` derivada de la hora de inicio.
+  const tono = presentacionTurnoPorHora(turno.inicio);
   return (
     <div
-      className={`rounded bg-keni-50 px-1.5 py-0.5 text-[11px] leading-tight text-keni-800 dark:bg-keni-900/30 dark:text-keni-200 print:border print:border-keni-300 ${
-        atenuado ? "opacity-50" : ""
-      }`}
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[11px] leading-tight print:border print:border-border",
+        tono.fondo,
+        tono.nombre,
+        atenuado && "opacity-50",
+      )}
     >
       <div className="truncate font-medium">{turno.franja_nombre}</div>
       {turno.inicio && (
-        <div className="tabular-nums text-keni-700/80 dark:text-keni-300/80">
+        <div className={cn("tabular-nums", tono.horas)}>
           {turno.inicio}–{turno.fin}
         </div>
       )}
@@ -584,11 +591,16 @@ function ChipFranjaEquipo({
   atenuado?: boolean;
   miId: string;
 }) {
+  // Color del bloque por PERIODO del turno (mañana/tarde/noche), igual que la rejilla semanal.
+  const tono = presentacionTurnoPorHora(franja.inicio);
   return (
     <div
-      className={`rounded bg-keni-50 px-1.5 py-0.5 text-[11px] leading-tight text-keni-800 dark:bg-keni-900/30 dark:text-keni-200 print:border print:border-keni-300 ${
-        atenuado ? "opacity-50" : ""
-      }`}
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[11px] leading-tight print:border print:border-border",
+        tono.fondo,
+        tono.nombre,
+        atenuado && "opacity-50",
+      )}
     >
       <div className="font-medium">
         {franja.nombre}
@@ -599,15 +611,11 @@ function ChipFranjaEquipo({
           </span>
         )}
       </div>
-      <div className="text-keni-700/90 dark:text-keni-200/90">
+      <div className={tono.gente}>
         {franja.personas.map((p, i) => (
           <React.Fragment key={p.id}>
             {i > 0 && ", "}
-            <span
-              className={
-                p.id === miId ? "font-semibold underline decoration-keni-400" : ""
-              }
-            >
+            <span className={p.id === miId ? "font-semibold underline" : ""}>
               {p.nombre}
             </span>
           </React.Fragment>

@@ -577,6 +577,52 @@ export function presentacionFranja(franja: FranjaSemana, indiceLaboral: number):
   );
 }
 
+/** Tintes del bloque de un turno según su PERIODO del día (no decorativo: el color comunica si el
+ *  turno es de mañana/tarde/noche). Mismo estilo de tinte suave que el chip de turno de la
+ *  plataforma. Lo comparten la rejilla semanal (`SemanaPorDias`) y la mensual (`MisTurnos`). */
+export interface PresentacionTurno {
+  /** Fondo del bloque. */
+  fondo: string;
+  /** Color del nombre de la franja. */
+  nombre: string;
+  /** Color (apagado) de las horas. */
+  horas: string;
+  /** Color de los nombres de la gente. */
+  gente: string;
+}
+
+const TURNO_MANANA: PresentacionTurno = {
+  fondo: "bg-amber-100 dark:bg-amber-950/40",
+  nombre: "text-amber-900 dark:text-amber-200",
+  horas: "text-amber-700/70 dark:text-amber-300/70",
+  gente: "text-amber-900/90 dark:text-amber-200/90",
+};
+const TURNO_TARDE: PresentacionTurno = {
+  fondo: "bg-orange-100 dark:bg-orange-950/40",
+  nombre: "text-orange-900 dark:text-orange-200",
+  horas: "text-orange-700/70 dark:text-orange-300/70",
+  gente: "text-orange-900/90 dark:text-orange-200/90",
+};
+const TURNO_NOCHE: PresentacionTurno = {
+  fondo: "bg-rose-100 dark:bg-rose-950/40",
+  nombre: "text-rose-900 dark:text-rose-200",
+  horas: "text-rose-700/70 dark:text-rose-300/70",
+  gente: "text-rose-900/90 dark:text-rose-200/90",
+};
+
+/**
+ * Periodo del día de un turno por su hora de inicio "HH:MM" → su paleta (terna «Cálidos»): mañana
+ * (05:00–11:59, ámbar), tarde (12:00–17:59, naranja), noche (18:00–04:59, rosa). Derivar de la HORA
+ * (no del nombre ni del índice) lo hace robusto ante franjas con nombres custom.
+ */
+export function presentacionTurnoPorHora(inicio: string): PresentacionTurno {
+  const h = Number(inicio.slice(0, 2));
+  if (Number.isNaN(h)) return TURNO_TARDE;
+  if (h >= 5 && h < 12) return TURNO_MANANA;
+  if (h >= 12 && h < 18) return TURNO_TARDE;
+  return TURNO_NOCHE;
+}
+
 /** Una persona que COGIÓ un evento (titularidad real). La misma noción que el Panorama:
  * sale de la tarea de cobertura (clase='tarea' con `evento_id`), no de quién está de turno. */
 export interface CubridorEvento {
