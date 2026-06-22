@@ -190,9 +190,11 @@ def test_lanzar_para_pieza_compone_el_prompt_y_encola(entorno, monkeypatch):
     # La longitud entra en la clave de idempotencia (corto y largo son runs distintos).
     assert captura["clave_idem"] == f"carrusel:{pid}:largo"
     assert captura["publicacion_id"] == pid
-    # El spec lleva el tope de la longitud (largo = 9).
+    # El spec lleva el tope de la longitud (largo = 9). `como_variante` False = flujo legado
+    # (sobrescribe), que es lo que prueba este caso (lanzar_para_pieza sin como_variante).
     assert captura["procesar_spec"] == {
         "kind": jobspec.PROC_CARRUSEL, "publicacion_id": pid, "max_slides": 9,
+        "como_variante": False,
     }
     # El copy y el titular de portada viajan DENTRO del prompt (autocontenido).
     assert "Un sensor cuántico rescata señales del universo" in captura["prompt"]
