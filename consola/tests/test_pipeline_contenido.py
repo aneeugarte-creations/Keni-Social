@@ -725,6 +725,58 @@ def test_portal_admite_cluster_con_item_propio_aunque_primera_fuente_ajena(entor
     assert "Nota cubierta por ambos" in [t["titulo"] for t in res["temas"]]
 
 
+def test_claves_dedup_marca_ventana_portal_mas_corta(entorno):
+    """La ventana de dedup del Portal es `_DIAS_DEDUP_PORTAL`; la general, `_DIAS_DEDUP`.
+
+    Un contenido de hace 30 días entra en la ventana general (lo ve el dedup normal) pero queda
+    FUERA de la corta del Portal (no lo ve): un titular recurrente vuelve a admitirse en el Portal.
+    """
+    from datetime import timedelta
+
+    from keni_consola.dominio import dedup as _dedup
+    from keni_consola.pipeline_contenido._admitir import _claves_dedup_marca
+    from keni_consola.pipeline_contenido._comun import _DIAS_DEDUP_PORTAL
+    from keni_consola.tiempo import hoy_utc
+
+    creado = (hoy_utc() - timedelta(days=30)).isoformat()
+    repos.crear_publicacion(
+        clase="contenido", titulo="Resultados de la jornada", marca="unotv", creado=creado,
+    )
+    clave = _dedup.clave("Resultados de la jornada")
+
+    assert clave in _claves_dedup_marca("unotv")  # ventana general (60 días): lo ve
+    assert clave not in _claves_dedup_marca("unotv", dias=_DIAS_DEDUP_PORTAL)  # corta: no
+
+
+def test_portal_readmite_titular_recurrente_fuera_de_ventana_corta(entorno, monkeypatch):
+    """Portal: un titular que ya salió hace 30 días (dentro de los 60 generales pero fuera de la
+    ventana corta del Portal) SÍ vuelve a admitirse; una colisión del mismo día sigue deduplicándose."""
+    from datetime import timedelta
+
+    from keni_consola.tiempo import hoy_utc
+
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
+    # Ya publicado hace 30 días: dentro de los 60 generales, fuera de la ventana corta del Portal.
+    repos.crear_publicacion(
+        clase="contenido", titulo="Clima de hoy", marca="unotv",
+        creado=(hoy_utc() - timedelta(days=30)).isoformat(),
+    )
+    # Recién creado hoy: dentro de la ventana corta -> debe deduplicarse.
+    repos.crear_publicacion(clase="contenido", titulo="Resultados de la jornada", marca="unotv")
+    _inicializar_cluster("c-recurrente", titulo="Clima de hoy", score=0.05,
+                         primera_fuente=propia["id"])
+    _inicializar_cluster("c-duplicado", titulo="Resultados de la jornada", score=0.05,
+                         primera_fuente=propia["id"])
+
+    res = pc.ejecutar_portal()
+
+    titulos = [t["titulo"] for t in res["temas"]]
+    assert "Clima de hoy" in titulos  # fuera de la ventana corta: vuelve a entrar
+    assert "Resultados de la jornada" not in titulos  # colisión del día: deduplicada
+
+
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """DEDUP AL ÉXITO + BACKOFF: un copy fallido se RELANZA, pero solo PASADA la espera creciente.
 

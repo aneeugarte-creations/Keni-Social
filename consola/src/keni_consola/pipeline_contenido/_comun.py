@@ -40,6 +40,7 @@ __all__ = [
     "ETAPA_VERIFICAR",
     "ETAPA_SUGERIR_HASHTAGS",
     "_DIAS_DEDUP",
+    "_DIAS_DEDUP_PORTAL",
     "_FORMATO_PIPELINE",
     "PROMPT_VERIFICACION_ID",
     "_TITULO_VERIFICACION",
@@ -122,6 +123,12 @@ ETAPA_ILUSTRAR = "ILUSTRAR"
 # creado en esta ventana NO se crea: cubre el duplicado en la cola (misma noticia por dos fuentes)
 # y el republicado de lo ya salido hace poco. Fuera de la ventana, una noticia recurrente sí entra.
 _DIAS_DEDUP = 60
+
+# DEDUP del canal PORTAL: ventana (días) más corta que la general. El portal de un cliente de
+# noticias reedita a diario titulares legítimamente recurrentes (resultados de jornada, clima,
+# "Claro Sports transmite…"); con la ventana de 60 días colisionarían con una nota de hasta dos
+# meses antes y la nueva se descartaría en silencio. Aquí solo se filtra el duplicado inmediato.
+_DIAS_DEDUP_PORTAL = 3
 
 # El pipeline no sabe de antemano si un ítem será FOTO o VIDEO, así que crea piezas de FOTO
 # (regla del dueño: foto -> 3 redes IG/X/FB). El mapeo formato->redes vive en

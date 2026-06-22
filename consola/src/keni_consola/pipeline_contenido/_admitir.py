@@ -17,6 +17,7 @@ from ..tiempo import hoy_utc
 from . import _ref
 from ._comun import (
     _DIAS_DEDUP,
+    _DIAS_DEDUP_PORTAL,
     _FORMATO_PIPELINE,
     ETAPA_ADMITIR,
     ORIGEN_PIPELINE,
@@ -1209,7 +1210,7 @@ def promover_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     clusters = clusters_portal(marca, maximo=maximo)
     if not clusters:
         return []
-    claves_vistas = _claves_dedup_marca(marca)
+    claves_vistas = _claves_dedup_marca(marca, dias=_DIAS_DEDUP_PORTAL)
     temas: list[dict[str, Any]] = []
     for cluster in clusters:
         try:
@@ -1228,16 +1229,18 @@ def promover_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     return temas
 
 
-def _claves_dedup_marca(marca: str) -> set[str]:
-    """Claves de dedup (títulos normalizados) del contenido reciente de `marca` (`_DIAS_DEDUP`).
+def _claves_dedup_marca(marca: str, *, dias: int = _DIAS_DEDUP) -> set[str]:
+    """Claves de dedup (títulos normalizados) del contenido de `marca` de los últimos `dias`.
 
+    El camino normal usa la ventana general (`_DIAS_DEDUP`); el Portal pasa una más corta
+    (`_DIAS_DEDUP_PORTAL`) porque reedita titulares recurrentes legítimos a diario.
     Best-effort: si la lectura falla, devuelve un set vacío (no se deduplica, no se rompe el
     barrido). Cubre el duplicado en cola y el republicado: todo contenido de la marca creado en
     la ventana entra (esté en borrador, en revisión o ya publicado).
     """
     from datetime import timedelta
 
-    desde = (hoy_utc() - timedelta(days=_DIAS_DEDUP)).isoformat()
+    desde = (hoy_utc() - timedelta(days=dias)).isoformat()
     try:
         titulos = repos.titulos_recientes_marca(marca, desde)
     except Exception:  # noqa: BLE001 -- sin títulos legibles, no dedup (no rompe el barrido)
