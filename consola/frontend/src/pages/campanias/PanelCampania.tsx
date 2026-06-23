@@ -48,8 +48,12 @@ import type {
   PiezaCampania,
 } from "@/types";
 
+import { Bloque } from "@/pages/metricas/Bloque";
 import { CabeceraOrdenable } from "@/pages/metricas/CabeceraOrdenable";
+import type { ColumnaMeta } from "@/pages/metricas/columnasMeta";
+import { Seccion } from "@/pages/metricas/Seccion";
 import { useOrdenTabla } from "@/pages/metricas/useOrdenTabla";
+import { columnasVisibles, useVistaConfig } from "@/pages/metricas/vistaConfig";
 import { CLAVE_CAMPANIAS } from "./claves";
 import { GraficaTendencia } from "./GraficaTendencia";
 import { fechaCorta } from "./formato";
@@ -174,7 +178,11 @@ export function PanelCampania({
 
       {!ocultarAds && <BloqueInorganico inorganico={inorganico} />}
 
-      <GraficaTendencia puntos={tendencia.puntos} />
+      <Bloque id="campania-tendencia" titulo="Tendencia de la campaña">
+        <Seccion id="campania-tendencia" titulo="Tendencia de la campaña">
+          <GraficaTendencia puntos={tendencia.puntos} />
+        </Seccion>
+      </Bloque>
 
       <DesgloseRedTabla filas={desglose_red} />
 
@@ -238,78 +246,116 @@ const ACCESORES_RED: Record<ClaveOrdenRed, (f: DesgloseRedCampania) => number> =
   engagement_pct: (f) => f.engagement_pct,
 };
 
+/** Columnas configurables del desglose por red (orden base). La primera, "red", es la dimensión. */
+const COLS_RED: ColumnaMeta[] = [
+  { id: "red", etiqueta: "Red" },
+  { id: "piezas", etiqueta: "Piezas" },
+  { id: "visualizaciones", etiqueta: "Vistas" },
+  { id: "interacciones", etiqueta: "Interacciones" },
+  { id: "likes", etiqueta: "Me gusta" },
+  { id: "comentarios", etiqueta: "Comentarios" },
+  { id: "compartidos", etiqueta: "Compartidos" },
+  { id: "guardados", etiqueta: "Guardados" },
+  { id: "engagement_pct", etiqueta: "Engagement" },
+];
+const IDS_RED = COLS_RED.map((c) => c.id);
+
+/** Valor formateado de una celda numérica del desglose por red. */
+function valorCeldaRed(f: DesgloseRedCampania, clave: ClaveOrdenRed): string {
+  if (clave === "engagement_pct") return porcentaje(f.engagement_pct);
+  if (clave === "piezas") return numeroCompleto(f.piezas);
+  return numeroCompacto(f[clave]);
+}
+
 /** Tabla de agregados por red: dónde y cómo rinde la campaña (ordenable por columna). */
 function DesgloseRedTabla({ filas }: { filas: DesgloseRedCampania[] }) {
+  const cfg = useVistaConfig((s) => s.columnas["campania-red"]) ?? { orden: IDS_RED, ocultas: [] };
+  const columnas = columnasVisibles(IDS_RED, cfg);
+
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<DesgloseRedCampania, ClaveOrdenRed>(
     filas,
     ACCESORES_RED,
     { clave: "visualizaciones", direccion: "desc" },
   );
 
-  const col = (clave: ClaveOrdenRed, etiqueta: string, className?: string) => (
-    <CabeceraOrdenable
-      activa={estado.clave === clave}
-      direccion={estado.direccion}
-      onClick={() => alClicar(clave)}
-      alinear="right"
-      className={className}
-    >
-      {etiqueta}
-    </CabeceraOrdenable>
-  );
+  const etiquetaDe = (id: string) => COLS_RED.find((c) => c.id === id)?.etiqueta ?? id;
+
+  const encabezado = (id: string, idx: number) => {
+    const ultima = idx === columnas.length - 1;
+    if (id === "red") {
+      return (
+        <TableHead key={id} className="pl-6">
+          Red
+        </TableHead>
+      );
+    }
+    const clave = id as ClaveOrdenRed;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear="right"
+        className={ultima ? "pr-6" : undefined}
+      >
+        {etiquetaDe(id)}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (f: DesgloseRedCampania, id: string, idx: number) => {
+    const ultima = idx === columnas.length - 1;
+    if (id === "red") {
+      return (
+        <TableCell key={id} className="pl-6">
+          <Badge variant="outline">{nombreRed(f.red)}</Badge>
+        </TableCell>
+      );
+    }
+    const clave = id as ClaveOrdenRed;
+    const conTitulo = clave === "visualizaciones" || clave === "interacciones";
+    return (
+      <TableCell
+        key={id}
+        className={cn("text-right tabular-nums", ultima && "pr-6")}
+        title={conTitulo ? numeroCompleto(f[clave]) : undefined}
+      >
+        {valorCeldaRed(f, clave)}
+      </TableCell>
+    );
+  };
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between px-6 py-4">
-          <h3 className="text-sm font-medium">Desglose por red</h3>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Red</TableHead>
-              {col("piezas", "Piezas")}
-              {col("visualizaciones", "Vistas")}
-              {col("interacciones", "Interacciones")}
-              {col("likes", "Me gusta")}
-              {col("comentarios", "Comentarios")}
-              {col("compartidos", "Compartidos")}
-              {col("guardados", "Guardados")}
-              {col("engagement_pct", "Engagement", "pr-6")}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                  Sin datos por red en el periodo.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filasOrdenadas.map((f) => (
-                <TableRow key={f.red || "—"}>
-                  <TableCell className="pl-6">
-                    <Badge variant="outline">{nombreRed(f.red)}</Badge>
+    <Bloque id="campania-red" titulo="Desglose por red">
+      <Seccion
+        id="campania-red"
+        titulo="Desglose por red"
+        tablaId="campania-red"
+        columnas={COLS_RED}
+      >
+        <Card className="overflow-hidden py-2">
+          <Table>
+            <TableHeader>
+              <TableRow>{columnas.map((id, idx) => encabezado(id, idx))}</TableRow>
+            </TableHeader>
+            <TableBody>
+              {filas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columnas.length} className="py-8 text-center text-muted-foreground">
+                    Sin datos por red en el periodo.
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{numeroCompleto(f.piezas)}</TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.visualizaciones)}>
-                    {numeroCompacto(f.visualizaciones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.interacciones)}>
-                    {numeroCompacto(f.interacciones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{numeroCompacto(f.likes)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{numeroCompacto(f.comentarios)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{numeroCompacto(f.compartidos)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{numeroCompacto(f.guardados)}</TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">{porcentaje(f.engagement_pct)}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+              ) : (
+                filasOrdenadas.map((f) => (
+                  <TableRow key={f.red || "—"}>{columnas.map((id, idx) => celda(f, id, idx))}</TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      </Seccion>
+    </Bloque>
   );
 }
 
@@ -324,6 +370,33 @@ type ClaveOrdenPieza =
   | "visualizaciones_pagadas"
   | "interacciones"
   | "engagement_pct";
+
+/** Columnas configurables de la tabla de piezas (orden base). "Ads" es exclusiva del modo
+ * con Ads visibles: se excluye de la base cuando `ocultarAds`, así ni se ofrece ni se pinta. */
+const COLS_PIEZAS: ColumnaMeta[] = [
+  { id: "titulo", etiqueta: "Publicación" },
+  { id: "red", etiqueta: "Red" },
+  { id: "marca", etiqueta: "Marca" },
+  { id: "formato", etiqueta: "Formato" },
+  { id: "publicado", etiqueta: "Fecha" },
+  { id: "visualizaciones", etiqueta: "Vistas" },
+  { id: "visualizaciones_pagadas", etiqueta: "Ads" },
+  { id: "interacciones", etiqueta: "Interacciones" },
+  { id: "engagement_pct", etiqueta: "Engagement" },
+];
+
+/** Alineación de cada columna de la tabla de piezas (la dimensión textual va a la izquierda). */
+const ALINEAR_PIEZA: Record<string, "left" | "right"> = {
+  titulo: "left",
+  red: "left",
+  marca: "left",
+  formato: "left",
+  publicado: "right",
+  visualizaciones: "right",
+  visualizaciones_pagadas: "right",
+  interacciones: "right",
+  engagement_pct: "right",
+};
 
 /** Visualizaciones a MOSTRAR de una pieza: en modo cliente (ocultarAds) se suman las pagadas
  * a las orgánicas para que el inorgánico se vea como un post normal. */
@@ -397,175 +470,215 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
 
   const crossCount = React.useMemo(() => piezas.filter((p) => p.por_cross_post).length, [piezas]);
 
-  const col = (
-    clave: ClaveOrdenPieza,
-    etiqueta: string,
-    alinear: "left" | "right" = "right",
-    className?: string,
-  ) => (
-    <CabeceraOrdenable
-      activa={estado.clave === clave}
-      direccion={estado.direccion}
-      onClick={() => alClicar(clave)}
-      alinear={alinear}
-      className={className}
-    >
-      {etiqueta}
-    </CabeceraOrdenable>
+  // En modo cliente (ocultarAds) la columna "Ads" se excluye de la base ANTES de aplicar la
+  // vista, así el editor de campos no la ofrece y la tabla no la pinta.
+  const cols = ocultarAds ? COLS_PIEZAS.filter((c) => c.id !== "visualizaciones_pagadas") : COLS_PIEZAS;
+  const idsBase = cols.map((c) => c.id);
+  const cfg = useVistaConfig((s) => s.columnas["campania-piezas"]) ?? { orden: idsBase, ocultas: [] };
+  const columnas = columnasVisibles(idsBase, cfg);
+
+  const etiquetaDe = (id: string) => cols.find((c) => c.id === id)?.etiqueta ?? id;
+
+  const encabezado = (id: string, idx: number) => {
+    const clave = id as ClaveOrdenPieza;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear={ALINEAR_PIEZA[id] ?? "right"}
+        className={cn(idx === 0 && "pl-6", idx === columnas.length - 1 && "pr-6")}
+      >
+        {etiquetaDe(id)}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (p: PiezaCampania, id: string, idx: number) => {
+    const primera = idx === 0;
+    const ultima = idx === columnas.length - 1;
+    switch (id) {
+      case "titulo":
+        return (
+          <TableCell key={id} className={cn(primera && "pl-6", ultima && "pr-6")}>
+            <span className="flex max-w-[22rem] items-center gap-1.5">
+              <span className="truncate font-medium" title={p.titulo || "Publicación"}>
+                {p.titulo || "Publicación"}
+              </span>
+              {p.url && (
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label="Abrir publicación"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
+              {p.por_cross_post && (
+                <Badge
+                  variant="secondary"
+                  className="shrink-0 text-[10px]"
+                  title="Cross-post: mismo contenido en otra red"
+                >
+                  cross-post
+                </Badge>
+              )}
+              {!ocultarAds && p.es_inorganico && (
+                <Badge variant="aviso" className="shrink-0 text-[10px]" title="Incluida en Meta Ads">
+                  Ads
+                </Badge>
+              )}
+            </span>
+          </TableCell>
+        );
+      case "red":
+        return (
+          <TableCell key={id} className={cn(primera && "pl-6", ultima && "pr-6")}>
+            {p.red ? (
+              <Badge variant="outline">{nombreRed(p.red)}</Badge>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        );
+      case "marca":
+        return (
+          <TableCell key={id} className={cn("text-muted-foreground", primera && "pl-6", ultima && "pr-6")}>
+            {p.marca || <span className="text-muted-foreground">—</span>}
+          </TableCell>
+        );
+      case "formato":
+        return (
+          <TableCell key={id} className={cn("text-muted-foreground", primera && "pl-6", ultima && "pr-6")}>
+            {nombreFormato(p.formato)}
+          </TableCell>
+        );
+      case "publicado":
+        return (
+          <TableCell
+            key={id}
+            className={cn("text-right text-muted-foreground tabular-nums", primera && "pl-6", ultima && "pr-6")}
+          >
+            {fechaCorta(p.publicado)}
+          </TableCell>
+        );
+      case "visualizaciones":
+        return (
+          <TableCell
+            key={id}
+            className={cn("text-right tabular-nums", primera && "pl-6", ultima && "pr-6")}
+            title={numeroCompleto(visEfectivas(p, ocultarAds))}
+          >
+            {numeroCompacto(visEfectivas(p, ocultarAds))}
+          </TableCell>
+        );
+      case "visualizaciones_pagadas":
+        return (
+          <TableCell
+            key={id}
+            className={cn("text-right tabular-nums", primera && "pl-6", ultima && "pr-6")}
+            title={p.visualizaciones_pagadas ? numeroCompleto(p.visualizaciones_pagadas) : "Sin inversión"}
+          >
+            {p.visualizaciones_pagadas ? (
+              <span className="text-amber-600 dark:text-amber-400">
+                {numeroCompacto(p.visualizaciones_pagadas)}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
+        );
+      case "interacciones":
+        return (
+          <TableCell
+            key={id}
+            className={cn("text-right tabular-nums", primera && "pl-6", ultima && "pr-6")}
+            title={numeroCompleto(p.interacciones)}
+          >
+            {numeroCompacto(p.interacciones)}
+          </TableCell>
+        );
+      case "engagement_pct":
+        return (
+          <TableCell key={id} className={cn("text-right tabular-nums", primera && "pl-6", ultima && "pr-6")}>
+            {porcentaje(p.engagement_pct)}
+          </TableCell>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const filtros = (
+    <>
+      <Select value={red} onValueChange={setRed}>
+        <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filtrar por red">
+          <SelectValue placeholder="Red" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TODAS}>Todas las redes</SelectItem>
+          {redes.map((r) => (
+            <SelectItem key={r} value={r}>
+              {nombreRed(r)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select value={formato} onValueChange={setFormato}>
+        <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filtrar por formato">
+          <SelectValue placeholder="Formato" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={TODAS}>Todos los formatos</SelectItem>
+          {formatos.map((f) => (
+            <SelectItem key={f} value={f}>
+              {nombreFormato(f)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {filtradas.length} de {piezas.length}
+      </span>
+    </>
   );
 
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-          <div className="space-y-0.5">
-            <h3 className="text-sm font-medium">Piezas del periodo</h3>
-            {crossCount > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Incluye {crossCount} cross-posts.
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={red} onValueChange={setRed}>
-              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filtrar por red">
-                <SelectValue placeholder="Red" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS}>Todas las redes</SelectItem>
-                {redes.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {nombreRed(r)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={formato} onValueChange={setFormato}>
-              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filtrar por formato">
-                <SelectValue placeholder="Formato" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS}>Todos los formatos</SelectItem>
-                {formatos.map((f) => (
-                  <SelectItem key={f} value={f}>
-                    {nombreFormato(f)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {filtradas.length} de {piezas.length}
-            </span>
-          </div>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {col("titulo", "Publicación", "left", "pl-6")}
-              {col("red", "Red", "left")}
-              {col("marca", "Marca", "left")}
-              {col("formato", "Formato", "left")}
-              {col("publicado", "Fecha")}
-              {col("visualizaciones", "Vistas")}
-              {!ocultarAds && col("visualizaciones_pagadas", "Ads")}
-              {col("interacciones", "Interacciones")}
-              {col("engagement_pct", "Engagement", "right", "pr-6")}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtradas.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={ocultarAds ? 8 : 9} className="py-8 text-center text-muted-foreground">
-                  {piezas.length === 0
-                    ? "Sin piezas para estos hashtags."
-                    : "Ninguna pieza coincide con los filtros."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              filasOrdenadas.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="pl-6">
-                    <span className="flex max-w-[22rem] items-center gap-1.5">
-                      <span className="truncate font-medium" title={p.titulo || "Publicación"}>
-                        {p.titulo || "Publicación"}
-                      </span>
-                      {p.url && (
-                        <a
-                          href={p.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
-                          aria-label="Abrir publicación"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                      {p.por_cross_post && (
-                        <Badge
-                          variant="secondary"
-                          className="shrink-0 text-[10px]"
-                          title="Cross-post: mismo contenido en otra red"
-                        >
-                          cross-post
-                        </Badge>
-                      )}
-                      {!ocultarAds && p.es_inorganico && (
-                        <Badge
-                          variant="aviso"
-                          className="shrink-0 text-[10px]"
-                          title="Incluida en Meta Ads"
-                        >
-                          Ads
-                        </Badge>
-                      )}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {p.red ? (
-                      <Badge variant="outline">{nombreRed(p.red)}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {p.marca || <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{nombreFormato(p.formato)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground tabular-nums">
-                    {fechaCorta(p.publicado)}
-                  </TableCell>
-                  <TableCell
-                    className="text-right tabular-nums"
-                    title={numeroCompleto(visEfectivas(p, ocultarAds))}
-                  >
-                    {numeroCompacto(visEfectivas(p, ocultarAds))}
-                  </TableCell>
-                  {!ocultarAds && (
-                    <TableCell
-                      className="text-right tabular-nums"
-                      title={p.visualizaciones_pagadas ? numeroCompleto(p.visualizaciones_pagadas) : "Sin inversión"}
-                    >
-                      {p.visualizaciones_pagadas ? (
-                        <span className="text-amber-600 dark:text-amber-400">
-                          {numeroCompacto(p.visualizaciones_pagadas)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(p.interacciones)}>
-                    {numeroCompacto(p.interacciones)}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">
-                    {porcentaje(p.engagement_pct)}
+    <Bloque id="campania-piezas" titulo="Piezas del periodo">
+      <Seccion
+        id="campania-piezas"
+        titulo="Piezas del periodo"
+        descripcion={crossCount > 0 ? `Incluye ${crossCount} cross-posts.` : undefined}
+        acciones={filtros}
+        tablaId="campania-piezas"
+        columnas={cols}
+      >
+        <Card className="overflow-hidden py-2">
+          <Table>
+            <TableHeader>
+              <TableRow>{columnas.map((id, idx) => encabezado(id, idx))}</TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtradas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={columnas.length} className="py-8 text-center text-muted-foreground">
+                    {piezas.length === 0
+                      ? "Sin piezas para estos hashtags."
+                      : "Ninguna pieza coincide con los filtros."}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+              ) : (
+                filasOrdenadas.map((p) => (
+                  <TableRow key={p.id}>{columnas.map((id, idx) => celda(p, id, idx))}</TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      </Seccion>
+    </Bloque>
   );
 }
