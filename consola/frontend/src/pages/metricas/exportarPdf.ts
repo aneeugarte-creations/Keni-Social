@@ -48,6 +48,8 @@ const H = 720;
 const M = 64;
 
 type Doc = import("jspdf").jsPDF;
+/** Fila de datos genérica (un objeto de claves a valores desconocidos). */
+type Fila = Record<string, unknown>;
 
 function aRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
@@ -294,7 +296,7 @@ export async function descargarPresentacion(
   portada(doc, ctx);
 
   const reporte = datos.get("reporte") as
-    | { total?: Record<string, number>; por_red?: any[]; cuentas?: any[] }
+    | { total?: Record<string, number>; por_red?: Fila[]; cuentas?: Fila[] }
     | undefined;
   if (reporte?.total) slideKpis(doc, reporte.total, ctx, ++n);
   if (reporte?.por_red?.length) {
@@ -323,7 +325,7 @@ export async function descargarPresentacion(
     );
   }
 
-  const tendencia = datos.get("tendencia") as { puntos?: any[] } | undefined;
+  const tendencia = datos.get("tendencia") as { puntos?: Fila[] } | undefined;
   if (tendencia?.puntos?.length) {
     slideLineas(
       doc,
@@ -337,7 +339,7 @@ export async function descargarPresentacion(
     );
   }
 
-  const seguidores = datos.get("seguidores") as { puntos?: any[] } | undefined;
+  const seguidores = datos.get("seguidores") as { puntos?: Fila[] } | undefined;
   if (seguidores?.puntos?.length) {
     slideLineas(
       doc,
@@ -348,7 +350,7 @@ export async function descargarPresentacion(
     );
   }
 
-  const piezas = datos.get("piezas") as { top?: any[]; peores?: any[] } | undefined;
+  const piezas = datos.get("piezas") as { top?: Fila[]; peores?: Fila[] } | undefined;
   const colsPieza = [
     { clave: "titulo", etiqueta: "Título" },
     { clave: "plataforma", etiqueta: "Red" },
@@ -369,9 +371,9 @@ export async function descargarPresentacion(
     "piezas-listado": ["Listado de piezas", "piezas"],
   };
   for (const [dom, [titulo, clave]] of Object.entries(TITULOS_TABLA)) {
-    const d = datos.get(dom) as Record<string, any> | undefined;
+    const d = datos.get(dom) as Record<string, unknown> | undefined;
     const filas = d?.[clave];
-    if (Array.isArray(filas) && filas.length) await slideTabla(doc, titulo, filas, ctx, ++n);
+    if (Array.isArray(filas) && filas.length) await slideTabla(doc, titulo, filas as Fila[], ctx, ++n);
   }
 
   doc.save(`presentacion-${nombreArchivo}.pdf`);
