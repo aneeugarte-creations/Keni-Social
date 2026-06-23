@@ -105,6 +105,20 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
     if campos.get("video") and "falta_video" not in datos:
         campos["falta_video"] = False
 
+    # FOTO PROPIA: CAMBIAR la `foto` por esta vía (galería, subida, «usar original») es siempre
+    # una imagen propia/licenciada — el stock se adjunta aparte (autogen_stock), nunca por este
+    # PATCH. Limpia el metadato de stock heredado para que no quede el aviso SIN LICENCIA de una
+    # foto anterior. Solo al CAMBIAR de foto (no si reenvían la misma), para no pisar el badge.
+    if "foto" in campos and campos["foto"] != (previa.get("foto") or ""):
+        campos.update(
+            imagen_origen="",
+            imagen_proveedor="",
+            imagen_autor="",
+            imagen_licencia="",
+            imagen_credito_url="",
+            imagen_autorizada=False,
+        )
+
     if not campos:
         return 400, {"error": "Indica algún campo a actualizar."}
 

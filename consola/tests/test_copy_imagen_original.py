@@ -51,12 +51,12 @@ def test_imagen_fuente_se_cataloga_como_original_y_se_inyecta(entorno, monkeypat
         tipo_contenido="fuente",
     )
 
-    # La pieza nace con la foto ORIGINAL como `foto` (foto cruda real, en la carpeta protegida
-    # `artes`): así CUENTA como imagen y la pieza queda LISTA (sin "Falta imagen"). NO va a
-    # `imagen` (ese campo es la placa horneada y en marca no cuenta como foto real).
+    # La pieza nace con la foto ORIGINAL como `foto` (foto cruda real, en su carpeta de
+    # procedencia `originales`): así CUENTA como imagen y la pieza queda LISTA (sin "Falta
+    # imagen"). NO va a `imagen` (ese campo es la placa horneada y en marca no cuenta como foto).
     assert len(creadas) == 1
     foto = str(creadas[0].get("foto") or "")
-    assert foto.startswith("artes/")
+    assert foto.startswith("originales/")
     assert str(creadas[0].get("imagen") or "") == ""
     assert creadas[0].get("falta_imagen") is False
 

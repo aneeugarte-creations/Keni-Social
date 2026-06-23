@@ -58,6 +58,9 @@ CATEGORIAS: frozenset[str] = frozenset(
         "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
         "logos",        # activos de marca: logos, tipografias, plecas (reusable)
         "artes",        # artes catalogadas (galeria) para reutilizar (reusable)
+        "originales",   # fotos ORIGINALES de articulo de portal/marca propia (confiadas/publicables):
+                        # su propia carpeta por procedencia. Catalogadas (tipo=original); el GC las
+                        # conserva mientras exista su fila de catalogo o una pieza que las use
         "texto",        # soporte para servir objetos ya promovidos a `texto/`.
     }
 )

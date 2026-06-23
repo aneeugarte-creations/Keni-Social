@@ -83,3 +83,45 @@ def test_patch_plataforma_a_programado_pasa_tras_autorizar(entorno):
     )
     assert r.status_code == 200, r.text
     assert r.json()["plataforma"]["estado"] == "programado"
+
+
+def test_elegir_foto_propia_limpia_el_stock_heredado(entorno):
+    """Poner una foto PROPIA (galería/subida) por el PATCH limpia el SIN LICENCIA de la stock anterior."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock(pieza["id"], autorizada=False)  # tenía una stock sin autorizar
+    # El usuario elige una foto de la galería (key propia distinta) por el PATCH de plataforma.
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"foto": "originales/propia.jpg"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["foto"] == "originales/propia.jpg"
+    # El metadato de stock heredado queda limpio => ya no es SIN LICENCIA.
+    assert fila["imagen_origen"] == ""
+    assert fila["imagen_proveedor"] == ""
+    assert fila["imagen_autorizada"] in (False, 0)
+    # Y ahora SÍ puede programarse (sin el bloqueo de stock).
+    r2 = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_reenviar_la_misma_foto_no_altera_la_licencia(entorno):
+    """Reenviar la MISMA foto (sin cambiarla) NO toca el metadato de stock (no pisa el badge)."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock(pieza["id"], autorizada=False)
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"foto": "stock123.jpg", "copy": "edito el copy"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "stock"  # intacto: la foto no cambió

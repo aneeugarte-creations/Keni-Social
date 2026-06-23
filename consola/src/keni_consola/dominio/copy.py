@@ -234,13 +234,13 @@ def _descargar_original_a_biblioteca(
 ) -> str:
     """Descarga la foto ORIGINAL del articulo, la CATALOGA en la Biblioteca y devuelve su key.
 
-    La foto de una fuente PROPIA se baja a S3, se promueve a la carpeta protegida `artes` y se
-    registra en el catalogo (`tipo="original"`, por marca): asi APARECE en la Galeria de Artes
-    bajo su carpeta "Originales", el GC no la borra y la pieza nace con ESA key auto-inyectada
-    al feed COMO `foto` (foto cruda real: cuenta como imagen y la placa de marca se compone
-    sobre ella). Tolerante: "" si la descarga falla o la imagen es demasiado pequeña (la pieza
-    queda sin foto, a criterio humano); si solo falla el catalogo, se devuelve igualmente la key
-    promovida (la imagen sirve en la pieza).
+    La foto de una fuente PROPIA se baja a S3, se promueve a su carpeta de procedencia
+    `originales` y se registra en el catalogo (`tipo="original"`, por marca): asi APARECE en la
+    Galeria de Artes bajo su carpeta "Originales", el GC no la borra y la pieza nace con ESA key
+    auto-inyectada al feed COMO `foto` (foto cruda real: cuenta como imagen y la placa de marca
+    se compone sobre ella). Tolerante: "" si la descarga falla o la imagen es demasiado pequeña
+    (la pieza queda sin foto, a criterio humano); si solo falla el catalogo, se devuelve
+    igualmente la key promovida (la imagen sirve en la pieza).
     """
     from .. import almacen_media
     from . import extraccion_url
@@ -252,7 +252,7 @@ def _descargar_original_a_biblioteca(
     except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generacion
         return ""
     try:
-        objeto = almacen_media.promover_objeto(objeto, "artes")
+        objeto = almacen_media.promover_objeto(objeto, "originales")
         repos.crear_media_catalogo(
             objeto=objeto, tipo=TIPO_ARTE_ORIGINAL, marca=marca or "",
             titulo=titulo or "", autor=autor,
