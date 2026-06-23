@@ -57,7 +57,7 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
             "SELECT s.token AS s_token, s.expira AS s_expira, s.creada AS s_creada, "
             "u.id AS id, u.usuario AS usuario, "
             "u.rol AS rol, u.debe_cambiar_password AS debe_cambiar_password, "
-            "u.superadmin AS superadmin, "
+            "u.superadmin AS superadmin, u.puede_coordinar AS puede_coordinar, "
             "u.cargo AS cargo, u.creado AS creado, u.ultimo_acceso AS ultimo_acceso "
             "FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ?",
             (token,),
@@ -99,6 +99,9 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
             # `superadmin` (gestion de usuarios): se arrastra en la sesion para que el gate de
             # `/api/usuarios` (permisos.es_superadmin) no tenga que refrescar de BD en cada peticion.
             "superadmin": bool(fila["superadmin"]),
+            # `puede_coordinar` (permiso de coordinacion): lo lee el override de aprobacion
+            # (`_puede_forzar`) por peticion; se arrastra en la sesion para no refrescar de BD.
+            "puede_coordinar": bool(fila["puede_coordinar"]),
             # `cargo` (organigrama) lo usa la cadena de aprobacion para validar el cargo
             # requerido por nivel (item C). "" si el usuario no tiene cargo asignado.
             "cargo": fila["cargo"] or "",
