@@ -627,7 +627,10 @@ def analitica_por_etiqueta(
 
     # Resuelve etiquetas: publicacion_id -> {clase: nombre}. Solo nos interesa el nombre por
     # clase (el primero asignado de cada clase; el modelo garantiza nombre único por clase).
-    etiquetas = {e["id"]: e for e in repos.listar_etiquetas()}
+    # SOLO etiquetas ACTIVAS: una línea/vertical retirada del plan (p. ej. "Ciencia/Tech" en
+    # UnoTV) sigue en piezas antiguas, pero no debe reaparecer como serie; se ignora y la
+    # pieza cae en "Sin clasificar" para ese eje.
+    etiquetas = {e["id"]: e for e in repos.listar_etiquetas(solo_activas=True)}
     asignaciones = repos.etiquetas_por_contenido()
     etiquetas_por_cid: dict[str, dict[str, str]] = {}
     for cid, ids in asignaciones.items():

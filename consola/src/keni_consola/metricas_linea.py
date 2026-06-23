@@ -247,15 +247,17 @@ def lineas_y_origenes(
     plataformas = repos.listar_piezas_fila()
     enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
 
-    # Etiquetas DEFINIDAS de la marca por eje (incluye globales; `listar_etiquetas` ya las
-    # mezcla con marca=''). Filtra por clase en la BD para no traer de más.
+    # Etiquetas ACTIVAS de la marca por eje (incluye globales; `listar_etiquetas` ya las
+    # mezcla con marca=''). Filtra por clase en la BD para no traer de más, y SOLO activas:
+    # una línea/origen retirado del plan no debe aparecer como cubo (las piezas antiguas que
+    # lo tuvieran caen en "Sin línea"/"Sin origen").
     lineas_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
-        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL)
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL, solo_activas=True)
     ]
     origenes_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
-        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_ORIGEN)
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_ORIGEN, solo_activas=True)
     ]
     # `etiqueta_id -> nombre` por clase, para resolver la etiqueta de cada contenido.
     vertical_por_id = {e["id"]: e["nombre"] for e in lineas_def if e.get("id")}
