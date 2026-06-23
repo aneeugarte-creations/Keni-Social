@@ -159,6 +159,26 @@ export interface CuerpoAutorizarStock {
 }
 
 /**
+ * Respuesta de `GET /api/artes/agencias/buscar`: misma forma que la de stock (proveedores +
+ * candidatos), pero las candidatas son fotos LICENCIADAS de agencia (AFP), publicables con crédito.
+ */
+export type RespuestaBuscarAgencias = RespuestaBuscarStock;
+
+/**
+ * Cuerpo de `POST /api/artes/agencias/adjuntar`: la foto LICENCIADA elegida. A diferencia del stock,
+ * `url` y `proveedor` son obligatorios y al adjuntar la pieza queda publicable (`imagen_origen=
+ * "licenciada"`, `imagen_autorizada=true`), arrastrando el crédito/byline obligatorio de la agencia.
+ */
+export interface CuerpoAdjuntarAgencia {
+  pieza_id: string;
+  url: string;
+  proveedor: string;
+  autor?: string;
+  licencia?: string;
+  credito_url?: string;
+}
+
+/**
  * Subconjunto de campos de la fila por plataforma que devuelven los endpoints de stock
  * (`_plataforma_stock_a_dict`): lo justo para refrescar la imagen y su estado de licencia.
  */

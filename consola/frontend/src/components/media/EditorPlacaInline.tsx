@@ -87,6 +87,8 @@ export function EditorPlacaInline({
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
   // Buscador de fotos de stock (4ª vía de imagen del hueco activo).
   const [buscadorStock, setBuscadorStock] = React.useState(false);
+  // Buscador de fotos LICENCIADAS de agencia (AFP) para el hueco activo: publicables con crédito.
+  const [buscadorAgencias, setBuscadorAgencias] = React.useState(false);
   // Opciones de ORIGEN de la foto (Texto / Subir / Generar con IA): se abren al TOCAR un hueco
   // (fuera del titular), no como bloque permanente en el panel de edición. El origen elegido se
   // escribe en el HUECO ACTIVO (`slotActivo`).
@@ -711,6 +713,7 @@ export function EditorPlacaInline({
         }}
         onSubir={() => inputRef.current?.click()}
         onBuscarStock={piezaId ? () => setBuscadorStock(true) : undefined}
+        onBuscarAgencias={piezaId ? () => setBuscadorAgencias(true) : undefined}
         onGenerar={iniciarGeneracion}
       />
 
@@ -735,6 +738,23 @@ export function EditorPlacaInline({
             cambiarFotoActiva(plataforma.foto);
             onStockCambio?.(plataforma);
             setBuscadorStock(false);
+          }}
+        />
+      )}
+
+      {/* Foto LICENCIADA de agencia (AFP): al adjuntarla el back deja la pieza publicable con su
+          crédito y devuelve la plataforma con la foto colocada; la fijamos en el hueco activo. */}
+      {piezaId && (
+        <BuscadorStock
+          open={buscadorAgencias}
+          onCerrar={() => setBuscadorAgencias(false)}
+          piezaId={piezaId}
+          fuente="agencias"
+          consultaInicial={keywordBusqueda({ imagen_clave: imagenClave, titulo })}
+          onAdjuntada={(plataforma) => {
+            cambiarFotoActiva(plataforma.foto);
+            onStockCambio?.(plataforma);
+            setBuscadorAgencias(false);
           }}
         />
       )}

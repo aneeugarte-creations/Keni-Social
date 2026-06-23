@@ -51,6 +51,7 @@ import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import {
   atribucionStock,
+  esLicenciada,
   etiquetaOverlayStock,
   mensajeBloqueoStock,
   nivelLicencia,
@@ -460,19 +461,22 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   const cuerpo = pieza.contenido || pieza.titulo;
   const imagen = pieza.imagen_url || pieza.imagen || pieza.imagen_fuente;
 
-  // CRÉDITO OBLIGATORIO: una foto de stock AUTORIZADA con licencia de atribución (CC BY / BY-SA)
-  // permite uso comercial pero exige mantener el crédito visible al publicar. Se muestra junto al
-  // post (no solo en un badge) para que quien publique a mano no lo pierda.
-  const creditoAtribucion =
-    stockAutorizado(pieza) &&
-    nivelLicencia({ licencia: pieza.imagen_licencia, proveedor: pieza.imagen_proveedor }) ===
-      "atribucion"
-      ? atribucionStock({
-          autor: pieza.imagen_autor,
-          licencia: pieza.imagen_licencia,
-          proveedor: pieza.imagen_proveedor,
-        })
-      : "";
+  // CRÉDITO OBLIGATORIO: lo exigen (a) una foto de stock AUTORIZADA con licencia de atribución
+  // (CC BY / BY-SA) y (b) una foto LICENCIADA de agencia (AFP), publicable directa pero con
+  // byline obligatorio. Permiten uso comercial pero exigen mantener el crédito visible al publicar:
+  // se muestra junto al post (no solo en un badge) para que quien publique a mano no lo pierda.
+  const exigeCredito =
+    esLicenciada(pieza) ||
+    (stockAutorizado(pieza) &&
+      nivelLicencia({ licencia: pieza.imagen_licencia, proveedor: pieza.imagen_proveedor }) ===
+        "atribucion");
+  const creditoObligatorio = exigeCredito
+    ? atribucionStock({
+        autor: pieza.imagen_autor,
+        licencia: pieza.imagen_licencia,
+        proveedor: pieza.imagen_proveedor,
+      })
+    : "";
 
   return (
     // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
@@ -611,9 +615,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         }
       />
 
-      {/* CRÉDITO OBLIGATORIO: foto de stock autorizada con licencia de atribución (CC BY / BY-SA).
-          Va visible bajo la imagen (no solo en el badge) para no perderlo al publicar a mano. */}
-      {creditoAtribucion && (
+      {/* CRÉDITO OBLIGATORIO: foto de stock autorizada con licencia de atribución (CC BY / BY-SA) o
+          foto licenciada de agencia (AFP). Va visible bajo la imagen (no solo en el badge) para no
+          perderlo al publicar a mano. */}
+      {creditoObligatorio && (
         <p className="px-4 pt-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Crédito obligatorio: </span>
           {pieza.imagen_credito_url ? (
@@ -624,10 +629,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
               onClick={(e) => e.stopPropagation()}
               className="underline underline-offset-2 hover:text-foreground"
             >
-              {creditoAtribucion}
+              {creditoObligatorio}
             </a>
           ) : (
-            creditoAtribucion
+            creditoObligatorio
           )}
         </p>
       )}

@@ -3,6 +3,7 @@
 import { peticion, query } from "./_core";
 import type {
   CosteMedioArte,
+  CuerpoAdjuntarAgencia,
   CuerpoAdjuntarStock,
   CuerpoAutorizarStock,
   CuerpoGenerarArte,
@@ -10,6 +11,7 @@ import type {
   CuerpoGuardarArte,
   RespuestaArte,
   RespuestaArtes,
+  RespuestaBuscarAgencias,
   RespuestaBuscarStock,
   RespuestaGenerarArte,
   RespuestaGeneracion,
@@ -90,5 +92,24 @@ export const apiMedia = {
   // Confirma (o revoca) los derechos para publicar una foto de stock. Autorizar limpia `falta_imagen`.
   autorizarStock: (cuerpo: CuerpoAutorizarStock) =>
     peticion<RespuestaStock>("/artes/stock/autorizar", { metodo: "POST", json: cuerpo }),
+
+  // --- Fotos de AGENCIA LICENCIADAS (publicables con CRÉDITO/BYLINE obligatorio) ---
+  // Busca candidatas licenciadas en agencias (AFP). Devuelve los proveedores con su disponibilidad
+  // y motivo (sin credenciales, `disponible:false` y `candidatos:[]`) y las candidatas a adjuntar.
+  buscarAgencias: (
+    filtros: { q?: string; limite?: number } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaBuscarAgencias>(
+      `/artes/agencias/buscar${query({
+        q: filtros.q,
+        limite: filtros.limite != null ? String(filtros.limite) : undefined,
+      })}`,
+      { signal },
+    ),
+  // Descarga una candidata licenciada y la adjunta a la pieza como imagen PUBLICABLE
+  // (`imagen_origen="licenciada"`, `imagen_autorizada=true`, `falta_imagen=false`) con su crédito.
+  adjuntarAgencia: (cuerpo: CuerpoAdjuntarAgencia) =>
+    peticion<RespuestaStock>("/artes/agencias/adjuntar", { metodo: "POST", json: cuerpo }),
 
 };

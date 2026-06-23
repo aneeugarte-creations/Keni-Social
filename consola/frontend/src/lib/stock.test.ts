@@ -6,11 +6,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  esLicenciada,
   esShareAlike,
+  esStock,
   etiquetaOverlayStock,
   mensajeBloqueoStock,
   MENSAJE_BLOQUEO_STOCK,
   nivelLicencia,
+  stockNoAutorizado,
   tituloAutorizarStock,
 } from "./stock";
 
@@ -59,6 +62,21 @@ describe("nivelLicencia", () => {
   it("genérico (Wikimedia/Openverse) → restringida", () => {
     expect(nivelLicencia({ licencia: "Wikimedia Commons" })).toBe("restringida");
     expect(nivelLicencia({ licencia: "Openverse" })).toBe("restringida");
+  });
+});
+
+describe("esLicenciada (foto de agencia publicable con crédito)", () => {
+  it("true solo para imagen_origen 'licenciada'", () => {
+    expect(esLicenciada({ imagen_origen: "licenciada" })).toBe(true);
+    expect(esLicenciada({ imagen_origen: "stock" })).toBe(false);
+    expect(esLicenciada({ imagen_origen: "" })).toBe(false);
+    expect(esLicenciada({})).toBe(false);
+  });
+
+  it("una foto licenciada NO es stock ni dispara el bloqueo de stock", () => {
+    const licenciada = { imagen_origen: "licenciada", imagen_autorizada: true };
+    expect(esStock(licenciada)).toBe(false);
+    expect(stockNoAutorizado(licenciada)).toBe(false);
   });
 });
 

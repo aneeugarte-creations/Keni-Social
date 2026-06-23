@@ -26,6 +26,17 @@ export function esStock(p: DatosStock): boolean {
   return (p.imagen_origen ?? "") === ORIGEN_STOCK;
 }
 
+/** Valor de `imagen_origen` cuando la imagen es una foto LICENCIADA de agencia (AFP). */
+export const ORIGEN_LICENCIADA = "licenciada";
+
+/**
+ * ¿Esta pieza lleva una foto LICENCIADA de agencia? A diferencia del stock, es PUBLICABLE directa
+ * (sin autorizar, sin overlay "SIN LICENCIA"), pero arrastra un CRÉDITO/BYLINE obligatorio.
+ */
+export function esLicenciada(d: { imagen_origen?: string }): boolean {
+  return (d.imagen_origen ?? "") === ORIGEN_LICENCIADA;
+}
+
 /**
  * STOCK_NO_AUTORIZADO: foto de stock que un humano AÚN no ha autorizado a publicar. Es la condición
  * que dispara el tratamiento visual (atenuada + "SIN LICENCIA") y el bloqueo de publicar en la UI.
@@ -52,6 +63,7 @@ export function nombreProveedor(proveedor: string | undefined): string {
     wikimedia: "Wikimedia",
     nasa: "NASA",
     openverse: "Openverse",
+    afp: "AFP",
     rss: "Fuente original",
     stock: "Stock",
   };

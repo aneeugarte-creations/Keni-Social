@@ -1,12 +1,15 @@
 /**
- * Buscador de FOTOS DE STOCK: cuarta vía para dar imagen a una pieza, junto a Galería / Subir /
- * Generar IA. Propone fotos de APIs gratuitas (Pexels/Pixabay/Wikimedia/NASA/Openverse) o la foto
- * ORIGINAL del artículo de la fuente (RSS) como AYUDA VISUAL.
+ * Buscador de FOTOS para dar imagen a una pieza, junto a Galería / Subir / Generar IA. Sirve a dos
+ * fuentes según la prop `fuente`:
+ *  - "stock" (def): fotos de APIs gratuitas (Pexels/Pixabay/Wikimedia/NASA/Openverse) o la foto
+ *    ORIGINAL del artículo (RSS) como AYUDA VISUAL. Toda candidata se rotula "SIN LICENCIA": son
+ *    referencias. Al adjuntarla (`POST /api/artes/stock/adjuntar`) queda `imagen_origen="stock"`,
+ *    sin autorizar y con `falta_imagen` activo: visible pero NO publicable hasta confirmar derechos.
+ *  - "agencias": fotos LICENCIADAS de agencia (AFP). Se muestran con su crédito y SIN overlay de
+ *    "Sin licencia": al adjuntarlas (`POST /api/artes/agencias/adjuntar`) la pieza queda PUBLICABLE
+ *    (`imagen_origen="licenciada"`, `imagen_autorizada=true`), arrastrando su crédito obligatorio.
  *
- * Toda candidata se muestra ATENUADA + watermark "SIN LICENCIA": son referencias, no artes finales.
- * Al elegir una, se descarga y se adjunta a la pieza (`POST /api/artes/stock/adjuntar`), que la deja
- * `imagen_origen="stock"`, sin autorizar y con `falta_imagen` activo: visible pero NO publicable
- * hasta que un humano confirme derechos. El padre recibe la `PlataformaStock` para refrescar.
+ * El padre recibe la `PlataformaStock` para refrescar.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImageOff, Newspaper, Search } from "lucide-react";
@@ -14,6 +17,7 @@ import * as React from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { Aviso } from "@/components/comunes/Aviso";
 import { OverlaySinLicencia } from "@/components/media/OverlaySinLicencia";
 import {
   Dialog,
@@ -35,6 +39,11 @@ export interface BuscadorStockProps {
   open: boolean;
   onCerrar: () => void;
   piezaId: string;
+  /**
+   * Fuente de la búsqueda. "stock" (def): bancos gratuitos, AYUDA VISUAL no publicable. "agencias":
+   * fotos LICENCIADAS de agencia (AFP), publicables con crédito y sin overlay "Sin licencia".
+   */
+  fuente?: "stock" | "agencias";
   /** Marca de la pieza: acota las fuentes a las habilitadas para ella (toggles de la etapa Stock). */
   marca?: string;
   /** URL original del artículo de la fuente (RSS): si la hay, se ofrece "Usar foto original". */
@@ -49,11 +58,13 @@ export function BuscadorStock({
   open,
   onCerrar,
   piezaId,
+  fuente = "stock",
   marca,
   imagenFuente,
   consultaInicial = "",
   onAdjuntada,
 }: BuscadorStockProps) {
+  const esAgencias = fuente === "agencias";
   const [q, setQ] = React.useState(consultaInicial);
   const [qDebounced, setQDebounced] = React.useState(consultaInicial.trim());
   // Proveedor activo ("" = todos).
@@ -75,19 +86,27 @@ export function BuscadorStock({
   }, [q]);
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ["stock", proveedor, qDebounced, marca ?? ""],
+    queryKey: [esAgencias ? "agencias" : "stock", proveedor, qDebounced, marca ?? ""],
     queryFn: ({ signal }) =>
-      api.buscarStock(
-        { q: qDebounced || undefined, proveedor: proveedor || undefined, marca: marca || undefined },
-        signal,
-      ),
+      esAgencias
+        ? api.buscarAgencias({ q: qDebounced || undefined }, signal)
+        : api.buscarStock(
+            {
+              q: qDebounced || undefined,
+              proveedor: proveedor || undefined,
+              marca: marca || undefined,
+            },
+            signal,
+          ),
     enabled: open,
   });
 
   const proveedores = data?.proveedores ?? [];
   const candidatos = data?.candidatos ?? [];
+  // Agencias: el (único) proveedor sin credenciales/caído trae el motivo a mostrar en vez del grid.
+  const agenciaNoDisponible = esAgencias && proveedores.length > 0 && !proveedores[0].disponible;
 
-  // Adjuntar: descarga la candidata (o la foto original) y la deja como stock no autorizado.
+  // Adjuntar STOCK: descarga la candidata (o la foto original) y la deja como stock no autorizado.
   const adjuntar = useMutation({
     mutationFn: (cuerpo: Parameters<typeof api.adjuntarStock>[0]) => api.adjuntarStock(cuerpo),
     onSuccess: (res) => {
@@ -97,9 +116,30 @@ export function BuscadorStock({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const adjuntando = adjuntar.isPending;
+  // Adjuntar LICENCIADA: descarga la candidata de agencia y deja la pieza publicable con crédito.
+  const adjuntarLicenciada = useMutation({
+    mutationFn: (cuerpo: Parameters<typeof api.adjuntarAgencia>[0]) => api.adjuntarAgencia(cuerpo),
+    onSuccess: (res) => {
+      onAdjuntada(res.plataforma);
+      toast.success("Foto licenciada adjuntada. Publicable con su crédito obligatorio.");
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const adjuntando = adjuntar.isPending || adjuntarLicenciada.isPending;
 
-  const elegir = (c: CandidataStock) =>
+  const elegir = (c: CandidataStock) => {
+    if (esAgencias) {
+      adjuntarLicenciada.mutate({
+        pieza_id: piezaId,
+        url: c.url,
+        proveedor: c.proveedor,
+        autor: c.autor,
+        licencia: c.licencia,
+        credito_url: c.credito_url,
+      });
+      return;
+    }
     adjuntar.mutate({
       pieza_id: piezaId,
       url: c.url,
@@ -108,19 +148,23 @@ export function BuscadorStock({
       licencia: c.licencia,
       credito_url: c.credito_url,
     });
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Buscar foto de stock</DialogTitle>
+          <DialogTitle>
+            {esAgencias ? "Buscar foto de agencia (AFP)" : "Buscar foto de stock"}
+          </DialogTitle>
           <DialogDescription>
-            Ayuda visual de bancos gratuitos. Toda foto entra SIN LICENCIA: autorízala (bajo tu
-            responsabilidad) o sustitúyela antes de publicar.
+            {esAgencias
+              ? "Fotos licenciadas de agencia, publicables con crédito obligatorio. Al adjuntar una, la pieza queda lista para publicar."
+              : "Ayuda visual de bancos gratuitos. Toda foto entra SIN LICENCIA: autorízala (bajo tu responsabilidad) o sustitúyela antes de publicar."}
           </DialogDescription>
         </DialogHeader>
 
-        {imagenFuente && (
+        {!esAgencias && imagenFuente && (
           <Button
             type="button"
             variant="outline"
@@ -134,25 +178,29 @@ export function BuscadorStock({
           </Button>
         )}
 
-        {/* Chips de proveedor: deshabilitados los no disponibles (su `motivo` va al tooltip). */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <ChipProveedor
-            etiqueta="Todos"
-            activo={proveedor === ""}
-            disponible
-            onClick={() => setProveedor("")}
-          />
-          {proveedores.map((p) => (
+        {/* Chips de proveedor (solo stock): deshabilitados los no disponibles (su `motivo` va al
+            tooltip). En agencias hay un único proveedor (AFP): su indisponibilidad se muestra como
+            aviso, no como chip. */}
+        {!esAgencias && (
+          <div className="flex flex-wrap items-center gap-1.5">
             <ChipProveedor
-              key={p.proveedor}
-              etiqueta={p.nombre || nombreProveedor(p.proveedor)}
-              activo={proveedor === p.proveedor}
-              disponible={p.disponible}
-              motivo={p.motivo}
-              onClick={() => p.disponible && setProveedor(p.proveedor)}
+              etiqueta="Todos"
+              activo={proveedor === ""}
+              disponible
+              onClick={() => setProveedor("")}
             />
-          ))}
-        </div>
+            {proveedores.map((p) => (
+              <ChipProveedor
+                key={p.proveedor}
+                etiqueta={p.nombre || nombreProveedor(p.proveedor)}
+                activo={proveedor === p.proveedor}
+                disponible={p.disponible}
+                motivo={p.motivo}
+                onClick={() => p.disponible && setProveedor(p.proveedor)}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -174,6 +222,12 @@ export function BuscadorStock({
             <p className="flex h-48 items-center justify-center text-sm text-destructive">
               {mensajeError(error)}
             </p>
+          ) : agenciaNoDisponible ? (
+            <div className="flex h-48 items-center justify-center px-4">
+              <Aviso>
+                {proveedores[0].motivo || "La agencia (AFP) no está disponible ahora mismo."}
+              </Aviso>
+            </div>
           ) : !qDebounced ? (
             <div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
               <Search className="h-6 w-6" />
@@ -198,21 +252,35 @@ export function BuscadorStock({
                   disabled={adjuntando}
                   onClick={() => elegir(c)}
                   className="group block w-full overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20"
-                  title="Adjuntar como referencia (SIN LICENCIA)"
+                  title={
+                    esAgencias
+                      ? "Adjuntar foto licenciada (publicable con crédito)"
+                      : "Adjuntar como referencia (SIN LICENCIA)"
+                  }
                 >
-                  <OverlaySinLicencia
-                    activo
-                    tamano="sm"
-                    proveedor={c.proveedor}
-                    licencia={c.licencia}
-                  >
+                  {esAgencias ? (
+                    // Foto licenciada: nítida y publicable, sin overlay "Sin licencia".
                     <img
                       src={c.thumb || c.url}
-                      alt={c.titulo || "Foto de stock"}
+                      alt={c.titulo || "Foto de agencia"}
                       loading="lazy"
                       className="aspect-square w-full object-cover"
                     />
-                  </OverlaySinLicencia>
+                  ) : (
+                    <OverlaySinLicencia
+                      activo
+                      tamano="sm"
+                      proveedor={c.proveedor}
+                      licencia={c.licencia}
+                    >
+                      <img
+                        src={c.thumb || c.url}
+                        alt={c.titulo || "Foto de stock"}
+                        loading="lazy"
+                        className="aspect-square w-full object-cover"
+                      />
+                    </OverlaySinLicencia>
+                  )}
                   <span className="block truncate px-2 py-1 text-[11px] text-muted-foreground">
                     {atribucionStock({
                       autor: c.autor,

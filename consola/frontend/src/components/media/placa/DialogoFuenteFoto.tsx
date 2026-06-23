@@ -3,7 +3,7 @@
  * TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO ACTIVO (lo gobierna el
  * componente padre vía callbacks).
  */
-import { Library, ScanSearch, Upload } from "lucide-react";
+import { Library, Newspaper, ScanSearch, Upload } from "lucide-react";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -43,6 +43,8 @@ export interface DialogoFuenteFotoProps {
   onSubir: () => void;
   /** Abre el buscador de fotos de stock ("Buscar foto"); ausente si no hay pieza donde adjuntarla. */
   onBuscarStock?: () => void;
+  /** Abre el buscador de fotos LICENCIADAS de agencia (AFP); ausente si no hay pieza. */
+  onBuscarAgencias?: () => void;
   /** Lanza la generación con IA. */
   onGenerar: () => void;
 }
@@ -62,6 +64,7 @@ export function DialogoFuenteFoto({
   onAbrirGaleria,
   onSubir,
   onBuscarStock,
+  onBuscarAgencias,
   onGenerar,
 }: DialogoFuenteFotoProps) {
   return (
@@ -104,6 +107,18 @@ export function DialogoFuenteFoto({
               >
                 <ScanSearch className="h-4 w-4" />
                 Buscar foto
+              </Button>
+            )}
+            {onBuscarAgencias && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onBuscarAgencias}
+                disabled={ocupado}
+              >
+                <Newspaper className="h-4 w-4" />
+                Foto de agencia (AFP)
               </Button>
             )}
           </div>

@@ -832,3 +832,41 @@ describe("PostFeed · responsable («la lista», todas las marcas)", () => {
     expect(screen.getByTitle("Esta pieza la lleva Mariana")).toBeInTheDocument();
   });
 });
+
+describe("PostFeed · crédito de foto licenciada (AFP)", () => {
+  /** Una pieza con foto LICENCIADA de agencia (publicable directa, con byline obligatorio). */
+  function piezaLicenciada(over: Partial<Pieza> = {}): Pieza {
+    return pub({
+      imagen_url: "https://media.example/afp.jpg",
+      imagen_origen: "licenciada",
+      imagen_autorizada: true,
+      falta_imagen: false,
+      imagen_proveedor: "afp",
+      imagen_autor: "Jane Doe",
+      imagen_licencia: "AFP",
+      imagen_credito_url: "https://afp.example/credito",
+      ...over,
+    });
+  }
+
+  it("muestra el crédito obligatorio enlazado y NO el overlay 'SIN LICENCIA'", () => {
+    renderPost(piezaLicenciada());
+    expect(screen.getByText("Crédito obligatorio:")).toBeInTheDocument();
+    const enlace = screen.getByRole("link", { name: /Jane Doe · AFP · AFP/ });
+    expect(enlace).toHaveAttribute("href", "https://afp.example/credito");
+    // Publicable directa: nada de "SIN LICENCIA"/"Sin licencia"/"Autorizar".
+    expect(screen.queryByText(/sin licencia/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Autorizar")).not.toBeInTheDocument();
+  });
+
+  it("sin credito_url muestra el crédito como texto plano (no enlace)", () => {
+    renderPost(piezaLicenciada({ imagen_credito_url: "" }));
+    expect(screen.getByText("Crédito obligatorio:")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Jane Doe/ })).not.toBeInTheDocument();
+  });
+
+  it("una pieza sin foto licenciada ni stock no pinta crédito obligatorio", () => {
+    renderPost(pub({ imagen_url: "https://media.example/x.jpg", imagen_origen: "" }));
+    expect(screen.queryByText("Crédito obligatorio:")).not.toBeInTheDocument();
+  });
+});

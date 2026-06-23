@@ -16,6 +16,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   ImagePlus,
   Library,
+  Newspaper,
   Save,
   ScanSearch,
   ShieldCheck,
@@ -125,6 +126,8 @@ export function EditorImagen({
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
   // Buscador de fotos de stock (4ª vía de imagen).
   const [buscadorStock, setBuscadorStock] = React.useState(false);
+  // Buscador de fotos LICENCIADAS de agencia (AFP): publicables con crédito.
+  const [buscadorAgencias, setBuscadorAgencias] = React.useState(false);
   // Fondo elegido en esta sesión.
   const [fondo, setFondo] = React.useState<Fondo | null>(null);
   const src = urlMedia(imagenUrl || imagen);
@@ -262,7 +265,7 @@ export function EditorImagen({
     generandoIA;
   const ocupado = trabajando || autorizarStock.isPending || !!disabled;
 
-  // "Buscar foto" (stock) solo cuando hay pieza donde adjuntar la foto descargada.
+  // "Buscar foto" (stock) y "Foto de agencia" solo cuando hay pieza donde adjuntar la descargada.
   const puedeBuscarStock = !!piezaId;
 
   const fuente = (
@@ -278,6 +281,7 @@ export function EditorImagen({
       onTexto={() => setGaleriaAbierta(true)}
       onGenerar={() => generar.mutate()}
       onBuscarStock={puedeBuscarStock ? () => setBuscadorStock(true) : undefined}
+      onBuscarAgencias={puedeBuscarStock ? () => setBuscadorAgencias(true) : undefined}
       avisoGenerar={avisoGenerar}
     />
   );
@@ -463,11 +467,22 @@ export function EditorImagen({
           onAdjuntada={(plataforma) => onStockCambio?.(plataforma)}
         />
       )}
+
+      {piezaId && (
+        <BuscadorStock
+          open={buscadorAgencias}
+          onCerrar={() => setBuscadorAgencias(false)}
+          piezaId={piezaId}
+          fuente="agencias"
+          consultaInicial={keywordBusqueda({ imagen_clave: imagenClave, titulo })}
+          onAdjuntada={(plataforma) => onStockCambio?.(plataforma)}
+        />
+      )}
     </div>
   );
 }
 
-/** Selector de origen del fondo: galería · subir · buscar foto (stock) · generar con IA. */
+/** Selector de origen del fondo: galería · subir · buscar foto (stock) · foto de agencia · IA. */
 function FuenteFondo({
   idPrefijo,
   compacto,
@@ -480,6 +495,7 @@ function FuenteFondo({
   onTexto,
   onGenerar,
   onBuscarStock,
+  onBuscarAgencias,
   avisoGenerar,
 }: {
   idPrefijo: string;
@@ -494,6 +510,8 @@ function FuenteFondo({
   onGenerar: () => void;
   /** Abre el buscador de fotos de stock; ausente si no hay pieza donde adjuntarla. */
   onBuscarStock?: () => void;
+  /** Abre el buscador de fotos LICENCIADAS de agencia (AFP); ausente si no hay pieza. */
+  onBuscarAgencias?: () => void;
   avisoGenerar: string;
 }) {
   return (
@@ -522,6 +540,18 @@ function FuenteFondo({
           >
             <ScanSearch className="h-4 w-4" />
             Buscar foto
+          </Button>
+        )}
+        {onBuscarAgencias && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onBuscarAgencias}
+            disabled={ocupado}
+          >
+            <Newspaper className="h-4 w-4" />
+            Foto de agencia (AFP)
           </Button>
         )}
         <span className="text-xs text-muted-foreground">o genera con IA:</span>
