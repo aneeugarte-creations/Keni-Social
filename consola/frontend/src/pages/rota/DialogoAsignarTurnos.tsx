@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { CalendarPlus, Check, Loader2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -15,15 +15,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { diaCorto } from "@/lib/rota-calendario";
 import type { FranjaSemana, MiembroRota } from "@/types";
 
+/** Letra de cada día de la semana (lun→dom), para la tira compacta de Días. */
+const LETRA_DIA = ["L", "M", "X", "J", "V", "S", "D"];
+
 /**
- * Pastilla de selección múltiple (un día o una persona). El estado SELECCIONADO es inconfundible
- * —relleno sólido + check— frente al no-seleccionado —contorno y texto apagado—: con los grises
- * de plataforma (secondary ~95% vs background ~98%) un toggle sutil era invisible y el usuario no
- * veía qué quedaba marcado. Personas y días usan la misma pastilla para que el diálogo sea
- * coherente: ambos son multi-selección por toque.
+ * Token de persona: texto sin caja que, al elegirse, se tiñe del naranja suave de marca (el mismo
+ * lenguaje «con gente» del calendario). No-seleccionado en gris apagado; seleccionado en
+ * keni-50/keni-700. Multi-selección por toque (role checkbox).
  */
 function ChipToggle({
   activo,
@@ -41,13 +41,12 @@ function ChipToggle({
       aria-checked={activo}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+        "rounded-full px-2.5 py-1 text-[13px] leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         activo
-          ? "border-foreground bg-foreground font-medium text-background"
-          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "bg-keni-50 font-medium text-keni-700 dark:bg-keni-900/30 dark:text-keni-300"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      {activo && <Check className="h-3.5 w-3.5" />}
       {children}
     </button>
   );
@@ -360,20 +359,15 @@ export function DialogoAsignarTurnos({
   // lateral (incrustado). El reparto automático «de un documento» vive aparte, al final del panel
   // (lo monta el contenedor de Gestión), por ser la última opción.
   const camposManual = (
-    <>
-        {/* Personas en pastillas multi-selección (mismo patrón que los Días): marca a quien
-            trabaja ese horario y el reparto aplica el MISMO turno a todas. */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="flex items-baseline gap-1.5">
+    <div className="space-y-4">
+        {/* Personas: tokens de texto; marca a quien trabaja ese horario y el reparto aplica el
+            MISMO turno a cada una. */}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
               Personas
-              {personasSel.size > 0 && (
-                <span className="text-xs font-normal text-muted-foreground">
-                  {personasSel.size} elegida{personasSel.size === 1 ? "" : "s"}
-                </span>
-              )}
             </Label>
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 text-[11px]">
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:underline"
@@ -391,7 +385,7 @@ export function DialogoAsignarTurnos({
               </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-0.5">
             {cms.map((m) => (
               <ChipToggle
                 key={m.id}
@@ -406,14 +400,16 @@ export function DialogoAsignarTurnos({
 
         {/* Horario en horas (de–a). Es lo único que define el turno; la franja —la fila del
             calendario— se deduce sola del horario, sin que el usuario la elija. */}
-        <div className="space-y-1.5">
-          <Label>Horario</Label>
-          <div className="flex items-center gap-2">
+        <div className="space-y-2">
+          <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+            Horario
+          </Label>
+          <div className="flex items-center gap-3">
             <Input
               value={inicio}
               onChange={(e) => setInicio(e.target.value)}
               placeholder="08:00"
-              className="w-24 tabular-nums"
+              className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
               aria-label="Hora de inicio"
             />
             <span className="text-muted-foreground">–</span>
@@ -421,7 +417,7 @@ export function DialogoAsignarTurnos({
               value={fin}
               onChange={(e) => setFin(e.target.value)}
               placeholder="16:00"
-              className="w-24 tabular-nums"
+              className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
               aria-label="Hora de fin"
             />
           </div>
@@ -430,17 +426,13 @@ export function DialogoAsignarTurnos({
           )}
         </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label className="flex items-baseline gap-1.5">
+        {/* Días: tira compacta de 7 (eco de la rejilla de la semana). */}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
               Días
-              {diasSel.size > 0 && (
-                <span className="text-xs font-normal text-muted-foreground">
-                  {diasSel.size} elegido{diasSel.size === 1 ? "" : "s"}
-                </span>
-              )}
             </Label>
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5 text-[11px]">
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:underline"
@@ -466,16 +458,45 @@ export function DialogoAsignarTurnos({
               </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {dias.map((fecha) => (
-              <ChipToggle key={fecha} activo={diasSel.has(fecha)} onClick={() => toggleDia(fecha)}>
-                <span className="capitalize">{diaCorto(fecha)}</span> {fecha.slice(8, 10)}
-              </ChipToggle>
-            ))}
+          <div className="grid grid-cols-7 gap-1">
+            {dias.map((fecha, i) => {
+              const sel = diasSel.has(fecha);
+              return (
+                <button
+                  key={fecha}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={sel}
+                  onClick={() => toggleDia(fecha)}
+                  className={cn(
+                    "flex flex-col items-center gap-0.5 rounded-lg py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    sel ? "bg-keni-50 dark:bg-keni-900/30" : "hover:bg-accent",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "text-[10px] font-semibold uppercase tracking-wide",
+                      sel ? "text-keni-700 dark:text-keni-300" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {LETRA_DIA[i] ?? ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[13px] tabular-nums",
+                      sel
+                        ? "font-semibold text-keni-700 dark:text-keni-300"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {fecha.slice(8, 10)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
-
-    </>
+    </div>
   );
 
   const botonAsignar = (
@@ -484,17 +505,24 @@ export function DialogoAsignarTurnos({
       onClick={() => asignar.mutate()}
       disabled={incompleto || asignar.isPending}
     >
-      {asignar.isPending ? (
-        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-      ) : (
-        <CalendarPlus className="mr-1 h-4 w-4" />
-      )}
+      {asignar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
       {asignar.isPending
         ? "Asignando…"
         : totalTurnos > 0
           ? `Asignar ${totalTurnos} turno${totalTurnos === 1 ? "" : "s"}`
           : "Asignar"}
     </Button>
+  );
+
+  // Pie: si falta algo, la pista que lo desbloquea; si está completo, el desglose vivo
+  // (personas × días). El total de turnos vive en el propio botón «Asignar».
+  const pieTexto = pistaIncompleta ? (
+    <span className="text-xs text-muted-foreground">{pistaIncompleta}</span>
+  ) : (
+    <span className="text-xs text-muted-foreground">
+      {personasSel.size} persona{personasSel.size === 1 ? "" : "s"} × {diasSel.size} día
+      {diasSel.size === 1 ? "" : "s"}
+    </span>
   );
 
   // Columna lateral (Gestión): tarjeta del reparto MANUAL. La compone el contenedor de Gestión
@@ -517,12 +545,8 @@ export function DialogoAsignarTurnos({
           </Button>
         </div>
         {camposManual}
-        <div className="flex items-center justify-between gap-2 pt-1">
-          {pistaIncompleta ? (
-            <span className="text-xs text-muted-foreground">{pistaIncompleta}</span>
-          ) : (
-            <span aria-hidden />
-          )}
+        <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
+          {pieTexto}
           {botonAsignar}
         </div>
       </div>
@@ -537,11 +561,7 @@ export function DialogoAsignarTurnos({
         </DialogHeader>
         {camposManual}
         <DialogFooter>
-          {pistaIncompleta && (
-            <span className="mr-auto self-center text-xs text-muted-foreground">
-              {pistaIncompleta}
-            </span>
-          )}
+          <span className="mr-auto self-center">{pieTexto}</span>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={asignar.isPending}>
             Cancelar
           </Button>
