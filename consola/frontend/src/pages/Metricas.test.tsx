@@ -71,8 +71,16 @@ function reporte(fuente: string): ReporteMetricas {
       engagement_pct: 5,
       piezas: 10,
     },
-    cuentas: [],
-    por_red: [],
+    // Dos marcas y dos redes CON datos: así se muestran las secciones por marca/por red
+    // (un desglose por una dimensión con un solo valor se omite a propósito).
+    cuentas: [
+      { marca: "UnoTV", marca_id: "uno_tv", visualizaciones: 700, alcance: 500, interacciones: 35, engagement_pct: 5 },
+      { marca: "Claro Sports", marca_id: "claro_sports", visualizaciones: 300, alcance: 200, interacciones: 15, engagement_pct: 5 },
+    ],
+    por_red: [
+      { red: "instagram", visualizaciones: 600, alcance: 400, interacciones: 30, engagement_pct: 5 },
+      { red: "youtube", visualizaciones: 400, alcance: null, interacciones: 20, engagement_pct: 5 },
+    ],
     cobertura_redes: [],
     generado_en: "2026-06-10T12:00:00Z",
   };

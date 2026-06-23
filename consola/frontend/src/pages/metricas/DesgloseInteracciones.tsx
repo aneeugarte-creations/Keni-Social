@@ -195,26 +195,29 @@ export function DesgloseInteracciones({
 type EntradaRejilla = { marca: string; red: RedCanonica; celda: CeldaDesglose | undefined };
 
 /**
- * Construye la rejilla marca×red: por cada marca presente (en su orden de aparición) y cada
- * red EN FOCO (`redes`) devuelve la celda real o `undefined`. Una red en foco sin datos no se
- * omite: aparece como entrada vacía que el render pinta con "—" (tabla) o sin barra (gráfica).
- * Las redes fuera del foco no entran en la rejilla.
+ * Construye la rejilla marca×red SOLO con las combinaciones que tienen datos (dentro de las
+ * redes EN FOCO). Una marca×red sin datos NO se emite: una fila entera de "—" es ruido (p.ej.
+ * con el foco en "foto", las redes donde no se publican fotos no aparecen). Las redes fuera
+ * del foco tampoco entran.
  */
 function construirRejilla(
   celdas: CeldaDesglose[],
   redes: readonly string[],
 ): EntradaRejilla[] {
+  const enFoco = new Set(redes.map((r) => r.toLowerCase()));
   // Marcas en orden de primera aparición en las celdas (estable, sin reordenar).
   const marcasOrden: string[] = [];
   const porClave = new Map<string, CeldaDesglose>();
   for (const c of celdas) {
+    if (!enFoco.has(c.red.toLowerCase())) continue;
     if (!marcasOrden.includes(c.marca)) marcasOrden.push(c.marca);
     porClave.set(`${c.marca}::${c.red.toLowerCase()}`, c);
   }
   const rejilla: EntradaRejilla[] = [];
   for (const marca of marcasOrden) {
     for (const red of redes) {
-      rejilla.push({ marca, red: red as RedCanonica, celda: porClave.get(`${marca}::${red}`) });
+      const celda = porClave.get(`${marca}::${red.toLowerCase()}`);
+      if (celda) rejilla.push({ marca, red: red as RedCanonica, celda });
     }
   }
   return rejilla;

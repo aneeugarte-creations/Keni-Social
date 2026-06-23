@@ -6,7 +6,7 @@
  * tablas— con la marca Keni. Resultado: descarga directa, determinista, nítida e imposible
  * que cuelgue, lista para presentar a dirección.
  */
-import { numeroCompacto, nombreRed, porcentaje } from "@/lib/formato";
+import { numeroCompacto, nombreFormato, nombreRed, porcentaje } from "@/lib/formato";
 import { recargaSegura } from "@/lib/version";
 import { colorDe } from "./coloresRed";
 import { diasDePeriodo, partesMes, partesRango } from "./rango";
@@ -346,6 +346,82 @@ function porDominio(entradas: Array<[readonly unknown[], unknown]>): Map<string,
   return m;
 }
 
+/** Etiqueta legible de un estado de cobertura (espejo de `CoberturaRedes`). */
+const ESTADO_COBERTURA: Record<string, string> = {
+  con_datos: "Con datos",
+  sin_metricas: "Sin métricas",
+  no_conectada: "No conectada",
+  sin_lectura: "Sin lectura",
+  no_configurada: "No configurada",
+  sin_credenciales: "Sin credenciales",
+  presupuesto_agotado: "Límite de API",
+};
+
+/** Etiqueta legible para una clave cruda en la tabla genérica de respaldo. */
+function etiquetaClave(k: string): string {
+  const MAPA: Record<string, string> = {
+    marca: "Marca",
+    red: "Red",
+    formato: "Formato",
+    linea: "Línea",
+    origen: "Origen",
+    tipo: "Tipo",
+    etiqueta: "Etiqueta",
+    serie: "Serie",
+    campania: "Campaña",
+    n_piezas: "Piezas",
+    piezas: "Piezas",
+    visualizaciones: "Vistas",
+    interacciones: "Interac.",
+    engagement_pct: "Eng. %",
+    gasto: "Gasto",
+    impresiones: "Impresiones",
+    clics: "Clics",
+  };
+  return MAPA[k] ?? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+}
+
+/**
+ * Tabla GENÉRICA acotada para dominios sin slide a medida (líneas, por serie, ads…): toma
+ * el array de filas, sus primeras ~6 claves escalares (descarta sub-objetos), reparte el
+ * ancho a partes iguales y delega en `slideTabla` (que ya acota filas y elipsa el texto).
+ */
+async function slideTablaGenerica(
+  doc: Doc,
+  titulo: string,
+  filas: Fila[],
+  ctx: ContextoDeck,
+  n: number,
+): Promise<void> {
+  const claves = Object.keys(filas[0])
+    .filter((k) => {
+      const v = filas[0][k];
+      return v == null || typeof v !== "object"; // descarta sub-objetos (post_estrella, etc.)
+    })
+    .filter((k) => k !== "id" && k !== "marca_id")
+    .slice(0, 6);
+  if (claves.length === 0) return;
+  const ancho = (W - 2 * M) / claves.length;
+  const columnas: ColTabla[] = claves.map((k, i) => ({
+    clave: k,
+    etiqueta: etiquetaClave(k),
+    ancho,
+    align: i === 0 ? "left" : "right",
+  }));
+  await slideTabla(doc, titulo, filas, ctx, n, columnas);
+}
+
+/** Extrae el primer array de objetos de un payload de dominio (celdas/items/piezas/filas…). */
+function filasDeDominio(dato: unknown): Fila[] {
+  const d = (dato ?? {}) as Record<string, unknown>;
+  for (const v of Object.values(d)) {
+    if (Array.isArray(v) && v.length && typeof v[0] === "object" && v[0] != null) {
+      return v as Fila[];
+    }
+  }
+  return [];
+}
+
 /** Genera y DESCARGA el PDF presentación. Lanza si no hay datos. */
 export async function descargarPresentacion(
   entradas: Array<[readonly unknown[], unknown]>,
@@ -362,10 +438,25 @@ export async function descargarPresentacion(
   portada(doc, ctx);
 
   const reporte = datos.get("reporte") as
-    | { total?: Record<string, number>; por_red?: Fila[]; cuentas?: Fila[] }
+    | {
+        total?: Record<string, number>;
+        por_red?: Fila[];
+        cuentas?: Fila[];
+        cobertura_redes?: Fila[];
+      }
     | undefined;
   if (reporte?.total) slideKpis(doc, reporte.total, ctx, ++n);
-  if (reporte?.por_red?.length) {
+
+  // Un desglose por una dimensión con UN solo valor no aporta: con una sola marca/red,
+  // ni la comparativa ni el detalle de esa dimensión tienen sentido (se omiten).
+  const conDato = (f: Fila) =>
+    (Number(f.visualizaciones) || 0) > 0 || (Number(f.interacciones) || 0) > 0;
+  const nMarcas = reporte?.cuentas?.length ?? 0;
+  const redesConDato = (reporte?.por_red ?? []).filter(conDato);
+  const variasMarcas = nMarcas > 1;
+  const variasRedes = redesConDato.length > 1;
+
+  if (reporte?.por_red?.length && variasRedes) {
     slideBarras(
       doc,
       "Por red · visualizaciones",
@@ -378,7 +469,7 @@ export async function descargarPresentacion(
       ++n,
     );
   }
-  if (reporte?.cuentas?.length) {
+  if (reporte?.cuentas?.length && variasMarcas) {
     slideBarras(
       doc,
       "Por marca · visualizaciones",
@@ -454,6 +545,129 @@ export async function descargarPresentacion(
       guardados: Number(c.guardados) || 0,
     }));
     await slideTabla(doc, "Desglose de interacciones", filas, ctx, ++n, colsDesglose);
+  }
+
+  // Detalle por marca (tabla): solo con más de una marca (con una sola no hay nada que comparar).
+  if (reporte?.cuentas?.length && variasMarcas) {
+    const cols: ColTabla[] = [
+      { clave: "marca", etiqueta: "Marca", ancho: 420 },
+      { clave: "visualizaciones", etiqueta: "Vistas", ancho: 244, align: "right" },
+      { clave: "interacciones", etiqueta: "Interacciones", ancho: 244, align: "right" },
+      { clave: "engagement_pct", etiqueta: "Engagement", ancho: 244, align: "right" },
+    ];
+    const filas = reporte.cuentas.map((c) => ({
+      marca: String(c.marca ?? c.marca_id ?? ""),
+      visualizaciones: Number(c.visualizaciones) || 0,
+      interacciones: Number(c.interacciones) || 0,
+      engagement_pct: porcentaje(Number(c.engagement_pct) || 0),
+    }));
+    await slideTabla(doc, "Detalle por marca", filas, ctx, ++n, cols);
+  }
+
+  // Detalle por red (tabla): solo con más de una red con datos.
+  if (variasRedes) {
+    const cols: ColTabla[] = [
+      { clave: "red", etiqueta: "Red", ancho: 420 },
+      { clave: "visualizaciones", etiqueta: "Vistas", ancho: 244, align: "right" },
+      { clave: "interacciones", etiqueta: "Interacciones", ancho: 244, align: "right" },
+      { clave: "engagement_pct", etiqueta: "Engagement", ancho: 244, align: "right" },
+    ];
+    const filas = redesConDato.map((r) => ({
+      red: nombreRed(String(r.red)),
+      visualizaciones: Number(r.visualizaciones) || 0,
+      interacciones: Number(r.interacciones) || 0,
+      engagement_pct: porcentaje(Number(r.engagement_pct) || 0),
+    }));
+    await slideTabla(doc, "Detalle por red", filas, ctx, ++n, cols);
+  }
+
+  // Cobertura por red (aplana marca×red): por qué una red aporta o no datos.
+  const cobertura = reporte?.cobertura_redes;
+  if (Array.isArray(cobertura) && cobertura.length) {
+    const cols: ColTabla[] = [
+      { clave: "marca", etiqueta: "Marca", ancho: 220 },
+      { clave: "red", etiqueta: "Red", ancho: 160 },
+      { clave: "estado", etiqueta: "Estado", ancho: 200 },
+      { clave: "visualizaciones", etiqueta: "Vistas", ancho: 190, align: "right" },
+      { clave: "interacciones", etiqueta: "Interac.", ancho: 190, align: "right" },
+      { clave: "engagement_pct", etiqueta: "Engagement", ancho: 192, align: "right" },
+    ];
+    const filas: Fila[] = [];
+    for (const m of cobertura as Array<Record<string, unknown>>) {
+      for (const r of (m.redes as Array<Record<string, unknown>>) ?? []) {
+        filas.push({
+          marca: String(m.marca ?? m.marca_id ?? ""),
+          red: nombreRed(String(r.red)),
+          estado: ESTADO_COBERTURA[String(r.estado)] ?? String(r.estado ?? "—"),
+          visualizaciones: r.visualizaciones == null ? "—" : Number(r.visualizaciones),
+          interacciones: r.interacciones == null ? "—" : Number(r.interacciones),
+          engagement_pct: r.engagement_pct == null ? "—" : porcentaje(Number(r.engagement_pct)),
+        });
+      }
+    }
+    if (filas.length) await slideTabla(doc, "Cobertura por red", filas, ctx, ++n, cols);
+  }
+
+  // Cruce por formato (marca×red×formato).
+  const crosstab = datos.get("crosstab") as { celdas?: Fila[] } | undefined;
+  if (crosstab?.celdas?.length) {
+    const cols: ColTabla[] = [
+      { clave: "marca", etiqueta: "Marca", ancho: 210 },
+      { clave: "red", etiqueta: "Red", ancho: 150 },
+      { clave: "formato", etiqueta: "Formato", ancho: 170 },
+      { clave: "n_piezas", etiqueta: "Piezas", ancho: 150, align: "right" },
+      { clave: "visualizaciones", etiqueta: "Vistas", ancho: 232, align: "right" },
+      { clave: "engagement_pct", etiqueta: "Engagement", ancho: 240, align: "right" },
+    ];
+    const filas = crosstab.celdas.map((c) => ({
+      marca: String(c.marca ?? ""),
+      red: nombreRed(String(c.red)),
+      formato: nombreFormato(c.formato == null ? null : String(c.formato)),
+      n_piezas: Number(c.n_piezas) || 0,
+      visualizaciones: Number(c.visualizaciones) || 0,
+      engagement_pct: porcentaje(Number(c.engagement_pct) || 0),
+    }));
+    await slideTabla(doc, "Rendimiento por formato", filas, ctx, ++n, cols);
+  }
+
+  // Correlación seguidores ↔ piezas (por día).
+  const correlacion = datos.get("correlacion") as { items?: Fila[] } | undefined;
+  if (correlacion?.items?.length) {
+    const cols: ColTabla[] = [
+      { clave: "fecha", etiqueta: "Día", ancho: 180 },
+      { clave: "marca", etiqueta: "Marca", ancho: 220 },
+      { clave: "red", etiqueta: "Red", ancho: 160 },
+      { clave: "seguidores_ganados", etiqueta: "Seguidores", ancho: 210, align: "right" },
+      { clave: "n_posts", etiqueta: "Piezas", ancho: 170, align: "right" },
+      { clave: "seguidores_por_post", etiqueta: "Seg./pieza", ancho: 212, align: "right" },
+    ];
+    const filas = correlacion.items.map((it) => ({
+      fecha: String(it.fecha ?? ""),
+      marca: String(it.marca ?? ""),
+      red: nombreRed(String(it.red)),
+      seguidores_ganados: Number(it.seguidores_ganados) || 0,
+      n_posts: Number(it.n_posts) || 0,
+      seguidores_por_post: it.seguidores_por_post == null ? "—" : Number(it.seguidores_por_post),
+    }));
+    await slideTabla(doc, "Seguidores frente a piezas", filas, ctx, ++n, cols);
+  }
+
+  // Piezas del periodo (listado COMPLETO): acotado por `slideTabla` (top N + nota "de M").
+  const listado = datos.get("piezas-listado") as { piezas?: Fila[] } | undefined;
+  if (listado?.piezas?.length) {
+    await slideTabla(doc, "Piezas del periodo", prepPiezas(listado.piezas), ctx, ++n, colsPieza);
+  }
+
+  // Resto de tablas en pantalla SIN slide a medida (Rendimiento por serie/línea, Publicidad):
+  // tabla genérica acotada para no dejar contenido fuera del deck.
+  const GENERICAS: Array<[string, string]> = [
+    ["piezas-por-etiqueta", "Rendimiento por serie"],
+    ["lineas", "Rendimiento por línea"],
+    ["ads", "Publicidad"],
+  ];
+  for (const [dom, titulo] of GENERICAS) {
+    const filas = filasDeDominio(datos.get(dom));
+    if (filas.length) await slideTablaGenerica(doc, titulo, filas, ctx, ++n);
   }
 
   doc.save(`presentacion-${nombreArchivo}.pdf`);

@@ -195,6 +195,15 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     generadoEn: reporteQuery.data?.generado_en,
   });
 
+  // Un desglose por una dimensión con UN solo valor no aporta: con una sola marca, ni la
+  // comparativa ni el detalle por marca; con una sola red con datos, ni la evolución ni el
+  // detalle por red. Esas secciones se omiten (ni se muestran ni dejan barra de "mostrar").
+  const cuentas = reporteQuery.data?.cuentas ?? [];
+  const porRed = reporteQuery.data?.por_red ?? [];
+  const variasMarcas = cuentas.length > 1;
+  const variasRedes =
+    porRed.filter((r) => (r.visualizaciones || 0) > 0 || (r.interacciones || 0) > 0).length > 1;
+
   // Sin rangos del backend no hay nada que consultar: error honesto en vez del
   // esqueleto infinito que dejaría la query deshabilitada (enabled: false).
   if (!rango) {
@@ -217,7 +226,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // se saturaba y solapaba con las pestañas/título. `flex-wrap` evita cualquier solape: en
   // pantallas estrechas los controles fluyen a la siguiente línea.
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+    <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/95 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <EstadoActualizacion
         refrescando={refresco.refrescando}
         generadoEn={reporteQuery.data?.generado_en}
@@ -293,18 +302,28 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <Bloque id="tendencia">
             <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
           </Bloque>
-          <Bloque id="marca-comparativa">
-            <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
-          </Bloque>
-          <Bloque id="marca-detalle">
-            <TablaCuentas cuentas={reporteQuery.data.cuentas} onVerPiezas={verPiezasDeMarca} />
-          </Bloque>
-          <Bloque id="red-evolucion">
-            <EvolucionRedes marcaActual={marca} rangoActual={rango} />
-          </Bloque>
-          <Bloque id="red-detalle">
-            <TablaRedes redes={reporteQuery.data.por_red} />
-          </Bloque>
+          {/* Por marca: solo con más de una marca (con una sola no hay comparación posible). */}
+          {variasMarcas && (
+            <Bloque id="marca-comparativa">
+              <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
+            </Bloque>
+          )}
+          {variasMarcas && (
+            <Bloque id="marca-detalle">
+              <TablaCuentas cuentas={reporteQuery.data.cuentas} onVerPiezas={verPiezasDeMarca} />
+            </Bloque>
+          )}
+          {/* Por red: solo con más de una red con datos (con una sola no hay desglose útil). */}
+          {variasRedes && (
+            <Bloque id="red-evolucion">
+              <EvolucionRedes marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+          )}
+          {variasRedes && (
+            <Bloque id="red-detalle">
+              <TablaRedes redes={reporteQuery.data.por_red} />
+            </Bloque>
+          )}
           <Bloque id="cobertura">
             <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
           </Bloque>
