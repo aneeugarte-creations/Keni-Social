@@ -47,6 +47,7 @@ ETAPA_GENERANDO_ARTE = "generando_arte"  # tiene copy pero le falta imagen (arte
 ETAPA_FALTAN_FOTOS = "faltan_fotos"      # CARRUSEL con portada pero algun slide sin foto real
 ETAPA_FALTA_COPY_IN = "falta_copy_in"    # copy + foto pero sin el texto en la imagen (placa)
 ETAPA_FALTA_HASHTAGS = "falta_hashtags"  # en revision pero sin hashtags (clave para campanas/lineas)
+ETAPA_FALTA_HASHTAG_EDITORIAL = "falta_hashtag_editorial"  # tiene hashtags pero no el de su LINEA
 ETAPA_LISTA_REVISAR = "lista_para_revisar"  # copy + imagen listos / ya en revision o mas alla
 ETAPA_FUERA = "fuera_de_tuberia"         # no entra a la auto-generacion (manual tecleado, tarea)
 
@@ -151,6 +152,7 @@ ETAPAS_PIEZA: tuple[str, ...] = (
     ETAPA_GENERANDO_ARTE,
     ETAPA_FALTA_COPY_IN,
     ETAPA_FALTA_HASHTAGS,
+    ETAPA_FALTA_HASHTAG_EDITORIAL,
     ETAPA_LISTA_REVISAR,
     ETAPA_PROGRAMADA,
     ETAPA_PUBLICADA,
@@ -174,6 +176,7 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
       - falta copy                      -> generando_copy   ("Falta copy")
       - falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
       - sin hashtags                     -> falta_hashtags   ("Faltan hashtags")
+      - tiene hashtags pero NO el de su línea -> falta_hashtag_editorial ("Falta hashtag editorial")
       - EN REVISIÓN y falta la placa     -> falta_copy_in    ("Falta copy-in")
       - nada pendiente                   -> lista_para_revisar (te toca el like/dislike)
 
@@ -210,6 +213,10 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
     # (no solo en revisión): una pieza sin hashtags no está "lista" y no entra a la cola.
     if pieza.get("falta_hashtags", False):
         return ETAPA_FALTA_HASHTAGS
+    # Hashtag de la LÍNEA editorial: hay hashtags pero falta el obligatorio de la sección (sin él
+    # las métricas por línea no cuadran). Gatea igual; etapa propia para pedir SOLO ese.
+    if pieza.get("falta_hashtag_editorial", False):
+        return ETAPA_FALTA_HASHTAG_EDITORIAL
     # Placa (`copy_in`): acción del equipo DENTRO de la cola; solo se pide en revisión y no gatea.
     if estado == "en_revision" and pieza.get("falta_copy_in", False):
         return ETAPA_FALTA_COPY_IN

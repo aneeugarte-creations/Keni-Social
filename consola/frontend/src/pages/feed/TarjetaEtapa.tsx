@@ -29,6 +29,10 @@ const ESTADO_DE_ETAPA = {
 const ACCIONES_EQUIPO = new Set<EtapaIa>(["faltan_fotos", "falta_copy_in", "falta_hashtags"]);
 const CLASE_ACCION_EQUIPO = "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300";
 
+/** Falta el hashtag OBLIGATORIO de la línea editorial: badge ROJO (más fuerte que el ámbar de
+ *  acción de equipo) — sin él las métricas por línea no cuadran, igual que la sugerencia del editor. */
+const CLASE_FALTA_EDITORIAL = "border-transparent bg-red-500/15 text-red-700 dark:text-red-300";
+
 /** Color del punto por etapa, a juego con la clase del badge. */
 const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {
   generando_copy: "animate-pulse motion-reduce:animate-none bg-sky-500",
@@ -36,6 +40,7 @@ const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {
   faltan_fotos: "bg-amber-500",
   falta_copy_in: "bg-amber-500",
   falta_hashtags: "bg-amber-500",
+  falta_hashtag_editorial: "bg-red-500",
   lista_para_revisar: "bg-violet-500",
   programada: "bg-amber-500",
   publicada: "bg-emerald-500",
@@ -55,9 +60,11 @@ export function BadgeEtapa({
   const etiqueta = etiquetaEtapa(etapa, formato);
   const clase = meta.enCurso
     ? "border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300"
-    : ACCIONES_EQUIPO.has(etapa)
-      ? CLASE_ACCION_EQUIPO
-      : metaEstado(ESTADO_DE_ETAPA[etapa as keyof typeof ESTADO_DE_ETAPA]).clase;
+    : etapa === "falta_hashtag_editorial"
+      ? CLASE_FALTA_EDITORIAL
+      : ACCIONES_EQUIPO.has(etapa)
+        ? CLASE_ACCION_EQUIPO
+        : metaEstado(ESTADO_DE_ETAPA[etapa as keyof typeof ESTADO_DE_ETAPA]).clase;
   return (
     <Badge
       variant="outline"

@@ -212,6 +212,18 @@ def test_pieza_sin_hashtags_gatea_desde_borrador():
     assert etapa == pe.ETAPA_FALTA_HASHTAGS
 
 
+def test_pieza_con_hashtags_pero_sin_el_de_la_linea_es_falta_hashtag_editorial():
+    # Tiene hashtags (no gatea `falta_hashtags`) pero NO el OBLIGATORIO de su línea editorial:
+    # etapa propia `falta_hashtag_editorial`, que gatea el avance igual.
+    etapa = pe.etapa_de_pieza(
+        _pieza(
+            estado="en_revision", falta_copy=False, falta_imagen=False,
+            falta_hashtags=False, falta_hashtag_editorial=True,
+        )
+    )
+    assert etapa == pe.ETAPA_FALTA_HASHTAG_EDITORIAL
+
+
 def test_pieza_falta_copy_in_en_la_placa():
     # Falta el texto sobre la imagen (placa, `copy_in`): es producción, se exige siempre que aplique.
     etapa = pe.etapa_de_pieza(

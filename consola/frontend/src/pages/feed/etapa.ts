@@ -18,6 +18,7 @@
  *  no la traigan. La forma de salida (`EtapaIa`) es el contrato del feed.
  */
 import { parsearCarrusel } from "@/lib/carrusel";
+import { contieneHashtag } from "@/pages/piezas/hashtags";
 import type { Pieza } from "@/types";
 
 /** Las etapas observables de la pipeline IA, en orden. Una pieza COMPLETA (copy + arte) está
@@ -30,6 +31,7 @@ export type EtapaIa =
   | "faltan_fotos"
   | "falta_copy_in"
   | "falta_hashtags"
+  | "falta_hashtag_editorial"
   | "lista_para_revisar"
   | "programada"
   | "publicada";
@@ -58,6 +60,9 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   // imagen (placa) y los hashtags (clave para campañas/líneas). `enCurso:false` = sin pulso.
   falta_copy_in: { etiqueta: "Falta copy-in", enCurso: false },
   falta_hashtags: { etiqueta: "Faltan hashtags", enCurso: false },
+  // Tiene hashtags pero NO el de su LÍNEA editorial (obligatorio para el desglose por sección):
+  // el feed lo pide aparte y la sugerencia del editor lo ofrece en rojo.
+  falta_hashtag_editorial: { etiqueta: "Falta hashtag editorial", enCurso: false },
   // "Para revisar" (no "Lista"): no colisiona con la pestaña "Lista" del hub y dice la acción.
   lista_para_revisar: { etiqueta: "Para revisar", enCurso: false },
   programada: { etiqueta: "Programada", enCurso: false },
@@ -103,6 +108,17 @@ function faltaCopyIn(p: Pieza): boolean {
 /** ¿El copy no lleva ningún hashtag? Clave para monitorizar campañas y líneas de contenido. */
 function faltaHashtags(p: Pieza): boolean {
   return !textoTieneHashtags(p.contenido);
+}
+
+/** ¿El copy lleva hashtags pero NO el de su LÍNEA editorial (`hashtags_linea`)? El de la sección
+ *  es obligatorio (desglose de métricas por línea). Solo aplica con ALGÚN hashtag ya puesto (si no
+ *  hay ninguno manda `faltaHashtags`). ESPEJO de `_falta_hashtag_editorial` del backend. */
+function faltaHashtagEditorial(p: Pieza): boolean {
+  if (!textoTieneHashtags(p.contenido)) return false;
+  const linea = p.hashtags_linea ?? [];
+  if (linea.length === 0) return false;
+  const contenido = p.contenido ?? "";
+  return !linea.some((t) => contieneHashtag(contenido, t));
 }
 
 /** CARRUSEL con portada pero algún SLIDE sin foto real (placa de solo texto, horneada en `artes/`).
@@ -180,6 +196,8 @@ function etapaBruta(p: Pieza): EtapaIa {
   if (faltanFotosEnSlides(p)) return "faltan_fotos";
   // Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE.
   if (faltaHashtags(p)) return "falta_hashtags";
+  // Tiene hashtags pero falta el de su LÍNEA editorial (obligatorio): etapa propia, gatea igual.
+  if (faltaHashtagEditorial(p)) return "falta_hashtag_editorial";
   // Placa (`copy_in`): acción del equipo en revisión; solo se pide ahí y NO gatea el avance.
   if (p.estado === "en_revision" && faltaCopyIn(p)) return "falta_copy_in";
   return "lista_para_revisar";

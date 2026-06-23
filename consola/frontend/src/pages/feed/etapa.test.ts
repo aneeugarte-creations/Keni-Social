@@ -154,6 +154,36 @@ describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () 
     ).toBe("lista_para_revisar");
   });
 
+  it("con hashtags pero sin el de la LÍNEA editorial deriva 'falta_hashtag_editorial'", () => {
+    // Lleva hashtags (no gatea `falta_hashtags`) pero NO el obligatorio de su línea: etapa propia.
+    expect(
+      etapaDePieza(
+        pub({
+          estado: "en_revision", contenido: "copy #UnoTV #Mexico", copy_in: "TITULAR",
+          foto: "bg.png", hashtags_linea: ["#cienciatech"], etapa_ia: undefined,
+        }),
+      ),
+    ).toBe("falta_hashtag_editorial");
+    // Mismo caso pero el copy YA lleva el de la línea (insensible a mayúsculas): pasa el gate.
+    expect(
+      etapaDePieza(
+        pub({
+          estado: "en_revision", contenido: "copy #CienciaTech #UnoTV", copy_in: "TITULAR",
+          foto: "bg.png", hashtags_linea: ["#cienciatech"], etapa_ia: undefined,
+        }),
+      ),
+    ).toBe("lista_para_revisar");
+    // Sin línea con hashtag: basta con que haya ALGÚN hashtag -> lista (no pide el editorial).
+    expect(
+      etapaDePieza(
+        pub({
+          estado: "en_revision", contenido: "copy #Mexico", copy_in: "TITULAR",
+          foto: "bg.png", hashtags_linea: [], etapa_ia: undefined,
+        }),
+      ),
+    ).toBe("lista_para_revisar");
+  });
+
   it("respeta el `etapa_ia` explícito 'lista_para_revisar' tanto en borrador como en revisión", () => {
     // «borrador» no es un estado donde descanse una pieza completa: el pipeline la avanza sola,
     // así que "Para revisar" es honesto desde que tiene todo el contenido (sin etapa intermedia).
@@ -191,6 +221,7 @@ describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () 
       "generando_arte",
       "falta_copy_in",
       "falta_hashtags",
+      "falta_hashtag_editorial",
       "lista_para_revisar",
       "programada",
       "publicada",

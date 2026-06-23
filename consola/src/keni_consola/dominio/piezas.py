@@ -44,18 +44,23 @@ def _cuerpos_hashtags(texto: str) -> set[str]:
 
 
 def _falta_hashtags(pub: dict[str, Any]) -> bool:
-    """True si al caption le FALTAN hashtags y por eso la pieza no puede avanzar. Dos casos:
-
-      - no lleva NINGÚN hashtag, o
-      - lleva hashtags pero NO el de su LÍNEA editorial (`linea_hashtags`): el de la sección es
-        obligatorio (alimenta las métricas por línea), así que tener otros no basta.
+    """True si al caption NO le lleva NINGÚN hashtag y por eso la pieza no puede avanzar.
 
     Los hashtags son clave para monitorizar campañas y líneas de contenido; el equipo los pone en
-    la fase de revisión. Si el contenido no tiene línea (o esta no fija hashtag), solo aplica el
-    primer caso."""
+    la fase de revisión. El caso «tiene hashtags pero NO el de su LÍNEA editorial» es un gate
+    DISTINTO (`_falta_hashtag_editorial`): así el feed puede pedir cada cosa en su propia etapa."""
+    return not _cuerpos_hashtags(pub.get("contenido") or "")
+
+
+def _falta_hashtag_editorial(pub: dict[str, Any]) -> bool:
+    """True si el caption lleva hashtags pero NO el de su LÍNEA editorial (`linea_hashtags`).
+
+    El de la sección es OBLIGATORIO (alimenta las métricas por línea), así que tener otros no basta.
+    Solo aplica cuando YA hay algún hashtag (si no hay ninguno manda `_falta_hashtags`) y la línea
+    declara hashtag; si el contenido no tiene línea, no falta nada por este concepto."""
     presentes = _cuerpos_hashtags(pub.get("contenido") or "")
     if not presentes:
-        return True
+        return False
     requeridos = [
         c for crudo in re.split(r"[,\s]+", str(pub.get("linea_hashtags") or ""))
         if (c := crudo.strip().lstrip("#").strip().lower())
@@ -272,6 +277,7 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
             # «lo que falta» además de copy/foto (la etapa decide cuándo aplica cada una).
             "falta_copy_in": _falta_copy_in(pub, formato),
             "falta_hashtags": _falta_hashtags(pub),
+            "falta_hashtag_editorial": _falta_hashtag_editorial(pub),
         }
     )
     return {
@@ -414,9 +420,12 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Hashtag(s) de la LÍNEA editorial: el feed los propone APARTE y en rojo (firma de la
         # sección, clave para el desglose de métricas por línea). [] si el contenido no tiene línea.
         "hashtags_linea": _hashtags_linea(pub),
-        # ¿Al caption le faltan hashtags (ninguno, o tiene pero no el de su línea)? Gate de la
-        # sugerencia en el feed. Derivado del contenido real, no de un flag almacenado.
+        # ¿Al caption le falta CUALQUIER hashtag (ninguno)? Gate de la sugerencia en el feed.
+        # Derivado del contenido real, no de un flag almacenado.
         "falta_hashtags": _falta_hashtags(pub),
+        # ¿Lleva hashtags pero NO el de su LÍNEA editorial? Gate aparte (etapa propia): el de la
+        # sección es obligatorio para el desglose de métricas por línea. Derivado del contenido.
+        "falta_hashtag_editorial": _falta_hashtag_editorial(pub),
     }
 
 

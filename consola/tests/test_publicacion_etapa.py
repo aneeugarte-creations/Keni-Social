@@ -142,14 +142,17 @@ def test_en_revision_con_hashtags_es_lista():
 
 def test_falta_el_hashtag_de_la_linea_aunque_haya_otros():
     # La pieza lleva hashtags, pero NO el de su LÍNEA (`linea_hashtags`): el de la sección es
-    # obligatorio (métricas por línea), así que sigue gateada en `falta_hashtags`.
+    # obligatorio (métricas por línea), así que gatea en su etapa propia `falta_hashtag_editorial`
+    # (no en `falta_hashtags`, que es «no hay NINGÚN hashtag»).
     d = pieza_a_dict(
         _pub(
             estado="en_revision", contenido="Texto #UnoTV #Mexico", copy_in="TITULAR",
             foto="bg.png", linea_hashtags="cienciatech",
         )
     )
-    assert d["etapa_ia"] == "falta_hashtags"
+    assert d["etapa_ia"] == "falta_hashtag_editorial"
+    assert d["falta_hashtag_editorial"] is True
+    assert d["falta_hashtags"] is False  # sí hay hashtags, solo falta el de la línea
 
 
 def test_con_el_hashtag_de_la_linea_esta_lista():

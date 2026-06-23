@@ -680,6 +680,7 @@ export interface Pieza {
     | "generando_arte"
     | "falta_copy_in"
     | "falta_hashtags"
+    | "falta_hashtag_editorial"
     | "lista_para_revisar"
     | "programada"
     | "publicada";
@@ -696,6 +697,7 @@ export interface Pieza {
   hashtags_sugeridos?: string[];
   hashtags_linea?: string[];
   falta_hashtags?: boolean;
+  falta_hashtag_editorial?: boolean;
   copy_in_exento?: boolean;
   placa_oculta?: boolean;
   plantilla_diseno_id?: string;

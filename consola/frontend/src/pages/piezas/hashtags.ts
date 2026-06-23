@@ -37,8 +37,9 @@ export function contieneHashtag(contenido: string, tag: string): boolean {
 }
 
 /**
- * Añade hashtags al final de un contenido evitando duplicados. Inserta un par
- * de saltos de línea de separación si el contenido ya tenía texto.
+ * Añade hashtags al final de un contenido evitando duplicados. Si el copy YA termina en hashtags
+ * (un bloque de hashtags), los nuevos se unen a esa MISMA línea con un espacio; si termina en prosa,
+ * se separan con un par de saltos de línea. Sin contenido previo, van tal cual.
  */
 export function agregarHashtags(contenido: string, hashtags: string[]): string {
   if (hashtags.length === 0) return contenido;
@@ -50,6 +51,8 @@ export function agregarHashtags(contenido: string, hashtags: string[]): string {
     .filter((h) => h && !existentes.has(h.toLowerCase()));
   if (nuevos.length === 0) return contenido;
   const base = contenido.replace(/\s+$/, "");
-  const sep = base ? "\n\n" : "";
+  // El copy termina en un hashtag -> los nuevos van en la misma línea (no en un párrafo aparte).
+  const terminaEnHashtag = /#[\p{L}\p{N}_]+$/u.test(base);
+  const sep = base ? (terminaEnHashtag ? " " : "\n\n") : "";
   return `${base}${sep}${nuevos.join(" ")}`;
 }

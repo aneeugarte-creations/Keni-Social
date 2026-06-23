@@ -19,8 +19,9 @@ describe("SugerenciaHashtags", () => {
     render(
       <SugerenciaHashtags contenido="Gran partido hoy" pieza={pieza()} onAceptar={vi.fn()} />,
     );
-    expect(screen.getByText("#futbol #ligamx")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /aceptar hashtags sugeridos/i })).toBeInTheDocument();
+    expect(screen.getByText("#futbol")).toBeInTheDocument();
+    expect(screen.getByText("#ligamx")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /aceptar hashtags/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
   });
 
@@ -30,6 +31,7 @@ describe("SugerenciaHashtags", () => {
     );
     // #futbol ya está; se sigue ofreciendo el que falta (#ligamx), no se oculta del todo.
     expect(screen.getByText("#ligamx")).toBeInTheDocument();
+    expect(screen.queryByText("#futbol")).not.toBeInTheDocument();
   });
 
   it("no sugiere si el copy YA lleva todos los sugeridos (y no hay línea)", () => {
@@ -65,12 +67,12 @@ describe("SugerenciaHashtags", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("aceptar gris llama onAceptar solo con lo que falta", () => {
+  it("aceptar llama onAceptar solo con lo que falta", () => {
     const onAceptar = vi.fn();
     render(
       <SugerenciaHashtags contenido="Gran partido #futbol" pieza={pieza()} onAceptar={onAceptar} />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /aceptar hashtags sugeridos/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar hashtags/i }));
     expect(onAceptar).toHaveBeenCalledWith(["#ligamx"]);
   });
 
@@ -94,7 +96,7 @@ describe("SugerenciaHashtags", () => {
     expect(screen.getByText(/no pueden trackear bien/i)).toBeInTheDocument();
   });
 
-  it("aceptar la línea llama onAceptar con su hashtag", () => {
+  it("aceptar con la línea pendiente la incluye en onAceptar", () => {
     const onAceptar = vi.fn();
     render(
       <SugerenciaHashtags
@@ -103,7 +105,7 @@ describe("SugerenciaHashtags", () => {
         onAceptar={onAceptar}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /aceptar hashtag de la línea/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar hashtags/i }));
     expect(onAceptar).toHaveBeenCalledWith(["#cienciatech"]);
   });
 
@@ -116,5 +118,35 @@ describe("SugerenciaHashtags", () => {
       />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("unifica línea y sugeridos en un solo bloque: acepta todo junto, la línea primero", () => {
+    const onAceptar = vi.fn();
+    render(
+      <SugerenciaHashtags
+        contenido="Gran partido"
+        pieza={pieza({ hashtags_linea: ["#cienciatech"] })}
+        onAceptar={onAceptar}
+      />,
+    );
+    // Un único bloque con el de la línea (rojo) y los sugeridos juntos, no dos mensajes separados.
+    expect(screen.getByText("#cienciatech")).toBeInTheDocument();
+    expect(screen.getByText("#futbol")).toBeInTheDocument();
+    expect(screen.getByText("#ligamx")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /aceptar hashtags/i }));
+    expect(onAceptar).toHaveBeenCalledWith(["#cienciatech", "#futbol", "#ligamx"]);
+  });
+
+  it("rechazar los sugeridos NO oculta el de la línea (sigue en rojo)", () => {
+    render(
+      <SugerenciaHashtags
+        contenido="Gran partido"
+        pieza={pieza({ hashtags_linea: ["#cienciatech"] })}
+        onAceptar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /rechazar/i }));
+    expect(screen.getByText("#cienciatech")).toBeInTheDocument();
+    expect(screen.getByText(/no pueden trackear bien/i)).toBeInTheDocument();
   });
 });

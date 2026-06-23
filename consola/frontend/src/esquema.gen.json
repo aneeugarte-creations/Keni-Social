@@ -2256,6 +2256,7 @@
             "generando_arte",
             "falta_copy_in",
             "falta_hashtags",
+            "falta_hashtag_editorial",
             "lista_para_revisar",
             "programada",
             "publicada"
@@ -2304,6 +2305,9 @@
           }
         },
         "falta_hashtags": {
+          "type": "boolean"
+        },
+        "falta_hashtag_editorial": {
           "type": "boolean"
         },
         "copy_in_exento": {
