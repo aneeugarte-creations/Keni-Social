@@ -20,8 +20,10 @@ from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
-# Timeout del proxy a worker-dev para la promoción (fetch+rebase+push puede tardar).
-_TIMEOUT_PROMOVER = 120.0
+# Timeout del proxy a worker-dev para la promoción. El caso común (rebase limpio + push) es
+# rápido; un conflicto lo resuelve un agente Opus dentro del worker (hasta el wall-timeout de
+# claude, def 600 s), así que damos margen para ese peor caso.
+_TIMEOUT_PROMOVER = 720.0
 
 
 def _llamar_dev(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict]:
@@ -107,11 +109,17 @@ async def listar(request: Request) -> Response:
 
 
 async def obtener(request: Request) -> Response:
-    """GET /api/sugerencias/{id} -> `{sugerencia}`. Dueño o superadmin; ajena -> 404 (no se filtra)."""
+    """GET /api/sugerencias/{id} -> `{sugerencia}`. Dueño o superadmin; ajena -> 404 (no se filtra).
+
+    Enriquece la fila con `checkpoint_final` (derivado de la máquina de fases) para que la UI
+    oculte «Aprobar checkpoint» cuando sería un no-op, sin duplicar el pipeline en el front.
+    """
     sug = sugerencias.obtener(request.path_params["sugerencia_id"])
     if sug is None or not _puede_ver(request, sug):
         return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
-    return JSONResponse({"sugerencia": sug})
+    return JSONResponse(
+        {"sugerencia": {**sug, "checkpoint_final": sugerencias.es_checkpoint_final(sug)}}
+    )
 
 
 async def crear(request: Request) -> Response:
@@ -342,35 +350,6 @@ async def promover(request: Request) -> Response:
     })
 
 
-async def rebase(request: Request) -> Response:
-    """POST /api/sugerencias/{id}/rebase -> `{ok, detalle, rama}` (rebasa la rama sobre main).
-
-    SUPERADMIN-gated (control del tablero). PROXEA (httpx+bearer) al listener de worker-dev, que
-    hace fetch+rebase de la rama sobre `origin/main` (SIN push) y reconstruye el preview. Refresca
-    una rama que se quedó vieja respecto a `main`. No mueve el kanban; si worker-dev no responde,
-    degrada con error claro.
-    """
-    rechazo = _solo_superadmin(request, "Solo un superadmin puede rebasar una rama.")
-    if rechazo is not None:
-        return rechazo
-    sugerencia_id = request.path_params["sugerencia_id"]
-    sug = sugerencias.obtener(sugerencia_id)
-    if sug is None:
-        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
-
-    status, payload = await run_in_threadpool(
-        _llamar_dev, "POST", "/control/dev/rebase", {"sugerencia_id": sugerencia_id}
-    )
-    if status != 200 or not payload.get("ok"):
-        detalle = payload.get("detalle") or payload.get("error") or "No se pudo rebasar la rama."
-        return JSONResponse({"ok": False, "detalle": detalle}, status_code=status if status >= 400 else 502)
-    return JSONResponse({
-        "ok": True,
-        "detalle": payload.get("detalle") or "Rama rebasada sobre main.",
-        "rama": payload.get("rama", ""),
-    })
-
-
 RUTAS = [
     Route("/api/sugerencias", listar, methods=["GET"]),
     Route("/api/sugerencias", crear, methods=["POST"]),
@@ -381,5 +360,4 @@ RUTAS = [
     Route("/api/sugerencias/{sugerencia_id}/construir", construir, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/checkpoint", checkpoint, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/promover", promover, methods=["POST"]),
-    Route("/api/sugerencias/{sugerencia_id}/rebase", rebase, methods=["POST"]),
 ]

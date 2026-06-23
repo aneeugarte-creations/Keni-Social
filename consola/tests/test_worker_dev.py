@@ -140,13 +140,25 @@ def test_promover_sugerencia_inexistente(monkeypatch):
     assert res["ok"] is False
 
 
-def test_promover_sugerencia_rebase_conflicto(monkeypatch, tmp_path):
+def test_promover_conflicto_agente_resuelve_empuja(monkeypatch, tmp_path):
+    # Rebase con conflicto -> el agente Opus lo resuelve -> sigue el push (NO aborta).
     sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
     fake = _parchear(monkeypatch, sug, tmp_path, fallos={"rebase"})
+    monkeypatch.setattr(worker_dev, "_resolver_rebase_con_agente", lambda *_a, **_k: True)
+    res = worker_dev.promover_sugerencia("x")
+    assert res["ok"] is True
+    subcomandos = [c[0] for c in fake.llamadas]
+    assert "push" in subcomandos
+    assert ("rebase", "--abort") not in fake.llamadas
+
+
+def test_promover_conflicto_agente_no_resuelve_aborta(monkeypatch, tmp_path):
+    # Rebase con conflicto y el agente NO lo resuelve -> aborta y NO empuja.
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
+    fake = _parchear(monkeypatch, sug, tmp_path, fallos={"rebase"})
+    monkeypatch.setattr(worker_dev, "_resolver_rebase_con_agente", lambda *_a, **_k: False)
     res = worker_dev.promover_sugerencia("x")
     assert res["ok"] is False
-    assert "rebase" in res["detalle"].lower()
-    # Abortó el rebase y NO empujó.
     subcomandos = [c[0] for c in fake.llamadas]
     assert "push" not in subcomandos
     assert ("rebase", "--abort") in fake.llamadas
@@ -161,51 +173,28 @@ def test_promover_sugerencia_push_falla(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Rebase de la rama sobre main (git parcheado): fetch+rebase, sin push          #
+# Resolución de conflictos de rebase con agente Opus (claude -p parcheado)      #
 # --------------------------------------------------------------------------- #
 
 
-def test_rebase_sugerencia_ok(monkeypatch, tmp_path):
-    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    fake = _parchear(monkeypatch, sug, tmp_path)
-    monkeypatch.setattr(worker_dev, "_construir_preview", lambda *_a, **_k: True)
-    res = worker_dev.rebase_sugerencia("x")
-    assert res["ok"] is True
-    assert res["preview_listo"] is True
-    subcomandos = [c[0] for c in fake.llamadas]
-    assert subcomandos[:2] == ["fetch", "rebase"]
-    assert "push" not in subcomandos  # rebase NO empuja
-
-
-def test_rebase_sugerencia_conflicto_aborta_sin_reconstruir(monkeypatch, tmp_path):
-    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    fake = _parchear(monkeypatch, sug, tmp_path, fallos={"rebase"})
-    construido = {"v": False}
+def test_resolver_rebase_con_agente_exito(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        worker_dev, "_construir_preview", lambda *_a, **_k: construido.__setitem__("v", True) or True
+        worker_dev.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0, "", "")
     )
-    res = worker_dev.rebase_sugerencia("x")
-    assert res["ok"] is False
-    assert "rebase" in res["detalle"].lower()
-    assert ("rebase", "--abort") in fake.llamadas
-    assert "push" not in [c[0] for c in fake.llamadas]
-    assert construido["v"] is False  # no reconstruye el preview si el rebase falló
+    monkeypatch.setattr(worker_dev._gl, "_entorno_generacion", lambda: {})
+    # merge-base --is-ancestor OK (0) y status limpio: el rebase quedó completo sobre origin/main.
+    monkeypatch.setattr(worker_dev, "_git", _FakeGit())
+    assert worker_dev._resolver_rebase_con_agente(tmp_path) is True
 
 
-def test_rebase_sugerencia_building_rechaza(monkeypatch, tmp_path):
-    sug = {"estado": "building", "rama": "dev/sug-x", "worktree": str(tmp_path)}
-    _parchear(monkeypatch, sug, tmp_path)
-    res = worker_dev.rebase_sugerencia("x")
-    assert res["ok"] is False
-    assert "en curso" in res["detalle"].lower()
-
-
-def test_rebase_sugerencia_sin_worktree(monkeypatch, tmp_path):
-    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path / "no-existe")}
-    _parchear(monkeypatch, sug, tmp_path)
-    res = worker_dev.rebase_sugerencia("x")
-    assert res["ok"] is False
-    assert "worktree" in res["detalle"].lower()
+def test_resolver_rebase_con_agente_no_completa(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        worker_dev.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0, "", "")
+    )
+    monkeypatch.setattr(worker_dev._gl, "_entorno_generacion", lambda: {})
+    # merge-base --is-ancestor FALLA: el rebase NO terminó -> False.
+    monkeypatch.setattr(worker_dev, "_git", _FakeGit(fallos={"merge-base"}))
+    assert worker_dev._resolver_rebase_con_agente(tmp_path) is False
 
 
 # --------------------------------------------------------------------------- #

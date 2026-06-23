@@ -51,10 +51,8 @@ export const apiSugerencias = {
       metodo: "POST",
       json: { accion, comentario },
     }),
-  // Promueve la rama dev a main (checkpoint humano final). No corre agente: sin nota.
+  // Promueve la rama dev a main (checkpoint humano final). Rebasa siempre sobre main antes del
+  // push, y un agente Opus resuelve conflictos si los hay (lo hace el worker, sin botón aparte).
   promoverSugerencia: (id: string) =>
     peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/promover`, { metodo: "POST" }),
-  // Rebasa la rama de la sugerencia sobre main (sin push) y reconstruye el preview.
-  rebasarSugerencia: (id: string) =>
-    peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/rebase`, { metodo: "POST" }),
 };

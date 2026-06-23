@@ -40,6 +40,16 @@ def test_transiciones_invalidas():
     assert not sugerencias.transicion_valida("en_cola", "inventado")
 
 
+def test_es_checkpoint_final():
+    # `review` es la última fase: checkpoint final (solo queda promover).
+    assert sugerencias.es_checkpoint_final({"estado": "revision", "complejidad": "simple", "fase": "review"})
+    # `plan` en `complex` es checkpoint INTERMEDIO: aún hay fase siguiente (build).
+    assert not sugerencias.es_checkpoint_final({"estado": "revision", "complejidad": "complex", "fase": "plan"})
+    # Fuera de `revision` nunca es checkpoint final.
+    assert not sugerencias.es_checkpoint_final({"estado": "building", "complejidad": "complex", "fase": "plan"})
+    assert not sugerencias.es_checkpoint_final(None)
+
+
 # --------------------------------------------------------------------------- #
 # CRUD + transiciones — requiere Postgres (fixture `entorno`)                  #
 # --------------------------------------------------------------------------- #

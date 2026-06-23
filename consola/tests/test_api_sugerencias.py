@@ -162,6 +162,19 @@ def test_patch_inexistente_404(entorno):
     ).status_code == 404
 
 
+def test_obtener_marca_checkpoint_final(entorno):
+    # En el checkpoint final (simple -> build/review; review es el último), GET enriquece con
+    # `checkpoint_final=True` para que la UI oculte «Aprobar checkpoint».
+    cli = _super()
+    sid = _crear(cli)
+    sugerencias.cambiar_estado(sid, "en_cola", campos={"complejidad": "simple"})
+    sugerencias.cambiar_estado(sid, "building", campos={"fase": "review"})
+    sugerencias.cambiar_estado(sid, "revision")
+    r = cli.get(f"/api/sugerencias/{sid}")
+    assert r.status_code == 200
+    assert r.json()["sugerencia"]["checkpoint_final"] is True
+
+
 def test_descartar_desde_nueva(entorno):
     cli = _super()
     sid = _crear(cli)

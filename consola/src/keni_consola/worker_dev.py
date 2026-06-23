@@ -159,22 +159,63 @@ def _arbol_limpio(worktree: Path) -> bool:
     return res.returncode == 0 and not (res.stdout or "").strip()
 
 
-def _rebasar_sobre_main(worktree: Path) -> tuple[bool, str]:
+_PROMPT_RESOLVER_REBASE = (
+    "Estás dentro de un `git rebase origin/main` PAUSADO por conflictos en este repositorio git. "
+    "Resuélvelos tú: por cada fichero en conflicto, edítalo conservando la intención de AMBOS "
+    "lados (el cambio de esta rama y el de main) y quita los marcadores "
+    "`<<<<<<<`/`=======`/`>>>>>>>`; luego `git add` los ficheros resueltos y `git rebase "
+    "--continue`. Repite hasta que el rebase TERMINE del todo. NO hagas `git push` ni "
+    "`git rebase --abort`. Mantén verdes los tests que toques."
+)
+
+
+def _resolver_rebase_con_agente(worktree: Path, modelo: str = "opus") -> bool:
+    """Lanza `claude -p` (Opus) para resolver un `git rebase origin/main` PAUSADO por conflictos.
+
+    El agente edita los ficheros en conflicto conservando ambas intenciones, hace `git add` y
+    `git rebase --continue` hasta terminar (sin push ni abort). No streaming, acotado por el
+    wall-timeout de claude. Devuelve True SOLO si tras correr quedó un rebase COMPLETO y limpio
+    sobre origin/main. Best-effort: cualquier fallo (no arranca, timeout, sin resolver) -> False.
+    """
+    argv = ["claude", "-p", _PROMPT_RESOLVER_REBASE]
+    if config.claude_skip_permisos():
+        argv.append("--dangerously-skip-permissions")
+    if modelo:
+        argv += ["--model", modelo]
+    try:
+        subprocess.run(  # noqa: S603 -- argv lista, sin shell
+            argv, cwd=str(worktree), capture_output=True, text=True,
+            timeout=config.claude_timeout(), env=_gl._entorno_generacion(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        _log.warning("worker_dev: el agente de resolución de conflictos falló o agotó el tiempo", exc_info=True)
+    # Éxito SOLO si el rebase quedó completo (origin/main es ancestro de HEAD) y el árbol limpio
+    # (sin ficheros sin mergear ni rebase a medias).
+    en_main = _git("merge-base", "--is-ancestor", "origin/main", "HEAD", cwd=worktree).returncode == 0
+    return en_main and _arbol_limpio(worktree)
+
+
+def _rebasar_sobre_main(worktree: Path, *, resolver_conflictos: bool = False) -> tuple[bool, str]:
     """fetch `origin main` + rebase `origin/main` dentro de `worktree`. No lanza.
 
     La misma disciplina que `scripts/promover-main.sh`: traer lo último de main y rebasar encima
-    ANTES de empujar/construir, para que la rama nunca quede vieja. En conflicto hace
-    `rebase --abort` (no deja el árbol a medias) y devuelve `(False, motivo)`. La credencial gh la
-    cablea el llamante. Devuelve `(True, "")` si la rama quedó sobre origin/main.
+    ANTES de empujar/construir, para que la rama nunca quede vieja. La credencial gh la cablea el
+    llamante. Devuelve `(True, "")` si la rama quedó sobre origin/main.
+
+    En conflicto: si `resolver_conflictos`, un agente Opus intenta resolverlo (lo usa la
+    promoción, para que «meter a main» nunca falle por una rama vieja); si no lo logra (o no se
+    pidió agente) hace `rebase --abort` y devuelve `(False, motivo)`.
     """
     fetch = _git("fetch", "origin", "main", cwd=worktree)
     if fetch.returncode != 0:
         return False, f"No se pudo actualizar desde origin: {(fetch.stderr or '').strip()[:200]}"
     rebase = _git("rebase", "origin/main", cwd=worktree)
-    if rebase.returncode != 0:
-        _git("rebase", "--abort", cwd=worktree)
-        return False, "El rebase sobre origin/main tiene conflictos; resuélvelos en la rama."
-    return True, ""
+    if rebase.returncode == 0:
+        return True, ""
+    if resolver_conflictos and _resolver_rebase_con_agente(worktree):
+        return True, "Conflictos de rebase resueltos por un agente Opus."
+    _git("rebase", "--abort", cwd=worktree)
+    return False, "El rebase sobre origin/main tiene conflictos que no se pudieron resolver."
 
 
 def _asegurar_worktree(sugerencia_id: str) -> tuple[Path, str]:
@@ -326,7 +367,9 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
     # La credencial gh debe estar cableada en git para que `git push` autentique.
     _setup_git_credenciales()
 
-    ok, detalle = _rebasar_sobre_main(worktree)
+    # Rebase SIEMPRE sobre origin/main antes de empujar (disciplina del script local); si hay
+    # conflictos, un agente Opus los resuelve para que «meter a main» no falle por rama vieja.
+    ok, detalle = _rebasar_sobre_main(worktree, resolver_conflictos=True)
     if not ok:
         return {"ok": False, "detalle": detalle, "rama": rama}
 
@@ -338,40 +381,6 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
     # para no dejar artefactos huerfanos en el worker ni en S3.
     _teardown(sugerencia_id)
     return {"ok": True, "detalle": f"Rama «{rama}» promovida a main.", "rama": rama}
-
-
-def rebase_sugerencia(sugerencia_id: str) -> dict[str, object]:
-    """Rebasa la rama de una sugerencia sobre `origin/main` (SIN push) y reconstruye el preview.
-
-    Refresca una rama que se quedó vieja respecto a `main` (p.ej. un preview que no enruta o no
-    arranca porque se compiló de un `main` anterior). Corre dentro del worktree: fetch →
-    rebase `origin/main`; si hay conflictos, `--abort` y devuelve error legible (nunca propaga).
-    Tras un rebase OK recompila el preview con el código ya actualizado. No toca el estado del
-    kanban. Rechaza si hay una fase en curso (`building`) o no hay worktree.
-    """
-    sug = sugerencias.obtener(sugerencia_id)
-    if sug is None:
-        return {"ok": False, "detalle": "Esa sugerencia ya no existe."}
-    if sug.get("estado") == "building":
-        return {"ok": False, "detalle": "Hay una fase en curso; espera a que termine para rebasar."}
-    rama = str(sug.get("rama") or f"dev/sug-{sugerencia_id}")
-    wt_crudo = str(sug.get("worktree") or (_dir_worktrees() / f"sug-{sugerencia_id}"))
-    worktree = Path(wt_crudo)
-    if not worktree.is_dir():
-        return {"ok": False, "detalle": "No se encontró el worktree de la sugerencia para rebasar."}
-
-    _setup_git_credenciales()
-    ok, detalle = _rebasar_sobre_main(worktree)
-    if not ok:
-        return {"ok": False, "detalle": detalle, "rama": rama}
-
-    # Rebasada: recompila el preview para que refleje el código ya actualizado.
-    listo = _construir_preview(worktree, sugerencia_id)
-    sugerencias.actualizar_avance(sugerencia_id, {"preview_listo": listo})
-    detalle = f"Rama «{rama}» rebasada sobre main." + (
-        " Preview reconstruido." if listo else " (el preview no se pudo reconstruir)"
-    )
-    return {"ok": True, "detalle": detalle, "rama": rama, "preview_listo": listo}
 
 
 # --------------------------------------------------------------------------- #

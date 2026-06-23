@@ -41,6 +41,8 @@ export interface Sugerencia {
   coste_usd: number;
   /** Hay un preview navegable del cambio publicado en `/api/preview/<id>/`. */
   preview_listo?: boolean;
+  /** En `revision` sin fase siguiente: solo queda promover («Aprobar checkpoint» sería no-op). */
+  checkpoint_final?: boolean;
   creada: string;
   actualizada: string;
 }

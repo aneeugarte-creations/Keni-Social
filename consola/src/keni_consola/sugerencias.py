@@ -78,6 +78,21 @@ def transicion_valida(origen: str, destino: str) -> bool:
     return destino in _TRANSICIONES.get(origen, frozenset())
 
 
+def es_checkpoint_final(sug: dict[str, Any] | None) -> bool:
+    """True si la sugerencia está en un checkpoint del que YA no sale otra fase: solo queda promover.
+
+    En `revision` con una fase siguiente (checkpoint intermedio, p.ej. `plan` en `complex`)
+    «Aprobar checkpoint» avanza el pipeline y SÍ tiene efecto; en el checkpoint final no hay
+    siguiente fase y «Aprobar checkpoint» sería un no-op (la UI lo oculta). Fuera de `revision`
+    devuelve False.
+    """
+    if (sug or {}).get("estado") != "revision":
+        return False
+    from .dominio import desarrollo
+
+    return desarrollo.siguiente_fase(sug.get("complejidad", ""), sug.get("fase", "")) is None
+
+
 # --------------------------------------------------------------------------- #
 # Lectura / creación                                                           #
 # --------------------------------------------------------------------------- #

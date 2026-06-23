@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Coins,
   ExternalLink,
-  GitBranch,
   Hammer,
   Loader2,
   MessageSquareWarning,
@@ -370,16 +369,6 @@ export default function DetalleSugerenciaPagina() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const rebasar = useMutation({
-    mutationFn: () => api.rebasarSugerencia(id),
-    onSuccess: (res) => {
-      invalidar();
-      cerrarPendiente();
-      toast.success(res.detalle || "Rama rebasada sobre main");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const cambiarEstado = useMutation({
     mutationFn: (estado: string) => api.actualizarSugerencia(id, { estado }),
     onSuccess: (_res, estado) => {
@@ -441,15 +430,15 @@ export default function DetalleSugerenciaPagina() {
   // mostrarlo duplicaría el spec. Acabada la generación, mandan los bloques guardados.
   const generando = estado === "discovery" || estado === "building";
 
-  // Hay worktree/rama (y por tanto un preview que puede quedar viejo) desde que se construye.
-  const tieneRama = estado === "revision" || estado === "fallida";
+  // En el checkpoint FINAL (sin fase siguiente) «Aprobar checkpoint» sería un no-op: solo queda
+  // promover. Lo deriva el backend (no duplicamos la máquina de fases en el front).
+  const checkpointIntermedio = enRevision && sugerencia.checkpoint_final !== true;
 
   const ocupado =
     discovery.isPending ||
     construir.isPending ||
     checkpoint.isPending ||
     promover.isPending ||
-    rebasar.isPending ||
     cambiarEstado.isPending ||
     borrar.isPending;
 
@@ -605,22 +594,24 @@ export default function DetalleSugerenciaPagina() {
                     <MessageSquareWarning className="h-4 w-4" />
                     Pedir cambios
                   </Button>
-                  <Button
-                    disabled={ocupado}
-                    onClick={() =>
-                      setPendiente({
-                        clave: "continuar",
-                        titulo: "Aprobar checkpoint",
-                        descripcion:
-                          "Aprueba esta fase y sigue el pipeline. Puedes añadir una nota para la siguiente fase.",
-                        etiquetaConfirmar: "Aprobar checkpoint",
-                        ejecutar: (nota) => checkpoint.mutate({ accion: "continuar", nota }),
-                      })
-                    }
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Aprobar checkpoint
-                  </Button>
+                  {checkpointIntermedio && (
+                    <Button
+                      disabled={ocupado}
+                      onClick={() =>
+                        setPendiente({
+                          clave: "continuar",
+                          titulo: "Aprobar checkpoint",
+                          descripcion:
+                            "Aprueba esta fase y sigue el pipeline. Puedes añadir una nota para la siguiente fase.",
+                          etiquetaConfirmar: "Aprobar checkpoint",
+                          ejecutar: (nota) => checkpoint.mutate({ accion: "continuar", nota }),
+                        })
+                      }
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Aprobar checkpoint
+                    </Button>
+                  )}
                 </>
               )}
               {enRevision && (
@@ -631,7 +622,7 @@ export default function DetalleSugerenciaPagina() {
                       clave: "promover",
                       titulo: "Promover a main",
                       descripcion:
-                        "Hace el git push real de la rama a main y marca la idea como hecha. No corre ningún agente.",
+                        "Rebasa la rama sobre lo último de main y hace el git push real, marcando la idea como hecha. Si el rebase tiene conflictos, un agente Opus los resuelve antes de empujar.",
                       etiquetaConfirmar: "Promover a main",
                       sinNota: true,
                       ejecutar: () => promover.mutate(),
@@ -640,26 +631,6 @@ export default function DetalleSugerenciaPagina() {
                 >
                   <Rocket className="h-4 w-4" />
                   Promover a main
-                </Button>
-              )}
-              {tieneRama && (
-                <Button
-                  variant="outline"
-                  disabled={ocupado}
-                  onClick={() =>
-                    setPendiente({
-                      clave: "rebase",
-                      titulo: "Rebasar sobre main",
-                      descripcion:
-                        "Actualiza la rama de la idea con lo último de main (fetch + rebase, sin push) y reconstruye el preview. Útil si el preview se quedó viejo. Si hay conflictos, se aborta sin tocar la rama.",
-                      etiquetaConfirmar: "Rebasar sobre main",
-                      sinNota: true,
-                      ejecutar: () => rebasar.mutate(),
-                    })
-                  }
-                >
-                  <GitBranch className="h-4 w-4" />
-                  Rebasar sobre main
                 </Button>
               )}
               {!esDescartada && estado !== "hecha" && (
