@@ -3,14 +3,16 @@
  *
  * Lista las campañas de pago (impresiones, gasto, clics) con sus totales, claramente
  * separadas de lo orgánico. Sólo aparece si hubo inversión con entrega en el periodo
- * (si no, no ensucia el dashboard). Reusa el stack del resto de Métricas: SeccionColapsable
- * + tabla ordenable, estados honestos (carga / error / vacío).
+ * (si no, no ensucia el dashboard). Reusa el stack del resto de Métricas: encuadre
+ * uniforme `Seccion` + editor de columnas + tabla ordenable, con estados honestos
+ * (carga / error / vacío).
  */
 import { useQuery } from "@tanstack/react-query";
 import { Megaphone } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -25,10 +27,11 @@ import { nombreRed, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { CampaniaAdsMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import type { ColumnaMeta } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 import { useOrdenTabla } from "./useOrdenTabla";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
 function dinero(v: number, moneda: string): string {
   return `${v.toLocaleString("es-MX", { maximumFractionDigits: 0 })} ${moneda}`.trim();
@@ -42,6 +45,22 @@ const ACCESORES: Record<ClaveOrden, (a: CampaniaAdsMetrica) => number> = {
   gasto: (a) => a.gasto,
   clics: (a) => a.clics,
 };
+
+/** Columnas FIJAS de la tabla de campañas de Ads (orden base + etiquetas legibles). */
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "campania", etiqueta: "Campaña" },
+  { id: "red", etiqueta: "Red" },
+  { id: "impresiones", etiqueta: "Impresiones" },
+  { id: "gasto", etiqueta: "Gasto" },
+  { id: "clics", etiqueta: "Clics" },
+];
+
+const IDS_BASE = COLUMNAS.map((c) => c.id);
+
+/** ¿La columna es una métrica ordenable (cabecera con clic)? */
+function esOrdenable(id: string): id is ClaveOrden {
+  return id === "impresiones" || id === "gasto" || id === "clics";
+}
 
 export function SeccionAds({
   marcaActual = MARCA_TODAS,
@@ -66,83 +85,127 @@ export function SeccionAds({
     { clave: "impresiones", direccion: "desc" },
   );
 
+  const cfgGuardada = useVistaConfig((s) => s.columnas["ads"]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+
   // Sin inversión con entrega en el periodo (o sin Ads conectado): no se muestra la sección.
   if (!isPending && !isError && (data?.total.campanias ?? 0) === 0) return null;
 
   const total = data?.total;
-  const col = (clave: ClaveOrden, etiqueta: string, className?: string) => (
-    <CabeceraOrdenable
-      activa={estado.clave === clave}
-      direccion={estado.direccion}
-      onClick={() => alClicar(clave)}
-      alinear="right"
-      className={className}
-    >
-      {etiqueta}
-    </CabeceraOrdenable>
-  );
+  const etiquetaDe = (id: string) => COLUMNAS.find((c) => c.id === id)?.etiqueta ?? id;
+  const padding = (idx: number) =>
+    [idx === 0 ? "pl-6" : "", idx === columnas.length - 1 ? "pr-6" : ""].filter(Boolean).join(" ");
+
+  const encabezado = (id: string, idx: number) => {
+    const clase = padding(idx) || undefined;
+    if (esOrdenable(id)) {
+      return (
+        <CabeceraOrdenable
+          key={id}
+          activa={estado.clave === id}
+          direccion={estado.direccion}
+          onClick={() => alClicar(id)}
+          alinear="right"
+          className={clase}
+        >
+          {etiquetaDe(id)}
+        </CabeceraOrdenable>
+      );
+    }
+    return (
+      <TableHead key={id} className={clase}>
+        {etiquetaDe(id)}
+      </TableHead>
+    );
+  };
+
+  const celda = (a: CampaniaAdsMetrica, id: string, idx: number) => {
+    const borde = padding(idx);
+    if (id === "campania") {
+      return (
+        <TableCell key={id} className={borde || undefined}>
+          <span className="block max-w-[28rem] truncate font-medium" title={a.nombre}>
+            {a.nombre}
+          </span>
+        </TableCell>
+      );
+    }
+    if (id === "red") {
+      return (
+        <TableCell key={id} className={borde || undefined}>
+          <Badge variant="outline">{nombreRed(a.red)}</Badge>
+        </TableCell>
+      );
+    }
+    const claseNum = `text-right tabular-nums ${borde}`.trim();
+    if (id === "impresiones") {
+      return (
+        <TableCell key={id} className={claseNum} title={numeroCompleto(a.impresiones)}>
+          {numeroCompacto(a.impresiones)}
+        </TableCell>
+      );
+    }
+    if (id === "gasto") {
+      return (
+        <TableCell key={id} className={claseNum}>
+          {dinero(a.gasto, a.moneda)}
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className={claseNum}>
+        {numeroCompacto(a.clics)}
+      </TableCell>
+    );
+  };
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="ads"
       titulo="Publicidad"
       icono={Megaphone}
       descripcion="Campañas de pago"
-      contentClassName="p-0"
+      tablaId="ads"
+      columnas={COLUMNAS}
     >
-      {isPending ? (
-        <div className="p-4">
-          <Skeleton className="h-40 w-full rounded-lg" />
-        </div>
-      ) : isError ? (
-        <p className="p-6 text-sm text-muted-foreground">No se pudieron cargar las campañas de Ads.</p>
-      ) : (
-        <>
-          {total && (
-            <div className="flex flex-wrap gap-x-8 gap-y-2 border-b px-6 py-4">
-              {/* `total.visualizaciones` es la SUMA de la columna Impresiones (no son
-                  vistas orgánicas): el término correcto en Ads es "Impresiones". */}
-              <Kpi etiqueta="Impresiones" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
-              <Kpi etiqueta="Gasto" valor={dinero(total.gasto, total.moneda)} />
-              <Kpi etiqueta="Campañas" valor={String(total.campanias)} />
-              <Kpi etiqueta="Clics" valor={numeroCompacto(total.clics)} />
-            </div>
-          )}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-6">Campaña</TableHead>
-                <TableHead>Red</TableHead>
-                {col("impresiones", "Impresiones")}
-                {col("gasto", "Gasto")}
-                {col("clics", "Clics", "pr-6")}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filasOrdenadas.map((a, i) => (
-                // Clave estable ante reordenaciones: nombre+red+inicio identifica la
-                // campaña; el índice solo entra si `inicio` llega vacío.
-                <TableRow key={`${a.nombre}-${a.red}-${a.inicio || i}`}>
-                  <TableCell className="pl-6">
-                    <span className="block max-w-[28rem] truncate font-medium" title={a.nombre}>
-                      {a.nombre}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{nombreRed(a.red)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(a.impresiones)}>
-                    {numeroCompacto(a.impresiones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{dinero(a.gasto, a.moneda)}</TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">{numeroCompacto(a.clics)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </>
-      )}
-    </SeccionColapsable>
+      <Card className="overflow-hidden py-2">
+        {isPending ? (
+          <div className="p-4">
+            <Skeleton className="h-40 w-full rounded-lg" />
+          </div>
+        ) : isError ? (
+          <p className="p-6 text-sm text-muted-foreground">No se pudieron cargar las campañas de Ads.</p>
+        ) : (
+          <>
+            {total && (
+              <div className="flex flex-wrap gap-x-8 gap-y-2 border-b px-6 py-4">
+                {/* `total.visualizaciones` es la SUMA de la columna Impresiones (no son
+                    vistas orgánicas): el término correcto en Ads es "Impresiones". */}
+                <Kpi etiqueta="Impresiones" valor={numeroCompacto(total.visualizaciones)} titulo={numeroCompleto(total.visualizaciones)} />
+                <Kpi etiqueta="Gasto" valor={dinero(total.gasto, total.moneda)} />
+                <Kpi etiqueta="Campañas" valor={String(total.campanias)} />
+                <Kpi etiqueta="Clics" valor={numeroCompacto(total.clics)} />
+              </div>
+            )}
+            <Table>
+              <TableHeader>
+                <TableRow>{columnas.map(encabezado)}</TableRow>
+              </TableHeader>
+              <TableBody>
+                {filasOrdenadas.map((a, i) => (
+                  // Clave estable ante reordenaciones: nombre+red+inicio identifica la
+                  // campaña; el índice solo entra si `inicio` llega vacío.
+                  <TableRow key={`${a.nombre}-${a.red}-${a.inicio || i}`}>
+                    {columnas.map((id, idx) => celda(a, id, idx))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </>
+        )}
+      </Card>
+    </Seccion>
   );
 }
 

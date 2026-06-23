@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Grid3x3 } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -38,12 +39,38 @@ import {
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import type { ColumnaMeta } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { PieMostrarMas } from "./PieMostrarMas";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
+
+/** Id de tabla del editor de columnas (clave en `vistaConfig.columnas`). */
+const TABLA_CROSSTAB = "crosstab";
+
+/**
+ * Columnas FIJAS del cruce (dimensiones marca/red/formato + métricas). El mapa de calor
+ * es solo el color de la celda "Rendimiento", no columnas derivadas de datos: el conjunto
+ * es estable, así que admite editor de columnas.
+ */
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "marca", etiqueta: "Marca" },
+  { id: "red", etiqueta: "Red" },
+  { id: "formato", etiqueta: "Formato" },
+  { id: "n_piezas", etiqueta: "Piezas" },
+  { id: "visualizaciones", etiqueta: "Vistas" },
+  { id: "engagement_pct", etiqueta: "Engagement" },
+  { id: "rendimiento", etiqueta: "Rendimiento" },
+];
+
+const IDS_BASE = COLUMNAS.map((c) => c.id);
+
+/** Etiqueta legible de una columna por id. */
+function etiquetaCol(id: string): string {
+  return COLUMNAS.find((c) => c.id === id)?.etiqueta ?? id;
+}
 
 /**
  * Color del rendimiento relativo (>1 rinde por encima de la mediana de su grupo, <1
@@ -77,10 +104,12 @@ export function Crosstab({
   });
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="crosstab"
       titulo="Rendimiento por formato"
       icono={Grid3x3}
+      tablaId={TABLA_CROSSTAB}
+      columnas={COLUMNAS}
       descripcion={
         <>
           Rendimiento = promedio por pieza de (vistas ÷ mediana de vistas de su grupo marca×red); si la mediana es 0 se usa la media.{" "}
@@ -103,7 +132,7 @@ export function Crosstab({
       ) : (
         <TablaCrosstab celdas={data.celdas} marcas={marcas} />
       )}
-    </SeccionColapsable>
+    </Seccion>
   );
 }
 
@@ -151,91 +180,135 @@ function TablaCrosstab({
   // Recorte a 5 filas CON DATOS (post-orden); los placeholders "—" solo al desplegar.
   const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
 
+  // Qué columnas se ven y en qué orden lo decide el editor de columnas (id "crosstab").
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_CROSSTAB]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+
+  const encabezado = (id: string) => {
+    if (id === "marca" || id === "red" || id === "formato") {
+      return <TableHead key={id}>{etiquetaCol(id)}</TableHead>;
+    }
+    const clave = id as ClaveCrosstab;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear="right"
+      >
+        {etiquetaCol(id)}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (c: CeldaCrosstab, id: string) => {
+    switch (id) {
+      case "marca":
+        return (
+          <TableCell key={id} className="font-medium">
+            {nombreMarca(c.marca, marcas)}
+          </TableCell>
+        );
+      case "red":
+        return (
+          <TableCell key={id} className="text-muted-foreground">
+            {nombreRed(c.red)}
+          </TableCell>
+        );
+      case "formato":
+        return (
+          <TableCell key={id} className="text-muted-foreground">
+            {nombreFormato(c.formato)}
+          </TableCell>
+        );
+      case "n_piezas":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {c.n_piezas}
+          </TableCell>
+        );
+      case "visualizaciones":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {numeroCompleto(c.visualizaciones)}
+          </TableCell>
+        );
+      case "engagement_pct":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {porcentaje(c.engagement_pct)}
+          </TableCell>
+        );
+      default:
+        return (
+          <TableCell
+            key={id}
+            className={cn(
+              "text-right font-medium tabular-nums",
+              claseRendimiento(c.rendimiento_relativo_medio),
+            )}
+            title="Promedio por pieza de: vistas ÷ mediana de vistas de su grupo marca×red (media del grupo si la mediana es 0)"
+          >
+            {rendimientoRel(c.rendimiento_relativo_medio)}
+          </TableCell>
+        );
+    }
+  };
+
+  const celdaVacia = (marca: string, red: string, id: string) => {
+    if (id === "marca") {
+      return (
+        <TableCell key={id} className="font-medium">
+          {nombreMarca(marca, marcas)}
+        </TableCell>
+      );
+    }
+    if (id === "red") {
+      return <TableCell key={id}>{nombreRed(red)}</TableCell>;
+    }
+    if (id === "formato") {
+      return <TableCell key={id}>—</TableCell>;
+    }
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        —
+      </TableCell>
+    );
+  };
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Marca</TableHead>
-            <TableHead>Red</TableHead>
-            <TableHead>Formato</TableHead>
-            <CabeceraOrdenable
-              activa={estado.clave === "n_piezas"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("n_piezas")}
-              alinear="right"
-            >
-              Piezas
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={estado.clave === "visualizaciones"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("visualizaciones")}
-              alinear="right"
-            >
-              Vistas
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={estado.clave === "engagement_pct"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("engagement_pct")}
-              alinear="right"
-            >
-              Engagement
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={estado.clave === "rendimiento"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("rendimiento")}
-              alinear="right"
-            >
-              Rendimiento
-            </CabeceraOrdenable>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibles.map((c) => (
-            <TableRow key={`${c.marca}-${c.red}-${c.formato ?? "sin"}`}>
-              <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
-              <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>
-              <TableCell className="text-muted-foreground">{nombreFormato(c.formato)}</TableCell>
-              <TableCell className="text-right tabular-nums">{c.n_piezas}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {numeroCompleto(c.visualizaciones)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {porcentaje(c.engagement_pct)}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "text-right font-medium tabular-nums",
-                  claseRendimiento(c.rendimiento_relativo_medio),
-                )}
-                title="Promedio por pieza de: vistas ÷ mediana de vistas de su grupo marca×red (media del grupo si la mediana es 0)"
-              >
-                {rendimientoRel(c.rendimiento_relativo_medio)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite).
-              Solo se muestran al desplegar (o si la tabla no se recorta). */}
-          {(expandido || !hayMas) &&
-            filasVacias.map(({ marca, red }) => (
-            <TableRow key={`vacia-${marca}-${red}`} className="text-muted-foreground">
-              <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
-              <TableCell>{nombreRed(red)}</TableCell>
-              <TableCell>—</TableCell>
-              <TableCell className="text-right tabular-nums">—</TableCell>
-              <TableCell className="text-right tabular-nums">—</TableCell>
-              <TableCell className="text-right tabular-nums">—</TableCell>
-              <TableCell className="text-right tabular-nums">—</TableCell>
-            </TableRow>
+    <Card className="overflow-hidden py-2">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>{columnas.map(encabezado)}</TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibles.map((c) => (
+              <TableRow key={`${c.marca}-${c.red}-${c.formato ?? "sin"}`}>
+                {columnas.map((id) => celda(c, id))}
+              </TableRow>
             ))}
-        </TableBody>
-        {hayMas && (
-          <PieMostrarMas expandido={expandido} onAlternar={alternar} colSpan={7} />
-        )}
-      </Table>
-    </div>
+            {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite).
+                Solo se muestran al desplegar (o si la tabla no se recorta). */}
+            {(expandido || !hayMas) &&
+              filasVacias.map(({ marca, red }) => (
+                <TableRow key={`vacia-${marca}-${red}`} className="text-muted-foreground">
+                  {columnas.map((id) => celdaVacia(marca, red, id))}
+                </TableRow>
+              ))}
+          </TableBody>
+          {hayMas && (
+            <PieMostrarMas
+              expandido={expandido}
+              onAlternar={alternar}
+              colSpan={columnas.length}
+            />
+          )}
+        </Table>
+      </div>
+    </Card>
   );
 }

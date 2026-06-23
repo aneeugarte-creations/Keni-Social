@@ -30,7 +30,7 @@ import type { PiezaListado } from "@/types";
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 /** Orden canónico de redes (color y apilado estables). */
 const ORDEN_REDES = ["facebook", "instagram", "tiktok", "youtube", "x"];
@@ -134,14 +134,11 @@ function TooltipEvolucion(props: {
 export function EvolucionRedes({
   marcaActual = MARCA_TODAS,
   rangoActual,
-  desnudo = false,
 }: {
   /** Marca global del dashboard (switch de la barra superior): acota la consulta. */
   marcaActual?: string;
   /** Rango global del dashboard: el periodo del gráfico. */
   rangoActual?: string;
-  /** `true` => solo el gráfico, sin el `SeccionColapsable` (título/colapso). */
-  desnudo?: boolean;
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
@@ -218,7 +215,14 @@ export function EvolucionRedes({
   // Muestra ~8 etiquetas de intervalo como máximo en el eje X (interval = categorías a saltar).
   const intervalo = Math.max(0, Math.ceil(filas.length / 8) - 1);
 
-  const contenido = isPending ? (
+  return (
+    <Seccion
+      id="red-evolucion"
+      titulo="Evolución por red"
+      icono={BarChart3}
+      descripcion="Por intervalo, apiladas por red."
+    >
+      {isPending ? (
         <Skeleton className="h-[380px] w-full rounded-xl" />
       ) : isError ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
@@ -300,16 +304,7 @@ export function EvolucionRedes({
             </BarChart>
           </ResponsiveContainer>
         </div>
-      );
-
-  if (desnudo) return contenido;
-  return (
-    <SeccionColapsable
-      titulo="Evolución por red"
-      icono={BarChart3}
-      descripcion="Por intervalo, apiladas por red."
-    >
-      {contenido}
-    </SeccionColapsable>
+      )}
+    </Seccion>
   );
 }

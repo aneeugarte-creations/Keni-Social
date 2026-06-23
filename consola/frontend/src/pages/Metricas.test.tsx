@@ -138,7 +138,8 @@ describe("Metricas · cuerpo del dashboard", () => {
   it("pinta el cuerpo sin avisos de datos de muestra (no existen en la app)", async () => {
     renderMetricas();
 
-    expect(await screen.findByText("Por marca")).toBeInTheDocument();
+    // "Detalle por red" es una sección REAL (no mockeada): confirma que el cuerpo montó.
+    expect(await screen.findByText("Detalle por red")).toBeInTheDocument();
     expect(screen.queryByText("Corte de prueba (1–7 jun)")).not.toBeInTheDocument();
     expect(screen.queryByText(/datos de muestra/i)).not.toBeInTheDocument();
   });
@@ -148,19 +149,23 @@ describe("Metricas · cuerpo del dashboard", () => {
 
     // Visible por defecto: su contenido está montado y NO hay botón "Mostrar".
     expect(await screen.findByTestId("grafica-marcas")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mostrar Por marca" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mostrar Comparativa por marca" }),
+    ).not.toBeInTheDocument();
   });
 
   it("oculta una sección dejando su título + botón Mostrar, sin montar su contenido", async () => {
-    useVistaConfig.getState().setSeccionVisible("por-marca", false);
+    useVistaConfig.getState().setSeccionVisible("marca-comparativa", false);
     renderMetricas();
 
     // El resto del dashboard sigue ahí.
-    expect(await screen.findByText("Por red")).toBeInTheDocument();
+    expect(await screen.findByText("Detalle por red")).toBeInTheDocument();
     // La sección oculta NO desaparece: conserva su título y ofrece "Mostrar" para restaurarla
     // in situ (no hay panel macro). Y su contenido NO se monta (ni se consulta).
-    expect(screen.getByText("Por marca")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mostrar Por marca" })).toBeInTheDocument();
+    expect(screen.getByText("Comparativa por marca")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Mostrar Comparativa por marca" }),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("grafica-marcas")).not.toBeInTheDocument();
   });
 });

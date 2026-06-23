@@ -17,6 +17,7 @@ import { Layers } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -25,7 +26,7 @@ import type { SeriePorEtiqueta } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 export function GraficaPorSerie({
   marcaActual = MARCA_TODAS,
@@ -56,12 +57,13 @@ export function GraficaPorSerie({
   const tabValido = data?.series.some((s) => s.eje === tab) ? tab : ejeInicial;
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="por-serie"
-      titulo="Rendimiento por serie y tipo"
+      titulo="Rendimiento por serie"
       descripcion="Engagement promedio por pieza del periodo, agrupado por clasificación editorial."
       icono={Layers}
     >
+      <Card className="p-4 sm:p-6">
       {isPending ? (
           <Skeleton className="mt-2 h-72 w-full rounded-lg" />
         ) : isError ? (
@@ -96,7 +98,8 @@ export function GraficaPorSerie({
             />
           </>
         )}
-    </SeccionColapsable>
+      </Card>
+    </Seccion>
   );
 }
 

@@ -81,7 +81,7 @@ describe("MetricaPorLinea", () => {
 
     // Espera al dato cargado (el título de la sección ya se pinta durante la carga).
     expect(await screen.findByText("Por línea de contenido")).toBeInTheDocument();
-    expect(screen.getByText("Rendimiento por línea y origen")).toBeInTheDocument();
+    expect(screen.getByText("Rendimiento por línea")).toBeInTheDocument();
     expect(screen.getByText("Por origen")).toBeInTheDocument();
 
     // Cada tabla con la primera columna propia + las columnas comunes (en ambas).

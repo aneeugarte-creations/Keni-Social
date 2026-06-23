@@ -2,7 +2,7 @@
  * Control de pie "Ver las N … / Mostrar menos" para las tablas plegables de Métricas.
  * Componente de UI puro (espejo de `CabeceraOrdenable`): va como `TableFooter` a ancho
  * completo, debajo del cuerpo (y de la fila de Total, que se renderiza aparte y NO se
- * recorta). Mismo gesto que `SeccionColapsable`: ghost + ChevronDown que rota.
+ * recorta). Gesto ghost + ChevronDown que rota.
  */
 import { ChevronDown } from "lucide-react";
 

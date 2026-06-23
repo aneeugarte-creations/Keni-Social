@@ -52,7 +52,7 @@ import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
 import { tokenRango } from "./rango";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 /** Radio base (px) de las burbujas según engagement. */
 const R_MIN = 3;
@@ -254,7 +254,7 @@ export function PanoramaPiezas({
 }: {
   /** Marca global del dashboard (switch de la barra superior): acota la consulta. */
   marcaActual?: string;
-  /** `true` => solo el gráfico, sin el `SeccionColapsable` (título/colapso). */
+  /** `true` => solo el gráfico, sin el encuadre `Seccion` (título/controles). */
   desnudo?: boolean;
 }) {
   const marca_ = marcaParam(marcaActual);
@@ -547,7 +547,7 @@ export function PanoramaPiezas({
     );
   }
   return (
-    <SeccionColapsable
+    <Seccion
       id="panorama"
       titulo="Panorama de piezas"
       icono={Telescope}
@@ -555,6 +555,6 @@ export function PanoramaPiezas({
       acciones={selectorPeriodo}
     >
       {contenido}
-    </SeccionColapsable>
+    </Seccion>
   );
 }

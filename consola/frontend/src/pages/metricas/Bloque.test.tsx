@@ -1,6 +1,6 @@
 /**
- * Tests del encuadre de sección con visibilidad INLINE (`Bloque`): ocultar/mostrar con su
- * propio toggle y, oculto, NO montar el contenido (deja una barra para restaurarlo in situ).
+ * Tests del GATE de sección (`Bloque`): visible monta el contenido; oculto NO lo monta
+ * (deja una barra fina con el título y un botón "Mostrar" para restaurarlo in situ).
  */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -13,18 +13,13 @@ beforeEach(() => {
 });
 
 describe("Bloque", () => {
-  it("visible (con cabecera): muestra el contenido y permite ocultar", () => {
+  it("visible: monta el contenido", () => {
     render(
-      <Bloque id="tendencia" conCabecera>
+      <Bloque id="tendencia">
         <div data-testid="contenido" />
       </Bloque>,
     );
     expect(screen.getByTestId("contenido")).toBeInTheDocument();
-    // El título sale fuera del contenido, en la cabecera.
-    expect(screen.getByText("Tendencia diaria")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Ocultar sección" }));
-    expect(useVistaConfig.getState().seccionVisible("tendencia")).toBe(false);
   });
 
   it("oculto: barra con título + Mostrar, sin montar el contenido", () => {
@@ -36,7 +31,7 @@ describe("Bloque", () => {
     );
     // El contenido NO se monta (así no se dispara su consulta).
     expect(screen.queryByTestId("contenido")).not.toBeInTheDocument();
-    // El título permanece y hay un botón para volver a mostrarla.
+    // La barra fina conserva el título y ofrece "Mostrar" para restaurarla.
     expect(screen.getByText("Tendencia diaria")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Mostrar Tendencia diaria" }));

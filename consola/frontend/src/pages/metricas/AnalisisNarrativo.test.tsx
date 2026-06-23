@@ -57,8 +57,9 @@ describe("AnalisisNarrativo", () => {
     vi.spyOn(api, "metricasAnalisis").mockResolvedValue(RESP);
     renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
 
-    expect(await screen.findByText("Qué cambió y por qué")).toBeInTheDocument();
-    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    expect(await screen.findByText("Análisis del periodo")).toBeInTheDocument();
+    // El título de sección se pinta durante la carga; espera al dato para el resto.
+    expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
     // Variación formateada con `variacion()` (signo explícito + 1 decimal, es-MX).
     expect(screen.getByText(/subió \+39\.0 % en vistas/)).toBeInTheDocument();
     expect(screen.getByText(/4\.4 k vistas en el periodo/)).toBeInTheDocument();

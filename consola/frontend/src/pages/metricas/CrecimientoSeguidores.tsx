@@ -15,6 +15,7 @@ import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
@@ -24,7 +25,7 @@ import type { PuntoSeguidores } from "@/types";
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 /** Neto de seguidores con signo: es un CONTEO (`+1.2K` / `−5K`), NO un porcentaje. */
 function netoSeguidores(n: number): string {
@@ -81,7 +82,7 @@ export function CrecimientoSeguidores({
   const colores = porRed ? redesConDatos.map(colorDe) : ["blue"];
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="seguidores"
       titulo="Crecimiento de seguidores"
       icono={Users}
@@ -96,9 +97,9 @@ export function CrecimientoSeguidores({
           Por red
         </label>
       }
-      contentClassName="space-y-4"
     >
-      {isPending ? (
+      <Card className="space-y-4 p-4 sm:p-6">
+        {isPending ? (
           <Skeleton className="h-56 w-full rounded-lg" />
         ) : isError ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
@@ -132,7 +133,8 @@ export function CrecimientoSeguidores({
             </div>
           </>
         )}
-    </SeccionColapsable>
+      </Card>
+    </Seccion>
   );
 }
 

@@ -17,6 +17,7 @@ import { SigmaSquare } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { numeroCompacto, numeroCompleto, plural, porcentaje } from "@/lib/formato";
@@ -24,7 +25,7 @@ import type { AnaliticaPiezas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 /** Punto de color del tooltip, coherente con el `emerald` del BarChart (Tremor). */
 const PUNTO = "bg-emerald-500";
@@ -59,25 +60,23 @@ export function DistribucionEngagement({
   });
 
   return (
-    <SeccionColapsable
-      id="distribucion"
-      titulo="Distribución del engagement"
-      icono={SigmaSquare}
-    >
-      {isPending ? (
-        <Skeleton className="h-72 w-full rounded-lg" />
-      ) : isError || !data ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No se pudo cargar la distribución de engagement.
-        </p>
-      ) : data.total === 0 || data.distribucion.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          Sin piezas en este periodo.
-        </p>
-      ) : (
-        <Cuerpo data={data} />
-      )}
-    </SeccionColapsable>
+    <Seccion id="distribucion" titulo="Distribución del engagement" icono={SigmaSquare}>
+      <Card className="p-4 sm:p-6">
+        {isPending ? (
+          <Skeleton className="h-72 w-full rounded-lg" />
+        ) : isError || !data ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No se pudo cargar la distribución de engagement.
+          </p>
+        ) : data.total === 0 || data.distribucion.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Sin piezas en este periodo.
+          </p>
+        ) : (
+          <Cuerpo data={data} />
+        )}
+      </Card>
+    </Seccion>
   );
 }
 

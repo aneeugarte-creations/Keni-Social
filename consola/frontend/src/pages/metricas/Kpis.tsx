@@ -23,11 +23,20 @@ import { api } from "@/lib/api";
 import type { TotalMetricas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
+import type { ColumnaMeta } from "./columnasMeta";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { InsigniaComparativa } from "./InsigniaComparativa";
 import { numeroCompleto } from "./formato";
 import { METRICAS, valorMetrica } from "./metricas-meta";
 import { parComparable } from "./rango";
+import { Seccion } from "./Seccion";
+
+/** Catálogo de tarjetas configurables: "Piezas" + una por métrica del reporte. El id de
+ * cada tarjeta de métrica es su `clave`; el de la tarjeta de conteo es "piezas". */
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "piezas", etiqueta: "Piezas" },
+  ...METRICAS.map((m) => ({ id: m.clave, etiqueta: m.etiqueta })),
+];
 
 export function Kpis({
   total,
@@ -40,6 +49,16 @@ export function Kpis({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  // Orden y visibilidad de las tarjetas (panel "Tarjetas"): se pintan SOLO las visibles,
+  // en su orden; el grid reflowea solo al ocultar/reordenar.
+  const cfg = useVistaConfig((s) => s.columnas["kpis"]) ?? {
+    orden: COLUMNAS.map((c) => c.id),
+    ocultas: [],
+  };
+  const visibles = columnasVisibles(
+    COLUMNAS.map((c) => c.id),
+    cfg,
+  );
   // Par A/B de la MISMA duración (guarda de comparabilidad): para un mes en curso,
   // B son los días transcurridos y A los mismos días del mes anterior. null = no
   // hay comparación honesta posible (token irresoluble o periodo futuro).
@@ -70,40 +89,60 @@ export function Kpis({
     return <InsigniaComparativa comp={comp} title={title} />;
   }
 
-  return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {/* Sin delta a propósito: /metricas/comparar no emite `piezas`
-            (no está en _METRICAS_CONTEO_COMPARABLES del backend, ver
-            consola/src/keni_consola/api/metricas/reporte.py). */}
+  /** Tarjeta de una id visible: la de conteo ("piezas") o la de su métrica. */
+  function tarjeta(id: string): React.ReactNode {
+    if (id === "piezas") {
+      // Sin delta a propósito: /metricas/comparar no emite `piezas`
+      // (no está en _METRICAS_CONTEO_COMPARABLES del backend, ver
+      // consola/src/keni_consola/api/metricas/reporte.py).
+      return (
         <TarjetaKpi
+          key="piezas"
           variante="card"
           etiqueta="Piezas publicadas"
           valor={numeroCompleto(total.piezas)}
         />
-        {METRICAS.map((m) => (
-          <TarjetaKpi
-            key={m.clave}
-            variante="card"
-            etiqueta={m.etiqueta}
-            valor={m.compacto(valorMetrica(total, m.clave))}
-            titulo={
-              m.descripcion
-                ? `${m.completo(valorMetrica(total, m.clave))} — ${m.descripcion}`
-                : m.completo(valorMetrica(total, m.clave))
-            }
-            insignia={insigniaDe(m.metrica)}
-          />
-        ))}
+      );
+    }
+    const m = METRICAS.find((x) => x.clave === id);
+    if (!m) return null;
+    return (
+      <TarjetaKpi
+        key={m.clave}
+        variante="card"
+        etiqueta={m.etiqueta}
+        valor={m.compacto(valorMetrica(total, m.clave))}
+        titulo={
+          m.descripcion
+            ? `${m.completo(valorMetrica(total, m.clave))} — ${m.descripcion}`
+            : m.completo(valorMetrica(total, m.clave))
+        }
+        insignia={insigniaDe(m.metrica)}
+      />
+    );
+  }
+
+  return (
+    <Seccion
+      id="kpis"
+      titulo="Resumen del periodo"
+      tablaId="kpis"
+      columnas={COLUMNAS}
+      etiquetaCampos="Tarjetas"
+    >
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {visibles.map((id) => tarjeta(id))}
+        </div>
+        {/* Leyenda de comparabilidad: con el periodo en curso, las insignias comparan
+            intervalos de la MISMA duración (días transcurridos vs el intervalo equivalente del
+            periodo anterior), y aquí se dice de forma visible, no solo en el tooltip. */}
+        {par?.enCurso && data && (
+          <p className="text-xs text-muted-foreground" role="note">
+            Periodo en curso: {data.etiqueta_b} vs {data.etiqueta_a}.
+          </p>
+        )}
       </div>
-      {/* Leyenda de comparabilidad: con el periodo en curso, las insignias comparan
-          intervalos de la MISMA duración (días transcurridos vs el intervalo equivalente del
-          periodo anterior), y aquí se dice de forma visible, no solo en el tooltip. */}
-      {par?.enCurso && data && (
-        <p className="text-xs text-muted-foreground" role="note">
-          Periodo en curso: {data.etiqueta_b} vs {data.etiqueta_a}.
-        </p>
-      )}
-    </div>
+    </Seccion>
   );
 }

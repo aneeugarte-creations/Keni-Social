@@ -12,6 +12,7 @@ import { LineChart as LineChartIcon } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -26,7 +27,7 @@ import type { PuntoSerie } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { useVistaConfig } from "./vistaConfig";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 type Metrica = "visualizaciones" | "interacciones";
 
@@ -99,7 +100,7 @@ export function TendenciaDiaria({
   const suma = puntos.reduce((s, p) => s + p[metrica], 0);
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="tendencia"
       titulo="Tendencia diaria"
       icono={LineChartIcon}
@@ -115,6 +116,7 @@ export function TendenciaDiaria({
         </Select>
       }
     >
+      <Card className="p-4 sm:p-6">
       {isPending ? (
           <Skeleton className="h-56 w-full rounded-lg" />
         ) : isError ? (
@@ -158,6 +160,7 @@ export function TendenciaDiaria({
             />
           </div>
         )}
-    </SeccionColapsable>
+      </Card>
+    </Seccion>
   );
 }

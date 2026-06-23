@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { marcaCanonicaDesdeMetricas } from "@/components/comunes/selectores";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -28,10 +29,10 @@ import { numeroCompleto, porcentaje } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
-import { idsColumnas, TABLA_CUENTAS } from "./columnasMeta";
+import { idsColumnas, metaColumnas, TABLA_CUENTAS } from "./columnasMeta";
 import { METRICAS, valorMetrica, type ClaveMetrica } from "./metricas-meta";
 import { PieMostrarMas } from "./PieMostrarMas";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
@@ -67,17 +68,10 @@ function calcularTotales(cuentas: CuentaMetrica[]): {
 export function TablaCuentas({
   cuentas,
   onVerPiezas,
-  desnudo = false,
 }: {
   cuentas: CuentaMetrica[];
   /** Drill-down: ver las piezas de esta marca (id crudo de métricas). */
   onVerPiezas?: (marcaId: string) => void;
-  /**
-   * `true` => renderiza SOLO la tabla (sin el `SeccionColapsable` de título/recuadro), para
-   * mostrarla directamente bajo el gráfico de "Por marca". Mantiene el recorte a 5 filas +
-   * "Mostrar más".
-   */
-  desnudo?: boolean;
 }) {
   const navigate = useNavigate();
 
@@ -216,10 +210,14 @@ export function TablaCuentas({
     </Table>
   );
 
-  if (desnudo) return tabla;
   return (
-    <SeccionColapsable titulo="Detalle por marca" contentClassName="p-0">
-      {tabla}
-    </SeccionColapsable>
+    <Seccion
+      id="marca-detalle"
+      titulo="Detalle por marca"
+      tablaId={TABLA_CUENTAS}
+      columnas={metaColumnas(TABLA_CUENTAS)}
+    >
+      <Card className="overflow-hidden py-2">{tabla}</Card>
+    </Seccion>
   );
 }

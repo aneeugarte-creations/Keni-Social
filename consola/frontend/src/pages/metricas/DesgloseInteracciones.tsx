@@ -5,7 +5,7 @@
  * compartidos, guardados, reproducciones) por cada celda marca×red. Pinta un BarChart
  * apilado (una barra por marca×red, segmentada SOLO por interacciones: las
  * reproducciones son consumo, no interacción, y aplastarían al resto) y una tabla con
- * las 5 columnas, el detalle y los `totales` del periodo.
+ * el detalle por columna y los `totales` del periodo.
  *
  * La gráfica ofrece dos modos: "Proporción" (apilado al 100 %, cada barra normalizada a
  * su composición) y "Volumen" (apilado absoluto). El modo proporción es el predeterminado
@@ -15,9 +15,11 @@
  * volumen.
  *
  * Mismo stack (Tremor) y estados honestos (carga / vacío / error) que el resto de
- * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. La sección es
- * colapsable; el foco de red lo manda el selector GLOBAL de la cabecera (solo se muestran
- * las redes seleccionadas).
+ * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. Encuadre UNIFORME
+ * (`Seccion`): cabecera fuera del contenido, con el toggle de modo a la izquierda del
+ * editor de campos. Qué columnas de la TABLA se ven y en qué orden lo decide ese editor
+ * (`vistaConfig.columnas.desglose`). El foco de red lo manda el selector GLOBAL de la
+ * cabecera (solo se muestran las redes seleccionadas).
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
@@ -25,13 +27,13 @@ import { Activity } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup } from "@/components/ui/toggle-group";
 import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -48,12 +50,16 @@ import {
 import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import type { ColumnaMeta } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
 import { PieMostrarMas } from "./PieMostrarMas";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
+
+/** Id de tabla del desglose (clave en `vistaConfig.columnas`). */
+const TABLA_DESGLOSE = "desglose";
 
 // Componentes que la GRÁFICA apila: solo interacciones (orden y color estables).
 // Las reproducciones (video_views) son consumo, no interacción, y su volumen
@@ -68,14 +74,26 @@ const COMPONENTES_GRAFICA: Array<{ clave: keyof CeldaDesglose; etiqueta: string;
     { clave: "guardados", etiqueta: "Guardados", color: "amber" },
   ];
 
-// La TABLA sí conserva las 5 columnas (reproducciones incluidas).
-const COMPONENTES_TABLA: Array<{ clave: keyof CeldaDesglose; etiqueta: string }> = [
-  ...COMPONENTES_GRAFICA,
-  { clave: "video_views", etiqueta: "Reproducciones" },
-];
-
 const ETIQUETAS = COMPONENTES_GRAFICA.map((c) => c.etiqueta);
 const COLORES = COMPONENTES_GRAFICA.map((c) => c.color);
+
+// Columnas configurables de la TABLA (orden base + etiquetas legibles). Incluye marca y
+// red como columnas controlables; el editor de campos las reordena/oculta como al resto.
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "marca", etiqueta: "Marca" },
+  { id: "red", etiqueta: "Red" },
+  { id: "likes", etiqueta: "Me gusta" },
+  { id: "comentarios", etiqueta: "Comentarios" },
+  { id: "compartidos", etiqueta: "Compartidos" },
+  { id: "guardados", etiqueta: "Guardados" },
+  { id: "video_views", etiqueta: "Reproducciones" },
+  { id: "n_piezas", etiqueta: "Piezas" },
+];
+
+const IDS_BASE = COLUMNAS.map((c) => c.id);
+const ETIQUETA_COL = new Map(COLUMNAS.map((c) => [c.id, c.etiqueta]));
+// Columnas de texto (alineadas a la izquierda); el resto son numéricas a la derecha.
+const COLUMNAS_TEXTO = new Set(["marca", "red"]);
 
 /** Modo de la gráfica: proporción (apilado al 100 %) o volumen (apilado absoluto). */
 type ModoGrafica = "proporcion" | "volumen";
@@ -122,11 +140,14 @@ export function DesgloseInteracciones({
   );
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="desglose"
       titulo="Desglose de interacciones"
       icono={Activity}
       acciones={acciones}
+      tablaId={TABLA_DESGLOSE}
+      columnas={COLUMNAS}
+      contentClassName="space-y-4"
     >
       {isPending ? (
         <Skeleton className="h-72 w-full rounded-lg" />
@@ -139,29 +160,33 @@ export function DesgloseInteracciones({
           Aún no hay desglose de interacciones para este periodo.
         </p>
       ) : (
-        <div className="space-y-4">
-          {/* Alternativa textual del chart: los totales del periodo por componente. */}
-          <div
-            role="img"
-            aria-label={`Desglose de interacciones por marca y red: Me gusta ${numeroCompacto(
-              data.totales.likes ?? 0,
-            )}, Comentarios ${numeroCompacto(
-              data.totales.comentarios ?? 0,
-            )}, Compartidos ${numeroCompacto(
-              data.totales.compartidos ?? 0,
-            )}, Guardados ${numeroCompacto(data.totales.guardados ?? 0)}`}
-          >
-            <GraficaApilada celdas={celdas} marcas={marcas} redes={redes} modo={modo} />
-          </div>
-          <TablaDesglose
-            celdas={celdas}
-            totales={data.totales}
-            marcas={marcas}
-            redes={redes}
-          />
-        </div>
+        <>
+          <Card className="p-4 sm:p-6">
+            {/* Alternativa textual del chart: los totales del periodo por componente. */}
+            <div
+              role="img"
+              aria-label={`Desglose de interacciones por marca y red: Me gusta ${numeroCompacto(
+                data.totales.likes ?? 0,
+              )}, Comentarios ${numeroCompacto(
+                data.totales.comentarios ?? 0,
+              )}, Compartidos ${numeroCompacto(
+                data.totales.compartidos ?? 0,
+              )}, Guardados ${numeroCompacto(data.totales.guardados ?? 0)}`}
+            >
+              <GraficaApilada celdas={celdas} marcas={marcas} redes={redes} modo={modo} />
+            </div>
+          </Card>
+          <Card className="overflow-hidden py-2">
+            <TablaDesglose
+              celdas={celdas}
+              totales={data.totales}
+              marcas={marcas}
+              redes={redes}
+            />
+          </Card>
+        </>
       )}
-    </SeccionColapsable>
+    </Seccion>
   );
 }
 
@@ -257,9 +282,9 @@ const ACCESORES_DESGLOSE = {
   guardados: (e) => e.celda?.guardados ?? null,
   video_views: (e) => e.celda?.video_views ?? null,
   n_piezas: (e) => e.celda?.n_piezas ?? null,
-  // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
   marca: (e) => e.marca,
   red: (e) => e.red,
+  // El resto de claves de CeldaDesglose no se usan como orden, pero el tipo las exige.
   interacciones: (e) => e.celda?.interacciones ?? null,
   visualizaciones: (e) => e.celda?.visualizaciones ?? null,
   engagement_pct: (e) => e.celda?.engagement_pct ?? null,
@@ -276,6 +301,11 @@ function TablaDesglose({
   marcas: MarcaDisponible[];
   redes: readonly string[];
 }) {
+  // Orden y visibilidad de columnas efectivos (editor de campos / vistas guardadas).
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_DESGLOSE]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+
   // Rejilla marca×red (solo redes en foco): una red en foco sin datos va como entrada con
   // `celda` undefined, que el orden empuja al final (`null` no es un 0 real) y se pinta "—".
   const rejilla = React.useMemo(
@@ -283,7 +313,7 @@ function TablaDesglose({
     [celdas, redes],
   );
 
-  // Cada componente del desglose + nº de piezas es ordenable (accesores estables arriba).
+  // Cada columna es ordenable (accesores estables arriba), incluidas marca y red.
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<EntradaRejilla, ClaveDesglose>(
     rejilla,
     ACCESORES_DESGLOSE,
@@ -292,68 +322,86 @@ function TablaDesglose({
   // Recorte a 5 filas (post-orden): las visibles son el top 5 según la columna activa.
   const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
 
+  const cabecera = (id: string) => {
+    const clave = id as ClaveDesglose;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear={COLUMNAS_TEXTO.has(id) ? "left" : "right"}
+      >
+        {ETIQUETA_COL.get(id) ?? id}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celdaFila = ({ marca, red, celda }: EntradaRejilla, id: string) => {
+    if (id === "marca") {
+      return (
+        <TableCell key={id} className="font-medium">
+          {nombreMarca(marca, marcas)}
+        </TableCell>
+      );
+    }
+    if (id === "red") {
+      return (
+        <TableCell key={id} className="text-muted-foreground">
+          {nombreRed(red)}
+        </TableCell>
+      );
+    }
+    if (id === "n_piezas") {
+      return (
+        <TableCell key={id} className="text-right tabular-nums">
+          {celda ? celda.n_piezas : "—"}
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        {celda ? numeroCompleto(celda[id as ClaveDesglose] as number) : "—"}
+      </TableCell>
+    );
+  };
+
+  const celdaTotal = (id: string) => {
+    if (id === "marca") {
+      return <TableCell key={id}>Total</TableCell>;
+    }
+    if (id === "red") {
+      return <TableCell key={id} />;
+    }
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        {numeroCompleto(totales[id] ?? 0)}
+      </TableCell>
+    );
+  };
+
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead>Marca</TableHead>
-            <TableHead>Red</TableHead>
-            {COMPONENTES_TABLA.map((c) => (
-              <CabeceraOrdenable
-                key={c.clave as string}
-                activa={estado.clave === c.clave}
-                direccion={estado.direccion}
-                onClick={() => alClicar(c.clave)}
-                alinear="right"
-              >
-                {c.etiqueta}
-              </CabeceraOrdenable>
-            ))}
-            <CabeceraOrdenable
-              activa={estado.clave === "n_piezas"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("n_piezas")}
-              alinear="right"
-            >
-              Piezas
-            </CabeceraOrdenable>
-          </TableRow>
+          <TableRow>{columnas.map(cabecera)}</TableRow>
         </TableHeader>
         <TableBody>
-          {visibles.map(({ marca, red, celda }) => (
+          {visibles.map((fila) => (
             <TableRow
-              key={`${marca}-${red}`}
-              className={celda ? undefined : "text-muted-foreground"}
+              key={`${fila.marca}-${fila.red}`}
+              className={fila.celda ? undefined : "text-muted-foreground"}
             >
-              <TableCell className="font-medium">{nombreMarca(marca, marcas)}</TableCell>
-              <TableCell className="text-muted-foreground">{nombreRed(red)}</TableCell>
-              {COMPONENTES_TABLA.map((comp) => (
-                <TableCell key={comp.clave} className="text-right tabular-nums">
-                  {celda ? numeroCompleto(celda[comp.clave] as number) : "—"}
-                </TableCell>
-              ))}
-              <TableCell className="text-right tabular-nums">{celda ? celda.n_piezas : "—"}</TableCell>
+              {columnas.map((id) => celdaFila(fila, id))}
             </TableRow>
           ))}
-          <TableRow className="border-t-2 font-medium">
-            <TableCell>Total</TableCell>
-            <TableCell />
-            {COMPONENTES_TABLA.map((comp) => (
-              <TableCell key={comp.clave} className="text-right tabular-nums">
-                {numeroCompleto(totales[comp.clave] ?? 0)}
-              </TableCell>
-            ))}
-            <TableCell className="text-right tabular-nums">
-              {totales.n_piezas ?? 0}
-            </TableCell>
-          </TableRow>
+          <TableRow className="border-t-2 font-medium">{columnas.map(celdaTotal)}</TableRow>
         </TableBody>
         {hayMas && (
           <PieMostrarMas
             expandido={expandido}
             onAlternar={alternar}
-            colSpan={COMPONENTES_TABLA.length + 3}
+            colSpan={columnas.length}
           />
         )}
       </Table>

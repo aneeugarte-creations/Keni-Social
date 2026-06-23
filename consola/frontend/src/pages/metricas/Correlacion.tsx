@@ -29,6 +29,7 @@ import {
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -54,12 +55,28 @@ import {
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import type { ColumnaMeta } from "./columnasMeta";
 import { colorDe } from "./coloresRed";
 import { MARCA_TODAS } from "./Controles";
-import { useVistaConfig } from "./vistaConfig";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { N_MINIMA_CORRELACION, spearman } from "./estadistica";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 import { useOrdenTabla } from "./useOrdenTabla";
+
+/** Tabla por día configurable (`vistaConfig.columnas[TABLA_CORRELACION]`). */
+const TABLA_CORRELACION = "correlacion";
+
+/** Columnas de la tabla por día (orden base + etiquetas del editor de campos). */
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "marca", etiqueta: "Marca" },
+  { id: "red", etiqueta: "Red" },
+  { id: "seguidores_ganados", etiqueta: "Seguidores" },
+  { id: "n_posts", etiqueta: "Piezas" },
+  { id: "seguidores_por_post", etiqueta: "Seg. por pieza" },
+  { id: "post_estrella", etiqueta: "Pieza estrella" },
+];
+
+const COLUMNAS_BASE = COLUMNAS.map((c) => c.id);
 
 /** Seguidores por post: ratio crudo con un decimal ("—" si no aplica). */
 function ratio(v: number | null): string {
@@ -147,11 +164,13 @@ export function Correlacion({
   );
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="correlacion"
-      titulo="Seguidores frente a piezas publicadas"
+      titulo="Seguidores frente a piezas"
       icono={GitCompareArrows}
       descripcion="Con la pieza que mejor rindió cada día"
+      tablaId={TABLA_CORRELACION}
+      columnas={COLUMNAS}
       contentClassName="space-y-4"
     >
       {isPending ? (
@@ -166,21 +185,27 @@ export function Correlacion({
         </p>
       ) : (
         <>
-          {/* La nota del backend (correlación, no causalidad) SIEMPRE visible, con el
-              nombre técnico del ratio traducido a la etiqueta de la tabla. */}
-          <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{data.nota.replace("'seguidores_por_post'", "«Seg. por pieza»")}</span>
-          </p>
-          {/* Coeficiente (o su supresión honesta) sobre los pares visibles del filtro. */}
-          {visibles.length > 0 && <ResumenCorrelacion items={visibles} />}
-          {/* Scatter con TODOS los puntos del periodo filtrado; la tabla de abajo es el
-              drill-down del día. */}
-          {visibles.length > 0 && <GraficaCorrelacion items={visibles} marcas={marcas} />}
-          <TablaCorrelacion items={items} marcas={marcas} red={red} />
+          {/* Scatter + nota + coeficiente en su propia tarjeta. */}
+          <Card className="space-y-4 p-4 sm:p-6">
+            {/* La nota del backend (correlación, no causalidad) SIEMPRE visible, con el
+                nombre técnico del ratio traducido a la etiqueta de la tabla. */}
+            <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{data.nota.replace("'seguidores_por_post'", "«Seg. por pieza»")}</span>
+            </p>
+            {/* Coeficiente (o su supresión honesta) sobre los pares visibles del filtro. */}
+            {visibles.length > 0 && <ResumenCorrelacion items={visibles} />}
+            {/* Scatter con TODOS los puntos del periodo filtrado; la tabla de abajo es el
+                drill-down del día. */}
+            {visibles.length > 0 && <GraficaCorrelacion items={visibles} marcas={marcas} />}
+          </Card>
+          {/* Drill-down del día en su propia tarjeta (con su editor de campos). */}
+          <Card className="overflow-hidden py-2">
+            <TablaCorrelacion items={items} marcas={marcas} red={red} />
+          </Card>
         </>
       )}
-    </SeccionColapsable>
+    </Seccion>
   );
 }
 
@@ -400,6 +425,102 @@ function TablaCorrelacion({
     { clave: "seguidores_ganados", direccion: "desc" },
   );
 
+  // Orden y visibilidad de columnas del editor de campos (kebab de la sección).
+  const cfg = useVistaConfig((s) => s.columnas[TABLA_CORRELACION]) ?? {
+    orden: COLUMNAS_BASE,
+    ocultas: [],
+  };
+  const columnas = columnasVisibles(COLUMNAS_BASE, cfg);
+
+  const etiquetaDe = (id: string) => COLUMNAS.find((c) => c.id === id)?.etiqueta ?? id;
+
+  // Solo las columnas numéricas son ordenables; sus ids coinciden con `ClaveCorrelacion`.
+  const encabezado = (id: string) => {
+    if (id === "marca" || id === "red" || id === "post_estrella") {
+      return <TableHead key={id}>{etiquetaDe(id)}</TableHead>;
+    }
+    const clave = id as ClaveCorrelacion;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={estado.clave === clave}
+        direccion={estado.direccion}
+        onClick={() => alClicar(clave)}
+        alinear="right"
+      >
+        {etiquetaDe(id)}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (it: ItemCorrelacion, id: string) => {
+    switch (id) {
+      case "marca":
+        return (
+          <TableCell key={id} className="font-medium">
+            {nombreMarca(it.marca, marcas)}
+          </TableCell>
+        );
+      case "red":
+        return (
+          <TableCell key={id} className="text-muted-foreground">
+            {nombreRed(it.red)}
+          </TableCell>
+        );
+      case "seguidores_ganados":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {seguidoresNeto(it.seguidores_ganados)}
+          </TableCell>
+        );
+      case "n_posts":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {it.n_posts}
+          </TableCell>
+        );
+      case "seguidores_por_post":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {ratio(it.seguidores_por_post)}
+          </TableCell>
+        );
+      case "post_estrella":
+        return (
+          <TableCell key={id} className="max-w-[18rem]">
+            <PiezaEstrella post={it.post_estrella} />
+          </TableCell>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const celdaFaltante = (redFalta: string, id: string) => {
+    if (id === "marca") {
+      return (
+        <TableCell key={id} className="font-medium">
+          —
+        </TableCell>
+      );
+    }
+    if (id === "red") {
+      return <TableCell key={id}>{nombreRed(redFalta)}</TableCell>;
+    }
+    if (id === "post_estrella") {
+      return (
+        <TableCell key={id} className="max-w-[18rem]">
+          —
+        </TableCell>
+      );
+    }
+    return (
+      <TableCell key={id} className="text-right tabular-nums">
+        —
+      </TableCell>
+    );
+  };
+
   // Redes EN FOCO presentes en CADA día: una red en foco que no publicó ni ganó seguidores
   // ese día aparece igualmente como fila "—"; las redes fuera del foco no se muestran.
   const redesConDatos = new Set(itemsDelDia.map((it) => redCanonica(it.red)));
@@ -416,7 +537,7 @@ function TablaCorrelacion({
   return (
     <div className="space-y-3">
       {/* Pager por día */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 px-4 pt-2">
         <div>
           <p className="text-sm font-semibold text-foreground">{etiquetaDia(diaActual)}</p>
           <p className="text-xs text-muted-foreground">
@@ -451,62 +572,18 @@ function TablaCorrelacion({
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Marca</TableHead>
-              <TableHead>Red</TableHead>
-              <CabeceraOrdenable
-                activa={estado.clave === "seguidores_ganados"}
-                direccion={estado.direccion}
-                onClick={() => alClicar("seguidores_ganados")}
-                alinear="right"
-              >
-                Seguidores
-              </CabeceraOrdenable>
-              <CabeceraOrdenable
-                activa={estado.clave === "n_posts"}
-                direccion={estado.direccion}
-                onClick={() => alClicar("n_posts")}
-                alinear="right"
-              >
-                Piezas
-              </CabeceraOrdenable>
-              <CabeceraOrdenable
-                activa={estado.clave === "seguidores_por_post"}
-                direccion={estado.direccion}
-                onClick={() => alClicar("seguidores_por_post")}
-                alinear="right"
-              >
-                Seg. por pieza
-              </CabeceraOrdenable>
-              <TableHead>Pieza estrella</TableHead>
-            </TableRow>
+            <TableRow>{columnas.map(encabezado)}</TableRow>
           </TableHeader>
           <TableBody>
             {filasOrdenadas.map((it) => (
               <TableRow key={`${it.marca}-${it.red}-${it.fecha}`}>
-                <TableCell className="font-medium">{nombreMarca(it.marca, marcas)}</TableCell>
-                <TableCell className="text-muted-foreground">{nombreRed(it.red)}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {seguidoresNeto(it.seguidores_ganados)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{it.n_posts}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {ratio(it.seguidores_por_post)}
-                </TableCell>
-                <TableCell className="max-w-[18rem]">
-                  <PiezaEstrella post={it.post_estrella} />
-                </TableCell>
+                {columnas.map((id) => celda(it, id))}
               </TableRow>
             ))}
             {/* Redes sin datos ese día: fila presente con "—" (no se omiten). */}
             {redesFaltantes.map((red) => (
               <TableRow key={`falta-${red}`} className="text-muted-foreground">
-                <TableCell className="font-medium">—</TableCell>
-                <TableCell>{nombreRed(red)}</TableCell>
-                <TableCell className="text-right tabular-nums">—</TableCell>
-                <TableCell className="text-right tabular-nums">—</TableCell>
-                <TableCell className="text-right tabular-nums">—</TableCell>
-                <TableCell className="max-w-[18rem]">—</TableCell>
+                {columnas.map((id) => celdaFaltante(red, id))}
               </TableRow>
             ))}
           </TableBody>

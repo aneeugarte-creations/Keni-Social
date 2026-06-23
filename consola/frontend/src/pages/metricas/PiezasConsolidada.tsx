@@ -40,7 +40,8 @@ import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Card } from "@/components/ui/card";
+import { Seccion } from "./Seccion";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -73,7 +74,7 @@ import {
 import type { MarcaDisponible, PiezaListado } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
-import { idsColumnas, TABLA_PIEZAS } from "./columnasMeta";
+import { idsColumnas, metaColumnas, TABLA_PIEZAS } from "./columnasMeta";
 import { MARCA_TODAS } from "./Controles";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { DetallePieza } from "./DetallePieza";
@@ -293,14 +294,15 @@ export function PiezasConsolidada({
 
   return (
     <>
-      <SeccionColapsable
+      <Seccion
         id="piezas-tabla"
         titulo="Piezas del periodo"
         icono={ListChecks}
-        tablaColumnas={TABLA_PIEZAS}
-        contentClassName="px-0 pb-0"
+        tablaId={TABLA_PIEZAS}
+        columnas={metaColumnas(TABLA_PIEZAS)}
       >
-        <div className="space-y-3 px-6 pb-3">
+        <Card className="overflow-hidden">
+        <div className="space-y-3 px-6 pb-3 pt-4">
         {/* Filtros */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative max-w-sm flex-1">
@@ -443,7 +445,8 @@ export function PiezasConsolidada({
             )}
           </>
         )}
-      </SeccionColapsable>
+        </Card>
+      </Seccion>
 
       <DetallePieza
         pieza={seleccion}

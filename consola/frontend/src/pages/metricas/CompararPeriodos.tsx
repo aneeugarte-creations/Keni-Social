@@ -2,11 +2,12 @@
  * Sub-sección "Comparar periodos".
  *
  * Selecciona el periodo A ("Comparar con (antes)"), el periodo B ("Periodo actual") y
- * marca, consulta `api.metricasComparar` y muestra por métrica el valor A, el valor B
- * y la variación con flecha y color (Tremor BadgeDelta: verde sube / rojo baja).
- * Incluye el desglose `por_marca`. Por defecto A es el periodo inmediatamente ANTERIOR
- * adyacente a B (misma longitud); si los periodos elegidos no son comparables (distinta
- * duración o solape) se avisa, sin bloquear.
+ * marca, consulta `api.metricasComparar` y pinta una tabla con una fila por métrica:
+ * el valor del periodo actual (B), el anterior (A) y la variación (`InsigniaComparativa`).
+ * Bajo los totales, el desglose `por_marca` como grupos de filas. Qué columnas se ven y en
+ * qué orden lo decide el editor de campos de la cabecera (`vistaConfig.columnas.comparativa`).
+ * Por defecto A es el periodo inmediatamente ANTERIOR adyacente a B (misma longitud); si los
+ * periodos elegidos no son comparables (distinta duración o solape) se avisa, sin bloquear.
  *
  * Ambos periodos usan `SelectorTiempo` (periodos comunes · mes · fechas exactas),
  * así que se pueden comparar periodos ARBITRARIOS —p. ej. "mayo 2026" vs "abril 2026"
@@ -23,18 +24,88 @@ import {
   marcaParam,
 } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { nombreMarca, numeroCompleto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
+import type { ColumnaMeta } from "./columnasMeta";
 import { MARCA_TODAS, SelectorTiempo } from "./Controles";
 import { InsigniaComparativa } from "./InsigniaComparativa";
-import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
 import { diasDePeriodo, periodoAnterior, seSolapan } from "./rango";
+import { Seccion } from "./Seccion";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
+
+/**
+ * Columnas FIJAS de la tabla comparativa: la métrica como etiqueta de fila, los dos periodos
+ * (actual = B, antes = A) y su variación. El id "comparativa" persiste orden/ocultas en
+ * `vistaConfig.columnas`, así el editor de campos de la cabecera las muestra/oculta y reordena.
+ */
+const TABLA_COMPARATIVA = "comparativa";
+
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "metrica", etiqueta: "Métrica" },
+  { id: "actual", etiqueta: "Periodo actual" },
+  { id: "antes", etiqueta: "Antes" },
+  { id: "variacion", etiqueta: "Variación" },
+];
+
+const IDS_COMPARATIVA = COLUMNAS.map((c) => c.id);
+
+/** Cabecera de una columna: la métrica alineada a la izquierda, el resto a la derecha. */
+function encabezado(id: string) {
+  const etiqueta = COLUMNAS.find((c) => c.id === id)?.etiqueta ?? id;
+  if (id === "metrica") {
+    return (
+      <TableHead key={id} className="pl-6">
+        {etiqueta}
+      </TableHead>
+    );
+  }
+  return (
+    <TableHead key={id} className="pr-6 text-right last:pr-6">
+      {etiqueta}
+    </TableHead>
+  );
+}
+
+/** Celda de una métrica para la columna `id` (valor de un periodo o insignia de variación). */
+function celdaComp(comp: ComparativaMetrica, id: string) {
+  if (id === "metrica") {
+    return (
+      <TableCell key={id} className="pl-6 font-medium">
+        {etiquetaMetrica(comp.metrica)}
+      </TableCell>
+    );
+  }
+  if (id === "variacion") {
+    return (
+      <TableCell key={id} className="pr-6 last:pr-6">
+        <div className="flex justify-end">
+          <InsigniaComparativa comp={comp} />
+        </div>
+      </TableCell>
+    );
+  }
+  const valor = id === "antes" ? comp.a : comp.b;
+  return (
+    <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
+      {formatoValor(comp.metrica, valor)}
+    </TableCell>
+  );
+}
 
 /**
  * Metadatos de las métricas EXTRA de la comparativa (granulares + seguidores) que no están
@@ -182,11 +253,17 @@ export function CompararPeriodos({
     staleTime: 5 * 60_000,
   });
 
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_COMPARATIVA]);
+  const cfg = cfgGuardada ?? { orden: IDS_COMPARATIVA, ocultas: [] };
+  const columnas = columnasVisibles(IDS_COMPARATIVA, cfg);
+
   return (
-    <SeccionColapsable
+    <Seccion
       id="comparativa"
       titulo="Comparar periodos"
       icono={ArrowLeftRight}
+      tablaId={TABLA_COMPARATIVA}
+      columnas={COLUMNAS}
       acciones={
         <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
@@ -213,93 +290,64 @@ export function CompararPeriodos({
       contentClassName="space-y-6"
     >
       {!habilitado ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Selecciona dos periodos
-          </p>
-        ) : isPending ? (
-          <EsqueletoComparar />
-        ) : isError ? (
-          <ErrorComparar
-            mensaje={error instanceof Error ? error.message : undefined}
-            onReintentar={() => void refetch()}
-            cargando={isFetching}
-          />
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-              Comparando
-              <span className="font-medium text-foreground">{data.etiqueta_a}</span>
-              <span aria-hidden="true">→</span>
-              <span className="font-medium text-foreground">{data.etiqueta_b}</span>
-            </div>
-
-            <AvisosComparabilidad rangoA={rangoA} rangoB={rangoB} />
-
-            {/* Totales: una tarjeta por métrica con A, B y variación. */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {data.total.metricas.map((comp) => (
-                <TarjetaComparativa key={comp.metrica} comp={comp} />
-              ))}
-            </div>
-
-            {/* Desglose por marca. */}
-            {data.por_marca.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold">Desglose por marca</h4>
-                <div className="space-y-3">
-                  {data.por_marca.map((pm) => (
-                    <div key={pm.marca_id} className="rounded-lg border border-border p-4">
-                      <p className="mb-3 text-sm font-medium">
-                        {etiquetaMarca(pm, opciones.marcas)}
-                      </p>
-                      <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                        {pm.comparativa.map((comp) => (
-                          <FilaComparativa key={comp.metrica} comp={comp} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-    </SeccionColapsable>
-  );
-}
-
-/** Tarjeta destacada de una métrica con valor A, valor B y su insignia comparativa
- * (variación relativa para conteos, diferencia en pts para engagement, "Nuevo" para
- * arranques desde cero; ver InsigniaComparativa). */
-function TarjetaComparativa({ comp }: { comp: ComparativaMetrica }) {
-  return (
-    <div className="rounded-lg border border-border bg-muted/30 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">
-          {etiquetaMetrica(comp.metrica)}
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Selecciona dos periodos
         </p>
-        <InsigniaComparativa comp={comp} />
-      </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
-        {formatoValor(comp.metrica, comp.b)}
-      </p>
-      <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-        antes {formatoValor(comp.metrica, comp.a)}
-      </p>
-    </div>
-  );
-}
+      ) : isPending ? (
+        <EsqueletoComparar />
+      ) : isError ? (
+        <ErrorComparar
+          mensaje={error instanceof Error ? error.message : undefined}
+          onReintentar={() => void refetch()}
+          cargando={isFetching}
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            Comparando
+            <span className="font-medium text-foreground">{data.etiqueta_a}</span>
+            <span aria-hidden="true">→</span>
+            <span className="font-medium text-foreground">{data.etiqueta_b}</span>
+          </div>
 
-/** Fila compacta usada dentro del desglose por marca. */
-function FilaComparativa({ comp }: { comp: ComparativaMetrica }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className="truncate text-xs text-muted-foreground">{etiquetaMetrica(comp.metrica)}</p>
-        <p className="text-sm font-medium tabular-nums">{formatoValor(comp.metrica, comp.b)}</p>
-      </div>
-      <InsigniaComparativa comp={comp} />
-    </div>
+          <AvisosComparabilidad rangoA={rangoA} rangoB={rangoB} />
+
+          <Card className="overflow-hidden py-2">
+            <Table>
+              <TableHeader>
+                <TableRow>{columnas.map(encabezado)}</TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Totales: una fila por métrica con A, B y variación. */}
+                {data.total.metricas.map((comp) => (
+                  <TableRow key={comp.metrica}>
+                    {columnas.map((id) => celdaComp(comp, id))}
+                  </TableRow>
+                ))}
+                {/* Desglose por marca: cada marca como un grupo de filas precedido por su nombre. */}
+                {data.por_marca.map((pm) => (
+                  <React.Fragment key={pm.marca_id}>
+                    <TableRow className="bg-muted/30">
+                      <TableCell
+                        colSpan={columnas.length}
+                        className="pl-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                      >
+                        {etiquetaMarca(pm, opciones.marcas)}
+                      </TableCell>
+                    </TableRow>
+                    {pm.comparativa.map((comp) => (
+                      <TableRow key={comp.metrica}>
+                        {columnas.map((id) => celdaComp(comp, id))}
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
+    </Seccion>
   );
 }
 

@@ -12,7 +12,6 @@
 import { BarChart, type CustomTooltipProps } from "@tremor/react";
 import { Info } from "lucide-react";
 import * as React from "react";
-import type { ReactNode } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -26,7 +25,7 @@ import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { NOTA_VISTAS_CROSSRED } from "./metricas-meta";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { Seccion } from "./Seccion";
 
 /** Icono de info con la nota en el tooltip nativo (mismo patrón que `DetallePieza`). */
 function NotaInfo({ nota }: { nota: string }) {
@@ -81,14 +80,7 @@ function porcentajesMayorResto(valores: number[]): number[] {
   return pisos;
 }
 
-export function GraficaMarcas({
-  cuentas,
-  desnudo = false,
-}: {
-  cuentas: CuentaMetrica[];
-  /** `true` => solo las gráficas, sin el `SeccionColapsable` (título/colapso). */
-  desnudo?: boolean;
-}) {
+export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
   const [metrica, setMetrica] = React.useState<Metrica>("visualizaciones");
   const etiqueta = ETIQUETA[metrica];
 
@@ -113,26 +105,20 @@ export function GraficaMarcas({
     pct: pcts[i],
   }));
 
-  const envolver = (hijo: ReactNode) =>
-    desnudo ? (
-      hijo
-    ) : (
-      <SeccionColapsable titulo="Comparativa por marca" sinCaja>
-        {hijo}
-      </SeccionColapsable>
-    );
-
   if (cuentas.length === 0) {
-    return envolver(
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        No hay marcas para mostrar en este periodo.
-      </p>,
+    return (
+      <Seccion id="marca-comparativa" titulo="Comparativa por marca">
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No hay marcas para mostrar en este periodo.
+        </p>
+      </Seccion>
     );
   }
 
-  return envolver(
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-      <Card className="lg:col-span-3">
+  return (
+    <Seccion id="marca-comparativa" titulo="Comparativa por marca">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Título dinámico: la gráfica enseña UNA métrica a la vez (la del Select). */}
@@ -201,7 +187,8 @@ export function GraficaMarcas({
           </ul>
         </CardContent>
       </Card>
-      </div>,
+      </div>
+    </Seccion>
   );
 }
 

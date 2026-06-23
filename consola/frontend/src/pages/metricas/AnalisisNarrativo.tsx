@@ -3,8 +3,8 @@
  *
  * Capa de lectura para un equipo de redes NO técnico sobre `GET /metricas/analisis`:
  * top movimientos (qué marca subió/bajó y la pieza que lo explica) y una sugerencia
- * accionable ya redactada por el backend. Es el resumen ejecutivo de la página, por
- * eso es una Card SIEMPRE visible (no colapsable) justo después de los KPIs.
+ * accionable ya redactada por el backend. Es el resumen ejecutivo de la página: va en
+ * el encuadre uniforme (`<Seccion>`) con su contenido en una Card, justo tras los KPIs.
  *
  * Los textos se pintan con los formateadores es-MX de `@/lib/formato`; el backend
  * entrega nombres de marca ya resueltos y `siguiente_paso.texto` como frase completa.
@@ -21,19 +21,14 @@ import {
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { nombreRed, numeroCompacto, plural, porcentaje, variacion } from "@/lib/formato";
 import type { AnalisisDiario, MovimientoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { Seccion } from "./Seccion";
 import { useVistaConfig } from "./vistaConfig";
 
 /** Enlace externo a una pieza (nueva pestaña), con el icono de "sale de la app". */
@@ -191,26 +186,26 @@ export function AnalisisNarrativo({
     staleTime: 2 * 60_000,
   });
 
-  if (isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
-
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Qué cambió y por qué</CardTitle>
-        </div>
-        {data && <CardDescription>{data.etiqueta_rango}</CardDescription>}
-      </CardHeader>
-      <CardContent>
-        {isError || !data ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            No se pudo cargar el análisis del periodo.
-          </p>
-        ) : (
-          <CuerpoAnalisis data={data} />
-        )}
-      </CardContent>
-    </Card>
+    <Seccion
+      id="analisis"
+      titulo="Análisis del periodo"
+      icono={Sparkles}
+      descripcion={data?.etiqueta_rango}
+    >
+      <Card>
+        <CardContent className="pt-6">
+          {isPending ? (
+            <Skeleton className="h-40 w-full rounded-xl" />
+          ) : isError || !data ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No se pudo cargar el análisis del periodo.
+            </p>
+          ) : (
+            <CuerpoAnalisis data={data} />
+          )}
+        </CardContent>
+      </Card>
+    </Seccion>
   );
 }

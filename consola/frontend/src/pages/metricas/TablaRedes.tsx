@@ -12,6 +12,7 @@
  * redes seleccionadas; una en foco sin datos aparece como fila "—" (nunca un 0 falso),
  * y una fuera del foco no se muestra.
  */
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -31,8 +32,8 @@ import {
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
-import { idsColumnas, TABLA_REDES } from "./columnasMeta";
-import { SeccionColapsable } from "./SeccionColapsable";
+import { idsColumnas, metaColumnas, TABLA_REDES } from "./columnasMeta";
+import { Seccion } from "./Seccion";
 import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
@@ -84,14 +85,7 @@ function calcularTotales(redes: RedMetrica[]): {
   return { visualizaciones, alcance, interacciones, engagement_pct };
 }
 
-export function TablaRedes({
-  redes,
-  desnudo = false,
-}: {
-  redes: RedMetrica[];
-  /** `true` => solo la tabla + reparto, sin el `SeccionColapsable` (para deslizar). */
-  desnudo?: boolean;
-}) {
+export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
   // El foco de red lo manda el selector GLOBAL de la cabecera (`vistaConfig.red`): no hay
   // filtro de red propio de la tabla (uno solo, no varios que confundan).
   const red = useVistaConfig((s) => s.red);
@@ -213,12 +207,14 @@ export function TablaRedes({
     </Table>
   );
 
-  if (desnudo) {
-    return cuerpo;
-  }
   return (
-    <SeccionColapsable titulo="Detalle por red" contentClassName="p-0">
-      {cuerpo}
-    </SeccionColapsable>
+    <Seccion
+      id="red-detalle"
+      titulo="Detalle por red"
+      tablaId={TABLA_REDES}
+      columnas={metaColumnas(TABLA_REDES)}
+    >
+      <Card className="overflow-hidden py-2">{cuerpo}</Card>
+    </Seccion>
   );
 }

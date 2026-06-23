@@ -30,12 +30,16 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
   },
   {
     titulo: "Por marca",
-    secciones: [{ id: "por-marca", etiqueta: "Por marca" }],
+    secciones: [
+      { id: "marca-comparativa", etiqueta: "Comparativa por marca" },
+      { id: "marca-detalle", etiqueta: "Detalle por marca" },
+    ],
   },
   {
     titulo: "Por red",
     secciones: [
-      { id: "por-red", etiqueta: "Por red" },
+      { id: "red-evolucion", etiqueta: "Evolución por red" },
+      { id: "red-detalle", etiqueta: "Detalle por red" },
       { id: "cobertura", etiqueta: "Cobertura por red" },
     ],
   },
@@ -44,11 +48,11 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
     secciones: [
       { id: "seguidores", etiqueta: "Crecimiento de seguidores" },
       { id: "desglose", etiqueta: "Desglose de interacciones" },
-      { id: "crosstab", etiqueta: "Cruce de métricas" },
+      { id: "crosstab", etiqueta: "Rendimiento por formato" },
       { id: "por-serie", etiqueta: "Rendimiento por serie" },
       { id: "por-linea", etiqueta: "Rendimiento por línea" },
-      { id: "correlacion", etiqueta: "Correlación con seguidores" },
-      { id: "ads", etiqueta: "Publicidad pagada" },
+      { id: "correlacion", etiqueta: "Seguidores frente a piezas" },
+      { id: "ads", etiqueta: "Publicidad" },
     ],
   },
   {

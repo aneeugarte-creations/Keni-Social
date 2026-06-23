@@ -71,3 +71,8 @@ export function idsColumnas(tablaId: string): string[] {
   const t = TABLAS_CONFIG.find((x) => x.id === tablaId);
   return t ? t.columnas.map((c) => c.id) : [];
 }
+
+/** Catálogo de columnas (orden base) de una tabla del registro central. */
+export function metaColumnas(tablaId: string): ColumnaMeta[] {
+  return TABLAS_CONFIG.find((x) => x.id === tablaId)?.columnas ?? [];
+}

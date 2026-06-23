@@ -11,10 +11,11 @@
  * deriva de la cobertura que ya trae el resumen (sin llamadas extra). Una métrica
  * `null` se pinta "—" (la red no respondió: no se inventa un 0 falso).
  *
- * La sección es colapsable y filtra client-side por marca; el foco de red lo manda el
- * selector GLOBAL de la cabecera (solo se muestran las redes seleccionadas). Ordena las
- * redes (por vistas / interacciones / engagement) con un orden global elegido por el
- * usuario que se aplica dentro de cada bloque de marca.
+ * La sección filtra client-side por marca; el foco de red lo manda el selector GLOBAL
+ * de la cabecera (solo se muestran las redes seleccionadas). Qué columnas se ven y en
+ * qué orden lo decide el editor de campos de la sección (`vistaConfig.columnas.cobertura`),
+ * aplicado a cada bloque de marca. Ordena las redes (por vistas / interacciones /
+ * engagement) con un orden global elegido por el usuario que se aplica dentro de cada bloque.
  */
 import { Radar } from "lucide-react";
 import * as React from "react";
@@ -38,9 +39,26 @@ import { nombreRed, numeroCompleto, porcentaje, redEnFoco } from "@/lib/formato"
 import type { MarcaCobertura, RedCobertura } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
-import { SeccionColapsable } from "./SeccionColapsable";
+import type { ColumnaMeta } from "./columnasMeta";
+import { Seccion } from "./Seccion";
 import type { DireccionOrden } from "./useOrdenTabla";
-import { useVistaConfig } from "./vistaConfig";
+import { columnasVisibles, useVistaConfig } from "./vistaConfig";
+
+/** Id de tabla de esta sección (clave en `vistaConfig.columnas`). */
+const TABLA = "cobertura";
+
+/** Catálogo de columnas de la tabla por marca, en su orden base. */
+const COLUMNAS: ColumnaMeta[] = [
+  { id: "red", etiqueta: "Red" },
+  { id: "estado", etiqueta: "Estado" },
+  { id: "visualizaciones", etiqueta: "Vistas" },
+  { id: "interacciones", etiqueta: "Interacciones" },
+  { id: "engagement_pct", etiqueta: "Engagement" },
+  { id: "stories", etiqueta: "Stories" },
+  { id: "motivo", etiqueta: "Motivo" },
+];
+
+const IDS_BASE = COLUMNAS.map((c) => c.id);
 
 /** Metadatos de presentación por estado de cobertura (etiqueta + color del punto). */
 const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }> = {
@@ -112,6 +130,17 @@ const ACCESOR: Record<ClaveOrden, (r: RedCobertura) => number | null> = {
   engagement_pct: (r) => r.engagement_pct,
 };
 
+/** Etiqueta de cada columna numérica ordenable (la que pinta la cabecera). */
+const ETIQUETA_ORDEN: Record<ClaveOrden, string> = {
+  visualizaciones: "Vistas",
+  interacciones: "Interacciones",
+  engagement_pct: "Engagement",
+};
+
+function esClaveOrden(id: string): id is ClaveOrden {
+  return id === "visualizaciones" || id === "interacciones" || id === "engagement_pct";
+}
+
 /**
  * Ordena las redes de un bloque según el orden global elegido (null/no finito al
  * final, igual que `useOrdenTabla`). Si no hay columna activa, respeta el orden
@@ -141,37 +170,10 @@ function ordenarRedes(
     .map((x) => x.red);
 }
 
-function FilaRed({ r }: { r: RedCobertura }) {
-  const meta = metaEstado(r.estado);
-  return (
-    <TableRow>
-      <TableCell className="pl-6 font-medium">{nombreRed(r.red)}</TableCell>
-      <TableCell>
-        <span className="inline-flex items-center gap-2">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${meta.punto}`} aria-hidden />
-          <span className={`text-sm ${meta.texto}`}>{meta.etiqueta}</span>
-        </span>
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {r.visualizaciones == null ? "—" : numeroCompleto(r.visualizaciones)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {r.interacciones == null ? "—" : numeroCompleto(r.interacciones)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {r.engagement_pct == null ? "—" : porcentaje(r.engagement_pct)}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {r.stories == null ? "—" : numeroCompleto(r.stories)}
-      </TableCell>
-      <TableCell className="pr-6 text-sm text-muted-foreground">{r.motivo ?? "—"}</TableCell>
-    </TableRow>
-  );
-}
-
 function BloqueMarca({
   marca,
   red,
+  columnas,
   clave,
   direccion,
   alClicar,
@@ -179,6 +181,8 @@ function BloqueMarca({
   marca: MarcaCobertura;
   /** Foco de red global (`vistaConfig.red`, CSV): solo se muestran las redes en foco. */
   red: string | null;
+  /** Ids de columna visibles, en su orden efectivo (mismo para todos los bloques). */
+  columnas: string[];
   clave: ClaveOrden | null;
   direccion: DireccionOrden;
   alClicar: (clave: ClaveOrden) => void;
@@ -188,6 +192,99 @@ function BloqueMarca({
   const redes = ordenarRedes(enFoco, clave, direccion);
   if (redes.length === 0) return null;
 
+  const encabezado = (id: string) => {
+    if (id === "red") {
+      return (
+        <TableHead key={id} className="pl-6">
+          Red
+        </TableHead>
+      );
+    }
+    if (id === "estado") {
+      return <TableHead key={id}>Estado</TableHead>;
+    }
+    if (id === "stories") {
+      return (
+        <TableHead key={id} className="text-right">
+          Stories
+        </TableHead>
+      );
+    }
+    if (id === "motivo") {
+      return (
+        <TableHead key={id} className="pr-6">
+          Motivo
+        </TableHead>
+      );
+    }
+    const c = id as ClaveOrden;
+    return (
+      <CabeceraOrdenable
+        key={id}
+        activa={clave === c}
+        direccion={direccion}
+        onClick={() => alClicar(c)}
+        alinear="right"
+      >
+        {ETIQUETA_ORDEN[c]}
+      </CabeceraOrdenable>
+    );
+  };
+
+  const celda = (r: RedCobertura, id: string) => {
+    switch (id) {
+      case "red":
+        return (
+          <TableCell key={id} className="pl-6 font-medium">
+            {nombreRed(r.red)}
+          </TableCell>
+        );
+      case "estado": {
+        const meta = metaEstado(r.estado);
+        return (
+          <TableCell key={id}>
+            <span className="inline-flex items-center gap-2">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${meta.punto}`} aria-hidden />
+              <span className={`text-sm ${meta.texto}`}>{meta.etiqueta}</span>
+            </span>
+          </TableCell>
+        );
+      }
+      case "visualizaciones":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {r.visualizaciones == null ? "—" : numeroCompleto(r.visualizaciones)}
+          </TableCell>
+        );
+      case "interacciones":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {r.interacciones == null ? "—" : numeroCompleto(r.interacciones)}
+          </TableCell>
+        );
+      case "engagement_pct":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {r.engagement_pct == null ? "—" : porcentaje(r.engagement_pct)}
+          </TableCell>
+        );
+      case "stories":
+        return (
+          <TableCell key={id} className="text-right tabular-nums">
+            {r.stories == null ? "—" : numeroCompleto(r.stories)}
+          </TableCell>
+        );
+      case "motivo":
+        return (
+          <TableCell key={id} className="pr-6 text-sm text-muted-foreground">
+            {r.motivo ?? "—"}
+          </TableCell>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 px-6 pb-2">
@@ -196,40 +293,11 @@ function BloqueMarca({
       </div>
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="pl-6">Red</TableHead>
-            <TableHead>Estado</TableHead>
-            <CabeceraOrdenable
-              activa={clave === "visualizaciones"}
-              direccion={direccion}
-              onClick={() => alClicar("visualizaciones")}
-              alinear="right"
-            >
-              Vistas
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={clave === "interacciones"}
-              direccion={direccion}
-              onClick={() => alClicar("interacciones")}
-              alinear="right"
-            >
-              Interacciones
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={clave === "engagement_pct"}
-              direccion={direccion}
-              onClick={() => alClicar("engagement_pct")}
-              alinear="right"
-            >
-              Engagement
-            </CabeceraOrdenable>
-            <TableHead className="text-right">Stories</TableHead>
-            <TableHead className="pr-6">Motivo</TableHead>
-          </TableRow>
+          <TableRow>{columnas.map(encabezado)}</TableRow>
         </TableHeader>
         <TableBody>
           {redes.map((r) => (
-            <FilaRed key={r.red} r={r} />
+            <TableRow key={r.red}>{columnas.map((id) => celda(r, id))}</TableRow>
           ))}
         </TableBody>
       </Table>
@@ -255,6 +323,13 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
   // El foco de red lo manda el selector GLOBAL; aquí solo queda el filtro propio por marca.
   const red = useVistaConfig((s) => s.red);
   const [marcaFiltro, setMarcaFiltro] = React.useState(TODAS);
+
+  // Columnas visibles (orden + ocultas) del editor de campos de la sección.
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA]);
+  const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
+  const columnas = columnasVisibles(IDS_BASE, cfg);
+  // Si el orden activo apunta a una columna ya oculta, no se pinta su cabecera ordenable.
+  const claveEfectiva = clave != null && esClaveOrden(clave) && columnas.includes(clave) ? clave : null;
 
   const marcasDisp = React.useMemo(
     () => (marcas ?? []).map((m) => ({ id: m.marca_id, nombre: m.marca })),
@@ -286,11 +361,13 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
   );
 
   return (
-    <SeccionColapsable
+    <Seccion
       id="cobertura"
-      titulo="Cobertura por marca y red"
+      titulo="Cobertura por red"
       icono={Radar}
       acciones={acciones}
+      tablaId={TABLA}
+      columnas={COLUMNAS}
       contentClassName="space-y-8 p-0 pb-2"
     >
       {marcasVisibles.map((m) => (
@@ -298,11 +375,12 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
           key={m.marca_id}
           marca={m}
           red={red}
-          clave={clave}
+          columnas={columnas}
+          clave={claveEfectiva}
           direccion={direccion}
           alClicar={alClicar}
         />
       ))}
-    </SeccionColapsable>
+    </Seccion>
   );
 }

@@ -118,7 +118,7 @@ describe("CompararPeriodos", () => {
     // B parte del periodo que se ve arriba ("mes"); A es el periodo inmediatamente
     // ANTERIOR adyacente: un token `rango:` de la MISMA longitud (comparable), nunca
     // el propio "mes" ni un preset solapado.
-    await screen.findByText("Desglose por marca");
+    await screen.findByText("Claro Sports");
     const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
     expect(rango_b).toBe("mes");
     expect(rango_a).not.toBe("mes");
@@ -207,8 +207,7 @@ describe("CompararPeriodos", () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(RESP);
     renderConProviders(<CompararPeriodos opciones={OPCIONES} rangoActual="mes" />);
 
-    expect(await screen.findByText("Desglose por marca")).toBeInTheDocument();
-    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
     expect(screen.queryByText("claro_sports")).not.toBeInTheDocument();
   });
 });

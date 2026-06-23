@@ -1,11 +1,11 @@
 /**
- * Menú "⋮" de COLUMNAS de una tabla, en la cabecera de la propia tabla.
+ * Menú "⋮" de COLUMNAS/CAMPOS de una tabla, en su propia cabecera.
  *
- * Sustituye al antiguo panel macro "Configurar vista": el operador edita las columnas
- * DONDE están (mostrar/ocultar + reordenar con flechas), viéndolas, en vez de cotejar de
- * memoria una lista de checkboxes. Escribe en `vistaConfig.columnas[tablaId]` (orden +
- * ocultas), que persiste en localStorage y serializan las vistas guardadas. Dropdown propio
- * (sin dependencia nueva): cierra al clicar fuera, con Escape o al perder el foco.
+ * El operador edita los campos DONDE están (mostrar/ocultar + reordenar con flechas),
+ * viéndolos, no de memoria. Escribe en `vistaConfig.columnas[tablaId]` (orden + ocultas),
+ * que persiste en localStorage y serializan las vistas guardadas. Cada tabla pasa su propio
+ * catálogo de columnas (`columnas`), así no hay un registro central que se vuelva un cuello
+ * de botella. Dropdown propio (sin dependencia nueva): cierra al clicar fuera o con Escape.
  */
 import { ChevronDown, ChevronUp, Columns3 } from "lucide-react";
 import * as React from "react";
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
-import { TABLAS_CONFIG } from "./columnasMeta";
+import type { ColumnaMeta } from "./columnasMeta";
 import { type ConfigColumnas, useVistaConfig } from "./vistaConfig";
 
 /** Orden COMPLETO de columnas (incluidas las ocultas): `orden` válido + base al final. */
@@ -25,8 +25,18 @@ function ordenCompleto(todas: string[], cfg: ConfigColumnas): string[] {
   ];
 }
 
-export function MenuColumnas({ tablaId }: { tablaId: string }) {
-  const meta = TABLAS_CONFIG.find((t) => t.id === tablaId);
+export function MenuColumnas({
+  tablaId,
+  columnas,
+  etiqueta = "Campos",
+}: {
+  /** Id de la tabla (clave en `vistaConfig.columnas`). */
+  tablaId: string;
+  /** Catálogo de columnas de ESTA tabla (orden base + etiquetas legibles). */
+  columnas: ColumnaMeta[];
+  /** Texto accesible del botón (por defecto "Campos"). */
+  etiqueta?: string;
+}) {
   const cfgGuardada = useVistaConfig((s) => s.columnas[tablaId]);
   const setColumnas = useVistaConfig((s) => s.setColumnas);
 
@@ -49,12 +59,10 @@ export function MenuColumnas({ tablaId }: { tablaId: string }) {
     };
   }, [abierto]);
 
-  if (!meta) return null;
-
-  const base = meta.columnas.map((c) => c.id);
+  const base = columnas.map((c) => c.id);
   const cfg = cfgGuardada ?? { orden: base, ocultas: [] };
   const orden = ordenCompleto(base, cfg);
-  const etiquetaDe = (id: string) => meta.columnas.find((c) => c.id === id)?.etiqueta ?? id;
+  const etiquetaDe = (id: string) => columnas.find((c) => c.id === id)?.etiqueta ?? id;
 
   const toggle = (id: string, visible: boolean) => {
     const ocultas = visible ? cfg.ocultas.filter((x) => x !== id) : [...cfg.ocultas, id];
@@ -76,8 +84,8 @@ export function MenuColumnas({ tablaId }: { tablaId: string }) {
         variant="ghost"
         size="icon"
         className="h-7 w-7 text-muted-foreground hover:text-foreground"
-        aria-label="Columnas"
-        title="Columnas"
+        aria-label={etiqueta}
+        title={etiqueta}
         aria-haspopup="menu"
         aria-expanded={abierto}
         onClick={() => setAbierto((v) => !v)}
@@ -90,7 +98,7 @@ export function MenuColumnas({ tablaId }: { tablaId: string }) {
           className="absolute right-0 z-50 mt-1 w-64 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md"
         >
           <p className="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Columnas
+            {etiqueta}
           </p>
           <ul className="space-y-0.5">
             {orden.map((id, idx) => {
