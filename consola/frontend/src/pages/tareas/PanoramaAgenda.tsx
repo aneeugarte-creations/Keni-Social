@@ -297,9 +297,13 @@ function AccionUrgente({ item }: { item: Item }) {
 function AccionesItem({
   item,
   catalogos,
+  asignarResaltado = false,
 }: {
   item: Item;
   catalogos: CatalogosPublicacion | undefined;
+  /** Saca «Asignar a…» del kebab a un botón visible (un toque). Lo usa «Por cubrir» del Resumen
+   *  del día para que el hueco se cubra donde se ve, sin enterrar la acción. */
+  asignarResaltado?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -397,17 +401,19 @@ function AccionesItem({
 
   // Las 3 acciones de fila (asignar / editar / borrar) viven en UN kebab para no llenar la fila
   // de botones-icono. El ⚡ (escalar) queda fuera, inline, como acción de un solo toque.
-  const itemsMenu: EntradaMenuContextual[] = [
-    {
-      etiqueta: "Asignar a…",
-      icono: UserPlus,
-      onClick: () => setAsignarAbierto(true),
-    },
+  // «Asignar a…» se omite del kebab cuando se resalta como botón visible (no duplicar la acción).
+  const accionesPrevias: EntradaMenuContextual[] = [
+    ...(asignarResaltado
+      ? []
+      : [{ etiqueta: "Asignar a…", icono: UserPlus, onClick: () => setAsignarAbierto(true) }]),
     // Editar solo si hay evento detrás (partidos): abre el diálogo del calendario.
     ...(evento
       ? [{ etiqueta: "Editar", icono: Pencil, onClick: () => setEditarAbierto(true) }]
       : []),
-    { separador: true },
+  ];
+  const itemsMenu: EntradaMenuContextual[] = [
+    ...accionesPrevias,
+    ...(accionesPrevias.length > 0 ? [{ separador: true } as const] : []),
     {
       etiqueta: "Borrar",
       icono: Trash2,
@@ -419,6 +425,17 @@ function AccionesItem({
 
   return (
     <span className="flex shrink-0 items-center gap-1">
+      {asignarResaltado && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 shrink-0 gap-1.5"
+          onClick={() => setAsignarAbierto(true)}
+        >
+          <UserPlus className="h-3.5 w-3.5" /> Asignar
+        </Button>
+      )}
       <MenuContextual items={itemsMenu} disparador="click">
         <Button
           type="button"
@@ -491,6 +508,7 @@ export function FilaAgenda({
   onToggle,
   catalogos,
   urgente = false,
+  asignarResaltado = false,
 }: {
   item: Item;
   abierta: boolean;
@@ -499,6 +517,8 @@ export function FilaAgenda({
   /** En la banda «Urgente ahora»: acento amarillo MÁS marcado en la fila (breaking), por encima del
    *  amarillo suave de «por cubrir». */
   urgente?: boolean;
+  /** Saca «Asignar a…» a un botón visible en la fila (lo usa «Por cubrir» del Resumen del día). */
+  asignarResaltado?: boolean;
 }) {
   const tarea = item.kind === "tarea" ? item.tarea : null;
   const evento = item.kind === "evento" ? item.evento : null;
@@ -586,7 +606,7 @@ export function FilaAgenda({
         {/* Acciones de la fila: editar (lápiz) + borrar (papelera) + ⚡ escalar/des-escalar.
             La papelera queda pegada al ⚡; el lápiz abre el diálogo de edición del calendario. */}
         <span className="flex items-center gap-1 px-1.5">
-          <AccionesItem item={item} catalogos={catalogos} />
+          <AccionesItem item={item} catalogos={catalogos} asignarResaltado={asignarResaltado} />
           <AccionUrgente item={item} />
         </span>
       </div>

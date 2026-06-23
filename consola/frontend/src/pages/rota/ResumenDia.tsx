@@ -234,13 +234,14 @@ export function ResumenDia({
   const minutosTotales = horasTotalesDelDia(t.turnosHoy, franjaPorId);
   const incidencias = conflictosDelDia(fecha, t.turnosHoy, franjaPorId, t.ausencias);
 
-  const fila = (i: Item) => (
+  const fila = (i: Item, asignarResaltado = false) => (
     <FilaAgenda
       key={i.clave}
       item={i}
       abierta={abiertas.has(i.clave)}
       onToggle={() => toggle(i.clave)}
       catalogos={t.catalogos}
+      asignarResaltado={asignarResaltado}
     />
   );
 
@@ -348,7 +349,7 @@ export function ResumenDia({
                   Nada pendiente: todo lo del día tiene quien lo cubra.
                 </p>
               ) : (
-                <div className="space-y-1.5">{porCubrir.map(fila)}</div>
+                <div className="space-y-1.5">{porCubrir.map((i) => fila(i, true))}</div>
               )}
             </section>
 
@@ -360,7 +361,7 @@ export function ResumenDia({
               {asignados.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nada asignado ese día.</p>
               ) : (
-                <div className="space-y-1.5">{asignados.map(fila)}</div>
+                <div className="space-y-1.5">{asignados.map((i) => fila(i))}</div>
               )}
             </section>
           </div>
