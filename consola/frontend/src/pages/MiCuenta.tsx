@@ -54,7 +54,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -188,16 +190,57 @@ function SeccionTuCuenta() {
 /** Zona por defecto del equipo del piloto; respaldo si el backend aún no manda una. */
 const ZONA_DEFECTO = "America/Mexico_City";
 
-/** Lista de zonas IANA del runtime (tzdb), o un respaldo mínimo si el navegador no la expone. */
-function zonasDisponibles(): string[] {
-  const soporte = (Intl as unknown as { supportedValuesOf?: (clave: string) => string[] })
-    .supportedValuesOf;
+/**
+ * Catálogo de zonas para el selector: agrupado por región y con ciudad legible. No listamos las
+ * ~400 zonas IANA (un muro inmanejable); cubrimos las realistas del equipo y colaboradores. Si la
+ * cuenta ya tiene una zona fuera de esta lista, se añade aparte para que siga siendo elegible.
+ */
+const GRUPOS_ZONAS: { grupo: string; zonas: { id: string; ciudad: string }[] }[] = [
+  {
+    grupo: "México",
+    zonas: [
+      { id: "America/Mexico_City", ciudad: "Ciudad de México" },
+      { id: "America/Monterrey", ciudad: "Monterrey" },
+      { id: "America/Cancun", ciudad: "Cancún" },
+      { id: "America/Chihuahua", ciudad: "Chihuahua" },
+      { id: "America/Hermosillo", ciudad: "Hermosillo" },
+      { id: "America/Tijuana", ciudad: "Tijuana" },
+    ],
+  },
+  {
+    grupo: "América",
+    zonas: [
+      { id: "America/New_York", ciudad: "Nueva York · Miami" },
+      { id: "America/Chicago", ciudad: "Chicago" },
+      { id: "America/Denver", ciudad: "Denver" },
+      { id: "America/Los_Angeles", ciudad: "Los Ángeles" },
+      { id: "America/Bogota", ciudad: "Bogotá · Lima" },
+      { id: "America/Santiago", ciudad: "Santiago de Chile" },
+      { id: "America/Argentina/Buenos_Aires", ciudad: "Buenos Aires" },
+      { id: "America/Sao_Paulo", ciudad: "São Paulo" },
+    ],
+  },
+  {
+    grupo: "Europa",
+    zonas: [
+      { id: "Europe/Madrid", ciudad: "Madrid" },
+      { id: "Europe/London", ciudad: "Londres" },
+      { id: "Europe/Paris", ciudad: "París · Berlín" },
+    ],
+  },
+  { grupo: "Otros", zonas: [{ id: "UTC", ciudad: "UTC" }] },
+];
+
+/** Offset GMT actual de una zona ("GMT-6"), robusto ante horario de verano. "" si inválida. */
+function offsetZona(zona: string): string {
   try {
-    if (soporte) return soporte("timeZone");
+    const tz = new Intl.DateTimeFormat("es-MX", { timeZone: zona, timeZoneName: "shortOffset" })
+      .formatToParts(new Date())
+      .find((p) => p.type === "timeZoneName");
+    return tz?.value ?? "";
   } catch {
-    /* cae al respaldo */
+    return "";
   }
-  return [ZONA_DEFECTO, "America/New_York", "America/Bogota", "America/Argentina/Buenos_Aires", "Europe/Madrid", "UTC"];
 }
 
 /** Hora de pared AHORA en `zona` con su etiqueta, para previsualizar la elección. "" si inválida. */
@@ -222,12 +265,17 @@ function SeccionZonaHoraria() {
   const { usuario, refrescar } = useSesion();
   const zonaActual = usuario?.zona_horaria || ZONA_DEFECTO;
 
-  const zonas = React.useMemo(zonasDisponibles, []);
   const [zona, setZona] = React.useState(zonaActual);
   React.useEffect(() => setZona(zonaActual), [zonaActual]);
 
-  const valida = zonas.includes(zona);
-  const preview = valida ? previsualizarZona(zona) : "";
+  // Si la zona guardada no está en el catálogo, la añadimos como grupo propio para no perderla.
+  const grupos = React.useMemo(() => {
+    const conocidas = new Set(GRUPOS_ZONAS.flatMap((g) => g.zonas.map((z) => z.id)));
+    if (conocidas.has(zonaActual)) return GRUPOS_ZONAS;
+    return [...GRUPOS_ZONAS, { grupo: "Tu zona actual", zonas: [{ id: zonaActual, ciudad: zonaActual }] }];
+  }, [zonaActual]);
+
+  const preview = previsualizarZona(zona);
 
   const guardar = useMutation({
     mutationFn: (z: string) => api.actualizarMiZona(z),
@@ -244,7 +292,7 @@ function SeccionZonaHoraria() {
     },
   });
 
-  const puedeGuardar = valida && zona !== zonaActual && !guardar.isPending;
+  const puedeGuardar = zona !== zonaActual && !guardar.isPending;
 
   return (
     <Card>
@@ -257,43 +305,44 @@ function SeccionZonaHoraria() {
       </CardHeader>
       <CardContent>
         <form
-          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          className="space-y-1.5"
           onSubmit={(e) => {
             e.preventDefault();
             if (puedeGuardar) guardar.mutate(zona);
           }}
           noValidate
         >
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="cuenta-zona">Tu zona horaria</Label>
-            <Input
-              id="cuenta-zona"
-              list="lista-zonas-horarias"
-              value={zona}
-              placeholder={ZONA_DEFECTO}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setZona(e.target.value)}
-              disabled={guardar.isPending}
-            />
-            <datalist id="lista-zonas-horarias">
-              {zonas.map((z) => (
-                <option key={z} value={z} />
-              ))}
-            </datalist>
-            {!valida && zona.length > 0 ? (
-              <p className="text-xs text-destructive">
-                Zona no reconocida. Empieza a escribir y elige una de la lista (p. ej.
-                “America/Mexico_City”).
-              </p>
-            ) : preview ? (
-              <p className="text-xs text-muted-foreground">Ahora mismo ahí: {preview}</p>
-            ) : null}
+          <Label htmlFor="cuenta-zona">Tu zona horaria</Label>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={zona} onValueChange={setZona} disabled={guardar.isPending}>
+              <SelectTrigger id="cuenta-zona" className="sm:flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {grupos.map((g) => (
+                  <SelectGroup key={g.grupo}>
+                    <SelectLabel>{g.grupo}</SelectLabel>
+                    {g.zonas.map((z) => (
+                      <SelectItem key={z.id} value={z.id}>
+                        {z.ciudad} · {offsetZona(z.id)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="submit" disabled={!puedeGuardar} className="shrink-0">
+              {guardar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Clock className="h-4 w-4" />
+              )}
+              Guardar zona
+            </Button>
           </div>
-          <Button type="submit" disabled={!puedeGuardar}>
-            {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
-            Guardar zona
-          </Button>
+          {preview && (
+            <p className="text-xs text-muted-foreground">Ahora mismo ahí: {preview}</p>
+          )}
         </form>
       </CardContent>
     </Card>
