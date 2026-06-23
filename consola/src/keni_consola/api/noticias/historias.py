@@ -161,22 +161,24 @@ def _evaluar_promovible(
     return _evaluar_umbral(cluster, vocab_memo)
 
 
-def _pesos_score_publicos() -> dict[str, float]:
-    """Los PESOS vivos de la fórmula del ranking, para que la UI enseñe el cálculo.
+def _pesos_score_publicos(marca: str = "") -> dict[str, float]:
+    """Los PESOS de MÉRITO vivos del ranking (perfil de la marca), para que la UI enseñe el cálculo.
 
-    El `score_desglose` persistido trae las señales CRUDAS [0,1]; con los pesos (editables
-    en caliente desde ajustes) la UI reconstruye la fórmula completa: señal × peso = aporte,
-    Σ aportes = score. Sin esto el ranking sería una caja negra de cara al equipo.
+    Modelo v2: el score es `mérito × confianza`. El `score_desglose` persistido trae las señales
+    CRUDAS [0,1]; con estos pesos de mérito (perfil POR MARCA) la UI reconstruye la fórmula:
+    Σ (señal × peso) = mérito, y `mérito × confianza` (la confianza sale de la corroboración,
+    `piso_confianza` es su suelo) = score. Sin esto el ranking sería una caja negra para el equipo.
     """
-    p = config.score_pesos()
+    p = config.score_pesos(marca)
     return {
-        "corroboracion": round(p.corroboracion, 3),
-        "velocidad": round(p.velocidad, 3),
         "frescura": round(p.frescura, 3),
-        "viralidad": round(p.viralidad, 3),
         "marca": round(p.marca, 3),
+        "evento": round(p.evento, 3),
+        "viralidad": round(p.viralidad, 3),
+        "velocidad": round(p.velocidad, 3),
         "rendimiento": round(p.rendimiento, 3),
         "breaking": round(p.breaking, 3),
+        "piso_confianza": round(p.piso_confianza, 3),
     }
 
 
@@ -296,7 +298,7 @@ def _historia_a_dict(
         "enlaces": enlaces_pub,
         # Los PESOS vivos de la fórmula (editables en ajustes): con las señales crudas del
         # desglose, la UI enseña el cálculo completo (señal × peso = aporte, Σ = score).
-        "score_pesos": _pesos_score_publicos(),
+        "score_pesos": _pesos_score_publicos(cluster.get("marca") or ""),
         # TRACKING DE FUENTES (ranking ponderado): masa de corroboración (Σ peso por outlet),
         # quién ABRIÓ la historia y el timeline de outlets (orden cronológico, con peso/tier).
         "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),

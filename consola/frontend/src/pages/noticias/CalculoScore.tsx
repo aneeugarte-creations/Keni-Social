@@ -1,15 +1,15 @@
 /**
  * CalculoScore — el «panel de señal» del detalle: el score como cifra grande, «¿por qué
- * rankea así?» en frases editoriales y el desglose como BARRAS (señal medida 0–1 × peso de
- * la fórmula = aporte; la suma es el score). Cada barra mide la señal; a su derecha, el
- * aporte ponderado. Vive solo en el detalle de la historia.
+ * rankea así?» en frases editoriales y el desglose como BARRAS. Modelo v2: cada barra mide una
+ * señal de MÉRITO (0–1 × peso = aporte); la suma es el mérito, que se MULTIPLICA por la
+ * confianza (corroboración) para dar el score. Vive solo en el detalle de la historia.
  */
 
 import { calculoScore, factoresRanking } from "@/lib/noticias/ranking-editorial";
 import type { Historia } from "@/types";
 
 export function CalculoScore({ historia }: { historia: Historia }) {
-  const { lineas } = calculoScore(historia);
+  const { lineas, merito, confianza } = calculoScore(historia);
   const score = Math.round(historia.score * 100);
   return (
     <div className="space-y-4" data-testid="calculo-score">
@@ -57,8 +57,25 @@ export function CalculoScore({ historia }: { historia: Historia }) {
               </span>
             </div>
           ))}
+          <div
+            className="mt-1 space-y-1 border-t border-border pt-2 font-mono text-[10px] tabular-nums"
+            data-testid="calculo-confianza"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Mérito (Σ aportes)</span>
+              <span className="font-semibold text-foreground">{merito.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">× Confianza (corroboración)</span>
+              <span className="font-semibold text-foreground">{confianza.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-foreground">= Score</span>
+              <span className="font-semibold text-foreground">{(score / 100).toFixed(2)}</span>
+            </div>
+          </div>
           <p className="pt-0.5 text-[11px] text-muted-foreground">
-            Señal (0–1) × peso = aporte; la suma es el score.
+            Mérito (señal 0–1 × peso, sumado) × confianza (corroboración) = score.
           </p>
         </div>
       )}

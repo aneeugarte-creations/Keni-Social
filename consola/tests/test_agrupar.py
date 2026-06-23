@@ -419,14 +419,17 @@ def _detalle(*entradas):
 
 
 def test_puntuar_dos_potentes_simultaneas_rankean_top_y_breaking():
-    # 2 fuentes potentes a la vez → corroboración 0.67 + velocidad 1.0 + frescura ≈ score 0.6+
-    # y flag breaking EN VIVO: tiene que salir al top del pool y al feed (vía umbral).
+    # 2 fuentes potentes a la vez y on-brand → confianza 1.0 (la masa satura la corroboración)
+    # × mérito alto (frescura + velocidad + marca) ⇒ top del pool, con flag breaking EN VIVO.
+    pal = frozenset({"sismo", "cdmx", "magnitud"})
     cl = _cluster(
         n_fuentes=2, peso_fuentes=4.0, ultimo_visto=_T0.isoformat(),
+        titulo="Sismo de magnitud 6.1 en CDMX",
         fuentes_detalle=_detalle((2.0, _T0 - timedelta(minutes=20)), (2.0, _T0 - timedelta(minutes=5))),
     )
-    score, _razon, desglose = agrupar.puntuar_detalle(cl, ahora=_T0)
+    score, _razon, desglose = agrupar.puntuar_detalle(cl, palabras_marca=pal, ahora=_T0)
     assert score >= 0.55
+    assert desglose["confianza"] == 1.0  # 2 potentes saturan la corroboración → confianza plena
     assert desglose["breaking"] == 1
     assert desglose["velocidad"] == 1.0
     assert desglose["peso_fuentes"] == 4.0
@@ -480,16 +483,22 @@ def test_puntuar_relevancia_de_marca_sube_el_score():
 
 
 def test_puntuar_pesos_inyectados_cambian_el_score():
-    """Pesos inyectados (PesosScore) reemplazan los defaults: el ranking es configurable."""
-    cl = _cluster(n_fuentes=6, senal=0, breaking=0, ultimo_visto=_T0.isoformat())
-    solo_corro = agrupar.PesosScore(
-        corroboracion=1.0, frescura=0.0, viralidad=0.0, marca=0.0, breaking=0.0
+    """Pesos de mérito inyectados (PesosScore) reemplazan los defaults: el ranking es configurable.
+
+    Con mérito 0 (todos los pesos a 0) el score es 0 por mucha confianza/corroboración que haya:
+    la corroboración MULTIPLICA el mérito, no lo crea (modelo v2).
+    """
+    pal = frozenset({"reforma"})
+    cl = _cluster(n_fuentes=6, senal=0, breaking=0, ultimo_visto=_T0.isoformat(),
+                  titulo="Aprueban la reforma")
+    solo_marca = agrupar.PesosScore(
+        frescura=0.0, marca=1.0, evento=0.0, viralidad=0.0, velocidad=0.0, rendimiento=0.0
     )
     todo_cero = agrupar.PesosScore(
-        corroboracion=0.0, frescura=0.0, viralidad=0.0, marca=0.0, breaking=0.0
+        frescura=0.0, marca=0.0, evento=0.0, viralidad=0.0, velocidad=0.0, rendimiento=0.0
     )
-    assert agrupar.puntuar(cl, ahora=_T0, pesos=solo_corro)[0] > 0.0
-    assert agrupar.puntuar(cl, ahora=_T0, pesos=todo_cero)[0] == 0.0
+    assert agrupar.puntuar(cl, palabras_marca=pal, ahora=_T0, pesos=solo_marca)[0] > 0.0
+    assert agrupar.puntuar(cl, palabras_marca=pal, ahora=_T0, pesos=todo_cero)[0] == 0.0
 
 
 def test_puntuar_senal_rendimiento_inerte_sin_peso():
@@ -522,10 +531,13 @@ def test_puntuar_detalle_desglosa_las_senales_y_las_palabras():
     score, razon, desglose = agrupar.puntuar_detalle(cl, palabras_marca=pal, ahora=_T0)
     assert agrupar.puntuar(cl, palabras_marca=pal, ahora=_T0) == (score, razon)  # wrapper fiel
     assert set(desglose) == {
-        "corroboracion", "velocidad", "frescura", "viralidad", "marca", "rendimiento",
-        "peso_fuentes", "breaking", "palabras",
+        "corroboracion", "confianza", "velocidad", "frescura", "viralidad", "marca", "evento",
+        "rendimiento", "peso_fuentes", "breaking", "palabras", "evento_titulo",
     }
-    for senal in ("corroboracion", "velocidad", "frescura", "viralidad", "marca", "rendimiento"):
+    for senal in (
+        "corroboracion", "confianza", "velocidad", "frescura", "viralidad", "marca", "evento",
+        "rendimiento",
+    ):
         assert 0.0 <= desglose[senal] <= 1.0
     assert desglose["breaking"] == 1  # sin timeline persistido se respeta el flag
     assert desglose["palabras"] == ["cdmx", "sismo"]  # qué del vocabulario casó (explicable)
@@ -557,6 +569,58 @@ def test_puntuar_detalle_casa_vocabulario_pese_a_la_puntuacion():
         palabras_marca=pal, ahora=_T0,
     )
     assert desglose["palabras"] == ["mexico"]
+
+
+# --------------------------------------------------------------------------- #
+# Modelo v2: confianza-multiplicador y encaje de evento                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_puntuar_confianza_topa_la_fuente_unica():
+    """Un rumor de fuente única, por fresco y on-brand que sea, queda TOPADO por la confianza.
+
+    Misma historia, mismo mérito; la única diferencia es la corroboración. La corroborada
+    (confianza plena) puntúa estrictamente más que la de fuente única (confianza = piso).
+    """
+    pal = frozenset({"reforma"})
+    base = dict(titulo="Aprueban la reforma", ultimo_visto=_T0.isoformat())
+    sola = _cluster(n_fuentes=1, peso_fuentes=1.0, **base)
+    corroborada = _cluster(n_fuentes=4, peso_fuentes=4.0, **base)
+    s_sola, _r, d_sola = agrupar.puntuar_detalle(sola, palabras_marca=pal, ahora=_T0)
+    s_corr, _r2, d_corr = agrupar.puntuar_detalle(corroborada, palabras_marca=pal, ahora=_T0)
+    assert d_sola["confianza"] == 0.5  # piso por defecto: no se mata, pero queda topada
+    assert d_corr["confianza"] == 1.0  # masa 4 satura la corroboración
+    assert s_corr > s_sola
+
+
+def test_encaje_evento_casa_partido_proximo():
+    """Una noticia que nombra los equipos de un evento PRÓXIMO de la agenda casa el encaje."""
+    eventos = [{"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()}]
+    cl = _cluster(titulo="¿Dónde ver Portugal vs Uzbekistán hoy?", ultimo_visto=_T0.isoformat())
+    s, titulo = agrupar.encaje_evento_detalle(cl, eventos, ahora=_T0)
+    assert s == 1.0  # ambos equipos en el título + evento hoy (proximidad plena)
+    assert titulo == "Portugal vs Uzbekistán"
+
+
+def test_encaje_evento_fuera_de_ventana_no_casa():
+    """Un evento lejano (más allá de la ventana) o ya pasado no aporta encaje."""
+    lejano = [{"titulo": "Final", "fecha": (_T0 + timedelta(days=30)).date().isoformat()}]
+    cl = _cluster(titulo="La gran final del torneo", ultimo_visto=_T0.isoformat())
+    assert agrupar.encaje_evento_detalle(cl, lejano, ahora=_T0)[0] == 0.0
+    # Sin agenda tampoco hay señal.
+    assert agrupar.encaje_evento_detalle(cl, [], ahora=_T0)[0] == 0.0
+
+
+def test_puntuar_evento_sube_el_score():
+    """Con un evento próximo que casa, el score sube respecto a la misma historia sin agenda."""
+    eventos = [{"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()}]
+    cl = _cluster(
+        n_fuentes=2, peso_fuentes=2.0,
+        titulo="Previa: Portugal vs Uzbekistán", ultimo_visto=_T0.isoformat(),
+    )
+    sin = agrupar.puntuar(cl, ahora=_T0)[0]
+    con = agrupar.puntuar(cl, eventos=eventos, ahora=_T0)[0]
+    assert con > sin
 
 
 # --------------------------------------------------------------------------- #

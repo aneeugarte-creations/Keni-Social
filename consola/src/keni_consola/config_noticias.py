@@ -70,12 +70,6 @@ from ._config_comun import (
     ENV_REUTERS_API_KEY,
     ENV_REUTERS_BASE_URL,
     ENV_SCORE_BONUS_BREAKING,
-    ENV_SCORE_PESO_CORROBORACION,
-    ENV_SCORE_PESO_FRESCURA,
-    ENV_SCORE_PESO_MARCA,
-    ENV_SCORE_PESO_RENDIMIENTO,
-    ENV_SCORE_PESO_VELOCIDAD,
-    ENV_SCORE_PESO_VIRALIDAD,
     ENV_STOCK_MAX_BARRIDO,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
@@ -107,12 +101,6 @@ from ._config_comun import (
     RENDIMIENTO_MIN_PIEZAS_DEF,
     RENDIMIENTO_TOP_N_DEF,
     SCORE_BONUS_BREAKING_DEF,
-    SCORE_PESO_CORROBORACION_DEF,
-    SCORE_PESO_FRESCURA_DEF,
-    SCORE_PESO_MARCA_DEF,
-    SCORE_PESO_RENDIMIENTO_DEF,
-    SCORE_PESO_VELOCIDAD_DEF,
-    SCORE_PESO_VIRALIDAD_DEF,
     TRAD_LOTE_DEF,
     TRAD_MIN_SCORE_DEF,
     _crudo,
@@ -329,48 +317,61 @@ def _peso01(env_flag: str, defecto: float) -> float:
     return min(1.0, max(0.0, valor))
 
 
-# Peso AUTOMÁTICO de la señal de rendimiento cuando `KENI_RENDIMIENTO_RANKING` está ON pero
-# `KENI_SCORE_PESO_RENDIMIENTO` no se fijó explícitamente. Los demás pesos se RENORMALIZAN
-# por (1 - auto) para que la combinación lineal siga sumando ~1.
-SCORE_PESO_RENDIMIENTO_AUTO = 0.10
+# Perfiles de MÉRITO por marca (modelo v2: score = mérito × confianza). Cada marca pondera
+# distinto las señales: Claro Sports es agenda+velocidad (Mundial); UnoTV frescura+velocidad
+# (nacional, breaking); Nación Gamer y Piso 15 marca+viralidad (cultura/entretenimiento);
+# Fundación marca+rendimiento (evergreen, menos urgente). `vida_h` afina la vida media de la
+# frescura (un resultado deportivo caduca en horas; un reportaje dura días) y `piso` la
+# confianza de una historia SIN corroborar (UnoTV más estricta con rumores; Fundación más laxa).
+# Los 6 pesos de mérito se RENORMALIZAN a sumar 1.0 (mérito honesto: el techo alcanzable es 1.0).
+SCORE_PERFILES_MARCA: dict[str, dict[str, float]] = {
+    "claro-sports": {"frescura": 0.20, "marca": 0.15, "evento": 0.30, "viralidad": 0.10,
+                     "velocidad": 0.20, "rendimiento": 0.05, "vida_h": 24.0, "piso": 0.50},
+    "unotv": {"frescura": 0.30, "marca": 0.20, "evento": 0.10, "viralidad": 0.10,
+              "velocidad": 0.25, "rendimiento": 0.05, "vida_h": 36.0, "piso": 0.45},
+    "nacion-gamer": {"frescura": 0.20, "marca": 0.30, "evento": 0.10, "viralidad": 0.25,
+                     "velocidad": 0.05, "rendimiento": 0.10, "vida_h": 72.0, "piso": 0.55},
+    "piso-15": {"frescura": 0.15, "marca": 0.30, "evento": 0.10, "viralidad": 0.25,
+                "velocidad": 0.05, "rendimiento": 0.15, "vida_h": 96.0, "piso": 0.60},
+    "fundacion": {"frescura": 0.15, "marca": 0.35, "evento": 0.10, "viralidad": 0.10,
+                  "velocidad": 0.05, "rendimiento": 0.25, "vida_h": 120.0, "piso": 0.60},
+}
+SCORE_PERFIL_DEF: dict[str, float] = {
+    "frescura": 0.25, "marca": 0.25, "evento": 0.15, "viralidad": 0.15,
+    "velocidad": 0.20, "rendimiento": 0.0, "vida_h": 72.0, "piso": 0.50,
+}
+_SCORE_PESOS_MERITO = ("frescura", "marca", "evento", "viralidad", "velocidad", "rendimiento")
 
 
-def score_pesos():
-    """Pesos del algoritmo de ponderación del score de cluster, como `agrupar.PesosScore`.
+def score_pesos(marca: str = ""):
+    """Pesos y forma del score (modelo v2) para una marca, como `agrupar.PesosScore`.
 
-    Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de Recolectar
-    inyecta el resultado en `agrupar.puntuar` para que el equipo afine la jerarquización desde
-    la consola sin tocar código. Import perezoso de `dominio.agrupar` para evitar ciclos.
+    El score es `mérito × confianza`: `mérito` combina las señales de valor editorial (frescura,
+    marca, evento, viralidad, velocidad, rendimiento) y se MULTIPLICA por la confianza derivada
+    de la corroboración. Cada marca tiene su perfil (`SCORE_PERFILES_MARCA`; `SCORE_PERFIL_DEF`
+    para marcas sin perfil). Import perezoso de `dominio.agrupar` para evitar ciclos.
 
-    Señal de RENDIMIENTO (Fase 2c): si el flag `KENI_RENDIMIENTO_RANKING` está ON y el peso NO
-    se fijó explícitamente, se aplica `SCORE_PESO_RENDIMIENTO_AUTO` (0.10) renormalizando la
-    combinación lineal (corroboración/frescura/viralidad/marca × 0.90): encender el flag SIEMPRE
-    tiene efecto. Un peso explícito (store/env) manda y no renormaliza nada.
+    RENDIMIENTO (Fase 2c): solo cuenta si `KENI_RENDIMIENTO_RANKING` está ON; si está OFF su peso
+    es 0 y el resto del mérito se renormaliza a sumar 1.0 (el techo alcanzable sigue siendo 1.0,
+    sin hueco muerto). El bonus aditivo de breaking (`KENI_SCORE_BONUS_BREAKING`) sigue editable.
     """
     from .dominio.agrupar import PesosScore
 
-    corroboracion = _peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF)
-    velocidad = _peso01(ENV_SCORE_PESO_VELOCIDAD, SCORE_PESO_VELOCIDAD_DEF)
-    frescura = _peso01(ENV_SCORE_PESO_FRESCURA, SCORE_PESO_FRESCURA_DEF)
-    viralidad = _peso01(ENV_SCORE_PESO_VIRALIDAD, SCORE_PESO_VIRALIDAD_DEF)
-    marca = _peso01(ENV_SCORE_PESO_MARCA, SCORE_PESO_MARCA_DEF)
-    rendimiento = _peso01(ENV_SCORE_PESO_RENDIMIENTO, SCORE_PESO_RENDIMIENTO_DEF)
-    if rendimiento_ranking_activo() and not _crudo(ENV_SCORE_PESO_RENDIMIENTO).strip():
-        rendimiento = SCORE_PESO_RENDIMIENTO_AUTO
-        factor = 1.0 - rendimiento
-        corroboracion *= factor
-        velocidad *= factor
-        frescura *= factor
-        viralidad *= factor
-        marca *= factor
+    perfil = dict(SCORE_PERFILES_MARCA.get(marca) or SCORE_PERFIL_DEF)
+    if not rendimiento_ranking_activo():
+        perfil["rendimiento"] = 0.0
+    suma = sum(perfil[k] for k in _SCORE_PESOS_MERITO)
+    factor = (1.0 / suma) if suma > 0 else 0.0
     return PesosScore(
-        corroboracion=corroboracion,
-        velocidad=velocidad,
-        frescura=frescura,
-        viralidad=viralidad,
-        marca=marca,
+        frescura=perfil["frescura"] * factor,
+        marca=perfil["marca"] * factor,
+        evento=perfil["evento"] * factor,
+        viralidad=perfil["viralidad"] * factor,
+        velocidad=perfil["velocidad"] * factor,
+        rendimiento=perfil["rendimiento"] * factor,
         breaking=_peso01(ENV_SCORE_BONUS_BREAKING, SCORE_BONUS_BREAKING_DEF),
-        rendimiento=rendimiento,
+        piso_confianza=float(perfil["piso"]),
+        frescura_vida_h=float(perfil["vida_h"]),
     )
 
 

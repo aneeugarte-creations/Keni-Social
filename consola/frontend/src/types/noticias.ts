@@ -111,25 +111,34 @@ export interface Historia {
   /** Razón humana del score (qué señales lo explican; la persiste el daemon al puntuar). */
   score_razon?: string;
   /**
-   * Desglose por señal del score, cada una cruda en [0,1] + las palabras del vocabulario
-   * de la marca que casaron. {} si el daemon aún no puntuó esta historia.
+   * Desglose por señal del score (modelo v2: score = mérito × confianza). Cada señal cruda en
+   * [0,1] + las palabras del vocabulario y el evento de la agenda que casaron. {} si el daemon
+   * aún no puntuó esta historia.
    */
   score_desglose?: {
+    /** Corroboración cruda (Σ peso de outlets, escala log): la base de la confianza. */
     corroboracion?: number;
+    /** Multiplicador de CONFIANZA efectivo (piso..1) derivado de la corroboración. */
+    confianza?: number;
     /** Masa ponderada que se sumó en la ventana actual (señal de última hora; decae sola). */
     velocidad?: number;
     frescura?: number;
     viralidad?: number;
     marca?: number;
+    /** Encaje con la agenda de la marca (evento próximo de `rota_eventos`). */
+    evento?: number;
     rendimiento?: number;
     /** Masa de corroboración ponderada (Σ peso por outlet). */
     peso_fuentes?: number;
     breaking?: number;
     palabras?: string[];
+    /** Título del evento de la agenda que ató la historia (explica la señal de evento). */
+    evento_titulo?: string;
   };
   /**
-   * Los PESOS vivos de la fórmula del ranking (editables en ajustes). Con las señales
-   * crudas del desglose, la UI reconstruye el cálculo: señal × peso = aporte, Σ = score.
+   * Los PESOS de MÉRITO vivos del ranking (perfil de la marca) + `piso_confianza`. Con las
+   * señales crudas del desglose, la UI reconstruye el cálculo: Σ (señal × peso) = mérito,
+   * mérito × confianza = score.
    */
   score_pesos?: Record<string, number>;
   /** true si supera el UMBRAL de producción automática (la misma evaluación que el pipeline). */

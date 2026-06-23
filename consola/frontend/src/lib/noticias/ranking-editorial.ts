@@ -99,11 +99,19 @@ export function factoresRanking(h: Historia): string[] {
   if ((d.frescura ?? 0) >= 0.5 && h.ultimo_visto) {
     factores.push(`Es fresca: la última nota es de ${tiempoRelativo(h.ultimo_visto)}`);
   }
+  if ((d.evento ?? 0) >= 0.3 && d.evento_titulo) {
+    factores.push(`En la agenda: ${d.evento_titulo}`);
+  }
   if ((d.viralidad ?? 0) >= 0.3) {
     factores.push("Trae señal de viralidad (se está moviendo en redes)");
   }
   if (d.palabras && d.palabras.length > 0) {
     factores.push(`Encaja con la marca por: ${d.palabras.slice(0, 5).join(", ")}`);
+  }
+  // Coletilla de confianza: una historia con mérito pero sin corroborar queda topada (su score
+  // se multiplica por el piso). Solo se añade si ya hay señales positivas (nunca es la sola línea).
+  if (factores.length > 0 && (d.corroboracion ?? 0) <= 0 && h.n_fuentes <= 1) {
+    factores.push("Sin corroborar todavía: una sola fuente topa su confianza");
   }
   if (factores.length === 0) {
     factores.push(h.score_razon || "Historia única, sin señales fuertes todavía");
@@ -111,7 +119,7 @@ export function factoresRanking(h: Historia): string[] {
   return factores;
 }
 
-/** Una línea del cálculo del score: señal cruda × peso = aporte. */
+/** Una línea del cálculo del MÉRITO: señal cruda × peso = aporte. */
 export interface LineaCalculo {
   etiqueta: string;
   senal: number;
@@ -119,38 +127,52 @@ export interface LineaCalculo {
   aporte: number;
 }
 
-const SENALES_CALCULO: { clave: string; etiqueta: string }[] = [
-  { clave: "corroboracion", etiqueta: "Corroboración" },
-  { clave: "velocidad", etiqueta: "Velocidad" },
+/** El cálculo del score (modelo v2): mérito (Σ aportes) × confianza (corroboración) = score. */
+export interface CalculoScore {
+  lineas: LineaCalculo[];
+  merito: number;
+  confianza: number;
+  total: number;
+}
+
+const SENALES_MERITO: { clave: string; etiqueta: string }[] = [
   { clave: "frescura", etiqueta: "Frescura" },
-  { clave: "viralidad", etiqueta: "Viralidad" },
   { clave: "marca", etiqueta: "Encaje de marca" },
+  { clave: "evento", etiqueta: "Encaje de evento" },
+  { clave: "viralidad", etiqueta: "Viralidad" },
+  { clave: "velocidad", etiqueta: "Velocidad" },
   { clave: "rendimiento", etiqueta: "Rendimiento" },
 ];
 
 /**
- * El CÁLCULO del score, línea a línea: señal cruda [0,1] × peso de la fórmula = aporte.
- * Devuelve las líneas con peso > 0 (las señales que cuentan) y el total (Σ aportes,
- * + bonus de última hora si está configurado). El score persistido puede diferir unas
- * centésimas del total (el re-score envejece la frescura entre pasadas).
+ * El CÁLCULO del score (modelo v2). El MÉRITO editorial es Σ (señal cruda [0,1] × peso); la
+ * CONFIANZA (derivada de la corroboración, piso..1) lo MULTIPLICA: una historia sin corroborar
+ * queda topada por mucho mérito que tenga. `score = mérito × confianza` (+ bonus de última hora
+ * si está configurado). Devuelve las líneas de mérito con peso > 0, el mérito, la confianza y el
+ * total. El score persistido puede diferir unas centésimas (el re-score envejece la frescura).
  */
-export function calculoScore(h: Historia): { lineas: LineaCalculo[]; total: number } {
+export function calculoScore(h: Historia): CalculoScore {
   const d = (h.score_desglose ?? {}) as Record<string, number | string[] | undefined>;
   const pesos = h.score_pesos ?? {};
   const lineas: LineaCalculo[] = [];
-  let total = 0;
-  for (const { clave, etiqueta } of SENALES_CALCULO) {
+  let merito = 0;
+  for (const { clave, etiqueta } of SENALES_MERITO) {
     const peso = Number(pesos[clave] ?? 0) || 0;
     if (peso <= 0) continue;
     const senal = Number(d[clave] ?? 0) || 0;
     const aporte = senal * peso;
-    total += aporte;
+    merito += aporte;
     lineas.push({ etiqueta, senal, peso, aporte });
   }
+  merito = Math.min(1, merito);
+  // Confianza = multiplicador efectivo que el back persiste; si falta, se reconstruye con el
+  // piso del perfil (corroboración 0 → piso; saturada → 1).
+  const piso = Number(pesos.piso_confianza ?? 0.5) || 0.5;
+  const corro = Number(d.corroboracion ?? 0) || 0;
+  const confianza =
+    d.confianza != null ? Number(d.confianza) || 0 : piso + (1 - piso) * corro;
+  let total = merito * confianza;
   const bonus = Number(pesos.breaking ?? 0);
-  if (Number(d.breaking ?? 0) === 1 && bonus > 0) {
-    total = Math.min(1, total + bonus);
-    lineas.push({ etiqueta: "Bonus última hora", senal: 1, peso: bonus, aporte: bonus });
-  }
-  return { lineas, total: Math.min(1, total) };
+  if (Number(d.breaking ?? 0) === 1 && bonus > 0) total += bonus;
+  return { lineas, merito, confianza, total: Math.min(1, total) };
 }

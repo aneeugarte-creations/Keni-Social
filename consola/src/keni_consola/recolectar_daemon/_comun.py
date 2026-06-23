@@ -18,14 +18,14 @@ siga surtiendo efecto tras el troceado.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import keni_consola.recolectar_daemon as _pkg
 
 from .. import config, generaciones, marcas, noticias_umbral, repos
 from ..dominio import agrupar, traducir
-from ..tiempo import ahora_iso
+from ..tiempo import ahora_iso, hoy_utc
 
 _log = logging.getLogger("keni_consola.recolectar_daemon")
 
@@ -70,6 +70,25 @@ def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
     score que la priorización no calculó).
     """
     return noticias_umbral.palabras_relevancia(marca, perfil_activo)
+
+
+def eventos_proximos(marca: str) -> list[dict[str, Any]]:
+    """Eventos de la AGENDA de la marca en la ventana de encaje (ayer .. +7 días). Best-effort.
+
+    Alimenta la señal de `evento` del scoring (`agrupar.encaje_evento_detalle`): una noticia que
+    casa con un evento próximo de `rota_eventos` (p. ej. un partido del Mundial para Claro Sports)
+    sube en el ranking. Ante cualquier fallo de lectura devuelve vacío y la señal queda inerte.
+    """
+    if not marca:
+        return []
+    try:
+        hoy = hoy_utc()
+        desde = (hoy - timedelta(days=1)).isoformat()
+        hasta = (hoy + timedelta(days=7)).isoformat()
+        return repos.listar_eventos_rota(desde=desde, hasta=hasta, marca=marca)
+    except Exception:  # noqa: BLE001 -- sin agenda legible la señal de evento queda en 0
+        _log.warning("recolectar_daemon: no se pudieron leer eventos de la marca %s.", marca)
+        return []
 
 
 def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
@@ -204,6 +223,7 @@ def _fusionar_grupo(
     por_id: dict[str, dict[str, Any]],
     *,
     pesos: Any,
+    eventos: list[dict[str, Any]] | None = None,
     breaking_peso: float,
     breaking_ventana_h: int,
     fuentes_baja: frozenset[str],
@@ -261,7 +281,7 @@ def _fusionar_grupo(
     )
     palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
     recalc["score"], recalc["score_razon"], recalc["score_desglose"] = agrupar.puntuar_detalle(
-        recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos,
+        recalc, palabras_marca=palabras, eventos=eventos, ahora=ahora, pesos=pesos,
         breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     repos.upsert_noticia_cluster(recalc)

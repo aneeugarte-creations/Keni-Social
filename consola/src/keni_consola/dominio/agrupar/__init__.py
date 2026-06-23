@@ -55,6 +55,7 @@ from .relevancia import UMBRAL_MARCA_VOCABULARIO, marca_por_vocabulario, relevan
 from .relevancia import _relevancia_marca as _relevancia_marca  # re-export para tests
 from .scoring import (
     PesosScore,
+    encaje_evento_detalle,
     puntuar,
     puntuar_detalle,
     seleccionar_diversos,
@@ -72,6 +73,7 @@ __all__ = [
     "clasificar_verificacion",
     "clave_cluster",
     "dedup",
+    "encaje_evento_detalle",
     "evaluar_umbral",
     "fuentes_detalle",
     "marca_por_vocabulario",

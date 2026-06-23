@@ -1,12 +1,20 @@
 """Scoring de historias para el ranking newsroom y selección diversa (capa pura).
 
 Pesos del score (`PesosScore`), la fórmula combinada (`puntuar`/`puntuar_detalle`), la
-señal de frescura y el top-N con diversidad (MMR).
+señal de frescura y de encaje de evento, y el top-N con diversidad (MMR).
+
+MODELO (v2): el score NO es una suma plana de señales. La corroboración no SUMA, MULTIPLICA:
+es el nivel de CONFIANZA en que la historia es real. El resto de señales componen el MÉRITO
+editorial (¿vale la pena cubrirla?) y se ponderan en una combinación que suma ~1.0; ese mérito
+se multiplica por la confianza. Así un rumor de fuente única, por fresco y on-brand que sea,
+queda topado (confianza = piso); una historia confirmada por varios medios alcanza su mérito
+pleno. Es MONÓTONA en cada señal (los tests lo verifican).
 """
 
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -19,60 +27,71 @@ from ._comun import (
     _log_norm,
     _parse_iso,
     _ratio_claves,
+    _sin_acentos,
 )
 from .corroboracion import _velocidad, peso_ventana_actual
 from .relevancia import relevancia_marca_detalle
 
-# Pesos del score (ver `puntuar`). Suman 1.0: el score vive en [0, 1] y es comparable
-# entre marcas/categorías para el ranking. Son los DEFAULTS; el daemon los puede inyectar
-# desde la configuración (ajustes editables por la consola), de ahí la dataclass `PesosScore`.
-_PESO_CORROBORACION = 0.30
+# Pesos de MÉRITO (combinación lineal que suma ~1.0): cuánto vale editorialmente la historia.
+# La corroboración NO está aquí: actúa como multiplicador de confianza (ver `puntuar_detalle`).
+# Son los DEFAULTS de la capa pura; el daemon inyecta perfiles por marca desde `config`.
+_PESO_FRESCURA = 0.25
+_PESO_MARCA = 0.25
+_PESO_EVENTO = 0.15
+_PESO_VIRALIDAD = 0.15
 _PESO_VELOCIDAD = 0.20
-_PESO_FRESCURA = 0.20
-_PESO_VIRALIDAD = 0.10
-_PESO_MARCA = 0.20
-# Empujón aditivo si la historia es breaking. DEFAULT 0.0 = SIN bonus: breaking ya emerge del
-# ranking (2 fuentes potentes a la vez ⇒ corroboración 0.67 + velocidad 1.0 ⇒ top del pool);
-# el knob queda por compatibilidad/rollback (config puede reactivarlo sin tocar código).
-_BONUS_BREAKING = 0.0
-# Peso de la señal de RENDIMIENTO (líneas que mejor funcionan). DEFAULT 0.0 = INERTE: la señal
-# (Fase 2c) solo cuenta cuando el equipo le da peso desde config; así no cambia nada por defecto.
+# Rendimiento (Fase 2c): INERTE en la capa pura (peso 0). Los perfiles por marca del config le
+# dan peso solo cuando `KENI_RENDIMIENTO_RANKING` está ON; así el default no cambia nada.
 _PESO_RENDIMIENTO = 0.0
+# Empujón aditivo si la historia es breaking. DEFAULT 0.0 = SIN bonus: breaking ya emerge del
+# ranking (varias fuentes potentes a la vez ⇒ confianza alta + velocidad ⇒ top del pool) y de
+# la exención de umbral; el knob queda por compatibilidad/rollback (config lo reactiva).
+_BONUS_BREAKING = 0.0
+
+# Forma de las señales (afinables por marca desde config).
+_PISO_CONFIANZA = 0.5  # confianza de una historia SIN corroborar (1 fuente); satura a 1.0
+_PESO_SATURA = 4.0  # masa ponderada (Σ peso por outlet) que satura la corroboración a 1.0
+_FRESCURA_VIDA_H = 72.0  # a las `vida_h` la frescura cae a ~0 (lineal acotada)
+_EVENTO_VENTANA_DIAS = 3.0  # ventana futura (días) en la que un evento próximo da encaje
+_SENAL_SATURA = 1_000_000  # escala log de viralidad (alineada con parrilla)
 
 
 @dataclass(frozen=True)
 class PesosScore:
-    """Pesos del algoritmo de ponderación del score de cluster (inyectables desde config).
+    """Pesos y forma del algoritmo de score de cluster (inyectables por marca desde config).
 
-    `corroboracion/velocidad/frescura/viralidad/marca` son la combinación lineal (idealmente
-    suman ~1.0); `breaking` es el empujón aditivo (def 0.0: breaking ya emerge del ranking);
-    `rendimiento` es la señal de líneas que mejor funcionan (Fase 2c), INERTE por defecto
-    (peso 0). `puntuar()` usa estos; el daemon construye una instancia desde
-    `config.score_pesos()`. Sin inyección, `puntuar()` cae a `_PESOS_DEF`.
+    `frescura/marca/evento/viralidad/velocidad/rendimiento` son los pesos de MÉRITO (idealmente
+    suman ~1.0); su combinación lineal se MULTIPLICA por la confianza. `piso_confianza` es la
+    confianza de una historia sin corroborar (corroboración 0 ⇒ confianza = piso; saturada ⇒
+    1.0). `breaking` es el empujón aditivo (def 0.0). `corro_satura`, `frescura_vida_h` y
+    `evento_ventana_dias` son la forma de cada señal. `puntuar()` usa estos; sin inyección cae
+    a `_PESOS_DEF`.
     """
 
-    corroboracion: float = _PESO_CORROBORACION
-    velocidad: float = _PESO_VELOCIDAD
     frescura: float = _PESO_FRESCURA
-    viralidad: float = _PESO_VIRALIDAD
     marca: float = _PESO_MARCA
-    breaking: float = _BONUS_BREAKING
+    evento: float = _PESO_EVENTO
+    viralidad: float = _PESO_VIRALIDAD
+    velocidad: float = _PESO_VELOCIDAD
     rendimiento: float = _PESO_RENDIMIENTO
+    breaking: float = _BONUS_BREAKING
+    piso_confianza: float = _PISO_CONFIANZA
+    corro_satura: float = _PESO_SATURA
+    frescura_vida_h: float = _FRESCURA_VIDA_H
+    evento_ventana_dias: float = _EVENTO_VENTANA_DIAS
 
 
 _PESOS_DEF = PesosScore()
 
-# Normalizadores de cada señal (ver fórmula).
-_PESO_SATURA = 8.0  # masa ponderada (Σ peso por outlet) que satura la corroboración a 1.0
-_SENAL_SATURA = 1_000_000  # escala log de viralidad (alineada con parrilla)
-_FRESCURA_VIDA_H = 72.0  # a las 72h la frescura cae a ~0 (lineal acotada)
 
-
-def _frescura(ultimo_visto: str, *, ahora: datetime | None = None) -> float:
-    """Frescura [0,1]: 1.0 si la historia es de ahora mismo, cae lineal a 0 en `_FRESCURA_VIDA_H`.
+def _frescura(
+    ultimo_visto: str, *, ahora: datetime | None = None, vida_h: float = _FRESCURA_VIDA_H
+) -> float:
+    """Frescura [0,1]: 1.0 si la historia es de ahora mismo, cae lineal a 0 en `vida_h` horas.
 
     Sin `ultimo_visto` parseable → 0.0 (sin señal de recencia, no se premia). `ahora`
-    inyectable para tests deterministas.
+    inyectable para tests deterministas. `vida_h` afina la vida media por marca (un resultado
+    deportivo caduca en horas; un reportaje dura días).
     """
     dt = _parse_iso(ultimo_visto)
     if dt is None:
@@ -81,13 +100,93 @@ def _frescura(ultimo_visto: str, *, ahora: datetime | None = None) -> float:
     horas = (ref - dt).total_seconds() / 3600.0
     if horas <= 0:
         return 1.0
-    return max(0.0, 1.0 - horas / _FRESCURA_VIDA_H)
+    return max(0.0, 1.0 - horas / max(1.0, vida_h))
+
+
+# Tokens vacíos del título de un evento (conectores, ordinales de bracket, ruido). No aportan
+# encaje: "Portugal vs Uzbekistán" casa por {portugal, uzbekistan}, no por "vs".
+_STOP_EVENTO: frozenset[str] = frozenset({
+    "vs", "de", "del", "la", "el", "los", "las", "y", "en", "al", "por", "con", "the",
+    "r16", "r32", "octavos", "cuartos", "semis", "semifinal", "final", "grupo", "fase",
+})
+
+
+def _tokens_evento(texto: str) -> set[str]:
+    """Tokens significativos de un texto para el encaje de evento (sin acentos, sin ruido).
+
+    Descarta conectores/ordinales conocidos, tokens de < 3 letras y los puramente numéricos:
+    los nombres propios (equipos, torneos, sedes) son lo que de verdad ata una noticia a un
+    evento de la agenda.
+    """
+    crudo = re.findall(r"\w+", _sin_acentos(texto))
+    return {t for t in crudo if len(t) >= 3 and not t.isdigit() and t not in _STOP_EVENTO}
+
+
+def _proximidad_evento(dias: float, ventana_dias: float) -> float:
+    """Peso temporal [0,1] de un evento a `dias` de distancia (negativo = pasado).
+
+    Plena (1.0) en la ventana de cobertura viva [-1, +1] días (ayer/hoy/mañana); decae lineal
+    hasta ~0.3 al borde de `ventana_dias`; 0 fuera de [-1, ventana_dias]. Un evento de hace más
+    de un día ya no es agenda (la cobertura post se hace por resultado/frescura, no por evento).
+    """
+    if dias < -1.0 or dias > ventana_dias:
+        return 0.0
+    if dias <= 1.0:
+        return 1.0
+    span = max(1.0, ventana_dias - 1.0)
+    return max(0.3, 1.0 - 0.7 * (dias - 1.0) / span)
+
+
+def encaje_evento_detalle(
+    cluster: dict[str, Any],
+    eventos: list[dict[str, Any]],
+    *,
+    ahora: datetime | None = None,
+    ventana_dias: float = _EVENTO_VENTANA_DIAS,
+) -> tuple[float, str]:
+    """Encaje de la historia con la AGENDA de la marca [0,1] MÁS el evento que mejor casa. PURA.
+
+    Cruza el título/resumen del cluster con los eventos próximos (`rota_eventos` de la marca,
+    cada uno `{titulo, fecha, ...}`). Por evento: solape textual de nombres propios (equipos,
+    torneos, sedes) × proximidad temporal. Devuelve el MÁXIMO y el título del evento ganador
+    (la EXPLICACIÓN). 0.0 sin eventos, sin solape o fuera de ventana. Determinista.
+    """
+    if not eventos:
+        return 0.0, ""
+    ref = ahora or datetime.now(UTC)
+    hoy = ref.date()
+    texto = " ".join(
+        str(cluster.get(k) or "") for k in ("titulo", "titulo_es", "resumen", "resumen_es")
+    )
+    tokens_noticia = _tokens_evento(texto)
+    if not tokens_noticia:
+        return 0.0, ""
+    mejor = 0.0
+    mejor_titulo = ""
+    for ev in eventos:
+        fecha = _parse_iso(str(ev.get("fecha") or ""))
+        if fecha is None:
+            continue
+        dias = (fecha.date() - hoy).days
+        prox = _proximidad_evento(float(dias), ventana_dias)
+        if prox <= 0.0:
+            continue
+        tokens_ev = _tokens_evento(str(ev.get("titulo") or ""))
+        if not tokens_ev:
+            continue
+        solape = len(tokens_ev & tokens_noticia) / len(tokens_ev)
+        s = prox * solape
+        if s > mejor:
+            mejor = s
+            mejor_titulo = str(ev.get("titulo") or "")
+    return min(1.0, mejor), (mejor_titulo if mejor > 0.0 else "")
 
 
 def puntuar(
     cluster: dict[str, Any],
     *,
     palabras_marca: frozenset[str] = frozenset(),
+    eventos: list[dict[str, Any]] | None = None,
     ahora: datetime | None = None,
     pesos: PesosScore | None = None,
     breaking_peso: float = BREAKING_PESO_DEF,
@@ -98,7 +197,7 @@ def puntuar(
     Atajo de `puntuar_detalle` para los llamantes que no necesitan el desglose por señal.
     """
     score, razon, _desglose = puntuar_detalle(
-        cluster, palabras_marca=palabras_marca, ahora=ahora, pesos=pesos,
+        cluster, palabras_marca=palabras_marca, eventos=eventos, ahora=ahora, pesos=pesos,
         breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     return score, razon
@@ -108,6 +207,7 @@ def puntuar_detalle(
     cluster: dict[str, Any],
     *,
     palabras_marca: frozenset[str] = frozenset(),
+    eventos: list[dict[str, Any]] | None = None,
     ahora: datetime | None = None,
     pesos: PesosScore | None = None,
     breaking_peso: float = BREAKING_PESO_DEF,
@@ -115,28 +215,31 @@ def puntuar_detalle(
 ) -> tuple[float, str, dict[str, Any]]:
     """Puntúa una historia y EXPLICA el porqué. Devuelve `(score, razon, desglose)`. PURA.
 
-    FÓRMULA — score en [0, 1], combinación lineal ponderada de cinco señales independientes:
+    FÓRMULA — score en [0, 1]:
 
-        W     = peso_fuentes (Σ peso editorial por outlet; potente 2.0 / normal 1.0 / baja 0.5;
-                cae a n_fuentes si el cluster aún no trae timeline — pre-migración)
-        score = 0.30 · corroboracion    (log(W)/log(8): 1 fuente→0; 2 potentes→0.67; satura 8)
-              + 0.20 · velocidad        (masa que SE SUMÓ en la ventana actual / 4; 2 potentes
-                                         a la vez = 1.0; DECAE sola al envejecer)
-              + 0.20 · frescura         (recencia de `ultimo_visto`; lineal, 0 a las 72h)
-              + 0.10 · viralidad        (`senal` agregada, escala log; satura a 1e6)
-              + 0.20 · relevancia_marca (palabras de la marca en título/resumen; 0 sin marca)
+        merito    = w_frescura·frescura + w_marca·marca + w_evento·evento
+                  + w_viralidad·viralidad + w_velocidad·velocidad + w_rendimiento·rendimiento
+        confianza = piso_confianza + (1 − piso_confianza)·corroboracion   (∈ [piso, 1])
+        score     = merito · confianza   (+ bonus breaking si aplica)
 
-    BREAKING emerge de aquí, no es un carril aparte: 2 fuentes potentes a la vez ⇒
-    corroboración 0.67 + velocidad 1.0 + frescura ≈ 1 ⇒ ~0.6+, top del pool, y el flag
-    `breaking` (masa en ventana ≥ `breaking_peso`) exime de maduración en el umbral ⇒ sale
-    al feed en el siguiente barrido. El bonus aditivo (`pesos.breaking`) queda en 0.0 por
-    defecto (knob de rollback). Es MONÓTONA en cada señal (los tests lo verifican).
+    Las señales CRUDAS [0,1]:
+        corroboracion  log(W)/log(corro_satura), W = peso_fuentes (Σ peso editorial por outlet;
+                       cae a n_fuentes pre-migración). Es la CONFIANZA: multiplica, no suma.
+        velocidad      masa que SE SUMÓ en la ventana actual / 4 (decae sola al envejecer).
+        frescura       recencia de `ultimo_visto`; lineal, 0 a las `frescura_vida_h` horas.
+        viralidad      `senal` agregada, escala log; satura a 1e6.
+        marca          palabras del vocabulario de la marca en título/resumen; 0 sin marca.
+        evento         encaje con la agenda de la marca (`rota_eventos` próximos); 0 sin agenda.
+        rendimiento    bonus [0,1] que el daemon precalcula (líneas top por engagement).
 
-    `desglose` es la EXPLICACIÓN estructurada (se persiste junto al score, la lee la UI):
-    cada señal CRUDA en [0,1] (`corroboracion`/`velocidad`/`frescura`/`viralidad`/`marca`/
-    `rendimiento`), `peso_fuentes` (la masa W), `breaking` (0/1, computado EN VIVO: decae) y
-    `palabras` (los términos del vocabulario que casaron). Señales crudas, no ponderadas: el
-    desglose explica QUÉ tiene la historia; los pesos (editables en caliente) cuánto cuenta.
+    BREAKING emerge de aquí: varias fuentes potentes a la vez ⇒ confianza alta + velocidad ⇒
+    top del pool, y el flag `breaking` (masa en ventana ≥ `breaking_peso`) exime de maduración
+    en el umbral. El bonus aditivo (`pesos.breaking`) queda en 0.0 por defecto (rollback).
+
+    `desglose` es la EXPLICACIÓN estructurada (se persiste, la lee la UI): cada señal CRUDA en
+    [0,1] (`corroboracion`/`velocidad`/`frescura`/`viralidad`/`marca`/`evento`/`rendimiento`),
+    `confianza` (el multiplicador efectivo), `peso_fuentes` (la masa W), `breaking` (0/1, EN
+    VIVO), `palabras` (vocabulario que casó) y `evento_titulo` (el evento que ató la historia).
     """
     p = pesos or _PESOS_DEF
     n_fuentes = int(cluster.get("n_fuentes") or 0)
@@ -152,7 +255,10 @@ def puntuar_detalle(
         masa = float(n_fuentes)
     s_corro = 0.0
     if masa > 1.0:
-        s_corro = min(1.0, math.log(masa) / math.log(_PESO_SATURA))
+        s_corro = min(1.0, math.log(masa) / math.log(max(2.0, p.corro_satura)))
+    # CONFIANZA: la corroboración no suma, multiplica. Una historia sin corroborar parte del
+    # piso (no se mata, pero queda topada); confirmada por varios medios llega a 1.0.
+    confianza = p.piso_confianza + (1.0 - p.piso_confianza) * s_corro
 
     # Velocidad + breaking EN VIVO desde el timeline persistido (decaen con el reloj). Sin
     # timeline no se inventa señal: velocidad 0 y el flag persistido se respeta tal cual.
@@ -167,24 +273,28 @@ def puntuar_detalle(
         s_vel = min(1.0, max(0.0, float(cluster.get("velocidad") or 0.0)))
         es_breaking = bool(int(cluster.get("breaking") or 0))
 
-    s_fresca = _frescura(str(cluster.get("ultimo_visto") or ""), ahora=ahora)
+    s_fresca = _frescura(
+        str(cluster.get("ultimo_visto") or ""), ahora=ahora, vida_h=p.frescura_vida_h
+    )
     s_viral = _log_norm(senal, _SENAL_SATURA)
     s_marca, palabras_casadas = relevancia_marca_detalle(cluster, palabras_marca)
-    # Señal de RENDIMIENTO (Fase 2c): 0..1 que el daemon precalcula (1 si la historia cae en una
-    # línea top por engagement). INERTE salvo que `pesos.rendimiento` > 0. Acota a [0,1] por defensa.
+    s_evento, evento_titulo = encaje_evento_detalle(
+        cluster, eventos or [], ahora=ahora, ventana_dias=p.evento_ventana_dias
+    )
     s_rend = min(1.0, max(0.0, float(cluster.get("bonus_rendimiento") or 0.0)))
 
-    score = (
-        p.corroboracion * s_corro
-        + p.velocidad * s_vel
-        + p.frescura * s_fresca
-        + p.viralidad * s_viral
+    merito = (
+        p.frescura * s_fresca
         + p.marca * s_marca
+        + p.evento * s_evento
+        + p.viralidad * s_viral
+        + p.velocidad * s_vel
         + p.rendimiento * s_rend
     )
+    score = merito * confianza
     if es_breaking and p.breaking:
-        score = min(1.0, score + p.breaking)
-    score = min(1.0, score)
+        score = score + p.breaking
+    score = min(1.0, max(0.0, score))
 
     razones: list[str] = []
     if es_breaking:
@@ -199,6 +309,8 @@ def puntuar_detalle(
             razones.append(f"{n_fuentes} fuentes")
     if s_fresca >= 0.5:
         razones.append("reciente")
+    if s_evento > 0 and evento_titulo:
+        razones.append(f"en agenda: {evento_titulo}")
     if senal > 0:
         razones.append(f"señal {senal}")
     if s_marca > 0:
@@ -208,14 +320,17 @@ def puntuar_detalle(
     razon = " · ".join(razones) if razones else "historia única"
     desglose: dict[str, Any] = {
         "corroboracion": round(s_corro, 3),
+        "confianza": round(confianza, 3),
         "velocidad": round(s_vel, 3),
         "frescura": round(s_fresca, 3),
         "viralidad": round(s_viral, 3),
         "marca": round(s_marca, 3),
+        "evento": round(s_evento, 3),
         "rendimiento": round(s_rend, 3),
         "peso_fuentes": round(masa, 3),
         "breaking": 1 if es_breaking else 0,
         "palabras": list(palabras_casadas),
+        "evento_titulo": evento_titulo,
     }
     return round(score, 6), razon, desglose
 

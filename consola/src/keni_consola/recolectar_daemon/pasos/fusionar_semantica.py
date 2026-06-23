@@ -121,7 +121,6 @@ def paso_fusionar_semantica(
         return {"grupos": 0, "fusionadas": 0}
     ventana_h = config.cluster_ventana_h()
     maximo = config.fusion_semantica_max()
-    pesos = config.score_pesos()
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
@@ -170,6 +169,10 @@ def paso_fusionar_semantica(
             continue
         lote = recientes[:maximo]
         por_id = {str(c["id"]): c for c in lote}
+        # Pesos y agenda POR MARCA (modelo v2): cada marca jerarquiza distinto y el encaje de
+        # evento usa SU agenda. Una lectura por marca y barrido (la canónica fusionada es de esta).
+        pesos = config.score_pesos(marca_f)
+        eventos = _comun.eventos_proximos(marca_f)
         # Descarta métricas residuales de pasos previos del hilo: lo acumulado a partir de
         # aquí es el coste de Fusionar de ESTA marca (lo sella el registro de actividad).
         traducir.tomar_metricas_acumuladas()
@@ -189,7 +192,7 @@ def paso_fusionar_semantica(
         for grupo in grupos:
             try:
                 if _pkg._fusionar_grupo(
-                    grupo, por_id, pesos=pesos, breaking_peso=breaking_peso,
+                    grupo, por_id, pesos=pesos, eventos=eventos, breaking_peso=breaking_peso,
                     breaking_ventana_h=breaking_ventana_h, fuentes_baja=fuentes_baja,
                     perfil_activo=perfil_activo, ahora=ahora,
                 ):

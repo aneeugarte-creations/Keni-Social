@@ -15,7 +15,7 @@ from ._comun import (
     _parse_iso,
 )
 from .corroboracion import peso_ventana_actual
-from .scoring import puntuar_detalle
+from .scoring import PesosScore, puntuar_detalle
 
 # El score que LISTA el panel y el umbral que DISPARA producción automática son dos niveles
 # distintos a propósito: el panel muestra el pool jerarquizado (todo lo que pasó la entrada),
@@ -29,6 +29,7 @@ def evaluar_umbral(
     cluster: dict[str, Any],
     *,
     palabras_marca: frozenset[str] = frozenset(),
+    pesos: PesosScore | None = None,
     min_score: float = UMBRAL_MIN_SCORE_DEF,
     min_marca: float = UMBRAL_MIN_MARCA_DEF,
     min_maduracion_min: int = 0,
@@ -88,7 +89,7 @@ def evaluar_umbral(
                     "se promueve cuando la corroboración haya tenido tiempo de acumularse"
                 )
     score, _razon, desglose = puntuar_detalle(
-        cluster, palabras_marca=palabras_marca, ahora=ahora,
+        cluster, palabras_marca=palabras_marca, pesos=pesos, ahora=ahora,
         breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     if score < min_score:

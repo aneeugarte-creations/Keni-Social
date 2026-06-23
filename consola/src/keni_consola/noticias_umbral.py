@@ -69,6 +69,7 @@ def evaluar(
     return agrupar.evaluar_umbral(
         cluster,
         palabras_marca=palabras_marca,
+        pesos=config.score_pesos(marca),
         min_score=config.promover_min_score(),
         min_marca=config.promover_min_marca(),
         min_maduracion_min=config.promover_maduracion_min(),

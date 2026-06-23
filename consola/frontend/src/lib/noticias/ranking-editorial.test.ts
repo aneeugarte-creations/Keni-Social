@@ -128,18 +128,37 @@ describe("factoresRanking", () => {
 });
 
 describe("calculoScore", () => {
-  it("reconstruye la fórmula: señal × peso = aporte, Σ = score", () => {
-    const { lineas, total } = calculoScore(
+  it("reconstruye la fórmula v2: mérito (Σ señal × peso) × confianza = score", () => {
+    const { lineas, merito, confianza, total } = calculoScore(
       historia({
-        score_desglose: { corroboracion: 0.5, velocidad: 1.0, frescura: 0.5, viralidad: 0, marca: 0 },
-        score_pesos: { corroboracion: 0.3, velocidad: 0.2, frescura: 0.2, viralidad: 0.1, marca: 0.2, rendimiento: 0, breaking: 0 },
+        score_desglose: {
+          corroboracion: 0.5, confianza: 0.75, velocidad: 1.0, frescura: 0.5,
+          viralidad: 0, marca: 0, evento: 0,
+        },
+        score_pesos: {
+          frescura: 0.4, marca: 0.2, evento: 0.1, viralidad: 0.1, velocidad: 0.2,
+          rendimiento: 0, breaking: 0, piso_confianza: 0.5,
+        },
       }),
     );
     const porEtiqueta = Object.fromEntries(lineas.map((l) => [l.etiqueta, l]));
-    expect(porEtiqueta["Corroboración"].aporte).toBeCloseTo(0.15);
-    expect(porEtiqueta["Velocidad"].aporte).toBeCloseTo(0.2);
+    expect(porEtiqueta["Frescura"].aporte).toBeCloseTo(0.2); // 0.5 × 0.4
+    expect(porEtiqueta["Velocidad"].aporte).toBeCloseTo(0.2); // 1.0 × 0.2
     expect(porEtiqueta["Rendimiento"]).toBeUndefined(); // peso 0: no cuenta
-    expect(total).toBeCloseTo(0.45);
+    expect(merito).toBeCloseTo(0.4); // 0.2 + 0.2
+    expect(confianza).toBeCloseTo(0.75); // el multiplicador que persiste el back
+    expect(total).toBeCloseTo(0.3); // 0.4 × 0.75
+  });
+
+  it("sin confianza persistida la reconstruye con el piso del perfil", () => {
+    const { confianza, total } = calculoScore(
+      historia({
+        score_desglose: { corroboracion: 1.0, frescura: 1.0 },
+        score_pesos: { frescura: 1.0, piso_confianza: 0.5 },
+      }),
+    );
+    expect(confianza).toBeCloseTo(1.0); // piso 0.5 + 0.5 × corroboración 1.0
+    expect(total).toBeCloseTo(1.0); // mérito 1.0 × confianza 1.0
   });
 
   it("sin pesos del back no inventa cálculo (degradación honesta)", () => {
@@ -150,17 +169,18 @@ describe("calculoScore", () => {
   it("un peso malformado (NaN) se ignora y no contamina el total con NaN", () => {
     const { lineas, total } = calculoScore(
       historia({
-        score_desglose: { corroboracion: 0.5, velocidad: 1.0 },
+        score_desglose: { confianza: 1.0, frescura: 1.0, velocidad: 1.0 },
         score_pesos: {
-          corroboracion: "x" as unknown as number, // valor inválido del back
+          frescura: "x" as unknown as number, // valor inválido del back
           velocidad: 0.2,
+          piso_confianza: 0.5,
         },
       }),
     );
     const porEtiqueta = Object.fromEntries(lineas.map((l) => [l.etiqueta, l]));
-    expect(porEtiqueta["Corroboración"]).toBeUndefined(); // peso NaN: no cuenta
+    expect(porEtiqueta["Frescura"]).toBeUndefined(); // peso NaN: no cuenta
     expect(porEtiqueta["Velocidad"].aporte).toBeCloseTo(0.2);
     expect(Number.isNaN(total)).toBe(false);
-    expect(total).toBeCloseTo(0.2);
+    expect(total).toBeCloseTo(0.2); // mérito 0.2 × confianza 1.0
   });
 });

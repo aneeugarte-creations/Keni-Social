@@ -16,6 +16,7 @@ from .._comun import (
     _palabras_relevancia,
     _rendimiento_bonus,
     _rendimiento_top_lineas,
+    eventos_proximos,
 )
 
 # Tope de items a AGRUPAR por barrido: el agrupar es best-effort y ACOTADO. Si un
@@ -50,10 +51,13 @@ def paso_agrupar() -> dict[str, Any]:
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
-    pesos = config.score_pesos()  # pesos editables del algoritmo de ponderación
     perfil_activo = config.priorizar_perfil_activo()  # relevancia desde la línea editorial (Haiku)
     perfil_ttl = config.perfil_editorial_ttl_horas()
     perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
+    # Pesos del score y agenda POR MARCA (modelo v2): perfil distinto por marca y señal de evento
+    # contra SU `rota_eventos`. Perezosos (1 lectura por marca y barrido), como el rendimiento.
+    pesos_cache: dict[str, Any] = {}
+    eventos_cache: dict[str, list[dict[str, Any]]] = {}
     # Señal de RENDIMIENTO (Fase 2c, gateada): líneas top por engagement, POR MARCA y perezoso.
     rendimiento_activo = config.rendimiento_ranking_activo()
     rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
@@ -200,6 +204,9 @@ def paso_agrupar() -> dict[str, Any]:
                     ),
                 )
             palabras = _palabras_relevancia(marca_c, perfil_activo)
+            if marca_c not in pesos_cache:
+                pesos_cache[marca_c] = config.score_pesos(marca_c)
+                eventos_cache[marca_c] = eventos_proximos(marca_c)
             # Señal de rendimiento (Fase 2c): 1 si la historia cae en una línea top POR MARCA.
             if rendimiento_activo and marca_c:
                 if marca_c not in rend_cache:
@@ -210,7 +217,8 @@ def paso_agrupar() -> dict[str, Any]:
                         recalc, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
             score, razon, desglose = agrupar.puntuar_detalle(
-                recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos,
+                recalc, palabras_marca=palabras, eventos=eventos_cache[marca_c],
+                ahora=ahora, pesos=pesos_cache[marca_c],
                 breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
             )
             recalc["score"] = score

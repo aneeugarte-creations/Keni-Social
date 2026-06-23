@@ -51,13 +51,14 @@ def paso_rescore(
         _log.warning("recolectar_daemon: no se pudo leer la ventana para el re-score.", exc_info=True)
         return {"revisados": 0, "actualizados": 0}
 
-    pesos = config.score_pesos()
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     perfil_activo = config.priorizar_perfil_activo()
     rendimiento_activo = config.rendimiento_ranking_activo()
     ahora = datetime.now(UTC)
     palabras_cache: dict[str, frozenset[str]] = {}
+    pesos_cache: dict[str, Any] = {}  # perfil de pesos POR MARCA (modelo v2)
+    eventos_cache: dict[str, list[dict[str, Any]]] = {}  # agenda POR MARCA (señal de evento)
     rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
     cambios: dict[str, dict[str, Any]] = {}
     revisados = 0
@@ -69,6 +70,8 @@ def paso_rescore(
             marca_c = str(c.get("marca") or "")
             if marca_c not in palabras_cache:
                 palabras_cache[marca_c] = _palabras_relevancia(marca_c, perfil_activo)
+                pesos_cache[marca_c] = config.score_pesos(marca_c)
+                eventos_cache[marca_c] = _comun.eventos_proximos(marca_c)
             cl = dict(c)
             # `bonus_rendimiento` no se persiste: se recomputa si la señal está activa.
             if rendimiento_activo and marca_c:
@@ -80,7 +83,8 @@ def paso_rescore(
                         cl, top_lineas, vert_id_a_nombre, vert_etiquetas
                     )
             score, razon, desglose = agrupar.puntuar_detalle(
-                cl, palabras_marca=palabras_cache[marca_c], ahora=ahora, pesos=pesos,
+                cl, palabras_marca=palabras_cache[marca_c], eventos=eventos_cache[marca_c],
+                ahora=ahora, pesos=pesos_cache[marca_c],
                 breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
             )
             # Breaking/velocidad DECAEN con el reloj (la ventana se ancla en ahora): el
