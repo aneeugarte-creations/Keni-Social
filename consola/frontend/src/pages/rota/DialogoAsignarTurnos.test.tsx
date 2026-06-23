@@ -182,7 +182,7 @@ describe("DialogoAsignarTurnos (render)", () => {
     expect(screen.getByRole("checkbox", { name: "Luis" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Ana" })).toBeInTheDocument();
     // El horario sustituye al selector de franja: hay «Horario», ya no «Franja».
-    expect(screen.getByText("Horario")).toBeInTheDocument();
+    expect(screen.getByText("Horario (CDMX)")).toBeInTheDocument();
     expect(screen.queryByText("Franja")).not.toBeInTheDocument();
     // Sin persona ni días elegidos, «Asignar» está deshabilitado.
     expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
@@ -268,7 +268,7 @@ describe("DialogoAsignarTurnos (render)", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByText("Personas")).toBeInTheDocument();
-    expect(screen.getByText("Horario")).toBeInTheDocument();
+    expect(screen.getByText("Horario (CDMX)")).toBeInTheDocument();
     // No es un modal: nada de role=dialog que cubra la rejilla.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Su propio botón de cerrar devuelve el ancho a la rejilla.

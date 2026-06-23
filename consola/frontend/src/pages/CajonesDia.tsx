@@ -237,7 +237,7 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="di-hora">Hora</Label>
+              <Label htmlFor="di-hora">Hora (CDMX)</Label>
               <Input
                 id="di-hora"
                 value={hora}

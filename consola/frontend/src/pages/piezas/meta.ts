@@ -241,7 +241,10 @@ export {
   datetimeLocalAIso,
   formatearFecha,
   formatearFechaHora,
+  // Operativas (publicación/parrilla): SIEMPRE en CDMX + etiqueta, da igual la zona de display.
+  formatearFechaHoraOperativa,
   formatearHora,
+  formatearHoraOperativa,
   isoADatetimeLocal,
   tiempoRelativo,
 } from "@/lib/fecha";

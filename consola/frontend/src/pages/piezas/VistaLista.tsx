@@ -37,7 +37,7 @@ import type { Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
-import { formatearFechaHora } from "./meta";
+import { formatearFechaHoraOperativa } from "./meta";
 
 /**
  * Visibilidad del kebab "⋮" según el puntero. En TÁCTIL (puntero grueso) no hay hover, así
@@ -96,7 +96,7 @@ function TarjetaPieza({
       const fecha = res?.pieza?.fecha_programada;
       toast.success(
         fecha
-          ? `Encolada para ${formatearFechaHora(fecha)}`
+          ? `Encolada para ${formatearFechaHoraOperativa(fecha)}`
           : "Publicación añadida a la cola",
       );
     },
@@ -306,7 +306,7 @@ function TarjetaPieza({
                   )}
                 >
                   <CalendarClock className="h-3.5 w-3.5" />
-                  {formatearFechaHora(pieza.fecha_programada)}
+                  {formatearFechaHoraOperativa(pieza.fecha_programada)}
                 </span>
               )}
             </div>

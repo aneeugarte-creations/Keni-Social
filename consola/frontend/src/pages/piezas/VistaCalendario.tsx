@@ -25,7 +25,7 @@ import { CLAVE_PIEZAS } from "./claves";
 import { DialogoReprogramar } from "./DialogoReprogramar";
 import {
   datetimeLocalAIso,
-  formatearHora,
+  formatearHoraOperativa,
   iconoRed,
   isoADatetimeLocal,
   nombreRed,
@@ -233,7 +233,7 @@ function PildoraPub({
         ) : (
           <Icono className="h-3 w-3 shrink-0" />
         )}
-        <span className="shrink-0 tabular-nums">{formatearHora(pieza.fecha_programada)}</span>
+        <span className="shrink-0 tabular-nums">{formatearHoraOperativa(pieza.fecha_programada)}</span>
         <span className="truncate">{pieza.titulo}</span>
       </button>
     </MenuContextual>

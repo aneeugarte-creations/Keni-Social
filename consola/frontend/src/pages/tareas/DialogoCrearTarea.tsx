@@ -471,7 +471,7 @@ export function DialogoCrearTarea({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="tarea-hora">Hora</Label>
+                    <Label htmlFor="tarea-hora">Hora (CDMX)</Label>
                     <Input
                       id="tarea-hora"
                       type="time"

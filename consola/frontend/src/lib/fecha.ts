@@ -154,6 +154,54 @@ export function formatearHora(iso: string | null | undefined): string {
   return d ? `${_fmt.hora.format(d)} ${etiquetaZona(d)}` : "";
 }
 
+// --- Horas OPERATIVAS (zona del equipo, CDMX fija) ---------------------------
+// Las horas de PUBLICACIÓN / parrilla / turnos son el TARGET del equipo: "publica a las 18:00
+// CDMX" significa lo mismo mire quien mire, da igual la zona de display de cada quien. Por eso
+// estas se anclan SIEMPRE a CDMX (no a `_zonaDisplay`) y llevan la etiqueta CDMX. Tienen sus
+// propios formateadores fijos (no se reconstruyen al cambiar la zona de display). Cuando la zona
+// de display difiere de la operativa, la UI avisa (ver `zonaDisplayDifiereDeOperativa`).
+
+/** Etiqueta de la zona OPERATIVA del equipo (siempre CDMX). */
+export const ETIQUETA_ZONA_OPERATIVA = "CDMX";
+
+const _fOpFechaHora = new Intl.DateTimeFormat("es-MX", {
+  timeZone: ZONA_CDMX, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+});
+const _fOpFechaHoraCorta = new Intl.DateTimeFormat("es-MX", {
+  timeZone: ZONA_CDMX, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+});
+const _fOpHora = new Intl.DateTimeFormat("es-MX", { timeZone: ZONA_CDMX, hour: "2-digit", minute: "2-digit" });
+
+/** Fecha + hora de un instante OPERATIVO (publicación/parrilla), SIEMPRE en CDMX. Ej.: "03 jun 2026, 16:00 CDMX". */
+export function formatearFechaHoraOperativa(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = aInstante(iso);
+  return d ? `${_fOpFechaHora.format(d)} ${ETIQUETA_ZONA_OPERATIVA}` : String(iso);
+}
+
+/** Fecha + hora OPERATIVA sin año (compacta). SIEMPRE en CDMX. Ej.: "03 jun, 16:00 CDMX". */
+export function formatearFechaHoraCortaOperativa(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = aInstante(iso);
+  return d ? `${_fOpFechaHoraCorta.format(d)} ${ETIQUETA_ZONA_OPERATIVA}` : String(iso);
+}
+
+/** Solo hora OPERATIVA (HH:mm). SIEMPRE en CDMX. Ej.: "16:00 CDMX". */
+export function formatearHoraOperativa(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = aInstante(iso);
+  return d ? `${_fOpHora.format(d)} ${ETIQUETA_ZONA_OPERATIVA}` : "";
+}
+
+/**
+ * ¿La zona de DISPLAY del usuario difiere de la OPERATIVA (CDMX)? Cuando es `true`, la UI debe
+ * AVISAR de que los horarios de publicación/parrilla/turnos van en CDMX (la zona del equipo), no
+ * en la zona del usuario, para que no haya confusión. `false` en el caso normal (equipo en CDMX).
+ */
+export function zonaDisplayDifiereDeOperativa(): boolean {
+  return zonaDisplay() !== ZONA_CDMX;
+}
+
 /**
  * ¿Una pieza `programado` ya se pasó de su hora sin publicarse?
  *

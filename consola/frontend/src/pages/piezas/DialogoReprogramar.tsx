@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Pieza } from "@/types";
@@ -75,6 +76,7 @@ export function DialogoReprogramar({
             value={valor}
             onChange={(e) => setValor(e.target.value)}
           />
+          <AvisoZonaOperativa que="La hora de publicación" />
         </div>
 
         <DialogFooter>

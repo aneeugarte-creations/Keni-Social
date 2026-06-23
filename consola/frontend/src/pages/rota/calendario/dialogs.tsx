@@ -217,7 +217,7 @@ export function DialogEditarEvento({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ce-hora">Hora</Label>
+              <Label htmlFor="ce-hora">Hora (CDMX)</Label>
               <Input
                 id="ce-hora"
                 value={hora}

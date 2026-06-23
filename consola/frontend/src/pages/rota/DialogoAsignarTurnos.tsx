@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -411,7 +412,7 @@ export function DialogoAsignarTurnos({
             calendario— se deduce sola del horario, sin que el usuario la elija. */}
         <div className="space-y-2">
           <Label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-            Horario
+            Horario (CDMX)
           </Label>
           <div className="flex items-center gap-3">
             <Input
@@ -419,7 +420,7 @@ export function DialogoAsignarTurnos({
               onChange={(e) => setInicio(e.target.value)}
               placeholder="08:00"
               className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-              aria-label="Hora de inicio"
+              aria-label="Hora de inicio (CDMX)"
             />
             <span className="text-muted-foreground">–</span>
             <Input
@@ -427,12 +428,13 @@ export function DialogoAsignarTurnos({
               onChange={(e) => setFin(e.target.value)}
               placeholder="16:00"
               className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-              aria-label="Hora de fin"
+              aria-label="Hora de fin (CDMX)"
             />
           </div>
           {!horasValidas && (inicio || fin) && (
             <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
           )}
+          <AvisoZonaOperativa que="Los turnos" />
         </div>
 
         {/* Días: tira compacta de 7 (eco de la rejilla de la semana). */}

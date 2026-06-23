@@ -362,7 +362,7 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
     // El reparto está junto al mes (un <aside>, NO un role=dialog que lo tape) y arranca abierto.
     const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
-    expect(within(panel).getByText("Horario")).toBeInTheDocument();
+    expect(within(panel).getByText("Horario (CDMX)")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
     // El toggle vive en el menú ⋯: abrirlo y pulsar «Asignar turnos» oculta el panel; repetir lo
     // vuelve a mostrar.

@@ -47,7 +47,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
+import {
+  formatearFechaHoraCorta,
+  formatearFechaHoraCortaOperativa,
+  formatearFechaHoraOperativa,
+} from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import {
   atribucionStock,
@@ -663,23 +667,23 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                 to="/operacion/programa/programacion"
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 rounded-md text-xs tabular-nums text-muted-foreground hover:text-foreground"
-                aria-label={`Programada para ${formatearFechaHora(pieza.fecha_programada)} — ver en Programación`}
+                aria-label={`Programada para ${formatearFechaHoraOperativa(pieza.fecha_programada)} — ver en Programación`}
               >
                 <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatearFechaHoraCorta(pieza.fecha_programada)}
+                {formatearFechaHoraCortaOperativa(pieza.fecha_programada)}
               </Link>
             </Tooltip>
           ) : (
             <span
               className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
-              title={`Publicada el ${formatearFechaHora(pieza.fecha_programada)}`}
+              title={`Publicada el ${formatearFechaHoraOperativa(pieza.fecha_programada)}`}
             >
               <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
               <span aria-hidden="true">
-                {formatearFechaHoraCorta(pieza.fecha_programada)}
+                {formatearFechaHoraCortaOperativa(pieza.fecha_programada)}
               </span>
               <span className="sr-only">
-                {`Publicada el ${formatearFechaHora(pieza.fecha_programada)}`}
+                {`Publicada el ${formatearFechaHoraOperativa(pieza.fecha_programada)}`}
               </span>
             </span>
           ))}

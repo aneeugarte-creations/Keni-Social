@@ -15,6 +15,7 @@ import {
   formatearFecha,
   formatearFechaHora,
   formatearHora,
+  formatearHoraOperativa,
   hoyCDMX,
   isoADatetimeLocal,
   minutosHastaEvento,
@@ -22,7 +23,28 @@ import {
   tiempoRelativoCorto,
   ZONA_CDMX,
   zonaDisplay,
+  zonaDisplayDifiereDeOperativa,
 } from "./fecha";
+
+describe("horas OPERATIVAS (CDMX fija, no siguen la zona de display)", () => {
+  afterEach(() => establecerZonaDisplay(ZONA_CDMX));
+
+  it("se quedan en CDMX aunque la zona de display sea otra", () => {
+    const enCdmx = formatearHoraOperativa("2026-06-03T22:00:00Z"); // hora de pared CDMX + "CDMX"
+    expect(enCdmx).toMatch(/ CDMX$/);
+    establecerZonaDisplay("Europe/Madrid");
+    // La hora de DISPLAY pasa a Madrid (offset GMT)...
+    expect(formatearHora("2026-06-03T22:00:00Z")).toContain("GMT");
+    // ...pero la OPERATIVA es la MISMA que en CDMX (no se mueve con el display).
+    expect(formatearHoraOperativa("2026-06-03T22:00:00Z")).toBe(enCdmx);
+  });
+
+  it("zonaDisplayDifiereDeOperativa: false en CDMX, true en otra zona", () => {
+    expect(zonaDisplayDifiereDeOperativa()).toBe(false);
+    establecerZonaDisplay("Europe/Madrid");
+    expect(zonaDisplayDifiereDeOperativa()).toBe(true);
+  });
+});
 
 describe("tiempoRelativoCorto (relativo compacto, sin 'hace')", () => {
   const haceSeg = (s: number) => new Date(Date.now() - s * 1000).toISOString();

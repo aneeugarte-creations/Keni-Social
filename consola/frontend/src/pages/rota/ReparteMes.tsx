@@ -3,6 +3,7 @@ import { Loader2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -359,14 +360,14 @@ export function ReparteMes({
 
       {/* Horario */}
       <div className="space-y-2">
-        <Label className={eyebrow}>Horario</Label>
+        <Label className={eyebrow}>Horario (CDMX)</Label>
         <div className="flex items-center gap-3">
           <Input
             value={inicio}
             onChange={(e) => setInicio(e.target.value)}
             placeholder="08:00"
             className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-            aria-label="Hora de inicio"
+            aria-label="Hora de inicio (CDMX)"
           />
           <span className="text-muted-foreground">–</span>
           <Input
@@ -374,12 +375,13 @@ export function ReparteMes({
             onChange={(e) => setFin(e.target.value)}
             placeholder="16:00"
             className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-            aria-label="Hora de fin"
+            aria-label="Hora de fin (CDMX)"
           />
         </div>
         {!horasValidas && (inicio || fin) && (
           <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
         )}
+        <AvisoZonaOperativa que="Los turnos" />
       </div>
 
       {/* Matriz: filas = personas elegidas, columnas = días marcados en el calendario. */}

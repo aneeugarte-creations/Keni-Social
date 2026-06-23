@@ -17,6 +17,7 @@ import { Loader2, Plus, Save, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -258,6 +259,8 @@ export function PanelPlan({ marca }: { marca: string }) {
         aquí mismo. El hashtag de cada línea y sus palabras clave del clasificador se editan en la
         pestaña «Keywords».
       </p>
+      {/* Solo aparece si la zona de visualización del usuario difiere de la operativa (CDMX). */}
+      <AvisoZonaOperativa que="Las horas del plan" className="mb-5" />
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
