@@ -161,7 +161,7 @@ def borrar_video_composicion(composicion_id: str) -> bool:
         con.close()
 
 
-# Estados validos de un subtitulo de video (contrato; ver G-video-engine.md).
+# Estados validos de un subtitulo de video (contrato; ver 08-video-engine.md).
 ESTADOS_VIDEO_SUBTITULO = ("pendiente", "transcrito", "editado", "listo")
 
 _COLS_VIDEO_SUBTITULOS = (

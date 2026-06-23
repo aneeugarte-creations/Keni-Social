@@ -1514,7 +1514,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_insumos_item_lote ON insumos_item (lote_id)",
     "CREATE INDEX IF NOT EXISTS idx_insumos_item_marca_fecha ON insumos_item (marca, fecha)",
     # MOTOR DE VIDEO (Ola VIDEO). `video_composiciones` guarda el JSON de COMPOSICION (pistas/
-    # clips/overlay/subtitulos; esquema en `docs/maquina-contenido/G-video-engine.md`, validado
+    # clips/overlay/subtitulos; esquema en `docs/maquina-contenido/08-video-engine.md`, validado
     # por `keni_shared.video.validar_composicion`). `documento` es el JSON; `publicacion_id` la liga
     # opcionalmente a una pieza del tablero. Una composicion por video del Estudio de Video.
     """

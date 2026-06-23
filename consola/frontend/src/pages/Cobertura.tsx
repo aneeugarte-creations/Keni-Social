@@ -7,10 +7,6 @@
  * La salud de feeds se redujo a UNA línea condicional (el detalle vive en Fuentes). Con la
  * vista «Todas» (admin, sin marca) se degrada a la lista plana clásica con filtros y
  * selección múltiple.
- *
- * Contrato: docs/maquina-contenido/A-motor-ingesta.md
- *           docs/maquina-contenido/B-clustering-historias.md
- *           docs/maquina-contenido/D-cobertura-verificacion.md
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";

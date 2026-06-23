@@ -1,7 +1,7 @@
 """API HTTP del motor de VIDEO (Ola VIDEO) — Estudio de Video.
 
 Superficie REST sobre las composiciones y subtitulos del motor de video (ver el CONTRATO en
-`docs/maquina-contenido/G-video-engine.md`). Es la capa fina entre el frontend (Estudio de
+`docs/maquina-contenido/08-video-engine.md`). Es la capa fina entre el frontend (Estudio de
 Video) y la base ya construida: NO hace render ni ASR (eso lo ejecutan los motores via el
 worker), solo CRUD de composiciones/subtitulos y ENCOLADO de jobs de proceso.
 

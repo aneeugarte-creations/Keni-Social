@@ -65,7 +65,6 @@ export interface RespuestaInvCorrer {
 }
 
 // --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo --------
-// Contrato: docs/maquina-contenido/A-motor-ingesta.md
 
 // --- Motor de ingesta: Ola B — Clustering de historias ---
 

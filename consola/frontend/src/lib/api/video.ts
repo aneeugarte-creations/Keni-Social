@@ -13,7 +13,7 @@ import type {
 
 export const apiVideo = {
   // --- Estudio de video (composición + render FFmpeg + subtítulos ASR) ---
-  // CONTRATO: docs/maquina-contenido/G-video-engine.md. El documento de composición se valida
+  // CONTRATO: docs/maquina-contenido/08-video-engine.md. El documento de composición se valida
   // en el backend (`keni_shared.video.validar_composicion`). El render y la transcripción se
   // ENCOLAN como jobs de proceso (no-claude) y se SONDEAN con `useGeneracion` (tipos
   // "render-video" / "transcribir"); al completar dan `resultado` `{media_id, url}`.

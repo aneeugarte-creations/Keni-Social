@@ -6,7 +6,7 @@ subtitulos) y devuelven el filtergraph y la lista de argumentos de ffmpeg. El ej
 (`__init__.ejecutar_render`) las usa tras bajar los media; los tests las verifican sin tocar
 ffmpeg.
 
-CONVENCIONES DEL ESQUEMA (ver `docs/maquina-contenido/G-video-engine.md`)
+CONVENCIONES DEL ESQUEMA (ver `docs/maquina-contenido/08-video-engine.md`)
 =========================================================================
   - `formato`: {w, h, fps, preset}. Lienzo de salida.
   - pista `video` con `id == "base"` (o la primera pista de video): clip de fondo. Se reencuadra

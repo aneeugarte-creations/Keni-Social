@@ -16,7 +16,6 @@ import type {
 
 export const apiNoticias = {
   // --- Motor de ingesta persistente (Ola A): archivo a nivel de artículo ---
-  // Contrato: docs/maquina-contenido/A-motor-ingesta.md
   noticias: {
     /**
      * Lista el archivo de noticias ingeridas, newest-first (`capturado_en` desc).

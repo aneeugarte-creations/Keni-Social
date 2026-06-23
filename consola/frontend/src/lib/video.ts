@@ -1,6 +1,6 @@
 // Tipos y helpers PUROS del motor de edición de video (Ola VIDEO, "toque RRSS").
 //
-// Espejo del CONTRATO de `docs/maquina-contenido/G-video-engine.md` y del validador de
+// Espejo del CONTRATO de `docs/maquina-contenido/08-video-engine.md` y del validador de
 // `keni-shared/src/keni_shared/video.py`. El frontend edita el `documento` de composición en
 // local y lo manda al backend (`POST /api/video/composiciones` + `PUT`), que lo re-valida y lo
 // renderiza server-side con FFmpeg. Este fichero NO renderiza nada: solo construye/serializa el

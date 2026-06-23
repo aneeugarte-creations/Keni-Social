@@ -2,7 +2,7 @@
 
 DUEÑO de este modulo: el RENDER. `ejecutar_render(gen_id, spec)` es el EJECUTOR del job de
 proceso `render-video` (lo despacha `worker._procesar_job_proceso`). La firma es el CONTRATO
-con el seam y NO cambia sin actualizar `worker` + `docs/maquina-contenido/G-video-engine.md`.
+con el seam y NO cambia sin actualizar `worker` + `docs/maquina-contenido/08-video-engine.md`.
 
 El render (ffmpeg) es LOCAL, gratuito y BAJO DEMANDA (lo dispara un humano, no un daemon, y no
 consume tokens), asi que NO tiene kill-switch ni gateo por maquina: el worker ejecuta lo que
