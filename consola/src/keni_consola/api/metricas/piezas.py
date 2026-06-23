@@ -16,9 +16,12 @@ from starlette.responses import JSONResponse, Response
 
 from ...tiempo import ahora_iso
 from ._comun import (
+    _conjunto_formatos,
     _etiqueta_rango,
+    _formato_canonico,
     _gate_marca_metricas,
     _log,
+    _validar_formatos,
     _validar_rango,
     _validar_redes,
     marcas,
@@ -43,10 +46,11 @@ async def piezas(request: Request) -> Response:
     """GET /api/metricas/piezas: estadísticas + top 10 + peores 10 + distribución.
 
     `?marca=` acota a una marca (sus piezas); sin marca, agrega todas (tab "Todas").
-    `?red=` acota a UNA red (top/peores/estadísticas SOLO de esa red; red desconocida →400).
-    Sin `red` se sirve de cache (lazy fill); CON `red` se recomputa al vuelo (en executor)
-    — es una vista filtrada bajo demanda, no se cachea cada combinación marca×red. Incluye
-    `etiqueta_rango` y `generado_en`.
+    `?red=` acota a UNA red y `?formato=` a esos formatos canónicos (valor desconocido →400);
+    top/peores/estadísticas se calculan SOLO sobre las piezas que pasan ambos filtros. Sin
+    `red` ni `formato` se sirve de cache (lazy fill); con cualquiera de ellos se recomputa
+    al vuelo (en executor) — vista filtrada bajo demanda, no se cachea cada combinación.
+    Incluye `etiqueta_rango` y `generado_en`.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -54,11 +58,12 @@ async def piezas(request: Request) -> Response:
         return rechazo
     try:
         redes = _validar_redes(request.query_params.get("red"))
-        if redes:
-            # Vista filtrada por red(es): recálculo bajo demanda (trabajo bloqueante de la
-            # fuente) en threadpool para no congelar el event loop; no usa la cache por combo.
+        formatos = _validar_formatos(request.query_params.get("formato"))
+        if redes or formatos:
+            # Vista filtrada por red/formato: recálculo bajo demanda (trabajo bloqueante de
+            # la fuente) en threadpool para no congelar el event loop; no usa cache por combo.
             payload = await run_in_threadpool(
-                servicio.construir_analitica_piezas, rango, marca, redes
+                servicio.construir_analitica_piezas, rango, marca, redes, formatos
             )
             generado_en = ahora_iso()
         else:
@@ -67,8 +72,8 @@ async def piezas(request: Request) -> Response:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception(
-            "Fallo al generar la analítica de piezas (rango=%s, marca=%s, red=%s).",
-            rango, marca or "todas", ",".join(redes) or "todas",
+            "Fallo al generar la analítica de piezas (rango=%s, marca=%s, red=%s, formato=%s).",
+            rango, marca or "todas", ",".join(redes) or "todas", ",".join(formatos) or "todos",
         )
         return JSONResponse({"error": "No se pudo generar la analítica de piezas."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
@@ -167,12 +172,14 @@ async def piezas_listado(request: Request) -> Response:
     del periodo" (con buscador + orden + detalle por pieza). Servido desde cache (lazy fill).
 
     `?marca=` (en forma `id_metricas`) acota a una marca; sin marca, agrega todas.
-    `?red=a,b` acota a esas redes (combinación libre); sin `red`, todas. La cache guarda
-    el listado completo y el recorte por red se aplica aquí sobre la salida.
+    `?red=a,b` acota a esas redes (combinación libre) y `?formato=a,b` a esos formatos
+    canónicos; sin filtro, todas. La cache guarda el listado completo y el recorte por
+    red/formato se aplica aquí sobre la salida (valor desconocido →400).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
         redes = _validar_redes(request.query_params.get("red"))
+        formatos = _validar_formatos(request.query_params.get("formato"))
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -209,6 +216,12 @@ async def piezas_listado(request: Request) -> Response:
     # desaparece del listado por completo, igual que en el resto del dashboard.
     if redes:
         piezas = [p for p in piezas if (p.get("plataforma") or "").lower() in redes]
+        total = len(piezas)
+    # Recorte por formato(s) canónico(s): una pieza cuyo formato canónico no está en el
+    # foco desaparece del listado, igual que con la red.
+    if formatos:
+        fmts = _conjunto_formatos(formatos)
+        piezas = [p for p in piezas if _formato_canonico(p.get("formato") or "") in fmts]
         total = len(piezas)
     return JSONResponse(
         {
@@ -362,8 +375,10 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     cruzando las piezas del periodo con el `contenido` de la BD (enlace por
     `id_post_metricool`; fallback fuzzy por título) y agrega engagement medio +
     visualizaciones + nº de piezas por cada eje (tipo de contenido + clases de etiqueta).
-    `?marca=` (en forma `id_metricas`) acota; sin marca, todas. Trabajo bloqueante (BD +
-    listado de piezas de la fuente) en executor para no congelar el event loop.
+    `?marca=` (en forma `id_metricas`) acota; sin marca, todas. `?red=a,b` acota a esas
+    redes y `?formato=a,b` a esos formatos canónicos (valor desconocido →400); las piezas
+    fuera del foco no entran en la agregación. Trabajo bloqueante (BD + listado de piezas de
+    la fuente) en executor para no congelar el event loop.
     """
     marca_metricas, rechazo = _gate_marca_metricas(
         request, request.query_params.get("marca") or None
@@ -373,8 +388,11 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
+        redes = _validar_redes(request.query_params.get("red"))
+        formatos = _validar_formatos(request.query_params.get("formato"))
         payload = await run_in_threadpool(
-            metricas_pieza.analitica_por_etiqueta, rango, marca_consola, marca_metricas
+            metricas_pieza.analitica_por_etiqueta,
+            rango, marca_consola, marca_metricas, redes, formatos,
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -407,8 +425,10 @@ async def lineas(request: Request) -> Response:
     sin línea/origen caen en "Sin línea"/"Sin origen".
 
     `?marca=` (en forma `id_metricas`) acota; sin marca, todas. `?rango=` (preset o token).
-    Trabajo bloqueante (BD + listado de piezas de la fuente) en executor para no congelar
-    el event loop.
+    `?red=a,b` acota a esas redes y `?formato=a,b` a esos formatos canónicos (valor
+    desconocido →400); las piezas fuera del foco no entran en la agregación. Trabajo
+    bloqueante (BD + listado de piezas de la fuente) en executor para no congelar el event
+    loop.
     """
     marca_metricas, rechazo = _gate_marca_metricas(
         request, request.query_params.get("marca") or None
@@ -418,8 +438,11 @@ async def lineas(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     try:
+        redes = _validar_redes(request.query_params.get("red"))
+        formatos = _validar_formatos(request.query_params.get("formato"))
         payload = await run_in_threadpool(
-            metricas_linea.lineas_y_origenes, rango, marca_consola, marca_metricas
+            metricas_linea.lineas_y_origenes,
+            rango, marca_consola, marca_metricas, redes, formatos,
         )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)

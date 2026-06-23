@@ -123,6 +123,7 @@ function tituloDeKey(key: readonly unknown[]): string {
 export interface ContextoCsv {
   marca: string;
   red: string;
+  formato: string;
   periodo: string;
   generadoEn?: string;
 }
@@ -139,6 +140,7 @@ export function construirCsvCompleto(
     "# Analíticas Keni Social",
     filaCsv(["Marca", ctx.marca]),
     filaCsv(["Red", ctx.red]),
+    filaCsv(["Formato", ctx.formato]),
     filaCsv(["Periodo", ctx.periodo]),
   ];
   if (ctx.generadoEn) lineas.push(filaCsv(["Generado", ctx.generadoEn]));

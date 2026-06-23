@@ -469,6 +469,38 @@ def _normalizar_titulo(titulo: str) -> str:
     return re.sub(r"\s+", " ", s)
 
 
+def _red_canonica(pieza: dict[str, Any]) -> str:
+    """Red canónica de una pieza del listado del periodo: minúsculas y `twitter` -> `x`.
+
+    El listado (`servicio.construir_listado_piezas`) emite la red en `red`; misma
+    normalización que el resto del dashboard para que el filtro hable el mismo idioma.
+    """
+    red = (pieza.get("red") or pieza.get("plataforma") or "").strip().lower()
+    return "x" if red == "twitter" else red
+
+
+def filtrar_piezas_periodo(
+    piezas: list[dict[str, Any]],
+    redes: tuple[str, ...] = (),
+    formatos: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    """Filtra el listado de piezas del periodo por red(es) y formato(s) canónicos.
+
+    Espejo del filtrado del resto del dashboard: una pieza se conserva si su red canónica
+    está entre `redes` (vacío = todas) Y su formato canónico (`servicio.formato_canonico`)
+    está entre `formatos` (vacío = todos). Con ambos vacíos devuelve la MISMA lista sin
+    tocar (comportamiento idéntico a no filtrar). No muta la lista de entrada.
+    """
+    salida = piezas
+    if redes:
+        focos = set(redes)
+        salida = [p for p in salida if _red_canonica(p) in focos]
+    if formatos:
+        fmts = set(formatos)
+        salida = [p for p in salida if servicio.formato_canonico(p.get("formato") or "") in fmts]
+    return salida
+
+
 # Prefijos de `id_post_metricool` que NO son un id real de post de Metricool, sino sellos de
 # degradación: el timeout de publicación (`programador.ID_POST_INCIERTO = "incierto-timeout"`)
 # y las reconciliaciones manuales que ops ha escrito sobre piezas inciertas ("reconc-timeout-…").
@@ -561,14 +593,20 @@ def _serie_final(serie: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def analitica_por_etiqueta(
-    rango: str, marca_consola: str | None, marca_metricas: str | None
+    rango: str,
+    marca_consola: str | None,
+    marca_metricas: str | None,
+    redes: tuple[str, ...] = (),
+    formatos: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Rendimiento de las piezas del periodo AGRUPADO por tipo de contenido y por etiqueta.
 
     Cruza las piezas de Metricool del periodo (`servicio.construir_listado_piezas`) con su
     `contenido` de la BD (enlace por `id_post_metricool`; fallback fuzzy por título) y agrega
     engagement medio + visualizaciones + nº de piezas por cada eje (`tipo` + clases de
-    etiqueta `campania`/`vertical`/`tipo`). Devuelve una estructura lista para graficar:
+    etiqueta `campania`/`vertical`/`tipo`). `redes` acota a esas redes y `formatos` a esos
+    formatos canónicos ANTES de agregar (vacío = todas/todos), igual que el resto del
+    dashboard. Devuelve una estructura lista para graficar:
 
         {"series": [{"eje": "tipo", "etiqueta": "Tipo de contenido",
                      "grupos": [{"valor": ..., "n": ..., "visualizaciones": ..., "engagement_pct": ...}]}, ...],
@@ -577,7 +615,9 @@ def analitica_por_etiqueta(
 
     Best-effort y honesto: si nada enlaza, las series salen con todo en "Sin clasificar".
     """
-    piezas = servicio.construir_listado_piezas(rango, marca_metricas)
+    piezas = filtrar_piezas_periodo(
+        servicio.construir_listado_piezas(rango, marca_metricas), redes, formatos
+    )
     fuente = servicio.nombre_fuente()
 
     contenidos = repos.listar_publicacion(marca=marca_consola)

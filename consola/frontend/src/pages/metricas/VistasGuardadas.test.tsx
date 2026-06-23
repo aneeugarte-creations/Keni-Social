@@ -27,6 +27,7 @@ const VISTA: VistaGuardada = {
   periodo: "mes",
   config: {
     red: "instagram",
+    formato: "reel",
     secciones: { Resumen: false },
     columnas: { piezas: { orden: ["titulo"], ocultas: ["url"] } },
   },

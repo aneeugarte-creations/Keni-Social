@@ -41,6 +41,7 @@ __all__ = [
     "RANGOS_VALIDOS",
     "RANGOS_PRESET_UI",
     "REDES_VALIDAS",
+    "FORMATOS_VALIDOS",
     # Helpers transversales.
     "_gate_marca_metricas",
     "_etiqueta_rango",
@@ -49,6 +50,9 @@ __all__ = [
     "_validar_red",
     "_validar_redes",
     "_conjunto_redes",
+    "_validar_formatos",
+    "_conjunto_formatos",
+    "_formato_canonico",
     "_rango_opcional",
 ]
 
@@ -183,6 +187,57 @@ def _conjunto_redes(red: "str | Iterable[str] | None") -> set[str]:
     if isinstance(red, str):
         return {red} if red else set()
     return {r for r in red if r}
+
+
+# Formatos (ids CANÓNICOS de pieza) que el dashboard puede filtrar. Fuente ÚNICA de
+# verdad: la del backend de métricas (`servicio.FORMATOS_VALIDOS`), para no duplicar el
+# contrato entre la API HTTP y el servicio que filtra las piezas.
+FORMATOS_VALIDOS: frozenset[str] = servicio.FORMATOS_VALIDOS
+
+
+def _formato_canonico(raw: str) -> str:
+    """Normaliza el formato crudo de una pieza a su id canónico (delega en el servicio).
+
+    Es el MISMO mapa que aplica el servicio al filtrar las piezas, para que validar el
+    filtro y filtrar las piezas hablen exactamente el mismo idioma de formato.
+    """
+    return servicio.formato_canonico(raw)
+
+
+def _validar_formatos(raw: str | None) -> tuple[str, ...]:
+    """Valida el filtro `?formato=` que puede traer VARIOS formatos separados por coma.
+
+    None/'' = todos (sin filtro) → tupla vacía. Cada id debe ser un formato canónico
+    válido; uno desconocido lanza ValueError (→400), igual que `_validar_redes`. Devuelve
+    los formatos ÚNICOS en orden de aparición (`?formato=reel,carrusel`).
+    """
+    crudo = (raw or "").strip()
+    if not crudo:
+        return ()
+    elegidos: list[str] = []
+    for parte in crudo.split(","):
+        fmt = parte.strip()
+        if not fmt:
+            continue
+        if fmt not in FORMATOS_VALIDOS:
+            validos = ", ".join(sorted(FORMATOS_VALIDOS))
+            raise ValueError(f"Formato desconocido {fmt!r}. Usa uno de: {validos}.")
+        if fmt not in elegidos:
+            elegidos.append(fmt)
+    return tuple(elegidos)
+
+
+def _conjunto_formatos(formato: "str | Iterable[str] | None") -> set[str]:
+    """Normaliza un argumento de filtro de formato a un CONJUNTO. None/''/() = vacío.
+
+    Acepta un único id (str), una colección de ids, o None, para que las funciones de
+    filtro funcionen igual con uno o varios formatos sin cambiar sus llamadas.
+    """
+    if formato is None:
+        return set()
+    if isinstance(formato, str):
+        return {formato} if formato else set()
+    return {f for f in formato if f}
 
 
 def _rango_opcional(raw: str | None) -> str | None:

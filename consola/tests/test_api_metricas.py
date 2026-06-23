@@ -127,6 +127,181 @@ def test_piezas_listado_red_invalida_devuelve_400(cliente):
     assert "error" in r.json()
 
 
+# --------------------------------------------------------------------------- #
+# Filtro GLOBAL por formato (`?formato=`), espejo del filtro por red.          #
+# --------------------------------------------------------------------------- #
+#
+# Los valores esperados se derivan DINÁMICAMENTE del listado de la muestra (no se
+# hardcodean): se canonicaliza el formato crudo de cada pieza con la MISMA función que
+# usa el backend (`servicio.formato_canonico`) y se eligen formatos realmente presentes.
+
+
+def _canonico(raw):
+    from keni_metricas import servicio
+
+    return servicio.formato_canonico(raw or "")
+
+
+def _formato_presente(piezas):
+    """Un id de formato canónico presente en la muestra (el más frecuente), o None."""
+    cuenta = {}
+    for p in piezas:
+        cuenta[_canonico(p.get("formato"))] = cuenta.get(_canonico(p.get("formato")), 0) + 1
+    if not cuenta:
+        return None
+    return max(cuenta, key=cuenta.get)
+
+
+def test_piezas_listado_filtra_por_formato(cliente):
+    # `?formato=` recorta el listado a ese formato CANÓNICO: las piezas con un crudo que
+    # mapea a ese canónico (p.ej. "link" -> "enlace") se conservan; el resto desaparece.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    assert fmt  # la muestra trae piezas con formato
+    filtrado = cliente.get(f"/api/metricas/piezas-listado?rango=mes&formato={fmt}").json()
+    assert {_canonico(p.get("formato")) for p in filtrado["piezas"]} == {fmt}
+    esperado = sum(1 for p in full["piezas"] if _canonico(p.get("formato")) == fmt)
+    assert filtrado["total"] == esperado
+    assert esperado > 0
+
+
+def test_piezas_listado_combina_red_y_formato(cliente):
+    # `?red=&formato=` combinan: el listado queda solo con piezas de esa red Y ese formato.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    redes = sorted({p["plataforma"] for p in full["piezas"] if _canonico(p.get("formato")) == fmt})
+    assert redes
+    red = redes[0]
+    r = cliente.get(f"/api/metricas/piezas-listado?rango=mes&red={red}&formato={fmt}").json()
+    assert all(p["plataforma"] == red and _canonico(p.get("formato")) == fmt for p in r["piezas"])
+    esperado = sum(
+        1 for p in full["piezas"] if p["plataforma"] == red and _canonico(p.get("formato")) == fmt
+    )
+    assert r["total"] == esperado
+
+
+def test_piezas_listado_formato_invalido_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/piezas-listado?rango=mes&formato=historia")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_piezas_filtra_por_formato(cliente):
+    # `/piezas?formato=`: top/peores se calculan SOLO sobre las piezas de ese formato.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    r = cliente.get(f"/api/metricas/piezas?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    data = r.json()
+    assert all(_canonico(p.get("formato")) == fmt for p in data["top"])
+    assert all(_canonico(p.get("formato")) == fmt for p in data["peores"])
+    sin_filtro = cliente.get("/api/metricas/piezas?rango=mes").json()
+    assert data["total"] <= sin_filtro["total"]
+
+
+def test_piezas_formato_invalido_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/piezas?rango=mes&formato=historia")
+    assert r.status_code == 400
+
+
+def test_crosstab_filtra_por_formato(cliente):
+    # `/crosstab?formato=`: cada celda es de ese formato canónico (el crudo de la celda
+    # mapea al canónico pedido).
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    r = cliente.get(f"/api/metricas/crosstab?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    celdas = r.json()["celdas"]
+    assert celdas
+    assert all(_canonico(c.get("formato")) == fmt for c in celdas)
+
+
+def test_desglose_filtra_por_formato_recompone_desde_piezas(cliente):
+    # `/desglose?formato=` recompone desde las piezas: los totales agregados coinciden con
+    # la suma de visualizaciones/interacciones de las piezas de ese formato en el listado.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    coincide = [p for p in full["piezas"] if _canonico(p.get("formato")) == fmt]
+    r = cliente.get(f"/api/metricas/desglose?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    totales = r.json()["totales"]
+    assert totales["visualizaciones"] == sum(p.get("visualizaciones") or 0 for p in coincide)
+    assert totales["interacciones"] == sum(p.get("interacciones") or 0 for p in coincide)
+
+
+def test_tendencia_filtra_por_formato(cliente):
+    # `/tendencia?formato=`: la serie se deriva de las piezas de ese formato; la suma de
+    # visualizaciones de los puntos coincide con la de esas piezas.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    coincide = [p for p in full["piezas"] if _canonico(p.get("formato")) == fmt]
+    r = cliente.get(f"/api/metricas/tendencia?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    puntos = r.json()["puntos"]
+    assert sum(pt["visualizaciones"] for pt in puntos) == sum(
+        p.get("visualizaciones") or 0 for p in coincide
+    )
+
+
+def test_correlacion_formato_200_y_400(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    r = cliente.get(f"/api/metricas/correlacion?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    assert "items" in r.json()
+    assert cliente.get("/api/metricas/correlacion?rango=mes&formato=historia").status_code == 400
+
+
+def test_reporte_filtra_por_formato_recompone_desde_piezas(cliente):
+    # `/reporte?formato=` recompone total/cuentas/por_red desde las piezas: las sumas
+    # cuadran, el alcance no es sumable (null) y se hace eco del filtro.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    coincide = [p for p in full["piezas"] if _canonico(p.get("formato")) == fmt]
+    r = cliente.get(f"/api/metricas/reporte?rango=mes&formato={fmt}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["formato"] == fmt
+    assert data["total"]["visualizaciones"] == sum(p.get("visualizaciones") or 0 for p in coincide)
+    assert data["total"]["interacciones"] == sum(p.get("interacciones") or 0 for p in coincide)
+    assert data["total"]["piezas"] == len(coincide)
+    # alcance NO es sumable a nivel pieza: con filtro de formato queda null.
+    assert data["total"]["alcance"] is None
+    # por_red queda restringido a las redes que aportan piezas de ese formato.
+    redes_esperadas = {p["plataforma"] for p in coincide}
+    assert {x["red"] for x in data["por_red"]} == redes_esperadas
+
+
+def test_reporte_combina_red_y_formato(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    redes = sorted({p["plataforma"] for p in full["piezas"] if _canonico(p.get("formato")) == fmt})
+    assert redes
+    red = redes[0]
+    coincide = [
+        p for p in full["piezas"] if p["plataforma"] == red and _canonico(p.get("formato")) == fmt
+    ]
+    data = cliente.get(f"/api/metricas/reporte?rango=mes&red={red}&formato={fmt}").json()
+    assert data["red"] == red and data["formato"] == fmt
+    assert data["total"]["visualizaciones"] == sum(p.get("visualizaciones") or 0 for p in coincide)
+    assert data["total"]["piezas"] == len(coincide)
+    assert {x["red"] for x in data["por_red"]} <= {red}
+
+
+def test_reporte_sin_formato_identico(cliente):
+    # Sin `?formato=`, la respuesta es la de siempre: ni campo `formato` ni recompute (el
+    # alcance del total sigue siendo un número, no null).
+    data = cliente.get("/api/metricas/reporte?rango=mes").json()
+    assert "formato" not in data
+    assert isinstance(data["total"]["alcance"], int)
+
+
+def test_reporte_formato_invalido_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/reporte?rango=mes&formato=historia")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 def test_cobertura_por_marca_clasifica_los_cuatro_estados():
     from keni_consola.api.metricas import _cobertura_por_marca
 
@@ -710,3 +885,90 @@ def test_cobertura_x_no_conectada_aclara_licencia_extra():
     por_red = {r["red"]: r for r in _cobertura_por_marca(rep)[0]["redes"]}
     assert por_red["x"]["estado"] == "no_conectada"
     assert "licencia adicional" in por_red["x"]["motivo"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# Filtro por red/formato en /piezas-por-etiqueta y /lineas (espejo del resto). #
+# --------------------------------------------------------------------------- #
+#
+# Los valores esperados se DERIVAN del listado de la muestra (no se hardcodean): se cuenta
+# cuántas piezas del periodo casan con el foco (red `plataforma` / formato canónico) y se
+# contrasta con el `total` que reportan los endpoints agregados.
+
+
+def test_piezas_por_etiqueta_filtra_por_formato(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes&marca=claro_sports").json()
+    assert len({_canonico(p.get("formato")) for p in full["piezas"]}) >= 2
+    fmt = _formato_presente(full["piezas"])
+    base = cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports").json()
+    filtrado = cliente.get(
+        f"/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports&formato={fmt}"
+    ).json()
+    esperado = sum(1 for p in full["piezas"] if _canonico(p.get("formato")) == fmt)
+    assert 0 < esperado < base["total"]
+    assert filtrado["total"] == esperado
+
+
+def test_piezas_por_etiqueta_filtra_por_red(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes&marca=claro_sports").json()
+    redes = sorted({p["plataforma"] for p in full["piezas"]})
+    assert len(redes) >= 2  # la muestra de la marca cubre varias redes
+    red = redes[0]
+    base = cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports").json()
+    filtrado = cliente.get(
+        f"/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports&red={red}"
+    ).json()
+    esperado = sum(1 for p in full["piezas"] if p["plataforma"] == red)
+    assert 0 < esperado < base["total"]
+    assert filtrado["total"] == esperado
+
+
+def test_piezas_por_etiqueta_formato_y_red_invalidos_devuelven_400(cliente):
+    assert cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&formato=historia").status_code == 400
+    assert cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&red=linkedin").status_code == 400
+
+
+def test_lineas_filtra_por_formato(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    assert len({_canonico(p.get("formato")) for p in full["piezas"]}) >= 2
+    fmt = _formato_presente(full["piezas"])
+    base = cliente.get("/api/metricas/lineas?rango=mes").json()
+    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&formato={fmt}").json()
+    esperado = sum(1 for p in full["piezas"] if _canonico(p.get("formato")) == fmt)
+    assert 0 < esperado < base["total"]
+    assert filtrado["total"] == esperado
+    # Cada pieza cae en exactamente un cubo de línea: la suma cuadra con el total filtrado.
+    assert sum(b["piezas"] for b in filtrado["lineas"]) == filtrado["total"]
+
+
+def test_lineas_filtra_por_red(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    redes = sorted({p["plataforma"] for p in full["piezas"]})
+    assert len(redes) >= 2  # la muestra cubre varias redes
+    red = redes[0]
+    base = cliente.get("/api/metricas/lineas?rango=mes").json()
+    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&red={red}").json()
+    esperado = sum(1 for p in full["piezas"] if p["plataforma"] == red)
+    assert 0 < esperado < base["total"]
+    assert filtrado["total"] == esperado
+    # Cada pieza cae en exactamente un cubo de origen: la suma cuadra con el total filtrado.
+    assert sum(b["piezas"] for b in filtrado["origenes"]) == filtrado["total"]
+
+
+def test_lineas_combina_red_y_formato(cliente):
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    fmt = _formato_presente(full["piezas"])
+    redes = sorted({p["plataforma"] for p in full["piezas"] if _canonico(p.get("formato")) == fmt})
+    assert redes
+    red = redes[0]
+    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&red={red}&formato={fmt}").json()
+    esperado = sum(
+        1 for p in full["piezas"] if p["plataforma"] == red and _canonico(p.get("formato")) == fmt
+    )
+    assert esperado > 0
+    assert filtrado["total"] == esperado
+
+
+def test_lineas_formato_y_red_invalidos_devuelven_400(cliente):
+    assert cliente.get("/api/metricas/lineas?rango=mes&formato=historia").status_code == 400
+    assert cliente.get("/api/metricas/lineas?rango=mes&red=linkedin").status_code == 400

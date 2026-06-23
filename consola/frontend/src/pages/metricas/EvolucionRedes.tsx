@@ -24,7 +24,14 @@ import {
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, numeroCompleto, redCanonica, redEnFoco } from "@/lib/formato";
+import {
+  formatoEnFoco,
+  nombreRed,
+  numeroCompacto,
+  numeroCompleto,
+  redCanonica,
+  redEnFoco,
+} from "@/lib/formato";
 import type { PiezaListado } from "@/types";
 
 import { colorDe } from "./coloresRed";
@@ -142,12 +149,13 @@ export function EvolucionRedes({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
 
   // MISMA queryKey que PiezasConsolidada => caché compartida (sin coste extra).
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
+      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });
@@ -161,8 +169,9 @@ export function EvolucionRedes({
     for (const p of piezas) {
       const f = fechaDeISO(p.publicado);
       if (!f || !Number.isFinite(p.visualizaciones)) continue;
-      // Solo redes en foco: una pieza fuera del foco no entra al apilado ni a la leyenda.
+      // Solo red Y formato en foco: una pieza fuera del foco no entra al apilado ni a la leyenda.
       if (!redEnFoco(red, p.plataforma)) continue;
+      if (!formatoEnFoco(formato, p.formato)) continue;
       const redCan = redCanonica(p.plataforma) || "otra";
       redes.add(redCan);
       validas.push({ f, red: redCan, vistas: p.visualizaciones });
@@ -210,7 +219,7 @@ export function EvolucionRedes({
     }
 
     return { filas: out, redesPresentes: presentes, gran };
-  }, [piezas, red]);
+  }, [piezas, red, formato]);
 
   // Muestra ~8 etiquetas de intervalo como máximo en el eje X (interval = categorías a saltar).
   const intervalo = Math.max(0, Math.ceil(filas.length / 8) - 1);

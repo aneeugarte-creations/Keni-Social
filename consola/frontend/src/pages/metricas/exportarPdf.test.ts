@@ -9,7 +9,7 @@ beforeAll(() => {
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 });
 
-const CTX = { marca: "Claro Sports", red: "Instagram", periodo: "junio 2026", generadoEn: "2026-06-22T10:00:00Z" };
+const CTX = { marca: "Claro Sports", red: "Instagram", formato: "Todos los formatos", periodo: "junio 2026", generadoEn: "2026-06-22T10:00:00Z" };
 
 describe("etiquetaPeriodo", () => {
   it("traduce presets y tokens de mes/rango", () => {

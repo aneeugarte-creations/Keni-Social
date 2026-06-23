@@ -14,11 +14,14 @@ from starlette.responses import JSONResponse, Response
 
 from ._comun import (
     RANGOS_PRESET_UI,
+    _conjunto_formatos,
     _conjunto_redes,
     _etiqueta_rango,
+    _formato_canonico,
     _gate_marca_metricas,
     _log,
     _nombre_marca_id,
+    _validar_formatos,
     _validar_rango,
     _validar_redes,
     engagement_pct,
@@ -34,6 +37,7 @@ __all__ = [
     "_suma_clics",
     "_cobertura_por_marca",
     "_filtrar_reporte_por_red",
+    "_recomputar_reporte_por_formato",
 ]
 
 
@@ -423,6 +427,87 @@ def _filtrar_reporte_por_red(rep: dict, red, piezas_red: int) -> dict:
     return nuevo
 
 
+def _recomputar_reporte_por_formato(salida: dict, listado: dict, redes, formatos) -> dict:
+    """Recalcula `total`, `cuentas` y `por_red` DESDE LAS PIEZAS cuando hay filtro de formato.
+
+    El reporte cacheado agrega por red sin dimensión de formato, así que un filtro de formato
+    no se puede proyectar sobre él: se recompone desde el listado de piezas del periodo (mismo
+    coste 0 de API, cache lazy fill) quedándose con las que pasan formato CANÓNICO ∩ red.
+    `visualizaciones`/`interacciones` son sumables; `engagement_pct` se agrupa
+    (interacciones/visualizaciones); `alcance` NO es sumable a nivel pieza, así que queda
+    `None` cuando el filtro de formato está activo. `cobertura_redes` se deja como está (no
+    tiene dimensión de formato). El resto de `salida` (rango, marca, fuente…) se conserva.
+    """
+    reds = _conjunto_redes(redes)
+    fmts = _conjunto_formatos(formatos)
+    piezas = [
+        p
+        for p in (listado.get("piezas") or [])
+        if _formato_canonico(p.get("formato") or "") in fmts
+        and (not reds or p.get("red") in reds)
+    ]
+
+    def _vis(p: dict) -> int:
+        return int(p.get("visualizaciones") or 0)
+
+    def _inter(p: dict) -> int:
+        return int(p.get("interacciones") or 0)
+
+    tot_vis = sum(_vis(p) for p in piezas)
+    tot_inter = sum(_inter(p) for p in piezas)
+    salida = dict(salida)
+    salida["total"] = {
+        "visualizaciones": tot_vis,
+        # El alcance (usuarios únicos) no es sumable entre piezas: con filtro de formato
+        # no hay un agregado honesto, así que se omite (None) en vez de inventar una suma.
+        "alcance": None,
+        "interacciones": tot_inter,
+        "engagement_pct": _engagement_pct(tot_inter, tot_vis),
+        "piezas": len(piezas),
+    }
+
+    # Nombre legible por id de marca: reaprovecha el que ya resolvió `_reporte_serializable`.
+    nombres = {c.get("marca_id", ""): c.get("marca", "") for c in salida.get("cuentas") or []}
+
+    por_red_acc: dict[str, dict[str, int]] = {}
+    cuentas_acc: dict[str, dict[str, int]] = {}
+    for p in piezas:
+        red = p.get("red") or ""
+        dr = por_red_acc.setdefault(red, {"visualizaciones": 0, "interacciones": 0})
+        dr["visualizaciones"] += _vis(p)
+        dr["interacciones"] += _inter(p)
+        cid = p.get("cuenta") or ""
+        dc = cuentas_acc.setdefault(cid, {"visualizaciones": 0, "interacciones": 0})
+        dc["visualizaciones"] += _vis(p)
+        dc["interacciones"] += _inter(p)
+
+    por_red = [
+        {
+            "red": red,
+            "visualizaciones": d["visualizaciones"],
+            "alcance": None,
+            "interacciones": d["interacciones"],
+            "engagement_pct": _engagement_pct(d["interacciones"], d["visualizaciones"]),
+        }
+        for red, d in por_red_acc.items()
+    ]
+    por_red.sort(key=lambda x: x["visualizaciones"], reverse=True)
+    salida["por_red"] = por_red
+
+    salida["cuentas"] = [
+        {
+            "marca_id": cid,
+            "marca": nombres.get(cid) or _nombre_marca_id(cid, {}),
+            "visualizaciones": d["visualizaciones"],
+            "alcance": None,
+            "interacciones": d["interacciones"],
+            "engagement_pct": _engagement_pct(d["interacciones"], d["visualizaciones"]),
+        }
+        for cid, d in cuentas_acc.items()
+    ]
+    return salida
+
+
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     """Forma JSON del reporte para el SPA: total + cuentas con nombres resueltos."""
     nombres = rep.get("nombres") or {}
@@ -486,16 +571,21 @@ async def reporte(request: Request) -> Response:
         return rechazo
     try:
         # `red` admite una o VARIAS redes (combinación a antojo); None = todas (igual que
-        # antes). Validación primero: una red mal escrita falla limpio (→400).
+        # antes). `formato` admite uno o varios ids canónicos. Validación primero: un valor
+        # mal escrito falla limpio (→400).
         redes = _validar_redes(request.query_params.get("red"))
+        formatos = _validar_formatos(request.query_params.get("formato"))
         # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
         # En executor: un combo frío golpea la API externa y NO debe bloquear el loop.
         rep, generado_en = await metricas_cache.reporte_async(rango, marca)
-        if redes:
-            # El conteo de piezas por red NO está en el resumen (`por_plataforma` no
-            # cuenta piezas): se deriva del listado cacheado por (rango, marca) filtrando
-            # por plataforma. Mismo coste 0 de API (cache lazy fill).
+        listado = None
+        if redes or formatos:
+            # El listado cacheado por (rango, marca) es el insumo por-pieza que necesitan
+            # tanto el conteo de piezas por red como el recálculo por formato (coste 0 API).
             listado, _ = await metricas_cache.piezas_listado_async(rango, marca)
+        if redes and not formatos:
+            # El conteo de piezas por red NO está en el resumen (`por_plataforma` no
+            # cuenta piezas): se deriva del listado filtrando por plataforma.
             piezas_red = sum(
                 1 for p in (listado.get("piezas") or []) if p.get("red") in redes
             )
@@ -506,6 +596,10 @@ async def reporte(request: Request) -> Response:
         _log.exception("Fallo al generar el reporte (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el reporte."}, status_code=500)
     salida = _reporte_serializable(rep, rango, marca)
+    if formatos:
+        # Con filtro de formato el reporte se recompone desde las piezas (red ∩ formato):
+        # total/cuentas/por_red salen del listado, no del resumen cacheado sin formato.
+        salida = _recomputar_reporte_por_formato(salida, listado, redes, formatos)
     if redes:
         # Con filtro de red, la auditoría de cobertura muestra SOLO esas redes por marca
         # (la vista "solo de Instagram + …" no lista el resto de redes). El campo `red` se
@@ -515,6 +609,10 @@ async def reporte(request: Request) -> Response:
             {**m, "redes": [r for r in m["redes"] if r["red"] in redes]}
             for m in salida["cobertura_redes"]
         ]
+    if formatos:
+        # Eco del filtro de formato como CSV (igual que `red`), para que la UI sepa que las
+        # cifras están recompuestas sobre esos formatos.
+        salida["formato"] = ",".join(formatos)
     salida["generado_en"] = generado_en
     return JSONResponse(salida)
 

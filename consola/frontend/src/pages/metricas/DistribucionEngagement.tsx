@@ -49,10 +49,11 @@ export function DistribucionEngagement({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
-    queryFn: ({ signal }) => api.metricasPiezas({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
+    queryKey: ["metricas", "piezas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
+    queryFn: ({ signal }) => api.metricasPiezas({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: mismo criterio que el resto de secciones de Métricas; el botón
     // "Actualizar" invalida igualmente.

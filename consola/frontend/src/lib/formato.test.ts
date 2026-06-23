@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
 import {
   costeUsd,
   duracion,
+  formatoCanonico,
+  formatoEnFoco,
+  formatosDeRedes,
   nombreFormato,
   nombreMarca,
   nombreRed,
@@ -332,5 +335,53 @@ describe("nombreMarca", () => {
 
   it("'' → —", () => {
     expect(nombreMarca("", CATALOGO)).toBe("—");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Formato canónico + filtro global de formato
+// ---------------------------------------------------------------------------
+describe("formatoCanonico", () => {
+  it("colapsa variantes crudas a su forma canónica", () => {
+    expect(formatoCanonico("feed_reel")).toBe("reel");
+    expect(formatoCanonico("reel")).toBe("reel");
+    expect(formatoCanonico("feed_carousel_album")).toBe("carrusel");
+    expect(formatoCanonico("photo")).toBe("foto");
+    expect(formatoCanonico("feed_image")).toBe("foto");
+    expect(formatoCanonico("feed_video")).toBe("video");
+    expect(formatoCanonico("link")).toBe("enlace");
+    expect(formatoCanonico("text")).toBe("texto");
+  });
+
+  it("un id desconocido cae a sí mismo en minúsculas; vacío → ''", () => {
+    expect(formatoCanonico("Storymagia")).toBe("storymagia");
+    expect(formatoCanonico(null)).toBe("");
+  });
+});
+
+describe("formatosDeRedes", () => {
+  it("Instagram ofrece reel/carrusel/foto", () => {
+    expect(formatosDeRedes("instagram")).toEqual(["reel", "carrusel", "foto"]);
+  });
+
+  it("YouTube solo vídeo", () => {
+    expect(formatosDeRedes("youtube")).toEqual(["video"]);
+  });
+
+  it("varias redes = unión en orden canónico; sin foco = todos", () => {
+    expect(formatosDeRedes("instagram,youtube")).toEqual(["reel", "carrusel", "foto", "video"]);
+    expect(formatosDeRedes(null)).toEqual(["reel", "carrusel", "foto", "video", "enlace", "texto"]);
+  });
+});
+
+describe("formatoEnFoco", () => {
+  it("sin foco (null) todo está en foco", () => {
+    expect(formatoEnFoco(null, "feed_reel")).toBe(true);
+  });
+
+  it("compara por forma canónica", () => {
+    expect(formatoEnFoco("reel", "feed_reel")).toBe(true);
+    expect(formatoEnFoco("reel,carrusel", "photo")).toBe(false);
+    expect(formatoEnFoco("foto", "feed_image")).toBe(true);
   });
 });

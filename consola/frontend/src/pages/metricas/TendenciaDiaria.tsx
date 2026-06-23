@@ -80,11 +80,12 @@ export function TendenciaDiaria({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
   const [metrica, setMetrica] = React.useState<Metrica>("visualizaciones");
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "tendencia", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
-    queryFn: ({ signal }) => api.metricasTendencia({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
+    queryKey: ["metricas", "tendencia", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
+    queryFn: ({ signal }) => api.metricasTendencia({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: el conmutador de métrica/marca no debe re-pegar a la fuente en cada cambio,
     // pero tampoco queremos serie rancia; "Actualizar" invalida igualmente.

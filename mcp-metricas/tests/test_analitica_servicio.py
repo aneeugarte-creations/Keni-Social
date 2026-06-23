@@ -99,3 +99,79 @@ def test_analitica_piezas_filtra_por_red(muestra):
     assert all(p["plataforma"] == red for p in filtrado["peores"])
     # Acotar a una red nunca trae más piezas que todas las redes juntas.
     assert filtrado["total"] <= todas["total"]
+
+
+# --------------------------------------------------------------------------- #
+# Filtro por formato (canónico) en las builders del servicio.                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_formato_canonico_mapea_crudos_a_los_seis_ids():
+    # Cada crudo conocido cae en su id canónico; un desconocido conserva su string.
+    assert servicio.formato_canonico("feed_reel") == "reel"
+    assert servicio.formato_canonico("CAROUSEL") == "carrusel"
+    assert servicio.formato_canonico("feed_image") == "foto"
+    assert servicio.formato_canonico("short") == "video"
+    assert servicio.formato_canonico("link") == "enlace"
+    assert servicio.formato_canonico("status") == "texto"
+    assert servicio.formato_canonico("Encuesta") == "encuesta"
+    assert servicio.FORMATOS_VALIDOS == frozenset(
+        {"reel", "carrusel", "foto", "video", "enlace", "texto"}
+    )
+
+
+def _un_formato_presente(muestra_marca="claro_sports"):
+    listado = servicio.construir_listado_piezas("mes", muestra_marca)
+    cuenta: dict[str, int] = {}
+    for p in listado:
+        c = servicio.formato_canonico(p["formato"] or "")
+        cuenta[c] = cuenta.get(c, 0) + 1
+    return max(cuenta, key=cuenta.get), listado
+
+
+def test_listado_piezas_filtra_por_formato(muestra):
+    fmt, full = _un_formato_presente()
+    filtrado = servicio.construir_listado_piezas("mes", "claro_sports", (fmt,))
+    assert {servicio.formato_canonico(p["formato"] or "") for p in filtrado} == {fmt}
+    assert len(filtrado) == sum(
+        1 for p in full if servicio.formato_canonico(p["formato"] or "") == fmt
+    )
+
+
+def test_analitica_piezas_filtra_por_formato(muestra):
+    fmt, _ = _un_formato_presente()
+    todas = servicio.construir_analitica_piezas("mes", "claro_sports")
+    filtrado = servicio.construir_analitica_piezas("mes", "claro_sports", None, (fmt,))
+    assert all(servicio.formato_canonico(p["formato"] or "") == fmt for p in filtrado["top"])
+    assert filtrado["total"] <= todas["total"]
+
+
+def test_analitica_piezas_combina_red_y_formato(muestra):
+    fmt, listado = _un_formato_presente()
+    red = next(p["red"] for p in listado if servicio.formato_canonico(p["formato"] or "") == fmt)
+    filtrado = servicio.construir_analitica_piezas("mes", "claro_sports", red, (fmt,))
+    assert all(p["plataforma"] == red for p in filtrado["top"])
+    assert all(servicio.formato_canonico(p["formato"] or "") == fmt for p in filtrado["top"])
+
+
+def test_tendencia_diaria_filtra_por_formato(muestra):
+    fmt, listado = _un_formato_presente()
+    coincide = [p for p in listado if servicio.formato_canonico(p["formato"] or "") == fmt]
+    esperado_vis = sum(p["visualizaciones"] for p in coincide)
+    t = servicio.construir_tendencia_diaria("mes", "claro_sports", None, (fmt,))
+    assert sum(pt["visualizaciones"] for pt in t["puntos"]) == esperado_vis
+
+
+def test_desglose_filtra_por_formato(muestra):
+    fmt, listado = _un_formato_presente()
+    coincide = [p for p in listado if servicio.formato_canonico(p["formato"] or "") == fmt]
+    d = servicio.construir_desglose_interacciones("mes", "claro_sports", (fmt,))
+    assert d["totales"]["visualizaciones"] == sum(p["visualizaciones"] for p in coincide)
+    assert d["totales"]["interacciones"] == sum(p["interacciones"] for p in coincide)
+
+
+def test_crosstab_filtra_por_formato(muestra):
+    fmt, _ = _un_formato_presente()
+    c = servicio.construir_crosstab("mes", "claro_sports", (fmt,))
+    assert c["celdas"]
+    assert all(servicio.formato_canonico(cl["formato"] or "") == fmt for cl in c["celdas"])

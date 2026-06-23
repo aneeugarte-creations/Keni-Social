@@ -290,6 +290,91 @@ export function nombreFormato(f: string | null): string {
   return NOMBRES_FORMATO[clave] ?? capitalizar(f.trim());
 }
 
+// ---------------------------------------------------------------------------
+// Formato CANÓNICO y filtro global de formato (espejo del filtro de red).
+//
+// Las fuentes emiten el formato con muchos nombres (`feed_reel`, `reel`, `photo`,
+// `feed_image`…). Los colapsamos a un conjunto canónico pequeño para poder filtrar y
+// ofrecer un selector estable. ESTE mapa debe coincidir con el del backend
+// (`_formato_canonico` / `FORMATOS_VALIDOS`).
+// ---------------------------------------------------------------------------
+
+/** Formatos canónicos que el filtro global ofrece, en orden de lectura. */
+export const FORMATOS_CANONICOS = ["reel", "carrusel", "foto", "video", "enlace", "texto"] as const;
+export type FormatoCanonico = (typeof FORMATOS_CANONICOS)[number];
+
+const FORMATO_CANONICO: Record<string, FormatoCanonico> = {
+  reel: "reel",
+  feed_reel: "reel",
+  reels: "reel",
+  carrusel: "carrusel",
+  carousel: "carrusel",
+  feed_carousel_album: "carrusel",
+  album: "carrusel",
+  foto: "foto",
+  photo: "foto",
+  feed_image: "foto",
+  image: "foto",
+  imagen: "foto",
+  video: "video",
+  feed_video: "video",
+  short: "video",
+  shorts: "video",
+  enlace: "enlace",
+  link: "enlace",
+  texto: "texto",
+  text: "texto",
+  status: "texto",
+};
+
+/** Colapsa un id de formato crudo a su forma canónica (o el id en minúsculas si es desconocido). */
+export function formatoCanonico(f: string | null | undefined): string {
+  const clave = (f ?? "").trim().toLowerCase();
+  return FORMATO_CANONICO[clave] ?? clave;
+}
+
+/**
+ * Formatos canónicos disponibles por red (para que el selector dependa de la red elegida:
+ * Instagram → reel/carrusel/foto, YouTube → video, etc.).
+ */
+const FORMATOS_POR_RED: Record<string, FormatoCanonico[]> = {
+  instagram: ["reel", "carrusel", "foto"],
+  facebook: ["foto", "carrusel", "video", "reel", "enlace"],
+  tiktok: ["video"],
+  youtube: ["video"],
+  x: ["texto", "foto", "enlace"],
+};
+
+/**
+ * Formatos canónicos ofrecidos para el conjunto de redes en foco (unión, en orden canónico).
+ * Sin foco de red (todas), ofrece TODOS los formatos canónicos.
+ */
+export function formatosDeRedes(red: string | null | undefined): FormatoCanonico[] {
+  const redes = redesEnFoco(red);
+  if (redes.length === 0) return [...FORMATOS_CANONICOS];
+  const set = new Set<FormatoCanonico>();
+  for (const r of redes) for (const f of FORMATOS_POR_RED[r] ?? []) set.add(f);
+  return FORMATOS_CANONICOS.filter((f) => set.has(f));
+}
+
+/** Formatos en foco (canónicos) a partir del CSV de `vistaConfig.formato` (vacío = todos). */
+export function formatosEnFoco(formato: string | null | undefined): string[] {
+  if (!formato) return [];
+  return formato
+    .split(",")
+    .map((f) => formatoCanonico(f.trim()))
+    .filter(Boolean);
+}
+
+/** ¿El formato `candidato` está en foco? Sin foco (todos) → siempre `true`. */
+export function formatoEnFoco(
+  formato: string | null | undefined,
+  candidato: string | null | undefined,
+): boolean {
+  const foco = formatosEnFoco(formato);
+  return foco.length === 0 || foco.includes(formatoCanonico(candidato));
+}
+
 /**
  * Nombre legible de una marca a partir de su id y el catálogo de opciones
  * (`opciones.marcas` = `[{ id, nombre }]`). Si el id no está en el catálogo,

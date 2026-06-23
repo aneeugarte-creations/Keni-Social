@@ -48,6 +48,7 @@ export function etiquetaPeriodo(token: string, rangos: RangoMetrica[]): string {
 export interface ContextoDeck {
   marca: string;
   red: string;
+  formato: string;
   periodo: string;
   generadoEn?: string;
 }
@@ -104,7 +105,7 @@ function abrirSlide(doc: Doc, titulo: string, ctx: ContextoDeck, n: number): num
   text(doc, MUTED);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(`${ctx.marca} · ${ctx.red} · ${ctx.periodo}`, M, H - 28);
+  doc.text(`${ctx.marca} · ${ctx.red} · ${ctx.formato} · ${ctx.periodo}`, M, H - 28);
   doc.text(String(n), W - M, H - 28, { align: "right" });
   return M + 56; // y de inicio del contenido
 }
@@ -121,7 +122,7 @@ function portada(doc: Doc, ctx: ContextoDeck): void {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(26);
   text(doc, "#cbd5e1");
-  doc.text(`${ctx.red}  ·  ${ctx.periodo}`, M + 36, H / 2 + 22);
+  doc.text(`${ctx.red}  ·  ${ctx.formato}  ·  ${ctx.periodo}`, M + 36, H / 2 + 22);
   doc.setFontSize(13);
   text(doc, "#94a3b8");
   const pie = ["Keni Social — Analíticas", fechaLegible(ctx.generadoEn)].filter(Boolean).join("   ·   ");

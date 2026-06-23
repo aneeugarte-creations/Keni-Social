@@ -97,11 +97,12 @@ export function MetricaPorLinea({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "lineas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryKey: ["metricas", "lineas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasLineas({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
+      api.metricasLineas({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });

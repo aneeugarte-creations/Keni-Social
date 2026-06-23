@@ -39,11 +39,12 @@ export function GraficaPorSerie({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-por-etiqueta", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
+    queryKey: ["metricas", "piezas-por-etiqueta", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasPorEtiqueta({ rango: rangoActual, marca: marca_, red: red ?? undefined }, signal),
+      api.metricasPiezasPorEtiqueta({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     // 2 min: al cambiar marca/rango se repinta pronto sin re-pegar en cada toque.
     staleTime: 2 * 60_000,

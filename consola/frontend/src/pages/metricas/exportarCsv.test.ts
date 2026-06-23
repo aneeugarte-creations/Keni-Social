@@ -5,6 +5,7 @@ import { construirCsvCompleto, type ContextoCsv } from "./exportarCsv";
 const CTX: ContextoCsv = {
   marca: "Claro Sports",
   red: "Instagram",
+  formato: "Todos los formatos",
   periodo: "junio 2026",
   generadoEn: "2026-06-22T10:00:00Z",
 };

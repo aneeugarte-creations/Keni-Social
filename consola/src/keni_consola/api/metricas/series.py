@@ -25,6 +25,7 @@ from ._comun import (
     _etiqueta_rango,
     _gate_marca_metricas,
     _log,
+    _validar_formatos,
     _validar_rango,
     _validar_redes,
     marcas,
@@ -112,9 +113,10 @@ async def tendencia(request: Request) -> Response:
     """GET /api/metricas/tendencia: serie diaria del periodo (visualizaciones + interacciones).
 
     `?marca=` acota el ámbito (suma de sus cuentas); sin marca, todas. `?red=` acota a UNA
-    red (red desconocida →400): la serie por red se deriva de las piezas de esa red, así
-    que CON `red` se recomputa al vuelo (en executor), no se cachea cada marca×red. Sin
-    `red` se sirve de cache (lazy fill). `puntos` vacío = la fuente no expone serie diaria.
+    red y `?formato=` a esos formatos canónicos (valor desconocido →400): la serie filtrada
+    se deriva de las piezas, así que CON red o formato se recomputa al vuelo (en executor),
+    no se cachea cada combinación. Sin red ni formato se sirve de cache (lazy fill).
+    `puntos` vacío = la fuente no expone serie diaria.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -122,9 +124,10 @@ async def tendencia(request: Request) -> Response:
         return rechazo
     try:
         redes = _validar_redes(request.query_params.get("red"))
-        if redes:
+        formatos = _validar_formatos(request.query_params.get("formato"))
+        if redes or formatos:
             payload = await run_in_threadpool(
-                servicio.construir_tendencia_diaria, rango, marca, redes
+                servicio.construir_tendencia_diaria, rango, marca, redes, formatos
             )
             generado_en = ahora_iso()
         else:
@@ -290,7 +293,9 @@ async def desglose(request: Request) -> Response:
     """GET /api/metricas/desglose: desglose de interacciones por marca×red.
 
     `?marca=` acota a una marca; sin marca, todas. `?red=` acota a UNA red (red desconocida
-    →400): conserva solo sus celdas y re-suma los totales. Servido desde cache (lazy fill).
+    →400): conserva solo sus celdas y re-suma los totales. `?formato=` acota a esos formatos
+    canónicos (es un predicado por-pieza ANTES de agregar, así que con formato se recomputa
+    al vuelo; valor desconocido →400). Sin formato, servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -298,7 +303,14 @@ async def desglose(request: Request) -> Response:
         return rechazo
     try:
         redes = _validar_redes(request.query_params.get("red"))
-        payload, generado_en = await metricas_cache.desglose_async(rango, marca)
+        formatos = _validar_formatos(request.query_params.get("formato"))
+        if formatos:
+            payload = await run_in_threadpool(
+                servicio.construir_desglose_interacciones, rango, marca, formatos
+            )
+            generado_en = ahora_iso()
+        else:
+            payload, generado_en = await metricas_cache.desglose_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -313,7 +325,9 @@ async def crosstab(request: Request) -> Response:
     """GET /api/metricas/crosstab: rendimiento cruzado marca×red×formato.
 
     `?marca=` acota a una marca; sin marca, todas. `?red=` conserva solo las celdas de esa
-    red (red desconocida →400). Servido desde cache (lazy fill).
+    red (red desconocida →400). `?formato=` acota a esos formatos canónicos (predicado
+    por-pieza antes de agrupar, así que con formato se recomputa al vuelo; valor desconocido
+    →400). Sin formato, servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -321,7 +335,14 @@ async def crosstab(request: Request) -> Response:
         return rechazo
     try:
         redes = _validar_redes(request.query_params.get("red"))
-        payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
+        formatos = _validar_formatos(request.query_params.get("formato"))
+        if formatos:
+            payload = await run_in_threadpool(
+                servicio.construir_crosstab, rango, marca, formatos
+            )
+            generado_en = ahora_iso()
+        else:
+            payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -339,7 +360,9 @@ async def correlacion(request: Request) -> Response:
     """GET /api/metricas/correlacion: correlación seguidores ganados ↔ piezas publicadas.
 
     `?marca=` acota a una marca; sin marca, todas. `?red=` conserva solo los items de esa
-    red (red desconocida →400). Servido desde cache (lazy fill).
+    red (red desconocida →400). `?formato=` acota el recuento de piezas (n_posts/estrella) a
+    esos formatos canónicos (predicado por-pieza, así que con formato se recomputa al vuelo;
+    valor desconocido →400). Sin formato, servido desde cache (lazy fill).
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
@@ -347,7 +370,14 @@ async def correlacion(request: Request) -> Response:
         return rechazo
     try:
         redes = _validar_redes(request.query_params.get("red"))
-        payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
+        formatos = _validar_formatos(request.query_params.get("formato"))
+        if formatos:
+            payload = await run_in_threadpool(
+                servicio.construir_correlacion_seguidores, rango, marca, formatos
+            )
+            generado_en = ahora_iso()
+        else:
+            payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente

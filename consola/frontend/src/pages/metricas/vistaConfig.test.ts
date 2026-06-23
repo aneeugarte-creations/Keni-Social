@@ -61,3 +61,33 @@ describe("useVistaConfig", () => {
     expect(useVistaConfig.getState().red).toBe(VISTA_POR_DEFECTO.red);
   });
 });
+
+describe("vistaConfig · formato", () => {
+  it("setFormatos guarda CSV y vacío = null (todos)", () => {
+    const s = useVistaConfig.getState();
+    s.setFormatos(["reel", "carrusel"]);
+    expect(useVistaConfig.getState().formato).toBe("reel,carrusel");
+    s.setFormatos([]);
+    expect(useVistaConfig.getState().formato).toBeNull();
+  });
+
+  it("toggleFormato añade y quita", () => {
+    const s = useVistaConfig.getState();
+    s.toggleFormato("reel");
+    expect(useVistaConfig.getState().formato).toBe("reel");
+    s.toggleFormato("foto");
+    expect(useVistaConfig.getState().formato).toBe("reel,foto");
+    s.toggleFormato("reel");
+    expect(useVistaConfig.getState().formato).toBe("foto");
+  });
+
+  it("exportar conserva el formato; reset lo limpia; aplicar lo restaura", () => {
+    const s = useVistaConfig.getState();
+    s.setFormatos(["reel"]);
+    expect(useVistaConfig.getState().exportar().formato).toBe("reel");
+    useVistaConfig.getState().reset();
+    expect(useVistaConfig.getState().formato).toBeNull();
+    useVistaConfig.getState().aplicar({ formato: "video" });
+    expect(useVistaConfig.getState().formato).toBe("video");
+  });
+});

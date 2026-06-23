@@ -68,12 +68,59 @@ RANGOS_VALIDOS: tuple[str, ...] = tuple(RANGOS_DIAS.keys())
 # Fuentes validas ("muestra" | "real"). Re-export para la pantalla de configuracion.
 FUENTES_DISPONIBLES: tuple[str, ...] = tuple(sorted(FUENTES_VALIDAS))
 
+# --------------------------------------------------------------------------- #
+# Formato de pieza — contrato CANÓNICO (única fuente de verdad del backend)    #
+# --------------------------------------------------------------------------- #
+#
+# El formato crudo de una pieza varía por red/fuente (Metricool antepone `feed_` en
+# Meta, YouTube llama `short` al vertical, X distingue `status`…). El dashboard filtra
+# por un id CANÓNICO estable; este es el mapa que la Consola (`api/metricas/_comun`)
+# reusa para no duplicar la verdad. Un crudo desconocido cae a su propio bucket (su
+# string en minúsculas), así el filtro nunca rompe.
+
+# Ids canónicos que el dashboard puede filtrar.
+FORMATOS_VALIDOS: frozenset[str] = frozenset(
+    {"reel", "carrusel", "foto", "video", "enlace", "texto"}
+)
+
+# Crudo (minúsculas) -> id canónico. Lo no listado conserva su propio string.
+_FORMATO_CANONICO_RAW: dict[str, str] = {
+    "reel": "reel", "feed_reel": "reel", "reels": "reel",
+    "carrusel": "carrusel", "carousel": "carrusel",
+    "feed_carousel_album": "carrusel", "album": "carrusel",
+    "foto": "foto", "photo": "foto", "feed_image": "foto",
+    "image": "foto", "imagen": "foto",
+    "video": "video", "feed_video": "video", "short": "video", "shorts": "video",
+    "link": "enlace", "enlace": "enlace",
+    "texto": "texto", "text": "texto", "status": "texto",
+}
+
+
+def formato_canonico(raw: str) -> str:
+    """Normaliza el formato crudo de una pieza a su id canónico (minúsculas).
+
+    Un crudo desconocido se devuelve tal cual (en minúsculas): su propio bucket, sin
+    romper nunca. Es la fuente ÚNICA de verdad del canónico de formato del backend.
+    """
+    s = (raw or "").strip().lower()
+    return _FORMATO_CANONICO_RAW.get(s, s)
+
+
+def _filtrar_formato(piezas: list, formato: tuple[str, ...]) -> list:
+    """Filtra las piezas cuyo formato CANÓNICO está entre `formato`. Vacío = todas."""
+    fmts = set(formato)
+    if not fmts:
+        return piezas
+    return [p for p in piezas if formato_canonico(p.formato or "") in fmts]
+
 # Excepciones de dominio que la Consola captura (re-export para no importar internals).
 __all__ = [
     "RANGOS_VALIDOS",
     "RANGOS_PRESET_UI",
     "RANGOS_PRECALENTAR",
     "FUENTES_DISPONIBLES",
+    "FORMATOS_VALIDOS",
+    "formato_canonico",
     "ConfigInvalida",
     "CuentaNoEncontrada",
     "nombre_fuente",
@@ -259,6 +306,7 @@ def construir_analitica_piezas(
     rango: str = "mes",
     marca: str | None = None,
     red: "str | tuple[str, ...] | list[str] | None" = None,
+    formato: tuple[str, ...] = (),
 ) -> dict:
     """Analítica de piezas del periodo: estadísticas + top 10 + peores 10 + distribución.
 
@@ -266,8 +314,9 @@ def construir_analitica_piezas(
     `marca=None` agrega todas las cuentas en alcance (tab "Todas"); con marca, esa
     cuenta. `red` (id de plataforma, p.ej. "tiktok") acota a UNA red: el top/peores y las
     estadísticas se calculan SOLO sobre las piezas de esa red (None = todas las redes).
-    Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera de alcance).
-    Devuelve un dict JSON-serializable (`AnaliticaPiezas`).
+    `formato` (ids canónicos, p.ej. ("reel",)) acota a esos formatos por su canónico de
+    pieza (vacío = todos). Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada`
+    (marca fuera de alcance). Devuelve un dict JSON-serializable (`AnaliticaPiezas`).
     """
     fuente = _fuente(marca)
     desde, hasta, _ = resolver_rango(rango)
@@ -279,6 +328,8 @@ def construir_analitica_piezas(
     reds = {red} if isinstance(red, str) else set(red or ())
     if reds:
         piezas = [p for p in piezas if p.plataforma.value in reds]
+    # Filtro por formato(s) canónico(s): igual semántica que la red. Vacío = todos.
+    piezas = _filtrar_formato(piezas, formato)
 
     top, peores = _estadisticas.top_y_peores(piezas, n=10)
     analitica = AnaliticaPiezas(
@@ -296,7 +347,9 @@ def construir_analitica_piezas(
     return analitica.model_dump(mode="json")
 
 
-def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> list[dict]:
+def construir_listado_piezas(
+    rango: str = "mes", marca: str | None = None, formato: tuple[str, ...] = ()
+) -> list[dict]:
     """Lista los posts YA PUBLICADOS del periodo, para SELECCIONARLOS (no para rankear).
 
     A diferencia de `construir_analitica_piezas` (top/peores + distribucion), esto
@@ -315,6 +368,8 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
     piezas = []
     for c in fuente.cuentas():
         piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
+    # Filtro por formato(s) canónico(s) antes de ordenar/serializar (vacío = todos).
+    piezas = _filtrar_formato(piezas, formato)
     # Orden estable: mas recientes primero; a igualdad de fecha, mayor engagement antes.
     piezas.sort(key=lambda p: (p.publicado.isoformat(), p.engagement_pct), reverse=True)
     return [
@@ -386,6 +441,7 @@ def construir_tendencia_diaria(
     rango: str = "mes",
     marca: str | None = None,
     red: "str | tuple[str, ...] | list[str] | None" = None,
+    formato: tuple[str, ...] = (),
 ) -> dict:
     """Serie diaria del periodo (visualizaciones + interacciones) sumada por cuenta.
 
@@ -393,20 +449,24 @@ def construir_tendencia_diaria(
     (muestra/Metricool); si no (fuentes 'real' compuestas), degrada a serie vacía sin
     romper. Devuelve un dict JSON-serializable (`SerieDiaria`).
 
-    `red` (id de plataforma) acota la serie a UNA red. Como `serie_diaria` agrega las
-    redes (no las desglosa), la serie por red se DERIVA de las piezas de esa red del
-    periodo, sumando sus visualizaciones/interacciones por fecha de publicación (mismas
-    piezas que ya descarga el dashboard, coste 0 de API). None = todas las redes
-    (camino y semántica de siempre, vía `serie_diaria`).
+    `red` (id de plataforma) acota la serie a UNA red y `formato` (ids canónicos) a esos
+    formatos. Como `serie_diaria` agrega las redes (no las desglosa), CON red o formato la
+    serie se DERIVA de las piezas filtradas del periodo, sumando visualizaciones/
+    interacciones por fecha de publicación (mismas piezas que ya descarga el dashboard,
+    coste 0 de API). Sin red ni formato = todas (camino y semántica de siempre, vía
+    `serie_diaria`).
     """
     fuente = _fuente(marca)
     desde, hasta, _ = resolver_rango(rango)
     vis: dict = {}
     inter: dict = {}
     reds = {red} if isinstance(red, str) else set(red or ())
-    if reds:
+    fmts = set(formato)
+    if reds or fmts:
         for p in _piezas_periodo(fuente, rango):
-            if p.plataforma.value not in reds:
+            if reds and p.plataforma.value not in reds:
+                continue
+            if fmts and formato_canonico(p.formato or "") not in fmts:
                 continue
             vis[p.publicado] = vis.get(p.publicado, 0) + (p.visualizaciones or 0)
             inter[p.publicado] = inter.get(p.publicado, 0) + (p.interacciones or 0)
@@ -606,23 +666,28 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
     return serie.model_dump(mode="json")
 
 
-def construir_desglose_interacciones(rango: str = "mes", marca: str | None = None) -> dict:
+def construir_desglose_interacciones(
+    rango: str = "mes", marca: str | None = None, formato: tuple[str, ...] = ()
+) -> dict:
     """Desglose de engagement (likes/comentarios/compartidos/guardados/video_views)
     agregado por MARCA×RED.
 
     AGREGA desde las piezas del periodo (que ya traen los campos granulares). Los
     campos granulares ausentes (None) cuentan como 0 SOLO en la suma; `n_piezas`
     cuenta TODAS las piezas del grupo. `engagement_pct` de la celda =
-    interacciones/visualizaciones*100 (0 si no hay visualizaciones). Devuelve un
+    interacciones/visualizaciones*100 (0 si no hay visualizaciones). `formato` (ids
+    canónicos) acota a esos formatos antes de agregar (vacío = todos). Devuelve un
     dict JSON-serializable (`DesgloseInteracciones`).
     """
-    return desglose_interacciones_desde_fuente(_fuente(marca), rango)
+    return desglose_interacciones_desde_fuente(_fuente(marca), rango, formato)
 
 
-def desglose_interacciones_desde_fuente(fuente, rango: str) -> dict:
+def desglose_interacciones_desde_fuente(
+    fuente, rango: str, formato: tuple[str, ...] = ()
+) -> dict:
     """Worker de `construir_desglose_interacciones` sobre una `fuente` explícita (MCP)."""
     desde, hasta, _ = resolver_rango(rango)
-    piezas = _piezas_periodo(fuente, rango)
+    piezas = _filtrar_formato(_piezas_periodo(fuente, rango), formato)
 
     _campos = ("likes", "comentarios", "compartidos", "guardados", "video_views")
     # Acumula por (marca, red). marca None -> "" (sin marca) para que la clave sea str.
@@ -675,22 +740,25 @@ def desglose_interacciones_desde_fuente(fuente, rango: str) -> dict:
     return desglose.model_dump(mode="json")
 
 
-def construir_crosstab(rango: str = "mes", marca: str | None = None) -> dict:
+def construir_crosstab(
+    rango: str = "mes", marca: str | None = None, formato: tuple[str, ...] = ()
+) -> dict:
     """Cruce MARCA×RED×FORMATO de las piezas del periodo.
 
     Agrupa las piezas por (marca, red, formato). `rendimiento_relativo_medio` = media
     del `rendimiento_relativo` (no-None) del grupo, computado con
     `estadisticas.anotar_rendimiento_relativo` sobre TODAS las piezas antes de agrupar
     (normaliza contra el baseline marca×red). None si ninguna pieza del grupo lo tiene.
+    `formato` (ids canónicos) acota a esos formatos antes de agrupar (vacío = todos).
     Devuelve un dict JSON-serializable (`Crosstab`).
     """
-    return crosstab_desde_fuente(_fuente(marca), rango)
+    return crosstab_desde_fuente(_fuente(marca), rango, formato)
 
 
-def crosstab_desde_fuente(fuente, rango: str) -> dict:
+def crosstab_desde_fuente(fuente, rango: str, formato: tuple[str, ...] = ()) -> dict:
     """Worker de `construir_crosstab` sobre una `fuente` explícita (lo usa el MCP)."""
     desde, hasta, _ = resolver_rango(rango)
-    piezas = _piezas_periodo(fuente, rango)
+    piezas = _filtrar_formato(_piezas_periodo(fuente, rango), formato)
     # Anota el rendimiento relativo (vs. la mediana del grupo marca×red) ANTES de
     # agrupar por formato: así el score por pieza ya está disponible al promediar.
     _estadisticas.anotar_rendimiento_relativo(piezas)
@@ -750,19 +818,26 @@ _NOTA_SIN_SERIE = (
 )
 
 
-def construir_correlacion_seguidores(rango: str = "mes", marca: str | None = None) -> dict:
+def construir_correlacion_seguidores(
+    rango: str = "mes", marca: str | None = None, formato: tuple[str, ...] = ()
+) -> dict:
     """Correlación (NO causalidad) crecimiento de seguidores ↔ piezas.
 
     Por (marca, red, día): `seguidores_ganados` = delta diario de la serie de
     followers (punto N − N-1); `n_posts` = piezas publicadas ese día;
     `seguidores_por_post` = ganados/n_posts si n_posts>0 (None si 0); `post_estrella`
-    = la pieza de mayor engagement ese día. Si no hay serie de followers, `items=[]`
-    y `nota` lo explica. Devuelve un dict JSON-serializable (`CorrelacionSeguidores`).
+    = la pieza de mayor engagement ese día. `formato` (ids canónicos) acota las piezas
+    que cuentan (n_posts/estrella) a esos formatos; el stock de followers no tiene
+    dimensión de formato, así que `seguidores_ganados` no varía. Si no hay serie de
+    followers, `items=[]` y `nota` lo explica. Devuelve un dict JSON-serializable
+    (`CorrelacionSeguidores`).
     """
-    return correlacion_seguidores_desde_fuente(_fuente(marca), rango)
+    return correlacion_seguidores_desde_fuente(_fuente(marca), rango, formato)
 
 
-def correlacion_seguidores_desde_fuente(fuente, rango: str) -> dict:
+def correlacion_seguidores_desde_fuente(
+    fuente, rango: str, formato: tuple[str, ...] = ()
+) -> dict:
     """Worker de `construir_correlacion_seguidores` sobre una `fuente` explícita (MCP)."""
     desde, hasta, _ = resolver_rango(rango)
     fechas, stock = _serie_seguidores_saneada(fuente, rango)
@@ -776,7 +851,8 @@ def correlacion_seguidores_desde_fuente(fuente, rango: str) -> dict:
         return CorrelacionSeguidores(**base, items=[], nota=_NOTA_SIN_SERIE).model_dump(mode="json")
 
     # Piezas indexadas por (marca, red, fecha) para contar posts y hallar la estrella.
-    piezas = _piezas_periodo(fuente, rango)
+    # El filtro de formato afecta SOLO al recuento de piezas, no al stock de seguidores.
+    piezas = _filtrar_formato(_piezas_periodo(fuente, rango), formato)
     por_dia: dict[tuple[str, str, str], list] = {}
     for p in piezas:
         clave = (p.cuenta or "", p.plataforma.value, p.publicado.isoformat())

@@ -30,11 +30,15 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
+  FORMATOS_CANONICOS,
+  formatoCanonico,
   nombreFormato,
   nombreRed,
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  REDES_CANONICAS,
+  redCanonica,
   variacion,
 } from "@/lib/formato";
 import type {
@@ -332,20 +336,39 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
   const [red, setRed] = React.useState<string>(TODAS);
   const [formato, setFormato] = React.useState<string>(TODAS);
 
-  // Opciones de filtro derivadas de las piezas presentes (ordenadas, sin vacíos).
-  const redes = React.useMemo(
-    () => [...new Set(piezas.map((p) => p.red).filter(Boolean))].sort(),
-    [piezas],
-  );
-  const formatos = React.useMemo(
-    () => [...new Set(piezas.map((p) => p.formato).filter(Boolean))].sort(),
-    [piezas],
-  );
+  // Redes canónicas presentes en las piezas, en orden canónico (las desconocidas al final).
+  const redes = React.useMemo(() => {
+    const presentes = new Set(piezas.map((p) => redCanonica(p.red)).filter(Boolean));
+    const conocidas = REDES_CANONICAS.filter((r) => presentes.has(r));
+    const otras = [...presentes]
+      .filter((r) => !(REDES_CANONICAS as readonly string[]).includes(r))
+      .sort();
+    return [...conocidas, ...otras];
+  }, [piezas]);
+
+  // Formatos canónicos presentes (colapsando feed_reel/reel… en uno), restringidos a la red
+  // elegida: así el selector de formato depende de la red, como en métricas.
+  const formatos = React.useMemo(() => {
+    const relevantes = red === TODAS ? piezas : piezas.filter((p) => redCanonica(p.red) === red);
+    const presentes = new Set(relevantes.map((p) => formatoCanonico(p.formato)).filter(Boolean));
+    const conocidos = FORMATOS_CANONICOS.filter((f) => presentes.has(f));
+    const otros = [...presentes]
+      .filter((f) => !(FORMATOS_CANONICOS as readonly string[]).includes(f))
+      .sort();
+    return [...conocidos, ...otros];
+  }, [piezas, red]);
+
+  // Si el formato seleccionado deja de estar disponible al cambiar de red, vuelve a "todos".
+  React.useEffect(() => {
+    if (formato !== TODAS && !formatos.includes(formato)) setFormato(TODAS);
+  }, [formatos, formato]);
 
   const filtradas = React.useMemo(
     () =>
       piezas.filter(
-        (p) => (red === TODAS || p.red === red) && (formato === TODAS || p.formato === formato),
+        (p) =>
+          (red === TODAS || redCanonica(p.red) === red) &&
+          (formato === TODAS || formatoCanonico(p.formato) === formato),
       ),
     [piezas, red, formato],
   );

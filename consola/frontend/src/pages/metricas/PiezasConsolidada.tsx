@@ -62,6 +62,7 @@ import {
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { api } from "@/lib/api";
 import {
+  formatoEnFoco,
   nombreFormato,
   nombreMarca,
   nombreRed,
@@ -161,6 +162,7 @@ export function PiezasConsolidada({
 }) {
   const marca_ = marcaParam(marcaActual);
   const redGlobal = useVistaConfig((s) => s.red);
+  const formato = useVistaConfig((s) => s.formato);
   const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_PIEZAS]);
   const cfgCols = cfgGuardada ?? { orden: IDS_PIEZAS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_PIEZAS_BASE, cfgCols);
@@ -170,9 +172,9 @@ export function PiezasConsolidada({
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", redGlobal ?? "todas"],
+    queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas", redGlobal ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: redGlobal ?? undefined }, signal),
+      api.metricasPiezasListado({ rango: rangoActual, marca: marca_, red: redGlobal ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });
@@ -198,11 +200,12 @@ export function PiezasConsolidada({
     const q = busqueda.trim().toLowerCase();
     return piezas.filter((p) => {
       if (!redEnFoco(redGlobal, p.plataforma)) return false;
+      if (!formatoEnFoco(formato, p.formato)) return false;
       if (lineaFiltro !== TODAS && (p.linea || SIN_LINEA) !== lineaFiltro) return false;
       if (q && !(p.titulo || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [piezas, redGlobal, lineaFiltro, busqueda]);
+  }, [piezas, redGlobal, formato, lineaFiltro, busqueda]);
 
   // Estadísticas del conjunto FILTRADO (reflejan los filtros activos). El engagement
   // agregado es POOLED (interacciones ÷ vistas del conjunto), no la media de porcentajes:

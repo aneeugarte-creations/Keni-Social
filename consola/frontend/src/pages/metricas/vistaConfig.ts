@@ -3,7 +3,8 @@
  *
  * Contrato único que comparten el panel "Configurar vista", las tablas configurables y
  * las vistas guardadas:
- *   - `red`: red única en foco (`null` = todas las redes).
+ *   - `red`: redes en foco (`null` = todas las redes).
+ *   - `formato`: formatos en foco (`null` = todos). Depende de la red en el selector.
  *   - `secciones`: visibilidad por id de sección del dashboard (ausente = visible).
  *   - `columnas`: por tabla, el ORDEN de sus columnas y cuáles están OCULTAS.
  *
@@ -26,13 +27,20 @@ export interface ConfigColumnas {
 export interface VistaConfig {
   /** Redes en foco como CSV de ids (`"instagram,youtube"`), o `null` = todas. Combinación libre. */
   red: string | null;
+  /** Formatos en foco como CSV de ids canónicos (`"reel,carrusel"`), o `null` = todos. */
+  formato: string | null;
   /** Visibilidad por id de sección (true/false). Ausente = visible. */
   secciones: Record<string, boolean>;
   /** Configuración de columnas por id de tabla. */
   columnas: Record<string, ConfigColumnas>;
 }
 
-export const VISTA_POR_DEFECTO: VistaConfig = { red: null, secciones: {}, columnas: {} };
+export const VISTA_POR_DEFECTO: VistaConfig = {
+  red: null,
+  formato: null,
+  secciones: {},
+  columnas: {},
+};
 
 const CLAVE_LS = "keni-vista-metricas";
 
@@ -43,6 +51,7 @@ function leerLocal(): VistaConfig {
     const v = JSON.parse(crudo) as Partial<VistaConfig>;
     return {
       red: v.red ?? null,
+      formato: v.formato ?? null,
       secciones: v.secciones ?? {},
       columnas: v.columnas ?? {},
     };
@@ -68,6 +77,12 @@ interface EstadoVista extends VistaConfig {
   toggleRed: (id: string) => void;
   /** Redes en foco como lista (vacía = todas). */
   redesSeleccionadas: () => string[];
+  /** Fija el conjunto de formatos en foco (canónicos). Vacío = todos. */
+  setFormatos: (formatos: string[]) => void;
+  /** Añade/quita un formato del conjunto en foco. */
+  toggleFormato: (id: string) => void;
+  /** Formatos en foco como lista (vacía = todos). */
+  formatosSeleccionados: () => string[];
   /** Muestra/oculta una sección por id. */
   setSeccionVisible: (id: string, visible: boolean) => void;
   /** ¿La sección `id` está visible? (ausente = visible). */
@@ -88,8 +103,8 @@ export const useVistaConfig = create<EstadoVista>((set, get) => {
   const inicial = leerLocal();
   const persistir = (parcial: Partial<VistaConfig>) => {
     set(parcial as Partial<EstadoVista>);
-    const { red, secciones, columnas } = get();
-    guardarLocal({ red, secciones, columnas });
+    const { red, formato, secciones, columnas } = get();
+    guardarLocal({ red, formato, secciones, columnas });
   };
   return {
     ...inicial,
@@ -106,6 +121,19 @@ export const useVistaConfig = create<EstadoVista>((set, get) => {
       persistir({ red: siguiente.length ? siguiente.join(",") : null });
     },
     redesSeleccionadas: () => (get().red ? get().red!.split(",").filter(Boolean) : []),
+    // `formato` se almacena como CSV de ids canónicos (`"reel,carrusel"`) o null = todos,
+    // espejo de `red`: los sub-componentes lo leen y lo pasan como `?formato=`.
+    setFormatos: (formatos) =>
+      persistir({ formato: formatos.length ? formatos.join(",") : null }),
+    toggleFormato: (id) => {
+      const actuales = get().formato ? get().formato!.split(",").filter(Boolean) : [];
+      const siguiente = actuales.includes(id)
+        ? actuales.filter((f) => f !== id)
+        : [...actuales, id];
+      persistir({ formato: siguiente.length ? siguiente.join(",") : null });
+    },
+    formatosSeleccionados: () =>
+      get().formato ? get().formato!.split(",").filter(Boolean) : [],
     setSeccionVisible: (id, visible) =>
       persistir({ secciones: { ...get().secciones, [id]: visible } }),
     seccionVisible: (id) => get().secciones[id] !== false,
@@ -117,12 +145,13 @@ export const useVistaConfig = create<EstadoVista>((set, get) => {
       return cfg;
     },
     exportar: () => {
-      const { red, secciones, columnas } = get();
-      return { red, secciones, columnas };
+      const { red, formato, secciones, columnas } = get();
+      return { red, formato, secciones, columnas };
     },
     aplicar: (cfg) =>
       persistir({
         red: cfg.red ?? null,
+        formato: cfg.formato ?? null,
         secciones: cfg.secciones ?? {},
         columnas: cfg.columnas ?? {},
       }),

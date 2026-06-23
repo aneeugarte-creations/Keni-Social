@@ -29,6 +29,8 @@ interface ItemsDescargaProps {
   marcaEtiqueta: string;
   /** Etiqueta legible de la red activa (o "Todas las redes"). */
   redEtiqueta: string;
+  /** Etiqueta legible del formato activo (o "Todos los formatos"). */
+  formatoEtiqueta: string;
   /** Etiqueta legible del periodo. */
   periodoEtiqueta: string;
   /** ISO de generación del reporte, para el pie de la portada. */
@@ -51,6 +53,7 @@ export function ItemsDescarga({
   marca,
   marcaEtiqueta,
   redEtiqueta,
+  formatoEtiqueta,
   periodoEtiqueta,
   generadoEn,
 }: ItemsDescargaProps) {
@@ -68,10 +71,14 @@ export function ItemsDescarga({
   const ctx = {
     marca: marcaEtiqueta,
     red: redEtiqueta,
+    formato: formatoEtiqueta,
     periodo: periodoEtiqueta,
     generadoEn,
   };
-  const nombre = [marca ?? "todas", redEtiqueta, rango].map(slug).filter(Boolean).join("-");
+  const nombre = [marca ?? "todas", redEtiqueta, formatoEtiqueta, rango]
+    .map(slug)
+    .filter(Boolean)
+    .join("-");
 
   const descargarCsv = () => {
     const conDatos = entradasActivas();

@@ -24,6 +24,7 @@ const PROPS_BASE = {
   marca: "claro_sports",
   marcaEtiqueta: "Claro Sports",
   redEtiqueta: "Instagram",
+  formatoEtiqueta: "Todos los formatos",
   periodoEtiqueta: "junio 2026",
 };
 

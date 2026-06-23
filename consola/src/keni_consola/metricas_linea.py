@@ -35,7 +35,11 @@ from typing import Any
 from keni_metricas import servicio
 
 from . import repos
-from .metricas_pieza import _indice_contenido_por_post, _normalizar_titulo
+from .metricas_pieza import (
+    _indice_contenido_por_post,
+    _normalizar_titulo,
+    filtrar_piezas_periodo,
+)
 
 _log = logging.getLogger("keni_consola.metricas_linea")
 
@@ -214,7 +218,11 @@ def lineas_por_pieza(
 
 
 def lineas_y_origenes(
-    rango: str, marca_consola: str | None, marca_metricas: str | None
+    rango: str,
+    marca_consola: str | None,
+    marca_metricas: str | None,
+    redes: tuple[str, ...] = (),
+    formatos: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Rendimiento del periodo por LÍNEA (clase `vertical`) y por ORIGEN (clase `origen`).
 
@@ -223,11 +231,16 @@ def lineas_y_origenes(
     el MISMO cruce pieza↔contenido que `analitica_por_etiqueta` (enlace por
     `id_post_metricool`; fallback fuzzy por título). No duplica la conexión a Metricool.
 
+    `redes` acota a esas redes y `formatos` a esos formatos canónicos ANTES de agregar
+    (vacío = todas/todos), igual que el resto del dashboard.
+
     Devuelve `{"lineas": [...], "origenes": [...], "total": <piezas del periodo>,
     "fuente": <muestra|real|…>}`. Best-effort/honesto: si nada enlaza, todas las piezas
     caen en "Sin línea"/"Sin origen".
     """
-    piezas = servicio.construir_listado_piezas(rango, marca_metricas)
+    piezas = filtrar_piezas_periodo(
+        servicio.construir_listado_piezas(rango, marca_metricas), redes, formatos
+    )
     fuente = servicio.nombre_fuente()
 
     contenidos = repos.listar_publicacion(marca=marca_consola)

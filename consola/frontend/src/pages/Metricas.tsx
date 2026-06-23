@@ -25,6 +25,7 @@ import { Bloque } from "./metricas/Bloque";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
 import { SelectorRed, etiquetaRed } from "./metricas/SelectorRed";
+import { SelectorFormato, etiquetaFormato } from "./metricas/SelectorFormato";
 import { useVistaConfig } from "./metricas/vistaConfig";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
@@ -101,6 +102,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // Red única en foco (switch propio de Analíticas, persistido en `vistaConfig`): `null`
   // = todas. Filtra TODA la página (cada sub-sección la incluye en su consulta).
   const red = useVistaConfig((s) => s.red);
+  // Formato en foco (selector propio, dependiente de la red): `null` = todos. Filtra las
+  // secciones por pieza y recalcula los agregados derivables (mismo CSV opaco que `red`).
+  const formato = useVistaConfig((s) => s.formato);
   // La visibilidad de cada sección la resuelve su propio `<Bloque>` (toggle inline): una
   // sección oculta no se monta —ni consulta— y deja en su sitio una barra para mostrarla.
 
@@ -157,6 +161,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     ? (marcas.find((m) => m.id === marca_)?.nombre ?? marca_)
     : "Todas las marcas";
   const redEtiqueta = etiquetaRed(red);
+  const formatoEtiqueta = etiquetaFormato(formato);
   const periodoEtiqueta = etiquetaPeriodo(rango, rangos);
 
   // Drill-down: al clicar una marca en "Por marca", enfocamos TODO el dashboard en esa
@@ -172,9 +177,12 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   );
 
   const reporteQuery = useQuery({
-    queryKey: ["metricas", "reporte", rango, marca_ ?? "todas", red ?? "todas"],
+    queryKey: ["metricas", "reporte", rango, marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasReporte({ rango, marca: marca_, red: red ?? undefined }, signal),
+      api.metricasReporte(
+        { rango, marca: marca_, red: red ?? undefined, formato: formato ?? undefined },
+        signal,
+      ),
     enabled: Boolean(rango),
     // El dato se sirve de la cache del backend (refresco en 2º plano); no hace falta
     // re-pedirlo cada 30 s. El botón "Actualizar" lo invalida cuando hay dato fresco.
@@ -215,8 +223,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
-      {/* Selector de RED único: filtra toda la página (escribe en `vistaConfig.red`). */}
+      {/* Selectores globales RED + FORMATO: filtran toda la página (escriben en `vistaConfig`).
+          El de formato depende de la red en foco (Instagram → Reel/Carrusel/Foto, …). */}
       <SelectorRed />
+      <SelectorFormato />
       {/* La visibilidad de secciones y el orden/visibilidad de columnas se editan AHORA en
           cada sección (toggle de ojo + kebab de columnas), no en un panel macro aparte. */}
       {/* Vistas guardadas: presets nombrados (config de vista + marca + periodo). */}
@@ -236,6 +246,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           marca={marca_}
           marcaEtiqueta={marcaEtiqueta}
           redEtiqueta={redEtiqueta}
+          formatoEtiqueta={formatoEtiqueta}
           periodoEtiqueta={periodoEtiqueta}
           generadoEn={reporteQuery.data?.generado_en}
         />
