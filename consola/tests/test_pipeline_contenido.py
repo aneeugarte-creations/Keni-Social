@@ -1445,7 +1445,9 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx", verificacion_fuente=ver)
     _inicializar_cluster(
         "int1", titulo="Internacional unica historia", score=0.4, categoria="internacional",
-        resumen="México observa la cumbre internacional", verificacion_fuente=ver,
+        # 4 fuentes: corrobora lo suficiente para superar el umbral de producción pese a su
+        # encaje de marca flojo; así la única internacional sí compite por su cupo del plan.
+        n_fuentes=4, resumen="México observa la cumbre internacional", verificacion_fuente=ver,
     )
     _inicializar_cluster(
         "dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="futbol", verificacion_fuente=ver

@@ -675,8 +675,11 @@ def test_umbral_recalcula_el_score_no_usa_el_persistido():
 
 
 def test_umbral_rechaza_sin_encaje_de_marca():
+    # `velocidad=1.0`: la historia supera el score por mérito propio, así el rechazo aísla
+    # la regla de ENCAJE DE MARCA (sin ella, caería antes por el umbral de score).
     ok, motivo = agrupar.evaluar_umbral(
-        _cluster_apto(titulo="Celebrity gossip news today"), palabras_marca=_PAL, ahora=_T0
+        _cluster_apto(titulo="Celebrity gossip news today", velocidad=1.0),
+        palabras_marca=_PAL, ahora=_T0,
     )
     assert not ok
     assert "marca" in motivo
@@ -734,7 +737,11 @@ def test_umbral_exime_de_marca_a_lo_curado_por_el_equipo():
 
 
 def test_umbral_exime_de_marca_a_breaking_corroborada():
-    breaking = _cluster_apto(titulo="Evento inesperado sin vocabulario aun", breaking=1)
+    # `velocidad=1.0`: la breaking corrobora su mérito y supera el score; la exención que se
+    # prueba aquí es la de ENCAJE DE MARCA (su vocabulario nuevo no casa con el de la marca).
+    breaking = _cluster_apto(
+        titulo="Evento inesperado sin vocabulario aun", breaking=1, velocidad=1.0
+    )
     ok, _motivo = agrupar.evaluar_umbral(breaking, palabras_marca=_PAL, ahora=_T0)
     assert ok  # evento mayor confirmado por varias fuentes a la vez
 
@@ -770,7 +777,9 @@ def test_umbral_breaking_sin_corroborar_no_queda_exenta():
 
 
 def test_umbral_umbral_cero_desactiva_cada_regla():
-    sin_encaje = _cluster_apto(titulo="Celebrity gossip news today")
+    # `velocidad=1.0`: supera el score por mérito propio (sin encaje de marca), de modo que el
+    # único filtro pendiente es el de marca, que `min_marca=0` apaga.
+    sin_encaje = _cluster_apto(titulo="Celebrity gossip news today", velocidad=1.0)
     ok, _ = agrupar.evaluar_umbral(
         sin_encaje, palabras_marca=_PAL, min_marca=0.0, ahora=_T0
     )
