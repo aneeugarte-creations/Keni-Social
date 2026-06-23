@@ -248,7 +248,7 @@ export function ResumenDia({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] gap-4 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="capitalize">
+          <DialogTitle className="first-letter:uppercase">
             {formatearFechaCorta(fecha) || fecha}
           </DialogTitle>
         </DialogHeader>

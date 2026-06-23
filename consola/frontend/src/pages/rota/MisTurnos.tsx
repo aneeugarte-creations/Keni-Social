@@ -39,7 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { TurnoRota } from "@/types";
 
-import { presentacionTurnoPorHora } from "./comun";
+import { formatearFechaCorta, presentacionTurnoPorHora } from "./comun";
 import { ResumenDia } from "./ResumenDia";
 import { type ResumenDiaCobertura, useTableroMes } from "./useTableroMes";
 
@@ -391,6 +391,9 @@ function IndicadorCobertura({
       <button
         type="button"
         onClick={() => onAbrir(fecha)}
+        aria-label={`${formatearFechaCorta(fecha) || fecha}: ${nEventos} ${
+          nEventos === 1 ? "evento" : "eventos"
+        }${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""}. Ver el resumen del día`}
         title={`Ver el resumen del día (${nEventos} eventos${nSinCubrir > 0 ? `, ${nSinCubrir} sin cubrir` : ""})`}
         className={cn(
           clases,
@@ -406,9 +409,11 @@ function IndicadorCobertura({
 
 /** Encabezado que SOLO aparece al imprimir, para identificar la hoja (mes + subtítulo). */
 function EncabezadoImpresion({ mes, subtitulo }: { mes: string; subtitulo: string }) {
+  // Mayúscula SOLO en la inicial (`first-letter`, no `capitalize`, que title-caseaba «Junio De
+  // 2026»; la forma es-MX de `nombreMes` es «junio de 2026»).
   return (
     <div className="mb-3 hidden print:block">
-      <h2 className="text-lg font-semibold capitalize">{nombreMes(mes)}</h2>
+      <h2 className="text-lg font-semibold first-letter:uppercase">{nombreMes(mes)}</h2>
       <p className="text-sm text-neutral-600">{subtitulo}</p>
     </div>
   );
