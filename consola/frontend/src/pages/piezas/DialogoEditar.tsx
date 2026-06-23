@@ -47,6 +47,7 @@ import {
 import type { CuerpoActualizarPieza, PlataformaStock, Pieza } from "@/types";
 
 import { CLAVE_PIEZAS } from "./claves";
+import { nombreCategoriaPlan } from "./categoria";
 import { metaRed } from "./meta";
 import { etapaDePieza } from "@/pages/feed/etapa";
 
@@ -65,6 +66,16 @@ function DialogoEditarInterno({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // Catálogo de opciones (la misma query cacheada que el feed): nombra la categoría del plan
+  // de la pieza a partir de su id, con el MISMO rótulo que el selector de «Crear post».
+  const opcionesQuery = useQuery({
+    queryKey: ["piezas", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: pieza !== null,
+  });
+  const nombreCategoria = pieza
+    ? nombreCategoriaPlan(pieza.categoria, pieza.marca, opcionesQuery.data?.categorias)
+    : "";
   const [contenido, setPublicacion] = React.useState("");
   // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.
   const [copyIn, setCopyIn] = React.useState("");
@@ -579,6 +590,15 @@ function DialogoEditarInterno({
           {pieza && (
             <DialogDescription>
               {pieza.red_nombre} · {pieza.marca_nombre}
+              {nombreCategoria && (
+                <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
+                  <span
+                    aria-hidden
+                    className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/60"
+                  />
+                  <span className="text-xs text-foreground/70">{nombreCategoria}</span>
+                </span>
+              )}
             </DialogDescription>
           )}
           {/* «La lista» (todas las marcas): quién lleva la pieza, SOLO LECTURA. Aquí avisa a quien
