@@ -8,9 +8,12 @@
 //   · Toggles de fuentes por marca: en la subpágina de la etapa Stock (Contexto).
 import { peticion, query } from "./_core";
 import type {
+  Agencia,
+  CuerpoGuardarAgencia,
   CuerpoGuardarClaveStock,
   CuerpoGuardarFuentesStock,
   MarcaFuentesStock,
+  RespuestaAgencias,
   RespuestaClaveStock,
   RespuestaProbarStock,
   RespuestaProveedoresStock,
@@ -45,5 +48,25 @@ export const apiStock = {
     peticion<RespuestaProbarStock>("/stock/probar", {
       metodo: "POST",
       json: { proveedor },
+    }),
+
+  // Estado (dirigido por metadatos) de las agencias AFP/Reuters: campos + presencia de secretos.
+  estadoAgencias: (signal?: AbortSignal) =>
+    peticion<RespuestaAgencias>("/stock/agencias", { signal }),
+  // Guarda credenciales de una agencia (solo los campos enviados; un secreto vacío no se borra).
+  guardarAgencia: (agencia: string, valores: Record<string, string>) =>
+    peticion<Agencia>(`/stock/agencias/${encodeURIComponent(agencia)}`, {
+      metodo: "PUT",
+      json: { valores } satisfies CuerpoGuardarAgencia,
+    }),
+  // Valida en vivo las credenciales guardadas de una agencia. No expone secretos.
+  probarAgencia: (agencia: string) =>
+    peticion<RespuestaProbarStock>(`/stock/agencias/${encodeURIComponent(agencia)}/probar`, {
+      metodo: "POST",
+    }),
+  // Limpia las credenciales de una agencia.
+  eliminarAgencia: (agencia: string) =>
+    peticion<Agencia>(`/stock/agencias/${encodeURIComponent(agencia)}`, {
+      metodo: "DELETE",
     }),
 };

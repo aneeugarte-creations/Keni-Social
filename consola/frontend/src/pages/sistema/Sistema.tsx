@@ -9,6 +9,7 @@ import { ApiError, api } from "@/lib/api";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
 import { SeccionFuentesStock } from "@/pages/configuracion/SeccionFuentesStock";
+import { SeccionAgencias } from "@/pages/configuracion/SeccionAgencias";
 
 import { AvisosDoctor } from "./Doctor";
 import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
@@ -88,6 +89,7 @@ export default function Sistema() {
             <SeccionMetricool />
             <SeccionPostproxy />
             <SeccionFuentesStock />
+            <SeccionAgencias />
           </div>
         )}
         {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura

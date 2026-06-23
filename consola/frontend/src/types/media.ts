@@ -274,6 +274,61 @@ export interface RespuestaProbarStock {
   mensaje: string;
 }
 
+// --- Credenciales de AGENCIAS (AFP / Reuters), dirigidas por metadatos ---
+// El backend declara los campos de cada agencia (distintos entre ellas) y el front los
+// pinta genéricamente. Mismo voto de pobreza que el resto de secretos: un campo `secreto`
+// NUNCA trae `valor`, solo `configurado` + `pista` (`····last4`). Estas credenciales sirven
+// a la agencia entera (noticias + foto licenciada); el env var sigue de respaldo.
+
+/** Campo SECRETO de una agencia (API key, client secret…): write-only, nunca devuelve el valor. */
+export interface CampoAgenciaSecreto {
+  clave: string;
+  etiqueta: string;
+  secreto: true;
+  /** El campo no es obligatorio para que la agencia opere. */
+  opcional: boolean;
+  /** El secreto está guardado. */
+  configurado: boolean;
+  /** Pista no sensible del secreto guardado (`····last4`), "" si no hay. */
+  pista: string;
+}
+
+/** Campo NO secreto de una agencia (p. ej. base_url): trae su valor efectivo, editable. */
+export interface CampoAgenciaPublico {
+  clave: string;
+  etiqueta: string;
+  secreto: false;
+  opcional: boolean;
+  /** Valor efectivo actual (editable). */
+  valor: string;
+}
+
+/** Un campo declarado por la agencia. Unión discriminada por `secreto`. */
+export type CampoAgencia = CampoAgenciaSecreto | CampoAgenciaPublico;
+
+/** Estado de una agencia de noticias/foto licenciada (AFP/Reuters). */
+export interface Agencia {
+  agencia: string;
+  nombre: string;
+  /** Sus credenciales obligatorias están todas guardadas. */
+  configurado: boolean;
+  /** La agencia puede operar ahora. */
+  disponible: boolean;
+  /** Por qué no está disponible (para mostrarlo discreto). */
+  motivo: string;
+  campos: CampoAgencia[];
+}
+
+/** Respuesta de `GET /api/stock/agencias`: estado de todas las agencias. */
+export interface RespuestaAgencias {
+  agencias: Agencia[];
+}
+
+/** Cuerpo de `PUT /api/stock/agencias/{agencia}`: solo los campos que el usuario tocó. */
+export interface CuerpoGuardarAgencia {
+  valores: Record<string, string>;
+}
+
 // --- Lanzamiento manual de ARTE (genera N imágenes a mano para una marca) ---
 
 /** Cuerpo de `POST /api/artes/generar`: lanza N imágenes de arte a mano. */
