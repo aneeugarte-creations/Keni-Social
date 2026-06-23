@@ -111,5 +111,8 @@ def test_adjuntar_candidata_propaga_a_todas_las_vacias(entorno, monkeypatch):
     assert fa["imagen_origen"] == fb["imagen_origen"] == "stock"
     # Sin autorizar en ninguna: el bloqueo sigue de pie hasta decisión humana.
     assert fa["imagen_autorizada"] is False and fb["imagen_autorizada"] is False
-    # El stock SIN LICENCIA se descarga a la carpeta `copyright`, aislado de las fotos propias.
-    assert llamadas == [{"url": "https://x.test/y.jpg", "categoria": "copyright"}]
+    # El stock SIN LICENCIA se descarga a la carpeta `copyright` (aislado de las fotos propias)
+    # y con piso de tamaño, para descartar iconos/emojis colados como candidata.
+    assert llamadas == [
+        {"url": "https://x.test/y.jpg", "categoria": "copyright", "min_lado": 320}
+    ]

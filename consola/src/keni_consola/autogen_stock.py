@@ -32,6 +32,10 @@ _log = logging.getLogger("keni_consola.autogen_stock")
 ETIQUETA_AUTOGEN_STOCK = "autogen-stock"
 _ESTADO_CERRADO = "hecha"
 CLASE_CONTENIDO = "contenido"
+# Lado mínimo (px) de una foto de stock: descarta iconos/emojis/thumbnails que se cuelan como
+# candidata (p. ej. la original RSS resulta ser el emoji 72×72 de WordPress). Una foto real de
+# banco o de portada de artículo lo supera de sobra.
+_MIN_LADO_FOTO = 320
 
 
 def _normaliza(texto: object) -> str:
@@ -181,7 +185,9 @@ def adjuntar_candidata(
     `espejo` del tema esta activo, el caso normal), no solo a la pieza tocada. Si no, una red
     saldria con la foto SIN LICENCIA pero sin el aviso, que es justo lo peligroso a evitar.
     """
-    nombre = extraccion_url.descargar_imagen_a_media(url, categoria="copyright")
+    nombre = extraccion_url.descargar_imagen_a_media(
+        url, min_lado=_MIN_LADO_FOTO, categoria="copyright"
+    )
     campos = {
         "foto": nombre,
         "imagen": "",

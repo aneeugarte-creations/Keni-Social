@@ -361,6 +361,29 @@ def _dimensiones_jpeg(datos: bytes) -> tuple[int, int] | None:
     return None
 
 
+# Patrones de URL que delatan un ICONO/emoji/favicon (NO una foto de artículo). El clásico es
+# el emoji-fallback de WordPress (`s.w.org/images/core/emoji/...`, 72×72) que se cuela como
+# primer <img> del cuerpo cuando el titular lleva una 🔔/✔️/🇲🇽. Lista de ALTA precisión (cero
+# falsos positivos sobre fotos reales); el piso de tamaño (`min_lado`) cubre los iconos que la
+# URL no delata.
+_PATRONES_ICONO: tuple[str, ...] = (
+    "s.w.org/images/core/emoji",
+    "/emoji/",
+    "favicon",
+    "apple-touch-icon",
+    "gravatar.com",
+)
+
+
+def es_url_icono(url: str) -> bool:
+    """True si `url` apunta a un ICONO/emoji/favicon (no a una foto), deducido por su ruta."""
+    u = (url or "").lower()
+    if any(p in u for p in _PATRONES_ICONO):
+        return True
+    ruta = u.split("?", 1)[0].split("#", 1)[0]  # ignora query/fragmento
+    return ruta.endswith(".ico")
+
+
 def descargar_imagen_a_media(url: str, *, min_lado: int = 0, categoria: str = "fotos") -> str:
     """Descarga una imagen desde `url` (SSRF guard) y la GUARDA en media (S3/disco).
 
@@ -382,6 +405,8 @@ def descargar_imagen_a_media(url: str, *, min_lado: int = 0, categoria: str = "f
     url_limpia, error = validar_url(url)
     if error is not None or url_limpia is None:
         raise ExtraccionError(error or "La URL de la imagen no es válida.")
+    if es_url_icono(url_limpia):
+        raise ExtraccionError("La URL apunta a un icono/emoji, no a una foto.")
     datos = _DESCARGADOR_BYTES(url_limpia)
     if not datos:
         raise ExtraccionError("La URL no devolvió ninguna imagen.")

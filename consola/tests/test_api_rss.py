@@ -23,6 +23,32 @@ _URL_OK = "https://93.184.216.34/feed.xml"
 
 
 # --------------------------------------------------------------------------- #
+# _imagen_de_html: primer <img> UTIL (salta el emoji de WordPress)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_imagen_de_html_salta_emoji_de_wordpress():
+    """Si el primer <img> es el emoji 🔔 de WordPress, coge la foto real que viene despues."""
+    html = (
+        '<p>EN VIVO <img class="emoji" '
+        'src="https://s.w.org/images/core/emoji/17.0.2/72x72/1f514.png"> La mananera</p>'
+        '<figure><img src="https://cdn.amxinfra.com/uploads/foto-real.jpg"></figure>'
+    )
+    assert http_feed._imagen_de_html(html) == "https://cdn.amxinfra.com/uploads/foto-real.jpg"
+
+
+def test_imagen_de_html_solo_emoji_devuelve_vacio():
+    """Si el unico <img> es un emoji/icono, no hay foto (mejor sin foto que un icono)."""
+    html = '<p><img src="https://s.w.org/images/core/emoji/17.0.2/72x72/2714.png"></p>'
+    assert http_feed._imagen_de_html(html) == ""
+
+
+def test_imagen_de_html_foto_normal():
+    html = '<img src="https://cdn.site.com/portada.jpg"> texto'
+    assert http_feed._imagen_de_html(html) == "https://cdn.site.com/portada.jpg"
+
+
+# --------------------------------------------------------------------------- #
 # validar_url + guard SSRF (funcion pura, IPs literales => sin DNS)            #
 # --------------------------------------------------------------------------- #
 

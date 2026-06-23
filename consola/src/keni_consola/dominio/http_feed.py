@@ -31,6 +31,8 @@ from typing import Any, TypeVar
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
+from . import extraccion_url
+
 # Limites de descarga (defensa frente a feeds maliciosos o gigantes).
 _TIMEOUT = 6.0  # segundos
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -296,18 +298,20 @@ _RE_IMG_SRC = re.compile(
 
 
 def _imagen_de_html(html: str) -> str:
-    """URL del primer `<img>` de un fragmento HTML (PURA); '' si no hay o no es http(s).
+    """URL del primer `<img>` ÚTIL de un fragmento HTML (PURA); '' si no hay o no es http(s).
 
     Fallback de `_imagen_item` para feeds cuya foto del artículo viaja DENTRO del
     `content:encoded` (WordPress: UnoTV, La Jornada…) en vez de en un tag de media.
+    Salta iconos/emojis (el emoji 🔔/✔️ de WordPress suele ser el primer <img>) para quedarse
+    con la foto real del artículo si viene después.
     """
     if not html:
         return ""
-    m = _RE_IMG_SRC.search(_html.unescape(html))
-    if not m:
-        return ""
-    url = (m.group(1) or "").strip()
-    return url if url.startswith(("http://", "https://")) else ""
+    for m in _RE_IMG_SRC.finditer(_html.unescape(html)):
+        url = (m.group(1) or "").strip()
+        if url.startswith(("http://", "https://")) and not extraccion_url.es_url_icono(url):
+            return url
+    return ""
 
 
 def _clave_item(clave_feed: str, enlace: str) -> str:

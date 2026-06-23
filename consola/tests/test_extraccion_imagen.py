@@ -189,6 +189,56 @@ def test_descargar_imagen_a_media_categoria_copyright(almacen_disco, monkeypatch
 
 
 # --------------------------------------------------------------------------- #
+# es_url_icono: descarta emojis/iconos/favicons por la ruta                   #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://s.w.org/images/core/emoji/17.0.2/72x72/1f514.png",  # 🔔 bell de WordPress
+        "https://s.w.org/images/core/emoji/17.0.2/72x72/2714.png",   # ✔️ check
+        "https://cdn.site.com/assets/emoji/smile.png",
+        "https://site.com/favicon.ico",
+        "https://site.com/apple-touch-icon.png",
+        "https://www.gravatar.com/avatar/abc.png",
+        "https://site.com/logo.ICO",
+    ],
+)
+def test_es_url_icono_detecta(url):
+    assert extraccion_url.es_url_icono(url) is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://cdn.amxinfra.com/uploads/2026/06/nota-portada.jpg",
+        "https://sm.ign.com/ign_mx/screenshot/foto.png",
+        "https://site.com/articulo/imagen-grande.webp",
+        "",
+    ],
+)
+def test_es_url_icono_no_falso_positivo(url):
+    assert extraccion_url.es_url_icono(url) is False
+
+
+def test_descargar_rechaza_url_icono_sin_tocar_red(almacen_disco, monkeypatch):
+    """Una URL de emoji/icono => ExtraccionError ANTES de descargar (no llama al descargador)."""
+    llamado = {"n": 0}
+
+    def descargador_espia(url):  # noqa: ANN001
+        llamado["n"] += 1
+        return _PNG
+
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", descargador_espia)
+    with pytest.raises(extraccion_url.ExtraccionError):
+        extraccion_url.descargar_imagen_a_media(
+            "https://s.w.org/images/core/emoji/17.0.2/72x72/1f514.png"
+        )
+    assert llamado["n"] == 0
+
+
+# --------------------------------------------------------------------------- #
 # descargar_imagen_a_media: errores controlados (ExtraccionError)             #
 # --------------------------------------------------------------------------- #
 
