@@ -2199,6 +2199,9 @@
         "formato": {
           "type": "string"
         },
+        "variante": {
+          "type": "string"
+        },
         "espejo": {
           "type": "boolean"
         },

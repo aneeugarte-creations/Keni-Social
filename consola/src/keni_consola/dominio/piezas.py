@@ -324,6 +324,10 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # FORMATO de la pieza (foto|video): decide a qué redes va (`redes.redes_de_formato`).
         # "" / desconocido -> "foto" (el formato del flujo automático). La UI muestra el badge.
         "formato": redes.normalizar_formato(pub.get("formato")),
+        # VARIANTE ('foto'|'carrusel'): qué VERSIÓN de la idea es esta pieza. El feed agrupa por
+        # variante para mostrar un MODO coherente por idea (todas foto o todas carrusel) con un
+        # toggle, en vez de mezclar variantes por red.
+        "variante": str(pub.get("variante") or "foto"),
         # ESPEJO entre redes (propiedad de la idea, default ON): editar el contenido de una
         # pieza propaga los mismos campos a sus redes hermanas. El editor lo togglea.
         "espejo": bool(pub.get("espejo", True)),

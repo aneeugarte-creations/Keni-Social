@@ -100,6 +100,11 @@ class Pieza(TypedDict):
     # redes va (`redes.redes_de_formato`, fuente única). El flujo automático crea piezas "foto".
     # La UI lo muestra como badge ("Foto"/"Video"/"Carrusel").
     formato: str
+    # VARIANTE de la pieza: "foto" (por defecto) o "carrusel". Una idea puede tener AMBAS por red
+    # (la conversion no destructiva crea la carrusel junto a la foto); el feed agrupa por variante
+    # para enseñar un MODO coherente por idea (todas foto o todas carrusel) con un toggle.
+    # Opcional (NotRequired): los productores legados no lo traen y la UI lo lee como "foto".
+    variante: NotRequired[str]
     # ESPEJO entre redes (propiedad de la idea, default ON): editar el contenido de esta pieza
     # propaga copy/copy-in/foto/plantilla a sus redes hermanas (saltando las ya publicadas).
     # El editor lo togglea por pieza (PUT `{espejo}`); OFF = cada red se edita por separado.

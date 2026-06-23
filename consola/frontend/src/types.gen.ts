@@ -658,6 +658,7 @@ export interface Pieza {
   id_post_metricool: string;
   tipo_contenido: string;
   formato: string;
+  variante?: string;
   espejo?: boolean;
   imagen_fuente: string;
   video: string;

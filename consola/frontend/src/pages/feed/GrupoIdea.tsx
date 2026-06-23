@@ -144,20 +144,49 @@ export function GrupoIdea({
   /** false con una marca activa en la topbar: el dato ya vive en el switch global. */
   mostrarMarca?: boolean;
 }) {
-  const porRed = React.useMemo(() => {
-    const m = new Map<string, Pieza>();
+  // VARIANTES por red: una idea puede tener pieza FOTO y CARRUSEL en cada red. Se indexan por red
+  // para mostrar un MODO coherente (todas foto o todas carrusel), nunca mezclado por red.
+  const porRedVariante = React.useMemo(() => {
+    const m = new Map<string, { foto?: Pieza; carrusel?: Pieza }>();
     for (const p of grupo.piezas) {
       if (filtra && !filtra(p)) continue;
-      if (!m.has(p.red)) m.set(p.red, p);
+      const e = m.get(p.red) ?? {};
+      const v = p.variante === "carrusel" ? "carrusel" : "foto";
+      if (!e[v]) e[v] = p; // primera de su variante en esa red
+      m.set(p.red, e);
     }
     return m;
   }, [grupo.piezas, filtra]);
-  // FORMATO de la idea: si alguna pieza es video, la idea va a las 5 redes; si es carrusel,
-  // a las 2 de carrusel; si no, a las 3 de foto. Acota los huecos "No generado" a las redes
-  // que el backend SÍ generará.
+  const hayFoto = React.useMemo(
+    () => [...porRedVariante.values()].some((e) => e.foto),
+    [porRedVariante],
+  );
+  const hayCarrusel = React.useMemo(
+    () => [...porRedVariante.values()].some((e) => e.carrusel),
+    [porRedVariante],
+  );
+  // MODO visto (foto|carrusel) a nivel de IDEA: el toggle solo aparece si conviven ambas. Por
+  // defecto foto (el original); si la idea solo tiene carrusel, se ve carrusel.
+  const [varianteVista, setVarianteVista] = React.useState<"foto" | "carrusel">(
+    hayFoto ? "foto" : "carrusel",
+  );
+  const modo = !hayFoto ? "carrusel" : !hayCarrusel ? "foto" : varianteVista;
+  // Una pieza por red en el MODO elegido; si una red no tiene esa variante, cae a la otra (p. ej.
+  // X no admite carrusel: en modo carrusel sigue mostrando su foto, no desaparece).
+  const porRed = React.useMemo(() => {
+    const m = new Map<string, Pieza>();
+    for (const [red, e] of porRedVariante) {
+      const elegida = modo === "carrusel" ? (e.carrusel ?? e.foto) : (e.foto ?? e.carrusel);
+      if (elegida) m.set(red, elegida);
+    }
+    return m;
+  }, [porRedVariante, modo]);
+  // FORMATO de la idea: video va a las 5 redes; en MODO carrusel, a las 2 de carrusel; si no, a
+  // las 3 de foto. Acota los huecos "No generado" a las redes que el backend SÍ generará, y sigue
+  // el modo visto (en modo foto no se reclaman las redes que solo aplican a carrusel).
   const formatoGrupo = grupo.piezas.some((p) => normalizarFormato(p.formato) === "video")
     ? "video"
-    : grupo.piezas.some((p) => normalizarFormato(p.formato) === "carrusel")
+    : modo === "carrusel"
       ? "carrusel"
       : "foto";
   // Solo las redes CON pieza pintan tarjeta; las pendientes del formato van a la franja
@@ -201,6 +230,28 @@ export function GrupoIdea({
           )
         }
       />
+      {/* TOGGLE de variante: solo cuando la idea tiene AMBAS (foto y carrusel). Cambia el MODO
+          de TODAS las redes a la vez (espejo: nunca foto en una red y carrusel en otra). */}
+      {hayFoto && hayCarrusel && (
+        <div className="mb-3 inline-flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Ver variante">
+          {(["foto", "carrusel"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={modo === v}
+              onClick={() => setVarianteVista(v)}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                modo === v
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {v === "foto" ? "Foto" : "Carrusel"}
+            </button>
+          ))}
+        </div>
+      )}
       <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
         {redesVisibles.map((r) => {
           const p = porRed.get(r);
