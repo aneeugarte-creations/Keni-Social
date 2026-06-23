@@ -11,9 +11,10 @@ import { AlertTriangle } from "lucide-react";
 import { marcaParam } from "@/components/comunes/selectores";
 import { api } from "@/lib/api";
 import { formatearDia } from "@/lib/fecha";
-import { nombreFormato, nombreRed } from "@/lib/formato";
+import { nombreFormato, nombreRed, redEnFoco } from "@/lib/formato";
 
 import { MARCA_TODAS } from "./Controles";
+import { useVistaConfig } from "./vistaConfig";
 
 export function AlertaIngesta({
   marcaActual = MARCA_TODAS,
@@ -23,12 +24,14 @@ export function AlertaIngesta({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
   const { data } = useQuery({
     queryKey: ["metricas", "ingesta", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasIngesta({ rango: rangoActual, marca: marca_ }, signal),
   });
 
-  const alertas = data?.alertas ?? [];
+  // Solo alertas de redes en foco: avisar de Facebook cuando solo se mira Instagram sería ruido.
+  const alertas = (data?.alertas ?? []).filter((a) => redEnFoco(red, a.red));
   if (alertas.length === 0) return null;
 
   return (

@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import * as React from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
 import type { IngestaMetricas } from "@/types";
 
 import { AlertaIngesta } from "./AlertaIngesta";
+import { useVistaConfig } from "./vistaConfig";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -16,6 +17,10 @@ beforeAll(() => {
       disconnect() {}
     };
   }
+});
+
+beforeEach(() => {
+  useVistaConfig.getState().reset();
 });
 
 const CON_ALERTA: IngestaMetricas = {
@@ -67,5 +72,15 @@ describe("AlertaIngesta", () => {
     // Días sin piezas y rezago frente al resto del feed.
     expect(aviso).toHaveTextContent("8 días");
     expect(aviso).toHaveTextContent("6 por detrás del resto");
+  });
+
+  it("no avisa de una red fuera del foco global (Facebook con foco en Instagram)", async () => {
+    const espia = vi.spyOn(api, "metricasIngesta").mockResolvedValue(CON_ALERTA);
+    useVistaConfig.getState().setRed("instagram");
+    renderConProviders(<AlertaIngesta marcaActual="__todas__" rangoActual="semana" />);
+
+    await vi.waitFor(() => expect(espia).toHaveBeenCalled());
+    // La alerta es de Facebook; con foco en Instagram, no debe mostrarse nada.
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

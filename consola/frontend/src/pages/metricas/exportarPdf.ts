@@ -7,9 +7,26 @@
  * que cuelgue, lista para presentar a dirección.
  */
 import { numeroCompacto, nombreRed, porcentaje } from "@/lib/formato";
+import { recargaSegura } from "@/lib/version";
 import { colorDe } from "./coloresRed";
 import { diasDePeriodo, partesMes, partesRango } from "./rango";
 import type { RangoMetrica } from "@/types";
+
+/**
+ * `import()` de un módulo pesado (motor del PDF) resistente a chunks OBSOLETOS: tras un
+ * deploy, una pestaña abierta conserva el `index.html` viejo que apunta a un hash que ya
+ * dio 404, así que el import falla con "Failed to fetch dynamically imported module". En ese
+ * caso recargamos en silencio para tomar el bundle nuevo (`recargaSegura` lleva guard
+ * anti-bucle); si la recarga se suprime, devolvemos un error legible en vez del críptico.
+ */
+async function importarModulo<T>(carga: () => Promise<T>): Promise<T> {
+  try {
+    return await carga();
+  } catch {
+    if (recargaSegura()) return new Promise<T>(() => {}); // la recarga corta la ejecución
+    throw new Error("La app se actualizó. Recarga la página e inténtalo de nuevo.");
+  }
+}
 
 const MESES_ES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -252,7 +269,7 @@ async function slideTabla(
     return;
   }
   const cols = columnas ?? Object.keys(filas[0]).map((k) => ({ clave: k, etiqueta: k }));
-  const { default: autoTable } = await import("jspdf-autotable");
+  const { default: autoTable } = await importarModulo(() => import("jspdf-autotable"));
   autoTable(doc, {
     head: [cols.map((c) => c.etiqueta)],
     body: filas.map((f) => cols.map((c) => formatoCelda(f[c.clave]))),
@@ -289,7 +306,7 @@ export async function descargarPresentacion(
   const datos = porDominio(entradas);
   if (datos.size === 0) throw new Error("No hay datos cargados para el PDF.");
 
-  const { jsPDF } = await import("jspdf");
+  const { jsPDF } = await importarModulo(() => import("jspdf"));
   const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H] });
   let n = 1;
 

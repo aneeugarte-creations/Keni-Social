@@ -97,6 +97,36 @@ def test_reporte_red_invalida_devuelve_400(cliente):
     assert "error" in r.json()
 
 
+def test_piezas_listado_filtra_por_red(cliente):
+    # `?red=` recorta el listado a esa plataforma: las demás desaparecen y `total` cuadra.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    plataformas = {p["plataforma"] for p in full["piezas"] if p.get("plataforma")}
+    assert plataformas  # la muestra trae piezas con plataforma
+    red = sorted(plataformas)[0]
+    filtrado = cliente.get(f"/api/metricas/piezas-listado?rango=mes&red={red}").json()
+    assert {p["plataforma"] for p in filtrado["piezas"]} == {red}
+    assert filtrado["total"] == sum(1 for p in full["piezas"] if p["plataforma"] == red)
+
+
+def test_piezas_listado_combina_varias_redes(cliente):
+    # `?red=a,b` combina redes a antojo: el listado queda exactamente con esas plataformas.
+    full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
+    plataformas = sorted({p["plataforma"] for p in full["piezas"] if p.get("plataforma")})
+    if len(plataformas) < 2:
+        return  # muestra con una sola red: nada que combinar
+    dos = plataformas[:2]
+    filtrado = cliente.get(
+        f"/api/metricas/piezas-listado?rango=mes&red={dos[0]},{dos[1]}"
+    ).json()
+    assert {p["plataforma"] for p in filtrado["piezas"]} == set(dos)
+
+
+def test_piezas_listado_red_invalida_devuelve_400(cliente):
+    r = cliente.get("/api/metricas/piezas-listado?rango=mes&red=linkedin")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 def test_cobertura_por_marca_clasifica_los_cuatro_estados():
     from keni_consola.api.metricas import _cobertura_por_marca
 

@@ -2,7 +2,8 @@
  * Tabla CONSOLIDADA de piezas del periodo (fusiona Lista + Top/Peores + Rendimiento).
  *
  * UNA sola tabla rica con todo el kit, consistente:
- *   - Filtros (client-side): marca, línea editorial, red y buscador por título.
+ *   - Filtros (client-side): línea editorial y buscador por título. El foco de red lo
+ *     manda el selector GLOBAL de la cabecera; la marca, el switch global.
  *   - Estadísticas del conjunto filtrado: nº de piezas, vistas media/mediana y
  *     engagement medio/mediana (top/peores = ordenar por la columna Vistas).
  *   - Columnas ordenables (día / vistas / engagement / comentarios / compartidos /
@@ -66,8 +67,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
-  redCanonica,
-  REDES_CANONICAS,
+  redEnFoco,
   rendimientoRel,
 } from "@/lib/formato";
 import type { MarcaDisponible, PiezaListado } from "@/types";
@@ -164,7 +164,6 @@ export function PiezasConsolidada({
   const cfgCols = cfgGuardada ?? { orden: IDS_PIEZAS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_PIEZAS_BASE, cfgCols);
   const [busqueda, setBusqueda] = React.useState("");
-  const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
   const [seleccion, setSeleccion] = React.useState<PiezaListado | null>(null);
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
@@ -184,10 +183,6 @@ export function PiezasConsolidada({
     () => Array.from(new Set(piezas.map((p) => p.cuenta).filter(Boolean) as string[])).sort(),
     [piezas],
   );
-  // El filtro de Red ofrece SIEMPRE las redes canónicas en orden (no solo las
-  // presentes en los datos): así una red sin piezas se puede seleccionar igualmente
-  // (la tabla mostrará entonces su estado vacío). Mismo universo que el resto de vistas.
-  const redesDisponibles = REDES_CANONICAS;
   const lineasDisponibles = React.useMemo(() => {
     const set = new Set<string>();
     for (const p of piezas) set.add(p.linea || SIN_LINEA);
@@ -196,18 +191,17 @@ export function PiezasConsolidada({
     );
   }, [piezas]);
 
-  // Filtro combinado: línea + red + título. La marca la acota el switch global (la
-  // consulta ya viene scopeada); aquí solo se filtra dentro de lo recibido.
+  // Filtro combinado: línea + título. El foco de red lo manda el selector GLOBAL
+  // (`redEnFoco`); la marca la acota el switch global (la consulta ya viene scopeada).
   const filtradas = React.useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return piezas.filter((p) => {
-      // La plataforma se normaliza a su forma canónica (twitter→x) antes de comparar.
-      if (redFiltro !== TODAS && redCanonica(p.plataforma) !== redFiltro) return false;
+      if (!redEnFoco(redGlobal, p.plataforma)) return false;
       if (lineaFiltro !== TODAS && (p.linea || SIN_LINEA) !== lineaFiltro) return false;
       if (q && !(p.titulo || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [piezas, redFiltro, lineaFiltro, busqueda]);
+  }, [piezas, redGlobal, lineaFiltro, busqueda]);
 
   // Estadísticas del conjunto FILTRADO (reflejan los filtros activos). El engagement
   // agregado es POOLED (interacciones ÷ vistas del conjunto), no la media de porcentajes:
@@ -329,19 +323,6 @@ export function PiezasConsolidada({
               {lineasDisponibles.map((l) => (
                 <SelectItem key={l} value={l}>
                   {l}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={redFiltro} onValueChange={setRedFiltro}>
-            <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
-              <SelectValue placeholder="Red" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={TODAS}>Todas las redes</SelectItem>
-              {redesDisponibles.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {nombreRed(r)}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import type { MarcaCobertura } from "@/types";
 
 import { CoberturaRedes } from "./CoberturaRedes";
+import { useVistaConfig } from "./vistaConfig";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -13,6 +14,10 @@ beforeAll(() => {
       disconnect() {}
     };
   }
+});
+
+beforeEach(() => {
+  useVistaConfig.getState().reset();
 });
 
 // Universo COMPLETO de redes de una marca, cada una con su estado y motivo (la
@@ -123,11 +128,26 @@ describe("CoberturaRedes", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
-  it("expone los filtros client-side por red y por marca (aria-label)", () => {
+  it("expone el filtro por marca, pero NO uno de red (el foco de red es global)", () => {
     render(<CoberturaRedes marcas={MARCAS} />);
 
-    expect(screen.getByRole("combobox", { name: "Filtrar por red" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Filtrar por marca" })).toBeInTheDocument();
+    // El foco de red lo manda el selector GLOBAL de la cabecera: aquí no hay filtro propio.
+    expect(screen.queryByRole("combobox", { name: "Filtrar por red" })).not.toBeInTheDocument();
+  });
+
+  it("con foco de red global solo muestra las redes seleccionadas", () => {
+    // Foco = solo Instagram: en UnoTV queda su fila de Instagram y desaparecen las demás;
+    // Claro Sports (sin Instagram) se oculta entero al quedarse sin redes en foco.
+    useVistaConfig.getState().setRed("instagram");
+    render(<CoberturaRedes marcas={MARCAS} />);
+
+    expect(screen.getByText("UnoTV")).toBeInTheDocument();
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.queryByText("Facebook")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
+    // El conteo describe lo seleccionado (Instagram está "sin métricas"): 0/1.
+    expect(screen.getByText("0/1 con datos")).toBeInTheDocument();
   });
 
   it("no renderiza nada sin marcas en el reporte", () => {

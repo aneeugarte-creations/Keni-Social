@@ -167,8 +167,14 @@ async def piezas_listado(request: Request) -> Response:
     del periodo" (con buscador + orden + detalle por pieza). Servido desde cache (lazy fill).
 
     `?marca=` (en forma `id_metricas`) acota a una marca; sin marca, agrega todas.
+    `?red=a,b` acota a esas redes (combinación libre); sin `red`, todas. La cache guarda
+    el listado completo y el recorte por red se aplica aquí sobre la salida.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
+    try:
+        redes = _validar_redes(request.query_params.get("red"))
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
         return rechazo
@@ -197,6 +203,13 @@ async def piezas_listado(request: Request) -> Response:
         _log.exception("Fallo al resolver líneas del listado (marca=%s).", marca or "todas")
         linea_map = {}
     piezas = [_pieza_listado_serializable(p, linea_map) for p in piezas_crudas]
+    total = payload.get("total", 0)
+    # Recorte por red(es): el contrato `PiezaListado` emite la red en `plataforma`
+    # (con `twitter` ya normalizado a `x` en la fuente). Una pieza fuera del foco
+    # desaparece del listado por completo, igual que en el resto del dashboard.
+    if redes:
+        piezas = [p for p in piezas if (p.get("plataforma") or "").lower() in redes]
+        total = len(piezas)
     return JSONResponse(
         {
             "rango": rango,
@@ -205,7 +218,7 @@ async def piezas_listado(request: Request) -> Response:
             "periodo": payload.get("periodo") or {"desde": "", "hasta": ""},
             "fuente": payload.get("fuente") or "muestra",
             "piezas": piezas,
-            "total": payload.get("total", 0),
+            "total": total,
             "generado_en": generado_en,
         }
     )

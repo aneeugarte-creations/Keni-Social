@@ -16,7 +16,8 @@
  *
  * Mismo stack (Tremor) y estados honestos (carga / vacío / error) que el resto de
  * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. La sección es
- * colapsable y filtra client-side por red (selector en la cabecera).
+ * colapsable; el foco de red lo manda el selector GLOBAL de la cabecera (solo se muestran
+ * las redes seleccionadas).
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
@@ -24,13 +25,6 @@ import { Activity } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup } from "@/components/ui/toggle-group";
 import {
@@ -48,7 +42,7 @@ import {
   numeroCompacto,
   numeroCompleto,
   porcentaje,
-  REDES_CANONICAS,
+  redesObjetivo,
   type RedCanonica,
 } from "@/lib/formato";
 import type { CeldaDesglose, MarcaDisponible } from "@/types";
@@ -83,9 +77,6 @@ const COMPONENTES_TABLA: Array<{ clave: keyof CeldaDesglose; etiqueta: string }>
 const ETIQUETAS = COMPONENTES_GRAFICA.map((c) => c.etiqueta);
 const COLORES = COMPONENTES_GRAFICA.map((c) => c.color);
 
-/** Centinela "sin filtro" para los selectores de red/marca. */
-const TODAS = "__todas__";
-
 /** Modo de la gráfica: proporción (apilado al 100 %) o volumen (apilado absoluto). */
 type ModoGrafica = "proporcion" | "volumen";
 
@@ -109,48 +100,25 @@ export function DesgloseInteracciones({
     staleTime: 2 * 60_000,
   });
 
-  // Filtro client-side por red, derivado de las celdas del periodo. La marca la acota
-  // el switch global de la barra superior (la consulta ya viene scopeada).
-  const [redFiltro, setRedFiltro] = React.useState(TODAS);
-
   // Modo de la gráfica. Por defecto "proporcion": los "me gusta" eclipsan al resto en
   // volumen absoluto, así que normalizar a 100 % es lo que deja legibles los segmentos.
   const [modo, setModo] = React.useState<ModoGrafica>("proporcion");
 
   const celdas = React.useMemo(() => data?.celdas ?? [], [data]);
-  // "Todas las tablas, todas las redes": el selector ofrece SIEMPRE las 5 redes canónicas
-  // (no solo las que traen datos), así el operador puede enfocar cualquiera —incluida X, que
-  // en el piloto no está contratada en Metricool— y, si no hay datos, la tabla lo dice con "—".
-  // El filtro por red NO se aplica recortando celdas aquí: `construirRejilla` deriva las marcas
-  // del conjunto completo y restringe las redes a `redFiltro`, de modo que enfocar una red sin
-  // datos sigue mostrando esa red como fila "—" para cada marca (no se vacía la tabla).
-  const redesDisp = REDES_CANONICAS;
+  // El foco de red lo manda el selector GLOBAL (`vistaConfig.red`): la rejilla solo cubre
+  // las redes seleccionadas; una en foco sin datos sigue como fila "—" para cada marca.
+  const redes = redesObjetivo(red);
 
   const acciones = (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <ToggleGroup<ModoGrafica>
-        ariaLabel="Modo de la gráfica"
-        valor={modo}
-        onCambio={setModo}
-        opciones={[
-          { valor: "proporcion", etiqueta: "Proporción" },
-          { valor: "volumen", etiqueta: "Volumen" },
-        ]}
-      />
-      <Select value={redFiltro} onValueChange={setRedFiltro}>
-        <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
-          <SelectValue placeholder="Red" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={TODAS}>Todas las redes</SelectItem>
-          {redesDisp.map((r) => (
-            <SelectItem key={r} value={r}>
-              {nombreRed(r)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ToggleGroup<ModoGrafica>
+      ariaLabel="Modo de la gráfica"
+      valor={modo}
+      onCambio={setModo}
+      opciones={[
+        { valor: "proporcion", etiqueta: "Proporción" },
+        { valor: "volumen", etiqueta: "Volumen" },
+      ]}
+    />
   );
 
   return (
@@ -182,18 +150,13 @@ export function DesgloseInteracciones({
               data.totales.compartidos ?? 0,
             )}, Guardados ${numeroCompacto(data.totales.guardados ?? 0)}`}
           >
-            <GraficaApilada
-              celdas={celdas}
-              marcas={marcas}
-              redFiltro={redFiltro}
-              modo={modo}
-            />
+            <GraficaApilada celdas={celdas} marcas={marcas} redes={redes} modo={modo} />
           </div>
           <TablaDesglose
             celdas={celdas}
             totales={data.totales}
             marcas={marcas}
-            redFiltro={redFiltro}
+            redes={redes}
           />
         </div>
       )}
@@ -205,16 +168,15 @@ export function DesgloseInteracciones({
 type EntradaRejilla = { marca: string; red: RedCanonica; celda: CeldaDesglose | undefined };
 
 /**
- * Construye la rejilla marca×red completa: por cada marca presente (en su orden de aparición)
- * y cada red canónica objetivo (todas, o la única bajo filtro) devuelve la celda real o
- * `undefined`. Así "todas las tablas, todas las redes": una red sin datos no se omite, aparece
- * como entrada vacía que el render pinta con "—" (tabla) o sin barra (gráfica).
+ * Construye la rejilla marca×red: por cada marca presente (en su orden de aparición) y cada
+ * red EN FOCO (`redes`) devuelve la celda real o `undefined`. Una red en foco sin datos no se
+ * omite: aparece como entrada vacía que el render pinta con "—" (tabla) o sin barra (gráfica).
+ * Las redes fuera del foco no entran en la rejilla.
  */
-function construirRejilla(celdas: CeldaDesglose[], redFiltro: string): EntradaRejilla[] {
-  const redesObjetivo =
-    redFiltro === TODAS
-      ? REDES_CANONICAS
-      : REDES_CANONICAS.filter((r) => r === redFiltro);
+function construirRejilla(
+  celdas: CeldaDesglose[],
+  redes: readonly string[],
+): EntradaRejilla[] {
   // Marcas en orden de primera aparición en las celdas (estable, sin reordenar).
   const marcasOrden: string[] = [];
   const porClave = new Map<string, CeldaDesglose>();
@@ -224,8 +186,8 @@ function construirRejilla(celdas: CeldaDesglose[], redFiltro: string): EntradaRe
   }
   const rejilla: EntradaRejilla[] = [];
   for (const marca of marcasOrden) {
-    for (const red of redesObjetivo) {
-      rejilla.push({ marca, red, celda: porClave.get(`${marca}::${red}`) });
+    for (const red of redes) {
+      rejilla.push({ marca, red: red as RedCanonica, celda: porClave.get(`${marca}::${red}`) });
     }
   }
   return rejilla;
@@ -234,12 +196,12 @@ function construirRejilla(celdas: CeldaDesglose[], redFiltro: string): EntradaRe
 function GraficaApilada({
   celdas,
   marcas,
-  redFiltro,
+  redes,
   modo,
 }: {
   celdas: CeldaDesglose[];
   marcas: MarcaDisponible[];
-  redFiltro: string;
+  redes: readonly string[];
   modo: ModoGrafica;
 }) {
   const proporcion = modo === "proporcion";
@@ -248,7 +210,7 @@ function GraficaApilada({
   // Solo interacciones: las reproducciones quedan fuera de la pila (ver COMPONENTES_GRAFICA).
   // En modo proporción cada barra se normaliza a su composición (segmentos que suman 100 %);
   // una barra sin interacciones se queda toda en 0 (sin pila).
-  const datos = construirRejilla(celdas, redFiltro).map(({ marca, red, celda }) => {
+  const datos = construirRejilla(celdas, redes).map(({ marca, red, celda }) => {
     const valores = {
       "Me gusta": celda?.likes ?? 0,
       Comentarios: celda?.comentarios ?? 0,
@@ -306,18 +268,18 @@ function TablaDesglose({
   celdas,
   totales,
   marcas,
-  redFiltro,
+  redes,
 }: {
   celdas: CeldaDesglose[];
   totales: Record<string, number>;
   marcas: MarcaDisponible[];
-  redFiltro: string;
+  redes: readonly string[];
 }) {
-  // Rejilla marca×red COMPLETA: las redes sin datos van como entradas con `celda` undefined,
-  // que el orden empuja al final (`null` no es un 0 real) y el render pinta con "—".
+  // Rejilla marca×red (solo redes en foco): una red en foco sin datos va como entrada con
+  // `celda` undefined, que el orden empuja al final (`null` no es un 0 real) y se pinta "—".
   const rejilla = React.useMemo(
-    () => construirRejilla(celdas, redFiltro),
-    [celdas, redFiltro],
+    () => construirRejilla(celdas, redes),
+    [celdas, redes],
   );
 
   // Cada componente del desglose + nº de piezas es ordenable (accesores estables arriba).

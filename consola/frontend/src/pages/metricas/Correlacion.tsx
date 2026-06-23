@@ -8,8 +8,8 @@
  * estrella. Sobre los pares visibles se muestra el COEFICIENTE de correlación (ρ de
  * Spearman con su n; ver estadistica.ts), suprimido cuando n es insuficiente.
  * RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
- * para no inducir lecturas causales. La tabla es ORDENABLE por columna numérica y
- * FILTRABLE por red (cliente).
+ * para no inducir lecturas causales. La tabla es ORDENABLE por columna numérica; el foco
+ * de red lo manda el selector GLOBAL (solo se muestran las redes seleccionadas).
  *
  * Mismo stack y estados honestos (carga / vacío / error) que el resto de Métricas: si la
  * fuente no expone los datos (sin seguidores), lo dice en vez de inventar.
@@ -29,13 +29,6 @@ import {
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -54,6 +47,8 @@ import {
   plural,
   porcentaje,
   redCanonica,
+  redEnFoco,
+  redesObjetivo,
   REDES_CANONICAS,
 } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
@@ -65,8 +60,6 @@ import { useVistaConfig } from "./vistaConfig";
 import { N_MINIMA_CORRELACION, spearman } from "./estadistica";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
-
-const RED_TODAS = "__todas__";
 
 /** Seguidores por post: ratio crudo con un decimal ("—" si no aplica). */
 function ratio(v: number | null): string {
@@ -137,7 +130,6 @@ export function Correlacion({
 }) {
   const marca_ = marcaParam(marcaActual);
   const red = useVistaConfig((s) => s.red);
-  const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "correlacion", rangoActual ?? "", marca_ ?? "todas", red ?? "todas"],
@@ -147,39 +139,18 @@ export function Correlacion({
   });
 
   const items = React.useMemo(() => data?.items ?? [], [data]);
-  // TODAS las redes canónicas en el selector (no solo las que traen datos).
-  const redesDisponibles = REDES_CANONICAS;
 
-  // Items del periodo tras el filtro de red (cliente): alimentan el scatter.
+  // Items del periodo en foco de red (selector global): alimentan el scatter.
   const visibles = React.useMemo(
-    () => (redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro)),
-    [items, redFiltro],
+    () => items.filter((it) => redEnFoco(red, it.red)),
+    [items, red],
   );
-
-  // El filtro de red solo tiene sentido cuando hay datos cargados.
-  const filtroRed =
-    !isPending && !isError && items.length > 0 ? (
-      <Select value={redFiltro} onValueChange={setRedFiltro}>
-        <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
-          <SelectValue placeholder="Red" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
-          {redesDisponibles.map((r) => (
-            <SelectItem key={r} value={r}>
-              {nombreRed(r)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    ) : undefined;
 
   return (
     <SeccionColapsable
       titulo="Seguidores frente a piezas publicadas"
       icono={GitCompareArrows}
       descripcion="Con la pieza que mejor rindió cada día"
-      acciones={filtroRed}
       contentClassName="space-y-4"
     >
       {isPending ? (
@@ -205,7 +176,7 @@ export function Correlacion({
           {/* Scatter con TODOS los puntos del periodo filtrado; la tabla de abajo es el
               drill-down del día. */}
           {visibles.length > 0 && <GraficaCorrelacion items={visibles} marcas={marcas} />}
-          <TablaCorrelacion items={items} marcas={marcas} redFiltro={redFiltro} />
+          <TablaCorrelacion items={items} marcas={marcas} red={red} />
         </>
       )}
     </SeccionColapsable>
@@ -391,16 +362,17 @@ const ACCESORES_CORRELACION: Record<
 function TablaCorrelacion({
   items,
   marcas,
-  redFiltro,
+  red,
 }: {
   items: ItemCorrelacion[];
   marcas: MarcaDisponible[];
-  redFiltro: string;
+  /** Foco de red global (`vistaConfig.red`, CSV): solo se muestran las redes en foco. */
+  red: string | null;
 }) {
-  // Filtro de red (cliente) antes de paginar/ordenar.
+  // Foco de red global antes de paginar/ordenar.
   const visibles = React.useMemo(
-    () => (redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro)),
-    [items, redFiltro],
+    () => items.filter((it) => redEnFoco(red, it.red)),
+    [items, red],
   );
 
   // Paginación POR DÍA: un día por página, del más reciente al más antiguo.
@@ -427,12 +399,10 @@ function TablaCorrelacion({
     { clave: "seguidores_ganados", direccion: "desc" },
   );
 
-  // Todas las redes canónicas presentes en CADA día: si una red no publicó ni ganó
-  // seguidores ese día (o no está contratada, como X), aparece igualmente como fila "—".
+  // Redes EN FOCO presentes en CADA día: una red en foco que no publicó ni ganó seguidores
+  // ese día aparece igualmente como fila "—"; las redes fuera del foco no se muestran.
   const redesConDatos = new Set(itemsDelDia.map((it) => redCanonica(it.red)));
-  const redesFaltantes = (
-    redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro)
-  ).filter((r) => !redesConDatos.has(r));
+  const redesFaltantes = redesObjetivo(red).filter((r) => !redesConDatos.has(r));
 
   if (dias.length === 0) {
     return (

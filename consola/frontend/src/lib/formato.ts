@@ -211,6 +211,35 @@ export function redCanonica(red: string): string {
 }
 
 /**
+ * Redes EN FOCO según el selector global (`vistaConfig.red`, CSV de ids). Devuelve los
+ * ids canónicos elegidos, o lista vacía cuando no hay foco (= todas). Fuente única para
+ * que TODA tabla/gráfica/leyenda/alerta filtre por el mismo conjunto.
+ */
+export function redesEnFoco(red: string | null | undefined): string[] {
+  if (!red) return [];
+  return red
+    .split(",")
+    .map((r) => redCanonica(r.trim()))
+    .filter(Boolean);
+}
+
+/**
+ * Universo de redes a RENDERIZAR: las en foco (en orden canónico) o TODAS las canónicas
+ * si no hay foco. Las tablas/gráficas iteran sobre esto: una red no seleccionada
+ * desaparece por completo (no se pinta como fila/serie "—").
+ */
+export function redesObjetivo(red: string | null | undefined): RedCanonica[] {
+  const foco = new Set(redesEnFoco(red));
+  return foco.size ? REDES_CANONICAS.filter((r) => foco.has(r)) : [...REDES_CANONICAS];
+}
+
+/** ¿La red `candidata` está en foco? Sin foco (todas) → siempre `true`. */
+export function redEnFoco(red: string | null | undefined, candidata: string): boolean {
+  const foco = redesEnFoco(red);
+  return foco.length === 0 || foco.includes(redCanonica(candidata));
+}
+
+/**
  * Alinea unas filas "por red" a la lista canónica completa: por cada red de
  * `REDES_CANONICAS` devuelve la fila existente (casada por su id de red, normalizado a
  * minúsculas y con `twitter`→`x`) o `undefined` si esa red no trae datos en el periodo.

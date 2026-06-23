@@ -1,9 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { RedMetrica } from "@/types";
 
 import { TablaRedes } from "./TablaRedes";
+import { useVistaConfig } from "./vistaConfig";
+
+beforeEach(() => {
+  useVistaConfig.getState().reset();
+});
 
 const REDES: RedMetrica[] = [
   {
@@ -67,6 +72,19 @@ describe("TablaRedes", () => {
     // aria-sort refleja la columna activa.
     const th = cabecera.closest("th")!;
     expect(th).toHaveAttribute("aria-sort", "ascending");
+  });
+
+  it("con foco de red global solo muestra las redes seleccionadas (quita el resto)", () => {
+    // Foco = solo Instagram: TikTok desaparece por completo (ni fila de datos ni "—").
+    useVistaConfig.getState().setRed("instagram");
+    render(<TablaRedes redes={REDES} />);
+
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
+    expect(screen.queryByText("TikTok")).not.toBeInTheDocument();
+    expect(screen.queryByText("Facebook")).not.toBeInTheDocument();
+    // El total refleja solo Instagram (no la suma de todas las redes).
+    const filaTotal = screen.getByText("Total").closest("tr")!;
+    expect(within(filaTotal).getByText("120,000")).toBeInTheDocument();
   });
 
   it("muestra TODAS las redes canónicas (con '—') aunque no haya datos", () => {

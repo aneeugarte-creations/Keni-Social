@@ -24,7 +24,7 @@ import {
 import { marcaParam } from "@/components/comunes/selectores";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, numeroCompleto, redCanonica } from "@/lib/formato";
+import { nombreRed, numeroCompacto, numeroCompleto, redCanonica, redEnFoco } from "@/lib/formato";
 import type { PiezaListado } from "@/types";
 
 import { colorDe } from "./coloresRed";
@@ -164,9 +164,11 @@ export function EvolucionRedes({
     for (const p of piezas) {
       const f = fechaDeISO(p.publicado);
       if (!f || !Number.isFinite(p.visualizaciones)) continue;
-      const red = redCanonica(p.plataforma) || "otra";
-      redes.add(red);
-      validas.push({ f, red, vistas: p.visualizaciones });
+      // Solo redes en foco: una pieza fuera del foco no entra al apilado ni a la leyenda.
+      if (!redEnFoco(red, p.plataforma)) continue;
+      const redCan = redCanonica(p.plataforma) || "otra";
+      redes.add(redCan);
+      validas.push({ f, red: redCan, vistas: p.visualizaciones });
     }
     if (!validas.length) {
       return {
@@ -211,7 +213,7 @@ export function EvolucionRedes({
     }
 
     return { filas: out, redesPresentes: presentes, gran };
-  }, [piezas]);
+  }, [piezas, red]);
 
   // Muestra ~8 etiquetas de intervalo como máximo en el eje X (interval = categorías a saltar).
   const intervalo = Math.max(0, Math.ceil(filas.length / 8) - 1);

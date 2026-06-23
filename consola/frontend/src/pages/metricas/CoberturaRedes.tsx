@@ -11,7 +11,8 @@
  * deriva de la cobertura que ya trae el resumen (sin llamadas extra). Una métrica
  * `null` se pinta "—" (la red no respondió: no se inventa un 0 falso).
  *
- * La sección es colapsable, filtra client-side por marca y por red, y ordena las
+ * La sección es colapsable y filtra client-side por marca; el foco de red lo manda el
+ * selector GLOBAL de la cabecera (solo se muestran las redes seleccionadas). Ordena las
  * redes (por vistas / interacciones / engagement) con un orden global elegido por el
  * usuario que se aplica dentro de cada bloque de marca.
  */
@@ -33,12 +34,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { nombreRed, numeroCompleto, porcentaje } from "@/lib/formato";
+import { nombreRed, numeroCompleto, porcentaje, redEnFoco } from "@/lib/formato";
 import type { MarcaCobertura, RedCobertura } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { SeccionColapsable } from "./SeccionColapsable";
 import type { DireccionOrden } from "./useOrdenTabla";
+import { useVistaConfig } from "./vistaConfig";
 
 /** Metadatos de presentación por estado de cobertura (etiqueta + color del punto). */
 const ESTADO: Record<string, { etiqueta: string; texto: string; punto: string }> = {
@@ -90,9 +92,8 @@ function metaEstado(estado: string) {
 }
 
 /**
- * Resumen "3/5 con datos" para la cabecera de cada marca. Recibe SIEMPRE el universo
- * completo de redes de la marca (no la lista filtrada por el selector de red): el
- * conteo describe la cobertura real de la marca, no lo que la tabla muestra.
+ * Resumen "3/5 con datos" para la cabecera de cada marca, sobre las redes EN FOCO que se
+ * muestran (cuando hay foco de red, el conteo describe lo seleccionado, no el universo).
  */
 function conteo(redes: RedCobertura[]): string {
   const con = redes.filter((r) => r.estado === "con_datos").length;
@@ -170,27 +171,28 @@ function FilaRed({ r }: { r: RedCobertura }) {
 
 function BloqueMarca({
   marca,
-  redFiltro,
+  red,
   clave,
   direccion,
   alClicar,
 }: {
   marca: MarcaCobertura;
-  redFiltro: string;
+  /** Foco de red global (`vistaConfig.red`, CSV): solo se muestran las redes en foco. */
+  red: string | null;
   clave: ClaveOrden | null;
   direccion: DireccionOrden;
   alClicar: (clave: ClaveOrden) => void;
 }) {
-  // Filtra por red dentro de la marca y luego aplica el orden global.
-  const visibles = marca.redes.filter((r) => redFiltro === TODAS || r.red === redFiltro);
-  const redes = ordenarRedes(visibles, clave, direccion);
+  // Solo las redes en foco (selector global) y luego el orden global.
+  const enFoco = marca.redes.filter((r) => redEnFoco(red, r.red));
+  const redes = ordenarRedes(enFoco, clave, direccion);
   if (redes.length === 0) return null;
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 px-6 pb-2">
         <h3 className="text-sm font-semibold text-foreground">{marca.marca}</h3>
-        <span className="shrink-0 text-xs text-muted-foreground">{conteo(marca.redes)}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">{conteo(enFoco)}</span>
       </div>
       <Table>
         <TableHeader>
@@ -250,16 +252,12 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
     );
   }, []);
 
-  // Filtros client-side por marca y por red, derivados del universo de marcas/redes.
+  // El foco de red lo manda el selector GLOBAL; aquí solo queda el filtro propio por marca.
+  const red = useVistaConfig((s) => s.red);
   const [marcaFiltro, setMarcaFiltro] = React.useState(TODAS);
-  const [redFiltro, setRedFiltro] = React.useState(TODAS);
 
   const marcasDisp = React.useMemo(
     () => (marcas ?? []).map((m) => ({ id: m.marca_id, nombre: m.marca })),
-    [marcas],
-  );
-  const redesDisp = React.useMemo(
-    () => Array.from(new Set((marcas ?? []).flatMap((m) => m.redes.map((r) => r.red)))),
     [marcas],
   );
 
@@ -272,34 +270,19 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
   );
 
   const acciones = (
-    <>
-      <Select value={redFiltro} onValueChange={setRedFiltro}>
-        <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
-          <SelectValue placeholder="Red" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={TODAS}>Todas las redes</SelectItem>
-          {redesDisp.map((r) => (
-            <SelectItem key={r} value={r}>
-              {nombreRed(r)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={marcaFiltro} onValueChange={setMarcaFiltro}>
-        <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por marca">
-          <SelectValue placeholder="Marca" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={TODAS}>Todas las marcas</SelectItem>
-          {marcasDisp.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {m.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </>
+    <Select value={marcaFiltro} onValueChange={setMarcaFiltro}>
+      <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por marca">
+        <SelectValue placeholder="Marca" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={TODAS}>Todas las marcas</SelectItem>
+        {marcasDisp.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            {m.nombre}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 
   return (
@@ -313,7 +296,7 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
         <BloqueMarca
           key={m.marca_id}
           marca={m}
-          redFiltro={redFiltro}
+          red={red}
           clave={clave}
           direccion={direccion}
           alClicar={alClicar}

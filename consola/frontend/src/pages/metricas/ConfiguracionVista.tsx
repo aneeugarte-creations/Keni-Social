@@ -186,8 +186,9 @@ export function ConfiguracionVista() {
         <DialogHeader>
           <DialogTitle>Configurar vista</DialogTitle>
           <DialogDescription>
-            Elige qué secciones y columnas se muestran. Los cambios se guardan en este
-            navegador.
+            Controla la PRESENTACIÓN: qué secciones se muestran y, por tabla, qué columnas y
+            en qué orden. Las redes y el periodo se eligen en la barra de arriba. Los cambios
+            se guardan en este navegador.
           </DialogDescription>
         </DialogHeader>
 
@@ -200,10 +201,16 @@ export function ConfiguracionVista() {
               Columnas
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="secciones">
+          <TabsContent value="secciones" className="max-h-[55vh] overflow-y-auto pr-1">
+            <p className="mb-3 text-xs text-muted-foreground">
+              Marca qué bloques del dashboard quieres ver.
+            </p>
             <SeccionesConfig />
           </TabsContent>
-          <TabsContent value="columnas">
+          <TabsContent value="columnas" className="max-h-[55vh] overflow-y-auto pr-1">
+            <p className="mb-3 text-xs text-muted-foreground">
+              En cada tabla, muestra/oculta columnas y reordénalas con las flechas.
+            </p>
             <ColumnasConfig />
           </TabsContent>
         </Tabs>

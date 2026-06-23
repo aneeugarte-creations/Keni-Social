@@ -15,9 +15,18 @@ import { marcarSesionExpirada, SesionProvider } from "@/hooks/use-sesion";
 import { TemaProvider } from "@/hooks/use-tema";
 import { ApiError } from "@/lib/api";
 import { registrarExitoRed, registrarFalloRed } from "@/lib/estado-red";
+import { recargaSegura } from "@/lib/version";
 import { router } from "@/router";
 
 import "./index.css";
+
+// Red de seguridad para chunks OBSOLETOS: tras un deploy, una pestaña abierta apunta a
+// hashes viejos y un `import()` bajo demanda (p. ej. el motor del PDF) da 404; Vite emite
+// `vite:preloadError`. Recargamos en silencio para tomar el bundle nuevo (`recargaSegura`
+// lleva guard anti-bucle, así un fallo real no atrapa al usuario en un ciclo de recargas).
+window.addEventListener("vite:preloadError", () => {
+  recargaSegura();
+});
 
 /**
  * Manejador GLOBAL de sesión expirada (#): cualquier query/mutación que falle con un 401

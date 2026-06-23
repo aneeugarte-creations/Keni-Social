@@ -8,18 +8,10 @@
  * numéricas van alineadas a la derecha con cifras tabulares para la lectura
  * comparada y son ORDENABLES (clic en la cabecera). Qué columnas se ven y en qué
  * orden lo decide el panel "Configurar vista" (`vistaConfig.columnas.redes`). Al pie,
- * una fila de TOTALES. Cada red canónica sin datos aparece igualmente como fila con
- * "—" (incluida X, no contratada en el piloto), nunca un 0 falso.
+ * una fila de TOTALES. El foco de red lo manda el selector GLOBAL: solo se muestran las
+ * redes seleccionadas; una en foco sin datos aparece como fila "—" (nunca un 0 falso),
+ * y una fuera del foco no se muestra.
  */
-import * as React from "react";
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -28,7 +20,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { nombreRed, numeroCompleto, porcentaje, redCanonica, REDES_CANONICAS } from "@/lib/formato";
+import {
+  nombreRed,
+  numeroCompleto,
+  porcentaje,
+  redCanonica,
+  redEnFoco,
+  redesObjetivo,
+} from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -36,8 +35,6 @@ import { idsColumnas, TABLA_REDES } from "./columnasMeta";
 import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
-
-const RED_TODAS = "__todas__";
 
 type ClaveRed = "visualizaciones" | "interacciones" | "engagement_pct";
 
@@ -85,17 +82,16 @@ export function TablaRedes({
   /** `true` => solo la tabla + reparto, sin el `SeccionColapsable` (para deslizar). */
   desnudo?: boolean;
 }) {
-  const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
-  // TODAS las redes canónicas en el selector (no solo las que traen datos): el operador
-  // puede enfocar cualquiera y, si no tiene datos en el rango, la tabla lo dice con "—".
-  const redesDisponibles = REDES_CANONICAS;
+  // El foco de red lo manda el selector GLOBAL de la cabecera (`vistaConfig.red`): no hay
+  // filtro de red propio de la tabla (uno solo, no varios que confundan).
+  const red = useVistaConfig((s) => s.red);
 
   const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_REDES]);
   const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_BASE, cfg);
 
-  // Filas tras aplicar el filtro de red (cliente). `visibles` alimenta orden, totales y reparto.
-  const visibles = redFiltro === RED_TODAS ? redes : redes.filter((r) => r.red === redFiltro);
+  // Filas tras aplicar el foco de red global. `visibles` alimenta orden, totales y reparto.
+  const visibles = redes.filter((r) => redEnFoco(red, r.red));
 
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(
     visibles,
@@ -104,13 +100,10 @@ export function TablaRedes({
 
   const totales = calcularTotales(visibles);
 
-  // "Todas las tablas, todas las redes": además de las filas con datos (ya ordenadas),
-  // pintamos una fila "—" por cada red canónica que no aparezca en el periodo —incluida X,
-  // que en el piloto no está contratada en Metricool—. Así ninguna red desaparece.
-  const objetivoRedes =
-    redFiltro === RED_TODAS ? REDES_CANONICAS : REDES_CANONICAS.filter((r) => r === redFiltro);
+  // Las redes EN FOCO sin datos en el periodo se pintan igualmente como fila "—" (no
+  // desaparecen); las redes fuera del foco no se muestran en absoluto.
   const conDatos = new Set(visibles.map((r) => redCanonica(r.red)));
-  const redesFaltantes = objetivoRedes.filter((r) => !conDatos.has(r));
+  const redesFaltantes = redesObjetivo(red).filter((r) => !conDatos.has(r));
 
   const encabezado = (id: string) => {
     if (id === "red") {
@@ -182,22 +175,6 @@ export function TablaRedes({
     );
   };
 
-  const filtroRed = (
-    <Select value={redFiltro} onValueChange={setRedFiltro}>
-      <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
-        <SelectValue placeholder="Red" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
-        {redesDisponibles.map((r) => (
-          <SelectItem key={r} value={r}>
-            {nombreRed(r)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-
   const cuerpo = (
     <Table>
       <TableHeader>
@@ -221,15 +198,10 @@ export function TablaRedes({
   );
 
   if (desnudo) {
-    return (
-      <div className="space-y-3">
-        <div className="flex justify-end">{filtroRed}</div>
-        {cuerpo}
-      </div>
-    );
+    return cuerpo;
   }
   return (
-    <SeccionColapsable titulo="Detalle por red" acciones={filtroRed} contentClassName="p-0">
+    <SeccionColapsable titulo="Detalle por red" contentClassName="p-0">
       {cuerpo}
     </SeccionColapsable>
   );
