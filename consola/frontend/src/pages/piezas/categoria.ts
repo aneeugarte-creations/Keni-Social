@@ -1,20 +1,14 @@
-import type { OpcionesPiezas } from "@/types";
+import { etiquetaLinea } from "@/lib/lineas";
 
 /**
- * Nombre legible de la categoría del plan de una pieza, resuelto contra el catálogo de
- * `/piezas/opciones` (las MISMAS etiquetas que el selector de «Crear post» y los chips del
- * feed: el backend ya resuelve líneas por su nombre de BD y señales del motor —breaking/
- * evergreen— por su rótulo). Devuelve cadena vacía cuando la pieza no pertenece a ninguna
- * categoría del plan («Fuera del plan», sin franja) o el catálogo aún no cargó; en ese caso
- * la cabecera del editor no pinta etiqueta.
+ * Rótulo legible de la categoría de una pieza para la cabecera del editor: el MISMO nombre que
+ * usan la Mesa de Noticias y el Detalle (`etiquetaLinea` sobre `pieza.categoria`), p. ej.
+ * "salud" → "Salud", "breaking" → "Última hora", "medio-ambiente" → "Medio ambiente". Devuelve
+ * cadena vacía cuando la pieza no tiene categoría (no se pinta etiqueta); `Pieza.categoria` está
+ * tipado `string` pero puede faltar en runtime (piezas legadas/parciales).
  */
-export function nombreCategoriaPlan(
-  categoria: string | null | undefined,
-  marca: string,
-  categorias: OpcionesPiezas["categorias"] | undefined,
-): string {
-  const id = (categoria ?? "").trim();
-  if (!id) return "";
-  const cats = categorias?.[marca] ?? [];
-  return cats.find((c) => c.id === id)?.nombre ?? "";
+export function etiquetaCategoriaPieza(categoria: string | null | undefined): string {
+  const slug = (categoria ?? "").trim();
+  if (!slug) return "";
+  return etiquetaLinea(slug);
 }
