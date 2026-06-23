@@ -508,7 +508,8 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     # Investigación: el proceso COMPLETO en orden (la frontera del ADR: Verificar la fuente es
     # Investigación), con las etapas sin prompt de la Prompts como `mecanica` (contexto).
     # Ids/títulos de las etapas compartidas casan 1:1 con el flujo de la página Investigación
-    # (verbos C: Recolectar · Fusionar · Clasificar · Priorizar · Verificar).
+    # (verbos C: Recolectar · Fusionar · Clasificar · Priorizar · Verificar). «Investigar evergreen»
+    # cuelga al final como rama paralela a Verificar (investiga una idea propia, no una fuente).
     assert [(e["tipo"], e["id"]) for e in inv["etapas"]] == [
         ("mecanica", "recolectar"),
         ("mecanica", "agrupar"),
@@ -519,6 +520,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
         ("prompt", "priorizar"),
         ("mecanica", "admitir"),
         ("prompt", "verificar"),
+        ("prompt", "investigar-evergreen"),
     ]
     por_id = {e["id"]: e for e in inv["etapas"]}
     assert por_id["verificar"]["doc_id"] == "prompt/verificar"  # prompt_base_de("verificar")
