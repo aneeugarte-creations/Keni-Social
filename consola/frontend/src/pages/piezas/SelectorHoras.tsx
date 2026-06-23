@@ -1,13 +1,13 @@
 /**
- * Editor de la LISTA de horas de publicación de una línea (en hora CDMX). Sustituye al texto
- * libre «08:45, 10:45…»: cada hora elegida es un chip con × y se añaden nuevas con dos selectores
- * HH : MM (Radix, no el reloj nativo del navegador). El valor sigue siendo la misma cadena CSV
- * que consume `GestionPlan` (`parsearHoras` + franjas), así que no cambia el contrato de datos.
+ * Editor de la LISTA de horas de publicación de una línea (en hora CDMX). En reposo muestra solo
+ * las horas elegidas como chips con × y un botón «+ hora»; al pulsarlo despliega dos selectores
+ * HH : MM (Radix, no el reloj nativo) para añadir, y se pliega de nuevo con «Listo». El valor es
+ * la misma cadena CSV que consume `GestionPlan` (`parsearHoras` + franjas): no cambia el contrato.
  *
  * El añadir trabaja en pasos de 5 minutos; las horas ya guardadas con minutos sueltos se siguen
  * mostrando como chips y se conservan al guardar (solo el alta nueva usa la rejilla de 5 min).
  */
-import { Plus, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ export function SelectorHoras({
   const horas = React.useMemo(() => leerHoras(value), [value]);
   const [hh, setHh] = React.useState("08");
   const [mm, setMm] = React.useState("45");
+  const [abierto, setAbierto] = React.useState(false);
 
   const anadirHora = () => {
     const nueva = `${hh}:${mm}`;
@@ -74,49 +75,70 @@ export function SelectorHoras({
           </button>
         </span>
       ))}
-      <div className="flex items-center gap-1">
-        <Select value={hh} onValueChange={setHh}>
-          <SelectTrigger
-            className="h-7 w-14 px-2 font-mono text-xs tabular-nums"
-            aria-label="Hora"
+      {abierto ? (
+        <div className="flex items-center gap-1">
+          <Select value={hh} onValueChange={setHh}>
+            <SelectTrigger
+              className="h-7 w-14 px-2 font-mono text-xs tabular-nums"
+              aria-label="Hora"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {HORAS.map((h) => (
+                <SelectItem key={h} value={h} className="font-mono text-xs tabular-nums">
+                  {h}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">:</span>
+          <Select value={mm} onValueChange={setMm}>
+            <SelectTrigger
+              className="h-7 w-14 px-2 font-mono text-xs tabular-nums"
+              aria-label="Minuto"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MINUTOS.map((m) => (
+                <SelectItem key={m} value={m} className="font-mono text-xs tabular-nums">
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={anadirHora}
+            aria-label="Añadir hora"
+            className="h-7 w-7"
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {HORAS.map((h) => (
-              <SelectItem key={h} value={h} className="font-mono text-xs tabular-nums">
-                {h}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-xs text-muted-foreground">:</span>
-        <Select value={mm} onValueChange={setMm}>
-          <SelectTrigger
-            className="h-7 w-14 px-2 font-mono text-xs tabular-nums"
-            aria-label="Minuto"
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setAbierto(false)}
+            aria-label="Listo"
+            className="h-7 w-7 text-muted-foreground"
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MINUTOS.map((m) => (
-              <SelectItem key={m} value={m} className="font-mono text-xs tabular-nums">
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
+            <Check className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <button
           type="button"
-          variant="outline"
-          size="icon"
-          onClick={anadirHora}
+          onClick={() => setAbierto(true)}
           aria-label="Añadir hora"
-          className="h-7 w-7"
+          className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+          <Plus className="h-3.5 w-3.5" /> hora
+        </button>
+      )}
     </div>
   );
 }

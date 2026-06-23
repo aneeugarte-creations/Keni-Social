@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
+import { cn } from "@/lib/utils";
 
 import { ORDEN_REDES, iconoRed, nombreRed } from "./meta";
 import { SelectorHoras } from "./SelectorHoras";
@@ -252,106 +253,132 @@ export function PanelPlan({ marca }: { marca: string }) {
 
   return (
     <div>
-      <p className="mb-3 text-xs text-muted-foreground">
-        Las líneas de esta marca: cuántos contenidos al día publica cada una y a qué horas (CDMX).
-        Añade o quita líneas aquí mismo. El hashtag de cada línea y sus palabras clave del
-        clasificador se editan en la pestaña «Keywords».
+      <p className="mb-5 text-xs text-muted-foreground">
+        Cuántos contenidos al día publica cada línea y a qué horas (CDMX). Añade o quita líneas
+        aquí mismo. El hashtag de cada línea y sus palabras clave del clasificador se editan en la
+        pestaña «Keywords».
       </p>
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : (
-        <div className="space-y-3">
-          {/* Redes que el plan espera por slot: el calendario las pinta como huecos por red. */}
-          <div className="space-y-2 border-b border-border/60 pb-3">
-            <Label className="text-sm">Redes del plan</Label>
-            <p className="text-xs text-muted-foreground">
-              Las redes que el plan espera cada día; el calendario marca un hueco por cada una.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {ORDEN_REDES.map((id) => {
-                const Icono = iconoRed(id);
-                const activa = redes.has(id);
-                return (
-                  <Button
-                    key={id}
-                    type="button"
-                    size="sm"
-                    variant={activa ? "default" : "outline"}
-                    aria-pressed={activa}
-                    onClick={() =>
-                      setRedes((prev) => {
-                        const sig = new Set(prev);
-                        if (sig.has(id)) sig.delete(id);
-                        else sig.add(id);
-                        return sig;
-                      })
-                    }
-                  >
-                    <Icono className="h-4 w-4" />
-                    {nombreRed(id)}
-                  </Button>
-                );
-              })}
-            </div>
+        <div className="max-w-[920px]">
+          {/* Redes que el plan espera por slot (el calendario las pinta como huecos por red).
+              Selección sutil: la activa lleva relleno gris suave; el resto, texto apagado. */}
+          <div className="mb-6 flex flex-wrap items-center gap-1">
+            <span className="mr-2 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              Redes
+            </span>
+            {ORDEN_REDES.map((id) => {
+              const Icono = iconoRed(id);
+              const activa = redes.has(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={activa}
+                  onClick={() =>
+                    setRedes((prev) => {
+                      const sig = new Set(prev);
+                      if (sig.has(id)) sig.delete(id);
+                      else sig.add(id);
+                      return sig;
+                    })
+                  }
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
+                    activa
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  <Icono className="h-3.5 w-3.5" />
+                  {nombreRed(id)}
+                </button>
+              );
+            })}
           </div>
-          {filasPlan.map((fila) => (
-            <div
-              key={fila.clave}
-              className="grid grid-cols-[12rem_5rem_minmax(0,1fr)_auto] items-center gap-3"
-            >
-              <Label className="text-sm">{fila.etiqueta}</Label>
-              <Input
-                type="number"
-                min={0}
-                value={filas[fila.clave]?.cupo ?? "0"}
-                onChange={(e) =>
-                  setFilas((prev) => ({
-                    ...prev,
-                    [fila.clave]: { ...(prev[fila.clave] ?? { cupo: "0", horas: "" }), cupo: e.target.value },
-                  }))
-                }
-                aria-label={`Publicaciones al día de ${fila.etiqueta}`}
-                className="tabular-nums"
-              />
-              {fila.conHorario ? (
-                <SelectorHoras
-                  value={filas[fila.clave]?.horas ?? ""}
-                  onChange={(csv) =>
+
+          {/* Ledger: cabecera + una fila por línea (Línea · Al día · Horas · ×). */}
+          <div className="grid grid-cols-[1fr_5rem_minmax(0,2fr)_2rem] items-center gap-4 border-b border-border px-1 pb-2">
+            <span className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              Línea
+            </span>
+            <span className="text-right text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              Al día
+            </span>
+            <span className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              Horas
+            </span>
+            <span className="sr-only">Acciones</span>
+          </div>
+
+          {filasPlan.map((fila) => {
+            const cupo = filas[fila.clave]?.cupo ?? "0";
+            return (
+              <div
+                key={fila.clave}
+                className="group grid grid-cols-[1fr_5rem_minmax(0,2fr)_2rem] items-center gap-4 border-b border-border px-1 py-2.5"
+              >
+                <Label className="text-sm font-medium">{fila.etiqueta}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cupo}
+                  onChange={(e) =>
                     setFilas((prev) => ({
                       ...prev,
-                      [fila.clave]: { ...(prev[fila.clave] ?? { cupo: "0", horas: "" }), horas: csv },
+                      [fila.clave]: {
+                        ...(prev[fila.clave] ?? { cupo: "0", horas: "" }),
+                        cupo: e.target.value,
+                      },
                     }))
                   }
-                  ariaLabel={`Horarios de ${fila.etiqueta} (hora CDMX)`}
+                  aria-label={`Publicaciones al día de ${fila.etiqueta}`}
+                  className={cn(
+                    "h-8 w-16 justify-self-end border-0 bg-transparent px-2 text-right tabular-nums shadow-none hover:bg-muted/60 focus-visible:ring-1",
+                    Number(cupo) > 0 ? "" : "text-muted-foreground",
+                  )}
                 />
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  Sin horario: sale al instante.
-                </span>
-              )}
-              {fila.esLinea ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  aria-label={`Quitar ${fila.etiqueta}`}
-                  disabled={quitarLinea.isPending}
-                  onClick={() => quitarLinea.mutate(fila.clave)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              ) : (
-                <span />
-              )}
-            </div>
-          ))}
+                {fila.conHorario ? (
+                  <SelectorHoras
+                    value={filas[fila.clave]?.horas ?? ""}
+                    onChange={(csv) =>
+                      setFilas((prev) => ({
+                        ...prev,
+                        [fila.clave]: {
+                          ...(prev[fila.clave] ?? { cupo: "0", horas: "" }),
+                          horas: csv,
+                        },
+                      }))
+                    }
+                    ariaLabel={`Horarios de ${fila.etiqueta} (hora CDMX)`}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">Sale al instante</span>
+                )}
+                {fila.esLinea ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                    aria-label={`Quitar ${fila.etiqueta}`}
+                    disabled={quitarLinea.isPending}
+                    onClick={() => quitarLinea.mutate(fila.clave)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <span />
+                )}
+              </div>
+            );
+          })}
 
           {/* Añadir una LÍNEA nueva a esta marca (la crea de verdad; aparece como fila). */}
-          <div className="grid grid-cols-[12rem_minmax(0,1fr)_auto] items-center gap-3 pt-1">
-            <Label className="text-sm text-muted-foreground">Añadir línea</Label>
+          <div className="grid grid-cols-[1fr_5rem_minmax(0,2fr)_2rem] items-center gap-4 px-1 py-2.5">
             <Input
               value={nuevaLinea}
               placeholder="Nombre de la línea"
@@ -365,9 +392,11 @@ export function PanelPlan({ marca }: { marca: string }) {
               }}
               aria-label="Nombre de la nueva línea"
             />
+            <span />
             <Button
               type="button"
               variant="outline"
+              className="w-fit text-muted-foreground"
               disabled={!nuevaLinea.trim() || crearLinea.isPending}
               onClick={() => crearLinea.mutate(nuevaLinea)}
             >
@@ -378,13 +407,20 @@ export function PanelPlan({ marca }: { marca: string }) {
               )}
               Añadir
             </Button>
+            <span />
           </div>
 
-          <div className="flex items-center justify-between border-t border-border/60 pt-3">
+          <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
             <span className="text-sm text-muted-foreground">
-              Total: <span className="font-medium tabular-nums">{total}</span> contenidos/día
+              Total: <span className="font-medium tabular-nums text-foreground">{total}</span>{" "}
+              contenidos/día
             </span>
-            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => guardar.mutate()}
+              disabled={guardar.isPending}
+            >
               {guardar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
