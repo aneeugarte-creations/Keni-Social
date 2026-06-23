@@ -33,6 +33,24 @@ def _cli_como(rol: str) -> TestClient:
     return c
 
 
+def _cli_superadmin(usuario: str = "sa", marcas: list[str] | None = None) -> TestClient:
+    """Cliente con sesión de SUPERADMIN (gestiona la identidad de las marcas)."""
+    auth.crear_usuario(usuario, CLAVE, "admin", superadmin=True, marcas=marcas)
+    c = _cli()
+    r = c.post("/api/auth/login", json={"usuario": usuario, "password": CLAVE}, headers=_ORIGIN)
+    assert r.status_code == 200
+    return c
+
+
+def _cli_admin_de(usuario: str, marcas: list[str]) -> TestClient:
+    """Cliente con sesión de ADMIN (no superadmin) asignado a `marcas`."""
+    auth.crear_usuario(usuario, CLAVE, "admin", marcas=marcas)
+    c = _cli()
+    r = c.post("/api/auth/login", json={"usuario": usuario, "password": CLAVE}, headers=_ORIGIN)
+    assert r.status_code == 200
+    return c
+
+
 def _mock_postproxy(monkeypatch, *, api_key="PP_KEY", grupo="g1"):
     monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: api_key)
     monkeypatch.setattr(conexiones, "_config_existente", lambda: {})
@@ -132,13 +150,59 @@ def test_catalogo_editor_403(entorno):
     assert c.post("/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN).status_code == 403
 
 
+def test_catalogo_crear_exige_superadmin(entorno, monkeypatch, tmp_path):
+    """Crear una marca (identidad) es config de app: un admin normal recibe 403, el superadmin 201."""
+    from keni_shared import marcas as km
+
+    monkeypatch.setenv("KENI_MARCAS_CONFIG", str(tmp_path / "marcas.toml"))
+    km.recargar()
+    try:
+        admin = _cli_admin_de("ad", ["unotv"])
+        assert admin.post(
+            "/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN
+        ).status_code == 403
+        sa = _cli_superadmin()
+        assert sa.post(
+            "/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN
+        ).status_code == 201
+    finally:
+        km.recargar()
+
+
+def test_catalogo_likes_lo_edita_el_admin_de_la_marca(entorno, monkeypatch, tmp_path):
+    """`likes_aprobacion` lo ajusta el admin de ESA marca; la identidad NO (eso es superadmin)."""
+    from keni_shared import marcas as km
+
+    monkeypatch.setenv("KENI_MARCAS_CONFIG", str(tmp_path / "marcas.toml"))
+    km.recargar()
+    try:
+        admin = _cli_admin_de("ad", ["unotv"])
+        # Ajusta los likes de SU marca: OK, y el catálogo vivo lo refleja.
+        r = admin.put(
+            "/api/marcas/catalogo/unotv", json={"likes_aprobacion": 3}, headers=_ORIGIN
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["marca"]["likes_aprobacion"] == 3
+        assert km.likes_aprobacion_de("unotv") == 3
+        # Tocar la IDENTIDAD (etiqueta) -> 403 (no es superadmin).
+        assert admin.put(
+            "/api/marcas/catalogo/unotv", json={"etiqueta": "Otra"}, headers=_ORIGIN
+        ).status_code == 403
+        # Los likes de OTRA marca (no asignada) -> 403.
+        assert admin.put(
+            "/api/marcas/catalogo/claro-sports", json={"likes_aprobacion": 4}, headers=_ORIGIN
+        ).status_code == 403
+    finally:
+        km.recargar()
+
+
 def test_catalogo_crud(entorno, monkeypatch, tmp_path):
     from keni_shared import marcas as km
 
     monkeypatch.setenv("KENI_MARCAS_CONFIG", str(tmp_path / "marcas.toml"))
     km.recargar()
     try:
-        c = _cli_como("admin")
+        c = _cli_superadmin()
         # GET inicial: la semilla (amx) mientras no haya overlay.
         r = c.get("/api/marcas/catalogo")
         assert r.status_code == 200
@@ -155,6 +219,8 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
             "tipo": "noticias",
             # Nombre del panel de investigación; "Noticias" por defecto.
             "etiqueta_investigacion": "Noticias",
+            # Umbral de likes de aprobación; 2 por defecto.
+            "likes_aprobacion": 2,
         }
         # El catálogo (vivo) ya la incluye.
         assert km.es_marca("nueva-marca")
@@ -185,6 +251,13 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
         r = c.put("/api/marcas/catalogo/nueva-marca", json={"etiqueta": "Otra Vez"}, headers=_ORIGIN)
         assert r.json()["marca"]["etiqueta_investigacion"] == "Curiosidades"
 
+        # Likes de aprobación: se fijan y se PRESERVAN en un round-trip que no los toca.
+        r = c.put("/api/marcas/catalogo/nueva-marca", json={"likes_aprobacion": 3}, headers=_ORIGIN)
+        assert r.status_code == 200 and r.json()["marca"]["likes_aprobacion"] == 3
+        assert km.likes_aprobacion_de("nueva-marca") == 3
+        r = c.put("/api/marcas/catalogo/nueva-marca", json={"etiqueta": "Otra Más"}, headers=_ORIGIN)
+        assert r.json()["marca"]["likes_aprobacion"] == 3
+
         # Borrar.
         assert c.delete("/api/marcas/catalogo/nueva-marca", headers=_ORIGIN).status_code == 200
         assert not km.es_marca("nueva-marca")
@@ -201,7 +274,7 @@ def test_catalogo_sin_data_dir_no_persiste(entorno, monkeypatch):
     monkeypatch.delenv("KENI_DATA_DIR", raising=False)
     km.recargar()
     try:
-        c = _cli_como("admin")
+        c = _cli_superadmin()
         r = c.post("/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN)
         assert r.status_code == 503
     finally:

@@ -79,8 +79,7 @@ export function ControlContexto() {
     puedeTodas,
     marcasParaSwitch,
     nombreActiva,
-    enMarcaPrimaria,
-    marcaPrimaria,
+    fueraDeCasa,
     cambiarMarca,
     volverAPrimaria,
   } = useMarcaActiva();
@@ -117,7 +116,6 @@ export function ControlContexto() {
   const fuenteActiva = marcaActiva ? fuentesMarca.get(marcaActiva) : undefined;
 
   const usaFiltros = rutaUsaFiltrosPublicacion(pathname);
-  const fueraDeCasa = !enMarcaPrimaria && marcaPrimaria !== null;
   const filtrosActivos = usaFiltros && (red !== FILTRO_TODOS || linea !== FILTRO_TODOS);
   const etiquetaMarca = marcaActiva ? (nombreActiva ?? marcaActiva) : "Todas las marcas";
 

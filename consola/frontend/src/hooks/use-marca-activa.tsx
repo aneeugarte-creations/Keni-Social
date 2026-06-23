@@ -42,7 +42,9 @@ function guardarPersistida(usuarioId: string, marca: string | null): void {
 export function MarcaActivaProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useSesion();
   const usuarioId = usuario?.id ?? "";
-  const esAdmin = usuario?.rol === "admin";
+  // Solo el SUPERADMIN (el "admin de la app") ve la vista agregada "Todas". Un admin normal es
+  // autoridad sobre SUS marcas asignadas, no sobre todas.
+  const esSuperadmin = usuario?.es_superadmin === true;
   // Marcas del perfil (organigrama del cliente), en id canónico. Vacío = no cubre ninguna.
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
   const marcaPrimaria = marcasUsuario[0] ?? null;
@@ -59,14 +61,14 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     [catalogoQuery.data],
   );
 
-  /** ¿`marca` es una elección permitida para este usuario? (admin = cualquiera). */
+  /** ¿`marca` es una elección permitida? Foco, no restricción: cualquiera enfoca cualquier
+   *  marca; solo "Todas" (la vista agregada, `null`) queda reservada al superadmin. */
   const permitida = React.useCallback(
     (marca: string | null): boolean => {
-      if (marca === null) return esAdmin; // "Todas" solo para admin.
-      if (esAdmin) return true;
-      return marcasUsuario.includes(marca);
+      if (marca === null) return esSuperadmin; // "Todas" solo para superadmin.
+      return true; // cualquier marca concreta es enfocable por cualquiera.
     },
-    [esAdmin, marcasUsuario],
+    [esSuperadmin],
   );
 
   // Estado inicial: preferencia persistida válida → marca de casa → "Todas".
@@ -105,14 +107,14 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     cambiarMarca(marcaPrimaria);
   }, [cambiarMarca, marcaPrimaria]);
 
-  // Opciones del switch: admin → catálogo completo; editor → solo sus marcas.
-  // Si el catálogo aún no cargó, se arman desde los ids del perfil (nombre = id)
+  // Opciones del switch: el catálogo COMPLETO para todos (foco, no restricción: cualquiera puede
+  // enfocar cualquier marca; lo que separa a admin/editor de superadmin es la vista "Todas", no
+  // qué marcas ven). Si el catálogo aún no cargó, se arman desde los ids del perfil (nombre = id)
   // para no esconder el switch durante la carga.
   const marcasParaSwitch = React.useMemo<MarcaDisponible[]>(() => {
-    if (esAdmin) return catalogo;
-    if (catalogo.length) return catalogo.filter((m) => marcasUsuario.includes(m.id));
+    if (catalogo.length) return catalogo;
     return marcasUsuario.map((id) => ({ id, nombre: id }));
-  }, [esAdmin, catalogo, marcasUsuario]);
+  }, [catalogo, marcasUsuario]);
 
   const nombreActiva = React.useMemo<string | null>(() => {
     if (marcaActiva === null) return null;
@@ -134,13 +136,21 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
 
   const valor = React.useMemo<ValorMarcaActiva>(() => {
     const enMarcaPrimaria = marcaActiva === (marcaPrimaria ?? null);
-    const esMultiMarca = marcasParaSwitch.length > 1 || (esAdmin && marcasParaSwitch.length >= 1);
+    // "Fuera de casa" SOLO si enfocas una marca que NO es tuya (no está entre tus asignadas):
+    // un admin con varias marcas asignadas que cambia entre ellas sigue "en casa" (todas son
+    // suyas) y no ve el aviso "Volver a tu marca". "Todas" (null) tampoco es fuera de casa.
+    const fueraDeCasa =
+      marcaActiva !== null &&
+      marcaPrimaria !== null &&
+      !marcasUsuario.includes(marcaActiva);
+    const esMultiMarca = marcasParaSwitch.length > 1 || esSuperadmin;
     return {
       marcaActiva,
       marcaPrimaria,
       enMarcaPrimaria,
+      fueraDeCasa,
       esMultiMarca,
-      puedeTodas: esAdmin,
+      puedeTodas: esSuperadmin,
       marcaActivaEsNoticias,
       etiquetaInvestigacion,
       marcasParaSwitch,
@@ -151,8 +161,9 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
   }, [
     marcaActiva,
     marcaPrimaria,
+    marcasUsuario,
     marcasParaSwitch,
-    esAdmin,
+    esSuperadmin,
     marcaActivaEsNoticias,
     etiquetaInvestigacion,
     nombreActiva,

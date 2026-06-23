@@ -29,6 +29,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from keni_shared import marcas as _km
+
 from .. import config, db, permisos, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion, licencia_imagen
@@ -319,8 +321,9 @@ def _enviar_a_revision(pieza_id: str) -> tuple[int, dict]:
     # borrador->en_revision y llega aqui); el `solo_si_ausente` queda para otros llamantes.
     # Cadena por defecto del feed: los dos OK humanos y, si `KENI_CRITICA_IA` esta on, el nivel
     # automatico "Crítica IA" AL FINAL (lo vota el critico con vision tras cerrar los humanos).
-    etiquetas = colaboracion.cadena_simple()
-    if config.etapa_activa(config.ENV_CRITICA_IA, str(actualizada.get("marca") or "")):
+    marca = str(actualizada.get("marca") or "")
+    etiquetas = colaboracion.cadena_para_marca(_km.likes_aprobacion_de(marca))
+    if config.etapa_activa(config.ENV_CRITICA_IA, marca):
         etiquetas = [*etiquetas, colaboracion.ETIQUETA_CRITICA_IA]
     montar_cadena_aprobacion(pieza_id, plat or {}, etiquetas, con_cargos=False)
     return 200, {"pieza": pieza_a_dict(actualizada)}
@@ -444,19 +447,18 @@ async def deshacer(request: Request) -> Response:
 
 
 def _puede_forzar(request: Request) -> bool:
-    """¿Puede esta sesión FORZAR la aprobación (saltarse la cadena)? Admin o coordinador.
+    """¿Puede esta sesión FORZAR la aprobación (saltarse los OK humanos)? Admin/superadmin o flag.
 
     El token de mantenimiento (sin sesión) cuenta como admin. Un usuario logueado puede forzar si
-    su rol es admin o si su CARGO del organigrama es de coordinación (`coordinador`,
-    `coordinador_redes`, `coordinador_youtube`…); todos empiezan por "coordinador".
+    su rol es admin, si es superadmin, o si tiene el permiso explícito `puede_coordinar`. El CARGO
+    del organigrama NO da este poder: los cargos son puramente visuales.
     """
     usuario = getattr(request.state, "usuario", None)
     if not isinstance(usuario, dict):
         return True  # token de mantenimiento = admin
-    if usuario.get("rol") == ROL_ADMIN:
+    if usuario.get("rol") == ROL_ADMIN or usuario.get("superadmin"):
         return True
-    cargo = str(usuario.get("cargo") or "")
-    return cargo.startswith("coordinador") or bool(usuario.get("puede_coordinar"))
+    return bool(usuario.get("puede_coordinar"))
 
 
 def _forzar(pieza_id: str, autor: dict[str, str]) -> tuple[int, dict]:
@@ -645,13 +647,16 @@ def _programar(
         return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
 
     # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
-    # cadena (def 2, "cuatro ojos" reales). El gate SOLO aplica si la pieza tiene una CADENA
-    # de aprobacion configurada: una pieza marcada `aprobado` SIN cadena (atajo admin/legado)
-    # ya paso por su propio control y no se le exige el minimo (no hay nada que contar). Una
-    # cadena simple de 1 nivel SI queda sujeta al minimo (debe acumular las firmas exigidas).
-    minimo = config.min_aprobaciones()
+    # cadena (los likes que exige LA MARCA, def 2 = "cuatro ojos" reales). El gate SOLO aplica
+    # si la pieza tiene una CADENA configurada: una pieza marcada `aprobado` SIN cadena (atajo
+    # admin/legado) ya paso por su propio control y no se le exige el minimo (no hay nada que
+    # contar). Una cadena simple de 1 nivel SI queda sujeta al minimo de su marca.
+    minimo = _km.likes_aprobacion_de(str(pub.get("marca") or ""))
     cadena = repos.listar_aprobaciones(pieza_id)
     if cadena:
+        # Acota al techo de la cadena ya montada (no exigir más OK que niveles humanos tiene):
+        # subir el umbral de la marca no deja en deadlock las piezas con una cadena más corta.
+        minimo = min(minimo, colaboracion.niveles_humanos(cadena))
         cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, minimo)
         if not cumple:
             return 409, {"error": f"Faltan aprobaciones: {aprobados} de {minimo}."}

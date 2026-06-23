@@ -5,8 +5,9 @@ que junta los 2 likes (los OK humanos); en ese momento, en vez de esperar una pr
 manual, se ENCOLA al próximo hueco libre de sus franjas (la misma lógica del botón "encolar":
 `api.piezas.calcular_hueco_para`), respetando los gates de la programación manual:
 
-  - Gate A (gobernanza): la pieza debe tener su cadena de likes CUMPLIENDO el mínimo
-    (`config.min_aprobaciones`, def 2 = "cuatro ojos"). Sin cadena o sin los likes -> no programa.
+  - Gate A (gobernanza): la pieza debe tener su cadena de likes CUMPLIENDO el mínimo que exige
+    SU MARCA (`marcas.likes_aprobacion_de`, def 2 = "cuatro ojos"). Sin cadena o sin los likes
+    acumulados -> no programa.
   - Gate B (verificación): cero comentarios sin resolver (una objeción pendiente bloquea programar;
     incluye los de la Crítica IA).
   - Debe existir una franja aplicable a su (marca, red). Si no hay hueco, la pieza se queda
@@ -25,6 +26,8 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+
+from keni_shared import marcas as _km
 
 from . import config, repos
 from .dominio import colaboracion, licencia_imagen
@@ -52,12 +55,18 @@ def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
     if licencia_imagen.es_stock_sin_autorizar(pub):
         return None
 
-    # Gate A (gobernanza): la pieza debe tener su cadena de likes cumpliendo el mínimo (los 2 OK).
-    # Sin cadena (no se mandó a revisión por el flujo) o sin los likes acumulados -> no programa.
+    # Gate A (gobernanza): la pieza debe tener su cadena de likes cumpliendo el mínimo que exige
+    # SU MARCA (def 2 = los dos OK). Sin cadena (no se mandó a revisión por el flujo) o sin los
+    # likes acumulados -> no programa.
     cadena = repos.listar_aprobaciones(pieza_id)
     if not cadena:
         return None
-    cumple, _ = colaboracion.cumple_minimo_aprobaciones(cadena, config.min_aprobaciones())
+    # Acota al techo de la cadena ya montada (no exigir más OK que niveles humanos tiene).
+    minimo = min(
+        _km.likes_aprobacion_de(str(pub.get("marca") or "")),
+        colaboracion.niveles_humanos(cadena),
+    )
+    cumple, _ = colaboracion.cumple_minimo_aprobaciones(cadena, minimo)
     if not cumple:
         return None
 

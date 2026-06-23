@@ -40,7 +40,12 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .cliente import cargar_cliente, normalizar_etiqueta_investigacion, normalizar_tipo
+from .cliente import (
+    cargar_cliente,
+    normalizar_etiqueta_investigacion,
+    normalizar_likes_aprobacion,
+    normalizar_tipo,
+)
 
 
 @dataclass(frozen=True)
@@ -56,6 +61,9 @@ class Marca:
     # Nombre del panel de investigación que ve el equipo para esta marca (p.ej.
     # "Curiosidades"). Solo aplica a marcas 'noticias'; por defecto "Noticias".
     etiqueta_investigacion: str = "Noticias"
+    # Nº de OK ("likes") de personas distintas que una pieza de esta marca necesita para
+    # aprobarse y programarse (umbral de "cuatro ojos" por marca; def 2, min 1).
+    likes_aprobacion: int = 2
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +103,7 @@ def _semilla() -> tuple[Marca, ...]:
             id_metricas=m.id_metricas,
             tipo=m.tipo,
             etiqueta_investigacion=m.etiqueta_investigacion,
+            likes_aprobacion=m.likes_aprobacion,
         )
         for m in cargar_cliente().marcas
     )
@@ -139,6 +148,7 @@ def _parsear_overlay(ruta: Path) -> tuple[Marca, ...]:
                 etiqueta_investigacion=normalizar_etiqueta_investigacion(
                     m.get("etiqueta_investigacion")
                 ),
+                likes_aprobacion=normalizar_likes_aprobacion(m.get("likes_aprobacion")),
             )
         )
     return tuple(marcas) if marcas else _semilla()
@@ -242,6 +252,17 @@ def es_noticias(marca_id: str) -> bool:
     """True si `marca_id` es una marca de NOTICIAS (existe y `tipo='noticias'`)."""
     marca = _estado().por_id.get(marca_id)
     return marca is not None and marca.tipo == "noticias"
+
+
+def likes_aprobacion_de(marca_id: str) -> int:
+    """Nº de OK ("likes") que una pieza de esta marca necesita para aprobarse (def 2).
+
+    Es el umbral de "cuatro ojos" POR MARCA: gobierna cuántos niveles humanos lleva la cadena
+    del feed y el mínimo de aprobaciones que exige el gate de programación. Cae a 2 si la marca
+    no se conoce (defecto histórico).
+    """
+    marca = _estado().por_id.get(marca_id)
+    return marca.likes_aprobacion if marca is not None else 2
 
 
 def catalogo() -> list[Marca]:

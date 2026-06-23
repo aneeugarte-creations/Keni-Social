@@ -25,7 +25,11 @@ from starlette.routing import Route
 
 from keni_metricas.fuentes import postproxy as _pp_cliente
 from keni_shared import marcas as _km
-from keni_shared.cliente import normalizar_etiqueta_investigacion, normalizar_tipo
+from keni_shared.cliente import (
+    normalizar_etiqueta_investigacion,
+    normalizar_likes_aprobacion,
+    normalizar_tipo,
+)
 from keni_shared.io_atomico import escribir_atomico
 
 from .. import permisos
@@ -137,6 +141,8 @@ def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marc
         "etiqueta_investigacion": (
             marca_cat.etiqueta_investigacion if marca_cat is not None else "Noticias"
         ),
+        # Nº de OK ("likes") que una pieza de esta marca necesita para aprobarse (def 2).
+        "likes_aprobacion": marca_cat.likes_aprobacion if marca_cat is not None else 2,
         "canal_publicacion": canal,
         "postproxy": {"conectado": bool(grupo), "profile_group_id": grupo},
         "redes": redes,
@@ -148,11 +154,13 @@ def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marc
     }
 
 
-def _construir_dashboard() -> dict:
+def _construir_dashboard(foco: set[str] | None = None) -> dict:
     """Arma la vista de Marcas: por marca, sus redes (estado + números) y el sumatorio.
 
-    Una llamada a Postproxy por cuenta conectada (el handler lo corre en threadpool). Cada
-    proveedor degrada por separado a null/desconectado si falla; nunca casca."""
+    `foco` (ids canónicos) acota las marcas mostradas: un admin solo ve SUS marcas asignadas;
+    `None` (superadmin / token) las muestra todas. Una llamada a Postproxy por cuenta conectada
+    (el handler lo corre en threadpool). Cada proveedor degrada por separado a null/desconectado
+    si falla; nunca casca."""
     from keni_shared import marcas as _marcas_catalogo
 
     estado_pp = _conexiones.estado_postproxy()
@@ -167,6 +175,8 @@ def _construir_dashboard() -> dict:
     for mid, etiqueta in _marcas_catalogo.opciones_metricas():
         m_obj = _marcas_catalogo.marca_por_id_metricas(mid)
         id_canonico = m_obj.id if m_obj is not None else mid
+        if foco is not None and id_canonico not in foco:
+            continue  # admin: solo sus marcas asignadas (superadmin/token ve todas).
         fila = _fila_marca(mid, id_canonico, etiqueta, api_key, pp_por_marca.get(mid, {}))
         filas.append(fila)
         t = fila["total"]
@@ -199,8 +209,9 @@ async def dashboard(request: Request) -> Response:
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    foco = permisos.marcas_preferentes(request)
     try:
-        cuerpo = await run_in_threadpool(_construir_dashboard)
+        cuerpo = await run_in_threadpool(_construir_dashboard, foco)
     except Exception:  # noqa: BLE001 -- última red de seguridad: nunca un 500 crudo
         return JSONResponse(
             {"error": "No se pudo construir el panel de marcas."}, status_code=500
@@ -221,6 +232,10 @@ async def dashboard(request: Request) -> Response:
 import re as _re
 
 _MSG_CRUD_ADMIN = "Solo un administrador puede gestionar las marcas."
+# La IDENTIDAD de una marca (crear/borrar/renombrar/id_metricas/tipo) es config de app: solo el
+# superadmin. El admin de la marca solo ajusta su umbral de likes (ver `catalogo_editar`).
+_MSG_CRUD_SUPERADMIN = "Solo un superadmin puede crear, borrar o renombrar marcas."
+_MSG_LIKES_ADMIN = "Solo un administrador de esta marca puede ajustar sus likes de aprobación."
 _RE_ID = _re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _RE_ID_METRICAS = _re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
 # Sin acentos en los ids: traducción mínima para auto-derivar el slug desde la etiqueta.
@@ -243,6 +258,7 @@ def _catalogo_actual() -> list[dict]:
             "id_metricas": m.id_metricas,
             "tipo": m.tipo,
             "etiqueta_investigacion": m.etiqueta_investigacion,
+            "likes_aprobacion": m.likes_aprobacion,
         }
         for m in _km.catalogo()
     ]
@@ -267,6 +283,7 @@ def _serializar_marcas(marcas: list[dict]) -> str:
             f'tipo = "{esc(normalizar_tipo(m.get("tipo")))}"\n'
             f'etiqueta_investigacion = '
             f'"{esc(normalizar_etiqueta_investigacion(m.get("etiqueta_investigacion")))}"\n'
+            f'likes_aprobacion = {normalizar_likes_aprobacion(m.get("likes_aprobacion"))}\n'
         )
     return cabecera + "\n" + "\n".join(bloques)
 
@@ -300,8 +317,8 @@ async def catalogo_crear(request: Request) -> Response:
     `id` se auto-deriva de la etiqueta (slug-guion) si no viene; `id_metricas` del id
     (guion_bajo) si no viene. Valida formato y unicidad de `id` e `id_metricas`.
     """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    if not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_SUPERADMIN)
     datos = await leer_json(request)
     etiqueta = datos.get("etiqueta")
     if not isinstance(etiqueta, str) or not etiqueta.strip():
@@ -330,25 +347,34 @@ async def catalogo_crear(request: Request) -> Response:
         "id_metricas": id_metricas,
         "tipo": normalizar_tipo(datos.get("tipo")),
         "etiqueta_investigacion": normalizar_etiqueta_investigacion(datos.get("etiqueta_investigacion")),
+        "likes_aprobacion": normalizar_likes_aprobacion(datos.get("likes_aprobacion")),
     }
     if (err := _persistir([*catalogo, nueva])) is not None:
         return err
     return JSONResponse({"marca": nueva, "mensaje": f"Marca {etiqueta!r} creada."}, status_code=201)
 
 
-async def catalogo_editar(request: Request) -> Response:
-    """PUT /api/marcas/catalogo/{id}: edita `etiqueta` y/o `id_metricas` de una marca. SOLO ADMIN.
+_CAMPOS_ESTRUCTURALES = ("etiqueta", "id_metricas", "tipo", "etiqueta_investigacion")
 
-    El `id` canónico NO se cambia (es la clave estable que referencia el contenido).
+
+async def catalogo_editar(request: Request) -> Response:
+    """PUT /api/marcas/catalogo/{id}: edita campos de una marca. El `id` canónico NO se cambia.
+
+    Permisos por campo: la IDENTIDAD (`etiqueta`/`id_metricas`/`tipo`/`etiqueta_investigacion`)
+    solo la toca un SUPERADMIN; `likes_aprobacion` lo ajusta el admin de ESTA marca (o un
+    superadmin), porque el admin es autoridad sobre el flujo de aprobación de sus marcas.
     """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
     mid = request.path_params["id"]
     catalogo = _catalogo_actual()
     actual = next((m for m in catalogo if m["id"] == mid), None)
     if actual is None:
         return JSONResponse({"error": "Marca desconocida."}, status_code=404)
     datos = await leer_json(request)
+
+    if any(c in datos for c in _CAMPOS_ESTRUCTURALES) and not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_SUPERADMIN)
+    if "likes_aprobacion" in datos and not permisos.es_admin_de_marca(request, mid):
+        return permisos.rechazo_solo_admin(_MSG_LIKES_ADMIN)
 
     etiqueta = actual["etiqueta"]
     if "etiqueta" in datos:
@@ -371,12 +397,18 @@ async def catalogo_editar(request: Request) -> Response:
         if "etiqueta_investigacion" in datos
         else actual.get("etiqueta_investigacion", "Noticias")
     )
+    likes_aprobacion = (
+        normalizar_likes_aprobacion(datos["likes_aprobacion"])
+        if "likes_aprobacion" in datos
+        else actual.get("likes_aprobacion", 2)
+    )
     actualizado = {
         "id": mid,
         "etiqueta": etiqueta,
         "id_metricas": id_metricas,
         "tipo": tipo,
         "etiqueta_investigacion": etiqueta_investigacion,
+        "likes_aprobacion": likes_aprobacion,
     }
     nuevo = [actualizado if m["id"] == mid else m for m in catalogo]
     if (err := _persistir(nuevo)) is not None:
@@ -390,8 +422,8 @@ async def catalogo_borrar(request: Request) -> Response:
     No se permite borrar la ÚLTIMA marca (el catálogo no puede quedar vacío). No toca las
     credenciales de la marca (quedan inertes en el config; conéctala de nuevo si la recreas).
     """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    if not permisos.es_superadmin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_SUPERADMIN)
     mid = request.path_params["id"]
     catalogo = _catalogo_actual()
     if not any(m["id"] == mid for m in catalogo):

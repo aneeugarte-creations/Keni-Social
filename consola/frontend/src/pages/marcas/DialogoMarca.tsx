@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { TipoMarca } from "@/types";
 
@@ -28,6 +29,8 @@ export interface MarcaEditable {
   tipo: TipoMarca;
   /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
   etiqueta_investigacion: string;
+  /** Nº de OK ("likes") de personas distintas que una pieza de esta marca necesita para aprobarse (def 2). */
+  likes_aprobacion: number;
 }
 
 function invalidarMarcas(qc: ReturnType<typeof useQueryClient>) {
@@ -53,12 +56,17 @@ export function DialogoMarca({
   onCerrar: () => void;
 }) {
   const qc = useQueryClient();
+  const { usuario } = useSesion();
+  // La IDENTIDAD de la marca (crear/borrar/renombrar/id_metricas/tipo/panel) es config de app:
+  // solo el superadmin. Un admin de la marca solo ajusta su umbral de likes de aprobación.
+  const esSuperadmin = usuario?.es_superadmin === true;
   const esEditar = inicial !== null;
   const [etiqueta, setEtiqueta] = React.useState("");
   const [id, setId] = React.useState("");
   const [idMetricas, setIdMetricas] = React.useState("");
   const [tipo, setTipo] = React.useState<TipoMarca>("noticias");
   const [etiquetaInvestigacion, setEtiquetaInvestigacion] = React.useState("Noticias");
+  const [likes, setLikes] = React.useState(2);
 
   React.useEffect(() => {
     if (abierto) {
@@ -67,6 +75,7 @@ export function DialogoMarca({
       setIdMetricas(inicial?.id_metricas ?? "");
       setTipo(inicial?.tipo ?? "noticias");
       setEtiquetaInvestigacion(inicial?.etiqueta_investigacion || "Noticias");
+      setLikes(inicial?.likes_aprobacion ?? 2);
     }
   }, [abierto, inicial]);
 
@@ -78,6 +87,7 @@ export function DialogoMarca({
         id_metricas: idMetricas.trim() || undefined,
         tipo,
         etiqueta_investigacion: etiquetaInvestigacion.trim() || "Noticias",
+        likes_aprobacion: likes,
       }),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca creada.");
@@ -88,13 +98,21 @@ export function DialogoMarca({
   });
 
   const editar = useMutation({
+    // El superadmin edita la identidad + los likes; un admin de la marca solo manda los likes
+    // (el backend rechaza los campos de identidad si no es superadmin).
     mutationFn: () =>
-      api.editarMarca(inicial!.id, {
-        etiqueta,
-        id_metricas: idMetricas.trim(),
-        tipo,
-        etiqueta_investigacion: etiquetaInvestigacion.trim() || "Noticias",
-      }),
+      api.editarMarca(
+        inicial!.id,
+        esSuperadmin
+          ? {
+              etiqueta,
+              id_metricas: idMetricas.trim(),
+              tipo,
+              etiqueta_investigacion: etiquetaInvestigacion.trim() || "Noticias",
+              likes_aprobacion: likes,
+            }
+          : { likes_aprobacion: likes },
+      ),
     onSuccess: (r) => {
       toast.success(r.mensaje || "Marca actualizada.");
       invalidarMarcas(qc);
@@ -125,6 +143,8 @@ export function DialogoMarca({
   };
 
   const ocupado = crear.isPending || editar.isPending || borrar.isPending;
+  // Admin (no superadmin) editando: solo puede tocar los likes; la identidad queda de solo lectura.
+  const soloLikes = esEditar && !esSuperadmin;
   const valido = etiqueta.trim() !== "";
 
   return (
@@ -133,9 +153,11 @@ export function DialogoMarca({
         <DialogHeader>
           <DialogTitle>{esEditar ? "Editar marca" : "Añadir marca"}</DialogTitle>
           <DialogDescription>
-            {esEditar
-              ? "Cambia el nombre o el id de métricas. El id de la marca no se cambia."
-              : "El id y el id de métricas se generan del nombre si los dejas vacíos."}
+            {soloLikes
+              ? "Ajusta cuántos likes necesita una pieza de esta marca para aprobarse. El resto de la identidad lo gestiona un superadmin."
+              : esEditar
+                ? "Cambia el nombre, el id de métricas o los likes de aprobación. El id de la marca no se cambia."
+                : "El id y el id de métricas se generan del nombre si los dejas vacíos."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -146,7 +168,7 @@ export function DialogoMarca({
               value={etiqueta}
               onChange={(e) => setEtiqueta(e.target.value)}
               placeholder="Ej. Claro Sports"
-              disabled={ocupado}
+              disabled={ocupado || soloLikes}
               autoFocus
             />
           </div>
@@ -174,7 +196,7 @@ export function DialogoMarca({
               value={idMetricas}
               onChange={(e) => setIdMetricas(e.target.value)}
               placeholder="se genera del id (claro_sports)"
-              disabled={ocupado}
+              disabled={ocupado || soloLikes}
             />
           </div>
           <div className="space-y-1">
@@ -192,7 +214,7 @@ export function DialogoMarca({
                   variant={tipo === opt.id ? "default" : "outline"}
                   className="flex-1"
                   onClick={() => setTipo(opt.id)}
-                  disabled={ocupado}
+                  disabled={ocupado || soloLikes}
                 >
                   {opt.etiqueta}
                 </Button>
@@ -212,7 +234,7 @@ export function DialogoMarca({
                 value={etiquetaInvestigacion}
                 onChange={(e) => setEtiquetaInvestigacion(e.target.value)}
                 placeholder="Noticias"
-                disabled={ocupado}
+                disabled={ocupado || soloLikes}
               />
               <p className="text-xs text-muted-foreground">
                 Cómo se llama su panel de investigación (p.ej. “Curiosidades”, “Novedades”). Por
@@ -220,12 +242,27 @@ export function DialogoMarca({
               </p>
             </div>
           )}
+          <div className="space-y-1">
+            <Label htmlFor="marca-likes">Likes para aprobar</Label>
+            <Input
+              id="marca-likes"
+              type="number"
+              min={1}
+              value={likes}
+              onChange={(e) => setLikes(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+              disabled={ocupado}
+            />
+            <p className="text-xs text-muted-foreground">
+              Cuántos OK de personas distintas necesita una pieza de esta marca antes de
+              programarse (cuatro ojos). Por defecto 2.
+            </p>
+          </div>
         </div>
 
         {/* Pie: en edición, «Borrar marca» a la izquierda (la confirmación va por `confirmar()`). */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <div>
-            {esEditar && (
+            {esEditar && esSuperadmin && (
               <Button
                 variant="ghost"
                 className="text-destructive hover:text-destructive"

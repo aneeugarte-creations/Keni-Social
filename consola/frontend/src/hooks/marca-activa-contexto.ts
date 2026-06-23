@@ -16,11 +16,11 @@ import type { MarcaDisponible } from "@/types";
  *     usuario, pero el estado "estás fuera de tu marca" queda siempre visible.
  *
  * Quién puede cambiar (`marcasParaSwitch`):
- *   - Editor con 1 marca → no hay switch (queda fijado a su marca).
- *   - Editor con varias marcas → cambia entre SUS marcas (sin opción "Todas":
- *     "Todas" mezcla, y el principio es no mezclar).
- *   - Admin → cambia entre TODAS las marcas y además puede elegir "Todas"
- *     (vista agregada para supervisión operativa).
+ *   - Foco, no restricción: el switch lista SIEMPRE el catálogo completo, así que
+ *     cualquiera (editor o admin) puede enfocar cualquier marca; por defecto arranca
+ *     en la propia. Si el catálogo tiene una sola marca no hay nada que conmutar.
+ *   - Solo el SUPERADMIN ve además la opción "Todas" (vista agregada para supervisión
+ *     operativa). Un admin normal es autoridad sobre SUS marcas, no sobre todas.
  *
  * El provider (en `use-marca-activa.tsx`) resuelve el catálogo de nombres y la
  * persistencia; este archivo solo declara el contrato (separado del .tsx para
@@ -37,9 +37,16 @@ export interface ValorMarcaActiva {
    * marca" y ofrece volver.
    */
   enMarcaPrimaria: boolean;
+  /**
+   * `true` si la marca activa NO es una de las marcas asignadas del usuario (estás enfocando una
+   * marca ajena). La UI lo avisa en ámbar y ofrece "Volver a tu marca". `false` cuando enfocas
+   * una de tus marcas (aunque no sea la primaria) o la vista agregada "Todas". Opcional: ausente
+   * se trata como `false` (default seguro); el provider real siempre lo provee.
+   */
+  fueraDeCasa?: boolean;
   /** `true` si hay más de una opción de marca: entonces se muestra el switch. */
   esMultiMarca: boolean;
-  /** `true` si la persona puede elegir la vista agregada "Todas" (solo admin). */
+  /** `true` si la persona puede elegir la vista agregada "Todas" (solo superadmin). */
   puedeTodas: boolean;
   /**
    * `true` si la marca activa es de NOTICIAS (pasa por investigación). `false` para marcas de

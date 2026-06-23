@@ -32,6 +32,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from keni_shared import marcas as _km
+
 from .. import config, repos
 from ..dominio import colaboracion
 from ..dominio.piezas import pieza_a_dict
@@ -126,9 +128,10 @@ def enviar_a_revision(pub: dict[str, Any]) -> bool:
 
     plat = repos.obtener_pieza_fila(pub["id"])
     try:
-        montar_cadena_aprobacion(
-            pub["id"], plat or {}, colaboracion.cadena_simple(), con_cargos=False
+        etiquetas = colaboracion.cadena_para_marca(
+            _km.likes_aprobacion_de(str(pub.get("marca") or ""))
         )
+        montar_cadena_aprobacion(pub["id"], plat or {}, etiquetas, con_cargos=False)
     except Exception:
         repos.transicionar_estado_pieza(
             pub["id"],

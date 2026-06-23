@@ -33,9 +33,11 @@ def _app(bootstrap=False):
     return app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=bootstrap)
 
 
-def _cli_usuario(usuario: str, rol: str = "editor", cargo: str = "") -> TestClient:
+def _cli_usuario(
+    usuario: str, rol: str = "editor", cargo: str = "", puede_coordinar: bool = False
+) -> TestClient:
     """TestClient con SESION de `usuario` (login real): atribuye al crear/enviar/aprobar."""
-    auth.crear_usuario(usuario, _CLAVE, rol, cargo=cargo)
+    auth.crear_usuario(usuario, _CLAVE, rol, cargo=cargo, puede_coordinar=puede_coordinar)
     c = TestClient(_app())
     r = c.post("/api/auth/login", json={"usuario": usuario, "password": _CLAVE}, headers=_ORIGIN)
     assert r.status_code == 200
@@ -214,23 +216,34 @@ def test_admin_fuerza_aprobacion_saltando_la_cadena(entorno):
     assert _cadena_aprobada(pub["id"])
 
 
-def test_coordinador_puede_forzar(entorno):
-    """Un coordinador (cargo `coordinador_redes`) también puede forzar la aprobación."""
+def test_puede_coordinar_puede_forzar(entorno):
+    """Un editor con el flag `puede_coordinar` puede forzar (el CARGO ya no da este poder)."""
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    coord = _cli_usuario("elias", rol="editor", cargo="coordinador_redes")
+    coord = _cli_usuario("elias", rol="editor", puede_coordinar=True)
     r = coord.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert _cadena_aprobada(pub["id"])
 
 
-def test_editor_normal_no_puede_forzar_403(entorno):
-    """Un editor sin cargo de coordinación NO puede forzar (403): no se salta la cadena."""
+def test_cargo_coordinador_ya_no_basta_para_forzar_403(entorno):
+    """El CARGO es puramente visual: un editor con cargo `coordinador_redes` pero SIN el flag
+    `puede_coordinar` NO puede forzar (403)."""
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    beto = _cli_usuario("beto")  # editor, sin cargo
+    coord_visual = _cli_usuario("elias", rol="editor", cargo="coordinador_redes")
+    r = coord_visual.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_editor_normal_no_puede_forzar_403(entorno):
+    """Un editor sin `puede_coordinar` NO puede forzar (403): no se salta la cadena."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")  # editor, sin cargo ni puede_coordinar
     r = beto.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 403
     assert autora.get(f"/api/piezas/{pub['id']}").json()["pieza"]["estado"] == "en_revision"
@@ -433,8 +446,8 @@ def test_programar_sin_cadena_no_aplica_el_minimo(entorno):
 
 
 def test_programar_bloquea_si_faltan_aprobaciones_para_el_minimo(entorno, monkeypatch):
-    """Con KENI_MIN_APROBACIONES=3 y los dos OK (2 firmas), programar da 409 «2 de 3»."""
-    monkeypatch.setenv("KENI_MIN_APROBACIONES", "3")
+    """Con la marca exigiendo 3 likes y solo dos OK (2 firmas), programar da 409 «2 de 3»."""
+    monkeypatch.setattr("keni_shared.marcas.likes_aprobacion_de", lambda _m: 3)
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -453,8 +466,8 @@ def test_programar_bloquea_si_faltan_aprobaciones_para_el_minimo(entorno, monkey
 
 
 def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
-    """KENI_MIN_APROBACIONES=2: los dos OK (de dos personas) bastan para programar a mano."""
-    monkeypatch.setenv("KENI_MIN_APROBACIONES", "2")
+    """Marca con 2 likes: los dos OK (de dos personas) bastan para programar a mano."""
+    monkeypatch.setattr("keni_shared.marcas.likes_aprobacion_de", lambda _m: 2)
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -478,7 +491,7 @@ def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
 
 def test_comentario_sin_resolver_bloquea_programar(entorno, monkeypatch):
     """Un comentario abierto en el item da 409 al programar, aunque la pieza esté lista."""
-    monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar el gate B del gate A
+    monkeypatch.setattr("keni_shared.marcas.likes_aprobacion_de", lambda _m: 0)  # aislar gate B
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora, estado="en_revision")
     # El contenido padre de la pieza (su publicacion_id) recibe un comentario abierto.
@@ -531,7 +544,7 @@ def test_segundo_programar_da_409_si_ya_no_esta_en_revision(entorno, monkeypatch
     Tras programar, la pieza ya no esta `en_revision`; el CAS de la transicion no aplica y el
     segundo intento recibe 409 ("el estado cambió"), sin re-escribir la fecha.
     """
-    monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar del gate A
+    monkeypatch.setattr("keni_shared.marcas.likes_aprobacion_de", lambda _m: 0)  # aislar del gate A
     from datetime import datetime, timedelta
 
     autora = _cli_usuario("ana")

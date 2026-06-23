@@ -189,6 +189,16 @@ def test_cadena_simple_son_los_dos_ok():
     assert etiquetas == ["Edición", "Coordinación"]
 
 
+def test_cadena_para_marca_escala_los_niveles_por_likes():
+    # 2 likes = la cadena clásica; 1 = un solo OK; >3 = etiquetas genéricas tras la escalera.
+    assert colaboracion.cadena_para_marca(2) == ["Edición", "Coordinación"]
+    assert colaboracion.cadena_para_marca(1) == ["Edición"]
+    assert colaboracion.cadena_para_marca(3) == ["Edición", "Coordinación", "Dirección"]
+    assert colaboracion.cadena_para_marca(4) == ["Edición", "Coordinación", "Dirección", "OK 4"]
+    # Valor inválido (0 / negativo) se acota a 1 nivel (nunca cadena vacía).
+    assert colaboracion.cadena_para_marca(0) == ["Edición"]
+
+
 def test_decidir_misma_persona_no_da_los_dos_ok():
     """Quien ya decidio un nivel de la cadena no puede decidir el otro (segundo OK = otra persona)."""
     cadena = [
@@ -350,9 +360,10 @@ def test_cumple_minimo_cero_desactiva_el_gate():
 # --------------------------------------------------------------------------- #
 
 
-def test_cargo_requerido_por_etiqueta_del_organigrama():
-    assert colaboracion.cargo_requerido_para("Coordinación") == "coordinador"
-    assert colaboracion.cargo_requerido_para("Dirección") == "director"
+def test_ninguna_etiqueta_exige_cargo_los_cargos_son_visuales():
+    # Los cargos del organigrama son PURAMENTE VISUALES: ninguna etiqueta de nivel los exige.
+    assert colaboracion.cargo_requerido_para("Coordinación") == ""
+    assert colaboracion.cargo_requerido_para("Dirección") == ""
     assert colaboracion.cargo_requerido_para("Edición") == ""
 
 
@@ -436,9 +447,9 @@ def test_cargo_de_nivel_ia_siempre_lleva_cargo_reservado():
         colaboracion.cargo_de_nivel(colaboracion.ETIQUETA_CRITICA_IA, con_cargos=False)
         == colaboracion.CARGO_IA_CRITICO
     )
-    # Un nivel humano sin cargos -> "" ; con cargos -> el del organigrama.
+    # Un nivel humano nunca exige cargo (los cargos son visuales): "" con o sin `con_cargos`.
     assert colaboracion.cargo_de_nivel("Coordinación", con_cargos=False) == ""
-    assert colaboracion.cargo_de_nivel("Coordinación", con_cargos=True) == "coordinador"
+    assert colaboracion.cargo_de_nivel("Coordinación", con_cargos=True) == ""
 
 
 def test_cargo_reservado_ia_no_lo_satisface_ningun_humano():

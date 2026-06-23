@@ -57,6 +57,9 @@ class _MarcaCruda:
     # "Curiosidades" en una marca de datos curiosos). Solo aplica a marcas de tipo 'noticias';
     # por defecto "Noticias".
     etiqueta_investigacion: str = "Noticias"
+    # Nº de OK ("likes") de personas distintas que una pieza de esta marca necesita para
+    # aprobarse y programarse (umbral de "cuatro ojos" por marca; def 2, min 1).
+    likes_aprobacion: int = 2
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,21 @@ def normalizar_etiqueta_investigacion(valor: object) -> str:
     return valor.strip() if isinstance(valor, str) and valor.strip() else "Noticias"
 
 
+def normalizar_likes_aprobacion(valor: object) -> int:
+    """Nº de OK ("likes") que una pieza de esta marca necesita para aprobarse; def 2, min 1.
+
+    Es el umbral de "cuatro ojos" POR MARCA: cada marca decide cuántos OK de personas
+    distintas exige una pieza antes de programarse. Tolerante: valor ausente/no entero → 2.
+    """
+    if isinstance(valor, bool):  # bool es subclase de int; un booleano no es un conteo.
+        return 2
+    try:
+        n = int(valor)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 2
+    return max(1, n)
+
+
 def _parsear_marca(idx: int, m: object) -> _MarcaCruda:
     n = f"#{idx + 1}"
     if not isinstance(m, dict):
@@ -107,6 +125,7 @@ def _parsear_marca(idx: int, m: object) -> _MarcaCruda:
         id_metricas=_exigir_str(m.get("id_metricas"), f"un 'id_metricas' en la marca {etiqueta_n}"),
         tipo=normalizar_tipo(m.get("tipo")),
         etiqueta_investigacion=normalizar_etiqueta_investigacion(m.get("etiqueta_investigacion")),
+        likes_aprobacion=normalizar_likes_aprobacion(m.get("likes_aprobacion")),
     )
 
 

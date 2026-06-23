@@ -89,6 +89,27 @@ def cadena_simple() -> list[str]:
     return list(CADENA_APROBACION_SIMPLE)
 
 
+# Escalera de etiquetas de los niveles HUMANOS de una cadena de N OK. Los dos primeros son la
+# cadena clásica ("Edición" + "Coordinación"); más allá se nombran genéricos ("OK 4"…). Cada
+# nivel = un "like" de una persona distinta.
+ESCALERA_CADENA: tuple[str, ...] = ("Edición", "Coordinación", "Dirección")
+
+
+def cadena_para_marca(n_likes: int) -> list[str]:
+    """Etiquetas de los `n_likes` niveles humanos que exige una marca (umbral por marca).
+
+    `n_likes` (≥1) es cuántos OK de personas distintas necesita una pieza de esa marca. Las
+    primeras etiquetas salen de `ESCALERA_CADENA` (Edición, Coordinación, Dirección) y, si la
+    marca pide más, se nombran genéricas ("OK 4", "OK 5"…). `n_likes=2` reproduce la cadena
+    clásica. El llamante antepone/añade los niveles automáticos (verificación / Crítica IA).
+    """
+    n = max(1, int(n_likes))
+    etiquetas: list[str] = []
+    for i in range(n):
+        etiquetas.append(ESCALERA_CADENA[i] if i < len(ESCALERA_CADENA) else f"OK {i + 1}")
+    return etiquetas
+
+
 def estado_publicacion_para(estado_global: str) -> str | None:
     """Traduce el estado GLOBAL de la cadena al `estado` editorial de la PIEZA.
 
@@ -139,6 +160,16 @@ def contar_aprobados(cadena: list[dict[str, Any]]) -> int:
     aprobaciones validas y trazables. No distingue humano vs auto aqui (eso lo deja a la UI).
     """
     return sum(1 for n in cadena if n.get("decision") == DECISION_APROBADO)
+
+
+def niveles_humanos(cadena: list[dict[str, Any]]) -> int:
+    """Nº de niveles de la cadena que decide una PERSONA (excluye el nivel automático "Crítica IA").
+
+    Es el TECHO de likes que una cadena ya montada puede acumular: el gate de programación acota
+    su mínimo a este valor para que subir el umbral de una marca no deje EN DEADLOCK las piezas
+    que ya están en revisión con una cadena más corta (no se puede exigir más OK que niveles hay).
+    """
+    return sum(1 for n in cadena if not es_nivel_critica_ia(n))
 
 
 def contar_aprobaciones_humanas(cadena: list[dict[str, Any]]) -> int:
@@ -375,17 +406,13 @@ def humanos_aprobados_ia_pendiente(cadena: list[dict[str, Any]]) -> bool:
 # ROLES en la cadena: cargo requerido por nivel (item C)                       #
 # --------------------------------------------------------------------------- #
 #
-# Cada nivel de la cadena puede exigir un CARGO concreto del organigrama (`auth/usuarios.cargo`,
-# allowlist en `estados.CARGOS_USUARIO`): p. ej. "Coordinación" la decide un coordinador y
-# "Dirección" un director. Es una guarda EDITORIAL ortogonal a la separacion de funciones
-# ("otro par de ojos") y al rol de permisos (admin/editor). Mapa por defecto razonable a
-# partir del organigrama del cliente; lo demas no exige cargo (cualquiera del equipo decide).
-CARGO_POR_ETIQUETA: dict[str, str] = {
-    "coordinación": "coordinador",
-    "coordinacion": "coordinador",
-    "dirección": "director",
-    "direccion": "director",
-}
+# Los CARGOS del organigrama (`auth/usuarios.cargo`) son PURAMENTE VISUALES: describen la función
+# en el equipo y NO gobiernan ningún permiso de la app. Por eso NINGUNA etiqueta de nivel exige un
+# cargo: cualquiera del equipo (salvo el autor) da los OK humanos respetando "cuatro ojos", y la
+# autoridad para FORZAR la lleva el rol admin/superadmin o el flag `puede_coordinar`, no el cargo.
+# El mapa queda VACÍO a propósito (el único requisito de nivel que sobrevive es el marcador
+# reservado `ia-critico`, que no es un cargo del organigrama sino el sello del nivel automático).
+CARGO_POR_ETIQUETA: dict[str, str] = {}
 
 
 def cargo_requerido_para(etiqueta: str) -> str:

@@ -42,6 +42,8 @@ export interface MarcaDashboard {
   tipo: TipoMarca;
   /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
   etiqueta_investigacion: string;
+  /** Nº de OK ("likes") de personas distintas que una pieza de esta marca necesita para aprobarse (def 2). */
+  likes_aprobacion: number;
   /** Canal por el que la marca publica sus piezas. */
   canal_publicacion: CanalPieza;
   postproxy: PostproxyMarca;
@@ -69,6 +71,8 @@ export interface MarcaCatalogo {
   tipo: TipoMarca;
   /** Nombre del panel de investigación de esta marca (p.ej. "Curiosidades"); "Noticias" por defecto. */
   etiqueta_investigacion: string;
+  /** Nº de OK ("likes") de personas distintas que una pieza de esta marca necesita para aprobarse (def 2). */
+  likes_aprobacion: number;
 }
 
 export interface RespuestaCatalogoMarcas {
@@ -81,6 +85,7 @@ export interface CuerpoCrearMarca {
   id_metricas?: string;
   tipo?: TipoMarca;
   etiqueta_investigacion?: string;
+  likes_aprobacion?: number;
 }
 
 export interface CuerpoEditarMarca {
@@ -88,6 +93,7 @@ export interface CuerpoEditarMarca {
   id_metricas?: string;
   tipo?: TipoMarca;
   etiqueta_investigacion?: string;
+  likes_aprobacion?: number;
 }
 
 export interface RespuestaMarcaCatalogo {

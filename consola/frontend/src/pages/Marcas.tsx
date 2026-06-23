@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DialogoMarca, type MarcaEditable } from "@/pages/marcas/DialogoMarca";
@@ -25,6 +26,7 @@ function aEditable(m: MarcaDashboard): MarcaEditable {
     id_metricas: m.marca,
     tipo: m.tipo,
     etiqueta_investigacion: m.etiqueta_investigacion,
+    likes_aprobacion: m.likes_aprobacion,
   };
 }
 
@@ -240,6 +242,10 @@ function BloqueMarca({
  */
 export default function Marcas() {
   const queryClient = useQueryClient();
+  // Crear/borrar marcas (identidad) es config de app: solo superadmin. Editar (incl. los likes
+  // de aprobación de SUS marcas) lo puede cualquier admin desde el mismo diálogo.
+  const { usuario } = useSesion();
+  const esSuperadmin = usuario?.es_superadmin === true;
   const [pendiente, setPendiente] = React.useState<string | null>(null);
   // CRUD del catálogo: un único diálogo de crear/editar (null = crear). El borrado vive
   // dentro del editor (clic en el nombre de la marca lo abre).
@@ -336,15 +342,17 @@ export default function Marcas() {
               {data.generado_en ? `Actualizado ${tiempoRelativo(data.generado_en)}` : "Marcas × redes"}
             </p>
             <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs"
-                onClick={() => setEditor({ abierto: true, marca: null })}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Añadir marca
-              </Button>
+              {esSuperadmin && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setEditor({ abierto: true, marca: null })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Añadir marca
+                </Button>
+              )}
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => void refetch()} disabled={isFetching}>
                 <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
                 Actualizar

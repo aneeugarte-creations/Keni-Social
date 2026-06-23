@@ -40,6 +40,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from keni_shared import marcas as _km
+
 from .. import config, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion, notificaciones
@@ -347,7 +349,10 @@ def _cadena_publica(pieza_id: str) -> dict[str, object]:
         "estado": colaboracion.estado_cadena(cadena),
         "nivel_actual": (colaboracion.nivel_actual(cadena) or {}).get("id", ""),
         "aprobados": colaboracion.contar_aprobados(cadena),
-        "minimo_aprobaciones": config.min_aprobaciones(),
+        "minimo_aprobaciones": min(
+            _km.likes_aprobacion_de(str((plat or {}).get("marca") or "")),
+            colaboracion.niveles_humanos(cadena),
+        ) if cadena else _km.likes_aprobacion_de(str((plat or {}).get("marca") or "")),
         "comentarios_sin_resolver": sin_resolver,
     }
 

@@ -20,10 +20,36 @@ def _request(usuario):
     return SimpleNamespace(state=SimpleNamespace(usuario=usuario))
 
 
-def test_admin_sin_preferencia():
-    # Admin => sin foco por defecto (None => todas las marcas).
-    req = _request({"id": "u1", "rol": "admin"})
+def test_superadmin_sin_preferencia():
+    # Superadmin (el "admin de la app") => sin foco por defecto (None => todas las marcas).
+    req = _request({"id": "u1", "rol": "admin", "superadmin": True})
     assert permisos.marcas_preferentes(req) is None
+
+
+def test_admin_con_marca_da_su_foco(monkeypatch):
+    # Admin (NO superadmin) ya NO ve todas: su foco son SUS marcas asignadas (como un editor).
+    monkeypatch.setattr(
+        "keni_consola.auth.obtener_usuario_por_id",
+        lambda _id: {"id": "u1", "marcas": ["unotv"]},
+    )
+    req = _request({"id": "u1", "rol": "admin"})
+    assert permisos.marcas_preferentes(req) == {"unotv"}
+
+
+def test_es_admin_de_marca(monkeypatch):
+    monkeypatch.setattr(
+        "keni_consola.auth.obtener_usuario_por_id",
+        lambda _id: {"id": "u1", "marcas": ["unotv"]},
+    )
+    admin = _request({"id": "u1", "rol": "admin"})
+    assert permisos.es_admin_de_marca(admin, "unotv") is True
+    assert permisos.es_admin_de_marca(admin, "claro-sports") is False
+    # Superadmin: autoridad sobre cualquier marca (sin mirar asignaciones).
+    sa = _request({"id": "u2", "rol": "admin", "superadmin": True})
+    assert permisos.es_admin_de_marca(sa, "claro-sports") is True
+    # Editor: nunca es admin de marca.
+    editor = _request({"id": "u3", "rol": "editor"})
+    assert permisos.es_admin_de_marca(editor, "unotv") is False
 
 
 def test_token_sin_usuario_sin_preferencia():

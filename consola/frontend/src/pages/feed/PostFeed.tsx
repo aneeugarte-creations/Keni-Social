@@ -279,12 +279,11 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       : miNivel?.decision === "rechazado"
         ? "dislike"
         : "neutral";
-  // ¿Esta sesión puede FORZAR? Admin o cargo de coordinación (o candidato a coordinador). El
-  // backend es la fuente de verdad (403 si no); esto solo decide si se muestra el botón.
+  // ¿Esta sesión puede FORZAR? Admin/superadmin o el permiso explícito `puede_coordinar`. El
+  // cargo NO da este poder (los cargos son puramente visuales). El backend es la fuente de
+  // verdad (403 si no); esto solo decide si se muestra el botón.
   const puedeForzar =
-    usuario?.rol === "admin" ||
-    (usuario?.cargo ?? "").startsWith("coordinador") ||
-    !!usuario?.puede_coordinar;
+    usuario?.rol === "admin" || !!usuario?.es_superadmin || !!usuario?.puede_coordinar;
   const onForzar = async () => {
     const ok = await confirmar({
       titulo: "Saltar los OK del equipo",

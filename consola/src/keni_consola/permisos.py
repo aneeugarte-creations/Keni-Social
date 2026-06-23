@@ -114,26 +114,50 @@ def usuario_actual(request: Request) -> dict[str, Any] | None:
 # las marcas).
 
 
+def _marcas_asignadas(request: Request) -> list[str]:
+    """Marcas (ids canonicos) asignadas a la sesion, o lista vacia (token / sin marcas).
+
+    La sesion del middleware no arrastra la tabla N:M (la cookie no la carga), asi que se
+    consultan al vuelo por id de usuario, igual que hace `GET /api/auth/me`.
+    """
+    usuario = usuario_actual(request)
+    if usuario is None:
+        return []
+    from .auth import obtener_usuario_por_id  # lazy: evita ciclo de import con auth
+
+    refrescado = obtener_usuario_por_id(usuario["id"]) or {}
+    return list(refrescado.get("marcas") or [])
+
+
+def es_admin_de_marca(request: Request, marca_id: str) -> bool:
+    """True si la sesion es superadmin, o admin con `marca_id` entre sus marcas asignadas.
+
+    El admin es AUTORIDAD sobre SUS marcas asignadas (aprueba, fuerza, ajusta su umbral de
+    likes); el superadmin lo es sobre todas. Un editor nunca. El token de mantenimiento no.
+    """
+    if es_superadmin(request):
+        return True
+    if not es_admin(request):
+        return False
+    return marca_id in _marcas_asignadas(request)
+
+
 def marcas_preferentes(request: Request) -> set[str] | None:
     """Marcas (ids canonicos) en las que la sesion se ENFOCA por defecto, o None si sin foco.
 
-    None (sin foco => todas las marcas) cuando: es admin, se entro por token (sin usuario
-    de sesion), o el usuario no tiene marcas asignadas. En otro caso, el conjunto de ids
-    canonicos de sus marcas (relacion N:M del organigrama del cliente).
+    None (sin foco => todas las marcas) cuando: es SUPERADMIN, se entro por token (sin usuario
+    de sesion), o el usuario no tiene marcas asignadas. En otro caso (admin/editor con marcas),
+    el conjunto de ids canonicos de sus marcas (relacion N:M del organigrama del cliente).
 
-    NO es una restriccion: solo es el FOCO POR DEFECTO de listados/metricas cuando no se
-    pide marca explicita. Pasar una `marca` explicita (cualquiera) sobreescribe este foco.
-
-    La sesion del middleware no arrastra las marcas (la cookie no carga la tabla N:M),
-    asi que se consultan al vuelo por id de usuario, igual que hace `GET /api/auth/me`.
+    El admin DEJA de ver todas por defecto: su autoridad es sobre SUS marcas asignadas; solo el
+    superadmin (el "admin de la app") conserva la vista agregada de todas. NO es una restriccion:
+    sigue siendo el FOCO POR DEFECTO de listados/metricas cuando no se pide marca explicita;
+    pasar una `marca` explicita (cualquiera) lo sobreescribe.
     """
     usuario = usuario_actual(request)
     if usuario is None:
         return None
-    if usuario.get("rol") == ROL_ADMIN:
+    if es_superadmin(request):
         return None
-    from .auth import obtener_usuario_por_id  # lazy: evita ciclo de import con auth
-
-    refrescado = obtener_usuario_por_id(usuario["id"]) or {}
-    marcas = refrescado.get("marcas") or []
+    marcas = _marcas_asignadas(request)
     return set(marcas) if marcas else None
