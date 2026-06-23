@@ -111,6 +111,11 @@ const Sistema = lazy(() => import("@/pages/sistema/Sistema"));
  * Las rutas planas anteriores (`/estudio`, `/investigacion/...`, `/parrilla/...`, etc.)
  * se mantienen como redirecciones a su nuevo path con prefijo de bloque.
  */
+// Basename del router = `base` del bundle. En la app normal `BASE_URL` es "/" (sin cambio); un
+// bundle de PREVIEW se compila con `base=/api/preview/<id>/`, así el router lo recorta y enruta
+// bien bajo ese prefijo (sin él, toda ruta caería en el 404 del catch-all). Sin barra final.
+const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export const router = createBrowserRouter([
   // Feed móvil para revisores: ruta hermana del AppShell (layout propio, sin
   // sidebar). Su propia frontera de error + Suspense, ya que no cuelga del shell.
@@ -514,4 +519,4 @@ export const router = createBrowserRouter([
       { path: "*", element: <Error404 /> },
     ],
   },
-]);
+], { basename: BASENAME });
