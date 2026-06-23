@@ -202,6 +202,21 @@ export function Calendario({
     });
     return m;
   }, [lunesSel, franjasSemanaQs]);
+  // Turnos REALES de las celdas (persona×día) de los días marcados, sacados de las MISMAS queries por
+  // semana (sin fetch extra). El panel los pinta como «turno real» y deja marcarlos para quitar.
+  const turnosSelExistentes = React.useMemo(() => {
+    const m = new Map<string, TurnoRota[]>();
+    franjasSemanaQs.forEach((q) => {
+      for (const t of q.data?.turnos ?? []) {
+        if (!diasSel.has(t.fecha)) continue;
+        const k = `${t.miembro_id}|${t.fecha}`;
+        const lista = m.get(k) ?? [];
+        lista.push(t);
+        m.set(k, lista);
+      }
+    });
+    return m;
+  }, [franjasSemanaQs, diasSel]);
 
   // Diálogo de cobertura: clicar un chip de evento abre su tarjeta de cobertura (la MISMA del
   // Panorama) para coger/«Asignar a…»/soltar/editar sin salir del calendario. La edición del
@@ -631,6 +646,7 @@ export function Calendario({
               diasSel={diasSel}
               cms={cms}
               franjasPorSemana={franjasPorSemana}
+              turnosExistentes={turnosSelExistentes}
               onCambio={invalidar}
               onCerrar={() => setAbrirAsignar(false)}
               onLimpiarDias={() => setDiasSel(new Set())}

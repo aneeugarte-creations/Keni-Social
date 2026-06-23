@@ -1,15 +1,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import * as apiMod from "@/lib/api";
-import type { FranjaSemana, MiembroRota } from "@/types";
+import type { FranjaSemana, MiembroRota, TurnoRota } from "@/types";
 
 import { ReparteMes } from "./ReparteMes";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
+vi.mock("@/components/comunes/confirmar", () => ({ confirmar: vi.fn() }));
 
 // 2026-06-15 es lunes; las dos fechas caen en la MISMA semana (un solo grupo de franjas).
 const FRANJA: FranjaSemana = {
@@ -29,6 +32,30 @@ const CMS: MiembroRota[] = [
 ];
 const FRANJAS_POR_SEMANA = new Map([["2026-06-15", [FRANJA]]]);
 
+function turno(over: Partial<TurnoRota> = {}): TurnoRota {
+  return {
+    id: "t-1",
+    semana: "2026-06-15",
+    fecha: "2026-06-15",
+    miembro_id: "u-luis",
+    miembro_nombre: "Luis",
+    franja_id: "f-m",
+    franja_nombre: "Mañana",
+    franja: "matutino",
+    inicio: "08:00",
+    fin: "16:00",
+    horario_propio: false,
+    estado: "aprobado",
+    override: false,
+    motivo: "",
+    nota_relevo: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
 function montar(ui: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
@@ -43,6 +70,7 @@ describe("ReparteMes — matriz editable por persona", () => {
         diasSel={new Set(["2026-06-15", "2026-06-16"])}
         cms={CMS}
         franjasPorSemana={FRANJAS_POR_SEMANA}
+        turnosExistentes={new Map()}
         onCambio={vi.fn()}
         onCerrar={vi.fn()}
         onLimpiarDias={onLimpiarDias}
@@ -69,5 +97,69 @@ describe("ReparteMes — matriz editable por persona", () => {
     });
     // Tras crear, limpia la selección de días para encadenar otra tanda.
     await waitFor(() => expect(onLimpiarDias).toHaveBeenCalled());
+  });
+
+  it("marca un turno real para quitar → confirma y lo borra por lote, con Deshacer", async () => {
+    vi.mocked(confirmar).mockResolvedValue(true);
+    const borrar = vi.spyOn(apiMod.api, "borrarTurnosLote").mockResolvedValue({
+      borrados: 1,
+      no_encontrados: [],
+    } as never);
+    const onLimpiarDias = vi.fn();
+    montar(
+      <ReparteMes
+        diasSel={new Set(["2026-06-15"])}
+        cms={CMS}
+        franjasPorSemana={FRANJAS_POR_SEMANA}
+        turnosExistentes={new Map([["u-luis|2026-06-15", [turno()]]])}
+        onCambio={vi.fn()}
+        onCerrar={vi.fn()}
+        onLimpiarDias={onLimpiarDias}
+      />,
+    );
+    // Con Luis elegido, su celda del 15 es un TURNO REAL: no es alta, así que «Asignar» sigue inerte.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
+
+    // Tocar el turno real lo marca para quitar → el botón pasa a «Quitar 1 turno».
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis 15" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar 1 turno" }));
+
+    // Pasa por la confirmación destructiva y borra por lote el id del turno.
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
+    await waitFor(() => expect(borrar).toHaveBeenCalledWith({ ids: ["t-1"] }));
+    // Avisa con un toast que ofrece Deshacer.
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining("borrado"),
+        expect.objectContaining({ action: expect.objectContaining({ label: "Deshacer" }) }),
+      ),
+    );
+    await waitFor(() => expect(onLimpiarDias).toHaveBeenCalled());
+  });
+
+  it("no borra nada si se cancela la confirmación", async () => {
+    vi.mocked(confirmar).mockResolvedValue(false);
+    const borrar = vi.spyOn(apiMod.api, "borrarTurnosLote").mockResolvedValue({
+      borrados: 0,
+      no_encontrados: [],
+    } as never);
+    montar(
+      <ReparteMes
+        diasSel={new Set(["2026-06-15"])}
+        cms={CMS}
+        franjasPorSemana={FRANJAS_POR_SEMANA}
+        turnosExistentes={new Map([["u-luis|2026-06-15", [turno()]]])}
+        onCambio={vi.fn()}
+        onCerrar={vi.fn()}
+        onLimpiarDias={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis 15" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar 1 turno" }));
+
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
+    expect(borrar).not.toHaveBeenCalled();
   });
 });
