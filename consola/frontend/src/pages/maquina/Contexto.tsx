@@ -169,8 +169,10 @@ export default function Contexto() {
               navigate(`/maquina/contexto/produccion/${slugFase(fase.nombre)}`)
             }
           />
-          {esAdmin && <ServiciosMaquina motor="produccion" />}
+          {/* El umbral de likes vive en la sección «Cadena de aprobación» del pipeline (justo
+              tras la Crítica), no al final: es parte de esa cadena, no un servicio. */}
           {esAdmin && <SeccionCadenaAprobacion marcaActiva={marcaActiva} />}
+          {esAdmin && <ServiciosMaquina motor="produccion" />}
         </div>
       )}
 
