@@ -9,11 +9,11 @@ import type { OpcionesPiezas } from "@/types";
  * la cabecera del editor no pinta etiqueta.
  */
 export function nombreCategoriaPlan(
-  categoria: string,
+  categoria: string | null | undefined,
   marca: string,
   categorias: OpcionesPiezas["categorias"] | undefined,
 ): string {
-  const id = categoria.trim();
+  const id = (categoria ?? "").trim();
   if (!id) return "";
   const cats = categorias?.[marca] ?? [];
   return cats.find((c) => c.id === id)?.nombre ?? "";
