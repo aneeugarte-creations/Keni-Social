@@ -107,6 +107,31 @@ def test_historias_incluye_enlaces_corroborantes(cliente):
     assert all("url" in e and "titulo" in e for e in enlaces)
 
 
+def test_historia_expone_id_de_fuente_para_marcar_origen(cliente):
+    """La historia trae `primera_fuente_id` y cada enlace su `fuente_id`, para que la UI marque
+    el origen (p. ej. Google Trends) sin fiarse del nombre del medio (en Trends, un outlet suelto)."""
+    repos.upsert_noticia_cluster({
+        "id": "gt", "titulo": "Tema viral", "resumen": "r", "marca": "unotv",
+        "categoria": "mx", "geo": "MX", "clave": "t:gt", "n_items": 1, "n_fuentes": 1,
+        "idiomas": ["es"], "senal": 100, "score": 0.5,
+        "primer_visto": "2026-06-01T00:00:00+00:00", "ultimo_visto": "2026-06-05T12:00:00+00:00",
+        "estado": "nuevo", "primera_fuente": "google-trends",
+    })
+    repos.crear_noticias_items([{
+        "fuente_id": "google-trends", "fuente_nombre": "朝日新聞", "categoria": "mx",
+        "marca": "unotv", "titulo": "Titular", "resumen": "r",
+        "url": "https://medio.jp/x", "url_canonica": "medio.jp/x", "clave": "gt-0",
+        "capturado_en": "2026-06-05T12:00:00+00:00",
+    }])
+    items_db, _ = repos.listar_noticias_items(limite=500)
+    repos.asignar_cluster_item(next(x for x in items_db if x["clave"] == "gt-0")["id"], "gt")
+
+    historia = cliente.get("/api/noticias/historias").json()["historias"][0]
+    assert historia["primera_fuente_id"] == "google-trends"
+    assert historia["enlaces"]
+    assert all(e["fuente_id"] == "google-trends" for e in historia["enlaces"])
+
+
 def test_historias_filtra_por_marca(cliente):
     _inicializar_cluster("u", marca="unotv")
     _inicializar_cluster("c", marca="claro-sports")

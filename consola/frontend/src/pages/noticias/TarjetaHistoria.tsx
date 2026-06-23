@@ -17,6 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { formatearHora } from "@/lib/fecha";
 import { nivelPrioridad } from "@/lib/noticias/ranking-editorial";
+import { nombreFuente } from "@/lib/trends";
 import type { Historia } from "@/types";
 
 export interface PropsTarjetaHistoria {
@@ -49,7 +50,9 @@ export function TarjetaHistoria({
   const prioridad = nivelPrioridad(historia.score);
   // Lo esencial junto al título: hora de apertura y fuente que abrió.
   const hora = formatearHora(historia.primer_visto);
-  const fuente = historia.primera_fuente_nombre || historia.marca_nombre;
+  const fuente =
+    nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
+    historia.marca_nombre;
 
   const abrir = () => navigate(`/maquina/investigacion/historia/${encodeURIComponent(historia.id)}`);
 

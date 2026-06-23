@@ -213,6 +213,9 @@ def _historia_a_dict(
                 "titulo": it.get("titulo") or "",
                 "url": url,
                 "fuente": it.get("fuente_nombre") or "",
+                # `fuente_id` para que la UI marque el origen (p. ej. "(Google Trends)") sin
+                # depender del nombre del medio, que en Trends es el outlet suelto.
+                "fuente_id": it.get("fuente_id") or "",
                 # Cuándo publicó este enlace y el tier de su fuente: la UI arma con esto la
                 # frase de corroboración ("la abrió Reuters hace 42 min") sin pedir el detalle.
                 "publicado_en": it.get("publicado_en") or it.get("capturado_en") or "",
@@ -299,6 +302,9 @@ def _historia_a_dict(
         "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),
         "velocidad": float(cluster.get("velocidad") or 0.0),
         "primera_fuente_nombre": cluster.get("primera_fuente_nombre") or "",
+        # `fuente_id` del outlet que ABRIÓ: la UI marca el origen (p. ej. "(Google Trends)")
+        # sin fiarse del nombre, que en Trends es el medio suelto que cubrió el tema.
+        "primera_fuente_id": cluster.get("primera_fuente") or "",
         "fuentes": _fuentes_timeline(cluster.get("fuentes_detalle") or []),
     }
 

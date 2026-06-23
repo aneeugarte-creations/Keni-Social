@@ -158,7 +158,15 @@ export interface Historia {
    */
   pieza_estado?: "en_pool" | "en_cola" | "generando" | "en_feed" | "descartada" | string;
   /** Hasta ~8 artículos corroborantes del cluster (con su hora y el tier de su fuente). */
-  enlaces: { titulo: string; url: string; fuente: string; publicado_en?: string; tier?: string }[];
+  enlaces: {
+    titulo: string;
+    url: string;
+    fuente: string;
+    /** ID de la fuente (p. ej. "google-trends"), para marcar el origen en la UI. */
+    fuente_id?: string;
+    publicado_en?: string;
+    tier?: string;
+  }[];
   // ── Tracking de fuentes (ranking ponderado) ───────────────────────────────
   /** Masa de corroboración PONDERADA (Σ peso editorial por outlet distinto). */
   peso_fuentes?: number;
@@ -166,6 +174,8 @@ export interface Historia {
   velocidad?: number;
   /** Nombre de la fuente que ABRIÓ la historia (publicó primero). */
   primera_fuente_nombre?: string;
+  /** ID de la fuente que ABRIÓ (p. ej. "google-trends"), para marcar el origen en la UI. */
+  primera_fuente_id?: string;
   /** Timeline cronológico de outlets (el primero abrió la historia). */
   fuentes?: FuenteHistoria[];
   // ── Etapas de Investigación visibles por historia (ADR 0011) ─────────────

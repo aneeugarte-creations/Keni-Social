@@ -36,6 +36,7 @@ import { api, mensajeError } from "@/lib/api";
 import { formatearHora } from "@/lib/fecha";
 import { etiquetaLinea } from "@/lib/lineas";
 import { fraseCorroboracion } from "@/lib/noticias/ranking-editorial";
+import { nombreFuente } from "@/lib/trends";
 
 import { BadgeVerificacionFuente, ChipMarca } from "./BadgesInvestigacion";
 import { CalculoScore } from "./CalculoScore";
@@ -126,7 +127,9 @@ export default function DetalleHistoriaPagina() {
   const esUltimaHora = historia.breaking === 1 && piezaEstado !== "descartada";
   const enPool = piezaEstado === "en_pool";
   const hora = formatearHora(historia.primer_visto);
-  const fuente = historia.primera_fuente_nombre || historia.marca_nombre;
+  const fuente =
+    nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
+    historia.marca_nombre;
   const enCurso = usarMut.isPending || descartarMut.isPending;
 
   const onDescartar = async () => {
@@ -303,7 +306,9 @@ export default function DetalleHistoriaPagina() {
                         <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
                       </a>
                       {e.fuente && (
-                        <span className="shrink-0 text-muted-foreground">— {e.fuente}</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          — {nombreFuente(e.fuente, e.fuente_id)}
+                        </span>
                       )}
                     </li>
                   ))}
