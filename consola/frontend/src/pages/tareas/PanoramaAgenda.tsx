@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { useRelojVivo } from "@/hooks/use-reloj-vivo";
 import { api, mensajeError } from "@/lib/api";
+import type { CubridorPorTurno } from "@/lib/cobertura";
 import { formatearDia, hoyCDMX, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosPublicacion, Publicacion, EventoRota, PrioridadEvento } from "@/types";
@@ -25,6 +26,7 @@ import { DialogoAsignar } from "./dialogos";
 import { IconoEvento } from "./icono-evento";
 import { etiquetaRol, type RolCobertura } from "./roles";
 import {
+  BadgeCubiertoPorTurno,
   RolesCubiertos,
   SelectorRol,
   SemaforoCobertura,
@@ -563,6 +565,10 @@ export function FilaAgenda({
         <span className="flex-1 truncate text-sm font-medium">{titulo}</span>
         {tarea?.estado === "en_curso" && <ChipEstado estado="en_curso" />}
         {tarea?.estado === "hecha" && <ChipEstado estado="completado" />}
+      </button>
+        {/* Estado/dueño FUERA del botón de plegar: así «Cubierto por turno» es su propio control
+            (despliega quién lo cubre) sin anidar botones, y pulsar un avatar/badge no pliega la fila. */}
+        <div className="flex shrink-0 items-center pr-1">
         {sinDueno ? (
           <span className="flex shrink-0 items-center gap-1.5">
             {/* Un recuperable (cobertura soltada) conserva su rol: deja claro QUÉ rol resurge. */}
@@ -579,13 +585,8 @@ export function FilaAgenda({
             </Badge>
           </span>
         ) : item.kind === "evento" ? (
-          // Nadie lo cogió pero hay turno en su franja: lo cubre el turno (calmado, no amarillo).
-          <Badge
-            variant="outline"
-            className="shrink-0 border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
-          >
-            Cubierto por turno
-          </Badge>
+          // Nadie lo cogió pero hay turno en su franja: lo cubre el turno. Al pulsarlo, quién.
+          <BadgeCubiertoPorTurno cubridores={item.cubridoresPorTurno ?? []} />
         ) : cob ? (
           <span className="flex shrink-0 items-center gap-1.5">
             {/* Semáforo agregado por rol: qué roles del evento están cubiertos. */}
@@ -602,7 +603,7 @@ export function FilaAgenda({
             </span>
           </span>
         )}
-      </button>
+        </div>
         {/* Acciones de la fila: editar (lápiz) + borrar (papelera) + ⚡ escalar/des-escalar.
             La papelera queda pegada al ⚡; el lápiz abre el diálogo de edición del calendario. */}
         <span className="flex items-center gap-1 px-1.5">
@@ -622,6 +623,7 @@ export function FilaAgenda({
               catalogos={catalogos}
               sinMenu
               cubiertoPorTurno={item.kind === "evento" && Boolean(item.cubiertoPorTurno)}
+              cubridoresPorTurno={item.kind === "evento" ? (item.cubridoresPorTurno ?? []) : []}
             />
           )}
         </div>
@@ -651,8 +653,9 @@ export function PanoramaAgenda({
   eventos: EventoRota[];
   catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
-  /** Ids de eventos que cubre el turno de su franja (no son «sin cubrir»). */
-  cubiertosPorTurno: Set<string>;
+  /** Eventos que cubre el turno de su franja → sus cubridores (no son «sin cubrir»). `.has(id)`
+   *  marca cuáles; el valor da QUIÉN, para revelarlo al pulsar el badge «Cubierto por turno». */
+  cubiertosPorTurno: Map<string, CubridorPorTurno[]>;
   /** Filtro de agenda (id de persona, "__pool__" o null), CONTROLADO por el board: así el KPI de
    *  cabecera puede activarlo («N sin cubrir» → «Por cubrir») sin duplicar el estado. */
   filtro: string | null;
@@ -741,6 +744,7 @@ export function PanoramaAgenda({
             orden: e.fecha || "9999-99-99",
             evento: e,
             cubiertoPorTurno: cubiertosPorTurno.has(e.id),
+            cubridoresPorTurno: cubiertosPorTurno.get(e.id) ?? [],
           }))
       : []),
   ];

@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import type { CubridorPorTurno } from "@/lib/cobertura";
 import type { CatalogosPublicacion, EventoRota, UsuarioSesion } from "@/types";
 
 import { FilaAgenda } from "./PanoramaAgenda";
@@ -116,5 +117,44 @@ describe("FilaAgenda — asignarResaltado", () => {
     montar(true, "editor");
     expect(screen.queryByRole("button", { name: "Asignar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+  });
+});
+
+describe("FilaAgenda — «Cubierto por turno» revela quién cubre", () => {
+  function montarCubierto(cubridores: CubridorPorTurno[]) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const item: Item = {
+      kind: "evento",
+      clave: "ev1",
+      orden: "2026-07-01",
+      evento: evento(),
+      cubiertoPorTurno: true,
+      cubridoresPorTurno: cubridores,
+    };
+    return render(
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={sesion(usuario("editor"))}>
+          <FilaAgenda item={item} abierta={false} onToggle={() => {}} catalogos={catalogos()} />
+        </SesionContexto.Provider>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("con cubridores, el badge es un botón que despliega los nombres de quién está de turno", () => {
+    montarCubierto([
+      { turnoId: "tr1", miembroId: "u-luis", miembroNombre: "Luis", franjaId: "f1" },
+      { turnoId: "tr2", miembroId: "u-ana", miembroNombre: "Ana", franjaId: "f1" },
+    ]);
+    // Antes de pulsar, los nombres NO están en el árbol (es un despliegue, no texto siempre visible).
+    expect(screen.queryByText("Luis")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Cubierto por turno/ }));
+    expect(screen.getByText("Luis")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+  });
+
+  it("sin cubridores cae al badge plano (no es un botón)", () => {
+    montarCubierto([]);
+    expect(screen.getByText("Cubierto por turno")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Cubierto por turno/ })).toBeNull();
   });
 });

@@ -2,7 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { useRelojVivo } from "@/hooks/use-reloj-vivo";
 import { api } from "@/lib/api";
-import { derivarCoberturaEvento } from "@/lib/cobertura";
+import { derivarCoberturaEvento, type CubridorPorTurno } from "@/lib/cobertura";
 import { hoyCDMX, posicionTemporal } from "@/lib/fecha";
 import { lunesSiguiente } from "@/lib/rota-calendario";
 import type { RotaSemana } from "@/types";
@@ -85,12 +85,14 @@ export function useTablero(
   });
   const rotaDe = (e: { fecha: string }): RotaSemana | undefined =>
     e.fecha ? porLunes.get(lunesSiguiente(e.fecha, 0)) : undefined;
-  const cubiertosPorTurno = new Set<string>();
+  // Evento → personas de turno que lo cubren. `Map` (no `Set`): además de marcar qué eventos cubre
+  // un turno (`.has(id)`, como antes), guarda QUIÉN para poder revelarlo al pulsar el badge.
+  const cubiertosPorTurno = new Map<string, CubridorPorTurno[]>();
   for (const e of eventosLibres) {
     const semana = rotaDe(e);
     if (!semana) continue;
     const d = derivarCoberturaEvento(e, [], semana.turnos, semana.franjas, undefined, ausencias);
-    if (d.estado === "cubierto-turno") cubiertosPorTurno.add(e.id);
+    if (d.estado === "cubierto-turno") cubiertosPorTurno.set(e.id, d.porTurno);
   }
 
   // Cortes del DÍA SELECCIONADO (`fecha`, por defecto HOY). Las claves del retorno conservan el
@@ -129,6 +131,7 @@ export function useTablero(
       orden: conOrden(e.fecha),
       evento: e,
       cubiertoPorTurno: cubiertosPorTurno.has(e.id),
+      cubridoresPorTurno: cubiertosPorTurno.get(e.id) ?? [],
     })),
   ].sort((a, b) => a.orden.localeCompare(b.orden));
 

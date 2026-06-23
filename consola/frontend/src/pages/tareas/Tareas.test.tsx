@@ -11,6 +11,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
+import type { CubridorPorTurno } from "@/lib/cobertura";
 import { hoyCDMX } from "@/lib/fecha";
 import type {
   CatalogosPublicacion,
@@ -749,7 +750,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
               // En curso ahora (23:00, ventana 180') → «en vivo», debe flotar arriba.
               evento({ id: "ev-vivo", titulo: "En vivo ahora", fecha: hoy, hora: "23:00" }),
             ]}
-            cubiertosPorTurno={new Set()}
+            cubiertosPorTurno={new Map()}
           />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -832,7 +833,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   function PanoramaConFiltro(props: {
     tareas: Publicacion[];
     eventos: EventoRota[];
-    cubiertosPorTurno: Set<string>;
+    cubiertosPorTurno: Map<string, CubridorPorTurno[]>;
   }) {
     const [filtro, setFiltro] = React.useState<string | null>(null);
     return (
@@ -851,7 +852,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   function renderPanorama(props: {
     tareas?: Publicacion[];
     eventos?: EventoRota[];
-    cubiertosPorTurno?: Set<string>;
+    cubiertosPorTurno?: Map<string, CubridorPorTurno[]>;
   }) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
@@ -860,7 +861,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
           <PanoramaConFiltro
             tareas={props.tareas ?? []}
             eventos={props.eventos ?? []}
-            cubiertosPorTurno={props.cubiertosPorTurno ?? new Set()}
+            cubiertosPorTurno={props.cubiertosPorTurno ?? new Map()}
           />
         </MemoryRouter>
       </QueryClientProvider>,

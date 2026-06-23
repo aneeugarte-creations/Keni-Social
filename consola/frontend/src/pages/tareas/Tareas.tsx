@@ -96,6 +96,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
         evento={i.evento}
         catalogos={catalogos}
         cubiertoPorTurno={i.cubiertoPorTurno ?? false}
+        cubridoresPorTurno={i.cubridoresPorTurno ?? []}
       />
     ) : i.kind === "cobertura" ? (
       <TarjetaCoberturaMia key={i.clave} cobertura={i.cobertura} />

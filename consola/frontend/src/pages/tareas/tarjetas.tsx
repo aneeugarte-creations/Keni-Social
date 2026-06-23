@@ -13,13 +13,14 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import type { Semaforo } from "@/lib/cobertura";
+import type { CubridorPorTurno, Semaforo } from "@/lib/cobertura";
 import { SEMAFORO_ESTILO } from "@/lib/estado-color";
 import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -298,6 +299,131 @@ function RolLibre({ tarea }: { tarea: Publicacion }) {
   );
 }
 
+/** Estilo del badge «Cubierto por turno» (outline esmeralda, calmado), compartido con su versión plana. */
+const CLASE_CUBIERTO_TURNO = "border-emerald-500/50 text-emerald-700 dark:text-emerald-300";
+
+/**
+ * Tarjeta flotante minimalista con QUIÉN cubre el evento por turno (avatar + nombre). Se portaliza
+ * a `<body>` y se ancla bajo el badge; `pointer-events-auto` para que sea clicable también dentro
+ * de un diálogo modal de Radix (que pone el `<body>` en `pointer-events: none`).
+ */
+function PopoverCubridores({
+  cubridores,
+  anclaRef,
+  contenedorRef,
+}: {
+  cubridores: CubridorPorTurno[];
+  anclaRef: React.RefObject<HTMLButtonElement>;
+  contenedorRef: React.RefObject<HTMLDivElement>;
+}) {
+  const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
+
+  // Mide el ancla y el panel ya montado para anclarlo bajo el badge sin salirse del viewport.
+  React.useLayoutEffect(() => {
+    const ancla = anclaRef.current;
+    const panel = contenedorRef.current;
+    if (!ancla || !panel) return;
+    const a = ancla.getBoundingClientRect();
+    const p = panel.getBoundingClientRect();
+    const m = 8;
+    let x = a.left;
+    if (x + p.width > window.innerWidth - m) x = Math.max(m, window.innerWidth - p.width - m);
+    let y = a.bottom + 4;
+    if (y + p.height > window.innerHeight - m) y = Math.max(m, a.top - p.height - 4);
+    setPos({ x, y });
+  }, [anclaRef, contenedorRef, cubridores]);
+
+  return createPortal(
+    <div
+      ref={contenedorRef}
+      role="dialog"
+      aria-label="Quién lo cubre por turno"
+      style={pos ? { left: pos.x, top: pos.y } : { left: 0, top: 0, visibility: "hidden" }}
+      className="pointer-events-auto fixed z-50 min-w-[9rem] max-w-[15rem] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-md"
+    >
+      <p className="px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        De turno
+      </p>
+      <ul className="space-y-0.5">
+        {cubridores.map((c) => (
+          <li key={c.turnoId} className="flex items-center gap-2 px-1 py-0.5">
+            <AvatarPersona id={c.miembroId} nombre={c.miembroNombre} size="sm" />
+            <span className="truncate text-sm">{c.miembroNombre}</span>
+          </li>
+        ))}
+      </ul>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Badge «Cubierto por turno» que, al pulsarlo, despliega QUIÉN lo cubre (las personas de turno en
+ * la franja del evento). Sin cubridores (no debería pasar si está cubierto por turno) cae al badge
+ * plano no interactivo de siempre.
+ */
+export function BadgeCubiertoPorTurno({ cubridores }: { cubridores: CubridorPorTurno[] }) {
+  const [abierto, setAbierto] = React.useState(false);
+  const anclaRef = React.useRef<HTMLButtonElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!abierto) return;
+    function fuera(e: MouseEvent) {
+      const t = e.target as Node;
+      // El propio badge cierra vía su `onClick`; el panel no debe cerrarse al pulsarse a sí mismo.
+      if (anclaRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setAbierto(false);
+    }
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setAbierto(false);
+        anclaRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("keydown", tecla);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("keydown", tecla);
+    };
+  }, [abierto]);
+
+  if (cubridores.length === 0) {
+    return (
+      <Badge variant="outline" className={cn("shrink-0", CLASE_CUBIERTO_TURNO)}>
+        Cubierto por turno
+      </Badge>
+    );
+  }
+
+  return (
+    <span className="inline-flex shrink-0">
+      <button
+        ref={anclaRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setAbierto((v) => !v);
+        }}
+        aria-expanded={abierto}
+        aria-haspopup="dialog"
+        title="Ver quién lo cubre"
+        className={cn(
+          "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-medium transition-colors",
+          "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          CLASE_CUBIERTO_TURNO,
+        )}
+      >
+        Cubierto por turno
+      </button>
+      {abierto && (
+        <PopoverCubridores cubridores={cubridores} anclaRef={anclaRef} contenedorRef={panelRef} />
+      )}
+    </span>
+  );
+}
+
 /**
  * Un EVENTO «Por cubrir»: un partido/transmisión que nadie ha cogido todavía. No tiene tarea
  * aún; al coger (o que el coordinador de la rota asigne) se crea su registro de cobertura vía `cubrirEvento`.
@@ -307,6 +433,7 @@ export function TarjetaEventoLibre({
   catalogos,
   sinMenu = false,
   cubiertoPorTurno = false,
+  cubridoresPorTurno = [],
 }: {
   evento: EventoRota;
   catalogos: CatalogosPublicacion | undefined;
@@ -315,6 +442,8 @@ export function TarjetaEventoLibre({
   sinMenu?: boolean;
   /** Lo cubre el turno de su franja → «Cubierto por turno» (calmado) en vez de «Sin cubrir». */
   cubiertoPorTurno?: boolean;
+  /** Personas de turno que lo cubren (revelables al pulsar el badge «Cubierto por turno»). */
+  cubridoresPorTurno?: CubridorPorTurno[];
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -406,12 +535,7 @@ export function TarjetaEventoLibre({
         <IconoEvento titulo={evento.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{evento.titulo}</span>
         {cubiertoPorTurno ? (
-          <Badge
-            variant="outline"
-            className="border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
-          >
-            Cubierto por turno
-          </Badge>
+          <BadgeCubiertoPorTurno cubridores={cubridoresPorTurno} />
         ) : (
           <Badge
             variant="outline"

@@ -1,3 +1,4 @@
+import type { CubridorPorTurno } from "@/lib/cobertura";
 import type { Publicacion, EventoRota, PrioridadEvento, TipoCoberturaEvento } from "@/types";
 
 /** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
@@ -46,6 +47,8 @@ export type Item =
       evento: EventoRota;
       /** Hay alguien de turno en la franja del evento ese día → lo cubre el turno (no «sin cubrir»). */
       cubiertoPorTurno?: boolean;
+      /** Las personas de turno que lo cubren (para revelar QUIÉN al pulsar «Cubierto por turno»). */
+      cubridoresPorTurno?: CubridorPorTurno[];
     }
   | { kind: "cobertura"; clave: string; orden: string; cobertura: Cobertura }
   | { kind: "tarea"; clave: string; orden: string; tarea: Publicacion };
