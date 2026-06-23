@@ -1,7 +1,6 @@
 import type { Generacion } from "./generaciones";
 
 // ── Agentes de investigación (Ola 6) ─────────────────────────────────────────
-// Contrato: docs/maquina-contenido/06-agentes-investigacion.md
 
 /** Un encargo de investigación reutilizable (brief). */
 export interface InvBrief {
