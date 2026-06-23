@@ -1,15 +1,19 @@
 /**
- * Cabecera del editor de placa inline: título "Imagen" + selector nativo de plantilla (quitar
- * plantilla / publicar solo la foto · elegir plantilla del estudio).
+ * Cabecera del editor de placa inline: título "Imagen" + controles de plantilla (con plantilla ↔
+ * solo foto · elegir plantilla del estudio) y descarga del render.
+ *
+ * Estilo minimal: iconos ghost sin caja, sutiles. El glifo del MODO refleja el estado actual
+ * (plantilla puesta ↔ solo foto), sin tachado; el sufijo "· solo foto" del título lo reafirma.
+ * La descarga (exportar) queda como acción tranquila a la derecha.
  */
-import { Download, ImagePlus, LayoutTemplate, Slash } from "lucide-react";
+import { Download, Image as ImageIcon, ImagePlus, LayoutGrid, LayoutTemplate } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
 export interface CabeceraPlacaProps {
   /** "Sin plantilla": publicar solo la foto cruda (sin la plantilla encima). */
   sinPlantilla: boolean;
-  /** Alterna "sin plantilla" (icono de plantilla tachada). */
+  /** Alterna entre "con plantilla" y "solo foto". */
   onAlternarSinPlantilla: () => void;
   /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
   onAbrirGaleria?: () => void;
@@ -30,37 +34,37 @@ export function CabeceraPlaca({
         Imagen
         {sinPlantilla && <span className="font-normal text-muted-foreground">· solo foto</span>}
       </span>
-      {/* Selector nativo de plantilla: quitar plantilla (publicar solo la foto) · elegir plantilla
-          del estudio (galería por marca). Todo es 4:5, así que la plantilla la dicta la MARCA. */}
-      <div className="flex items-center gap-1">
+      {/* Controles ghost sutiles: modo (el glifo refleja el estado) · elegir plantilla · descargar. */}
+      <div className="flex items-center gap-0.5 text-muted-foreground">
         <Button
           type="button"
-          variant={sinPlantilla ? "secondary" : "outline"}
+          variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={onAlternarSinPlantilla}
           title={
             sinPlantilla
-              ? "Solo foto. Toca para restaurar"
-              : "Quitar la plantilla"
+              ? "Solo foto. Toca para poner la plantilla"
+              : "Con plantilla. Toca para publicar solo la foto"
           }
           aria-pressed={sinPlantilla}
         >
-          <span className="relative inline-flex">
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            <Slash className="absolute inset-0 h-3.5 w-3.5 text-destructive" />
-          </span>
+          {sinPlantilla ? (
+            <ImageIcon className="h-4 w-4" />
+          ) : (
+            <LayoutTemplate className="h-4 w-4" />
+          )}
         </Button>
         {onAbrirGaleria && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={onAbrirGaleria}
             title="Elegir plantilla"
           >
-            <LayoutTemplate className="h-3.5 w-3.5" />
+            <LayoutGrid className="h-4 w-4" />
           </Button>
         )}
         {/* Descarga el render completo (foto + plantilla + texto) tal cual se ve, para postear a
@@ -68,13 +72,13 @@ export function CabeceraPlaca({
         {onDescargar && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={onDescargar}
             title="Descargar imagen para postear"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-4 w-4" />
           </Button>
         )}
       </div>
