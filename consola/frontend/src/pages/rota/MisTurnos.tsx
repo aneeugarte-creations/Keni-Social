@@ -52,6 +52,7 @@ export function VistaMensualTurnos({
   onVerSemana,
   mostrarCobertura = true,
   mostrarHorasEquipo,
+  horasPorPersona = false,
   ocultarImprimir = false,
   controlesPre,
   marcadorSalud,
@@ -74,6 +75,10 @@ export function VistaMensualTurnos({
    *  ocultar «· 08:00–16:00» para que «Mañana/Tarde/Noche» no sugiera un horario único. «Yo»
    *  SIEMPRE muestra las horas propias (no le afecta este flag). */
   mostrarHorasEquipo?: boolean;
+  /** En «Equipo», muestra «la hora de cada uno»: las horas se agrupan por horario y, si dentro de
+   *  una franja difieren, se parten por hora (en vez de un único rango por franja). Gestión lo activa
+   *  para coordinar; «Horario» no (deja el rango por franja gobernado por `mostrarHorasEquipo`). */
+  horasPorPersona?: boolean;
   /** Oculta el botón-icono «Imprimir» de la barra para que el host lo ofrezca en su menú ⋯ (junto a
    *  las descargas). Gestión lo usa para no repetir la acción suelta; «Horario» lo deja visible. */
   ocultarImprimir?: boolean;
@@ -164,6 +169,7 @@ export function VistaMensualTurnos({
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
           mostrarHoras={mostrarHoras}
+          horasPorPersona={horasPorPersona}
           seleccionable={seleccionable}
           diasSel={diasSel}
           onToggleDia={onToggleDia}
@@ -596,13 +602,16 @@ function agruparPorFecha(turnos: TurnoRota[]): Map<string, TurnoRota[]> {
 
 // --- Vista EQUIPO: la jornada de todo el equipo -----------------------------
 
+/** Una persona de una franja, con su horario EFECTIVO (sus horas a medida o las de la franja). */
+type PersonaFranja = { id: string; nombre: string; inicio: string; fin: string };
+
 /** Una franja de un día con la gente que la cubre (agrupada para la celda del equipo). */
 type FranjaConPersonas = {
   franjaId: string;
   nombre: string;
   inicio: string;
   fin: string;
-  personas: { id: string; nombre: string }[];
+  personas: PersonaFranja[];
 };
 
 function VistaMesEquipo({
@@ -610,6 +619,7 @@ function VistaMesEquipo({
   cobertura,
   onAbrirDia,
   mostrarHoras = true,
+  horasPorPersona = false,
   seleccionable = false,
   diasSel,
   onToggleDia,
@@ -619,6 +629,8 @@ function VistaMesEquipo({
   onAbrirDia?: (fecha: string) => void;
   /** Pinta el rango horario junto a cada franja. El equipo puede ocultarlo (horas heterogéneas). */
   mostrarHoras?: boolean;
+  /** Gestión: muestra «la hora de cada uno» (ver `ChipFranjaEquipo`). */
+  horasPorPersona?: boolean;
   /** Gestión: celdas de día clicables para marcar la selección de reparto. */
   seleccionable?: boolean;
   diasSel?: Set<string>;
@@ -675,6 +687,7 @@ function VistaMesEquipo({
                 atenuado={!delMes}
                 miId={miId}
                 mostrarHoras={mostrarHoras}
+                horasPorPersona={horasPorPersona}
               />
             ))
           }
@@ -688,20 +701,50 @@ function VistaMesEquipo({
   );
 }
 
+/** La gente de un grupo, separada por comas, con el usuario resaltado. */
+function ListaGente({
+  personas,
+  miId,
+}: {
+  personas: { id: string; nombre: string }[];
+  miId: string;
+}) {
+  return (
+    <>
+      {personas.map((p, i) => (
+        <React.Fragment key={p.id}>
+          {i > 0 && ", "}
+          <span className={p.id === miId ? "font-semibold underline" : ""}>{p.nombre}</span>
+        </React.Fragment>
+      ))}
+    </>
+  );
+}
+
 /** Chip de una franja del equipo: franja + horario y la gente que la cubre (tú, resaltado). */
 function ChipFranjaEquipo({
   franja,
   atenuado,
   miId,
   mostrarHoras = true,
+  horasPorPersona = false,
 }: {
   franja: FranjaConPersonas;
   atenuado?: boolean;
   miId: string;
   mostrarHoras?: boolean;
+  /** Gestión: muestra «la hora de cada uno». Homogénea → hora junto a la franja; heterogénea →
+   *  una línea por horario. Resuelve lo que `mostrarHoras` evitaba (un horario único engañoso). */
+  horasPorPersona?: boolean;
 }) {
   // Color del bloque por PERIODO del turno (mañana/tarde/noche), igual que la rejilla semanal.
   const tono = presentacionTurnoPorHora(franja.inicio);
+  const grupos = horasPorPersona ? agruparPersonasPorHorario(franja.personas) : null;
+  // Homogénea = todos comparten horario → la hora va una sola vez junto al nombre de la franja.
+  const heterogenea = !!grupos && grupos.length > 1;
+  // El rango va junto a la franja cuando es un horario único y o bien el equipo lo pide
+  // (`mostrarHoras`) o estamos en «la hora de cada uno» (Gestión).
+  const horaFranja = !heterogenea && franja.inicio && (mostrarHoras || horasPorPersona);
   return (
     <div
       className={cn(
@@ -713,23 +756,29 @@ function ChipFranjaEquipo({
     >
       <div className="font-medium">
         {franja.nombre}
-        {mostrarHoras && franja.inicio && (
+        {horaFranja && (
           <span className="font-normal tabular-nums">
             {" "}
             · {franja.inicio}–{franja.fin}
           </span>
         )}
       </div>
-      <div className={tono.gente}>
-        {franja.personas.map((p, i) => (
-          <React.Fragment key={p.id}>
-            {i > 0 && ", "}
-            <span className={p.id === miId ? "font-semibold underline" : ""}>
-              {p.nombre}
-            </span>
-          </React.Fragment>
-        ))}
-      </div>
+      {heterogenea ? (
+        grupos!.map((g) => (
+          <div key={`${g.inicio}-${g.fin}`} className={tono.gente}>
+            {g.inicio && (
+              <span className={cn("tabular-nums", tono.horas)}>
+                {g.inicio}–{g.fin} ·{" "}
+              </span>
+            )}
+            <ListaGente personas={g.personas} miId={miId} />
+          </div>
+        ))
+      ) : (
+        <div className={tono.gente}>
+          <ListaGente personas={franja.personas} miId={miId} />
+        </div>
+      )}
     </div>
   );
 }
@@ -760,7 +809,12 @@ export function agruparEquipoPorFecha(
       };
       dia.set(t.franja_id, fr);
     }
-    fr.personas.push({ id: t.miembro_id, nombre: t.miembro_nombre });
+    fr.personas.push({
+      id: t.miembro_id,
+      nombre: t.miembro_nombre,
+      inicio: t.inicio,
+      fin: t.fin,
+    });
   }
   const salida = new Map<string, FranjaConPersonas[]>();
   for (const [fecha, dia] of porDia) {
@@ -772,4 +826,26 @@ export function agruparEquipoPorFecha(
     salida.set(fecha, franjas);
   }
   return salida;
+}
+
+/** Grupo de gente de una franja que comparte el mismo horario efectivo ("HH:MM"). */
+export type GrupoHorario = { inicio: string; fin: string; personas: { id: string; nombre: string }[] };
+
+/**
+ * Agrupa la gente de una franja por su horario efectivo (Gestión muestra «la hora de cada uno»).
+ * Un solo grupo = franja homogénea (todos a la misma hora); varios = horas heterogéneas. Conserva
+ * el orden (alfabético) de entrada dentro de cada grupo y ordena los grupos por hora de inicio.
+ */
+export function agruparPersonasPorHorario(personas: PersonaFranja[]): GrupoHorario[] {
+  const grupos: GrupoHorario[] = [];
+  for (const p of personas) {
+    let g = grupos.find((x) => x.inicio === p.inicio && x.fin === p.fin);
+    if (!g) {
+      g = { inicio: p.inicio, fin: p.fin, personas: [] };
+      grupos.push(g);
+    }
+    g.personas.push({ id: p.id, nombre: p.nombre });
+  }
+  grupos.sort((a, b) => a.inicio.localeCompare(b.inicio));
+  return grupos;
 }

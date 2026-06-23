@@ -689,6 +689,7 @@ export function Calendario({
         controlesPre={esGestion ? undefined : conmutadorVista}
         marcadorSalud={marcadorSalud}
         soloEquipo={esGestion}
+        horasPorPersona={esGestion}
         ocultarImprimir={esGestion}
         accionesDerecha={accionesMes}
         seleccionable={esGestion}

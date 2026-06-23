@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TurnoRota } from "@/types";
 
-import { agruparEquipoPorFecha } from "./MisTurnos";
+import { agruparEquipoPorFecha, agruparPersonasPorHorario } from "./MisTurnos";
 
 function turno(p: Partial<TurnoRota>): TurnoRota {
   return {
@@ -68,5 +68,35 @@ describe("agruparEquipoPorFecha", () => {
       turno({ franja_id: "f-man", miembro_id: "a", miembro_nombre: "Ada" }),
     ]);
     expect(m.get("2026-06-03")![0].personas.map((p) => p.nombre)).toEqual(["Ada", "Zoe"]);
+  });
+
+  it("guarda el horario efectivo de cada persona", () => {
+    const dia = agruparEquipoPorFecha([
+      turno({ miembro_id: "a", miembro_nombre: "Ana", inicio: "08:00", fin: "16:00" }),
+    ]).get("2026-06-03")!;
+    expect(dia[0].personas[0]).toMatchObject({ nombre: "Ana", inicio: "08:00", fin: "16:00" });
+  });
+});
+
+describe("agruparPersonasPorHorario", () => {
+  it("franja homogénea = un solo grupo con toda la gente", () => {
+    const g = agruparPersonasPorHorario([
+      { id: "a", nombre: "Ana", inicio: "08:00", fin: "16:00" },
+      { id: "b", nombre: "Beto", inicio: "08:00", fin: "16:00" },
+    ]);
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ inicio: "08:00", fin: "16:00" });
+    expect(g[0].personas.map((p) => p.nombre)).toEqual(["Ana", "Beto"]);
+  });
+
+  it("franja heterogénea = un grupo por horario, ordenados por inicio", () => {
+    const g = agruparPersonasPorHorario([
+      { id: "a", nombre: "Ana", inicio: "10:00", fin: "18:00" },
+      { id: "b", nombre: "Beto", inicio: "08:00", fin: "16:00" },
+      { id: "c", nombre: "Caro", inicio: "08:00", fin: "16:00" },
+    ]);
+    expect(g.map((x) => x.inicio)).toEqual(["08:00", "10:00"]);
+    expect(g[0].personas.map((p) => p.nombre)).toEqual(["Beto", "Caro"]);
+    expect(g[1].personas.map((p) => p.nombre)).toEqual(["Ana"]);
   });
 });
