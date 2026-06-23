@@ -191,6 +191,50 @@ def test_protege_fotos_de_collage(monkeypatch):
     assert borrados == [] and res["conservados"] == 2
 
 
+def test_protege_slides_de_carrusel(monkeypatch):
+    # Slides de carrusel: JSON array `[{tipo, objeto, foto?}, …]` en el campo `carrusel`. La
+    # placa horneada (`objeto`) y la procedencia (`foto`) de cada slide son referencias vivas.
+    monkeypatch.setattr(
+        media_gc.repos, "listar_piezas",
+        lambda *a, **k: [
+            {
+                "id": "pub1",
+                "imagen": "render/portada.png",
+                "foto": "",
+                "fotos": "",
+                "carrusel": '[{"tipo":"imagen","objeto":"artes/slide1.png","foto":"originales/fondo1.jpg"},'
+                '{"tipo":"imagen","objeto":"artes/slide2.png"}]',
+            },
+            {"id": "pub2", "imagen": "", "foto": "", "fotos": "", "carrusel": ""},  # sin carrusel
+        ],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
+
+    vivas = media_gc.referencias_vivas()
+    assert {"artes/slide1.png", "artes/slide2.png", "originales/fondo1.jpg"} <= vivas
+
+    # Slides VIEJAS pero referenciadas por el carrusel: NO se borran.
+    _objetos(
+        monkeypatch,
+        [("artes/slide1.png", _VIEJO), ("artes/slide2.png", _VIEJO), ("originales/fondo1.jpg", _VIEJO)],
+    )
+    borrados = _captura_borrados(monkeypatch)
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == [] and res["conservados"] == 3
+
+
+def test_protege_carrusel_json_malformado(monkeypatch):
+    # Si el JSON de `carrusel` está malformado, el GC lo ignora silenciosamente (robusto).
+    monkeypatch.setattr(
+        media_gc.repos, "listar_piezas",
+        lambda *a, **k: [{"id": "p", "imagen": "", "foto": "", "fotos": "", "carrusel": "{bad"}],
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
+    assert media_gc.referencias_vivas() == set()
+
+
 def test_protege_collage_json_malformado(monkeypatch):
     # Si el JSON de `fotos` está malformado, el GC lo ignora silenciosamente (robusto).
     monkeypatch.setattr(

@@ -109,6 +109,38 @@ def _fotos_de_collage(filas: list[dict[str, Any]]) -> set[str]:
     return nombres
 
 
+def _fotos_de_carrusel(filas: list[dict[str, Any]]) -> set[str]:
+    """Nombres de objeto en el campo `carrusel` (slides JSON) de una lista de filas.
+
+    Una pieza de carrusel guarda sus slides como JSON array `[{tipo, objeto, foto?}, …]`: el
+    `objeto` es la placa horneada que SE MUESTRA y la `foto` es la procedencia (para re-editar
+    el slide). Ambas viven SOLO en este campo, fuera del catálogo regenerable; sin esta
+    protección el GC borraría las slides de todo carrusel publicado al pasar el umbral.
+    """
+    import json
+
+    nombres: set[str] = set()
+    for fila in filas:
+        crudo = (fila.get("carrusel") or "").strip()
+        if not crudo:
+            continue
+        try:
+            slides = json.loads(crudo)
+            if not isinstance(slides, list):
+                continue
+            for slide in slides:
+                if not isinstance(slide, dict):
+                    continue
+                for campo in ("objeto", "foto"):
+                    valor = (slide.get(campo) or "").strip()
+                    if valor:
+                        nombres.add(valor)
+        except (ValueError, TypeError):
+            # JSON malformado: ignora silenciosamente.
+            pass
+    return nombres
+
+
 def _refs_documento(doc: Any, acc: set[str]) -> None:
     """Acumula en `acc` los media_id referenciados por un documento de capas (recursivo)."""
     if not isinstance(doc, dict):
@@ -289,6 +321,9 @@ def referencias_vivas() -> set[str]:
     vivas |= _fotos_de(piezas)
     # Fotos de collage: varias fotos en huecos distintos, almacenadas como JSON array.
     vivas |= _fotos_de_collage(piezas)
+    # Slides de carrusel: placa horneada (`objeto`) + procedencia (`foto`) por slide, en el campo
+    # `carrusel`. Viven SOLO ahí; sin esto el GC borraría las slides de los carruseles publicados.
+    vivas |= _fotos_de_carrusel(piezas)
     # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
     # activos de marca (logos, tipografías). Defensivo y opcional.
     vivas |= _objetos_recursos_marca()
