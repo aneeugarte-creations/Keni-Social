@@ -179,9 +179,6 @@ export function ReparteMes({
           <X className="h-4 w-4" />
         </Button>
       </div>
-      <p className="-mt-1 text-xs text-muted-foreground">
-        Sin patrones fijos — ajusta los días de cada persona.
-      </p>
 
       {/* Personas */}
       <div className="space-y-2">
