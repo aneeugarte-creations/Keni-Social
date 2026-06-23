@@ -51,8 +51,8 @@ ENV_OPENAI_API_KEY = "OPENAI_API_KEY"
 # modelo concreto se elige por id, ver `media.py` / skill `estudio-imagen`).
 PROVEEDOR_DEFECTO = "openrouter"
 
-# Proveedores de fotos de stock con credencial (la guarda la UI POR MARCA en `[stock]`).
-# Los gratuitos (Wikimedia/NASA/Openverse) no tienen clave y no viven aqui.
+# Agencias de stock GENÉRICAS con credencial: una clave GLOBAL por agencia (sirve a todas
+# las marcas). Los gratuitos (Wikimedia/NASA/Openverse) no tienen clave y no viven aqui.
 _PROVEEDORES_STOCK = ("pexels", "pixabay")
 
 # Cabecera del archivo de secretos (recordatorio de que NO se debe compartir).
@@ -97,15 +97,9 @@ def _bloque_imagen(datos: dict) -> dict:
 
 
 def _bloque_stock(datos: dict) -> dict:
-    """Devuelve el sub-dict `[stock]` (marca -> {proveedor: clave}) ({} si falta)."""
+    """Devuelve el sub-dict `[stock]` (proveedor -> clave GLOBAL) ({} si falta)."""
     bloque = datos.get("stock")
     return bloque if isinstance(bloque, dict) else {}
-
-
-def _stock_de_marca(datos: dict, marca: str) -> dict:
-    """Sub-dict `[stock.<marca>]` (proveedor -> clave) ({} si falta o malformado)."""
-    tabla = _bloque_stock(datos).get(marca)
-    return tabla if isinstance(tabla, dict) else {}
 
 
 def _escribir(datos: dict) -> None:
@@ -147,25 +141,20 @@ def _serializar_imagen(datos: dict) -> str:
 
 
 def _serializar_stock(datos: dict) -> str:
-    """Serializa los bloques `[stock.<marca>]` (proveedor -> clave) a TOML.
+    """Serializa el bloque `[stock]` (proveedor -> clave GLOBAL) a TOML.
 
-    Una tabla por marca con clave guardada; la marca se escribe como clave entre comillas
-    (`[stock."claro-sports"]`) para tolerar guiones. Omite marcas/proveedores sin clave.
+    Pexels/Pixabay son agencias GENÉRICAS: una sola clave por agencia sirve a todas las
+    marcas. Omite proveedores sin clave.
     """
     bloque = _bloque_stock(datos)
-    if not bloque:
+    filas = [
+        f"{prov} = {_toml_str(bloque[prov])}"
+        for prov in _PROVEEDORES_STOCK
+        if isinstance(bloque.get(prov), str) and bloque[prov]
+    ]
+    if not filas:
         return ""
-    tablas: list[str] = []
-    for marca in sorted(bloque):
-        claves = _stock_de_marca(datos, marca)
-        filas = [
-            f"{prov} = {_toml_str(claves[prov])}"
-            for prov in _PROVEEDORES_STOCK
-            if isinstance(claves.get(prov), str) and claves[prov]
-        ]
-        if filas:
-            tablas.append(f"[stock.{_toml_str(marca)}]\n" + "\n".join(filas) + "\n")
-    return "\n".join(tablas)
+    return "[stock]\n" + "\n".join(filas) + "\n"
 
 
 def _serializar(datos: dict) -> str:
@@ -295,44 +284,38 @@ def estado_imagen() -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# API publica: claves de fotos de stock POR MARCA (Pexels / Pixabay)          #
+# API publica: claves GLOBALES de fotos de stock (Pexels / Pixabay)           #
 # --------------------------------------------------------------------------- #
+# Pexels y Pixabay son agencias GENÉRICAS: una sola cuenta/clave por agencia sirve a
+# todas las marcas (la clave NO es propiedad de ninguna marca). Una agencia PROPIA de
+# una marca iría por marca, pero hoy no hay ninguna, así que no se monta esa via.
 
 
-def guardar_clave_stock(marca: str, proveedor: str, api_key: str) -> None:
-    """Guarda la API key de un proveedor de stock PARA UNA MARCA (atomico, `0600`).
+def guardar_clave_stock(proveedor: str, api_key: str) -> None:
+    """Guarda la API key GLOBAL de un proveedor de stock (atomico, `0600`).
 
     `proveedor` debe ser uno de `_PROVEEDORES_STOCK`; si no, no hace nada (el endpoint
-    valida antes). Preserva las claves de otras marcas y otros proveedores de la misma.
+    valida antes). Preserva las claves de los demas proveedores.
     """
-    marca = (marca or "").strip()
     proveedor = (proveedor or "").strip().lower()
     api_key = (api_key or "").strip()
-    if not marca or proveedor not in _PROVEEDORES_STOCK:
+    if proveedor not in _PROVEEDORES_STOCK:
         return
     datos = _leer()
     stock = dict(_bloque_stock(datos))
-    por_marca = dict(_stock_de_marca(datos, marca))
-    por_marca[proveedor] = api_key
-    stock[marca] = por_marca
+    stock[proveedor] = api_key
     datos["stock"] = stock
     _escribir(datos)
 
 
-def borrar_clave_stock(marca: str, proveedor: str) -> None:
-    """Borra la API key de un proveedor de stock de una marca (deja limpio si queda vacia)."""
-    marca = (marca or "").strip()
+def borrar_clave_stock(proveedor: str) -> None:
+    """Borra la API key GLOBAL de un proveedor de stock (deja limpio si no queda ninguna)."""
     proveedor = (proveedor or "").strip().lower()
     datos = _leer()
-    por_marca = dict(_stock_de_marca(datos, marca))
-    if proveedor not in por_marca:
-        return
-    por_marca.pop(proveedor, None)
     stock = dict(_bloque_stock(datos))
-    if por_marca:
-        stock[marca] = por_marca
-    else:
-        stock.pop(marca, None)
+    if proveedor not in stock:
+        return
+    stock.pop(proveedor, None)
     if stock:
         datos["stock"] = stock
     else:
@@ -340,24 +323,22 @@ def borrar_clave_stock(marca: str, proveedor: str) -> None:
     _escribir(datos)
 
 
-def obtener_clave_stock(marca: str, proveedor: str) -> str | None:
-    """Devuelve la API key de un proveedor de stock para una marca, o None si no hay.
+def obtener_clave_stock(proveedor: str) -> str | None:
+    """Devuelve la API key GLOBAL de un proveedor de stock, o None si no hay.
 
     Uso INTERNO (la consume `config.pexels_api_key`/`pixabay_api_key`). NUNCA se expone
     entera por la API ni se loguea.
     """
-    valor = _stock_de_marca(_leer(), (marca or "").strip()).get(
-        (proveedor or "").strip().lower()
-    )
+    valor = _bloque_stock(_leer()).get((proveedor or "").strip().lower())
     if isinstance(valor, str) and valor.strip():
         return valor.strip()
     return None
 
 
-def estado_clave_stock(marca: str, proveedor: str) -> dict:
-    """Estado de la clave de un proveedor de stock de una marca, SIN exponerla.
+def estado_clave_stock(proveedor: str) -> dict:
+    """Estado de la clave GLOBAL de un proveedor de stock, SIN exponerla.
 
     Devuelve `{configurado, pista}` (pista = `····` + ultimos 4 chars, o "").
     """
-    clave = obtener_clave_stock(marca, proveedor)
+    clave = obtener_clave_stock(proveedor)
     return {"configurado": clave is not None, "pista": _pista(clave)}

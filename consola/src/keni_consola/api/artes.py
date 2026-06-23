@@ -382,8 +382,9 @@ _STOCK_LIMITE_MAX = 12
 def _buscar_stock(query: str, proveedor: str, limite: int, marca: str) -> dict:
     """Busca candidatas en los proveedores usables de una marca. Degradación honesta.
 
-    Las claves (Pexels/Pixabay) y los toggles de fuente se resuelven POR MARCA: la lista
-    `proveedores` y la búsqueda reflejan lo configurado para `marca` (o lo global si '').
+    Las claves (Pexels/Pixabay) son GLOBALES; los toggles de qué fuentes usa la marca sí
+    son POR MARCA: la lista `proveedores` y la búsqueda reflejan lo habilitado para `marca`
+    (o todas las disponibles si '').
     """
     proveedores = [
         stock_fotos.estado_fuente(p, marca)
@@ -393,7 +394,7 @@ def _buscar_stock(query: str, proveedor: str, limite: int, marca: str) -> dict:
         return {"proveedores": proveedores, "candidatos": []}
     try:
         if proveedor:
-            candidatos = stock_fotos.buscar(query, proveedor, limite=limite, marca=marca)
+            candidatos = stock_fotos.buscar(query, proveedor, limite=limite)
         else:
             candidatos = stock_fotos.buscar_todos(query, limite_por=limite, marca=marca)
     except Exception:  # noqa: BLE001 -- una API caída no rompe la búsqueda; devolvemos lo que haya

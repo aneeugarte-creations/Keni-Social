@@ -234,20 +234,21 @@ def test_proveedores_disponibles_sin_claves():
 
 
 # --------------------------------------------------------------------------- #
-# Por marca: clave propia + toggle de fuentes habilitadas                      #
+# Clave GLOBAL + toggle de fuentes habilitadas por marca                       #
 # --------------------------------------------------------------------------- #
 
 
-def test_clave_pexels_por_marca_hace_disponible(monkeypatch):
-    # La clave existe SOLO para 'unotv': disponible para esa marca, no para otra ni global.
-    monkeypatch.setattr(
-        stock_fotos.config,
-        "pexels_api_key",
-        lambda marca="": "k" if marca == "unotv" else None,
-    )
+def test_clave_pexels_global_hace_disponible(monkeypatch):
+    # La clave de Pexels es GLOBAL: configurada, disponible para cualquier marca.
+    monkeypatch.setattr(stock_fotos.config, "pexels_api_key", lambda: "k")
     assert stock_fotos.estado_fuente("pexels", "unotv")["disponible"] is True
-    assert stock_fotos.estado_fuente("pexels", "claro-sports")["disponible"] is False
-    assert stock_fotos.estado_fuente("pexels", "")["disponible"] is False
+    assert stock_fotos.estado_fuente("pexels", "claro-sports")["disponible"] is True
+    assert stock_fotos.estado_fuente("pexels")["disponible"] is True
+
+
+def test_pexels_sin_clave_global_no_disponible(monkeypatch):
+    monkeypatch.setattr(stock_fotos.config, "pexels_api_key", lambda: None)
+    assert stock_fotos.estado_fuente("pexels", "unotv")["disponible"] is False
 
 
 def test_estado_incluye_activa_segun_toggle(monkeypatch):

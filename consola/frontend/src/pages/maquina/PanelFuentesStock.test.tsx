@@ -21,8 +21,6 @@ const MARCA: MarcaFuentesStock = {
       disponible: true,
       activa: true,
       motivo: "",
-      configurado: true,
-      pista: "1234",
     },
     {
       proveedor: "pixabay",
@@ -31,8 +29,6 @@ const MARCA: MarcaFuentesStock = {
       disponible: false,
       activa: false,
       motivo: "Configúrala en Sistema → Proveedores.",
-      configurado: false,
-      pista: null,
     },
     { proveedor: "wikimedia", nombre: "Wikimedia", requiere_clave: false, disponible: true, activa: true, motivo: "" },
     { proveedor: "nasa", nombre: "NASA", requiere_clave: false, disponible: true, activa: true, motivo: "" },

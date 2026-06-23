@@ -22,23 +22,24 @@ def stores(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_STOCK_FUENTES", raising=False)
 
 
-def test_pexels_key_secreto_por_marca_gana(stores, monkeypatch):
-    monkeypatch.setenv("KENI_PEXELS_API_KEY", "global-key")
-    secretos.guardar_clave_stock("unotv", "pexels", "marca-key")
-    assert config.pexels_api_key("unotv") == "marca-key"  # secreto por marca gana
-    assert config.pexels_api_key("claro-sports") == "global-key"  # cae a la global
-    assert config.pexels_api_key("") == "global-key"  # sin marca: solo la global
+def test_pexels_key_secreto_ui_gana_a_env(stores, monkeypatch):
+    monkeypatch.setenv("KENI_PEXELS_API_KEY", "global-env")
+    secretos.guardar_clave_stock("pexels", "ui-key")
+    assert config.pexels_api_key() == "ui-key"  # el secreto guardado por la UI gana
+
+
+def test_pexels_key_cae_a_env(stores, monkeypatch):
+    monkeypatch.setenv("KENI_PEXELS_API_KEY", "global-env")
+    assert config.pexels_api_key() == "global-env"  # sin secreto UI: cae a la env global
 
 
 def test_pexels_key_none_sin_nada(stores):
-    assert config.pexels_api_key("unotv") is None
-    assert config.pexels_api_key("") is None
+    assert config.pexels_api_key() is None
 
 
-def test_pixabay_key_por_marca(stores):
-    secretos.guardar_clave_stock("unotv", "pixabay", "px-marca")
-    assert config.pixabay_api_key("unotv") == "px-marca"
-    assert config.pixabay_api_key("otra") is None
+def test_pixabay_key_global(stores):
+    secretos.guardar_clave_stock("pixabay", "px-ui")
+    assert config.pixabay_api_key() == "px-ui"
 
 
 def test_fuentes_activas_none_sin_config(stores):

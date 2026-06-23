@@ -110,7 +110,7 @@ export interface RespuestaArte {
 // --- Fotos de STOCK (ayuda visual NUNCA publicable sin autorizar) ---
 
 /** Estado de un proveedor de fotos de stock (lo declara `GET /api/artes/stock/buscar`). */
-export interface ProveedorStock {
+export interface ProveedorBuscarStock {
   proveedor: string;
   nombre: string;
   /** `false` si el proveedor no se puede usar ahora (falta clave / caído): chip deshabilitado. */
@@ -136,7 +136,7 @@ export interface CandidataStock {
 
 /** Respuesta de `GET /api/artes/stock/buscar`. */
 export interface RespuestaBuscarStock {
-  proveedores: ProveedorStock[];
+  proveedores: ProveedorBuscarStock[];
   candidatos: CandidataStock[];
 }
 
@@ -180,41 +180,55 @@ export interface RespuestaStock {
   plataforma: PlataformaStock;
 }
 
-// --- Configuración de FUENTES de stock POR MARCA (claves + toggles) ---
-// Las claves de Pexels/Pixabay viven en Sistema → Proveedores; los toggles de
-// fuentes, en la subpágina de la etapa Stock (Contexto). Ambas son por marca.
+// --- Configuración de FUENTES de stock (claves GLOBALES + toggles por marca) ---
+// Las claves de Pexels/Pixabay son GLOBALES (una por agencia, vale para todas las
+// marcas) y viven en Sistema → Proveedores; los toggles de qué bancos usa cada
+// marca, en la subpágina de la etapa Stock (Contexto), siguen siendo por marca.
 
 /**
- * Estado de un proveedor de fotos de stock PARA UNA MARCA (`GET /api/stock/fuentes`).
+ * Estado de un proveedor de fotos de stock a nivel GLOBAL (`GET /api/stock/proveedores`).
  * `configurado`/`pista` solo llegan cuando `requiere_clave` es `true`.
+ */
+export interface ProveedorStock {
+  proveedor: string;
+  nombre: string;
+  /** El proveedor lleva API key (pexels/pixabay); los gratuitos no la necesitan. */
+  requiere_clave: boolean;
+  /** El proveedor puede operar (gratuito, o de pago con su clave global configurada). */
+  disponible: boolean;
+  /** La clave global de este proveedor está guardada (solo si `requiere_clave`). */
+  configurado?: boolean;
+  /** Pista no sensible de la clave guardada (`····last4`), solo si `requiere_clave`. */
+  pista?: string | null;
+}
+
+/** Respuesta de `GET /api/stock/proveedores`: estado de las claves globales. */
+export interface RespuestaProveedoresStock {
+  proveedores: ProveedorStock[];
+}
+
+/**
+ * Estado de un proveedor de fotos de stock PARA UNA MARCA (`GET /api/stock/fuentes?marca=`).
+ * Si un banco de pago no se puede activar es porque su clave global falta: lo dice `disponible`.
  */
 export interface FuenteStock {
   proveedor: string;
   nombre: string;
   /** El proveedor lleva API key (pexels/pixabay); los gratuitos no la necesitan. */
   requiere_clave: boolean;
-  /** El proveedor puede operar (gratuito, o de pago con su clave configurada). */
+  /** El proveedor puede operar (gratuito, o de pago con su clave global configurada). */
   disponible: boolean;
   /** Habilitado por el toggle de esta marca. */
   activa: boolean;
   /** Por qué no está disponible/activa (para el tooltip o la pista del toggle). */
   motivo: string;
-  /** La clave de este proveedor está guardada para la marca (solo si `requiere_clave`). */
-  configurado?: boolean;
-  /** Pista no sensible de la clave guardada (`····last4`), solo si `requiere_clave`. */
-  pista?: string | null;
 }
 
-/** Estado de las fuentes de stock de UNA marca. */
+/** Estado de las fuentes de stock de UNA marca (`GET /api/stock/fuentes?marca=`). */
 export interface MarcaFuentesStock {
   marca: string;
   etiqueta: string;
   fuentes: FuenteStock[];
-}
-
-/** Respuesta de `GET /api/stock/fuentes` (todas las marcas). */
-export interface RespuestaFuentesStock {
-  marcas: MarcaFuentesStock[];
 }
 
 /** Cuerpo de `PUT /api/stock/fuentes/{marca}`: ids de proveedores habilitados. */
@@ -222,19 +236,19 @@ export interface CuerpoGuardarFuentesStock {
   activas: string[];
 }
 
-/** Cuerpo de `PUT /api/stock/clave/{marca}`: clave de un proveedor (write-only). */
+/** Cuerpo de `PUT /api/stock/clave`: clave GLOBAL de un proveedor (write-only). */
 export interface CuerpoGuardarClaveStock {
   proveedor: string;
   api_key: string;
 }
 
-/** Respuesta al guardar o borrar la clave de un proveedor de stock. */
+/** Respuesta al guardar o borrar la clave global de un proveedor de stock. */
 export interface RespuestaClaveStock {
   configurado: boolean;
   mensaje: string;
 }
 
-/** Respuesta de `POST /api/stock/probar/{marca}`: validación en vivo de una clave. */
+/** Respuesta de `POST /api/stock/probar`: validación en vivo de una clave global. */
 export interface RespuestaProbarStock {
   ok: boolean;
   mensaje: string;

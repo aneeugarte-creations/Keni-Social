@@ -1,4 +1,4 @@
-"""API /api/stock: claves de bancos de fotos por marca + fuentes habilitadas por marca.
+"""API /api/stock: claves GLOBALES de bancos de fotos + fuentes habilitadas por marca.
 
 SOLO ADMIN (secretos compartidos), mismo criterio que /api/conexiones. `entorno` aisla
 `secretos.toml` y el store de ajustes en tmp; la prueba de conexión parchea el descargador
@@ -35,9 +35,9 @@ def _cli_como(rol: str) -> TestClient:
 
 def test_editor_no_accede_a_stock_403(entorno):
     c = _cli_como("editor")
-    assert c.get("/api/stock/fuentes").status_code == 403
+    assert c.get("/api/stock/proveedores").status_code == 403
     r = c.put(
-        f"/api/stock/clave/{_MARCA}",
+        "/api/stock/clave",
         json={"proveedor": "pexels", "api_key": _KEY},
         headers=_ORIGIN,
     )
@@ -45,38 +45,43 @@ def test_editor_no_accede_a_stock_403(entorno):
     assert _KEY not in r.text
 
 
-def test_admin_guarda_clave_y_estado_no_filtra(entorno):
+def test_admin_guarda_clave_global_y_no_filtra(entorno):
     c = _cli_como("admin")
     r = c.put(
-        f"/api/stock/clave/{_MARCA}",
+        "/api/stock/clave",
         json={"proveedor": "pexels", "api_key": _KEY},
         headers=_ORIGIN,
     )
     assert r.status_code == 200
     assert _KEY not in r.text
-    estado = c.get(f"/api/stock/fuentes?marca={_MARCA}").json()
-    pexels = next(f for f in estado["fuentes"] if f["proveedor"] == "pexels")
+    estado = c.get("/api/stock/proveedores").json()
+    pexels = next(p for p in estado["proveedores"] if p["proveedor"] == "pexels")
     assert pexels["configurado"] is True
     assert pexels["disponible"] is True
     assert pexels["pista"] == "····" + _KEY[-4:]
-    assert _KEY not in c.get(f"/api/stock/fuentes?marca={_MARCA}").text
+    assert _KEY not in c.get("/api/stock/proveedores").text
 
 
-def test_admin_borra_clave(entorno):
+def test_clave_global_vale_para_cualquier_marca(entorno):
     c = _cli_como("admin")
-    c.put(
-        f"/api/stock/clave/{_MARCA}",
-        json={"proveedor": "pexels", "api_key": _KEY},
-        headers=_ORIGIN,
-    )
-    assert c.request("DELETE", f"/api/stock/clave/{_MARCA}/pexels", headers=_ORIGIN).status_code == 200
-    estado = c.get(f"/api/stock/fuentes?marca={_MARCA}").json()
-    pexels = next(f for f in estado["fuentes"] if f["proveedor"] == "pexels")
+    c.put("/api/stock/clave", json={"proveedor": "pexels", "api_key": _KEY}, headers=_ORIGIN)
+    # La misma clave global hace a Pexels disponible en la vista por marca, sin reconfigurar.
+    fuentes = c.get(f"/api/stock/fuentes?marca={_MARCA}").json()["fuentes"]
+    pexels = next(f for f in fuentes if f["proveedor"] == "pexels")
+    assert pexels["disponible"] is True
+
+
+def test_admin_borra_clave_global(entorno):
+    c = _cli_como("admin")
+    c.put("/api/stock/clave", json={"proveedor": "pexels", "api_key": _KEY}, headers=_ORIGIN)
+    assert c.request("DELETE", "/api/stock/clave/pexels", headers=_ORIGIN).status_code == 200
+    estado = c.get("/api/stock/proveedores").json()
+    pexels = next(p for p in estado["proveedores"] if p["proveedor"] == "pexels")
     assert pexels["configurado"] is False
     assert pexels["disponible"] is False
 
 
-def test_admin_guarda_fuentes_activas(entorno):
+def test_admin_guarda_fuentes_activas_por_marca(entorno):
     c = _cli_como("admin")
     r = c.put(
         f"/api/stock/fuentes/{_MARCA}",
@@ -102,12 +107,13 @@ def test_fuentes_proveedor_invalido_ignora(entorno):
     assert "inventado" not in fuentes
 
 
-def test_marca_desconocida_400(entorno):
+def test_fuentes_marca_desconocida_400(entorno):
     c = _cli_como("admin")
     assert c.get("/api/stock/fuentes?marca=no-existe").status_code == 400
+    assert c.get("/api/stock/fuentes").status_code == 400  # marca obligatoria
 
 
-def test_probar_clave_offline(entorno, monkeypatch):
+def test_probar_clave_global_offline(entorno, monkeypatch):
     monkeypatch.setattr(stock_fotos.rss, "validar_url", lambda url: (url, None))
     monkeypatch.setattr(
         stock_fotos.rss,
@@ -115,16 +121,12 @@ def test_probar_clave_offline(entorno, monkeypatch):
         lambda url: '{"photos": [{"src": {"original": "https://p/o.jpg"}, "photographer": "A"}]}',
     )
     c = _cli_como("admin")
-    c.put(
-        f"/api/stock/clave/{_MARCA}",
-        json={"proveedor": "pexels", "api_key": _KEY},
-        headers=_ORIGIN,
-    )
-    r = c.post(f"/api/stock/probar/{_MARCA}", json={"proveedor": "pexels"}, headers=_ORIGIN)
+    c.put("/api/stock/clave", json={"proveedor": "pexels", "api_key": _KEY}, headers=_ORIGIN)
+    r = c.post("/api/stock/probar", json={"proveedor": "pexels"}, headers=_ORIGIN)
     assert r.json()["ok"] is True
 
 
 def test_probar_sin_clave(entorno):
     c = _cli_como("admin")
-    r = c.post(f"/api/stock/probar/{_MARCA}", json={"proveedor": "pexels"}, headers=_ORIGIN)
+    r = c.post("/api/stock/probar", json={"proveedor": "pexels"}, headers=_ORIGIN)
     assert r.json()["ok"] is False

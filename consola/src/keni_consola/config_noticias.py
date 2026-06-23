@@ -1039,31 +1039,30 @@ def reuters_configurado() -> bool:
     return bool(reuters_api_key())
 
 
-def pexels_api_key(marca: str = "") -> str | None:
-    """API key de Pexels para una marca; None si no está (proveedor de stock apagado).
+def pexels_api_key() -> str | None:
+    """API key GLOBAL de Pexels; None si no está (proveedor de stock apagado).
 
-    Precedencia: el SECRETO por marca (guardado por la UI en Sistema → Proveedores) gana;
-    si la marca no tiene clave propia, cae a la global por entorno (`KENI_PEXELS_API_KEY`).
+    Pexels es una agencia genérica: una sola clave sirve a todas las marcas. Precedencia:
+    el SECRETO guardado por la UI (Sistema → Proveedores) gana; si no, la global por
+    entorno (`KENI_PEXELS_API_KEY`).
     """
-    return _clave_stock_marca("pexels", marca) or _crudo(ENV_PEXELS_API_KEY) or None
+    return _clave_stock("pexels") or _crudo(ENV_PEXELS_API_KEY) or None
 
 
-def pixabay_api_key(marca: str = "") -> str | None:
-    """API key de Pixabay para una marca; None si no está (proveedor de stock apagado).
+def pixabay_api_key() -> str | None:
+    """API key GLOBAL de Pixabay; None si no está (proveedor de stock apagado).
 
-    Misma precedencia que Pexels: secreto por marca > global por entorno
+    Misma precedencia que Pexels: secreto de la UI > global por entorno
     (`KENI_PIXABAY_API_KEY`).
     """
-    return _clave_stock_marca("pixabay", marca) or _crudo(ENV_PIXABAY_API_KEY) or None
+    return _clave_stock("pixabay") or _crudo(ENV_PIXABAY_API_KEY) or None
 
 
-def _clave_stock_marca(proveedor: str, marca: str) -> str | None:
-    """Clave de stock guardada para `marca` (almacen de secretos), o None si no hay marca/clave."""
-    if not marca:
-        return None
+def _clave_stock(proveedor: str) -> str | None:
+    """Clave GLOBAL de stock guardada por la UI (almacen de secretos), o None si no hay."""
     from . import secretos
 
-    return secretos.obtener_clave_stock(marca, proveedor)
+    return secretos.obtener_clave_stock(proveedor)
 
 
 def fuentes_stock_activas(marca: str = "") -> set[str] | None:

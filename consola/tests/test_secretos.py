@@ -135,55 +135,52 @@ def test_guardar_modelo_mantiene_0600(almacen):
 
 
 # --------------------------------------------------------------------------- #
-# Claves de fotos de stock POR MARCA (Pexels / Pixabay)                       #
+# Claves GLOBALES de fotos de stock (Pexels / Pixabay)                        #
 # --------------------------------------------------------------------------- #
 
 _CLAVE_STOCK = "pexels-key-9876ZZZZ"
 
 
-def test_roundtrip_clave_stock_por_marca(almacen):
-    assert secretos.obtener_clave_stock("unotv", "pexels") is None
-    secretos.guardar_clave_stock("unotv", "pexels", _CLAVE_STOCK)
-    assert secretos.obtener_clave_stock("unotv", "pexels") == _CLAVE_STOCK
-    # otra marca / otro proveedor no se ven afectados
-    assert secretos.obtener_clave_stock("claro-sports", "pexels") is None
-    assert secretos.obtener_clave_stock("unotv", "pixabay") is None
+def test_roundtrip_clave_stock(almacen):
+    assert secretos.obtener_clave_stock("pexels") is None
+    secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
+    assert secretos.obtener_clave_stock("pexels") == _CLAVE_STOCK
+    # otro proveedor no se ve afectado
+    assert secretos.obtener_clave_stock("pixabay") is None
 
 
-def test_clave_stock_aislada_por_marca_y_proveedor(almacen):
-    secretos.guardar_clave_stock("unotv", "pexels", "AAA1")
-    secretos.guardar_clave_stock("unotv", "pixabay", "BBB2")
-    secretos.guardar_clave_stock("claro-sports", "pexels", "CCC3")
-    assert secretos.obtener_clave_stock("unotv", "pexels") == "AAA1"
-    assert secretos.obtener_clave_stock("unotv", "pixabay") == "BBB2"
-    assert secretos.obtener_clave_stock("claro-sports", "pexels") == "CCC3"
+def test_clave_stock_aislada_por_proveedor(almacen):
+    secretos.guardar_clave_stock("pexels", "AAA1")
+    secretos.guardar_clave_stock("pixabay", "BBB2")
+    assert secretos.obtener_clave_stock("pexels") == "AAA1"
+    assert secretos.obtener_clave_stock("pixabay") == "BBB2"
 
 
 def test_borrar_clave_stock(almacen):
-    secretos.guardar_clave_stock("unotv", "pexels", "AAA1")
-    secretos.guardar_clave_stock("unotv", "pixabay", "BBB2")
-    secretos.borrar_clave_stock("unotv", "pexels")
-    assert secretos.obtener_clave_stock("unotv", "pexels") is None
-    # borrar uno NO toca el otro proveedor de la misma marca
-    assert secretos.obtener_clave_stock("unotv", "pixabay") == "BBB2"
+    secretos.guardar_clave_stock("pexels", "AAA1")
+    secretos.guardar_clave_stock("pixabay", "BBB2")
+    secretos.borrar_clave_stock("pexels")
+    assert secretos.obtener_clave_stock("pexels") is None
+    # borrar uno NO toca el otro proveedor
+    assert secretos.obtener_clave_stock("pixabay") == "BBB2"
 
 
 def test_guardar_clave_stock_proveedor_no_valido_no_escribe(almacen):
-    secretos.guardar_clave_stock("unotv", "openverse", "x")  # openverse no lleva clave
-    assert secretos.obtener_clave_stock("unotv", "openverse") is None
+    secretos.guardar_clave_stock("openverse", "x")  # openverse no lleva clave
+    assert secretos.obtener_clave_stock("openverse") is None
     assert not almacen.exists()
 
 
 def test_estado_clave_stock_no_filtra_la_clave(almacen):
-    secretos.guardar_clave_stock("unotv", "pexels", _CLAVE_STOCK)
-    estado = secretos.estado_clave_stock("unotv", "pexels")
+    secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
+    estado = secretos.estado_clave_stock("pexels")
     assert estado["configurado"] is True
     assert estado["pista"] == "····" + _CLAVE_STOCK[-4:]
     assert _CLAVE_STOCK not in estado["pista"]
 
 
 def test_clave_stock_0600_y_en_disco(almacen):
-    secretos.guardar_clave_stock("unotv", "pexels", _CLAVE_STOCK)
+    secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
     assert (almacen.stat().st_mode & 0o777) == 0o600
     assert _CLAVE_STOCK in almacen.read_text(encoding="utf-8")
 
@@ -191,6 +188,6 @@ def test_clave_stock_0600_y_en_disco(almacen):
 def test_clave_stock_convive_con_imagen(almacen):
     """Guardar stock NO debe descartar el bloque [imagen] ni viceversa."""
     secretos.guardar_clave_imagen("openrouter", _CLAVE)
-    secretos.guardar_clave_stock("unotv", "pexels", _CLAVE_STOCK)
+    secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
     assert secretos.obtener_clave_imagen() == _CLAVE
-    assert secretos.obtener_clave_stock("unotv", "pexels") == _CLAVE_STOCK
+    assert secretos.obtener_clave_stock("pexels") == _CLAVE_STOCK

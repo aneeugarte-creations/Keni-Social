@@ -4,7 +4,7 @@ import * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
-import type { RespuestaFuentesStock } from "@/types";
+import type { RespuestaProveedoresStock } from "@/types";
 
 import { SeccionFuentesStock } from "./SeccionFuentesStock";
 
@@ -14,41 +14,30 @@ vi.mock("@/hooks/sesion-contexto", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-const RESP: RespuestaFuentesStock = {
-  marcas: [
+// Claves GLOBALES: una sola lista de proveedores, sin marca. Solo los de pago llevan clave.
+const RESP: RespuestaProveedoresStock = {
+  proveedores: [
     {
-      marca: "claro-sports",
-      etiqueta: "Claro Sports",
-      fuentes: [
-        {
-          proveedor: "pexels",
-          nombre: "Pexels",
-          requiere_clave: true,
-          disponible: true,
-          activa: true,
-          motivo: "",
-          configurado: true,
-          pista: "····1234",
-        },
-        {
-          proveedor: "pixabay",
-          nombre: "Pixabay",
-          requiere_clave: true,
-          disponible: false,
-          activa: false,
-          motivo: "Falta la clave.",
-          configurado: false,
-          pista: null,
-        },
-        {
-          proveedor: "wikimedia",
-          nombre: "Wikimedia",
-          requiere_clave: false,
-          disponible: true,
-          activa: true,
-          motivo: "",
-        },
-      ],
+      proveedor: "pexels",
+      nombre: "Pexels",
+      requiere_clave: true,
+      disponible: true,
+      configurado: true,
+      pista: "····1234",
+    },
+    {
+      proveedor: "pixabay",
+      nombre: "Pixabay",
+      requiere_clave: true,
+      disponible: false,
+      configurado: false,
+      pista: null,
+    },
+    {
+      proveedor: "wikimedia",
+      nombre: "Wikimedia",
+      requiere_clave: false,
+      disponible: true,
     },
   ],
 };
@@ -60,41 +49,38 @@ function renderConProviders(ui: React.ReactElement) {
 
 /** La sección arranca colapsada (SeccionColapsable): se abre pulsando su cabecera. */
 function abrir() {
-  fireEvent.click(screen.getByText("Fotos de stock · Claves por marca"));
+  fireEvent.click(screen.getByText("Fotos de stock · Claves globales"));
 }
 
 describe("SeccionFuentesStock", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("muestra SOLO los proveedores de pago con su estado de clave por marca", async () => {
-    vi.spyOn(api, "estadoFuentesStock").mockResolvedValue(RESP);
+  it("muestra SOLO los proveedores de pago con su estado de clave global", async () => {
+    vi.spyOn(api, "estadoProveedoresStock").mockResolvedValue(RESP);
     const { container } = renderConProviders(<SeccionFuentesStock />);
     abrir();
 
-    expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
     // Pexels (clave guardada): badge con la pista; Pixabay sin configurar.
-    expect(screen.getByText("Configurada ····1234")).toBeInTheDocument();
+    expect(await screen.findByText("Configurada ····1234")).toBeInTheDocument();
     expect(screen.getByText("Sin configurar")).toBeInTheDocument();
     // Solo los dos proveedores con clave tienen input; los gratuitos (Wikimedia) no aparecen aquí.
     expect(container.querySelectorAll('input[type="password"]')).toHaveLength(2);
   });
 
-  it("guarda la clave de un proveedor al escribirla y pulsar Reemplazar", async () => {
-    vi.spyOn(api, "estadoFuentesStock").mockResolvedValue(RESP);
+  it("guarda la clave global de un proveedor al escribirla y pulsar Reemplazar", async () => {
+    vi.spyOn(api, "estadoProveedoresStock").mockResolvedValue(RESP);
     const guardar = vi
       .spyOn(api, "guardarClaveStock")
       .mockResolvedValue({ configurado: true, mensaje: "ok" });
     const { container } = renderConProviders(<SeccionFuentesStock />);
     abrir();
 
-    await screen.findByText("Claro Sports");
+    await screen.findByText("Configurada ····1234");
     // Primer input de clave = Pexels (configurado): el botón dice «Reemplazar».
     const inputs = container.querySelectorAll<HTMLInputElement>('input[type="password"]');
     fireEvent.change(inputs[0], { target: { value: "nueva-key" } });
     fireEvent.click(screen.getByRole("button", { name: "Reemplazar" }));
 
-    await waitFor(() =>
-      expect(guardar).toHaveBeenCalledWith("claro-sports", "pexels", "nueva-key"),
-    );
+    await waitFor(() => expect(guardar).toHaveBeenCalledWith("pexels", "nueva-key"));
   });
 });
