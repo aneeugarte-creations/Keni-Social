@@ -386,6 +386,13 @@ export function DialogoEditar({
     // par legado `foto`/`foto_encuadre`.
     const fotosGuardadas = parsearFotos(pieza.fotos);
     if (fotosGuardadas.length) {
+      // RECONCILIA el hueco 0 con el `foto` legado: un collage cuyo hueco 0 llegó VACÍO no debe
+      // tapar una foto legada real. Si lo hiciera, el autoguardado (que deriva `foto` del hueco 0)
+      // borraría la portada y el espejo propagaría el vacío a las redes hermanas.
+      if (!fotosGuardadas[0].objeto && (pieza.foto ?? "")) {
+        const enc = parsearEncuadre(pieza.foto_encuadre);
+        fotosGuardadas[0] = { objeto: pieza.foto ?? "", foco: enc?.foco ?? null, zoom: enc?.zoom ?? 0 };
+      }
       setFotos(fotosGuardadas);
     } else {
       const enc = parsearEncuadre(pieza.foto_encuadre);

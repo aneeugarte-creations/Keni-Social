@@ -301,7 +301,13 @@ def crear_variante_carrusel(publicacion_id: str, titulares: list[str]) -> list[d
             estado="borrador",
             copy=str(f.get("copy") or ""),
             copy_in=str(f.get("copy_in") or ""),
+            # Receta COMPLETA de la PORTADA de la foto: foto cruda, collage (hueco 0 con su
+            # encuadre), reencuadre legado y plantilla. Sin esto la variante nacía sin portada
+            # usable y, al editarla, divergía de la foto (la foto acababa en «Falta imagen»).
             foto=str(f.get("foto") or ""),
+            fotos=str(f.get("fotos") or ""),
+            foto_encuadre=str(f.get("foto_encuadre") or ""),
+            plantilla_diseno_id=str(f.get("plantilla_diseno_id") or ""),
             imagen=str(f.get("imagen") or ""),
             imagen_fuente=str(f.get("imagen_fuente") or ""),
             carrusel=payload,

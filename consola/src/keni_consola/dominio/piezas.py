@@ -168,12 +168,53 @@ def _hay_imagen_real(pub: dict[str, Any]) -> bool:
     )
 
 
+def _carrusel_falta_foto(pub: dict[str, Any]) -> bool:
+    """True si la pieza es variante CARRUSEL y algún SLIDE extra no tiene foto/medio real.
+
+    El requisito de imagen se extiende a TODOS los slides, no solo a la portada: un carrusel de
+    placas de SOLO TEXTO (lo que hornea la generación) no está listo —cada tarjeta necesita su
+    FOTO real detrás (o ser un vídeo)—. La portada la cubre `_hay_imagen_real` (la `foto` de la
+    pieza); aquí se valida el resto. Sin slides extra no añade falta (lo decide la portada).
+    """
+    if (str(pub.get("variante") or "foto")) != "carrusel":
+        return False
+    crudo = str(pub.get("carrusel") or "").strip()
+    if not crudo:
+        return False
+    try:
+        slides = json.loads(crudo)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(slides, list):
+        return False
+    for s in slides:
+        if not isinstance(s, dict):
+            return True
+        if (str(s.get("tipo") or "imagen")) == "video":
+            # Un slide de vídeo está completo si trae su asset publicable.
+            if not str(s.get("objeto") or "").strip():
+                return True
+            continue
+        # Slide de imagen: completo si trae FOTO real de fondo (`foto` de procedencia) o si su
+        # propio `objeto` es media CRUDA (una foto subida). NO basta una placa de SOLO TEXTO
+        # horneada, que es un PNG generado en `artes/` sin foto detrás.
+        objeto = str(s.get("objeto") or "").strip()
+        es_placa_horneada = objeto.startswith("artes/")
+        tiene_foto = bool(str(s.get("foto") or "").strip()) or (objeto != "" and not es_placa_horneada)
+        if not tiene_foto:
+            return True
+    return False
+
+
 def flags_falta_de_contenido(pub: dict[str, Any]) -> dict[str, bool]:
     """Flags `falta_*` DERIVADAS del CONTENIDO real de una pieza (copy + foto), no del flujo.
 
     FUENTE ÚNICA de "¿qué le falta de contenido?": la misma heurística que pinta la etapa en el
     feed. Devuelve solo las flags derivadas del contenido (`falta_copy`/`falta_imagen`); las de
     aprobación/publicación (`falta_revision`/`falta_publicar`) NO se tocan aquí.
+
+    En CARRUSEL «falta_imagen» exige foto en la portada Y en cada slide (no solo la portada):
+    una tarjeta de solo texto no está lista.
 
     La usan el editor y el ESPEJO para mantener en sync las flags ALMACENADAS en
     `pieza` cuando se edita/replica el contenido: sin esto, la LISTA del feed (que
@@ -182,7 +223,7 @@ def flags_falta_de_contenido(pub: dict[str, Any]) -> dict[str, bool]:
     """
     return {
         "falta_copy": not str(pub.get("contenido") or "").strip(),
-        "falta_imagen": not _hay_imagen_real(pub),
+        "falta_imagen": not _hay_imagen_real(pub) or _carrusel_falta_foto(pub),
     }
 
 

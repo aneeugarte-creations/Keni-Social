@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from keni_consola.dominio.piezas import pieza_a_dict
+from keni_consola.dominio.piezas import flags_falta_de_contenido, pieza_a_dict
 
 
 def _pub(**kw: Any) -> dict[str, Any]:
@@ -193,3 +193,72 @@ def test_en_revision_no_oculta_lo_que_falta():
     # mienta.
     d = pieza_a_dict(_pub(contenido="copy", copy_in="TITULAR", estado="en_revision", foto=""))
     assert d["etapa_ia"] == "generando_arte"
+
+
+def _carrusel(slides: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
+    import json as _json
+
+    return _pub(
+        variante="carrusel", formato="carrusel", foto="fotos/portada.jpg",
+        carrusel=_json.dumps(slides), **kw,
+    )
+
+
+def test_carrusel_con_slide_de_solo_texto_falta_imagen():
+    # Un slide horneado de SOLO TEXTO (placa sin foto de fondo) deja el carrusel «Falta imagen»,
+    # aunque la portada tenga su foto: el requisito se extiende a TODOS los slides.
+    pub = _carrusel(
+        [{"tipo": "imagen", "objeto": "artes/a.png", "titular": "Uno", "foto": ""}],
+        contenido="copy",
+    )
+    assert flags_falta_de_contenido(pub)["falta_imagen"] is True
+    assert pieza_a_dict(pub)["etapa_ia"] == "generando_arte"
+
+
+def test_carrusel_con_foto_en_todos_los_slides_esta_completo():
+    # Portada con foto + cada slide con su foto real de fondo -> ya no falta imagen.
+    pub = _carrusel(
+        [
+            {"tipo": "imagen", "objeto": "artes/a.png", "titular": "Uno", "foto": "fotos/1.jpg"},
+            {"tipo": "imagen", "objeto": "fotos/2.jpg", "sinPlaca": True},
+        ],
+        contenido="copy",
+    )
+    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+
+
+def test_carrusel_slide_de_video_cuenta_si_trae_asset():
+    pub = _carrusel(
+        [
+            {"tipo": "imagen", "objeto": "artes/a.png", "foto": "fotos/1.jpg"},
+            {"tipo": "video", "objeto": "videos/v.mp4"},
+        ],
+        contenido="copy",
+    )
+    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+    # Sin asset de vídeo el slide está incompleto.
+    pub_sin = _carrusel(
+        [{"tipo": "imagen", "objeto": "artes/a.png", "foto": "fotos/1.jpg"},
+         {"tipo": "video", "objeto": ""}],
+    )
+    assert flags_falta_de_contenido(pub_sin)["falta_imagen"] is True
+
+
+def test_carrusel_de_media_cruda_esta_completo():
+    # Slides de FOTO/VÍDEO crudos (presidencia/clips): el `objeto` ES la media real, no una placa
+    # de texto -> completos sin campo `foto` de procedencia.
+    pub = _carrusel(
+        [
+            {"tipo": "imagen", "objeto": "fotos/p2.jpg"},
+            {"tipo": "video", "objeto": "videos/clip.mp4"},
+            {"tipo": "imagen", "objeto": "fotos/p3.jpg"},
+        ],
+        contenido="copy",
+    )
+    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+
+
+def test_carrusel_sin_slides_extra_lo_decide_la_portada():
+    # Sin slides extra (campo vacío), la completitud la decide solo la portada (`foto`).
+    assert flags_falta_de_contenido(_pub(variante="carrusel", formato="carrusel", foto="fotos/p.jpg", carrusel=""))["falta_imagen"] is False
+    assert flags_falta_de_contenido(_pub(variante="carrusel", formato="carrusel", foto="", carrusel=""))["falta_imagen"] is True

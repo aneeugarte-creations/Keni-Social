@@ -158,6 +158,28 @@ def test_crear_variante_carrusel_no_destructivo(entorno, monkeypatch):
     assert all(f["copy"] == "Cuerpo del post" for f in carr)
 
 
+def test_crear_variante_carrusel_hereda_la_portada(entorno, monkeypatch):
+    # La variante carrusel NACE con la receta COMPLETA de portada de la foto (foto cruda, collage,
+    # encuadre, plantilla): sin esto la foto acababa en «Falta imagen» al editar.
+    monkeypatch.setattr(
+        dom_copy, "_COMPONER_SLIDE",
+        lambda marca, titular, foto: {"objeto": f"media-{titular}", "foto": ""},
+    )
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
+    pid = tema["id"]
+    repos.crear_pieza_fila(
+        publicacion_id=pid, red="instagram", copy="Cuerpo",
+        foto="fotos/abc.jpg", fotos='[{"objeto":"fotos/abc.jpg","foco":null,"zoom":0}]',
+        foto_encuadre='{"foco":[0.5,0.5],"zoom":1.2}', plantilla_diseno_id="plt-1",
+    )
+    dom_carrusel.crear_variante_carrusel(pid, ["Uno"])
+    carr = next(f for f in repos.listar_piezas_fila(publicacion_id=pid) if f["variante"] == "carrusel")
+    assert carr["foto"] == "fotos/abc.jpg"
+    assert carr["fotos"] == '[{"objeto":"fotos/abc.jpg","foco":null,"zoom":0}]'
+    assert carr["foto_encuadre"] == '{"foco":[0.5,0.5],"zoom":1.2}'
+    assert carr["plantilla_diseno_id"] == "plt-1"
+
+
 def test_crear_variante_carrusel_idempotente(entorno, monkeypatch):
     # Re-ejecutar NO duplica: re-hornea los slides de la variante existente de esa red.
     monkeypatch.setattr(
