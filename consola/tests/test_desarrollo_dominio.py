@@ -87,6 +87,24 @@ def test_componer_prompt_envuelve_datos():
         assert dato in prompt
 
 
+def test_componer_prompt_inyecta_nota_efimera():
+    # Sin nota: no aparece bloque ni aviso. Con `nota`: bloque propio + aviso, sin tocar el detalle.
+    sug = {"titulo": "T", "detalle": "D", "spec": "S", "plan": "P", "categoria": "bug"}
+    assert "Nota del usuario" not in desarrollo.componer_prompt("BASE", sug, "build")
+
+    prompt = desarrollo.componer_prompt("BASE", sug, "build", nota="  ojo con X  ")
+    assert "Nota del usuario para esta etapa" in prompt
+    assert "ojo con X" in prompt
+    assert "El humano escribió" in prompt
+    # La nota es efímera: no se mete en el dict de la sugerencia.
+    assert sug["detalle"] == "D"
+
+
+def test_componer_prompt_nota_vacia_no_anade_bloque():
+    sug = {"titulo": "T", "detalle": "D", "spec": "S", "plan": "P", "categoria": "bug"}
+    assert "Nota del usuario" not in desarrollo.componer_prompt("BASE", sug, "build", nota="   ")
+
+
 # --------------------------------------------------------------------------- #
 # Kinds y carril de desarrollo (jobspec)                                      #
 # --------------------------------------------------------------------------- #

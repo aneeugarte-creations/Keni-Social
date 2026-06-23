@@ -284,14 +284,23 @@ def test_editor_no_construye_403(entorno):
 def test_discovery_encola(entorno, monkeypatch):
     cli = _super()
     sid = _crear(cli)
-    monkeypatch.setattr(sugerencias, "lanzar_discovery", lambda _id: {"id": "gen-x"})
-    r = cli.post(f"/api/sugerencias/{sid}/discovery", json={}, headers=_ORIGIN)
+    capturado = {}
+
+    def fake(_id, *, nota=""):
+        capturado["nota"] = nota
+        return {"id": "gen-x"}
+
+    monkeypatch.setattr(sugerencias, "lanzar_discovery", fake)
+    r = cli.post(
+        f"/api/sugerencias/{sid}/discovery", json={"nota": "enfócate en X"}, headers=_ORIGIN
+    )
     assert r.status_code == 200
     assert r.json()["generacion"]["id"] == "gen-x"
+    assert capturado["nota"] == "enfócate en X"
 
 
 def test_discovery_inexistente_404(entorno, monkeypatch):
-    monkeypatch.setattr(sugerencias, "lanzar_discovery", lambda _id: None)
+    monkeypatch.setattr(sugerencias, "lanzar_discovery", lambda _id, *, nota="": None)
     assert _super().post(
         "/api/sugerencias/nope/discovery", json={}, headers=_ORIGIN
     ).status_code == 404
@@ -302,17 +311,21 @@ def test_construir_encola(entorno, monkeypatch):
     sid = _crear(cli)
     capturado = {}
 
-    def fake(_id, *, complejidad=""):
+    def fake(_id, *, complejidad="", nota=""):
         capturado["complejidad"] = complejidad
+        capturado["nota"] = nota
         return {"id": "gen-y"}
 
     monkeypatch.setattr(sugerencias, "lanzar_construir", fake)
     r = cli.post(
-        f"/api/sugerencias/{sid}/construir", json={"complejidad": "simple"}, headers=_ORIGIN
+        f"/api/sugerencias/{sid}/construir",
+        json={"complejidad": "simple", "nota": "cuida los tests"},
+        headers=_ORIGIN,
     )
     assert r.status_code == 200
     assert r.json()["generacion"]["id"] == "gen-y"
     assert capturado["complejidad"] == "simple"
+    assert capturado["nota"] == "cuida los tests"
 
 
 def test_checkpoint_accion_invalida_400(entorno):

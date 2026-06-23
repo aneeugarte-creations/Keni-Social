@@ -31,19 +31,27 @@ export const apiSugerencias = {
     peticion<RespuestaMensaje>(`/sugerencias/${enc(id)}`, { metodo: "DELETE" }),
 
   // --- Flujo de desarrollo ---
+  // Discovery/construir/checkpoint aceptan una `nota` opcional: indicación EFÍMERA del usuario
+  // que se inyecta en el prompt de ESA fase (no se persiste). Lo permanente va por «Editar idea».
   // Lanza el wizard L1: genera el SPEC y estima complejidad.
-  discoverySugerencia: (id: string) =>
-    peticion<RespuestaGeneracion>(`/sugerencias/${enc(id)}/discovery`, { metodo: "POST" }),
+  discoverySugerencia: (id: string, nota?: string) =>
+    peticion<RespuestaGeneracion>(`/sugerencias/${enc(id)}/discovery`, {
+      metodo: "POST",
+      json: { nota },
+    }),
   // Mueve a en_cola y encola el pipeline de desarrollo (analyze→plan→build→review).
-  construirSugerencia: (id: string) =>
-    peticion<RespuestaGeneracion>(`/sugerencias/${enc(id)}/construir`, { metodo: "POST" }),
+  construirSugerencia: (id: string, nota?: string) =>
+    peticion<RespuestaGeneracion>(`/sugerencias/${enc(id)}/construir`, {
+      metodo: "POST",
+      json: { nota },
+    }),
   // Checkpoint humano sobre una pieza en revisión.
   checkpointSugerencia: (id: string, accion: AccionCheckpoint, comentario?: string) =>
     peticion<RespuestaSugerencia>(`/sugerencias/${enc(id)}/checkpoint`, {
       metodo: "POST",
       json: { accion, comentario },
     }),
-  // Promueve la rama dev a main (checkpoint humano final).
+  // Promueve la rama dev a main (checkpoint humano final). No corre agente: sin nota.
   promoverSugerencia: (id: string) =>
     peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/promover`, { metodo: "POST" }),
 };

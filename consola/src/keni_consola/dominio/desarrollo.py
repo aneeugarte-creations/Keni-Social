@@ -134,12 +134,16 @@ def _bloque(etiqueta: str, texto: str) -> str:
     return f"## {etiqueta}\n{_INI}\n{texto}\n{_FIN}\n"
 
 
-def componer_prompt(base: str, sugerencia: dict[str, Any], fase: str) -> str:
+def componer_prompt(
+    base: str, sugerencia: dict[str, Any], fase: str, *, nota: str = ""
+) -> str:
     """Arma el prompt de una fase: el cuerpo `base` (clase `desarrollo`) + los datos de la sugerencia.
 
     `base` es el texto del prompt de la fase (lo carga el llamante desde la biblioteca de
     prompts). Se le adjunta el contexto acumulado de la sugerencia (título, detalle, SPEC del
-    discovery, plan de la fase plan) envuelto anti-inyección. PURO: no lee ni escribe nada.
+    discovery, plan de la fase plan) envuelto anti-inyección. `nota` (opcional) es una indicación
+    EFÍMERA del usuario para ESTE lanzamiento: se añade como bloque propio y el prompt avisa de
+    que el humano la escribió a propósito para esta etapa. PURO: no lee ni escribe nada.
     """
     partes = [
         (base or "").strip(),
@@ -150,6 +154,12 @@ def componer_prompt(base: str, sugerencia: dict[str, Any], fase: str) -> str:
         _bloque("SPEC (discovery)", str(sugerencia.get("spec", ""))),
         _bloque("Plan", str(sugerencia.get("plan", ""))),
     ]
+    if (nota or "").strip():
+        partes.append(_bloque("Nota del usuario para esta etapa", nota))
+        partes.append(
+            "El humano escribió la «Nota del usuario para esta etapa» a propósito al lanzar esta "
+            "fase. Tenla en cuenta por encima del SPEC/plan previos."
+        )
     return "\n\n".join(p for p in partes if p)
 
 

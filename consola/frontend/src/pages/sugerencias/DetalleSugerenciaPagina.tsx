@@ -22,6 +22,14 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/ui/Markdown";
@@ -127,6 +135,84 @@ function BloqueMarkdown({ titulo, texto }: { titulo: string; texto: string }) {
   );
 }
 
+/** Una acción del flujo pendiente de confirmar: la dispara un botón que avanza de etapa. */
+interface AccionFlujo {
+  clave: string;
+  titulo: string;
+  descripcion: string;
+  etiquetaConfirmar: string;
+  /** `true` en acciones sin agente (promover): el pop-up es solo confirmación, sin nota. */
+  sinNota?: boolean;
+  ejecutar: (nota: string) => void;
+}
+
+/**
+ * Pop-up de confirmación de una acción del flujo. Discovery/construir/pedir-cambios/aprobar
+ * llevan una NOTA opcional EFÍMERA: se inyecta en el prompt de esa fase y no se persiste (lo
+ * permanente va por «Editar idea»). Promover no corre agente: solo confirma (`sinNota`).
+ */
+function DialogoAccionFlujo({
+  accion,
+  ocupado,
+  onCerrar,
+}: {
+  accion: AccionFlujo | null;
+  ocupado: boolean;
+  onCerrar: () => void;
+}) {
+  const [nota, setNota] = React.useState("");
+  // Limpia la nota cada vez que cambia la acción abierta (no arrastrar texto entre etapas).
+  React.useEffect(() => {
+    setNota("");
+  }, [accion?.clave]);
+
+  return (
+    <Dialog
+      open={accion !== null}
+      onOpenChange={(abierto) => {
+        if (!abierto) onCerrar();
+      }}
+    >
+      <DialogContent>
+        {accion && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{accion.titulo}</DialogTitle>
+              <DialogDescription>{accion.descripcion}</DialogDescription>
+            </DialogHeader>
+            {!accion.sinNota && (
+              <div className="space-y-1.5">
+                <Label htmlFor="nota-accion">Nota para el agente (opcional)</Label>
+                <Textarea
+                  id="nota-accion"
+                  value={nota}
+                  onChange={(e) => setNota(e.target.value)}
+                  placeholder="Indica al agente qué tener en cuenta en esta etapa…"
+                  rows={4}
+                  maxLength={4000}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Solo para este lanzamiento; no se guarda. Para cambios permanentes, edita la idea.
+                </p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+                Cancelar
+              </Button>
+              <Button onClick={() => accion.ejecutar(nota)} disabled={ocupado}>
+                {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {accion.etiquetaConfirmar}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Formulario inline para editar el texto de una idea (título / detalle / categoría). */
 function EdicionTexto({
   sugerencia,
@@ -221,8 +307,10 @@ export default function DetalleSugerenciaPagina() {
   const { usuario } = useSesion();
   const esSuper = usuario?.es_superadmin === true;
 
-  const [comentario, setComentario] = React.useState("");
+  const [pendiente, setPendiente] = React.useState<AccionFlujo | null>(null);
   const [editando, setEditando] = React.useState(false);
+
+  const cerrarPendiente = () => setPendiente(null);
 
   const query = useQuery({
     queryKey: [...CLAVE_SUGERENCIAS, id],
@@ -235,29 +323,31 @@ export default function DetalleSugerenciaPagina() {
   };
 
   const discovery = useMutation({
-    mutationFn: () => api.discoverySugerencia(id),
+    mutationFn: (nota: string) => api.discoverySugerencia(id, nota.trim() || undefined),
     onSuccess: () => {
       invalidar();
+      cerrarPendiente();
       toast.success("Discovery lanzado");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
   const construir = useMutation({
-    mutationFn: () => api.construirSugerencia(id),
+    mutationFn: (nota: string) => api.construirSugerencia(id, nota.trim() || undefined),
     onSuccess: () => {
       invalidar();
+      cerrarPendiente();
       toast.success("En cola para construir");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
   const checkpoint = useMutation({
-    mutationFn: (accion: AccionCheckpoint) =>
-      api.checkpointSugerencia(id, accion, comentario.trim() || undefined),
-    onSuccess: (_res, accion) => {
+    mutationFn: ({ accion, nota }: { accion: AccionCheckpoint; nota: string }) =>
+      api.checkpointSugerencia(id, accion, nota.trim() || undefined),
+    onSuccess: (_res, { accion }) => {
       invalidar();
-      setComentario("");
+      cerrarPendiente();
       toast.success(
         accion === "continuar"
           ? "Checkpoint aprobado"
@@ -273,6 +363,7 @@ export default function DetalleSugerenciaPagina() {
     mutationFn: () => api.promoverSugerencia(id),
     onSuccess: (res) => {
       invalidar();
+      cerrarPendiente();
       toast.success(res.detalle || "Promovida a main");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -426,17 +517,8 @@ export default function DetalleSugerenciaPagina() {
             </Button>
           )}
 
-          {esSuper && enRevision && (
-            <Textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Comentario para «Pedir cambios» (opcional)…"
-              rows={3}
-              maxLength={4000}
-            />
-          )}
-
-          {/* Acciones del flujo: solo superadmin (control del tablero). */}
+          {/* Acciones del flujo: solo superadmin (control del tablero). Cada botón que AVANZA
+              de etapa abre un pop-up de confirmación con nota opcional para el agente. */}
           {esSuper && (
             <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">
               {esDescartada && (
@@ -450,12 +532,21 @@ export default function DetalleSugerenciaPagina() {
                 </Button>
               )}
               {(estado === "nueva" || estado === "fallida") && (
-                <Button variant="outline" onClick={() => discovery.mutate()} disabled={ocupado}>
-                  {discovery.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4" />
-                  )}
+                <Button
+                  variant="outline"
+                  disabled={ocupado}
+                  onClick={() =>
+                    setPendiente({
+                      clave: "discovery",
+                      titulo: "Lanzar discovery",
+                      descripcion:
+                        "El agente analizará la idea y producirá el SPEC. Puedes añadir una nota para orientar ese análisis.",
+                      etiquetaConfirmar: "Lanzar discovery",
+                      ejecutar: (nota) => discovery.mutate(nota),
+                    })
+                  }
+                >
+                  <Search className="h-4 w-4" />
                   Lanzar discovery
                 </Button>
               )}
@@ -463,12 +554,20 @@ export default function DetalleSugerenciaPagina() {
                 estado === "discovery" ||
                 estado === "en_cola" ||
                 estado === "fallida") && (
-                <Button onClick={() => construir.mutate()} disabled={ocupado}>
-                  {construir.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Hammer className="h-4 w-4" />
-                  )}
+                <Button
+                  disabled={ocupado}
+                  onClick={() =>
+                    setPendiente({
+                      clave: "construir",
+                      titulo: "Construir",
+                      descripcion:
+                        "Arranca el pipeline de desarrollo (analyze→plan→build→review). Una nota viaja como contexto a los agentes que lo ejecutan.",
+                      etiquetaConfirmar: "Construir",
+                      ejecutar: (nota) => construir.mutate(nota),
+                    })
+                  }
+                >
+                  <Hammer className="h-4 w-4" />
                   Construir
                 </Button>
               )}
@@ -476,25 +575,55 @@ export default function DetalleSugerenciaPagina() {
                 <>
                   <Button
                     variant="outline"
-                    onClick={() => checkpoint.mutate("cambios")}
                     disabled={ocupado}
+                    onClick={() =>
+                      setPendiente({
+                        clave: "cambios",
+                        titulo: "Pedir cambios",
+                        descripcion:
+                          "Re-ejecuta la construcción con tu nota como feedback. Explica qué cambiar.",
+                        etiquetaConfirmar: "Pedir cambios",
+                        ejecutar: (nota) => checkpoint.mutate({ accion: "cambios", nota }),
+                      })
+                    }
                   >
                     <MessageSquareWarning className="h-4 w-4" />
                     Pedir cambios
                   </Button>
-                  <Button onClick={() => checkpoint.mutate("continuar")} disabled={ocupado}>
+                  <Button
+                    disabled={ocupado}
+                    onClick={() =>
+                      setPendiente({
+                        clave: "continuar",
+                        titulo: "Aprobar checkpoint",
+                        descripcion:
+                          "Aprueba esta fase y sigue el pipeline. Puedes añadir una nota para la siguiente fase.",
+                        etiquetaConfirmar: "Aprobar checkpoint",
+                        ejecutar: (nota) => checkpoint.mutate({ accion: "continuar", nota }),
+                      })
+                    }
+                  >
                     <CheckCircle2 className="h-4 w-4" />
                     Aprobar checkpoint
                   </Button>
                 </>
               )}
               {enRevision && (
-                <Button onClick={() => promover.mutate()} disabled={ocupado}>
-                  {promover.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Rocket className="h-4 w-4" />
-                  )}
+                <Button
+                  disabled={ocupado}
+                  onClick={() =>
+                    setPendiente({
+                      clave: "promover",
+                      titulo: "Promover a main",
+                      descripcion:
+                        "Hace el git push real de la rama a main y marca la idea como hecha. No corre ningún agente.",
+                      etiquetaConfirmar: "Promover a main",
+                      sinNota: true,
+                      ejecutar: () => promover.mutate(),
+                    })
+                  }
+                >
+                  <Rocket className="h-4 w-4" />
                   Promover a main
                 </Button>
               )}
@@ -528,6 +657,8 @@ export default function DetalleSugerenciaPagina() {
           )}
         </div>
       )}
+
+      <DialogoAccionFlujo accion={pendiente} ocupado={ocupado} onCerrar={cerrarPendiente} />
     </div>
   );
 }

@@ -248,6 +248,11 @@ def construir_procesar_dev_fase(*, sugerencia_id: str, fase: str):  # noqa: ANN2
 # reclama, crea el worktree y corre `claude -p` sin sandbox. Lo usan tanto la API (discovery/
 # construir) como `worker_dev` (encadenado de fases). Heavy imports en perezoso.
 
+# Nota EFÍMERA del usuario: las acciones del flujo (discovery/construir/checkpoint) aceptan un
+# texto opcional que se inyecta en el prompt SOLO de la fase que se lanza. No se persiste: lo
+# permanente va por «Editar idea» (`detalle`), que también viaja en cada fase (`componer_prompt`).
+
+
 # Cuerpos de respaldo si la biblioteca de prompts (clase `desarrollo`) aún no trae el doc:
 # instrucciones mínimas para que el motor funcione sin depender del seed editorial.
 _BASE_FALLBACK_GENERICO = (
@@ -307,14 +312,18 @@ def _lanzar(*, tipo: str, etiqueta: str, prompt: str,
     return gen
 
 
-def lanzar_discovery(sugerencia_id: str) -> dict[str, Any] | None:
-    """Encola el job de DISCOVERY y mueve la sugerencia a `discovery`. None si no existe."""
+def lanzar_discovery(sugerencia_id: str, *, nota: str = "") -> dict[str, Any] | None:
+    """Encola el job de DISCOVERY y mueve la sugerencia a `discovery`. None si no existe.
+
+    `nota` (opcional): texto EFÍMERO del usuario que se inyecta en el prompt de ESTE discovery
+    (no se persiste); orienta al agente al producir el SPEC.
+    """
     sug = obtener(sugerencia_id)
     if sug is None:
         return None
     from .dominio import desarrollo, jobspec
 
-    prompt = desarrollo.componer_prompt(_cargar_base("discovery"), sug, "discovery")
+    prompt = desarrollo.componer_prompt(_cargar_base("discovery"), sug, "discovery", nota=nota)
     gen = _lanzar(
         tipo="dev-discovery",
         etiqueta=f"Discovery · {sug['titulo']}",
@@ -328,15 +337,21 @@ def lanzar_discovery(sugerencia_id: str) -> dict[str, Any] | None:
     return gen
 
 
-def lanzar_fase(sugerencia_id: str, fase: str, *, modelo: str = "") -> dict[str, Any] | None:
-    """Encola el job de una FASE del pipeline y deja la sugerencia en `building`. None si no existe."""
+def lanzar_fase(
+    sugerencia_id: str, fase: str, *, modelo: str = "", nota: str = ""
+) -> dict[str, Any] | None:
+    """Encola el job de una FASE del pipeline y deja la sugerencia en `building`. None si no existe.
+
+    `nota` (opcional): texto EFÍMERO del usuario que se inyecta en el prompt de ESTA fase (no se
+    persiste). El encadenado automático de fases (worker_dev) la deja vacía a propósito.
+    """
     sug = obtener(sugerencia_id)
     if sug is None:
         return None
     from .dominio import desarrollo, jobspec
 
     modelo = modelo or desarrollo.modelo_de(fase)
-    prompt = desarrollo.componer_prompt(_cargar_base(fase), sug, fase)
+    prompt = desarrollo.componer_prompt(_cargar_base(fase), sug, fase, nota=nota)
     gen = _lanzar(
         tipo="dev-fase",
         etiqueta=f"{fase} · {sug['titulo']}",
@@ -354,11 +369,12 @@ def lanzar_fase(sugerencia_id: str, fase: str, *, modelo: str = "") -> dict[str,
 
 
 def lanzar_construir(
-    sugerencia_id: str, *, complejidad: str = ""
+    sugerencia_id: str, *, complejidad: str = "", nota: str = ""
 ) -> dict[str, Any] | None:
     """Mueve a `en_cola` (fijando complejidad) y encola la PRIMERA fase del pipeline.
 
     None si no existe. La complejidad efectiva sale del parámetro, de la fila o del defecto.
+    `nota` (opcional): texto EFÍMERO del usuario que se inyecta en el prompt de la PRIMERA fase.
     """
     sug = obtener(sugerencia_id)
     if sug is None:
@@ -372,7 +388,7 @@ def lanzar_construir(
         cambiar_estado(sugerencia_id, "en_cola", campos={"complejidad": comp})
     except TransicionInvalida:
         actualizar_avance(sugerencia_id, {"complejidad": comp})
-    return lanzar_fase(sugerencia_id, desarrollo.primera_fase(comp))
+    return lanzar_fase(sugerencia_id, desarrollo.primera_fase(comp), nota=nota)
 
 
 # --------------------------------------------------------------------------- #
@@ -387,8 +403,10 @@ def aplicar_checkpoint(
 
     - cancelar: descarta la sugerencia (válido desde cualquier estado).
     - continuar: sigue el pipeline (lanza la siguiente fase; si no hay, queda en `revision`
-      lista para promover). Solo desde `revision`.
-    - cambios: re-ejecuta la construcción con `comentario` como feedback. Solo desde `revision`.
+      lista para promover). Solo desde `revision`. `comentario` (opcional, EFÍMERO) se inyecta en
+      el prompt de esa siguiente fase.
+    - cambios: re-ejecuta la construcción con `comentario` (EFÍMERO) como feedback. Solo desde
+      `revision`.
     Lanza `TransicionInvalida` si la acción no aplica al estado actual.
     """
     sug = obtener(sugerencia_id)
@@ -404,16 +422,12 @@ def aplicar_checkpoint(
         siguiente = desarrollo.siguiente_fase(sug.get("complejidad", ""), sug.get("fase", ""))
         if siguiente is None:
             return sug  # pipeline terminado: queda en revisión, lista para /promover
-        lanzar_fase(sugerencia_id, siguiente)
+        lanzar_fase(sugerencia_id, siguiente, nota=comentario)
         return obtener(sugerencia_id)
     if accion == "cambios":
         from .dominio import desarrollo
 
-        if comentario.strip():
-            nota = f"\n\n## Feedback de checkpoint\n{comentario.strip()}"
-            detalle = (str(sug.get("detalle", "")) + nota)[:_MAX_DETALLE]
-            actualizar_avance(sugerencia_id, {"detalle": detalle})
-        lanzar_fase(sugerencia_id, desarrollo.FASE_BUILD)
+        lanzar_fase(sugerencia_id, desarrollo.FASE_BUILD, nota=comentario)
         return obtener(sugerencia_id)
     raise TransicionInvalida(f"acción de checkpoint desconocida: {accion!r}")
 

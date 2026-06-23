@@ -224,16 +224,25 @@ def _lanzar_o_error(funcion, *args, **kwargs) -> Response:
     return JSONResponse({"generacion": gen})
 
 
+def _nota(datos: dict) -> str:
+    """Nota opcional del cuerpo (texto del usuario para los agentes); "" si no es texto."""
+    nota = datos.get("nota") or ""
+    return nota if isinstance(nota, str) else ""
+
+
 async def discovery(request: Request) -> Response:
-    """POST /api/sugerencias/{id}/discovery -> `{generacion}` (encola el job dev-discovery)."""
+    """POST /api/sugerencias/{id}/discovery `{nota?}` -> `{generacion}` (encola dev-discovery)."""
     rechazo = _solo_superadmin(request, "Solo un superadmin puede lanzar discovery.")
     if rechazo is not None:
         return rechazo
-    return _lanzar_o_error(sugerencias.lanzar_discovery, request.path_params["sugerencia_id"])
+    datos = await leer_json(request)
+    return _lanzar_o_error(
+        sugerencias.lanzar_discovery, request.path_params["sugerencia_id"], nota=_nota(datos)
+    )
 
 
 async def construir(request: Request) -> Response:
-    """POST /api/sugerencias/{id}/construir -> `{generacion}` (en_cola + primera fase)."""
+    """POST /api/sugerencias/{id}/construir `{complejidad?, nota?}` -> `{generacion}`."""
     rechazo = _solo_superadmin(request, "Solo un superadmin puede construir.")
     if rechazo is not None:
         return rechazo
@@ -243,7 +252,7 @@ async def construir(request: Request) -> Response:
     if not isinstance(complejidad, str):
         complejidad = ""
     return _lanzar_o_error(
-        sugerencias.lanzar_construir, sugerencia_id, complejidad=complejidad
+        sugerencias.lanzar_construir, sugerencia_id, complejidad=complejidad, nota=_nota(datos)
     )
 
 
