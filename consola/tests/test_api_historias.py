@@ -321,6 +321,50 @@ def test_stats_fuentes_marca_invalida_400(cliente):
     assert cliente.get("/api/noticias/fuentes/stats", params={"marca": "nope"}).status_code == 400
 
 
+def _inicializar_trends():
+    """Una historia de Trends con dos medios distintos (no latinos) bajo el mismo fuente_id."""
+    repos.upsert_noticia_cluster({
+        "id": "ht", "titulo": "Tema en tendencia", "marca": "unotv", "clave": "t:ht",
+        "estado": "nuevo", "primera_fuente": "google-trends",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00",
+    })
+    repos.crear_noticias_items([
+        {"fuente_id": "google-trends", "fuente_nombre": "朝日新聞", "marca": "unotv",
+         "titulo": "T1", "clave": "gt-1", "cluster_id": "ht"},
+        {"fuente_id": "google-trends", "fuente_nombre": "وكالة صدى نيوز", "marca": "unotv",
+         "titulo": "T2", "clave": "gt-2", "cluster_id": "ht"},
+    ])
+
+
+def test_stats_fuentes_google_trends_es_un_canal_unico(cliente):
+    """Google Trends agrega muchos medios bajo un fuente_id; en rendimiento se muestra como UN
+    canal 'Google Trends', no por el MAX(fuente_nombre) (un medio suelto, a menudo no latino)."""
+    _inicializar_trends()
+    datos = cliente.get("/api/noticias/fuentes/stats", params={"marca": "unotv"}).json()
+    gt = next(f for f in datos["fuentes"] if f["fuente_id"] == "google-trends")
+    assert gt["fuente_nombre"] == "Google Trends"
+    assert gt["items"] == 2
+
+
+def test_descubrimiento_devuelve_estado_y_rendimiento(cliente, monkeypatch):
+    monkeypatch.setattr("keni_consola.config.trends_activo", lambda: True)
+    monkeypatch.setattr("keni_consola.config.trends_geos", lambda: ("MX",))
+    _inicializar_trends()
+    datos = cliente.get("/api/noticias/descubrimiento", params={"marca": "unotv"}).json()
+    assert datos["activo"] is True
+    assert datos["geos"] == ["MX"]
+    assert datos["max_por_tema"] == 3
+    assert datos["stats"]["fuente_nombre"] == "Google Trends"
+    assert datos["stats"]["items"] == 2
+
+
+def test_descubrimiento_sin_aportes_devuelve_stats_nulo(cliente):
+    """Sin items de Trends en la ventana, el canal reporta estado pero `stats` = null."""
+    datos = cliente.get("/api/noticias/descubrimiento", params={"marca": "unotv"}).json()
+    assert datos["stats"] is None
+    assert "activo" in datos
+
+
 def test_cluster_por_url_canonica_cruza_items_de_cualquier_fuente(cliente):
     # Cruce exacto del clustering a NIVEL DE ITEM: encuentra el cluster aunque la url no sea
     # la clave del representativo (igualdad o prefijo `?` sobre la canónica de dedup).

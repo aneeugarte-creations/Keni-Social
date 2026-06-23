@@ -371,21 +371,75 @@ async def stats_fuentes_handler(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
-def _stats_fuentes(marca: str | None, dias: int) -> dict:
-    from ...dominio import fuentes_pesos
+def _fila_stats(f: dict) -> dict:
+    """Enriquece una fila de `repos.stats_fuentes` para la vista: tier, tasa de uso y nombre.
 
-    fuentes = []
-    for f in repos.stats_fuentes(marca or None, dias=dias):
-        historias = int(f.get("historias") or 0)
-        usadas = int(f.get("usadas") or 0)
-        fuentes.append(
-            {
-                **f,
-                "tier": fuentes_pesos.tier_de_peso(float(f.get("peso") or 1.0)),
-                "tasa_uso": round(usadas / historias, 3) if historias else 0.0,
-            }
-        )
+    Google Trends agrega cientos de medios bajo un único `fuente_id`; el repo trae el
+    `MAX(fuente_nombre)` de la bolsa (un medio cualquiera, a menudo no latino). Como fila de
+    rendimiento es UN canal —el descubridor—, así que se nombra como tal, no por ese medio suelto.
+    """
+    from ...dominio import fuentes_pesos
+    from ...dominio import trends as dom_trends
+
+    historias = int(f.get("historias") or 0)
+    usadas = int(f.get("usadas") or 0)
+    nombre = (
+        "Google Trends"
+        if f.get("fuente_id") == dom_trends.FUENTE_ID
+        else f.get("fuente_nombre")
+    )
+    return {
+        **f,
+        "fuente_nombre": nombre,
+        "tier": fuentes_pesos.tier_de_peso(float(f.get("peso") or 1.0)),
+        "tasa_uso": round(usadas / historias, 3) if historias else 0.0,
+    }
+
+
+def _stats_fuentes(marca: str | None, dias: int) -> dict:
+    fuentes = [_fila_stats(f) for f in repos.stats_fuentes(marca or None, dias=dias)]
     return {"fuentes": fuentes, "dias": dias}
+
+
+async def descubrimiento_handler(request: Request) -> Response:
+    """GET /api/noticias/descubrimiento?marca=&dias=: estado + rendimiento del canal AUTOMÁTICO.
+
+    Google Trends es el canal de DESCUBRIMIENTO (paralelo a las fuentes RSS manuales): un daemon
+    vuelca una muestra de las tendencias —con sus noticias— al pool. Devuelve si está activo, sus
+    geos, intervalo y muestra por tema, y su rendimiento editorial agregado (la fila `google-trends`
+    de stats). `dias` acota la ventana (def 7, máx 90). Marca-aware.
+    """
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    try:
+        dias = int(request.query_params.get("dias") or 7)
+    except ValueError:
+        dias = 7
+    dias = max(1, min(dias, 90))
+    cuerpo = await run_in_threadpool(_descubrimiento, marca, dias)
+    return JSONResponse(cuerpo)
+
+
+def _descubrimiento(marca: str | None, dias: int) -> dict:
+    from ...dominio import trends as dom_trends
+
+    stats = next(
+        (
+            _fila_stats(f)
+            for f in repos.stats_fuentes(marca or None, dias=dias)
+            if f.get("fuente_id") == dom_trends.FUENTE_ID
+        ),
+        None,
+    )
+    return {
+        "activo": config.trends_activo(),
+        "geos": list(config.trends_geos()),
+        "intervalo_min": config.trends_intervalo_min(),
+        "max_por_tema": dom_trends.MAX_NOTICIAS_POR_TERMINO,
+        "dias": dias,
+        "stats": stats,
+    }
 
 
 async def salud(request: Request) -> Response:

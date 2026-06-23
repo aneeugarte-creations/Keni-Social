@@ -59,6 +59,7 @@ from .items import (
     cobertura,
     construir_salud,
     descartar,
+    descubrimiento_handler,
     listar,
     salud,
     stats_fuentes_handler,
@@ -74,6 +75,7 @@ __all__ = [
     "cobertura",
     "salud",
     "stats_fuentes_handler",
+    "descubrimiento_handler",
     "construir_salud",
     "_frescura_min",
     # Handlers de HISTORIAS (clusters) + la Mesa.
@@ -106,6 +108,7 @@ RUTAS = [
     # Rendimiento editorial por fuente (tracking de fuentes). ANTES de `/{item_id}/...` para
     # que `fuentes` nunca se interprete como un item_id.
     Route("/api/noticias/fuentes/stats", stats_fuentes_handler, methods=["GET"]),
+    Route("/api/noticias/descubrimiento", descubrimiento_handler, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
     # La Mesa de redacción: pool segmentado por las líneas del plan + progreso del día.
     Route("/api/noticias/mesa", mesa, methods=["GET"]),

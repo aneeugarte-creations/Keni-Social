@@ -3,7 +3,8 @@
 El RSS de Google Trends (`trends.google.com/trending/rss?geo=MX`) trae, por término en
 tendencia, su `ht:approx_traffic` (la señal HONESTA de viralidad) y sus `ht:news_item`
 (noticias reales que lo explican). Este módulo APLANA esas noticias a items del pool
-(`noticias_items`): una fila por `ht:news_item`, con su categoría editorial por geografía
+(`noticias_items`): hasta `MAX_NOTICIAS_POR_TERMINO` filas por término (los medios que cubren
+un tema son casi-duplicados; basta una muestra), con su categoría editorial por geografía
 (MX → 'mx', resto → 'internacional') y la señal del término. Determinista y PURO (sin red):
 el parseo no toca la red; la descarga —con guard
 SSRF— la hace el daemon (`trends_daemon`) vía `dominio.http_feed`.
@@ -36,6 +37,10 @@ FUENTE_ID = "google-trends"
 
 # Tope de términos en tendencia que se procesan por barrido (cada uno trae varias noticias).
 MAX_TERMINOS = 40
+# Tope de noticias que se conservan POR término: un tema en tendencia trae muchos medios
+# cubriendo lo mismo (casi-duplicados). La señal útil es el TEMA, no la cobertura; con una
+# muestra basta. Para profundizar están las fuentes RSS directas.
+MAX_NOTICIAS_POR_TERMINO = 3
 _MAX_TITULO = 300
 
 
@@ -92,10 +97,11 @@ def _texto_hijo(elemento: ET.Element, *nombres: str) -> str:
 
 
 def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
-    """Parsea el RSS de Google Trends a items de `noticias_items` (uno por `ht:news_item`).
+    """Parsea el RSS de Google Trends a items de `noticias_items`.
 
     Cada `<item>` es un término en tendencia (titulo + `ht:approx_traffic` + sus `ht:news_item`).
-    Se aplana a una fila de pool por noticia, con `senal` = el tráfico del término y `categoria`
+    Se aplana a hasta `MAX_NOTICIAS_POR_TERMINO` filas de pool por término (los medios que cubren
+    un mismo tema son casi-duplicados), con `senal` = el tráfico del término y `categoria`
     por geo (MX → 'mx', resto → 'internacional'). Dedup por `clave` (URL canónica o hash del título). Tolerante: campos ausentes
     se omiten. Lanza `RSSError` si el XML no parsea.
     """
@@ -117,7 +123,10 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
         termino = _texto_hijo(item, "title").strip()
         trafico = _texto_hijo(item, "approx_traffic").strip()
         senal = traduce_trafico(trafico)
+        n_termino = 0
         for hijo in item:
+            if n_termino >= MAX_NOTICIAS_POR_TERMINO:
+                break
             if http_feed._quitar_ns(hijo.tag) != "news_item":
                 continue
             titulo = _texto_hijo(hijo, "news_item_title").strip()[:_MAX_TITULO]
@@ -130,6 +139,7 @@ def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
             if not clave or clave in vistos:
                 continue
             vistos.add(clave)
+            n_termino += 1
             resumen = f"En tendencia en {GEOS.get(geo, geo)}: {termino}" if termino else ""
             if trafico:
                 resumen = f"{resumen} (~{trafico} búsquedas)" if resumen else f"~{trafico} búsquedas"

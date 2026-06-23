@@ -6,6 +6,7 @@ import type {
   RespuestaHistorias,
   RespuestaMesa,
   RespuestaMesaLinea,
+  RespuestaDescubrimiento,
   RespuestaNoticias,
   RespuestaStatsFuentes,
   ResumenCobertura,
@@ -222,6 +223,24 @@ export const apiNoticias = {
     ) =>
       peticion<RespuestaStatsFuentes>(
         `/noticias/fuentes/stats${query({
+          marca: params.marca,
+          dias: params.dias != null ? String(params.dias) : undefined,
+        })}`,
+        { signal },
+      ),
+
+    /**
+     * Estado + rendimiento del canal AUTOMÁTICO de descubrimiento (Google Trends), paralelo a
+     * las fuentes RSS manuales: si está activo, geos/intervalo/muestra por tema y su aporte
+     * editorial agregado. Marca-aware.
+     * GET /api/noticias/descubrimiento?marca=&dias=
+     */
+    descubrimiento: (
+      params: { marca?: string; dias?: number } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaDescubrimiento>(
+        `/noticias/descubrimiento${query({
           marca: params.marca,
           dias: params.dias != null ? String(params.dias) : undefined,
         })}`,

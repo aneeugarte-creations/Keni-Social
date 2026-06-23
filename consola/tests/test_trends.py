@@ -105,6 +105,28 @@ def test_parsear_trends_dedup_por_clave():
     assert len(items) == 2
 
 
+def test_parsear_trends_capa_por_termino():
+    """Un término con muchos medios cubriendo el mismo tema solo aporta una muestra: como mucho
+    `MAX_NOTICIAS_POR_TERMINO` filas (los demás son casi-duplicados, ruido para el pool)."""
+    noticias = "".join(
+        f"<ht:news_item>"
+        f"<ht:news_item_title>Cobertura {i} del eclipse</ht:news_item_title>"
+        f"<ht:news_item_url>https://example.com/eclipse-{i}</ht:news_item_url>"
+        f"<ht:news_item_source>Medio {i}</ht:news_item_source>"
+        f"</ht:news_item>"
+        for i in range(10)
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>'
+        f"<item><title>Eclipse solar</title><ht:approx_traffic>200 mil+</ht:approx_traffic>"
+        f"{noticias}</item>"
+        "</channel></rss>"
+    )
+    items = dom.parsear_trends_items(xml, geo="MX")
+    assert len(items) == dom.MAX_NOTICIAS_POR_TERMINO
+
+
 def test_parsear_trends_xml_invalido_lanza():
     with pytest.raises(http_feed.RSSError):
         dom.parsear_trends_items("esto no es xml <<<", geo="MX")

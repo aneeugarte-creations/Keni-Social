@@ -377,6 +377,23 @@ export interface RespuestaStatsFuentes {
   dias: number;
 }
 
+// ── Descubrimiento: Google Trends (GET /api/noticias/descubrimiento) ─────────
+
+/** Estado + rendimiento del canal AUTOMÁTICO (Google Trends), paralelo a las fuentes manuales. */
+export interface RespuestaDescubrimiento {
+  /** El daemon de Trends está ingiriendo tendencias al pool. */
+  activo: boolean;
+  /** Geografías que ingiere (ej. ["MX"]). */
+  geos: string[];
+  /** Cada cuántos minutos hace un barrido. */
+  intervalo_min: number;
+  /** Nº de noticias que conserva por tema en tendencia (el resto son casi-duplicados). */
+  max_por_tema: number;
+  dias: number;
+  /** Rendimiento editorial agregado del canal en la ventana (null si aún no aportó nada). */
+  stats: RendimientoFuente | null;
+}
+
 // ── Ola D: salud de fuentes (GET /api/noticias/salud) ────────────────────────
 
 /**

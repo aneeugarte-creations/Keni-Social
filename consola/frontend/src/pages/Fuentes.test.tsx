@@ -241,17 +241,18 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(await screen.findByText("BBC Mundo")).toBeInTheDocument();
   });
 
-  it("tres pestañas: Externas, Internas y Rendimiento", async () => {
+  it("cuatro pestañas: Externas, Descubrimiento, Internas y Rendimiento", async () => {
     stubFetch();
     renderFuentes();
 
-    // Fuentes tiene 3 pestañas: lo externo (RSS/agencias/Trends), lo interno (buzones del
-    // equipo) y el RENDIMIENTO editorial por fuente (quién abre historias, % de uso) que
-    // alimenta la decisión de potencia/tier de las fuentes.
+    // Fuentes tiene 4 pestañas: lo externo manual (feeds RSS), el DESCUBRIMIENTO automático
+    // (Google Trends, paralelo a lo manual), lo interno (buzones del equipo) y el RENDIMIENTO
+    // editorial por fuente (quién abre historias, % de uso) que alimenta la decisión de tier.
     expect(await screen.findByRole("tab", { name: "Externas" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Descubrimiento" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Internas" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Rendimiento" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getAllByRole("tab")).toHaveLength(4);
   });
 
   it("la pestaña por defecto es Internas (el flujo diario del equipo)", async () => {
