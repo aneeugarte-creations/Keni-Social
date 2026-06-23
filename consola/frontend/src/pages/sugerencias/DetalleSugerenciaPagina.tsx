@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Coins,
   ExternalLink,
+  GitBranch,
   Hammer,
   Loader2,
   MessageSquareWarning,
@@ -369,6 +370,16 @@ export default function DetalleSugerenciaPagina() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const rebasar = useMutation({
+    mutationFn: () => api.rebasarSugerencia(id),
+    onSuccess: (res) => {
+      invalidar();
+      cerrarPendiente();
+      toast.success(res.detalle || "Rama rebasada sobre main");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const cambiarEstado = useMutation({
     mutationFn: (estado: string) => api.actualizarSugerencia(id, { estado }),
     onSuccess: (_res, estado) => {
@@ -430,11 +441,15 @@ export default function DetalleSugerenciaPagina() {
   // mostrarlo duplicaría el spec. Acabada la generación, mandan los bloques guardados.
   const generando = estado === "discovery" || estado === "building";
 
+  // Hay worktree/rama (y por tanto un preview que puede quedar viejo) desde que se construye.
+  const tieneRama = estado === "revision" || estado === "fallida";
+
   const ocupado =
     discovery.isPending ||
     construir.isPending ||
     checkpoint.isPending ||
     promover.isPending ||
+    rebasar.isPending ||
     cambiarEstado.isPending ||
     borrar.isPending;
 
@@ -625,6 +640,26 @@ export default function DetalleSugerenciaPagina() {
                 >
                   <Rocket className="h-4 w-4" />
                   Promover a main
+                </Button>
+              )}
+              {tieneRama && (
+                <Button
+                  variant="outline"
+                  disabled={ocupado}
+                  onClick={() =>
+                    setPendiente({
+                      clave: "rebase",
+                      titulo: "Rebasar sobre main",
+                      descripcion:
+                        "Actualiza la rama de la idea con lo último de main (fetch + rebase, sin push) y reconstruye el preview. Útil si el preview se quedó viejo. Si hay conflictos, se aborta sin tocar la rama.",
+                      etiquetaConfirmar: "Rebasar sobre main",
+                      sinNota: true,
+                      ejecutar: () => rebasar.mutate(),
+                    })
+                  }
+                >
+                  <GitBranch className="h-4 w-4" />
+                  Rebasar sobre main
                 </Button>
               )}
               {!esDescartada && estado !== "hecha" && (

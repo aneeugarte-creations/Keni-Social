@@ -125,3 +125,47 @@ def test_promover_ok_marca_hecha(entorno, monkeypatch):
     assert capturado["json"] == {"sugerencia_id": sid}
     # Tras el push real, el kanban queda en `hecha`.
     assert sugerencias.obtener(sid)["estado"] == "hecha"
+
+
+# --- Rebase: proxy admin-gated al listener (parcheado), sin mover el kanban -- #
+
+
+def test_rebase_editor_403(entorno):
+    sid = _en_revision()
+    assert _cli_como("editor").post(
+        f"/api/sugerencias/{sid}/rebase", json={}, headers=_ORIGIN
+    ).status_code == 403
+
+
+def test_rebase_inexistente_404(entorno):
+    assert _cli_super().post(
+        "/api/sugerencias/nope/rebase", json={}, headers=_ORIGIN
+    ).status_code == 404
+
+
+def test_rebase_ok_reenvia_al_listener_sin_tocar_estado(entorno, monkeypatch):
+    sid = _en_revision()
+    capturado: dict = {}
+
+    def _fake(metodo, ruta, json=None):
+        capturado["ruta"] = ruta
+        return 200, {"ok": True, "detalle": "Rama «dev/sug-x» rebasada sobre main.", "rama": "dev/sug-x"}
+
+    monkeypatch.setattr(api_sugerencias, "_llamar_dev", _fake)
+    r = _cli_super().post(f"/api/sugerencias/{sid}/rebase", json={}, headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert capturado["ruta"] == "/control/dev/rebase"
+    # El rebase NO mueve el kanban: sigue en revision.
+    assert sugerencias.obtener(sid)["estado"] == "revision"
+
+
+def test_rebase_worker_dev_caido_degrada(entorno, monkeypatch):
+    sid = _en_revision()
+    monkeypatch.setattr(
+        api_sugerencias, "_llamar_dev",
+        lambda metodo, ruta, json=None: (502, {"ok": False, "detalle": "No se pudo contactar worker-dev."}),
+    )
+    r = _cli_super().post(f"/api/sugerencias/{sid}/rebase", json={}, headers=_ORIGIN)
+    assert r.status_code == 502
+    assert r.json()["ok"] is False

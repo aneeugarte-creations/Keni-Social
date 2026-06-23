@@ -54,4 +54,7 @@ export const apiSugerencias = {
   // Promueve la rama dev a main (checkpoint humano final). No corre agente: sin nota.
   promoverSugerencia: (id: string) =>
     peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/promover`, { metodo: "POST" }),
+  // Rebasa la rama de la sugerencia sobre main (sin push) y reconstruye el preview.
+  rebasarSugerencia: (id: string) =>
+    peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/rebase`, { metodo: "POST" }),
 };

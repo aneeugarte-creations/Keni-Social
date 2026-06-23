@@ -342,6 +342,35 @@ async def promover(request: Request) -> Response:
     })
 
 
+async def rebase(request: Request) -> Response:
+    """POST /api/sugerencias/{id}/rebase -> `{ok, detalle, rama}` (rebasa la rama sobre main).
+
+    SUPERADMIN-gated (control del tablero). PROXEA (httpx+bearer) al listener de worker-dev, que
+    hace fetch+rebase de la rama sobre `origin/main` (SIN push) y reconstruye el preview. Refresca
+    una rama que se quedó vieja respecto a `main`. No mueve el kanban; si worker-dev no responde,
+    degrada con error claro.
+    """
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede rebasar una rama.")
+    if rechazo is not None:
+        return rechazo
+    sugerencia_id = request.path_params["sugerencia_id"]
+    sug = sugerencias.obtener(sugerencia_id)
+    if sug is None:
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+
+    status, payload = await run_in_threadpool(
+        _llamar_dev, "POST", "/control/dev/rebase", {"sugerencia_id": sugerencia_id}
+    )
+    if status != 200 or not payload.get("ok"):
+        detalle = payload.get("detalle") or payload.get("error") or "No se pudo rebasar la rama."
+        return JSONResponse({"ok": False, "detalle": detalle}, status_code=status if status >= 400 else 502)
+    return JSONResponse({
+        "ok": True,
+        "detalle": payload.get("detalle") or "Rama rebasada sobre main.",
+        "rama": payload.get("rama", ""),
+    })
+
+
 RUTAS = [
     Route("/api/sugerencias", listar, methods=["GET"]),
     Route("/api/sugerencias", crear, methods=["POST"]),
@@ -352,4 +381,5 @@ RUTAS = [
     Route("/api/sugerencias/{sugerencia_id}/construir", construir, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/checkpoint", checkpoint, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/promover", promover, methods=["POST"]),
+    Route("/api/sugerencias/{sugerencia_id}/rebase", rebase, methods=["POST"]),
 ]

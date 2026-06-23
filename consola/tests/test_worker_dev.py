@@ -161,6 +161,54 @@ def test_promover_sugerencia_push_falla(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Rebase de la rama sobre main (git parcheado): fetch+rebase, sin push          #
+# --------------------------------------------------------------------------- #
+
+
+def test_rebase_sugerencia_ok(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
+    fake = _parchear(monkeypatch, sug, tmp_path)
+    monkeypatch.setattr(worker_dev, "_construir_preview", lambda *_a, **_k: True)
+    res = worker_dev.rebase_sugerencia("x")
+    assert res["ok"] is True
+    assert res["preview_listo"] is True
+    subcomandos = [c[0] for c in fake.llamadas]
+    assert subcomandos[:2] == ["fetch", "rebase"]
+    assert "push" not in subcomandos  # rebase NO empuja
+
+
+def test_rebase_sugerencia_conflicto_aborta_sin_reconstruir(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path)}
+    fake = _parchear(monkeypatch, sug, tmp_path, fallos={"rebase"})
+    construido = {"v": False}
+    monkeypatch.setattr(
+        worker_dev, "_construir_preview", lambda *_a, **_k: construido.__setitem__("v", True) or True
+    )
+    res = worker_dev.rebase_sugerencia("x")
+    assert res["ok"] is False
+    assert "rebase" in res["detalle"].lower()
+    assert ("rebase", "--abort") in fake.llamadas
+    assert "push" not in [c[0] for c in fake.llamadas]
+    assert construido["v"] is False  # no reconstruye el preview si el rebase falló
+
+
+def test_rebase_sugerencia_building_rechaza(monkeypatch, tmp_path):
+    sug = {"estado": "building", "rama": "dev/sug-x", "worktree": str(tmp_path)}
+    _parchear(monkeypatch, sug, tmp_path)
+    res = worker_dev.rebase_sugerencia("x")
+    assert res["ok"] is False
+    assert "en curso" in res["detalle"].lower()
+
+
+def test_rebase_sugerencia_sin_worktree(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path / "no-existe")}
+    _parchear(monkeypatch, sug, tmp_path)
+    res = worker_dev.rebase_sugerencia("x")
+    assert res["ok"] is False
+    assert "worktree" in res["detalle"].lower()
+
+
+# --------------------------------------------------------------------------- #
 # Teardown: borra worktree + rama local + preview                              #
 # --------------------------------------------------------------------------- #
 

@@ -313,6 +313,49 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
     return {"ok": True, "detalle": f"Rama «{rama}» promovida a main.", "rama": rama}
 
 
+def rebase_sugerencia(sugerencia_id: str) -> dict[str, object]:
+    """Rebasa la rama de una sugerencia sobre `origin/main` (SIN push) y reconstruye el preview.
+
+    Refresca una rama que se quedó vieja respecto a `main` (p.ej. un preview que no enruta o no
+    arranca porque se compiló de un `main` anterior). Corre dentro del worktree: fetch →
+    rebase `origin/main`; si hay conflictos, `--abort` y devuelve error legible (nunca propaga).
+    Tras un rebase OK recompila el preview con el código ya actualizado. No toca el estado del
+    kanban. Rechaza si hay una fase en curso (`building`) o no hay worktree.
+    """
+    sug = sugerencias.obtener(sugerencia_id)
+    if sug is None:
+        return {"ok": False, "detalle": "Esa sugerencia ya no existe."}
+    if sug.get("estado") == "building":
+        return {"ok": False, "detalle": "Hay una fase en curso; espera a que termine para rebasar."}
+    rama = str(sug.get("rama") or f"dev/sug-{sugerencia_id}")
+    wt_crudo = str(sug.get("worktree") or (_dir_worktrees() / f"sug-{sugerencia_id}"))
+    worktree = Path(wt_crudo)
+    if not worktree.is_dir():
+        return {"ok": False, "detalle": "No se encontró el worktree de la sugerencia para rebasar."}
+
+    _setup_git_credenciales()
+    fetch = _git("fetch", "origin", "main", cwd=worktree)
+    if fetch.returncode != 0:
+        return {"ok": False, "detalle": f"No se pudo actualizar desde origin: {(fetch.stderr or '').strip()[:200]}"}
+
+    rebase = _git("rebase", "origin/main", cwd=worktree)
+    if rebase.returncode != 0:
+        _git("rebase", "--abort", cwd=worktree)
+        return {
+            "ok": False,
+            "detalle": "El rebase sobre origin/main tiene conflictos; resuélvelos en la rama.",
+            "rama": rama,
+        }
+
+    # Rebasada: recompila el preview para que refleje el código ya actualizado.
+    listo = _construir_preview(worktree, sugerencia_id)
+    sugerencias.actualizar_avance(sugerencia_id, {"preview_listo": listo})
+    detalle = f"Rama «{rama}» rebasada sobre main." + (
+        " Preview reconstruido." if listo else " (el preview no se pudo reconstruir)"
+    )
+    return {"ok": True, "detalle": detalle, "rama": rama, "preview_listo": listo}
+
+
 # --------------------------------------------------------------------------- #
 # Reaper de fondo: purga restos de sugerencias terminadas (descartes/crashes)  #
 # --------------------------------------------------------------------------- #

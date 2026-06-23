@@ -14,6 +14,7 @@ lo proxea (admin-gated) desde `api/sugerencias.py`. Imita `control.py`/`worker_r
 Rutas (bajo `/control/dev`, contrato con el proxy del back):
   - GET  /control/healthz       -> {ok:true}             (sonda, sin bearer)
   - POST /control/dev/promover  -> {ok, detalle, rama}   (fetch+rebase+push de la rama a main)
+  - POST /control/dev/rebase    -> {ok, detalle, rama}   (fetch+rebase de la rama sobre main, sin push)
 """
 
 from __future__ import annotations
@@ -76,12 +77,30 @@ async def promover(request: Request) -> Response:
     return JSONResponse(res, status_code=200 if res.get("ok") else 400)
 
 
+async def rebase(request: Request) -> Response:
+    """POST /control/dev/rebase `{sugerencia_id}` -> {ok, detalle, rama}.
+
+    Rebasa la rama de la sugerencia sobre `origin/main` (sin push) y reconstruye el preview, en
+    el threadpool (git bloqueante). 200 si rebasó; 400 en caso contrario."""
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    sid = cuerpo.get("sugerencia_id")
+    if not isinstance(sid, str) or not sid.strip():
+        return JSONResponse({"ok": False, "detalle": "falta sugerencia_id"}, status_code=400)
+    from . import worker_dev
+
+    res = await run_in_threadpool(worker_dev.rebase_sugerencia, sid.strip())
+    return JSONResponse(res, status_code=200 if res.get("ok") else 400)
+
+
 def crear_app_control_dev() -> Starlette:
     """App Starlette del listener de promoción del carril dev (rutas + healthz)."""
     return Starlette(
         routes=[
             Route("/control/healthz", healthz, methods=["GET"]),
             Route("/control/dev/promover", promover, methods=["POST"]),
+            Route("/control/dev/rebase", rebase, methods=["POST"]),
         ]
     )
 
