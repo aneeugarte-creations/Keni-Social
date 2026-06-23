@@ -484,6 +484,42 @@ def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
     assert r.json()["pieza"]["estado"] == "programado"
 
 
+def test_bajar_umbral_resetea_likes_de_piezas_en_revision(entorno):
+    """Bajar el umbral de likes de una marca resetea los OK humanos de sus piezas EN REVISIÓN
+    con ≥1 like: vuelven a pendiente (nada se auto-programa sin querer) y la pieza sigue en revisión."""
+    from keni_consola.api import marcas as marcas_api
+    from keni_consola.dominio import colaboracion
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)  # marca unotv, cadena de 2 (likes por defecto = 2)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    _cli_usuario("beto").post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert colaboracion.contar_aprobaciones_humanas(repos.listar_aprobaciones(pub["id"])) == 1
+
+    # Bajar el umbral resetea los likes humanos de las piezas en revisión de ESA marca.
+    marcas_api._resetear_likes_en_revision(_MARCA)
+
+    assert colaboracion.contar_aprobaciones_humanas(repos.listar_aprobaciones(pub["id"])) == 0
+    assert autora.get(f"/api/piezas/{pub['id']}").json()["pieza"]["estado"] == "en_revision"
+
+
+def test_bajar_umbral_no_toca_piezas_sin_likes(entorno):
+    """Una pieza en revisión SIN ningún like no se altera al bajar el umbral (nada que resetear)."""
+    from keni_consola.api import marcas as marcas_api
+    from keni_consola.dominio import colaboracion
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    antes = repos.listar_aprobaciones(pub["id"])
+    assert colaboracion.contar_aprobaciones_humanas(antes) == 0
+
+    marcas_api._resetear_likes_en_revision(_MARCA)
+
+    despues = repos.listar_aprobaciones(pub["id"])
+    assert [n["decision"] for n in despues] == [n["decision"] for n in antes]
+
+
 # --------------------------------------------------------------------------- #
 # Gate B: comentarios sin resolver bloquean programar (item B)                 #
 # --------------------------------------------------------------------------- #

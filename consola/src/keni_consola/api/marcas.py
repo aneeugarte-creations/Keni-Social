@@ -352,6 +352,36 @@ async def catalogo_crear(request: Request) -> Response:
     return JSONResponse({"marca": nueva, "mensaje": f"Marca {etiqueta!r} creada."}, status_code=201)
 
 
+def _resetear_likes_en_revision(marca_id: str) -> None:
+    """Resetea los OK humanos de las piezas EN REVISIÓN de `marca_id` que tengan ≥1 like.
+
+    Lo dispara BAJAR el umbral de likes de una marca: una pieza que ya acumulaba likes podría
+    quedar por encima del nuevo umbral y auto-programarse sin querer. Para evitarlo, sus niveles
+    humanos (no el automático de Crítica IA) vuelven a `pendiente`; la pieza sigue en revisión,
+    ahora con cero likes, y se re-aprueba bajo el nuevo umbral. Solo INFRA (repos + dominio): no
+    cruza a la app de operación. Idempotente y best-effort por pieza."""
+    from .. import repos
+    from ..dominio import colaboracion
+    from ..estados import DECISION_APROBADO, DECISION_RECHAZADO, ESTADO_EN_REVISION
+
+    for fila in repos.listar_piezas_fila(marca=marca_id):
+        if fila.get("estado") != ESTADO_EN_REVISION:
+            continue
+        pieza_id = fila.get("id") or ""
+        cadena = repos.listar_aprobaciones(pieza_id)
+        # Solo las que tienen al menos UN like humano (un dislike aislado no auto-programa nada).
+        if colaboracion.contar_aprobaciones_humanas(cadena) < 1:
+            continue
+        for nivel in cadena:
+            if colaboracion.es_nivel_critica_ia(nivel):
+                continue  # el nivel automático de IA no es un "like" humano
+            if nivel.get("decision") not in (DECISION_APROBADO, DECISION_RECHAZADO):
+                continue
+            if (nivel.get("decisor_id") or "") == colaboracion.DECISOR_AUTO_ID:
+                continue  # pre-aprobación automática: no es un like que el cambio deba borrar
+            repos.actualizar_aprobacion(nivel["id"], dict(colaboracion.CAMPOS_NIVEL_PENDIENTE))
+
+
 _CAMPOS_ESTRUCTURALES = ("etiqueta", "id_metricas", "tipo", "etiqueta_investigacion")
 
 
@@ -411,6 +441,11 @@ async def catalogo_editar(request: Request) -> Response:
     nuevo = [actualizado if m["id"] == mid else m for m in catalogo]
     if (err := _persistir(nuevo)) is not None:
         return err
+    # Al BAJAR el umbral de likes, resetea los OK humanos de las piezas EN REVISIÓN de esta marca
+    # (las que tengan ≥1 like): vuelven a pendiente para re-aprobarse bajo el nuevo umbral, así
+    # ninguna se auto-programa de forma no intencionada por el cambio.
+    if likes_aprobacion < actual.get("likes_aprobacion", 2):
+        await run_in_threadpool(_resetear_likes_en_revision, mid)
     return JSONResponse({"marca": actualizado, "mensaje": "Marca actualizada."})
 
 
