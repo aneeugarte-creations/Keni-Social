@@ -121,11 +121,31 @@ def test_resumen_agrega_los_posts_del_periodo_por_red():
     assert resumen.fuente == "metricool"
     assert resumen.visualizaciones == 10000  # 6000 + 4000
     assert resumen.interacciones == 300  # 200 + 100
-    # alcance no se deriva del post de forma uniforme -> None (honesto, no se inventa).
+    # posts sin campo 'reach'/'impressionsUnique' -> alcance None (honesto, no se inventa).
     assert resumen.alcance is None
     assert resumen.engagement_pct == pytest.approx(3.0)  # 300/10000 -> 3.0
     assert [m.plataforma for m in resumen.por_plataforma] == [Plataforma.instagram]
     assert resumen.cobertura is not None and resumen.cobertura.completa
+
+
+@respx.mock
+def test_resumen_suma_alcance_de_posts_ig_con_reach():
+    """Cuando los posts de IG exponen 'reach', el resumen lo suma por red."""
+    _mock_perfiles(_perfil(instagram="unotv_"))  # IG conectada
+    _mock_posts(
+        "instagram",
+        [
+            {**_post_ig("p1", 6000, 200), "reach": 3000},
+            {**_post_ig("p2", 4000, 100), "reach": 2500},
+        ],
+    )
+
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert resumen.alcance == 5500  # 3000 + 2500
+    ig = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.instagram)
+    assert ig.alcance == 5500
 
 
 @respx.mock
