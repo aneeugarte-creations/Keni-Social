@@ -660,6 +660,15 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "fecha_programada": "fecha_programada",
     "imagen": "imagen",
     "foto": "foto",
+    # Metadata de licencia de la imagen: el PUT genérico y el ESPEJO entre redes la reescriben al
+    # REEMPLAZAR la foto (normalización + propagación), así que `actualizar_pieza` debe persistirla
+    # como cualquier otro campo de la fila —si no, una hermana conserva la licencia STALE de la foto vieja.
+    "imagen_origen": "imagen_origen",
+    "imagen_proveedor": "imagen_proveedor",
+    "imagen_autor": "imagen_autor",
+    "imagen_licencia": "imagen_licencia",
+    "imagen_credito_url": "imagen_credito_url",
+    "imagen_autorizada": "imagen_autorizada",
     "evergreen": "evergreen",
     "placa_oculta": "placa_oculta",
     "plantilla_diseno_id": "plantilla_diseno_id",
@@ -704,7 +713,10 @@ def actualizar_pieza(
     for clave, columna in _CAMPOS_PUB_A_PLAT.items():
         if clave in campos:
             valor = campos[clave]
-            if clave in ("evergreen", "placa_oculta", "falta_copy", "falta_imagen", "falta_video"):
+            if clave in (
+                "evergreen", "placa_oculta", "falta_copy", "falta_imagen", "falta_video",
+                "imagen_autorizada",
+            ):
                 valor = 1 if valor else 0
             cambios_plat[columna] = valor
     if "estado" in campos:

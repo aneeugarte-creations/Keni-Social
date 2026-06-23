@@ -170,7 +170,7 @@ def test_by_sa_no_se_puede_programar(entorno):
         headers=_ORIGIN,
     )
     assert r.status_code == 409, r.text
-    assert "no permite publicarla" in r.json().get("error", "")
+    assert "NO permite publicarla" in r.json().get("error", "")
 
 
 def test_cc_by_sin_credito_se_bloquea(entorno):
@@ -253,7 +253,7 @@ def test_composicion_placa_preserva_licencia_y_bloqueo(entorno):
         headers=_ORIGIN,
     )
     assert r2.status_code == 409, r2.text
-    assert "no permite publicarla" in r2.json().get("error", "")
+    assert "NO permite publicarla" in r2.json().get("error", "")
 
 
 def test_reemplazo_por_put_se_espeja_y_limpia_licencia_en_hermana(entorno):

@@ -90,7 +90,9 @@ def test_bloquea_solo_estados_publicables():
 
 
 def test_no_bloquea_si_autorizada():
-    ok = {"imagen_origen": "stock", "imagen_autorizada": True}
+    # Autorizada Y de licencia libre (Pexels): supera el gate humano del stock Y el legal de la
+    # licencia. Sin una licencia publicable, la autorización sola ya no basta (bloqueo determinista).
+    ok = {"imagen_origen": "stock", "imagen_autorizada": True, "imagen_proveedor": "pexels"}
     assert not licencia_imagen.bloquea_estado(ok, "programado")
     assert not licencia_imagen.bloquea_estado(ok, "publicado")
 
