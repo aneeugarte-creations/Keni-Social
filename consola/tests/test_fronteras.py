@@ -76,6 +76,14 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # mismo patrón que "produccion lee la agenda de C". El health-check es transversal:
         # le importa a todo el equipo, no a una app. (ADR 0005.)
         ("estado", "actividad"),
+        # Seam (config de marca dispara un efecto en la cadena de aprobación): BAJAR el umbral
+        # de likes de una marca en `api/marcas.py` (shell) resetea los OK humanos de sus piezas
+        # EN REVISIÓN para que no se auto-programen bajo el nuevo umbral. Ese reseteo lee y
+        # vuelve a `pendiente` los niveles de la cadena, primitivas de `dominio.colaboracion`
+        # (operación: `contar_aprobaciones_humanas`, `es_nivel_critica_ia`, `DECISOR_AUTO_ID`,
+        # `CAMPOS_NIVEL_PENDIENTE`). Es el efecto INTRÍNSECO de cambiar el umbral, no acoplamiento
+        # arbitrario; acotado a ese único disparo. (ADR 0005.)
+        ("marcas", "colaboracion"),
         # NOTA — seams RETIRADOS de la allowlist (cola-jobs-infra / T1.1 / T1.2 / borra-panel):
         #   ("media"|"parrilla_import"|"publicaciones"|"sugerencias", "generaciones")
         #       [cola-jobs-infra]: `generaciones` (la cola de jobs) se reclasificó de módulo

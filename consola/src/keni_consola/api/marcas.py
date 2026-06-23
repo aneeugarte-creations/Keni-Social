@@ -358,8 +358,9 @@ def _resetear_likes_en_revision(marca_id: str) -> None:
     Lo dispara BAJAR el umbral de likes de una marca: una pieza que ya acumulaba likes podría
     quedar por encima del nuevo umbral y auto-programarse sin querer. Para evitarlo, sus niveles
     humanos (no el automático de Crítica IA) vuelven a `pendiente`; la pieza sigue en revisión,
-    ahora con cero likes, y se re-aprueba bajo el nuevo umbral. Solo INFRA (repos + dominio): no
-    cruza a la app de operación. Idempotente y best-effort por pieza."""
+    ahora con cero likes, y se re-aprueba bajo el nuevo umbral. Toca la cadena de aprobación
+    vía primitivas de `dominio.colaboracion` (seam shell→operación de la allowlist, ADR 0005).
+    Idempotente y best-effort por pieza."""
     from .. import repos
     from ..dominio import colaboracion
     from ..estados import DECISION_APROBADO, DECISION_RECHAZADO, ESTADO_EN_REVISION
