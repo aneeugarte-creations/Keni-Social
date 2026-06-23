@@ -108,6 +108,7 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
         ("prompt", "priorizar", "Priorizar", "prompt/priorizar", None),
         ("mecanica", "admitir", "Admitir", None, None),
         ("prompt", "verificar", "Verificar", None, None),  # prompt_base_de("verificar")
+        ("prompt", "investigar-evergreen", "Investigar evergreen", "prompt/investigar-evergreen", None),
     )),
     ("produccion", "Producción", "La máquina de contenido", (
         ("prompt", "redactar", "Redactar", None, None),          # prompt_base_de("redactar")

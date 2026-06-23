@@ -124,6 +124,21 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     queue: "verificar",
     etapa: "verificar",
     excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
+    // Verificar (noticias) e Investigar evergreen son las dos vías de INVESTIGACIÓN —contrastar la
+    // fuente de una historia vs. investigar una idea propia—: comparten fila horizontal (mismo `paralelo`).
+    paralelo: "investigacion",
+  },
+  {
+    // Rama PARALELA de Verificar: investiga una IDEA EVERGREEN aprobada (con web) y produce material
+    // verificado que entra a producción como un tema más. No es un daemon (lo dispara aprobar la idea,
+    // no un barrido): solo cuelga del maestro y no pinta switch propio. Su prompt es editable aquí.
+    nombre: "Investigar evergreen",
+    es_ia: true,
+    claves: [MAESTRO_INVESTIGACION],
+    ayuda: "Investiga una idea evergreen aprobada con web y produce material verificado para producción",
+    doc: "prompt/investigar-evergreen",
+    contextoMarca: true,
+    paralelo: "investigacion",
   },
 ];
 
