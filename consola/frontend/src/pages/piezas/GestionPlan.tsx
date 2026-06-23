@@ -263,7 +263,7 @@ export function PanelPlan({ marca }: { marca: string }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
         </div>
       ) : (
-        <div className="max-w-[920px]">
+        <div>
           {/* Redes que el plan espera por slot (el calendario las pinta como huecos por red).
               Selección sutil: la activa lleva relleno gris suave; el resto, texto apagado. */}
           <div className="mb-6 flex flex-wrap items-center gap-1">
