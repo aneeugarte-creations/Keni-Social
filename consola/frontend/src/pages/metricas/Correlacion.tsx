@@ -49,7 +49,6 @@ import {
   porcentaje,
   redCanonica,
   redEnFoco,
-  redesObjetivo,
   REDES_CANONICAS,
 } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
@@ -497,36 +496,6 @@ function TablaCorrelacion({
     }
   };
 
-  const celdaFaltante = (redFalta: string, id: string) => {
-    if (id === "marca") {
-      return (
-        <TableCell key={id} className="font-medium">
-          —
-        </TableCell>
-      );
-    }
-    if (id === "red") {
-      return <TableCell key={id}>{nombreRed(redFalta)}</TableCell>;
-    }
-    if (id === "post_estrella") {
-      return (
-        <TableCell key={id} className="max-w-[18rem]">
-          —
-        </TableCell>
-      );
-    }
-    return (
-      <TableCell key={id} className="text-right tabular-nums">
-        —
-      </TableCell>
-    );
-  };
-
-  // Redes EN FOCO presentes en CADA día: una red en foco que no publicó ni ganó seguidores
-  // ese día aparece igualmente como fila "—"; las redes fuera del foco no se muestran.
-  const redesConDatos = new Set(itemsDelDia.map((it) => redCanonica(it.red)));
-  const redesFaltantes = redesObjetivo(red).filter((r) => !redesConDatos.has(r));
-
   if (dias.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -576,15 +545,11 @@ function TablaCorrelacion({
             <TableRow>{columnas.map(encabezado)}</TableRow>
           </TableHeader>
           <TableBody>
+            {/* Solo combinaciones CON datos ese día: una red sin actividad (o que no publica
+                el formato filtrado) no se pinta como fila "—", se omite. */}
             {filasOrdenadas.map((it) => (
               <TableRow key={`${it.marca}-${it.red}-${it.fecha}`}>
                 {columnas.map((id) => celda(it, id))}
-              </TableRow>
-            ))}
-            {/* Redes sin datos ese día: fila presente con "—" (no se omiten). */}
-            {redesFaltantes.map((red) => (
-              <TableRow key={`falta-${red}`} className="text-muted-foreground">
-                {columnas.map((id) => celdaFaltante(red, id))}
               </TableRow>
             ))}
           </TableBody>

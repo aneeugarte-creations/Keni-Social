@@ -9,8 +9,8 @@
  * comparada y son ORDENABLES (clic en la cabecera). Qué columnas se ven y en qué
  * orden lo decide el panel "Configurar vista" (`vistaConfig.columnas.redes`). Al pie,
  * una fila de TOTALES. El foco de red lo manda el selector GLOBAL: solo se muestran las
- * redes seleccionadas; una en foco sin datos aparece como fila "—" (nunca un 0 falso),
- * y una fuera del foco no se muestra.
+ * redes CON datos en el foco; una red sin datos (p. ej. la que no publica el formato
+ * filtrado) NO se pinta como fila "—", se omite (la auditoría de cobertura explica el porqué).
  */
 import { Card } from "@/components/ui/card";
 import {
@@ -21,14 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  nombreRed,
-  numeroCompleto,
-  porcentaje,
-  redCanonica,
-  redEnFoco,
-  redesObjetivo,
-} from "@/lib/formato";
+import { nombreRed, numeroCompleto, porcentaje, redEnFoco } from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -104,11 +97,6 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
 
   const totales = calcularTotales(visibles);
 
-  // Las redes EN FOCO sin datos en el periodo se pintan igualmente como fila "—" (no
-  // desaparecen); las redes fuera del foco no se muestran en absoluto.
-  const conDatos = new Set(visibles.map((r) => redCanonica(r.red)));
-  const redesFaltantes = redesObjetivo(red).filter((r) => !conDatos.has(r));
-
   const encabezado = (id: string) => {
     if (id === "red") {
       return (
@@ -147,21 +135,6 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
     );
   };
 
-  const celdaFaltante = (red: string, id: string) => {
-    if (id === "red") {
-      return (
-        <TableCell key={id} className="pl-6 font-medium">
-          {nombreRed(red)}
-        </TableCell>
-      );
-    }
-    return (
-      <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
-        —
-      </TableCell>
-    );
-  };
-
   const celdaTotal = (id: string) => {
     if (id === "red") {
       return (
@@ -191,14 +164,10 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
         <TableRow>{columnas.map(encabezado)}</TableRow>
       </TableHeader>
       <TableBody>
+        {/* Solo redes CON datos en el foco: una red sin datos (p. ej. la que no publica el
+            formato filtrado) no se pinta como fila "—", se omite. */}
         {filasOrdenadas.map((r) => (
           <TableRow key={r.red}>{columnas.map((id) => celda(r, id))}</TableRow>
-        ))}
-        {/* Redes sin datos en el periodo: fila presente con "—" (no se omiten). */}
-        {redesFaltantes.map((red) => (
-          <TableRow key={red} className="text-muted-foreground">
-            {columnas.map((id) => celdaFaltante(red, id))}
-          </TableRow>
         ))}
         {visibles.length > 0 && (
           <TableRow className="border-t-2 font-medium">{columnas.map(celdaTotal)}</TableRow>

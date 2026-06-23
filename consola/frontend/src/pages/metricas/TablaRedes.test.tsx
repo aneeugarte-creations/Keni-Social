@@ -105,15 +105,14 @@ describe("TablaRedes", () => {
     expect(within(filaTotal).getByText("120,000")).toBeInTheDocument();
   });
 
-  it("muestra TODAS las redes canónicas (con '—') aunque no haya datos", () => {
-    // Contrato "todas las tablas, todas las redes": sin datos NO se oculta la tabla; cada
-    // red canónica aparece como fila con "—" (incluida X, no contratada en el piloto).
-    render(<TablaRedes redes={[]} />);
+  it("no pinta redes sin datos: una red sin filas no aparece (sin '—' de relleno)", () => {
+    // Una red sin datos en el foco (p. ej. la que no publica el formato filtrado) se OMITE,
+    // no se rellena con una fila "—". Con `redes` solo de Instagram, el resto no sale.
+    render(<TablaRedes redes={[REDES[0]]} />);
 
-    for (const nombre of ["Facebook", "Instagram", "TikTok", "YouTube", "X"]) {
-      expect(screen.getByText(nombre)).toBeInTheDocument();
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
+    for (const nombre of ["Facebook", "TikTok", "YouTube", "X"]) {
+      expect(screen.queryByText(nombre)).not.toBeInTheDocument();
     }
-    // Celdas vacías con guion largo, nunca ceros falsos.
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
