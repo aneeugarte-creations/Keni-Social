@@ -53,6 +53,7 @@ export function VistaMensualTurnos({
   mostrarCobertura = true,
   controlesPre,
   marcadorSalud,
+  soloEquipo = false,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
@@ -66,10 +67,14 @@ export function VistaMensualTurnos({
   controlesPre?: React.ReactNode;
   /** Marcador de estado (✓ «Al día») a la derecha, junto a «Imprimir». Lo inyecta Gestión (SOSIEGO). */
   marcadorSalud?: React.ReactNode;
+  /** Fija el ámbito a «Equipo» y oculta el conmutador Equipo/Yo. Gestión lo activa (coordinar al
+   *  equipo, y el admin no está en la rota → «Yo» sería un estado vacío); «Horario» no. */
+  soloEquipo?: boolean;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
-  const [ambito, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
+  const [ambitoSel, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
+  const ambito: Ambito = soloEquipo ? "equipo" : ambitoSel;
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
   const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
 
@@ -88,7 +93,7 @@ export function VistaMensualTurnos({
       <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="flex flex-wrap items-center gap-2 md:justify-self-start">
           {controlesPre}
-          <SelectorAmbito ambito={ambito} setAmbito={setAmbito} />
+          {!soloEquipo && <SelectorAmbito ambito={ambito} setAmbito={setAmbito} />}
         </div>
         <div className="md:justify-self-center">
           <NavegadorMes mes={mes} setMes={setMes} />

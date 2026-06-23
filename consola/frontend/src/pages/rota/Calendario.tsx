@@ -438,6 +438,7 @@ export function Calendario({
         onVerSemana={() => setVista("semana")}
         controlesPre={conmutadorVista}
         marcadorSalud={marcadorSalud}
+        soloEquipo={esGestion}
       />
     );
     return esGestion ? (

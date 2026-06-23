@@ -299,6 +299,16 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.getByRole("button", { name: /Imprimir/ })).toBeInTheDocument();
   });
 
+  it("«Gestión» NO muestra el conmutador Equipo/Yo (coordinar es siempre del equipo)", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    // El ámbito queda fijo en «Equipo»: el admin no está en la rota, así que «Yo» sería un vacío.
+    // Ver la jornada propia es cosa de «Horario» (que SÍ conserva el conmutador).
+    await screen.findByRole("button", { name: "Mes", pressed: true });
+    expect(screen.queryByRole("button", { name: "Equipo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Yo" })).toBeNull();
+  });
+
   it("«Gestión» tiene «Asignar turnos» en su Semana; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
