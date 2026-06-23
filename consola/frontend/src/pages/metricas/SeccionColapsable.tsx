@@ -20,11 +20,16 @@ import * as React from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+import { BotonOcultar } from "./Bloque";
+import { MenuColumnas } from "./MenuColumnas";
+
 export function SeccionColapsable({
   titulo,
   descripcion,
   icono: Icono,
   acciones,
+  id,
+  tablaColumnas,
   defaultAbierto = true,
   contentClassName,
   sinCaja = false,
@@ -36,6 +41,10 @@ export function SeccionColapsable({
   icono?: LucideIcon;
   /** Controles a la derecha de la cabecera (filtros, toggles, descargas…). */
   acciones?: React.ReactNode;
+  /** Id de sección: si se pasa, la cabecera muestra el toggle "ocultar" (`vistaConfig`). */
+  id?: string;
+  /** Id de tabla configurable: si se pasa, la cabecera muestra el kebab de columnas. */
+  tablaColumnas?: string;
   defaultAbierto?: boolean;
   /** Clase para el `CardContent` (p. ej. "p-0" para tablas a sangre). */
   contentClassName?: string;
@@ -70,7 +79,11 @@ export function SeccionColapsable({
         ) : null}
         <h3 className="truncate text-base font-semibold leading-none tracking-tight group-hover:underline">{titulo}</h3>
       </button>
-      {acciones ? <div className="flex flex-wrap items-center gap-2">{acciones}</div> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {acciones}
+        {tablaColumnas ? <MenuColumnas tablaId={tablaColumnas} /> : null}
+        {id ? <BotonOcultar id={id} /> : null}
+      </div>
     </div>
   );
 

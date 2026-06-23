@@ -148,6 +148,7 @@ export function Correlacion({
 
   return (
     <SeccionColapsable
+      id="correlacion"
       titulo="Seguidores frente a piezas publicadas"
       icono={GitCompareArrows}
       descripcion="Con la pieza que mejor rindió cada día"

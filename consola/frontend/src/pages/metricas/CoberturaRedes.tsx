@@ -287,6 +287,7 @@ export function CoberturaRedes({ marcas }: { marcas: MarcaCobertura[] }) {
 
   return (
     <SeccionColapsable
+      id="cobertura"
       titulo="Cobertura por marca y red"
       icono={Radar}
       acciones={acciones}

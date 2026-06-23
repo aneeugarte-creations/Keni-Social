@@ -42,7 +42,10 @@ vi.mock("./metricas/CrecimientoSeguidores", () => ({ CrecimientoSeguidores: () =
 vi.mock("./metricas/GraficaPorSerie", () => ({ GraficaPorSerie: () => null }));
 vi.mock("./metricas/MetricaPorLinea", () => ({ MetricaPorLinea: () => null }));
 vi.mock("./metricas/SeccionAds", () => ({ SeccionAds: () => null }));
-vi.mock("./metricas/GraficaMarcas", () => ({ GraficaMarcas: () => null }));
+// Marcador para comprobar que una sección oculta NO monta su contenido.
+vi.mock("./metricas/GraficaMarcas", () => ({
+  GraficaMarcas: () => <div data-testid="grafica-marcas" />,
+}));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -140,13 +143,25 @@ describe("Metricas · cuerpo del dashboard", () => {
     expect(screen.queryByText(/datos de muestra/i)).not.toBeInTheDocument();
   });
 
-  it("oculta una sección cuando la config la marca como no visible", async () => {
+  it("muestra el contenido de una sección visible (toggle inline)", async () => {
+    renderMetricas();
+
+    // Visible por defecto: su contenido está montado y NO hay botón "Mostrar".
+    expect(await screen.findByTestId("grafica-marcas")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mostrar Por marca" })).not.toBeInTheDocument();
+  });
+
+  it("oculta una sección dejando su título + botón Mostrar, sin montar su contenido", async () => {
     useVistaConfig.getState().setSeccionVisible("por-marca", false);
     renderMetricas();
 
-    // El resto del dashboard sigue ahí; solo desaparece la sección oculta y su encabezado.
+    // El resto del dashboard sigue ahí.
     expect(await screen.findByText("Por red")).toBeInTheDocument();
-    expect(screen.queryByText("Por marca")).not.toBeInTheDocument();
+    // La sección oculta NO desaparece: conserva su título y ofrece "Mostrar" para restaurarla
+    // in situ (no hay panel macro). Y su contenido NO se monta (ni se consulta).
+    expect(screen.getByText("Por marca")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mostrar Por marca" })).toBeInTheDocument();
+    expect(screen.queryByTestId("grafica-marcas")).not.toBeInTheDocument();
   });
 });
 

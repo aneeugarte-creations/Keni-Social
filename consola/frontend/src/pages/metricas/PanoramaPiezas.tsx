@@ -548,6 +548,7 @@ export function PanoramaPiezas({
   }
   return (
     <SeccionColapsable
+      id="panorama"
       titulo="Panorama de piezas"
       icono={Telescope}
       descripcion="Cada punto es una pieza: altura = vistas, tamaño = engagement, color = red. Usa su propio selector de periodo, independiente del global."

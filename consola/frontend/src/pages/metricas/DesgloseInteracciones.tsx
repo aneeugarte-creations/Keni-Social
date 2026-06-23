@@ -123,6 +123,7 @@ export function DesgloseInteracciones({
 
   return (
     <SeccionColapsable
+      id="desglose"
       titulo="Desglose de interacciones"
       icono={Activity}
       acciones={acciones}

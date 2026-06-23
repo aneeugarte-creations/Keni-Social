@@ -22,9 +22,11 @@ import {
   ItemActualizarMetricas,
   useActualizarMetricas,
 } from "./metricas/BotonActualizar";
+import { Bloque } from "./metricas/Bloque";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
-import { ConfiguracionVista } from "./metricas/ConfiguracionVista";
+import { TABLA_CUENTAS, TABLA_REDES } from "./metricas/columnasMeta";
+import { MenuColumnas } from "./metricas/MenuColumnas";
 import { SelectorRed, etiquetaRed } from "./metricas/SelectorRed";
 import { useVistaConfig } from "./metricas/vistaConfig";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
@@ -102,21 +104,8 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // Red única en foco (switch propio de Analíticas, persistido en `vistaConfig`): `null`
   // = todas. Filtra TODA la página (cada sub-sección la incluye en su consulta).
   const red = useVistaConfig((s) => s.red);
-  // Visibilidad de secciones (panel "Configurar vista"): un id ausente = visible.
-  const secciones = useVistaConfig((s) => s.secciones);
-  const vis = React.useCallback((id: string) => secciones[id] !== false, [secciones]);
-  // Las secciones-grupo (Estrategia, Piezas) se ocultan enteras —encabezado incluido—
-  // cuando todos sus sub-bloques están ocultos.
-  const algunaEstrategia = [
-    "seguidores",
-    "desglose",
-    "crosstab",
-    "por-serie",
-    "por-linea",
-    "correlacion",
-    "ads",
-  ].some(vis);
-  const algunaPiezas = ["panorama", "distribucion", "piezas-tabla"].some(vis);
+  // La visibilidad de cada sección la resuelve su propio `<Bloque>` (toggle inline): una
+  // sección oculta no se monta —ni consulta— y deja en su sitio una barra para mostrarla.
 
   // Deep-link: si llegamos con una marca en el `state` de navegación (canónica), la
   // fijamos en el switch global una vez y limpiamos el state para que no reaparezca al
@@ -231,8 +220,8 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
       {/* Selector de RED único: filtra toda la página (escribe en `vistaConfig.red`). */}
       <SelectorRed />
-      {/* Panel "Configurar vista": qué secciones se muestran y orden/visibilidad de columnas. */}
-      <ConfiguracionVista />
+      {/* La visibilidad de secciones y el orden/visibilidad de columnas se editan AHORA en
+          cada sección (toggle de ojo + kebab de columnas), no en un panel macro aparte. */}
       {/* Vistas guardadas: presets nombrados (config de vista + marca + periodo). */}
       <VistasGuardadas
         marcaActual={marcaActiva}
@@ -278,165 +267,94 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           cargando={reporteQuery.isFetching}
         />
       ) : (
-        <div data-deck-root className="flex flex-col gap-8">
-          {/* `data-deck-root` marca el cuerpo capturable por el export a PDF; cada bloque
-              `data-slide="…"` es una diapositiva (su valor es el título de la diapositiva).
-              Usamos `flex flex-col gap-*` (no `space-y-*`) para que los envoltorios de
-              diapositiva no alteren el espaciado vertical. */}
+        <div className="flex flex-col gap-8">
+          {/* Cada sección es un `<Bloque>`: su toggle (ojo) la muestra/oculta y, oculta, no
+              se monta —ni consulta— y deja una barra fina para volver a mostrarla. Las tablas
+              traen además un kebab de columnas (mostrar/ocultar/reordenar) en su cabecera. */}
           {/* Mientras la fuente sea sintética, el aviso encabeza el dashboard: que
-              nadie confunda las cifras de demostración con datos reales del cliente. */}
-          {/* Ni marca ni rango se repiten en el cuerpo: la marca la manda el switch global
-              de la topbar y el corte temporal ya lo enseña el selector de la cabecera. */}
+              nadie confunda las cifras de demostración con datos reales del cliente.
+              No es una sección configurable: no lleva toggle. */}
           <AlertaIngesta marcaActual={marca} rangoActual={rango} />
 
-          {vis("kpis") && (
-            <div data-slide="Resumen del periodo">
-              <Kpis total={reporteQuery.data.total} marcaActual={marca} rangoActual={rango} />
-            </div>
-          )}
-          {/* Lectura narrativa del periodo (qué pasó y por qué), entre los números
-              crudos y la tendencia diaria. Sigue marca/rango global. */}
-          {vis("analisis") && (
-            <div data-slide="Análisis del periodo">
-              <AnalisisNarrativo marcaActual={marca} rangoActual={rango} />
-            </div>
-          )}
-          {vis("tendencia") && (
-            <div data-slide="Tendencia diaria">
-              <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
-            </div>
-          )}
+          <Bloque id="kpis" conCabecera>
+            <Kpis total={reporteQuery.data.total} marcaActual={marca} rangoActual={rango} />
+          </Bloque>
+          {/* Lectura narrativa del periodo (qué pasó y por qué). Sigue marca/rango global. */}
+          <Bloque id="analisis" conCabecera>
+            <AnalisisNarrativo marcaActual={marca} rangoActual={rango} />
+          </Bloque>
+          <Bloque id="tendencia">
+            <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
+          </Bloque>
 
-          {/* Por marca: la comparativa visual y la tabla detallada son dos lecturas
-              del MISMO corte (cada cuenta), así que van juntas bajo un solo
-              encabezado. La tabla permite drill-down a las piezas de cada marca. */}
-          {vis("por-marca") && (
-            <section className="flex flex-col gap-4">
-              <h2 className="text-lg font-semibold tracking-tight">Por marca</h2>
-              <div data-slide="Por marca · comparativa">
-                <GraficaMarcas cuentas={reporteQuery.data.cuentas} desnudo />
-              </div>
-              <div data-slide="Por marca · detalle">
-                <Card className="overflow-hidden py-2">
-                  <TablaCuentas
-                    cuentas={reporteQuery.data.cuentas}
-                    onVerPiezas={verPiezasDeMarca}
-                    desnudo
-                  />
-                </Card>
-              </div>
-            </section>
-          )}
-          {/* Por red: agrega las plataformas de todas las marcas del reporte. */}
-          {(vis("por-red") || vis("cobertura")) && (
-            <section className="flex flex-col gap-4">
-              <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
-              {vis("por-red") && (
-                <>
-                  <div data-slide="Por red · evolución">
-                    <EvolucionRedes marcaActual={marca} rangoActual={rango} desnudo />
-                  </div>
-                  <div data-slide="Por red · detalle">
-                    <Card className="overflow-hidden py-2">
-                      <TablaRedes redes={reporteQuery.data.por_red} desnudo />
-                    </Card>
-                  </div>
-                </>
-              )}
-              {vis("cobertura") && (
-                <div data-slide="Cobertura por red">
-                  <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
-                </div>
-              )}
-            </section>
-          )}
+          {/* Por marca: comparativa visual + tabla detallada (drill-down a piezas). El kebab
+              edita las columnas de la tabla por marca. */}
+          <Bloque id="por-marca" conCabecera acciones={<MenuColumnas tablaId={TABLA_CUENTAS} />}>
+            <GraficaMarcas cuentas={reporteQuery.data.cuentas} desnudo />
+            <Card className="overflow-hidden py-2">
+              <TablaCuentas
+                cuentas={reporteQuery.data.cuentas}
+                onVerPiezas={verPiezasDeMarca}
+                desnudo
+              />
+            </Card>
+          </Bloque>
+          {/* Por red: evolución + tabla detallada (kebab de columnas de la tabla por red). */}
+          <Bloque id="por-red" conCabecera acciones={<MenuColumnas tablaId={TABLA_REDES} />}>
+            <EvolucionRedes marcaActual={marca} rangoActual={rango} desnudo />
+            <Card className="overflow-hidden py-2">
+              <TablaRedes redes={reporteQuery.data.por_red} desnudo />
+            </Card>
+          </Bloque>
+          <Bloque id="cobertura">
+            <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
+          </Bloque>
 
-          {/* Estrategia digital: lectura de alto nivel (más allá del día a día),
-              ANTES del detalle granular de piezas. Crecimiento de audiencia, de qué
-              se compone el engagement, qué formatos rinden y correlación. El tráfico
-              web (clics a enlace) vive ahora como columna en "Piezas del periodo".
+          {/* Estrategia digital: lectura de alto nivel, antes del detalle granular de piezas.
               Siguen marca/rango global como el resto del dashboard. */}
-          {algunaEstrategia && (
-            <section className="flex flex-col gap-4">
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
-              </div>
-              {vis("seguidores") && (
-                <div data-slide="Crecimiento de seguidores">
-                  <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {vis("desglose") && (
-                <div data-slide="Desglose de interacciones">
-                  <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {vis("crosstab") && (
-                <div data-slide="Cruce de métricas">
-                  <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
-                  BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
-              {vis("por-serie") && (
-                <div data-slide="Rendimiento por serie">
-                  <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {/* Rendimiento por LÍNEA de contenido (vertical) y por ORIGEN del periodo:
-                  dos tablas con piezas/visualizaciones/interacciones/engagement. Sigue
-                  marca/rango global como el resto del dashboard. */}
-              {vis("por-linea") && (
-                <div data-slide="Rendimiento por línea">
-                  <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {vis("correlacion") && (
-                <div data-slide="Correlación con seguidores">
-                  <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {vis("ads") && (
-                <div data-slide="Publicidad pagada">
-                  <SeccionAds marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-            </section>
-          )}
+          <section className="flex flex-col gap-4">
+            <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
+            <Bloque id="seguidores">
+              <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="desglose">
+              <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="crosstab">
+              <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="por-serie">
+              <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="por-linea">
+              <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="correlacion">
+              <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="ads">
+              <SeccionAds marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+          </section>
 
-          {/* Detalle granular de piezas: del alto nivel al caso concreto. UNA tabla
-              consolidada (fusiona Lista + Top/Peores + Rendimiento): filtros marca/línea/
-              red + búsqueda, stats media/mediana, orden por columna (Vistas desc=top,
-              asc=peores), paginación por día y drill-down. El drill-down desde la tabla
-              por marca fija su filtro de marca. */}
-          {algunaPiezas && (
-            <section ref={piezasRef} className="scroll-mt-6 flex flex-col gap-4">
-              <h2 className="text-lg font-semibold tracking-tight">Piezas</h2>
-              {/* El Panorama usa query y periodo PROPIOS (selector 7d/30d/90d/1año); solo
-                  EvolucionRedes comparte caché con PiezasConsolidada. */}
-              {vis("panorama") && (
-                <div data-slide="Panorama de piezas">
-                  <PanoramaPiezas marcaActual={marca} />
-                </div>
-              )}
-              {/* Cómo se reparte el engagement entre las piezas del periodo (distribución,
-                  no solo medias): contexto antes de bajar a la tabla consolidada. */}
-              {vis("distribucion") && (
-                <div data-slide="Distribución de engagement">
-                  <DistribucionEngagement marcaActual={marca} rangoActual={rango} />
-                </div>
-              )}
-              {vis("piezas-tabla") && (
-                <div data-slide="Piezas del periodo">
-                  <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
-                </div>
-              )}
-            </section>
-          )}
+          {/* Detalle granular de piezas: del alto nivel al caso concreto. El drill-down desde
+              la tabla por marca fija su filtro de marca y hace scroll aquí. */}
+          <section ref={piezasRef} className="scroll-mt-6 flex flex-col gap-4">
+            <h2 className="text-lg font-semibold tracking-tight">Piezas</h2>
+            <Bloque id="panorama">
+              <PanoramaPiezas marcaActual={marca} />
+            </Bloque>
+            <Bloque id="distribucion">
+              <DistribucionEngagement marcaActual={marca} rangoActual={rango} />
+            </Bloque>
+            <Bloque id="piezas-tabla">
+              <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
+            </Bloque>
+          </section>
 
-          {vis("comparativa") && (
+          <Bloque id="comparativa">
             <CompararPeriodos opciones={opciones} rangoActual={rango} />
-          )}
+          </Bloque>
         </div>
       )}
     </div>

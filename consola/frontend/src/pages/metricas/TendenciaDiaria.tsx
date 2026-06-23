@@ -100,6 +100,7 @@ export function TendenciaDiaria({
 
   return (
     <SeccionColapsable
+      id="tendencia"
       titulo="Tendencia diaria"
       icono={LineChartIcon}
       acciones={

@@ -23,19 +23,19 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
   {
     titulo: "Resumen",
     secciones: [
-      { id: "kpis", etiqueta: "Resumen del periodo (KPIs)" },
+      { id: "kpis", etiqueta: "Resumen del periodo" },
       { id: "analisis", etiqueta: "Análisis del periodo" },
       { id: "tendencia", etiqueta: "Tendencia diaria" },
     ],
   },
   {
     titulo: "Por marca",
-    secciones: [{ id: "por-marca", etiqueta: "Comparativa y detalle por marca" }],
+    secciones: [{ id: "por-marca", etiqueta: "Por marca" }],
   },
   {
     titulo: "Por red",
     secciones: [
-      { id: "por-red", etiqueta: "Evolución y detalle por red" },
+      { id: "por-red", etiqueta: "Por red" },
       { id: "cobertura", etiqueta: "Cobertura por red" },
     ],
   },
@@ -65,7 +65,15 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
   },
 ];
 
+/** Todas las secciones aplanadas (orden de aparición). */
+export const SECCIONES: SeccionMeta[] = GRUPOS_SECCIONES.flatMap((g) => g.secciones);
+
 /** Todos los ids de sección, en orden de aparición. */
-export const IDS_SECCIONES: string[] = GRUPOS_SECCIONES.flatMap((g) =>
-  g.secciones.map((s) => s.id),
-);
+export const IDS_SECCIONES: string[] = SECCIONES.map((s) => s.id);
+
+const ETIQUETA_POR_ID = new Map(SECCIONES.map((s) => [s.id, s.etiqueta]));
+
+/** Etiqueta legible de una sección por su id (fuente única para cabeceras y barras ocultas). */
+export function etiquetaSeccion(id: string): string {
+  return ETIQUETA_POR_ID.get(id) ?? id;
+}

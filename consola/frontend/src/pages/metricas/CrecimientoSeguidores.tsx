@@ -82,6 +82,7 @@ export function CrecimientoSeguidores({
 
   return (
     <SeccionColapsable
+      id="seguidores"
       titulo="Crecimiento de seguidores"
       icono={Users}
       acciones={

@@ -294,8 +294,10 @@ export function PiezasConsolidada({
   return (
     <>
       <SeccionColapsable
+        id="piezas-tabla"
         titulo="Piezas del periodo"
         icono={ListChecks}
+        tablaColumnas={TABLA_PIEZAS}
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">

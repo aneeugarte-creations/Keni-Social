@@ -57,6 +57,7 @@ export function GraficaPorSerie({
 
   return (
     <SeccionColapsable
+      id="por-serie"
       titulo="Rendimiento por serie y tipo"
       descripcion="Engagement promedio por pieza del periodo, agrupado por clasificación editorial."
       icono={Layers}

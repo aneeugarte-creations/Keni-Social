@@ -84,6 +84,7 @@ export function SeccionAds({
 
   return (
     <SeccionColapsable
+      id="ads"
       titulo="Publicidad"
       icono={Megaphone}
       descripcion="Campañas de pago"

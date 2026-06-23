@@ -184,6 +184,7 @@ export function CompararPeriodos({
 
   return (
     <SeccionColapsable
+      id="comparativa"
       titulo="Comparar periodos"
       icono={ArrowLeftRight}
       acciones={

@@ -78,6 +78,7 @@ export function Crosstab({
 
   return (
     <SeccionColapsable
+      id="crosstab"
       titulo="Rendimiento por formato"
       icono={Grid3x3}
       descripcion={

@@ -60,6 +60,7 @@ export function DistribucionEngagement({
 
   return (
     <SeccionColapsable
+      id="distribucion"
       titulo="Distribución del engagement"
       icono={SigmaSquare}
     >
