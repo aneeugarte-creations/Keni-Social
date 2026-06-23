@@ -67,7 +67,7 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("Kpis", () => {
-  it("pinta los 4 KPIs con sus totales formateados es-MX", async () => {
+  it("pinta los 5 KPIs con sus totales formateados es-MX", async () => {
     vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
     renderConProviders(<Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes" />);
 
@@ -75,6 +75,7 @@ describe("Kpis", () => {
     expect(screen.getByText("1,234")).toBeInTheDocument(); // separador de miles es-MX
     expect(screen.getByText("Vistas")).toBeInTheDocument();
     expect(screen.getByText("950")).toBeInTheDocument();
+    expect(screen.getByText("Alcance")).toBeInTheDocument();
     expect(screen.getByText("Interacciones")).toBeInTheDocument();
     expect(screen.getByText("500")).toBeInTheDocument();
     expect(screen.getByText("Engagement")).toBeInTheDocument();

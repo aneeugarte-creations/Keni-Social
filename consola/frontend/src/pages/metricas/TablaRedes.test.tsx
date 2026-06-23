@@ -33,11 +33,27 @@ describe("TablaRedes", () => {
     // Cabeceras de las columnas pedidas.
     expect(screen.getByText("Red")).toBeInTheDocument();
     expect(screen.getByText("Vistas")).toBeInTheDocument();
+    expect(screen.getByText("Alcance")).toBeInTheDocument();
     expect(screen.getByText("Interacciones")).toBeInTheDocument();
     expect(screen.getByText("Engagement")).toBeInTheDocument();
-    expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
-    // Una métrica concreta formateada (vistas de instagram).
-    expect(screen.getByText("120,000")).toBeInTheDocument();
+    // Métricas de instagram (vistas y alcance) acotadas a SU fila: el alcance total
+    // coincide con el de IG (45k, único que lo mide), así que sin acotar chocaría.
+    const filaIG = screen
+      .getAllByRole("row")
+      .find((f) => within(f).queryByText("120,000"))!;
+    expect(filaIG).toBeTruthy();
+    expect(within(filaIG).getByText("120,000")).toBeInTheDocument();
+    expect(within(filaIG).getByText("45,000")).toBeInTheDocument();
+  });
+
+  it("muestra '—' en el alcance de una red que no lo mide (TikTok)", () => {
+    render(<TablaRedes redes={REDES} />);
+
+    const filaTikTok = screen
+      .getAllByRole("row")
+      .find((f) => within(f).queryByText("TikTok"))!;
+    expect(filaTikTok).toBeTruthy();
+    expect(within(filaTikTok).getByText("—")).toBeInTheDocument();
   });
 
   it("muestra una fila de totales con suma de brutas y engagement global", () => {
@@ -48,6 +64,8 @@ describe("TablaRedes", () => {
     // Suma de vistas (120k + 90k) e interacciones (6000 + 4500).
     expect(celdasTotal.getByText("210,000")).toBeInTheDocument();
     expect(celdasTotal.getByText("10,500")).toBeInTheDocument();
+    // Alcance total = solo IG lo mide (45k); TikTok es null y no suma.
+    expect(celdasTotal.getByText("45,000")).toBeInTheDocument();
     // Engagement global = interacciones/vistas = 10500/210000 = 5.0 %.
     expect(celdasTotal.getByText("5.0 %")).toBeInTheDocument();
   });
