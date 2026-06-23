@@ -831,9 +831,9 @@ class FuenteMetricool:
         `/v2/analytics/timelines` (vocabulario de métrica distinto por red; solo daba TikTok).
         Así el agregado por red es consistente con las piezas/desglose que ve el usuario: una
         red que solo publica reels (FB/IG) aporta sus vistas+interacciones, no 0/0. `alcance`
-        queda None (no se deriva del post de forma uniforme; honesto, no se inventa). Una red
-        conectada sin actividad en el rango devuelve 0/0 (la UI lo muestra como "sin
-        métricas", no como error).
+        es la suma de los alcances por post (IG: reach; FB: impressionsUnique); None si
+        ningún post lo reporta (red sin la métrica). Una red conectada sin actividad en el
+        rango devuelve 0/0 (la UI lo muestra como "sin métricas", no como error).
         """
         try:
             posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
@@ -848,10 +848,15 @@ class FuenteMetricool:
             piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
         vis = sum(p.visualizaciones for p in piezas)
         inter = sum(p.interacciones for p in piezas)
+        # Suma el alcance de los posts que lo exponen (IG: reach; FB: impressionsUnique).
+        # Es la suma de alcances por publicación, en la misma unidad que ya muestra el
+        # desglose por pieza, no el alcance único de la cuenta. None si ningún post lo
+        # reporta (red sin la métrica o sin actividad): honesto, no se inventa 0.
+        alcs = [p.alcance for p in piezas if p.alcance is not None]
         return MetricaPlataforma(
             plataforma=plat,
             visualizaciones=vis,
-            alcance=None,
+            alcance=sum(alcs) if alcs else None,
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )

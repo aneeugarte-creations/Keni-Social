@@ -101,8 +101,9 @@ def _comparar_totales(total_a: dict, total_b: dict) -> dict:
     heterogéneos). Se RECALCULA int/vis por periodo —igual que
     `_reporte_serializable`— para que deje de salir "—".
 
-    NO incluye `alcance`: no se mide con la fuente de posts (sería siempre null y la UI ya
-    no lo muestra). Emitirlo dejaba una fila con valor null que reventaba el comparador.
+    NO incluye `alcance` en la comparativa: puede ser null cuando ninguna red Meta lo
+    reporta y una fila con valor null revienta el comparador. El alcance se lee por red en
+    la tabla, no en las tarjetas comparadas.
     """
     metricas = []
     for clave in _METRICAS_CONTEO_COMPARABLES:
@@ -434,7 +435,8 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
                 "marca_id": cid,
                 "marca": _nombre_marca_id(cid, nombres),
                 "visualizaciones": r.get("visualizaciones", 0),
-                # alcance no se mide con posts -> 0 (nunca null; la UI ya no lo muestra).
+                # alcance: suma de alcances por post Meta (IG/FB); 0 si ningún post lo
+                # reporta o la red no es Meta.
                 "alcance": r.get("alcance") or 0,
                 "interacciones": r.get("interacciones", 0),
                 "engagement_pct": _engagement_pct(r.get("interacciones"), r.get("visualizaciones")),
