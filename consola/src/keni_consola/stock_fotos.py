@@ -386,7 +386,9 @@ def _url_y_headers(proveedor: str, query: str, limite: int) -> tuple[str, dict[s
         url = (
             "https://commons.wikimedia.org/w/api.php?action=query&generator=search"
             f"&gsrsearch={q}&gsrnamespace=6&gsrlimit={limite}"
-            "&prop=imageinfo&iiprop=url%7Cextmetadata&format=json"
+            # `iiurlwidth` hace que la API devuelva `thumburl` (miniatura a ese ancho); sin él la
+            # respuesta no trae miniatura y el buscador caía a la imagen original (pesada/rota).
+            "&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=320&format=json"
         )
         return url, {"User-Agent": _USER_AGENT}
     if proveedor == "nasa":
