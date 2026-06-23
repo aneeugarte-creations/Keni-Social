@@ -178,12 +178,7 @@ export function DesgloseInteracciones({
             </div>
           </Card>
           <Card className="overflow-hidden py-2">
-            <TablaDesglose
-              celdas={celdas}
-              totales={data.totales}
-              marcas={marcas}
-              redes={redes}
-            />
+            <TablaDesglose celdas={celdas} marcas={marcas} redes={redes} />
           </Card>
         </>
       )}
@@ -296,12 +291,10 @@ const ACCESORES_DESGLOSE = {
 
 function TablaDesglose({
   celdas,
-  totales,
   marcas,
   redes,
 }: {
   celdas: CeldaDesglose[];
-  totales: Record<string, number>;
   marcas: MarcaDisponible[];
   redes: readonly string[];
 }) {
@@ -310,12 +303,25 @@ function TablaDesglose({
   const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_BASE, cfg);
 
-  // Rejilla marca×red (solo redes en foco): una red en foco sin datos va como entrada con
-  // `celda` undefined, que el orden empuja al final (`null` no es un 0 real) y se pinta "—".
+  // Rejilla marca×red SOLO con combinaciones con datos (en foco): las vacías se omiten.
   const rejilla = React.useMemo(
     () => construirRejilla(celdas, redes),
     [celdas, redes],
   );
+
+  // Totales de la fila final: suma de las filas MOSTRADAS (no del backend, que no cuenta
+  // `n_piezas`), así el Total cuadra exactamente con lo que se ve, incluidas las Piezas.
+  const totalFila = React.useMemo(() => {
+    const t: Record<string, number> = {};
+    for (const { celda } of rejilla) {
+      if (!celda) continue;
+      for (const id of IDS_BASE) {
+        if (COLUMNAS_TEXTO.has(id)) continue;
+        t[id] = (t[id] ?? 0) + (Number(celda[id as keyof CeldaDesglose]) || 0);
+      }
+    }
+    return t;
+  }, [rejilla]);
 
   // Cada columna es ordenable (accesores estables arriba), incluidas marca y red.
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<EntradaRejilla, ClaveDesglose>(
@@ -379,7 +385,7 @@ function TablaDesglose({
     }
     return (
       <TableCell key={id} className="text-right tabular-nums">
-        {numeroCompleto(totales[id] ?? 0)}
+        {numeroCompleto(totalFila[id] ?? 0)}
       </TableCell>
     );
   };

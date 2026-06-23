@@ -32,8 +32,6 @@ import {
   nombreRed,
   numeroCompleto,
   porcentaje,
-  redCanonica,
-  REDES_CANONICAS,
   rendimientoRel,
 } from "@/lib/formato";
 import type { CeldaCrosstab, MarcaDisponible } from "@/types";
@@ -161,24 +159,9 @@ function TablaCrosstab({
     { clave: "rendimiento", direccion: "desc" },
   );
 
-  // "Todas las tablas, todas las redes": la dimensión RED del cruce SIEMPRE incluye las 5
-  // redes canónicas (facebook, instagram, tiktok, youtube, x) por cada marca presente.
-  // Por cada marca×red sin ninguna celda en el periodo añadimos una fila placeholder con
-  // "—" (no inventamos ceros ni la omitimos —incluida X, no contratada en el piloto—).
-  const marcasPresentes: string[] = [];
-  const combosConDatos = new Set<string>();
-  for (const c of celdas) {
-    if (!marcasPresentes.includes(c.marca)) marcasPresentes.push(c.marca);
-    combosConDatos.add(`${c.marca}::${redCanonica(c.red)}`);
-  }
-  const filasVacias: Array<{ marca: string; red: string }> = [];
-  for (const marca of marcasPresentes) {
-    for (const red of REDES_CANONICAS) {
-      if (!combosConDatos.has(`${marca}::${red}`)) filasVacias.push({ marca, red });
-    }
-  }
-
-  // Recorte a 5 filas CON DATOS (post-orden); los placeholders "—" solo al desplegar.
+  // Solo combinaciones marca×red×formato CON datos: una sin actividad (p. ej. la red que no
+  // publica el formato filtrado) se OMITE, no se rellena con una fila "—".
+  // Recorte a 5 filas (post-orden); el resto se ve al desplegar.
   const { visibles, expandido, alternar, hayMas } = useFilasPlegables(filasOrdenadas, 5);
 
   // Qué columnas se ven y en qué orden lo decide el editor de columnas (id "crosstab").
@@ -258,27 +241,6 @@ function TablaCrosstab({
     }
   };
 
-  const celdaVacia = (marca: string, red: string, id: string) => {
-    if (id === "marca") {
-      return (
-        <TableCell key={id} className="font-medium">
-          {nombreMarca(marca, marcas)}
-        </TableCell>
-      );
-    }
-    if (id === "red") {
-      return <TableCell key={id}>{nombreRed(red)}</TableCell>;
-    }
-    if (id === "formato") {
-      return <TableCell key={id}>—</TableCell>;
-    }
-    return (
-      <TableCell key={id} className="text-right tabular-nums">
-        —
-      </TableCell>
-    );
-  };
-
   return (
     <Card className="overflow-hidden py-2">
       <div className="overflow-x-auto">
@@ -292,14 +254,6 @@ function TablaCrosstab({
                 {columnas.map((id) => celda(c, id))}
               </TableRow>
             ))}
-            {/* Marca×red canónica sin datos en el periodo: fila presente con "—" (no se omite).
-                Solo se muestran al desplegar (o si la tabla no se recorta). */}
-            {(expandido || !hayMas) &&
-              filasVacias.map(({ marca, red }) => (
-                <TableRow key={`vacia-${marca}-${red}`} className="text-muted-foreground">
-                  {columnas.map((id) => celdaVacia(marca, red, id))}
-                </TableRow>
-              ))}
           </TableBody>
           {hayMas && (
             <PieMostrarMas
