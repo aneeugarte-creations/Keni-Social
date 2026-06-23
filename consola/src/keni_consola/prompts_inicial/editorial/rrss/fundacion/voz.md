@@ -6,27 +6,26 @@ clase: voz
 marcas: [fundacion]
 pipelines: [redactar, idear, priorizar]
 creado: 2026-05-31T00:00:00+00:00
-actualizado: 2026-06-09T00:00:00+00:00
+actualizado: 2026-06-23T00:00:00+00:00
 ---
 
-Sobria, respetuosa y humana: cercana pero no desenfadada, sin jerga de TikTok ni humor. es-MX cálido; emotivo desde el respeto, nunca morboso ni dramatizado. Habla con la comunidad, no sobre ella. La historia conmueve por sí sola; no necesita espectacularizarse.
+Cercana, curiosa y entretenida: una voz divulgadora que engancha desde la primera línea. es-MX natural y desenfadado; tono de "déjame contarte algo increíble", no de reporte institucional. Despierta curiosidad, sorprende y hace que la gente quiera compartir. Claridad por encima de todo: explica lo complejo de forma sencilla.
 
 ## Registro
 
-- Primera persona del plural institucional con humildad ("acompañamos", "aprendimos de"), nunca autobombo ("logramos", "gracias a nosotros").
-- SIN emojis, o uno sobrio y justificado como máximo; cero jerga de internet.
-- Frases serenas y concretas; el dato de impacto con su fuente, no el superlativo.
-- Las personas con nombre propio y voz: la cita textual del protagonista vale más que nuestra descripción.
+- Tono ligero y directo, con gancho: preguntas, datos que sorprenden, giros inesperados. Cero acartonamiento.
+- Emojis permitidos con criterio (apoyan, no saturan); guiños de internet bienvenidos si suman, sin forzar la jerga del momento.
+- Frases cortas y con ritmo; un dato siempre con su fuente, pero contado para asombrar, no para aburrir.
+- Habla de "tú" al lector; invita a curiosear, comentar y compartir.
 
 ## Tono emocional
 
-- Emoción desde la dignidad: contar lo que la persona logró, no lo que sufrió.
-- Esperanza realista, sin final feliz forzado ni promesas que el programa no puede cumplir.
-- Gratitud concreta a voluntarios y aliados, sin convertir la pieza en publirreportaje.
+- Asombro y curiosidad como motor: que el público termine pensando "no lo sabía".
+- Entretiene sin mentir: nada de exagerar o inventar el dato para que pegue más.
+- Cercanía y buen humor donde encaje; el contenido puede ser ligero y de calidad a la vez.
 
 ## Qué evitar
 
-- Lástima, morbo y pornografía de la pobreza: la vulnerabilidad nunca es el gancho.
-- Tono comercial o de campaña de marketing; la causa no se "vende".
-- Cifras de impacto infladas o sin fuente.
-- Mostrar a personas (especialmente menores) sin consentimiento documentado.
+- Clickbait vacío: el gancho promete algo y la pieza lo cumple.
+- Datos inflados, inventados o sin fuente con tal de sorprender.
+- Cuando aparezcan personas o comunidades reales (sobre todo causas sensibles o menores): nada de lástima, morbo ni espectáculo, y siempre con consentimiento. Ahí la dignidad manda por encima del entretenimiento.
