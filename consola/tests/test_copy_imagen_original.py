@@ -178,7 +178,7 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
         slides = json.loads(str(creada.get("carrusel") or "[]"))
         assert [s["objeto"] for s in slides] == ["artes/slide-1.png", "artes/slide-2.png"]
         assert all(s["tipo"] == "imagen" for s in slides)
-        assert str(creada.get("imagen") or "").startswith("artes/")
+        assert str(creada.get("imagen") or "").startswith("originales/")
         # PROCEDENCIA persistida por slide (para re-editar la placa): titular siempre; foto fuente
         # solo si la sub-historia la traía (el slide A tenía foto; el B era placa de solo texto).
         assert slides[0]["titular"] == "Concierto A"
