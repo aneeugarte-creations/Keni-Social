@@ -1,12 +1,10 @@
 // Pestaña CALENDARIO de la rota (rejilla semanal de turnos + cobertura derivada).
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
   CalendarPlus,
   ChevronRight,
-  MoreHorizontal,
-  Printer,
   SlidersHorizontal,
   Sunrise,
   Sunset,
@@ -18,7 +16,6 @@ import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,11 +65,12 @@ import {
   type CubridorEvento,
   type ItemEventoCalendario,
 } from "./comun";
-import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
+import { ReparteMes } from "./ReparteMes";
+import { lunesDeFecha } from "@/lib/rota-reparto";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas, DialogoAjustesTurnos } from "./Franjas";
-import { imprimirMes, VistaMensualTurnos } from "./MisTurnos";
+import { VistaMensualTurnos } from "./MisTurnos";
 import { SemanaPorDias } from "./SemanaPorDias";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
@@ -172,6 +170,40 @@ export function Calendario({
   // `diasDeSemana` ancla a mediodía UTC, siguiendo la convención CDMX de lib/fecha +
   // rota-calendario (el resto de helpers de fecha).
   const dias = React.useMemo(() => diasDeSemana(lunes), [lunes]);
+
+  // Gestión = Mes único: días marcados en el calendario mensual (pueden cruzar semanas) que
+  // alimentan el panel de reparto. La franja de cada día se resuelve por SU semana (motor).
+  const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set());
+  const toggleDiaSel = React.useCallback(
+    (fecha: string) =>
+      setDiasSel((prev) => {
+        const n = new Set(prev);
+        if (n.has(fecha)) n.delete(fecha);
+        else n.add(fecha);
+        return n;
+      }),
+    [],
+  );
+  // Franjas LABORALES de CADA semana tocada por la selección: una query por semana única (misma
+  // clave que el grid → cacheada). `listarTurnos` trae las franjas de su semana.
+  const lunesSel = React.useMemo(
+    () => Array.from(new Set(Array.from(diasSel, lunesDeFecha))).sort(),
+    [diasSel],
+  );
+  const franjasSemanaQs = useQueries({
+    queries: lunesSel.map((l) => ({
+      queryKey: ["rota", "turnos", l, marcaActiva] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.listarTurnos({ lunes: l, marca: marcaActiva ?? undefined }, signal),
+    })),
+  });
+  const franjasPorSemana = React.useMemo(() => {
+    const m = new Map<string, FranjaSemana[]>();
+    lunesSel.forEach((l, i) => {
+      m.set(l, (franjasSemanaQs[i]?.data?.franjas ?? []).filter((f) => !f.es_descanso));
+    });
+    return m;
+  }, [lunesSel, franjasSemanaQs]);
 
   // Diálogo de cobertura: clicar un chip de evento abre su tarjeta de cobertura (la MISMA del
   // Panorama) para coger/«Asignar a…»/soltar/editar sin salir del calendario. La edición del
@@ -445,50 +477,162 @@ export function Calendario({
       <DialogoAjustesTurnos onCerrar={() => setAbrirAjustes(false)} />
     ) : null;
 
-  if (vista === "mes") {
-    // El conmutador Semana|Mes y el ✓ «Al día» se inyectan EN la barra del mensual (una sola fila de
-    // tres zonas), en vez de una fila propia encima: la cabecera queda como un único instrumento.
-    // En Gestión, el ⋯ de esa barra agrupa «Ajustes de turnos» + «Imprimir / PDF» (imprimir deja de
-    // ser un icono suelto). Fuera de Gestión (consulta) no hay menú: el icono de imprimir se queda.
-    const accionesMes = esGestion ? (
-      <MenuContextual
-        items={[
-          {
-            etiqueta: "Ajustes de turnos",
-            icono: SlidersHorizontal,
-            onClick: () => setAbrirAjustes(true),
-          },
-          { separador: true },
-          { etiqueta: "Imprimir / PDF", icono: Printer, onClick: () => imprimirMes() },
-        ]}
-        disparador="click"
+  // Franja «Más opciones» del panel: utilidades secundarias (no tarjetas sueltas). «Cambios y
+  // ausencias» abre su lista en un diálogo; «Importar de un documento» abre el asistente. El héroe
+  // es el reparto de arriba; esto queda callado al pie.
+  const masOpciones = (
+    <section
+      aria-label="Más opciones"
+      className="shrink-0 rounded-xl border border-border bg-card p-3"
+    >
+      <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+        Más opciones
+      </div>
+      <button
+        type="button"
+        onClick={() => setAbrirCambios(true)}
+        className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
       >
+        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <SlidersHorizontal className="h-[15px] w-[15px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-medium text-foreground">
+            Cambios y ausencias
+          </span>
+          <span className="block text-[11.5px] text-muted-foreground">
+            Solicitudes y ausencias del equipo
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+      </button>
+      <div className="my-0.5 border-t border-border/70" />
+      <ImportarDocumentoParrilla
+        marca={marcaActiva ?? ""}
+        onAplicado={invalidar}
+        renderTrigger={(abrir) => (
+          <button
+            type="button"
+            onClick={abrir}
+            className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
+          >
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Upload className="h-[15px] w-[15px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13.5px] font-medium text-foreground">
+                Importar de un documento
+              </span>
+              <span className="block text-[11.5px] text-muted-foreground">
+                Parrilla o Excel · automático
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+          </button>
+        )}
+      />
+    </section>
+  );
+
+  // Modales de Gestión (Mes único): editar franjas, carga del equipo, «Cambios y ausencias» y los
+  // ajustes de visualización. Se montan junto al panel de reparto en la vista mensual.
+  const modalesGestion = esGestion ? (
+    <>
+      {abrirFranjas && (
+        <DialogFranjas
+          lunes={lunes}
+          onCerrar={() => setAbrirFranjas(false)}
+          onAsignar={
+            editable
+              ? () => {
+                  setAbrirFranjas(false);
+                  setAbrirAsignar(true);
+                }
+              : undefined
+          }
+        />
+      )}
+      {abrirCarga && <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />}
+      {abrirCambios && (
+        <Dialog open onOpenChange={setAbrirCambios}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Cambios y ausencias</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-y-auto">
+              <CambiosYAusencias esAdmin={esAdmin} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {dialogoAjustes}
+    </>
+  ) : null;
+
+  // Gestión = Mes único: SIEMPRE toma esta rama (no hay vista Semana en Gestión). Fuera de
+  // Gestión, la rama Semana sigue disponible para la consulta del calendario.
+  if (vista === "mes" || esGestion) {
+    // Barra del mensual (una sola fila de tres zonas). En CONSULTA lleva el conmutador Semana|Mes +
+    // ✓ «Al día» (vía `controlesPre`). En GESTIÓN (Mes único, sin conmutador) lleva las acciones de
+    // gestión: «Asignar turnos» (abre/cierra el panel de reparto) + el menú «Más»
+    // (copiar/franjas/carga/export). Imprimir queda como icono suelto.
+    const accionesMes = esGestion ? (
+      <>
         <Button
-          type="button"
           variant="outline"
-          size="icon"
-          aria-label="Más acciones"
-          title="Más acciones"
+          onClick={() => setAbrirAsignar((v) => !v)}
+          aria-pressed={abrirAsignar}
         >
-          <MoreHorizontal className="h-4 w-4" />
+          <CalendarPlus className="h-4 w-4" /> Asignar turnos
         </Button>
-      </MenuContextual>
+        <MenuMasAcciones
+          esAdmin={esAdmin}
+          semanaAprobada={false}
+          copiarPendiente={copiarAnterior.isPending}
+          onCopiarAnterior={() => copiarAnterior.mutate()}
+          onAbrirFranjas={() => setAbrirFranjas(true)}
+          onAbrirAjustes={() => setAbrirAjustes(true)}
+          onAbrirCarga={() => setAbrirCarga(true)}
+          onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
+          onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
+        />
+      </>
     ) : undefined;
     const mensual = (
       <VistaMensualTurnos
         esAdmin={esAdmin}
-        onVerSemana={() => setVista("semana")}
-        controlesPre={conmutadorVista}
+        onVerSemana={esGestion ? undefined : () => setVista("semana")}
+        controlesPre={esGestion ? undefined : conmutadorVista}
         marcadorSalud={marcadorSalud}
         soloEquipo={esGestion}
-        ocultarImprimir={esGestion}
+        ocultarImprimir={false}
         accionesDerecha={accionesMes}
+        seleccionable={esGestion}
+        diasSel={esGestion ? diasSel : undefined}
+        onToggleDia={esGestion ? toggleDiaSel : undefined}
       />
     );
     return esGestion ? (
-      <div className="h-full min-h-0 overflow-auto">
-        {mensual}
-        {dialogoAjustes}
+      // El mes es el lienzo (selección de días por clic); el panel de reparto vive a su derecha.
+      <div className="flex min-h-0 gap-4 lg:h-full">
+        <div className="min-w-0 flex-1 overflow-auto">{mensual}</div>
+        {abrirAsignar && (
+          <aside
+            aria-label="Asignar turnos"
+            className="flex min-h-0 w-full shrink-0 flex-col gap-4 lg:h-full lg:w-[26rem]"
+          >
+            <ReparteMes
+              diasSel={diasSel}
+              cms={cms}
+              franjasPorSemana={franjasPorSemana}
+              onCambio={invalidar}
+              onCerrar={() => setAbrirAsignar(false)}
+              onLimpiarDias={() => setDiasSel(new Set())}
+            />
+            {masOpciones}
+          </aside>
+        )}
+        {modalesGestion}
       </div>
     ) : (
       mensual
@@ -814,116 +958,7 @@ export function Calendario({
         </Card>
       )}
         </div>
-        {/* Panel de Gestión como columna lateral (solo admin). Cerrado no pinta nada (la rejilla
-            recupera el ancho). El reparto MANUAL es el héroe (comparte estado con la rejilla → cada
-            turno aparece al instante); debajo, una franja «Más opciones» reúne «Cambios y ausencias»
-            (se abre en un diálogo) y el import automático desde un documento. */}
-        {esGestion && abrirAsignar && (
-          <aside
-            aria-label="Asignar turnos"
-            className="flex min-h-0 w-full shrink-0 flex-col gap-4 lg:h-full lg:w-[26rem]"
-          >
-            <DialogoAsignarTurnos
-              incrustado
-              abierto
-              onOpenChange={setAbrirAsignar}
-              lunes={lunes}
-              dias={dias}
-              franjas={franjasSemana}
-              cms={cms}
-              onCambio={invalidar}
-            />
-            {/* Utilidades secundarias en UNA franja (no tarjetas sueltas): «Cambios y ausencias»
-                abre su lista completa en un diálogo; «Importar de un documento» abre el asistente de
-                parrilla. El héroe es el reparto de arriba; esto queda callado al pie. */}
-            <section
-              aria-label="Más opciones"
-              className="shrink-0 rounded-xl border border-border bg-card p-3"
-            >
-              <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
-                Más opciones
-              </div>
-              <button
-                type="button"
-                onClick={() => setAbrirCambios(true)}
-                className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
-              >
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                  <SlidersHorizontal className="h-[15px] w-[15px]" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-medium text-foreground">
-                    Cambios y ausencias
-                  </span>
-                  <span className="block text-[11.5px] text-muted-foreground">
-                    Solicitudes y ausencias del equipo
-                  </span>
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-              </button>
-              <div className="my-0.5 border-t border-border/70" />
-              <ImportarDocumentoParrilla
-                marca={marcaActiva ?? ""}
-                onAplicado={invalidar}
-                renderTrigger={(abrir) => (
-                  <button
-                    type="button"
-                    onClick={abrir}
-                    className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
-                  >
-                    <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      <Upload className="h-[15px] w-[15px]" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13.5px] font-medium text-foreground">
-                        Importar de un documento
-                      </span>
-                      <span className="block text-[11.5px] text-muted-foreground">
-                        Parrilla o Excel · automático
-                      </span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-                  </button>
-                )}
-              />
-            </section>
-          </aside>
-        )}
       </div>
-
-      {/* Modales solo de «Gestión»: editar franjas y ver la carga del equipo. */}
-      {esGestion && abrirFranjas && (
-        <DialogFranjas
-          lunes={lunes}
-          onCerrar={() => setAbrirFranjas(false)}
-          onAsignar={
-            editable
-              ? () => {
-                  setAbrirFranjas(false);
-                  setAbrirAsignar(true);
-                }
-              : undefined
-          }
-        />
-      )}
-      {esGestion && abrirCarga && (
-        <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
-      )}
-      {/* «Cambios y ausencias»: su lista completa (filtros + «Nueva solicitud») en un diálogo,
-          abierto desde la franja «Más opciones» del panel de Gestión. */}
-      {esGestion && abrirCambios && (
-        <Dialog open onOpenChange={setAbrirCambios}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Cambios y ausencias</DialogTitle>
-            </DialogHeader>
-            <div className="max-h-[70vh] overflow-y-auto">
-              <CambiosYAusencias esAdmin={esAdmin} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-      {dialogoAjustes}
 
       {/* Diálogo de cobertura del chip: la MISMA tarjeta del Panorama (coger/«Asignar a…»/
           soltar/editar/borrar en su kebab). Si el evento ya tiene cubridores → TarjetaCobertura;

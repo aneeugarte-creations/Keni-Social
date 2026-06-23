@@ -95,7 +95,7 @@ function solapeMinutos(aIni: string, aFin: string, bIni: string, bFin: string): 
  * ninguna solapa, la de inicio más cercano; en último caso, la primera. Así el usuario NO
  * elige franja a mano —piensa en horas, no en franjas—: el turno se coloca solo por su hora.
  */
-function franjaParaHorario(
+export function franjaParaHorario(
   inicio: string,
   fin: string,
   franjas: FranjaSemana[],

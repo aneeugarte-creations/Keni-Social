@@ -261,15 +261,13 @@ describe("Turnos — Calendario: gating de coordinador", () => {
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
   });
 
-  it("el admin tampoco ve el ⋯ en el Calendario: ahora vive en «Gestión»", async () => {
+  it("el admin tampoco ve el ⋯ en el Calendario; vive en «Gestión»", async () => {
     renderRota(); // admin por defecto
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
     await screen.findByRole("button", { name: "Equipo" });
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
-    // El ⋯ (Franjas/Copiar/Carga/Export) se reubicó en la pestaña admin «Gestión», en su rejilla
-    // SEMANAL (Gestión abre en «Mes»; el conmutador lleva a la Semana con el menú de coordinador).
+    // El ⋯ (Franjas/Copiar/Carga/Export) vive en la pestaña admin «Gestión» (Mes único, sin Semana).
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
     expect(await screen.findByRole("button", { name: "Más acciones" })).toBeInTheDocument();
   });
 });
@@ -290,36 +288,24 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(within(nav).getAllByRole("button")).toHaveLength(2);
   });
 
-  it("«Gestión» abre en el calendario MENSUAL del equipo (overview); el conmutador lo marca", async () => {
+  it("«Gestión» = Mes único: sin conmutador Semana|Mes y con el panel de reparto al lado", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    // Vista de apertura = «Mes» (overview de la jornada del equipo); «Semana» queda a un clic.
-    expect(await screen.findByRole("button", { name: "Mes", pressed: true })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Semana", pressed: false })).toBeInTheDocument();
-    // Imprimir/PDF ya NO es un icono suelto: vive en el ⋯ (junto a «Ajustes de turnos»).
-    expect(screen.queryByRole("button", { name: /Imprimir/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // El panel de reparto arranca abierto junto al mes (Mes único).
     expect(
-      await screen.findByRole("menuitem", { name: /Imprimir \/ PDF/ }),
+      await screen.findByRole("complementary", { name: "Asignar turnos" }),
     ).toBeInTheDocument();
-  });
-
-  it("el conmutador de Gestión lista «Mes» antes que «Semana» (Mes es la vista primaria)", async () => {
-    renderRota();
-    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    await screen.findByRole("button", { name: "Mes", pressed: true });
-    const grupo = screen.getByRole("group", { name: "Vista del calendario" });
-    const orden = within(grupo)
-      .getAllByRole("button")
-      .map((b) => b.textContent);
-    expect(orden).toEqual(["Mes", "Semana"]);
+    // Ya no hay conmutador de vistas: ni «Semana» ni «Mes».
+    expect(screen.queryByRole("button", { name: "Semana" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mes" })).toBeNull();
+    // Imprimir/PDF queda como icono suelto en la barra del mensual.
+    expect(screen.getByRole("button", { name: /Imprimir/ })).toBeInTheDocument();
   });
 
   it("«Gestión» abre «Ajustes de turnos» desde el ⋯ (interruptor de horas en Equipo)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    await screen.findByRole("button", { name: "Mes", pressed: true });
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Más acciones" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Ajustes de turnos" }));
     // El diálogo de ajustes con el interruptor de mostrar horas en «Equipo».
     expect(await screen.findByRole("dialog", { name: "Ajustes de turnos" })).toBeInTheDocument();
@@ -333,32 +319,29 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
     // El ámbito queda fijo en «Equipo»: el admin no está en la rota, así que «Yo» sería un vacío.
     // Ver la jornada propia es cosa de «Horario» (que SÍ conserva el conmutador).
-    await screen.findByRole("button", { name: "Mes", pressed: true });
+    await screen.findByRole("button", { name: "Más acciones" });
     expect(screen.queryByRole("button", { name: "Equipo" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Yo" })).toBeNull();
   });
 
-  it("«Gestión» tiene «Asignar turnos» en su Semana; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
+  it("«Gestión» tiene «Asignar turnos»; ya no existe «Aprobar y publicar» (sin paso de aprobación)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Horario" }));
     await screen.findByRole("button", { name: "Equipo" });
     expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
-    // Gestión abre en «Mes»; el reparto vive en su rejilla SEMANAL (un clic en el conmutador).
-    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
+    // Mes único: «Asignar turnos» (toggle del panel) vive en la barra del mes, sin pasar por Semana.
     expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
     // Sin paso de aprobación: lo asignado ya lo ve el equipo, no hay «Aprobar y publicar» ni «Despublicar».
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Despublicar" })).toBeNull();
   });
 
-  it("en la Semana de «Gestión», el panel de reparto arranca abierto (columna lateral, no un modal)", async () => {
+  it("el panel de reparto de «Gestión» arranca abierto (columna lateral, no un modal)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    // Gestión abre en «Mes»; al pasar a «Semana» el reparto está abierto sin clic previo.
-    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
-    // El reparto está junto a la rejilla (un <aside>, NO un role=dialog que la tape).
+    // El reparto está junto al mes (un <aside>, NO un role=dialog que lo tape) y arranca abierto.
     const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
     expect(within(panel).getByText("Horario")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -368,15 +351,6 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
     fireEvent.click(toggle);
     expect(await screen.findByRole("complementary", { name: "Asignar turnos" })).toBeInTheDocument();
-  });
-
-  it("la Semana de «Gestión» usa el diseño por días del mensual (sin la columna «Franja» de la matriz)", async () => {
-    renderRota();
-    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Semana", pressed: false }));
-    // La rejilla por-días no tiene la cabecera «Franja» de la matriz (esa vive en «Calendario»).
-    await screen.findByRole("complementary", { name: "Asignar turnos" });
-    expect(screen.queryByText("Franja")).toBeNull();
   });
 
   it("deep-link ?tab=gestion para un no-admin cae en «Horario»", async () => {

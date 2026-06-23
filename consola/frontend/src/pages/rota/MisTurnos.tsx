@@ -57,6 +57,9 @@ export function VistaMensualTurnos({
   marcadorSalud,
   soloEquipo = false,
   accionesDerecha,
+  seleccionable = false,
+  diasSel,
+  onToggleDia,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
@@ -84,6 +87,13 @@ export function VistaMensualTurnos({
   /** Fija el ámbito a «Equipo» y oculta el conmutador Equipo/Yo. Gestión lo activa (coordinar al
    *  equipo, y el admin no está en la rota → «Yo» sería un estado vacío); «Horario» no. */
   soloEquipo?: boolean;
+  /** Gestión = Mes único: hace clicables las celdas de día del Equipo para marcar la selección de
+   *  reparto (puede cruzar semanas). Solo Gestión lo pasa; «Horario» (solo lectura) no. */
+  seleccionable?: boolean;
+  /** Días ISO marcados (se tiñen). Controlado por el contenedor (Gestión). */
+  diasSel?: Set<string>;
+  /** Alterna un día en la selección al clicar su número en la rejilla. */
+  onToggleDia?: (fechaIso: string) => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -148,6 +158,9 @@ export function VistaMensualTurnos({
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
           mostrarHoras={mostrarHoras}
+          seleccionable={seleccionable}
+          diasSel={diasSel}
+          onToggleDia={onToggleDia}
         />
       ) : (
         <VistaMesYo
@@ -283,11 +296,18 @@ function RejillaMensual({
   renderDia,
   cobertura,
   onAbrirDia,
+  seleccionable = false,
+  diasSel,
+  onToggleDia,
 }: {
   mes: string;
   renderDia: (fecha: string, delMes: boolean) => React.ReactNode;
   cobertura?: Map<string, ResumenDiaCobertura>;
   onAbrirDia?: (fecha: string) => void;
+  /** Gestión: el número del día es un toggle de la selección de reparto; la celda se tiñe. */
+  seleccionable?: boolean;
+  diasSel?: Set<string>;
+  onToggleDia?: (fechaIso: string) => void;
 }) {
   const hoy = hoyCDMX();
   const dias = React.useMemo(() => semanasDelMes(mes).flat(), [mes]);
@@ -306,30 +326,51 @@ function RejillaMensual({
           const finde = esFinDeSemana(fecha);
           const esHoy = fecha === hoy;
           const resumen = delMes ? cobertura?.get(fecha) : undefined;
+          const sel = seleccionable && delMes && !!diasSel?.has(fecha);
+          const num = Number(fecha.slice(8, 10));
           return (
             <div
               key={fecha}
-              className={`min-h-[5.25rem] border-b border-r bg-background p-1.5 print:min-h-[3.25rem] ${
-                !delMes ? "bg-muted/20" : finde ? "bg-muted/30" : ""
+              className={`min-h-[5.25rem] border-b border-r p-1.5 print:min-h-[3.25rem] ${
+                sel
+                  ? "bg-keni-50 dark:bg-keni-900/30"
+                  : !delMes
+                    ? "bg-muted/20"
+                    : finde
+                      ? "bg-muted/30"
+                      : "bg-background"
               } ${esHoy ? "ring-1 ring-inset ring-keni-500/50" : ""}`}
             >
-              <div
-                className={`mb-1 text-right text-xs tabular-nums ${
-                  esHoy
-                    ? "font-semibold text-keni-700 dark:text-keni-300"
-                    : delMes
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/50"
-                }`}
-              >
-                {Number(fecha.slice(8, 10))}
-              </div>
+              {seleccionable && delMes ? (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={sel}
+                  aria-label={`Día ${num}`}
+                  onClick={() => onToggleDia?.(fecha)}
+                  className={`mb-1 block w-full rounded text-right text-xs tabular-nums transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    sel || esHoy
+                      ? "font-semibold text-keni-700 dark:text-keni-300"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {num}
+                </button>
+              ) : (
+                <div
+                  className={`mb-1 text-right text-xs tabular-nums ${
+                    esHoy
+                      ? "font-semibold text-keni-700 dark:text-keni-300"
+                      : delMes
+                        ? "text-muted-foreground"
+                        : "text-muted-foreground/50"
+                  }`}
+                >
+                  {num}
+                </div>
+              )}
               {resumen && (
-                <IndicadorCobertura
-                  fecha={fecha}
-                  resumen={resumen}
-                  onAbrir={onAbrirDia}
-                />
+                <IndicadorCobertura fecha={fecha} resumen={resumen} onAbrir={onAbrirDia} />
               )}
               <div className="space-y-1">{renderDia(fecha, delMes)}</div>
             </div>
@@ -563,12 +604,19 @@ function VistaMesEquipo({
   cobertura,
   onAbrirDia,
   mostrarHoras = true,
+  seleccionable = false,
+  diasSel,
+  onToggleDia,
 }: {
   mes: string;
   cobertura?: Map<string, ResumenDiaCobertura>;
   onAbrirDia?: (fecha: string) => void;
   /** Pinta el rango horario junto a cada franja. El equipo puede ocultarlo (horas heterogéneas). */
   mostrarHoras?: boolean;
+  /** Gestión: celdas de día clicables para marcar la selección de reparto. */
+  seleccionable?: boolean;
+  diasSel?: Set<string>;
+  onToggleDia?: (fechaIso: string) => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -591,7 +639,9 @@ function VistaMesEquipo({
         cargando={q.isFetching}
       />
     );
-  if (turnos.length === 0)
+  // En modo selección (Gestión = Mes único) la rejilla se pinta SIEMPRE, aunque el mes esté vacío:
+  // hace falta poder marcar días para repartir sobre un mes en blanco. Solo lectura → estado vacío.
+  if (turnos.length === 0 && !seleccionable)
     return (
       <EstadoVacio
         icono={Users}
@@ -608,6 +658,9 @@ function VistaMesEquipo({
           mes={mes}
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
+          seleccionable={seleccionable}
+          diasSel={diasSel}
+          onToggleDia={onToggleDia}
           renderDia={(fecha, delMes) =>
             (porFecha.get(fecha) ?? []).map((fr) => (
               <ChipFranjaEquipo
