@@ -17,6 +17,7 @@ import {
   Clock,
   ExternalLink,
   Globe,
+  History,
   Newspaper,
   Sparkles,
   Trash2,
@@ -33,7 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
-import { formatearHora } from "@/lib/fecha";
+import { formatearFechaHora, tiempoRelativoCorto } from "@/lib/fecha";
 import { etiquetaLinea } from "@/lib/lineas";
 import { fraseCorroboracion } from "@/lib/noticias/ranking-editorial";
 import { nombreFuente } from "@/lib/trends";
@@ -126,7 +127,8 @@ export default function DetalleHistoriaPagina() {
     (historia.estado === "usado" ? "en_feed" : esDescartada ? "descartada" : "en_pool");
   const esUltimaHora = historia.breaking === 1 && piezaEstado !== "descartada";
   const enPool = piezaEstado === "en_pool";
-  const hora = formatearHora(historia.primer_visto);
+  const cuando = tiempoRelativoCorto(historia.primer_visto);
+  const cuandoExacto = formatearFechaHora(historia.primer_visto);
   const fuente =
     nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
     historia.marca_nombre;
@@ -186,11 +188,19 @@ export default function DetalleHistoriaPagina() {
             {historia.titulo || "(sin título)"}
           </h1>
 
-          {(hora || fuente) && (
-            <p className="text-sm text-muted-foreground" data-testid="hora-fuente">
-              {hora}
-              {hora && fuente ? " · " : ""}
-              {fuente}
+          {(cuando || fuente) && (
+            <p
+              className="flex items-center gap-1 text-sm text-muted-foreground"
+              data-testid="hora-fuente"
+            >
+              {cuando && (
+                <span className="inline-flex items-center gap-1" title={cuandoExacto}>
+                  <History className="h-3.5 w-3.5 shrink-0" />
+                  {cuando}
+                </span>
+              )}
+              {cuando && fuente ? <span aria-hidden>·</span> : null}
+              {fuente && <span>{fuente}</span>}
             </p>
           )}
 

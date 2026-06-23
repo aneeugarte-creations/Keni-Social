@@ -324,6 +324,19 @@ export function NavGruposLineas({
   );
 }
 
+/**
+ * Ordena por SCORE descendente (mayor relevancia primero). La lista plana de "Todas" concatena
+ * las líneas una tras otra, así que sin esto quedaría en orden de línea, no de score. Copia (no
+ * muta) y desempata por `ultimo_visto` para un orden estable.
+ */
+export function ordenarPorScore(historias: Historia[]): Historia[] {
+  return [...historias].sort(
+    (a, b) =>
+      (b.score ?? 0) - (a.score ?? 0) ||
+      (b.ultimo_visto ?? "").localeCompare(a.ultimo_visto ?? ""),
+  );
+}
+
 /** Candidatas visibles según el chip y la línea elegidos ('' = sin filtrar en ese nivel). */
 export function historiasDelGrupo(
   historias: Historia[],
@@ -701,7 +714,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
         : { chips: [] as GrupoMesa[], browse: [] as Historia[] };
   if (chips.length > 0) {
     const total = chips.reduce((acc, g) => acc + g.en_pool, 0);
-    const visibles = historiasDelGrupo(browse, grupoSel, lineaSel);
+    const visibles = ordenarPorScore(historiasDelGrupo(browse, grupoSel, lineaSel));
     // ¿La selección actual es UNA línea concreta? Entonces se recorre PAGINADA (todo su pool), no
     // el browse en memoria. Marca con grupos: la línea del menú (`lineaSel` = id). Marca sin grupos:
     // el chip seleccionado ES una línea (`chip.lineaId`).

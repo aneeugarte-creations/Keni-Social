@@ -238,6 +238,23 @@ export function tiempoRelativo(iso: string | null | undefined): string {
 }
 
 /**
+ * Tiempo relativo COMPACTO para listas, SIN la palabra "hace" (en la UI lo acompaña un icono de
+ * reloj). Escala por tramos: minutos hasta 1 h ("8min"), horas hasta 48 h ("36h") y luego días
+ * ("3d"). Para edades de más de ~30 días cae a fecha corta ("03 jun"), porque "320d" no se lee.
+ * "" / inválido → "". Solo mira al PASADO (un instante futuro, raro aquí, se muestra como "ahora").
+ */
+export function tiempoRelativoCorto(iso: string | null | undefined): string {
+  const d = aInstante(iso);
+  if (!d) return "";
+  const seg = Math.round((Date.now() - d.getTime()) / 1000);
+  if (seg < 60) return "ahora";
+  if (seg < 3600) return `${Math.floor(seg / 60)}min`;
+  if (seg < 172800) return `${Math.floor(seg / 3600)}h`; // horas hasta 48 h
+  if (seg < 2592000) return `${Math.floor(seg / 86400)}d`;
+  return formatearFechaCorta(iso);
+}
+
+/**
  * Tiempo relativo a partir de una EDAD en segundos ya calculada por el backend
  * (p. ej. `encolado_hace_s`): "hace 5 segundos", "hace 3 minutos". `null` → "—".
  */

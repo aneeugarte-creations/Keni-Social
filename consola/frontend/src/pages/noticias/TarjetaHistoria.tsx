@@ -7,7 +7,7 @@
  * selección múltiple no navega; el resto de la tarjeta sí.
  */
 
-import { CheckCircle2, Clock, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, Clock, History, Sparkles, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatearHora } from "@/lib/fecha";
+import { formatearFechaHora, tiempoRelativoCorto } from "@/lib/fecha";
 import { nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import { nombreFuente } from "@/lib/trends";
 import type { Historia } from "@/types";
@@ -48,8 +48,10 @@ export function TarjetaHistoria({
     (historia.estado === "usado" ? "en_feed" : esDescartada ? "descartada" : "en_pool");
   const esUltimaHora = historia.breaking === 1 && piezaEstado !== "descartada";
   const prioridad = nivelPrioridad(historia.score);
-  // Lo esencial junto al título: hora de apertura y fuente que abrió.
-  const hora = formatearHora(historia.primer_visto);
+  // Lo esencial junto al título: hace cuánto abrió (relativo, no la hora suelta que confunde) y
+  // la fuente que abrió. El instante exacto queda en el `title` al pasar el ratón.
+  const cuando = tiempoRelativoCorto(historia.primer_visto);
+  const cuandoExacto = formatearFechaHora(historia.primer_visto);
   const fuente =
     nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
     historia.marca_nombre;
@@ -133,11 +135,19 @@ export function TarjetaHistoria({
                   historia.titulo || "(sin título)"
                 )}
               </p>
-              {(hora || fuente) && (
-                <p className="text-xs text-muted-foreground" data-testid="hora-fuente">
-                  {hora}
-                  {hora && fuente ? " · " : ""}
-                  {fuente}
+              {(cuando || fuente) && (
+                <p
+                  className="flex items-center gap-1 text-xs text-muted-foreground"
+                  data-testid="hora-fuente"
+                >
+                  {cuando && (
+                    <span className="inline-flex items-center gap-1" title={cuandoExacto}>
+                      <History className="h-3 w-3 shrink-0" />
+                      {cuando}
+                    </span>
+                  )}
+                  {cuando && fuente ? <span aria-hidden>·</span> : null}
+                  {fuente && <span className="truncate">{fuente}</span>}
                 </p>
               )}
             </button>

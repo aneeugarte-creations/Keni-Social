@@ -17,6 +17,7 @@ import {
   chipsDeLineas,
   historiasDelGrupo,
   NavGruposLineas,
+  ordenarPorScore,
 } from "./MesaNoticias";
 
 function historia(id: string, overrides: Partial<Historia> = {}): Historia {
@@ -96,6 +97,26 @@ describe("agruparPorMacro", () => {
       historia("b", { tema_macro: "" }),
     ]);
     expect(bloques.every((b) => b.tipo === "suelta")).toBe(true);
+  });
+});
+
+describe("ordenarPorScore", () => {
+  it("ordena por score desc (la lista plana de 'Todas' queda por relevancia, no por línea)", () => {
+    const lista = [
+      historia("a", { score: 0.2 }),
+      historia("b", { score: 0.9 }),
+      historia("c", { score: 0.5 }),
+    ];
+    expect(ordenarPorScore(lista).map((h) => h.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("a igual score, el más reciente (ultimo_visto) va primero; no muta la entrada", () => {
+    const lista = [
+      historia("vieja", { score: 0.5, ultimo_visto: "2026-06-05T08:00:00" }),
+      historia("nueva", { score: 0.5, ultimo_visto: "2026-06-05T12:00:00" }),
+    ];
+    expect(ordenarPorScore(lista).map((h) => h.id)).toEqual(["nueva", "vieja"]);
+    expect(lista.map((h) => h.id)).toEqual(["vieja", "nueva"]); // original intacto
   });
 });
 

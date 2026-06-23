@@ -16,8 +16,24 @@ import {
   isoADatetimeLocal,
   minutosHastaEvento,
   posicionTemporal,
+  tiempoRelativoCorto,
   ZONA_CDMX,
 } from "./fecha";
+
+describe("tiempoRelativoCorto (relativo compacto, sin 'hace')", () => {
+  const haceSeg = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+  it("escala: minutos < 1 h, horas hasta 48 h, luego días", () => {
+    expect(tiempoRelativoCorto(haceSeg(30))).toBe("ahora");
+    expect(tiempoRelativoCorto(haceSeg(5 * 60))).toBe("5min");
+    expect(tiempoRelativoCorto(haceSeg(90 * 60))).toBe("1h"); // 90 min ya se cuenta en horas
+    expect(tiempoRelativoCorto(haceSeg(36 * 3600))).toBe("36h"); // sigue en horas hasta 48 h
+    expect(tiempoRelativoCorto(haceSeg(3 * 86400))).toBe("3d");
+  });
+  it("vacío/ inválido → ''", () => {
+    expect(tiempoRelativoCorto("")).toBe("");
+    expect(tiempoRelativoCorto(null)).toBe("");
+  });
+});
 
 describe("aInstante", () => {
   it("trata un ISO sin zona como UTC", () => {
