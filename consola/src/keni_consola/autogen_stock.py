@@ -257,8 +257,9 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     # hay, el TEMA (`titulo`). NUNCA el copy/titular largo (no encuentra nada en los bancos).
     consulta = (objetivo.get("imagen_clave") or "").strip() or (item.get("titulo") or "").strip()
     if consulta:
+        marca = (item.get("marca") or "").strip()
         try:
-            candidatas.extend(stock_fotos.buscar_todos(consulta, limite_por=2))
+            candidatas.extend(stock_fotos.buscar_todos(consulta, limite_por=2, marca=marca))
         except Exception:  # noqa: BLE001 -- una API caída no rompe el barrido
             _log.debug("auto-stock: fallo buscando en APIs para %r.", consulta, exc_info=True)
 

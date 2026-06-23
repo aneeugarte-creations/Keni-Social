@@ -25,7 +25,6 @@ descarga + delega el parseo aquí.
 from __future__ import annotations
 
 import json
-import os
 import urllib.parse
 from typing import Any
 
@@ -277,22 +276,28 @@ _NORMALIZADORES = {
 # --------------------------------------------------------------------------- #
 
 
-def _clave_proveedor(proveedor: str) -> str | None:
-    """Devuelve la API key de un proveedor gateado, o None si no está configurada.
+def _clave_proveedor(proveedor: str, marca: str = "") -> str | None:
+    """Devuelve la API key de un proveedor gateado para una marca, o None si no hay.
 
-    Prefiere el accessor de `config` cuando exista (`config.pexels_api_key()` /
-    `config.pixabay_api_key()`); si aún no está cableado, cae a la env var directamente.
+    Delega en `config.pexels_api_key(marca)` / `config.pixabay_api_key(marca)`, que
+    resuelven la precedencia secreto-por-marca > clave global por entorno.
     """
-    # TODO config accessor: añadir config.pexels_api_key() / config.pixabay_api_key().
     accessor = {"pexels": "pexels_api_key", "pixabay": "pixabay_api_key"}.get(proveedor)
     if accessor:
         fn = getattr(config, accessor, None)
         if callable(fn):
-            return fn() or None
-    env = {"pexels": "KENI_PEXELS_API_KEY", "pixabay": "KENI_PIXABAY_API_KEY"}.get(proveedor)
-    if env:
-        return os.environ.get(env) or None
+            return fn(marca) or None
     return None
+
+
+def _fuente_activa(proveedor: str, marca: str) -> bool:
+    """True si `proveedor` está HABILITADO para `marca` (toggle de la subpágina de Stock).
+
+    `config.fuentes_stock_activas(marca)` devuelve el conjunto habilitado o None (sin
+    filtro = todas activas).
+    """
+    activas = config.fuentes_stock_activas(marca)
+    return activas is None or proveedor in activas
 
 
 # --------------------------------------------------------------------------- #
@@ -300,51 +305,58 @@ def _clave_proveedor(proveedor: str) -> str | None:
 # --------------------------------------------------------------------------- #
 
 
-def estado_fuente(proveedor: str) -> dict[str, Any]:
-    """Estado HONESTO de un proveedor (sin tocar red).
+def ids_proveedores() -> list[str]:
+    """Ids de TODOS los proveedores del catálogo, en su orden (disponibles o no)."""
+    return list(_PROVEEDORES)
 
-    `{proveedor, nombre, disponible, motivo, requiere_clave}`. Pexels/Pixabay sólo
-    `disponible=True` con API key; Wikimedia/NASA/Openverse siempre disponibles.
+
+def estado_fuente(proveedor: str, marca: str = "") -> dict[str, Any]:
+    """Estado HONESTO de un proveedor PARA UNA MARCA (sin tocar red).
+
+    `{proveedor, nombre, requiere_clave, disponible, activa, motivo}`:
+      - `disponible`: el proveedor PUEDE operar (gratuito, o con API key para la marca).
+      - `activa`: el usuario lo ha HABILITADO para la marca (toggle de la subpágina Stock).
+    Pexels/Pixabay sólo `disponible=True` con API key; Wikimedia/NASA/Openverse siempre.
+    Una fuente se usa en la búsqueda sólo si está `disponible` Y `activa`.
     """
     info = _PROVEEDORES.get(proveedor)
     if info is None:
         return {
             "proveedor": proveedor,
             "nombre": proveedor,
+            "requiere_clave": False,
             "disponible": False,
+            "activa": False,
             "motivo": "Proveedor de fotos desconocido.",
-            "requiere_clave": False,
         }
+    activa = _fuente_activa(proveedor, marca)
     requiere_clave = info["requiere_clave"]
-    if not requiere_clave:
-        return {
-            "proveedor": proveedor,
-            "nombre": info["nombre"],
-            "disponible": True,
-            "motivo": "",
-            "requiere_clave": False,
-        }
-    if _clave_proveedor(proveedor):
-        return {
-            "proveedor": proveedor,
-            "nombre": info["nombre"],
-            "disponible": True,
-            "motivo": "",
-            "requiere_clave": True,
-        }
-    env = "KENI_PEXELS_API_KEY" if proveedor == "pexels" else "KENI_PIXABAY_API_KEY"
+    if not requiere_clave or _clave_proveedor(proveedor, marca):
+        motivo = ""
+        disponible = True
+    else:
+        disponible = False
+        motivo = (
+            f"Falta la API key de {info['nombre']} "
+            "(configúrala en Sistema → Proveedores)."
+        )
     return {
         "proveedor": proveedor,
         "nombre": info["nombre"],
-        "disponible": False,
-        "motivo": f"Falta la API key de {info['nombre']} (configura {env}).",
-        "requiere_clave": True,
+        "requiere_clave": requiere_clave,
+        "disponible": disponible,
+        "activa": activa,
+        "motivo": motivo,
     }
 
 
-def proveedores_disponibles() -> list[str]:
-    """Ids de los proveedores disponibles ahora mismo (en el orden del catálogo)."""
-    return [p for p in _PROVEEDORES if estado_fuente(p)["disponible"]]
+def proveedores_disponibles(marca: str = "") -> list[str]:
+    """Ids de los proveedores USABLES para una marca: disponibles Y habilitados."""
+    return [
+        p
+        for p in _PROVEEDORES
+        if (e := estado_fuente(p, marca))["disponible"] and e["activa"]
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -369,14 +381,16 @@ def _descargar_json(url: str, headers: dict[str, str]) -> Any:
         raise rss.RSSError("El proveedor de fotos respondió algo que no es JSON válido.") from e
 
 
-def _url_y_headers(proveedor: str, query: str, limite: int) -> tuple[str, dict[str, str]]:
+def _url_y_headers(
+    proveedor: str, query: str, limite: int, marca: str = ""
+) -> tuple[str, dict[str, str]]:
     """Construye la URL de búsqueda y las cabeceras de un proveedor. `query` ya saneado."""
     q = urllib.parse.quote(query)
     if proveedor == "pexels":
         url = f"https://api.pexels.com/v1/search?query={q}&per_page={limite}"
-        return url, {"Authorization": _clave_proveedor("pexels") or ""}
+        return url, {"Authorization": _clave_proveedor("pexels", marca) or ""}
     if proveedor == "pixabay":
-        clave = urllib.parse.quote(_clave_proveedor("pixabay") or "")
+        clave = urllib.parse.quote(_clave_proveedor("pixabay", marca) or "")
         url = (
             f"https://pixabay.com/api/?key={clave}&q={q}&per_page={limite}"
             "&image_type=photo&safesearch=true"
@@ -400,19 +414,23 @@ def _url_y_headers(proveedor: str, query: str, limite: int) -> tuple[str, dict[s
     return "", {}
 
 
-def buscar(query: str, proveedor: str, limite: int = 6) -> list[dict[str, str]]:
+def buscar(
+    query: str, proveedor: str, limite: int = 6, marca: str = ""
+) -> list[dict[str, str]]:
     """Busca fotos en un proveedor. Degradación honesta: `[]` si query vacío o no disponible.
 
-    Propaga `rss.RSSError` si falla la descarga (igual que las agencias). El query se
-    URL-encodea y `limite` se acota a [1, _MAX_ITEMS].
+    Usa la API key de `marca` (si el proveedor la requiere). Propaga `rss.RSSError` si
+    falla la descarga (igual que las agencias). El query se URL-encodea y `limite` se
+    acota a [1, _MAX_ITEMS]. Comprueba `disponible` (puede operar), no el toggle `activa`:
+    elegir un proveedor explícito lo fuerza aunque no esté en el conjunto por defecto.
     """
     query = (query or "").strip()
     if not query or proveedor not in _NORMALIZADORES:
         return []
-    if not estado_fuente(proveedor)["disponible"]:
+    if not estado_fuente(proveedor, marca)["disponible"]:
         return []
     limite = max(1, min(int(limite), _MAX_ITEMS))
-    url, headers = _url_y_headers(proveedor, query, limite)
+    url, headers = _url_y_headers(proveedor, query, limite, marca)
     if not url:
         return []
     datos = _descargar_json(url, headers)
@@ -420,25 +438,30 @@ def buscar(query: str, proveedor: str, limite: int = 6) -> list[dict[str, str]]:
 
 
 def buscar_todos(
-    query: str, limite_por: int = 4, proveedores: list[str] | None = None
+    query: str,
+    limite_por: int = 4,
+    proveedores: list[str] | None = None,
+    marca: str = "",
 ) -> list[dict[str, str]]:
-    """Busca en varios proveedores disponibles y concatena los candidatos.
+    """Busca en los proveedores usables de una marca y concatena los candidatos.
 
     Tolera fallos por proveedor (un `rss.RSSError` no corta a los demás). `proveedores`
-    None = todos los disponibles; si se pasa una lista, sólo los que estén disponibles.
+    None = los USABLES de la marca (disponibles Y habilitados); si se pasa una lista,
+    sólo los que estén `disponible` para la marca (un proveedor pedido a mano no se
+    descarta por el toggle, pero sí si le falta la clave).
     """
     query = (query or "").strip()
     if not query:
         return []
     if proveedores is None:
-        elegidos = proveedores_disponibles()
+        elegidos = proveedores_disponibles(marca)
     else:
-        disponibles = set(proveedores_disponibles())
+        disponibles = {p for p in _PROVEEDORES if estado_fuente(p, marca)["disponible"]}
         elegidos = [p for p in proveedores if p in disponibles]
     salida: list[dict[str, str]] = []
     for proveedor in elegidos:
         try:
-            salida.extend(buscar(query, proveedor, limite_por))
+            salida.extend(buscar(query, proveedor, limite_por, marca))
         except rss.RSSError:
             continue
     return salida

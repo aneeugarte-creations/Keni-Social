@@ -35,6 +35,8 @@ export interface BuscadorStockProps {
   open: boolean;
   onCerrar: () => void;
   piezaId: string;
+  /** Marca de la pieza: acota las fuentes a las habilitadas para ella (toggles de la etapa Stock). */
+  marca?: string;
   /** URL original del artículo de la fuente (RSS): si la hay, se ofrece "Usar foto original". */
   imagenFuente?: string;
   /** Texto inicial de búsqueda: el TEMA de la pieza (su título), no el copy/titular largo. Opcional. */
@@ -47,6 +49,7 @@ export function BuscadorStock({
   open,
   onCerrar,
   piezaId,
+  marca,
   imagenFuente,
   consultaInicial = "",
   onAdjuntada,
@@ -72,9 +75,12 @@ export function BuscadorStock({
   }, [q]);
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ["stock", proveedor, qDebounced],
+    queryKey: ["stock", proveedor, qDebounced, marca ?? ""],
     queryFn: ({ signal }) =>
-      api.buscarStock({ q: qDebounced || undefined, proveedor: proveedor || undefined }, signal),
+      api.buscarStock(
+        { q: qDebounced || undefined, proveedor: proveedor || undefined, marca: marca || undefined },
+        signal,
+      ),
     enabled: open,
   });
 

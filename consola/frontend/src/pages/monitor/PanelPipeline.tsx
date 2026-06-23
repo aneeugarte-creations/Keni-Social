@@ -87,6 +87,9 @@ export interface FasePipeline {
    *  mismo pool y se pintan LADO A LADO en una fila, con un solo conector ↓ antes del grupo (p. ej.
    *  Recolectar + Google Trends, ambas de ingesta). */
   paralelo?: string;
+  /** Panel PROPIO (no Prompt · Contexto · Logs) que es el contenido de la subpágina de la fase.
+   *  Hace la fase navegable: su subpágina monta ese panel (p. ej. Stock → toggles de fuentes). */
+  panel?: "stock";
 }
 
 function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<string, number> {

@@ -15,6 +15,7 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { DetalleFase } from "@/pages/maquina/DetalleFase";
+import { PanelFuentesStock } from "@/pages/maquina/PanelFuentesStock";
 import {
   agentesDe,
   FASES_INVESTIGACION,
@@ -73,14 +74,22 @@ export default function FaseDetalle() {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <DetalleFase
-          fase={fase}
-          proceso={proceso}
-          marca={marcaActiva}
-          cola={cola.data}
-          queuePorTipo={queuePorTipo}
-          mostrarLogs={!esCatalogo}
-        />
+        {fase.panel === "stock" ? (
+          // La etapa Stock no tiene Prompt · Contexto · Logs: su subpágina son los toggles de
+          // fuentes de stock de la marca activa.
+          <div className="p-4">
+            <PanelFuentesStock marca={marcaActiva} />
+          </div>
+        ) : (
+          <DetalleFase
+            fase={fase}
+            proceso={proceso}
+            marca={marcaActiva}
+            cola={cola.data}
+            queuePorTipo={queuePorTipo}
+            mostrarLogs={!esCatalogo}
+          />
+        )}
       </div>
     </div>
   );

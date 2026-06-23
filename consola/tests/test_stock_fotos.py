@@ -198,13 +198,13 @@ def test_estado_pexels_pendiente_sin_clave():
     estado = stock_fotos.estado_fuente("pexels")
     assert estado["disponible"] is False
     assert estado["requiere_clave"] is True
-    assert "KENI_PEXELS_API_KEY" in estado["motivo"]
+    assert "Sistema → Proveedores" in estado["motivo"]
 
 
 def test_estado_pixabay_pendiente_sin_clave():
     estado = stock_fotos.estado_fuente("pixabay")
     assert estado["disponible"] is False
-    assert "KENI_PIXABAY_API_KEY" in estado["motivo"]
+    assert "Pixabay" in estado["motivo"]
 
 
 def test_estado_pexels_disponible_con_clave(monkeypatch):
@@ -231,6 +231,60 @@ def test_proveedores_disponibles_sin_claves():
     assert "pexels" not in disp
     assert "pixabay" not in disp
     assert set(disp) == {"wikimedia", "nasa", "openverse"}
+
+
+# --------------------------------------------------------------------------- #
+# Por marca: clave propia + toggle de fuentes habilitadas                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_clave_pexels_por_marca_hace_disponible(monkeypatch):
+    # La clave existe SOLO para 'unotv': disponible para esa marca, no para otra ni global.
+    monkeypatch.setattr(
+        stock_fotos.config,
+        "pexels_api_key",
+        lambda marca="": "k" if marca == "unotv" else None,
+    )
+    assert stock_fotos.estado_fuente("pexels", "unotv")["disponible"] is True
+    assert stock_fotos.estado_fuente("pexels", "claro-sports")["disponible"] is False
+    assert stock_fotos.estado_fuente("pexels", "")["disponible"] is False
+
+
+def test_estado_incluye_activa_segun_toggle(monkeypatch):
+    # Toggle por marca: solo wikimedia+openverse habilitadas; nasa queda activa=False.
+    monkeypatch.setattr(
+        stock_fotos.config,
+        "fuentes_stock_activas",
+        lambda marca="": {"wikimedia", "openverse"} if marca == "unotv" else None,
+    )
+    assert stock_fotos.estado_fuente("wikimedia", "unotv")["activa"] is True
+    nasa = stock_fotos.estado_fuente("nasa", "unotv")
+    assert nasa["disponible"] is True and nasa["activa"] is False
+
+
+def test_proveedores_disponibles_respeta_toggle(monkeypatch):
+    monkeypatch.setattr(
+        stock_fotos.config,
+        "fuentes_stock_activas",
+        lambda marca="": {"openverse"} if marca == "unotv" else None,
+    )
+    assert stock_fotos.proveedores_disponibles("unotv") == ["openverse"]
+
+
+def test_buscar_todos_omite_fuente_desactivada(monkeypatch, _sin_ssrf):
+    # 'nasa' desactivada por toggle: aunque responda, buscar_todos no la consulta.
+    monkeypatch.setattr(
+        stock_fotos.config,
+        "fuentes_stock_activas",
+        lambda marca="": {"openverse"},
+    )
+    monkeypatch.setattr(
+        stock_fotos.rss,
+        "_DESCARGADOR",
+        lambda url: '{"results": [{"url": "https://ov/i.jpg", "creator": "C", "license": "cc0"}]}',
+    )
+    cands = stock_fotos.buscar_todos("tema", marca="unotv")
+    assert {c["proveedor"] for c in cands} == {"openverse"}
 
 
 def test_buscar_pexels_sin_clave_devuelve_vacio_sin_red():

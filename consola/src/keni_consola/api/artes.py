@@ -379,18 +379,23 @@ _STOCK_LIMITE_DEF = 4
 _STOCK_LIMITE_MAX = 12
 
 
-def _buscar_stock(query: str, proveedor: str, limite: int) -> dict:
-    """Busca candidatas en proveedores gratuitos. Degradación honesta (nunca lanza al cliente)."""
+def _buscar_stock(query: str, proveedor: str, limite: int, marca: str) -> dict:
+    """Busca candidatas en los proveedores usables de una marca. Degradación honesta.
+
+    Las claves (Pexels/Pixabay) y los toggles de fuente se resuelven POR MARCA: la lista
+    `proveedores` y la búsqueda reflejan lo configurado para `marca` (o lo global si '').
+    """
     proveedores = [
-        stock_fotos.estado_fuente(p) for p in stock_fotos.proveedores_disponibles()
+        stock_fotos.estado_fuente(p, marca)
+        for p in stock_fotos.proveedores_disponibles(marca)
     ]
     if not query.strip():
         return {"proveedores": proveedores, "candidatos": []}
     try:
         if proveedor:
-            candidatos = stock_fotos.buscar(query, proveedor, limite=limite)
+            candidatos = stock_fotos.buscar(query, proveedor, limite=limite, marca=marca)
         else:
-            candidatos = stock_fotos.buscar_todos(query, limite_por=limite)
+            candidatos = stock_fotos.buscar_todos(query, limite_por=limite, marca=marca)
     except Exception:  # noqa: BLE001 -- una API caída no rompe la búsqueda; devolvemos lo que haya
         _log.exception("Fallo buscando fotos de stock (q=%r proveedor=%r).", query, proveedor)
         candidatos = []
@@ -398,15 +403,22 @@ def _buscar_stock(query: str, proveedor: str, limite: int) -> dict:
 
 
 async def buscar_stock(request: Request) -> Response:
-    """GET /api/artes/stock/buscar?q=&proveedor=&limite= -> {proveedores, candidatos}."""
+    """GET /api/artes/stock/buscar?q=&proveedor=&limite=&marca= -> {proveedores, candidatos}.
+
+    `marca` ('' = global) acota claves y fuentes habilitadas a esa marca; si llega una
+    marca desconocida se responde 400 (igual que el resto de endpoints de artes).
+    """
     q = (request.query_params.get("q") or "").strip()
     proveedor = (request.query_params.get("proveedor") or "").strip().lower()
+    marca, err = _validar_marca(request.query_params.get("marca"))
+    if err is not None:
+        return JSONResponse({"error": err}, status_code=400)
     try:
         limite = int(request.query_params.get("limite") or _STOCK_LIMITE_DEF)
     except ValueError:
         limite = _STOCK_LIMITE_DEF
     limite = max(1, min(_STOCK_LIMITE_MAX, limite))
-    cuerpo = await run_in_threadpool(_buscar_stock, q, proveedor, limite)
+    cuerpo = await run_in_threadpool(_buscar_stock, q, proveedor, limite, marca or "")
     return JSONResponse(cuerpo)
 
 

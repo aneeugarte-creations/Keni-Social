@@ -38,6 +38,10 @@ modulos_backend = [
   # frontera. Antes estaba en produccion.toml y obligaba a 4 entradas en SEAMS_PERMITIDOS. ADR 0005.
   "generaciones",
   "artes",
+  # api/stock.py: claves de los bancos de fotos por marca (almacen de secretos) + fuentes
+  # de stock habilitadas por marca (store de ajustes). Config transversal admin, hermana de
+  # `conexiones`/`artes`: Sistema → Proveedores (claves) y la subpágina de la etapa Stock.
+  "stock",
   "alertas",
   "sugerencias",
   # api/preview.py: sirve el preview navegable de una propuesta (assets del bundle desde el

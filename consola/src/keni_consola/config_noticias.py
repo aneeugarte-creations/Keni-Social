@@ -62,6 +62,7 @@ from ._config_comun import (
     ENV_PEXELS_API_KEY,
     ENV_PIPELINE_STOCK,
     ENV_PIXABAY_API_KEY,
+    ENV_STOCK_FUENTES,
     ENV_PRIORIZAR_PERFIL_IA,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
@@ -1038,14 +1039,44 @@ def reuters_configurado() -> bool:
     return bool(reuters_api_key())
 
 
-def pexels_api_key() -> str | None:
-    """API key de Pexels (`KENI_PEXELS_API_KEY`); None si no está (proveedor de stock apagado)."""
-    return _crudo(ENV_PEXELS_API_KEY) or None
+def pexels_api_key(marca: str = "") -> str | None:
+    """API key de Pexels para una marca; None si no está (proveedor de stock apagado).
+
+    Precedencia: el SECRETO por marca (guardado por la UI en Sistema → Proveedores) gana;
+    si la marca no tiene clave propia, cae a la global por entorno (`KENI_PEXELS_API_KEY`).
+    """
+    return _clave_stock_marca("pexels", marca) or _crudo(ENV_PEXELS_API_KEY) or None
 
 
-def pixabay_api_key() -> str | None:
-    """API key de Pixabay (`KENI_PIXABAY_API_KEY`); None si no está (proveedor de stock apagado)."""
-    return _crudo(ENV_PIXABAY_API_KEY) or None
+def pixabay_api_key(marca: str = "") -> str | None:
+    """API key de Pixabay para una marca; None si no está (proveedor de stock apagado).
+
+    Misma precedencia que Pexels: secreto por marca > global por entorno
+    (`KENI_PIXABAY_API_KEY`).
+    """
+    return _clave_stock_marca("pixabay", marca) or _crudo(ENV_PIXABAY_API_KEY) or None
+
+
+def _clave_stock_marca(proveedor: str, marca: str) -> str | None:
+    """Clave de stock guardada para `marca` (almacen de secretos), o None si no hay marca/clave."""
+    if not marca:
+        return None
+    from . import secretos
+
+    return secretos.obtener_clave_stock(marca, proveedor)
+
+
+def fuentes_stock_activas(marca: str = "") -> set[str] | None:
+    """Proveedores de stock HABILITADOS para una marca, o None si no hay filtro (todos).
+
+    Lee `KENI_STOCK_FUENTES[::marca]` (CSV de ids de proveedor). Vacío/ausente = sin filtro:
+    se usan todas las fuentes disponibles. Un valor no vacío ACOTA a los ids listados.
+    """
+    crudo = _crudo(f"{ENV_STOCK_FUENTES}::{marca}") if marca else ""
+    if not crudo:
+        crudo = _crudo(ENV_STOCK_FUENTES)
+    ids = {t.strip().lower() for t in crudo.split(",") if t.strip()}
+    return ids or None
 
 
 def stock_busca_activo() -> bool:

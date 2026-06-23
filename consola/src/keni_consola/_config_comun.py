@@ -502,6 +502,9 @@ ENV_PEXELS_API_KEY = "KENI_PEXELS_API_KEY"
 ENV_PIXABAY_API_KEY = "KENI_PIXABAY_API_KEY"
 ENV_PIPELINE_STOCK = "KENI_PIPELINE_STOCK"
 ENV_STOCK_MAX_BARRIDO = "KENI_STOCK_MAX_BARRIDO"
+# Proveedores de stock HABILITADOS por marca: CSV de ids (`KENI_STOCK_FUENTES::<marca>`).
+# Vacío = sin filtro (todas las fuentes disponibles). Lo gestiona la subpágina de Stock.
+ENV_STOCK_FUENTES = "KENI_STOCK_FUENTES"
 
 # Persistencia (ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
 # S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
@@ -886,6 +889,7 @@ __all__ = [
     'ENV_PIPELINE_ILUSTRAR',
     'ENV_PIPELINE_STOCK',
     'ENV_STOCK_MAX_BARRIDO',
+    'ENV_STOCK_FUENTES',
     'ENV_PEXELS_API_KEY',
     'ENV_PIXABAY_API_KEY',
     'ENV_PIPELINE_SUGERIR_HASHTAGS',

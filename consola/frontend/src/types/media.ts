@@ -180,6 +180,66 @@ export interface RespuestaStock {
   plataforma: PlataformaStock;
 }
 
+// --- Configuración de FUENTES de stock POR MARCA (claves + toggles) ---
+// Las claves de Pexels/Pixabay viven en Sistema → Proveedores; los toggles de
+// fuentes, en la subpágina de la etapa Stock (Contexto). Ambas son por marca.
+
+/**
+ * Estado de un proveedor de fotos de stock PARA UNA MARCA (`GET /api/stock/fuentes`).
+ * `configurado`/`pista` solo llegan cuando `requiere_clave` es `true`.
+ */
+export interface FuenteStock {
+  proveedor: string;
+  nombre: string;
+  /** El proveedor lleva API key (pexels/pixabay); los gratuitos no la necesitan. */
+  requiere_clave: boolean;
+  /** El proveedor puede operar (gratuito, o de pago con su clave configurada). */
+  disponible: boolean;
+  /** Habilitado por el toggle de esta marca. */
+  activa: boolean;
+  /** Por qué no está disponible/activa (para el tooltip o la pista del toggle). */
+  motivo: string;
+  /** La clave de este proveedor está guardada para la marca (solo si `requiere_clave`). */
+  configurado?: boolean;
+  /** Pista no sensible de la clave guardada (`····last4`), solo si `requiere_clave`. */
+  pista?: string | null;
+}
+
+/** Estado de las fuentes de stock de UNA marca. */
+export interface MarcaFuentesStock {
+  marca: string;
+  etiqueta: string;
+  fuentes: FuenteStock[];
+}
+
+/** Respuesta de `GET /api/stock/fuentes` (todas las marcas). */
+export interface RespuestaFuentesStock {
+  marcas: MarcaFuentesStock[];
+}
+
+/** Cuerpo de `PUT /api/stock/fuentes/{marca}`: ids de proveedores habilitados. */
+export interface CuerpoGuardarFuentesStock {
+  activas: string[];
+}
+
+/** Cuerpo de `PUT /api/stock/clave/{marca}`: clave de un proveedor (write-only). */
+export interface CuerpoGuardarClaveStock {
+  proveedor: string;
+  api_key: string;
+}
+
+/** Respuesta al guardar o borrar la clave de un proveedor de stock. */
+export interface RespuestaClaveStock {
+  configurado: boolean;
+  mensaje: string;
+}
+
+/** Respuesta de `POST /api/stock/probar/{marca}`: validación en vivo de una clave. */
+export interface RespuestaProbarStock {
+  ok: boolean;
+  mensaje: string;
+}
+
 // --- Lanzamiento manual de ARTE (genera N imágenes a mano para una marca) ---
 
 /** Cuerpo de `POST /api/artes/generar`: lanza N imágenes de arte a mano. */

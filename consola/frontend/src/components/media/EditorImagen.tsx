@@ -80,6 +80,8 @@ export interface EditorImagenProps {
    * "Abrir en Estudio" que lleva al Estudio de imagen preconfigurado (router state).
    */
   piezaId?: string;
+  /** Marca de la pieza: acota las fuentes del buscador de stock a las habilitadas para ella. */
+  marca?: string;
   red?: string;
   copy?: string;
   /**
@@ -104,6 +106,7 @@ export function EditorImagen({
   disabled,
   idPrefijo = "img",
   piezaId,
+  marca,
   red,
   copy,
   stock,
@@ -433,6 +436,7 @@ export function EditorImagen({
           open={buscadorStock}
           onCerrar={() => setBuscadorStock(false)}
           piezaId={piezaId}
+          marca={marca}
           imagenFuente={imagenFuente}
           consultaInicial={keywordBusqueda({ imagen_clave: imagenClave, titulo })}
           onAdjuntada={(plataforma) => onStockCambio?.(plataforma)}

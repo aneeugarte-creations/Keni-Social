@@ -26,7 +26,9 @@ export function slugFase(nombre: string): string {
  * (no debe pintarse como fila).
  */
 export function tieneContenido(fase: FasePipeline): boolean {
-  return Boolean(fase.doc || fase.contextoMarca || fase.etapa || fase.queue || fase.daemon);
+  return Boolean(
+    fase.doc || fase.contextoMarca || fase.etapa || fase.queue || fase.daemon || fase.panel,
+  );
 }
 
 /** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
@@ -239,6 +241,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     es_ia: false,
     claves: ["KENI_PIPELINE_STOCK", MAESTRO_PRODUCCION],
     ayuda: "Adjunta una foto de stock como referencia sin licencia para los temas sin imagen",
+    // Su subpágina son los TOGGLES de fuentes de stock por marca (no Prompt · Contexto · Logs).
+    panel: "stock",
   },
   {
     // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras

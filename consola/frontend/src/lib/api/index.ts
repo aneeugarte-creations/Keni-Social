@@ -35,6 +35,7 @@ import { apiRota } from "./rota";
 import { apiParrilla } from "./parrilla";
 import { apiMetricas } from "./metricas";
 import { apiConexiones } from "./conexiones";
+import { apiStock } from "./stock";
 import { apiSugerencias } from "./sugerencias";
 import { apiCampanias } from "./campanias";
 import { apiNotificaciones } from "./notificaciones";
@@ -84,6 +85,7 @@ export const api = {
   ...apiParrilla,
   ...apiMetricas,
   ...apiConexiones,
+  ...apiStock,
   ...apiSugerencias,
   ...apiCampanias,
   ...apiNotificaciones,

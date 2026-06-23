@@ -803,6 +803,7 @@ function DialogoEditarInterno({
                 }}
                 idPrefijo="editar"
                 piezaId={pieza.id}
+                marca={pieza.marca}
                 red={pieza.red}
                 copy={contenido}
                 titulo={pieza.titulo}

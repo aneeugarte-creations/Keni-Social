@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 export const CLAVE_IMAGEN = ["conexiones", "imagen"];
 export const CLAVE_METRICOOL = ["conexiones", "metricool"];
 export const CLAVE_POSTPROXY = ["conexiones", "postproxy"];
+export const CLAVE_FUENTES_STOCK = ["stock", "fuentes"];
 export const CLAVE_AJUSTES = ["ajustes"];
 
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */

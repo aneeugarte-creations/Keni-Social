@@ -70,7 +70,7 @@ export const apiMedia = {
   // Busca candidatas en APIs gratuitas (Pexels/Pixabay/Wikimedia/NASA/Openverse). Devuelve los
   // proveedores con su disponibilidad (chips) y las candidatas (referencias, aún sin descargar).
   buscarStock: (
-    filtros: { q?: string; proveedor?: string; limite?: number } = {},
+    filtros: { q?: string; proveedor?: string; limite?: number; marca?: string } = {},
     signal?: AbortSignal,
   ) =>
     peticion<RespuestaBuscarStock>(
@@ -78,6 +78,8 @@ export const apiMedia = {
         q: filtros.q,
         proveedor: filtros.proveedor,
         limite: filtros.limite != null ? String(filtros.limite) : undefined,
+        // La marca acota las fuentes a las habilitadas para ella (toggles de la etapa Stock).
+        marca: filtros.marca,
       })}`,
       { signal },
     ),
