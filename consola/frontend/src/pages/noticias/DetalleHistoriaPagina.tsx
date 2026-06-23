@@ -1,17 +1,18 @@
 /**
  * DetalleHistoriaPagina — el detalle de UNA historia de la Mesa como SUBPÁGINA (URL propia,
- * deep-link), no como diálogo. Cabe en una pantalla, en dos planos:
+ * deep-link), no como diálogo. Clave CALMA: minimalista, con aire, en dos columnas.
  *
- *   · Cabecera: titular + última hora, hora·fuente y marca/estado/idioma/verificación a la
- *     izquierda; las acciones «Empujar al feed» y «Descartar» (irreversible, con confirmación,
- *     solo si la historia sigue en el pool) a la derecha.
- *   · Cuerpo en dos columnas. Izquierda, la noticia: frase de corroboración, resumen y
- *     «Fuentes y titulares similares» (línea de tiempo de outlets `TimelineFuentes` + la lista
- *     de artículos corroborantes). Derecha, el panel de señal: el score (`CalculoScore`).
+ *   · Izquierda (la noticia): titular + última hora, hora·fuente y marca/estado/idioma/
+ *     verificación; la frase de corroboración (en tono de cautela si pide corroboración),
+ *     resumen y «Fuentes y titulares similares» (línea de tiempo `TimelineFuentes` + la lista
+ *     de artículos corroborantes).
+ *   · Derecha (el rail de señal): el score (`CalculoScore`) y, al pie, las acciones «Empujar al
+ *     feed» y «Descartar» (irreversible, con confirmación, solo si la historia sigue en el pool).
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Clock,
@@ -36,8 +37,9 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora, tiempoRelativoCorto } from "@/lib/fecha";
 import { etiquetaLinea } from "@/lib/lineas";
-import { fraseCorroboracion } from "@/lib/noticias/ranking-editorial";
+import { estadoCorroboracion, fraseCorroboracion } from "@/lib/noticias/ranking-editorial";
 import { nombreFuente } from "@/lib/trends";
+import { cn } from "@/lib/utils";
 
 import { BadgeVerificacionFuente, ChipMarca } from "./BadgesInvestigacion";
 import { CalculoScore } from "./CalculoScore";
@@ -133,6 +135,7 @@ export default function DetalleHistoriaPagina() {
     nombreFuente(historia.primera_fuente_nombre, historia.primera_fuente_id) ||
     historia.marca_nombre;
   const enCurso = usarMut.isPending || descartarMut.isPending;
+  const estado = estadoCorroboracion(historia);
 
   const onDescartar = async () => {
     if (
@@ -169,157 +172,137 @@ export default function DetalleHistoriaPagina() {
     ) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-[1180px] space-y-6">
       {volver}
 
-      {/* ── Cabecera: la noticia (izq) · acciones (der) ─────────────────────── */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-3">
-          <h1 className="text-xl font-semibold leading-tight">
-            {esUltimaHora && (
-              <Badge
-                className="mr-1.5 gap-1 align-middle text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
-                data-testid="badge-ultima-hora"
-              >
-                <Zap className="h-3 w-3" />
-                ÚLTIMA HORA
-              </Badge>
-            )}
-            {historia.titulo || "(sin título)"}
-          </h1>
-
-          {(cuando || fuente) && (
-            <p
-              className="flex items-center gap-1 text-sm text-muted-foreground"
-              data-testid="hora-fuente"
-            >
-              {cuando && (
-                <span className="inline-flex items-center gap-1" title={cuandoExacto}>
-                  <History className="h-3.5 w-3.5 shrink-0" />
-                  {cuando}
-                </span>
-              )}
-              {cuando && fuente ? <span aria-hidden>·</span> : null}
-              {fuente && <span>{fuente}</span>}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <ChipMarca historia={historia} />
-            {badgeEstado}
-            <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
-              {etiquetaLinea(historia.breaking === 1 ? "breaking" : historia.categoria)}
-            </Badge>
-            <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />
-            {historia.traducido && historia.idioma && (
-              <Tooltip
-                label={
-                  historia.titulo_original
-                    ? `Traducido del ${historia.idioma.toUpperCase()} — original: ${historia.titulo_original}`
-                    : `Traducido del ${historia.idioma.toUpperCase()}`
-                }
-                side="top"
-              >
-                <span
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                  data-testid="badge-traducido"
-                >
-                  <Globe className="h-3 w-3" />
-                  {historia.idioma.toUpperCase()}
-                </span>
-              </Tooltip>
-            )}
-            {historia.promovible === true && (
-              <Tooltip
-                label={historia.promovible_motivo || "Supera el umbral automático"}
-                side="top"
-              >
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_348px] lg:items-start lg:gap-16">
+        {/* ── La noticia ──────────────────────────────────────────────────── */}
+        <div className="min-w-0 max-w-[640px]">
+          <div className="space-y-3">
+            <h1 className="text-2xl font-medium leading-snug tracking-tight">
+              {esUltimaHora && (
                 <Badge
-                  variant="outline"
-                  className="gap-1 text-xs border-emerald-500 text-emerald-700 dark:text-emerald-300"
-                  data-testid="badge-sale-sola"
+                  className="mr-1.5 gap-1 align-middle text-[10px] bg-red-600 hover:bg-red-600 text-white border-0"
+                  data-testid="badge-ultima-hora"
                 >
-                  <Sparkles className="h-3 w-3" />
-                  Sale sola al feed
+                  <Zap className="h-3 w-3" />
+                  ÚLTIMA HORA
                 </Badge>
-              </Tooltip>
+              )}
+              {historia.titulo || "(sin título)"}
+            </h1>
+
+            {(cuando || fuente) && (
+              <p
+                className="flex items-center gap-1.5 text-sm text-muted-foreground"
+                data-testid="hora-fuente"
+              >
+                {cuando && (
+                  <span className="inline-flex items-center gap-1" title={cuandoExacto}>
+                    <History className="h-3.5 w-3.5 shrink-0" />
+                    {cuando}
+                  </span>
+                )}
+                {cuando && fuente ? <span aria-hidden>·</span> : null}
+                {fuente && <span>{fuente}</span>}
+              </p>
             )}
-          </div>
-        </div>
 
-        {/* ── Acciones ──────────────────────────────────────────────────────── */}
-        {enPool && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              className="gap-1 bg-card shadow-md transition hover:bg-card hover:shadow-lg"
-              onClick={() => usarMut.mutate()}
-              disabled={enCurso}
-              data-testid="btn-empujar"
-            >
-              {usarMut.isPending ? <Spinner className="h-4 w-4" /> : <Newspaper className="h-4 w-4" />}
-              Empujar al feed
-            </Button>
-            <Button
-              variant="ghost"
-              className="gap-1 hover:bg-destructive/10 hover:text-destructive"
-              onClick={onDescartar}
-              disabled={enCurso}
-              data-testid="btn-descartar"
-            >
-              {descartarMut.isPending ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-              Descartar
-            </Button>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <ChipMarca historia={historia} />
+              {badgeEstado}
+              <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                {etiquetaLinea(historia.breaking === 1 ? "breaking" : historia.categoria)}
+              </Badge>
+              <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />
+              {historia.traducido && historia.idioma && (
+                <Tooltip
+                  label={
+                    historia.titulo_original
+                      ? `Traducido del ${historia.idioma.toUpperCase()} — original: ${historia.titulo_original}`
+                      : `Traducido del ${historia.idioma.toUpperCase()}`
+                  }
+                  side="top"
+                >
+                  <span
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                    data-testid="badge-traducido"
+                  >
+                    <Globe className="h-3 w-3" />
+                    {historia.idioma.toUpperCase()}
+                  </span>
+                </Tooltip>
+              )}
+              {historia.promovible === true && (
+                <Tooltip
+                  label={historia.promovible_motivo || "Supera el umbral automático"}
+                  side="top"
+                >
+                  <Badge
+                    variant="outline"
+                    className="gap-1 text-xs border-emerald-500 text-emerald-700 dark:text-emerald-300"
+                    data-testid="badge-sale-sola"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Sale sola al feed
+                  </Badge>
+                </Tooltip>
+              )}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* ── Cuerpo: la noticia (izq) · panel de señal (der) ─────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        {/* La noticia */}
-        <div className="min-w-0 space-y-4">
           <p
-            className="text-sm leading-relaxed text-muted-foreground"
+            className={cn(
+              "mt-6 flex items-start gap-2 text-sm leading-relaxed",
+              estado.cautela ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+            )}
             data-testid="frase-corroboracion"
           >
-            {fraseCorroboracion(historia)}
+            {estado.cautela && <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+            <span>{fraseCorroboracion(historia)}</span>
           </p>
 
-          {historia.resumen && <p className="text-sm leading-relaxed">{historia.resumen}</p>}
+          {historia.resumen && (
+            <p className="mt-4 text-sm leading-relaxed">{historia.resumen}</p>
+          )}
           {historia.traducido && historia.titulo_original && (
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-4 border-l border-border pl-4 text-xs leading-relaxed text-muted-foreground">
               Original ({(historia.idioma || "").toUpperCase()}): {historia.titulo_original}
             </p>
           )}
 
-          <section className="space-y-3 border-t pt-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <section className="mt-9 space-y-5">
+            <h2 className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Fuentes y titulares similares
             </h2>
-            <div className="space-y-1.5">
-              <h3 className="text-sm font-semibold">Línea de tiempo de fuentes</h3>
+            <div className="space-y-2.5">
+              <h3 className="text-xs text-muted-foreground">Línea de tiempo de fuentes</h3>
               <TimelineFuentes fuentes={historia.fuentes ?? []} />
             </div>
             {(historia.enlaces?.length ?? 0) > 0 && (
-              <div className="space-y-1.5">
-                <h3 className="text-sm font-semibold">Titulares similares</h3>
-                <ul className="space-y-1" data-testid="lista-enlaces">
+              <div className="space-y-2.5">
+                <h3 className="text-xs text-muted-foreground">Titulares similares</h3>
+                <ul data-testid="lista-enlaces">
                   {historia.enlaces.map((e, i) => (
-                    <li key={i} className="flex items-start gap-1 text-xs">
+                    <li key={i} className="border-t border-border py-3 first:border-t-0 first:pt-0">
                       <a
                         href={e.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex min-w-0 flex-1 items-center gap-0.5 break-words hover:underline"
+                        className="group flex items-start gap-2.5 text-[13px] leading-relaxed"
                       >
-                        {e.titulo || e.url}
-                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      </a>
-                      {e.fuente && (
-                        <span className="shrink-0 text-muted-foreground">
-                          — {nombreFuente(e.fuente, e.fuente_id)}
+                        <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0">
+                          <span className="break-words group-hover:text-keni">
+                            {e.titulo || e.url}
+                          </span>
+                          {e.fuente && (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              — {nombreFuente(e.fuente, e.fuente_id)}
+                            </span>
+                          )}
                         </span>
-                      )}
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -328,9 +311,42 @@ export default function DetalleHistoriaPagina() {
           </section>
         </div>
 
-        {/* El panel de señal: el score */}
-        <aside className="rounded-lg border bg-card p-5">
+        {/* ── El rail de señal: el score + las acciones al pie ─────────────── */}
+        <aside className="flex flex-col gap-11">
           <CalculoScore historia={historia} />
+
+          {enPool && (
+            <div className="flex flex-col gap-2.5">
+              <Button
+                variant="outline"
+                className="h-11 w-full justify-center gap-2 bg-card text-sm font-medium shadow-sm transition hover:bg-card hover:shadow-md"
+                onClick={() => usarMut.mutate()}
+                disabled={enCurso}
+                data-testid="btn-empujar"
+              >
+                {usarMut.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Newspaper className="h-4 w-4" />
+                )}
+                Empujar al feed
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-10 w-full justify-center gap-2 text-sm font-normal text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={onDescartar}
+                disabled={enCurso}
+                data-testid="btn-descartar"
+              >
+                {descartarMut.isPending ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Descartar
+              </Button>
+            </div>
+          )}
         </aside>
       </div>
     </div>

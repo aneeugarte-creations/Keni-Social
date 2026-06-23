@@ -83,6 +83,29 @@ export function fraseCorroboracion(h: Historia): string {
   return frase;
 }
 
+/** El veredicto de corroboración: cautela ('dudosa' o única fuente) o corroborada. */
+export type TonoCorroboracion = "espera" | "dudosa" | "corroborada";
+
+export interface EstadoCorroboracion {
+  tono: TonoCorroboracion;
+  /** Etiqueta corta para el panel de señal: «Espera corroboración», «Señal dudosa»… */
+  texto: string;
+  /** true cuando la historia pide cautela (única fuente o señal dudosa). */
+  cautela: boolean;
+}
+
+/**
+ * El VEREDICTO de corroboración en una etiqueta corta (para el panel de señal y para el tono de
+ * la frase de corroboración): 'dudosa' > 'espera' (única fuente) > 'corroborada'. Usa
+ * `verificacion` (Ola D) y cae a `n_fuentes` cuando el daemon aún no la fijó.
+ */
+export function estadoCorroboracion(h: Historia): EstadoCorroboracion {
+  const v = h.verificacion ?? (h.n_fuentes > 1 ? "corroborada" : "unica_fuente");
+  if (v === "dudosa") return { tono: "dudosa", texto: "Señal dudosa", cautela: true };
+  if (v === "unica_fuente") return { tono: "espera", texto: "Espera corroboración", cautela: true };
+  return { tono: "corroborada", texto: "Corroborada", cautela: false };
+}
+
 /**
  * "¿Por qué rankea así?" — el desglose del score traducido a frases editoriales (una por
  * señal activa). Es el tooltip del punto de prioridad y la lista del detalle.

@@ -8,7 +8,13 @@ import { describe, expect, it } from "vitest";
 
 import type { Historia } from "@/types";
 
-import { calculoScore, factoresRanking, fraseCorroboracion, nivelPrioridad } from "./ranking-editorial";
+import {
+  calculoScore,
+  estadoCorroboracion,
+  factoresRanking,
+  fraseCorroboracion,
+  nivelPrioridad,
+} from "./ranking-editorial";
 
 function historia(overrides: Partial<Historia> = {}): Historia {
   return {
@@ -98,6 +104,32 @@ describe("fraseCorroboracion", () => {
       }),
     );
     expect(frase).toMatch(/Confirmada por Reforma y Milenio/);
+  });
+});
+
+describe("estadoCorroboracion", () => {
+  it("única fuente pide cautela: «Espera corroboración»", () => {
+    const e = estadoCorroboracion(historia({ verificacion: "unica_fuente" }));
+    expect(e).toEqual({ tono: "espera", texto: "Espera corroboración", cautela: true });
+  });
+
+  it("dudosa gana y pide cautela", () => {
+    expect(estadoCorroboracion(historia({ verificacion: "dudosa" })).tono).toBe("dudosa");
+    expect(estadoCorroboracion(historia({ verificacion: "dudosa" })).cautela).toBe(true);
+  });
+
+  it("corroborada no pide cautela", () => {
+    const e = estadoCorroboracion(historia({ verificacion: "corroborada" }));
+    expect(e).toEqual({ tono: "corroborada", texto: "Corroborada", cautela: false });
+  });
+
+  it("sin verificación cae a n_fuentes (una sola = espera corroboración)", () => {
+    expect(estadoCorroboracion(historia({ verificacion: undefined, n_fuentes: 1 })).cautela).toBe(
+      true,
+    );
+    expect(estadoCorroboracion(historia({ verificacion: undefined, n_fuentes: 3 })).tono).toBe(
+      "corroborada",
+    );
   });
 });
 
