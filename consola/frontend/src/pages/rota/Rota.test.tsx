@@ -304,6 +304,17 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     ).toBeInTheDocument();
   });
 
+  it("el conmutador de Gestión lista «Mes» antes que «Semana» (Mes es la vista primaria)", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    await screen.findByRole("button", { name: "Mes", pressed: true });
+    const grupo = screen.getByRole("group", { name: "Vista del calendario" });
+    const orden = within(grupo)
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(orden).toEqual(["Mes", "Semana"]);
+  });
+
   it("«Gestión» abre «Ajustes de turnos» desde el ⋯ (interruptor de horas en Equipo)", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));

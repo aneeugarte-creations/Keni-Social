@@ -411,15 +411,16 @@ export function Calendario({
   const error =
     coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error;
 
-  // Conmutador Semana|Mes (palabras, outline gris): visible en ambos modos.
+  // Conmutador Mes|Semana (palabras, outline gris): visible en ambos modos. Mes va primero: es la
+  // vista de apertura (primaria) y la Semana la opción secundaria a un clic.
   const conmutadorVista = (
     <ToggleGroup
       ariaLabel="Vista del calendario"
       valor={vista}
       onCambio={setVista}
       opciones={[
-        { valor: "semana", etiqueta: "Semana" },
         { valor: "mes", etiqueta: "Mes" },
+        { valor: "semana", etiqueta: "Semana" },
       ]}
     />
   );
