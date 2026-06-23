@@ -127,6 +127,13 @@ def _toml_str(valor: str) -> str:
     return f'"{escapado}"'
 
 
+def _clave_toml(clave: str) -> str:
+    """Clave TOML: bare si es un slug seguro (`A-Za-z0-9_-`), entre comillas si no."""
+    if clave and all(c.isalnum() or c in "-_" for c in clave):
+        return clave
+    return _toml_str(clave)
+
+
 def _serializar_imagen(datos: dict) -> str:
     """Serializa el bloque `[imagen]` a TOML (campos fijos: proveedor + api_key + modelo)."""
     bloque = _bloque_imagen(datos)
@@ -157,9 +164,46 @@ def _serializar_stock(datos: dict) -> str:
     return "[stock]\n" + "\n".join(filas) + "\n"
 
 
+def _bloque_agencias(datos: dict) -> dict:
+    """Devuelve el sub-dict `[agencias]` (agencia -> {campo: valor}) ({} si falta)."""
+    bloque = datos.get("agencias")
+    return bloque if isinstance(bloque, dict) else {}
+
+
+def _serializar_agencias(datos: dict) -> str:
+    """Serializa los bloques `[agencias.<agencia>]` (tabla campo=valor por agencia) a TOML.
+
+    Cada agencia (AFP, Reuters, …) tiene campos PROPIOS (OAuth2 vs Bearer): se emite una tabla
+    por agencia con sus pares `campo = valor`. Omite agencias y campos sin valor.
+    """
+    bloque = _bloque_agencias(datos)
+    partes: list[str] = []
+    for agencia in sorted(bloque):
+        campos = bloque[agencia]
+        if not isinstance(campos, dict):
+            continue
+        filas = [
+            f"{_clave_toml(campo)} = {_toml_str(campos[campo])}"
+            for campo in sorted(campos)
+            if isinstance(campos.get(campo), str) and campos[campo]
+        ]
+        if not filas:
+            continue
+        partes.append(f"[agencias.{_clave_toml(agencia)}]\n" + "\n".join(filas) + "\n")
+    return "\n".join(partes)
+
+
 def _serializar(datos: dict) -> str:
-    """Serializa el almacen de secretos a TOML: bloque `[imagen]` + bloques `[stock.*]`."""
-    partes = [p for p in (_serializar_imagen(datos), _serializar_stock(datos)) if p]
+    """Serializa el almacen a TOML: `[imagen]` + `[stock]` + bloques `[agencias.<agencia>]`."""
+    partes = [
+        p
+        for p in (
+            _serializar_imagen(datos),
+            _serializar_stock(datos),
+            _serializar_agencias(datos),
+        )
+        if p
+    ]
     return "\n".join(partes)
 
 
@@ -342,3 +386,70 @@ def estado_clave_stock(proveedor: str) -> dict:
     """
     clave = obtener_clave_stock(proveedor)
     return {"configurado": clave is not None, "pista": _pista(clave)}
+
+
+# --------------------------------------------------------------------------- #
+# API publica: credenciales de AGENCIAS de noticias/foto (AFP / Reuters)      #
+# --------------------------------------------------------------------------- #
+# Cada agencia guarda un conjunto de campos PROPIOS (AFP OAuth2: client_id/client_secret/
+# base_url; Reuters Bearer: api_key/base_url), dirigido por el catalogo de metadatos del
+# endpoint. Aqui solo se persiste/lee de forma generica (tabla `[agencias.<agencia>]`).
+
+
+def guardar_credencial_agencia(agencia: str, campo: str, valor: str) -> None:
+    """Guarda un campo de credencial de una agencia (atomico, `0600`).
+
+    Escribe `[agencias.<agencia>].<campo>`; preserva el resto de campos de esa agencia y
+    de las demas agencias/bloques. `agencia`/`campo` se normalizan (minusculas, sin espacios);
+    vacios = no-op (el endpoint valida antes contra el catalogo).
+    """
+    agencia = (agencia or "").strip().lower()
+    campo = (campo or "").strip().lower()
+    if not agencia or not campo:
+        return
+    datos = _leer()
+    agencias = dict(_bloque_agencias(datos))
+    actuales = agencias.get(agencia)
+    campos = dict(actuales) if isinstance(actuales, dict) else {}
+    campos[campo] = (valor or "").strip()
+    agencias[agencia] = campos
+    datos["agencias"] = agencias
+    _escribir(datos)
+
+
+def obtener_credencial_agencia(agencia: str, campo: str) -> str | None:
+    """Devuelve el valor de un campo de credencial de una agencia, o None si no hay.
+
+    Uso INTERNO (la consume `config.afp_*`/`reuters_*`). NUNCA se expone entera por la API.
+    """
+    campos = _bloque_agencias(_leer()).get((agencia or "").strip().lower())
+    if not isinstance(campos, dict):
+        return None
+    valor = campos.get((campo or "").strip().lower())
+    if isinstance(valor, str) and valor.strip():
+        return valor
+    return None
+
+
+def borrar_agencia(agencia: str) -> None:
+    """Borra TODA la tabla de credenciales de una agencia (deja limpio si no queda ninguna)."""
+    agencia = (agencia or "").strip().lower()
+    datos = _leer()
+    agencias = dict(_bloque_agencias(datos))
+    if agencia not in agencias:
+        return
+    agencias.pop(agencia, None)
+    if agencias:
+        datos["agencias"] = agencias
+    else:
+        datos.pop("agencias", None)
+    _escribir(datos)
+
+
+def estado_credencial_agencia(agencia: str, campo: str) -> dict:
+    """Estado de un campo de credencial de una agencia, SIN exponer el valor.
+
+    Devuelve `{configurado, pista}` (pista = `····` + ultimos 4 chars, o "").
+    """
+    valor = obtener_credencial_agencia(agencia, campo)
+    return {"configurado": valor is not None, "pista": _pista(valor)}

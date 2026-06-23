@@ -191,3 +191,82 @@ def test_clave_stock_convive_con_imagen(almacen):
     secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
     assert secretos.obtener_clave_imagen() == _CLAVE
     assert secretos.obtener_clave_stock("pexels") == _CLAVE_STOCK
+
+
+# --------------------------------------------------------------------------- #
+# Credenciales de AGENCIAS de noticias/foto (AFP / Reuters)                   #
+# --------------------------------------------------------------------------- #
+
+_CRED_AFP = "prueba-afp-3210"
+
+
+def test_roundtrip_credencial_agencia(almacen):
+    assert secretos.obtener_credencial_agencia("afp", "client_id") is None
+    secretos.guardar_credencial_agencia("afp", "client_id", "id-123")
+    assert secretos.obtener_credencial_agencia("afp", "client_id") == "id-123"
+    # otro campo de la misma agencia no se ve afectado
+    assert secretos.obtener_credencial_agencia("afp", "client_secret") is None
+
+
+def test_credencial_agencia_aislada_por_campo(almacen):
+    secretos.guardar_credencial_agencia("afp", "client_id", "id-123")
+    secretos.guardar_credencial_agencia("afp", "client_secret", _CRED_AFP)
+    # guardar el segundo campo NO pisa el primero
+    assert secretos.obtener_credencial_agencia("afp", "client_id") == "id-123"
+    assert secretos.obtener_credencial_agencia("afp", "client_secret") == _CRED_AFP
+
+
+def test_credencial_agencia_aislada_por_agencia(almacen):
+    secretos.guardar_credencial_agencia("afp", "client_id", "id-afp")
+    secretos.guardar_credencial_agencia("reuters", "api_key", "key-reuters")
+    assert secretos.obtener_credencial_agencia("afp", "client_id") == "id-afp"
+    assert secretos.obtener_credencial_agencia("reuters", "api_key") == "key-reuters"
+    # afp no tiene api_key; reuters no tiene client_id
+    assert secretos.obtener_credencial_agencia("afp", "api_key") is None
+    assert secretos.obtener_credencial_agencia("reuters", "client_id") is None
+
+
+def test_borrar_agencia_limpia_solo_esa(almacen):
+    secretos.guardar_credencial_agencia("afp", "client_id", "id-afp")
+    secretos.guardar_credencial_agencia("afp", "client_secret", _CRED_AFP)
+    secretos.guardar_credencial_agencia("reuters", "api_key", "key-reuters")
+    secretos.borrar_agencia("afp")
+    assert secretos.obtener_credencial_agencia("afp", "client_id") is None
+    assert secretos.obtener_credencial_agencia("afp", "client_secret") is None
+    # borrar afp NO toca reuters
+    assert secretos.obtener_credencial_agencia("reuters", "api_key") == "key-reuters"
+
+
+def test_borrar_agencia_inexistente_no_lanza(almacen):
+    secretos.borrar_agencia("afp")
+    assert secretos.obtener_credencial_agencia("afp", "client_id") is None
+
+
+def test_estado_credencial_agencia_no_filtra(almacen):
+    secretos.guardar_credencial_agencia("afp", "client_secret", _CRED_AFP)
+    estado = secretos.estado_credencial_agencia("afp", "client_secret")
+    assert estado["configurado"] is True
+    assert estado["pista"] == "····" + _CRED_AFP[-4:]
+    assert _CRED_AFP not in estado["pista"]
+    # un campo sin guardar: no configurado, sin pista
+    vacio = secretos.estado_credencial_agencia("afp", "client_id")
+    assert vacio == {"configurado": False, "pista": ""}
+
+
+def test_credencial_agencia_0600_y_en_disco(almacen):
+    secretos.guardar_credencial_agencia("afp", "client_secret", _CRED_AFP)
+    assert (almacen.stat().st_mode & 0o777) == 0o600
+    assert _CRED_AFP in almacen.read_text(encoding="utf-8")
+
+
+def test_agencias_conviven_con_stock_e_imagen(almacen):
+    """Escribir agencias NO debe descartar [imagen] ni [stock] (ni al revés)."""
+    secretos.guardar_clave_imagen("openrouter", _CLAVE)
+    secretos.guardar_clave_stock("pexels", _CLAVE_STOCK)
+    secretos.guardar_credencial_agencia("afp", "client_id", "id-afp")
+    secretos.guardar_credencial_agencia("reuters", "api_key", "key-reuters")
+    # todo sigue presente tras los escritos cruzados
+    assert secretos.obtener_clave_imagen() == _CLAVE
+    assert secretos.obtener_clave_stock("pexels") == _CLAVE_STOCK
+    assert secretos.obtener_credencial_agencia("afp", "client_id") == "id-afp"
+    assert secretos.obtener_credencial_agencia("reuters", "api_key") == "key-reuters"

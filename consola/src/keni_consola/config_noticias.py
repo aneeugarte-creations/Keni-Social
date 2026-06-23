@@ -1025,14 +1025,32 @@ REUTERS_BASE_URL_DEF = "https://api.reutersconnect.com"
 AFP_BASE_URL_DEF = "https://afp-apicore-prod.afp.com"
 
 
+def _cred_agencia(agencia: str, campo: str) -> str | None:
+    """Credencial de agencia guardada por la UI (almacen de secretos), o None si no hay.
+
+    Import PEREZOSO de `secretos` (evita el ciclo config <- secretos), igual que `_clave_stock`.
+    """
+    from . import secretos
+
+    return secretos.obtener_credencial_agencia(agencia, campo)
+
+
 def reuters_api_key() -> str | None:
-    """API key de Reuters Connect (`KENI_REUTERS_API_KEY`); None si no esta (fuente apagada)."""
-    return _crudo(ENV_REUTERS_API_KEY) or None
+    """API key de Reuters Connect; None si no esta (fuente apagada).
+
+    Precedencia: el SECRETO guardado por la UI (Sistema → Proveedores) gana; si no, la env
+    `KENI_REUTERS_API_KEY`.
+    """
+    return _cred_agencia("reuters", "api_key") or _crudo(ENV_REUTERS_API_KEY) or None
 
 
 def reuters_base_url() -> str:
-    """URL base de Reuters Connect (`KENI_REUTERS_BASE_URL`, def el publico), sin barra final."""
-    return (_crudo(ENV_REUTERS_BASE_URL) or REUTERS_BASE_URL_DEF).rstrip("/")
+    """URL base de Reuters Connect (secreto UI > `KENI_REUTERS_BASE_URL` > def publico), sin barra final."""
+    return (
+        _cred_agencia("reuters", "base_url")
+        or _crudo(ENV_REUTERS_BASE_URL)
+        or REUTERS_BASE_URL_DEF
+    ).rstrip("/")
 
 
 def reuters_configurado() -> bool:
@@ -1102,19 +1120,31 @@ def stock_max_por_barrido() -> int:
 
 
 def afp_client_id() -> str | None:
-    """Client ID de AFP (`KENI_AFP_CLIENT_ID`); None si no esta."""
-    return _crudo(ENV_AFP_CLIENT_ID) or None
+    """Client ID de AFP; None si no esta.
+
+    Precedencia: el SECRETO guardado por la UI gana; si no, la env `KENI_AFP_CLIENT_ID`.
+    """
+    return _cred_agencia("afp", "client_id") or _crudo(ENV_AFP_CLIENT_ID) or None
 
 
 def afp_client_secret() -> str | None:
-    """Client secret de AFP (`KENI_AFP_CLIENT_SECRET`); None si no esta. SIN strip (sensible)."""
+    """Client secret de AFP; None si no esta.
+
+    Precedencia: el SECRETO guardado por la UI gana; si no, la env `KENI_AFP_CLIENT_SECRET`
+    (esta SIN strip, sensible).
+    """
+    secreto = _cred_agencia("afp", "client_secret")
+    if secreto:
+        return secreto
     valor = os.environ.get(ENV_AFP_CLIENT_SECRET)
     return valor if valor else None
 
 
 def afp_base_url() -> str:
-    """URL base de AFP (`KENI_AFP_BASE_URL`, def el publico), sin barra final."""
-    return (_crudo(ENV_AFP_BASE_URL) or AFP_BASE_URL_DEF).rstrip("/")
+    """URL base de AFP (secreto UI > `KENI_AFP_BASE_URL` > def publico), sin barra final."""
+    return (
+        _cred_agencia("afp", "base_url") or _crudo(ENV_AFP_BASE_URL) or AFP_BASE_URL_DEF
+    ).rstrip("/")
 
 
 def afp_configurado() -> bool:
