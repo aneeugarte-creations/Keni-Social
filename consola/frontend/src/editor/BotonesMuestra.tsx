@@ -26,16 +26,11 @@ export function BotonesMuestra({
   setVerFoto,
   verCopy,
   setVerCopy,
-  onFotoMuestra,
 }: {
   verFoto: boolean;
   setVerFoto: (v: boolean) => void;
   verCopy: boolean;
   setVerCopy: (v: boolean) => void;
-  // Si se pasa (editando una PLANTILLA), el fotón además PERSISTE lo que se sube/pega como
-  // `foto_muestra` de esa plantilla (se hornea en la galería). `""` la limpia. Ausente (pieza/
-  // lienzo suelto) => el fotón es solo presentación local (localStorage), como siempre.
-  onFotoMuestra?: (src: string) => void;
 }) {
   // Qué popover de edición está abierto (o ninguno).
   const [editar, setEditar] = useState<"foto" | "copy" | null>(null);
@@ -58,7 +53,6 @@ export function BotonesMuestra({
           <PopoverFoto
             onCerrar={() => setEditar(null)}
             onActivar={() => setVerFoto(true)}
-            onPersistir={onFotoMuestra}
           />
         }
         onCerrar={() => setEditar(null)}
@@ -160,22 +154,17 @@ function BotonToggle({
 function PopoverFoto({
   onCerrar,
   onActivar,
-  onPersistir,
 }: {
   onCerrar: () => void;
   onActivar: () => void;
-  // Editando una PLANTILLA: además de la previa local, guarda la foto como `foto_muestra` de la
-  // plantilla (se hornea en la galería). `""` la limpia.
-  onPersistir?: (src: string) => void;
 }) {
   const [src, setSrc] = useState(getFotoMuestraSrc());
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const aplicar = (nuevo: string) => {
     setSrc(nuevo);
-    setFotoMuestra(nuevo); // previa local del lienzo (siempre)
+    setFotoMuestra(nuevo); // previa local del lienzo (solo presentación)
     onActivar();
-    onPersistir?.(nuevo); // y, si es una plantilla, su muestra de galería
   };
 
   const onArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,9 +183,7 @@ function PopoverFoto({
         Foto de muestra
       </div>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        {onPersistir
-          ? "Se guarda como muestra de ESTA plantilla (se ve en la galería). En el lienzo solo aparece con el fotón activo."
-          : "Solo para previsualizar (no se guarda en la plantilla). Por defecto una superficie gris."}
+        Solo para previsualizar (no se guarda en la plantilla). Por defecto una superficie gris.
       </p>
       <div className="aspect-[4/5] w-full overflow-hidden rounded border border-border bg-muted/40">
         {src ? (

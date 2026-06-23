@@ -23,8 +23,10 @@ export const apiPlantillasDiseno = {
     tipo?: "foto" | "miniatura";
     documento: unknown;
     miniatura?: string;
-    /** Objeto de media de la foto de muestra de la plantilla (horneada en la galería). */
+    /** Muestra de la galería (horneada): objeto de la foto + titular/pleca representativos. */
     foto_muestra?: string;
+    titular_muestra?: string;
+    etiqueta_muestra?: string;
     lineas?: string[];
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.

@@ -545,7 +545,8 @@ export default function Imagen() {
       // Hornea la muestra ya asignada a la plantilla (foto + texto) para que la miniatura no la pierda
       // al re-guardar el diseño.
       const miniatura = await miniaturaDe(documento, muestraActualDe(pestanaActiva.plantillaId));
-      return api.actualizarPlantillaDiseno(pestanaActiva.plantillaId, { documento, miniatura });
+      // Guard: si el render falla ("") conservamos la miniatura anterior en vez de blanquearla.
+      return api.actualizarPlantillaDiseno(pestanaActiva.plantillaId, { documento, ...(miniatura ? { miniatura } : {}) });
     },
     onSuccess: () => {
       if (activa) marcarLimpia(activa);
@@ -621,24 +622,27 @@ export default function Imagen() {
     return (await api.mediaDesdeUrl(src)).id;
   };
 
-  // PUERTA COMPARTIDA (galería + fotón del editor): fija la MUESTRA de una plantilla (foto + texto) y
-  // regenera su miniatura horneada. `foto`: null = no se tocó (conserva la actual); string = nueva
-  // ("" la quita). `titular`/`etiqueta`: texto de muestra ("" = fallback). `documento` es el que se
-  // hornea (el de la plantilla en galería; el del lienzo en el editor). El documento editable NO se toca.
+  // PUERTA ÚNICA (diálogo «Foto y texto de muestra» de la galería): fija la MUESTRA de una plantilla
+  // (foto + texto) y regenera su miniatura horneada. `foto`: null = no se tocó (se conserva, NO se
+  // reescribe); string = nueva ("" la quita). `fotoActual`: la foto de muestra vigente del diálogo,
+  // autoritativa para hornear cuando se conserva. `titular`/`etiqueta`: texto de muestra ("" = fallback).
   const fijarMuestra = useMutation({
-    mutationFn: async ({ plantillaId, documento, foto, titular, etiqueta }: {
+    mutationFn: async ({ plantillaId, documento, foto, fotoActual, titular, etiqueta }: {
       plantillaId: string;
       documento: Documento;
       foto: string | null;
+      fotoActual: string;
       titular: string;
       etiqueta: string;
     }) => {
-      const objeto = foto === null ? muestraActualDe(plantillaId).foto || "" : await subirMuestra(foto);
+      const objeto = foto === null ? fotoActual : await subirMuestra(foto);
       const miniatura = await miniaturaDe(documento, { foto: objeto, titular, etiqueta });
       return api.actualizarPlantillaDiseno(plantillaId, {
-        foto_muestra: objeto,
         titular_muestra: titular,
         etiqueta_muestra: etiqueta,
+        // `foto_muestra` solo se escribe si la persona la cambió (subir/quitar) en el diálogo; si no
+        // se tocó (`foto === null`) se OMITE y el merge parcial del backend la deja intacta.
+        ...(foto !== null ? { foto_muestra: objeto } : {}),
         // Si el render falla ("") conservamos la miniatura anterior en vez de borrarla.
         ...(miniatura ? { miniatura } : {}),
       });
@@ -702,6 +706,10 @@ export default function Imagen() {
         tipo: p.tipo ?? "foto",
         documento: p.documento,
         miniatura: p.miniatura || undefined,
+        // La copia hereda la MUESTRA (foto + texto) de la galería: misma foto horneada, no «Sin foto».
+        foto_muestra: p.foto_muestra || undefined,
+        titular_muestra: p.titular_muestra || undefined,
+        etiqueta_muestra: p.etiqueta_muestra || undefined,
         lineas: p.lineas,
       }),
     onSuccess: () => {
@@ -1031,26 +1039,6 @@ export default function Imagen() {
             // Aviso de hueco de foto: solo relevante cuando la pestaña está atada a una plantilla
             // (sin hueco no autoguarda a servidor ni deja Guardar).
             avisaHueco={!!pestanaActiva.plantillaId}
-            // PUERTA EDITOR de la foto de muestra: solo si la pestaña edita una plantilla. El fotón
-            // de «Vista con muestra» persiste la FOTO que se sube/pega como muestra de ESA plantilla
-            // (el texto de muestra se conserva: se edita desde el ⋮ de la galería).
-            onFotoMuestra={
-              pestanaActiva.plantillaId
-                ? (src) => {
-                    const plantillaId = pestanaActiva.plantillaId;
-                    if (plantillaId) {
-                      const cur = muestraActualDe(plantillaId);
-                      fijarMuestra.mutate({
-                        plantillaId,
-                        documento: storeActivo.getState().documento,
-                        foto: src,
-                        titular: cur.titular || "",
-                        etiqueta: cur.etiqueta || "",
-                      });
-                    }
-                  }
-                : undefined
-            }
           />
         ) : (
           // GALERÍA del estado vacío (sin pestañas): el MISMO `PublicacionPlantillas` del rail y de
@@ -1099,6 +1087,7 @@ export default function Imagen() {
               plantillaId: muestraDe.id,
               documento: muestraDe.documento as Documento,
               foto,
+              fotoActual: muestraDe.foto_muestra || "",
               titular,
               etiqueta,
             })

@@ -319,6 +319,21 @@ def test_patch_foto_muestra_set_y_limpia(cliente):
     assert r2.json()["plantilla"]["foto_muestra_url"] == ""
 
 
+def test_patch_documento_preserva_muestra(cliente):
+    """Editar SOLO el documento (sin enviar `foto_muestra`/`titular_muestra`/`etiqueta_muestra`) NO
+    toca la muestra: el merge parcial la conserva. La muestra solo cambia al enviar ESE campo."""
+    p = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "documento": _DOC,
+        "foto_muestra": "muestra.jpg", "titular_muestra": "HOLA", "etiqueta_muestra": "EN VIVO",
+    }).json()["plantilla"]
+    r = cliente.patch(f"/api/plantillas-diseno/{p['id']}", json={"documento": _DOC})
+    assert r.status_code == 200
+    pl = r.json()["plantilla"]
+    assert pl["foto_muestra"] == "muestra.jpg"
+    assert pl["titular_muestra"] == "HOLA"
+    assert pl["etiqueta_muestra"] == "EN VIVO"
+
+
 def test_texto_muestra_round_trip_y_patch(cliente):
     """`titular_muestra`/`etiqueta_muestra` (texto del overview) se crean, persisten y editan; `""` limpia."""
     p = cliente.post("/api/plantillas-diseno", json={
