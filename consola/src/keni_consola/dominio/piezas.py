@@ -213,8 +213,9 @@ def flags_falta_de_contenido(pub: dict[str, Any]) -> dict[str, bool]:
     feed. Devuelve solo las flags derivadas del contenido (`falta_copy`/`falta_imagen`); las de
     aprobación/publicación (`falta_revision`/`falta_publicar`) NO se tocan aquí.
 
-    En CARRUSEL «falta_imagen» exige foto en la portada Y en cada slide (no solo la portada):
-    una tarjeta de solo texto no está lista.
+    `falta_imagen` es SOLO la PORTADA (la `foto` de la pieza). Que a un carrusel le falten fotos
+    en los SLIDES NO es «falta portada» (la portada puede estar): eso lo señala aparte la etapa
+    `faltan_fotos` (ver `_carrusel_falta_foto` + `pipeline_estado.etapa_de_pieza`).
 
     La usan el editor y el ESPEJO para mantener en sync las flags ALMACENADAS en
     `pieza` cuando se edita/replica el contenido: sin esto, la LISTA del feed (que
@@ -223,7 +224,7 @@ def flags_falta_de_contenido(pub: dict[str, Any]) -> dict[str, bool]:
     """
     return {
         "falta_copy": not str(pub.get("contenido") or "").strip(),
-        "falta_imagen": not _hay_imagen_real(pub) or _carrusel_falta_foto(pub),
+        "falta_imagen": not _hay_imagen_real(pub),
     }
 
 
@@ -264,6 +265,9 @@ def pieza_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
             "falta_copy": falta["falta_copy"],
             "falta_imagen": falta["falta_imagen"],
             "falta_video": not hay_video,
+            # CARRUSEL: a sus SLIDES les falta foto real (placa de solo texto). Es distinto de
+            # «falta portada» (la portada puede estar): etapa propia `faltan_fotos`.
+            "falta_foto_slides": _carrusel_falta_foto(pub),
             # Placa (texto en la imagen) y hashtags: las dos acciones que el feed enseña como
             # «lo que falta» además de copy/foto (la etapa decide cuándo aplica cada una).
             "falta_copy_in": _falta_copy_in(pub, formato),

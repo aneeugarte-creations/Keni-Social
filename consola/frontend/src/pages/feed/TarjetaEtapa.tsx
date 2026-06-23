@@ -26,13 +26,14 @@ const ESTADO_DE_ETAPA = {
 
 /** Acciones del EQUIPO pendientes en revisión (placa/hashtags): badge ámbar "hay que hacer
  *  algo", distinto del cian "IA trabajando" y del violeta "te toca el OK". */
-const ACCIONES_EQUIPO = new Set<EtapaIa>(["falta_copy_in", "falta_hashtags"]);
+const ACCIONES_EQUIPO = new Set<EtapaIa>(["faltan_fotos", "falta_copy_in", "falta_hashtags"]);
 const CLASE_ACCION_EQUIPO = "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300";
 
 /** Color del punto por etapa, a juego con la clase del badge. */
 const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {
   generando_copy: "animate-pulse motion-reduce:animate-none bg-sky-500",
   generando_arte: "animate-pulse motion-reduce:animate-none bg-sky-500",
+  faltan_fotos: "bg-amber-500",
   falta_copy_in: "bg-amber-500",
   falta_hashtags: "bg-amber-500",
   lista_para_revisar: "bg-violet-500",

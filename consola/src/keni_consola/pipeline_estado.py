@@ -44,6 +44,7 @@ _ESTADO_CERRADO = "hecha"
 ETAPA_PRIORIZADA = "priorizada"          # tema auto-generable en cola, sin copy aun
 ETAPA_GENERANDO_COPY = "generando_copy"  # copy ya encolado (etiqueta autogen), sin copy listo
 ETAPA_GENERANDO_ARTE = "generando_arte"  # tiene copy pero le falta imagen (arte en curso/pendiente)
+ETAPA_FALTAN_FOTOS = "faltan_fotos"      # CARRUSEL con portada pero algun slide sin foto real
 ETAPA_FALTA_COPY_IN = "falta_copy_in"    # copy + foto pero sin el texto en la imagen (placa)
 ETAPA_FALTA_HASHTAGS = "falta_hashtags"  # en revision pero sin hashtags (clave para campanas/lineas)
 ETAPA_LISTA_REVISAR = "lista_para_revisar"  # copy + imagen listos / ya en revision o mas alla
@@ -201,6 +202,10 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
             return ETAPA_GENERANDO_ARTE
     elif pieza.get("falta_imagen", True):
         return ETAPA_GENERANDO_ARTE
+    # CARRUSEL con portada pero con SLIDES sin foto real (placa de solo texto): no está listo, pero
+    # NO es «falta portada». Gatea igual que la foto (no avanza hasta poner foto en cada tarjeta).
+    if pieza.get("falta_foto_slides", False):
+        return ETAPA_FALTAN_FOTOS
     # Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE
     # (no solo en revisión): una pieza sin hashtags no está "lista" y no entra a la cola.
     if pieza.get("falta_hashtags", False):

@@ -195,36 +195,48 @@ def test_en_revision_no_oculta_lo_que_falta():
     assert d["etapa_ia"] == "generando_arte"
 
 
-def _carrusel(slides: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
+def _carrusel(slides: list[dict[str, Any]], *, foto: str = "fotos/portada.jpg", **kw: Any) -> dict[str, Any]:
     import json as _json
 
     return _pub(
-        variante="carrusel", formato="carrusel", foto="fotos/portada.jpg",
+        variante="carrusel", formato="carrusel", foto=foto,
         carrusel=_json.dumps(slides), **kw,
     )
 
 
-def test_carrusel_con_slide_de_solo_texto_falta_imagen():
-    # Un slide horneado de SOLO TEXTO (placa sin foto de fondo) deja el carrusel «Falta imagen»,
-    # aunque la portada tenga su foto: el requisito se extiende a TODOS los slides.
+def test_carrusel_con_slide_de_solo_texto_faltan_fotos_no_portada():
+    # Un slide de SOLO TEXTO (placa sin foto de fondo) deja el carrusel en «Faltan fotos», NO en
+    # «Falta portada»: la portada SÍ está (su foto). `falta_imagen` (portada) es False.
     pub = _carrusel(
         [{"tipo": "imagen", "objeto": "artes/a.png", "titular": "Uno", "foto": ""}],
         contenido="copy",
+    )
+    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+    assert pieza_a_dict(pub)["etapa_ia"] == "faltan_fotos"
+
+
+def test_carrusel_sin_portada_es_generando_arte_no_faltan_fotos():
+    # Sin foto de portada manda «generando_arte» (Falta portada), antes que el chequeo de slides.
+    pub = _carrusel(
+        [{"tipo": "imagen", "objeto": "artes/a.png", "foto": ""}],
+        contenido="copy", foto="",
     )
     assert flags_falta_de_contenido(pub)["falta_imagen"] is True
     assert pieza_a_dict(pub)["etapa_ia"] == "generando_arte"
 
 
-def test_carrusel_con_foto_en_todos_los_slides_esta_completo():
-    # Portada con foto + cada slide con su foto real de fondo -> ya no falta imagen.
+def test_carrusel_con_foto_en_todos_los_slides_esta_listo():
+    # Portada con foto + cada slide con su foto real de fondo -> no falta nada de imagen.
     pub = _carrusel(
         [
             {"tipo": "imagen", "objeto": "artes/a.png", "titular": "Uno", "foto": "fotos/1.jpg"},
             {"tipo": "imagen", "objeto": "fotos/2.jpg", "sinPlaca": True},
         ],
-        contenido="copy",
+        contenido="copy #x",
+        copy_in="TITULAR",
+        estado="en_revision",
     )
-    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+    assert pieza_a_dict(pub)["etapa_ia"] == "lista_para_revisar"
 
 
 def test_carrusel_slide_de_video_cuenta_si_trae_asset():
@@ -235,18 +247,19 @@ def test_carrusel_slide_de_video_cuenta_si_trae_asset():
         ],
         contenido="copy",
     )
-    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
-    # Sin asset de vídeo el slide está incompleto.
+    assert pieza_a_dict(pub)["etapa_ia"] != "faltan_fotos"
+    # Sin asset de vídeo el slide está incompleto -> faltan_fotos.
     pub_sin = _carrusel(
         [{"tipo": "imagen", "objeto": "artes/a.png", "foto": "fotos/1.jpg"},
          {"tipo": "video", "objeto": ""}],
+        contenido="copy",
     )
-    assert flags_falta_de_contenido(pub_sin)["falta_imagen"] is True
+    assert pieza_a_dict(pub_sin)["etapa_ia"] == "faltan_fotos"
 
 
 def test_carrusel_de_media_cruda_esta_completo():
     # Slides de FOTO/VÍDEO crudos (presidencia/clips): el `objeto` ES la media real, no una placa
-    # de texto -> completos sin campo `foto` de procedencia.
+    # de texto -> completos sin campo `foto` de procedencia (no faltan_fotos).
     pub = _carrusel(
         [
             {"tipo": "imagen", "objeto": "fotos/p2.jpg"},
@@ -255,10 +268,13 @@ def test_carrusel_de_media_cruda_esta_completo():
         ],
         contenido="copy",
     )
-    assert flags_falta_de_contenido(pub)["falta_imagen"] is False
+    assert pieza_a_dict(pub)["etapa_ia"] != "faltan_fotos"
 
 
 def test_carrusel_sin_slides_extra_lo_decide_la_portada():
     # Sin slides extra (campo vacío), la completitud la decide solo la portada (`foto`).
-    assert flags_falta_de_contenido(_pub(variante="carrusel", formato="carrusel", foto="fotos/p.jpg", carrusel=""))["falta_imagen"] is False
-    assert flags_falta_de_contenido(_pub(variante="carrusel", formato="carrusel", foto="", carrusel=""))["falta_imagen"] is True
+    con = _pub(variante="carrusel", formato="carrusel", foto="fotos/p.jpg", carrusel="", contenido="c")
+    assert flags_falta_de_contenido(con)["falta_imagen"] is False
+    assert pieza_a_dict(con)["etapa_ia"] != "faltan_fotos"
+    sin = _pub(variante="carrusel", formato="carrusel", foto="", carrusel="", contenido="c")
+    assert flags_falta_de_contenido(sin)["falta_imagen"] is True

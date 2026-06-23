@@ -17,6 +17,7 @@
  *  derivación en cliente queda solo como DEGRADACIÓN para piezas legadas/parciales que aún
  *  no la traigan. La forma de salida (`EtapaIa`) es el contrato del feed.
  */
+import { parsearCarrusel } from "@/lib/carrusel";
 import type { Pieza } from "@/types";
 
 /** Las etapas observables de la pipeline IA, en orden. Una pieza COMPLETA (copy + arte) está
@@ -26,6 +27,7 @@ import type { Pieza } from "@/types";
 export type EtapaIa =
   | "generando_copy"
   | "generando_arte"
+  | "faltan_fotos"
   | "falta_copy_in"
   | "falta_hashtags"
   | "lista_para_revisar"
@@ -49,6 +51,9 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   // Ola F: para piezas video este estado significa "Falta video"; la etiqueta dinámica
   // la calcula `etiquetaEtapa` a partir del formato; aquí "Falta imagen" es el fallback foto.
   generando_arte: { etiqueta: "Falta imagen", enCurso: true },
+  // CARRUSEL con portada pero algún slide de SOLO TEXTO: el equipo debe poner una foto a cada
+  // tarjeta. Es acción humana (no IA), por eso sin pulso.
+  faltan_fotos: { etiqueta: "Faltan fotos", enCurso: false },
   // Acciones del EQUIPO en la fase de revisión (no es la IA trabajando): el texto sobre la
   // imagen (placa) y los hashtags (clave para campañas/líneas). `enCurso:false` = sin pulso.
   falta_copy_in: { etiqueta: "Falta copy-in", enCurso: false },
@@ -98,6 +103,19 @@ function faltaCopyIn(p: Pieza): boolean {
 /** ¿El copy no lleva ningún hashtag? Clave para monitorizar campañas y líneas de contenido. */
 function faltaHashtags(p: Pieza): boolean {
   return !textoTieneHashtags(p.contenido);
+}
+
+/** CARRUSEL con portada pero algún SLIDE sin foto real (placa de solo texto, horneada en `artes/`).
+ *  ESPEJO de `dominio.piezas._carrusel_falta_foto`. La media cruda (`fotos/`, vídeo) sí cuenta. */
+function faltanFotosEnSlides(p: Pieza): boolean {
+  if ((p as { variante?: string }).variante !== "carrusel") return false;
+  const slides = parsearCarrusel((p as { carrusel?: string }).carrusel);
+  return slides.some((s) => {
+    if (s.tipo === "video") return !s.objeto?.trim();
+    const objeto = (s.objeto ?? "").trim();
+    const esPlacaHorneada = objeto.startsWith("artes/");
+    return !(s.foto?.trim() || (objeto !== "" && !esPlacaHorneada));
+  });
 }
 
 /**
@@ -158,6 +176,8 @@ function etapaBruta(p: Pieza): EtapaIa {
       !(p.imagen_origen === "stock" && !p.imagen_autorizada);
     if (!hayImagenReal) return "generando_arte";
   }
+  // Carrusel con portada pero slides de solo texto: faltan las fotos de las tarjetas.
+  if (faltanFotosEnSlides(p)) return "faltan_fotos";
   // Hashtags: GATEA el avance igual que copy/foto (no sale nada sin hashtag). Se evalúa SIEMPRE.
   if (faltaHashtags(p)) return "falta_hashtags";
   // Placa (`copy_in`): acción del equipo en revisión; solo se pide ahí y NO gatea el avance.

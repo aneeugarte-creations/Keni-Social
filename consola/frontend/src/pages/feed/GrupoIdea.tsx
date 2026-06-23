@@ -157,20 +157,22 @@ export function GrupoIdea({
     }
     return m;
   }, [grupo.piezas, filtra]);
-  const hayFoto = React.useMemo(
-    () => [...porRedVariante.values()].some((e) => e.foto),
-    [porRedVariante],
-  );
-  const hayCarrusel = React.useMemo(
-    () => [...porRedVariante.values()].some((e) => e.carrusel),
-    [porRedVariante],
-  );
-  // MODO visto (foto|carrusel) a nivel de IDEA: el toggle solo aparece si conviven ambas. Por
-  // defecto foto (el original); si la idea solo tiene carrusel, se ve carrusel.
-  const [varianteVista, setVarianteVista] = React.useState<"foto" | "carrusel">(
-    hayFoto ? "foto" : "carrusel",
-  );
-  const modo = !hayFoto ? "carrusel" : !hayCarrusel ? "foto" : varianteVista;
+  // MODO visto (foto|carrusel) a nivel de IDEA: la variante EDITADA MÁS RECIENTEMENTE de la idea.
+  // El selector para cambiar de variante vive en el EDITOR, no aquí: el feed solo muestra un modo
+  // coherente en todas las redes (nunca foto en una red y carrusel en otra).
+  const modo = React.useMemo<"foto" | "carrusel">(() => {
+    let reciente: Pieza | undefined;
+    for (const p of grupo.piezas) {
+      if (filtra && !filtra(p)) continue;
+      if (
+        !reciente ||
+        (p.fecha_actualizacion ?? "") > (reciente.fecha_actualizacion ?? "")
+      ) {
+        reciente = p;
+      }
+    }
+    return reciente?.variante === "carrusel" ? "carrusel" : "foto";
+  }, [grupo.piezas, filtra]);
   // Una pieza por red en el MODO elegido; si una red no tiene esa variante, cae a la otra (p. ej.
   // X no admite carrusel: en modo carrusel sigue mostrando su foto, no desaparece).
   const porRed = React.useMemo(() => {
@@ -230,28 +232,6 @@ export function GrupoIdea({
           )
         }
       />
-      {/* TOGGLE de variante: solo cuando la idea tiene AMBAS (foto y carrusel). Cambia el MODO
-          de TODAS las redes a la vez (espejo: nunca foto en una red y carrusel en otra). */}
-      {hayFoto && hayCarrusel && (
-        <div className="mb-3 inline-flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Ver variante">
-          {(["foto", "carrusel"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={modo === v}
-              onClick={() => setVarianteVista(v)}
-              className={cn(
-                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                modo === v
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {v === "foto" ? "Foto" : "Carrusel"}
-            </button>
-          ))}
-        </div>
-      )}
       <div className={cn("grid items-start gap-4", GRID_COLS[columnas])}>
         {redesVisibles.map((r) => {
           const p = porRed.get(r);
