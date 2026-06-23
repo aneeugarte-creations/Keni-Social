@@ -189,16 +189,17 @@ def _correr_cmd(argv: list[str], *, cwd: Path, timeout: int = 900) -> subprocess
 def _construir_preview(worktree: Path, sugerencia_id: str) -> bool:
     """Compila el frontend de la rama y sube el bundle a `previews/sug-<id>/`. Devuelve si quedo listo.
 
-    El bundle se compila con `base=/api/preview/sug-<id>/` para que sus assets y su cliente API
-    cuelguen de ese prefijo (lo sirve `api/preview.py`). NO lanza: un fallo de build/instalacion
-    se loguea y devuelve False (el preview es un extra, no debe tumbar la fase). Reupload limpio:
-    borra el prefijo antes de subir para que un bundle que encoge no deje assets viejos.
+    El bundle se compila con `base=/api/preview/<id>/` para que sus assets y su cliente API
+    cuelguen de ese prefijo (lo sirve `api/preview.py`, que mapea ese `<id>` a la clave de
+    almacen `previews/sug-<id>/`). NO lanza: un fallo de build/instalacion se loguea y devuelve
+    False (el preview es un extra, no debe tumbar la fase). Reupload limpio: borra el prefijo
+    antes de subir para que un bundle que encoge no deje assets viejos.
     """
     front = worktree / "consola" / "frontend"
     if not (front / "package.json").is_file():
         return False
     salida = front / "dist-preview"
-    base = f"/api/preview/sug-{sugerencia_id}/"
+    base = f"/api/preview/{sugerencia_id}/"
     try:
         if not (front / "node_modules").is_dir():
             dep = _correr_cmd(["npm", "ci", "--prefer-offline", "--no-audit"], cwd=front, timeout=1200)

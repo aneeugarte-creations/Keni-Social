@@ -260,8 +260,8 @@ def test_construir_preview_compila_y_sube_el_bundle(monkeypatch, tmp_path):
 
     def fake_cmd(argv, *, cwd, timeout=900):
         if argv[:2] == ["npx", "vite"]:
-            # vite build con --base correcto escribe el bundle en dist-preview.
-            assert "--base" in argv and argv[argv.index("--base") + 1] == "/api/preview/sug-z/"
+            # vite build con --base correcto (id pelado) escribe el bundle en dist-preview.
+            assert "--base" in argv and argv[argv.index("--base") + 1] == "/api/preview/z/"
             (front / "dist-preview" / "assets").mkdir(parents=True)
             (front / "dist-preview" / "index.html").write_text("<html>")
             (front / "dist-preview" / "assets" / "app.js").write_text("//js")

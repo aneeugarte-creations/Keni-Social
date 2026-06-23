@@ -46,6 +46,18 @@ def test_sirve_asset_anidado_con_content_type(cliente, monkeypatch):
     assert "javascript" in r.headers["content-type"]
 
 
+def test_asset_con_prefijo_sug_resuelve_a_la_misma_clave(cliente, monkeypatch):
+    # Un bundle compilado con `base=/api/preview/sug-<id>/` pide sus assets con ese prefijo;
+    # el segmento `sug-x` debe recortarse para no buscar `previews/sug-sug-x/...` (doble prefijo).
+    monkeypatch.setattr(
+        almacen_media, "leer_crudo",
+        lambda clave: b"//js" if clave == "previews/sug-x/assets/app.js" else None,
+    )
+    r = cliente.get("/api/preview/sug-x/assets/app.js")
+    assert r.status_code == 200
+    assert r.content == b"//js"
+
+
 def test_ruta_cliente_cae_a_index(cliente, monkeypatch):
     monkeypatch.setattr(
         almacen_media, "leer_crudo",

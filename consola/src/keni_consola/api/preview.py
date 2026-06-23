@@ -82,8 +82,14 @@ async def proxy_api(request: Request) -> Response:
 
 
 async def servir_asset(request: Request) -> Response:
-    """Sirve un asset del bundle `previews/sug-<id>/<path>`; fallback a `index.html` (SPA)."""
-    sid = request.path_params["sugerencia_id"]
+    """Sirve un asset del bundle `previews/sug-<id>/<path>`; fallback a `index.html` (SPA).
+
+    El `<id>` del path va pelado (sin `sug-`); la clave de almacen sí lo lleva. Toleramos un
+    `sug-` sobrante en el segmento por si un bundle se compiló con ese prefijo en su `base`:
+    así sus assets (`/api/preview/sug-<id>/...`) resuelven igual sin doble prefijo. Los ids de
+    sugerencia son hex, nunca empiezan por `sug-`, así que el recorte es inequívoco.
+    """
+    sid = request.path_params["sugerencia_id"].removeprefix("sug-")
     path = (request.path_params.get("path") or "").strip("/") or "index.html"
     datos = await run_in_threadpool(almacen_media.leer_crudo, f"previews/sug-{sid}/{path}")
     if datos is None:
