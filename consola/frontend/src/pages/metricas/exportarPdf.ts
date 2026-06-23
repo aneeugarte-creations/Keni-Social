@@ -658,10 +658,9 @@ export async function descargarPresentacion(
     await slideTabla(doc, "Piezas del periodo", prepPiezas(listado.piezas), ctx, ++n, colsPieza);
   }
 
-  // Resto de tablas en pantalla SIN slide a medida (Rendimiento por serie/línea, Publicidad):
+  // Resto de tablas en pantalla SIN slide a medida (Rendimiento por línea, Publicidad):
   // tabla genérica acotada para no dejar contenido fuera del deck.
   const GENERICAS: Array<[string, string]> = [
-    ["piezas-por-etiqueta", "Rendimiento por serie"],
     ["lineas", "Rendimiento por línea"],
     ["ads", "Publicidad"],
   ];

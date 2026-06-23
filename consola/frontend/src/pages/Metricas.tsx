@@ -37,7 +37,6 @@ import { etiquetaPeriodo } from "./metricas/exportarPdf";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
-import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
 import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
@@ -335,9 +334,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </Bloque>
           <Bloque id="crosstab">
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
-          </Bloque>
-          <Bloque id="por-serie">
-            <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="por-linea">
             <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
