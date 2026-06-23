@@ -9,6 +9,7 @@ import type {
   RespuestaDescubrimiento,
   RespuestaNoticias,
   RespuestaStatsFuentes,
+  RespuestaTerminosTendencia,
   ResumenCobertura,
   SaludCobertura,
 } from "@/types";
@@ -244,6 +245,17 @@ export const apiNoticias = {
           marca: params.marca,
           dias: params.dias != null ? String(params.dias) : undefined,
         })}`,
+        { signal },
+      ),
+
+    /**
+     * Lista los TÉRMINOS en tendencia AHORA (en vivo desde Google Trends, por geo configurado):
+     * tema + tráfico + una muestra de noticias. No del pool; no ingiere nada.
+     * GET /api/noticias/descubrimiento/terminos
+     */
+    descubrimientoTerminos: (signal?: AbortSignal) =>
+      peticion<RespuestaTerminosTendencia>(
+        `/noticias/descubrimiento/terminos`,
         { signal },
       ),
 

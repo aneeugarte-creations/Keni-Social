@@ -9,7 +9,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
-import { Radar } from "lucide-react";
+import { Flame, Radar, TrendingUp } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
@@ -36,6 +36,102 @@ function Metrica({ etiqueta, valor }: { etiqueta: string; valor: string | number
   );
 }
 
+/**
+ * Lista de TÉRMINOS en tendencia AHORA (en vivo desde Google Trends). Es lo que está sonando este
+ * momento, no lo del pool: por eso vive aparte y se recarga con su propio ritmo (5 min).
+ */
+function ListaTerminos() {
+  const query = useQuery({
+    queryKey: ["noticias", "descubrimiento", "terminos"],
+    queryFn: ({ signal }) => api.noticias.descubrimientoTerminos(signal),
+    staleTime: 5 * 60_000,
+  });
+
+  const data = query.data;
+  const terminos = data?.terminos ?? [];
+  const variosGeos = (data?.geos.length ?? 0) > 1;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <TrendingUp className="h-4 w-4" />
+          Términos en tendencia ahora
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {query.isPending ? (
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-md" />
+            ))}
+          </div>
+        ) : query.isError ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            {mensajeError(query.error)}
+          </p>
+        ) : terminos.length === 0 ? (
+          <EstadoVacioTexto
+            texto="Google Trends no devolvió términos ahora mismo. Reinténtalo en un momento."
+            className="py-4"
+          />
+        ) : (
+          <ol className="space-y-2">
+            {terminos.map((t, i) => (
+              <li
+                key={`${t.geo}-${t.termino}`}
+                className="rounded-md border p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {i + 1}.
+                  </span>
+                  <span className="font-medium">{t.termino}</span>
+                  {t.trafico ? (
+                    <Badge variant="secondary" className="gap-1">
+                      <Flame className="h-3 w-3" />
+                      {t.trafico}
+                    </Badge>
+                  ) : null}
+                  {variosGeos ? <Badge variant="outline">{t.geo}</Badge> : null}
+                </div>
+                {t.noticias.length ? (
+                  <ul className="mt-1.5 space-y-0.5 pl-6">
+                    {t.noticias.map((n) => (
+                      <li key={n.url || n.titulo} className="text-xs text-muted-foreground">
+                        {n.url ? (
+                          <a
+                            href={n.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-foreground hover:underline"
+                          >
+                            {n.titulo}
+                          </a>
+                        ) : (
+                          <span>{n.titulo}</span>
+                        )}
+                        {n.fuente ? (
+                          <span className="text-muted-foreground/70"> · {n.fuente}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        )}
+        {data?.errores.length ? (
+          <p className="text-[11px] text-muted-foreground">
+            No se pudo leer: {data.errores.join("; ")}.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Descubrimiento() {
   const { marcaActiva } = useMarcaActiva();
   const [dias, setDias] = React.useState(7);
@@ -51,6 +147,7 @@ export function Descubrimiento() {
   const stats = data?.stats ?? null;
 
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
@@ -123,5 +220,7 @@ export function Descubrimiento() {
         )}
       </CardContent>
     </Card>
+    <ListaTerminos />
+    </div>
   );
 }

@@ -394,6 +394,34 @@ export interface RespuestaDescubrimiento {
   stats: RendimientoFuente | null;
 }
 
+/** Una noticia de muestra que explica un término en tendencia. */
+export interface NoticiaTendencia {
+  titulo: string;
+  url: string;
+  fuente: string;
+}
+
+/** Un término en tendencia AHORA (en vivo desde Google Trends), con su tráfico y muestra. */
+export interface TerminoTendencia {
+  /** El tema en tendencia (la búsqueda que sube). */
+  termino: string;
+  /** Tráfico aproximado crudo, tal cual lo da Trends (ej. "200 mil+"). */
+  trafico: string;
+  /** Tráfico normalizado a entero, para ordenar. */
+  senal: number;
+  /** Geografía de la tendencia (ej. "MX"). */
+  geo: string;
+  /** Muestra de noticias que explican el término. */
+  noticias: NoticiaTendencia[];
+}
+
+export interface RespuestaTerminosTendencia {
+  geos: string[];
+  terminos: TerminoTendencia[];
+  /** Avisos por geo que falló (best-effort); vacío si todo fue bien. */
+  errores: string[];
+}
+
 // ── Ola D: salud de fuentes (GET /api/noticias/salud) ────────────────────────
 
 /**

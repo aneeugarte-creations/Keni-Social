@@ -96,6 +96,58 @@ def _texto_hijo(elemento: ET.Element, *nombres: str) -> str:
     return http_feed._texto_local(http_feed._buscar_hijo(elemento, *nombres))
 
 
+def parsear_trends_terminos(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
+    """Parsea el RSS de Google Trends a la lista de TÉRMINOS en tendencia (sin aplanar a noticias).
+
+    Una fila por `<item>` (término): su texto, el tráfico aproximado (crudo `trafico` para mostrar
+    y `senal` comparable para ordenar) y una muestra de las noticias que lo explican. Es para VER
+    "qué está sonando", no para el pool. Orden: por señal (tráfico) desc. PURO (sin red). Lanza
+    `RSSError` si el XML no parsea.
+    """
+    try:
+        raiz = ET.fromstring(xml)
+    except ET.ParseError as e:
+        raise http_feed.RSSError("El feed de tendencias no es un XML válido.") from e
+
+    canal = http_feed._buscar_hijo(raiz, "channel")
+    contenedor = canal if canal is not None else raiz
+    items = [h for h in contenedor if http_feed._quitar_ns(h.tag) == "item"]
+
+    terminos: list[dict[str, Any]] = []
+    for item in items[:MAX_TERMINOS]:
+        termino = _texto_hijo(item, "title").strip()
+        if not termino:
+            continue
+        trafico = _texto_hijo(item, "approx_traffic").strip()
+        noticias: list[dict[str, str]] = []
+        for hijo in item:
+            if http_feed._quitar_ns(hijo.tag) != "news_item":
+                continue
+            titulo = _texto_hijo(hijo, "news_item_title").strip()[:_MAX_TITULO]
+            if not titulo:
+                continue
+            noticias.append(
+                {
+                    "titulo": titulo,
+                    "url": _texto_hijo(hijo, "news_item_url").strip(),
+                    "fuente": _texto_hijo(hijo, "news_item_source").strip(),
+                }
+            )
+            if len(noticias) >= MAX_NOTICIAS_POR_TERMINO:
+                break
+        terminos.append(
+            {
+                "termino": termino,
+                "trafico": trafico,
+                "senal": traduce_trafico(trafico),
+                "geo": geo,
+                "noticias": noticias,
+            }
+        )
+    terminos.sort(key=lambda t: t["senal"], reverse=True)
+    return terminos
+
+
 def parsear_trends_items(xml: str, *, geo: str = "MX") -> list[dict[str, Any]]:
     """Parsea el RSS de Google Trends a items de `noticias_items`.
 

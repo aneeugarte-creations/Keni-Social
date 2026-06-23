@@ -127,6 +127,45 @@ def test_parsear_trends_capa_por_termino():
     assert len(items) == dom.MAX_NOTICIAS_POR_TERMINO
 
 
+def test_parsear_trends_terminos_agrupa_y_ordena():
+    """La lista de términos NO se aplana: una fila por tema, con su tráfico y una muestra de
+    noticias, ordenada por señal (tráfico) desc."""
+    terminos = dom.parsear_trends_terminos(_TRENDS_XML, geo="MX")
+    assert [t["termino"] for t in terminos] == ["Selección Mexicana", "Nuevo videojuego"]
+    primero = terminos[0]
+    assert primero["senal"] == 50_000  # 50 mil+ ordena por delante de 2K+
+    assert primero["trafico"] == "50 mil+"
+    assert primero["geo"] == "MX"
+    assert [n["fuente"] for n in primero["noticias"]] == ["ESPN", "Récord"]
+
+
+def test_parsear_trends_terminos_capa_muestra_de_noticias():
+    """La muestra de noticias por término también se acota a `MAX_NOTICIAS_POR_TERMINO`."""
+    noticias = "".join(
+        f"<ht:news_item>"
+        f"<ht:news_item_title>Cobertura {i}</ht:news_item_title>"
+        f"<ht:news_item_url>https://example.com/n-{i}</ht:news_item_url>"
+        f"<ht:news_item_source>Medio {i}</ht:news_item_source>"
+        f"</ht:news_item>"
+        for i in range(10)
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>'
+        f"<item><title>Eclipse solar</title><ht:approx_traffic>200 mil+</ht:approx_traffic>"
+        f"{noticias}</item>"
+        "</channel></rss>"
+    )
+    terminos = dom.parsear_trends_terminos(xml, geo="MX")
+    assert len(terminos) == 1
+    assert len(terminos[0]["noticias"]) == dom.MAX_NOTICIAS_POR_TERMINO
+
+
+def test_parsear_trends_terminos_xml_invalido_lanza():
+    with pytest.raises(http_feed.RSSError):
+        dom.parsear_trends_terminos("no soy xml <<<", geo="MX")
+
+
 def test_parsear_trends_xml_invalido_lanza():
     with pytest.raises(http_feed.RSSError):
         dom.parsear_trends_items("esto no es xml <<<", geo="MX")

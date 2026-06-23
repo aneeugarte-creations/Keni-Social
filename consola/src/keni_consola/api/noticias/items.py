@@ -442,6 +442,41 @@ def _descubrimiento(marca: str | None, dias: int) -> dict:
     }
 
 
+async def descubrimiento_terminos_handler(request: Request) -> Response:
+    """GET /api/noticias/descubrimiento/terminos: los TÉRMINOS en tendencia AHORA (en vivo).
+
+    Descarga el RSS público de Google Trends de los geos configurados y devuelve la lista de
+    términos (tema + tráfico + una muestra de noticias que lo explican), ordenada por señal. Es
+    "qué está sonando ahora mismo", en vivo, NO del pool: no ingiere nada. Best-effort: un geo que
+    falle se omite con su aviso en `errores`.
+    """
+    cuerpo = await run_in_threadpool(_descubrimiento_terminos)
+    return JSONResponse(cuerpo)
+
+
+def _descubrimiento_terminos() -> dict:
+    from ...dominio import http_feed
+    from ...dominio import trends as dom_trends
+
+    geos = list(config.trends_geos())
+    terminos: list[dict] = []
+    errores: list[str] = []
+    for geo in geos:
+        url_ok, err = http_feed.validar_url(dom_trends.url_trends(geo))
+        if url_ok is None:
+            errores.append(f"{geo}: {err}")
+            continue
+        try:
+            xml = http_feed._descargar_real(url_ok)
+            terminos.extend(dom_trends.parsear_trends_terminos(xml, geo=geo))
+        except http_feed.RSSError as e:
+            errores.append(f"{geo}: {e}")
+        except Exception:  # noqa: BLE001 -- un geo no debe tumbar la lista entera
+            errores.append(f"{geo}: error inesperado al leer las tendencias")
+    terminos.sort(key=lambda t: t.get("senal") or 0, reverse=True)
+    return {"geos": geos, "terminos": terminos, "errores": errores}
+
+
 async def salud(request: Request) -> Response:
     """GET /api/noticias/salud?marca=: monitor de cobertura a escala.
 

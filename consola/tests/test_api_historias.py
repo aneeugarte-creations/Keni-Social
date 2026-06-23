@@ -365,6 +365,44 @@ def test_descubrimiento_sin_aportes_devuelve_stats_nulo(cliente):
     assert "activo" in datos
 
 
+_TRENDS_XML_VIVO = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>'
+    "<item><title>Eclipse solar</title><ht:approx_traffic>200 mil+</ht:approx_traffic>"
+    "<ht:news_item><ht:news_item_title>Dónde ver el eclipse</ht:news_item_title>"
+    "<ht:news_item_url>https://medio.mx/eclipse</ht:news_item_url>"
+    "<ht:news_item_source>UnoTV</ht:news_item_source></ht:news_item></item>"
+    "</channel></rss>"
+)
+
+
+def test_descubrimiento_terminos_en_vivo(cliente, monkeypatch):
+    """La lista de términos en vivo descarga el RSS de Trends (mock) y lo devuelve por geo."""
+    monkeypatch.setattr("keni_consola.config.trends_geos", lambda: ("MX",))
+    monkeypatch.setattr("keni_consola.dominio.http_feed.validar_url", lambda u: (u, None))
+    monkeypatch.setattr("keni_consola.dominio.http_feed._descargar_real", lambda u: _TRENDS_XML_VIVO)
+    datos = cliente.get("/api/noticias/descubrimiento/terminos").json()
+    assert datos["geos"] == ["MX"]
+    assert datos["errores"] == []
+    assert datos["terminos"][0]["termino"] == "Eclipse solar"
+    assert datos["terminos"][0]["noticias"][0]["fuente"] == "UnoTV"
+
+
+def test_descubrimiento_terminos_geo_caido_no_rompe(cliente, monkeypatch):
+    """Un geo que falla al descargar se omite con su aviso; la respuesta no casca."""
+    monkeypatch.setattr("keni_consola.config.trends_geos", lambda: ("MX",))
+    monkeypatch.setattr("keni_consola.dominio.http_feed.validar_url", lambda u: (u, None))
+
+    def explota(_url):
+        from keni_consola.dominio import http_feed
+        raise http_feed.RSSError("No se pudo contactar con el feed.")
+
+    monkeypatch.setattr("keni_consola.dominio.http_feed._descargar_real", explota)
+    datos = cliente.get("/api/noticias/descubrimiento/terminos").json()
+    assert datos["terminos"] == []
+    assert any("MX" in e for e in datos["errores"])
+
+
 def test_cluster_por_url_canonica_cruza_items_de_cualquier_fuente(cliente):
     # Cruce exacto del clustering a NIVEL DE ITEM: encuentra el cluster aunque la url no sea
     # la clave del representativo (igualdad o prefijo `?` sobre la canónica de dedup).
