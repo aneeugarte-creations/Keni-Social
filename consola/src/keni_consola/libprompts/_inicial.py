@@ -58,6 +58,16 @@ _PROMPTS_OBSOLETOS_V2: tuple[str, ...] = (
 )
 _SENTINELA_OBSOLETOS_V2 = ".prompts-obsoletos-v2"
 
+# OLA v3 de obsoletos: `prompt/fusionar-macroevento` se RETIRA porque su trabajo (etiquetar familias
+# del mismo gran evento) se fundió en `prompt/fusionar` —una sola pasada del LLM devuelve `grupos` y
+# `familias`—. El store en vivo ya pasó v1/v2 (sentinelas aparte), así que esta ola lleva su PROPIO
+# sentinela. Idempotente. Borra el .md del store; la propagación del nuevo cuerpo de `fusionar` la
+# hace `propagar_fusionar_fundido`.
+_PROMPTS_OBSOLETOS_V3: tuple[str, ...] = (
+    "prompt/fusionar-macroevento",
+)
+_SENTINELA_OBSOLETOS_V3 = ".prompts-obsoletos-v3"
+
 # Editoriales con id no-canónico que duplican su `<marca>/marca.md`: se retiran del store en vivo
 # (el canónico conserva el contenido). El canónico de cada marca es `editorial/rrss/<marca>/marca`.
 # ONE-SHOT por sentinela propio.
@@ -174,6 +184,16 @@ _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
     ("prompt/traducir", "7f1a14bef37042b33b90500c40d943113f3c173e0ef860710dd4587f3a3965f2"),
 )
 _SENTINELA_REFORMATO = ".reformato-prompts-v1"
+
+# FUNDE MACRO-EVENTO EN FUSIONAR: `prompt/fusionar` se reescribió para devolver `grupos` Y `familias`
+# en una sola pasada (antes `familias` las daba `prompt/fusionar-macroevento`, ya retirado). Propaga el
+# cuerpo NUEVO al store SOLO si el cuerpo ACTUAL casa con el VIEJO conocido (sha256 de abajo); si el
+# equipo lo editó, su hash no casa y se respeta. El sha es del CUERPO (sin frontmatter), como lo
+# devuelve `_leer(...).cuerpo` (con `strip("\n")`). ONE-SHOT por sentinela.
+_FUSIONAR_FUNDE_MACRO_V1: tuple[tuple[str, str], ...] = (
+    ("prompt/fusionar", "1683849acaed33053a01f8803a157c7bd55ff5ee236254f951971f8844cad701"),
+)
+_SENTINELA_FUSIONAR_FUNDE_MACRO = ".fusionar-funde-macro-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
 _SENTINELA_PARRILLA = ".parrilla-contrato-v1"
@@ -524,6 +544,25 @@ def limpiar_prompts_obsoletos_v2() -> int:
     return n
 
 
+def limpiar_prompts_obsoletos_v3() -> int:
+    """Borra del store la OLA v3 (`_PROMPTS_OBSOLETOS_V3`): `prompt/fusionar-macroevento`, fundido en
+    `prompt/fusionar`. Sentinela PROPIO. ONE-SHOT, idempotente. Devuelve cuántos borró.
+    """
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_OBSOLETOS_V3
+    if sentinela.exists():
+        return 0
+    n = 0
+    for pid in _PROMPTS_OBSOLETOS_V3:
+        ruta = destino_raiz.joinpath(*f"{pid}.md".split("/"))
+        if ruta.is_file():
+            ruta.unlink()
+            n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
 def limpiar_editoriales_duplicados() -> int:
     """Borra del store los editoriales no-canónicos de `_EDITORIALES_DUPLICADOS` (su `marca.md`
     canónico permanece). ONE-SHOT por sentinela. Idempotente. Devuelve cuántos borró.
@@ -563,6 +602,44 @@ def reformatear_prompts(origen: Path | None = None) -> int:
         return 0
     n = 0
     for doc_id, sha_viejo in _REFORMATO_PROMPTS_V1:
+        destino = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not destino.is_file():
+            continue
+        actual = _leer(destino)
+        if actual is None:
+            continue
+        if hashlib.sha256(actual.cuerpo.encode("utf-8")).hexdigest() != sha_viejo:
+            continue  # editado por el equipo: respetar
+        ruta_inicial = base.joinpath(*f"{doc_id}.md".split("/"))
+        try:
+            texto = ruta_inicial.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        escribir_atomico(destino, texto)
+        n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def propagar_fusionar_fundido(origen: Path | None = None) -> int:
+    """Propaga al store el `prompt/fusionar` FUNDIDO (grupos + familias en una pasada).
+
+    Reescribe `prompt/fusionar` con su versión de la INICIAL nueva SOLO si el cuerpo ACTUAL del store
+    casa EXACTO con el cuerpo VIEJO (sha256 de `_FUSIONAR_FUNDE_MACRO_V1`): si el equipo lo editó, su
+    hash no casa y se respeta. Mismo mecanismo que `reformatear_prompts`, sentinela PROPIO. Pensado
+    para el DEPLOY (junto a `limpiar_prompts_obsoletos_v3`, que retira `fusionar-macroevento`).
+    Idempotente. Devuelve cuántos reescribió.
+    """
+    base = origen or dir_inicial()
+    if not base.is_dir():
+        return 0
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_FUSIONAR_FUNDE_MACRO
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, sha_viejo in _FUSIONAR_FUNDE_MACRO_V1:
         destino = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
         if not destino.is_file():
             continue

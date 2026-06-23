@@ -27,13 +27,10 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Noticias / algoritmo
     "prompt/traducir": ["Recolectar noticias · Traducir (MX)"],
     "prompt/fusionar": [
-        "Recolectar noticias · Fusionar historias del mismo evento",
+        "Recolectar noticias · Fusionar historias del mismo hecho y etiquetar familias de macro-evento",
     ],
     "prompt/fusionar-verificar": [
         "Recolectar noticias · Verificar cada grupo propuesto antes de fusionar",
-    ],
-    "prompt/fusionar-macroevento": [
-        "Recolectar noticias · Etiquetar familias de macro-evento (historias distintas, mismo gran evento)",
     ],
     "prompt/fusionar-subtema": [
         "Recolectar noticias · Partir un macro-evento en subtemas coherentes (un carrusel por faceta)",

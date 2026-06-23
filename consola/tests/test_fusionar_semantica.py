@@ -1,8 +1,9 @@
 """Tests de la fusión semántica de historias (`dominio.fusionar_semantica` + `paso_fusionar_semantica`).
 
-OFFLINE: nunca llama a `claude` (ejecutor falso). Cubre el PARSEO/validación de grupos (puro) y la
-FUSIÓN end-to-end en el daemon (Postgres): reasigna items a la canónica, borra las absorbidas y
-recalcula n_fuentes/score. La fusión está gateada por `KENI_PIPELINE_FUSIONAR`.
+OFFLINE: nunca llama a `claude` (ejecutor falso). En UNA pasada `proponer_fusiones` devuelve
+`Fusiones(grupos, familias)`: `grupos` (mismo hecho, a fundir, verificados) y `familias` (mismo gran
+evento, a etiquetar). Cubre el PARSEO/validación (puro) y la FUSIÓN end-to-end en el daemon
+(Postgres). Gateado por `KENI_PIPELINE_FUSIONAR`.
 """
 
 from __future__ import annotations
@@ -34,39 +35,44 @@ def _reset_throttle_fusionar():
 
 
 def _ej(grupos):
+    """Ejecutor falso: la pasada de propuesta devuelve `{"grupos": ...}` (sin familias)."""
     def run(_prompt, _carpeta):
         return json.dumps({"grupos": grupos})
     return run
 
 
-def _ej_familias(salida):
-    """Ejecutor falso para macro-eventos: devuelve `salida` tal cual (str o dict serializable)."""
+def _ej_salida(salida):
+    """Ejecutor falso que devuelve `salida` tal cual (str o dict serializable). Para probar el
+    parseo de `familias`/`subtemas` desde la respuesta del LLM."""
     def run(_prompt, _carpeta):
         return salida if isinstance(salida, str) else json.dumps(salida)
     return run
 
 
 # --------------------------------------------------------------------------- #
-# proponer_fusiones (puro)                                                      #
+# proponer_fusiones — GRUPOS (puro)                                             #
 # --------------------------------------------------------------------------- #
 
 
 def test_proponer_fusiones_valida_disjunta_y_subset():
     clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}, {"id": "c", "titulo": "Z"}]
     # b reaparece en el 2º grupo (se ignora: ya usado); 'zzz' no existe (se filtra).
-    grupos = fusionar_semantica.proponer_fusiones(clusters, ejecutor=_ej([["a", "b"], ["b", "c"], ["a", "zzz"]]))
-    assert grupos == [["a", "b"]]
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=_ej([["a", "b"], ["b", "c"], ["a", "zzz"]]))
+    assert res.grupos == [["a", "b"]]
+    assert res.familias == []
 
 
 def test_proponer_fusiones_menos_de_dos_historias():
-    assert fusionar_semantica.proponer_fusiones([{"id": "a", "titulo": "X"}], ejecutor=_ej([["a", "b"]])) == []
+    res = fusionar_semantica.proponer_fusiones([{"id": "a", "titulo": "X"}], ejecutor=_ej([["a", "b"]]))
+    assert res.grupos == [] and res.familias == []
 
 
 def test_proponer_fusiones_fallo_haiku_no_funde():
     def revienta(_p, _c):
         raise RuntimeError("claude caído")
     clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
-    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=revienta) == []
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=revienta)
+    assert res.grupos == [] and res.familias == []
 
 
 def test_verificacion_descarta_grupo_no_confirmado():
@@ -88,7 +94,7 @@ def test_verificacion_descarta_grupo_no_confirmado():
         {"id": "shakira", "titulo": "A qué hora cantará Shakira en la inauguración"},
         {"id": "embajada", "titulo": "Embajada de EU alerta sobre la seguridad"},
     ]
-    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej) == []
+    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej).grupos == []
     assert llamadas["n"] == 2  # propuesta + verificación
 
 
@@ -107,7 +113,7 @@ def test_verificacion_puede_partir_un_grupo():
         {"id": "b", "titulo": "Tiembla en la Ciudad de México: 6.1"},
         {"id": "c", "titulo": "Protección Civil presenta su plan anual"},
     ]
-    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej) == [["a", "b"]]
+    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej).grupos == [["a", "b"]]
 
 
 def test_verificacion_fallida_descarta_el_grupo():
@@ -121,7 +127,7 @@ def test_verificacion_fallida_descarta_el_grupo():
         raise RuntimeError("claude caído")
 
     clusters = [{"id": "a", "titulo": "X largo para fuzzy"}, {"id": "b", "titulo": "Y largo tambien"}]
-    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej) == []
+    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej).grupos == []
 
 
 def test_extraer_grupos_tolera_fences():
@@ -130,42 +136,44 @@ def test_extraer_grupos_tolera_fences():
 
 
 # --------------------------------------------------------------------------- #
-# proponer_macro_eventos (puro)                                                 #
+# proponer_fusiones — FAMILIAS (mismo gran evento, en la MISMA pasada)          #
 # --------------------------------------------------------------------------- #
 
 
-def test_proponer_macro_eventos_agrupa_familia():
-    """Tres historias DISTINTAS del mismo gran evento se etiquetan como una familia."""
+def test_proponer_fusiones_agrupa_familia():
+    """Tres historias DISTINTAS del mismo gran evento salen como una familia (no se funden)."""
     clusters = [
         {"id": "hotmic", "titulo": "Micrófono abierto capta a un líder en el G7"},
         {"id": "iran", "titulo": "El G7 endurece su postura sobre Irán"},
         {"id": "comercio", "titulo": "Acuerdo comercial en la cumbre del G7"},
     ]
-    salida = {"familias": [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]}
-    familias = fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias(salida))
-    assert familias == [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]
+    salida = {"grupos": [], "familias": [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]}
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=_ej_salida(salida))
+    assert res.grupos == []
+    assert res.familias == [{"tema": "Cumbre del G7", "ids": ["hotmic", "iran", "comercio"]}]
 
 
-def test_proponer_macro_eventos_ignora_familia_de_uno():
+def test_proponer_fusiones_ignora_familia_de_uno():
     """Una familia con un solo id válido (y los ids inexistentes se filtran) se descarta."""
     clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
     salida = {"familias": [
         {"tema": "Evento de uno", "ids": ["a", "a"]},      # un solo id distinto -> fuera
         {"tema": "Inexistentes", "ids": ["zzz", "www"]},   # ningún id válido -> fuera
     ]}
-    assert fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias(salida)) == []
+    assert fusionar_semantica.proponer_fusiones(clusters, ejecutor=_ej_salida(salida)).familias == []
 
 
-def test_proponer_macro_eventos_json_invalido_devuelve_vacio():
-    """Salida no parseable de Haiku -> [] (best-effort)."""
+def test_proponer_fusiones_familias_json_invalido_devuelve_vacio():
+    """Salida no parseable -> grupos y familias vacías (best-effort)."""
     clusters = [{"id": "a", "titulo": "X"}, {"id": "b", "titulo": "Y"}]
-    assert fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=_ej_familias("no soy json")) == []
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=_ej_salida("no soy json"))
+    assert res.grupos == [] and res.familias == []
 
 
-def test_proponer_macro_eventos_reutiliza_tema_macro_existente():
+def test_proponer_fusiones_familia_reutiliza_tema_macro_existente():
     """El payload lleva el `tema_macro` ACTUAL de cada cluster y la familia REUTILIZA esa etiqueta.
 
-    Evita que Haiku etiquete el mismo evento con sinónimos ("Mundial 2026" vs "Copa del Mundo
+    Evita que el modelo etiquete el mismo evento con sinónimos ("Mundial 2026" vs "Copa del Mundo
     2026") y parta la familia. El ejecutor falso lee el payload del prompt, toma el `tema_macro`
     no vacío que ya existe y lo devuelve verbatim como `tema`; se verifica que se propaga."""
     clusters = [
@@ -175,16 +183,14 @@ def test_proponer_macro_eventos_reutiliza_tema_macro_existente():
 
     def ej(prompt, _carpeta):
         # El payload (lista JSON de historias) viene embebido en el prompt; cada item trae su
-        # `tema_macro`. Reutilizamos la etiqueta existente como tema de la familia. El payload es la
-        # PRIMERA estructura JSON del prompt; `raw_decode` la lee y descarta el contrato de salida
-        # (que trae sus propios `[...]` de ejemplo) que viene detrás.
+        # `tema_macro`. El payload es la PRIMERA estructura JSON del prompt; `raw_decode` la lee.
         items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
         existente = next((it["tema_macro"] for it in items if it.get("tema_macro")), "")
         assert all("tema_macro" in it for it in items)  # el payload SIEMPRE lleva la etiqueta
-        return json.dumps({"familias": [{"tema": existente, "ids": ["x", "y"]}]})
+        return json.dumps({"grupos": [], "familias": [{"tema": existente, "ids": ["x", "y"]}]})
 
-    familias = fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=ej)
-    assert familias == [{"tema": "Mundial 2026", "ids": ["x", "y"]}]
+    res = fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej)
+    assert res.familias == [{"tema": "Mundial 2026", "ids": ["x", "y"]}]
 
 
 # --------------------------------------------------------------------------- #
@@ -273,44 +279,23 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
     assert len(repos.items_de_cluster("c1")) == 2                # ambos items reasignados
 
 
-def test_paso_macro_omite_el_llm_si_todo_el_lote_ya_esta_etiquetado(entorno, monkeypatch):
-    """Lote 100% etiquetado (tema_macro + subtema) -> NO se llama al LLM de macro ni de subtema.
-
-    Etiquetado INCREMENTAL: re-correr macro/subtema sobre familias estables en cada barrido era el
-    grueso del gasto del pool (`marcar_*` cuenta filas emparejadas, no cambiadas, así que el código
-    viejo no detectaba que ya estaba todo etiquetado). Postgres (CI)."""
-    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
-    _inicializar("c1")
-    _inicializar("c2")
-    repos.marcar_clusters_tema_macro(["c1", "c2"], "Mundial 2026")
-    repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
-
-    llamadas = {"macro": 0, "subtema": 0}
-    monkeypatch.setattr(fusionar_semantica, "proponer_macro_eventos",
-                        lambda *a, **k: llamadas.__setitem__("macro", llamadas["macro"] + 1) or [])
-    monkeypatch.setattr(fusionar_semantica, "proponer_subtemas",
-                        lambda *a, **k: llamadas.__setitem__("subtema", llamadas["subtema"] + 1) or [])
-
-    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
-    assert llamadas == {"macro": 0, "subtema": 0}
-
-
-def test_paso_macro_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
-    """Con un cluster nuevo SIN etiquetar el macro corre, pero el subtema solo se re-propone para la
-    familia que tiene un cluster sin subtema; la familia ya faceteada se omite. Postgres (CI)."""
+def test_paso_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
+    """La pasada etiqueta las familias y el subtema solo se re-propone para la familia que tiene un
+    cluster sin subtema; la familia ya faceteada se omite (`_falta_subtema`). Postgres (CI)."""
     monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
     for cid in ("c1", "c2", "c3", "c4"):
         _inicializar(cid)
     # Familia A: ya etiquetada y faceteada (estable, no debe re-faceterarse).
     repos.marcar_clusters_tema_macro(["c1", "c2"], "Mundial 2026")
     repos.marcar_clusters_subtema(["c1", "c2"], "Partidos")
-    # c3, c4: nuevos, sin tema_macro ni subtema -> reactivan la pasada de macro-evento.
+    # c3, c4: nuevos, sin tema_macro ni subtema.
 
-    macro_out = [
+    familias = [
         {"tema": "Mundial 2026", "ids": ["c1", "c2"]},
         {"tema": "Elecciones 2026", "ids": ["c3", "c4"]},
     ]
-    monkeypatch.setattr(fusionar_semantica, "proponer_macro_eventos", lambda *a, **k: macro_out)
+    monkeypatch.setattr(fusionar_semantica, "proponer_fusiones",
+                        lambda *a, **k: fusionar_semantica.Fusiones([], familias))
     faceteadas: list[list[str]] = []
 
     def fake_subtemas(familia, **_kw):
@@ -320,7 +305,7 @@ def test_paso_macro_solo_facetea_familias_con_subtema_pendiente(entorno, monkeyp
     monkeypatch.setattr(fusionar_semantica, "proponer_subtemas", fake_subtemas)
 
     recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
-    assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía a Haiku
+    assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía al LLM
 
 
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
@@ -334,14 +319,14 @@ def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Payload mínimo (solo titulares) + ejecutor no-agéntico                        #
+# Payload (id + titulo + tema_macro, sin resumen) + ejecutor no-agéntico         #
 # --------------------------------------------------------------------------- #
 
 
-def test_proponer_fusiones_payload_solo_id_y_titulo():
-    """El payload a Haiku lleva solo `id`+`titulo` (sin `resumen`): clasificación inline barata."""
+def test_proponer_fusiones_payload_id_titulo_tema_macro_sin_resumen():
+    """El payload lleva `id`, `titulo` y `tema_macro` (que reutilizan las familias), nunca `resumen`."""
     clusters = [
-        {"id": "a", "titulo": "Titular A", "resumen": "Resumen largo A"},
+        {"id": "a", "titulo": "Titular A", "resumen": "Resumen largo A", "tema_macro": "Mundial 2026"},
         {"id": "b", "titulo": "Titular B", "resumen": "Resumen largo B"},
     ]
     capt: dict[str, list[dict]] = {}
@@ -349,30 +334,14 @@ def test_proponer_fusiones_payload_solo_id_y_titulo():
     def ej(prompt, _carpeta):
         items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
         capt["items"] = items
-        return json.dumps({"grupos": []})
+        return json.dumps({"grupos": [], "familias": []})
 
     fusionar_semantica.proponer_fusiones(clusters, ejecutor=ej)
-    assert capt["items"] == [{"id": "a", "titulo": "Titular A"}, {"id": "b", "titulo": "Titular B"}]
-    assert all("resumen" not in it for it in capt["items"])
-
-
-def test_proponer_macro_eventos_payload_conserva_tema_macro_sin_resumen():
-    """El payload de macro-evento mantiene `tema_macro` (lo reutiliza el modelo) pero NO `resumen`."""
-    clusters = [
-        {"id": "a", "titulo": "T A", "resumen": "R A", "tema_macro": "Mundial 2026"},
-        {"id": "b", "titulo": "T B", "resumen": "R B", "tema_macro": ""},
+    assert capt["items"] == [
+        {"id": "a", "titulo": "Titular A", "tema_macro": "Mundial 2026"},
+        {"id": "b", "titulo": "Titular B", "tema_macro": ""},
     ]
-    capt: dict[str, list[dict]] = {}
-
-    def ej(prompt, _carpeta):
-        items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
-        capt["items"] = items
-        return json.dumps({"familias": []})
-
-    fusionar_semantica.proponer_macro_eventos(clusters, ejecutor=ej)
     assert all("resumen" not in it for it in capt["items"])
-    assert all("tema_macro" in it for it in capt["items"])
-    assert {it["id"] for it in capt["items"]} == {"a", "b"}
 
 
 def test_ejecutar_haiku_es_no_agentico(monkeypatch):
@@ -391,11 +360,11 @@ def test_ejecutar_haiku_es_no_agentico(monkeypatch):
 
 def test_construir_prompt_inserta_historias_y_contrato():
     # La plantilla viene de la Prompts (inicial): la lista JSON sustituye al marcador (que NO
-    # debe quedar crudo) y se conserva el contrato JSON {"grupos": [...]}.
+    # debe quedar crudo) y se conserva el contrato JSON {"grupos": [...], "familias": [...]}.
     p = fusionar_semantica._construir_prompt('[{"id":"a"}]')
     assert '[{"id":"a"}]' in p
     assert fusionar_semantica._MARCA_HISTORIAS not in p
-    assert "grupos" in p
+    assert "grupos" in p and "familias" in p
 
 
 # --------------------------------------------------------------------------- #

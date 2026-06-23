@@ -143,7 +143,7 @@ def _registrar_actividad_ia(
     """Sella una GENERACIÓN-actividad (`tipo='pipeline'`) de un paso IA INLINE del pool (best-effort).
 
     Hace VISIBLES en «Actividad IA» y en la economía POR ETAPA los pasos Haiku inline del pool
-    —Fusionar, Macro-evento, Clasificar, Priorizar, Traducir— que comparten `tipo='pipeline'`. Es un
+    —Fusionar, Clasificar, Priorizar, Traducir— que comparten `tipo='pipeline'`. Es un
     registro ya COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los
     REALES de la llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no
     se pasan, queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el

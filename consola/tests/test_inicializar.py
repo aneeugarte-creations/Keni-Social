@@ -11,6 +11,8 @@ def _silenciar_migraciones(monkeypatch):
         "migrar_nombres_prompts",
         "limpiar_prompts_obsoletos",
         "limpiar_prompts_obsoletos_v2",
+        "limpiar_prompts_obsoletos_v3",
+        "propagar_fusionar_fundido",
         "limpiar_editoriales_duplicados",
         "migrar_descripciones_editorial",
         "migrar_contrato_salida",

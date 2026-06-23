@@ -274,7 +274,7 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # `_cuerpo`, no engorda; `generaciones.proceso_de` lo deduce de tipo/etiqueta al leer).
         "proceso": _str("proceso"),
         # ETAPA explicita (fase del pipeline) cuando el llamante la conoce: la fijan las fases
-        # INLINE del pool (Fusionar/Traducir/Clasificar/Priorizar/Macro-evento), que comparten
+        # INLINE del pool (Fusionar/Traducir/Clasificar/Priorizar), que comparten
         # `tipo='pipeline'`. El ledger la vuelca al cerrar para desglosar la economia por etapa.
         # Ausente en el resto => "" (lo filtra `_cuerpo`; la economia deriva la etapa del tipo).
         "etapa": _str("etapa"),

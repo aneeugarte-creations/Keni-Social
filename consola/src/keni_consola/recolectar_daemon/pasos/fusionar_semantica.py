@@ -179,17 +179,18 @@ def paso_fusionar_semantica(
         # Capturamos el PROMPT y la SALIDA reales de Haiku (para la transparencia de la actividad).
         haiku: dict[str, str] = {"prompt": "", "salida": ""}
         try:
-            grupos = fusionar_semantica.proponer_fusiones(
+            res = fusionar_semantica.proponer_fusiones(
                 lote, ejecutor=ejecutor,
                 al_ejecutar=lambda p, s, _h=haiku: _h.update(prompt=p, salida=s),
             )
         except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
             _log.exception("recolectar_daemon: fallo proponiendo fusiones de una marca.")
             continue
+        # FUNDIR los grupos del mismo hecho (reasigna items a la canónica, borra las absorbidas).
         grupos_marca = 0
         fusionadas_marca = 0
         descripciones: list[str] = []
-        for grupo in grupos:
+        for grupo in res.grupos:
             try:
                 if _pkg._fusionar_grupo(
                     grupo, por_id, pesos=pesos, eventos=eventos, breaking_peso=breaking_peso,
@@ -204,52 +205,13 @@ def paso_fusionar_semantica(
                     descripciones.append(" + ".join(t for t in titulos if t))
             except Exception:  # noqa: BLE001 -- un fusionado problemático no aborta el paso
                 _log.exception("recolectar_daemon: fallo al fusionar un grupo de historias.")
-        # Actividad IA: deja constancia VISIBLE de la dedup semántica por marca, con el Haiku REAL
-        # (prompt + salida) y un resumen humano de qué historias se unieron.
-        if grupos_marca:
-            resumen = (
-                "Historias del mismo acontecimiento unidas por IA (dedup semántico):\n"
-                + "\n".join(f"• {d}" for d in descripciones)
-            )
-            salida_real = haiku["salida"].strip()
-            salida = (f"{salida_real}\n\n— — —\n{resumen}" if salida_real else resumen)
-            _pkg._registrar_actividad_ia(
-                marca_f,
-                f"Fusionar historias — {marcas.etiqueta_de(marca_f)}: "
-                f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s)",
-                salida,
-                prompt=haiku["prompt"],
-                etapa="Fusionar",
-            )
-
-        # Etiquetado INCREMENTAL: el LLM de macro-evento solo se invoca si hay algo que CAMBIAR —
-        # un cluster SIN `tema_macro` (familia nueva por formar) o ≥2 etiquetas distintas en el lote
-        # (posible sinónimo que el backstop de `_etiqueta_canonica` debe unificar a la dominante).
-        # Si TODO el lote ya comparte una sola etiqueta no hay familia nueva ni split que reconciliar,
-        # y `marcar_clusters_tema_macro`/`_subtema` cuentan filas EMPAREJADAS (no cambiadas): re-correr
-        # reescribiría la misma etiqueta y pagaría un Haiku de macro + uno de subtema por familia en
-        # CADA barrido. El bloque macro es lo último del cuerpo: `continue` lo omite.
-        temas_lote = {str(c.get("tema_macro") or "").strip() for c in lote}
-        if "" not in temas_lote and len(temas_lote) == 1:
-            continue
-
-        # MACRO-EVENTO (Fase A): además de FUNDIR duplicados, ETIQUETA familias de clusters
-        # DISTINTOS que cubren un mismo gran evento (cumbre, desastre, torneo…) SIN fusionarlos:
-        # cada sub-historia conserva su cluster y su corroboración real. Producción usa `tema_macro`
-        # para armar un carrusel del evento. Best-effort: un fallo de Haiku/persistencia no aborta.
-        traducir.tomar_metricas_acumuladas()  # aísla el coste del macro-evento del paso anterior
-        haiku_macro: dict[str, str] = {"prompt": "", "salida": ""}
-        try:
-            familias = fusionar_semantica.proponer_macro_eventos(
-                lote, ejecutor=ejecutor,
-                al_ejecutar=lambda p, s, _h=haiku_macro: _h.update(prompt=p, salida=s),
-            )
-        except Exception:  # noqa: BLE001 -- un fallo de Haiku por marca no aborta el paso
-            _log.exception("recolectar_daemon: fallo proponiendo macro-eventos de una marca.")
-            familias = []
+        # ETIQUETAR las familias de macro-evento (historias DISTINTAS del mismo gran evento, SIN
+        # fundirlas): cada sub-historia conserva su cluster y su corroboración real; producción usa
+        # `tema_macro` para armar un carrusel del evento. Vienen en la MISMA respuesta que los grupos
+        # (una sola llamada). Best-effort: un fallo de persistencia no aborta el paso.
         etiquetadas = 0
         familias_desc: list[str] = []
-        for familia in familias:
+        for familia in res.familias:
             tema_propuesto = str(familia.get("tema") or "").strip()
             ids = [str(i) for i in (familia.get("ids") or []) if i]
             if not tema_propuesto or len(ids) < 2:
@@ -271,20 +233,32 @@ def paso_fusionar_semantica(
             # faceteada no se reenvía a Haiku). Best-effort: un fallo no aborta el etiquetado macro.
             if _falta_subtema(ids, por_id):
                 _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
-        if etiquetadas:
-            macro_total += etiquetadas
-            resumen_macro = (
-                "Historias agrupadas por macro-evento (NO fusionadas; cada una conserva su cluster):\n"
-                + "\n".join(f"• {d}" for d in familias_desc)
-            )
-            salida_macro = haiku_macro["salida"].strip()
-            salida_m = f"{salida_macro}\n\n— — —\n{resumen_macro}" if salida_macro else resumen_macro
+        macro_total += etiquetadas
+        # Actividad IA: UNA constancia de la pasada de Fusionar (dedup + familias) con el LLM REAL
+        # (prompt + salida) y un resumen humano de qué se unió y qué se etiquetó.
+        if grupos_marca or etiquetadas:
+            partes: list[str] = []
+            if grupos_marca:
+                partes.append(
+                    "Historias del mismo acontecimiento unidas (dedup):\n"
+                    + "\n".join(f"• {d}" for d in descripciones)
+                )
+            if etiquetadas:
+                partes.append(
+                    "Familias de macro-evento etiquetadas (NO fundidas; cada una conserva su cluster):\n"
+                    + "\n".join(f"• {d}" for d in familias_desc)
+                )
+            salida_real = haiku["salida"].strip()
+            resumen = "\n\n".join(partes)
+            salida = f"{salida_real}\n\n— — —\n{resumen}" if salida_real else resumen
             _pkg._registrar_actividad_ia(
                 marca_f,
-                f"Macro-evento — {marcas.etiqueta_de(marca_f)}: {etiquetadas} familia(s)",
-                salida_m,
-                prompt=haiku_macro["prompt"],
-                etapa="Macro-evento",
+                f"Fusionar — {marcas.etiqueta_de(marca_f)}: "
+                f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s), "
+                f"{etiquetadas} familia(s) de evento",
+                salida,
+                prompt=haiku["prompt"],
+                etapa="Fusionar",
             )
     _comun._ultimo_fusionar = ahora_mono
     _comun._ultima_huella_fusionar = huella
@@ -294,5 +268,5 @@ def paso_fusionar_semantica(
             grupos_total, fusionadas_total,
         )
     if macro_total:
-        _log.info("recolectar_daemon: macro-evento: %d familia(s) etiquetada(s).", macro_total)
+        _log.info("recolectar_daemon: fusionar: %d familia(s) de evento etiquetada(s).", macro_total)
     return {"grupos": grupos_total, "fusionadas": fusionadas_total}

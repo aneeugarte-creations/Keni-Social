@@ -27,6 +27,9 @@ def main() -> int:
     o2 = libprompts.limpiar_prompts_obsoletos_v2()
     if o2:
         print(f"Texto: {o2} prompt(s) obsoleto(s) (ola v2) eliminados del store.")
+    o3 = libprompts.limpiar_prompts_obsoletos_v3()
+    if o3:
+        print(f"Texto: {o3} prompt(s) obsoleto(s) (ola v3: macro-evento fundido en fusionar) eliminados.")
     ed = libprompts.limpiar_editoriales_duplicados()
     if ed:
         print(f"Texto: {ed} editorial(es) duplicado(s) eliminados del store.")
@@ -41,6 +44,11 @@ def main() -> int:
     r = libprompts.reformatear_prompts()
     if r:
         print(f"Texto: {r} prompt(s) reformateados en el store.")
+    # Funde macro-evento en fusionar: propaga el cuerpo NUEVO de `prompt/fusionar` (grupos + familias
+    # en una pasada) al store, respetando ediciones del equipo. Tras retirar el macro (ola v3).
+    ff = libprompts.propagar_fusionar_fundido()
+    if ff:
+        print(f"Texto: {ff} prompt(s) fusionar propagados (macro-evento fundido).")
     # Saca el contrato de salida (forma del JSON) del cuerpo editable a un placeholder gestionado
     # por codigo (`{{CONTRATO_SALIDA}}`); el editor lo muestra read-only. One-shot; re-publica los
     # que toca para no dejarlos "sin publicar". El prompt que ve el modelo queda byte-identico.

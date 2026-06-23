@@ -88,7 +88,6 @@ describe("Contexto · la máquina en una página", () => {
       screen.getByText("Recolectar").closest("li"),
     );
     expect(screen.getByText("Cotejar")).toBeInTheDocument();
-    expect(screen.getByText("Macro-evento")).toBeInTheDocument();
     expect(screen.getByText("Verificar")).toBeInTheDocument();
     // «Agrupar» ya NO es una fila: es un sub-paso determinista dentro de Recolectar.
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();

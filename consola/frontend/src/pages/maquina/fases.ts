@@ -72,19 +72,9 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     nombre: "Fusionar",
     es_ia: true,
     claves: ["KENI_PIPELINE_FUSIONAR", MAESTRO_INVESTIGACION],
-    ayuda: "Funde las notas agrupadas en una sola historia",
+    ayuda: "Funde las notas del mismo hecho y agrupa las de un mismo gran evento",
     doc: "prompt/fusionar",
     etapa: "fusionar",
-  },
-  {
-    // Etiqueta familias de un mismo gran evento (historias DISTINTAS, sin fundirlas) para sacarlas
-    // como un carrusel. Corre dentro del paso de Fusionar; seguidora de su flag (solo el maestro en
-    // `claves`): no pinta switch propio, su recorrido lo gobierna Fusionar.
-    nombre: "Macro-evento",
-    es_ia: true,
-    claves: [MAESTRO_INVESTIGACION],
-    ayuda: "Agrupa historias distintas de un mismo gran evento (carrusel)",
-    doc: "prompt/fusionar-macroevento",
   },
   {
     nombre: "Traducir",
