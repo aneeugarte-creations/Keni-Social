@@ -36,42 +36,52 @@ import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
-type ClaveRed = "visualizaciones" | "interacciones" | "engagement_pct";
+type ClaveRed = "visualizaciones" | "alcance" | "interacciones" | "engagement_pct";
 
 /** Etiqueta legible de cada columna numérica (misma forma que la tabla por marca). */
 const ETIQUETA_METRICA: Record<ClaveRed, string> = {
   visualizaciones: "Vistas",
+  alcance: "Alcance",
   interacciones: "Interacciones",
   engagement_pct: "Engagement",
 };
 
-/** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
+/** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook).
+ * El alcance es `null` cuando la red no lo mide (TikTok/YouTube); a efectos de orden vale 0. */
 const ACCESORES: Record<ClaveRed, (r: RedMetrica) => number> = {
   visualizaciones: (r) => r.visualizaciones,
+  alcance: (r) => r.alcance ?? 0,
   interacciones: (r) => r.interacciones,
   engagement_pct: (r) => r.engagement_pct,
 };
 
 const IDS_BASE = idsColumnas(TABLA_REDES);
 
-/** Formatea el valor de una columna. */
+/** Formatea el valor de una columna. El alcance `null` (red que no lo mide) se pinta "—". */
 function valorCelda(r: RedMetrica, clave: ClaveRed): string {
   if (clave === "engagement_pct") {
     return porcentaje(r.engagement_pct);
   }
+  if (clave === "alcance") {
+    return r.alcance === null ? "—" : numeroCompleto(r.alcance);
+  }
   return numeroCompleto(r[clave]);
 }
 
-/** Totales del periodo por red: suma de las brutas + engagement global derivado. */
+/** Totales del periodo por red: suma de las brutas + engagement global derivado.
+ * `alcance` suma solo las redes que lo miden; `null` si ninguna lo hace (no se inventa 0). */
 function calcularTotales(redes: RedMetrica[]): {
   visualizaciones: number;
+  alcance: number | null;
   interacciones: number;
   engagement_pct: number;
 } {
   const visualizaciones = redes.reduce((s, r) => s + r.visualizaciones, 0);
   const interacciones = redes.reduce((s, r) => s + r.interacciones, 0);
+  const conAlcance = redes.filter((r) => r.alcance !== null);
+  const alcance = conAlcance.length > 0 ? conAlcance.reduce((s, r) => s + (r.alcance ?? 0), 0) : null;
   const engagement_pct = visualizaciones > 0 ? (interacciones / visualizaciones) * 100 : 0;
-  return { visualizaciones, interacciones, engagement_pct };
+  return { visualizaciones, alcance, interacciones, engagement_pct };
 }
 
 export function TablaRedes({
@@ -166,11 +176,17 @@ export function TablaRedes({
         </TableCell>
       );
     }
+    let contenido: string;
+    if (id === "engagement_pct") {
+      contenido = porcentaje(totales.engagement_pct);
+    } else if (id === "alcance") {
+      contenido = totales.alcance === null ? "—" : numeroCompleto(totales.alcance);
+    } else {
+      contenido = numeroCompleto(totales[id as "visualizaciones" | "interacciones"]);
+    }
     return (
       <TableCell key={id} className="pr-6 text-right tabular-nums last:pr-6">
-        {id === "engagement_pct"
-          ? porcentaje(totales.engagement_pct)
-          : numeroCompleto(totales[id as "visualizaciones" | "interacciones"])}
+        {contenido}
       </TableCell>
     );
   };

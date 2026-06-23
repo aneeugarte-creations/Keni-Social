@@ -45,11 +45,13 @@ describe("TablaCuentas", () => {
 
     expect(screen.getByText("UnoTV")).toBeInTheDocument();
     expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    expect(screen.getByText("Alcance")).toBeInTheDocument();
 
     const filaTotal = screen.getByText("Total").closest("tr")!;
     const total = within(filaTotal);
-    // Suma de vistas (100k + 300k), interacciones (5000 + 9000).
+    // Suma de vistas (100k + 300k), alcance (40k + 90k), interacciones (5000 + 9000).
     expect(total.getByText("400,000")).toBeInTheDocument();
+    expect(total.getByText("130,000")).toBeInTheDocument();
     expect(total.getByText("14,000")).toBeInTheDocument();
     // Engagement global = 14000/400000 = 3.5 %.
     expect(total.getByText("3.5 %")).toBeInTheDocument();

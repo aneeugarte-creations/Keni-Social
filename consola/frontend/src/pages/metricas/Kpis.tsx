@@ -72,7 +72,7 @@ export function Kpis({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* Sin delta a propósito: /metricas/comparar no emite `piezas`
             (no está en _METRICAS_CONTEO_COMPARABLES del backend, ver
             consola/src/keni_consola/api/metricas/reporte.py). */}

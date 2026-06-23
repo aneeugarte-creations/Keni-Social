@@ -1,5 +1,5 @@
 /**
- * Tabla por cuenta: una fila por cuenta con las cuatro métricas bien formateadas.
+ * Tabla por cuenta: una fila por cuenta con sus métricas bien formateadas.
  *
  * Las columnas numéricas van alineadas a la derecha con cifras tabulares para
  * facilitar la lectura comparada entre filas, y son ORDENABLES (clic en la
@@ -39,6 +39,7 @@ import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 /** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
 const ACCESORES: Record<ClaveMetrica, (c: CuentaMetrica) => number> = {
   visualizaciones: (c) => c.visualizaciones,
+  alcance: (c) => c.alcance,
   interacciones: (c) => c.interacciones,
   engagement_pct: (c) => c.engagement_pct,
 };
@@ -51,14 +52,16 @@ const IDS_BASE = idsColumnas(TABLA_CUENTAS);
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
 function calcularTotales(cuentas: CuentaMetrica[]): {
   visualizaciones: number;
+  alcance: number;
   interacciones: number;
   engagement_pct: number;
 } {
   const visualizaciones = cuentas.reduce((s, c) => s + c.visualizaciones, 0);
+  const alcance = cuentas.reduce((s, c) => s + c.alcance, 0);
   const interacciones = cuentas.reduce((s, c) => s + c.interacciones, 0);
   // Engagement global = interacciones totales ÷ vistas totales (no la media de %).
   const engagement_pct = visualizaciones > 0 ? (interacciones / visualizaciones) * 100 : 0;
-  return { visualizaciones, interacciones, engagement_pct };
+  return { visualizaciones, alcance, interacciones, engagement_pct };
 }
 
 export function TablaCuentas({
@@ -153,7 +156,7 @@ export function TablaCuentas({
       <TableCell key={id} className="text-right tabular-nums">
         {id === "engagement_pct"
           ? porcentaje(totales.engagement_pct)
-          : numeroCompleto(totales[id as "visualizaciones" | "interacciones"])}
+          : numeroCompleto(totales[id as "visualizaciones" | "alcance" | "interacciones"])}
       </TableCell>
     );
   };

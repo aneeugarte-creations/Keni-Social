@@ -34,6 +34,7 @@ export const TABLAS_CONFIG: TablaMeta[] = [
     columnas: [
       { id: "marca", etiqueta: "Marca" },
       { id: "visualizaciones", etiqueta: "Vistas" },
+      { id: "alcance", etiqueta: "Alcance" },
       { id: "interacciones", etiqueta: "Interacciones" },
       { id: "engagement_pct", etiqueta: "Engagement" },
     ],
@@ -44,6 +45,7 @@ export const TABLAS_CONFIG: TablaMeta[] = [
     columnas: [
       { id: "red", etiqueta: "Red" },
       { id: "visualizaciones", etiqueta: "Vistas" },
+      { id: "alcance", etiqueta: "Alcance" },
       { id: "interacciones", etiqueta: "Interacciones" },
       { id: "engagement_pct", etiqueta: "Engagement" },
     ],

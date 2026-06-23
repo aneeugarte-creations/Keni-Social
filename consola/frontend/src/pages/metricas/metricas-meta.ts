@@ -1,5 +1,5 @@
 /**
- * Metadatos compartidos de las cuatro métricas del reporte.
+ * Metadatos compartidos de las métricas del reporte.
  *
  * Define el orden, las etiquetas en español y el formateador adecuado de cada
  * métrica para reutilizarlos en KPIs, tabla y comparativa, evitando repetir
@@ -9,9 +9,12 @@ import type { CuentaMetrica, TotalMetricas } from "@/types";
 
 import { numeroCompacto, numeroCompleto, porcentaje } from "./formato";
 
-/** Claves de métrica que se MUESTRAN (el `alcance` del contrato no se mide en ninguna
- * red con la fuente actual de posts, así que no se expone en la UI). */
-export type ClaveMetrica = "visualizaciones" | "interacciones" | "engagement_pct";
+/** Claves de métrica que se MUESTRAN en KPIs, tabla y comparativa. */
+export type ClaveMetrica =
+  | "visualizaciones"
+  | "alcance"
+  | "interacciones"
+  | "engagement_pct";
 
 /** Honestidad de las "Vistas" agregadas ENTRE redes: el total suma magnitudes que no
  * son la misma cosa (impresiones en Facebook/Instagram vs. reproducciones en
@@ -39,7 +42,7 @@ export interface MetaMetrica {
   descripcion?: string;
 }
 
-/** Las 4 métricas en el orden en que se muestran en toda la página. */
+/** Las métricas en el orden en que se muestran en toda la página. */
 export const METRICAS: MetaMetrica[] = [
   {
     clave: "visualizaciones",
@@ -49,6 +52,17 @@ export const METRICAS: MetaMetrica[] = [
     completo: numeroCompleto,
     color: "orange",
     descripcion: NOTA_VISTAS_CROSSRED,
+  },
+  {
+    clave: "alcance",
+    etiqueta: "Alcance",
+    metrica: "alcance",
+    compacto: numeroCompacto,
+    completo: numeroCompleto,
+    color: "sky",
+    descripcion:
+      "Suma del alcance por publicación de Instagram y Facebook (usuarios únicos por " +
+      "post). Solo Meta (IG/FB); otras redes no lo miden.",
   },
   {
     clave: "interacciones",
