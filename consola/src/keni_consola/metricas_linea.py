@@ -22,9 +22,10 @@ resto de agregaciones del módulo. El orquestador `lineas_y_origenes` hace las l
 (repos + fachada de métricas) y delega en la función pura.
 
 La LÍNEA agrupa por la `categoria` de PLAN del contenido (la misma del monitor de
-Producción): incluye las SEÑALES del motor —Evergreen y Última hora— que no son etiquetas
-`vertical`, además de las verticales activas; las altas manuales sin categoría caen a su
-etiqueta `vertical`. El ORIGEN sí es la etiqueta de clase `origen`. Por cada cubo devuelve:
+Producción): incluye la línea reutilizable EVERGREEN (que no es una etiqueta `vertical`)
+además de las verticales activas; `breaking` (Última hora) es una SEÑAL, no una línea, así
+que cae a la vertical de la pieza, igual que las altas manuales sin categoría. El ORIGEN sí
+es la etiqueta de clase `origen`. Por cada cubo devuelve:
 nº de piezas, suma de visualizaciones, suma de interacciones y engagement medio; las piezas
 sin valor caen en "Sin línea" / "Sin origen". Solo LECTURA; no muta nada.
 """
@@ -192,20 +193,19 @@ def linea_de_categoria(
 ) -> str:
     """Nombre de la LÍNEA de plan de un contenido a partir de su `categoria` persistida.
 
-    El plan agrupa por su `categoria` (la misma clave que el monitor de Producción), que NO es
-    solo la etiqueta `vertical`: puede ser una SEÑAL del motor (`breaking`→"Última hora",
-    `evergreen`→"Evergreen") o el id de una vertical. Resolución:
-      - señal del motor → su rótulo fijo (`ETIQUETAS_CLAVE_NO_LINEA`);
+    `Evergreen` SÍ es una línea del plan; `breaking` (Última hora) es una SEÑAL del motor, NO
+    una línea. Resolución:
+      - `evergreen` → "Evergreen" (línea reutilizable del plan);
+      - `breaking` o `categoria` vacía (alta manual) → la etiqueta `vertical` asignada (o "Sin
+        línea" si no tiene): la señal de última hora no define la línea editorial;
       - id de vertical ACTIVA → su nombre (`vertical_por_id`);
-      - id de vertical retirada/desconocida → "" (cae en "Sin línea");
-      - `categoria` vacía (alta manual, fuera de plan) → la etiqueta `vertical` asignada.
+      - id de vertical retirada/desconocida → "" (cae en "Sin línea").
     """
-    rotulo = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
-    if rotulo is not None:
-        return rotulo
-    if categoria:
-        return vertical_por_id.get(categoria, "")
-    return etiqueta_vertical
+    if categoria == "evergreen":
+        return bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get("evergreen", "Evergreen")
+    if not categoria or categoria == "breaking":
+        return etiqueta_vertical
+    return vertical_por_id.get(categoria, "")
 
 
 def _lineas_por_contenido_plan(
@@ -215,8 +215,8 @@ def _lineas_por_contenido_plan(
 ) -> dict[str, str]:
     """`publicacion_id -> nombre de su LÍNEA de plan` (señales del motor incluidas).
 
-    Combina la `categoria` persistida de cada contenido (Evergreen/Última hora/vertical) con,
-    como respaldo para altas manuales sin categoría, la etiqueta `vertical` asignada.
+    Combina la `categoria` persistida de cada contenido (Evergreen o vertical) con, como
+    respaldo para altas manuales o señales (breaking), la etiqueta `vertical` asignada.
     """
     etiqueta_vertical = _valor_por_contenido(asignaciones, vertical_por_id)
     salida: dict[str, str] = {}
@@ -257,7 +257,7 @@ def lineas_por_pieza(
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL, solo_activas=True)
         if e.get("id")
     }
-    # Línea de PLAN por contenido (Evergreen/Última hora incluidas), no solo la etiqueta vertical.
+    # Línea de PLAN por contenido (Evergreen incluida), no solo la etiqueta vertical.
     linea_por_contenido = _lineas_por_contenido_plan(
         contenidos, repos.etiquetas_por_contenido(), vertical_por_id
     )
@@ -320,9 +320,9 @@ def lineas_y_origenes(
     origen_por_id = {e["id"]: e["nombre"] for e in origenes_def if e.get("id")}
 
     asignaciones = repos.etiquetas_por_contenido()
-    # La LÍNEA agrupa por la `categoria` de PLAN del contenido (incluye las señales del motor
-    # Evergreen/Última hora, que NO son etiquetas `vertical`), con respaldo a la etiqueta
-    # vertical para las altas manuales. El ORIGEN sí es una etiqueta de su clase.
+    # La LÍNEA agrupa por la `categoria` de PLAN del contenido (incluye EVERGREEN, que no es una
+    # etiqueta `vertical`); `breaking` es señal, no línea, y cae a la vertical, igual que las
+    # altas manuales. El ORIGEN sí es una etiqueta de su clase.
     linea_por_contenido = _lineas_por_contenido_plan(contenidos, asignaciones, vertical_por_id)
     origen_por_contenido = _valor_por_contenido(asignaciones, origen_por_id)
 

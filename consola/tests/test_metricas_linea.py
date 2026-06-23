@@ -22,15 +22,17 @@ def _pieza(id_post, titulo, vis, inter, eng):
     }
 
 
-def test_linea_de_categoria_resuelve_senales_verticales_y_manual():
-    """La LÍNEA de plan sale de la `categoria` del contenido: señales del motor con su rótulo,
-    vertical activa por id, vertical retirada/desconocida → "" (Sin línea), y alta manual
-    (categoria vacía) → la etiqueta vertical asignada."""
+def test_linea_de_categoria_evergreen_es_linea_breaking_no():
+    """La LÍNEA sale de la `categoria` del contenido: EVERGREEN es línea; `breaking` es SEÑAL
+    (cae a la vertical, no es una línea); vertical activa por id; retirada/desconocida → ""
+    (Sin línea); alta manual (categoria vacía) → la etiqueta vertical asignada."""
     verticales = {"et-nac": "Nacional", "et-int": "Internacional"}
     f = metricas_linea.linea_de_categoria
-    # Señales del motor (no son etiquetas vertical).
+    # Evergreen SÍ es una línea del plan.
     assert f("evergreen", vertical_por_id=verticales, etiqueta_vertical="") == "Evergreen"
-    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="") == "Última hora"
+    # Breaking es señal, no línea: cae a la vertical de la pieza (o "Sin línea" si no tiene).
+    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="Nacional") == "Nacional"
+    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="") == ""
     # Id de vertical ACTIVA → su nombre.
     assert f("et-nac", vertical_por_id=verticales, etiqueta_vertical="") == "Nacional"
     # Id de vertical RETIRADA/desconocida → "" (cae en "Sin línea").
