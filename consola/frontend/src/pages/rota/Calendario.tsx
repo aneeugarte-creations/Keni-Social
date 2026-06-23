@@ -4,12 +4,13 @@ import {
   AlertTriangle,
   BellRing,
   CalendarPlus,
+  ChevronRight,
   MoreHorizontal,
   Printer,
   SlidersHorizontal,
-  Sparkles,
   Sunrise,
   Sunset,
+  Upload,
   UserPlus,
 } from "lucide-react";
 import * as React from "react";
@@ -192,6 +193,8 @@ export function Calendario({
   // mensual a «Semana», repartir es la acción directa, sin un clic previo. El botón de la cabecera
   // solo lo oculta/muestra.
   const [abrirAsignar, setAbrirAsignar] = React.useState(modo === "gestion");
+  // «Cambios y ausencias» vive en la franja «Más opciones» del panel y abre su lista en un diálogo.
+  const [abrirCambios, setAbrirCambios] = React.useState(false);
 
   // Copiar la semana anterior. GRID POR MARCA: muta UNA rejilla -> exige marca concreta; en
   // "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
@@ -812,11 +815,9 @@ export function Calendario({
       )}
         </div>
         {/* Panel de Gestión como columna lateral (solo admin). Cerrado no pinta nada (la rejilla
-            recupera el ancho). Tres bloques, de más usado a menos: reparto MANUAL (comparte estado
-            con la rejilla → cada turno aparece al instante), «Cambios y ausencias», y al FINAL el
-            reparto automático desde un documento (la última opción). El panel ENTERO cabe en el
-            alto del viewport: el reparto y el import quedan fijos y solo la LISTA de cambios hace
-            scroll dentro de su recuadro, así nunca hay que deslizar el panel para llegar a ellos. */}
+            recupera el ancho). El reparto MANUAL es el héroe (comparte estado con la rejilla → cada
+            turno aparece al instante); debajo, una franja «Más opciones» reúne «Cambios y ausencias»
+            (se abre en un diálogo) y el import automático desde un documento. */}
         {esGestion && abrirAsignar && (
           <aside
             aria-label="Asignar turnos"
@@ -832,27 +833,60 @@ export function Calendario({
               cms={cms}
               onCambio={invalidar}
             />
+            {/* Utilidades secundarias en UNA franja (no tarjetas sueltas): «Cambios y ausencias»
+                abre su lista completa en un diálogo; «Importar de un documento» abre el asistente de
+                parrilla. El héroe es el reparto de arriba; esto queda callado al pie. */}
             <section
-              aria-label="Cambios y ausencias"
-              className="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card p-4"
+              aria-label="Más opciones"
+              className="shrink-0 rounded-xl border border-border bg-card p-3"
             >
-              <h2 className="mb-3 shrink-0 text-base font-semibold">Cambios y ausencias</h2>
-              {/* Solo la lista (no la cabecera del panel) hace scroll: la franja de filtros y
-                  «Nueva solicitud» viajan con ella, pero el recuadro queda acotado al hueco libre. */}
-              <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-                <CambiosYAusencias esAdmin={esAdmin} />
+              <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                Más opciones
               </div>
+              <button
+                type="button"
+                onClick={() => setAbrirCambios(true)}
+                className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
+              >
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <SlidersHorizontal className="h-[15px] w-[15px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-medium text-foreground">
+                    Cambios y ausencias
+                  </span>
+                  <span className="block text-[11.5px] text-muted-foreground">
+                    Solicitudes y ausencias del equipo
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+              </button>
+              <div className="my-0.5 border-t border-border/70" />
+              <ImportarDocumentoParrilla
+                marca={marcaActiva ?? ""}
+                onAplicado={invalidar}
+                renderTrigger={(abrir) => (
+                  <button
+                    type="button"
+                    onClick={abrir}
+                    className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
+                  >
+                    <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <Upload className="h-[15px] w-[15px]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13.5px] font-medium text-foreground">
+                        Importar de un documento
+                      </span>
+                      <span className="block text-[11.5px] text-muted-foreground">
+                        Parrilla o Excel · automático
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                  </button>
+                )}
+              />
             </section>
-            {/* Reparto automático: la ÚLTIMA opción, al fondo y compacta (la acción vive en su propio
-                diálogo). Sube una parrilla/Excel/foto y Keni propone los turnos; al aplicar, la
-                rejilla se refresca (no cierra el panel). */}
-            <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-dashed border-border p-3">
-              <div className="flex items-center gap-1.5 text-sm font-medium">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Automático: de un documento
-              </div>
-              <ImportarDocumentoParrilla marca={marcaActiva ?? ""} onAplicado={invalidar} />
-            </div>
           </aside>
         )}
       </div>
@@ -874,6 +908,20 @@ export function Calendario({
       )}
       {esGestion && abrirCarga && (
         <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
+      )}
+      {/* «Cambios y ausencias»: su lista completa (filtros + «Nueva solicitud») en un diálogo,
+          abierto desde la franja «Más opciones» del panel de Gestión. */}
+      {esGestion && abrirCambios && (
+        <Dialog open onOpenChange={setAbrirCambios}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Cambios y ausencias</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[70vh] overflow-y-auto">
+              <CambiosYAusencias esAdmin={esAdmin} />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       {dialogoAjustes}
 

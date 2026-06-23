@@ -19,6 +19,9 @@ import type { FranjaSemana, MiembroRota } from "@/types";
 
 /** Letra de cada día de la semana (lun→dom), para la tira compacta de Días. */
 const LETRA_DIA = ["L", "M", "X", "J", "V", "S", "D"];
+/** Nombre largo del día (lun→dom), para el `aria-label` de cada botón de la tira (la tira
+ *  enseña solo la letra; la fecha la pone la cabecera de la matriz). */
+const DIA_LARGO = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 
 /**
  * Token de persona: texto sin caja que, al elegirse, se tiñe del naranja suave de marca (el mismo
@@ -342,6 +345,12 @@ export function DialogoAsignarTurnos({
     franjasLaborales.length === 0;
   // Turnos que se intentarán crear: el mismo horario+días aplicado a cada persona marcada.
   const totalTurnos = personasSel.size * diasSel.size;
+  // Personas marcadas, en el orden de la lista: son las filas de la matriz de previsualización.
+  const personasElegidas = cms.filter((m) => personasSel.has(m.id));
+  const resumenMatriz =
+    totalTurnos > 0
+      ? `Previsualización: ${totalTurnos} turno${totalTurnos === 1 ? "" : "s"} a crear`
+      : "Previsualización del reparto: elige personas y días";
   // Por qué el botón está deshabilitado: la PRIMERA pieza que falta. Un botón gris a secas no dice
   // qué hace falta y deja al usuario atascado («no me deja seguir»); esta pista lo desbloquea.
   const pistaIncompleta =
@@ -467,34 +476,85 @@ export function DialogoAsignarTurnos({
                   type="button"
                   role="checkbox"
                   aria-checked={sel}
+                  aria-label={`${DIA_LARGO[i] ?? ""} ${fecha.slice(8, 10)}`}
                   onClick={() => toggleDia(fecha)}
                   className={cn(
-                    "flex flex-col items-center gap-0.5 rounded-lg py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    sel ? "bg-keni-50 dark:bg-keni-900/30" : "hover:bg-accent",
+                    "rounded-md py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    sel
+                      ? "bg-keni-50 text-keni-700 dark:bg-keni-900/30 dark:text-keni-300"
+                      : "text-muted-foreground/80 hover:bg-accent",
                   )}
                 >
+                  {LETRA_DIA[i] ?? ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Previsualización del reparto: filas = personas elegidas, columnas = los 7 días; las
+            celdas que se crearán se encienden en el naranja suave de marca. El recuento deja de
+            ser un número abstracto y se ve como una imagen de lo que vas a hacer. */}
+        <div
+          role="img"
+          aria-label={resumenMatriz}
+          className="rounded-lg border border-border bg-card p-2.5 tabular-nums"
+        >
+          <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] items-end gap-[3px]">
+            <span />
+            {dias.map((fecha, i) => {
+              const sel = diasSel.has(fecha);
+              return (
+                <span key={fecha} className="flex flex-col items-center leading-none">
                   <span
                     className={cn(
-                      "text-[10px] font-semibold uppercase tracking-wide",
-                      sel ? "text-keni-700 dark:text-keni-300" : "text-muted-foreground/70",
+                      "text-[10px] font-semibold uppercase",
+                      sel ? "text-keni-700 dark:text-keni-300" : "text-muted-foreground/50",
                     )}
                   >
                     {LETRA_DIA[i] ?? ""}
                   </span>
                   <span
                     className={cn(
-                      "text-[13px] tabular-nums",
-                      sel
-                        ? "font-semibold text-keni-700 dark:text-keni-300"
-                        : "text-muted-foreground",
+                      "mt-0.5 text-[9px]",
+                      sel ? "text-keni-600 dark:text-keni-300" : "text-muted-foreground/40",
                     )}
                   >
                     {fecha.slice(8, 10)}
                   </span>
-                </button>
+                </span>
               );
             })}
           </div>
+          {personasElegidas.length === 0 ? (
+            <p className="px-1 py-3 text-center text-xs text-muted-foreground">
+              Elige personas y días para ver el reparto.
+            </p>
+          ) : (
+            <div className="mt-1.5 space-y-[3px]">
+              {personasElegidas.map((m) => (
+                <div
+                  key={m.id}
+                  className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] items-center gap-[3px]"
+                >
+                  <span className="truncate pr-1 text-[11.5px] text-foreground/80">
+                    {m.nombre}
+                  </span>
+                  {dias.map((fecha) => (
+                    <span
+                      key={fecha}
+                      className={cn(
+                        "h-[18px] rounded-[4px] border",
+                        diasSel.has(fecha)
+                          ? "border-keni-400/40 bg-keni-50 dark:bg-keni-900/30"
+                          : "border-border/60",
+                      )}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
     </div>
   );

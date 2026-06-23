@@ -106,30 +106,35 @@ function ResumenRango({
 export function ImportarDocumentoParrilla({
   onAplicado,
   marca,
+  renderTrigger,
 }: {
   /** Se invoca tras aplicar una propuesta (para refrescar el calendario real). */
   onAplicado: () => void;
   /** Marca activa: dice de qué equipo son las franjas a las que se mapean las personas. */
   marca: string;
+  /** Disparador a medida: recibe la función que abre el asistente. Sin él se pinta el botón
+   *  outline «Importar documento» por defecto; con él se puede incrustar como fila de una franja. */
+  renderTrigger?: (abrir: () => void) => React.ReactNode;
 }) {
   const [abierto, setAbierto] = React.useState(false);
   // Propuesta activa que estamos siguiendo en el Dialog (recién subida o reabierta).
   const [propuestaId, setPropuestaId] = React.useState<string | null>(null);
+  const abrir = () => {
+    setPropuestaId(null);
+    setAbierto(true);
+  };
 
   return (
     <>
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setPropuestaId(null);
-            setAbierto(true);
-          }}
-          data-testid="rota-importar-documento"
-        >
-          <Upload className="h-4 w-4" />
-          Importar documento
-        </Button>
+        {renderTrigger ? (
+          renderTrigger(abrir)
+        ) : (
+          <Button variant="outline" onClick={abrir} data-testid="rota-importar-documento">
+            <Upload className="h-4 w-4" />
+            Importar documento
+          </Button>
+        )}
         <BadgePropuestasPendientes
           onAbrir={(id) => {
             setPropuestaId(id);
