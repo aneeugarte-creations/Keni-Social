@@ -141,8 +141,6 @@ def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marc
         "etiqueta_investigacion": (
             marca_cat.etiqueta_investigacion if marca_cat is not None else "Noticias"
         ),
-        # Nº de OK ("likes") que una pieza de esta marca necesita para aprobarse (def 2).
-        "likes_aprobacion": marca_cat.likes_aprobacion if marca_cat is not None else 2,
         "canal_publicacion": canal,
         "postproxy": {"conectado": bool(grupo), "profile_group_id": grupo},
         "redes": redes,

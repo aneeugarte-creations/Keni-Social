@@ -539,7 +539,7 @@ async def forzar(request: Request) -> Response:
     """
     if not _puede_forzar(request):
         return JSONResponse(
-            {"error": "Solo un admin o coordinador puede forzar la aprobación."},
+            {"error": "Solo un admin/superadmin o alguien con permiso de coordinación puede forzar la aprobación."},
             status_code=403,
         )
     pieza_id = request.path_params["pieza_id"]

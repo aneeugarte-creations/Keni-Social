@@ -26,7 +26,6 @@ function aEditable(m: MarcaDashboard): MarcaEditable {
     id_metricas: m.marca,
     tipo: m.tipo,
     etiqueta_investigacion: m.etiqueta_investigacion,
-    likes_aprobacion: m.likes_aprobacion,
   };
 }
 
@@ -172,7 +171,8 @@ function BloqueMarca({
   onConectar: (marca: string, plataforma: string) => void;
   onDesconectar: (marca: string, red: RedMarca) => void;
   onCanal: (marca: string, canal: CanalPieza) => void;
-  onEditar: (marca: MarcaDashboard) => void;
+  /** Abre el editor de identidad de la marca; ausente => la marca no es editable (no superadmin). */
+  onEditar?: (marca: MarcaDashboard) => void;
 }) {
   const conectadas = marca.redes.filter((r) => r.conectado && r.estado === "active").length;
   return (
@@ -180,16 +180,21 @@ function BloqueMarca({
       {/* Sumatorio de la marca + canal de publicación. */}
       <tr className="border-b border-border bg-muted/40 font-medium">
         <td className="py-2 pl-3 pr-2">
-          {/* Clic en el nombre → abre el editor de la marca (con borrar dentro). */}
-          <Tooltip label="Editar marca">
-            <button
-              type="button"
-              onClick={() => onEditar(marca)}
-              className="rounded text-left hover:underline"
-            >
-              {marca.etiqueta}
-            </button>
-          </Tooltip>
+          {/* Clic en el nombre → abre el editor de identidad (solo superadmin). Si no es
+              editable, el nombre va como texto plano. */}
+          {onEditar ? (
+            <Tooltip label="Editar marca">
+              <button
+                type="button"
+                onClick={() => onEditar(marca)}
+                className="rounded text-left hover:underline"
+              >
+                {marca.etiqueta}
+              </button>
+            </Tooltip>
+          ) : (
+            <span>{marca.etiqueta}</span>
+          )}
         </td>
         <CeldasNumero c={marca.total} />
         <td className="px-3 py-2 text-right">
@@ -385,7 +390,9 @@ export default function Marcas() {
                     onConectar={conectar}
                     onDesconectar={desconectar}
                     onCanal={cambiarCanal}
-                    onEditar={(m) => setEditor({ abierto: true, marca: aEditable(m) })}
+                    onEditar={
+                      esSuperadmin ? (m) => setEditor({ abierto: true, marca: aEditable(m) }) : undefined
+                    }
                   />
                 ))}
               </tbody>

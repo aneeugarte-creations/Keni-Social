@@ -37,6 +37,7 @@ import {
   QUEUE_PRODUCCION,
   slugFase,
 } from "@/pages/maquina/fases";
+import { SeccionCadenaAprobacion } from "@/pages/maquina/SeccionCadenaAprobacion";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { PanelAgentes } from "@/pages/monitor/PanelAgentes";
 import {
@@ -169,6 +170,7 @@ export default function Contexto() {
             }
           />
           {esAdmin && <ServiciosMaquina motor="produccion" />}
+          {esAdmin && <SeccionCadenaAprobacion marcaActiva={marcaActiva} />}
         </div>
       )}
 

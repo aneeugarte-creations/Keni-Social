@@ -102,8 +102,7 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
             # `puede_coordinar` (permiso de coordinacion): lo lee el override de aprobacion
             # (`_puede_forzar`) por peticion; se arrastra en la sesion para no refrescar de BD.
             "puede_coordinar": bool(fila["puede_coordinar"]),
-            # `cargo` (organigrama) lo usa la cadena de aprobacion para validar el cargo
-            # requerido por nivel (item C). "" si el usuario no tiene cargo asignado.
+            # `cargo` (organigrama): PURAMENTE VISUAL (lo pinta el front). No gobierna permisos.
             "cargo": fila["cargo"] or "",
             "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
             "creado": fila["creado"],
