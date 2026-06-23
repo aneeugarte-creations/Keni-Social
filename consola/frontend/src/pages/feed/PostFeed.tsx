@@ -56,12 +56,16 @@ import { plural } from "@/lib/formato";
 import {
   atribucionStock,
   esLicenciada,
+  esStock,
   etiquetaOverlayStock,
+  MENSAJE_BLOQUEO_LICENCIA,
   mensajeBloqueoStock,
   nivelLicencia,
   nombreProveedor,
+  publicablePorLicenciaStock,
   stockAutorizado,
   stockNoAutorizado,
+  urlDeedLicencia,
 } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 import {
@@ -315,16 +319,26 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // STOCK SIN LICENCIA: la pieza lleva una foto de stock que nadie ha autorizado. Bloquea publicar
   // (defensa en UI; el back también devuelve 409) con su mensaje propio en cualquier etapa pendiente.
   const bloqueoStock = stockNoAutorizado(pieza);
+  // BLOQUEO LEGAL por licencia: una foto de stock con licencia no publicable (BY-SA/NC/ND/
+  // desconocida) NO se puede publicar aunque esté autorizada (espejo del 409 del back).
+  const bloqueoLicencia =
+    esStock(pieza) &&
+    !publicablePorLicenciaStock({
+      licencia: pieza.imagen_licencia,
+      proveedor: pieza.imagen_proveedor,
+    });
   const motivoBloqueo = yaAprobada
     ? pieza.revisor_nombre
       ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
       : ""
-    : bloqueoStock
-      ? mensajeBloqueoStock({
-          licencia: pieza.imagen_licencia,
-          proveedor: pieza.imagen_proveedor,
-        })
-      : enRevision
+    : bloqueoLicencia
+      ? MENSAJE_BLOQUEO_LICENCIA
+      : bloqueoStock
+        ? mensajeBloqueoStock({
+            licencia: pieza.imagen_licencia,
+            proveedor: pieza.imagen_proveedor,
+          })
+        : enRevision
         ? cadenaQuery.isError
           ? "No se pudo cargar el estado de aprobación; reintenta."
           : cadenaCargando
@@ -354,15 +368,20 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       deshacer.mutate("like"); // retira tu dislike antes de poder dar el OK
       return;
     }
-    // STOCK SIN LICENCIA: nunca se aprueba/publica sin autorizar la imagen. El toast manda al editor
-    // (donde está el botón Autorizar o se sustituye la foto).
-    if (bloqueoStock) {
-      toast(mensajeBloqueoStock({
-        licencia: pieza.imagen_licencia,
-        proveedor: pieza.imagen_proveedor,
-      }), {
-        action: { label: "Abrir", onClick: () => void abrirEditor() },
-      });
+    // STOCK SIN LICENCIA o licencia no publicable: nunca se aprueba/publica. El toast manda al
+    // editor (donde está el botón Autorizar o se sustituye la foto).
+    if (bloqueoLicencia || bloqueoStock) {
+      toast(
+        bloqueoLicencia
+          ? MENSAJE_BLOQUEO_LICENCIA
+          : mensajeBloqueoStock({
+              licencia: pieza.imagen_licencia,
+              proveedor: pieza.imagen_proveedor,
+            }),
+        {
+          action: { label: "Abrir", onClick: () => void abrirEditor() },
+        },
+      );
       return;
     }
     if (!puedeDar) {
@@ -636,6 +655,21 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
             </a>
           ) : (
             creditoObligatorio
+          )}
+          {/* Enlace al DEED de la licencia CC (sus términos), además de a la obra. */}
+          {urlDeedLicencia(pieza.imagen_licencia) && (
+            <>
+              {" · "}
+              <a
+                href={urlDeedLicencia(pieza.imagen_licencia)}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                licencia
+              </a>
+            </>
           )}
         </p>
       )}

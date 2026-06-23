@@ -494,19 +494,44 @@ def _autorizar_stock(pieza_id: str, autorizar: bool) -> tuple[int, dict]:
     if actualizada is None:
         return 404, {"error": "Esa pieza ya no existe."}
     # ESPEJO de la decisión: la MISMA foto en otras redes son los mismos derechos, así que
-    # autorizar/revocar una vez se aplica a las hermanas que comparten esa `foto` (no se obliga a
-    # autorizar red por red). Solo toca stock con la misma foto; no pisa imágenes propias.
-    foto = (actualizada.get("foto") or "").strip()
+    # autorizar/revocar una vez se aplica a TODAS las hermanas del mismo tema que llevan esa foto
+    # de stock (no se obliga a autorizar red por red, lo que dejaba unas redes OK y otras no).
+    # "Misma foto" se identifica de forma robusta (la `foto` puede diferir entre redes aunque la
+    # imagen sea la misma): por `foto` igual, o `imagen_credito_url` igual, o la terna
+    # (proveedor, autor, licencia) igual. Solo toca stock; no pisa imágenes propias ni publicadas.
     pub_id = (actualizada.get("publicacion_id") or "").strip()
-    if foto and pub_id:
+    foto = (actualizada.get("foto") or "").strip()
+    credito_url = (actualizada.get("imagen_credito_url") or "").strip()
+    firma = (
+        (actualizada.get("imagen_proveedor") or "").strip(),
+        (actualizada.get("imagen_autor") or "").strip(),
+        (actualizada.get("imagen_licencia") or "").strip(),
+    )
+    if pub_id and (foto or credito_url or any(firma)):
         for hermana in repos.listar_piezas_fila(pub_id):
             if hermana.get("id") == pieza_id or (hermana.get("estado") or "") == "publicado":
                 continue
-            if (hermana.get("imagen_origen") or "") == licencia_imagen.ORIGEN_STOCK and (
-                hermana.get("foto") or ""
-            ).strip() == foto:
+            if _misma_foto_stock(hermana, foto, credito_url, firma):
                 repos.actualizar_pieza_fila(hermana["id"], campos)
     return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
+
+
+def _misma_foto_stock(
+    hermana: dict, foto: str, credito_url: str, firma: tuple[str, str, str]
+) -> bool:
+    """True si la hermana lleva la MISMA foto de stock (por `foto`, crédito o terna proveedor/autor/licencia)."""
+    if (hermana.get("imagen_origen") or "") != licencia_imagen.ORIGEN_STOCK:
+        return False
+    if foto and (hermana.get("foto") or "").strip() == foto:
+        return True
+    if credito_url and (hermana.get("imagen_credito_url") or "").strip() == credito_url:
+        return True
+    h_firma = (
+        (hermana.get("imagen_proveedor") or "").strip(),
+        (hermana.get("imagen_autor") or "").strip(),
+        (hermana.get("imagen_licencia") or "").strip(),
+    )
+    return bool(any(firma)) and h_firma == firma
 
 
 async def autorizar_stock(request: Request) -> Response:

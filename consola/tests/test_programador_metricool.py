@@ -163,6 +163,43 @@ def test_borrador_x_sin_media(monkeypatch):
     assert borrador.media == []
 
 
+def test_borrador_cc_by_anade_credito_al_caption(monkeypatch):
+    """Una pieza con foto CC BY publica el copy + la línea de crédito (idempotente)."""
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+    pub = {
+        "id": "cb1", "red": "x", "contenido": "Mira esta foto",
+        "imagen": "", "fecha_programada": "2030-01-01T10:00",
+        "imagen_origen": "stock", "imagen_autorizada": True,
+        "imagen_licencia": "CC BY 4.0", "imagen_proveedor": "openverse",
+        "imagen_autor": "Jane Doe", "imagen_credito_url": "https://ov/obra",
+    }
+    borrador = _borrador_de_publicacion(pub)
+    assert borrador is not None
+    assert "Mira esta foto" in borrador.texto
+    assert "Jane Doe" in borrador.texto
+    assert "CC BY 4.0" in borrador.texto
+    # IDEMPOTENTE: si el copy ya trae la línea de crédito, no se duplica.
+    credito = borrador.texto.split("\n\n")[-1]
+    pub2 = {**pub, "contenido": f"{pub['contenido']}\n\n{credito}"}
+    borrador2 = _borrador_de_publicacion(pub2)
+    assert borrador2 is not None
+    assert borrador2.texto.count("Jane Doe") == 1
+
+
+def test_borrador_cc0_no_anade_credito(monkeypatch):
+    """Una pieza con foto CC0 (libre) NO exige crédito: el caption es solo el copy."""
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+    pub = {
+        "id": "c0", "red": "x", "contenido": "Texto sin crédito",
+        "imagen": "", "fecha_programada": "2030-01-01T10:00",
+        "imagen_origen": "stock", "imagen_autorizada": True,
+        "imagen_licencia": "CC0", "imagen_proveedor": "openverse",
+    }
+    borrador = _borrador_de_publicacion(pub)
+    assert borrador is not None
+    assert borrador.texto == "Texto sin crédito"
+
+
 def test_borrador_video_construye_media_video(monkeypatch):
     """Pieza formato=video con asset y URL publica -> MediaRef de tipo video."""
     monkeypatch.setenv("KENI_CONSOLA_URL_PUBLICA", "https://social.kenitech.io")

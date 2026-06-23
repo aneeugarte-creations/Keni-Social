@@ -71,8 +71,9 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
         # GATE STOCK (infranqueable): cubre el PATCH directo y el MCP tablero (`mover_pieza`),
         # que entran por aquí sin pasar por los gates de aprobación. Una imagen de stock SIN
         # LICENCIA no autorizada no puede ir a programado/publicado por ningún atajo.
-        if licencia_imagen.bloquea_estado(previa, datos["estado"]):
-            return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
+        motivo = licencia_imagen.motivo_bloqueo(previa, datos["estado"])
+        if motivo is not None:
+            return 409, {"error": motivo}
         campos["estado"] = datos["estado"]
     for flag in (
         "falta_copy",
@@ -106,18 +107,15 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
         campos["falta_video"] = False
 
     # FOTO PROPIA: CAMBIAR la `foto` por esta vía (galería, subida, «usar original») es siempre
-    # una imagen propia/licenciada — el stock se adjunta aparte (autogen_stock), nunca por este
-    # PATCH. Limpia el metadato de stock heredado para que no quede el aviso SIN LICENCIA de una
-    # foto anterior. Solo al CAMBIAR de foto (no si reenvían la misma), para no pisar el badge.
+    # una imagen PROPIA — el stock/licenciada se adjunta por su puerta (autogen_stock/agencias),
+    # nunca por este PATCH. Declara el origen PROPIO (el que indique el cliente: galeria/subida/
+    # ia, o '' por defecto; jamás stock/licenciada) para que la normalización LIMPIE el metadato
+    # de stock heredado. Solo al CAMBIAR de foto (no si reenvían la misma), para no pisar el badge.
     if "foto" in campos and campos["foto"] != (previa.get("foto") or ""):
-        campos.update(
-            imagen_origen="",
-            imagen_proveedor="",
-            imagen_autor="",
-            imagen_licencia="",
-            imagen_credito_url="",
-            imagen_autorizada=False,
-        )
+        campos["imagen_origen"] = licencia_imagen.origen_propio(datos.get("imagen_origen"))
+    # INVARIANTE de metadata de licencia: el metadato solo es significativo si el origen RESULTANTE
+    # es stock/licenciada; en cualquier otro caso queda vacío (no se arrastra una licencia stale).
+    campos = licencia_imagen.normalizar_campos_imagen(campos, previa)
 
     if not campos:
         return 400, {"error": "Indica algún campo a actualizar."}

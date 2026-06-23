@@ -138,6 +138,145 @@ def test_pieza_licenciada_no_se_bloquea_es_publicable(entorno):
     assert r.json()["plataforma"]["estado"] == "programado"
 
 
+def _marcar_stock_licencia(
+    pieza_id: str, *, licencia: str, proveedor: str, autor: str = ""
+) -> None:
+    """Marca una foto de stock AUTORIZADA (gate humano OK) con una licencia concreta."""
+    repos.actualizar_pieza_fila(
+        pieza_id,
+        {
+            "foto": "stock123.jpg",
+            "imagen": "",
+            "falta_imagen": False,
+            "imagen_origen": "stock",
+            "imagen_proveedor": proveedor,
+            "imagen_licencia": licencia,
+            "imagen_autor": autor,
+            "imagen_autorizada": True,
+        },
+    )
+
+
+def test_by_sa_no_se_puede_programar(entorno):
+    """Una foto CC BY-SA (share-alike) NO se publica: 409 con el motivo legal de licencia."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_licencia(
+        pieza["id"], licencia="CC BY-SA 4.0", proveedor="wikimedia", autor="A"
+    )
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 409, r.text
+    assert "no permite publicarla" in r.json().get("error", "")
+
+
+def test_cc_by_sin_credito_se_bloquea(entorno):
+    """Una foto CC BY sin crédito (sin autor) se bloquea: 409 por crédito ausente."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_licencia(pieza["id"], licencia="CC BY 4.0", proveedor="openverse")
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 409, r.text
+    assert "crédito" in r.json().get("error", "")
+
+
+def test_cc_by_con_credito_se_programa(entorno):
+    """Una foto CC BY con crédito (autor + licencia) SÍ se programa: el crédito viajará en el caption."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_licencia(
+        pieza["id"], licencia="CC BY 4.0", proveedor="openverse", autor="Jane Doe"
+    )
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["plataforma"]["estado"] == "programado"
+
+
+def test_reemplazo_foto_propia_limpia_licencia_stale(entorno):
+    """REEMPLAZO: cambiar una foto de stock BY-SA por una PROPIA limpia la metadata y desbloquea.
+
+    Antes el `foto` cambiaba pero la licencia vieja se quedaba pegada (riesgo de leer una licencia
+    stale). Ahora el PATCH declara origen propio y la normalización vacía la metadata.
+    """
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_licencia(pieza["id"], licencia="CC BY-SA 4.0", proveedor="wikimedia", autor="A")
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"foto": "originales/propia.jpg", "imagen_origen": "subida"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "subida"
+    assert fila["imagen_licencia"] == ""
+    assert fila["imagen_proveedor"] == ""
+    assert fila["imagen_autor"] == ""
+    assert fila["imagen_autorizada"] in (False, 0)
+    assert fila["falta_imagen"] in (False, 0)
+    r2 = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_composicion_placa_preserva_licencia_y_bloqueo(entorno):
+    """COMPOSICIÓN: recomponer SOLO la `imagen` (placa) de una foto BY-SA CONSERVA metadata y bloqueo."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_licencia(pieza["id"], licencia="CC BY-SA 4.0", proveedor="wikimedia", autor="A")
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"imagen": "placa.png"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "stock"
+    assert fila["imagen_licencia"] == "CC BY-SA 4.0"
+    r2 = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 409, r2.text
+    assert "no permite publicarla" in r2.json().get("error", "")
+
+
+def test_reemplazo_por_put_se_espeja_y_limpia_licencia_en_hermana(entorno):
+    """ESPEJO: reemplazar la foto por PUT propaga la limpieza de licencia a la red hermana."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    pub_id = pieza["publicacion_id"]
+    _marcar_stock_licencia(pieza["id"], licencia="CC BY-SA 4.0", proveedor="wikimedia", autor="A")
+    hermana = repos.crear_pieza_fila(publicacion_id=pub_id, red="facebook")
+    _marcar_stock_licencia(hermana["id"], licencia="CC BY-SA 4.0", proveedor="wikimedia", autor="A")
+    r = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={"foto": "originales/propia.jpg", "imagen_origen": "subida"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    h = repos.obtener_pieza_fila(hermana["id"])
+    assert h["foto"] == "originales/propia.jpg"
+    assert h["imagen_origen"] == "subida"
+    assert h["imagen_licencia"] == ""
+    assert h["imagen_autorizada"] in (False, 0)
+
+
 def test_reenviar_la_misma_foto_no_altera_la_licencia(entorno):
     """Reenviar la MISMA foto (sin cambiarla) NO toca el metadato de stock (no pisa el badge)."""
     cli = _cli()

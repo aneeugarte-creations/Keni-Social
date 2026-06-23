@@ -495,8 +495,9 @@ def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, An
             }
         # GATE STOCK (infranqueable): el PUT puede saltar directo a programado/publicado; una
         # imagen de stock SIN LICENCIA no autorizada no pasa por este atajo tampoco.
-        if licencia_imagen.bloquea_estado(pieza, estado):
-            return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
+        motivo = licencia_imagen.motivo_bloqueo(pieza, estado)
+        if motivo is not None:
+            return 409, {"error": motivo}
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")
@@ -569,6 +570,14 @@ def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, An
         if not isinstance(espejo, bool):
             return 400, {"error": "El campo espejo debe ser verdadero o falso."}
         campos["espejo"] = espejo
+
+    # FOTO PROPIA: CAMBIAR la `foto` por este PUT es una imagen PROPIA (galería/subida/usar
+    # original); el stock/licenciada se adjunta por su puerta, nunca aquí. Declara el origen PROPIO
+    # (el que indique el cliente, jamás stock/licenciada) y FUERZA la invariante de metadata: el
+    # crédito/licencia stale de una foto anterior se LIMPIA (si no, el gate leería una licencia vieja).
+    if "foto" in campos and campos["foto"] != (pieza.get("foto") or ""):
+        campos["imagen_origen"] = licencia_imagen.origen_propio(datos.get("imagen_origen"))
+    campos = licencia_imagen.normalizar_campos_imagen(campos, pieza)
 
     # PUBLICADO ES TERMINAL para la fecha: el post de una pieza publicada ya salió en su
     # momento; mover su `fecha_programada` reubicaría su píldora verde y MENTIRÍA sobre cuándo

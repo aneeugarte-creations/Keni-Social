@@ -378,6 +378,42 @@ def test_adjuntar_agencias_deja_pieza_licenciada_y_publicable(cliente, monkeypat
     assert r2.json()["plataforma"]["estado"] == "programado"
 
 
+def test_autorizar_stock_espeja_a_hermana_misma_foto(cliente):
+    """Autorizar una foto de stock se ESPEJA a la hermana del mismo tema con la MISMA foto.
+
+    La hermana lleva un `foto` DISTINTO (puede pasar entre redes) pero el mismo crédito: el
+    matching robusto (por `imagen_credito_url`) la reconoce y autoriza también, sin obligar a
+    autorizar red por red.
+    """
+    pieza = _crear_pieza(cliente)
+    pub_id = pieza["publicacion_id"]
+    meta = {
+        "imagen_origen": "stock",
+        "imagen_proveedor": "openverse",
+        "imagen_autor": "Jane Doe",
+        "imagen_licencia": "CC BY 4.0",
+        "imagen_credito_url": "https://ov/obra",
+        "imagen_autorizada": False,
+        "falta_imagen": True,
+    }
+    repos.actualizar_pieza_fila(pieza["id"], {"foto": "stock.jpg", **meta})
+    hermana = repos.crear_pieza_fila(publicacion_id=pub_id, red="facebook", falta_imagen=True)
+    repos.actualizar_pieza_fila(hermana["id"], {"foto": "otra-key.jpg", **meta})
+
+    r = cliente.post(
+        "/api/artes/stock/autorizar",
+        json={"pieza_id": pieza["id"], "autorizar": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+
+    original = repos.obtener_pieza_fila(pieza["id"])
+    assert original["imagen_autorizada"] in (True, 1)
+    h = repos.obtener_pieza_fila(hermana["id"])
+    assert h["imagen_autorizada"] in (True, 1)
+    assert h["falta_imagen"] in (False, 0)
+
+
 def test_adjuntar_agencias_sin_url_400(cliente):
     pieza = _crear_pieza(cliente)
     r = cliente.post(

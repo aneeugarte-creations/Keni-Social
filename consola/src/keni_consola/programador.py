@@ -301,6 +301,25 @@ def _slides_carrusel(pub: dict[str, Any], media_ref: Any, tipo_media: Any) -> li
     return refs
 
 
+def _texto_con_credito(pub: dict[str, Any]) -> str:
+    """Caption a publicar: el copy + la LÍNEA DE CRÉDITO cuando la foto exige atribución.
+
+    Las fotos CC BY y las de agencia licenciada (AFP) obligan a acreditar; el crédito DEBE viajar
+    en el caption publicado (no basta verlo en la consola). Se añade al final, separado por doble
+    salto de línea, e IDEMPOTENTE: si el copy ya lo trae (re-render), no se duplica. Las fotos sin
+    atribución obligatoria (CC0/PD/Pexels/Pixabay/propias) no la llevan.
+    """
+    texto = (pub.get("contenido") or "").strip()
+    if not licencia_imagen.requiere_atribucion(
+        pub.get("imagen_licencia"), pub.get("imagen_proveedor"), pub.get("imagen_origen")
+    ):
+        return texto
+    credito = licencia_imagen.linea_credito(pub)
+    if not credito or credito in texto:
+        return texto
+    return f"{texto}\n\n{credito}" if texto else credito
+
+
 def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     """Construye un `BorradorMetricool` desde la fila de pieza, o None si no aplica.
 
@@ -329,7 +348,7 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
         )
         return None
 
-    texto = (pub.get("contenido") or "").strip()
+    texto = _texto_con_credito(pub)
 
     # VIDEO (pieza `formato='video'`): se publica el asset de video en vez de la imagen. La capa
     # Metricool ya distingue foto/video (`TipoMedia.video`). Si no hay asset de video, NO se
@@ -535,14 +554,14 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         siguiente barrido la reintente: antes quedaba estampada y `piezas_vencidas`
         la excluia PARA SIEMPRE (pieza programada que nunca salia, en silencio).
     """
-    # GATE STOCK (backstop final del posteo real): los gates de programación ya impiden que una
-    # imagen de stock SIN LICENCIA no autorizada llegue a `programado`; si una se colara igual,
-    # aquí NO se publica. Se deja en `programado` (sin estampar `preparado_en`) para reintentar
-    # tras autorizarla o sustituir la imagen.
-    if licencia_imagen.es_stock_sin_autorizar(pub):
-        _log.error(
-            "Pieza %r: imagen de stock SIN LICENCIA no autorizada; NO se publica.", pub.get("id")
-        )
+    # GATE IMAGEN (backstop final del posteo real): los gates de programación ya impiden que una
+    # imagen de stock SIN LICENCIA no autorizada, una licencia no publicable (NC/ND/BY-SA/
+    # desconocida) o un crédito ausente lleguen a `programado`; si una se colara igual, aquí NO
+    # se publica. Se deja en `programado` (sin estampar `preparado_en`) para reintentar tras
+    # corregir la imagen/licencia/crédito.
+    motivo_imagen = licencia_imagen.motivo_bloqueo(pub, "publicado")
+    if motivo_imagen is not None:
+        _log.error("Pieza %r: %s NO se publica.", pub.get("id"), motivo_imagen)
         return None
 
     # Gate maestro + excepción por marca: el maestro global debe estar ON y la marca NO excluida.

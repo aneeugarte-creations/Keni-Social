@@ -42,6 +42,7 @@ from datetime import date
 from typing import Any
 
 from . import config, generaciones, media, priorizacion, repos
+from .dominio import licencia_imagen
 from .estados import CLASE_CONTENIDO
 
 _log = logging.getLogger("keni_consola.autogen_ilustrar")
@@ -297,9 +298,13 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
         )
         crudos = media.generar_imagen(prompt)
         nombre = media.guardar_bytes(crudos, ext="png")
-        repos.actualizar_pieza_fila(
-            objetivo["id"], {"imagen": nombre, "falta_imagen": False}
+        # IMAGEN IA: arte generado de cero (no compone la foto previa). Declara `imagen_origen='ia'`
+        # y normaliza: limpia cualquier metadata de licencia STALE de una foto de stock anterior
+        # (si no, el gate la leería y bloquearía el arte IA como "stock sin licencia").
+        campos_arte = licencia_imagen.normalizar_campos_imagen(
+            {"imagen": nombre, "imagen_origen": licencia_imagen.ORIGEN_IA}, objetivo
         )
+        repos.actualizar_pieza_fila(objetivo["id"], campos_arte)
         # Dedup: marca el tema como ya procesado (best-effort; un fallo no debe romper el cierre).
         et_id = _id_etiqueta_autogen_arte()
         if et_id and publicacion_id:

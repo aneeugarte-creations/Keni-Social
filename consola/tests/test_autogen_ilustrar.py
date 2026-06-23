@@ -289,7 +289,18 @@ def test_ejecutar_arte_job_genera_adjunta_y_completa(monkeypatch):
     aa.ejecutar_arte_job("g1", _spec_arte())
 
     assert cambios["pid"] == "p1"
-    assert cambios["campos"] == {"imagen": "arte.png", "falta_imagen": False}
+    # El arte IA declara `imagen_origen='ia'` y la normalización limpia cualquier metadata de
+    # licencia STALE (de una foto de stock previa), dejando la pieza publicable en el eje de licencia.
+    assert cambios["campos"] == {
+        "imagen": "arte.png",
+        "imagen_origen": "ia",
+        "imagen_proveedor": "",
+        "imagen_autor": "",
+        "imagen_licencia": "",
+        "imagen_credito_url": "",
+        "imagen_autorizada": False,
+        "falta_imagen": False,
+    }
     assert asignadas == [("c1", "et1")]
     assert estados[-1]["estado"] == aa.generaciones.ESTADO_COMPLETADO
     assert estados[-1]["resultado"] == {

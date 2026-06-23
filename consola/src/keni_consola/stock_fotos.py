@@ -30,6 +30,7 @@ from typing import Any
 
 from . import config
 from .api import rss
+from .dominio import licencia_imagen
 
 # Recortes defensivos (textos cortos: crédito/licencia/título de una foto).
 _MAX_TEXTO = 300
@@ -248,17 +249,22 @@ def normalizar_openverse(datos: Any) -> list[dict[str, str]]:
         url = _primero(res, "url")
         if not url:
             continue
-        salida.append(
-            _candidato(
-                "openverse",
-                url=url,
-                thumb=_primero(res, "thumbnail"),
-                autor=_primero(res, "creator", "attribution"),
-                licencia=_primero(res, "license", "license_version") or "Openverse",
-                credito_url=_primero(res, "foreign_landing_url"),
-                titulo=_primero(res, "title"),
-            )
+        cand = _candidato(
+            "openverse",
+            url=url,
+            thumb=_primero(res, "thumbnail"),
+            autor=_primero(res, "creator", "attribution"),
+            licencia=_primero(res, "license", "license_version") or "Openverse",
+            credito_url=_primero(res, "foreign_landing_url"),
+            titulo=_primero(res, "title"),
         )
+        # URL del DEED de la licencia CC (`license_url`), si Openverse la trae: se conserva en una
+        # clave extra para no perder el enlace al crédito. No altera la forma base del candidato
+        # (solo aparece cuando viene), así el resto de proveedores mantienen su dict tal cual.
+        license_url = _primero(res, "license_url")
+        if license_url:
+            cand["licencia_url"] = license_url[:_MAX_TEXTO]
+        salida.append(cand)
     return salida
 
 
@@ -408,10 +414,12 @@ def _url_y_headers(proveedor: str, query: str, limite: int) -> tuple[str, dict[s
         return url, {"User-Agent": _USER_AGENT}
     if proveedor == "openverse":
         # `license_type=commercial,modification`: Openverse devuelve SOLO imágenes con uso
-        # comercial Y modificación permitidos (descarta NC/ND en origen), las únicas usables aquí.
+        # comercial Y modificación permitidos (descarta NC/ND en origen). `license=cc0,pdm,by`
+        # acota además a las licencias PUBLICABLES con placa de marca (dominio público / CC BY),
+        # excluyendo en origen BY-SA (compartir-igual) que contaminaría la obra derivada.
         url = (
             f"https://api.openverse.org/v1/images/?q={q}&page_size={limite}"
-            "&license_type=commercial,modification"
+            "&license_type=commercial,modification&license=cc0,pdm,by"
         )
         return url, {"User-Agent": _USER_AGENT}
     return "", {}
@@ -435,7 +443,21 @@ def buscar(query: str, proveedor: str, limite: int = 6) -> list[dict[str, str]]:
     if not url:
         return []
     datos = _descargar_json(url, headers)
-    return _NORMALIZADORES[proveedor](datos)
+    return [c for c in _NORMALIZADORES[proveedor](datos) if _publicable(c)]
+
+
+def _publicable(candidato: dict[str, str]) -> bool:
+    """True si la licencia del candidato PERMITE publicarlo (descarta NC/ND/BY-SA/desconocida).
+
+    Filtro LEGAL en la búsqueda: el humano no debe poder elegir una foto que luego el gate de
+    publicación bloquearía. Reutiliza el clasificador del dominio sobre la foto tratada como STOCK.
+    Esto reduce MUCHO Wikimedia a propósito (mayormente BY-SA): solo deja dominio público / CC BY.
+    """
+    return licencia_imagen.publicable_por_licencia(
+        candidato.get("licencia"),
+        candidato.get("proveedor"),
+        licencia_imagen.ORIGEN_STOCK,
+    )
 
 
 def buscar_todos(

@@ -136,6 +136,41 @@ export function esShareAlike(licencia: string | undefined): boolean {
   return lic.includes("by-sa") || lic.includes("by sa");
 }
 
+/**
+ * ¿La licencia de una foto de STOCK PERMITE publicarla con placa de marca (obra derivada)? Espejo
+ * de la política del back (`dominio.licencia_imagen.publicable_por_licencia`): NO publicable si es
+ * BY-SA (share-alike contamina la composición), NC/ND, o desconocida/genérica (nivel "restringida").
+ */
+export function publicablePorLicenciaStock(d: { licencia?: string; proveedor?: string }): boolean {
+  if (esShareAlike(d.licencia)) return false;
+  return nivelLicencia(d) !== "restringida";
+}
+
+/** Aviso de bloqueo LEGAL por licencia no publicable (BY-SA / NC / ND / desconocida). */
+export const MENSAJE_BLOQUEO_LICENCIA =
+  "La licencia de la imagen no permite publicarla (compartir-igual/BY-SA, no comercial, sin obra " +
+  "derivada o licencia indeterminada): sustitúyela por una propia, libre o licenciada.";
+
+/**
+ * URL del DEED de Creative Commons de una licencia (para enlazar el crédito a sus términos). Cubre
+ * CC0/Public Domain Mark y los códigos CC BY*. Devuelve "" si la licencia no es un código CC
+ * reconocible (p. ej. "Pexels License", "AFP"), para no enlazar a un deed inexistente.
+ */
+export function urlDeedLicencia(licencia: string | undefined): string {
+  const lic = (licencia ?? "").trim().toLowerCase();
+  if (!lic) return "";
+  if (lic.includes("cc0") || lic.includes("zero")) {
+    return "https://creativecommons.org/publicdomain/zero/1.0/";
+  }
+  if (lic.includes("pdm") || lic.includes("public domain mark")) {
+    return "https://creativecommons.org/publicdomain/mark/1.0/";
+  }
+  const code = lic.match(/by(?:-(?:nc|nd|sa))*/)?.[0];
+  if (!code) return "";
+  const version = lic.match(/(\d+\.\d+)/)?.[1] ?? "4.0";
+  return `https://creativecommons.org/licenses/${code}/${version}/`;
+}
+
 /** Texto de la marca central sobre la foto de stock no autorizada, según su licencia/proveedor. */
 export function etiquetaOverlayStock(d: { licencia?: string; proveedor?: string }): string {
   return nivelLicencia(d) === "restringida" ? "Sin licencia" : "Autorizar";

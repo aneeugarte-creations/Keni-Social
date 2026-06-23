@@ -31,6 +31,14 @@ _CAMPOS_ESPEJO: tuple[str, ...] = (
     "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
 )
 
+# Metadata de licencia de la imagen. NO entra en `_CAMPOS_ESPEJO` (no cuenta como "contenido" que
+# invalide aprobaciones), pero SÍ se replica a las hermanas cuando la edición REEMPLAZA la fuente
+# (cambia foto/imagen): si no, una hermana se quedaría con el crédito/licencia STALE de la foto vieja.
+_CAMPOS_IMAGEN_LICENCIA: tuple[str, ...] = (
+    "imagen_origen", "imagen_proveedor", "imagen_autor", "imagen_licencia",
+    "imagen_credito_url", "imagen_autorizada",
+)
+
 # Campos cuyo cambio altera las flags de readiness DERIVADAS del contenido (copy/foto): si la
 # edición toca alguno, hay que recalcular `falta_copy`/`falta_imagen`.
 _CAMPOS_CONTENIDO_FALTA: tuple[str, ...] = ("contenido", "foto", "imagen")

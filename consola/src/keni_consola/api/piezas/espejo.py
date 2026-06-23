@@ -16,6 +16,7 @@ from ...dominio.piezas import pieza_a_dict
 from ...estados import ESTADO_BORRADOR, ESTADO_PUBLICADO
 from ._comun import (
     _CAMPOS_ESPEJO,
+    _CAMPOS_IMAGEN_LICENCIA,
     _RESET_APROBACIONES,
     _inyectar_flags_falta,
     _limpiar_cadena,
@@ -36,6 +37,12 @@ def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
     editada (su contenido cambió: exige OK nuevos).
     """
     espejo_campos = {k: campos[k] for k in _CAMPOS_ESPEJO if k in campos}
+    # REEMPLAZO de la fuente: si la edición cambió foto/imagen, la metadata de licencia recalculada
+    # (origen + crédito) viaja también a las hermanas, para que no se queden con una licencia STALE.
+    if "foto" in campos or "imagen" in campos:
+        for clave in _CAMPOS_IMAGEN_LICENCIA:
+            if clave in campos:
+                espejo_campos[clave] = campos[clave]
     if not espejo_campos or not pub.get("espejo", True):
         return
     publicacion_id = pub.get("publicacion_id") or ""

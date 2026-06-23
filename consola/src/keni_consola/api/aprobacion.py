@@ -642,9 +642,11 @@ def _programar(
     if pub.get("estado") != ESTADO_EN_REVISION:
         return 409, {"error": "Solo se puede programar una pieza en revisión con sus likes."}
 
-    # GATE STOCK (infranqueable): una imagen de stock SIN LICENCIA no autorizada no se programa.
-    if licencia_imagen.es_stock_sin_autorizar(pub):
-        return 409, {"error": licencia_imagen.MOTIVO_BLOQUEO}
+    # GATE IMAGEN (infranqueable): una imagen de stock SIN LICENCIA no autorizada, una licencia
+    # no publicable (NC/ND/BY-SA/desconocida) o un crédito ausente (CC BY / agencia) no se programan.
+    motivo_imagen = licencia_imagen.motivo_bloqueo(pub, "programado")
+    if motivo_imagen is not None:
+        return 409, {"error": motivo_imagen}
 
     # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
     # cadena (los likes que exige LA MARCA, def 2 = "cuatro ojos" reales). El gate SOLO aplica

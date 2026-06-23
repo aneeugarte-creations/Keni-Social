@@ -51,8 +51,9 @@ def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
     if pub is None or pub.get("estado") != ESTADO_EN_REVISION:
         return None
 
-    # Gate STOCK (infranqueable): una imagen de stock SIN LICENCIA no autorizada no se auto-programa.
-    if licencia_imagen.es_stock_sin_autorizar(pub):
+    # Gate IMAGEN (infranqueable): stock SIN LICENCIA no autorizado, licencia no publicable
+    # (NC/ND/BY-SA/desconocida) o crédito ausente (CC BY / agencia) no se auto-programan.
+    if licencia_imagen.bloquea_estado(pub, "programado"):
         return None
 
     # Gate A (gobernanza): la pieza debe tener su cadena de likes cumpliendo el mínimo que exige

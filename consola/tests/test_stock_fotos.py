@@ -349,15 +349,36 @@ def test_buscar_todos_tolera_proveedor_que_lanza(monkeypatch, _sin_ssrf):
 
 
 def test_buscar_todos_solo_disponibles(monkeypatch, _sin_ssrf):
-    # Sin claves, pedir pexels (no disponible) no llama a red; wikimedia sí.
+    # Sin claves, pedir pexels (no disponible) no llama a red; wikimedia sí. La foto wikimedia
+    # lleva licencia CC0 (publicable) para no caer por el filtro legal de licencia.
     monkeypatch.setattr(
         stock_fotos.rss,
         "_DESCARGADOR",
         lambda url: '{"query": {"pages": {"1": {"title": "File:a", '
-        '"imageinfo": [{"url": "https://w/a.jpg"}]}}}}',
+        '"imageinfo": [{"url": "https://w/a.jpg", '
+        '"extmetadata": {"LicenseShortName": {"value": "CC0"}}}]}}}}',
     )
     cands = stock_fotos.buscar_todos("t", proveedores=["pexels", "wikimedia"])
     assert {c["proveedor"] for c in cands} == {"wikimedia"}
+
+
+def test_buscar_descarta_licencia_no_publicable(monkeypatch, _sin_ssrf):
+    # El filtro legal de la búsqueda descarta BY-SA / NC / ND / desconocida (Wikimedia mayormente
+    # BY-SA queda muy reducida a propósito): solo sobrevive el dominio público / CC BY.
+    payload = (
+        '{"query": {"pages": {'
+        '"1": {"title": "File:sa", "imageinfo": [{"url": "https://w/sa.jpg", '
+        '"extmetadata": {"LicenseShortName": {"value": "CC BY-SA 4.0"}}}]}, '
+        '"2": {"title": "File:nc", "imageinfo": [{"url": "https://w/nc.jpg", '
+        '"extmetadata": {"LicenseShortName": {"value": "CC BY-NC 4.0"}}}]}, '
+        '"3": {"title": "File:by", "imageinfo": [{"url": "https://w/by.jpg", '
+        '"extmetadata": {"LicenseShortName": {"value": "CC BY 4.0"}}}]}}}}'
+    )
+    monkeypatch.setattr(stock_fotos.rss, "_DESCARGADOR", lambda url: payload)
+    cands = stock_fotos.buscar("t", "wikimedia")
+    assert [c["url"] for c in cands] == ["https://w/by.jpg"]
+    cands_todos = stock_fotos.buscar_todos("t", proveedores=["wikimedia"])
+    assert {c["licencia"] for c in cands_todos} == {"CC BY 4.0"}
 
 
 def test_buscar_todos_query_vacio():
@@ -370,6 +391,8 @@ def test_buscar_todos_query_vacio():
 
 
 def test_url_openverse_filtra_uso_comercial_y_modificacion():
-    # Openverse SOLO debe devolver imágenes usables: uso comercial + modificación permitidos.
+    # Openverse SOLO debe devolver imágenes usables: uso comercial + modificación permitidos, y
+    # con licencia PUBLICABLE (cc0/pdm/by) — sin BY-SA, que contaminaría la obra derivada.
     url, _ = stock_fotos._url_y_headers("openverse", "estadio", 6)
     assert "license_type=commercial,modification" in url
+    assert "license=cc0,pdm,by" in url
