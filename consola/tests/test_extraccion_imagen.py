@@ -178,6 +178,16 @@ def test_descargar_imagen_a_media_jpg_extension(almacen_disco, monkeypatch):
     assert media.leer_media(nombre) == _JPG
 
 
+def test_descargar_imagen_a_media_categoria_copyright(almacen_disco, monkeypatch):
+    """`categoria='copyright'` => key `copyright/<uuid>` (stock sin licencia aislado de `fotos/`)."""
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
+    nombre = extraccion_url.descargar_imagen_a_media(
+        "https://example.com/x.png", categoria="copyright"
+    )
+    assert nombre.startswith("copyright/")
+    assert media.leer_media(nombre) == _PNG
+
+
 # --------------------------------------------------------------------------- #
 # descargar_imagen_a_media: errores controlados (ExtraccionError)             #
 # --------------------------------------------------------------------------- #

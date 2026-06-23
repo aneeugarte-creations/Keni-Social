@@ -181,7 +181,7 @@ def adjuntar_candidata(
     `espejo` del tema esta activo, el caso normal), no solo a la pieza tocada. Si no, una red
     saldria con la foto SIN LICENCIA pero sin el aviso, que es justo lo peligroso a evitar.
     """
-    nombre = extraccion_url.descargar_imagen_a_media(url)
+    nombre = extraccion_url.descargar_imagen_a_media(url, categoria="copyright")
     campos = {
         "foto": nombre,
         "imagen": "",

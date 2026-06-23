@@ -95,9 +95,13 @@ def test_propagar_stock_rellena_vacias_y_respeta_propias(entorno):
 
 
 def test_adjuntar_candidata_propaga_a_todas_las_vacias(entorno, monkeypatch):
-    monkeypatch.setattr(
-        autogen_stock.extraccion_url, "descargar_imagen_a_media", lambda url, **_: "bajada.jpg"
-    )
+    llamadas: list[dict] = []
+
+    def _stub(url, **kw):
+        llamadas.append({"url": url, **kw})
+        return "bajada.jpg"
+
+    monkeypatch.setattr(autogen_stock.extraccion_url, "descargar_imagen_a_media", _stub)
     tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
     a = repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="c")["id"]
     b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
@@ -107,3 +111,5 @@ def test_adjuntar_candidata_propaga_a_todas_las_vacias(entorno, monkeypatch):
     assert fa["imagen_origen"] == fb["imagen_origen"] == "stock"
     # Sin autorizar en ninguna: el bloqueo sigue de pie hasta decisión humana.
     assert fa["imagen_autorizada"] is False and fb["imagen_autorizada"] is False
+    # El stock SIN LICENCIA se descarga a la carpeta `copyright`, aislado de las fotos propias.
+    assert llamadas == [{"url": "https://x.test/y.jpg", "categoria": "copyright"}]

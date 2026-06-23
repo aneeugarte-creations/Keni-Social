@@ -44,6 +44,9 @@ _RE_NOMBRE_OBJETO = re.compile(r"^[A-Za-z0-9._-]+$")
 CATEGORIAS: frozenset[str] = frozenset(
     {
         "fotos",        # fotos crudas subidas / extraidas (efimeras; borrables manualmente)
+        "copyright",    # fotos de STOCK sin licencia propia (proveedor externo): aisladas en su
+                        # carpeta para poder purgarlas/auditarlas aparte. Efimeras: el GC las borra
+                        # en cuanto dejan de estar referenciadas por una pieza (p. ej. al cambiar la foto)
         "videos",       # videos crudos subidos para piezas de formato video (efimeros)
         "audios",       # audios/videos del gestor de transcripciones; el GC los CONSERVA mientras
                         # exista su fila en audio_transcripciones (reanudar/re-transcribir/snippets)

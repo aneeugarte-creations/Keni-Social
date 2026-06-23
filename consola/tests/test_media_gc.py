@@ -396,6 +396,27 @@ def test_mezcla_solo_borra_el_suelto_viejo(monkeypatch):
     assert res["borrados"] == 1 and res["conservados"] == 3
 
 
+def test_borra_copyright_viejo_al_cambiar_la_foto(monkeypatch):
+    # Stock SIN LICENCIA: la pieza apunta ahora a `copyright/nueva.jpg` (se cambió la foto).
+    # La anterior `copyright/vieja.jpg` ya no la referencia nadie -> el GC la borra.
+    monkeypatch.setattr(
+        media_gc.repos, "listar_piezas", lambda *a, **k: [{"foto": "copyright/nueva.jpg"}]
+    )
+    monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
+    _objetos(
+        monkeypatch,
+        [
+            ("copyright/nueva.jpg", _VIEJO),  # referenciada por la pieza -> conservar
+            ("copyright/vieja.jpg", _VIEJO),  # huérfana tras el cambio -> BORRAR
+        ],
+    )
+    borrados = _captura_borrados(monkeypatch)
+
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == ["copyright/vieja.jpg"]
+    assert res["borrados"] == 1 and res["conservados"] == 1
+
+
 def test_dry_run_no_borra(monkeypatch, repos_vacios):
     _objetos(monkeypatch, [("suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)

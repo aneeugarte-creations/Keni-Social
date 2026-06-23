@@ -361,7 +361,7 @@ def _dimensiones_jpeg(datos: bytes) -> tuple[int, int] | None:
     return None
 
 
-def descargar_imagen_a_media(url: str, *, min_lado: int = 0) -> str:
+def descargar_imagen_a_media(url: str, *, min_lado: int = 0, categoria: str = "fotos") -> str:
     """Descarga una imagen desde `url` (SSRF guard) y la GUARDA en media (S3/disco).
 
     Devuelve el nombre del objeto guardado (servible en `/api/media/{nombre}`), ya un
@@ -373,6 +373,9 @@ def descargar_imagen_a_media(url: str, *, min_lado: int = 0) -> str:
     basura tipo el emoji-fallback de WordPress 72×72 que algunas notas traen como og:image).
     Solo bloquea cuando se PUEDE medir y es pequeña; una cabecera que no sabemos leer NO se
     descarta (no rechazamos una imagen válida por no medirla).
+
+    `categoria`: subcarpeta del almacen. Por defecto `fotos` (foto cruda propia: original de
+    artículo RSS o subida del equipo). El stock SIN LICENCIA usa `copyright` para aislarlo.
     """
     from .. import media
 
@@ -392,9 +395,9 @@ def descargar_imagen_a_media(url: str, *, min_lado: int = 0) -> str:
                 f"La imagen es demasiado pequeña ({dims[0]}×{dims[1]} px; mínimo {min_lado} px de lado)."
             )
     try:
-        # Es la foto ORIGINAL de un articulo (RSS de marca): va a la carpeta `fotos` como
-        # cualquier foto cruda, no a `generadas`.
-        return media.guardar_bytes(datos, ext=ext, categoria="fotos")
+        # Foto cruda en su carpeta por tipo: `fotos` para originales propias (RSS/subidas),
+        # `copyright` para stock sin licencia. Nunca a `generadas`.
+        return media.guardar_bytes(datos, ext=ext, categoria=categoria)
     except media.MediaError as e:
         raise ExtraccionError(str(e)) from e
 
