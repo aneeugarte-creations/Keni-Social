@@ -477,13 +477,15 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         imagen_fuente         TEXT NOT NULL DEFAULT '',
         foto                  TEXT NOT NULL DEFAULT '',
         -- PROCEDENCIA de la imagen ADJUNTA (no la del artículo, que va en `imagen_fuente`).
-        -- `imagen_origen` ∈ ''|ia|galeria|subida|stock. 'stock' marca una foto traída de una
-        -- fuente externa (RSS original o API gratuita) que es SOLO ayuda visual: lleva watermark
-        -- "SIN LICENCIA", `falta_imagen` sigue activo y NINGÚN camino la publica salvo que un
-        -- humano la autorice (`imagen_autorizada=1`). El bloqueo se dispara por
-        -- `imagen_origen='stock' AND imagen_autorizada=0` (ver `dominio.licencia_imagen`).
+        -- `imagen_origen` ∈ ''|ia|galeria|subida|stock|licenciada. 'stock' marca una foto traída
+        -- de una fuente externa GRATUITA (RSS original o API) que es SOLO ayuda visual: lleva
+        -- watermark "SIN LICENCIA", `falta_imagen` sigue activo y NINGÚN camino la publica salvo
+        -- que un humano la autorice (`imagen_autorizada=1`). 'licenciada' marca una foto de AGENCIA
+        -- con licencia editorial (p. ej. AFP): es PUBLICABLE directa (con crédito/byline), no se
+        -- bloquea. El bloqueo se dispara SOLO por `imagen_origen='stock' AND imagen_autorizada=0`
+        -- (ver `dominio.licencia_imagen`).
         imagen_origen         TEXT NOT NULL DEFAULT '',
-        -- Proveedor de una imagen 'stock': pexels|pixabay|wikimedia|nasa|openverse|rss.
+        -- Proveedor de una imagen externa: pexels|pixabay|wikimedia|nasa|openverse|rss (stock) o afp (licenciada).
         imagen_proveedor      TEXT NOT NULL DEFAULT '',
         -- Crédito del autor/fotógrafo y licencia declarada por la fuente (badge + atribución).
         imagen_autor          TEXT NOT NULL DEFAULT '',

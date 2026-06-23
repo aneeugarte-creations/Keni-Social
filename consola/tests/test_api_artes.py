@@ -8,10 +8,12 @@ REFERENCIA VIVA para el GC de media suelta (no se borra aunque nadie lo use).
 
 from __future__ import annotations
 
-from keni_consola import media
+from keni_consola import agencias_fotos, autogen_stock, config, media, repos
 from keni_consola.dominio import media_gc
 
 from .conftest import _cliente, lanzador_imagen_ejecuta
+
+_ORIGIN = {"Origin": "http://testserver"}
 
 # PNG minimo valido (1x1) -> bytes para subir como objeto de media.
 _PNG_1x1 = (
@@ -294,3 +296,93 @@ def test_coste_medio_por_modelo_con_fallback_global(entorno, monkeypatch):
 
 def test_coste_medio_modelo_invalido_400(cliente):
     assert cliente.get("/api/artes/coste-medio?modelo=inventado/xl").status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# FOTOS LICENCIADAS DE AGENCIA (AFP): buscar + adjuntar PUBLICABLE             #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_pieza(cliente) -> dict:
+    r = cliente.post(
+        "/api/piezas",
+        json={"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["pieza"]
+
+
+def test_buscar_agencias_sin_credencial_lista_pendiente(cliente, monkeypatch):
+    monkeypatch.setattr(config, "afp_configurado", lambda: False)
+    r = cliente.get("/api/artes/agencias/buscar?q=mundial")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["candidatos"] == []
+    assert cuerpo["proveedores"][0]["proveedor"] == "afp"
+    assert cuerpo["proveedores"][0]["disponible"] is False
+
+
+def test_buscar_agencias_devuelve_candidatos(cliente, monkeypatch):
+    monkeypatch.setattr(config, "afp_configurado", lambda: True)
+    monkeypatch.setattr(
+        agencias_fotos,
+        "_BUSCADOR",
+        lambda q, n: {"response": {"docs": [
+            {"title": "Gol", "creator": "Foto AFP", "creditline": "AFP",
+             "medias": [{"role": "highdef", "href": "https://afp/g.jpg"}]}
+        ]}},
+    )
+    r = cliente.get("/api/artes/agencias/buscar?q=gol&limite=3")
+    assert r.status_code == 200
+    cands = r.json()["candidatos"]
+    assert len(cands) == 1
+    assert cands[0]["proveedor"] == "afp"
+    assert cands[0]["url"] == "https://afp/g.jpg"
+
+
+def test_adjuntar_agencias_deja_pieza_licenciada_y_publicable(cliente, monkeypatch):
+    monkeypatch.setattr(
+        autogen_stock.extraccion_url, "descargar_imagen_a_media", lambda url, **kw: "afp.jpg"
+    )
+    pieza = _crear_pieza(cliente)
+    r = cliente.post(
+        "/api/artes/agencias/adjuntar",
+        json={
+            "pieza_id": pieza["id"],
+            "url": "https://afp/g.jpg",
+            "proveedor": "afp",
+            "autor": "Foto AFP",
+            "licencia": "AFP",
+            "credito_url": "https://afp.com/g",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    plat = r.json()["plataforma"]
+    assert plat["imagen_origen"] == "licenciada"
+    assert plat["imagen_autorizada"] is True
+    assert plat["falta_imagen"] is False
+    assert plat["imagen_autor"] == "Foto AFP"
+
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "licenciada"
+
+    # PUBLICABLE: programar NO se bloquea (la licencia cubre los derechos).
+    r2 = cliente.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["plataforma"]["estado"] == "programado"
+
+
+def test_adjuntar_agencias_sin_url_400(cliente):
+    pieza = _crear_pieza(cliente)
+    r = cliente.post(
+        "/api/artes/agencias/adjuntar",
+        json={"pieza_id": pieza["id"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400

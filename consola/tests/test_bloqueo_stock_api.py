@@ -112,6 +112,32 @@ def test_elegir_foto_propia_limpia_el_stock_heredado(entorno):
     assert r2.status_code == 200, r2.text
 
 
+def test_pieza_licenciada_no_se_bloquea_es_publicable(entorno):
+    """Una foto LICENCIADA (AFP) es publicable sin autorizar: programar pasa directo (no 409)."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    repos.actualizar_pieza_fila(
+        pieza["id"],
+        {
+            "foto": "afp123.jpg",
+            "imagen": "",
+            "falta_imagen": False,
+            "imagen_origen": "licenciada",
+            "imagen_proveedor": "afp",
+            "imagen_autor": "Foto AFP",
+            "imagen_licencia": "AFP",
+            "imagen_autorizada": True,
+        },
+    )
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["plataforma"]["estado"] == "programado"
+
+
 def test_reenviar_la_misma_foto_no_altera_la_licencia(entorno):
     """Reenviar la MISMA foto (sin cambiarla) NO toca el metadato de stock (no pisa el badge)."""
     cli = _cli()

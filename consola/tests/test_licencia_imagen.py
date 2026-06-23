@@ -61,6 +61,14 @@ def test_pieza_vacia_no_bloquea():
     assert not licencia_imagen.es_stock_sin_autorizar({})
 
 
+def test_licenciada_nunca_bloquea_es_publicable():
+    # Una foto LICENCIADA (AFP) tiene derechos: publicable directa, sin la autorización del stock.
+    licenciada = {"imagen_origen": licencia_imagen.ORIGEN_LICENCIADA, "imagen_autorizada": True}
+    assert not licencia_imagen.es_stock_sin_autorizar(licenciada)
+    assert not licencia_imagen.bloquea_estado(licenciada, "programado")
+    assert not licencia_imagen.bloquea_estado(licenciada, "publicado")
+
+
 # --- bloquea_estado (solo programado/publicado) ----------------------------- #
 
 

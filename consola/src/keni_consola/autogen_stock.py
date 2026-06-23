@@ -173,17 +173,21 @@ def adjuntar_candidata(
     autor: str = "",
     licencia: str = "",
     credito_url: str = "",
+    origen: str = licencia_imagen.ORIGEN_STOCK,
+    autorizada: bool = False,
+    falta_imagen: bool = True,
 ) -> dict[str, Any] | None:
-    """Descarga `url` (SSRF guard) y la fija en la pieza como foto de STOCK (ayuda visual).
+    """Descarga `url` (SSRF guard) y la fija en la pieza como foto externa, reparte a las hermanas.
 
-    ÚNICA puerta para marcar una foto de stock: deja `imagen_origen='stock'`,
-    `imagen_autorizada=0` y `falta_imagen=1` (sigue faltando imagen real). Devuelve la fila
-    objetivo actualizada o None si la pieza no existe. Propaga `extraccion_url.ExtraccionError`
-    si la descarga falla o el contenido no es una imagen.
+    ÚNICA puerta para fijar una foto externa. Por defecto (`origen='stock'`) deja la pieza como
+    AYUDA VISUAL bloqueada (`imagen_origen='stock'`, `imagen_autorizada=0`, `falta_imagen=1`). Para
+    una foto LICENCIADA (AFP), el endpoint de agencias pasa `origen='licenciada'`, `autorizada=True`
+    y `falta_imagen=False`: publicable directamente (la licencia cubre los derechos), conservando
+    autor/crédito (obligatorio). Devuelve la fila objetivo actualizada o None si la pieza no existe.
+    Propaga `extraccion_url.ExtraccionError` si la descarga falla o el contenido no es una imagen.
 
-    ESPEJO: la misma foto + sus flags de stock se aplican a TODAS las redes hermanas (cuando el
-    `espejo` del tema esta activo, el caso normal), no solo a la pieza tocada. Si no, una red
-    saldria con la foto SIN LICENCIA pero sin el aviso, que es justo lo peligroso a evitar.
+    ESPEJO: la misma foto + sus flags se aplican a TODAS las redes hermanas en gris (no solo a la
+    pieza tocada): así nunca queda una red con la foto sin su crédito/aviso.
     """
     nombre = extraccion_url.descargar_imagen_a_media(
         url, min_lado=_MIN_LADO_FOTO, categoria="copyright"
@@ -191,13 +195,13 @@ def adjuntar_candidata(
     campos = {
         "foto": nombre,
         "imagen": "",
-        "falta_imagen": True,
-        "imagen_origen": licencia_imagen.ORIGEN_STOCK,
+        "falta_imagen": falta_imagen,
+        "imagen_origen": origen,
         "imagen_proveedor": (proveedor or "stock")[:60],
         "imagen_autor": (autor or "")[:200],
         "imagen_licencia": (licencia or "")[:200],
         "imagen_credito_url": (credito_url or "")[:500],
-        "imagen_autorizada": False,
+        "imagen_autorizada": autorizada,
     }
     objetivo = repos.actualizar_pieza_fila(pieza_id, campos)
     if objetivo is None:

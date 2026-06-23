@@ -23,6 +23,11 @@ from typing import Any
 # Valor de `imagen_origen` que marca una foto externa (RSS/API gratuita) usada como ayuda visual.
 ORIGEN_STOCK = "stock"
 
+# Valor de `imagen_origen` de una foto con LICENCIA editorial (p. ej. AFP): SÍ es publicable sin
+# autorización manual de derechos (la licencia ya los cubre), con CRÉDITO/BYLINE obligatorio. A
+# diferencia del stock gratuito, NO dispara el bloqueo: solo `'stock'` sin autorizar bloquea.
+ORIGEN_LICENCIADA = "licenciada"
+
 # Estados de publicación cuya entrada exige una imagen publicable (con licencia o autorizada).
 ESTADOS_PUBLICABLES = frozenset({"programado", "publicado"})
 

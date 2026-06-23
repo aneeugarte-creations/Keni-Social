@@ -29,7 +29,16 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import almacen_media, autogen_stock, libprompts, marcas, media, repos, stock_fotos
+from .. import (
+    agencias_fotos,
+    almacen_media,
+    autogen_stock,
+    libprompts,
+    marcas,
+    media,
+    repos,
+    stock_fotos,
+)
 from .._http_json import leer_json
 from ..dominio import extraccion_url, licencia_imagen
 from ..seguridad import autor_de_peticion
@@ -530,6 +539,89 @@ def _plataforma_stock_a_dict(plat: dict | None) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# FOTOS LICENCIADAS DE AGENCIA (AFP): imagen PUBLICABLE con crédito obligatorio  #
+# --------------------------------------------------------------------------- #
+# A diferencia del stock gratuito (ayuda visual bloqueada hasta autorizar), AFP da licencia
+# editorial: la foto se adjunta como `imagen_origen='licenciada'`, `imagen_autorizada=1`,
+# `falta_imagen=0` (publicable directamente), conservando autor/crédito (BYLINE obligatorio).
+# AFP es una fuente GLOBAL (no por marca): una sola credencial OAuth2 para todas.
+
+
+def _buscar_agencias(query: str, limite: int) -> dict:
+    """Busca fotos licenciadas en AFP. Degradación honesta: nunca lanza al cliente."""
+    proveedores = [agencias_fotos.estado_fuente()]
+    if not query.strip():
+        return {"proveedores": proveedores, "candidatos": []}
+    try:
+        candidatos = agencias_fotos.buscar(query, limite=limite)
+    except Exception:  # noqa: BLE001 -- AFP caída no rompe la búsqueda; devolvemos lo que haya
+        _log.exception("Fallo buscando fotos de agencia (q=%r).", query)
+        candidatos = []
+    return {"proveedores": proveedores, "candidatos": candidatos}
+
+
+async def buscar_agencias(request: Request) -> Response:
+    """GET /api/artes/agencias/buscar?q=&limite= -> {proveedores:[estado_afp], candidatos:[...]}.
+
+    Sin marca: AFP es global. `proveedores` lleva el estado de la fuente (disponible o pendiente
+    por credencial). Cada candidato tiene la forma de stock: `{proveedor,url,thumb,autor,
+    licencia,credito_url,titulo}`.
+    """
+    q = (request.query_params.get("q") or "").strip()
+    try:
+        limite = int(request.query_params.get("limite") or _STOCK_LIMITE_DEF)
+    except ValueError:
+        limite = _STOCK_LIMITE_DEF
+    limite = max(1, min(_STOCK_LIMITE_MAX, limite))
+    cuerpo = await run_in_threadpool(_buscar_agencias, q, limite)
+    return JSONResponse(cuerpo)
+
+
+def _adjuntar_agencias(pieza_id: str, datos: dict) -> tuple[int, dict]:
+    """Descarga una foto de AFP y la adjunta como imagen LICENCIADA (publicable, con crédito)."""
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+
+    url = (datos.get("url") or "").strip()
+    if not url:
+        return 400, {"error": "Falta la URL de la foto a adjuntar."}
+    proveedor = (datos.get("proveedor") or "").strip().lower() or "afp"
+
+    try:
+        actualizada = autogen_stock.adjuntar_candidata(
+            pieza_id,
+            url=url,
+            proveedor=proveedor,
+            autor=(datos.get("autor") or "").strip(),
+            licencia=(datos.get("licencia") or "").strip(),
+            credito_url=(datos.get("credito_url") or "").strip(),
+            origen=licencia_imagen.ORIGEN_LICENCIADA,
+            autorizada=True,
+            falta_imagen=False,
+        )
+    except extraccion_url.ExtraccionError as e:
+        return 400, {"error": str(e)}
+    if actualizada is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
+
+
+async def adjuntar_agencias(request: Request) -> Response:
+    """POST /api/artes/agencias/adjuntar {pieza_id, url, proveedor, autor, licencia, credito_url}.
+
+    Adjunta la foto como `imagen_origen='licenciada'` (publicable, sin bloqueo de derechos) y la
+    reparte a las redes hermanas en gris con su crédito.
+    """
+    datos = await leer_json(request)
+    pieza_id = (datos.get("pieza_id") or "").strip()
+    if not pieza_id:
+        return JSONResponse({"error": "Falta la pieza."}, status_code=400)
+    status, cuerpo = await run_in_threadpool(_adjuntar_agencias, pieza_id, datos)
+    return JSONResponse(cuerpo, status_code=status)
+
+
 RUTAS = [
     Route("/api/artes", listar, methods=["GET"]),
     Route("/api/artes", crear, methods=["POST"]),
@@ -538,5 +630,7 @@ RUTAS = [
     Route("/api/artes/stock/buscar", buscar_stock, methods=["GET"]),
     Route("/api/artes/stock/adjuntar", adjuntar_stock, methods=["POST"]),
     Route("/api/artes/stock/autorizar", autorizar_stock, methods=["POST"]),
+    Route("/api/artes/agencias/buscar", buscar_agencias, methods=["GET"]),
+    Route("/api/artes/agencias/adjuntar", adjuntar_agencias, methods=["POST"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),
 ]

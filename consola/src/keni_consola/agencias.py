@@ -25,6 +25,8 @@ por tests; el `traer_items_*` solo hace el fetch + delega el parseo aqui.
 from __future__ import annotations
 
 import json
+import urllib.parse
+import urllib.request
 from typing import Any
 
 from . import config
@@ -34,6 +36,10 @@ from .api import rss
 _MAX_TITULO = 300
 _MAX_RESUMEN = 500
 _MAX_ITEMS = 30
+
+# Timeout (s) de las llamadas POST a AFP (login OAuth2 + búsqueda): cortas, solo intercambian
+# credencial por token o piden una página de resultados.
+_AFP_POST_TIMEOUT = 20
 
 
 def _primero(d: dict[str, Any], *claves: str) -> str:
@@ -175,6 +181,64 @@ def fuentes_pendientes() -> list[dict[str, str]]:
                 {"red": estado["red"], "nombre": estado["nombre"], "motivo": estado["motivo"]}
             )
     return pendientes
+
+
+def _postear_real(url: str, cuerpo: bytes, headers: dict[str, str]) -> str:
+    """POST real a `url` (guard SSRF + timeout) que devuelve el texto de la respuesta.
+
+    Transporte INYECTABLE para AFP (login OAuth2 + búsqueda): a diferencia del `_DESCARGADOR`
+    de feeds (solo GET), AFP necesita POST con cuerpo. En tests se parchea (`_POSTEAR`) para no
+    tocar la red. Lanza `rss.RSSError` ante SSRF o fallo de red.
+    """
+    url_ok, error = rss.validar_url(url)
+    if error is not None:
+        raise rss.RSSError(error)
+    peticion = urllib.request.Request(url_ok, data=cuerpo, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(peticion, timeout=_AFP_POST_TIMEOUT) as resp:
+            return resp.read().decode("utf-8", "replace")
+    except rss.RSSError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- red/HTTP: se uniforma a RSSError (no se filtra el detalle)
+        raise rss.RSSError("No se pudo contactar con AFP.") from e
+
+
+# Punto INYECTABLE del POST a AFP (token + búsqueda): los tests lo parchean para correr OFFLINE.
+_POSTEAR = _postear_real
+
+
+def obtener_token_afp() -> str:
+    """Pide un token OAuth2 a AFP (`client_credentials`) y devuelve el `access_token`.
+
+    REUTILIZABLE por las dos fuentes AFP (noticias y fotos licenciadas): centraliza el login para
+    no reimplementar OAuth en cada sitio. Lanza `rss.RSSError` si AFP no está configurada, si la
+    red falla o si la respuesta no trae token. NUNCA loguea las credenciales.
+
+    A VERIFICAR con credenciales reales: la forma EXACTA del intercambio (campos del cuerpo vs.
+    `Authorization: Basic`) puede variar; aquí se usa el grant `client_credentials` estándar por
+    cuerpo `application/x-www-form-urlencoded`.
+    """
+    client_id = config.afp_client_id()
+    client_secret = config.afp_client_secret()
+    if not client_id or not client_secret:
+        raise rss.RSSError("AFP no está configurada (faltan client_id/client_secret).")
+    url = f"{config.afp_base_url()}/oauth/token"
+    cuerpo = urllib.parse.urlencode(
+        {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        }
+    ).encode("utf-8")
+    crudo = _POSTEAR(url, cuerpo, {"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        datos = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError) as e:
+        raise rss.RSSError("AFP respondió al login algo que no es JSON válido.") from e
+    token = datos.get("access_token") if isinstance(datos, dict) else None
+    if not isinstance(token, str) or not token:
+        raise rss.RSSError("AFP no devolvió un token de acceso.")
+    return token
 
 
 def _descargar_json(url: str, headers: dict[str, str]) -> Any:
