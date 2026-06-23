@@ -60,6 +60,7 @@ export function VistaMensualTurnos({
   seleccionable = false,
   diasSel,
   onToggleDia,
+  onMes,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
@@ -94,6 +95,9 @@ export function VistaMensualTurnos({
   diasSel?: Set<string>;
   /** Alterna un día en la selección al clicar su número en la rejilla. */
   onToggleDia?: (fechaIso: string) => void;
+  /** Notifica el mes en vista ("YYYY-MM") al montar y al cambiarlo. Lo usa Gestión para «Copiar mes
+   *  anterior» (saber qué mes sembrar). */
+  onMes?: (mesIso: string) => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -112,6 +116,8 @@ export function VistaMensualTurnos({
   const ambito: Ambito = soloEquipo ? "equipo" : ambitoSel;
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
   const [diaResumen, setDiaResumen] = React.useState<string | null>(null);
+  // Notifica el mes en vista (montaje + cambios) para que Gestión sepa qué mes sembrar al copiar.
+  React.useEffect(() => onMes?.(mes), [mes, onMes]);
 
   // Cobertura del mes (eventos + estado por día) superpuesta sobre la jornada. Hook propio a
   // escala de mes; NO toca `useTablero` (infra del cockpit). Con `mostrarCobertura=false` (Horario

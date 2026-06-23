@@ -246,6 +246,18 @@ export function Calendario({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Mes en vista del calendario mensual de Gestión (lo notifica `VistaMensualTurnos.onMes`): es el
+  // mes que «Copiar mes anterior» siembra desde el mes anterior, alineado por día de semana.
+  const [mesGestion, setMesGestion] = React.useState("");
+  const copiarMes = useMutation({
+    mutationFn: () => api.copiarMes({ a_mes: mesGestion, reemplazar: false, marca: marcaRejilla }),
+    onSuccess: (res) => {
+      toast.success(`Copiados ${res.copiados ?? 0} turnos del mes anterior — edita lo que quieras.`);
+      invalidar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   // Eventos con su cobertura derivada (el backend ya excluyó los `no_cubrir`).
   const eventosCobertura = React.useMemo(
     () => (coberturaQ.data?.eventos ?? []).filter((e) => e.fecha >= desde && e.fecha < hasta),
@@ -588,8 +600,9 @@ export function Calendario({
         <MenuMasAcciones
           esAdmin={esAdmin}
           semanaAprobada={false}
-          copiarPendiente={copiarAnterior.isPending}
+          copiarPendiente={copiarAnterior.isPending || copiarMes.isPending}
           onCopiarAnterior={() => copiarAnterior.mutate()}
+          onCopiarMes={() => copiarMes.mutate()}
           onAbrirFranjas={() => setAbrirFranjas(true)}
           onAbrirAjustes={() => setAbrirAjustes(true)}
           onAbrirCarga={() => setAbrirCarga(true)}
@@ -610,6 +623,7 @@ export function Calendario({
         seleccionable={esGestion}
         diasSel={esGestion ? diasSel : undefined}
         onToggleDia={esGestion ? toggleDiaSel : undefined}
+        onMes={esGestion ? setMesGestion : undefined}
       />
     );
     return esGestion ? (

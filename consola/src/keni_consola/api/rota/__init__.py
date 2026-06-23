@@ -64,6 +64,7 @@ from .programas import (
 )
 from .semana import (
     carga_semana,
+    copiar_mes,
     copiar_semana,
 )
 from .swaps import (
@@ -119,6 +120,7 @@ __all__ = [
     "turnos_mes",
     "cobertura_semana",
     "cobertura_evento",
+    "copiar_mes",
     "copiar_semana",
     "carga_semana",
     "export_csv",
@@ -190,8 +192,9 @@ RUTAS = [
     Route("/api/rota/ausencias", crear_ausencia, methods=["POST"]),
     Route("/api/rota/ausencias/{ausencia_id}", actualizar_ausencia, methods=["PATCH"]),
     Route("/api/rota/ausencias/{ausencia_id}", borrar_ausencia, methods=["DELETE"]),
-    # Copia de semana + panel de carga.
+    # Copia de semana / mes + panel de carga.
     Route("/api/rota/copiar-semana", copiar_semana, methods=["POST"]),
+    Route("/api/rota/copiar-mes", copiar_mes, methods=["POST"]),
     Route("/api/rota/carga", carga_semana, methods=["GET"]),
     # Exports.
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),

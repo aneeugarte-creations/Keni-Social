@@ -1,6 +1,7 @@
 """API Rota · copia de semana + panel de carga por miembro."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from starlette.concurrency import run_in_threadpool
@@ -42,6 +43,36 @@ async def copiar_semana(request: Request) -> Response:
 
     n = await run_in_threadpool(
         repos.copiar_turnos_rota, de_lunes, a_lunes, reemplazar=reemplazar, marca=marca
+    )
+    return JSONResponse({"copiados": n})
+
+
+_MES_RE = re.compile(r"^\d{4}-\d{2}$")
+
+
+async def copiar_mes(request: Request) -> Response:
+    """POST /api/rota/copiar-mes: siembra el mes destino con el rol del MES ANTERIOR, semana a
+    semana (alineado por dia de semana: lunes<->lunes).
+
+    Cuerpo: `{a_mes: "YYYY-MM", marca, reemplazar?: bool}`. NO copia eventos; copia la rejilla
+    (franjas + turnos) de UNA marca. Con `reemplazar=true`, sobrescribe cada semana destino antes de
+    copiar (si no, rellena lo que falte). Es el punto de partida: luego el coordinador edita.
+    Devuelve `{copiados: N}`.
+
+    GRID POR MARCA: exige una marca concreta (no "Todas": cada rejilla se copia aparte).
+    """
+    datos = await leer_json(request)
+    a_mes = str(datos.get("a_mes", "")).strip()
+    reemplazar = bool(datos.get("reemplazar", False))
+
+    if not _MES_RE.match(a_mes):
+        return JSONResponse({"error": "Indica el mes destino (AAAA-MM)."}, status_code=400)
+    marca, error = _marca_cuerpo(datos)
+    if error is not None:
+        return error
+
+    n = await run_in_threadpool(
+        repos.copiar_mes_rota, a_mes, reemplazar=reemplazar, marca=marca
     )
     return JSONResponse({"copiados": n})
 

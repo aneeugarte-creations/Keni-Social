@@ -218,6 +218,18 @@ def copiar_turnos_rota(
     return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar, marca=marca)
 
 
+def copiar_mes_rota(a_mes: str, *, reemplazar: bool = False, marca: str | None = None) -> int:
+    """Siembra el mes `a_mes` ("YYYY-MM") con el rol del MES ANTERIOR, semana a semana (alineado por
+    dia de semana). Compone `copiar_turnos_rota` sobre los pares que calcula el dominio y suma las
+    filas creadas. `marca` acota la rejilla (la API exige marca concreta)."""
+    from .rota import pares_semanas_copia_mes
+
+    return sum(
+        db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar, marca=marca)
+        for de_lunes, a_lunes in pares_semanas_copia_mes(a_mes)
+    )
+
+
 def borrar_turnos_semana_rota(semana: str) -> int:
     return db.borrar_turnos_semana_rota(semana)
 

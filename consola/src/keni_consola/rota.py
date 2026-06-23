@@ -160,6 +160,46 @@ def dias_de_semana(lunes_iso: str) -> list[str]:
     return [(inicio + timedelta(days=i)).isoformat() for i in range(7)]
 
 
+def _lunes_semanas_del_mes(anio: int, mes: int) -> list[date]:
+    """Lunes (ancla lun->dom) de TODAS las semanas que solapan el mes `(anio, mes)`."""
+    primero = date(anio, mes, 1)
+    siguiente = date(anio + 1, 1, 1) if mes == 12 else date(anio, mes + 1, 1)
+    ultimo = siguiente - timedelta(days=1)
+    l_primero = lunes_de_semana(primero)
+    l_ultimo = lunes_de_semana(ultimo)
+    n = (l_ultimo - l_primero).days // 7
+    return [l_primero + timedelta(weeks=i) for i in range(n + 1)]
+
+
+def pares_semanas_copia_mes(mes_destino_iso: str) -> list[tuple[str, str]]:
+    """Pares `(de_lunes, a_lunes)` para sembrar el mes `mes_destino_iso` ("YYYY-MM") con el rol del
+    MES ANTERIOR, alineado por dia de semana (lunes<->lunes; el offset es multiplo de 7).
+
+    Cada semana que solapa el mes anterior se mapea a la semana que cae `offset` dias despues; se
+    incluye solo si esa semana sigue solapando el mes destino. Las semanas del destino sin
+    equivalente en el origen quedan FUERA (no se siembran). Lista vacia si `mes_destino_iso` no es un
+    "YYYY-MM" valido. Pura (sin BD): la composicion con la copia real vive en `repos.copiar_mes_rota`.
+    """
+    try:
+        partes = mes_destino_iso.split("-")
+        if len(partes) != 2:
+            return []
+        anio, mes = int(partes[0]), int(partes[1])
+        date(anio, mes, 1)  # valida que el mes sea 1..12
+    except (ValueError, TypeError, AttributeError):
+        return []
+    anio_ant, mes_ant = (anio - 1, 12) if mes == 1 else (anio, mes - 1)
+    lunes_dest = _lunes_semanas_del_mes(anio, mes)
+    lunes_ant = _lunes_semanas_del_mes(anio_ant, mes_ant)
+    offset = (lunes_dest[0] - lunes_ant[0]).days  # multiplo de 7 (ambos extremos son lunes)
+    dest = set(lunes_dest)
+    return [
+        (ls.isoformat(), (ls + timedelta(days=offset)).isoformat())
+        for ls in lunes_ant
+        if (ls + timedelta(days=offset)) in dest
+    ]
+
+
 # --------------------------------------------------------------------------- #
 # Predicados de rotacion (usados por la edicion manual de turnos)               #
 # --------------------------------------------------------------------------- #

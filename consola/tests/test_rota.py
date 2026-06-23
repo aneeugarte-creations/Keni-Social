@@ -9,6 +9,8 @@ con solapes, cruce de medianoche y descanso explícito.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from keni_consola import rota as r
@@ -55,6 +57,43 @@ def test_dias_de_semana():
 
 def test_dias_de_semana_invalida_devuelve_vacio():
     assert r.dias_de_semana("no-fecha") == []
+
+
+def test_pares_semanas_copia_mes_jun_desde_may_2026():
+    # Junio 2026 empieza en lunes (semanas 01,08,15,22,29) y se siembra desde mayo, alineado por
+    # dia de semana (offset 35d = 5 semanas): las 5 semanas que solapan mayo mapean a las 5 de junio.
+    pares = r.pares_semanas_copia_mes("2026-06")
+    assert pares == [
+        ("2026-04-27", "2026-06-01"),
+        ("2026-05-04", "2026-06-08"),
+        ("2026-05-11", "2026-06-15"),
+        ("2026-05-18", "2026-06-22"),
+        ("2026-05-25", "2026-06-29"),
+    ]
+    # Todos los `a_lunes` son lunes y caen en la rejilla del destino; el offset preserva el dia.
+    for de_lunes, a_lunes in pares:
+        assert r.lunes_de_semana_iso(de_lunes) == de_lunes
+        assert (date.fromisoformat(a_lunes) - date.fromisoformat(de_lunes)).days % 7 == 0
+
+
+def test_pares_semanas_copia_mes_omite_semanas_sin_equivalente():
+    # El origen puede tener mas semanas-solapantes que el destino; las que caen fuera se omiten,
+    # y las semanas del destino sin origen no aparecen como `a_lunes`. Cada par es lunes->lunes y
+    # el destino siempre solapa el mes pedido.
+    inicio, _fin = r.rango_semana(r.lunes_de_semana_iso("2026-03-01"))
+    pares = r.pares_semanas_copia_mes("2026-03")
+    assert pares  # no vacio
+    primer_lunes_mar = r.lunes_de_semana_iso("2026-03-01")
+    ultimo_lunes_mar = r.lunes_de_semana_iso("2026-03-31")
+    for _de, a_lunes in pares:
+        assert primer_lunes_mar <= a_lunes <= ultimo_lunes_mar
+    assert inicio == primer_lunes_mar
+
+
+def test_pares_semanas_copia_mes_entrada_invalida_vacio():
+    assert r.pares_semanas_copia_mes("no-mes") == []
+    assert r.pares_semanas_copia_mes("2026-13") == []
+    assert r.pares_semanas_copia_mes("2026-06-01") == []
 
 
 # --------------------------------------------------------------------------- #

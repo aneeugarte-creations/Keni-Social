@@ -12,6 +12,7 @@ import type {
   CuerpoActualizarTurnoRota,
   CuerpoAprobarRota,
   CuerpoBorrarLoteIds,
+  CuerpoCopiarMes,
   CuerpoCopiarSemana,
   CuerpoCrearAusenciaRota,
   CuerpoCrearEventoRota,
@@ -237,6 +238,8 @@ export const apiRota = {
   // --- Copia de semana + panel de carga ---
   copiarSemana: (cuerpo: CuerpoCopiarSemana) =>
     peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
+  copiarMes: (cuerpo: CuerpoCopiarMes) =>
+    peticion<RespuestaCopiarSemana>("/rota/copiar-mes", { metodo: "POST", json: cuerpo }),
   cargaRota: (params: { lunes: string; marca?: string }, signal?: AbortSignal) =>
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
 

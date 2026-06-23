@@ -730,6 +730,19 @@ export interface RespuestaCopiarSemana {
   copiados: number;
 }
 
+/**
+ * Cuerpo de `POST /api/rota/copiar-mes`: siembra el mes destino con el rol del MES ANTERIOR,
+ * semana a semana (alineado por día de semana).
+ */
+export interface CuerpoCopiarMes {
+  /** Mes destino "YYYY-MM". */
+  a_mes: string;
+  /** Si `true`, sobrescribe cada semana destino antes de copiar (si no, rellena). */
+  reemplazar?: boolean;
+  /** GRID POR MARCA: marca concreta cuya rejilla se copia (no "Todas"). */
+  marca: string;
+}
+
 /** Carga del equipo: cuánto trabajo lleva cada persona esta semana. */
 export interface CargaMiembroRota {
   miembro_id: string;

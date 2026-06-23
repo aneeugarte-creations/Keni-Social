@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -312,6 +312,22 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(
       screen.getByRole("switch", { name: /Mostrar horas en el calendario de Equipo/ }),
     ).toBeInTheDocument();
+  });
+
+  it("«Gestión» siembra desde el ⋯ → «Copiar mes anterior» (api.copiarMes con el mes en vista)", async () => {
+    const copiar = vi.spyOn(apiMod.api, "copiarMes").mockResolvedValue({ copiados: 12 } as never);
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Copiar mes anterior" }));
+    // Llama al endpoint de mes con el mes EN VISTA ("YYYY-MM") y sin reemplazar (rellena; luego edita).
+    await waitFor(() => expect(copiar).toHaveBeenCalledTimes(1));
+    expect(copiar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        a_mes: expect.stringMatching(/^\d{4}-\d{2}$/),
+        reemplazar: false,
+      }),
+    );
   });
 
   it("«Gestión» NO muestra el conmutador Equipo/Yo (coordinar es siempre del equipo)", async () => {

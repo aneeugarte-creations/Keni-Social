@@ -310,6 +310,7 @@ export function MenuMasAcciones({
   esAdmin,
   semanaAprobada,
   onCopiarAnterior,
+  onCopiarMes,
   onAbrirFranjas,
   onAbrirAjustes,
   onAbrirCarga,
@@ -320,6 +321,9 @@ export function MenuMasAcciones({
   esAdmin: boolean;
   semanaAprobada: boolean;
   onCopiarAnterior: () => void;
+  /** «Copiar mes anterior»: siembra el mes en vista con el rol del mes anterior. Solo Gestión (Mes)
+   *  lo pasa; sin él, el ítem no aparece. */
+  onCopiarMes?: () => void;
   /** Abre el diálogo «Franjas» (pestañas: esta semana / plantilla por defecto). */
   onAbrirFranjas: () => void;
   /** Abre «Ajustes de turnos» (preferencias de visualización por marca). Oculto si no se pasa. */
@@ -348,8 +352,16 @@ export function MenuMasAcciones({
       onClick: onAbrirFranjas,
     });
     items.push({ separador: true });
+    if (onCopiarMes) {
+      items.push({
+        etiqueta: copiarPendiente ? "Copiando…" : "Copiar mes anterior",
+        icono: Copy,
+        onClick: onCopiarMes,
+        deshabilitado: copiarPendiente || semanaAprobada,
+      });
+    }
     items.push({
-      etiqueta: copiarPendiente ? "Copiando…" : "Copiar anterior",
+      etiqueta: copiarPendiente ? "Copiando…" : "Copiar semana anterior",
       icono: Copy,
       onClick: onCopiarAnterior,
       deshabilitado: copiarPendiente || semanaAprobada,
