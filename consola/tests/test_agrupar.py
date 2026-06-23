@@ -611,6 +611,45 @@ def test_encaje_evento_fuera_de_ventana_no_casa():
     assert agrupar.encaje_evento_detalle(cl, [], ahora=_T0)[0] == 0.0
 
 
+def test_evento_ancla_casa_partido_y_devuelve_titulo():
+    """Una historia que nombra ambos equipos de un partido próximo se ancla a su título."""
+    eventos = [{"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()}]
+    cl = _cluster(titulo="Portugal golea a Uzbekistán con doblete de Cristiano")
+    assert agrupar.evento_ancla(cl, eventos, ahora=_T0) == "Portugal vs Uzbekistán"
+
+
+def test_evento_ancla_exige_dos_nombres_propios():
+    """Un solo equipo compartido NO ancla (evita atar dos partidos por un nombre común)."""
+    eventos = [{"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()}]
+    cl = _cluster(titulo="Cristiano Ronaldo arriesga su legado con Portugal")
+    assert agrupar.evento_ancla(cl, eventos, ahora=_T0) == ""
+
+
+def test_evento_ancla_tolera_nombre_compuesto():
+    """Solape parcial (≥50%) basta: «Bosnia vs Qatar» casa «Bosnia y Herzegovina vs Qatar»."""
+    eventos = [{"titulo": "Bosnia y Herzegovina vs Qatar", "fecha": _T0.date().isoformat()}]
+    cl = _cluster(titulo="Bosnia vs Qatar en vivo: horario y dónde ver")
+    assert agrupar.evento_ancla(cl, eventos, ahora=_T0) == "Bosnia y Herzegovina vs Qatar"
+
+
+def test_evento_ancla_fuera_de_ventana_o_sin_agenda():
+    """Un evento fuera de la ventana viva, o sin agenda, no ancla."""
+    lejano = [{"titulo": "Uruguay vs España", "fecha": (_T0 + timedelta(days=30)).date().isoformat()}]
+    cl = _cluster(titulo="Uruguay vs España chocan por el grupo")
+    assert agrupar.evento_ancla(cl, lejano, ahora=_T0) == ""
+    assert agrupar.evento_ancla(cl, [], ahora=_T0) == ""
+
+
+def test_evento_ancla_elige_el_de_mayor_encaje():
+    """Entre dos eventos posibles gana el de mayor (proximidad × solape)."""
+    eventos = [
+        {"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()},
+        {"titulo": "Colombia vs Portugal", "fecha": (_T0 + timedelta(days=1)).date().isoformat()},
+    ]
+    cl = _cluster(titulo="Hoy: Portugal vs Uzbekistán, segundo de Cristiano")
+    assert agrupar.evento_ancla(cl, eventos, ahora=_T0) == "Portugal vs Uzbekistán"
+
+
 def test_puntuar_evento_sube_el_score():
     """Con un evento próximo que casa, el score sube respecto a la misma historia sin agenda."""
     eventos = [{"titulo": "Portugal vs Uzbekistán", "fecha": _T0.date().isoformat()}]

@@ -293,6 +293,8 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
         items_de_cluster=lambda cid, *, limite=200: list(items_por_cid.get(cid, [])),
         cuerpos_de_cluster=lambda cid, *, limite=200: {},
         obtener_fuente_rss=lambda fid: {"propia": True},
+        # La agenda por defecto vacía: cada test que la necesite pasa `eventos_titulos` explícito.
+        listar_eventos_rota=lambda **kw: [],
         # El contexto «ya en el feed del evento» (no repetir ángulos) no aplica en estos tests.
         listar_publicacion=lambda **kw: [],
         crear_publicacion=crear_publicacion,
@@ -359,6 +361,58 @@ def test_macro_evento_crea_un_solo_carrusel_y_absorbe_la_familia(monkeypatch):
     assert {c for c, _e, _p in reg["actualizar"]} == {"c1", "c2", "c3"}
     assert all(estado == "usado" and pid == "tema-macro-1" for _c, estado, pid in reg["actualizar"])
     assert {c for c, _p in reg["marcar_items"]} == {"c1", "c2", "c3"}
+
+
+def test_evento_agenda_agrupa_por_tema_macro_sin_subtema(monkeypatch):
+    """Un partido de la AGENDA (tema_macro = título del evento) agrupa toda su familia en UN
+    carrusel aunque NO tenga subtema: el ancla determinista basta para colapsar el goteo."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    familia = [
+        _cluster_familia("c1", score=0.9, tema_macro="Portugal vs Uzbekistán", subtema=""),
+        _cluster_familia("c2", score=0.8, tema_macro="Portugal vs Uzbekistán", subtema=""),
+    ]
+    items_por_cid = {c["id"]: [_item_propio(c["id"])] for c in familia}
+    reg = _fake_repos_familia(monkeypatch, familia=familia, items_por_cid=items_por_cid)
+
+    tema = _admitir.crear_tema_de_cluster(
+        familia[0], items_por_cid["c1"], claves_vistas=set(),
+        eventos_titulos={"Portugal vs Uzbekistán"},
+    )
+
+    assert tema == {"id": "tema-macro-1"}
+    assert len(reg["crear"]) == 1
+    kw = reg["crear"][0]
+    assert kw["titulo"] == "Portugal vs Uzbekistán"        # sin « — »: no hay subtema
+    assert kw["tema_macro"] == "Portugal vs Uzbekistán" and kw["subtema"] == ""
+    assert json.loads(kw["copy_pendiente"])["n_notas"] == 2
+    assert {c for c, _e, _p in reg["actualizar"]} == {"c1", "c2"}   # absorbe la familia
+
+
+def test_macro_grueso_no_agenda_sin_subtema_no_agrupa(monkeypatch):
+    """Una etiqueta GRUESA de torneo («Mundial 2026») que NO es un evento de la agenda y SIN
+    subtema NO colapsa el torneo entero: va por la ruta por-cluster (sin mega-carrusel)."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    familia = [
+        _cluster_familia("c1", score=0.9, tema_macro="Mundial 2026", subtema=""),
+        _cluster_familia("c2", score=0.8, tema_macro="Mundial 2026", subtema=""),
+    ]
+    items_por_cid = {c["id"]: [_item_propio(c["id"])] for c in familia}
+    reg = _fake_repos_familia(monkeypatch, familia=familia, items_por_cid=items_por_cid)
+    monkeypatch.setattr(_admitir, "_fetch_cuerpo", lambda url: "")
+    llamado: list[bool] = []
+    monkeypatch.setattr(_admitir, "_crear_carrusel_de_familia",
+                        lambda *a, **k: llamado.append(True) or {"id": "carrusel"})
+
+    tema = _admitir.crear_tema_de_cluster(
+        familia[0], items_por_cid["c1"], claves_vistas=set(),
+        eventos_titulos={"Portugal vs Uzbekistán"},   # «Mundial 2026» NO está en la agenda
+    )
+
+    assert llamado == []                                  # NO se agrupó como carrusel
+    assert len(reg["crear"]) == 1
+    assert reg["crear"][0]["titulo"] == "Ángulo c1"       # pieza de UNA historia, no del evento
 
 
 def test_macro_evento_guarda_de_carrera_cluster_ya_absorbido(monkeypatch):

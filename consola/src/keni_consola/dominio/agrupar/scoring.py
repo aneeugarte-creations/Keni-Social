@@ -182,6 +182,61 @@ def encaje_evento_detalle(
     return min(1.0, mejor), (mejor_titulo if mejor > 0.0 else "")
 
 
+# Anclaje a la agenda: cuántos nombres propios del evento debe nombrar la historia para atarla
+# a ÉL sin ambigüedad (≥2 evita casar por un solo equipo compartido entre dos partidos) y qué
+# fracción de los del evento cubre (≥0.5 tolera nombres compuestos: «Bosnia y Herzegovina»).
+_ANCLA_MIN_TOKENS = 2
+_ANCLA_MIN_SOLAPE = 0.5
+
+
+def evento_ancla(
+    cluster: dict[str, Any],
+    eventos: list[dict[str, Any]],
+    *,
+    ahora: datetime | None = None,
+    ventana_dias: float = _EVENTO_VENTANA_DIAS,
+) -> str:
+    """El evento de la AGENDA al que la historia pertenece SIN ambigüedad -> su título; "" si ninguno.
+
+    Más estricto que `encaje_evento_detalle` (que da una señal graduada para el score): aquí se
+    exige un solape DURO —al menos `_ANCLA_MIN_TOKENS` nombres propios del evento presentes en la
+    historia y al menos `_ANCLA_MIN_SOLAPE` de los del evento— dentro de la ventana viva. Sirve de
+    CLAVE DE FAMILIA determinista: dos historias del mismo partido devuelven el mismo título sin
+    pasar por el LLM. A empate, el de mayor (proximidad × solape). PURA.
+    """
+    if not eventos:
+        return ""
+    ref = ahora or datetime.now(UTC)
+    hoy = ref.date()
+    texto = " ".join(
+        str(cluster.get(k) or "") for k in ("titulo", "titulo_es", "resumen", "resumen_es")
+    )
+    tokens_noticia = _tokens_evento(texto)
+    if not tokens_noticia:
+        return ""
+    mejor = 0.0
+    mejor_titulo = ""
+    for ev in eventos:
+        fecha = _parse_iso(str(ev.get("fecha") or ""))
+        if fecha is None:
+            continue
+        prox = _proximidad_evento(float((fecha.date() - hoy).days), ventana_dias)
+        if prox <= 0.0:
+            continue
+        tokens_ev = _tokens_evento(str(ev.get("titulo") or ""))
+        if not tokens_ev:
+            continue
+        comunes = len(tokens_ev & tokens_noticia)
+        solape = comunes / len(tokens_ev)
+        if comunes < _ANCLA_MIN_TOKENS or solape < _ANCLA_MIN_SOLAPE:
+            continue
+        s = prox * solape
+        if s > mejor:
+            mejor = s
+            mejor_titulo = str(ev.get("titulo") or "")
+    return mejor_titulo
+
+
 def puntuar(
     cluster: dict[str, Any],
     *,

@@ -9,7 +9,7 @@ from typing import Any
 import keni_consola.recolectar_daemon as _pkg
 
 from ... import config, marcas, repos
-from ...dominio import fusionar_semantica, traducir
+from ...dominio import agrupar, fusionar_semantica, traducir
 from .. import _comun
 from .._comun import _log
 
@@ -173,6 +173,35 @@ def paso_fusionar_semantica(
         # evento usa SU agenda. Una lectura por marca y barrido (la canónica fusionada es de esta).
         pesos = config.score_pesos(marca_f)
         eventos = _comun.eventos_proximos(marca_f)
+        # ANCLA DE AGENDA (determinista, sin LLM ni tope de lote): una historia que nombra SIN
+        # ambigüedad un evento programado HEREDA su título como `tema_macro`. Así todas las
+        # historias del MISMO partido comparten familia aunque caigan fuera del lote de Haiku o
+        # este las etiquete distinto. La agenda es la verdad; el LLM solo etiqueta lo NO agendado.
+        ancladas_ids: set[str] = set()
+        anclas_desc: list[str] = []
+        por_evento: dict[str, list[dict[str, Any]]] = {}
+        for c in recientes:
+            titulo_ev = agrupar.evento_ancla(c, eventos, ahora=ahora)
+            if titulo_ev:
+                por_evento.setdefault(titulo_ev, []).append(c)
+        for titulo_ev, miembros in por_evento.items():
+            for c in miembros:
+                ancladas_ids.add(str(c["id"]))
+            # Idempotente: solo (re)escribe las que aún no llevan ESA etiqueta (evita un UPDATE por barrido).
+            pendientes = [
+                str(c["id"]) for c in miembros
+                if str(c.get("tema_macro") or "").strip() != titulo_ev
+            ]
+            if pendientes:
+                try:
+                    repos.marcar_clusters_tema_macro(pendientes, titulo_ev)
+                except Exception:  # noqa: BLE001 -- persistir un ancla no aborta el paso
+                    _log.exception("recolectar_daemon: fallo al anclar el evento '%s'.", titulo_ev)
+                    continue
+                anclas_desc.append(f"{titulo_ev} ({len(pendientes)})")
+            # La huella en memoria refleja el ancla para que `_etiqueta_canonica` (abajo) lo respete.
+            for c in miembros:
+                c["tema_macro"] = titulo_ev
         # Descarta métricas residuales de pasos previos del hilo: lo acumulado a partir de
         # aquí es el coste de Fusionar de ESTA marca (lo sella el registro de actividad).
         traducir.tomar_metricas_acumuladas()
@@ -216,6 +245,10 @@ def paso_fusionar_semantica(
             ids = [str(i) for i in (familia.get("ids") or []) if i]
             if not tema_propuesto or len(ids) < 2:
                 continue
+            # La agenda ya etiquetó estas (match-level, determinista): NO dejes que Haiku las
+            # re-aglomere en una familia más gruesa («Mundial 2026») y pise el ancla.
+            if any(i in ancladas_ids for i in ids):
+                continue
             # Backstop determinista: si la familia ya tiene una etiqueta persistida, reúsala (la
             # dominante) en vez de la propuesta, para que el evento no se parta en sinónimos.
             tema = _etiqueta_canonica(ids, por_id, tema_propuesto)
@@ -234,14 +267,19 @@ def paso_fusionar_semantica(
             if _falta_subtema(ids, por_id):
                 _partir_en_subtemas(tema, ids, por_id, ejecutor=ejecutor)
         macro_total += etiquetadas
-        # Actividad IA: UNA constancia de la pasada de Fusionar (dedup + familias) con el LLM REAL
-        # (prompt + salida) y un resumen humano de qué se unió y qué se etiquetó.
-        if grupos_marca or etiquetadas:
+        # Actividad IA: UNA constancia de la pasada de Fusionar (dedup + familias del LLM + anclaje
+        # determinista por agenda) con el LLM REAL (prompt + salida) y un resumen humano.
+        if grupos_marca or etiquetadas or anclas_desc:
             partes: list[str] = []
             if grupos_marca:
                 partes.append(
                     "Historias del mismo acontecimiento unidas (dedup):\n"
                     + "\n".join(f"• {d}" for d in descripciones)
+                )
+            if anclas_desc:
+                partes.append(
+                    "Familias ancladas a la agenda (mismo evento programado, NO fundidas):\n"
+                    + "\n".join(f"• {d}" for d in anclas_desc)
                 )
             if etiquetadas:
                 partes.append(
@@ -255,7 +293,7 @@ def paso_fusionar_semantica(
                 marca_f,
                 f"Fusionar — {marcas.etiqueta_de(marca_f)}: "
                 f"{fusionadas_marca} absorbida(s) en {grupos_marca} grupo(s), "
-                f"{etiquetadas} familia(s) de evento",
+                f"{etiquetadas + len(anclas_desc)} familia(s) de evento",
                 salida,
                 prompt=haiku["prompt"],
                 etapa="Fusionar",

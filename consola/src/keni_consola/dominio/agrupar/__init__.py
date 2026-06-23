@@ -56,6 +56,7 @@ from .relevancia import _relevancia_marca as _relevancia_marca  # re-export para
 from .scoring import (
     PesosScore,
     encaje_evento_detalle,
+    evento_ancla,
     puntuar,
     puntuar_detalle,
     seleccionar_diversos,
@@ -75,6 +76,7 @@ __all__ = [
     "dedup",
     "encaje_evento_detalle",
     "evaluar_umbral",
+    "evento_ancla",
     "fuentes_detalle",
     "marca_por_vocabulario",
     "peso_corroboracion",

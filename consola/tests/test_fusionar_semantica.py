@@ -246,9 +246,10 @@ def test_proponer_subtemas_menos_de_dos_o_json_invalido():
 # --------------------------------------------------------------------------- #
 
 
-def _inicializar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="https://e.com/x"):
+def _inicializar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="https://e.com/x",
+                 titulo=None):
     repos.upsert_noticia_cluster({
-        "id": cid, "titulo": f"Historia {cid}", "resumen": "r", "marca": marca,
+        "id": cid, "titulo": titulo or f"Historia {cid}", "resumen": "r", "marca": marca,
         "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": n_fuentes,
         "idiomas": ["es"], "senal": 0, "score": score, "breaking": 0,
         "primer_visto": _AHORA, "ultimo_visto": _AHORA,
@@ -306,6 +307,44 @@ def test_paso_solo_facetea_familias_con_subtema_pendiente(entorno, monkeypatch):
 
     recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
     assert faceteadas == [["c3", "c4"]]  # la familia ya faceteada [c1, c2] no se reenvía al LLM
+
+
+def test_paso_ancla_familias_por_agenda(entorno, monkeypatch):
+    """Sin LLM: las historias que nombran el partido de la AGENDA heredan su título como
+    `tema_macro`, aunque la propuesta de fusiones venga vacía. Las que no casan, no. Postgres (CI)."""
+    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
+    hoy = datetime.now(UTC).date().isoformat()
+    monkeypatch.setattr(_comun, "eventos_proximos",
+                        lambda _marca: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
+    _inicializar("c1", titulo="Portugal golea a Uzbekistán con doblete de Cristiano")
+    _inicializar("c2", titulo="¿Dónde ver Portugal vs Uzbekistán hoy? horario y canal")
+    _inicializar("c3", titulo="Tormenta inunda la ciudad y deja apagones")  # no casa la agenda
+
+    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+
+    assert (repos.obtener_noticia_cluster("c1") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
+    assert (repos.obtener_noticia_cluster("c2") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
+    assert (repos.obtener_noticia_cluster("c3") or {}).get("tema_macro") == ""
+
+
+def test_paso_ancla_manda_sobre_reaglomerado_de_haiku(entorno, monkeypatch):
+    """Una familia ya anclada a la agenda (nivel partido) NO se re-etiqueta por una familia más
+    gruesa que proponga el LLM («Mundial 2026»): la agenda es la verdad. Postgres (CI)."""
+    monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
+    hoy = datetime.now(UTC).date().isoformat()
+    monkeypatch.setattr(_comun, "eventos_proximos",
+                        lambda _marca: [{"titulo": "Portugal vs Uzbekistán", "fecha": hoy}])
+    _inicializar("c1", titulo="Portugal golea a Uzbekistán")
+    _inicializar("c2", titulo="Portugal vs Uzbekistán: dónde ver hoy")
+    monkeypatch.setattr(
+        fusionar_semantica, "proponer_fusiones",
+        lambda *a, **k: fusionar_semantica.Fusiones([], [{"tema": "Mundial 2026", "ids": ["c1", "c2"]}]),
+    )
+
+    recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([]))
+
+    assert (repos.obtener_noticia_cluster("c1") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
+    assert (repos.obtener_noticia_cluster("c2") or {}).get("tema_macro") == "Portugal vs Uzbekistán"
 
 
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):

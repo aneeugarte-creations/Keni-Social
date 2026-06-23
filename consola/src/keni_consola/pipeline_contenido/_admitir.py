@@ -601,7 +601,7 @@ def _nota_de_familia(
 
 def crear_tema_de_cluster(
     cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None,
-    portal: bool = False,
+    portal: bool = False, eventos_titulos: set[str] | None = None,
 ) -> dict[str, Any] | None:
     """CI — promueve una HISTORIA (cluster rankeado) a tema del pipeline SIN copy. Marca el cluster usado.
 
@@ -631,15 +631,24 @@ def crear_tema_de_cluster(
     # como UN solo carrusel (un slide por sub-historia), no una pieza por sub-historia.
     tema_macro = (cluster.get("tema_macro") or "").strip()
     subtema = (cluster.get("subtema") or "").strip()
-    # MACRO-EVENTO (Fase B): UN carrusel COHERENTE por (evento, SUBTEMA) —los partidos no se
-    # mezclan con un concierto—. Solo agrupa cuando la faceta está etiquetada; sin subtema la
-    # historia va por la ruta por-cluster (la cadencia por evento limita el goteo igual).
-    if tema_macro and subtema:
+    # MACRO-EVENTO (Fase B): UN carrusel por evento. Agrupa cuando hay una FACETA (subtema)
+    # etiquetada —los partidos no se mezclan con un concierto— O cuando el `tema_macro` ES un
+    # evento concreto de la AGENDA (un partido anclado): toda la familia del partido va a UN
+    # carrusel sin necesidad de subtema. Una etiqueta GRUESA no-agenda («Mundial 2026») sin
+    # subtema NO agrupa (evitar el mega-carrusel del torneo): va por la ruta por-cluster.
+    if eventos_titulos is None:
+        eventos_titulos = _titulos_agenda(marca)
+    es_evento_agenda = bool(tema_macro) and tema_macro in eventos_titulos
+    if tema_macro and (subtema or es_evento_agenda):
         try:
-            familia = repos.clusters_por_subtema(tema_macro, subtema, marca, solo_nuevos=True)
+            familia = (
+                repos.clusters_por_subtema(tema_macro, subtema, marca, solo_nuevos=True)
+                if subtema
+                else repos.clusters_por_tema_macro(tema_macro, marca, solo_nuevos=True)
+            )
         except Exception:  # noqa: BLE001 -- sin familia legible, cae a la ruta por-cluster normal
             _log.warning(
-                "pipeline: no se pudo leer la familia del subtema «%s / %s» (%s)",
+                "pipeline: no se pudo leer la familia del evento «%s / %s» (%s)",
                 tema_macro[:40], subtema[:40], marca, exc_info=True,
             )
             familia = None
@@ -791,9 +800,9 @@ def _crear_carrusel_de_familia(
     try:
         tema = repos.crear_publicacion(
             clase="contenido",
-            # La FACETA del evento es el título («Mundial 2026 — Partidos»): cada sub-historia es
-            # un slide del carrusel, todas del mismo tipo.
-            titulo=f"{tema_macro} — {subtema}"[:300],
+            # El título es el evento; si hay FACETA la añade («Mundial 2026 — Partidos»). Cada
+            # sub-historia es un slide del carrusel.
+            titulo=(f"{tema_macro} — {subtema}" if subtema else tema_macro)[:300],
             descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
@@ -819,7 +828,7 @@ def _crear_carrusel_de_familia(
         return None
     _auto_etiquetar_linea(tema, tema_macro, resumen_lead, linea_feed=_linea_de_feed(items_lead))
     # Dedup por (evento, subtema): dos FACETAS distintas del mismo evento no se deduplican entre sí.
-    if claves_vistas is not None and (clave := dedup.clave(f"{tema_macro} {subtema}")):
+    if claves_vistas is not None and (clave := dedup.clave(f"{tema_macro} {subtema}".strip())):
         claves_vistas.add(clave)
     # ABSORBE TODA la familia: cada hermano queda `usado` enlazado a esta pieza (best-effort por
     # cluster; un fallo no aborta el barrido).
@@ -978,6 +987,29 @@ def _eventos_cubiertos_hoy(marca: str, *, ahora: datetime | None = None) -> set[
         if tm:
             cubiertos.add((tm, (p.get("subtema") or "").strip()))
     return cubiertos
+
+
+def _titulos_agenda(marca: str, *, ahora: datetime | None = None) -> set[str]:
+    """Títulos de los eventos de la AGENDA de `marca` en la ventana viva (ayer .. +7 días).
+
+    Es la CLAVE de un macro-evento anclado: producción agrupa por `tema_macro` solo (sin subtema)
+    cuando coincide con un evento real de la agenda —un partido concreto—, no con una etiqueta
+    gruesa de torneo. FAIL-OPEN: ante un fallo devuelve set() (sin agrupación por evento, la
+    historia va por la ruta por-cluster normal)."""
+    momento = ahora or datetime.now(timezone.utc)
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    hoy = momento.date()
+    try:
+        eventos = repos.listar_eventos_rota(
+            desde=(hoy - timedelta(days=1)).isoformat(),
+            hasta=(hoy + timedelta(days=7)).isoformat(),
+            marca=marca,
+        )
+    except Exception:  # noqa: BLE001 -- fail-open: sin agenda legible, no se agrupa por evento
+        _log.warning("pipeline: no se pudo leer la agenda de eventos (%s)", marca, exc_info=True)
+        return set()
+    return {t for ev in eventos if (t := (ev.get("titulo") or "").strip())}
 
 
 def _contexto_feed_evento(marca: str, tema_macro: str, *, ahora: datetime | None = None) -> str:
@@ -1142,11 +1174,15 @@ def promover_clusters_marca(
         marca, maximo=maximo, cupos_categoria=cupos_categoria, verificacion_estados=verificacion_estados
     )
     claves_vistas = _claves_dedup_marca(marca)
+    # Una sola lectura de la agenda por barrido: la clave para agrupar familias ancladas a evento.
+    eventos_titulos = _titulos_agenda(marca)
     temas: list[dict[str, Any]] = []
     for cluster in clusters:
         try:
             items = repos.items_de_cluster(cluster.get("id") or "", limite=_MAX_ENLACES_CLUSTER)
-            tema = crear_tema_de_cluster(cluster, items, claves_vistas=claves_vistas)
+            tema = crear_tema_de_cluster(
+                cluster, items, claves_vistas=claves_vistas, eventos_titulos=eventos_titulos
+            )
         except Exception:  # noqa: BLE001 -- una historia problemática no aborta el barrido
             _log.exception("pipeline: fallo al promover una historia (%s)", marca)
             continue
