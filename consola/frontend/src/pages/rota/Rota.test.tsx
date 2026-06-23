@@ -298,8 +298,10 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     // Ya no hay conmutador de vistas: ni «Semana» ni «Mes».
     expect(screen.queryByRole("button", { name: "Semana" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mes" })).toBeNull();
-    // Imprimir/PDF queda como icono suelto en la barra del mensual.
-    expect(screen.getByRole("button", { name: /Imprimir/ })).toBeInTheDocument();
+    // Imprimir/PDF se pliega en el menú ⋯ de Gestión (ya no es un icono suelto en la barra).
+    expect(screen.queryByRole("button", { name: /Imprimir/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(await screen.findByRole("menuitem", { name: /Imprimir/ })).toBeInTheDocument();
   });
 
   it("«Gestión» abre «Ajustes de turnos» desde el ⋯ (interruptor de horas en Equipo)", async () => {
@@ -347,8 +349,9 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     expect(screen.queryByRole("button", { name: "Asignar turnos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Gestión" }));
-    // Mes único: «Asignar turnos» (toggle del panel) vive en la barra del mes, sin pasar por Semana.
-    expect(await screen.findByRole("button", { name: "Asignar turnos" })).toBeInTheDocument();
+    // Mes único: «Asignar turnos» (toggle del panel) vive en el menú ⋯ de la barra del mes.
+    fireEvent.click(await screen.findByRole("button", { name: "Más acciones" }));
+    expect(await screen.findByRole("menuitem", { name: /Asignar turnos/ })).toBeInTheDocument();
     // Sin paso de aprobación: lo asignado ya lo ve el equipo, no hay «Aprobar y publicar» ni «Despublicar».
     expect(screen.queryByRole("button", { name: /Aprobar y publicar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Despublicar" })).toBeNull();
@@ -361,11 +364,13 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
     const panel = await screen.findByRole("complementary", { name: "Asignar turnos" });
     expect(within(panel).getByText("Horario")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
-    // El botón de la cabecera solo lo oculta/muestra.
-    const toggle = screen.getByRole("button", { name: "Asignar turnos" });
-    fireEvent.click(toggle);
+    // El toggle vive en el menú ⋯: abrirlo y pulsar «Asignar turnos» oculta el panel; repetir lo
+    // vuelve a mostrar.
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Asignar turnos/ }));
     expect(screen.queryByRole("complementary", { name: "Asignar turnos" })).toBeNull();
-    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Asignar turnos/ }));
     expect(await screen.findByRole("complementary", { name: "Asignar turnos" })).toBeInTheDocument();
   });
 

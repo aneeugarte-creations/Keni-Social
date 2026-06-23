@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BellRing,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +18,7 @@ import {
   Loader2,
   MoreHorizontal,
   Plane,
+  Printer,
   SlidersHorizontal,
   User,
   Users,
@@ -309,6 +311,9 @@ export function AyudaLeyenda() {
 export function MenuMasAcciones({
   esAdmin,
   semanaAprobada,
+  onAsignar,
+  asignarActivo,
+  onImprimir,
   onCopiarAnterior,
   onCopiarMes,
   onAbrirFranjas,
@@ -320,6 +325,12 @@ export function MenuMasAcciones({
 }: {
   esAdmin: boolean;
   semanaAprobada: boolean;
+  /** Conmuta el panel de reparto «Asignar turnos» (Mes único). Solo Gestión lo pasa; sin él, el
+   *  ítem no aparece. `asignarActivo` marca el punto cuando el panel está abierto. */
+  onAsignar?: () => void;
+  asignarActivo?: boolean;
+  /** Imprime / guarda el mes como PDF. Solo Gestión lo pasa (en «Horario» es un icono suelto). */
+  onImprimir?: () => void;
   onCopiarAnterior: () => void;
   /** «Copiar mes anterior»: siembra el mes en vista con el rol del mes anterior. Solo Gestión (Mes)
    *  lo pasa; sin él, el ítem no aparece. */
@@ -334,6 +345,26 @@ export function MenuMasAcciones({
   copiarPendiente: boolean;
 }) {
   const items: EntradaMenuContextual[] = [];
+
+  // Acciones de la barra del mes plegadas en el menú: el reparto (toggle del panel) e imprimir.
+  if (onAsignar) {
+    items.push({
+      etiqueta: "Asignar turnos",
+      icono: CalendarPlus,
+      onClick: onAsignar,
+      activo: asignarActivo,
+    });
+  }
+  if (onImprimir) {
+    items.push({
+      etiqueta: "Imprimir / PDF",
+      icono: Printer,
+      onClick: onImprimir,
+    });
+  }
+  if (onAsignar || onImprimir) {
+    items.push({ separador: true });
+  }
 
   if (esAdmin) {
     if (onAbrirAjustes) {

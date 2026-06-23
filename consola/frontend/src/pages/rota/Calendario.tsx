@@ -3,7 +3,6 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import {
   AlertTriangle,
   BellRing,
-  CalendarPlus,
   ChevronRight,
   SlidersHorizontal,
   Sunrise,
@@ -18,7 +17,6 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
@@ -70,7 +68,7 @@ import { lunesDeFecha } from "@/lib/rota-reparto";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas, DialogoAjustesTurnos } from "./Franjas";
-import { VistaMensualTurnos } from "./MisTurnos";
+import { VistaMensualTurnos, imprimirMes } from "./MisTurnos";
 import { SemanaPorDias } from "./SemanaPorDias";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
@@ -585,31 +583,25 @@ export function Calendario({
   // Gestión, la rama Semana sigue disponible para la consulta del calendario.
   if (vista === "mes" || esGestion) {
     // Barra del mensual (una sola fila de tres zonas). En CONSULTA lleva el conmutador Semana|Mes +
-    // ✓ «Al día» (vía `controlesPre`). En GESTIÓN (Mes único, sin conmutador) lleva las acciones de
-    // gestión: «Asignar turnos» (abre/cierra el panel de reparto) + el menú «Más»
-    // (copiar/franjas/carga/export). Imprimir queda como icono suelto.
+    // ✓ «Al día» (vía `controlesPre`). En GESTIÓN (Mes único, sin conmutador) toda la gestión vive
+    // en el menú ⋯: «Asignar turnos» (abre/cierra el panel de reparto), Imprimir, y el resto
+    // (copiar/franjas/carga/export). Así la barra queda con el mes centrado y nada más.
     const accionesMes = esGestion ? (
-      <>
-        <Button
-          variant="outline"
-          onClick={() => setAbrirAsignar((v) => !v)}
-          aria-pressed={abrirAsignar}
-        >
-          <CalendarPlus className="h-4 w-4" /> Asignar turnos
-        </Button>
-        <MenuMasAcciones
-          esAdmin={esAdmin}
-          semanaAprobada={false}
-          copiarPendiente={copiarAnterior.isPending || copiarMes.isPending}
-          onCopiarAnterior={() => copiarAnterior.mutate()}
-          onCopiarMes={() => copiarMes.mutate()}
-          onAbrirFranjas={() => setAbrirFranjas(true)}
-          onAbrirAjustes={() => setAbrirAjustes(true)}
-          onAbrirCarga={() => setAbrirCarga(true)}
-          onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
-          onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
-        />
-      </>
+      <MenuMasAcciones
+        esAdmin={esAdmin}
+        semanaAprobada={false}
+        copiarPendiente={copiarAnterior.isPending || copiarMes.isPending}
+        onAsignar={() => setAbrirAsignar((v) => !v)}
+        asignarActivo={abrirAsignar}
+        onImprimir={imprimirMes}
+        onCopiarAnterior={() => copiarAnterior.mutate()}
+        onCopiarMes={() => copiarMes.mutate()}
+        onAbrirFranjas={() => setAbrirFranjas(true)}
+        onAbrirAjustes={() => setAbrirAjustes(true)}
+        onAbrirCarga={() => setAbrirCarga(true)}
+        onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
+        onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
+      />
     ) : undefined;
     const mensual = (
       <VistaMensualTurnos
@@ -618,7 +610,7 @@ export function Calendario({
         controlesPre={esGestion ? undefined : conmutadorVista}
         marcadorSalud={marcadorSalud}
         soloEquipo={esGestion}
-        ocultarImprimir={false}
+        ocultarImprimir={esGestion}
         accionesDerecha={accionesMes}
         seleccionable={esGestion}
         diasSel={esGestion ? diasSel : undefined}
@@ -660,84 +652,47 @@ export function Calendario({
     // 100dvh − topbar `h-12` − padding del `<main>`), el mismo presupuesto que Gestión, para que
     // la rejilla baje hasta el pie de la pantalla y no deje hueco muerto debajo.
     <div className={`flex min-h-0 flex-col gap-4 ${esGestion ? "lg:h-full" : "h-[calc(100dvh-5.5rem)]"}`}>
-      {/* Cabecera. En «Gestión», el conmutador Semana|Mes (para volver al overview mensual) +
-          navegador de semana + el toggle del panel de reparto + el menú «Más»; en «Calendario», el
-          conmutador Semana|Mes + navegador + avisos de la semana. La leyenda se ofrece con el "?". */}
-      {esGestion ? (
-        // MISMA barra de tres zonas que el modo «Mes» (izquierda = modo de vista · centro = el
-        // navegador, foco · derecha = estado + acciones): grid 1fr·auto·1fr en md+; en móvil apila.
-        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
-          <div className="flex flex-wrap items-center gap-2 md:justify-self-start">
-            {conmutadorVista}
-          </div>
-          <div className="md:justify-self-center">
-            <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 md:justify-self-end">
-            {marcadorSalud}
-            {/* Oculta/muestra el panel de reparto (columna lateral, no un modal). Arranca abierto:
-                lo asignado ya lo ve el equipo (sin paso de aprobación), así que repartir es la
-                acción directa de esta pestaña. */}
-            <Button
-              variant="outline"
-              onClick={() => setAbrirAsignar((v) => !v)}
-              aria-pressed={abrirAsignar}
+      {/* Cabecera del Calendario (consulta, vista Semana): conmutador Semana|Mes + navegador de
+          semana + avisos de la semana. La leyenda se ofrece con el "?". Gestión nunca llega aquí
+          (Mes único): toma siempre la rama mensual de arriba. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {conmutadorVista}
+          <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+          <AyudaLeyenda />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Bandeja de propuestas: aceptar una promueve a evento «Por cubrir» (acción de
+              coordinador) → solo admin. El estado de la semana (Borrador/Publicada) vive en Gestión. */}
+          {esAdmin && <PropuestasCalendario propuestas={propuestas} />}
+          {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
+          {esAdmin && nCambiados > 0 && (
+            <Tooltip
+              label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
+                nCambiados === 1 ? "" : "s"
+              } sin aviso.`}
             >
-              <CalendarPlus className="h-4 w-4" /> Asignar turnos
-            </Button>
-            <MenuMasAcciones
-              esAdmin={esAdmin}
-              semanaAprobada={false}
-              copiarPendiente={copiarAnterior.isPending}
-              onCopiarAnterior={() => copiarAnterior.mutate()}
-              onAbrirFranjas={() => setAbrirFranjas(true)}
-              onAbrirAjustes={() => setAbrirAjustes(true)}
-              onAbrirCarga={() => setAbrirCarga(true)}
-              onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
-              onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {conmutadorVista}
-            <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
-            <AyudaLeyenda />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Bandeja de propuestas: aceptar una promueve a evento «Por cubrir» (acción de
-                coordinador) → solo admin. El estado de la semana (Borrador/Publicada) vive en Gestión. */}
-            {esAdmin && <PropuestasCalendario propuestas={propuestas} />}
-            {/* Aviso de coordinador (reprogramados sin avisar): solo admin; el trabajador no lo acciona. */}
-            {esAdmin && nCambiados > 0 && (
-              <Tooltip
-                label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
-                  nCambiados === 1 ? "" : "s"
-                } sin aviso.`}
+              <Badge variant="aviso" className="gap-1 font-normal">
+                <BellRing className="h-3.5 w-3.5" /> {nCambiados}
+              </Badge>
+            </Tooltip>
+          )}
+          {nSinCubrir > 0 && (
+            <Tooltip
+              label={`${nSinCubrir} evento${nSinCubrir === 1 ? "" : "s"} sin cubrir esta semana (sin nadie de turno en su franja).`}
+            >
+              <Badge
+                variant="outline"
+                className="gap-1 border-yellow-500/50 font-normal text-yellow-700 dark:text-yellow-300"
               >
-                <Badge variant="aviso" className="gap-1 font-normal">
-                  <BellRing className="h-3.5 w-3.5" /> {nCambiados}
-                </Badge>
-              </Tooltip>
-            )}
-            {nSinCubrir > 0 && (
-              <Tooltip
-                label={`${nSinCubrir} evento${nSinCubrir === 1 ? "" : "s"} sin cubrir esta semana (sin nadie de turno en su franja).`}
-              >
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-yellow-500/50 font-normal text-yellow-700 dark:text-yellow-300"
-                >
-                  <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
-                </Badge>
-              </Tooltip>
-            )}
-            {/* Asignar/Aprobar/Despublicar/Franjas/Copiar/Carga/Export viven en la pestaña
-                «Gestión» (admin); el Calendario es consulta + edición de celdas. */}
-          </div>
+                <UserPlus className="h-3.5 w-3.5" /> {nSinCubrir} sin cubrir
+              </Badge>
+            </Tooltip>
+          )}
+          {/* Asignar/Aprobar/Despublicar/Franjas/Copiar/Carga/Export viven en la pestaña
+              «Gestión» (admin); el Calendario es consulta + edición de celdas. */}
         </div>
-      )}
+      </div>
       {/* Split: la rejilla ocupa el ancho (flex-1) y crece en vertical (min-h-0 flex-1) hasta el pie.
           En Gestión con el panel abierto, el reparto se acomoda a la derecha SIN tapar la rejilla (la
           columna lateral); cerrado, la rejilla vuelve a ancho completo. En «Calendario» no hay panel:
