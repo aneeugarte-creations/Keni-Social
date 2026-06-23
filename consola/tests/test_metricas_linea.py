@@ -213,7 +213,7 @@ def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
     monkeypatch.setattr(
         repos,
         "listar_etiquetas",
-        lambda marca=None, clase=None: [{"id": "et-vir", "nombre": "Virales"}],
+        lambda marca=None, clase=None, solo_activas=False: [{"id": "et-vir", "nombre": "Virales"}],
     )
     monkeypatch.setattr(repos, "etiquetas_por_contenido", lambda: {"c1": ["et-vir"]})
 
