@@ -209,6 +209,63 @@ def test_rebase_sugerencia_sin_worktree(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# «Pull siempre»: fetch+rebase sobre origin/main antes de cada fase             #
+# --------------------------------------------------------------------------- #
+
+
+class _FakeGitArbol(_FakeGit):
+    """`_FakeGit` cuyo `status --porcelain` reporta el árbol como SUCIO (cambios sin commitear)."""
+
+    def __call__(self, *args, cwd=None, timeout=120):
+        res = super().__call__(*args, cwd=cwd, timeout=timeout)
+        if args[:2] == ("status", "--porcelain"):
+            res.stdout = " M archivo\n"
+        return res
+
+
+def test_rebasar_sobre_main_ok(monkeypatch, tmp_path):
+    fake = _FakeGit()
+    monkeypatch.setattr(worker_dev, "_git", fake)
+    ok, detalle = worker_dev._rebasar_sobre_main(tmp_path)
+    assert ok is True and detalle == ""
+    assert [c[0] for c in fake.llamadas] == ["fetch", "rebase"]  # sin push
+
+
+def test_rebasar_sobre_main_conflicto_aborta(monkeypatch, tmp_path):
+    fake = _FakeGit(fallos={"rebase"})
+    monkeypatch.setattr(worker_dev, "_git", fake)
+    ok, detalle = worker_dev._rebasar_sobre_main(tmp_path)
+    assert ok is False and "rebase" in detalle.lower()
+    assert ("rebase", "--abort") in fake.llamadas
+
+
+def _parchear_asegurar(monkeypatch, tmp_path, fake):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(worker_dev, "_asegurar_repo", lambda _r: None)
+    monkeypatch.setattr(worker_dev, "_setup_git_credenciales", lambda: None)
+    monkeypatch.setattr(worker_dev, "_git", fake)
+    wt = tmp_path / "dev-worktrees" / "sug-x"
+    wt.mkdir(parents=True)  # ya existe -> rama REUSADA
+    return wt
+
+
+def test_asegurar_worktree_reuso_rebasa_si_limpio(monkeypatch, tmp_path):
+    fake = _FakeGit()  # status --porcelain vacío => árbol limpio
+    wt = _parchear_asegurar(monkeypatch, tmp_path, fake)
+    devuelto, rama = worker_dev._asegurar_worktree("x")
+    assert devuelto == wt and rama == "dev/sug-x"
+    subcomandos = [c[0] for c in fake.llamadas]
+    assert "fetch" in subcomandos and "rebase" in subcomandos  # pull siempre
+
+
+def test_asegurar_worktree_reuso_no_rebasa_si_sucio(monkeypatch, tmp_path):
+    fake = _FakeGitArbol()  # árbol sucio: cambios sin commitear
+    _parchear_asegurar(monkeypatch, tmp_path, fake)
+    worker_dev._asegurar_worktree("x")
+    assert "rebase" not in [c[0] for c in fake.llamadas]  # no rebasa un árbol sucio
+
+
+# --------------------------------------------------------------------------- #
 # Teardown: borra worktree + rama local + preview                              #
 # --------------------------------------------------------------------------- #
 

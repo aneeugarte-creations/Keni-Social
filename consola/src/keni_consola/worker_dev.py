@@ -153,17 +153,52 @@ def _asegurar_repo(repo: Path) -> None:
         )
 
 
+def _arbol_limpio(worktree: Path) -> bool:
+    """True si el worktree no tiene cambios sin commitear (seguro para rebasar)."""
+    res = _git("status", "--porcelain", cwd=worktree)
+    return res.returncode == 0 and not (res.stdout or "").strip()
+
+
+def _rebasar_sobre_main(worktree: Path) -> tuple[bool, str]:
+    """fetch `origin main` + rebase `origin/main` dentro de `worktree`. No lanza.
+
+    La misma disciplina que `scripts/promover-main.sh`: traer lo último de main y rebasar encima
+    ANTES de empujar/construir, para que la rama nunca quede vieja. En conflicto hace
+    `rebase --abort` (no deja el árbol a medias) y devuelve `(False, motivo)`. La credencial gh la
+    cablea el llamante. Devuelve `(True, "")` si la rama quedó sobre origin/main.
+    """
+    fetch = _git("fetch", "origin", "main", cwd=worktree)
+    if fetch.returncode != 0:
+        return False, f"No se pudo actualizar desde origin: {(fetch.stderr or '').strip()[:200]}"
+    rebase = _git("rebase", "origin/main", cwd=worktree)
+    if rebase.returncode != 0:
+        _git("rebase", "--abort", cwd=worktree)
+        return False, "El rebase sobre origin/main tiene conflictos; resuélvelos en la rama."
+    return True, ""
+
+
 def _asegurar_worktree(sugerencia_id: str) -> tuple[Path, str]:
     """Crea (o reutiliza) el worktree+rama de una sugerencia. Devuelve `(worktree, rama)`.
 
     La rama `dev/sug-<id>` nace de `origin/main` fresco. Si el worktree ya existe, se reutiliza
-    (las fases del pipeline trabajan sobre el MISMO árbol acumulando el cambio).
+    (las fases del pipeline trabajan sobre el MISMO árbol acumulando el cambio) y se REBASA sobre
+    `origin/main` antes de seguir: «pull siempre», para que ninguna fase parta de una rama vieja
+    (la causa de previews/promociones que fallan). Best-effort: solo si el árbol está limpio
+    (los agentes commitean su trabajo), y un conflicto/fallo no bloquea la fase —se loguea y se
+    sigue; el rebase manual y la guardia de la promoción cubren el resto.
     """
     repo = _repo()
     _asegurar_repo(repo)
     rama = f"dev/sug-{sugerencia_id}"
     wt = _dir_worktrees() / f"sug-{sugerencia_id}"
     if wt.is_dir():
+        if _arbol_limpio(wt):
+            _setup_git_credenciales()
+            ok, detalle = _rebasar_sobre_main(wt)
+            if not ok:
+                _log.warning("worker_dev: no se pudo rebasar el worktree de %s: %s", sugerencia_id, detalle)
+        else:
+            _log.info("worker_dev: worktree de %s con cambios sin commitear; no rebaso", sugerencia_id)
         return wt, rama
     _git("fetch", "origin", "main", cwd=repo)
     res = _git("worktree", "add", "-B", rama, str(wt), "origin/main", cwd=repo)
@@ -291,17 +326,9 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
     # La credencial gh debe estar cableada en git para que `git push` autentique.
     _setup_git_credenciales()
 
-    fetch = _git("fetch", "origin", "main", cwd=worktree)
-    if fetch.returncode != 0:
-        return {"ok": False, "detalle": f"No se pudo actualizar desde origin: {(fetch.stderr or '').strip()[:200]}"}
-
-    rebase = _git("rebase", "origin/main", cwd=worktree)
-    if rebase.returncode != 0:
-        _git("rebase", "--abort", cwd=worktree)
-        return {
-            "ok": False,
-            "detalle": "El rebase sobre origin/main tiene conflictos; resuélvelos en la rama antes de promover.",
-        }
+    ok, detalle = _rebasar_sobre_main(worktree)
+    if not ok:
+        return {"ok": False, "detalle": detalle, "rama": rama}
 
     push = _git("push", "origin", f"{rama}:main", cwd=worktree, timeout=300)
     if push.returncode != 0:
@@ -334,18 +361,9 @@ def rebase_sugerencia(sugerencia_id: str) -> dict[str, object]:
         return {"ok": False, "detalle": "No se encontró el worktree de la sugerencia para rebasar."}
 
     _setup_git_credenciales()
-    fetch = _git("fetch", "origin", "main", cwd=worktree)
-    if fetch.returncode != 0:
-        return {"ok": False, "detalle": f"No se pudo actualizar desde origin: {(fetch.stderr or '').strip()[:200]}"}
-
-    rebase = _git("rebase", "origin/main", cwd=worktree)
-    if rebase.returncode != 0:
-        _git("rebase", "--abort", cwd=worktree)
-        return {
-            "ok": False,
-            "detalle": "El rebase sobre origin/main tiene conflictos; resuélvelos en la rama.",
-            "rama": rama,
-        }
+    ok, detalle = _rebasar_sobre_main(worktree)
+    if not ok:
+        return {"ok": False, "detalle": detalle, "rama": rama}
 
     # Rebasada: recompila el preview para que refleje el código ya actualizado.
     listo = _construir_preview(worktree, sugerencia_id)
