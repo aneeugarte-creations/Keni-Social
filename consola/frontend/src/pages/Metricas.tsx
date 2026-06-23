@@ -8,7 +8,6 @@ import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
-import { AccionesPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -219,8 +218,12 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   // gestiona ahora en Sistema → Proveedores (junto al resto de conexiones a externos), no aquí.
   // El estado del refresco vive aquí (hook): el item del menú se desmonta al cerrarse y el
   // polling le sobrevive.
-  const acciones = (
-    <div className="flex items-center gap-2">
+  // Toolbar PROPIA del dashboard (fila debajo de las pestañas), NO en la barra superior
+  // compartida: con tantos filtros (periodo, red, configurar, vistas, acciones) la cabecera
+  // se saturaba y solapaba con las pestañas/título. `flex-wrap` evita cualquier solape: en
+  // pantallas estrechas los controles fluyen a la siguiente línea.
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
       <EstadoActualizacion
         refrescando={refresco.refrescando}
         generadoEn={reporteQuery.data?.generado_en}
@@ -260,8 +263,8 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   );
 
   return (
-    <>
-      <AccionesPagina>{acciones}</AccionesPagina>
+    <div className="space-y-6">
+      {toolbar}
 
       {reporteQuery.isPending ? (
         <EsqueletoDashboard />
@@ -436,7 +439,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
