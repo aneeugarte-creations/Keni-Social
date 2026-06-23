@@ -251,40 +251,88 @@ function slideLineas(
   });
 }
 
-/** Una tabla (autoTable) en su diapositiva, a partir de filas de objetos planos. */
+/** Máximo de filas por tabla del deck: una presentación RESUME, no vuelca la tabla entera
+ *  (un volcado completo generaba cientos de páginas). El resto se anota al pie. */
+const MAX_FILAS_TABLA = 12;
+
+/**
+ * Columna de una tabla del deck: ancho FIJO (px) y alineación. El ancho fijo + el elipsado
+ * evitan que una columna se estreche hasta escribir el texto casi en vertical (lo que pasaba
+ * con anchos automáticos y muchas columnas).
+ */
+interface ColTabla {
+  clave: string;
+  etiqueta: string;
+  ancho: number;
+  align?: "left" | "right" | "center";
+}
+
+/**
+ * Una tabla (autoTable) en su diapositiva: filas ACOTADAS, columnas de ancho FIJO y texto
+ * ELIPSADO (nunca volcado a vertical ni partido en una página por fila). Cabe en UNA
+ * diapositiva; si sobran filas respecto al tope, lo anota al pie.
+ */
 async function slideTabla(
   doc: Doc,
   titulo: string,
-  filas: Array<Record<string, unknown>>,
+  filasTodas: Array<Record<string, unknown>>,
   ctx: ContextoDeck,
   n: number,
-  columnas?: Array<{ clave: string; etiqueta: string }>,
+  columnas: ColTabla[],
 ): Promise<void> {
   const y0 = abrirSlide(doc, titulo, ctx, n);
-  if (filas.length === 0) {
+  if (filasTodas.length === 0) {
     text(doc, MUTED);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.text("Sin datos en el periodo.", M, y0 + 40);
     return;
   }
-  const cols = columnas ?? Object.keys(filas[0]).map((k) => ({ clave: k, etiqueta: k }));
+  const filas = filasTodas.slice(0, MAX_FILAS_TABLA);
   const { default: autoTable } = await importarModulo(() => import("jspdf-autotable"));
   autoTable(doc, {
-    head: [cols.map((c) => c.etiqueta)],
-    body: filas.map((f) => cols.map((c) => formatoCelda(f[c.clave]))),
+    head: [columnas.map((c) => c.etiqueta)],
+    body: filas.map((f) => columnas.map((c) => formatoCelda(f[c.clave]))),
     startY: y0 + 16,
-    margin: { left: M, right: M, bottom: 64 },
-    styles: { font: "helvetica", fontSize: 9, cellPadding: 5, textColor: aRgb(INK), lineColor: aRgb(LINEA), lineWidth: 0.5 },
-    headStyles: { fillColor: aRgb(ACENTO), textColor: [255, 255, 255], fontStyle: "bold" },
+    margin: { left: M, right: M, bottom: 72 },
+    tableWidth: W - 2 * M,
+    // Acotadas a una página: ni la tabla ni una fila se parten en páginas nuevas.
+    pageBreak: "avoid",
+    rowPageBreak: "avoid",
+    styles: {
+      font: "helvetica",
+      fontSize: 12,
+      cellPadding: 9,
+      minCellHeight: 30,
+      overflow: "ellipsize",
+      valign: "middle",
+      textColor: aRgb(INK),
+      lineColor: aRgb(LINEA),
+      lineWidth: 0.5,
+    },
+    headStyles: { fillColor: aRgb(ACENTO), textColor: [255, 255, 255], fontStyle: "bold", fontSize: 12 },
     alternateRowStyles: { fillColor: aRgb(SUAVE) },
+    columnStyles: Object.fromEntries(
+      columnas.map((c, i) => [i, { cellWidth: c.ancho, halign: c.align ?? "left" }]),
+    ),
   });
+  if (filasTodas.length > filas.length) {
+    text(doc, MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Mostrando ${filas.length} de ${numeroCompacto(filasTodas.length)} filas.`, M, H - 46);
+  }
 }
 
 function formatoCelda(v: unknown): string {
-  if (v == null) return "";
-  if (typeof v === "number") return Number.isInteger(v) ? numeroCompacto(v) : String(v);
-  if (typeof v === "object") return JSON.stringify(v);
+  if (v == null) return "—";
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) return "—";
+    return Number.isInteger(v)
+      ? numeroCompacto(v)
+      : v.toLocaleString("es-MX", { maximumFractionDigits: 1 });
+  }
+  if (typeof v === "object") return "";
   return String(v);
 }
 
@@ -367,30 +415,44 @@ export async function descargarPresentacion(
     );
   }
 
+  // Top y "a revisar": lo más presentable del periodo (NO el listado completo de piezas, que
+  // generaría cientos de páginas). La red se muestra con su nombre legible, el título elipsado.
   const piezas = datos.get("piezas") as { top?: Fila[]; peores?: Fila[] } | undefined;
-  const colsPieza = [
-    { clave: "titulo", etiqueta: "Título" },
-    { clave: "plataforma", etiqueta: "Red" },
-    { clave: "publicado", etiqueta: "Publicado" },
-    { clave: "visualizaciones", etiqueta: "Vistas" },
-    { clave: "interacciones", etiqueta: "Interac." },
-    { clave: "engagement_pct", etiqueta: "Eng. %" },
+  const colsPieza: ColTabla[] = [
+    { clave: "titulo", etiqueta: "Título", ancho: 540 },
+    { clave: "plataforma", etiqueta: "Red", ancho: 110 },
+    { clave: "publicado", etiqueta: "Publicado", ancho: 120 },
+    { clave: "visualizaciones", etiqueta: "Vistas", ancho: 130, align: "right" },
+    { clave: "interacciones", etiqueta: "Interac.", ancho: 130, align: "right" },
+    { clave: "engagement_pct", etiqueta: "Eng. %", ancho: 122, align: "right" },
   ];
-  if (piezas?.top?.length) await slideTabla(doc, "Top piezas", piezas.top, ctx, ++n, colsPieza);
-  if (piezas?.peores?.length) await slideTabla(doc, "Peores piezas", piezas.peores, ctx, ++n, colsPieza);
+  const prepPiezas = (arr: Fila[]) =>
+    arr.map((p) => ({ ...p, plataforma: nombreRed(String(p.plataforma ?? "")) }));
+  if (piezas?.top?.length)
+    await slideTabla(doc, "Top piezas", prepPiezas(piezas.top), ctx, ++n, colsPieza);
+  if (piezas?.peores?.length)
+    await slideTabla(doc, "Piezas a revisar", prepPiezas(piezas.peores), ctx, ++n, colsPieza);
 
-  // Resto de dominios con datos tabulares → tabla genérica (desglose, crosstab, etc.).
-  const TITULOS_TABLA: Record<string, [string, string]> = {
-    desglose: ["Desglose de interacciones", "celdas"],
-    crosstab: ["Cruce de métricas", "celdas"],
-    correlacion: ["Correlación con seguidores", "items"],
-    ads: ["Publicidad pagada", "ads"],
-    "piezas-listado": ["Listado de piezas", "piezas"],
-  };
-  for (const [dom, [titulo, clave]] of Object.entries(TITULOS_TABLA)) {
-    const d = datos.get(dom) as Record<string, unknown> | undefined;
-    const filas = d?.[clave];
-    if (Array.isArray(filas) && filas.length) await slideTabla(doc, titulo, filas as Fila[], ctx, ++n);
+  // Desglose de interacciones por marca×red (resumen acotado, no la rejilla completa).
+  const desglose = datos.get("desglose") as { celdas?: Fila[] } | undefined;
+  if (desglose?.celdas?.length) {
+    const colsDesglose: ColTabla[] = [
+      { clave: "marca", etiqueta: "Marca", ancho: 250 },
+      { clave: "red", etiqueta: "Red", ancho: 150 },
+      { clave: "likes", etiqueta: "Me gusta", ancho: 188, align: "right" },
+      { clave: "comentarios", etiqueta: "Comentarios", ancho: 188, align: "right" },
+      { clave: "compartidos", etiqueta: "Compartidos", ancho: 188, align: "right" },
+      { clave: "guardados", etiqueta: "Guardados", ancho: 188, align: "right" },
+    ];
+    const filas = desglose.celdas.map((c) => ({
+      marca: String(c.marca ?? ""),
+      red: nombreRed(String(c.red ?? "")),
+      likes: Number(c.likes) || 0,
+      comentarios: Number(c.comentarios) || 0,
+      compartidos: Number(c.compartidos) || 0,
+      guardados: Number(c.guardados) || 0,
+    }));
+    await slideTabla(doc, "Desglose de interacciones", filas, ctx, ++n, colsDesglose);
   }
 
   doc.save(`presentacion-${nombreArchivo}.pdf`);
