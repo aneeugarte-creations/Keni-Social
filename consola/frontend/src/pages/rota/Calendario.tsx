@@ -498,7 +498,7 @@ export function Calendario({
     // (`h-full`, lo acota index.tsx); «Calendario» lo fija él mismo a `calc(100dvh-5.5rem)` (=
     // 100dvh − topbar `h-12` − padding del `<main>`), el mismo presupuesto que Gestión, para que
     // la rejilla baje hasta el pie de la pantalla y no deje hueco muerto debajo.
-    <div className={`flex min-h-0 flex-col gap-4 ${esGestion ? "h-full" : "h-[calc(100dvh-5.5rem)]"}`}>
+    <div className={`flex min-h-0 flex-col gap-4 ${esGestion ? "lg:h-full" : "h-[calc(100dvh-5.5rem)]"}`}>
       {/* Cabecera. En «Gestión», el conmutador Semana|Mes (para volver al overview mensual) +
           navegador de semana + el toggle del panel de reparto + el menú «Más»; en «Calendario», el
           conmutador Semana|Mes + navegador + avisos de la semana. La leyenda se ofrece con el "?". */}
@@ -581,7 +581,7 @@ export function Calendario({
           En Gestión con el panel abierto, el reparto se acomoda a la derecha SIN tapar la rejilla (la
           columna lateral); cerrado, la rejilla vuelve a ancho completo. En «Calendario» no hay panel:
           es solo la rejilla. */}
-      <div className="flex min-h-0 flex-1 gap-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
@@ -820,7 +820,7 @@ export function Calendario({
         {esGestion && abrirAsignar && (
           <aside
             aria-label="Asignar turnos"
-            className="flex h-full min-h-0 w-[26rem] shrink-0 flex-col gap-4"
+            className="flex min-h-0 w-full shrink-0 flex-col gap-4 lg:h-full lg:w-[26rem]"
           >
             <DialogoAsignarTurnos
               incrustado

@@ -155,7 +155,7 @@ export default function Rota() {
           PÁGINA; el «Necesita tu decisión» va arriba a su alto natural y el calendario rellena el
           resto con scroll INTERNO. */}
       {pestaniaEfectiva === "gestion" && (
-        <div className="flex h-[calc(100dvh-5.5rem)] flex-col gap-4 overflow-hidden">
+        <div className="flex flex-col gap-4 lg:h-[calc(100dvh-5.5rem)] lg:overflow-hidden">
           <PanelCoordinacion
             senales={senalesCoord.senales}
             cargando={senalesCoord.cargando}
