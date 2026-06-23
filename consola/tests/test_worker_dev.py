@@ -198,6 +198,50 @@ def test_resolver_rebase_con_agente_no_completa(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Preview: detección de desfase + reconstrucción                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_preview_desfasado_al_dia(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path), "preview_listo": True}
+    _parchear(monkeypatch, sug, tmp_path)  # _FakeGit: merge-base rc0 => la rama ya contiene main
+    res = worker_dev.preview_desfasado("x")
+    assert res["ok"] is True and res["desfasado"] is False
+
+
+def test_preview_desfasado_detecta(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path), "preview_listo": True}
+    _parchear(monkeypatch, sug, tmp_path, fallos={"merge-base"})  # main no es ancestro => desfase
+    res = worker_dev.preview_desfasado("x")
+    assert res["ok"] is True and res["desfasado"] is True
+
+
+def test_preview_desfasado_sin_preview(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path), "preview_listo": False}
+    _parchear(monkeypatch, sug, tmp_path)
+    assert worker_dev.preview_desfasado("x")["desfasado"] is False
+
+
+def test_reconstruir_preview_ok(monkeypatch, tmp_path):
+    sug = {"estado": "revision", "rama": "dev/sug-x", "worktree": str(tmp_path), "preview_listo": True}
+    fake = _parchear(monkeypatch, sug, tmp_path)
+    monkeypatch.setattr(worker_dev, "_construir_preview", lambda *_a, **_k: True)
+    res = worker_dev.reconstruir_preview("x")
+    assert res["ok"] is True and res["preview_listo"] is True
+    subcomandos = [c[0] for c in fake.llamadas]
+    assert subcomandos[:2] == ["fetch", "rebase"]
+    assert "push" not in subcomandos  # reconstruir NO empuja
+
+
+def test_reconstruir_preview_building_rechaza(monkeypatch, tmp_path):
+    sug = {"estado": "building", "rama": "dev/sug-x", "worktree": str(tmp_path)}
+    _parchear(monkeypatch, sug, tmp_path)
+    res = worker_dev.reconstruir_preview("x")
+    assert res["ok"] is False
+    assert "en curso" in res["detalle"].lower()
+
+
+# --------------------------------------------------------------------------- #
 # «Pull siempre»: fetch+rebase sobre origin/main antes de cada fase             #
 # --------------------------------------------------------------------------- #
 

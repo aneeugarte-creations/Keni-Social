@@ -350,6 +350,48 @@ async def promover(request: Request) -> Response:
     })
 
 
+async def preview_estado(request: Request) -> Response:
+    """GET /api/sugerencias/{id}/preview-estado -> `{ok, desfasado}`.
+
+    SUPERADMIN-gated. PROXEA al worker, que compara la rama con `origin/main` para saber si el
+    bundle del preview se quedó viejo. Degrada en silencio (`desfasado:false`) si no se puede
+    consultar: nunca bloquea ver el preview.
+    """
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede consultar el preview.")
+    if rechazo is not None:
+        return rechazo
+    sugerencia_id = request.path_params["sugerencia_id"]
+    if sugerencias.obtener(sugerencia_id) is None:
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+    status, payload = await run_in_threadpool(
+        _llamar_dev, "POST", "/control/dev/preview-desfase", {"sugerencia_id": sugerencia_id}
+    )
+    if status != 200 or not payload.get("ok"):
+        return JSONResponse({"ok": False, "desfasado": False})
+    return JSONResponse({"ok": True, "desfasado": bool(payload.get("desfasado"))})
+
+
+async def preview_reconstruir(request: Request) -> Response:
+    """POST /api/sugerencias/{id}/preview-reconstruir -> `{ok, detalle}`.
+
+    SUPERADMIN-gated. PROXEA al worker, que rebasa la rama sobre `origin/main` y recompila el
+    bundle del preview (sin push, sin mover el kanban). Refresca un preview desfasado.
+    """
+    rechazo = _solo_superadmin(request, "Solo un superadmin puede reconstruir el preview.")
+    if rechazo is not None:
+        return rechazo
+    sugerencia_id = request.path_params["sugerencia_id"]
+    if sugerencias.obtener(sugerencia_id) is None:
+        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
+    status, payload = await run_in_threadpool(
+        _llamar_dev, "POST", "/control/dev/preview-reconstruir", {"sugerencia_id": sugerencia_id}
+    )
+    if status != 200 or not payload.get("ok"):
+        detalle = payload.get("detalle") or payload.get("error") or "No se pudo reconstruir el preview."
+        return JSONResponse({"ok": False, "detalle": detalle}, status_code=status if status >= 400 else 502)
+    return JSONResponse({"ok": True, "detalle": payload.get("detalle") or "Preview reconstruido."})
+
+
 RUTAS = [
     Route("/api/sugerencias", listar, methods=["GET"]),
     Route("/api/sugerencias", crear, methods=["POST"]),
@@ -360,4 +402,6 @@ RUTAS = [
     Route("/api/sugerencias/{sugerencia_id}/construir", construir, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/checkpoint", checkpoint, methods=["POST"]),
     Route("/api/sugerencias/{sugerencia_id}/promover", promover, methods=["POST"]),
+    Route("/api/sugerencias/{sugerencia_id}/preview-estado", preview_estado, methods=["GET"]),
+    Route("/api/sugerencias/{sugerencia_id}/preview-reconstruir", preview_reconstruir, methods=["POST"]),
 ]

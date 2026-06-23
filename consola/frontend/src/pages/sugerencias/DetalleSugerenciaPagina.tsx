@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Coins,
@@ -8,6 +9,7 @@ import {
   Loader2,
   MessageSquareWarning,
   Pencil,
+  RefreshCw,
   RotateCcw,
   Rocket,
   Search,
@@ -131,6 +133,64 @@ function BloqueMarkdown({ titulo, texto }: { titulo: string; texto: string }) {
       <div className="rounded-md border bg-muted/20 p-4">
         <Markdown className="text-sm text-foreground/90">{texto}</Markdown>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Área del preview: enlace «Ver preview» + (superadmin) detección de DESFASE respecto a main y
+ * botón «Reconstruir preview». El bundle se compila de la rama; si main avanzó sin que el
+ * preview se reconstruyera, queda viejo y puede no cargar. La comprobación la hace el worker
+ * (compara la rama con origin/main); reconstruir rebasa sobre main y recompila el bundle.
+ */
+function BloquePreview({ sugerenciaId, esSuper }: { sugerenciaId: string; esSuper: boolean }) {
+  const queryClient = useQueryClient();
+  const estado = useQuery({
+    queryKey: [...CLAVE_SUGERENCIAS, sugerenciaId, "preview-estado"],
+    queryFn: ({ signal }) => api.previewEstado(sugerenciaId, signal),
+    enabled: esSuper,
+    staleTime: 30_000,
+  });
+  const reconstruir = useMutation({
+    mutationFn: () => api.reconstruirPreview(sugerenciaId),
+    onSuccess: (res) => {
+      toast.success(res.detalle || "Preview reconstruido");
+      void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const desfasado = estado.data?.desfasado === true;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" asChild>
+          <a href={`/api/preview/${sugerenciaId}/`} target="_blank" rel="noopener">
+            <ExternalLink className="h-4 w-4" />
+            Ver preview
+          </a>
+        </Button>
+        {esSuper && (
+          <Button
+            variant="outline"
+            onClick={() => reconstruir.mutate()}
+            disabled={reconstruir.isPending}
+          >
+            {reconstruir.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Reconstruir preview
+          </Button>
+        )}
+      </div>
+      {desfasado && (
+        <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          El preview está desfasado respecto a main: reconstrúyelo para verlo actualizado.
+        </p>
+      )}
     </div>
   );
 }
@@ -513,12 +573,7 @@ export default function DetalleSugerenciaPagina() {
           <BloqueMarkdown titulo="Plan" texto={sugerencia.plan} />
 
           {sugerencia.preview_listo && (
-            <Button variant="outline" asChild>
-              <a href={`/api/preview/${sugerencia.id}/`} target="_blank" rel="noopener">
-                <ExternalLink className="h-4 w-4" />
-                Ver preview
-              </a>
-            </Button>
+            <BloquePreview sugerenciaId={sugerencia.id} esSuper={esSuper} />
           )}
 
           {/* Acciones del flujo: solo superadmin (control del tablero). Cada botón que AVANZA

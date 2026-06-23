@@ -81,3 +81,9 @@ export interface RespuestaPromoverSugerencia {
   ok: boolean;
   detalle: string;
 }
+
+export interface RespuestaPreviewEstado {
+  ok: boolean;
+  /** `true` => el bundle del preview se quedó viejo respecto a main (puede no cargar bien). */
+  desfasado: boolean;
+}

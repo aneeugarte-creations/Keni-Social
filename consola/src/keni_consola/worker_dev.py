@@ -384,6 +384,75 @@ def promover_sugerencia(sugerencia_id: str) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
+# Preview: detección de desfase respecto a main + reconstrucción                #
+# --------------------------------------------------------------------------- #
+
+
+def _worktree_de(sug: dict, sugerencia_id: str) -> Path:
+    """Path del worktree de una sugerencia (de la fila o el convencional `sug-<id>`)."""
+    return Path(str(sug.get("worktree") or (_dir_worktrees() / f"sug-{sugerencia_id}")))
+
+
+def preview_desfasado(sugerencia_id: str) -> dict[str, object]:
+    """¿El preview de una sugerencia se quedó viejo respecto a `main`? No lanza.
+
+    El preview se compila de la rama; si `main` avanzó con commits que la rama no incluye, el
+    bundle está DESFASADO (puede no enrutar/arrancar). Lo detecta en el worktree: `fetch
+    origin main` y luego `merge-base --is-ancestor origin/main HEAD` (returncode 0 = la rama ya
+    contiene main = al día; !=0 = desfasada). Devuelve `{ok, desfasado, detalle}`; sin worktree
+    o sin preview devuelve `desfasado=False` (no hay nada que comparar).
+    """
+    sug = sugerencias.obtener(sugerencia_id)
+    if sug is None:
+        return {"ok": False, "desfasado": False, "detalle": "Esa sugerencia ya no existe."}
+    if not sug.get("preview_listo"):
+        return {"ok": True, "desfasado": False, "detalle": "No hay preview."}
+    worktree = _worktree_de(sug, sugerencia_id)
+    if not worktree.is_dir():
+        return {"ok": True, "desfasado": False, "detalle": "No hay worktree para comparar."}
+    _setup_git_credenciales()
+    fetch = _git("fetch", "origin", "main", cwd=worktree)
+    if fetch.returncode != 0:
+        return {"ok": False, "desfasado": False, "detalle": "No se pudo consultar origin/main."}
+    al_dia = _git("merge-base", "--is-ancestor", "origin/main", "HEAD", cwd=worktree).returncode == 0
+    return {
+        "ok": True,
+        "desfasado": not al_dia,
+        "detalle": "El preview está desfasado respecto a main." if not al_dia else "Preview al día.",
+    }
+
+
+def reconstruir_preview(sugerencia_id: str) -> dict[str, object]:
+    """Rebasa la rama sobre `origin/main` y RECONSTRUYE el preview (sin push). No lanza.
+
+    Para refrescar un preview desfasado (p.ej. compilado de un `main` anterior) sin re-correr el
+    pipeline. fetch → rebase `origin/main`; si hay conflictos, `--abort` y error legible. Tras un
+    rebase OK recompila el bundle. No toca el kanban. Rechaza si hay una fase en curso o no hay
+    worktree.
+    """
+    sug = sugerencias.obtener(sugerencia_id)
+    if sug is None:
+        return {"ok": False, "detalle": "Esa sugerencia ya no existe."}
+    if sug.get("estado") == "building":
+        return {"ok": False, "detalle": "Hay una fase en curso; espera a que termine."}
+    worktree = _worktree_de(sug, sugerencia_id)
+    if not worktree.is_dir():
+        return {"ok": False, "detalle": "No se encontró el worktree de la sugerencia."}
+
+    _setup_git_credenciales()
+    ok, detalle = _rebasar_sobre_main(worktree)
+    if not ok:
+        return {"ok": False, "detalle": detalle}
+    listo = _construir_preview(worktree, sugerencia_id)
+    sugerencias.actualizar_avance(sugerencia_id, {"preview_listo": listo})
+    return {
+        "ok": listo,
+        "detalle": "Preview reconstruido sobre main." if listo else "No se pudo reconstruir el preview.",
+        "preview_listo": listo,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Reaper de fondo: purga restos de sugerencias terminadas (descartes/crashes)  #
 # --------------------------------------------------------------------------- #
 

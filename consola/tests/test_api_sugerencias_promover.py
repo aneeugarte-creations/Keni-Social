@@ -125,3 +125,58 @@ def test_promover_ok_marca_hecha(entorno, monkeypatch):
     assert capturado["json"] == {"sugerencia_id": sid}
     # Tras el push real, el kanban queda en `hecha`.
     assert sugerencias.obtener(sid)["estado"] == "hecha"
+
+
+# --- Preview: estado (desfase) y reconstruir, proxy admin-gated -------------- #
+
+
+def test_preview_estado_editor_403(entorno):
+    sid = _en_revision()
+    assert _cli_como("editor").get(
+        f"/api/sugerencias/{sid}/preview-estado", headers=_ORIGIN
+    ).status_code == 403
+
+
+def test_preview_estado_ok(entorno, monkeypatch):
+    sid = _en_revision()
+    monkeypatch.setattr(
+        api_sugerencias, "_llamar_dev",
+        lambda metodo, ruta, json=None: (200, {"ok": True, "desfasado": True}),
+    )
+    r = _cli_super().get(f"/api/sugerencias/{sid}/preview-estado", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["desfasado"] is True
+
+
+def test_preview_estado_degrada_si_worker_caido(entorno, monkeypatch):
+    sid = _en_revision()
+    monkeypatch.setattr(
+        api_sugerencias, "_llamar_dev",
+        lambda metodo, ruta, json=None: (502, {"ok": False, "detalle": "x"}),
+    )
+    r = _cli_super().get(f"/api/sugerencias/{sid}/preview-estado", headers=_ORIGIN)
+    assert r.status_code == 200  # degrada en silencio: no bloquea ver el preview
+    assert r.json()["desfasado"] is False
+
+
+def test_preview_reconstruir_editor_403(entorno):
+    sid = _en_revision()
+    assert _cli_como("editor").post(
+        f"/api/sugerencias/{sid}/preview-reconstruir", json={}, headers=_ORIGIN
+    ).status_code == 403
+
+
+def test_preview_reconstruir_ok_sin_tocar_estado(entorno, monkeypatch):
+    sid = _en_revision()
+    capturado: dict = {}
+
+    def _fake(metodo, ruta, json=None):
+        capturado["ruta"] = ruta
+        return 200, {"ok": True, "detalle": "Preview reconstruido sobre main."}
+
+    monkeypatch.setattr(api_sugerencias, "_llamar_dev", _fake)
+    r = _cli_super().post(f"/api/sugerencias/{sid}/preview-reconstruir", json={}, headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert capturado["ruta"] == "/control/dev/preview-reconstruir"
+    assert sugerencias.obtener(sid)["estado"] == "revision"  # no mueve el kanban

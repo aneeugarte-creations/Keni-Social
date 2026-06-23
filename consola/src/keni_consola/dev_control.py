@@ -12,8 +12,10 @@ INTERNA de docker (NUNCA por Traefik). Lo protege el BEARER compartido
 lo proxea (admin-gated) desde `api/sugerencias.py`. Imita `control.py`/`worker_ralph`.
 
 Rutas (bajo `/control/dev`, contrato con el proxy del back):
-  - GET  /control/healthz       -> {ok:true}             (sonda, sin bearer)
-  - POST /control/dev/promover  -> {ok, detalle, rama}   (fetch+rebase+push de la rama a main)
+  - GET  /control/healthz                -> {ok:true}              (sonda, sin bearer)
+  - POST /control/dev/promover           -> {ok, detalle, rama}    (fetch+rebase+push a main)
+  - POST /control/dev/preview-desfase    -> {ok, desfasado, detalle} (¿el preview quedó viejo?)
+  - POST /control/dev/preview-reconstruir-> {ok, detalle}           (rebase + recompila el preview)
 """
 
 from __future__ import annotations
@@ -76,12 +78,45 @@ async def promover(request: Request) -> Response:
     return JSONResponse(res, status_code=200 if res.get("ok") else 400)
 
 
+async def preview_desfase(request: Request) -> Response:
+    """POST /control/dev/preview-desfase `{sugerencia_id}` -> {ok, desfasado, detalle}."""
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    sid = cuerpo.get("sugerencia_id")
+    if not isinstance(sid, str) or not sid.strip():
+        return JSONResponse({"ok": False, "detalle": "falta sugerencia_id"}, status_code=400)
+    from . import worker_dev
+
+    res = await run_in_threadpool(worker_dev.preview_desfasado, sid.strip())
+    return JSONResponse(res, status_code=200 if res.get("ok") else 400)
+
+
+async def preview_reconstruir(request: Request) -> Response:
+    """POST /control/dev/preview-reconstruir `{sugerencia_id}` -> {ok, detalle}.
+
+    Rebasa la rama sobre origin/main y recompila el preview, en el threadpool (git+vite
+    bloqueantes). 200 si quedó listo; 400 en caso contrario."""
+    if not _autorizado(request):
+        return _rechazo()
+    cuerpo = await _cuerpo(request)
+    sid = cuerpo.get("sugerencia_id")
+    if not isinstance(sid, str) or not sid.strip():
+        return JSONResponse({"ok": False, "detalle": "falta sugerencia_id"}, status_code=400)
+    from . import worker_dev
+
+    res = await run_in_threadpool(worker_dev.reconstruir_preview, sid.strip())
+    return JSONResponse(res, status_code=200 if res.get("ok") else 400)
+
+
 def crear_app_control_dev() -> Starlette:
     """App Starlette del listener de promoción del carril dev (rutas + healthz)."""
     return Starlette(
         routes=[
             Route("/control/healthz", healthz, methods=["GET"]),
             Route("/control/dev/promover", promover, methods=["POST"]),
+            Route("/control/dev/preview-desfase", preview_desfase, methods=["POST"]),
+            Route("/control/dev/preview-reconstruir", preview_reconstruir, methods=["POST"]),
         ]
     )
 

@@ -7,6 +7,7 @@ import type {
   CuerpoCrearSugerencia,
   RespuestaGeneracion,
   RespuestaMensaje,
+  RespuestaPreviewEstado,
   RespuestaPromoverSugerencia,
   RespuestaSugerencia,
   RespuestaSugerencias,
@@ -55,4 +56,12 @@ export const apiSugerencias = {
   // push, y un agente Opus resuelve conflictos si los hay (lo hace el worker, sin botón aparte).
   promoverSugerencia: (id: string) =>
     peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/promover`, { metodo: "POST" }),
+  // ¿El bundle del preview se quedó viejo respecto a main? (compara la rama con origin/main).
+  previewEstado: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaPreviewEstado>(`/sugerencias/${enc(id)}/preview-estado`, { signal }),
+  // Rebasa la rama sobre main y recompila el bundle del preview (sin push, sin mover el kanban).
+  reconstruirPreview: (id: string) =>
+    peticion<RespuestaPromoverSugerencia>(`/sugerencias/${enc(id)}/preview-reconstruir`, {
+      metodo: "POST",
+    }),
 };
