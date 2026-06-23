@@ -52,8 +52,10 @@ async def obtener_config_franjas(request: Request) -> Response:
 
     GRID POR MARCA: la plantilla es por marca; `?marca=` elige cuál. En "Todas" (sin marca)
     devuelve la plantilla por defecto del dominio. Forma:
-    `{franjas: [{nombre, inicio, fin}, ...], actualizado}` — con esta lista se siembra cada
-    semana NUEVA (la franja "Descanso" la añade aparte la siembra).
+    `{franjas: [{nombre, inicio, fin}, ...], mostrar_horas_equipo: bool, actualizado}` — con
+    la lista se siembra cada semana NUEVA (la franja "Descanso" la añade aparte la siembra);
+    `mostrar_horas_equipo` (default false) decide si el calendario de Turnos pinta el rango
+    horario junto a la franja en la vista "Equipo".
     """
     marca, error = _marca_param(request)
     if error is not None:
@@ -63,15 +65,19 @@ async def obtener_config_franjas(request: Request) -> Response:
 
 
 async def guardar_config_franjas(request: Request) -> Response:
-    """PATCH /api/rota/config/franjas: reemplaza la PLANTILLA de franjas (solo admin).
+    """PATCH /api/rota/config/franjas: actualiza la PLANTILLA de franjas y/o sus ajustes (admin).
 
-    Cuerpo: `{franjas: [{nombre, inicio, fin}, ...]}` en `HH:MM`. La lista es flexible (2, 3 o N
-    franjas: p. ej. añadir "Nocturna"); con ella se siembra cada semana NUEVA. Reglas:
-      - al menos una franja; cada una con nombre, `inicio` y `fin` válidos e `inicio < fin`;
-      - nombres únicos (la siembra usa el nombre como clave de la franja);
-      - "Descanso" NO se admite: lo añade siempre la siembra.
-    Los rangos PUEDEN solaparse: la cobertura (`franjas_activas_en`) hace UNION de las franjas
-    activas a una hora, así que una hora cubierta por dos franjas es legítima.
+    Cuerpo PARCIAL — `franjas` y `mostrar_horas_equipo` son ambos OPCIONALES (debe llegar al
+    menos uno):
+      - `franjas: [{nombre, inicio, fin}, ...]` en `HH:MM`. Lista flexible (2, 3 o N franjas:
+        p. ej. añadir "Nocturna"); con ella se siembra cada semana NUEVA. Reglas: al menos una
+        franja; cada una con nombre, `inicio` y `fin` válidos e `inicio < fin`; nombres únicos
+        (la siembra usa el nombre como clave); "Descanso" NO se admite (lo añade la siembra).
+        Los rangos PUEDEN solaparse: la cobertura (`franjas_activas_en`) hace UNION.
+      - `mostrar_horas_equipo: bool`: si el calendario de Turnos pinta el rango horario junto a
+        la franja en la vista "Equipo".
+    Solo se toca lo que llega: con solo el toggle, las franjas guardadas se conservan; con solo
+    `franjas`, el toggle no cambia. Devuelve la forma del GET.
     """
     if not _es_admin(request):
         return JSONResponse(
@@ -87,54 +93,79 @@ async def guardar_config_franjas(request: Request) -> Response:
             {"error": "Elige una marca concreta para editar su plantilla de franjas."},
             status_code=400,
         )
-    datos = await leer_json(request)
-    crudo = datos.get("franjas")
-    if not isinstance(crudo, list) or not crudo:
+    datos = await leer_json(request) or {}
+    tiene_franjas = "franjas" in datos
+    tiene_toggle = "mostrar_horas_equipo" in datos
+    if not tiene_franjas and not tiene_toggle:
         return JSONResponse(
-            {"error": "`franjas` debe ser una lista con al menos una franja."},
+            {
+                "error": "Indica `franjas` (lista) y/o `mostrar_horas_equipo` (bool) a editar."
+            },
             status_code=400,
         )
-    limpias: list[dict[str, str]] = []
-    vistos: set[str] = set()
-    for i, item in enumerate(crudo):
-        if not isinstance(item, dict):
+    limpias: list[dict[str, str]] | None = None
+    if tiene_franjas:
+        crudo = datos.get("franjas")
+        if not isinstance(crudo, list) or not crudo:
             return JSONResponse(
-                {"error": f"La franja #{i + 1} no es válida."}, status_code=400
-            )
-        nombre = str(item.get("nombre", "")).strip()
-        inicio = str(item.get("inicio", "")).strip()
-        fin = str(item.get("fin", "")).strip()
-        if not nombre:
-            return JSONResponse(
-                {"error": f"La franja #{i + 1} necesita un nombre."}, status_code=400
-            )
-        if nombre.casefold() == _NOMBRE_FRANJA_DESCANSO.casefold():
-            return JSONResponse(
-                {
-                    "error": f"«{_NOMBRE_FRANJA_DESCANSO}» se añade sola; "
-                    "no la pongas en la plantilla."
-                },
+                {"error": "`franjas` debe ser una lista con al menos una franja."},
                 status_code=400,
             )
-        clave = nombre.casefold()
-        if clave in vistos:
+        limpias = []
+        vistos: set[str] = set()
+        for i, item in enumerate(crudo):
+            if not isinstance(item, dict):
+                return JSONResponse(
+                    {"error": f"La franja #{i + 1} no es válida."}, status_code=400
+                )
+            nombre = str(item.get("nombre", "")).strip()
+            inicio = str(item.get("inicio", "")).strip()
+            fin = str(item.get("fin", "")).strip()
+            if not nombre:
+                return JSONResponse(
+                    {"error": f"La franja #{i + 1} necesita un nombre."}, status_code=400
+                )
+            if nombre.casefold() == _NOMBRE_FRANJA_DESCANSO.casefold():
+                return JSONResponse(
+                    {
+                        "error": f"«{_NOMBRE_FRANJA_DESCANSO}» se añade sola; "
+                        "no la pongas en la plantilla."
+                    },
+                    status_code=400,
+                )
+            clave = nombre.casefold()
+            if clave in vistos:
+                return JSONResponse(
+                    {"error": f"Hay dos franjas llamadas «{nombre}»; los nombres deben ser únicos."},
+                    status_code=400,
+                )
+            vistos.add(clave)
+            if not _hora_valida(inicio) or not _hora_valida(fin):
+                return JSONResponse(
+                    {"error": f"«{nombre}»: las horas deben ser HH:MM (00:00..24:00)."},
+                    status_code=400,
+                )
+            if not (_minutos_de(inicio) < _minutos_de(fin)):
+                return JSONResponse(
+                    {"error": f"«{nombre}» tiene que terminar después de empezar."},
+                    status_code=400,
+                )
+            limpias.append({"nombre": nombre, "inicio": inicio, "fin": fin})
+    mostrar: bool | None = None
+    if tiene_toggle:
+        bruto = datos.get("mostrar_horas_equipo")
+        if not isinstance(bruto, bool):
             return JSONResponse(
-                {"error": f"Hay dos franjas llamadas «{nombre}»; los nombres deben ser únicos."},
+                {"error": "`mostrar_horas_equipo` debe ser un booleano."},
                 status_code=400,
             )
-        vistos.add(clave)
-        if not _hora_valida(inicio) or not _hora_valida(fin):
-            return JSONResponse(
-                {"error": f"«{nombre}»: las horas deben ser HH:MM (00:00..24:00)."},
-                status_code=400,
-            )
-        if not (_minutos_de(inicio) < _minutos_de(fin)):
-            return JSONResponse(
-                {"error": f"«{nombre}» tiene que terminar después de empezar."},
-                status_code=400,
-            )
-        limpias.append({"nombre": nombre, "inicio": inicio, "fin": fin})
-    plantilla = await run_in_threadpool(repos.guardar_plantilla_franjas, limpias, marca)
+        mostrar = bruto
+    plantilla = await run_in_threadpool(
+        repos.guardar_plantilla_franjas,
+        limpias,
+        marca,
+        mostrar_horas_equipo=mostrar,
+    )
     return JSONResponse(plantilla)
 
 

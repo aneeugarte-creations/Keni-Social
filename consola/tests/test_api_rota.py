@@ -1795,9 +1795,12 @@ def test_patch_config_franjas_con_marca_ok(entorno):
         headers=_ORIGIN,
     )
     assert r.status_code == 200, r.text
-    franjas = r.json()["franjas"]
+    cuerpo = r.json()
+    franjas = cuerpo["franjas"]
     assert franjas[0]["nombre"] == "Mañana"
     assert franjas[0]["inicio"] == "09:00"
+    # La respuesta del PATCH lleva la forma del GET: incluye el toggle (default False).
+    assert cuerpo["mostrar_horas_equipo"] is False
 
 
 def test_patch_config_franjas_solape_permitido(entorno):

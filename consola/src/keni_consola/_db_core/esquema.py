@@ -666,6 +666,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     #     para no perder rangos personalizados de marcas viejas y para el endpoint legado
     #     `POST /api/rota/cobertura/asignar-franja` (`dominio.mapear_franja`). Inicios
     #     INCLUSIVOS, finales EXCLUSIVOS.
+    #   - mostrar_horas_equipo: el calendario de Turnos pinta el rango horario junto a la franja
+    #     en la vista "Equipo". Por defecto FALSE (oculto): la vista "Equipo" muestra solo el
+    #     nombre de la franja salvo que el admin lo active por marca.
     """
     CREATE TABLE IF NOT EXISTS rota_config_franjas (
         id                  TEXT PRIMARY KEY,
@@ -674,6 +677,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         vespertino_inicio   TEXT NOT NULL DEFAULT '16:00',
         vespertino_fin      TEXT NOT NULL DEFAULT '24:00',
         franjas             TEXT NOT NULL DEFAULT '',
+        mostrar_horas_equipo BOOLEAN NOT NULL DEFAULT FALSE,
         actualizado         TEXT NOT NULL DEFAULT ''
     )
     """,

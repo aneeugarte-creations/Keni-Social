@@ -103,17 +103,20 @@ def guardar_franjas_config(
 
 
 def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
-    """Lee la PLANTILLA de franjas de una marca como `{"franjas": [{nombre,inicio,fin}], "actualizado"}`.
+    """Lee la PLANTILLA de franjas de una marca como `{"franjas", "mostrar_horas_equipo", "actualizado"}`.
 
-    Fuente de verdad: la columna JSON `franjas`. Si esta vacia (fila previa a la columna o marca
-    que nunca uso el editor de lista) se DERIVA de las columnas legadas matutino/vespertino, asi
-    una marca con rangos personalizados los conserva. Sin fila: defaults del dominio.
+    `franjas` es la lista `[{nombre,inicio,fin}]`. Fuente de verdad: la columna JSON `franjas`;
+    si esta vacia (fila previa a la columna o marca que nunca uso el editor de lista) se DERIVA
+    de las columnas legadas matutino/vespertino, asi una marca con rangos personalizados los
+    conserva. `mostrar_horas_equipo` (bool, default False) decide si el calendario muestra el
+    rango horario en la vista "Equipo". Sin fila: defaults del dominio + toggle apagado.
     """
     con = _conectar()
     try:
         fila = con.execute(
             "SELECT franjas, matutino_inicio, matutino_fin, vespertino_inicio, "
-            "vespertino_fin, actualizado FROM rota_config_franjas WHERE id = ?",
+            "vespertino_fin, mostrar_horas_equipo, actualizado "
+            "FROM rota_config_franjas WHERE id = ?",
             (marca or "default",),
         ).fetchone()
     finally:
@@ -124,7 +127,7 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
             nombre_manana=NOMBRE_FRANJA_MANANA_DEFAULT,
             nombre_tarde=NOMBRE_FRANJA_TARDE_DEFAULT,
         )
-        return {"franjas": franjas, "actualizado": ""}
+        return {"franjas": franjas, "mostrar_horas_equipo": False, "actualizado": ""}
     franjas = resolver_franjas_plantilla(
         fila["franjas"],
         fila["matutino_inicio"],
@@ -134,36 +137,63 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
         nombre_manana=NOMBRE_FRANJA_MANANA_DEFAULT,
         nombre_tarde=NOMBRE_FRANJA_TARDE_DEFAULT,
     )
-    return {"franjas": franjas, "actualizado": fila["actualizado"] or ""}
+    return {
+        "franjas": franjas,
+        "mostrar_horas_equipo": bool(fila["mostrar_horas_equipo"]),
+        "actualizado": fila["actualizado"] or "",
+    }
 
 
 def guardar_plantilla_franjas(
-    franjas: list[dict[str, str]],
+    franjas: list[dict[str, str]] | None = None,
     marca: str = "",
+    *,
+    mostrar_horas_equipo: bool | None = None,
 ) -> dict[str, Any]:
-    """Hace UPSERT de la PLANTILLA de franjas (lista JSON) DE UNA MARCA. Devuelve la plantilla.
+    """Hace UPSERT PARCIAL de la PLANTILLA de franjas DE UNA MARCA. Devuelve la plantilla.
 
-    Guarda solo la columna `franjas`: las columnas legadas matutino/vespertino quedan con su
-    DEFAULT en filas nuevas (vestigio para el endpoint legado `mapear_franja`). La validacion
-    (horas, nombres, duplicados) la hace la API antes de llamar aqui.
+    Actualiza SOLO los campos provistos:
+      - `franjas` (lista JSON): si es None no toca la columna `franjas`.
+      - `mostrar_horas_equipo` (bool): si es None no toca esa columna.
+    En el UPSERT, ON CONFLICT actualiza solo las columnas provistas; si la fila no existe aun,
+    se crea con la plantilla derivada/por defecto (de `franjas` o de las columnas legadas) y el
+    toggle apagado para el campo que no llegue. Las columnas legadas matutino/vespertino quedan
+    con su DEFAULT en filas nuevas (vestigio para `mapear_franja`). La validacion (horas,
+    nombres, duplicados) la hace la API antes de llamar aqui.
     """
     ahora = ahora_iso()
     clave = marca or "default"
-    crudo = json.dumps(
-        [
-            {"nombre": f["nombre"], "inicio": f["inicio"], "fin": f["fin"]}
-            for f in franjas
-        ],
-        ensure_ascii=False,
-    )
+    crudo = None
+    if franjas is not None:
+        crudo = json.dumps(
+            [
+                {"nombre": f["nombre"], "inicio": f["inicio"], "fin": f["fin"]}
+                for f in franjas
+            ],
+            ensure_ascii=False,
+        )
+    # Columnas a insertar (fila nueva) y a actualizar (ON CONFLICT). `actualizado` siempre.
+    columnas = ["id"]
+    valores: list[Any] = [clave]
+    set_conflicto = ["actualizado = EXCLUDED.actualizado"]
+    if crudo is not None:
+        columnas.append("franjas")
+        valores.append(crudo)
+        set_conflicto.append("franjas = EXCLUDED.franjas")
+    if mostrar_horas_equipo is not None:
+        columnas.append("mostrar_horas_equipo")
+        valores.append(mostrar_horas_equipo)
+        set_conflicto.append("mostrar_horas_equipo = EXCLUDED.mostrar_horas_equipo")
+    columnas.append("actualizado")
+    valores.append(ahora)
+    marcadores = ", ".join("?" for _ in columnas)
     con = _conectar()
     try:
         con.execute(
-            "INSERT INTO rota_config_franjas (id, franjas, actualizado) "
-            "VALUES (?, ?, ?) "
-            "ON CONFLICT (id) DO UPDATE SET "
-            "franjas = EXCLUDED.franjas, actualizado = EXCLUDED.actualizado",
-            (clave, crudo, ahora),
+            f"INSERT INTO rota_config_franjas ({', '.join(columnas)}) "  # noqa: S608 -- columnas fijas de allowlist
+            f"VALUES ({marcadores}) "
+            f"ON CONFLICT (id) DO UPDATE SET {', '.join(set_conflicto)}",
+            tuple(valores),
         )
         con.commit()
     finally:

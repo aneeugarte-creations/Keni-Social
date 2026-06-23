@@ -486,3 +486,103 @@ def test_plantilla_franjas_patch_sin_marca_400(entorno):
         headers=_ORIGIN,
     )
     assert r.status_code == 400, r.text
+
+
+# --------------------------------------------------------------------------- #
+# mostrar_horas_equipo: toggle por marca (vista "Equipo" del calendario)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_config_franjas_get_mostrar_horas_default_false(cliente):
+    """Sin fila guardada, GET incluye `mostrar_horas_equipo` y por defecto es False."""
+    r = cliente.get(f"/api/rota/config/franjas?marca={MARCA}")
+    assert r.status_code == 200, r.text
+    assert r.json()["mostrar_horas_equipo"] is False
+
+
+def test_patch_solo_toggle_persiste_y_conserva_franjas(entorno):
+    """PATCH con SOLO `{mostrar_horas_equipo: true}` activa el toggle SIN borrar las franjas.
+
+    Guarda primero una plantilla de 3 franjas (con Nocturna); luego patchea SOLO el toggle y
+    comprueba que el GET sigue devolviendo las 3 franjas y ahora `mostrar_horas_equipo` True."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    # 1) Plantilla con 3 franjas.
+    cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "Tarde", "inicio": "16:00", "fin": "24:00"},
+                {"nombre": "Nocturna", "inicio": "00:00", "fin": "08:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    # 2) PATCH SOLO el toggle.
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"mostrar_horas_equipo": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["mostrar_horas_equipo"] is True
+    # Las franjas NO se tocaron: siguen las 3 (incluida Nocturna).
+    assert [f["nombre"] for f in cuerpo["franjas"]] == ["Mañana", "Tarde", "Nocturna"]
+    # Releer por GET confirma la persistencia de ambas cosas.
+    releido = cli.get(f"/api/rota/config/franjas?marca={MARCA}").json()
+    assert releido["mostrar_horas_equipo"] is True
+    assert [f["nombre"] for f in releido["franjas"]] == ["Mañana", "Tarde", "Nocturna"]
+
+
+def test_patch_solo_franjas_no_cambia_toggle(entorno):
+    """PATCH con SOLO `franjas` no toca `mostrar_horas_equipo` (queda como estaba)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    # Activa el toggle primero (solo el toggle).
+    cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"mostrar_horas_equipo": True},
+        headers=_ORIGIN,
+    )
+    # Ahora patchea SOLO las franjas.
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "09:00", "fin": "15:00"},
+                {"nombre": "Tarde", "inicio": "15:00", "fin": "23:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    # El toggle se conserva (no se reescribió).
+    assert cuerpo["mostrar_horas_equipo"] is True
+    assert [f["nombre"] for f in cuerpo["franjas"]] == ["Mañana", "Tarde"]
+
+
+def test_patch_sin_franjas_ni_toggle_400(entorno):
+    """PATCH con cuerpo vacío (ni `franjas` ni `mostrar_horas_equipo`) -> 400 accionable."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_patch_toggle_tipo_invalido_400(entorno):
+    """`mostrar_horas_equipo` debe ser booleano: un string -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"mostrar_horas_equipo": "sí"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text

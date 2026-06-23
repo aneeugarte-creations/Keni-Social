@@ -450,19 +450,25 @@ def _migrar_columnas_turnos_rota(con: Any) -> None:
 
 _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("franjas", "TEXT NOT NULL DEFAULT ''"),
+    # mostrar_horas_equipo: el calendario de Turnos pinta el rango horario junto a la franja en
+    # la vista "Equipo". Legado -> FALSE (oculto): la vista muestra solo el nombre de la franja
+    # hasta que el admin lo activa por marca.
+    ("mostrar_horas_equipo", "BOOLEAN NOT NULL DEFAULT FALSE"),
 )
 
 
 def _migrar_columnas_config_franjas(con: Any) -> None:
-    """Anade a `rota_config_franjas` la columna `franjas` (plantilla como lista JSON).
+    """Anade a `rota_config_franjas` las columnas ampliadas (plantilla JSON + toggle de horas).
 
     Antes la plantilla por defecto eran 4 columnas fijas (matutino/vespertino *_inicio/_fin):
     no cabia una 3a franja (p. ej. "Nocturna"). Ahora la plantilla es una LISTA flexible en
     JSON (`[{nombre,inicio,fin}, ...]`), tan extensible como las franjas de cada semana.
+    `mostrar_horas_equipo` controla si la vista "Equipo" del calendario muestra el rango horario.
 
-    Idempotente y NO destructivo: una BD nueva ya la trae por el DDL declarativo; una vieja la
-    recibe con DEFAULT '' (vacio = "deriva la lista de matutino/vespertino al leer", asi las
-    marcas con rangos personalizados los conservan sin reescribir nada).
+    Idempotente y NO destructivo: una BD nueva ya las trae por el DDL declarativo; una vieja
+    recibe `franjas` con DEFAULT '' (vacio = "deriva la lista de matutino/vespertino al leer",
+    asi las marcas con rangos personalizados los conservan) y `mostrar_horas_equipo` con DEFAULT
+    FALSE, sin reescribir nada.
     """
     if not _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS:
         return

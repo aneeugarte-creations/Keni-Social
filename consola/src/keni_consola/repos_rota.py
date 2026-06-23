@@ -544,7 +544,11 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
 
 
 def guardar_plantilla_franjas(
-    franjas: list[dict[str, str]],
+    franjas: list[dict[str, str]] | None = None,
     marca: str = "",
+    *,
+    mostrar_horas_equipo: bool | None = None,
 ) -> dict[str, Any]:
-    return db.guardar_plantilla_franjas(franjas, marca)
+    return db.guardar_plantilla_franjas(
+        franjas, marca, mostrar_horas_equipo=mostrar_horas_equipo
+    )

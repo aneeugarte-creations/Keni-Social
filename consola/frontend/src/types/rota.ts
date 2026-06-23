@@ -680,12 +680,18 @@ export interface PlantillaFranja {
 /** Respuesta de `GET /api/rota/config/franjas`: la plantilla como lista flexible. */
 export interface RespuestaConfigFranjas {
   franjas: PlantillaFranja[];
+  /** Muestra el rango horario junto a cada franja en el calendario de «Equipo». Por marca; por
+   *  defecto `false` (oculto): la gente de una franja puede tener horas distintas. */
+  mostrar_horas_equipo: boolean;
   actualizado?: string;
 }
 
-/** Cuerpo de `PATCH /api/rota/config/franjas`: reemplaza la plantilla por esta lista. */
+/** Cuerpo de `PATCH /api/rota/config/franjas`: actualización PARCIAL (al menos un campo). */
 export interface CuerpoGuardarConfigFranjas {
-  franjas: PlantillaFranja[];
+  /** Reemplaza la plantilla por esta lista. Omitir = no tocar las franjas. */
+  franjas?: PlantillaFranja[];
+  /** Activa/oculta el rango horario en «Equipo». Omitir = no tocar el flag. */
+  mostrar_horas_equipo?: boolean;
 }
 
 /**

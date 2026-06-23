@@ -4,6 +4,9 @@ import {
   AlertTriangle,
   BellRing,
   CalendarPlus,
+  MoreHorizontal,
+  Printer,
+  SlidersHorizontal,
   Sparkles,
   Sunrise,
   Sunset,
@@ -14,6 +17,7 @@ import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,8 +70,8 @@ import {
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { ResumenDia } from "./ResumenDia";
-import { DialogFranjas } from "./Franjas";
-import { VistaMensualTurnos } from "./MisTurnos";
+import { DialogFranjas, DialogoAjustesTurnos } from "./Franjas";
+import { imprimirMes, VistaMensualTurnos } from "./MisTurnos";
 import { SemanaPorDias } from "./SemanaPorDias";
 import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
@@ -179,6 +183,7 @@ export function Calendario({
   // Diálogo de franjas (unificado): un solo «Franjas» en el menú «Más» con dos pestañas
   // (esta semana / plantilla por defecto).
   const [abrirFranjas, setAbrirFranjas] = React.useState(false);
+  const [abrirAjustes, setAbrirAjustes] = React.useState(false);
   // Resumen "Carga del equipo": se abre bajo demanda desde el menú "Más" (popup), para no
   // alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
@@ -429,9 +434,42 @@ export function Calendario({
   // imprimir/PDF intactos. Es la vista de APERTURA de «Gestión» (overview del mes): ahí llena el
   // alto de su contenedor con el conmutador fijo arriba y el mes con scroll interno; en
   // «Calendario» crece a su alto natural y la página hace scroll. El vacío de «Yo» salta a «Semana».
+  // Diálogo «Ajustes de turnos» (preferencias de visualización por marca), abierto desde el ⋯ de
+  // Gestión en ambas vistas (Mes y Semana). Solo en Gestión.
+  const dialogoAjustes =
+    esGestion && abrirAjustes ? (
+      <DialogoAjustesTurnos onCerrar={() => setAbrirAjustes(false)} />
+    ) : null;
+
   if (vista === "mes") {
     // El conmutador Semana|Mes y el ✓ «Al día» se inyectan EN la barra del mensual (una sola fila de
     // tres zonas), en vez de una fila propia encima: la cabecera queda como un único instrumento.
+    // En Gestión, el ⋯ de esa barra agrupa «Ajustes de turnos» + «Imprimir / PDF» (imprimir deja de
+    // ser un icono suelto). Fuera de Gestión (consulta) no hay menú: el icono de imprimir se queda.
+    const accionesMes = esGestion ? (
+      <MenuContextual
+        items={[
+          {
+            etiqueta: "Ajustes de turnos",
+            icono: SlidersHorizontal,
+            onClick: () => setAbrirAjustes(true),
+          },
+          { separador: true },
+          { etiqueta: "Imprimir / PDF", icono: Printer, onClick: () => imprimirMes() },
+        ]}
+        disparador="click"
+      >
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Más acciones"
+          title="Más acciones"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </MenuContextual>
+    ) : undefined;
     const mensual = (
       <VistaMensualTurnos
         esAdmin={esAdmin}
@@ -439,10 +477,15 @@ export function Calendario({
         controlesPre={conmutadorVista}
         marcadorSalud={marcadorSalud}
         soloEquipo={esGestion}
+        ocultarImprimir={esGestion}
+        accionesDerecha={accionesMes}
       />
     );
     return esGestion ? (
-      <div className="h-full min-h-0 overflow-auto">{mensual}</div>
+      <div className="h-full min-h-0 overflow-auto">
+        {mensual}
+        {dialogoAjustes}
+      </div>
     ) : (
       mensual
     );
@@ -486,6 +529,7 @@ export function Calendario({
               copiarPendiente={copiarAnterior.isPending}
               onCopiarAnterior={() => copiarAnterior.mutate()}
               onAbrirFranjas={() => setAbrirFranjas(true)}
+              onAbrirAjustes={() => setAbrirAjustes(true)}
               onAbrirCarga={() => setAbrirCarga(true)}
               onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
               onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
@@ -830,6 +874,7 @@ export function Calendario({
       {esGestion && abrirCarga && (
         <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
       )}
+      {dialogoAjustes}
 
       {/* Diálogo de cobertura del chip: la MISMA tarjeta del Panorama (coger/«Asignar a…»/
           soltar/editar/borrar en su kebab). Si el evento ya tiene cubridores → TarjetaCobertura;

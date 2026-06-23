@@ -51,9 +51,12 @@ export function VistaMensualTurnos({
   esAdmin = false,
   onVerSemana,
   mostrarCobertura = true,
+  mostrarHorasEquipo,
+  ocultarImprimir = false,
   controlesPre,
   marcadorSalud,
   soloEquipo = false,
+  accionesDerecha,
 }: {
   /** El admin no suele estar en la rota: por eso arranca en «Equipo» (sí ve algo). */
   esAdmin?: boolean;
@@ -62,17 +65,39 @@ export function VistaMensualTurnos({
   /** Superpone el estado de cobertura por día («N ev · M sin cubrir») + el «Resumen del día». En
    *  «Horario» (calendario de turnos puro) va `false`: solo jornada. En Gestión queda `true`. */
   mostrarCobertura?: boolean;
+  /** OVERRIDE del flag «mostrar horas en Equipo». Por defecto (`undefined`) se lee de la config por
+   *  marca: la gente de una misma franja puede tener horas distintas, así que el equipo puede
+   *  ocultar «· 08:00–16:00» para que «Mañana/Tarde/Noche» no sugiera un horario único. «Yo»
+   *  SIEMPRE muestra las horas propias (no le afecta este flag). */
+  mostrarHorasEquipo?: boolean;
+  /** Oculta el botón-icono «Imprimir» de la barra para que el host lo ofrezca en su menú ⋯ (junto a
+   *  las descargas). Gestión lo usa para no repetir la acción suelta; «Horario» lo deja visible. */
+  ocultarImprimir?: boolean;
   /** Controles antepuestos a «Equipo|Yo» en la zona izquierda de la barra: el Calendario inyecta aquí
    *  su conmutador Semana|Mes en Gestión. En «Horario» va vacío (no hay vista Semana). */
   controlesPre?: React.ReactNode;
   /** Marcador de estado (✓ «Al día») a la derecha, junto a «Imprimir». Lo inyecta Gestión (SOSIEGO). */
   marcadorSalud?: React.ReactNode;
+  /** Acciones a la derecha de la barra (el menú ⋯ que Gestión inyecta: «Ajustes de turnos» +
+   *  «Imprimir / PDF»). En «Horario» va vacío (la acción de imprimir es el icono suelto). */
+  accionesDerecha?: React.ReactNode;
   /** Fija el ámbito a «Equipo» y oculta el conmutador Equipo/Yo. Gestión lo activa (coordinar al
    *  equipo, y el admin no está en la rota → «Yo» sería un estado vacío); «Horario» no. */
   soloEquipo?: boolean;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
+  // Flag por marca de si «Equipo» muestra el rango horario. Override por prop (preview/tests); si
+  // no, manda la config por marca (default oculto). Comparte clave con el editor de franjas, así
+  // que guardar el ajuste invalida `["rota"]` y el calendario se repinta.
+  const configFranjasQ = useQuery({
+    queryKey: ["rota", "config", "franjas", marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
+    enabled: !!marcaActiva,
+  });
+  const mostrarHoras =
+    mostrarHorasEquipo ?? configFranjasQ.data?.mostrar_horas_equipo ?? false;
   const [ambitoSel, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
   const ambito: Ambito = soloEquipo ? "equipo" : ambitoSel;
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
@@ -100,21 +125,30 @@ export function VistaMensualTurnos({
         </div>
         <div className="flex items-center gap-2 md:justify-self-end">
           {marcadorSalud}
-          {/* «Imprimir»: solo el icono, botón-icono outline (el icon-button de la app). */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={imprimirMes}
-            title="Imprimir o guardar como PDF"
-            aria-label="Imprimir / PDF"
-          >
-            <Printer className="h-4 w-4" />
-          </Button>
+          {/* «Imprimir»: solo el icono, botón-icono outline (el icon-button de la app). Gestión lo
+              pliega en su menú ⋯ (`ocultarImprimir`); «Horario» lo deja como acción suelta. */}
+          {!ocultarImprimir && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={imprimirMes}
+              title="Imprimir o guardar como PDF"
+              aria-label="Imprimir / PDF"
+            >
+              <Printer className="h-4 w-4" />
+            </Button>
+          )}
+          {accionesDerecha}
         </div>
       </div>
 
       {ambito === "equipo" ? (
-        <VistaMesEquipo mes={mes} cobertura={cobertura} onAbrirDia={onAbrirDia} />
+        <VistaMesEquipo
+          mes={mes}
+          cobertura={cobertura}
+          onAbrirDia={onAbrirDia}
+          mostrarHoras={mostrarHoras}
+        />
       ) : (
         <VistaMesYo
           mes={mes}
@@ -176,7 +210,7 @@ function SelectorAmbito({
 
 /** Imprime solo la rejilla del mes (o «Guardar como PDF»). La clase en `body` acota el
  *  CSS de impresión a esta vista (un Ctrl+P en otra pantalla no se ve afectado). */
-function imprimirMes() {
+export function imprimirMes() {
   document.body.classList.add("imprimiendo-mes");
   const limpiar = () => {
     document.body.classList.remove("imprimiendo-mes");
@@ -523,10 +557,13 @@ function VistaMesEquipo({
   mes,
   cobertura,
   onAbrirDia,
+  mostrarHoras = true,
 }: {
   mes: string;
   cobertura?: Map<string, ResumenDiaCobertura>;
   onAbrirDia?: (fecha: string) => void;
+  /** Pinta el rango horario junto a cada franja. El equipo puede ocultarlo (horas heterogéneas). */
+  mostrarHoras?: boolean;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const { usuario } = useSesion();
@@ -573,6 +610,7 @@ function VistaMesEquipo({
                 franja={fr}
                 atenuado={!delMes}
                 miId={miId}
+                mostrarHoras={mostrarHoras}
               />
             ))
           }
@@ -591,10 +629,12 @@ function ChipFranjaEquipo({
   franja,
   atenuado,
   miId,
+  mostrarHoras = true,
 }: {
   franja: FranjaConPersonas;
   atenuado?: boolean;
   miId: string;
+  mostrarHoras?: boolean;
 }) {
   // Color del bloque por PERIODO del turno (mañana/tarde/noche), igual que la rejilla semanal.
   const tono = presentacionTurnoPorHora(franja.inicio);
@@ -609,7 +649,7 @@ function ChipFranjaEquipo({
     >
       <div className="font-medium">
         {franja.nombre}
-        {franja.inicio && (
+        {mostrarHoras && franja.inicio && (
           <span className="font-normal tabular-nums">
             {" "}
             · {franja.inicio}–{franja.fin}

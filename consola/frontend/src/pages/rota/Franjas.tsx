@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -535,6 +536,93 @@ export function DialogFranjas({
         ) : (
           <CuerpoPlantillaFranjas onCerrar={onCerrar} />
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// --- Dialog «Ajustes de turnos» (preferencias de visualización por marca, solo admin) -------
+
+/**
+ * Ajustes de presentación del calendario de turnos, por marca. Hoy: si el calendario de «Equipo»
+ * muestra el rango horario junto a cada franja. Se guarda en la misma config por marca que las
+ * franjas (PATCH parcial: solo toca el flag). La vista «Yo» no se ve afectada (siempre muestra las
+ * horas propias).
+ */
+export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
+  const queryClient = useQueryClient();
+  const { marcaActiva } = useMarcaActiva();
+  const q = useQuery({
+    queryKey: ["rota", "config", "franjas", marcaActiva] as const,
+    queryFn: ({ signal }) =>
+      api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
+  });
+  // Eco local para feedback inmediato del interruptor; al confirmar el servidor, la query manda.
+  const [eco, setEco] = React.useState<boolean | null>(null);
+  const mostrar = eco ?? q.data?.mostrar_horas_equipo ?? false;
+
+  const guardar = useMutation({
+    mutationFn: (valor: boolean) =>
+      api.guardarConfigFranjas(
+        { mostrar_horas_equipo: valor },
+        marcaActiva ?? undefined,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["rota"] });
+    },
+    onError: (e) => {
+      setEco(null);
+      toast.error(mensajeError(e));
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="gap-3 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Ajustes de turnos</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          Preferencias de visualización del calendario, por marca. El equipo las ajusta a su gusto.
+        </p>
+        {q.isPending ? (
+          <Skeleton className="h-16 w-full rounded-md" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar los ajustes"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+            <div>
+              <Label htmlFor="ajuste-horas-equipo" className="text-sm font-medium">
+                Mostrar horas en el calendario de «Equipo»
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Apagado, en «Equipo» se ve solo «Mañana / Tarde / Noche», sin el rango de horas:
+                cada persona tiene su propio horario dentro de la franja. La vista «Yo» siempre
+                muestra tus horas.
+              </p>
+            </div>
+            <Switch
+              id="ajuste-horas-equipo"
+              checked={mostrar}
+              onCheckedChange={(v) => {
+                setEco(v);
+                guardar.mutate(v);
+              }}
+              disabled={guardar.isPending}
+              aria-label="Mostrar horas en el calendario de Equipo"
+            />
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar}>
+            Cerrar
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

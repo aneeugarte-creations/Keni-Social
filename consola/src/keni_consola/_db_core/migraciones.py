@@ -443,11 +443,12 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # "comercial", retirado). Corre tras 0014 (que ya añadió `marcas` a la tabla vieja). One-shot
     # e idempotente (RENAME solo si la vieja existe y la nueva no). Ver `_renombrar_comercial_campanias_a_campanias`.
     Migracion("0040-rename-campanias", _renombrar_comercial_campanias_a_campanias),
-    # PLANTILLA DE FRANJAS FLEXIBLE: columna `franjas` (lista JSON) en `rota_config_franjas`,
-    # para que la plantilla con que se siembra cada semana nueva sea una lista de N franjas (se
-    # puede añadir "Nocturna") en vez de 2 columnas fijas matutino/vespertino. One-shot e
-    # idempotente (ADD COLUMN IF NOT EXISTS); NO destructivo (vacío => deriva de las columnas
-    # legadas al leer, preservando rangos personalizados). Ver `_migrar_columnas_config_franjas`.
+    # COLUMNAS DE `rota_config_franjas`: `franjas` (lista JSON) hace que la plantilla con que se
+    # siembra cada semana nueva sea una lista de N franjas (se puede añadir "Nocturna") en vez de
+    # 2 columnas fijas matutino/vespertino; `mostrar_horas_equipo` controla si la vista "Equipo"
+    # del calendario pinta el rango horario. Re-aplicable al cambiar `datos`; idempotente (ADD
+    # COLUMN IF NOT EXISTS); NO destructivo (`franjas` vacío => deriva de las columnas legadas al
+    # leer; el toggle nace FALSE). Ver `_migrar_columnas_config_franjas`.
     Migracion(
         "0041-columnas-config-franjas",
         _migrar_columnas_config_franjas,

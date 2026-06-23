@@ -17,6 +17,7 @@ import {
   Loader2,
   MoreHorizontal,
   Plane,
+  SlidersHorizontal,
   User,
   Users,
 } from "lucide-react";
@@ -310,6 +311,7 @@ export function MenuMasAcciones({
   semanaAprobada,
   onCopiarAnterior,
   onAbrirFranjas,
+  onAbrirAjustes,
   onAbrirCarga,
   onExportExcel,
   onExportCsv,
@@ -320,6 +322,8 @@ export function MenuMasAcciones({
   onCopiarAnterior: () => void;
   /** Abre el diálogo «Franjas» (pestañas: esta semana / plantilla por defecto). */
   onAbrirFranjas: () => void;
+  /** Abre «Ajustes de turnos» (preferencias de visualización por marca). Oculto si no se pasa. */
+  onAbrirAjustes?: () => void;
   onAbrirCarga: () => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
@@ -328,6 +332,14 @@ export function MenuMasAcciones({
   const items: EntradaMenuContextual[] = [];
 
   if (esAdmin) {
+    if (onAbrirAjustes) {
+      items.push({
+        etiqueta: "Ajustes de turnos",
+        icono: SlidersHorizontal,
+        onClick: onAbrirAjustes,
+      });
+      items.push({ separador: true });
+    }
     // Configurar la semana: «Franjas» (cómo se divide el día). El reparto «Asignar turnos» es un
     // botón primario de la cabecera, no vive ya aquí.
     items.push({

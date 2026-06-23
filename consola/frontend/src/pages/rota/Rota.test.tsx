@@ -86,6 +86,7 @@ function renderRota(opts: OpcionesRender = {}, tab?: string) {
     "misTurnos",
     "misTurnosMes",
     "turnosMes",
+    "obtenerConfigFranjas",
   ] as const) {
     vi.spyOn(apiMod.api, m).mockResolvedValue({} as never);
   }
@@ -292,11 +293,28 @@ describe("Turnos — pestaña «Gestión» (admin)", () => {
   it("«Gestión» abre en el calendario MENSUAL del equipo (overview); el conmutador lo marca", async () => {
     renderRota();
     fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
-    // Vista de apertura = «Mes» (overview de la jornada del equipo), con su Imprimir/PDF; «Semana»
-    // queda a un clic para repartir.
+    // Vista de apertura = «Mes» (overview de la jornada del equipo); «Semana» queda a un clic.
     expect(await screen.findByRole("button", { name: "Mes", pressed: true })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Semana", pressed: false })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Imprimir/ })).toBeInTheDocument();
+    // Imprimir/PDF ya NO es un icono suelto: vive en el ⋯ (junto a «Ajustes de turnos»).
+    expect(screen.queryByRole("button", { name: /Imprimir/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Imprimir \/ PDF/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("«Gestión» abre «Ajustes de turnos» desde el ⋯ (interruptor de horas en Equipo)", async () => {
+    renderRota();
+    fireEvent.click(await screen.findByRole("button", { name: "Gestión" }));
+    await screen.findByRole("button", { name: "Mes", pressed: true });
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Ajustes de turnos" }));
+    // El diálogo de ajustes con el interruptor de mostrar horas en «Equipo».
+    expect(await screen.findByRole("dialog", { name: "Ajustes de turnos" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("switch", { name: /Mostrar horas en el calendario de Equipo/ }),
+    ).toBeInTheDocument();
   });
 
   it("«Gestión» NO muestra el conmutador Equipo/Yo (coordinar es siempre del equipo)", async () => {
