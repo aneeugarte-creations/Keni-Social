@@ -22,6 +22,23 @@ def _pieza(id_post, titulo, vis, inter, eng):
     }
 
 
+def test_linea_de_categoria_resuelve_senales_verticales_y_manual():
+    """La LÍNEA de plan sale de la `categoria` del contenido: señales del motor con su rótulo,
+    vertical activa por id, vertical retirada/desconocida → "" (Sin línea), y alta manual
+    (categoria vacía) → la etiqueta vertical asignada."""
+    verticales = {"et-nac": "Nacional", "et-int": "Internacional"}
+    f = metricas_linea.linea_de_categoria
+    # Señales del motor (no son etiquetas vertical).
+    assert f("evergreen", vertical_por_id=verticales, etiqueta_vertical="") == "Evergreen"
+    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="") == "Última hora"
+    # Id de vertical ACTIVA → su nombre.
+    assert f("et-nac", vertical_por_id=verticales, etiqueta_vertical="") == "Nacional"
+    # Id de vertical RETIRADA/desconocida → "" (cae en "Sin línea").
+    assert f("et-ciencia", vertical_por_id=verticales, etiqueta_vertical="") == ""
+    # Alta manual sin categoría → respaldo a la etiqueta vertical asignada.
+    assert f("", vertical_por_id=verticales, etiqueta_vertical="Nacional") == "Nacional"
+
+
 def test_agrupar_por_eje_suma_y_engagement_medio():
     """Dos piezas de la misma línea: suma vis/inter y promedia engagement."""
     piezas = [

@@ -239,8 +239,12 @@ function TablaLineas({
               <TableRow>{columnas.map(encabezado)}</TableRow>
             </TableHeader>
             <TableBody>
+              {/* Señales del plan (Evergreen/Última hora) y "Sin línea" comparten id vacío:
+                  la clave usa el nombre (único por cubo) para no colisionar. */}
               {visibles.map((f) => (
-                <TableRow key={f.id}>{columnas.map((id) => celda(f, id))}</TableRow>
+                <TableRow key={f.id || f.nombre}>
+                  {columnas.map((id) => celda(f, id))}
+                </TableRow>
               ))}
               <TableRow className="border-t-2 font-medium">
                 {columnas.map(celdaTotal)}

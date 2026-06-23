@@ -21,10 +21,12 @@ La agregación es PURA y separada de la lectura de BD (`agrupar_por_eje` /
 resto de agregaciones del módulo. El orquestador `lineas_y_origenes` hace las lecturas
 (repos + fachada de métricas) y delega en la función pura.
 
-Por cada LÍNEA definida de la marca (etiqueta clase `vertical`) y por cada ORIGEN
-(clase `origen`) devuelve: nº de piezas, suma de visualizaciones, suma de interacciones y
-engagement medio. Las piezas sin valor en el eje caen en el cubo "Sin línea" / "Sin
-origen". Solo LECTURA; no muta nada.
+La LÍNEA agrupa por la `categoria` de PLAN del contenido (la misma del monitor de
+Producción): incluye las SEÑALES del motor —Evergreen y Última hora— que no son etiquetas
+`vertical`, además de las verticales activas; las altas manuales sin categoría caen a su
+etiqueta `vertical`. El ORIGEN sí es la etiqueta de clase `origen`. Por cada cubo devuelve:
+nº de piezas, suma de visualizaciones, suma de interacciones y engagement medio; las piezas
+sin valor caen en "Sin línea" / "Sin origen". Solo LECTURA; no muta nada.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ from typing import Any
 
 from keni_metricas import servicio
 
-from . import repos
+from . import bootstrap_lineas, repos
 from .metricas_pieza import (
     _indice_contenido_por_post,
     _normalizar_titulo,
@@ -182,6 +184,57 @@ def _valor_por_contenido(
     return salida
 
 
+def linea_de_categoria(
+    categoria: str,
+    *,
+    vertical_por_id: dict[str, str],
+    etiqueta_vertical: str,
+) -> str:
+    """Nombre de la LÍNEA de plan de un contenido a partir de su `categoria` persistida.
+
+    El plan agrupa por su `categoria` (la misma clave que el monitor de Producción), que NO es
+    solo la etiqueta `vertical`: puede ser una SEÑAL del motor (`breaking`→"Última hora",
+    `evergreen`→"Evergreen") o el id de una vertical. Resolución:
+      - señal del motor → su rótulo fijo (`ETIQUETAS_CLAVE_NO_LINEA`);
+      - id de vertical ACTIVA → su nombre (`vertical_por_id`);
+      - id de vertical retirada/desconocida → "" (cae en "Sin línea");
+      - `categoria` vacía (alta manual, fuera de plan) → la etiqueta `vertical` asignada.
+    """
+    rotulo = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
+    if rotulo is not None:
+        return rotulo
+    if categoria:
+        return vertical_por_id.get(categoria, "")
+    return etiqueta_vertical
+
+
+def _lineas_por_contenido_plan(
+    contenidos: list[dict[str, Any]],
+    asignaciones: dict[str, list[str]],
+    vertical_por_id: dict[str, str],
+) -> dict[str, str]:
+    """`publicacion_id -> nombre de su LÍNEA de plan` (señales del motor incluidas).
+
+    Combina la `categoria` persistida de cada contenido (Evergreen/Última hora/vertical) con,
+    como respaldo para altas manuales sin categoría, la etiqueta `vertical` asignada.
+    """
+    etiqueta_vertical = _valor_por_contenido(asignaciones, vertical_por_id)
+    salida: dict[str, str] = {}
+    for c in contenidos:
+        cid = c.get("id") or ""
+        if not cid:
+            continue
+        salida[cid] = linea_de_categoria(
+            (c.get("categoria") or "").strip(),
+            vertical_por_id=vertical_por_id,
+            etiqueta_vertical=etiqueta_vertical.get(cid, ""),
+        )
+    # Contenidos sin fila propia aquí pero con etiqueta vertical: respáldalos también.
+    for cid, nombre in etiqueta_vertical.items():
+        salida.setdefault(cid, nombre)
+    return salida
+
+
 def lineas_por_pieza(
     marca_consola: str | None, piezas: list[dict[str, Any]]
 ) -> dict[str, str]:
@@ -201,10 +254,13 @@ def lineas_por_pieza(
     enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
     vertical_por_id = {
         e.get("id", ""): e.get("nombre", "")
-        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL)
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL, solo_activas=True)
         if e.get("id")
     }
-    linea_por_contenido = _valor_por_contenido(repos.etiquetas_por_contenido(), vertical_por_id)
+    # Línea de PLAN por contenido (Evergreen/Última hora incluidas), no solo la etiqueta vertical.
+    linea_por_contenido = _lineas_por_contenido_plan(
+        contenidos, repos.etiquetas_por_contenido(), vertical_por_id
+    )
     salida: dict[str, str] = {}
     for p in piezas:
         pid = str(p.get("id") or "")
@@ -264,7 +320,10 @@ def lineas_y_origenes(
     origen_por_id = {e["id"]: e["nombre"] for e in origenes_def if e.get("id")}
 
     asignaciones = repos.etiquetas_por_contenido()
-    linea_por_contenido = _valor_por_contenido(asignaciones, vertical_por_id)
+    # La LÍNEA agrupa por la `categoria` de PLAN del contenido (incluye las señales del motor
+    # Evergreen/Última hora, que NO son etiquetas `vertical`), con respaldo a la etiqueta
+    # vertical para las altas manuales. El ORIGEN sí es una etiqueta de su clase.
+    linea_por_contenido = _lineas_por_contenido_plan(contenidos, asignaciones, vertical_por_id)
     origen_por_contenido = _valor_por_contenido(asignaciones, origen_por_id)
 
     agregados = agrupar_lineas_y_origenes(
