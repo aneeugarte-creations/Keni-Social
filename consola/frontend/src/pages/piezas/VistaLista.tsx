@@ -169,7 +169,12 @@ function TarjetaPieza({
             icono: Send,
             onClick: () => {
               if (bloqueoStock) {
-                toast.error(mensajeBloqueoStock(pieza.imagen_proveedor));
+                toast.error(
+                  mensajeBloqueoStock({
+                    licencia: pieza.imagen_licencia,
+                    proveedor: pieza.imagen_proveedor,
+                  }),
+                );
                 return;
               }
               programarMetricool.mutate();
@@ -231,6 +236,7 @@ function TarjetaPieza({
                 activo={bloqueoStock}
                 tamano="sm"
                 proveedor={pieza.imagen_proveedor}
+                licencia={pieza.imagen_licencia}
                 className="rounded-md"
               >
                 <ImagenMedia

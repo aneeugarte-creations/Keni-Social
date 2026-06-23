@@ -600,7 +600,12 @@ function DialogoEditarInterno({
           {/* Stock SIN LICENCIA: aviso del bloqueo de publicar (vale para todo formato; el control
               para autorizar vive junto a la imagen en el editor sin marca). */}
           {bloqueoStock && !publicada && (
-            <Aviso className="self-start">{mensajeBloqueoStock(stock.imagen_proveedor)}</Aviso>
+            <Aviso className="self-start">
+              {mensajeBloqueoStock({
+                licencia: stock.imagen_licencia,
+                proveedor: stock.imagen_proveedor,
+              })}
+            </Aviso>
           )}
         </DialogHeader>
 

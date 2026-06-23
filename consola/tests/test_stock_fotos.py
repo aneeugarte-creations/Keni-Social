@@ -362,3 +362,14 @@ def test_buscar_todos_solo_disponibles(monkeypatch, _sin_ssrf):
 
 def test_buscar_todos_query_vacio():
     assert stock_fotos.buscar_todos("") == []
+
+
+# --------------------------------------------------------------------------- #
+# URL por proveedor (filtros en origen)                                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_url_openverse_filtra_uso_comercial_y_modificacion():
+    # Openverse SOLO debe devolver imágenes usables: uso comercial + modificación permitidos.
+    url, _ = stock_fotos._url_y_headers("openverse", "estadio", 6)
+    assert "license_type=commercial,modification" in url

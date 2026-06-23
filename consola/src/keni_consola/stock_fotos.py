@@ -407,7 +407,12 @@ def _url_y_headers(proveedor: str, query: str, limite: int) -> tuple[str, dict[s
         url = f"https://images-api.nasa.gov/search?q={q}&media_type=image"
         return url, {"User-Agent": _USER_AGENT}
     if proveedor == "openverse":
-        url = f"https://api.openverse.org/v1/images/?q={q}&page_size={limite}"
+        # `license_type=commercial,modification`: Openverse devuelve SOLO imágenes con uso
+        # comercial Y modificación permitidos (descarta NC/ND en origen), las únicas usables aquí.
+        url = (
+            f"https://api.openverse.org/v1/images/?q={q}&page_size={limite}"
+            "&license_type=commercial,modification"
+        )
         return url, {"User-Agent": _USER_AGENT}
     return "", {}
 

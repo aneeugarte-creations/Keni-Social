@@ -66,21 +66,81 @@ export function esProveedorLibre(proveedor: string | undefined): boolean {
   return PROVEEDORES_LIBRES.has((proveedor ?? "").trim().toLowerCase());
 }
 
-/** Texto de la marca central sobre la foto de stock no autorizada, según proveedor. */
-export function etiquetaOverlayStock(proveedor: string | undefined): string {
-  return esProveedorLibre(proveedor) ? "Autorizar" : "Sin licencia";
+/**
+ * Los 3 tratamientos legales de una foto de stock, según su LICENCIA REAL:
+ *  - "libre": uso comercial sin atribución obligatoria (CC0, dominio público, Pexels/Pixabay).
+ *  - "atribucion": uso comercial permitido PERO hay que mantener el crédito (CC BY / CC BY-SA).
+ *  - "restringida": no usable con garantías (NC/ND, o licencia desconocida/genérica/vacía).
+ */
+export type NivelLicencia = "libre" | "atribucion" | "restringida";
+
+/** ¿La licencia CC lleva una cláusula NC (no comercial) o ND (sin obra derivada)? */
+function tieneClausulaRestrictiva(lic: string): boolean {
+  return (
+    lic.includes("-nc") ||
+    lic.includes("nc-") ||
+    lic.includes("noncommercial") ||
+    lic.includes("non-commercial") ||
+    lic.includes("-nd") ||
+    lic.includes("nd-") ||
+    lic.includes("noderiv")
+  );
 }
 
-/** Aviso de bloqueo de publicar, según proveedor (las libres no se rotulan "SIN LICENCIA"). */
-export function mensajeBloqueoStock(proveedor: string | undefined): string {
-  return esProveedorLibre(proveedor)
-    ? "Foto de stock pendiente de autorizar antes de publicar."
-    : MENSAJE_BLOQUEO_STOCK;
+/**
+ * Clasifica una foto de stock por su LICENCIA REAL (no por proveedor) en 3 niveles. El proveedor
+ * solo decide en las agencias con licencia propia (Pexels/Pixabay), no en las APIs de CC.
+ */
+export function nivelLicencia(d: { licencia?: string; proveedor?: string }): NivelLicencia {
+  const lic = (d.licencia ?? "").trim().toLowerCase();
+  const prov = (d.proveedor ?? "").trim().toLowerCase();
+  // 1. NC/ND: uso comercial o edición restringidos -> nunca con garantías.
+  if (tieneClausulaRestrictiva(lic)) return "restringida";
+  // 2. Agencias con licencia propia libre (Pexels/Pixabay): se clasifican por proveedor.
+  if (prov === "pexels" || prov === "pixabay") return "libre";
+  // 3. Dominio público / CC0 / obra de gobierno: libre, sin atribución obligatoria.
+  if (
+    lic.includes("cc0") ||
+    lic.includes("publicdomain") ||
+    lic.includes("public domain") ||
+    lic.includes("dominio público") ||
+    lic.includes("dominio publico") ||
+    lic.includes("pdm") ||
+    lic.includes("us government") ||
+    lic === "pd"
+  )
+    return "libre";
+  // 4. CC BY-SA: comercial con crédito y, además, share-alike.
+  if (lic.includes("by-sa") || lic.includes("by sa")) return "atribucion";
+  // 5. CC BY: comercial con crédito.
+  if (lic.includes("by")) return "atribucion";
+  // 6. Vacío / genérico (Wikimedia/Openverse sin licencia concreta) / desconocido: por prudencia.
+  return "restringida";
 }
 
-/** Título del diálogo de autorizar, según proveedor. */
-export function tituloAutorizarStock(proveedor: string | undefined): string {
-  return esProveedorLibre(proveedor) ? "Autorizar foto de stock" : "Autorizar imagen de stock";
+/** ¿La licencia es share-alike (BY-SA): editar la foto obliga a licenciar igual la publicación? */
+export function esShareAlike(licencia: string | undefined): boolean {
+  const lic = (licencia ?? "").trim().toLowerCase();
+  return lic.includes("by-sa") || lic.includes("by sa");
+}
+
+/** Texto de la marca central sobre la foto de stock no autorizada, según su licencia/proveedor. */
+export function etiquetaOverlayStock(d: { licencia?: string; proveedor?: string }): string {
+  return nivelLicencia(d) === "restringida" ? "Sin licencia" : "Autorizar";
+}
+
+/** Aviso de bloqueo de publicar (las usables no se rotulan "SIN LICENCIA"). */
+export function mensajeBloqueoStock(d: { licencia?: string; proveedor?: string }): string {
+  return nivelLicencia(d) === "restringida"
+    ? MENSAJE_BLOQUEO_STOCK
+    : "Foto de stock pendiente de autorizar antes de publicar.";
+}
+
+/** Título del diálogo de autorizar, según el nivel de licencia. */
+export function tituloAutorizarStock(d: { licencia?: string; proveedor?: string }): string {
+  return nivelLicencia(d) === "restringida"
+    ? "Autorizar imagen de stock"
+    : "Autorizar foto de stock";
 }
 
 /** Los 2 riesgos editoriales que el humano debe descartar en una foto de stock con licencia libre. */

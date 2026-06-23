@@ -174,11 +174,15 @@ export function EditorPlacaInline({
       return;
     }
     const ok = await confirmar({
-      titulo: tituloAutorizarStock(stock?.imagen_proveedor),
+      titulo: tituloAutorizarStock({
+        licencia: stock?.imagen_licencia,
+        proveedor: stock?.imagen_proveedor,
+      }),
       mensaje: (
         <AvisoAutorizarStock
           proveedor={stock?.imagen_proveedor}
           licencia={stock?.imagen_licencia}
+          autor={stock?.imagen_autor}
         />
       ),
       textoConfirmar: "Autorizar",
@@ -581,7 +585,10 @@ export function EditorPlacaInline({
       {sinLicencia && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
           <span className="flex-1 font-medium">
-            {mensajeBloqueoStock(stock?.imagen_proveedor)}
+            {mensajeBloqueoStock({
+              licencia: stock?.imagen_licencia,
+              proveedor: stock?.imagen_proveedor,
+            })}
           </span>
           <Button
             type="button"
@@ -629,7 +636,10 @@ export function EditorPlacaInline({
                 className="pointer-events-none absolute inset-0 flex items-center justify-center"
               >
                 <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
-                  {etiquetaOverlayStock(stock?.imagen_proveedor)}
+                  {etiquetaOverlayStock({
+                    licencia: stock?.imagen_licencia,
+                    proveedor: stock?.imagen_proveedor,
+                  })}
                 </span>
               </div>
             )}

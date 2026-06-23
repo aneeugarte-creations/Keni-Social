@@ -23,8 +23,10 @@ export interface OverlaySinLicenciaProps {
   children: React.ReactNode;
   /** Tamaño del rótulo: "sm" para miniaturas, "md" para la preview del editor. */
   tamano?: "sm" | "md";
-  /** Proveedor del stock: las agencias con licencia libre (Pexels/Pixabay) rotulan "Autorizar". */
+  /** Proveedor del stock: junto a la licencia, decide el nivel ("Autorizar" vs "Sin licencia"). */
   proveedor?: string;
+  /** Licencia real de la foto: clasifica el nivel (las usables rotulan "Autorizar"). */
+  licencia?: string;
   className?: string;
 }
 
@@ -33,6 +35,7 @@ export function OverlaySinLicencia({
   children,
   tamano = "md",
   proveedor,
+  licencia,
   className,
 }: OverlaySinLicenciaProps) {
   if (!activo) {
@@ -53,7 +56,7 @@ export function OverlaySinLicencia({
             tamano === "sm" ? "px-1.5 py-0.5 text-[9px]" : "px-2.5 py-1 text-xs",
           )}
         >
-          {etiquetaOverlayStock(proveedor)}
+          {etiquetaOverlayStock({ licencia, proveedor })}
         </span>
       </div>
     </div>

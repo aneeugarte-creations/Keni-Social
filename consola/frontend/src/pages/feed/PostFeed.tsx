@@ -50,8 +50,10 @@ import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import {
+  atribucionStock,
   etiquetaOverlayStock,
   mensajeBloqueoStock,
+  nivelLicencia,
   nombreProveedor,
   stockAutorizado,
   stockNoAutorizado,
@@ -314,7 +316,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
       : ""
     : bloqueoStock
-      ? mensajeBloqueoStock(pieza.imagen_proveedor)
+      ? mensajeBloqueoStock({
+          licencia: pieza.imagen_licencia,
+          proveedor: pieza.imagen_proveedor,
+        })
       : enRevision
         ? cadenaQuery.isError
           ? "No se pudo cargar el estado de aprobación; reintenta."
@@ -348,7 +353,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     // STOCK SIN LICENCIA: nunca se aprueba/publica sin autorizar la imagen. El toast manda al editor
     // (donde está el botón Autorizar o se sustituye la foto).
     if (bloqueoStock) {
-      toast(mensajeBloqueoStock(pieza.imagen_proveedor), {
+      toast(mensajeBloqueoStock({
+        licencia: pieza.imagen_licencia,
+        proveedor: pieza.imagen_proveedor,
+      }), {
         action: { label: "Abrir", onClick: () => void abrirEditor() },
       });
       return;
@@ -451,6 +459,20 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
   // el material original como marcador para que el post no quede vacío en "generando copy".
   const cuerpo = pieza.contenido || pieza.titulo;
   const imagen = pieza.imagen_url || pieza.imagen || pieza.imagen_fuente;
+
+  // CRÉDITO OBLIGATORIO: una foto de stock AUTORIZADA con licencia de atribución (CC BY / BY-SA)
+  // permite uso comercial pero exige mantener el crédito visible al publicar. Se muestra junto al
+  // post (no solo en un badge) para que quien publique a mano no lo pierda.
+  const creditoAtribucion =
+    stockAutorizado(pieza) &&
+    nivelLicencia({ licencia: pieza.imagen_licencia, proveedor: pieza.imagen_proveedor }) ===
+      "atribucion"
+      ? atribucionStock({
+          autor: pieza.imagen_autor,
+          licencia: pieza.imagen_licencia,
+          proveedor: pieza.imagen_proveedor,
+        })
+      : "";
 
   return (
     // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
@@ -572,7 +594,10 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
                   className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
                 >
                   <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
-                    {etiquetaOverlayStock(pieza.imagen_proveedor)}
+                    {etiquetaOverlayStock({
+                      licencia: pieza.imagen_licencia,
+                      proveedor: pieza.imagen_proveedor,
+                    })}
                   </span>
                 </div>
               )}
@@ -585,6 +610,27 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
           ) : undefined
         }
       />
+
+      {/* CRÉDITO OBLIGATORIO: foto de stock autorizada con licencia de atribución (CC BY / BY-SA).
+          Va visible bajo la imagen (no solo en el badge) para no perderlo al publicar a mano. */}
+      {creditoAtribucion && (
+        <p className="px-4 pt-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Crédito obligatorio: </span>
+          {pieza.imagen_credito_url ? (
+            <a
+              href={pieza.imagen_credito_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              {creditoAtribucion}
+            </a>
+          ) : (
+            creditoAtribucion
+          )}
+        </p>
+      )}
 
       {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). El
           espacio LIBRE de esta fila expande/pliega el caption (la "parte baja" de la tarjeta);
