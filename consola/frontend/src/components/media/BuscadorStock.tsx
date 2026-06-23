@@ -200,7 +200,7 @@ export function BuscadorStock({
                   className="group block w-full overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-shadow hover:shadow-sm hover:ring-1 hover:ring-foreground/20"
                   title="Adjuntar como referencia (SIN LICENCIA)"
                 >
-                  <OverlaySinLicencia activo tamano="sm">
+                  <OverlaySinLicencia activo tamano="sm" proveedor={c.proveedor}>
                     <img
                       src={c.thumb || c.url}
                       alt={c.titulo || "Foto de stock"}

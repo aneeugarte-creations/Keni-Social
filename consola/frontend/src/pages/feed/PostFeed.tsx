@@ -50,7 +50,8 @@ import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import {
-  MENSAJE_BLOQUEO_STOCK,
+  etiquetaOverlayStock,
+  mensajeBloqueoStock,
   nombreProveedor,
   stockAutorizado,
   stockNoAutorizado,
@@ -313,7 +314,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
       ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
       : ""
     : bloqueoStock
-      ? MENSAJE_BLOQUEO_STOCK
+      ? mensajeBloqueoStock(pieza.imagen_proveedor)
       : enRevision
         ? cadenaQuery.isError
           ? "No se pudo cargar el estado de aprobación; reintenta."
@@ -347,7 +348,7 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
     // STOCK SIN LICENCIA: nunca se aprueba/publica sin autorizar la imagen. El toast manda al editor
     // (donde está el botón Autorizar o se sustituye la foto).
     if (bloqueoStock) {
-      toast(MENSAJE_BLOQUEO_STOCK, {
+      toast(mensajeBloqueoStock(pieza.imagen_proveedor), {
         action: { label: "Abrir", onClick: () => void abrirEditor() },
       });
       return;
@@ -563,14 +564,15 @@ export function PostFeed({ pieza }: { pieza: Pieza }) {
         overlayImagen={
           bloqueoStock || stockAutorizado(pieza) ? (
             <>
-              {/* Marca central "SIN LICENCIA" sobre la FOTO (no la tarjeta), discreta. */}
+              {/* Marca central sobre la FOTO (no la tarjeta), discreta. Las agencias con licencia
+                  libre (Pexels/Pixabay) rotulan "Autorizar"; el resto, "Sin licencia". */}
               {bloqueoStock && (
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
                 >
                   <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
-                    Sin licencia
+                    {etiquetaOverlayStock(pieza.imagen_proveedor)}
                   </span>
                 </div>
               )}

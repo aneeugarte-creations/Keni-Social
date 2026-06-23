@@ -58,6 +58,37 @@ export function nombreProveedor(proveedor: string | undefined): string {
   return nombres[p] || (p ? p.charAt(0).toUpperCase() + p.slice(1) : "Stock");
 }
 
+/** Agencias con licencia libre clara y uniforme: una marca "Autorizar" (no "Sin licencia"). */
+export const PROVEEDORES_LIBRES: ReadonlySet<string> = new Set(["pexels", "pixabay"]);
+
+/** ¿El proveedor da una licencia libre clara (Pexels/Pixabay)? Decide el tratamiento de la UI. */
+export function esProveedorLibre(proveedor: string | undefined): boolean {
+  return PROVEEDORES_LIBRES.has((proveedor ?? "").trim().toLowerCase());
+}
+
+/** Texto de la marca central sobre la foto de stock no autorizada, según proveedor. */
+export function etiquetaOverlayStock(proveedor: string | undefined): string {
+  return esProveedorLibre(proveedor) ? "Autorizar" : "Sin licencia";
+}
+
+/** Aviso de bloqueo de publicar, según proveedor (las libres no se rotulan "SIN LICENCIA"). */
+export function mensajeBloqueoStock(proveedor: string | undefined): string {
+  return esProveedorLibre(proveedor)
+    ? "Foto de stock pendiente de autorizar antes de publicar."
+    : MENSAJE_BLOQUEO_STOCK;
+}
+
+/** Título del diálogo de autorizar, según proveedor. */
+export function tituloAutorizarStock(proveedor: string | undefined): string {
+  return esProveedorLibre(proveedor) ? "Autorizar foto de stock" : "Autorizar imagen de stock";
+}
+
+/** Los 2 riesgos editoriales que el humano debe descartar en una foto de stock con licencia libre. */
+export const RIESGOS_STOCK_LIBRE: readonly string[] = [
+  "Que no induzca a error: que no parezca una foto real de la noticia.",
+  "Que no muestre personas o marcas reconocibles en un contexto que las perjudique.",
+];
+
 /**
  * Consulta inicial del buscador de stock a partir del TÍTULO del tema de la pieza. El título suele
  * traer un sufijo " — <vertical>" (p. ej. "Negociaciones EE.UU.-Irán — Diplomacia"): lo cortamos y

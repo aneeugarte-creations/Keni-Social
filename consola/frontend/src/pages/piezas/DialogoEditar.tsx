@@ -41,7 +41,7 @@ import {
 } from "@/lib/placa/encuadre";
 import {
   type DatosStock,
-  MENSAJE_BLOQUEO_STOCK,
+  mensajeBloqueoStock,
   stockNoAutorizado,
 } from "@/lib/stock";
 import type { CuerpoActualizarPieza, PlataformaStock, Pieza } from "@/types";
@@ -600,7 +600,7 @@ function DialogoEditarInterno({
           {/* Stock SIN LICENCIA: aviso del bloqueo de publicar (vale para todo formato; el control
               para autorizar vive junto a la imagen en el editor sin marca). */}
           {bloqueoStock && !publicada && (
-            <Aviso className="self-start">{MENSAJE_BLOQUEO_STOCK}</Aviso>
+            <Aviso className="self-start">{mensajeBloqueoStock(stock.imagen_proveedor)}</Aviso>
           )}
         </DialogHeader>
 

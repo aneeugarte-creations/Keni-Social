@@ -27,7 +27,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import {
-  MENSAJE_BLOQUEO_STOCK,
+  mensajeBloqueoStock,
   nombreProveedor,
   stockAutorizado,
   stockNoAutorizado,
@@ -169,7 +169,7 @@ function TarjetaPieza({
             icono: Send,
             onClick: () => {
               if (bloqueoStock) {
-                toast.error(MENSAJE_BLOQUEO_STOCK);
+                toast.error(mensajeBloqueoStock(pieza.imagen_proveedor));
                 return;
               }
               programarMetricool.mutate();
@@ -227,7 +227,12 @@ function TarjetaPieza({
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (
             <div className="relative h-16 w-16 shrink-0">
-              <OverlaySinLicencia activo={bloqueoStock} tamano="sm" className="rounded-md">
+              <OverlaySinLicencia
+                activo={bloqueoStock}
+                tamano="sm"
+                proveedor={pieza.imagen_proveedor}
+                className="rounded-md"
+              >
                 <ImagenMedia
                   nombreOUrl={imagen}
                   alt=""

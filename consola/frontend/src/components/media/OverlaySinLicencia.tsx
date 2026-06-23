@@ -13,6 +13,7 @@
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { etiquetaOverlayStock } from "@/lib/stock";
 import { cn } from "@/lib/utils";
 
 export interface OverlaySinLicenciaProps {
@@ -22,6 +23,8 @@ export interface OverlaySinLicenciaProps {
   children: React.ReactNode;
   /** Tamaño del rótulo: "sm" para miniaturas, "md" para la preview del editor. */
   tamano?: "sm" | "md";
+  /** Proveedor del stock: las agencias con licencia libre (Pexels/Pixabay) rotulan "Autorizar". */
+  proveedor?: string;
   className?: string;
 }
 
@@ -29,6 +32,7 @@ export function OverlaySinLicencia({
   activo,
   children,
   tamano = "md",
+  proveedor,
   className,
 }: OverlaySinLicenciaProps) {
   if (!activo) {
@@ -49,7 +53,7 @@ export function OverlaySinLicencia({
             tamano === "sm" ? "px-1.5 py-0.5 text-[9px]" : "px-2.5 py-1 text-xs",
           )}
         >
-          Sin licencia
+          {etiquetaOverlayStock(proveedor)}
         </span>
       </div>
     </div>

@@ -24,6 +24,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { AvisoAutorizarStock } from "@/components/media/AvisoAutorizarStock";
 import { BuscadorStock } from "@/components/media/BuscadorStock";
 import { BadgeStock } from "@/components/media/OverlaySinLicencia";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
@@ -49,11 +50,13 @@ import { ENCUADRE_DEFECTO, normalizarEncuadre } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { familiaRealDe } from "@/lib/placa/render";
 import {
+  etiquetaOverlayStock,
   keywordBusqueda,
-  MENSAJE_BLOQUEO_STOCK,
+  mensajeBloqueoStock,
   nombreProveedor,
   stockAutorizado,
   stockNoAutorizado,
+  tituloAutorizarStock,
 } from "@/lib/stock";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -171,9 +174,13 @@ export function EditorPlacaInline({
       return;
     }
     const ok = await confirmar({
-      titulo: "Autorizar imagen de stock",
-      mensaje:
-        "Confirmas que tienes derechos para publicar esta imagen. Bajo tu responsabilidad.",
+      titulo: tituloAutorizarStock(stock?.imagen_proveedor),
+      mensaje: (
+        <AvisoAutorizarStock
+          proveedor={stock?.imagen_proveedor}
+          licencia={stock?.imagen_licencia}
+        />
+      ),
       textoConfirmar: "Autorizar",
     });
     if (ok) autorizarStock.mutate(true);
@@ -573,7 +580,9 @@ export function EditorPlacaInline({
           derechos). Va en el chrome del editor, NO sobre el canvas. */}
       {sinLicencia && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-700 dark:text-red-300">
-          <span className="flex-1 font-medium">{MENSAJE_BLOQUEO_STOCK}</span>
+          <span className="flex-1 font-medium">
+            {mensajeBloqueoStock(stock?.imagen_proveedor)}
+          </span>
           <Button
             type="button"
             size="sm"
@@ -620,7 +629,7 @@ export function EditorPlacaInline({
                 className="pointer-events-none absolute inset-0 flex items-center justify-center"
               >
                 <span className="select-none rounded-sm bg-black/35 px-2.5 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur-[1px]">
-                  Sin licencia
+                  {etiquetaOverlayStock(stock?.imagen_proveedor)}
                 </span>
               </div>
             )}
