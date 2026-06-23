@@ -162,4 +162,32 @@ describe("ReparteMes — matriz editable por persona", () => {
     await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(borrar).not.toHaveBeenCalled();
   });
+
+  it("consulta los huecos con los ids a borrar antes de confirmar (aviso «sin cubrir»)", async () => {
+    vi.mocked(confirmar).mockResolvedValue(true);
+    vi.spyOn(apiMod.api, "borrarTurnosLote").mockResolvedValue({
+      borrados: 1,
+      no_encontrados: [],
+    } as never);
+    const calcularHuecos = vi.fn().mockReturnValue([{ titulo: "Partido", fecha: "2026-06-15" }]);
+    montar(
+      <ReparteMes
+        diasSel={new Set(["2026-06-15"])}
+        cms={CMS}
+        franjasPorSemana={FRANJAS_POR_SEMANA}
+        turnosExistentes={new Map([["u-luis|2026-06-15", [turno()]]])}
+        calcularHuecos={calcularHuecos}
+        onCambio={vi.fn()}
+        onCerrar={vi.fn()}
+        onLimpiarDias={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis 15" }));
+    fireEvent.click(screen.getByRole("button", { name: "Quitar 1 turno" }));
+
+    // El panel pregunta por los huecos con el id del turno marcado, y la confirmación se muestra.
+    await waitFor(() => expect(calcularHuecos).toHaveBeenCalledWith(["t-1"]));
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
+  });
 });

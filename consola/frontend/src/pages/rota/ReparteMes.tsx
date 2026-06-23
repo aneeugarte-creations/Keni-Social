@@ -24,6 +24,12 @@ function esHoraValida(s: string): boolean {
   return aMinutos24(s) !== null;
 }
 
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+/** "2026-06-13" → "13 jun" (para listar eventos en el aviso de huecos). */
+function fechaCorta(iso: string): string {
+  return `${Number(iso.slice(8, 10))} ${MESES_CORTOS[Number(iso.slice(5, 7)) - 1] ?? ""}`;
+}
+
 const clave = (id: string, fecha: string) => `${id}|${fecha}`;
 
 /** Token de persona (mismo lenguaje que el calendario: elegido = naranja suave). */
@@ -70,6 +76,7 @@ export function ReparteMes({
   cms,
   franjasPorSemana,
   turnosExistentes,
+  calcularHuecos,
   onCambio,
   onCerrar,
   onLimpiarDias,
@@ -83,6 +90,9 @@ export function ReparteMes({
   /** `${miembro_id}|${fecha}` → turnos reales en esa celda (de las semanas tocadas). La matriz los
    *  pinta como «turno real» y deja marcarlos para quitar. */
   turnosExistentes: Map<string, TurnoRota[]>;
+  /** Dado los ids de turnos a borrar, devuelve los eventos que quedarían SIN CUBRIR (para avisar
+   *  antes de confirmar). Lo resuelve Gestión con la cobertura de las semanas tocadas. */
+  calcularHuecos?: (idsBorrados: string[]) => { titulo: string; fecha: string }[];
   /** Refresca el calendario tras asignar/quitar. */
   onCambio: () => void;
   /** Oculta el panel (✕). */
@@ -252,12 +262,14 @@ export function ReparteMes({
     if (incompleto || aplicar.isPending) return;
     if (totalDels > 0) {
       const porPersona = new Map<string, number>();
+      const delIds: string[] = [];
       let protegidos = 0;
       personasElegidas.forEach((m) => {
         const n = delsDePersona(m.id).reduce((acc, f) => acc + turnosEn(m.id, f).length, 0);
         if (n) porPersona.set(m.nombre, n);
         delsDePersona(m.id).forEach((f) =>
           turnosEn(m.id, f).forEach((t) => {
+            delIds.push(t.id);
             if (t.override || t.nota_relevo) protegidos += 1;
           }),
         );
@@ -266,6 +278,7 @@ export function ReparteMes({
         porPersona.size === 1
           ? `de ${[...porPersona.keys()][0]}`
           : `de ${porPersona.size} personas`;
+      const huecos = calcularHuecos?.(delIds) ?? [];
       const ok = await confirmar({
         titulo: `Borrar ${totalDels} turno${totalDels === 1 ? "" : "s"}`,
         destructivo: true,
@@ -281,6 +294,12 @@ export function ReparteMes({
                 Incluye {protegidos} protegido{protegidos === 1 ? "" : "s"} (refuerzo de matchday /
                 nota de relevo).
               </p>
+            )}
+            {huecos.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                Esto deja {huecos.length} evento{huecos.length === 1 ? "" : "s"} sin cubrir:{" "}
+                {huecos.map((h) => `${h.titulo} (${fechaCorta(h.fecha)})`).join(" · ")}.
+              </div>
             )}
           </div>
         ),

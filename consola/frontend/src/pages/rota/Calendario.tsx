@@ -29,7 +29,7 @@ import { ToggleGroup } from "@/components/ui/toggle-group";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { resumenCobertura } from "@/lib/cobertura";
+import { derivarCoberturaEvento, resumenCobertura } from "@/lib/cobertura";
 import {
   diaCorto,
   diasDeSemana,
@@ -39,6 +39,7 @@ import {
 import { hoyCDMX } from "@/lib/fecha";
 import type {
   AusenciaRota,
+  CoberturaEvento,
   EventoRota,
   FranjaSemana,
   TurnoRota,
@@ -217,6 +218,41 @@ export function Calendario({
     });
     return m;
   }, [franjasSemanaQs, diasSel]);
+  // Cobertura (eventos) de CADA semana tocada por la selección — para avisar de huecos al borrar.
+  // Misma queryKey que `coberturaQ` (cache compartida con la semana en vista).
+  const coberturaSemanaQs = useQueries({
+    queries: lunesSel.map((l) => ({
+      queryKey: ["rota", "cobertura", l, marcaActiva] as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.cobertura({ lunes: l, marca: marcaActiva ?? undefined }, signal),
+    })),
+  });
+  // Eventos de los días marcados, franjas crudas por semana (con descanso, como el cálculo de
+  // cobertura) y turnos por fecha: lo que `calcularHuecos` necesita para recomputar la cobertura.
+  const eventosSel = React.useMemo(() => {
+    const out: CoberturaEvento[] = [];
+    coberturaSemanaQs.forEach((q) => {
+      for (const e of q.data?.eventos ?? []) if (diasSel.has(e.fecha)) out.push(e);
+    });
+    return out;
+  }, [coberturaSemanaQs, diasSel]);
+  const franjasCrudasPorSemana = React.useMemo(() => {
+    const m = new Map<string, FranjaSemana[]>();
+    lunesSel.forEach((l, i) => m.set(l, franjasSemanaQs[i]?.data?.franjas ?? []));
+    return m;
+  }, [lunesSel, franjasSemanaQs]);
+  const turnosPorFechaSel = React.useMemo(() => {
+    const m = new Map<string, TurnoRota[]>();
+    franjasSemanaQs.forEach((q) => {
+      for (const t of q.data?.turnos ?? []) {
+        if (!diasSel.has(t.fecha)) continue;
+        const lista = m.get(t.fecha) ?? [];
+        lista.push(t);
+        m.set(t.fecha, lista);
+      }
+    });
+    return m;
+  }, [franjasSemanaQs, diasSel]);
 
   // Diálogo de cobertura: clicar un chip de evento abre su tarjeta de cobertura (la MISMA del
   // Panorama) para coger/«Asignar a…»/soltar/editar sin salir del calendario. La edición del
@@ -371,6 +407,34 @@ export function Calendario({
   // descuadrándolo respecto al Panorama; así ambos coinciden.
   // Ref estable (no un literal nuevo por render) para no invalidar los memos que dependen de ella.
   const tareas = React.useMemo(() => tareasQ.data?.contenidos ?? [], [tareasQ.data?.contenidos]);
+  // Avisa de qué eventos quedarían SIN CUBRIR si se borran ciertos turnos (idsBorrados): los que
+  // pasan de cubiertos (cogido / cubierto-turno) a `sin-cubrir`. Mismo selector canónico que el chip
+  // (`derivarCoberturaEvento`): un evento «cogido» (claim) NO se cuenta como hueco (claim > turno).
+  const calcularHuecos = React.useCallback(
+    (idsBorrados: string[]): { titulo: string; fecha: string }[] => {
+      if (!idsBorrados.length) return [];
+      const borrados = new Set(idsBorrados);
+      const ausencias = ausenciasQ.data?.ausencias ?? [];
+      const out: { titulo: string; fecha: string }[] = [];
+      for (const ev of eventosSel) {
+        const franjas = franjasCrudasPorSemana.get(lunesDeFecha(ev.fecha)) ?? [];
+        const turnosDia = turnosPorFechaSel.get(ev.fecha) ?? [];
+        const antes = derivarCoberturaEvento(ev, tareas, turnosDia, franjas, undefined, ausencias);
+        if (antes.estado === "sin-cubrir") continue;
+        const despues = derivarCoberturaEvento(
+          ev,
+          tareas,
+          turnosDia.filter((t) => !borrados.has(t.id)),
+          franjas,
+          undefined,
+          ausencias,
+        );
+        if (despues.estado === "sin-cubrir") out.push({ titulo: ev.titulo, fecha: ev.fecha });
+      }
+      return out;
+    },
+    [eventosSel, tareas, turnosPorFechaSel, franjasCrudasPorSemana, ausenciasQ.data?.ausencias],
+  );
   // PROPUESTAS de calendario: tareas sueltas CON fecha (sin evento) aún sin terminar. No entran
   // directas a la rejilla como un evento; esperan en la bandeja de notificaciones del calendario
   // hasta que alguien las ACEPTA (se promueven a evento «Por cubrir»). Mismo criterio que el
@@ -647,6 +711,7 @@ export function Calendario({
               cms={cms}
               franjasPorSemana={franjasPorSemana}
               turnosExistentes={turnosSelExistentes}
+              calcularHuecos={calcularHuecos}
               onCambio={invalidar}
               onCerrar={() => setAbrirAsignar(false)}
               onLimpiarDias={() => setDiasSel(new Set())}
