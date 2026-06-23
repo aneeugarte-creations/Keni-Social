@@ -667,7 +667,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(within(dialogo).getByRole("button", { name: "Crear post" })).toBeDisabled();
     // Elegir categoría (Radix Select): abrir con clic en el trigger y clicar la opción.
     fireEvent.click(within(dialogo).getByLabelText("Categoría"));
-    fireEvent.click(screen.getByRole("option", { name: "México" }));
+    fireEvent.click(screen.getByRole("option", { name: "Nacional" }));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Crear post" }));
     await waitFor(() => {
       const llamada = vi

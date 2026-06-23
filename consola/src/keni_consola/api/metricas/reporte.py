@@ -504,12 +504,13 @@ async def reporte(request: Request) -> Response:
         _log.exception("Fallo al generar el reporte (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el reporte."}, status_code=500)
     salida = _reporte_serializable(rep, rango, marca)
-    if red:
-        # Con filtro de red, la auditoría de cobertura muestra SOLO esa red por marca
-        # (la vista "solo de Instagram" no lista el resto de redes).
-        salida["red"] = red
+    if redes:
+        # Con filtro de red, la auditoría de cobertura muestra SOLO esas redes por marca
+        # (la vista "solo de Instagram + …" no lista el resto de redes). El campo `red` se
+        # emite como CSV (igual que entra), así una sola red queda como su id a secas.
+        salida["red"] = ",".join(redes)
         salida["cobertura_redes"] = [
-            {**m, "redes": [r for r in m["redes"] if r["red"] == red]}
+            {**m, "redes": [r for r in m["redes"] if r["red"] in redes]}
             for m in salida["cobertura_redes"]
         ]
     salida["generado_en"] = generado_en
