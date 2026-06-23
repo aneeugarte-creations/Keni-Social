@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
 
 import { ItemsDescarga } from "./Descargas";
+import * as pdf from "./exportarPdf";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -16,8 +17,6 @@ beforeAll(() => {
   }
   URL.createObjectURL = vi.fn(() => "blob:test");
   URL.revokeObjectURL = vi.fn();
-  // jsdom no implementa print: lo stubeamos para el PDF (motor de impresión del navegador).
-  window.print = vi.fn();
 });
 
 const PROPS_BASE = {
@@ -28,7 +27,7 @@ const PROPS_BASE = {
   periodoEtiqueta: "junio 2026",
 };
 
-/** Activa una query de métricas en la caché para que el CSV tenga algo que volcar. */
+/** Activa una query de métricas en la caché para que la exportación tenga algo que volcar. */
 function ActivarReporte() {
   useQuery({
     queryKey: ["metricas", "reporte", "mes", "claro_sports"],
@@ -40,15 +39,12 @@ function ActivarReporte() {
   return null;
 }
 
-/** Renderiza los items dentro del menú "⋮" (como en Metricas) + un deck simulado, y lo abre. */
+/** Renderiza los items dentro del menú "⋮" (como en Metricas) y lo abre. */
 function renderYAbrir() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <ActivarReporte />
-      <div data-deck-root>
-        <div data-slide="Resumen">contenido</div>
-      </div>
       <MenuAcciones>
         <ItemsDescarga {...PROPS_BASE} />
       </MenuAcciones>
@@ -80,11 +76,15 @@ describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
     expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
-  it("PDF lanza la impresión del navegador", async () => {
+  it("PDF genera el deck con los datasets activos y el contexto", async () => {
+    const espia = vi.spyOn(pdf, "descargarPresentacion").mockResolvedValue();
     renderYAbrir();
 
     fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF/ }));
 
-    await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(espia).toHaveBeenCalledTimes(1));
+    const [entradas, ctx] = espia.mock.calls[0];
+    expect(entradas.length).toBeGreaterThan(0);
+    expect(ctx).toMatchObject({ marca: "Claro Sports", red: "Instagram", periodo: "junio 2026" });
   });
 });

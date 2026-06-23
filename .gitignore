@@ -33,3 +33,7 @@ deploy/secrets/
 # SPA build output (vite outDir). NO se versiona: prod compila desde fuente
 # (deploy/front), y `python -m keni_consola` lo sirve si lo compilas en local.
 consola/src/keni_consola/webapp/
+
+# Artefactos de PDF generados por tests/jsPDF
+consola/frontend/*.pdf
+presentacion-*.pdf
