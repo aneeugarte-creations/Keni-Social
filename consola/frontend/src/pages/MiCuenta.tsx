@@ -15,6 +15,7 @@
 import { startRegistration } from "@simplewebauthn/browser";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Clock,
   Copy,
   Fingerprint,
   KeyRound,
@@ -175,6 +176,125 @@ function SeccionTuCuenta() {
             </dl>
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sección: Zona horaria                                              */
+/* ------------------------------------------------------------------ */
+
+/** Zona por defecto del equipo del piloto; respaldo si el backend aún no manda una. */
+const ZONA_DEFECTO = "America/Mexico_City";
+
+/** Lista de zonas IANA del runtime (tzdb), o un respaldo mínimo si el navegador no la expone. */
+function zonasDisponibles(): string[] {
+  const soporte = (Intl as unknown as { supportedValuesOf?: (clave: string) => string[] })
+    .supportedValuesOf;
+  try {
+    if (soporte) return soporte("timeZone");
+  } catch {
+    /* cae al respaldo */
+  }
+  return [ZONA_DEFECTO, "America/New_York", "America/Bogota", "America/Argentina/Buenos_Aires", "Europe/Madrid", "UTC"];
+}
+
+/** Hora de pared AHORA en `zona` con su etiqueta, para previsualizar la elección. "" si inválida. */
+function previsualizarZona(zona: string): string {
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona,
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date());
+  } catch {
+    return "";
+  }
+}
+
+function SeccionZonaHoraria() {
+  const queryClient = useQueryClient();
+  const { usuario, refrescar } = useSesion();
+  const zonaActual = usuario?.zona_horaria || ZONA_DEFECTO;
+
+  const zonas = React.useMemo(zonasDisponibles, []);
+  const [zona, setZona] = React.useState(zonaActual);
+  React.useEffect(() => setZona(zonaActual), [zonaActual]);
+
+  const valida = zonas.includes(zona);
+  const preview = valida ? previsualizarZona(zona) : "";
+
+  const guardar = useMutation({
+    mutationFn: (z: string) => api.actualizarMiZona(z),
+    onSuccess: async () => {
+      toast.success("Zona horaria actualizada.");
+      // El resto de la app pinta las horas según la sesión: refrescamos para que toda la
+      // consola adopte la nueva zona (y su etiqueta) de inmediato.
+      await refrescar();
+      void queryClient.invalidateQueries({ queryKey: CLAVE_ME });
+    },
+    onError: (e) => {
+      setZona(zonaActual);
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const puedeGuardar = valida && zona !== zonaActual && !guardar.isPending;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Zona horaria</CardTitle>
+        <CardDescription>
+          Todas las horas de la consola se muestran en esta zona, siempre con su etiqueta (p. ej.
+          “16:00 CDMX”), para que ninguna hora quede sin saber a qué zona pertenece.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-col gap-2 sm:flex-row sm:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (puedeGuardar) guardar.mutate(zona);
+          }}
+          noValidate
+        >
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="cuenta-zona">Tu zona horaria</Label>
+            <Input
+              id="cuenta-zona"
+              list="lista-zonas-horarias"
+              value={zona}
+              placeholder={ZONA_DEFECTO}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setZona(e.target.value)}
+              disabled={guardar.isPending}
+            />
+            <datalist id="lista-zonas-horarias">
+              {zonas.map((z) => (
+                <option key={z} value={z} />
+              ))}
+            </datalist>
+            {!valida && zona.length > 0 ? (
+              <p className="text-xs text-destructive">
+                Zona no reconocida. Empieza a escribir y elige una de la lista (p. ej.
+                “America/Mexico_City”).
+              </p>
+            ) : preview ? (
+              <p className="text-xs text-muted-foreground">Ahora mismo ahí: {preview}</p>
+            ) : null}
+          </div>
+          <Button type="submit" disabled={!puedeGuardar}>
+            {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />}
+            Guardar zona
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );
@@ -804,6 +924,7 @@ export default function MiCuenta() {
           <SeccionTuCuenta />
           <SeccionCambiarPassword />
         </div>
+        <SeccionZonaHoraria />
         {usuario?.mfa_habilitado && <SeccionLlavesAcceso />}
         <SeccionTokensMcp />
       </div>

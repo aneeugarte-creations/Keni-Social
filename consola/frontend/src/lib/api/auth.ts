@@ -40,6 +40,10 @@ export const apiAuth = {
   // caracteres o no-texto); 401 sin sesión real.
   actualizarMiPerfil: (nombre: string) =>
     peticion<{ nombre: string }>("/auth/me", { metodo: "PATCH", json: { nombre } }),
+  // Cambia la ZONA HORARIA de display propia (IANA, p. ej. "Europe/Madrid"). 400 si no es una
+  // zona tzdb válida; 401 sin sesión real. Devuelve la zona ya guardada.
+  actualizarMiZona: (zona_horaria: string) =>
+    peticion<{ zona_horaria: string }>("/auth/me", { metodo: "PATCH", json: { zona_horaria } }),
 
   // --- MFA (segundo factor PASSKEYS / WebAuthn; gateado por `KENI_CONSOLA_MFA`) ---
   // Ceremonia de LOGIN (usa la cookie pre-auth + challenge que el backend gestiona):

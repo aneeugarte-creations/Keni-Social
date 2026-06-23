@@ -444,6 +444,50 @@ def test_editar_mi_nombre_sin_sesion_da_401(entorno):
     assert r.status_code == 401
 
 
+def test_me_zona_horaria_por_defecto_cdmx(entorno):
+    """Un usuario nuevo nace con zona de DISPLAY CDMX; `me` la expone."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    me = c.get("/api/auth/me").json()["usuario"]
+    assert me["zona_horaria"] == "America/Mexico_City"
+
+
+def test_editar_mi_zona_horaria(entorno):
+    """La persona cambia su zona de display; el PATCH la devuelve y `me` la refleja."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    r = c.patch("/api/auth/me", json={"zona_horaria": "Europe/Madrid"}, headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["zona_horaria"] == "Europe/Madrid"
+    me = c.get("/api/auth/me").json()["usuario"]
+    assert me["zona_horaria"] == "Europe/Madrid"
+    # No toca el resto de la cuenta.
+    assert me["usuario"] == "ana"
+    assert me["rol"] == "editor"
+
+
+def test_editar_mi_zona_horaria_invalida_da_400(entorno):
+    """Una zona que no es IANA valida se rechaza (400) y NO se persiste."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    r = c.patch("/api/auth/me", json={"zona_horaria": "No/Existe"}, headers=_ORIGIN)
+    assert r.status_code == 400
+    me = c.get("/api/auth/me").json()["usuario"]
+    assert me["zona_horaria"] == "America/Mexico_City"
+
+
+def test_patch_me_sin_campos_da_400(entorno):
+    """PATCH sin nombre ni zona -> 400 (no hay nada que actualizar)."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    r = c.patch("/api/auth/me", json={}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # 6) Gestion de usuarios (SOLO admin)                                         #
 # --------------------------------------------------------------------------- #

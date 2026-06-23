@@ -6,11 +6,14 @@
  * de pared CDMX correcta, y un ISO naive se interpreta como UTC (convención backend).
  * CDMX está en UTC-06:00 (sin horario de verano desde 2023).
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   aInstante,
   datetimeLocalAIso,
+  establecerZonaDisplay,
+  formatearFecha,
+  formatearFechaHora,
   formatearHora,
   hoyCDMX,
   isoADatetimeLocal,
@@ -18,6 +21,7 @@ import {
   posicionTemporal,
   tiempoRelativoCorto,
   ZONA_CDMX,
+  zonaDisplay,
 } from "./fecha";
 
 describe("tiempoRelativoCorto (relativo compacto, sin 'hace')", () => {
@@ -73,14 +77,50 @@ describe("formatearHora (en CDMX)", () => {
       minute: "2-digit",
     }).format(new Date(iso));
 
-  it("convierte el instante UTC a la hora de pared CDMX (no lo deja en UTC)", () => {
-    expect(formatearHora("2026-06-03T22:00:00Z")).toBe(enCdmx("2026-06-03T22:00:00Z"));
+  it("convierte el instante UTC a la hora de pared CDMX (no lo deja en UTC) y etiqueta la zona", () => {
+    // La hora de pared es la de CDMX y SIEMPRE lleva la etiqueta de zona pegada ("… CDMX").
+    expect(formatearHora("2026-06-03T22:00:00Z")).toBe(`${enCdmx("2026-06-03T22:00:00Z")} CDMX`);
     // 22:00 UTC ≠ 22:00 CDMX: se aplica el offset -06:00.
-    expect(formatearHora("2026-06-03T22:00:00Z")).not.toBe(enUtc("2026-06-03T22:00:00Z"));
+    expect(formatearHora("2026-06-03T22:00:00Z")).not.toBe(`${enUtc("2026-06-03T22:00:00Z")} CDMX`);
   });
 
   it("interpreta un naive como UTC (mismo resultado que con 'Z')", () => {
     expect(formatearHora("2026-06-03T22:00:00")).toBe(formatearHora("2026-06-03T22:00:00Z"));
+  });
+});
+
+describe("zona de DISPLAY configurable + etiqueta de zona", () => {
+  // El estado de zona vive en el módulo: dejamos siempre CDMX para no filtrar entre tests.
+  afterEach(() => establecerZonaDisplay(ZONA_CDMX));
+
+  it("por defecto las horas absolutas se etiquetan como CDMX", () => {
+    expect(formatearHora("2026-06-03T22:00:00Z")).toMatch(/ CDMX$/);
+    expect(formatearFechaHora("2026-06-03T22:00:00Z")).toMatch(/ CDMX$/);
+  });
+
+  it("la fecha SIN hora no lleva etiqueta de zona", () => {
+    expect(formatearFecha("2026-06-03T22:00:00Z")).not.toMatch(/CDMX|GMT/);
+  });
+
+  it("cambiar de zona reformatea la hora de pared y la etiqueta (offset GMT si no hay abreviatura)", () => {
+    const cdmx = formatearHora("2026-06-03T22:00:00Z"); // "16:00 CDMX"
+    establecerZonaDisplay("Europe/Madrid");
+    expect(zonaDisplay()).toBe("Europe/Madrid");
+    const madrid = formatearHora("2026-06-03T22:00:00Z");
+    expect(madrid).toContain("GMT"); // zona sin abreviatura conocida → offset GMT
+    expect(madrid).not.toBe(cdmx); // otra hora de pared y otra etiqueta
+  });
+
+  it("una zona inválida se ignora y se conserva la actual (no rompe el formateo)", () => {
+    establecerZonaDisplay("No/Existe");
+    expect(zonaDisplay()).toBe(ZONA_CDMX);
+    expect(formatearHora("2026-06-03T22:00:00Z")).toMatch(/ CDMX$/);
+  });
+
+  it("vacío/null vuelve a CDMX", () => {
+    establecerZonaDisplay("Europe/Madrid");
+    establecerZonaDisplay(null);
+    expect(zonaDisplay()).toBe(ZONA_CDMX);
   });
 });
 

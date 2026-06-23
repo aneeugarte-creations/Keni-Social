@@ -2,6 +2,7 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import * as React from "react";
 
 import { api, ApiError } from "@/lib/api";
+import { establecerZonaDisplay } from "@/lib/fecha";
 import type { UsuarioSesion } from "@/types";
 
 import { SesionContexto, type ValorSesion } from "./sesion-contexto";
@@ -148,6 +149,12 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       refrescar,
     ],
   );
+
+  // Mantiene la zona de DISPLAY (en `@/lib/fecha`) en sincronía con la preferencia del usuario
+  // ANTES de que los hijos rendericen: las funciones de formateo leen un módulo, no contexto, así
+  // que toda la app pinta las horas en la zona del usuario (con su etiqueta) ya en el primer paint.
+  // Sin sesión (logout) cae a CDMX. `establecerZonaDisplay` es idempotente y un no-op si no cambia.
+  establecerZonaDisplay(usuario?.zona_horaria);
 
   return <SesionContexto.Provider value={valor}>{children}</SesionContexto.Provider>;
 }

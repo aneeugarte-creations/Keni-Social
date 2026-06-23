@@ -43,8 +43,12 @@ BLOQUEO_MINUTOS = 5
 _COLUMNAS_USUARIO_PUBLICAS = (
     "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
     "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id", "mfa_activo",
-    "superadmin", "mfa_requerido",
+    "superadmin", "mfa_requerido", "zona_horaria",
 )
+
+# Zona IANA por defecto (el equipo del piloto). Respaldo para usuarios legados cuya columna
+# pudiera venir vacia/NULL antes de que la migracion la siembre.
+ZONA_HORARIA_DEFECTO = "America/Mexico_City"
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
 
@@ -84,6 +88,9 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         # `superadmin`: gestiona usuarios. `mfa_requerido`: el admin le exige segundo factor.
         "superadmin": bool(fila["superadmin"]),
         "mfa_requerido": bool(fila["mfa_requerido"]),
+        # `zona_horaria`: zona IANA de DISPLAY (la consola pinta los instantes en su hora de pared
+        # + etiqueta). Vacia/legada -> CDMX.
+        "zona_horaria": fila["zona_horaria"] or ZONA_HORARIA_DEFECTO,
         "marcas": marcas,
     }
 
@@ -184,6 +191,7 @@ def crear_usuario(
     manager_id: str = "",
     superadmin: bool = False,
     mfa_requerido: bool = False,
+    zona_horaria: str = ZONA_HORARIA_DEFECTO,
     marcas: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
@@ -215,20 +223,22 @@ def crear_usuario(
         "manager_id": manager_id,
         "superadmin": 1 if superadmin else 0,
         "mfa_requerido": 1 if mfa_requerido else 0,
+        "zona_horaria": zona_horaria or ZONA_HORARIA_DEFECTO,
     }
     con = db.conectar()
     try:
         con.execute(
             "INSERT INTO usuarios (id, usuario, rol, salt, hash, debe_cambiar_password, "
             "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-            "puede_coordinar, nombre, manager_id, superadmin, mfa_requerido) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "puede_coordinar, nombre, manager_id, superadmin, mfa_requerido, zona_horaria) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo["id"], nuevo["usuario"], nuevo["rol"], nuevo["salt"], nuevo["hash"],
                 nuevo["debe_cambiar_password"], nuevo["intentos_fallidos"],
                 nuevo["bloqueo_hasta"], nuevo["creado"], nuevo["ultimo_acceso"],
                 nuevo["cargo"], nuevo["cobertura"], nuevo["puede_coordinar"],
                 nuevo["nombre"], nuevo["manager_id"], nuevo["superadmin"], nuevo["mfa_requerido"],
+                nuevo["zona_horaria"],
             ),
         )
         # Marcas del organigrama (N:M): crearlas en la misma conexion para que el
@@ -260,6 +270,7 @@ def crear_usuario(
         "mfa_activo": False,
         "superadmin": bool(nuevo["superadmin"]),
         "mfa_requerido": bool(nuevo["mfa_requerido"]),
+        "zona_horaria": nuevo["zona_horaria"],
         "marcas": marcas_norm,
     }
 
@@ -307,6 +318,7 @@ def actualizar_perfil(
     manager_id: str | None = None,
     superadmin: bool | None = None,
     mfa_requerido: bool | None = None,
+    zona_horaria: str | None = None,
     marcas: list[str] | None = None,
 ) -> bool:
     """Actualiza `cargo`, `cobertura`, `puede_coordinar`, `nombre`, `manager_id`,
@@ -343,6 +355,9 @@ def actualizar_perfil(
     if mfa_requerido is not None:
         campos.append("mfa_requerido = ?")
         valores.append(1 if mfa_requerido else 0)
+    if zona_horaria is not None:
+        campos.append("zona_horaria = ?")
+        valores.append(zona_horaria)
     # Sin campos directos ni marcas -> simple existencia.
     if not campos and marcas is None:
         return obtener_usuario_por_id(usuario_id) is not None
@@ -374,7 +389,8 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
         "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-        "puede_coordinar, nombre, manager_id, mfa_activo, superadmin, mfa_requerido "
+        "puede_coordinar, nombre, manager_id, mfa_activo, superadmin, mfa_requerido, "
+        "zona_horaria "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -568,6 +584,7 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "mfa_activo": bool(fila["mfa_activo"]),
             "superadmin": bool(fila["superadmin"]),
             "mfa_requerido": bool(fila["mfa_requerido"]),
+            "zona_horaria": fila["zona_horaria"] or ZONA_HORARIA_DEFECTO,
             "marcas": marcas,
         }
     finally:

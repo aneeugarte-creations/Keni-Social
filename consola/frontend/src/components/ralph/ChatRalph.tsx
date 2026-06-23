@@ -14,14 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/Markdown";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
+import { formatearHora } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import { ETIQUETA_MODELO, useRalphStore } from "@/store/ralphStore";
 
-/** Hora corta (HH:MM) de un mensaje, en la zona del navegador; "" si la fecha no es válida. */
+/** Hora (HH:MM + etiqueta de zona) de un mensaje, en la zona de display del usuario; "" si inválida. */
 function horaCorta(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatearHora(iso);
 }
 
 export function ChatRalph({ id }: { id: string }) {

@@ -63,6 +63,7 @@ from .tokens_mcp import (
 from .usuarios import (
     BLOQUEO_MINUTOS,
     MAX_INTENTOS_FALLIDOS,
+    ZONA_HORARIA_DEFECTO,
     actualizar_perfil,
     actualizar_sign_count_mfa,
     autenticar,
@@ -115,6 +116,7 @@ __all__ = [
     "verificar_password_actual",
     "MAX_INTENTOS_FALLIDOS",
     "BLOQUEO_MINUTOS",
+    "ZONA_HORARIA_DEFECTO",
     # MFA PASSKEYS / WebAuthn (segundo factor)
     "MfaNoDisponible",
     "NOMBRE_RP_DEFECTO",

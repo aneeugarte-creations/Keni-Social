@@ -12,8 +12,93 @@
  * `Intl.DateTimeFormat` sin `timeZone`: eso reintroduce el bug de "se ve en UTC".
  */
 
-/** Zona horaria de operación (CDMX). Única fuente del nombre de zona. */
+/** Zona horaria OPERATIVA (CDMX). Es la zona del TARGET de publicación del equipo: la
+ *  parrilla, la rota y la programación de piezas se piensan y se anclan aquí, da igual desde
+ *  dónde mire quien usa la consola. NO confundir con la zona de DISPLAY (de más abajo). */
 export const ZONA_CDMX = "America/Mexico_City";
+
+// --- Zona de DISPLAY (informativa, por usuario) ------------------------------
+// Cómo se MUESTRAN los instantes (creado, último acceso, línea de tiempo de fuentes,
+// notificaciones…). El backend SELLA todo en UTC; esta zona solo decide la hora de PARED con
+// la que se pinta, y SIEMPRE se acompaña de su etiqueta ("CDMX", "GMT-6"…) para que ninguna
+// hora absoluta quede sin referencia de zona. Por defecto CDMX (el equipo del piloto). La
+// fija `establecerZonaDisplay` desde la sesión del usuario. NO afecta al almacenamiento ni a
+// la zona OPERATIVA (parrilla/rota/programación), que siguen en CDMX vía las funciones de abajo.
+
+let _zonaDisplay = ZONA_CDMX;
+
+/** Abreviaturas de ciudad para zonas conocidas; el resto cae al offset GMT del instante. */
+const _ETIQUETAS_ZONA: Record<string, string> = {
+  "America/Mexico_City": "CDMX",
+};
+
+interface Formateadores {
+  fechaHora: Intl.DateTimeFormat;
+  fechaHoraCorta: Intl.DateTimeFormat;
+  fecha: Intl.DateTimeFormat;
+  fechaCorta: Intl.DateTimeFormat;
+  hora: Intl.DateTimeFormat;
+  offset: Intl.DateTimeFormat;
+}
+
+// Construir un Intl.DateTimeFormat no es gratis y estos se usan en tablas/listas con muchas
+// filas: se cachean por zona y se reconstruyen solo cuando la zona de display cambia.
+function _construirFormateadores(zona: string): Formateadores {
+  return {
+    fechaHora: new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona, day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    }),
+    fechaHoraCorta: new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    }),
+    fecha: new Intl.DateTimeFormat("es-MX", {
+      timeZone: zona, day: "2-digit", month: "short", year: "numeric",
+    }),
+    fechaCorta: new Intl.DateTimeFormat("es-MX", { timeZone: zona, day: "2-digit", month: "short" }),
+    hora: new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "2-digit", minute: "2-digit" }),
+    // Para derivar el offset GMT del INSTANTE (robusto ante horario de verano) cuando la zona
+    // no tiene abreviatura de ciudad conocida.
+    offset: new Intl.DateTimeFormat("es-MX", { timeZone: zona, hour: "2-digit", timeZoneName: "shortOffset" }),
+  };
+}
+
+let _fmt = _construirFormateadores(_zonaDisplay);
+
+/**
+ * Fija la zona de DISPLAY (IANA, p. ej. "America/Mexico_City" o "Europe/Madrid") con la que la
+ * consola muestra los instantes. La llama la sesión con la preferencia del usuario. Vacío/`null`
+ * o zona inválida → vuelve a CDMX (no rompe el formateo de toda la app). Idempotente.
+ */
+export function establecerZonaDisplay(zona: string | null | undefined): void {
+  const z = (zona ?? "").trim() || ZONA_CDMX;
+  if (z === _zonaDisplay) return;
+  try {
+    // `Intl.DateTimeFormat` con una zona desconocida lanza `RangeError` al construir: si pasa,
+    // conservamos la zona actual.
+    const nuevos = _construirFormateadores(z);
+    _fmt = nuevos;
+    _zonaDisplay = z;
+  } catch {
+    /* zona inválida: se mantiene la anterior */
+  }
+}
+
+/** La zona de DISPLAY activa (IANA). */
+export function zonaDisplay(): string {
+  return _zonaDisplay;
+}
+
+/**
+ * Etiqueta corta de la zona de DISPLAY para pegar a una hora absoluta: la abreviatura de ciudad
+ * de una zona conocida ("CDMX") o, si no, el offset GMT del INSTANTE ("GMT-6"). Así una hora como
+ * "16:00" nunca queda sin decir EN QUÉ ZONA es.
+ */
+export function etiquetaZona(d: Date): string {
+  const conocida = _ETIQUETAS_ZONA[_zonaDisplay];
+  if (conocida) return conocida;
+  const tz = _fmt.offset.formatToParts(d).find((p) => p.type === "timeZoneName");
+  return tz?.value ?? "";
+}
 
 /** Detecta si un ISO trae marca de zona explícita ("Z" o "+/-HH:MM"). */
 const RE_CON_ZONA = /(?:Z|[+-]\d{2}:?\d{2})$/;
@@ -34,73 +119,39 @@ export function aInstante(iso: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-// Formateadores es-MX anclados a CDMX (cacheados: construir un Intl.DateTimeFormat
-// no es gratis y estos se usan en tablas/listas con muchas filas).
-const _fFechaHora = new Intl.DateTimeFormat("es-MX", {
-  timeZone: ZONA_CDMX,
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const _fFechaHoraCorta = new Intl.DateTimeFormat("es-MX", {
-  timeZone: ZONA_CDMX,
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const _fFecha = new Intl.DateTimeFormat("es-MX", {
-  timeZone: ZONA_CDMX,
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-const _fFechaCorta = new Intl.DateTimeFormat("es-MX", {
-  timeZone: ZONA_CDMX,
-  day: "2-digit",
-  month: "short",
-});
-const _fHora = new Intl.DateTimeFormat("es-MX", {
-  timeZone: ZONA_CDMX,
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** Fecha + hora CDMX con año. Ej.: "03 jun 2026, 16:00". "" / inválida → "—" o el crudo. */
+/** Fecha + hora con año y ETIQUETA de zona. Ej.: "03 jun 2026, 16:00 CDMX". "" / inválida → "—" o el crudo. */
 export function formatearFechaHora(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = aInstante(iso);
-  return d ? _fFechaHora.format(d) : String(iso);
+  return d ? `${_fmt.fechaHora.format(d)} ${etiquetaZona(d)}` : String(iso);
 }
 
-/** Fecha + hora CDMX SIN año (compacta para listas). Ej.: "03 jun, 16:00". */
+/** Fecha + hora SIN año (compacta para listas) con etiqueta de zona. Ej.: "03 jun, 16:00 CDMX". */
 export function formatearFechaHoraCorta(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = aInstante(iso);
-  return d ? _fFechaHoraCorta.format(d) : String(iso);
+  return d ? `${_fmt.fechaHoraCorta.format(d)} ${etiquetaZona(d)}` : String(iso);
 }
 
-/** Solo fecha CDMX (con año). Ej.: "03 jun 2026". */
+/** Solo fecha (con año). Ej.: "03 jun 2026". Sin componente horario → SIN etiqueta de zona. */
 export function formatearFecha(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = aInstante(iso);
-  return d ? _fFecha.format(d) : String(iso);
+  return d ? _fmt.fecha.format(d) : String(iso);
 }
 
-/** Solo fecha CDMX corta (sin año). Ej.: "03 jun". */
+/** Solo fecha corta (sin año). Ej.: "03 jun". Sin componente horario → SIN etiqueta de zona. */
 export function formatearFechaCorta(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = aInstante(iso);
-  return d ? _fFechaCorta.format(d) : String(iso);
+  return d ? _fmt.fechaCorta.format(d) : String(iso);
 }
 
-/** Solo hora CDMX (HH:mm). Ej.: "16:00". */
+/** Solo hora (HH:mm) con ETIQUETA de zona. Ej.: "16:00 CDMX". "" / inválida → "". */
 export function formatearHora(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = aInstante(iso);
-  return d ? _fHora.format(d) : "";
+  return d ? `${_fmt.hora.format(d)} ${etiquetaZona(d)}` : "";
 }
 
 /**
@@ -219,7 +270,7 @@ export function minutosHastaEvento(
 export function formatearDia(dia: string | null | undefined): string {
   if (!dia) return "—";
   const d = new Date(`${dia}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? String(dia) : _fFecha.format(d);
+  return Number.isNaN(d.getTime()) ? String(dia) : _fmt.fecha.format(d);
 }
 
 /**

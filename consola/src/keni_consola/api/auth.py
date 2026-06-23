@@ -6,7 +6,8 @@ Endpoints (todos bajo `/api/auth`, CONTRATO con el frontend):
     401 GENERICO ("Usuario o contrasena incorrectos") sin revelar si el usuario existe.
   - POST /api/auth/logout   -> 204; invalida la sesion server-side y borra la cookie.
   - GET  /api/auth/me       -> 200 {usuario:{...}} si hay sesion; 401 si no.
-  - PATCH /api/auth/me      {nombre} -> 200 {nombre}; la persona edita SU nombre humano.
+  - PATCH /api/auth/me      {nombre?, zona_horaria?} -> 200 con los campos cambiados; la
+                            persona edita SU nombre humano y/o su zona horaria de display.
   - POST /api/auth/cambiar-password {password_actual, password_nueva} -> 204
     (sirve para el cambio FORZADO al primer acceso y el voluntario; valida la actual).
   - POST /api/auth/passkey/opciones -> opciones WebAuthn de login DESCUBRIBLE (passwordless).
@@ -28,6 +29,8 @@ import os
 import threading
 import time
 from collections import deque
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -504,6 +507,14 @@ async def me(request: Request) -> Response:
                     refrescado.get("puede_coordinar") or usuario.get("puede_coordinar")
                 ),
                 "marcas": list(refrescado.get("marcas") or []),
+                # `zona_horaria`: zona IANA de DISPLAY con la que el frontend pinta TODOS los
+                # instantes (siempre con su etiqueta). Editable por la propia persona en "Mi
+                # cuenta" (PATCH /api/auth/me). Vacia/legada -> CDMX.
+                "zona_horaria": (
+                    refrescado.get("zona_horaria")
+                    or usuario.get("zona_horaria")
+                    or auth.ZONA_HORARIA_DEFECTO
+                ),
                 # MFA (segundo factor, passkeys): `mfa_habilitado` refleja la disponibilidad
                 # EFECTIVA de la maquinaria (flag global ON, o MFA de admin obligatorio + hay
                 # clave): la UI muestra la seccion de "Llaves de acceso" cuando esta activa, para
@@ -558,13 +569,33 @@ async def cambiar_password(request: Request) -> Response:
 # alli); aqui la persona edita el SUYO desde "Mi cuenta".
 _LONGITUD_MAX_NOMBRE = 120
 
+# Tope de longitud de un id de zona IANA (el mas largo de la tzdb ronda los 32 chars). Es una
+# barrera anti-DoS antes de tocar `ZoneInfo`; la validez real la decide la tzdb del sistema.
+_LONGITUD_MAX_ZONA = 64
+
+
+def _zona_horaria_valida(zona: str) -> bool:
+    """True si `zona` es un id IANA (tzdb) resoluble en este sistema (p. ej. "Europe/Madrid").
+
+    Rechaza vacios, cadenas largas (anti-DoS) y cualquier id que `ZoneInfo` no resuelva (incluye
+    intentos de path traversal, que lanzan `ValueError`).
+    """
+    if not zona or len(zona) > _LONGITUD_MAX_ZONA:
+        return False
+    try:
+        ZoneInfo(zona)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
 
 async def actualizar_mi_perfil(request: Request) -> Response:
-    """PATCH /api/auth/me: la persona edita SU PROPIO nombre humano (organigrama).
+    """PATCH /api/auth/me: la persona edita campos de SU PROPIA cuenta.
 
-    Solo el `nombre` (lo que se pinta en las tarjetas): NUNCA el rol, el login ni las
-    marcas (eso es competencia del admin en `/api/usuarios`). Por token de bootstrap no hay
-    usuario -> 401. `nombre=""` deja la tarjeta cayendo al login.
+    Hoy: el `nombre` humano (organigrama) y la `zona_horaria` de display (con la que la consola
+    le muestra todas las horas). NUNCA el rol, el login ni las marcas (eso es competencia del
+    admin en `/api/usuarios`). Se aplican solo los campos presentes en el cuerpo (PATCH parcial);
+    `nombre=""` deja la tarjeta cayendo al login. Por token de bootstrap no hay usuario -> 401.
     """
     usuario = getattr(request.state, "usuario", None)
     if usuario is None:
@@ -573,17 +604,32 @@ async def actualizar_mi_perfil(request: Request) -> Response:
             status_code=401,
         )
     datos = await leer_json(request)
-    nombre = datos.get("nombre")
-    if not isinstance(nombre, str):
-        return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
-    nombre = nombre.strip()
-    if len(nombre) > _LONGITUD_MAX_NOMBRE:
-        return JSONResponse(
-            {"error": f"El nombre no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
-            status_code=400,
-        )
-    auth.actualizar_perfil(usuario["id"], nombre=nombre)
-    return JSONResponse({"nombre": nombre})
+    cambios: dict[str, Any] = {}
+    salida: dict[str, Any] = {}
+    if "nombre" in datos:
+        nombre = datos.get("nombre")
+        if not isinstance(nombre, str):
+            return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+        nombre = nombre.strip()
+        if len(nombre) > _LONGITUD_MAX_NOMBRE:
+            return JSONResponse(
+                {"error": f"El nombre no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
+                status_code=400,
+            )
+        cambios["nombre"] = nombre
+        salida["nombre"] = nombre
+    if "zona_horaria" in datos:
+        zona = datos.get("zona_horaria")
+        if not isinstance(zona, str) or not _zona_horaria_valida(zona):
+            return JSONResponse(
+                {"error": "La zona horaria no es válida."}, status_code=400
+            )
+        cambios["zona_horaria"] = zona
+        salida["zona_horaria"] = zona
+    if not cambios:
+        return JSONResponse({"error": "No hay nada que actualizar."}, status_code=400)
+    auth.actualizar_perfil(usuario["id"], **cambios)
+    return JSONResponse(salida)
 
 
 # --------------------------------------------------------------------------- #

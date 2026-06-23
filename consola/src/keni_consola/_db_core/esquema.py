@@ -164,7 +164,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- normal NO. `mfa_requerido`: 1 = el admin exige segundo factor a esta persona
         -- (su login fuerza el enrolamiento si aun no tiene passkey).
         superadmin             INTEGER NOT NULL DEFAULT 0,
-        mfa_requerido          INTEGER NOT NULL DEFAULT 0
+        mfa_requerido          INTEGER NOT NULL DEFAULT 0,
+        -- `zona_horaria`: zona IANA (tzdb) con la que la consola MUESTRA al usuario los instantes
+        -- (que se siguen almacenando en UTC). Default CDMX (el equipo del piloto). Solo afecta a
+        -- la presentacion; la zona OPERATIVA del equipo (parrilla/rota/programacion) es CDMX fija.
+        zona_horaria           TEXT NOT NULL DEFAULT 'America/Mexico_City'
     )
     """,
     # Passkeys (WebAuthn/FIDO2): una credencial publica por dispositivo enrolado. Un usuario

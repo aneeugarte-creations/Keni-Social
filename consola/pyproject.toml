@@ -52,6 +52,10 @@ dependencies = [
     # offline) sustituye la heurística es/en por palabras; con semilla fija es determinista. Si
     # faltara, el código degrada a la heurística (no rompe), pero se fija como dependencia.
     "langdetect>=1.0.9",
+    # Base IANA (tzdb) para `zoneinfo`: valida la zona horaria de display que cada usuario elige
+    # en su cuenta (`api/auth._zona_horaria_valida`). Las imágenes `python:*-slim` NO traen `tzdata`
+    # del sistema, así que se fija como dependencia para que `zoneinfo` resuelva en CI y producción.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

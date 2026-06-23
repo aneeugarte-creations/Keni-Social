@@ -855,6 +855,10 @@ _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # `mfa_requerido`: 1 = el admin EXIGE segundo factor a esta persona. Si no tiene passkey,
     # su login fuerza el enrolamiento (pantalla obligatoria) antes de usar la consola.
     ("mfa_requerido", "INTEGER NOT NULL DEFAULT 0"),
+    # `zona_horaria`: zona IANA (tzdb) con la que la consola MUESTRA los instantes al usuario.
+    # Legado/BD vieja -> CDMX (el equipo del piloto). Solo presentacion; no toca el almacenamiento
+    # (UTC) ni la zona OPERATIVA del equipo (parrilla/rota/programacion), que es CDMX fija.
+    ("zona_horaria", "TEXT NOT NULL DEFAULT 'America/Mexico_City'"),
 )
 
 # Columnas RETIRADAS de `usuarios` (se dropan si una BD vieja las tiene). `mfa_secret_cifrado`

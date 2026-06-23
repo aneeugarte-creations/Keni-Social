@@ -120,6 +120,13 @@ export interface UsuarioSesion {
   ultimo_acceso?: string;
   /** Cargo (función en el equipo). Cadena vacía si aún sin clasificar. */
   cargo?: CargoUsuario;
+  /**
+   * Zona horaria IANA (tzdb, p. ej. "America/Mexico_City" o "Europe/Madrid") con la que la
+   * consola MUESTRA todos los instantes (siempre con su etiqueta de zona). El backend la siembra
+   * por defecto en CDMX; cada quien la cambia en "Mi cuenta". Llega por login y por `me`. No
+   * afecta a la zona OPERATIVA del equipo (parrilla/rota/programación), que es CDMX.
+   */
+  zona_horaria?: string;
   /** `true` => esta persona entra en la rota de turnos (cobertura). */
   cobertura?: boolean;
   /** `true` => candidato a coordinador por celda en el calendario (ola "coord"). */
