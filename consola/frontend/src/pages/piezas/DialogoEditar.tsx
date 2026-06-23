@@ -53,12 +53,15 @@ import { etapaDePieza } from "@/pages/feed/etapa";
 /** Diálogo de edición de una publicación, MÍNIMO: solo contenido (copy) + hashtags + imagen. Los
  *  posts no llevan título; el formato es texto plano (sin barra de formato ni UTM). Comentarios y
  *  versiones viven en el feed, no aquí. El estado/programación/aprobación los gestiona el flujo. */
-export function DialogoEditar({
+function DialogoEditarInterno({
   pieza,
   onCerrar,
+  irAVariante,
 }: {
   pieza: Pieza | null;
   onCerrar: () => void;
+  /** Salta a la pieza HERMANA de la otra variante (foto/carrusel) si existe; devuelve si saltó. */
+  irAVariante: (variante: "foto" | "carrusel") => boolean;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -285,6 +288,21 @@ export function DialogoEditar({
   // puede detectar de forma fiable desde una sola fila.
   const cambiarFormato = async (nuevo: string) => {
     if (!pieza || nuevo === formato) return;
+    // VARIANTES foto<->carrusel: son piezas HERMANAS que conviven. Si la variante destino YA
+    // existe, SALTAMOS a ella (la mostramos) en vez de regenerar/flipear: «verla», no rehacerla.
+    if (
+      (nuevo === "foto" || nuevo === "carrusel") &&
+      (formato === "foto" || formato === "carrusel") &&
+      irAVariante(nuevo)
+    ) {
+      return;
+    }
+    // No existe la variante FOTO hermana (raro: el carrusel nace de una foto): no flipeamos de
+    // forma destructiva sin querer; avisamos y dejamos abrirla desde el feed.
+    if (nuevo === "foto" && formato === "carrusel") {
+      toast("No encuentro la versión foto de esta red; ábrela desde el feed.");
+      return;
+    }
     // Pasar a CARRUSEL sin slides: el mismo diálogo confirma el cambio Y pregunta la longitud
     // (corto 4-5 / largo 8-9). Al elegir, flipea y genera ya con ella; Cancelar no hace nada.
     if (nuevo === "carrusel" && slides.length === 0) {
@@ -841,5 +859,81 @@ export function DialogoEditar({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Pieza HERMANA de la otra variante (misma idea + misma red) buscada en la caché del feed/lista
+ *  (CLAVE_PIEZAS), sin pedir red: el editor se abre desde superficies que ya la tienen cargada. */
+function buscarHermana(
+  queryClient: ReturnType<typeof useQueryClient>,
+  base: Pieza,
+  variante: "foto" | "carrusel",
+): Pieza | null {
+  let hallada: Pieza | null = null;
+  const escanear = (lista: unknown) => {
+    if (hallada || !Array.isArray(lista)) return;
+    for (const p of lista as Pieza[]) {
+      if (
+        p &&
+        p.id !== base.id &&
+        (p.publicacion_id || "") === (base.publicacion_id || "") &&
+        p.red === base.red &&
+        (p.variante === "carrusel" ? "carrusel" : "foto") === variante
+      ) {
+        hallada = p;
+        return;
+      }
+    }
+  };
+  for (const [, datos] of queryClient.getQueriesData({ queryKey: CLAVE_PIEZAS })) {
+    if (!datos || typeof datos !== "object") continue;
+    const d = datos as { piezas?: unknown; pages?: unknown[] };
+    escanear(d.piezas);
+    if (Array.isArray(d.pages)) {
+      for (const pg of d.pages) {
+        if (pg && typeof pg === "object") escanear((pg as { piezas?: unknown }).piezas);
+      }
+    }
+    if (hallada) break;
+  }
+  return hallada;
+}
+
+/**
+ * Editor de pieza. Envuelve al editor real para poder SALTAR entre variantes hermanas (foto ↔
+ * carrusel de la misma red) sin cerrar: el selector de formato, si la variante destino ya existe,
+ * cambia la pieza activa en vez de regenerarla. Al cambiar el `key` el editor interno se remonta
+ * y recarga limpio la pieza nueva (su efecto de desmontaje guarda la anterior).
+ */
+export function DialogoEditar({
+  pieza,
+  onCerrar,
+}: {
+  pieza: Pieza | null;
+  onCerrar: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [activa, setActiva] = React.useState<Pieza | null>(pieza);
+  // Abrir con una pieza distinta (cambia el prop) reinicia la pieza activa.
+  React.useEffect(() => setActiva(pieza), [pieza]);
+  const irAVariante = React.useCallback(
+    (variante: "foto" | "carrusel") => {
+      if (!activa) return false;
+      const hermana = buscarHermana(queryClient, activa, variante);
+      if (hermana) {
+        setActiva(hermana);
+        return true;
+      }
+      return false;
+    },
+    [activa, queryClient],
+  );
+  return (
+    <DialogoEditarInterno
+      key={activa?.id ?? "vacio"}
+      pieza={activa}
+      onCerrar={onCerrar}
+      irAVariante={irAVariante}
+    />
   );
 }
