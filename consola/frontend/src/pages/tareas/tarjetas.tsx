@@ -411,7 +411,9 @@ export function BadgeCubiertoPorTurno({ cubridores }: { cubridores: CubridorPorT
         title="Ver quién lo cubre"
         className={cn(
           "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-medium transition-colors",
-          "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          // Sin anillo de foco (el doble borde oscuro chirría): solo un fondo gris muy sutil, y
+          // únicamente con teclado (focus-visible). Al pulsar con ratón no se «selecciona» nada.
+          "hover:bg-accent focus:outline-none focus-visible:bg-accent",
           CLASE_CUBIERTO_TURNO,
         )}
       >
