@@ -705,7 +705,7 @@ export function Calendario({
         {abrirAsignar && (
           <aside
             aria-label="Asignar turnos"
-            className="flex min-h-0 w-full shrink-0 flex-col gap-4 lg:h-full lg:w-[26rem]"
+            className="flex min-h-0 w-full shrink-0 flex-col gap-4 lg:h-full lg:w-[22rem]"
           >
             <ReparteMes
               diasSel={diasSel}
