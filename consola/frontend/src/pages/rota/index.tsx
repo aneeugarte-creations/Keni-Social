@@ -9,6 +9,12 @@ import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabezado";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -65,6 +71,10 @@ export default function Rota() {
     usuario?.id ?? "",
     esAdmin,
   );
+  // «Cambios y ausencias» (admin): el panel de Gestión ya no lo lista como tarjeta; el coordinador
+  // revisa/aprueba los cambios desde un diálogo que abre la fila «cambios pendientes» del cockpit
+  // «Necesita tu decisión». El trabajador los ve en su propia pestaña.
+  const [verCambios, setVerCambios] = React.useState(false);
   // Por defecto: la semana ACTUAL (la que contiene hoy, en zona CDMX).
   const [lunes, setLunes] = React.useState(() => lunesDeSemana(new Date()));
   // Pestaña activa (controlada). Esta sección es SOLO el calendario de turnos (Horario/Hoy/Gestión);
@@ -172,9 +182,11 @@ export default function Rota() {
           <PanelCoordinacion
             senales={senalesCoord.senales}
             cargando={senalesCoord.cargando}
-            onIr={(destino) =>
-              destino === "cobertura" ? navigate("/operacion/trabajo") : setPestania(destino)
-            }
+            onIr={(destino) => {
+              if (destino === "cobertura") navigate("/operacion/trabajo");
+              else if (destino === "cambios-ausencias") setVerCambios(true);
+              else setPestania(destino);
+            }}
           />
           <div className="min-h-0 flex-1">
             <Calendario
@@ -186,6 +198,20 @@ export default function Rota() {
               marcadorSalud={marcadorSalud}
             />
           </div>
+          {verCambios && (
+            <Dialog open onOpenChange={setVerCambios}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>
+                    {tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno"}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="max-h-[70vh] overflow-y-auto">
+                  <CambiosYAusencias esAdmin={esAdmin} />
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       )}
 

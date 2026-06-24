@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   BellRing,
   ChevronRight,
-  SlidersHorizontal,
   Sunrise,
   Sunset,
   Upload,
@@ -66,7 +65,6 @@ import {
 } from "./comun";
 import { ReparteMes } from "./ReparteMes";
 import { lunesDeFecha } from "@/lib/rota-reparto";
-import { CambiosYAusencias } from "./CambiosYAusencias";
 import { DialogoTiempoLibre } from "./DialogoTiempoLibre";
 import { useTiempoLibreActivo } from "./useConfigRota";
 import { ResumenDia } from "./ResumenDia";
@@ -281,8 +279,6 @@ export function Calendario({
   // mensual a «Semana», repartir es la acción directa, sin un clic previo. El botón de la cabecera
   // solo lo oculta/muestra.
   const [abrirAsignar, setAbrirAsignar] = React.useState(modo === "gestion");
-  // «Cambios y ausencias» vive en la franja «Más opciones» del panel y abre su lista en un diálogo.
-  const [abrirCambios, setAbrirCambios] = React.useState(false);
   // «Tiempo libre»: registrar vacaciones/baja y ver quién está fuera, desde el menú ⋯ del gestor.
   const [abrirTiempoLibre, setAbrirTiempoLibre] = React.useState(false);
 
@@ -583,9 +579,8 @@ export function Calendario({
       <DialogoAjustesTurnos onCerrar={() => setAbrirAjustes(false)} />
     ) : null;
 
-  // Franja «Más opciones» del panel: utilidades secundarias (no tarjetas sueltas). «Cambios y
-  // ausencias» abre su lista en un diálogo; «Importar de un documento» abre el asistente. El héroe
-  // es el reparto de arriba; esto queda callado al pie.
+  // Franja «Más opciones» del panel: utilidades secundarias (no tarjetas sueltas). «Importar de un
+  // documento» abre el asistente. El héroe es el reparto de arriba; esto queda callado al pie.
   const masOpciones = (
     <section
       aria-label="Más opciones"
@@ -594,27 +589,6 @@ export function Calendario({
       <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
         Más opciones
       </div>
-      <button
-        type="button"
-        onClick={() => setAbrirCambios(true)}
-        className="flex w-full items-center gap-3 rounded-lg px-1.5 py-2 text-left transition-colors hover:bg-accent"
-      >
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <SlidersHorizontal className="h-[15px] w-[15px]" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13.5px] font-medium text-foreground">
-            {tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno"}
-          </span>
-          <span className="block text-[11.5px] text-muted-foreground">
-            {tiempoLibreActivo
-              ? "Solicitudes y ausencias del equipo"
-              : "Solicitudes de cambio de turno"}
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-      </button>
-      <div className="my-0.5 border-t border-border/70" />
       <ImportarDocumentoParrilla
         marca={marcaActiva ?? ""}
         onAplicado={invalidar}
@@ -642,8 +616,8 @@ export function Calendario({
     </section>
   );
 
-  // Modales de Gestión (Mes único): editar franjas, carga del equipo, «Cambios y ausencias» y los
-  // ajustes de visualización. Se montan junto al panel de reparto en la vista mensual.
+  // Modales de Gestión (Mes único): editar franjas, carga del equipo y los ajustes de
+  // visualización. Se montan junto al panel de reparto en la vista mensual.
   const modalesGestion = esGestion ? (
     <>
       {abrirFranjas && (
@@ -661,20 +635,6 @@ export function Calendario({
         />
       )}
       {abrirCarga && <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />}
-      {abrirCambios && (
-        <Dialog open onOpenChange={setAbrirCambios}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>
-                {tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno"}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="max-h-[70vh] overflow-y-auto">
-              <CambiosYAusencias esAdmin={esAdmin} />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
       {dialogoAjustes}
       {tiempoLibreActivo && (
         <DialogoTiempoLibre
