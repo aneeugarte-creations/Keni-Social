@@ -28,36 +28,56 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-# Versión de la herramienta local que sirve este lanzador (informativa para la página).
-VERSION = "0.1.0"
+# Versión de la herramienta local que sirve este lanzador. Es la fuente de verdad del
+# auto-update: la app local compara su versión contra esta y se actualiza si va por detrás.
+VERSION = "0.2.0"
 
-# Prompt que el equipo pega en su Claude local tras descomprimir el bundle: arranca al agente
-# que monta y ejecuta keni-fotos sobre la carpeta del partido.
+# Changelog corto (2-3 líneas) de la versión actual; se muestra en la ficha de la página.
+CHANGELOG = [
+    "App de escritorio: elige la carpeta, nombra el partido y procesa con un clic.",
+    "Copia o descarta fotos y ráfagas (a la Papelera, recuperable) desde la galería.",
+    "Detecta Claude y se mantiene actualizada sola.",
+]
+
+# Prompt que el equipo pega en su Claude local tras descomprimir el bundle. El Claude local NO
+# procesa fotos: su único trabajo es COMPILAR y LANZAR la app; la propia app guía a la persona.
 PROMPT_CLAUDE = (
-    "Eres el agente local de keni-fotos. Lee el CLAUDE.md de esta carpeta y monta y "
-    "ejecuta la app sobre mi carpeta de fotos del partido. Pregúntame la ruta de la "
-    "carpeta y el nombre del partido si no te los doy."
+    "Eres el agente local de keni-fotos. Tu ÚNICO trabajo es compilar y lanzar la app: "
+    "lee el CLAUDE.md de esta carpeta y déjala abierta en el navegador. NO proceses fotos "
+    "tú; la propia app guía a la persona para elegir la carpeta del partido, ponerle nombre "
+    "y ejecutar el etiquetado. Cuando la app esté abierta, avísame."
 )
 
-# Comandos para montar y arrancar la herramienta, en orden (se copian tal cual a la terminal).
+# Comandos para descomprimir y arrancar, en orden. `ls -t … | head -1` coge el zip más reciente,
+# así funciona aunque el navegador lo guarde como «keni-fotos (1).zip», «(2)», etc.
 COMANDOS = [
-    "unzip keni-fotos.zip && cd keni-fotos",
-    "claude",
+    "cd ~/Downloads",
+    'unzip -o "$(ls -t keni-fotos*.zip | head -1)"',
+    "cd keni-fotos && claude",
 ]
 
-# Pasos 1·2·3 que guían a la persona desde la descarga hasta procesar sus fotos.
+# Pasos 1·2·3 que guían a la persona desde la descarga hasta tener la app abierta.
 INSTRUCCIONES = [
-    "Descarga keni-fotos.zip y descomprímelo en tu equipo.",
-    "Abre Claude Code en la carpeta keni-fotos y pega el prompt de arriba.",
-    "Indícale la ruta de tu carpeta de fotos del partido y su nombre.",
+    "Descarga keni-fotos y descomprímelo (los comandos de abajo lo hacen por ti).",
+    "Abre Claude Code en la carpeta keni-fotos y pega el prompt: compila y lanza la app.",
+    "En la app: elige tu carpeta de fotos, ponle nombre al partido y pulsa Procesar.",
 ]
 
-# Nombre del fichero que se ofrece al descargar (Content-Disposition attachment).
+# Dos artefactos descargables (Content-Disposition attachment):
+#  - keni-fotos-app.zip : la app de escritorio (.app), vía principal de la página ("Descargar app").
+#  - keni-fotos.zip     : el payload/bundle, que el .app baja para AUTO-ACTUALIZARSE y que también
+#                         usa el modo avanzado (Claude). Ambos viven en `_fotos_bundle/`.
+_NOMBRE_APP = "keni-fotos-app.zip"
 _NOMBRE_BUNDLE = "keni-fotos.zip"
+_DIR_BUNDLE = Path(__file__).parent / "_fotos_bundle"
+_APP_DEFECTO = _DIR_BUNDLE / _NOMBRE_APP
+_BUNDLE_DEFECTO = _DIR_BUNDLE / _NOMBRE_BUNDLE
 
-# Ruta por defecto del zip: junto a este módulo, en `_fotos_bundle/keni-fotos.zip`. El zip real
-# lo coloca otro agente; el directorio se versiona con un `.gitkeep` aunque el zip aún no exista.
-_BUNDLE_DEFECTO = Path(__file__).parent / "_fotos_bundle" / _NOMBRE_BUNDLE
+
+def _ruta_app() -> Path:
+    """Ruta del .app zipeado: `KENI_FOTOS_APP` si está definida, si no la de por defecto."""
+    env = (os.environ.get("KENI_FOTOS_APP") or "").strip()
+    return Path(env) if env else _APP_DEFECTO
 
 
 def _ruta_bundle() -> Path:
@@ -71,6 +91,7 @@ async def info(request: Request) -> Response:
     return JSONResponse(
         {
             "version": VERSION,
+            "changelog": CHANGELOG,
             "prompt_claude": PROMPT_CLAUDE,
             "comandos": COMANDOS,
             "instrucciones": INSTRUCCIONES,
@@ -78,22 +99,28 @@ async def info(request: Request) -> Response:
     )
 
 
-async def bundle(request: Request) -> Response:
-    """GET /api/fotos/bundle: descarga `keni-fotos.zip` (attachment). 404 si aún no está colocado."""
-    ruta = _ruta_bundle()
+def _servir_zip(ruta: Path, nombre: str) -> Response:
+    """Sirve un zip como descarga, o 404 con mensaje si aún no está colocado."""
     if not ruta.is_file():
         return JSONResponse(
             {"error": "La herramienta keni-fotos aún no está disponible para descargar."},
             status_code=404,
         )
-    return FileResponse(
-        ruta,
-        media_type="application/zip",
-        filename=_NOMBRE_BUNDLE,
-    )
+    return FileResponse(ruta, media_type="application/zip", filename=nombre)
+
+
+async def app_descarga(request: Request) -> Response:
+    """GET /api/fotos/app: descarga la app de escritorio `keni-fotos-app.zip` (.app)."""
+    return _servir_zip(_ruta_app(), _NOMBRE_APP)
+
+
+async def bundle(request: Request) -> Response:
+    """GET /api/fotos/bundle: el payload `keni-fotos.zip` (auto-update del .app + modo avanzado)."""
+    return _servir_zip(_ruta_bundle(), _NOMBRE_BUNDLE)
 
 
 RUTAS = [
     Route("/api/fotos/info", info, methods=["GET"]),
+    Route("/api/fotos/app", app_descarga, methods=["GET"]),
     Route("/api/fotos/bundle", bundle, methods=["GET"]),
 ]

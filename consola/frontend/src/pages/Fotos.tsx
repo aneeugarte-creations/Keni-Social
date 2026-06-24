@@ -23,17 +23,26 @@ import type { RespuestaFotosInfo } from "@/lib/api";
 /** Texto de respaldo (espejo de `api/fotos.py`) si `GET /api/fotos/info` no carga. */
 const RESPALDO: RespuestaFotosInfo = {
   version: "",
+  changelog: [],
   prompt_claude:
-    "Eres el agente local de keni-fotos. Lee el CLAUDE.md de esta carpeta y monta y " +
-    "ejecuta la app sobre mi carpeta de fotos del partido. Pregúntame la ruta de la " +
-    "carpeta y el nombre del partido si no te los doy.",
-  comandos: ["unzip keni-fotos.zip && cd keni-fotos", "claude"],
+    "Eres el agente local de keni-fotos. Tu ÚNICO trabajo es compilar y lanzar la app: " +
+    "lee el CLAUDE.md de esta carpeta y déjala abierta en el navegador. NO proceses fotos " +
+    "tú; la propia app guía a la persona para elegir la carpeta del partido, ponerle nombre " +
+    "y ejecutar el etiquetado. Cuando la app esté abierta, avísame.",
+  comandos: ["cd ~/Downloads", 'unzip -o "$(ls -t keni-fotos*.zip | head -1)"', "cd keni-fotos && claude"],
   instrucciones: [
-    "Descarga keni-fotos.zip y descomprímelo en tu equipo.",
-    "Abre Claude Code en la carpeta keni-fotos y pega el prompt de arriba.",
-    "Indícale la ruta de tu carpeta de fotos del partido y su nombre.",
+    "Descarga keni-fotos y descomprímelo (los comandos de abajo lo hacen por ti).",
+    "Abre Claude Code en la carpeta keni-fotos y pega el prompt: compila y lanza la app.",
+    "En la app: elige tu carpeta de fotos, ponle nombre al partido y pulsa Procesar.",
   ],
 };
+
+/** Pasos del flujo de la app (sin terminal ni Claude). */
+const PASOS_APP = [
+  "Descarga la app y ábrela (la primera vez: clic derecho → Abrir).",
+  "Elige la carpeta del partido y ponle nombre.",
+  "Pulsa Procesar; al terminar verás la galería.",
+];
 
 /** Lo que hace la herramienta (la «descripción de producto» de la ficha). */
 const QUE_HACE = [
@@ -115,18 +124,40 @@ export default function Fotos() {
 
           <p className="max-w-md text-sm text-muted-foreground">
             Ordena las fotos de un partido en tu propio equipo. La web no puede leer tu disco, así
-            que la descargas y un Claude local termina el trabajo sobre tu carpeta de fotos. Nada de
-            lo que elijas sale de tu equipo.
+            que la descargas y la app hace el trabajo en local. Nada de lo que elijas sale de tu
+            equipo, y se mantiene actualizada sola.
           </p>
 
-          <Button variant="outline" className="gap-2" onClick={() => api.descargarFotosBundle()}>
+          <Button variant="outline" className="gap-2" onClick={() => api.descargarFotosApp()}>
             <Download className="h-4 w-4" aria-hidden="true" />
-            Descargar keni-fotos
+            Descargar app
           </Button>
           <p className="text-xs text-muted-foreground">
-            Se monta y ejecuta con Claude Code; pega el prompt tras descomprimir.
+            Doble clic para abrirla. La primera vez: clic derecho → Abrir (app sin firmar).
           </p>
         </section>
+
+        {/* Novedades — changelog corto de la versión actual. */}
+        {info.changelog.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Novedades
+                {info.version && <Badge variant="secondary">v{info.version}</Badge>}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-1.5">
+                {info.changelog.map((linea) => (
+                  <li key={linea} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+                    <span>{linea}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Qué hace — la «descripción» del producto. */}
         <Card>
@@ -145,15 +176,15 @@ export default function Fotos() {
           </CardContent>
         </Card>
 
-        {/* Cómo usarla: pasos + el prompt y los comandos para copiar. */}
+        {/* Cómo usarla: el flujo de la app (sin terminal ni Claude). */}
         <Card className="mt-6">
           <CardHeader>
             <CardTitle>Cómo usarla</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent>
             <ol className="space-y-3">
-              {info.instrucciones.map((paso, i) => (
-                <li key={i} className="flex items-start gap-3">
+              {PASOS_APP.map((paso, i) => (
+                <li key={paso} className="flex items-start gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                     {i + 1}
                   </span>
@@ -161,21 +192,45 @@ export default function Fotos() {
                 </li>
               ))}
             </ol>
+          </CardContent>
+        </Card>
 
-            <div className="space-y-2">
-              <p className="text-label">Prompt para Claude</p>
-              <BloqueCopiable texto={info.prompt_claude} etiqueta="el prompt" />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-label flex items-center gap-1.5">
-                <Terminal className="h-3.5 w-3.5" aria-hidden="true" />
-                Comandos
-              </p>
-              {info.comandos.map((comando) => (
-                <BloqueCopiable key={comando} texto={comando} etiqueta="el comando" />
-              ))}
-            </div>
+        {/* Modo avanzado: para quien prefiera montarla con Claude desde el código. */}
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <details>
+              <summary className="cursor-pointer text-sm font-medium">
+                Modo avanzado · montar con Claude
+              </summary>
+              <div className="mt-4 space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  ¿No puedes abrir la app? Descarga el código y deja que un Claude local la compile y
+                  lance. La app guía igual el resto (elegir carpeta, nombre y Procesar).
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => api.descargarFotosBundle()}
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Descargar código
+                </Button>
+                <div className="space-y-2">
+                  <p className="text-label">Prompt para Claude</p>
+                  <BloqueCopiable texto={info.prompt_claude} etiqueta="el prompt" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-label flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5" aria-hidden="true" />
+                    Comandos
+                  </p>
+                  {info.comandos.map((comando) => (
+                    <BloqueCopiable key={comando} texto={comando} etiqueta="el comando" />
+                  ))}
+                </div>
+              </div>
+            </details>
           </CardContent>
         </Card>
       </div>
