@@ -1,6 +1,7 @@
 /**
  * Tests del agrupado del calendario MENSUAL del EQUIPO («Mis turnos» → vista «Equipo»):
- * por día → franja → personas, ordenado por hora y excluyendo descanso (es «quién trabaja»).
+ * por día → PERIODO (mañana/tarde/noche, derivado de la HORA, no de la franja almacenada) →
+ * personas, en orden mañana→tarde→noche y excluyendo descanso (es «quién trabaja»).
  */
 import { describe, expect, it } from "vitest";
 
@@ -75,6 +76,46 @@ describe("agruparEquipoPorFecha", () => {
       turno({ miembro_id: "a", miembro_nombre: "Ana", inicio: "08:00", fin: "16:00" }),
     ]).get("2026-06-03")!;
     expect(dia[0].personas[0]).toMatchObject({ nombre: "Ana", inicio: "08:00", fin: "16:00" });
+  });
+
+  it("la banda sale de la HORA, no de la franja almacenada (franja importada incoherente)", () => {
+    // Un turno guardado como franja «Noche» pero con horas de tarde (17:00) cae en la banda TARDE:
+    // la hora manda, así el título nunca contradice el color.
+    const dia = agruparEquipoPorFecha([
+      turno({ franja_id: "f-noc", franja_nombre: "Noche", inicio: "17:00", fin: "01:00" }),
+    ]).get("2026-06-03")!;
+    expect(dia.map((f) => f.nombre)).toEqual(["Tarde"]);
+    expect(dia[0].clave).toBe("tarde");
+  });
+
+  it("mismo horario en franjas distintas = una sola banda (17:00 siempre es Tarde)", () => {
+    // El bug reportado: la misma hora repartida en franjas distintas se pintaba a veces «Tarde» y
+    // a veces «Noche». Ahora el periodo lo fija la hora → una sola banda con toda la gente.
+    const dia = agruparEquipoPorFecha([
+      turno({ franja_id: "f-tar", franja_nombre: "Tarde", inicio: "17:00", fin: "01:00", miembro_id: "a", miembro_nombre: "Ana" }),
+      turno({ franja_id: "f-noc", franja_nombre: "Noche", inicio: "17:00", fin: "01:00", miembro_id: "b", miembro_nombre: "Beto" }),
+    ]).get("2026-06-03")!;
+    expect(dia).toHaveLength(1);
+    expect(dia[0].nombre).toBe("Tarde");
+    expect(dia[0].personas.map((p) => p.nombre)).toEqual(["Ana", "Beto"]);
+  });
+
+  it("no mezcla tarde y noche: cada hora va a su banda", () => {
+    const dia = agruparEquipoPorFecha([
+      turno({ inicio: "17:00", fin: "01:00", miembro_id: "a", miembro_nombre: "Ana" }),
+      turno({ inicio: "22:00", fin: "06:00", miembro_id: "b", miembro_nombre: "Beto" }),
+    ]).get("2026-06-03")!;
+    expect(dia.map((f) => f.nombre)).toEqual(["Tarde", "Noche"]);
+    expect(dia[0].personas.map((p) => p.nombre)).toEqual(["Ana"]);
+    expect(dia[1].personas.map((p) => p.nombre)).toEqual(["Beto"]);
+  });
+
+  it("ordena noche al final aunque su hora cruda sea pequeña (02:00)", () => {
+    const dia = agruparEquipoPorFecha([
+      turno({ inicio: "02:00", fin: "08:00", miembro_id: "a", miembro_nombre: "Ana" }),
+      turno({ inicio: "08:00", fin: "16:00", miembro_id: "b", miembro_nombre: "Beto" }),
+    ]).get("2026-06-03")!;
+    expect(dia.map((f) => f.nombre)).toEqual(["Mañana", "Noche"]);
   });
 });
 

@@ -643,10 +643,18 @@ export function presentacionFranja(franja: FranjaSemana, indiceLaboral: number):
   );
 }
 
+/** Periodo del día de un turno. Es la fuente ÚNICA de verdad de la banda mensual: nombre, color y
+ *  agrupado salen todos de aquí (de la hora), nunca de la franja almacenada. */
+export type ClavePeriodo = "manana" | "tarde" | "noche";
+
 /** Tintes del bloque de un turno según su PERIODO del día (no decorativo: el color comunica si el
  *  turno es de mañana/tarde/noche). Mismo estilo de tinte suave que el chip de turno de la
  *  plataforma. Lo comparten la rejilla semanal (`SemanaPorDias`) y la mensual (`MisTurnos`). */
 export interface PresentacionTurno {
+  /** Periodo del turno: identidad estable para agrupar y ordenar (mañana<tarde<noche). */
+  clave: ClavePeriodo;
+  /** Título visible de la banda («Mañana»/«Tarde»/«Noche»). */
+  etiqueta: string;
   /** Fondo del bloque. */
   fondo: string;
   /** Color del nombre de la franja. */
@@ -658,23 +666,33 @@ export interface PresentacionTurno {
 }
 
 const TURNO_MANANA: PresentacionTurno = {
+  clave: "manana",
+  etiqueta: "Mañana",
   fondo: "bg-amber-100 dark:bg-amber-950/40",
   nombre: "text-amber-900 dark:text-amber-200",
   horas: "text-amber-700/70 dark:text-amber-300/70",
   gente: "text-amber-900/90 dark:text-amber-200/90",
 };
 const TURNO_TARDE: PresentacionTurno = {
+  clave: "tarde",
+  etiqueta: "Tarde",
   fondo: "bg-orange-100 dark:bg-orange-950/40",
   nombre: "text-orange-900 dark:text-orange-200",
   horas: "text-orange-700/70 dark:text-orange-300/70",
   gente: "text-orange-900/90 dark:text-orange-200/90",
 };
 const TURNO_NOCHE: PresentacionTurno = {
+  clave: "noche",
+  etiqueta: "Noche",
   fondo: "bg-rose-100 dark:bg-rose-950/40",
   nombre: "text-rose-900 dark:text-rose-200",
   horas: "text-rose-700/70 dark:text-rose-300/70",
   gente: "text-rose-900/90 dark:text-rose-200/90",
 };
+
+/** Orden de presentación de los periodos (mañana → tarde → noche), independiente de la hora cruda:
+ *  un turno de noche que empieza a las 02:00 va DESPUÉS de la mañana, no antes. */
+export const ORDEN_PERIODO: Record<ClavePeriodo, number> = { manana: 0, tarde: 1, noche: 2 };
 
 /**
  * Periodo del día de un turno por su hora de inicio "HH:MM" → su paleta (terna «Cálidos»): mañana

@@ -41,7 +41,9 @@ import type { AusenciaRota, TurnoRota } from "@/types";
 
 import {
   ausenciaTocaDia,
+  type ClavePeriodo,
   formatearFechaCorta,
+  ORDEN_PERIODO,
   PRESENTACION_AUSENCIA,
   presentacionTurnoPorHora,
 } from "./comun";
@@ -636,8 +638,9 @@ function ChipTurnoMes({ turno, atenuado }: { turno: TurnoRota; atenuado?: boolea
       </div>
     );
   }
-  // El color del bloque indica el PERIODO del turno (mañana/tarde/noche), igual que la rejilla
-  // semanal: misma `presentacionTurnoPorHora` derivada de la hora de inicio.
+  // Banda (título + color) derivada de la HORA, no de la franja almacenada: «Mañana»/«Tarde»/«Noche»
+  // y su tinte salen ambos de `presentacionTurnoPorHora`, así nunca divergen (p. ej. una franja
+  // importada como «Tarde» con horas de noche). Igual criterio que la rejilla semanal.
   const tono = presentacionTurnoPorHora(turno.inicio);
   return (
     <div
@@ -648,7 +651,7 @@ function ChipTurnoMes({ turno, atenuado }: { turno: TurnoRota; atenuado?: boolea
         atenuado && "opacity-50",
       )}
     >
-      <div className="truncate font-medium">{turno.franja_nombre}</div>
+      <div className="truncate font-medium">{tono.etiqueta}</div>
       {turno.inicio && (
         <div className={cn("tabular-nums", tono.horas)}>
           {turno.inicio}–{turno.fin}
@@ -706,9 +709,10 @@ function agruparPorFecha(turnos: TurnoRota[]): Map<string, TurnoRota[]> {
 /** Una persona de una franja, con su horario EFECTIVO (sus horas a medida o las de la franja). */
 type PersonaFranja = { id: string; nombre: string; inicio: string; fin: string };
 
-/** Una franja de un día con la gente que la cubre (agrupada para la celda del equipo). */
+/** Una banda de un día (mañana/tarde/noche) con la gente que la cubre (para la celda del equipo).
+ *  La identidad es el PERIODO (`clave`), derivado de la hora — no la franja almacenada. */
 type FranjaConPersonas = {
-  franjaId: string;
+  clave: ClavePeriodo;
   nombre: string;
   inicio: string;
   fin: string;
@@ -792,7 +796,7 @@ function VistaMesEquipo({
             <>
               {(porFecha.get(fecha) ?? []).map((fr) => (
                 <ChipFranjaEquipo
-                  key={fr.franjaId}
+                  key={fr.clave}
                   franja={fr}
                   atenuado={!delMes}
                   miId={miId}
@@ -907,30 +911,40 @@ function ChipFranjaEquipo({
 }
 
 /**
- * Agrupa los turnos del equipo por día → franja → personas. Excluye descanso (la vista de
- * equipo es «quién trabaja»). Franjas ordenadas por hora de inicio; personas, alfabéticas.
+ * Agrupa los turnos del equipo por día → PERIODO (mañana/tarde/noche) → personas. El periodo se
+ * deriva de la HORA de inicio (`presentacionTurnoPorHora`), NO de la franja almacenada: así un mismo
+ * horario (p. ej. 17:00) cae siempre en la misma banda, dos personas de la misma hora comparten
+ * cabecera y color, y nunca se mezclan tarde y noche bajo un título que no concuerda con su tinte.
+ * Excluye descanso (la vista de equipo es «quién trabaja»). Bandas en orden mañana→tarde→noche;
+ * personas, alfabéticas.
  */
 export function agruparEquipoPorFecha(
   turnos: TurnoRota[],
 ): Map<string, FranjaConPersonas[]> {
-  const porDia = new Map<string, Map<string, FranjaConPersonas>>();
+  const porDia = new Map<string, Map<ClavePeriodo, FranjaConPersonas>>();
   for (const t of turnos) {
     if (t.franja === "descanso") continue;
+    const pres = presentacionTurnoPorHora(t.inicio);
     let dia = porDia.get(t.fecha);
     if (!dia) {
       dia = new Map();
       porDia.set(t.fecha, dia);
     }
-    let fr = dia.get(t.franja_id);
+    let fr = dia.get(pres.clave);
     if (!fr) {
       fr = {
-        franjaId: t.franja_id,
-        nombre: t.franja_nombre,
+        clave: pres.clave,
+        nombre: pres.etiqueta,
         inicio: t.inicio,
         fin: t.fin,
         personas: [],
       };
-      dia.set(t.franja_id, fr);
+      dia.set(pres.clave, fr);
+    } else if (t.inicio.localeCompare(fr.inicio) < 0) {
+      // Hora representativa de la banda = la más temprana del periodo (estable, no «la primera que
+      // entró»). El color ya es coherente porque todas las horas del grupo comparten periodo.
+      fr.inicio = t.inicio;
+      fr.fin = t.fin;
     }
     fr.personas.push({
       id: t.miembro_id,
@@ -942,7 +956,7 @@ export function agruparEquipoPorFecha(
   const salida = new Map<string, FranjaConPersonas[]>();
   for (const [fecha, dia] of porDia) {
     const franjas = [...dia.values()].sort(
-      (a, b) => a.inicio.localeCompare(b.inicio) || a.nombre.localeCompare(b.nombre),
+      (a, b) => ORDEN_PERIODO[a.clave] - ORDEN_PERIODO[b.clave],
     );
     for (const fr of franjas)
       fr.personas.sort((a, b) => a.nombre.localeCompare(b.nombre));
