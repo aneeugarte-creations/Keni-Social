@@ -40,6 +40,10 @@ ver `docs/adr/0003-aislamiento-secretos-por-tenant.md`.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import secrets
 import time
 from datetime import date, timedelta
@@ -839,10 +843,55 @@ async def postproxy_canal(request: Request) -> Response:
 # GLOBALES; lo que varía por marca es el property_id. Mismas reglas que el resto de
 # conexiones: SECRETOS nunca salen al navegador (solo pista/estado) y SOLO ADMIN.
 
-# Estados OAuth en curso (anti-CSRF de un solo uso): state -> (redirect_uri, creado_en).
-# En proceso único (el back), un dict en memoria basta; se purga por TTL al usarse.
-_GA_ESTADOS: dict[str, tuple[str, float]] = {}
-_GA_STATE_TTL = 600.0  # segundos
+# Anti-CSRF del flujo OAuth SIN estado en memoria: el `state` es un token FIRMADO (HMAC)
+# que lleva dentro el redirect_uri y un timestamp. Así sobrevive a reinicios del back y a
+# sus VARIOS workers de uvicorn (no comparten memoria entre procesos): el canje valida la
+# firma y el TTL sin necesitar que el mismo worker que inició recuerde el state.
+_GA_STATE_TTL = 600  # segundos de validez del state OAuth
+
+
+def _ga_state_secret() -> str:
+    """Clave HMAC para firmar el state OAuth (persistida; se genera una vez).
+
+    Vive en `[google_analytics].state_secret` del config.toml (mismo almacén que el resto
+    de la conexión), así la comparten todos los workers y sobrevive a reinicios. Si no
+    existe, se genera y persiste. NUNCA se expone por la API.
+    """
+    seccion = _config_existente().get("google_analytics")
+    actual = seccion.get("state_secret") if isinstance(seccion, dict) else None
+    if isinstance(actual, str) and actual:
+        return actual
+    nuevo = secrets.token_hex(32)
+    _escribir_ga({"state_secret": nuevo})
+    return nuevo
+
+
+def _firmar_state(redirect_uri: str) -> str:
+    """State OAuth firmado: `base64url({r,t})` + '.' + HMAC. No se almacena en el servidor."""
+    payload = json.dumps({"r": redirect_uri, "t": int(time.time())}, separators=(",", ":"))
+    cuerpo = base64.urlsafe_b64encode(payload.encode()).rstrip(b"=")
+    firma = hmac.new(_ga_state_secret().encode(), cuerpo, hashlib.sha256).hexdigest()[:32]
+    return f"{cuerpo.decode()}.{firma}"
+
+
+def _verificar_state(token: str) -> str | None:
+    """Verifica firma + TTL de un state y devuelve su redirect_uri (None si no es válido)."""
+    if not isinstance(token, str) or "." not in token:
+        return None
+    cuerpo_b64, firma = token.split(".", 1)
+    cuerpo = cuerpo_b64.encode()
+    esperada = hmac.new(_ga_state_secret().encode(), cuerpo, hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(firma, esperada):
+        return None
+    try:
+        relleno = b"=" * (-len(cuerpo) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(cuerpo + relleno))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if int(time.time()) - int(payload.get("t", 0)) > _GA_STATE_TTL:
+        return None
+    redirect_uri = payload.get("r")
+    return redirect_uri if isinstance(redirect_uri, str) and redirect_uri else None
 
 
 def _ga_marca(cfg: dict, marca: str) -> dict:
@@ -939,8 +988,9 @@ async def google_analytics_conectar(request: Request) -> Response:
     """POST: inicia el OAuth de Google (JSON `{redirect_uri}`) y devuelve `{url}`. SOLO ADMIN.
 
     `redirect_uri` lo aporta el front (`window.location.origin` + la ruta de retorno) y
-    DEBE estar registrado en el cliente OAuth de Google. Se genera un `state` de un solo
-    uso que el canje (`/canjear`) verifica. La app OAuth debe estar configurada antes.
+    DEBE estar registrado en el cliente OAuth de Google. El `state` es un token firmado que
+    lleva dentro ese redirect_uri; el canje (`/canjear`) lo verifica. La app OAuth debe
+    estar configurada antes.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
@@ -954,13 +1004,7 @@ async def google_analytics_conectar(request: Request) -> Response:
     redirect_uri = datos.get("redirect_uri")
     if not isinstance(redirect_uri, str) or not redirect_uri.strip():
         return JSONResponse({"error": "Falta la URL de redirección."}, status_code=400)
-    state = secrets.token_urlsafe(24)
-    ahora = time.monotonic()
-    # Purga states caducados de paso (evita crecer sin fin) y registra el nuevo.
-    for s, (_, creado) in list(_GA_ESTADOS.items()):
-        if ahora - creado > _GA_STATE_TTL:
-            _GA_ESTADOS.pop(s, None)
-    _GA_ESTADOS[state] = (redirect_uri.strip(), ahora)
+    state = _firmar_state(redirect_uri.strip())
     url = ga4.url_autorizacion(gacfg.client_id, redirect_uri.strip(), state)
     return JSONResponse({"url": url})
 
@@ -968,8 +1012,8 @@ async def google_analytics_conectar(request: Request) -> Response:
 async def google_analytics_canjear(request: Request) -> Response:
     """POST: canjea el `code` del retorno OAuth por el refresh_token (JSON `{state, code}`).
 
-    Verifica el `state` (un solo uso, con TTL) y usa el `redirect_uri` que se guardó al
-    iniciar (debe coincidir con el del canje en Google). Persiste el refresh_token. NO lo
+    Verifica la firma + TTL del `state` (que lleva dentro el `redirect_uri` usado al
+    iniciar; debe coincidir con el del canje en Google). Persiste el refresh_token. NO lo
     devuelve. SOLO ADMIN.
     """
     if not permisos.es_admin(request):
@@ -979,12 +1023,11 @@ async def google_analytics_canjear(request: Request) -> Response:
     code = datos.get("code")
     if not isinstance(state, str) or not isinstance(code, str) or not state or not code:
         return JSONResponse({"error": "Faltan datos del retorno de Google."}, status_code=400)
-    entrada = _GA_ESTADOS.pop(state, None)
-    if entrada is None or time.monotonic() - entrada[1] > _GA_STATE_TTL:
+    redirect_uri = _verificar_state(state)
+    if redirect_uri is None:
         return JSONResponse(
             {"error": "El enlace de conexión caducó. Inténtalo de nuevo."}, status_code=400
         )
-    redirect_uri = entrada[0]
     gacfg = _ga_cfg()
     try:
         tokens = ga4.intercambiar_codigo(

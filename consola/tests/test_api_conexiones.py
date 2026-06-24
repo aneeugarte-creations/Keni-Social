@@ -641,6 +641,25 @@ def test_ga_canjear_state_invalido_400(cliente, monkeypatch):
     assert r.status_code == 400
 
 
+def test_ga_state_firmado_round_trip_y_tamper(entorno):
+    """El state es stateless (firmado): no depende de la memoria del worker que lo emitió.
+
+    Garantiza que el canje funciona aunque otro worker de uvicorn (o un reinicio) atienda
+    el callback: el redirect_uri viaja firmado dentro del state. Un state manipulado o mal
+    formado se rechaza.
+    """
+    from keni_consola.api import conexiones
+
+    uri = "https://social.kenitech.io/oauth/conectado"
+    token = conexiones._firmar_state(uri)
+    assert conexiones._verificar_state(token) == uri
+    # firma manipulada -> inválido
+    cuerpo, _, firma = token.partition(".")
+    assert conexiones._verificar_state(f"{cuerpo}.{'0' * len(firma)}") is None
+    # token sin separador -> inválido
+    assert conexiones._verificar_state("sinpunto") is None
+
+
 def test_ga_canjear_sin_refresh_token_502(cliente, monkeypatch):
     cliente.put(
         "/api/conexiones/google-analytics/app",
