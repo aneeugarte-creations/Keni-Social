@@ -40,18 +40,20 @@ export function CalculoScore({ historia }: { historia: Historia }) {
   const leyenda = [...lineas].sort((a, b) => b.aporte - a.aporte);
 
   return (
-    <div className="flex flex-col gap-11" data-testid="calculo-score">
+    <div className="flex flex-col gap-7" data-testid="calculo-score">
       {/* 1 · Veredicto — la cifra manda */}
       <div>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-6xl font-medium leading-none tracking-tight tabular-nums">
+          <span className="text-5xl font-medium leading-none tracking-tight tabular-nums">
             {score}
           </span>
-          <span className="text-lg font-normal tabular-nums text-muted-foreground/70">/100</span>
+          <span className="text-base font-normal tabular-nums text-muted-foreground/70">
+            /100
+          </span>
         </div>
         <p
           className={cn(
-            "mt-4 inline-flex items-center gap-2 text-xs",
+            "mt-3 inline-flex items-center gap-2 text-xs",
             estado.cautela
               ? "text-amber-700 dark:text-amber-400"
               : "text-emerald-700 dark:text-emerald-300",
@@ -65,7 +67,7 @@ export function CalculoScore({ historia }: { historia: Historia }) {
           />
           {estado.texto}
         </p>
-        <p className="mt-2.5 text-xs text-muted-foreground">Su sitio en el pool de hoy</p>
+        <p className="mt-2 text-xs text-muted-foreground">Su sitio en el pool de hoy</p>
       </div>
 
       {/* 2 · Aportes al score — el hilo fino + la lista de factores */}
@@ -81,12 +83,12 @@ export function CalculoScore({ historia }: { historia: Historia }) {
               />
             ))}
           </div>
-          <ul className="mt-5">
+          <ul className="mt-4">
             {leyenda.map((l, i) => (
               <li
                 key={l.etiqueta}
                 className={cn(
-                  "flex items-baseline justify-between gap-4 py-2",
+                  "flex items-baseline justify-between gap-4 py-1.5",
                   i > 0 && "border-t border-border/60",
                 )}
               >
@@ -110,7 +112,7 @@ export function CalculoScore({ historia }: { historia: Historia }) {
             ))}
           </ul>
           <p
-            className="mt-4 flex items-baseline justify-between gap-4 font-mono text-[11px] tabular-nums text-muted-foreground"
+            className="mt-3 flex items-baseline justify-between gap-4 font-mono text-[11px] tabular-nums text-muted-foreground"
             data-testid="calculo-confianza"
           >
             <span>
@@ -125,7 +127,7 @@ export function CalculoScore({ historia }: { historia: Historia }) {
       <div>
         <p className={ETIQUETA_SECCION}>¿Por qué rankea así?</p>
         <ul
-          className="mt-3.5 list-disc space-y-2.5 pl-4 text-[13px] leading-relaxed text-muted-foreground marker:text-muted-foreground/50"
+          className="mt-3 list-disc space-y-2 pl-4 text-[13px] leading-relaxed text-muted-foreground marker:text-muted-foreground/50"
           data-testid="factores-ranking"
         >
           {factoresRanking(historia).map((f, i) => (

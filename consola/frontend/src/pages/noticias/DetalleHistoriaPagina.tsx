@@ -172,7 +172,7 @@ export default function DetalleHistoriaPagina() {
     ) : null;
 
   return (
-    <div className="max-w-[1180px] space-y-6">
+    <div className="max-w-[1180px] space-y-4">
       {volver}
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_348px] lg:items-start lg:gap-16">
@@ -253,7 +253,7 @@ export default function DetalleHistoriaPagina() {
 
           <p
             className={cn(
-              "mt-6 flex items-start gap-2 text-sm leading-relaxed",
+              "mt-5 flex items-start gap-2 text-sm leading-relaxed",
               estado.cautela ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
             )}
             data-testid="frase-corroboracion"
@@ -271,7 +271,7 @@ export default function DetalleHistoriaPagina() {
             </p>
           )}
 
-          <section className="mt-9 space-y-5">
+          <section className="mt-7 space-y-4">
             <h2 className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Fuentes y titulares similares
             </h2>
@@ -312,14 +312,14 @@ export default function DetalleHistoriaPagina() {
         </div>
 
         {/* ── El rail de señal: el score + las acciones al pie ─────────────── */}
-        <aside className="flex flex-col gap-11">
+        <aside className="flex flex-col gap-7">
           <CalculoScore historia={historia} />
 
           {enPool && (
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2">
               <Button
                 variant="outline"
-                className="h-11 w-full justify-center gap-2 bg-card text-sm font-medium shadow-sm transition hover:bg-card hover:shadow-md"
+                className="h-10 w-full justify-center gap-2 bg-card text-sm font-medium shadow-sm transition hover:bg-card hover:shadow-md"
                 onClick={() => usarMut.mutate()}
                 disabled={enCurso}
                 data-testid="btn-empujar"
