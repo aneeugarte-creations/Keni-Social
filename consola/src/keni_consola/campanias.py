@@ -334,14 +334,21 @@ def _fila_inorganica(ad: dict[str, Any]) -> dict[str, Any]:
 
 
 def _agregar(piezas: list[dict[str, Any]]) -> dict[str, Any]:
-    """Totales del subconjunto: visualizaciones, interacciones, engagement %, nº piezas."""
+    """Totales del subconjunto: visualizaciones, interacciones, engagement %, alcance, nº piezas.
+
+    `alcance` (usuarios únicos) solo lo mide Meta (FB/IG): se suman los valores presentes y
+    es `None` si NINGUNA pieza lo reporta (no se inventa 0). La comparativa NO lo usa (puede
+    ser null), así que añadirlo aquí no afecta a `_comparar`.
+    """
     vis = sum(int(p.get("visualizaciones") or 0) for p in piezas)
     inter = sum(int(p.get("interacciones") or 0) for p in piezas)
     eng = round(inter / vis * 100, 2) if vis else 0.0
+    alcances = [int(p["alcance"]) for p in piezas if p.get("alcance") is not None]
     return {
         "visualizaciones": vis,
         "interacciones": inter,
         "engagement_pct": eng,
+        "alcance": sum(alcances) if alcances else None,
         "piezas": len(piezas),
     }
 
@@ -489,8 +496,10 @@ def _seccion_web(
     if not gacfg.conectada:
         return None
     cliente = ga4.ClienteGA4(gacfg.client_id, gacfg.client_secret, gacfg.refresh_token)
-    paginas: dict[str, tuple[int, int]] = {}
+    # ruta_path -> (paginas_vistas, navegadores_unicos, visitas) agregado entre marcas.
+    paginas: dict[str, tuple[int, int, int]] = {}
     dominios: list[str] = []
+    inicios_video = 0
     for idm in ids_metricas:
         marca_ga = gacfg.marcas.get(idm) or {}
         property_id = marca_ga.get("property_id")
@@ -501,32 +510,37 @@ def _seccion_web(
             dominios.append(dominio)
         try:
             filas = cliente.reporte_paginas(property_id, desde, hasta, _LIMITE_PAGINAS_WEB)
+            inicios_video += cliente.total_evento(property_id, desde, hasta, "video_start")
         except Exception:  # noqa: BLE001 -- esa marca aporta 0, no rompe la analítica web
             _log.exception("campanias: no se pudo leer GA4 (marca=%s).", idm)
             continue
         for f in filas:
             ruta = _ruta_web(f.get("ruta", ""))
-            vistas_prev, usuarios_prev = paginas.get(ruta, (0, 0))
+            v_prev, u_prev, s_prev = paginas.get(ruta, (0, 0, 0))
             paginas[ruta] = (
-                vistas_prev + int(f.get("vistas") or 0),
-                usuarios_prev + int(f.get("usuarios") or 0),
+                v_prev + int(f.get("vistas") or 0),
+                u_prev + int(f.get("usuarios") or 0),
+                s_prev + int(f.get("visitas") or 0),
             )
     notas_crudas = repos.notas_por_etiqueta(etiqueta, desde=desde.isoformat(), dominios=dominios)
     notas: list[dict[str, Any]] = []
     total_vistas = 0
     total_usuarios = 0
+    total_visitas = 0
     for nota in notas_crudas:
         if etiqueta not in (nota.get("tags") or []):
             continue
-        vistas, usuarios = paginas.get(_ruta_web(nota.get("url", "")), (0, 0))
+        vistas, usuarios, visitas = paginas.get(_ruta_web(nota.get("url", "")), (0, 0, 0))
         total_vistas += vistas
         total_usuarios += usuarios
+        total_visitas += visitas
         notas.append(
             {
                 "url": nota.get("url", ""),
                 "titulo": nota.get("titulo", ""),
-                "vistas": vistas,
-                "usuarios": usuarios,
+                "paginas_vistas": vistas,
+                "navegadores_unicos": usuarios,
+                "visitas": visitas,
                 "marca": nota.get("marca", ""),
             }
         )
@@ -534,8 +548,10 @@ def _seccion_web(
         "conectado": True,
         "etiqueta": etiqueta,
         "piezas": len(notas),
-        "vistas": total_vistas,
-        "usuarios": total_usuarios,
+        "paginas_vistas": total_vistas,
+        "navegadores_unicos": total_usuarios,
+        "visitas": total_visitas,
+        "inicios_video": inicios_video,
         "notas": notas,
     }
 

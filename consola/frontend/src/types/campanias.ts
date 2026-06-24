@@ -54,6 +54,8 @@ export interface KpisCampania {
   interacciones: number;
   engagement_pct: number;
   piezas: number;
+  /** Usuarios únicos alcanzados (solo Meta). `null` si ninguna red lo mide. */
+  alcance: number | null;
 }
 
 /** Un KPI comparado contra el periodo anterior (`variacion_pct` null si no hay base). */
@@ -98,8 +100,9 @@ export interface InorganicoCampania {
 export interface NotaWebCampania {
   url: string;
   titulo: string;
-  vistas: number;
-  usuarios: number;
+  paginas_vistas: number;
+  navegadores_unicos: number;
+  visitas: number;
   marca: string;
 }
 
@@ -109,8 +112,11 @@ export interface SeccionWebCampania {
   conectado: boolean;
   etiqueta: string;
   piezas: number;
-  vistas: number;
-  usuarios: number;
+  paginas_vistas: number;
+  navegadores_unicos: number;
+  visitas: number;
+  /** Eventos `video_start` de GA4; 0 si el sitio no trackea inicios de video. */
+  inicios_video: number;
   notas: NotaWebCampania[];
 }
 

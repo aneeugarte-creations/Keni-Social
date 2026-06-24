@@ -393,6 +393,9 @@ def _mock_ga(monkeypatch, *, conectada: bool, paginas=None, id_metricas="unotv")
         def reporte_paginas(self, property_id, desde, hasta, limite=100):
             return list(paginas or [])
 
+        def total_evento(self, property_id, desde, hasta, nombre_evento):
+            return 12
+
     monkeypatch.setattr(campanias.ga4, "ClienteGA4", _ClienteFalso)
 
 
@@ -405,8 +408,9 @@ def test_analitica_seccion_web_cruza_notas_con_ga(cliente, monkeypatch):
         monkeypatch,
         conectada=True,
         paginas=[
-            {"ruta": "/estados/chihuahua/nota-1/", "titulo": "Nota 1", "vistas": 500, "usuarios": 300},
-            {"ruta": "/otra/cosa", "titulo": "Otra", "vistas": 999, "usuarios": 999},
+            {"ruta": "/estados/chihuahua/nota-1/", "titulo": "Nota 1",
+             "vistas": 500, "usuarios": 300, "visitas": 420},
+            {"ruta": "/otra/cosa", "titulo": "Otra", "vistas": 999, "usuarios": 999, "visitas": 999},
         ],
     )
     monkeypatch.setattr(
@@ -424,11 +428,26 @@ def test_analitica_seccion_web_cruza_notas_con_ga(cliente, monkeypatch):
     assert web["conectado"] is True
     assert web["etiqueta"] == "chihuahua"
     assert web["piezas"] == 1  # solo la nota con la etiqueta
-    assert web["vistas"] == 500 and web["usuarios"] == 300
+    assert web["paginas_vistas"] == 500
+    assert web["navegadores_unicos"] == 300
+    assert web["visitas"] == 420
+    assert web["inicios_video"] == 12  # total_evento de la marca
     assert web["notas"] == [
         {"url": "https://www.unotv.com/estados/chihuahua/nota-1/", "titulo": "Nota 1",
-         "vistas": 500, "usuarios": 300, "marca": "unotv"}
+         "paginas_vistas": 500, "navegadores_unicos": 300, "visitas": 420, "marca": "unotv"}
     ]
+
+
+def test_kpis_agregan_alcance_solo_meta():
+    """`alcance` (solo Meta) suma los valores presentes; None si ninguna pieza lo reporta."""
+    piezas = [
+        {"visualizaciones": 100, "interacciones": 10, "alcance": 80},
+        {"visualizaciones": 50, "interacciones": 5, "alcance": None},
+    ]
+    assert campanias._agregar(piezas)["alcance"] == 80
+    # ninguna pieza con alcance -> None (no se inventa 0)
+    solo_none = [{"visualizaciones": 1, "interacciones": 0, "alcance": None}]
+    assert campanias._agregar(solo_none)["alcance"] is None
 
 
 def test_analitica_web_es_none_si_ga_no_conectado(cliente, monkeypatch):

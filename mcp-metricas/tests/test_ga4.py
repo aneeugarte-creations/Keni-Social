@@ -59,7 +59,7 @@ def test_cliente_propiedades_y_reporte():
                 "rows": [
                     {
                         "dimensionValues": [{"value": "/nota/x"}, {"value": "Título"}],
-                        "metricValues": [{"value": "10"}, {"value": "4"}],
+                        "metricValues": [{"value": "10"}, {"value": "4"}, {"value": "7"}],
                     }
                 ]
             },
@@ -70,7 +70,19 @@ def test_cliente_propiedades_y_reporte():
         {"property_id": "123", "nombre": "UnoTV", "cuenta": "AMX"}
     ]
     filas = cliente.reporte_paginas("123", date(2026, 1, 1), date(2026, 1, 7))
-    assert filas == [{"ruta": "/nota/x", "titulo": "Título", "vistas": 10, "usuarios": 4}]
+    assert filas == [
+        {"ruta": "/nota/x", "titulo": "Título", "vistas": 10, "usuarios": 4, "visitas": 7}
+    ]
+
+
+@respx.mock
+def test_total_evento_cuenta_video_start():
+    respx.post(ga4.TOKEN_URL).mock(return_value=httpx.Response(200, json={"access_token": "AT"}))
+    respx.post(f"{ga4.DATA_API}/properties/123:runReport").mock(
+        return_value=httpx.Response(200, json={"rows": [{"metricValues": [{"value": "42"}]}]})
+    )
+    cliente = ga4.ClienteGA4("cid", "sec", "rt")
+    assert cliente.total_evento("123", date(2026, 1, 1), date(2026, 1, 7), "video_start") == 42
 
 
 @respx.mock

@@ -101,6 +101,23 @@ function TarjetaKpiComparada({
   );
 }
 
+/** Tarjeta KPI simple, sin comparativa (para métricas que solo una red mide). */
+function TarjetaKpi({ etiqueta, valor, titulo }: { etiqueta: string; valor: string; titulo?: string }) {
+  return (
+    <Card>
+      <CardContent className="space-y-1.5 p-5">
+        <p className="text-sm text-muted-foreground">{etiqueta}</p>
+        <p
+          className="truncate text-2xl font-semibold tracking-tight tabular-nums"
+          title={titulo ?? valor}
+        >
+          {valor}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PanelCampania({
   campaniaId,
   rango,
@@ -175,6 +192,11 @@ export function PanelCampania({
           valor={porcentaje(kpis.engagement_pct)}
           comp={comparativa.engagement_pct}
         />
+        <TarjetaKpi
+          etiqueta="Alcance"
+          valor={kpis.alcance == null ? "n/d" : numeroCompacto(kpis.alcance)}
+          titulo={kpis.alcance == null ? "Ninguna red mide el alcance" : numeroCompleto(kpis.alcance)}
+        />
       </div>
 
       {!ocultarAds && <BloqueInorganico inorganico={inorganico} />}
@@ -230,7 +252,7 @@ function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorg
 /** Tráfico WEB (GA4) de la campaña: notas del sitio que cruzan con su etiqueta. Es tráfico de
  * la PÁGINA, no de redes: los pageviews van aparte y nunca se suman a las vistas sociales. */
 function BloqueWeb({ web }: { web: SeccionWebCampania }) {
-  const notas = [...web.notas].sort((a, b) => b.vistas - a.vistas);
+  const notas = [...web.notas].sort((a, b) => b.paginas_vistas - a.paginas_vistas);
   return (
     <Bloque id="campania-web" titulo="Tráfico web (GA4)">
       <Seccion
@@ -255,15 +277,33 @@ function BloqueWeb({ web }: { web: SeccionWebCampania }) {
                 <p className="text-xl font-semibold tabular-nums">{numeroCompleto(web.piezas)}</p>
               </div>
               <div className="space-y-0.5">
-                <p className="text-xs text-muted-foreground">Vistas de página</p>
-                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.vistas)}>
-                  {numeroCompacto(web.vistas)}
+                <p className="text-xs text-muted-foreground">Páginas vistas</p>
+                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.paginas_vistas)}>
+                  {numeroCompacto(web.paginas_vistas)}
                 </p>
               </div>
               <div className="space-y-0.5">
-                <p className="text-xs text-muted-foreground">Usuarios</p>
-                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.usuarios)}>
-                  {numeroCompacto(web.usuarios)}
+                <p className="text-xs text-muted-foreground">Navegadores únicos</p>
+                <p
+                  className="text-xl font-semibold tabular-nums"
+                  title={numeroCompleto(web.navegadores_unicos)}
+                >
+                  {numeroCompacto(web.navegadores_unicos)}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">Visitas</p>
+                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.visitas)}>
+                  {numeroCompacto(web.visitas)}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">Inicios de video</p>
+                <p
+                  className="text-xl font-semibold tabular-nums"
+                  title={numeroCompleto(web.inicios_video)}
+                >
+                  {numeroCompacto(web.inicios_video)}
                 </p>
               </div>
             </div>
@@ -275,8 +315,9 @@ function BloqueWeb({ web }: { web: SeccionWebCampania }) {
                     <TableRow>
                       <TableHead className="pl-4">Nota</TableHead>
                       <TableHead>Marca</TableHead>
-                      <TableHead className="text-right">Vistas</TableHead>
-                      <TableHead className="pr-4 text-right">Usuarios</TableHead>
+                      <TableHead className="text-right">Páginas vistas</TableHead>
+                      <TableHead className="text-right">Navegadores únicos</TableHead>
+                      <TableHead className="pr-4 text-right">Visitas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -303,11 +344,23 @@ function BloqueWeb({ web }: { web: SeccionWebCampania }) {
                         <TableCell className="text-muted-foreground">
                           {n.marca || <span className="text-muted-foreground">—</span>}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums" title={numeroCompleto(n.vistas)}>
-                          {numeroCompacto(n.vistas)}
+                        <TableCell
+                          className="text-right tabular-nums"
+                          title={numeroCompleto(n.paginas_vistas)}
+                        >
+                          {numeroCompacto(n.paginas_vistas)}
                         </TableCell>
-                        <TableCell className="pr-4 text-right tabular-nums" title={numeroCompleto(n.usuarios)}>
-                          {numeroCompacto(n.usuarios)}
+                        <TableCell
+                          className="text-right tabular-nums"
+                          title={numeroCompleto(n.navegadores_unicos)}
+                        >
+                          {numeroCompacto(n.navegadores_unicos)}
+                        </TableCell>
+                        <TableCell
+                          className="pr-4 text-right tabular-nums"
+                          title={numeroCompleto(n.visitas)}
+                        >
+                          {numeroCompacto(n.visitas)}
                         </TableCell>
                       </TableRow>
                     ))}

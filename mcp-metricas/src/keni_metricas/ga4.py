@@ -184,15 +184,20 @@ class ClienteGA4:
     def reporte_paginas(
         self, property_id: str, desde: date, hasta: date, limite: int = 100
     ) -> list[dict]:
-        """Pageviews por URL del periodo: `[{ruta, titulo, vistas, usuarios}]`.
+        """Tráfico por URL del periodo: `[{ruta, titulo, vistas, usuarios, visitas}]`.
 
-        Es el dato base del cruce con campañas (notas web por etiqueta). Ordena por
-        vistas descendentes y trunca a `limite` filas.
+        `vistas` = páginas vistas (screenPageViews), `usuarios` = navegadores únicos
+        (totalUsers), `visitas` = sesiones (sessions). Es el dato base del cruce con
+        campañas (notas web por etiqueta). Ordena por vistas desc y trunca a `limite`.
         """
         cuerpo = {
             "dateRanges": [{"startDate": desde.isoformat(), "endDate": hasta.isoformat()}],
             "dimensions": [{"name": "pagePath"}, {"name": "pageTitle"}],
-            "metrics": [{"name": "screenPageViews"}, {"name": "activeUsers"}],
+            "metrics": [
+                {"name": "screenPageViews"},
+                {"name": "totalUsers"},
+                {"name": "sessions"},
+            ],
             "orderBys": [{"metric": {"metricName": "screenPageViews"}, "desc": True}],
             "limit": str(limite),
         }
@@ -201,15 +206,46 @@ class ClienteGA4:
         for fila in datos.get("rows", []):
             dims = fila.get("dimensionValues", [])
             mets = fila.get("metricValues", [])
+
+            def _m(i: int) -> int:
+                return int(mets[i]["value"]) if len(mets) > i else 0
+
             filas.append(
                 {
                     "ruta": dims[0]["value"] if len(dims) > 0 else "",
                     "titulo": dims[1]["value"] if len(dims) > 1 else "",
-                    "vistas": int(mets[0]["value"]) if len(mets) > 0 else 0,
-                    "usuarios": int(mets[1]["value"]) if len(mets) > 1 else 0,
+                    "vistas": _m(0),
+                    "usuarios": _m(1),
+                    "visitas": _m(2),
                 }
             )
         return filas
+
+    def total_evento(
+        self, property_id: str, desde: date, hasta: date, nombre_evento: str
+    ) -> int:
+        """Nº de veces que ocurrió un evento GA4 en el periodo (p.ej. `video_start`).
+
+        Para "inicios de video": `eventCount` filtrado a `eventName == video_start`. Solo
+        devuelve > 0 si el sitio trackea ese evento (medición mejorada o evento propio);
+        si no, 0 sin error.
+        """
+        cuerpo = {
+            "dateRanges": [{"startDate": desde.isoformat(), "endDate": hasta.isoformat()}],
+            "metrics": [{"name": "eventCount"}],
+            "dimensionFilter": {
+                "filter": {
+                    "fieldName": "eventName",
+                    "stringFilter": {"value": nombre_evento},
+                }
+            },
+        }
+        datos = self._post(f"{DATA_API}/properties/{property_id}:runReport", cuerpo)
+        total = 0
+        for fila in datos.get("rows", []):
+            mets = fila.get("metricValues", [])
+            total += int(mets[0]["value"]) if mets else 0
+        return total
 
     def probar(self, property_id: str, desde: date, hasta: date) -> dict:
         """Llamada barata de validación: cuenta filas del runReport de una propiedad.
