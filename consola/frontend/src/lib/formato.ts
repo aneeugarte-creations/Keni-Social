@@ -197,12 +197,10 @@ export function nombreRed(red: string): string {
  * en los datos): así una red sin datos aparece igualmente como fila/serie con "—" y no
  * "desaparece" de la tabla. Es el mismo universo que `_REDES_AUDITABLES` del backend.
  *
- * Incluye `x` (Twitter) aunque en el piloto no esté contratada en Metricool: se
- * muestra como fila vacía (la ausencia es una decisión de contratación, no un hueco de
- * datos; el "por qué" se explica en la auditoría de cobertura). `x` va al final porque
- * es la que sistemáticamente no aporta datos en el piloto.
+ * Una red sin datos en una marca aparece igualmente como fila vacía con "—" (el "por qué"
+ * se explica en la auditoría de cobertura), nunca "desaparece" de la tabla.
  */
-export const REDES_CANONICAS = ["facebook", "instagram", "tiktok", "youtube", "x"] as const;
+export const REDES_CANONICAS = ["facebook", "instagram", "x", "tiktok", "youtube"] as const;
 export type RedCanonica = (typeof REDES_CANONICAS)[number];
 
 /** Normaliza un id de red a su forma canónica (minúsculas, `twitter`→`x`). Fuente única. */

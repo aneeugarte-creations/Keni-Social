@@ -99,8 +99,8 @@ _RED_METRICOOL: dict[Plataforma, str] = {
 # campo del perfil (id de la página/usuario de la red) significa que la marca TIENE esa
 # red CONECTADA en Metricool. Permite distinguir "no conectada" (la marca no la tiene
 # dada de alta) de "conectada pero sin datos en el rango", que de otro modo caerían en el
-# mismo "error" engañoso. Confirmado contra la cuenta real del piloto (X no está conectada
-# en ninguna marca; YouTube solo en Claro Sports).
+# mismo "error" engañoso. La conexión de cada red varía por marca y se detecta aquí (p.ej.
+# YouTube solo en Claro Sports).
 _PERFIL_RED: dict[str, Plataforma] = {
     "facebook": Plataforma.facebook,
     "instagram": Plataforma.instagram,
@@ -791,7 +791,7 @@ class FuenteMetricool:
         El perfil de la marca (su `blogId`) trae un campo por red (`facebook`,
         `instagram`, `twitter`, `tiktok`, `youtube`) con el id de la cuenta enlazada o
         `null`; un valor truthy = conectada. Permite marcar "no conectada" con honestidad
-        en vez de "error" (p.ej. X no está conectada en ninguna marca del piloto). Se
+        en vez de "error" (la conexión de cada red varía por marca). Se
         cachea por instancia. Devuelve None si la consulta falla: el llamante NO filtra
         por conexión (intenta leer todas, comportamiento previo) en vez de ocultar redes.
         """

@@ -75,7 +75,7 @@ const MARCAS: MarcaCobertura[] = [
         interacciones: null,
         engagement_pct: null,
         stories: null,
-        motivo: "Red no contratada en el piloto.",
+        motivo: "Esta red no está conectada a Metricool para la marca.",
       },
     ],
   },
@@ -117,7 +117,9 @@ describe("CoberturaRedes", () => {
     expect(screen.getByText("No conectada")).toBeInTheDocument();
 
     // El motivo explica POR QUÉ una red no aporta datos (no se oculta).
-    expect(screen.getByText("Red no contratada en el piloto.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Esta red no está conectada a Metricool para la marca."),
+    ).toBeInTheDocument();
 
     // Conteo de cobertura por marca sobre su universo completo de redes.
     expect(screen.getByText("1/5 con datos")).toBeInTheDocument();

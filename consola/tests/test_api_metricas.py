@@ -865,9 +865,9 @@ def test_piezas_por_etiqueta_enlaza_por_titulo_y_resuelve_etiqueta(cliente):
     assert any(g["valor"] == "Mundial 2026" for g in campania["grupos"])
 
 
-def test_cobertura_x_no_conectada_aclara_licencia_extra():
-    # X (Twitter) es una licencia aparte de Metricool: cuando sale "no conectada" el
-    # motivo lo aclara, para que nadie del equipo intente "conectarla".
+def test_cobertura_x_no_conectada_usa_motivo_generico():
+    # X (Twitter) es una red de pleno derecho: cuando una marca no la tiene conectada usa
+    # el mismo motivo genérico que el resto, sin texto especial de licencia.
     from keni_consola.api.metricas import _cobertura_por_marca
 
     rep = {
@@ -884,7 +884,8 @@ def test_cobertura_x_no_conectada_aclara_licencia_extra():
     }
     por_red = {r["red"]: r for r in _cobertura_por_marca(rep)[0]["redes"]}
     assert por_red["x"]["estado"] == "no_conectada"
-    assert "licencia adicional" in por_red["x"]["motivo"].lower()
+    assert por_red["x"]["motivo"] == "Esta red no está conectada a Metricool para la marca."
+    assert "licencia" not in por_red["x"]["motivo"].lower()
 
 
 # --------------------------------------------------------------------------- #

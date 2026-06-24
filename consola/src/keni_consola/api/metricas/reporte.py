@@ -275,16 +275,6 @@ _MOTIVO_COBERTURA: dict[str, str | None] = {
     "presupuesto_agotado": "Límite de la API de Metricool alcanzado; reintenta más tarde.",
 }
 
-# Override de motivo para casos CONOCIDOS por (red, estado). X (Twitter) en Metricool es
-# una LICENCIA APARTE no contratada en el piloto: por eso sale "no conectada" en TODAS las
-# marcas. Se aclara para que el equipo no intente "conectarla" (es una decisión de
-# contratación, no un hueco de configuración). simpleProfiles no distingue este caso del
-# genérico —ambos son `twitter: null`—, así que el matiz se añade aquí.
-_MOTIVO_RED_ESPECIAL: dict[tuple[str, str], str] = {
-    ("x", "no_conectada"): "Requiere licencia adicional de Metricool (no contratada).",
-}
-
-
 def _cobertura_por_marca(rep: dict) -> list[dict]:
     """Auditoría de cobertura: por cada marca, TODAS las redes auditables con su estado.
 
@@ -352,9 +342,7 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                     estado = "sin_lectura" if motivo_id == "error_api" else motivo_id
                 else:
                     estado = "no_configurada"
-                motivo = _MOTIVO_RED_ESPECIAL.get((red, estado)) or _MOTIVO_COBERTURA.get(
-                    estado, _MOTIVO_COBERTURA["sin_lectura"]
-                )
+                motivo = _MOTIVO_COBERTURA.get(estado, _MOTIVO_COBERTURA["sin_lectura"])
                 redes.append(
                     {
                         "red": red,
