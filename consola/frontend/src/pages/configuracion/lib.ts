@@ -8,6 +8,8 @@ import { ApiError } from "@/lib/api";
 export const CLAVE_IMAGEN = ["conexiones", "imagen"];
 export const CLAVE_METRICOOL = ["conexiones", "metricool"];
 export const CLAVE_POSTPROXY = ["conexiones", "postproxy"];
+export const CLAVE_GOOGLE_ANALYTICS = ["conexiones", "google-analytics"];
+export const CLAVE_GA_PROPIEDADES = ["conexiones", "google-analytics", "propiedades"];
 export const CLAVE_FUENTES_STOCK = ["stock", "fuentes"];
 export const CLAVE_AGENCIAS = ["stock", "agencias"];
 export const CLAVE_AJUSTES = ["ajustes"];

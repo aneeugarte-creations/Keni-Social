@@ -425,3 +425,91 @@ export interface RespuestaCanalPostproxy {
   canal: CanalPieza;
   mensaje: string;
 }
+
+// ── Conexión Google Analytics (GA4) ─────────────────────────────────────────
+// Una app OAuth GLOBAL (client_id + client_secret write-only) que, una vez
+// conectada por OAuth, se mapea a una propiedad GA4 por marca. El client_secret
+// solo se envía; del servidor llega el estado (app_configurada, conectado) y el
+// client_id (no secreto), más la propiedad mapeada de cada marca.
+
+/** Estado de Google Analytics para UNA marca (sin exponer secretos). */
+export interface MarcaGoogleAnalytics {
+  marca: string;
+  etiqueta: string;
+  /** id numérico de la propiedad GA4 mapeada (vacío si no hay). */
+  property_id: string;
+  conectado: boolean;
+}
+
+/** Respuesta de `GET /conexiones/google-analytics`: estado global + marcas. */
+export interface RespuestaGoogleAnalytics {
+  app_configurada: boolean;
+  conectado: boolean;
+  /** client_id de la app OAuth (no secreto; vacío si no está configurada). */
+  client_id: string;
+  marcas: MarcaGoogleAnalytics[];
+}
+
+/** Cuerpo para guardar la app OAuth (client_secret write-only). */
+export interface CuerpoAppGoogleAnalytics {
+  client_id: string;
+  client_secret: string;
+}
+
+/** Respuesta al guardar la app OAuth. */
+export interface RespuestaAppGoogleAnalytics {
+  app_configurada: boolean;
+  mensaje: string;
+}
+
+/** Cuerpo para iniciar el OAuth de Google Analytics. */
+export interface CuerpoConectarGoogleAnalytics {
+  redirect_uri: string;
+}
+
+/** Respuesta con la URL de Google a abrir en el popup. */
+export interface RespuestaConectarGoogleAnalytics {
+  url: string;
+}
+
+/** Cuerpo para canjear el código del OAuth por el refresh_token. */
+export interface CuerpoCanjearGoogleAnalytics {
+  state: string;
+  code: string;
+}
+
+/** Respuesta al canjear el código del OAuth. */
+export interface RespuestaCanjearGoogleAnalytics {
+  conectado: boolean;
+  mensaje: string;
+}
+
+/** Una propiedad GA4 disponible para mapear a una marca. */
+export interface PropiedadGoogleAnalytics {
+  property_id: string;
+  nombre: string;
+  cuenta: string;
+}
+
+/** Respuesta al listar las propiedades GA4 de la cuenta conectada. */
+export interface RespuestaPropiedadesGoogleAnalytics {
+  propiedades: PropiedadGoogleAnalytics[];
+}
+
+/** Cuerpo para mapear una propiedad GA4 a una marca. */
+export interface CuerpoPropiedadGoogleAnalytics {
+  property_id: string;
+}
+
+/** Respuesta al mapear (o quitar) la propiedad GA4 de una marca. */
+export interface RespuestaGuardarGoogleAnalytics {
+  conectado: boolean;
+  mensaje: string;
+}
+
+/** Respuesta de la prueba en vivo de la propiedad GA4 de una marca. */
+export interface RespuestaProbarGoogleAnalytics {
+  ok: boolean;
+  filas: number;
+  mensaje: string;
+}

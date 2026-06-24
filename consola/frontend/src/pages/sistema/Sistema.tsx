@@ -7,6 +7,7 @@ import { PestanasSeccion, type PestanaSeccion } from "@/components/layout/encabe
 import { ApiError, api } from "@/lib/api";
 
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
+import { SeccionGoogleAnalytics } from "@/pages/configuracion/SeccionGoogleAnalytics";
 import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
 import { SeccionFuentesStock } from "@/pages/configuracion/SeccionFuentesStock";
 import { SeccionAgencias } from "@/pages/configuracion/SeccionAgencias";
@@ -87,6 +88,7 @@ export default function Sistema() {
             <SeccionCuentaClaude />
             <SeccionGitHub />
             <SeccionMetricool />
+            <SeccionGoogleAnalytics />
             <SeccionPostproxy />
             <SeccionFuentesStock />
             <SeccionAgencias />

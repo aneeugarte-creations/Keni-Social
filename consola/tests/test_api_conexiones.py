@@ -534,3 +534,189 @@ def test_probar_openrouter_no_reenvio_bearer_en_redirect():
     assert "openrouter.ai" in url_llamada
     assert "evil.example.com" not in url_llamada
     assert ok is False
+
+
+# --------------------------------------------------------------------------- #
+# Google Analytics 4 (OAuth de usuario; property_id por marca)                 #
+# --------------------------------------------------------------------------- #
+# OFFLINE: la red de Google (canje de código, propiedades, runReport) se parchea
+# en `conexiones.ga4`. Ningun secreto (client_secret, refresh_token) debe aparecer
+# en ninguna respuesta de la API.
+
+
+def _estado_param(url: str, clave: str) -> str:
+    """Extrae un query param (p.ej. el `state`) de una URL de autorización."""
+    from urllib.parse import parse_qs, urlparse
+
+    return parse_qs(urlparse(url).query)[clave][0]
+
+
+def _conectar_ga(cliente, monkeypatch, refresh="RT-secreto-1234") -> None:
+    """Deja GA conectado: guarda la app, inicia el OAuth y canjea un código falso."""
+    cliente.put(
+        "/api/conexiones/google-analytics/app",
+        json={"client_id": "CID", "client_secret": "SEKRET-9999"},
+    )
+    r = cliente.post(
+        "/api/conexiones/google-analytics/conectar",
+        json={"redirect_uri": "https://s/oauth-conectado"},
+    )
+    state = _estado_param(r.json()["url"], "state")
+    monkeypatch.setattr(
+        conexiones.ga4, "intercambiar_codigo", lambda *a, **k: {"refresh_token": refresh}
+    )
+    r2 = cliente.post(
+        "/api/conexiones/google-analytics/canjear", json={"state": state, "code": "abc"}
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_ga_estado_inicial_desconectado(cliente):
+    r = cliente.get("/api/conexiones/google-analytics")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["app_configurada"] is False
+    assert cuerpo["conectado"] is False
+    assert cuerpo["marcas"], "deberia listar las marcas del catalogo"
+    assert all(m["conectado"] is False and m["property_id"] == "" for m in cuerpo["marcas"])
+    assert all({"marca", "etiqueta", "property_id", "conectado"} <= set(m) for m in cuerpo["marcas"])
+
+
+def test_ga_guardar_app_no_expone_secret(cliente):
+    r = cliente.put(
+        "/api/conexiones/google-analytics/app",
+        json={"client_id": "CID", "client_secret": "SEKRET-9999"},
+    )
+    assert r.status_code == 200
+    assert r.json()["app_configurada"] is True
+    assert "SEKRET-9999" not in r.text  # el secret NO se devuelve
+
+    cuerpo = cliente.get("/api/conexiones/google-analytics").json()
+    assert cuerpo["app_configurada"] is True
+    assert cuerpo["client_id"] == "CID"  # el client_id NO es secreto
+    assert "SEKRET-9999" not in cliente.get("/api/conexiones/google-analytics").text
+
+
+def test_ga_conectar_requiere_app(cliente):
+    r = cliente.post(
+        "/api/conexiones/google-analytics/conectar",
+        json={"redirect_uri": "https://s/oauth-conectado"},
+    )
+    assert r.status_code == 400
+
+
+def test_ga_conectar_devuelve_url_de_google(cliente):
+    cliente.put(
+        "/api/conexiones/google-analytics/app",
+        json={"client_id": "CID", "client_secret": "SEK"},
+    )
+    r = cliente.post(
+        "/api/conexiones/google-analytics/conectar",
+        json={"redirect_uri": "https://s/oauth-conectado"},
+    )
+    assert r.status_code == 200
+    url = r.json()["url"]
+    assert "accounts.google.com" in url
+    assert "client_id=CID" in url
+    assert "analytics.readonly" in url
+    assert _estado_param(url, "state")  # hay state anti-CSRF
+
+
+def test_ga_flujo_oauth_conecta_y_no_expone_refresh(cliente, monkeypatch):
+    _conectar_ga(cliente, monkeypatch, refresh="RT-secreto-1234")
+    cuerpo = cliente.get("/api/conexiones/google-analytics").json()
+    assert cuerpo["conectado"] is True
+    assert "RT-secreto-1234" not in cliente.get("/api/conexiones/google-analytics").text
+
+
+def test_ga_canjear_state_invalido_400(cliente, monkeypatch):
+    cliente.put(
+        "/api/conexiones/google-analytics/app",
+        json={"client_id": "CID", "client_secret": "SEK"},
+    )
+    monkeypatch.setattr(conexiones.ga4, "intercambiar_codigo", lambda *a, **k: {"refresh_token": "x"})
+    r = cliente.post(
+        "/api/conexiones/google-analytics/canjear", json={"state": "noexiste", "code": "abc"}
+    )
+    assert r.status_code == 400
+
+
+def test_ga_canjear_sin_refresh_token_502(cliente, monkeypatch):
+    cliente.put(
+        "/api/conexiones/google-analytics/app",
+        json={"client_id": "CID", "client_secret": "SEK"},
+    )
+    r = cliente.post(
+        "/api/conexiones/google-analytics/conectar",
+        json={"redirect_uri": "https://s/cb"},
+    )
+    state = _estado_param(r.json()["url"], "state")
+    # Google a veces no devuelve refresh_token (reautorización sin prompt=consent).
+    monkeypatch.setattr(conexiones.ga4, "intercambiar_codigo", lambda *a, **k: {"access_token": "solo"})
+    r2 = cliente.post(
+        "/api/conexiones/google-analytics/canjear", json={"state": state, "code": "abc"}
+    )
+    assert r2.status_code == 502
+
+
+def test_ga_property_por_marca_persiste_y_conecta(cliente, monkeypatch):
+    _conectar_ga(cliente, monkeypatch)
+    marca = _una_marca_metricool()
+    r = cliente.put(
+        f"/api/conexiones/google-analytics/{marca}", json={"property_id": "123456789"}
+    )
+    assert r.status_code == 200
+    marcas = {
+        m["marca"]: m for m in cliente.get("/api/conexiones/google-analytics").json()["marcas"]
+    }
+    assert marcas[marca]["property_id"] == "123456789"
+    assert marcas[marca]["conectado"] is True
+
+    # persiste en [google_analytics.marcas.<marca>]
+    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
+    assert datos["google_analytics"]["marcas"][marca]["property_id"] == "123456789"
+
+
+def test_ga_property_marca_desconocida_400(cliente):
+    r = cliente.put(
+        "/api/conexiones/google-analytics/inventada", json={"property_id": "1"}
+    )
+    assert r.status_code == 400
+
+
+def test_ga_probar_sin_property_400(cliente, monkeypatch):
+    _conectar_ga(cliente, monkeypatch)
+    marca = _una_marca_metricool()
+    r = cliente.post(f"/api/conexiones/google-analytics/{marca}/probar")
+    assert r.status_code == 400  # conectado pero sin property_id asignado
+
+
+def test_ga_probar_ok(cliente, monkeypatch):
+    _conectar_ga(cliente, monkeypatch)
+    marca = _una_marca_metricool()
+    cliente.put(f"/api/conexiones/google-analytics/{marca}", json={"property_id": "999"})
+
+    class _FakeCliente:
+        def __init__(self, *a, **k):
+            pass
+
+        def probar(self, pid, desde, hasta):
+            assert pid == "999"
+            return {"ok": True, "filas": 3, "detalle": "ok"}
+
+    monkeypatch.setattr(conexiones.ga4, "ClienteGA4", _FakeCliente)
+    r = cliente.post(f"/api/conexiones/google-analytics/{marca}/probar")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["filas"] == 3
+
+
+def test_ga_desconectar_borra_refresh(cliente, monkeypatch):
+    _conectar_ga(cliente, monkeypatch)
+    assert cliente.get("/api/conexiones/google-analytics").json()["conectado"] is True
+    r = cliente.delete("/api/conexiones/google-analytics")
+    assert r.status_code == 200
+    cuerpo = cliente.get("/api/conexiones/google-analytics").json()
+    # se cae la conexión pero la app sigue configurada (no se borró client_id/secret)
+    assert cuerpo["conectado"] is False
+    assert cuerpo["app_configurada"] is True

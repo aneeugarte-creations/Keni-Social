@@ -247,6 +247,71 @@ class PostproxyConfig:
 
 
 @dataclass
+class GoogleAnalyticsConfig:
+    """Conexión a Google Analytics 4 por OAuth de usuario + property_id POR MARCA.
+
+    Modelo de auth (ver `ga4.py`): la app OAuth (client_id/client_secret) es NUESTRA y
+    se configura una vez; el `refresh_token` es de la cuenta de la persona que conectó
+    su Google con acceso de lectura a las propiedades GA4 (no necesita ser admin). Por
+    eso client_id/client_secret/refresh_token son GLOBALES (una conexión sirve a todas
+    las marcas), igual que la api_key de Postproxy.
+
+    Lo que varía por marca es a qué PROPIEDAD GA4 (`property_id`, el id numérico) se lee.
+    Cada `[google_analytics.marcas.<id>]` trae su `property_id` (y opcional `dominio`).
+
+    Las env `GA_OAUTH_CLIENT_ID`/`GA_OAUTH_CLIENT_SECRET`/`GA_OAUTH_REFRESH_TOKEN`
+    tienen prioridad sobre el TOML (igual que `METRICOOL_USER_TOKEN`).
+
+    Estados:
+    - `app_configurada`: hay client_id + client_secret (se puede iniciar el flujo OAuth).
+    - `conectada`: además hay refresh_token (se puede leer GA4).
+    - una MARCA está configurada si la conexión está y la marca tiene property_id.
+    """
+
+    client_id: str = ""
+    client_secret: str = ""
+    refresh_token: str = ""
+    # id_marca_keni -> {"property_id": str, "dominio": str?}
+    marcas: dict[str, dict] = field(default_factory=dict)
+
+    @property
+    def app_configurada(self) -> bool:
+        """True si hay client_id + client_secret (se puede iniciar el flujo OAuth)."""
+        return bool(self.client_id and self.client_secret)
+
+    @property
+    def conectada(self) -> bool:
+        """True si la app está configurada Y hay refresh_token (se puede leer GA4)."""
+        return bool(self.app_configurada and self.refresh_token)
+
+    def property_de(self, marca: dict) -> str:
+        """property_id de una marca ('' si no lo tiene)."""
+        return str(marca.get("property_id") or "")
+
+    def marca_configurada(self, marca: dict) -> bool:
+        """True si la conexión está y la marca tiene property_id."""
+        return bool(self.conectada and self.property_de(marca))
+
+    def marcas_configuradas(self) -> dict[str, dict]:
+        """Subconjunto de `marcas` con property_id (y conexión presente)."""
+        if not self.conectada:
+            return {}
+        salida: dict[str, dict] = {}
+        for mid, m in self.marcas.items():
+            if not self.marca_configurada(m):
+                continue
+            resuelta = dict(m)
+            resuelta["property_id"] = self.property_de(m)
+            salida[mid] = resuelta
+        return salida
+
+    @property
+    def configurada(self) -> bool:
+        """True si AL MENOS UNA marca tiene property_id (y hay conexión)."""
+        return bool(self.marcas_configuradas())
+
+
+@dataclass
 class Config:
     fuente: str = FUENTE_DEFECTO  # "metricool" (única) | "muestra" (demo) | "real" (fallback)
     cuentas: list[CuentaConfig] = field(default_factory=list)
@@ -257,6 +322,8 @@ class Config:
     metricool: MetricoolConfig = field(default_factory=MetricoolConfig)
     # Credenciales para PUBLICAR via Postproxy (canal alternativo a Metricool).
     postproxy: PostproxyConfig = field(default_factory=PostproxyConfig)
+    # Conexión a Google Analytics 4 (métricas web por marca, OAuth de usuario).
+    google_analytics: GoogleAnalyticsConfig = field(default_factory=GoogleAnalyticsConfig)
 
 
 def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
@@ -390,6 +457,47 @@ def _parsear_postproxy(datos: dict) -> PostproxyConfig:
     return PostproxyConfig(api_key=str(api_key or ""), marcas=marcas)
 
 
+def _parsear_google_analytics(datos: dict) -> GoogleAnalyticsConfig:
+    """Lee `[google_analytics]`: app OAuth GLOBAL + property_id POR MARCA.
+
+    `client_id`/`client_secret`/`refresh_token` son globales (una conexión sirve a todas
+    las marcas); las env `GA_OAUTH_CLIENT_ID`/`GA_OAUTH_CLIENT_SECRET`/
+    `GA_OAUTH_REFRESH_TOKEN` ganan al TOML. Cada `[google_analytics.marcas.<id>]` trae su
+    `property_id` (id numérico) y opcional `dominio`. Se conservan TODAS las marcas
+    declaradas aunque les falte property_id, así el estado per-marca (consola GET) sabe
+    que existen pero están "sin propiedad"; la omisión real la hace `marcas_configuradas()`.
+    """
+    seccion = (
+        datos.get("google_analytics", {})
+        if isinstance(datos.get("google_analytics"), dict)
+        else {}
+    )
+    client_id = os.environ.get("GA_OAUTH_CLIENT_ID") or seccion.get("client_id", "")
+    client_secret = os.environ.get("GA_OAUTH_CLIENT_SECRET") or seccion.get("client_secret", "")
+    refresh_token = os.environ.get("GA_OAUTH_REFRESH_TOKEN") or seccion.get("refresh_token", "")
+
+    marcas: dict[str, dict] = {}
+    crudas = seccion.get("marcas", {})
+    if isinstance(crudas, dict):
+        for mid, m in crudas.items():
+            if not isinstance(m, dict):
+                continue
+            entrada: dict = {}
+            pid = m.get("property_id") or m.get("propertyId")
+            if pid not in (None, ""):
+                entrada["property_id"] = str(pid)
+            if m.get("dominio"):
+                entrada["dominio"] = str(m["dominio"])
+            marcas[str(mid)] = entrada
+
+    return GoogleAnalyticsConfig(
+        client_id=str(client_id or ""),
+        client_secret=str(client_secret or ""),
+        refresh_token=str(refresh_token or ""),
+        marcas=marcas,
+    )
+
+
 # Env vars que cambian el RESULTADO de `cargar_config` sin tocar el mtime del fichero.
 # Forman parte de la clave de cache: si cualquiera cambia, re-parseamos. (En proceso
 # raramente cambian, pero los tests las monkeypatchean entre llamadas.)
@@ -400,6 +508,9 @@ _ENV_RELEVANTES: tuple[str, ...] = (
     "METRICOOL_USER_TOKEN",
     "METRICOOL_USER_ID",
     "POSTPROXY_API_KEY",
+    "GA_OAUTH_CLIENT_ID",
+    "GA_OAUTH_CLIENT_SECRET",
+    "GA_OAUTH_REFRESH_TOKEN",
     ENV_PERMITIR_REAL,
     "XDG_CONFIG_HOME",
 )
@@ -520,6 +631,7 @@ def _cargar_config_desde_disco() -> Config:
         marcas=marcas,
         metricool=_parsear_metricool(datos),
         postproxy=_parsear_postproxy(datos),
+        google_analytics=_parsear_google_analytics(datos),
     )
 
 

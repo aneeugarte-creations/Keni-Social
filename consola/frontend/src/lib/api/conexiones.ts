@@ -3,6 +3,9 @@
 import { peticion } from "./_core";
 import type {
   CuerpoCanalPostproxy,
+  CuerpoAppGoogleAnalytics,
+  CuerpoCanjearGoogleAnalytics,
+  CuerpoConectarGoogleAnalytics,
   CuerpoConectarPostproxy,
   CuerpoGrupoPostproxy,
   CuerpoGuardarConexionImagen,
@@ -10,10 +13,16 @@ import type {
   CuerpoGuardarModeloImagen,
   CuerpoGuardarPostproxy,
   CuerpoPerfilesMetricool,
+  CuerpoPropiedadGoogleAnalytics,
+  RespuestaAppGoogleAnalytics,
   RespuestaCanalPostproxy,
+  RespuestaCanjearGoogleAnalytics,
+  RespuestaConectarGoogleAnalytics,
   RespuestaConectarPostproxy,
   RespuestaConexionImagen,
+  RespuestaGoogleAnalytics,
   RespuestaGrupoPostproxy,
+  RespuestaGuardarGoogleAnalytics,
   RespuestaGuardarConexionImagen,
   RespuestaGuardarMetricool,
   RespuestaGuardarModeloImagen,
@@ -23,8 +32,10 @@ import type {
   RespuestaPerfilesMetricool,
   RespuestaPostproxy,
   RespuestaProbarConexionImagen,
+  RespuestaProbarGoogleAnalytics,
   RespuestaProbarMetricool,
   RespuestaProbarPostproxy,
+  RespuestaPropiedadesGoogleAnalytics,
 } from "@/types";
 
 export const apiConexiones = {
@@ -108,4 +119,51 @@ export const apiConexiones = {
       `/conexiones/postproxy/perfil/${encodeURIComponent(perfilId)}`,
       { metodo: "DELETE" },
     ),
+
+  // Google Analytics (GA4): UNA app OAuth GLOBAL (client_secret write-only) que,
+  // una vez conectada por OAuth, se mapea a una propiedad GA4 por marca. El secret
+  // solo se envía; del servidor llega el estado + el client_id (no secreto).
+  conexionesGoogleAnalytics: (signal?: AbortSignal) =>
+    peticion<RespuestaGoogleAnalytics>("/conexiones/google-analytics", { signal }),
+  guardarAppGoogleAnalytics: (cuerpo: CuerpoAppGoogleAnalytics) =>
+    peticion<RespuestaAppGoogleAnalytics>("/conexiones/google-analytics/app", {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  // Inicia el OAuth; devuelve la URL de Google a abrir en el popup.
+  conectarGoogleAnalytics: (cuerpo: CuerpoConectarGoogleAnalytics) =>
+    peticion<RespuestaConectarGoogleAnalytics>("/conexiones/google-analytics/conectar", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  // Canjea el código del OAuth por el refresh_token (lo llama la ventana de retorno).
+  canjearGoogleAnalytics: (cuerpo: CuerpoCanjearGoogleAnalytics) =>
+    peticion<RespuestaCanjearGoogleAnalytics>("/conexiones/google-analytics/canjear", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  // Lista las propiedades GA4 de la cuenta conectada (para mapearlas por marca).
+  propiedadesGoogleAnalytics: (signal?: AbortSignal) =>
+    peticion<RespuestaPropiedadesGoogleAnalytics>(
+      "/conexiones/google-analytics/propiedades",
+      { signal },
+    ),
+  guardarPropiedadGoogleAnalytics: (marca: string, cuerpo: CuerpoPropiedadGoogleAnalytics) =>
+    peticion<RespuestaGuardarGoogleAnalytics>(
+      `/conexiones/google-analytics/${encodeURIComponent(marca)}`,
+      { metodo: "PUT", json: cuerpo },
+    ),
+  eliminarPropiedadGoogleAnalytics: (marca: string) =>
+    peticion<RespuestaMensaje>(
+      `/conexiones/google-analytics/${encodeURIComponent(marca)}`,
+      { metodo: "DELETE" },
+    ),
+  probarGoogleAnalytics: (marca: string) =>
+    peticion<RespuestaProbarGoogleAnalytics>(
+      `/conexiones/google-analytics/${encodeURIComponent(marca)}/probar`,
+      { metodo: "POST" },
+    ),
+  // Desconecta la app (borra el refresh_token global).
+  eliminarGoogleAnalytics: () =>
+    peticion<RespuestaMensaje>("/conexiones/google-analytics", { metodo: "DELETE" }),
 };

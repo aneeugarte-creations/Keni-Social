@@ -40,7 +40,13 @@ ver `docs/adr/0003-aislamiento-secretos-por-tenant.md`.
 
 from __future__ import annotations
 
-from keni_metricas import asistente
+import secrets
+import time
+from datetime import date, timedelta
+
+import httpx
+from keni_metricas import asistente, ga4
+from keni_metricas import config as km_config
 from keni_metricas.config import ruta_config
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -824,6 +830,299 @@ async def postproxy_canal(request: Request) -> Response:
     return JSONResponse({"canal": canal, "mensaje": "Canal de publicación guardado."})
 
 
+# --------------------------------------------------------------------------- #
+# Google Analytics 4 (OAuth de usuario; property_id POR MARCA en el config.toml) #
+# --------------------------------------------------------------------------- #
+# Modelo de auth (ver keni_metricas.ga4): la app OAuth (client_id/client_secret) es
+# nuestra y se guarda una vez; el refresh_token lo capta el flujo OAuth con la cuenta
+# de la persona (no hace falta ser admin de la propiedad, solo lectura). Esos tres son
+# GLOBALES; lo que varía por marca es el property_id. Mismas reglas que el resto de
+# conexiones: SECRETOS nunca salen al navegador (solo pista/estado) y SOLO ADMIN.
+
+# Estados OAuth en curso (anti-CSRF de un solo uso): state -> (redirect_uri, creado_en).
+# En proceso único (el back), un dict en memoria basta; se purga por TTL al usarse.
+_GA_ESTADOS: dict[str, tuple[str, float]] = {}
+_GA_STATE_TTL = 600.0  # segundos
+
+
+def _ga_marca(cfg: dict, marca: str) -> dict:
+    """Tabla `[google_analytics.marcas.<marca>]` del config ({} si no existe)."""
+    ga = cfg.get("google_analytics")
+    ga = ga if isinstance(ga, dict) else {}
+    marcas = ga.get("marcas")
+    marcas = marcas if isinstance(marcas, dict) else {}
+    tabla = marcas.get(marca)
+    return tabla if isinstance(tabla, dict) else {}
+
+
+def _escribir_ga(parcial: dict) -> None:
+    """Fusiona `parcial` bajo `[google_analytics]` en el config.toml (atomico 0600)."""
+    ruta = ruta_config()
+    existente = asistente.leer_config_existente(ruta)
+    fusionado = asistente.fusionar_config(existente, {"google_analytics": parcial})
+    asistente.escribir_config_atomico(ruta, fusionado)
+
+
+def _escribir_marca_ga(marca: str, valores: dict[str, str]) -> None:
+    """Persiste `[google_analytics.marcas.<marca>]` en el config.toml (atomico 0600)."""
+    _escribir_ga({"marcas": {marca: valores}})
+
+
+def _ga_cfg() -> km_config.GoogleAnalyticsConfig:
+    """Config de GA ya parseada (honra las env GA_OAUTH_*), para el estado de conexión."""
+    return km_config.cargar_config().google_analytics
+
+
+def estado_marcas_google_analytics() -> dict:
+    """Estado de GA: app configurada / conectada + property_id por marca. Sin secretos.
+
+    `app_configurada` (hay client_id+secret) y `conectado` (además refresh_token) salen
+    de la config parseada (honra env). El property_id por marca y la pista del client_id
+    NO son secretos; el client_secret y el refresh_token NUNCA se exponen.
+    """
+    gacfg = _ga_cfg()
+    raw = _config_existente()
+    marcas = []
+    for mid, etiqueta in _marcas_metricool():
+        pid = _credencial(_ga_marca(raw, mid), "property_id")
+        marcas.append(
+            {
+                "marca": mid,
+                "etiqueta": etiqueta,
+                "property_id": pid,
+                "conectado": bool(gacfg.conectada and pid),
+            }
+        )
+    return {
+        "app_configurada": gacfg.app_configurada,
+        "conectado": gacfg.conectada,
+        "client_id": gacfg.client_id,  # el client_id de OAuth NO es secreto
+        "marcas": marcas,
+    }
+
+
+async def google_analytics_estado(request: Request) -> Response:
+    """GET: estado de Google Analytics (app/conexión + property_id por marca). SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse(estado_marcas_google_analytics())
+
+
+async def google_analytics_guardar_app(request: Request) -> Response:
+    """PUT: guarda las credenciales de la app OAuth (JSON `{client_id, client_secret}`).
+
+    Son las credenciales de NUESTRO cliente OAuth (no las de la persona). No devuelve el
+    secreto. SOLO ADMIN.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    datos = await leer_json(request)
+    campos = {}
+    for clave, etiqueta in (
+        ("client_id", "el Client ID de OAuth"),
+        ("client_secret", "el Client Secret de OAuth"),
+    ):
+        valor = datos.get(clave)
+        if not isinstance(valor, str) or not valor.strip():
+            return JSONResponse({"error": f"Falta {etiqueta}."}, status_code=400)
+        campos[clave] = valor.strip()
+    try:
+        _escribir_ga(campos)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar la app de Google Analytics."}, status_code=500
+        )
+    return JSONResponse({"app_configurada": True, "mensaje": "App de Google Analytics guardada."})
+
+
+async def google_analytics_conectar(request: Request) -> Response:
+    """POST: inicia el OAuth de Google (JSON `{redirect_uri}`) y devuelve `{url}`. SOLO ADMIN.
+
+    `redirect_uri` lo aporta el front (`window.location.origin` + la ruta de retorno) y
+    DEBE estar registrado en el cliente OAuth de Google. Se genera un `state` de un solo
+    uso que el canje (`/canjear`) verifica. La app OAuth debe estar configurada antes.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    gacfg = _ga_cfg()
+    if not gacfg.app_configurada:
+        return JSONResponse(
+            {"error": "Configura primero el Client ID y Client Secret de OAuth."},
+            status_code=400,
+        )
+    datos = await leer_json(request)
+    redirect_uri = datos.get("redirect_uri")
+    if not isinstance(redirect_uri, str) or not redirect_uri.strip():
+        return JSONResponse({"error": "Falta la URL de redirección."}, status_code=400)
+    state = secrets.token_urlsafe(24)
+    ahora = time.monotonic()
+    # Purga states caducados de paso (evita crecer sin fin) y registra el nuevo.
+    for s, (_, creado) in list(_GA_ESTADOS.items()):
+        if ahora - creado > _GA_STATE_TTL:
+            _GA_ESTADOS.pop(s, None)
+    _GA_ESTADOS[state] = (redirect_uri.strip(), ahora)
+    url = ga4.url_autorizacion(gacfg.client_id, redirect_uri.strip(), state)
+    return JSONResponse({"url": url})
+
+
+async def google_analytics_canjear(request: Request) -> Response:
+    """POST: canjea el `code` del retorno OAuth por el refresh_token (JSON `{state, code}`).
+
+    Verifica el `state` (un solo uso, con TTL) y usa el `redirect_uri` que se guardó al
+    iniciar (debe coincidir con el del canje en Google). Persiste el refresh_token. NO lo
+    devuelve. SOLO ADMIN.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    datos = await leer_json(request)
+    state = datos.get("state")
+    code = datos.get("code")
+    if not isinstance(state, str) or not isinstance(code, str) or not state or not code:
+        return JSONResponse({"error": "Faltan datos del retorno de Google."}, status_code=400)
+    entrada = _GA_ESTADOS.pop(state, None)
+    if entrada is None or time.monotonic() - entrada[1] > _GA_STATE_TTL:
+        return JSONResponse(
+            {"error": "El enlace de conexión caducó. Inténtalo de nuevo."}, status_code=400
+        )
+    redirect_uri = entrada[0]
+    gacfg = _ga_cfg()
+    try:
+        tokens = ga4.intercambiar_codigo(
+            gacfg.client_id, gacfg.client_secret, code, redirect_uri
+        )
+    except httpx.HTTPError:
+        return JSONResponse(
+            {"error": "Google rechazó la conexión. Revisa el Client ID/Secret y reintenta."},
+            status_code=502,
+        )
+    refresh = tokens.get("refresh_token")
+    if not isinstance(refresh, str) or not refresh:
+        return JSONResponse(
+            {
+                "error": (
+                    "Google no devolvió un refresh_token. Revoca el acceso de la app en la "
+                    "cuenta y vuelve a conectar para forzar el consentimiento."
+                )
+            },
+            status_code=502,
+        )
+    try:
+        _escribir_ga({"refresh_token": refresh})
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar la conexión de Google Analytics."}, status_code=500
+        )
+    return JSONResponse({"conectado": True, "mensaje": "Google Analytics conectado."})
+
+
+async def google_analytics_propiedades(request: Request) -> Response:
+    """GET: propiedades GA4 que ve la cuenta conectada (`[{property_id, nombre, cuenta}]`).
+
+    Sirve para mapear cada propiedad a una marca en la UI. Requiere conexión. SOLO ADMIN.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    gacfg = _ga_cfg()
+    if not gacfg.conectada:
+        return JSONResponse({"error": "Conecta primero Google Analytics."}, status_code=400)
+    cliente = ga4.ClienteGA4(gacfg.client_id, gacfg.client_secret, gacfg.refresh_token)
+    try:
+        props = cliente.propiedades()
+    except httpx.HTTPError:
+        return JSONResponse(
+            {"error": "No se pudieron leer las propiedades de Google Analytics."},
+            status_code=502,
+        )
+    return JSONResponse({"propiedades": props})
+
+
+async def google_analytics_marca_guardar(request: Request) -> Response:
+    """PUT: guarda el property_id de UNA marca (JSON `{property_id}`). SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    datos = await leer_json(request)
+    property_id = datos.get("property_id")
+    if not isinstance(property_id, str) or not property_id.strip():
+        return JSONResponse({"error": "Falta el ID de propiedad de GA4."}, status_code=400)
+    try:
+        _escribir_marca_ga(marca, {"property_id": property_id.strip()})
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar la propiedad de Google Analytics."}, status_code=500
+        )
+    return JSONResponse({"conectado": True, "mensaje": "Propiedad de GA4 guardada."})
+
+
+async def google_analytics_marca_borrar(request: Request) -> Response:
+    """DELETE: quita la marca de `[google_analytics.marcas.<marca>]`. SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    ruta = ruta_config()
+    try:
+        cfg = asistente.leer_config_existente(ruta)
+        ga = cfg.get("google_analytics") if isinstance(cfg.get("google_analytics"), dict) else None
+        marcas = ga.get("marcas") if isinstance(ga, dict) else None
+        if isinstance(marcas, dict) and marca in marcas:
+            del marcas[marca]
+            asistente.escribir_config_atomico(ruta, cfg)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo quitar la propiedad de Google Analytics."}, status_code=500
+        )
+    return JSONResponse({"mensaje": "Propiedad de GA4 eliminada."})
+
+
+async def google_analytics_desconectar(request: Request) -> Response:
+    """DELETE: corta la conexión (borra el refresh_token; conserva la app y los IDs). SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    ruta = ruta_config()
+    try:
+        cfg = asistente.leer_config_existente(ruta)
+        ga = cfg.get("google_analytics") if isinstance(cfg.get("google_analytics"), dict) else None
+        if isinstance(ga, dict) and "refresh_token" in ga:
+            del ga["refresh_token"]
+            asistente.escribir_config_atomico(ruta, cfg)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo desconectar Google Analytics."}, status_code=500
+        )
+    return JSONResponse({"mensaje": "Google Analytics desconectado."})
+
+
+async def google_analytics_probar(request: Request) -> Response:
+    """POST: prueba EN VIVO la lectura de la propiedad de una marca (runReport). SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    gacfg = _ga_cfg()
+    if not gacfg.conectada:
+        return JSONResponse({"error": "Conecta primero Google Analytics."}, status_code=400)
+    property_id = _credencial(_ga_marca(_config_existente(), marca), "property_id")
+    if not property_id:
+        return JSONResponse(
+            {"error": "Esta marca no tiene una propiedad de GA4 asignada."}, status_code=400
+        )
+    cliente = ga4.ClienteGA4(gacfg.client_id, gacfg.client_secret, gacfg.refresh_token)
+    hasta = date.today()
+    resultado = cliente.probar(property_id, hasta - timedelta(days=7), hasta)
+    if not resultado.get("ok"):
+        return JSONResponse(
+            {"error": f"No se pudo leer GA4: {resultado.get('detalle', '')}"}, status_code=502
+        )
+    return JSONResponse(
+        {"ok": True, "filas": resultado.get("filas", 0), "mensaje": "Conexión con GA4 correcta."}
+    )
+
+
 RUTAS = [
     Route("/api/conexiones/imagen", imagen_estado, methods=["GET"]),
     Route("/api/conexiones/imagen", imagen_guardar, methods=["PUT"]),
@@ -844,4 +1143,14 @@ RUTAS = [
     Route("/api/conexiones/postproxy/{marca}/grupo", postproxy_grupo, methods=["PUT"]),
     Route("/api/conexiones/postproxy/{marca}/canal", postproxy_canal, methods=["PUT"]),
     Route("/api/conexiones/postproxy/{marca}/conectar", postproxy_conectar, methods=["POST"]),
+    # Google Analytics 4: app OAuth global + flujo de conexión + property_id por marca.
+    Route("/api/conexiones/google-analytics", google_analytics_estado, methods=["GET"]),
+    Route("/api/conexiones/google-analytics/app", google_analytics_guardar_app, methods=["PUT"]),
+    Route("/api/conexiones/google-analytics/conectar", google_analytics_conectar, methods=["POST"]),
+    Route("/api/conexiones/google-analytics/canjear", google_analytics_canjear, methods=["POST"]),
+    Route("/api/conexiones/google-analytics/propiedades", google_analytics_propiedades, methods=["GET"]),
+    Route("/api/conexiones/google-analytics", google_analytics_desconectar, methods=["DELETE"]),
+    Route("/api/conexiones/google-analytics/{marca}", google_analytics_marca_guardar, methods=["PUT"]),
+    Route("/api/conexiones/google-analytics/{marca}", google_analytics_marca_borrar, methods=["DELETE"]),
+    Route("/api/conexiones/google-analytics/{marca}/probar", google_analytics_probar, methods=["POST"]),
 ]
