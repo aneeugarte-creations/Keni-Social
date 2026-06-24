@@ -122,14 +122,15 @@ export async function descargarPresentacion(
 
     const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H] });
     for (let i = 0; i < slides.length; i++) {
-      // JPEG (no PNG): el PNG sin pérdida a 2× dispara el peso a cientos de MB; el JPEG de
-      // calidad alta sobre lienzo plano mantiene nitidez con un archivo ligero.
+      // JPEG (no PNG): el PNG sin pérdida dispara el peso a cientos de MB; el JPEG de calidad
+      // alta sobre lienzo plano mantiene nitidez con un archivo ligero. pixelRatio 3 da texto
+      // crujiente (a 2× se veía algo borroso) y sigue pesando poco al ser fondo casi plano.
       const img = await toJpeg(slides[i], {
         width: W,
         height: H,
-        pixelRatio: 2,
+        pixelRatio: 3,
         backgroundColor: FONDO,
-        quality: 0.95,
+        quality: 0.97,
         cacheBust: true,
       });
       if (i > 0) doc.addPage([W, H], "landscape");

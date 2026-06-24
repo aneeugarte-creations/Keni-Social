@@ -148,7 +148,7 @@ function Marco({
 
         {!portada && (
           <footer className={`mt-8 flex items-center justify-between gap-6 border-t border-neutral-100 pt-4 text-[10px] tracking-wide ${TONO.pie}`}>
-            <span className="truncate whitespace-nowrap uppercase tracking-[0.18em]">
+            <span className="whitespace-nowrap uppercase tracking-[0.18em]">
               {marca} · Todas las redes · {periodo}
             </span>
             <span className="shrink-0 uppercase tracking-[0.25em]">keni</span>
@@ -178,12 +178,16 @@ function TileKpi({ kpi, mesAnterior }: { kpi: KpiInforme; mesAnterior: string })
         {/* Espacio fino entre número y unidad (M / %) para que la cifra lea como un solo dato. */}
         {kpi.valor.replace(/\u0020/g, "\u202F")}
       </p>
-      {kpi.delta && (
+      {kpi.delta ? (
         <p className={`mt-3 text-xs font-medium tabular-nums ${color}`}>
           {flecha && <span className="mr-1">{flecha}</span>}
           {kpi.delta.texto}
           <span className="ml-1.5 font-normal text-neutral-400">vs. {mesAnterior}</span>
         </p>
+      ) : (
+        // Métrica sin comparativa este periodo (p. ej. piezas, o alcance no disponible): se
+        // marca explícito para que el hueco no parezca un dato faltante.
+        <p className="mt-3 text-xs font-normal text-neutral-300">sin comparativa</p>
       )}
     </div>
   );
