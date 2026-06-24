@@ -16,8 +16,22 @@ cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 ENVFILE="${1:-.env}"
 DC="docker compose --env-file $ENVFILE"
+PROYECTO="keni-social"   # nombre de proyecto de compose (`name:` en docker-compose.yml)
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
 REPO_VOL="keni-social_keni-repo"  # clon git del carril de auto-desarrollo (worker-dev/worker-ralph)
+
+# Id del contenedor VIVO de un servicio, por las ETIQUETAS de compose (no por `$DC ps -q`).
+# Es ROBUSTO al índice que deja el blue-green (back-2, front-62…) y al estado de `--scale`: tras
+# retirar el VIEJO por identidad (`docker rm`), el `--scale=2` queda en la memoria de compose y su
+# `ps -q` puede devolver vacío aunque el contenedor superviviente esté sano. `docker ps` por
+# etiqueta lista el contenedor REAL pase lo que pase. El blue-green deja un solo superviviente por
+# servicio, así que `head -n1` basta. Vacío => no hay contenedor (igual que antes: no se actúa).
+cid_servicio() {  # $1 = servicio compose
+  docker ps -q \
+    --filter "label=com.docker.compose.project=$PROYECTO" \
+    --filter "label=com.docker.compose.service=$1" \
+    2>/dev/null | head -n1
+}
 
 # Lee una clave del .env (primera ocurrencia, sin comillas envolventes).
 leer_env() {
@@ -299,7 +313,7 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
                  # dejó este servicio flapando (unhealthy/starting), su imagen actual NO es una
                  # foto fiable y revertir a ella deja prod igual de roto. En ese caso se conserva
                  # la :previa anterior (mejor garantía) o no se crea ninguna (rollback no aplica).
-  cont="keni-social-$1-1"
+  cont="$(cid_servicio "$1")"
   estado="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cont" 2>/dev/null || true)"
   case "$estado" in
     healthy|running) : ;;  # 'running' = servicios sin healthcheck propio
@@ -422,7 +436,7 @@ $DC ps
 espera_sano() {  # $1 = servicio compose ; $2 = timeout en segundos. 0 si llega a healthy.
   transcurrido=0
   while [ "$transcurrido" -le "$2" ]; do
-    cid="$($DC ps -q "$1" 2>/dev/null | head -n1)"
+    cid="$(cid_servicio "$1")"
     estado="desconocido"
     if [ -n "$cid" ]; then
       estado="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo desconocido)"
