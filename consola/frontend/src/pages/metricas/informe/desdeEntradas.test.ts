@@ -81,7 +81,7 @@ function entradaComparar(): [readonly unknown[], unknown] {
 }
 
 describe("desdeEntradas", () => {
-  it("produce un InformeProps completo en modo una-marca", () => {
+  it("produce un InformeProps con la identidad de marca en modo una-marca", () => {
     const props = desdeEntradas(entradasBase(), CTX_UNA);
 
     expect(props.esTodas).toBe(false);
@@ -91,7 +91,7 @@ describe("desdeEntradas", () => {
     expect(props.mesAnterior).toBe("mayo");
   });
 
-  it("arma los 5 KPIs del reporte en orden", () => {
+  it("arma los 5 KPIs del reporte en orden, con ritmo de piezas como lectura secundaria", () => {
     const props = desdeEntradas(entradasBase(), CTX_UNA);
 
     expect(props.kpis).toHaveLength(5);
@@ -102,82 +102,93 @@ describe("desdeEntradas", () => {
       "Interacciones",
       "Engagement",
     ]);
-    // Piezas = número completo; visualizaciones = compacto + title completo.
     expect(props.kpis[0].valor).toBe("10");
+    // Piezas sin comparativa → lectura secundaria de ritmo (10 piezas / 2 días de serie = 5/día).
+    expect(props.kpis[0].secundario).toBe("5 / día");
     expect(props.kpis[1].valor).toBe(numeroCompactoEsperado(1000));
     expect(props.kpis[1].titulo).toBe("1,000");
     expect(props.kpis[4].valor).toBe("5.0 %");
   });
 
-  it("SIN comparar no pone deltas y las conclusiones son absolutas/neutrales", () => {
-    const props = desdeEntradas(entradasBase(), CTX_UNA);
-
-    expect(props.kpis.every((k) => k.delta === undefined)).toBe(true);
-    expect(props.conclusiones).toHaveLength(3);
-    expect(props.conclusiones.map((c) => c.signo)).toEqual(["neutral", "neutral", "neutral"]);
-    expect(props.conclusiones[0].label).toBe("Visualizaciones");
-    expect(props.conclusiones[0].valor).toBe(numeroCompactoEsperado(1000));
-  });
-
-  it("CON comparar añade deltas por KPI y conclusiones relativas con signo", () => {
+  it("CON comparar añade deltas por KPI y un titular de mes según la dirección", () => {
     const props = desdeEntradas([...entradasBase(), entradaComparar()], CTX_UNA);
 
     const porEtiqueta = Object.fromEntries(props.kpis.map((k) => [k.etiqueta, k.delta]));
     expect(porEtiqueta["Visualizaciones"]).toEqual({ texto: "+25.0 %", signo: "sube" });
     expect(porEtiqueta["Alcance"]).toEqual({ texto: "−16.6 %", signo: "baja" });
-    // Engagement compara en puntos (diferencia), no variación relativa.
     expect(porEtiqueta["Engagement"]).toEqual({ texto: "+1.0 pts", signo: "sube" });
-    // Piezas no viene en la comparativa → sin delta.
     expect(porEtiqueta["Piezas"]).toBeUndefined();
 
-    expect(props.conclusiones).toHaveLength(3);
-    expect(props.conclusiones[0]).toMatchObject({ valor: "+25.0 %", signo: "sube" });
-    expect(props.conclusiones[1]).toMatchObject({ valor: "−16.6 %", signo: "baja" });
-    expect(props.conclusiones[1].nota).toContain("menos que mayo");
+    // Vistas e interacciones suben → titular "al alza".
+    expect(props.titularMes).toContain("al alza");
   });
 
-  it("mapea tendencia y seguidores a la forma del contrato", () => {
+  it("SIN comparar emite un titular factual (sin dirección inventada)", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+    expect(props.kpis.every((k) => k.delta === undefined)).toBe(true);
+    expect(props.titularMes).toContain("engagement");
+  });
+
+  it("tendencia lleva vistas E interacciones por día y calcula pico + media", () => {
     const props = desdeEntradas(entradasBase(), CTX_UNA);
 
     expect(props.tendencia).toEqual([
-      { fecha: fechaCortaEsperada("2026-06-01"), Vistas: 10 },
-      { fecha: fechaCortaEsperada("2026-06-02"), Vistas: 20 },
+      { fecha: fechaCortaEsperada("2026-06-01"), Vistas: 10, Interacciones: 1 },
+      { fecha: fechaCortaEsperada("2026-06-02"), Vistas: 20, Interacciones: 3 },
     ]);
+    // Pico = día 2 (20 de 30 vistas → 67 %, valor 20); media = 15.
+    expect(props.picoVistas).toEqual({ fecha: fechaCortaEsperada("2026-06-02"), pct: 67, valor: 20 });
+    expect(props.mediaVistas).toBe(15);
+  });
+
+  it("reparto por red = ranking ordenado desc con % que reparte a 100 y color de deck", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+
+    expect(props.porRed.map((r) => r.nombre)).toEqual(["Instagram", "YouTube"]);
+    expect(props.porRed.map((r) => r.valor)).toEqual([600, 400]);
+    expect(props.porRed.map((r) => r.pct)).toEqual([60, 40]);
+    expect(props.porRed[0].color).toMatch(/^#/);
+    expect(norm(props.redInsight)).toBe("Instagram concentra el 60 % de las visualizaciones.");
+  });
+
+  it("engagement por red = interacción por vista, ranking desc (dónde engancha)", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+
+    // Solo instagram tiene desglose (12 interac / 600 vistas = 2 %); youtube sin celda → fuera.
+    expect(props.engPorRed.map((r) => r.nombre)).toEqual(["Instagram"]);
+    expect(props.engPorRed[0].rate).toBe(2);
+    expect(norm(props.engInsight)).toContain("Instagram es donde más engancha");
+  });
+
+  it("seguidores: ganancia ACUMULADA desde 0 + neto honesto", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+
+    // La serie del gráfico es la ganancia acumulada (0 → +20), no el nivel absoluto.
     expect(props.seguidores).toEqual([
-      { fecha: fechaCortaEsperada("2026-06-01"), Total: 100 },
-      { fecha: fechaCortaEsperada("2026-06-02"), Total: 120 },
+      { fecha: fechaCortaEsperada("2026-06-01"), Ganados: 0 },
+      { fecha: fechaCortaEsperada("2026-06-02"), Ganados: 20 },
     ]);
+    // +20 netos sobre 100 = +20 %.
+    expect(props.seguidoresNeto?.signo).toBe("sube");
+    expect(norm(props.seguidoresNeto?.pct ?? "")).toBe("+20 %");
   });
 
-  it("apila las vistas por red en UNA barra Periodo, orden canónico y color por red", () => {
+  it("mezcla de interacciones AGREGADA a 4 segmentos (no una barra por celda)", () => {
     const props = desdeEntradas(entradasBase(), CTX_UNA);
 
-    expect(props.porRed.data).toHaveLength(1);
-    expect(props.porRed.data[0].semana).toBe("Periodo");
-    // Instagram va antes que YouTube en REDES_CANONICAS, aunque en los datos llegue primero IG.
-    expect(props.porRed.categorias).toEqual(["Instagram", "YouTube"]);
-    expect(props.porRed.data[0]["Instagram"]).toBe(600);
-    expect(props.porRed.data[0]["YouTube"]).toBe(400);
-    expect(props.porRed.colores).toHaveLength(2);
+    expect(props.desgloseMix.segmentos.map((s) => s.label)).toEqual([
+      "Me gusta",
+      "Comentarios",
+      "Compartidos",
+      "Guardados",
+    ]);
+    expect(props.desgloseMix.total).toBe(12);
+    // 10 likes + 2 comentarios → 83 / 17; alto valor (compartir+guardar) = 0 %.
+    expect(props.desgloseMix.segmentos.map((s) => s.pct)).toEqual([83, 17, 0, 0]);
+    expect(props.desgloseMix.altoValorPct).toBe(0);
   });
 
-  it("normaliza el desglose a 100 % por celda con las 4 categorías", () => {
-    const props = desdeEntradas(entradasBase(), CTX_UNA);
-
-    expect(props.desglose.categorias).toEqual(["Me gusta", "Comentarios", "Compartidos", "Guardados"]);
-    expect(props.desglose.colores).toEqual(["rose", "blue", "emerald", "amber"]);
-    expect(props.desglose.data).toHaveLength(1);
-    const celda = props.desglose.data[0];
-    const suma = ["Me gusta", "Comentarios", "Compartidos", "Guardados"].reduce(
-      (s, k) => s + (celda[k] as number),
-      0,
-    );
-    expect(suma).toBeCloseTo(100, 5);
-    // 10 likes de 12 → 83.3 %.
-    expect(celda["Me gusta"] as number).toBeCloseTo((10 / 12) * 100, 5);
-  });
-
-  it("mapea las top piezas (red canónica, vistas, engagement)", () => {
+  it("top piezas + pieza estrella (% del total y múltiplo vs pieza media)", () => {
     const props = desdeEntradas(entradasBase(), CTX_UNA);
 
     expect(props.topPiezas).toHaveLength(1);
@@ -189,6 +200,31 @@ describe("desdeEntradas", () => {
       interacciones: 40,
       engagement: 4.4,
     });
+    // 900 de 1000 vistas totales → 90 %; pieza media = 1000/10 = 100 → 900/100 = 9×.
+    expect(props.pctEstrella).toBe(90);
+    expect(props.multiploEstrella).toBe(9);
+  });
+
+  it("conclusiones del cierre = cifras DERIVADAS (no repiten los KPIs)", () => {
+    const props = desdeEntradas(entradasBase(), CTX_UNA);
+
+    expect(props.conclusiones.map((c) => c.label)).toEqual([
+      "Seguidores netos",
+      "Vistas por pieza",
+      "Interacción de alto valor",
+    ]);
+    expect(props.conclusiones[1].valor).toBe(numeroCompactoEsperado(100)); // 1000 vistas / 10 piezas
+    expect(norm(props.conclusiones[2].valor)).toBe("0 %");
+  });
+
+  it("recomendaciones accionables nacen de la evidencia (pieza estrella, caída, red)", () => {
+    const conComparar = desdeEntradas([...entradasBase(), entradaComparar()], CTX_UNA);
+
+    expect(conComparar.recomendaciones.length).toBeGreaterThanOrEqual(2);
+    expect(conComparar.recomendaciones.length).toBeLessThanOrEqual(3);
+    expect(conComparar.recomendaciones[0]).toContain("«Gol»");
+    // Alcance cayó (−16.6 %) → una recomendación apunta a recuperarlo.
+    expect(conComparar.recomendaciones.some((r) => r.includes("alcance"))).toBe(true);
   });
 
   it("deja cuentas vacío en modo una-marca", () => {
@@ -196,7 +232,7 @@ describe("desdeEntradas", () => {
     expect(props.cuentas).toEqual([]);
   });
 
-  it("en modo todas llena cuentas con % que suman 100, ordenadas desc", () => {
+  it("en modo todas, cuentas = ranking con % que suman 100, ordenado desc", () => {
     const entradas: Array<[readonly unknown[], unknown]> = [
       [
         ["metricas", "reporte", "mes", "todas"],
@@ -214,21 +250,9 @@ describe("desdeEntradas", () => {
 
     expect(props.esTodas).toBe(true);
     expect(props.marcaId).toBeNull();
-    expect(props.cuentas.map((c) => c.marca)).toEqual(["Claro Sports", "UnoTV"]);
-    expect(props.cuentas[0].vistas).toBe(700);
-    expect(props.cuentas[0].Vistas).toBe(700);
+    expect(props.cuentas.map((c) => c.nombre)).toEqual(["Claro Sports", "UnoTV"]);
+    expect(props.cuentas[0].valor).toBe(700);
     expect(props.cuentas.reduce((s, c) => s + c.pct, 0)).toBe(100);
-  });
-
-  it("siempre devuelve 3 conclusiones y un foco no vacío", () => {
-    const sinComparar = desdeEntradas(entradasBase(), CTX_UNA);
-    expect(sinComparar.conclusiones).toHaveLength(3);
-    expect(sinComparar.foco.length).toBeGreaterThan(0);
-
-    const conComparar = desdeEntradas([...entradasBase(), entradaComparar()], CTX_UNA);
-    expect(conComparar.conclusiones).toHaveLength(3);
-    // Alcance cayó (−16.6 %) → el foco apunta a recuperarlo.
-    expect(conComparar.foco).toContain("alcance");
   });
 
   it("es determinista (misma entrada → misma salida)", () => {
@@ -237,13 +261,16 @@ describe("desdeEntradas", () => {
     expect(a).toEqual(b);
   });
 
-  it("no revienta con entradas vacías", () => {
+  it("no revienta con entradas vacías (insights vacíos, no nulos sueltos)", () => {
     const props = desdeEntradas([], CTX_UNA);
     expect(props.kpis).toHaveLength(5);
     expect(props.tendencia).toEqual([]);
-    expect(props.porRed.data).toEqual([]);
+    expect(props.picoVistas).toBeNull();
+    expect(props.porRed).toEqual([]);
     expect(props.cuentas).toEqual([]);
-    expect(props.conclusiones).toHaveLength(3);
+    expect(props.seguidoresNeto).toBeNull();
+    expect(props.conclusiones).toEqual([]);
+    expect(props.recomendaciones).toEqual([]);
   });
 });
 
@@ -255,4 +282,9 @@ function numeroCompactoEsperado(v: number): string {
 
 function fechaCortaEsperada(iso: string): string {
   return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+}
+
+/** Normaliza el espacio fino (U+202F) que el adaptador pone antes de "%" a un espacio normal. */
+function norm(s: string): string {
+  return s.replace(/\u202f/g, " ");
 }
