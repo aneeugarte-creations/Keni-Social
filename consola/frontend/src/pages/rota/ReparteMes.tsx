@@ -8,7 +8,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, mensajeError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { asignarMatriz } from "@/lib/rota-reparto";
 import { cn } from "@/lib/utils";
 import type { FranjaSemana, MiembroRota, TurnoRota } from "@/types";
@@ -62,15 +62,151 @@ function Token({
 }
 
 /**
+ * Editor de hora de UN turno real, en línea en el panel (variante «ahí mismo»): toca un turno de
+ * la matriz y aquí cambias su horario sin abrir el calendario. «Guardar hora» hace un PATCH
+ * (`actualizarTurno`) que pone horas a medida; si el back pide override por ausencia (409) ofrece
+ * «Forzar». «Quitar turno» NO borra al vuelo: marca la celda para el lote de borrado del pie (con
+ * su confirmación, aviso de huecos y deshacer). Keyed por `turno.id` para resetear el estado local.
+ */
+function EditorHoraCelda({
+  turno,
+  marcadoQuitar,
+  onCambio,
+  onToggleQuitar,
+  onCerrar,
+}: {
+  turno: TurnoRota;
+  /** ¿La celda ya está marcada para el lote de borrado? Alterna la etiqueta Quitar/No quitar. */
+  marcadoQuitar: boolean;
+  onCambio: () => void;
+  onToggleQuitar: () => void;
+  onCerrar: () => void;
+}) {
+  const [inicio, setInicio] = React.useState(turno.inicio);
+  const [fin, setFin] = React.useState(turno.fin);
+  // Mensaje del 409 `requiere_override` (turno en día de ausencia): muestra «Forzar».
+  const [pendienteOverride, setPendienteOverride] = React.useState<string | null>(null);
+
+  const horasValidas = esHoraValida(inicio) && esHoraValida(fin);
+  const sinCambios = inicio === turno.inicio && fin === turno.fin;
+
+  const guardar = useMutation({
+    mutationFn: (override: boolean) =>
+      api.actualizarTurno(turno.id, {
+        inicio: inicio.trim(),
+        fin: fin.trim(),
+        ...(override ? { override: true } : {}),
+      }),
+    onSuccess: () => {
+      toast.success("Horario actualizado.");
+      onCambio();
+      onCerrar();
+    },
+    onError: (e) => {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (e.cuerpo?.requiere_override as boolean | undefined)
+      ) {
+        setPendienteOverride(e.message);
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const claseInput =
+    "h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0";
+
+  return (
+    <div className="space-y-2.5 rounded-lg border border-keni-400/50 bg-keni-50/40 p-3 dark:border-keni-400/30 dark:bg-keni-900/15">
+      <div className="flex items-center justify-between">
+        <p className="text-[11.5px] font-medium text-foreground/80">
+          {turno.miembro_nombre} · {letraDeFecha(turno.fecha)} {turno.fecha.slice(8, 10)} ·{" "}
+          {turno.franja_nombre}
+        </p>
+        <button
+          type="button"
+          onClick={onCerrar}
+          aria-label="Cerrar editor de hora"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={inicio}
+          onChange={(e) => setInicio(e.target.value)}
+          placeholder="08:00"
+          aria-label="Nueva hora de inicio"
+          className={claseInput}
+        />
+        <span className="text-muted-foreground">–</span>
+        <Input
+          value={fin}
+          onChange={(e) => setFin(e.target.value)}
+          placeholder="16:00"
+          aria-label="Nueva hora de fin"
+          className={claseInput}
+        />
+        <span className="text-[11px] text-muted-foreground">
+          {turno.horario_propio ? "a medida" : "de la franja"}
+        </span>
+      </div>
+      {!horasValidas && (inicio || fin) && (
+        <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
+      )}
+      {pendienteOverride && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">{pendienteOverride}</p>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onToggleQuitar}
+          className={cn(
+            "text-xs hover:underline",
+            marcadoQuitar ? "text-muted-foreground" : "text-destructive",
+          )}
+        >
+          {marcadoQuitar ? "No quitar" : "Quitar turno"}
+        </button>
+        {pendienteOverride ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={guardar.isPending}
+            onClick={() => guardar.mutate(true)}
+          >
+            {guardar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Forzar
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!horasValidas || sinCambios || guardar.isPending}
+            onClick={() => guardar.mutate(false)}
+          >
+            {guardar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Guardar hora
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Panel «Asignar turnos» de Gestión = Mes único (variante SELECCIÓN-EN-MES).
  *
  * Los DÍAS los marca el usuario en el calendario mensual (`diasSel`, puede cruzar semanas). Aquí
  * elige PERSONAS y HORARIO, y AFINA por persona en una matriz que pinta la REALIDAD: una celda
- * vacía está encendida por defecto y se CREA al asignar; una celda con turno real se muestra como
- * tal (naranja + punto) y un toque la marca para QUITAR (tachado gris, sin un segundo acento). El
- * mismo gesto añade o quita; el botón es uno e inteligente. Al asignar, el motor `asignarMatriz`
- * agrupa las fechas de cada persona por su semana y resuelve la franja con las franjas de ESA
- * semana; al quitar, se borran por lote los turnos reales de las celdas marcadas (con deshacer).
+ * vacía está encendida por defecto y se CREA al asignar; una celda con turno real se abre en un
+ * editor en línea (`EditorHoraCelda`) para CAMBIARLE LA HORA ahí mismo o marcarla para QUITAR
+ * (tachado gris). Al asignar, el motor `asignarMatriz` agrupa las fechas de cada persona por su
+ * semana y resuelve la franja con las franjas de ESA semana; al quitar, se borran por lote los
+ * turnos reales de las celdas marcadas (con deshacer).
  */
 export function ReparteMes({
   diasSel,
@@ -110,6 +246,8 @@ export function ReparteMes({
   const [excluidas, setExcluidas] = React.useState<Map<string, Set<string>>>(() => new Map());
   // `paraBorrar` = celdas con turno REAL marcadas para quitar (`${persona}|${fecha}`).
   const [paraBorrar, setParaBorrar] = React.useState<Set<string>>(() => new Set());
+  // Turno real abierto en el editor de hora en línea (null = cerrado).
+  const [editando, setEditando] = React.useState<TurnoRota | null>(null);
 
   const togglePersona = (id: string) =>
     setPersonasSel((prev) => {
@@ -129,26 +267,38 @@ export function ReparteMes({
     return celdaEncendida(id, fecha) ? "add" : "vacia";
   };
 
+  // Toca una celda: con turno real → abre el editor de hora; vacía → alterna su alta.
   const toggleCelda = (id: string, fecha: string) => {
-    const k = clave(id, fecha);
     if (existe(id, fecha)) {
-      setParaBorrar((prev) => {
-        const n = new Set(prev);
-        if (n.has(k)) n.delete(k);
-        else n.add(k);
-        return n;
-      });
-    } else {
-      setExcluidas((prev) => {
-        const n = new Map(prev);
-        const s = new Set(n.get(id) ?? []);
-        if (s.has(fecha)) s.delete(fecha);
-        else s.add(fecha);
-        n.set(id, s);
-        return n;
-      });
+      setEditando(turnosEn(id, fecha)[0]);
+      return;
     }
+    setExcluidas((prev) => {
+      const n = new Map(prev);
+      const s = new Set(n.get(id) ?? []);
+      if (s.has(fecha)) s.delete(fecha);
+      else s.add(fecha);
+      n.set(id, s);
+      return n;
+    });
   };
+
+  // Marca/desmarca la celda del turno editado para el lote de borrado del pie (la lleva el editor).
+  const toggleQuitar = (id: string, fecha: string) =>
+    setParaBorrar((prev) => {
+      const n = new Set(prev);
+      const k = clave(id, fecha);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+
+  // Cierra el editor si su celda deja de ser válida (persona deseleccionada o día fuera de la selección).
+  React.useEffect(() => {
+    if (editando && (!personasSel.has(editando.miembro_id) || !diasSel.has(editando.fecha))) {
+      setEditando(null);
+    }
+  }, [editando, personasSel, diasSel]);
 
   const personasElegidas = cms.filter((m) => personasSel.has(m.id));
   // Altas: celdas VACÍAS encendidas (no recreamos las que ya existen).
@@ -169,7 +319,7 @@ export function ReparteMes({
         : totalAdds > 0 && !horasValidas
           ? "Escribe un horario válido (HH:MM)."
           : totalAdds === 0 && totalDels === 0
-            ? "Toca celdas: vacía añade · con turno quita."
+            ? "Celda vacía añade · toca un turno para editar su hora."
             : null;
 
   // Restaura por lote los turnos borrados (deshacer): recrea con su franja/horas/override/nota.
@@ -252,6 +402,7 @@ export function ReparteMes({
         setPersonasSel(new Set());
         setExcluidas(new Map());
         setParaBorrar(new Set());
+        setEditando(null);
         onLimpiarDias();
       }
     },
@@ -389,7 +540,7 @@ export function ReparteMes({
         <div>
           <Label className={eyebrow}>El patrón de cada persona</Label>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Toca una celda: vacía → añade · con turno → quita (tachado). Cada quien el suyo.
+            Celda vacía → añade. Toca un turno para cambiarle la hora o quitarlo. Cada quien el suyo.
           </p>
         </div>
         {diasSel.size === 0 ? (
@@ -427,6 +578,7 @@ export function ReparteMes({
                     {dias.map((f) => {
                       const st = estadoCelda(m.id, f);
                       const t = turnosEn(m.id, f)[0];
+                      const enEdicion = editando?.miembro_id === m.id && editando?.fecha === f;
                       const tip = t
                         ? `${t.franja_nombre}${t.override ? " · refuerzo matchday" : ""}${t.nota_relevo ? " · nota de relevo" : ""}`
                         : "vacío";
@@ -445,6 +597,7 @@ export function ReparteMes({
                               st === "existe" && "border-keni-400 bg-keni-50 dark:bg-keni-900/30",
                               st === "del" && "border-border/60 bg-keni-50/50 dark:bg-keni-900/20",
                               st === "vacia" && "border-border/60 hover:bg-accent",
+                              enEdicion && "ring-2 ring-keni-400 ring-offset-1",
                             )}
                           >
                             {st === "existe" && (
@@ -468,6 +621,19 @@ export function ReparteMes({
               </tbody>
             </table>
           </div>
+        )}
+        {editando && (
+          <EditorHoraCelda
+            key={editando.id}
+            turno={editando}
+            marcadoQuitar={paraBorrar.has(clave(editando.miembro_id, editando.fecha))}
+            onCambio={onCambio}
+            onToggleQuitar={() => {
+              toggleQuitar(editando.miembro_id, editando.fecha);
+              setEditando(null);
+            }}
+            onCerrar={() => setEditando(null)}
+          />
         )}
       </div>
 
