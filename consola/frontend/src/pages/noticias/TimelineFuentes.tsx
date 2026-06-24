@@ -29,7 +29,7 @@ export function TimelineFuentes({ fuentes }: { fuentes: FuenteHistoria[] }) {
           )}
           {f.n_items > 1 && <span className="text-muted-foreground">· {f.n_items} notas</span>}
           {f.primer_visto && (
-            <span className="ml-auto text-muted-foreground">{tiempoRelativo(f.primer_visto)}</span>
+            <span className="text-muted-foreground">· {tiempoRelativo(f.primer_visto)}</span>
           )}
         </li>
       ))}
