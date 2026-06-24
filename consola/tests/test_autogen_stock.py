@@ -217,14 +217,22 @@ def test_lanzar_para_topic_unifica_sin_red_en_gris(entorno, monkeypatch):
         lambda *a, **k: (llamadas.append("buscar"), [])[1],
     )
     tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
-    a = repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="c")["id"]
-    b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    # `creado` explícito y distinto: la canónica es la PRIMERA red con stock por el orden de
+    # `listar_piezas_fila` (`creado ASC, id ASC`). Sin fijarlo, ambas filas comparten el segundo
+    # (`ahora_iso` redondea a segundos) y el desempate cae al `id` (uuid aleatorio): cuál gana sería
+    # una moneda al aire. Con `a` anterior a `b`, `a` es la canónica de forma determinista.
+    a = repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", copy="c", creado="2026-06-24T10:00:00"
+    )["id"]
+    b = repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="facebook", copy="c", creado="2026-06-24T10:00:01"
+    )["id"]
     repos.actualizar_pieza_fila(a, _campos("foto_a.jpg"))
     repos.actualizar_pieza_fila(b, _campos("foto_b.jpg"))
     autogen_stock.lanzar_para_topic({"id": tema["id"], "titulo": "T", "marca": _MARCA})
     assert llamadas == []
     fa, fb = repos.obtener_pieza_fila(a), repos.obtener_pieza_fila(b)
-    # La canónica es la primera red con stock (a); b converge a ella.
+    # La canónica es la primera red con stock (a, la de `creado` más antiguo); b converge a ella.
     assert fa["foto"] == fb["foto"] == "foto_a.jpg"
 
 
