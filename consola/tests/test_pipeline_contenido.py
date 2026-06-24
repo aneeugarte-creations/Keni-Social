@@ -114,6 +114,20 @@ def _inicializar_cluster(
     return repos.obtener_noticia_cluster(cid)
 
 
+def _sembrar_foto_propia(cid, fuente_id, *, titulo, marca="unotv"):
+    """Da al cluster `cid` un item de fuente PROPIA con su foto propia.
+
+    El canal Portal solo materializa un tema si la historia trae su propia foto (nunca stock ni
+    IA); sin foto propia lo omite. Los tests de ADMISIÓN del Portal siembran esa foto para
+    ejercitar su lógica (dedup, score bajo) sobre historias que sí se publican.
+    """
+    repos.crear_noticias_items([{
+        "fuente_id": fuente_id, "fuente_nombre": "Portal propio", "marca": marca,
+        "titulo": titulo, "url": f"https://casa.test/{cid}", "url_canonica": f"casa.test/{cid}",
+        "clave": f"k-{cid}", "cluster_id": cid, "imagen": f"https://casa.test/{cid}.jpg",
+    }])
+
+
 # --------------------------------------------------------------------------- #
 # Funciones PURAS (sin DB)                                                     #
 # --------------------------------------------------------------------------- #
@@ -799,6 +813,7 @@ def test_portal_admite_fuente_propia_directo(entorno, monkeypatch):
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
     _inicializar_cluster("c-propia", titulo="Nota del portal", score=0.05, primera_fuente=propia["id"])
     _inicializar_cluster("c-ajena", titulo="Nota de tercero", score=0.05, primera_fuente=ajena["id"])
+    _sembrar_foto_propia("c-propia", propia["id"], titulo="Nota del portal")
 
     res = pc.ejecutar_portal()
 
@@ -889,6 +904,9 @@ def test_portal_readmite_titular_recurrente_fuera_de_ventana_corta(entorno, monk
                          primera_fuente=propia["id"])
     _inicializar_cluster("c-duplicado", titulo="Resultados de la jornada", score=0.05,
                          primera_fuente=propia["id"])
+    # Ambos traen su foto propia: así el único motivo para excluir «Resultados…» es el dedup.
+    _sembrar_foto_propia("c-recurrente", propia["id"], titulo="Clima de hoy")
+    _sembrar_foto_propia("c-duplicado", propia["id"], titulo="Resultados de la jornada")
 
     res = pc.ejecutar_portal()
 
