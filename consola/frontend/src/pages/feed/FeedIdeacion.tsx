@@ -134,9 +134,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   const { marcaActiva } = useMarcaActiva();
   // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar.
   // Se aplican en SERVIDOR (van en la query), igual que el `estado` de las vistas dedicadas.
-  // La LÍNEA, además del control de contexto, tiene aquí su propia superficie visible
-  // (chips por línea del plan): mismo estado global, dos formas de tocarlo.
-  const { red, linea, lineasElegibles, cambiarLinea } = useFiltrosPublicacion();
+  const { red, linea } = useFiltrosPublicacion();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
@@ -155,6 +153,14 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     return () => window.clearTimeout(t);
   }, [busqueda]);
   const busquedaServidor = busquedaAplicada || undefined;
+
+  // FILTRO POR LÍNEA del plan (chips): son las CATEGORÍAS del plan de la marca (Última hora,
+  // Entretenimiento, Internacional, Nacional, Evergreen…) — las mismas filas de Programa › Plan
+  // y el mismo catálogo que «Crear post» y la Lista. Cada pieza cae en UNA categoría del plan
+  // (`c.categoria`), así que filtrar por ella es exacto: una pieza de «Última hora» NO se cuela
+  // en «Nacional». Estado LOCAL de la página (`""` = todas); va al servidor como `?categoria=`.
+  const [categoria, setCategoria] = React.useState("");
+  const categoriaServidor = categoria || undefined;
 
   // La vista activa vive SOLO en la URL (`?vista=`): derivada, sin useState que se
   // desincronice. "pendiente" (el default: el trabajo por hacer) va sin parámetro para no
@@ -177,13 +183,13 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     },
     [setSearchParams],
   );
-  // Cambio de contexto —vista (incluye atrás/adelante del navegador), línea editorial o el
-  // texto buscado—: el lote de búsqueda se reinicia y el listado nuevo se lee desde arriba.
+  // Cambio de contexto —vista (incluye atrás/adelante del navegador), línea del plan, línea
+  // editorial global o el texto buscado—: el lote se reinicia y el listado se lee desde arriba.
   React.useEffect(() => {
     setLotesBusqueda(1);
     const scroller = rootRef.current?.closest("main");
     if (scroller) scroller.scrollTop = 0;
-  }, [vista, linea, busquedaAplicada]);
+  }, [vista, linea, categoria, busquedaAplicada]);
 
   // Nº de posts por fila. Preferencia local, persistida por dispositivo.
   const [columnas, setColumnas] = React.useState(() =>
@@ -252,6 +258,24 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
+  // CATEGORÍAS del plan para los chips de línea: del CATÁLOGO (`{id, nombre}`), no de las piezas.
+  // Con una marca activa, las suyas; en la vista "Todas", la unión de todas (dedupe por id). Misma
+  // fuente y forma que «Crear post» y la Lista; el chip pinta el `nombre` y filtra por el `id`.
+  const categoriasPlan = React.useMemo(() => {
+    const porMarca = opcionesQuery.data?.categorias ?? {};
+    if (marcaActiva) return porMarca[marcaActiva] ?? [];
+    const mapa = new Map<string, { id: string; nombre: string }>();
+    for (const lista of Object.values(porMarca)) {
+      for (const c of lista) if (!mapa.has(c.id)) mapa.set(c.id, c);
+    }
+    return [...mapa.values()];
+  }, [opcionesQuery.data, marcaActiva]);
+  // Si la categoría elegida deja de existir (cambio de marca): vuelve a "Todas" para no filtrar
+  // por una línea que esta marca no tiene (listado vacío sin causa visible).
+  React.useEffect(() => {
+    if (categoria && !categoriasPlan.some((c) => c.id === categoria)) setCategoria("");
+  }, [categoriasPlan, categoria]);
+
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
@@ -273,6 +297,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       red,
       linea,
       busquedaAplicada,
+      categoria,
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
       origenServidor ?? "",
@@ -286,6 +311,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           red: red === FILTRO_TODOS ? undefined : red,
           linea: linea === FILTRO_TODOS ? undefined : linea,
           busqueda: busquedaServidor,
+          categoria: categoriaServidor,
           estado: estadoServidor,
           origen: origenServidor,
           excluir_origen: excluirOrigen,
@@ -311,6 +337,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     busqueda: busquedaServidor,
+    categoria: categoriaServidor,
     origen,
     excluirOrigen,
   });
@@ -482,22 +509,25 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       </Button>
     ) : undefined;
 
-  // VACÍO con buscador/línea activos: el "no hay nada" genérico mentiría (sí hay piezas, no
-  // con ESTE filtro). Cuando el buscador o la línea acotan, el vacío lo dice y ofrece limpiar.
-  const filtrandoPagina = !!busquedaServidor || linea !== FILTRO_TODOS;
+  // VACÍO con buscador/línea/línea-editorial activos: el "no hay nada" genérico mentiría (sí hay
+  // piezas, no con ESTE filtro). Cuando algo de la página acota, el vacío lo dice y ofrece limpiar.
+  // Filtros LOCALES de la página (buscador + línea del plan): los limpia el botón del vacío. La
+  // línea editorial GLOBAL (topbar) cuenta para el "Sin resultados" pero se quita desde el topbar.
+  const hayFiltroLocal = !!busquedaServidor || !!categoriaServidor;
+  const filtrandoPagina = hayFiltroLocal || linea !== FILTRO_TODOS;
   const vacioTitulo = filtrandoPagina ? "Sin resultados" : vistaActual.vacio.titulo;
   const vacioTexto = busquedaServidor
     ? `Ninguna pieza con «${busquedaServidor}» en el titular. Prueba con otras palabras o cambia la línea.`
     : filtrandoPagina
       ? "No hay piezas en esta línea. Prueba con otra o quita el filtro."
       : vistaActual.vacio.texto;
-  const accionVacioFiltro = filtrandoPagina ? (
+  const accionVacioFiltro = hayFiltroLocal ? (
     <Button
       variant="outline"
       size="sm"
       onClick={() => {
         setBusqueda("");
-        cambiarLinea(FILTRO_TODOS);
+        setCategoria("");
       }}
     >
       Limpiar filtros
@@ -561,10 +591,10 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
         <h2 className="sr-only">Feed de ideación</h2>
 
-        {/* Filtros de la PÁGINA: buscador por titular + chips de línea editorial (la taxonomía
-            del plan de la marca, la misma que Programa › Plan). La línea reusa el filtro GLOBAL
-            (mismo estado que el control de contexto de la topbar): aquí solo es una superficie
-            visible en la propia página, sin estado duplicado. */}
+        {/* Filtros de la PÁGINA: buscador por titular + chips de LÍNEA del plan (las categorías
+            del plan de la marca —Última hora, Entretenimiento, Internacional, Nacional,
+            Evergreen…—, las mismas filas de Programa › Plan). Cada pieza cae en UNA categoría del
+            plan, así que el filtro es exacto: una «Última hora» no se cuela en «Nacional». */}
         <div className="mb-3 space-y-2">
           <div className="relative">
             <Search
@@ -590,25 +620,22 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
               </button>
             )}
           </div>
-          {lineasElegibles.length > 0 && (
+          {categoriasPlan.length > 0 && (
             <div
               role="radiogroup"
-              aria-label="Filtrar por línea editorial"
+              aria-label="Filtrar por línea del plan"
               className="flex flex-wrap gap-1.5"
             >
-              <ChipLinea
-                activo={linea === FILTRO_TODOS}
-                onClick={() => cambiarLinea(FILTRO_TODOS)}
-              >
+              <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
                 Todas
               </ChipLinea>
-              {lineasElegibles.map((l) => (
+              {categoriasPlan.map((c) => (
                 <ChipLinea
-                  key={l.id}
-                  activo={linea === l.id}
-                  onClick={() => cambiarLinea(l.id)}
+                  key={c.id}
+                  activo={categoria === c.id}
+                  onClick={() => setCategoria(c.id)}
                 >
-                  {l.nombre}
+                  {c.nombre}
                 </ChipLinea>
               ))}
             </div>

@@ -1060,14 +1060,19 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
-  it("chips de línea editorial: filtran por la línea del plan (?linea=) reusando el filtro global", async () => {
-    const OPCIONES_LINEAS = {
+  it("chips de línea del plan: muestran TODAS las categorías (incl. Última hora/Evergreen) y filtran por ?categoria=", async () => {
+    const OPCIONES_PLAN = {
       ...OPCIONES,
-      // Líneas del plan de la marca activa (las mismas que Programa › Plan): pueblan los chips.
-      lineas: [
-        { id: "deportes", nombre: "Deportes", marca: "unotv" },
-        { id: "espectaculos", nombre: "Espectáculos", marca: "unotv" },
-      ],
+      // Categorías del plan de la marca = las filas de Programa › Plan, incluidas «Última hora» y
+      // «Evergreen» (que NO son líneas editoriales verticales y antes faltaban en los chips).
+      categorias: {
+        unotv: [
+          { id: "breaking", nombre: "Última hora" },
+          { id: "mx", nombre: "Nacional" },
+          { id: "internacional", nombre: "Internacional" },
+          { id: "evergreen", nombre: "Evergreen" },
+        ],
+      },
     };
     const urls: string[] = [];
     vi.stubGlobal(
@@ -1075,7 +1080,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
         if (ruta.includes("/api/piezas/opciones")) {
-          return new Response(JSON.stringify(OPCIONES_LINEAS), { status: 200 });
+          return new Response(JSON.stringify(OPCIONES_PLAN), { status: 200 });
         }
         if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
@@ -1105,12 +1110,18 @@ describe("FeedIdeacion · feed de ideación interno", () => {
 
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Los chips salen del catálogo del plan; clicar uno filtra por su id (estado global de línea).
-    fireEvent.click(await screen.findByRole("radio", { name: "Deportes" }));
+    // Las categorías especiales SÍ están entre los chips (antes faltaban por usar líneas verticales).
+    expect(await screen.findByRole("radio", { name: "Última hora" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Evergreen" })).toBeInTheDocument();
+    // Clicar «Nacional» filtra por su CATEGORÍA del plan (mx), no por una línea editorial: así una
+    // pieza de «Última hora» (categoria=breaking) nunca se cuela en «Nacional».
+    fireEvent.click(screen.getByRole("radio", { name: "Nacional" }));
     await waitFor(() =>
       expect(
-        urls.some((u) => u.includes("/api/piezas?") && u.includes("linea=deportes")),
+        urls.some((u) => u.includes("/api/piezas?") && u.includes("categoria=mx")),
       ).toBe(true),
     );
+    // El filtro de los chips NO entra como `linea=` (ese es el eje editorial global, no estos chips).
+    expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
 });
