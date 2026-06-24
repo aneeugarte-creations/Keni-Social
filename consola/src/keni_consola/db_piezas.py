@@ -425,6 +425,7 @@ def _filtros_publicacion(
     fase: str | None = None,
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
+    busqueda: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -513,6 +514,13 @@ def _filtros_publicacion(
     if fuente:
         clausulas.append("c.fuente_nombre = ?")
         params.append(fuente)
+    # BÚSQUEDA por TITULAR: palabras del título del `contenido` padre (`c.titulo`, el tema que
+    # agrupa las piezas del feed). Subcadena sin distinguir mayúsculas (`LOWER(...) LIKE`), mismo
+    # idioma que la mesa de noticias. El patrón viaja como PARÁMETRO (un '%' del usuario es un
+    # comodín, no rompe el SQL); espacios al borde se recortan.
+    if busqueda and busqueda.strip():
+        clausulas.append("LOWER(c.titulo) LIKE ?")
+        params.append(f"%{busqueda.strip().lower()}%")
     # ANTIGÜEDAD: solo lo creado ANTES del corte (ISO UTC que calcula el handler desde el
     # preset >24h/>48h/…). Sobre `c.creado` (creación del tema), mismo eje que el keyset.
     if creado_antes:
@@ -555,6 +563,7 @@ def listar_piezas(
     fase: str | None = None,
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
+    busqueda: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -573,7 +582,7 @@ def listar_piezas(
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
-        excluir_origen=excluir_origen,
+        excluir_origen=excluir_origen, busqueda=busqueda,
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -616,12 +625,13 @@ def contar_piezas(
     fase: str | None = None,
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
+    busqueda: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
-        excluir_origen=excluir_origen,
+        excluir_origen=excluir_origen, busqueda=busqueda,
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "

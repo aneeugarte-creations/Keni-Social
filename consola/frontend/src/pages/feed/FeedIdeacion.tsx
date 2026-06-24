@@ -28,7 +28,7 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Search, X } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { FILTRO_TODOS, useFiltrosPublicacion } from "@/hooks/filtros-contenido-contexto";
@@ -99,19 +100,61 @@ function guardarPref(clave: string, valor: number): void {
   }
 }
 
+/** Píldora de filtro por línea editorial: activa = rellena de marca; en reposo = contorno. */
+function ChipLinea({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={activo}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors",
+        activo
+          ? "border-keni-600 bg-keni-600 text-white hover:bg-keni-700"
+          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
   const { marcaActiva } = useMarcaActiva();
   // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar.
   // Se aplican en SERVIDOR (van en la query), igual que el `estado` de las vistas dedicadas.
-  const { red, linea } = useFiltrosPublicacion();
+  // La LÍNEA, además del control de contexto, tiene aquí su propia superficie visible
+  // (chips por línea del plan): mismo estado global, dos formas de tocarlo.
+  const { red, linea, lineasElegibles, cambiarLinea } = useFiltrosPublicacion();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
   // Diálogo "Crear post" (alta directa): el equipo teclea el copy FINAL y nace un
   // borrador por red por el mismo motor que el copy generado.
   const [creandoPost, setCreandoPost] = React.useState(false);
+
+  // BUSCADOR por titular: lo tecleado (`busqueda`) se DEBOUNCEA a `busquedaAplicada`, que es
+  // lo que viaja a la query (servidor) — así no se dispara una llamada por pulsación. La
+  // búsqueda filtra en SERVIDOR sobre el título del tema, transversal a vista/red/línea, y los
+  // conteos de las pestañas la respetan (cuentan lo mismo que se lista).
+  const [busqueda, setBusqueda] = React.useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = React.useState("");
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setBusquedaAplicada(busqueda.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [busqueda]);
+  const busquedaServidor = busquedaAplicada || undefined;
 
   // La vista activa vive SOLO en la URL (`?vista=`): derivada, sin useState que se
   // desincronice. "pendiente" (el default: el trabajo por hacer) va sin parámetro para no
@@ -134,13 +177,13 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     },
     [setSearchParams],
   );
-  // Cambio de contexto —incluye atrás/adelante del navegador, no solo el clic en la pestaña—:
-  // el lote de búsqueda se reinicia y el listado nuevo se lee desde arriba.
+  // Cambio de contexto —vista (incluye atrás/adelante del navegador), línea editorial o el
+  // texto buscado—: el lote de búsqueda se reinicia y el listado nuevo se lee desde arriba.
   React.useEffect(() => {
     setLotesBusqueda(1);
     const scroller = rootRef.current?.closest("main");
     if (scroller) scroller.scrollTop = 0;
-  }, [vista]);
+  }, [vista, linea, busquedaAplicada]);
 
   // Nº de posts por fila. Preferencia local, persistida por dispositivo.
   const [columnas, setColumnas] = React.useState(() =>
@@ -229,6 +272,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
       linea,
+      busquedaAplicada,
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
       origenServidor ?? "",
@@ -241,6 +285,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           marca: marcaActiva ?? undefined,
           red: red === FILTRO_TODOS ? undefined : red,
           linea: linea === FILTRO_TODOS ? undefined : linea,
+          busqueda: busquedaServidor,
           estado: estadoServidor,
           origen: origenServidor,
           excluir_origen: excluirOrigen,
@@ -265,6 +310,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
+    busqueda: busquedaServidor,
     origen,
     excluirOrigen,
   });
@@ -436,6 +482,30 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       </Button>
     ) : undefined;
 
+  // VACÍO con buscador/línea activos: el "no hay nada" genérico mentiría (sí hay piezas, no
+  // con ESTE filtro). Cuando el buscador o la línea acotan, el vacío lo dice y ofrece limpiar.
+  const filtrandoPagina = !!busquedaServidor || linea !== FILTRO_TODOS;
+  const vacioTitulo = filtrandoPagina ? "Sin resultados" : vistaActual.vacio.titulo;
+  const vacioTexto = busquedaServidor
+    ? `Ninguna pieza con «${busquedaServidor}» en el titular. Prueba con otras palabras o cambia la línea.`
+    : filtrandoPagina
+      ? "No hay piezas en esta línea. Prueba con otra o quita el filtro."
+      : vistaActual.vacio.texto;
+  const accionVacioFiltro = filtrandoPagina ? (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        setBusqueda("");
+        cambiarLinea(FILTRO_TODOS);
+      }}
+    >
+      Limpiar filtros
+    </Button>
+  ) : (
+    accionVacio
+  );
+
   return (
     <CadenasLoteContexto.Provider value={cadenasLote}>
     <div ref={rootRef}>
@@ -490,6 +560,61 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           cambiar de pestaña en monitores anchos. */}
       <div className={cn("mx-auto w-full", MAX_W_FEED[colsEfectivas])}>
         <h2 className="sr-only">Feed de ideación</h2>
+
+        {/* Filtros de la PÁGINA: buscador por titular + chips de línea editorial (la taxonomía
+            del plan de la marca, la misma que Programa › Plan). La línea reusa el filtro GLOBAL
+            (mismo estado que el control de contexto de la topbar): aquí solo es una superficie
+            visible en la propia página, sin estado duplicado. */}
+        <div className="mb-3 space-y-2">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por palabras del titular…"
+              aria-label="Buscar piezas por titular"
+              className="pl-8 pr-8"
+            />
+            {busqueda && (
+              <button
+                type="button"
+                onClick={() => setBusqueda("")}
+                aria-label="Limpiar búsqueda"
+                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {lineasElegibles.length > 0 && (
+            <div
+              role="radiogroup"
+              aria-label="Filtrar por línea editorial"
+              className="flex flex-wrap gap-1.5"
+            >
+              <ChipLinea
+                activo={linea === FILTRO_TODOS}
+                onClick={() => cambiarLinea(FILTRO_TODOS)}
+              >
+                Todas
+              </ChipLinea>
+              {lineasElegibles.map((l) => (
+                <ChipLinea
+                  key={l.id}
+                  activo={linea === l.id}
+                  onClick={() => cambiarLinea(l.id)}
+                >
+                  {l.nombre}
+                </ChipLinea>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Pestañas (control segmentado en UNA fila), solas en su fila. El scroll horizontal de
             emergencia vive FUERA del rail (dentro recortaba el anillo de foco y pintaba scrollbar
             sobre las píldoras). El badge cuenta PIEZAS con el total real del servidor y se pinta
@@ -562,9 +687,9 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           ) : (
             <EstadoVacio
               icono={vistaActual.icono}
-              titulo={vistaActual.vacio.titulo}
-              texto={vistaActual.vacio.texto}
-              accion={accionVacio}
+              titulo={vacioTitulo}
+              texto={vacioTexto}
+              accion={accionVacioFiltro}
             />
           )
         ) : agrupar ? (

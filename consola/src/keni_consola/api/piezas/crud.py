@@ -321,6 +321,9 @@ async def listar(request: Request) -> Response:
     tipo_contenido = qp.get("tipo") or None
     fuente = qp.get("fuente") or None
     fase = qp.get("fase") or None
+    # BÚSQUEDA por titular (`?busqueda=`): palabras del título del tema. Subcadena
+    # case-insensitive sobre `c.titulo`; transversal al estado y a la paginación keyset.
+    busqueda = qp.get("busqueda") or None
     creado_antes: str | None = None
     antiguedad_h = qp.get("antiguedad_h")
     if antiguedad_h:
@@ -363,7 +366,7 @@ async def listar(request: Request) -> Response:
         "linea": linea, "responsable": responsable, "desde": desde, "hasta": hasta,
         "origen": origen, "categoria": categoria, "tipo_contenido": tipo_contenido,
         "fuente": fuente, "fase": fase, "creado_antes": creado_antes,
-        "excluir_origen": excluir_origen,
+        "excluir_origen": excluir_origen, "busqueda": busqueda,
     }
     cuerpo = await run_in_threadpool(
         _listar, filtros, limite, desplazamiento, cursor, modo_feed, sin_limite

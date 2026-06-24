@@ -136,6 +136,7 @@ export function useConteosFeed(filtros: {
   marca?: string;
   red?: string;
   linea?: string;
+  busqueda?: string;
   responsable?: string;
   origen?: string;
   excluirOrigen?: string;
@@ -147,7 +148,7 @@ export function useConteosFeed(filtros: {
   // `responsable` (lente del reparto "la lista"): cuando está activa, la Lista filtra por
   // ella, así que los badges deben contar lo MISMO que se lista (si no, el número no cuadra
   // con las filas). Ausente en los demás feeds (MobileFeed/FeedIdeacion): sin efecto.
-  const { marca, red, linea, responsable, origen, excluirOrigen, enVivo } = filtros;
+  const { marca, red, linea, busqueda, responsable, origen, excluirOrigen, enVivo } = filtros;
   // `enVivo` (tablero COMPARTIDO del reparto): los conteos laten al MISMO pulso que la lista
   // y el calendario (que ya tienen refetchInterval+refetchOnWindowFocus), para que tras el
   // claim de un compañero el badge no quede rancio mientras la lista ya cambió.
@@ -161,6 +162,7 @@ export function useConteosFeed(filtros: {
       marca ?? MARCA_ACTIVA_TODAS,
       red ?? FILTRO_TODOS,
       linea ?? FILTRO_TODOS,
+      busqueda ?? "",
       responsable ?? "",
       origen ?? "",
       excluirOrigen ?? "",
@@ -169,21 +171,21 @@ export function useConteosFeed(filtros: {
   const conteoPendiente = useQuery({
     queryKey: claveConteo("pendiente"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "pendiente", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, busqueda, responsable, origen, excluir_origen: excluirOrigen, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoPublicado = useQuery({
     queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "publicado", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, busqueda, responsable, origen, excluir_origen: excluirOrigen, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoRevision = useQuery({
     queryKey: claveConteo("en_revision"),
     queryFn: ({ signal }) =>
-      api.piezas({ marca, red, linea, responsable, origen, excluir_origen: excluirOrigen, estado: "en_revision", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, busqueda, responsable, origen, excluir_origen: excluirOrigen, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });

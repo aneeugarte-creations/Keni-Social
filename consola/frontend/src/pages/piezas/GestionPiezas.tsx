@@ -29,7 +29,7 @@ import {
   PanelFiltrosLimpieza,
   type FiltrosLimpieza,
 } from "@/pages/piezas/PanelFiltrosLimpieza";
-import type { FiltrosPiezas, OpcionesPiezas, Pieza } from "@/types";
+import type { CategoriaPlanOpcion, FiltrosPiezas, OpcionesPiezas, Pieza } from "@/types";
 
 const TAM_PAGINA = 30;
 
@@ -173,6 +173,20 @@ function Cuerpo({
   // Acotan la lista —y por tanto lo que la selección múltiple borra— para barrer lo viejo o
   // incompleto sin tocar lo completado.
   const [limpieza, setLimpieza] = React.useState<FiltrosLimpieza>({});
+
+  // CATEGORÍAS del plan para el dropdown de limpieza: del CATÁLOGO (`{id, nombre}`), no de los
+  // ids crudos de las piezas cargadas. Con una marca activa, las suyas; en la vista "Todas",
+  // la unión de todas (dedupe por id, primer nombre que aparezca). Misma fuente que «Crear
+  // post» y Programa › Plan, así el dropdown muestra el nombre legible y filtra por el id.
+  const categoriasPlan = React.useMemo<CategoriaPlanOpcion[]>(() => {
+    const porMarca = opciones.categorias ?? {};
+    if (marcaActiva) return porMarca[marcaActiva] ?? [];
+    const mapa = new Map<string, CategoriaPlanOpcion>();
+    for (const lista of Object.values(porMarca)) {
+      for (const c of lista) if (!mapa.has(c.id)) mapa.set(c.id, c);
+    }
+    return [...mapa.values()];
+  }, [opciones.categorias, marcaActiva]);
 
   // `usuario` solo para avisar al editor sin marca asignada (abajo). El reparto de TAREAS
   // (coger/asignar) se mudó a su propia página (/operacion/tareas): el Feed es SOLO piezas.
@@ -355,7 +369,12 @@ function Cuerpo({
       {/* Filtros de LIMPIEZA por lotes (antigüedad/fase/tipo/categoría/fuente): acotan la lista
           —y lo que la selección múltiple borra— para barrer lo viejo o incompleto. Solo lista. */}
       {!calendario && (
-        <PanelFiltrosLimpieza valor={limpieza} onCambio={setLimpieza} piezas={piezas} />
+        <PanelFiltrosLimpieza
+          valor={limpieza}
+          onCambio={setLimpieza}
+          categorias={categoriasPlan}
+          piezas={piezas}
+        />
       )}
       {calendarioTruncado && (
         <Aviso role="alert" className="mb-3">

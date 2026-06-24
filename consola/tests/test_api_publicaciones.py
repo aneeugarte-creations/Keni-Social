@@ -138,6 +138,25 @@ def test_filtro_categoria_tipo_y_fuente(cliente):
     assert len(cliente.get("/api/piezas?categoria=mx").json()["piezas"]) == 0
 
 
+def test_filtro_busqueda_por_titular(cliente):
+    """`?busqueda=` filtra por palabras del TITULAR (título del tema padre), sin distinguir
+    mayúsculas y por subcadena; transversal a las demás facetas."""
+    _crear(cliente, titulo="Gol de último minuto")
+    _crear(cliente, titulo="Rueda de prensa del técnico")
+    # Subcadena, case-insensitive: "gol" casa "Gol de último minuto".
+    r = cliente.get("/api/piezas?busqueda=gol").json()["piezas"]
+    assert [p["titulo"] for p in r] == ["Gol de último minuto"]
+    # Una palabra interior del otro titular casa solo ese.
+    r2 = cliente.get("/api/piezas?busqueda=PRENSA").json()["piezas"]
+    assert [p["titulo"] for p in r2] == ["Rueda de prensa del técnico"]
+    # Sin coincidencias: lista vacía (no cae al listado completo).
+    assert cliente.get("/api/piezas?busqueda=baloncesto").json()["piezas"] == []
+    # Compone con otra faceta (red): mismo titular, distinta red, el filtro se acumula.
+    _crear(cliente, red="instagram", titulo="Gol en Instagram")
+    compuesto = cliente.get("/api/piezas?busqueda=gol&red=instagram").json()["piezas"]
+    assert [p["titulo"] for p in compuesto] == ["Gol en Instagram"]
+
+
 def test_filtro_fase(cliente):
     """`?fase=incompleto` = en producción (le falta copy/arte/revisión, en borrador); `programado`
     = ya en calendario. Permite barrer lo nunca terminado y conservar lo completado."""

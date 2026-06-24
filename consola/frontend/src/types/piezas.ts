@@ -212,6 +212,8 @@ export interface FiltrosPiezas {
   antiguedad_h?: string;
   /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
   linea?: string;
+  /** BÚSQUEDA por titular: subcadena (case-insensitive) sobre el título del tema padre. */
+  busqueda?: string;
   /**
    * REPARTO ("la lista" de ClaroSports): id de usuario = piezas COGIDAS por esa persona;
    * `"sin"` = piezas LIBRES (por coger). El responsable vive en el `contenido` padre.

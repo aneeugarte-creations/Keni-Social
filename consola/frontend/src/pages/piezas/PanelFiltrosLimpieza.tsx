@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Pieza } from "@/types";
+import type { CategoriaPlanOpcion, Pieza } from "@/types";
 
 /** Filtros de LIMPIEZA del feed (sobre el contenido padre). Vacío = sin filtrar. */
 export interface FiltrosLimpieza {
@@ -46,11 +46,11 @@ const TIPO = [
   { v: "fuente", n: "Fuente" },
 ];
 
-/** Valores distintos no vacíos de una clave de las piezas cargadas, ordenados. */
-function distintos(piezas: Pieza[], clave: "categoria" | "fuente_original"): string[] {
+/** Medios de origen distintos no vacíos de las piezas cargadas, ordenados. */
+function fuentesDistintas(piezas: Pieza[]): string[] {
   const vistos = new Set<string>();
   for (const p of piezas) {
-    const v = (p[clave] ?? "").trim();
+    const v = (p.fuente_original ?? "").trim();
     if (v) vistos.add(v);
   }
   return [...vistos].sort((a, b) => a.localeCompare(b, "es"));
@@ -59,20 +59,23 @@ function distintos(piezas: Pieza[], clave: "categoria" | "fuente_original"): str
 /**
  * Barra de filtros para LIMPIAR el feed por lotes: acota la lista (y por tanto lo que la
  * selección múltiple puede borrar) por antigüedad, fase de producción, tipo, categoría y
- * medio. Categoría y fuente se derivan de las piezas ya cargadas (no hay catálogo aparte).
- * Controlado: el estado vive en el padre (que lo pasa a `api.piezas`).
+ * medio. La CATEGORÍA viene del catálogo del plan (`{id, nombre}`, misma fuente que «Crear
+ * post» y Programa › Plan): el dropdown muestra el NOMBRE legible y filtra por el `id`. La
+ * fuente se deriva de las piezas cargadas (no hay catálogo aparte). Controlado: el estado
+ * vive en el padre (que lo pasa a `api.piezas`).
  */
 export function PanelFiltrosLimpieza({
   valor,
   onCambio,
+  categorias,
   piezas,
 }: {
   valor: FiltrosLimpieza;
   onCambio: (v: FiltrosLimpieza) => void;
+  categorias: CategoriaPlanOpcion[];
   piezas: Pieza[];
 }) {
-  const categorias = React.useMemo(() => distintos(piezas, "categoria"), [piezas]);
-  const fuentes = React.useMemo(() => distintos(piezas, "fuente_original"), [piezas]);
+  const fuentes = React.useMemo(() => fuentesDistintas(piezas), [piezas]);
   const set = (clave: keyof FiltrosLimpieza, v: string) =>
     onCambio({ ...valor, [clave]: v === _TODOS ? undefined : v });
   const hayFiltro = Object.values(valor).some(Boolean);
@@ -124,7 +127,7 @@ export function PanelFiltrosLimpieza({
           <SelectContent>
             <SelectItem value={_TODOS}>Cualquier categoría</SelectItem>
             {categorias.map((c) => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
+              <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
             ))}
           </SelectContent>
         </Select>

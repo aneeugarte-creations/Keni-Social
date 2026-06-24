@@ -1037,4 +1037,80 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.getByText("¡Increíble remontada!")).toBeInTheDocument();
     expect(screen.queryByText("Error al cargar")).not.toBeInTheDocument();
   });
+
+  it("buscador por titular: al teclear (debounce) el feed consulta al servidor con ?busqueda=", async () => {
+    stubFetch([PIEZA]);
+    const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string | URL) => {
+      urls.push(String(url));
+      return base(url);
+    });
+
+    renderFeed();
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Teclear filtra en SERVIDOR (no en cliente): la consulta del listado lleva ?busqueda=.
+    fireEvent.change(screen.getByLabelText("Buscar piezas por titular"), {
+      target: { value: "Gol" },
+    });
+    await waitFor(() =>
+      expect(
+        urls.some((u) => u.includes("/api/piezas?") && u.includes("busqueda=Gol")),
+      ).toBe(true),
+    );
+  });
+
+  it("chips de línea editorial: filtran por la línea del plan (?linea=) reusando el filtro global", async () => {
+    const OPCIONES_LINEAS = {
+      ...OPCIONES,
+      // Líneas del plan de la marca activa (las mismas que Programa › Plan): pueblan los chips.
+      lineas: [
+        { id: "deportes", nombre: "Deportes", marca: "unotv" },
+        { id: "espectaculos", nombre: "Espectáculos", marca: "unotv" },
+      ],
+    };
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/piezas/opciones")) {
+          return new Response(JSON.stringify(OPCIONES_LINEAS), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas")) {
+          urls.push(ruta);
+          return new Response(
+            JSON.stringify({
+              piezas: [PIEZA],
+              paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    renderFeed();
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Los chips salen del catálogo del plan; clicar uno filtra por su id (estado global de línea).
+    fireEvent.click(await screen.findByRole("radio", { name: "Deportes" }));
+    await waitFor(() =>
+      expect(
+        urls.some((u) => u.includes("/api/piezas?") && u.includes("linea=deportes")),
+      ).toBe(true),
+    );
+  });
 });
