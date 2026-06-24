@@ -253,7 +253,7 @@ export default function DetalleHistoriaPagina() {
 
           <p
             className={cn(
-              "mt-5 flex items-start gap-2 text-sm leading-relaxed",
+              "mt-4 flex items-start gap-2 text-sm leading-relaxed",
               estado.cautela ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
             )}
             data-testid="frase-corroboracion"
@@ -271,7 +271,7 @@ export default function DetalleHistoriaPagina() {
             </p>
           )}
 
-          <section className="mt-7 space-y-4">
+          <section className="mt-6 space-y-4">
             <h2 className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Fuentes y titulares similares
             </h2>
@@ -312,11 +312,11 @@ export default function DetalleHistoriaPagina() {
         </div>
 
         {/* ── El rail de señal: el score + las acciones al pie ─────────────── */}
-        <aside className="flex flex-col gap-7">
+        <aside className="flex flex-col gap-6">
           <CalculoScore historia={historia} />
 
           {enPool && (
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
                 className="h-10 w-full justify-center gap-2 bg-card text-sm font-medium shadow-sm transition hover:bg-card hover:shadow-md"

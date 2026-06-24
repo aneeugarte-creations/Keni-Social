@@ -40,7 +40,7 @@ export function CalculoScore({ historia }: { historia: Historia }) {
   const leyenda = [...lineas].sort((a, b) => b.aporte - a.aporte);
 
   return (
-    <div className="flex flex-col gap-7" data-testid="calculo-score">
+    <div className="flex flex-col gap-6" data-testid="calculo-score">
       {/* 1 · Veredicto — la cifra manda */}
       <div>
         <div className="flex items-baseline gap-1.5">
@@ -88,7 +88,7 @@ export function CalculoScore({ historia }: { historia: Historia }) {
               <li
                 key={l.etiqueta}
                 className={cn(
-                  "flex items-baseline justify-between gap-4 py-1.5",
+                  "flex items-baseline justify-between gap-4 py-1",
                   i > 0 && "border-t border-border/60",
                 )}
               >
