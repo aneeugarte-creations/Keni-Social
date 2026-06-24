@@ -820,6 +820,10 @@ function DialogoEditarInterno({
                 imagenClave={pieza.imagen_clave}
                 fotos={fotos}
                 onFotosCambio={setFotos}
+                // REEMPLAZO del FONDO (hueco 0) por una propia (subir/galería/IA): declara el origen
+                // para mandarlo al guardar y limpiar el metadato de licencia heredado. El buscador de
+                // stock/agencias y editar solo texto/diseño NO lo declaran (preservan la metadata).
+                onOrigenPropio={setImagenOrigen}
                 imagenFuente={pieza.imagen_fuente}
                 sinPlantilla={placaOculta}
                 onAlternarSinPlantilla={() => setPlacaOculta((v) => !v)}

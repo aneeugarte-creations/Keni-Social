@@ -9,6 +9,7 @@ comportamiento).
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -66,6 +67,23 @@ _TRANSICIONES_PUT: dict[str, frozenset[str]] = {
     ESTADO_PROGRAMADO: frozenset({ESTADO_BORRADOR, ESTADO_PUBLICADO}),
     ESTADO_PUBLICADO: frozenset(),
 }
+
+
+def _hueco0_objeto(fotos_json: str) -> str:
+    """Objeto (media id) del HUECO 0 de un collage JSON `[{objeto,…}, …]`. "" si vacío/inválido.
+
+    El hueco 0 es el FONDO de la placa: porta el `foto` y la metadata de licencia de la pieza.
+    """
+    crudo = (fotos_json or "").strip()
+    if not crudo:
+        return ""
+    try:
+        datos = json.loads(crudo)
+    except (ValueError, TypeError):
+        return ""
+    if isinstance(datos, list) and datos and isinstance(datos[0], dict):
+        return str(datos[0].get("objeto") or "").strip()
+    return ""
 
 
 def _normalizar_fecha_programada(valor: str) -> tuple[str | None, str | None]:
@@ -582,6 +600,16 @@ def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, An
     # se adjunta por su puerta, nunca aquí. Solo al CAMBIAR de foto (no si reenvían la misma).
     elif "foto" in campos and campos["foto"] != (pieza.get("foto") or ""):
         campos["imagen_origen"] = licencia_imagen.origen_propio(None)
+    # PLACA/COLLAGE (defensivo): el FONDO real es el hueco 0 del array `fotos`. Si cambia a un
+    # archivo DISTINTO sin que `foto` lo refleje (consumidor que no sincroniza el par legado), es
+    # un REEMPLAZO propio: nunca debe quedar metadata de stock cuando el fondo ya no es la foto de
+    # stock. Conservador: solo si el hueco 0 nuevo es no vacío y difiere del actual (ante duda,
+    # preserva). Si el front ya declaró `imagen_origen`/`foto`, las ramas previas ya lo cubren.
+    elif "fotos" in campos:
+        nuevo0 = _hueco0_objeto(campos["fotos"])
+        actual0 = _hueco0_objeto(pieza.get("fotos") or "") or (pieza.get("foto") or "").strip()
+        if nuevo0 and nuevo0 != actual0:
+            campos["imagen_origen"] = licencia_imagen.origen_propio(None)
     campos = licencia_imagen.normalizar_campos_imagen(campos, pieza)
 
     # PUBLICADO ES TERMINAL para la fecha: el post de una pieza publicada ya salió en su

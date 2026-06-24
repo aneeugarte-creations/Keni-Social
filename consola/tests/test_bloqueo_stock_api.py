@@ -363,6 +363,75 @@ def test_reemplazo_por_put_se_espeja_y_limpia_licencia_en_hermana(entorno):
     assert h["imagen_autorizada"] in (False, 0)
 
 
+def test_put_placa_reemplazo_fondo_propio_limpia_stock(entorno):
+    """PLACA: reemplazar el FONDO (hueco 0) por una propia declara origen y limpia el stock BY-SA.
+
+    El editor de placa manda `foto` (hueco 0) + `fotos` (collage) + `imagen_origen` 'subida'.
+    """
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])
+    r = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={
+            "foto": "originales/propia.jpg",
+            "fotos": '[{"objeto":"originales/propia.jpg","foco":null,"zoom":0}]',
+            "imagen_origen": "subida",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "subida"
+    assert fila["imagen_licencia"] == ""
+    assert fila["imagen_proveedor"] == ""
+    assert fila["imagen_autor"] == ""
+    assert fila["imagen_autorizada"] in (False, 0)
+    assert fila["falta_imagen"] in (False, 0)
+    # Desbloqueada: ya puede programarse sin autorizar.
+    r2 = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_put_placa_solo_texto_preserva_stock(entorno):
+    """PLACA: editar solo TEXTO/diseño (copy + copy_in) SIN tocar el fondo PRESERVA la metadata stock."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])
+    r = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={"contenido": "nuevo copy del post", "copy_in": "Titular nuevo"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "stock"
+    assert fila["imagen_licencia"] == "CC BY-SA 4.0"
+    assert fila["imagen_autorizada"] in (False, 0)
+
+
+def test_put_placa_fondo_via_fotos_sin_declarar_limpia_stock(entorno):
+    """DEFENSIVO: si cambia el hueco 0 del array `fotos` (sin `foto` ni origen declarados), se trata
+    como REEMPLAZO propio y la metadata de stock se limpia (no debe quedar stock huérfano)."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])  # foto guardada = stock123.jpg
+    r = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={"fotos": '[{"objeto":"originales/otra.jpg","foco":null,"zoom":0}]'},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == ""
+    assert fila["imagen_licencia"] == ""
+    assert fila["imagen_proveedor"] == ""
+
+
 def test_reenviar_la_misma_foto_no_altera_la_licencia(entorno):
     """Reenviar la MISMA foto (sin cambiarla) NO toca el metadato de stock (no pisa el badge)."""
     cli = _cli()

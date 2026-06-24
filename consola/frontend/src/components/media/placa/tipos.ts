@@ -2,6 +2,7 @@
  * Tipos y constantes compartidos del editor de placa inline (`EditorPlacaInline` y sus
  * sub-componentes en `components/media/placa/`).
  */
+import type { OrigenImagenPropio } from "@/components/media/EditorImagen";
 import type { Documento } from "@/editor/documento";
 import type { FotoCollage } from "@/lib/placa/docPieza";
 import type { DatosStock } from "@/lib/stock";
@@ -32,6 +33,13 @@ export interface EditorPlacaInlineProps {
   fotos: FotoCollage[];
   /** Notifica un cambio en el array de fotos (foto/reencuadre de algún hueco). */
   onFotosCambio: (fotos: FotoCollage[]) => void;
+  /**
+   * REEMPLAZO del FONDO (hueco 0) por una foto PROPIA (subir/galería/IA): declara su origen propio
+   * para que el padre lo mande al guardar y el back LIMPIE el metadato de licencia heredado (p. ej.
+   * de una foto de stock). NO se llama al reemplazar por el BUSCADOR de stock/agencias (el server
+   * fija ese origen), ni al editar solo TEXTO/diseño, ni al tocar un hueco secundario del collage.
+   */
+  onOrigenPropio?: (origen: OrigenImagenPropio) => void;
   /** URL de la imagen original (RSS de marca propia), si la pieza la trae. */
   imagenFuente?: string;
   /** "Sin plantilla": publicar solo la foto cruda (sin la plantilla encima). */

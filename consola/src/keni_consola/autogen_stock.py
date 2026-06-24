@@ -10,10 +10,12 @@ La etapa va GATEADA por `KENI_PIPELINE_STOCK` (def ON) + el maestro `KENI_MAQUIN
 cuántos temas por barrido con `KENI_STOCK_MAX_BARRIDO`. La SELECCIÓN (`topics_sin_stock`) es PURA.
 
 PROPAGACIÓN ROBUSTA Y RETROACTIVA (no depende del frágil toggle `espejo`): la foto de stock es
-ayuda del TEMA, así que `propagar_stock` la reparte a TODA red del tema que esté en gris (sin
-pisar imágenes propias ni publicadas). El barrido REPARA temas a medias copiando, gratis, la foto
-que ya tenga una red a las que aún no la tienen; solo BUSCA en APIs (con coste) cuando ninguna red
-del tema tiene foto, y marca `autogen-stock` tras intentarlo para no re-buscar lo no encontrable.
+ayuda del TEMA, así que es UNA sola por tema, idéntica en todas las redes. `propagar_stock` reparte
+la foto CANÓNICA a TODA red en gris Y UNIFICA las redes que tuvieran otra foto de stock distinta
+(sin pisar imágenes propias, stock ya autorizada ni publicadas). El barrido REPARA/unifica temas a
+medias o divergentes copiando, gratis, la foto que ya tenga una red; solo BUSCA en APIs (con coste)
+cuando NINGUNA red del tema tiene foto, y marca `autogen-stock` tras intentarlo para no re-buscar lo
+no encontrable. Así una búsqueda manual o un barrido nunca dejan IG con una foto y FB con otra.
 
 `adjuntar_candidata` es la ÚNICA puerta para fijar una foto de stock (la usan esta etapa y el
 endpoint manual `api/artes` de "Buscar foto") y SIEMPRE reparte a las hermanas vacías.
@@ -80,6 +82,43 @@ def _es_stock(plataforma: dict[str, Any]) -> bool:
     )
 
 
+# Identidad de una foto de stock (la foto + su crédito): dos redes con la MISMA tupla comparten la
+# misma foto de stock; si difieren, el tema tiene stock DIVERGENTE que hay que unificar.
+_CLAVES_CANONICAS = (
+    "foto",
+    "imagen_proveedor",
+    "imagen_autor",
+    "imagen_licencia",
+    "imagen_credito_url",
+)
+
+
+def _firma_stock(plataforma: dict[str, Any]) -> tuple[str, ...]:
+    """Tupla identidad de la foto de stock de una plataforma (foto + crédito)."""
+    return tuple((plataforma.get(c) or "") for c in _CLAVES_CANONICAS)
+
+
+def _difiere_de_canonica(plataforma: dict[str, Any], campos: dict[str, Any]) -> bool:
+    """True si la foto de stock de la plataforma difiere de la canónica `campos` (foto o crédito)."""
+    return any((plataforma.get(c) or "") != (campos.get(c) or "") for c in _CLAVES_CANONICAS)
+
+
+def _hay_stock_divergente(plataformas: list[dict[str, Any]]) -> bool:
+    """True si entre las redes del tema hay DOS o más fotos de stock DISTINTAS que se pueden unificar.
+
+    Solo cuenta el stock NO publicado y NO autorizado (la unificación nunca pisa una foto que un
+    humano autorizó ni una publicada): si todas las que se podrían tocar ya coinciden, no diverge.
+    """
+    firmas = {
+        _firma_stock(p)
+        for p in plataformas
+        if (p.get("estado") or "") != "publicado"
+        and _es_stock(p)
+        and not p.get("imagen_autorizada")
+    }
+    return len(firmas) > 1
+
+
 def _campos_desde(plataforma: dict[str, Any]) -> dict[str, Any]:
     """Campos de stock a ESPEJAR desde una pieza que ya tiene la foto (la copia a las vacías).
 
@@ -100,28 +139,39 @@ def _campos_desde(plataforma: dict[str, Any]) -> dict[str, Any]:
 
 
 def propagar_stock(publicacion_id: str, campos: dict[str, Any]) -> int:
-    """Aplica `campos` (foto de stock) a TODA red del tema que aún NO tiene imagen. Robusto.
+    """Aplica `campos` (foto de stock CANÓNICA) a TODA red del tema para que converja a UNA sola foto.
 
-    Independiente del toggle `espejo` (la foto de stock es ayuda del TEMA, no edición por red):
-    rellena solo las redes SIN imagen propia ni foto (no pisa una imagen real ya elegida) y salta
-    las publicadas. Idempotente: una red ya con foto no se vuelve a tocar. Devuelve cuántas rellenó.
-    Es el núcleo de "propaga en las que todavía no la tienen", usado por el adjuntado manual y el
-    barrido (incluida la reparación retroactiva de temas que quedaron a medias).
+    Independiente del toggle `espejo` (la foto de stock es ayuda del TEMA, no edición por red).
+    Escribe la canónica a una hermana cuando:
+      - está en GRIS (sin imagen propia ni foto) -> rellena la que aún no la tiene; o
+      - ya tiene OTRA foto de STOCK distinta (otro `foto`/crédito) -> UNIFICA, para que el tema no
+        quede con metadata divergente entre redes (p. ej. IG autor A / FB autor B por el mismo tema,
+        fruto de barridos o búsquedas manuales distintas).
+    NUNCA pisa una imagen PROPIA del usuario (subida/galería/IA/licenciada: no es `_es_stock`), una
+    foto de stock que un humano ya AUTORIZÓ, ni una pieza publicada. Idempotente: una red que ya
+    tiene la canónica no se reescribe. Devuelve cuántas tocó. Lo usan el adjuntado manual y el
+    barrido (reparación/unificación retroactiva de temas a medias o divergentes).
     """
     if not publicacion_id:
         return 0
-    rellenadas = 0
+    tocadas = 0
     for hermana in repos.listar_piezas_fila(publicacion_id):
         if (hermana.get("estado") or "") == "publicado":
             continue
-        if not _sin_imagen(hermana):
+        rellena_gris = _sin_imagen(hermana)
+        unifica_stock = (
+            _es_stock(hermana)
+            and not hermana.get("imagen_autorizada")
+            and _difiere_de_canonica(hermana, campos)
+        )
+        if not (rellena_gris or unifica_stock):
             continue
         try:
             repos.actualizar_pieza_fila(hermana["id"], campos)
-            rellenadas += 1
+            tocadas += 1
         except Exception:  # noqa: BLE001 -- una hermana borrada/en carrera no rompe el resto
             _log.debug("auto-stock: no se pudo espejar el stock a una hermana.", exc_info=True)
-    return rellenadas
+    return tocadas
 
 
 def topics_sin_stock(
@@ -158,11 +208,14 @@ def topics_sin_stock(
             continue
         plataformas = plataformas_por_item.get(item.get("id"), [])
         hay_vacia = any(_tiene_copy(p) and _sin_imagen(p) for p in plataformas)
-        if not hay_vacia:
+        # UNIFICACIÓN: aunque NINGUNA red esté en gris, un tema con DOS fotos de stock distintas
+        # debe converger a una sola; se elige para repartir la canónica (reparación, sin coste API).
+        hay_divergente = _hay_stock_divergente(plataformas)
+        if not (hay_vacia or hay_divergente):
             continue
         hay_stock = any(_es_stock(p) for p in plataformas)
         ya = item.get("id") in ya_procesados
-        # Repartir una foto ya existente (reparación) no gasta APIs: se permite aunque esté
+        # Repartir/unificar una foto ya existente (reparación) no gasta APIs: se permite aunque esté
         # procesado. Buscar una nueva sí cuesta: solo si no se intentó antes.
         if hay_stock or not ya:
             elegidos.append(item)
@@ -230,8 +283,9 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     """Da a un tema su foto de stock y la reparte a todas sus redes en gris.
 
     Dos caminos, REPARACIÓN antes que búsqueda:
-      1. Si alguna red del tema YA tiene una foto de stock, se REPARTE a las redes vacías (sin
-         tocar APIs ni descargar): repara retroactivamente los temas que quedaron a medias.
+      1. Si alguna red del tema YA tiene una foto de stock, se REPARTE a las redes vacías Y se
+         UNIFICAN las que tuvieran OTRA foto de stock (sin tocar APIs ni descargar): repara y hace
+         converger retroactivamente los temas a medias o divergentes, sin un objetivo en gris.
       2. Si NINGUNA la tiene, se BUSCA (1º la original del RSS, luego APIs gratuitas), se adjunta
          y `adjuntar_candidata` ya la reparte a todas. Se marca `autogen-stock` tras intentarlo,
          para no re-buscar en cada barrido un tema sin foto encontrable.
@@ -246,14 +300,20 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         _log.exception("auto-stock: no se pudieron leer las plataformas de un tema.")
         return None
     objetivo = next((p for p in plataformas if _tiene_copy(p) and _sin_imagen(p)), None)
-    if objetivo is None:
-        return None
 
-    # Camino 1 — REPARACIÓN: ya hay foto de stock en el tema; repártela a las vacías (gratis).
+    # Camino 1 — REPARACIÓN/UNIFICACIÓN: si el tema YA tiene foto de stock en alguna red, repártela a
+    # las vacías Y unifica las redes con OTRA foto de stock (gratis, sin tocar APIs). Va ANTES de
+    # exigir un objetivo en gris: un tema sin huecos vacíos pero con stock DIVERGENTE igual converge.
+    # Garantiza que la BÚSQUEDA (camino 2) nunca se repita una vez que el tema tiene stock.
     ya_con_stock = next((p for p in plataformas if _es_stock(p)), None)
     if ya_con_stock is not None:
-        if propagar_stock(str(item_id), _campos_desde(ya_con_stock)):
-            return repos.obtener_pieza_fila(str(objetivo.get("id") or ""))
+        if not propagar_stock(str(item_id), _campos_desde(ya_con_stock)):
+            return None
+        fila_id = str((objetivo or ya_con_stock).get("id") or "")
+        return repos.obtener_pieza_fila(fila_id)
+
+    # Sin stock que repartir: la búsqueda necesita una red en gris donde adjuntar.
+    if objetivo is None:
         return None
 
     # Camino 2 — BÚSQUEDA. CANDIDATAS: original del artículo (RSS) y luego APIs gratuitas.

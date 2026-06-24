@@ -64,6 +64,33 @@ def test_topics_repara_procesado_si_hay_stock_que_repartir(entorno):
     assert [i["id"] for i in out] == ["t"]
 
 
+def test_topics_selecciona_divergente_sin_huecos_vacios(entorno):
+    # Tema sin red en gris pero con DOS fotos de stock distintas: se elige para UNIFICAR (aunque
+    # esté procesado: repartir no gasta APIs).
+    items = [_item()]
+    plats = {
+        "t": [
+            _plat(id="a", copy="c", foto="x.jpg", imagen_origen="stock", imagen_credito_url="u-a"),
+            _plat(id="b", copy="c", foto="y.jpg", imagen_origen="stock", imagen_credito_url="u-b"),
+        ]
+    }
+    out = autogen_stock.topics_sin_stock(items, plataformas_por_item=plats, ya_procesados={"t"}, maximo=5)
+    assert [i["id"] for i in out] == ["t"]
+
+
+def test_topics_omite_stock_convergente_sin_vacias(entorno):
+    # Misma foto de stock en todas las redes y sin huecos: nada que unificar -> no se elige.
+    items = [_item()]
+    plats = {
+        "t": [
+            _plat(id="a", copy="c", foto="x.jpg", imagen_origen="stock", imagen_credito_url="u"),
+            _plat(id="b", copy="c", foto="x.jpg", imagen_origen="stock", imagen_credito_url="u"),
+        ]
+    }
+    out = autogen_stock.topics_sin_stock(items, plataformas_por_item=plats, ya_procesados=set(), maximo=5)
+    assert out == []
+
+
 def test_topics_omite_tema_completo(entorno):
     items = [_item()]
     plats = {"t": [_plat(id="a", copy="c", foto="x.jpg")]}
@@ -106,6 +133,99 @@ def test_propagar_stock_rellena_vacias_y_respeta_propias(entorno):
     assert repos.obtener_pieza_fila(a)["foto"] == "stock.jpg"
     assert repos.obtener_pieza_fila(b)["imagen_origen"] == "stock"
     assert repos.obtener_pieza_fila(c)["foto"] == "propia.jpg"  # NO se pisa
+
+
+def test_propagar_stock_unifica_hermana_con_otra_foto_de_stock(entorno):
+    # UNA foto por tema: una hermana con OTRA foto de stock (autor/crédito divergentes) se UNIFICA
+    # a la canónica; una red en gris se rellena. Ambas acaban con los MISMOS campos.
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    a = repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="c")["id"]
+    b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(
+        b,
+        {
+            "foto": "otra.jpg", "imagen_origen": "stock", "imagen_proveedor": "pexels",
+            "imagen_autor": "Autor B", "imagen_credito_url": "https://b.test", "falta_imagen": True,
+        },
+    )
+    n = autogen_stock.propagar_stock(tema["id"], _campos())  # canónica: stock.jpg / openverse
+    assert n == 2  # a (gris) rellenada + b (stock divergente) unificada
+    fa, fb = repos.obtener_pieza_fila(a), repos.obtener_pieza_fila(b)
+    assert fa["foto"] == fb["foto"] == "stock.jpg"
+    assert fb["imagen_proveedor"] == "openverse"
+    assert fb["imagen_autor"] == ""
+    assert fb["imagen_credito_url"] == ""
+
+
+def test_propagar_stock_no_pisa_imagen_propia(entorno):
+    # La unificación es SOLO entre fotos de stock: una imagen PROPIA del usuario nunca se sobrescribe.
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    c = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(c, {"foto": "propia.jpg", "imagen_origen": "subida"})
+    n = autogen_stock.propagar_stock(tema["id"], _campos())
+    assert n == 0
+    fc = repos.obtener_pieza_fila(c)
+    assert fc["foto"] == "propia.jpg"
+    assert fc["imagen_origen"] == "subida"
+
+
+def test_propagar_stock_no_pisa_stock_autorizada(entorno):
+    # Una foto de stock que un humano ya AUTORIZÓ no se unifica (su decisión manda): se preserva.
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    c = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(
+        c,
+        {
+            "foto": "autorizada.jpg", "imagen_origen": "stock", "imagen_proveedor": "pexels",
+            "imagen_autorizada": True, "falta_imagen": False,
+        },
+    )
+    n = autogen_stock.propagar_stock(tema["id"], _campos())
+    assert n == 0
+    assert repos.obtener_pieza_fila(c)["foto"] == "autorizada.jpg"
+
+
+def test_propagar_stock_idempotente_no_reescribe_la_canonica(entorno):
+    # Una red que YA tiene la canónica no se vuelve a tocar (no diverge).
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(b, _campos())  # ya es la canónica
+    assert autogen_stock.propagar_stock(tema["id"], _campos()) == 0
+
+
+def test_lanzar_para_topic_no_rebusca_si_ya_hay_stock(entorno, monkeypatch):
+    # Camino 1: con stock en alguna red, se reparte la canónica y NUNCA se llama a las APIs.
+    llamadas: list[str] = []
+    monkeypatch.setattr(
+        autogen_stock.stock_fotos, "buscar_todos",
+        lambda *a, **k: (llamadas.append("buscar"), [])[1],
+    )
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    a = repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="c")["id"]
+    b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(b, _campos())  # b ya tiene foto de stock
+    autogen_stock.lanzar_para_topic({"id": tema["id"], "titulo": "T", "marca": _MARCA})
+    assert llamadas == []  # no se buscó: se repartió la existente
+    assert repos.obtener_pieza_fila(a)["foto"] == "stock.jpg"  # gris -> canónica
+
+
+def test_lanzar_para_topic_unifica_sin_red_en_gris(entorno, monkeypatch):
+    # Tema SIN huecos vacíos pero con stock DIVERGENTE entre redes: converge a una sola, sin buscar.
+    llamadas: list[str] = []
+    monkeypatch.setattr(
+        autogen_stock.stock_fotos, "buscar_todos",
+        lambda *a, **k: (llamadas.append("buscar"), [])[1],
+    )
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca=_MARCA)
+    a = repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="c")["id"]
+    b = repos.crear_pieza_fila(publicacion_id=tema["id"], red="facebook", copy="c")["id"]
+    repos.actualizar_pieza_fila(a, _campos("foto_a.jpg"))
+    repos.actualizar_pieza_fila(b, _campos("foto_b.jpg"))
+    autogen_stock.lanzar_para_topic({"id": tema["id"], "titulo": "T", "marca": _MARCA})
+    assert llamadas == []
+    fa, fb = repos.obtener_pieza_fila(a), repos.obtener_pieza_fila(b)
+    # La canónica es la primera red con stock (a); b converge a ella.
+    assert fa["foto"] == fb["foto"] == "foto_a.jpg"
 
 
 def test_adjuntar_candidata_propaga_a_todas_las_vacias(entorno, monkeypatch):

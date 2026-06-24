@@ -2,8 +2,23 @@
  * Helpers puros del editor de placa inline (sin estado React): geometría del titular, familias de
  * fuentes de un documento y carga de imágenes.
  */
+import type { OrigenImagenPropio } from "@/components/media/EditorImagen";
 import type { CapaTexto, Documento } from "@/editor/documento";
 import { familiaRealDe } from "@/lib/placa/render";
+
+/**
+ * Origen PROPIO a DECLARAR cuando se REEMPLAZA la foto de un hueco por una propia (subir/galería/IA).
+ * Solo el HUECO 0 —el FONDO de la placa, que porta el `foto` y la metadata de licencia de la pieza—
+ * declara origen: sustituirlo limpia el crédito/stock heredado de la foto anterior. Un hueco
+ * SECUNDARIO del collage no toca esa metadata, así que devuelve null (no declarar: declararlo
+ * borraría la metadata de un fondo de stock que sigue en pie y lo desbloquearía sin licencia).
+ */
+export function origenFondoPropio(
+  slot: number,
+  origen: OrigenImagenPropio,
+): OrigenImagenPropio | null {
+  return slot === 0 ? origen : null;
+}
 
 /**
  * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima.

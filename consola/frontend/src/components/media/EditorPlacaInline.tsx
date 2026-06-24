@@ -32,7 +32,12 @@ import { BarraReencuadre } from "@/components/media/placa/BarraReencuadre";
 import { CabeceraPlaca } from "@/components/media/placa/CabeceraPlaca";
 import { DialogoFuenteFoto } from "@/components/media/placa/DialogoFuenteFoto";
 import { LienzoPlaca } from "@/components/media/placa/LienzoPlaca";
-import { cajaTitularLienzo, familiasDeDocumento } from "@/components/media/placa/lib";
+import type { OrigenImagenPropio } from "@/components/media/EditorImagen";
+import {
+  cajaTitularLienzo,
+  familiasDeDocumento,
+  origenFondoPropio,
+} from "@/components/media/placa/lib";
 import { LIENZO_4_5, type EditorPlacaInlineProps } from "@/components/media/placa/tipos";
 import { useImagenesPlaca } from "@/components/media/placa/useImagenesPlaca";
 import type { CapaImagen } from "@/editor/documento";
@@ -75,6 +80,7 @@ export function EditorPlacaInline({
   imagenClave,
   fotos,
   onFotosCambio,
+  onOrigenPropio,
   imagenFuente,
   sinPlantilla,
   onAlternarSinPlantilla,
@@ -150,6 +156,17 @@ export function EditorPlacaInline({
       setFuenteAbierta(false);
     },
     [cambiarHueco, slotActivo],
+  );
+
+  // Declara hacia el padre el origen PROPIO de un REEMPLAZO del FONDO (hueco 0): subir/galería/IA
+  // limpian el metadato de licencia heredado. Un hueco secundario del collage no porta esa metadata
+  // (`origenFondoPropio` devuelve null), así que no declara nada (preserva un fondo de stock).
+  const declararFondoPropio = React.useCallback(
+    (slot: number, origen: OrigenImagenPropio) => {
+      const declarar = origenFondoPropio(slot, origen);
+      if (declarar) onOrigenPropio?.(declarar);
+    },
+    [onOrigenPropio],
   );
 
   // Estado de stock de la pieza: condiciona el tratamiento "SIN LICENCIA" y el bloqueo de publicar.
@@ -322,6 +339,7 @@ export function EditorPlacaInline({
     mutationFn: (archivo: File) => api.subirMedia(archivo),
     onSuccess: (d) => {
       cambiarHueco(slotEnProgreso.current, { objeto: d.id, foco: null, zoom: 0 });
+      declararFondoPropio(slotEnProgreso.current, "subida");
       setFuenteAbierta(false);
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -356,13 +374,14 @@ export function EditorPlacaInline({
       if (r?.id) {
         setPrompt("");
         cambiarHueco(slotEnProgreso.current, { objeto: r.id, foco: null, zoom: 0 });
+        declararFondoPropio(slotEnProgreso.current, "ia");
         setFuenteAbierta(false);
       }
     } else if (genIA.estado === "error") {
       iaTerminal.current = genIA.id;
       toast.error(genIA.error || "No se pudo generar la imagen.");
     }
-  }, [genIA, cambiarHueco]);
+  }, [genIA, cambiarHueco, declararFondoPropio]);
 
   // --- Reencuadre manual: arrastrar para encuadrar + zoom dentro del HUECO activo --- //
   // Caja (en px de lienzo) de un hueco i: su rect en el diseño, o el lienzo entero sin plantilla.
@@ -528,7 +547,9 @@ export function EditorPlacaInline({
     if (inputRef.current) inputRef.current.value = "";
   }
   function elegirArte(arte: Arte) {
+    // `cambiarFotoActiva` escribe en el hueco activo; un arte de la galería es foto PROPIA.
     cambiarFotoActiva(arte.objeto);
+    declararFondoPropio(slotActivo, "galeria");
   }
 
   // Abre las opciones de origen de la foto y SIEMBRA el prompt de IA con el copy del post (o el
