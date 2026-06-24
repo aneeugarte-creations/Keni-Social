@@ -678,14 +678,15 @@ const TURNO_NOCHE: PresentacionTurno = {
 
 /**
  * Periodo del día de un turno por su hora de inicio "HH:MM" → su paleta (terna «Cálidos»): mañana
- * (05:00–11:59, ámbar), tarde (12:00–17:59, naranja), noche (18:00–04:59, rosa). Derivar de la HORA
+ * (05:00–13:59, ámbar), tarde (14:00–21:59, naranja), noche (22:00–04:59, rosa). Los cortes siguen
+ * la convención de franjas del equipo (Mañana 08:00–14:00, Tarde 14:00–22:00). Derivar de la HORA
  * (no del nombre ni del índice) lo hace robusto ante franjas con nombres custom.
  */
 export function presentacionTurnoPorHora(inicio: string): PresentacionTurno {
   const h = Number(inicio.slice(0, 2));
   if (Number.isNaN(h)) return TURNO_TARDE;
-  if (h >= 5 && h < 12) return TURNO_MANANA;
-  if (h >= 12 && h < 18) return TURNO_TARDE;
+  if (h >= 5 && h < 14) return TURNO_MANANA;
+  if (h >= 14 && h < 22) return TURNO_TARDE;
   return TURNO_NOCHE;
 }
 
