@@ -318,6 +318,7 @@ export function MenuMasAcciones({
   onCopiarMes,
   onAbrirFranjas,
   onAbrirAjustes,
+  onAbrirTiempoLibre,
   onAbrirCarga,
   onExportExcel,
   onExportCsv,
@@ -339,6 +340,8 @@ export function MenuMasAcciones({
   onAbrirFranjas: () => void;
   /** Abre «Ajustes de turnos» (preferencias de visualización por marca). Oculto si no se pasa. */
   onAbrirAjustes?: () => void;
+  /** Abre «Tiempo libre»: registrar vacaciones/baja y ver quién está fuera. Oculto si no se pasa. */
+  onAbrirTiempoLibre?: () => void;
   onAbrirCarga: () => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
@@ -367,6 +370,14 @@ export function MenuMasAcciones({
   }
 
   if (esAdmin) {
+    if (onAbrirTiempoLibre) {
+      items.push({
+        etiqueta: "Tiempo libre",
+        icono: Plane,
+        onClick: onAbrirTiempoLibre,
+      });
+      items.push({ separador: true });
+    }
     if (onAbrirAjustes) {
       items.push({
         etiqueta: "Ajustes de turnos",

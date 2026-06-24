@@ -37,9 +37,14 @@ import {
   semanasDelMes,
 } from "@/lib/rota-calendario";
 import { cn } from "@/lib/utils";
-import type { TurnoRota } from "@/types";
+import type { AusenciaRota, TurnoRota } from "@/types";
 
-import { formatearFechaCorta, presentacionTurnoPorHora } from "./comun";
+import {
+  ausenciaTocaDia,
+  formatearFechaCorta,
+  PRESENTACION_AUSENCIA,
+  presentacionTurnoPorHora,
+} from "./comun";
 import { ResumenDia } from "./ResumenDia";
 import { type ResumenDiaCobertura, useTableroMes } from "./useTableroMes";
 
@@ -117,6 +122,17 @@ export function VistaMensualTurnos({
   });
   const mostrarHoras =
     mostrarHorasEquipo ?? configFranjasQ.data?.mostrar_horas_equipo ?? false;
+  // Ausencias (vacaciones/baja/…) superpuestas al calendario: en «Equipo» dicen QUIÉN está fuera y
+  // por qué; en «Yo», el tiempo libre propio. Lista global (misma clave que Panorama y el panel de
+  // coordinación); cada vista la filtra al mes y a su ámbito.
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"],
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
+  const ausencias = React.useMemo(
+    () => ausenciasQ.data?.ausencias ?? [],
+    [ausenciasQ.data],
+  );
   const [ambitoSel, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
   const ambito: Ambito = soloEquipo ? "equipo" : ambitoSel;
   const [mes, setMes] = React.useState(() => mesDeFecha(new Date()));
@@ -170,6 +186,7 @@ export function VistaMensualTurnos({
           onAbrirDia={onAbrirDia}
           mostrarHoras={mostrarHoras}
           horasPorPersona={horasPorPersona}
+          ausencias={ausencias}
           seleccionable={seleccionable}
           diasSel={diasSel}
           onToggleDia={onToggleDia}
@@ -181,6 +198,7 @@ export function VistaMensualTurnos({
           onVerSemana={onVerSemana}
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
+          ausencias={ausencias.filter((a) => a.miembro_id === (usuario?.id ?? ""))}
         />
       )}
 
@@ -480,12 +498,15 @@ function VistaMesYo({
   onVerSemana,
   cobertura,
   onAbrirDia,
+  ausencias = [],
 }: {
   mes: string;
   esAdmin?: boolean;
   onVerSemana?: () => void;
   cobertura?: Map<string, ResumenDiaCobertura>;
   onAbrirDia?: (fecha: string) => void;
+  /** Tiempo libre PROPIO del usuario, pintado como banda (vacaciones/baja/…) en sus días. */
+  ausencias?: AusenciaRota[];
 }) {
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
@@ -509,7 +530,9 @@ function VistaMesYo({
     );
   if (datos?.aviso)
     return <EstadoVacio icono={User} titulo="Inicia sesión" texto={datos.aviso} />;
-  if (turnos.length === 0)
+  // El vacío solo si NO hay ni turnos ni tiempo libre: una semana entera de vacaciones también es
+  // información que el calendario debe mostrar.
+  if (turnos.length === 0 && ausencias.length === 0)
     return (
       <EstadoVacio
         icono={CalendarDays}
@@ -541,11 +564,18 @@ function VistaMesYo({
           mes={mes}
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
-          renderDia={(fecha, delMes) =>
-            (porFecha.get(fecha) ?? []).map((t) => (
-              <ChipTurnoMes key={t.id} turno={t} atenuado={!delMes} />
-            ))
-          }
+          renderDia={(fecha, delMes) => (
+            <>
+              {(porFecha.get(fecha) ?? []).map((t) => (
+                <ChipTurnoMes key={t.id} turno={t} atenuado={!delMes} />
+              ))}
+              {ausencias
+                .filter((a) => ausenciaTocaDia(a, fecha))
+                .map((a) => (
+                  <ChipAusenciaMes key={a.id} ausencia={a} atenuado={!delMes} />
+                ))}
+            </>
+          )}
         />
       </div>
       <p className="text-xs text-muted-foreground">
@@ -590,6 +620,39 @@ function ChipTurnoMes({ turno, atenuado }: { turno: TurnoRota; atenuado?: boolea
   );
 }
 
+/** Banda de TIEMPO LIBRE en un día: icono + texto (el tipo en «Yo», el nombre de la persona en
+ *  «Equipo»), en el tono suave del tipo de ausencia. No es un turno: comunica que NO se trabaja. */
+function ChipAusenciaMes({
+  ausencia,
+  atenuado,
+  mostrarNombre = false,
+  resaltado = false,
+}: {
+  ausencia: AusenciaRota;
+  atenuado?: boolean;
+  /** «Equipo» muestra de QUIÉN es la ausencia; «Yo» muestra el tipo (es del propio usuario). */
+  mostrarNombre?: boolean;
+  /** Resalta cuando la ausencia es del usuario actual (en «Equipo»). */
+  resaltado?: boolean;
+}) {
+  const pres = PRESENTACION_AUSENCIA[ausencia.tipo] ?? PRESENTACION_AUSENCIA.otro;
+  const Icono = pres.icono;
+  const texto = mostrarNombre ? ausencia.miembro_nombre || "—" : pres.etiqueta;
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-tight",
+        pres.chip,
+        atenuado && "opacity-50",
+      )}
+      title={mostrarNombre ? `${ausencia.miembro_nombre} · ${pres.etiqueta}` : pres.etiqueta}
+    >
+      <Icono className="h-3 w-3 shrink-0" aria-hidden />
+      <span className={cn("truncate", resaltado && "font-semibold underline")}>{texto}</span>
+    </div>
+  );
+}
+
 function agruparPorFecha(turnos: TurnoRota[]): Map<string, TurnoRota[]> {
   const m = new Map<string, TurnoRota[]>();
   for (const t of turnos) {
@@ -620,6 +683,7 @@ function VistaMesEquipo({
   onAbrirDia,
   mostrarHoras = true,
   horasPorPersona = false,
+  ausencias = [],
   seleccionable = false,
   diasSel,
   onToggleDia,
@@ -631,6 +695,8 @@ function VistaMesEquipo({
   mostrarHoras?: boolean;
   /** Gestión: muestra «la hora de cada uno» (ver `ChipFranjaEquipo`). */
   horasPorPersona?: boolean;
+  /** Tiempo libre del equipo: una banda por persona ausente ese día (quién está fuera y por qué). */
+  ausencias?: AusenciaRota[];
   /** Gestión: celdas de día clicables para marcar la selección de reparto. */
   seleccionable?: boolean;
   diasSel?: Set<string>;
@@ -658,8 +724,9 @@ function VistaMesEquipo({
       />
     );
   // En modo selección (Gestión = Mes único) la rejilla se pinta SIEMPRE, aunque el mes esté vacío:
-  // hace falta poder marcar días para repartir sobre un mes en blanco. Solo lectura → estado vacío.
-  if (turnos.length === 0 && !seleccionable)
+  // hace falta poder marcar días para repartir sobre un mes en blanco. Solo lectura → estado vacío,
+  // salvo que haya tiempo libre que mostrar (una semana de vacaciones también es información).
+  if (turnos.length === 0 && ausencias.length === 0 && !seleccionable)
     return (
       <EstadoVacio
         icono={Users}
@@ -679,18 +746,32 @@ function VistaMesEquipo({
           seleccionable={seleccionable}
           diasSel={diasSel}
           onToggleDia={onToggleDia}
-          renderDia={(fecha, delMes) =>
-            (porFecha.get(fecha) ?? []).map((fr) => (
-              <ChipFranjaEquipo
-                key={fr.franjaId}
-                franja={fr}
-                atenuado={!delMes}
-                miId={miId}
-                mostrarHoras={mostrarHoras}
-                horasPorPersona={horasPorPersona}
-              />
-            ))
-          }
+          renderDia={(fecha, delMes) => (
+            <>
+              {(porFecha.get(fecha) ?? []).map((fr) => (
+                <ChipFranjaEquipo
+                  key={fr.franjaId}
+                  franja={fr}
+                  atenuado={!delMes}
+                  miId={miId}
+                  mostrarHoras={mostrarHoras}
+                  horasPorPersona={horasPorPersona}
+                />
+              ))}
+              {ausencias
+                .filter((a) => ausenciaTocaDia(a, fecha))
+                .sort((a, b) => a.miembro_nombre.localeCompare(b.miembro_nombre))
+                .map((a) => (
+                  <ChipAusenciaMes
+                    key={a.id}
+                    ausencia={a}
+                    atenuado={!delMes}
+                    mostrarNombre
+                    resaltado={a.miembro_id === miId}
+                  />
+                ))}
+            </>
+          )}
         />
       </div>
       <p className="text-xs text-muted-foreground">

@@ -67,6 +67,7 @@ import {
 import { ReparteMes } from "./ReparteMes";
 import { lunesDeFecha } from "@/lib/rota-reparto";
 import { CambiosYAusencias } from "./CambiosYAusencias";
+import { DialogoTiempoLibre } from "./DialogoTiempoLibre";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas, DialogoAjustesTurnos } from "./Franjas";
 import { VistaMensualTurnos, imprimirMes } from "./MisTurnos";
@@ -276,6 +277,8 @@ export function Calendario({
   const [abrirAsignar, setAbrirAsignar] = React.useState(modo === "gestion");
   // «Cambios y ausencias» vive en la franja «Más opciones» del panel y abre su lista en un diálogo.
   const [abrirCambios, setAbrirCambios] = React.useState(false);
+  // «Tiempo libre»: registrar vacaciones/baja y ver quién está fuera, desde el menú ⋯ del gestor.
+  const [abrirTiempoLibre, setAbrirTiempoLibre] = React.useState(false);
 
   // Copiar la semana anterior. GRID POR MARCA: muta UNA rejilla -> exige marca concreta; en
   // "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
@@ -655,6 +658,10 @@ export function Calendario({
         </Dialog>
       )}
       {dialogoAjustes}
+      <DialogoTiempoLibre
+        abierto={abrirTiempoLibre}
+        onCerrar={() => setAbrirTiempoLibre(false)}
+      />
     </>
   ) : null;
 
@@ -677,6 +684,7 @@ export function Calendario({
         onCopiarMes={() => copiarMes.mutate()}
         onAbrirFranjas={() => setAbrirFranjas(true)}
         onAbrirAjustes={() => setAbrirAjustes(true)}
+        onAbrirTiempoLibre={() => setAbrirTiempoLibre(true)}
         onAbrirCarga={() => setAbrirCarga(true)}
         onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
         onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
