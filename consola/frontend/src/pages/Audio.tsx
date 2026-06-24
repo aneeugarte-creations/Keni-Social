@@ -57,7 +57,7 @@ import {
 import { Markdown } from "@/components/ui/Markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useGrabadoraVoz } from "@/hooks/use-grabadora-voz";
+import { grabacionSoportada, useGrabadoraVoz } from "@/hooks/use-grabadora-voz";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -151,7 +151,8 @@ export default function Audio() {
   const [audioId, setAudioId] = React.useState<string | null>(null);
   const [artefactoId, setArtefactoId] = React.useState<string | null>(null);
   const [panelesAbiertos, setPanelesAbiertos] = React.useState(true);
-  const [dialogo, setDialogo] = React.useState(false);
+  const [dialogo, setDialogo] = React.useState<ModoSubida | null>(null);
+  const grabarSoportado = grabacionSoportada();
 
   // Lista de audios (todos: la herramienta no filtra por marca activa).
   const audios = useQuery({
@@ -195,7 +196,7 @@ export default function Audio() {
       return api.audio.crear(form);
     },
     onSuccess: (r) => {
-      setDialogo(false);
+      setDialogo(null);
       setAudioId(r.transcripcion.id);
       setArtefactoId(null);
       qc.invalidateQueries({ queryKey: ["audio", "transcripciones"] });
@@ -234,10 +235,20 @@ export default function Audio() {
       <TituloPagina titulo="Audio" icono={AudioLines} />
       {!vacioTotal ? (
         <AccionesPagina>
+          {grabarSoportado ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDialogo("grabar")}
+              className="gap-2"
+            >
+              <Mic className="h-4 w-4" /> Grabar
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setDialogo(true)}
+            onClick={() => setDialogo("archivo")}
             className="gap-2"
           >
             <Upload className="h-4 w-4" /> Subir
@@ -247,10 +258,18 @@ export default function Audio() {
 
       {vacioTotal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3">
-          <Button variant="outline" onClick={() => setDialogo(true)} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Subir audio o vídeo
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {grabarSoportado ? (
+              <Button variant="outline" onClick={() => setDialogo("grabar")} className="gap-2">
+                <Mic className="h-4 w-4" />
+                Grabar voz
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setDialogo("archivo")} className="gap-2">
+              <Upload className="h-4 w-4" />
+              Subir audio o vídeo
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             Se extrae la voz y se transcribe con timestamps
           </p>
@@ -333,8 +352,8 @@ export default function Audio() {
       )}
 
       <DialogoSubida
-        abierto={dialogo}
-        onAbierto={setDialogo}
+        modo={dialogo}
+        onCerrar={() => setDialogo(null)}
         subiendo={subir.isPending}
         marcaDefecto={marca}
         onSubir={(archivo, tratamientos, marcaSel) =>
@@ -1555,15 +1574,18 @@ function FormularioPreguntas({
   );
 }
 
+/** Origen del audio: subir un archivo existente o grabar del micrófono. */
+type ModoSubida = "archivo" | "grabar";
+
 function DialogoSubida({
-  abierto,
-  onAbierto,
+  modo,
+  onCerrar,
   subiendo,
   marcaDefecto,
   onSubir,
 }: {
-  abierto: boolean;
-  onAbierto: (v: boolean) => void;
+  modo: ModoSubida | null;
+  onCerrar: () => void;
   subiendo: boolean;
   marcaDefecto: string;
   onSubir: (archivo: File, tratamientos: TipoArtefacto[], marca: string) => void;
@@ -1572,20 +1594,22 @@ function DialogoSubida({
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [sel, setSel] = React.useState<Record<string, boolean>>({});
   const [ambito, setAmbito] = React.useState<string>(marcaDefecto);
-  const [modo, setModo] = React.useState<"archivo" | "grabar">("archivo");
   const grab = useGrabadoraVoz();
+  const abierto = modo !== null;
+  // Conserva el último modo para que el contenido no parpadee durante la animación de cierre.
+  const [modoMostrado, setModoMostrado] = React.useState<ModoSubida>("archivo");
   React.useEffect(() => {
-    if (abierto) {
+    if (modo) {
       setAmbito(marcaDefecto);
+      setModoMostrado(modo);
     } else {
       setArchivo(null);
       setSel({});
       grab.limpiar();
-      setModo("archivo");
     }
     // grab.limpiar es estable (useCallback); depender del objeto grab re-ejecutaría cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, marcaDefecto, grab.limpiar]);
+  }, [modo, marcaDefecto, grab.limpiar]);
 
   const tratamientos = TRATAMIENTOS_SUBIDA.filter((t) => sel[t.tipo]).map((t) => t.tipo);
   const mmss = `${String(Math.floor(grab.segundos / 60)).padStart(2, "0")}:${String(grab.segundos % 60).padStart(2, "0")}`;
@@ -1599,7 +1623,7 @@ function DialogoSubida({
   };
 
   const transcribir = () => {
-    if (modo === "grabar") {
+    if (modoMostrado === "grabar") {
       if (!grab.audioBlob) return;
       const f = new File([grab.audioBlob], "grabacion.webm", { type: grab.audioBlob.type || "audio/webm" });
       onSubir(f, tratamientos, ambito);
@@ -1609,38 +1633,16 @@ function DialogoSubida({
     if (archivo) onSubir(archivo, tratamientos, ambito);
   };
 
-  const sinFuente = modo === "grabar" ? !grab.audioBlob : !archivo;
+  const sinFuente = modoMostrado === "grabar" ? !grab.audioBlob : !archivo;
 
   return (
-    <Dialog open={abierto} onOpenChange={onAbierto}>
+    <Dialog open={abierto} onOpenChange={(v) => { if (!v) onCerrar(); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Subir audio o vídeo</DialogTitle>
+          <DialogTitle>{modoMostrado === "grabar" ? "Grabar voz" : "Subir audio o vídeo"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          {grab.soportado && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={modo === "archivo" ? "default" : "outline"}
-                size="sm"
-                className="gap-2"
-                onClick={() => setModo("archivo")}
-              >
-                <Upload className="h-4 w-4" />
-                Subir archivo
-              </Button>
-              <Button
-                variant={modo === "grabar" ? "default" : "outline"}
-                size="sm"
-                className="gap-2"
-                onClick={() => setModo("grabar")}
-              >
-                <Mic className="h-4 w-4" />
-                Grabar voz
-              </Button>
-            </div>
-          )}
-          {modo === "archivo" ? (
+          {modoMostrado === "archivo" ? (
             <div>
               <input
                 type="file"
@@ -1715,7 +1717,7 @@ function DialogoSubida({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onAbierto(false)}>
+          <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
           <Button

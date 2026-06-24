@@ -11,6 +11,16 @@ import * as React from "react";
  */
 export type EstadoGrabadora = "idle" | "grabando" | "listo";
 
+/** ¿El navegador puede grabar del micrófono? Permite a la página decidir si ofrece el botón «Grabar». */
+export function grabacionSoportada(): boolean {
+  return (
+    typeof navigator !== "undefined" &&
+    !!navigator.mediaDevices &&
+    typeof window !== "undefined" &&
+    "MediaRecorder" in window
+  );
+}
+
 export interface Grabadora {
   estado: EstadoGrabadora;
   segundos: number;
@@ -35,11 +45,7 @@ export function useGrabadoraVoz(): Grabadora {
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const urlRef = React.useRef<string | null>(null);
 
-  const soportado =
-    typeof navigator !== "undefined" &&
-    !!navigator.mediaDevices &&
-    typeof window !== "undefined" &&
-    "MediaRecorder" in window;
+  const soportado = grabacionSoportada();
 
   const pararTimer = React.useCallback(() => {
     if (timerRef.current) {
