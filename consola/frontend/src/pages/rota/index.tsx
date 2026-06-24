@@ -140,9 +140,10 @@ export default function Rota() {
 
       {/* «Horario»: el calendario MENSUAL de turnos (Yo/Equipo · Imprimir/PDF), de CONSULTA. Solo
           jornada — sin eventos ni cobertura (`mostrarCobertura={false}`): eso vive en «Trabajo». No
-          tiene vista Semana; la rejilla editable + reparto están en «Gestión». */}
+          tiene vista Semana; la rejilla editable + reparto están en «Gestión». «Equipo» muestra la
+          hora de cada persona (`horasPorPersona`), igual que «Yo» enseña la del usuario. */}
       {pestaniaEfectiva === "calendario" && (
-        <VistaMensualTurnos esAdmin={esAdmin} mostrarCobertura={false} />
+        <VistaMensualTurnos esAdmin={esAdmin} mostrarCobertura={false} horasPorPersona />
       )}
 
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden

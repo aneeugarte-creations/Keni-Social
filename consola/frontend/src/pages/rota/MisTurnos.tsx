@@ -76,8 +76,8 @@ export function VistaMensualTurnos({
    *  SIEMPRE muestra las horas propias (no le afecta este flag). */
   mostrarHorasEquipo?: boolean;
   /** En «Equipo», muestra «la hora de cada uno»: las horas se agrupan por horario y, si dentro de
-   *  una franja difieren, se parten por hora (en vez de un único rango por franja). Gestión lo activa
-   *  para coordinar; «Horario» no (deja el rango por franja gobernado por `mostrarHorasEquipo`). */
+   *  una franja difieren, se parten por hora (en vez de un único rango por franja). Lo activan
+   *  «Horario» y Gestión; cuando está activo manda sobre `mostrarHorasEquipo` (la hora se ve igual). */
   horasPorPersona?: boolean;
   /** Oculta el botón-icono «Imprimir» de la barra para que el host lo ofrezca en su menú ⋯ (junto a
    *  las descargas). Gestión lo usa para no repetir la acción suelta; «Horario» lo deja visible. */
