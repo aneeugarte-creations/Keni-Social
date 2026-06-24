@@ -123,8 +123,6 @@ async def export_digitales(request: Request) -> Response:
     ref = date.today()
     meses = meses_ventana(ref)
     tokens = [token for token, _, _, _ in meses]
-    desde = f"{meses[0][2]:04d}-{meses[0][3]:02d}-01"
-    rango_seguidores = f"rango:{desde}_{ref.isoformat()}"
     try:
         reportes = await asyncio.gather(
             *(_cacheado(metricas_cache.reporte_async, t, marca) for t in tokens)
@@ -132,10 +130,16 @@ async def export_digitales(request: Request) -> Response:
         desgloses = await asyncio.gather(
             *(_cacheado(metricas_cache.desglose_async, t, marca) for t in tokens)
         )
-        seguidores = await _cacheado(metricas_cache.seguidores_async, rango_seguidores, marca)
+        # La serie de seguidores se pide MES A MES, igual que reporte/desglose: un único
+        # rango de 13 meses excede el tope de la fachada (MAX_DIAS_RANGO=366). Fundimos los
+        # puntos diarios de cada mes; `seguidores_por_mes` se queda con el último de cada uno.
+        series = await asyncio.gather(
+            *(_cacheado(metricas_cache.seguidores_async, t, marca) for t in tokens)
+        )
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception("Fallo al generar Métricas Digitales (marca=%s).", marca)
         return PlainTextResponse("No se pudo generar el reporte.", status_code=500)
+    seguidores = {"puntos": [p for s in series for p in (s.get("puntos") or [])]}
     datos = ensamblar_datos(tokens, reportes, desgloses, seguidores)
     csv = render_csv_digital(datos, meses)
     nombre = f"metricas-digitales-{marca}-{ref:%Y-%m}.csv"
