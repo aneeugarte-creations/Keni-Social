@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AudioLines,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -27,7 +28,6 @@ import {
   Pause,
   Pencil,
   Play,
-  Plus,
   RefreshCw,
   Scissors,
   SpellCheck,
@@ -37,16 +37,17 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
+import { origenBajoDisparador, type PosicionMenu } from "@/components/comunes/menuPos";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -1574,6 +1575,72 @@ function FormularioPreguntas({
   );
 }
 
+const ANILLO_FOCO =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+/**
+ * Popover anclado bajo un disparador y portalizado a <body>, para que el `overflow-y-auto`
+ * del diálogo no lo recorte. `pointer-events-auto` lo hace clicable sobre el modal Radix
+ * (que deja el <body> en `pointer-events:none`). Cierra al pulsar fuera o con Escape y se
+ * reubica si no cabe en el viewport.
+ */
+function PopoverAnclado({
+  ancla,
+  etiqueta,
+  onClose,
+  children,
+}: {
+  ancla: HTMLElement;
+  etiqueta: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState<PosicionMenu>(() =>
+    origenBajoDisparador(ancla.getBoundingClientRect()),
+  );
+
+  React.useLayoutEffect(() => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const margen = 8;
+    let { x, y } = origenBajoDisparador(ancla.getBoundingClientRect());
+    if (r.right > window.innerWidth - margen) x = Math.max(margen, window.innerWidth - r.width - margen);
+    if (r.bottom > window.innerHeight - margen) y = Math.max(margen, window.innerHeight - r.height - margen);
+    if (x !== pos.x || y !== pos.y) setPos({ x, y });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ancla]);
+
+  React.useEffect(() => {
+    function alPulsarFuera(e: MouseEvent) {
+      const t = e.target as Node;
+      if (ref.current && !ref.current.contains(t) && !ancla.contains(t)) onClose();
+    }
+    function alTeclear(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", alPulsarFuera);
+    document.addEventListener("keydown", alTeclear);
+    return () => {
+      document.removeEventListener("mousedown", alPulsarFuera);
+      document.removeEventListener("keydown", alTeclear);
+    };
+  }, [ancla, onClose]);
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={etiqueta}
+      className="pointer-events-auto fixed z-50 rounded-xl border border-border bg-card p-1 text-left shadow-lg"
+      style={{ left: pos.x, top: pos.y }}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 /** Origen del audio: subir un archivo existente o grabar del micrófono. */
 type ModoSubida = "archivo" | "grabar";
 
@@ -1598,6 +1665,11 @@ function DialogoSubida({
   const abierto = modo !== null;
   // Conserva el último modo para que el contenido no parpadee durante la animación de cierre.
   const [modoMostrado, setModoMostrado] = React.useState<ModoSubida>("archivo");
+  // Popovers de «Para» (ámbito) y «Crear también», anclados a su disparador.
+  const [ambitoAbierto, setAmbitoAbierto] = React.useState(false);
+  const [extrasAbierto, setExtrasAbierto] = React.useState(false);
+  const anclaAmbito = React.useRef<HTMLButtonElement>(null);
+  const anclaExtras = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     if (modo) {
       setAmbito(marcaDefecto);
@@ -1605,6 +1677,8 @@ function DialogoSubida({
     } else {
       setArchivo(null);
       setSel({});
+      setAmbitoAbierto(false);
+      setExtrasAbierto(false);
       grab.limpiar();
     }
     // grab.limpiar es estable (useCallback); depender del objeto grab re-ejecutaría cada render.
@@ -1634,6 +1708,14 @@ function DialogoSubida({
   };
 
   const sinFuente = modoMostrado === "grabar" ? !grab.audioBlob : !archivo;
+  const nombreAmbito =
+    ambito === ""
+      ? "Personal"
+      : (marcasParaSwitch.find((m) => m.id === ambito)?.nombre ?? "Personal");
+  const opcionesAmbito = [
+    { id: "", nombre: "Personal (solo para ti)" },
+    ...marcasParaSwitch.map((m) => ({ id: m.id, nombre: m.nombre })),
+  ];
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => { if (!v) onCerrar(); }}>
@@ -1641,94 +1723,253 @@ function DialogoSubida({
         <DialogHeader>
           <DialogTitle>{modoMostrado === "grabar" ? "Grabar voz" : "Subir audio o vídeo"}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          {modoMostrado === "archivo" ? (
-            <div>
+        {modoMostrado === "archivo" ? (
+          // Subir archivo: una sola superficie para soltar o elegir.
+          <div className="flex flex-col items-center gap-4 py-4 text-center">
+            <label
+              className={cn(
+                "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-border px-10 py-8 text-sm text-muted-foreground transition-colors hover:bg-accent",
+                ANILLO_FOCO,
+              )}
+            >
+              <Upload className="h-7 w-7" />
+              <span>
+                {archivo ? (
+                  <span className="font-medium text-foreground">{archivo.name}</span>
+                ) : (
+                  <>
+                    <span className="font-medium text-foreground">Elige un archivo</span> o suéltalo
+                    aquí
+                  </>
+                )}
+              </span>
               <input
                 type="file"
                 accept="audio/*,video/*"
+                className="sr-only"
                 onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
               />
-              <p className="mt-1 text-xs text-muted-foreground">Se extrae la voz y se transcribe con timestamps (SRT por defecto).</p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 py-6">
-              {grab.estado === "idle" && (
-                <>
-                  <Button size="lg" className="gap-2" onClick={iniciarGrabacion}>
-                    <Mic className="h-5 w-5" />
-                    Empezar a grabar
-                  </Button>
-                  <p className="text-xs text-muted-foreground">Graba una nota de voz con el micrófono del dispositivo.</p>
-                </>
-              )}
-              {grab.estado === "grabando" && (
-                <>
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
-                    Grabando · {mmss}
-                  </div>
-                  <Button size="lg" variant="destructive" className="gap-2" onClick={grab.detener}>
-                    <Square className="h-5 w-5" />
-                    Detener
-                  </Button>
-                </>
-              )}
-              {grab.estado === "listo" && grab.audioUrl && (
-                <>
-                  <audio src={grab.audioUrl} controls className="w-full max-w-xs" />
-                  <Button size="sm" variant="outline" className="gap-2" onClick={grab.reset}>
-                    <RefreshCw className="h-4 w-4" />
-                    Volver a grabar
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-          <div>
-            <p className="mb-1.5 text-sm font-medium">Ámbito</p>
-            <select
-              value={ambito}
-              onChange={(e) => setAmbito(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              <option value="">Personal (solo para ti)</option>
-              {marcasParaSwitch.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.nombre} (en colaboración)
-                </option>
-              ))}
-            </select>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Se extrae la voz y se transcribe con timestamps (SRT por defecto).
+            </p>
           </div>
-          <div>
-            <p className="mb-2 text-sm font-medium">Crear además:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {TRATAMIENTOS_SUBIDA.map((t) => (
-                <label key={t.tipo} className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={!!sel[t.tipo]}
-                    onCheckedChange={(c) => setSel((s) => ({ ...s, [t.tipo]: c }))}
+        ) : (
+          // Grabar: una sola cosa por estado.
+          <div className="flex flex-col items-center gap-5 py-4 text-center">
+            {grab.estado === "idle" && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Empezar a grabar"
+                  onClick={iniciarGrabacion}
+                  className={cn(
+                    "flex h-24 w-24 items-center justify-center rounded-full border-2 border-border text-foreground transition-colors hover:border-foreground/30 hover:bg-accent",
+                    ANILLO_FOCO,
+                  )}
+                >
+                  <Mic className="h-9 w-9" strokeWidth={1.5} />
+                </button>
+                <p className="text-sm text-muted-foreground">Toca para grabar</p>
+              </>
+            )}
+            {grab.estado === "grabando" && (
+              <>
+                <div className="flex flex-col items-center gap-3">
+                  <span className="font-mono text-4xl tabular-nums tracking-tight">{mmss}</span>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                    En vivo
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Detener"
+                  onClick={grab.detener}
+                  className={cn(
+                    "flex h-24 w-24 items-center justify-center rounded-full border-2 border-red-500/40 text-red-500 transition-colors hover:bg-red-500/5",
+                    ANILLO_FOCO,
+                  )}
+                >
+                  <Square className="h-8 w-8 fill-current" strokeWidth={1.5} />
+                </button>
+              </>
+            )}
+            {grab.estado === "listo" && grab.audioUrl && (
+              <div className="flex w-full flex-col items-center gap-5">
+                <audio src={grab.audioUrl} controls className="w-full max-w-xs" />
+                <button
+                  ref={anclaExtras}
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={extrasAbierto}
+                  onClick={() => setExtrasAbierto((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1 py-1 text-sm transition-colors",
+                    ANILLO_FOCO,
+                    tratamientos.length > 0
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>Crear también</span>
+                  {tratamientos.length > 0 && (
+                    <span className="tabular-nums text-xs text-muted-foreground/55">
+                      {tratamientos.length}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={cn(
+                      "h-3 w-3 text-muted-foreground/40 transition-transform",
+                      extrasAbierto && "rotate-180",
+                    )}
                   />
-                  {t.etiqueta}
-                </label>
-              ))}
-            </div>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ámbito como línea discreta: «Para X ⌄», centrado. */}
+        <div className="flex justify-center">
+          <div className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+            <span>Para</span>
+            <button
+              ref={anclaAmbito}
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={ambitoAbierto}
+              onClick={() => setAmbitoAbierto((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1 font-medium text-foreground",
+                ANILLO_FOCO,
+              )}
+            >
+              {nombreAmbito}
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 text-muted-foreground/40 transition-transform",
+                  ambitoAbierto && "rotate-180",
+                )}
+              />
+            </button>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button
-            disabled={sinFuente || subiendo}
-            onClick={transcribir}
-            className="gap-2"
+
+        {((modoMostrado === "grabar" && grab.estado === "listo") || modoMostrado === "archivo") && (
+          <DialogFooter>
+            {modoMostrado === "grabar" && grab.estado === "listo" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 text-muted-foreground"
+                onClick={() => {
+                  setExtrasAbierto(false);
+                  grab.reset();
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+                Volver a grabar
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              disabled={sinFuente || subiendo}
+              onClick={transcribir}
+              className="gap-2"
+            >
+              {subiendo && <Loader2 className="h-4 w-4 animate-spin" />}
+              Transcribir
+            </Button>
+          </DialogFooter>
+        )}
+
+        {ambitoAbierto && anclaAmbito.current && (
+          <PopoverAnclado
+            ancla={anclaAmbito.current}
+            etiqueta="Ámbito"
+            onClose={() => setAmbitoAbierto(false)}
           >
-            {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Transcribir
-          </Button>
-        </DialogFooter>
+            <div className="flex w-[15rem] max-w-[88vw] flex-col gap-0.5">
+              {opcionesAmbito.map((o) => {
+                const activo = ambito === o.id;
+                return (
+                  <button
+                    key={o.id || "personal"}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={activo}
+                    onClick={() => {
+                      setAmbito(o.id);
+                      setAmbitoAbierto(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+                      activo
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    <span className="truncate">{o.nombre}</span>
+                    {activo && <Check className="h-3.5 w-3.5 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </PopoverAnclado>
+        )}
+
+        {extrasAbierto && anclaExtras.current && (
+          <PopoverAnclado
+            ancla={anclaExtras.current}
+            etiqueta="Crear también"
+            onClose={() => setExtrasAbierto(false)}
+          >
+            <div className="w-[20rem] max-w-[88vw]">
+              <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-muted-foreground/60">
+                Crear también
+              </div>
+              <div className="grid grid-cols-2 gap-0.5">
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={tratamientos.length === 0}
+                  onClick={() => setSel({})}
+                  className={cn(
+                    "col-span-2 flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+                    tratamientos.length === 0
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <span className="truncate">Solo transcribir</span>
+                  {tratamientos.length === 0 && <Check className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+                {TRATAMIENTOS_SUBIDA.map((t) => {
+                  const activo = !!sel[t.tipo];
+                  return (
+                    <button
+                      key={t.tipo}
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={activo}
+                      onClick={() => setSel((s) => ({ ...s, [t.tipo]: !s[t.tipo] }))}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors",
+                        activo
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )}
+                    >
+                      <span className="truncate">{t.etiqueta}</span>
+                      {activo && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </PopoverAnclado>
+        )}
       </DialogContent>
     </Dialog>
   );
