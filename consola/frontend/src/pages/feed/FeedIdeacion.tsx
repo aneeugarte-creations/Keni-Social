@@ -100,7 +100,11 @@ function guardarPref(clave: string, valor: number): void {
   }
 }
 
-/** Píldora de filtro por línea editorial: activa = rellena de marca; en reposo = contorno. */
+/**
+ * Filtro de línea editorial en texto sobrio (mismo lenguaje que la barra de categorías de la
+ * Mesa de Investigación): sin borde ni píldora; el activo se distingue por oscurecer y engrosar
+ * la etiqueta.
+ */
 function ChipLinea({
   activo,
   onClick,
@@ -117,10 +121,8 @@ function ChipLinea({
       aria-checked={activo}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition-colors",
-        activo
-          ? "border-keni-600 bg-keni-600 text-white hover:bg-keni-700"
-          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
+        "flex shrink-0 items-center whitespace-nowrap py-1 text-sm transition-colors",
+        activo ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
@@ -624,7 +626,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
             <div
               role="radiogroup"
               aria-label="Filtrar por línea del plan"
-              className="flex flex-wrap gap-1.5"
+              className="flex flex-wrap gap-x-5 gap-y-1"
             >
               <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
                 Todas
