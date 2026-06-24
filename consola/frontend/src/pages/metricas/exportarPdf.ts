@@ -70,6 +70,23 @@ function esperarPintado(): Promise<void> {
 }
 
 /**
+ * Hornea el color COMPUTADO (fill/stroke/stop-color) como atributo inline en cada elemento
+ * SVG. `html-to-image` no captura el color de los SVG cuando viene por CLASE CSS (las gráficas
+ * Tremor lo aplican así); en el bundle de producción el CSS es externo y el rasterizado salía
+ * en negro/gris. Con el color ya inline en el atributo, el clon que rasteriza lo conserva.
+ */
+function hornearColoresSvg(raiz: HTMLElement): void {
+  raiz.querySelectorAll("svg").forEach((svg) => {
+    svg.querySelectorAll<SVGElement>("*").forEach((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.fill && cs.fill !== "none") el.setAttribute("fill", cs.fill);
+      if (cs.stroke && cs.stroke !== "none") el.setAttribute("stroke", cs.stroke);
+      if (el.tagName.toLowerCase() === "stop" && cs.stopColor) el.setAttribute("stop-color", cs.stopColor);
+    });
+  });
+}
+
+/**
  * Genera y DESCARGA el PDF presentación: monta `<Informe>` oculto a tamaño real, rasteriza
  * cada `.informe-slide` y la coloca como página del jsPDF. Lanza si no hay datos.
  */
@@ -101,6 +118,7 @@ export async function descargarPresentacion(
 
     const slides = Array.from(host.querySelectorAll<HTMLElement>(".informe-slide"));
     if (slides.length === 0) throw new Error("No se pudo construir el informe.");
+    hornearColoresSvg(host);
 
     const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H] });
     for (let i = 0; i < slides.length; i++) {
