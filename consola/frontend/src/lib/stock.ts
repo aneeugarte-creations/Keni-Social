@@ -198,7 +198,7 @@ export const RIESGOS_STOCK_LIBRE: readonly string[] = [
 
 /**
  * Consulta inicial del buscador de stock a partir del TÍTULO del tema de la pieza. El título suele
- * traer un sufijo " — <vertical>" (p. ej. "Negociaciones EE.UU.-Irán — Diplomacia"): lo cortamos y
+ * traer un sufijo " — <categoría>" (p. ej. "Negociaciones EE.UU.-Irán — Diplomacia"): lo cortamos y
  * usamos solo el tema, para que las APIs gratuitas devuelvan fotos relevantes y no aleatorias.
  */
 export function temaDeTitulo(titulo: string | undefined): string {

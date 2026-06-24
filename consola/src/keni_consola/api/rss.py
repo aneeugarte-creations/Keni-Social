@@ -240,14 +240,14 @@ def _listar_fuentes(marca: str) -> dict:
 
 
 def _validar_linea_id(valor: object, marca: str) -> tuple[str | None, str | None]:
-    """'' (catch-all "General") es válido; si llega un id debe ser una LÍNEA (clase `vertical`)
+    """'' (catch-all "General") es válido; si llega un id debe ser una LÍNEA (clase `categoria`)
     de la marca de la fuente (o global)."""
     if valor in (None, ""):
         return "", None
     if not isinstance(valor, str):
         return None, "Línea no válida."
     et = repos.obtener_etiqueta(valor.strip())
-    if et is None or et.get("clase") != "vertical":
+    if et is None or et.get("clase") != "categoria":
         return None, "Esa línea no existe."
     if (et.get("marca") or "") not in ("", marca):
         return None, "La línea no pertenece a esta marca."

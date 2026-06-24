@@ -5,13 +5,13 @@ import type { OpcionesPiezas } from "@/types";
  * Rótulo legible de la categoría de una pieza para la cabecera del editor.
  *
  * `pieza.categoria` puede ser:
- *  - el ID de una etiqueta vertical (un hash, p. ej. "06ad3588a80e") — el caso del Plan y la
+ *  - el ID de una etiqueta categoria (un hash, p. ej. "06ad3588a80e") — el caso del Plan y la
  *    programación: se resuelve a su nombre con la lista `lineas` de `/piezas/opciones`;
  *  - un slug de categoría conocido (señal del motor o ingesta: "breaking", "evergreen", "mx"…)
  *    — se resuelve con `etiquetaLinea` (mismo catálogo que la Mesa de Noticias).
  *
  * Devuelve cadena vacía (no se pinta etiqueta) cuando la pieza no tiene categoría o cuando el id
- * NO se puede resolver (catálogo aún sin cargar, vertical retirada…): NUNCA se muestra un id crudo.
+ * NO se puede resolver (catálogo aún sin cargar, categoría retirada…): NUNCA se muestra un id crudo.
  */
 export function etiquetaCategoriaPieza(
   categoria: string | null | undefined,

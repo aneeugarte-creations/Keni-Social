@@ -955,7 +955,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en
     # S3/almacen (`objeto`, uuid+ext del servidor). `metadatos` (JSON) lleva datos por tipo (p.ej.
     # familia/peso de una tipografia, lista de hex de una paleta); `lineas` (JSON de ids de
-    # `etiquetas` clase=vertical) etiqueta el activo por linea editorial. Para tipografias el
+    # `etiquetas` clase=categoria) etiqueta el activo por linea editorial. Para tipografias el
     # `objeto` es el .woff2/.ttf y `metadatos.familia` el nombre a registrar en el render.
     """
     CREATE TABLE IF NOT EXISTS marca_activos (
@@ -979,7 +979,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # un DOCUMENTO de capas completo (`documento`, JSON validado por `motores/estudio_imagen/
     # documento.py`). Se etiquetan por `categoria` (texto LIBRE normalizado a slug por la API:
     # ultima-hora | marcador | efemerides | …; "general" es el fallback y el legado "post" se trata
-    # como "general") y por `lineas` (JSON de ids de `etiquetas` clase=vertical) para filtrar por
+    # como "general") y por `lineas` (JSON de ids de `etiquetas` clase=categoria) para filtrar por
     # línea editorial.
     # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
     # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
@@ -1041,7 +1041,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
     # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
     # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
-    # por `marca` y `lineas` (ids de `etiquetas` clase=vertical). `miniatura` = objeto de media o "".
+    # por `marca` y `lineas` (ids de `etiquetas` clase=categoria). `miniatura` = objeto de media o "".
     """
     CREATE TABLE IF NOT EXISTS bloques (
         id           TEXT PRIMARY KEY,
@@ -1144,11 +1144,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_notif_buzon "
     "ON notificaciones (usuario_id, marca_id, leida, creada)",
-    # Etiquetas editoriales del tablero (campaña / vertical / tipo), ola "organizacion".
+    # Etiquetas editoriales del tablero (campaña / categoria / tipo), ola "organizacion".
     # Una etiqueta clasifica transversalmente un `contenido` (p.ej. campaña "Mundial 2026",
-    # vertical "futbol", tipo "reel"). `marca` ACOTA la etiqueta a una marca/workspace
+    # categoria "futbol", tipo "reel"). `marca` ACOTA la etiqueta a una marca/workspace
     # (UnoTV vs Claro Sports); `marca = ''` significa etiqueta GLOBAL (visible en todas las
-    # marcas). `clase` distingue el eje (campania/vertical/tipo) solo para agrupar/colorear
+    # marcas). `clase` distingue el eje (campania/categoria/tipo) solo para agrupar/colorear
     # en la UI — no es FK, se valida en la capa API contra una allowlist. `color` es un token
     # hex opcional para el chip. `activo` esconde del selector sin perder el historico de
     # asignaciones. `nombre` es UNIQUE por (marca, clase) — lo garantiza la capa API/repos.
@@ -1174,7 +1174,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_etiquetas_clase ON etiquetas (clase)",
     "CREATE INDEX IF NOT EXISTS idx_etiquetas_activo ON etiquetas (activo)",
     # Relacion N:M `contenido` <-> `etiquetas`. Una pieza puede llevar varias etiquetas
-    # (campaña + vertical + tipo). Cascada manual al borrar contenido o etiqueta (sin FK,
+    # (campaña + categoria + tipo). Cascada manual al borrar contenido o etiqueta (sin FK,
     # igual que el resto del esquema). PK compuesta evita duplicados.
     """
     CREATE TABLE IF NOT EXISTS publicacion_etiquetas (

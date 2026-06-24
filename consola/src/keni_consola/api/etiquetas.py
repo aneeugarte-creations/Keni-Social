@@ -1,11 +1,11 @@
 """API de ETIQUETAS editoriales del tablero (ola "organizacion").
 
 Una etiqueta clasifica transversalmente las piezas del tablero de contenido por un EJE
-(`clase`): una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección editorial ("futbol") o un
+(`clase`): una CAMPAÑA ("Mundial 2026"), una CATEGORÍA/sección editorial ("futbol") o un
 TIPO de formato ("reel", "nota"). Es N:M con `contenido` (una pieza puede llevar varias).
 
 WORKSPACES / MULTIMARCA: cada etiqueta puede ACOTARSE a una marca (`marca`) — así UnoTV
-y Claro Sports tienen sus propias campañas/verticales sin pisarse — o ser GLOBAL
+y Claro Sports tienen sus propias campañas/categorías sin pisarse — o ser GLOBAL
 (`marca = ''`, visible en todas). El equipo es compartido; lo que aísla cada workspace es
 la marca de las piezas y de sus etiquetas. El selector de etiquetas del tablero pide las
 de la marca activa + las globales.
@@ -77,7 +77,7 @@ _MAX_GRUPO = 40
 
 
 def _normalizar_grupo(valor: object) -> str:
-    """Grupo de líneas (clase `vertical`): texto libre recortado. '' = línea plana (sin grupo)."""
+    """Grupo de líneas (clase `categoria`): texto libre recortado. '' = línea plana (sin grupo)."""
     return valor.strip()[:_MAX_GRUPO] if isinstance(valor, str) else ""
 
 
@@ -92,7 +92,7 @@ _MAX_KEYWORDS = 400
 
 def _normalizar_keywords(valor: object) -> str:
     """CSV de palabras clave para auto-etiquetar (líneas/orígenes): minúsculas, sin
-    duplicados, recortado. Solo aplica de verdad a clases `vertical` y `origen`, pero se
+    duplicados, recortado. Solo aplica de verdad a clases `categoria` y `origen`, pero se
     acepta en cualquiera sin romper nada."""
     if not isinstance(valor, str):
         return ""
@@ -186,7 +186,7 @@ def _crear(
         return 200, {"etiqueta": _etiqueta_a_dict(etiqueta)}
     # LÍNEA = hashtag (1:1, línea = hueco de programación = hashtag): el hashtag de una línea se
     # DERIVA del nombre, no es un campo libre. Para campañas/otras clases lo edita el equipo.
-    if clase == "vertical":
+    if clase == "categoria":
         hashtags = slug_hashtag(nombre)
     etiqueta = repos.crear_etiqueta(
         nombre=nombre,
@@ -283,7 +283,7 @@ def _actualizar(etiqueta_id: str, datos: dict) -> tuple[int, dict]:
     marca_f = str(campos.get("marca", actual["marca"]))
     # LÍNEA = hashtag (1:1): el hashtag de una línea se DERIVA del nombre, no se edita a mano.
     # Lo refuerza en cada update (y lo re-sincroniza al renombrar), pisando lo que llegue en `datos`.
-    if clase_f == "vertical":
+    if clase_f == "categoria":
         campos["hashtags"] = slug_hashtag(nombre_f)
     if repos.existe_etiqueta_nombre(nombre_f, clase_f, marca_f, excluir_id=etiqueta_id):
         return 409, {"error": "Ya existe una etiqueta con ese nombre."}

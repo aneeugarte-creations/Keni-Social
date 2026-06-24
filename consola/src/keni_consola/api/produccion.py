@@ -14,12 +14,12 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
       "objetivo": {"dia": cupo_dia|None, "plan": plan_dia|None},
       "admision": {"total", "generando", "en_borrador", "en_revision",
                   "programado", "publicado"},
-      "por_vertical": [{"vertical", "total", "en_revision", "programado", "publicado"}],
+      "por_categoria_etiqueta": [{"categoria", "total", "en_revision", "programado", "publicado"}],
       "por_origen": {"pipeline": n, "historia": n, ...},
       "cola_generacion": {"pendientes", "en_curso"},
       "programacion": {"programadas": [{id, titulo, red, fecha_programada}],
                         "proximos_huecos": [{"red", "hueco"}]},
-      "piezas": [{"id", "titulo", "vertical", "estado", "redes", "creado"}],
+      "piezas": [{"id", "titulo", "categoria", "estado", "redes", "creado"}],
     }
 
 El ADMISION cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
@@ -79,10 +79,10 @@ def _peldano_admision(filas: list[dict[str, Any]]) -> str:
     return estado
 
 
-def _vertical_de(etiquetas: list[str], verticales: set[str]) -> str:
-    """Primera etiqueta del tema que sea una vertical de la marca ('' si ninguna)."""
+def _categoria_de(etiquetas: list[str], categorias: set[str]) -> str:
+    """Primera etiqueta del tema que sea una categoría de la marca ('' si ninguna)."""
     for nombre in etiquetas:
-        if nombre in verticales:
+        if nombre in categorias:
             return nombre
     return ""
 
@@ -112,9 +112,9 @@ def _dia(marca: str) -> dict:
         filas_por_item.setdefault(str(f.get("publicacion_id") or ""), []).append(f)
 
     etiquetas_por_item = repos.etiquetas_por_contenido()
-    verticales = {
+    categorias_marca = {
         e.get("nombre", "")
-        for e in repos.listar_etiquetas(marca=marca or None, clase="vertical")
+        for e in repos.listar_etiquetas(marca=marca or None, clase="categoria")
         if e.get("nombre")
     }
 
@@ -127,7 +127,7 @@ def _dia(marca: str) -> dict:
         "programado": 0,
         "publicado": 0,
     }
-    por_vertical: dict[str, dict[str, int]] = {}
+    por_categoria_etiqueta: dict[str, dict[str, int]] = {}
     por_origen: dict[str, int] = {}
     piezas: list[dict[str, Any]] = []
     for it in items:
@@ -137,9 +137,9 @@ def _dia(marca: str) -> dict:
         admision[peldano] = admision.get(peldano, 0) + 1
         origen = str(it.get("origen") or "") or "manual"
         por_origen[origen] = por_origen.get(origen, 0) + 1
-        vertical = _vertical_de(etiquetas_por_item.get(iid, []), verticales)
-        v = por_vertical.setdefault(
-            vertical or "(sin vertical)",
+        categoria = _categoria_de(etiquetas_por_item.get(iid, []), categorias_marca)
+        v = por_categoria_etiqueta.setdefault(
+            categoria or "(sin categoría)",
             {"total": 0, "en_revision": 0, "programado": 0, "publicado": 0},
         )
         v["total"] += 1
@@ -149,7 +149,7 @@ def _dia(marca: str) -> dict:
             {
                 "id": iid,
                 "titulo": it.get("titulo") or "",
-                "vertical": vertical,
+                "categoria": categoria,
                 "estado": peldano,
                 "redes": sorted({str(f.get("red") or "") for f in sus_filas if f.get("red")}),
                 "creado": it.get("creado") or "",
@@ -236,9 +236,9 @@ def _dia(marca: str) -> dict:
         "objetivo": objetivo,
         "por_categoria": por_categoria,
         "admision": admision,
-        "por_vertical": [
-            {"vertical": k, **v}
-            for k, v in sorted(por_vertical.items(), key=lambda kv: -kv[1]["total"])
+        "por_categoria_etiqueta": [
+            {"categoria": k, **v}
+            for k, v in sorted(por_categoria_etiqueta.items(), key=lambda kv: -kv[1]["total"])
         ],
         "por_origen": por_origen,
         "cola_generacion": cola,

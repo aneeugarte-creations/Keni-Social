@@ -1456,7 +1456,7 @@
           ]
         }
       },
-      "description": "Una pieza del listado COMPLETO del periodo (tabla \"Todas las piezas\").\n\nMisma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la\nLÍNEA editorial (etiqueta clase `vertical`) a la que pertenece la pieza, resuelto\ncruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene\nlínea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra\n\"Sin línea\". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.",
+      "description": "Una pieza del listado COMPLETO del periodo (tabla \"Todas las piezas\").\n\nMisma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la\nLÍNEA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto\ncruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene\nlínea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra\n\"Sin línea\". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.",
       "required": [
         "id",
         "plataforma",

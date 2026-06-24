@@ -57,7 +57,7 @@ def _franja_a_dict(franja: dict[str, Any], etiqueta: str = "") -> dict[str, Any]
         "red_nombre": redes.nombre_por_id(franja["red"]) if franja["red"] else "",
         "dia_semana": franja["dia_semana"],
         "hora": franja["hora"],
-        # LÍNEA del plan a la que sirve la franja (id de etiqueta vertical; '' = genérica).
+        # LÍNEA del plan a la que sirve la franja (id de etiqueta categoria; '' = genérica).
         "categoria": franja.get("categoria", ""),
         # Nombre legible de esa línea (o "Última hora"/"Evergreen"); '' si es genérica.
         "etiqueta": etiqueta,
@@ -72,7 +72,7 @@ def _franja_a_dict(franja: dict[str, Any], etiqueta: str = "") -> dict[str, Any]
 def _listar() -> dict:
     franjas = repos.listar_franjas()
     # Mapa id de línea -> nombre (una lectura) para rotular sin N consultas.
-    lineas = {e["id"]: e["nombre"] for e in repos.listar_etiquetas(clase="vertical")}
+    lineas = {e["id"]: e["nombre"] for e in repos.listar_etiquetas(clase="categoria")}
     return {
         "franjas": [_franja_a_dict(f, _label_linea(f.get("categoria", ""), lineas)) for f in franjas]
     }

@@ -166,8 +166,8 @@ def test_slug_de_categoria_se_traduce_a_linea_del_plan(cliente, ahora_fijo):
     """
     from keni_consola import bootstrap_lineas
 
-    bootstrap_lineas.inicializar_lineas()  # siembra las líneas (vertical) de unotv
-    et = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    bootstrap_lineas.inicializar_lineas()  # siembra las líneas (categoria) de unotv
+    et = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     assert et is not None, "la línea Internacional debe existir tras inicializar_lineas"
     cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "12:00", "marca": "unotv"})  # genérica
     cliente.post(
@@ -187,7 +187,7 @@ def test_sin_categoria_sin_genericas_cae_al_plan(cliente, ahora_fijo):
     from keni_consola import bootstrap_lineas
 
     bootstrap_lineas.inicializar_lineas()
-    et = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    et = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     assert et is not None
     # ÚNICA franja de la marca, con categoría de línea (no hay genérica).
     cliente.post(

@@ -98,7 +98,7 @@ def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[
     marcas, y el éxito de una marca premiaba historias de otra). Gateado por
     `KENI_RENDIMIENTO_RANKING` (def OFF). Best-effort: ante cualquier fallo (sin métricas, sin
     Metricool) devuelve vacío y la señal queda inerte. Devuelve
-    `(nombres_top, {etiqueta_id: nombre}, etiquetas_vertical)`.
+    `(nombres_top, {etiqueta_id: nombre}, etiquetas_categoria)`.
     """
     if not config.rendimiento_ranking_activo():
         return set(), {}, []
@@ -114,7 +114,7 @@ def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[
             minimo_piezas=config.rendimiento_min_piezas(),
             n=config.rendimiento_top_n(),
         )
-        etiquetas = [e for e in repos.listar_etiquetas(clase="vertical") if e.get("id")]
+        etiquetas = [e for e in repos.listar_etiquetas(clase="categoria") if e.get("id")]
         id_a_nombre = {e["id"]: (e.get("nombre") or "") for e in etiquetas}
         return top, id_a_nombre, etiquetas
     except Exception:  # noqa: BLE001 -- la señal de rendimiento es opcional; nunca rompe la recolección

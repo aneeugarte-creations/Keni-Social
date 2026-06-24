@@ -207,10 +207,10 @@ def test_filtro_pendiente_pseudo_estado(cliente):
 
 
 def test_opciones_incluye_lineas(cliente):
-    """`opciones.lineas` expone las etiquetas verticales (líneas editoriales) activas."""
+    """`opciones.lineas` expone las etiquetas de categoría (líneas editoriales) activas."""
     from keni_consola import repos
 
-    repos.crear_etiqueta(nombre="Deportes", clase="vertical", marca="unotv")
+    repos.crear_etiqueta(nombre="Deportes", clase="categoria", marca="unotv")
     # Una etiqueta de OTRA clase no debe colarse como línea editorial.
     repos.crear_etiqueta(nombre="Mundial", clase="campania", marca="unotv")
     lineas = cliente.get("/api/piezas/opciones").json()["lineas"]
@@ -233,18 +233,18 @@ def test_opciones_categorias_incluyen_grupo(cliente):
     """Cada categoría-línea de `opciones.categorias` trae su `grupo` (la barra agrupada lo usa)."""
     from keni_consola import repos
 
-    repos.crear_etiqueta(nombre="Bundesliga", clase="vertical", marca="unotv", grupo="Fútbol")
+    repos.crear_etiqueta(nombre="Bundesliga", clase="categoria", marca="unotv", grupo="Fútbol")
     cats = cliente.get("/api/piezas/opciones").json()["categorias"]["unotv"]
     bundesliga = next(c for c in cats if c["nombre"] == "Bundesliga")
     assert bundesliga["grupo"] == "Fútbol"
 
 
 def test_filtro_grupo(cliente):
-    """`?grupo=<grupo>` deja las piezas cuya `categoria` es una línea (vertical) de ese grupo."""
+    """`?grupo=<grupo>` deja las piezas cuya `categoria` es una línea (categoría) de ese grupo."""
     from keni_consola import repos
 
-    bund = repos.crear_etiqueta(nombre="Bundesliga", clase="vertical", marca="unotv", grupo="Fútbol")
-    nascar = repos.crear_etiqueta(nombre="NASCAR", clase="vertical", marca="unotv", grupo="Motor")
+    bund = repos.crear_etiqueta(nombre="Bundesliga", clase="categoria", marca="unotv", grupo="Fútbol")
+    nascar = repos.crear_etiqueta(nombre="NASCAR", clase="categoria", marca="unotv", grupo="Motor")
     fut = repos.crear_pieza("unotv", "x", titulo="De fútbol", contenido="C")
     mot = repos.crear_pieza("unotv", "x", titulo="De motor", contenido="C")
     repos.actualizar_publicacion(

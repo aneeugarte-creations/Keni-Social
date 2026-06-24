@@ -489,7 +489,7 @@ function ListaHistorias({ historias }: { historias: Historia[] }) {
  * La LÍNEA al completo, PAGINADA: recorre TODAS las candidatas de la marca+línea (no el top-N
  * del resumen), 30 por página con anterior/siguiente y «X–Y de N» real. Reusa el patrón de
  * paginación de la lista plana admin contra el endpoint `mesa/linea`. `linea` es la clave del
- * reparto de la Mesa (id de etiqueta vertical, 'breaking'/'evergreen' o '__fuera__').
+ * reparto de la Mesa (id de etiqueta categoria, 'breaking'/'evergreen' o '__fuera__').
  */
 function LineaPaginada({
   marca,

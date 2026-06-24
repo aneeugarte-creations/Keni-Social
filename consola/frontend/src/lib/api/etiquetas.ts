@@ -10,7 +10,7 @@ import type {
 } from "@/types";
 
 export const apiEtiquetas = {
-  // --- Catálogo de etiquetas editoriales (campaña / vertical / tipo) ---
+  // --- Catálogo de etiquetas editoriales (campaña / categoría / tipo) ---
   etiquetas: (
     params: { marca?: string; clase?: string; activas?: boolean } = {},
     signal?: AbortSignal,

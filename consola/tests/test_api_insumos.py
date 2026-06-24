@@ -724,7 +724,7 @@ def test_items_sin_linea_son_siempre_frescos():
 def test_solo_frescos_no_devuelve_caducados():
     """Con solo_frescos=1, ítems de líneas con TTL y fecha vieja no aparecen."""
     import keni_consola.repos as repos
-    repos.crear_etiqueta(nombre="Nacional-test-ttl", clase="vertical", marca="unotv", ttl_dias=1, es_evergreen=False)
+    repos.crear_etiqueta(nombre="Nacional-test-ttl", clase="categoria", marca="unotv", ttl_dias=1, es_evergreen=False)
 
     fecha_vieja = "2020-01-01"
     cli = _cliente_con_items([

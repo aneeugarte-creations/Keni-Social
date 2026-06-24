@@ -8,7 +8,7 @@ import type { RedPieza } from "@/types";
  *
  * La LÍNEA del plan NO vive aquí: se filtra POR PÁGINA (chips del Feed, dropdown de Categoría de
  * la Lista) sobre el eje `categoria` —único eje de línea/categoría— con el catálogo de
- * `opciones.categorias`. Antes había aquí un filtro de "Línea editorial" (eje de tags) paralelo;
+ * `opciones.categorias`. Antes había aquí un filtro de "Categoría" (eje de tags) paralelo;
  * se retiró para no tener dos ejes que el usuario veía como lo mismo.
  *
  * Por defecto FUERTE: "Todas" (centinela `FILTRO_TODOS`), de modo que el comportamiento inicial

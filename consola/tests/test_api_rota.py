@@ -130,7 +130,7 @@ def test_equipo_todos_incluye_no_cobertura(cliente):
 def test_equipo_incluye_marcas_de_cada_miembro(cliente):
     """`/api/rota/equipo` incluye `marcas` por miembro (organigrama del cliente).
 
-    El frontend filtra por vertical en el cliente; el backend devuelve el conjunto sin
+    El frontend filtra por categoría en el cliente; el backend devuelve el conjunto sin
     filtrar y la rota actual se limita a `claro-sports` en la UI.
     """
     auth.crear_usuario(

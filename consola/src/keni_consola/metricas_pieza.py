@@ -455,9 +455,9 @@ def refrescar_piezas_recientes(
 # `contenido.tipo_contenido`; los EJES_ETIQUETA son CLASES de etiqueta (`etiquetas.clase`).
 # OJO: la clase de etiqueta "tipo" se renombra a "etiqueta_tipo" como eje para no chocar con
 # el eje "tipo" (tipo_contenido). El mapeo eje->clase vive en `_CLASE_DE_EJE`.
-EJES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "etiqueta_tipo")
+EJES_ETIQUETA: tuple[str, ...] = ("campania", "categoria", "etiqueta_tipo")
 # Clase de etiqueta real de cada eje de etiqueta (el eje "etiqueta_tipo" mapea a clase "tipo").
-_CLASE_DE_EJE: dict[str, str] = {"campania": "campania", "vertical": "vertical", "etiqueta_tipo": "tipo"}
+_CLASE_DE_EJE: dict[str, str] = {"campania": "campania", "categoria": "categoria", "etiqueta_tipo": "tipo"}
 SIN_CLASIFICAR = "Sin clasificar"
 
 
@@ -604,7 +604,7 @@ def analitica_por_etiqueta(
     Cruza las piezas de Metricool del periodo (`servicio.construir_listado_piezas`) con su
     `contenido` de la BD (enlace por `id_post_metricool`; fallback fuzzy por título) y agrega
     engagement medio + visualizaciones + nº de piezas por cada eje (`tipo` + clases de
-    etiqueta `campania`/`vertical`/`tipo`). `redes` acota a esas redes y `formatos` a esos
+    etiqueta `campania`/`categoria`/`tipo`). `redes` acota a esas redes y `formatos` a esos
     formatos canónicos ANTES de agregar (vacío = todas/todos), igual que el resto del
     dashboard. Devuelve una estructura lista para graficar:
 
@@ -627,7 +627,7 @@ def analitica_por_etiqueta(
 
     # Resuelve etiquetas: publicacion_id -> {clase: nombre}. Solo nos interesa el nombre por
     # clase (el primero asignado de cada clase; el modelo garantiza nombre único por clase).
-    # SOLO etiquetas ACTIVAS: una línea/vertical retirada del plan (p. ej. "Ciencia/Tech" en
+    # SOLO etiquetas ACTIVAS: una línea/categoría retirada del plan (p. ej. "Ciencia/Tech" en
     # UnoTV) sigue en piezas antiguas, pero no debe reaparecer como serie; se ignora y la
     # pieza cae en "Sin clasificar" para ese eje.
     etiquetas = {e["id"]: e for e in repos.listar_etiquetas(solo_activas=True)}
@@ -662,7 +662,7 @@ def analitica_por_etiqueta(
     etiquetas_eje = {
         "tipo": "Tipo de contenido",
         "campania": "Campaña",
-        "vertical": "Vertical",
+        "categoria": "Categoría",
         "etiqueta_tipo": "Tipo (etiqueta)",
     }
     series = [

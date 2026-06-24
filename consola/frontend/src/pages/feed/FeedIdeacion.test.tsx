@@ -1065,7 +1065,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     const OPCIONES_PLAN = {
       ...OPCIONES,
       // Categorías del plan de la marca = las filas de Programa › Plan, incluidas «Última hora» y
-      // «Evergreen» (que NO son líneas editoriales verticales y antes faltaban en los chips).
+      // «Evergreen» (que NO son categorías editoriales y antes faltaban en los chips).
       categorias: {
         unotv: [
           { id: "breaking", nombre: "Última hora" },
@@ -1111,7 +1111,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
 
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Las categorías especiales SÍ están entre los chips (antes faltaban por usar líneas verticales).
+    // Las categorías especiales SÍ están entre los chips (antes faltaban por usar categorías editoriales).
     expect(await screen.findByRole("radio", { name: "Última hora" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Evergreen" })).toBeInTheDocument();
     // Clicar «Nacional» filtra por su CATEGORÍA del plan (mx), no por una línea editorial: así una
@@ -1126,8 +1126,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
 
-  it("una marca organizada por verticales (Claro Sports) recibe sus líneas en `categorias` y filtra por ?categoria=", async () => {
-    // El backend devuelve la TAXONOMÍA del plan por marca en `categorias` (verticales incluidas):
+  it("una marca organizada por categorías (Claro Sports) recibe sus líneas en `categorias` y filtra por ?categoria=", async () => {
+    // El backend devuelve la TAXONOMÍA del plan por marca en `categorias` (categorías incluidas):
     // un solo eje. No hay fallback a `linea`; los chips salen siempre de `categorias[marca]`.
     const OPCIONES_CLARO = {
       ...OPCIONES,
@@ -1176,7 +1176,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
 
     renderFeed({ marcas: ["claro-sports"] });
-    // Los chips son las verticales de la marca (vía `categorias`), más Última hora/Evergreen.
+    // Los chips son las categorías de la marca (vía `categorias`), más Última hora/Evergreen.
     expect(await screen.findByRole("radio", { name: "NFL" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Boxeo" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Última hora" })).toBeInTheDocument();

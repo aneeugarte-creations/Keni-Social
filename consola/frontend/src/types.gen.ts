@@ -369,7 +369,7 @@ export interface PiezasRendimiento {
  * Una pieza del listado COMPLETO del periodo (tabla "Todas las piezas").
  *
  * Misma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la
- * LÍNEA editorial (etiqueta clase `vertical`) a la que pertenece la pieza, resuelto
+ * LÍNEA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto
  * cruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene
  * línea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra
  * "Sin línea". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.

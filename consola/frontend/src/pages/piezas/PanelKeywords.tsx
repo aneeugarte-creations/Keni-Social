@@ -1,5 +1,5 @@
 /**
- * Pestaña «Keywords» de Plan (hub Programa): por marca, cada LÍNEA editorial con su HASHTAG
+ * Pestaña «Keywords» de Plan (hub Programa): por marca, cada CATEGORÍA con su HASHTAG
  * (derivado del nombre, 1:1, solo lectura — va siempre en sus piezas para medir por línea) y sus
  * PALABRAS CLAVE del clasificador (CSV, editable). El clasificador es determinista (0 tokens):
  * asigna una pieza a la línea cuyas keywords casen en su título+resumen.
@@ -18,11 +18,11 @@ import { api, mensajeError } from "@/lib/api";
 
 export function PanelKeywords({ marca }: { marca: string }) {
   const queryClient = useQueryClient();
-  const claveLineas = ["etiquetas", "vertical", marca] as const;
+  const claveLineas = ["etiquetas", "categoria", marca] as const;
   const lineasQuery = useQuery({
     queryKey: claveLineas,
     queryFn: ({ signal }) =>
-      api.etiquetas({ marca, clase: "vertical", activas: true }, signal),
+      api.etiquetas({ marca, clase: "categoria", activas: true }, signal),
   });
 
   // Borrador por línea: lo tecleado aún sin guardar (cae al valor del servidor si no hay).

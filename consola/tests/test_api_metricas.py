@@ -833,7 +833,7 @@ def test_piezas_por_etiqueta_contrato_y_ejes(cliente):
     data = r.json()
     assert data["total"] > 0
     ejes = {s["eje"] for s in data["series"]}
-    assert {"tipo", "campania", "vertical", "etiqueta_tipo"} <= ejes
+    assert {"tipo", "campania", "categoria", "etiqueta_tipo"} <= ejes
     # Sin nada enlazado en la BD, todas las piezas caen en "Sin clasificar".
     assert data["enlazadas"] == 0
     assert data["sin_enlace"] == data["total"]

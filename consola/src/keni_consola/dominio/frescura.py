@@ -76,7 +76,7 @@ def estado_frescura(
 def resolver_linea(nombre_linea: str, marca: str) -> tuple[int, bool]:
     """Devuelve (ttl_dias, es_evergreen) para la línea indicada en la marca dada.
 
-    Busca en `etiquetas` clase='vertical' por nombre case-insensitive.
+    Busca en `etiquetas` clase='categoria' por nombre case-insensitive.
     Si no encuentra la línea devuelve (0, False) = evergreen por defecto
     (nunca ocultar por dato desconocido).
 
@@ -84,7 +84,7 @@ def resolver_linea(nombre_linea: str, marca: str) -> tuple[int, bool]:
     """
     from .. import repos  # import local para mantener el módulo testeable sin BD
 
-    et = repos.obtener_etiqueta_por_nombre(nombre_linea, "vertical", marca)
+    et = repos.obtener_etiqueta_por_nombre(nombre_linea, "categoria", marca)
     if et is None:
         return (0, False)
     return (int(et.get("ttl_dias") or 0), bool(et.get("es_evergreen", False)))

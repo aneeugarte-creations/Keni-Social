@@ -104,7 +104,7 @@ export function faltaMarcaAsignada(
  * `pieza` de un `contenido`) y reutiliza el editor rico
  * (`VistaLista`/`VistaCalendario`/`DialogoEditar`).
  *
- * MARCA, RED y LÍNEA editorial vienen TODAS de los selectores GLOBALES de la barra
+ * MARCA, RED y CATEGORÍA vienen TODAS de los selectores GLOBALES de la barra
  * superior (`useMarcaActiva` + `useFiltrosPublicacion`); esta página ya no tiene
  * dropdowns de filtro propios.
  */

@@ -96,13 +96,13 @@ function FormularioFuente({
     marcas.find((m) => m.id === marcaParam(marca))?.nombre ?? "Compartida (todas las marcas)";
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
   const [propia, setPropia] = React.useState(fuente?.propia ?? false);
-  // LÍNEA editorial de la que cuelga el feed (catch-all "" = General). La cadencia se hereda.
+  // CATEGORÍA de la que cuelga el feed (catch-all "" = General). La cadencia se hereda.
   const [lineaId, setLineaId] = React.useState(fuente?.linea_id ?? "");
-  // Líneas de la marca del feed (clase `vertical`, activas): de aquí cuelga el feed.
+  // Líneas de la marca del feed (clase `categoria`, activas): de aquí cuelga el feed.
   const lineasQuery = useQuery({
-    queryKey: ["etiquetas", "vertical", marcaParam(marca) ?? ""],
+    queryKey: ["etiquetas", "categoria", marcaParam(marca) ?? ""],
     queryFn: ({ signal }) =>
-      api.etiquetas({ marca: marcaParam(marca) ?? "", clase: "vertical", activas: true }, signal),
+      api.etiquetas({ marca: marcaParam(marca) ?? "", clase: "categoria", activas: true }, signal),
   });
   const lineas = lineasQuery.data?.etiquetas ?? [];
   // Relevancia. Alta nueva: "" = el back decide por el medio; al editar, la del feed.

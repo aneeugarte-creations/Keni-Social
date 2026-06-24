@@ -129,7 +129,7 @@ export const apiNoticias = {
     /**
      * Candidatas de UNA línea de la Mesa, PAGINADAS: recorre TODO el pool de la línea
      * (no solo el top-N de la Mesa), rankeadas por score. `linea` es la clave del reparto
-     * de la Mesa: id de etiqueta vertical, 'breaking'/'evergreen', o '__fuera__' ('fuera').
+     * de la Mesa: id de etiqueta categoria, 'breaking'/'evergreen', o '__fuera__' ('fuera').
      * GET /api/noticias/mesa/linea?marca=&linea=&offset=&limit=  →  { historias, total }
      */
     mesaLinea: (

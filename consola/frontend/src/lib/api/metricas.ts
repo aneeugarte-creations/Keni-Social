@@ -66,7 +66,7 @@ export const apiMetricas = {
     params: { rango?: string; marca?: string; red?: string; formato?: string },
     signal?: AbortSignal,
   ) => peticion<PiezasPorEtiqueta>(`/metricas/piezas-por-etiqueta${query(params)}`, { signal }),
-  // Rendimiento del periodo agregado por LÍNEA de contenido (vertical) y por ORIGEN.
+  // Rendimiento del periodo agregado por LÍNEA de contenido (categoría) y por ORIGEN.
   // `marca` viaja en forma `id_metricas` (guion_bajo), igual que el resto de Métricas.
   metricasLineas: (
     params: { rango?: string; marca?: string; red?: string; formato?: string },

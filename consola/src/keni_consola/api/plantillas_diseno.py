@@ -3,7 +3,7 @@
 Cada plantilla es un DOCUMENTO de capas completo (logo + textos + marcos + …) que el equipo
 guarda para reutilizar; se etiqueta por `categoria` (texto LIBRE normalizado a slug: ultima-hora |
 marcador | efemerides | … con "general" como fallback; sin enum en BD) y por `lineas` (ids de
-`etiquetas` clase=vertical) para filtrar por línea editorial. A diferencia de `plantillas_marca`
+`etiquetas` clase=categoria) para filtrar por línea editorial. A diferencia de `plantillas_marca`
 (1 plantilla POR DEFECTO por marca), aquí hay muchas. El catálogo legible de categorías vive en
 el frontend (`lib/categoriasPlantilla.ts`); el legado "post" se trata como "general".
 

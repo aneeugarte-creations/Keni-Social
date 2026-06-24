@@ -59,7 +59,7 @@ export interface EstadoOpcion {
   nombre: string;
 }
 
-/** Una línea editorial = etiqueta de clase `vertical` (la LÍNEA de contenido de una marca). */
+/** Una categoría editorial = etiqueta de clase `categoria` (la LÍNEA de contenido de una marca). */
 export interface LineaEditorialOpcion {
   id: string;
   nombre: string;
@@ -84,7 +84,7 @@ export interface OpcionesPiezas {
   redes: RedPieza[];
   estados: EstadoOpcion[];
   marcas: MarcaOpcion[];
-  /** Catálogo PLANO de verticales (id→nombre) SOLO para resolver el nombre de `pieza.categoria`
+  /** Catálogo PLANO de categorías (id→nombre) SOLO para resolver el nombre de `pieza.categoria`
    *  en el editor. NO es un eje de filtro: el filtro de líneas/categorías es `categorias`. */
   lineas: LineaEditorialOpcion[];
   /** TAXONOMÍA del plan POR marca (Última hora · líneas · Evergreen), nombre resuelto en el
@@ -165,7 +165,7 @@ export interface Franja {
   dia_semana: number;
   /** Hora en formato "HH:MM" (UTC: el backend almacena instantes en UTC). */
   hora: string;
-  /** Línea del plan a la que sirve: id de etiqueta vertical ('' = franja genérica). */
+  /** Línea del plan a la que sirve: id de etiqueta categoria ('' = franja genérica). */
   categoria: string;
   /** Nombre legible de esa línea (o "Última hora"/"Evergreen"); '' si es genérica. */
   etiqueta?: string;

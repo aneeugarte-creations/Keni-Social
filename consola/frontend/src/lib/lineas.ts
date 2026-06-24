@@ -1,7 +1,7 @@
 /**
  * Rótulos legibles de los SLUGS de categoría del pool de NOTICIAS (mx, internacional, breaking…).
  *
- * El Plan, la programación y las métricas hablan ya en LÍNEAS reales (etiquetas vertical); este
+ * El Plan, la programación y las métricas hablan ya en LÍNEAS reales (etiquetas categoria); este
  * mapa solo traduce el slug de categoría que arrastra una HISTORIA del pool (pre-pieza, capa de
  * ingesta) a un nombre legible para la Mesa de Noticias y el Detalle. No es el catálogo del plan.
  */
@@ -54,7 +54,7 @@ export interface ColorLinea {
   barraSuave: string;
 }
 
-// Color por LÍNEA editorial: cada línea (Evergreen, Internacional, Nacional…) tiene un tono fijo
+// Color por CATEGORÍA: cada línea (Evergreen, Internacional, Nacional…) tiene un tono fijo
 // para distinguirlas de un vistazo en el plan y los KPIs. Tonos del 500/700 (texto legible);
 // las clases son literales porque el JIT de Tailwind solo ve cadenas completas (no concatenadas).
 // VERDE y ROJO NO se usan como color de línea: están reservados para ESTADO (bien/mal) —

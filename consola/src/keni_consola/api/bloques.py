@@ -2,7 +2,7 @@
 
 Un bloque es un conjunto de capas con sentido propio (lower-third, módulo de infografía, pleca de
 marca) que se guarda una vez y se suelta en cualquier documento. Se etiqueta por `marca` y `lineas`
-(ids de `etiquetas` clase=vertical).
+(ids de `etiquetas` clase=categoria).
 
   - `GET    /api/bloques`        lista (filtros `?marca=&q=`).
   - `POST   /api/bloques`        crea un bloque a partir de una lista de capas (validadas).

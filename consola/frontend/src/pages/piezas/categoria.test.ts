@@ -9,7 +9,7 @@ const LINEAS = [
 ];
 
 describe("etiquetaCategoriaPieza", () => {
-  it("resuelve el ID de una vertical a su nombre vía `lineas` (no muestra el hash)", () => {
+  it("resuelve el ID de una categoría a su nombre vía `lineas` (no muestra el hash)", () => {
     expect(etiquetaCategoriaPieza("06ad3588a80e", LINEAS)).toBe("Salud");
     expect(etiquetaCategoriaPieza("9f1c2d3e4a5b", LINEAS)).toBe("Educación");
   });

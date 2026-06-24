@@ -1,5 +1,5 @@
 /**
- * Métrica por LÍNEA de contenido (vertical) y por ORIGEN.
+ * Métrica por LÍNEA de contenido (categoría) y por ORIGEN.
  *
  * Consume `/api/metricas/lineas` y muestra dos tablas: rendimiento del periodo por línea
  * y por origen, con piezas / vistas / interacciones / engagement (promedio por pieza:
@@ -48,7 +48,7 @@ type ClaveMetrica = "piezas" | "visualizaciones" | "interacciones" | "engagement
 
 /**
  * Catálogo de campos COMPARTIDO por las dos tablas. La primera columna ("dimension") es la
- * vertical de cada fila: se etiqueta "Línea" u "Origen" según la tabla en el render. El resto
+ * categoría de cada fila: se etiqueta "Línea" u "Origen" según la tabla en el render. El resto
  * son las métricas comunes. Su orden aquí es el orden base.
  */
 const COLUMNAS: ColumnaMeta[] = [

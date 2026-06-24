@@ -17,7 +17,7 @@ def _linea_nacional() -> str:
     El plan y la mesa se clavan por id de línea; un feed 'mx' se reparte en esta línea.
     """
     bootstrap_lineas.inicializar_lineas()
-    return repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")["id"]
+    return repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")["id"]
 
 
 def _inicializar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
@@ -62,13 +62,13 @@ def test_mesa_requiere_marca_concreta(cliente):
 
 
 def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
-    # El plan y la mesa se clavan por LÍNEA (id de etiqueta vertical): un feed 'mx' se reparte
+    # El plan y la mesa se clavan por LÍNEA (id de etiqueta categoria): un feed 'mx' se reparte
     # en la línea Nacional; 'breaking'/'evergreen' son señales del motor.
     from keni_consola import bootstrap_lineas, repos
 
     bootstrap_lineas.inicializar_lineas()
-    nac = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")["id"]
-    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")["id"]
+    nac = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")["id"]
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")["id"]
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,{intl}:1,breaking:1")
     _inicializar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
     _inicializar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
@@ -108,7 +108,7 @@ def test_mesa_clasifica_por_contenido_si_el_feed_no_mapea(cliente, monkeypatch):
     sus líneas; aquí se reproduce con UnoTV dándole keywords a una línea y un feed sin mapeo.
     """
     bootstrap_lineas.inicializar_lineas()
-    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")["id"]
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")["id"]
     # Como las líneas de Fundación, esta línea recibe keywords: una candidata cuyo feed NO
     # mapea ('gaming' no es línea de UnoTV) se clasifica por su texto.
     repos.actualizar_etiqueta(intl, {"keywords": "groenlandia, vikingos, fosil"})
@@ -368,7 +368,7 @@ def test_mesa_linea_marca_con_grupos_filtra_por_linea(cliente):
     LÉXICO (la misma clasificación que la barra de grupos) y filtra a la línea (id de etiqueta).
     """
     bootstrap_lineas.inicializar_lineas()
-    box = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")["id"]
+    box = repos.obtener_etiqueta_por_nombre("Boxeo", "categoria", "claro-sports")["id"]
     _inicializar("box1", score=0.9, marca="claro-sports", categoria="otros-deportes",
                  titulo="Canelo Álvarez confirma su próxima pelea de box")
     _inicializar("f1", score=0.8, marca="claro-sports", categoria="motor",

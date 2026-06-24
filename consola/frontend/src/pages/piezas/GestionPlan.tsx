@@ -3,8 +3,8 @@
  * contenidos salen al día de cada LÍNEA y a qué horas (CDMX), más las redes del plan y el
  * alta/baja de líneas. El hashtag y los keywords de cada línea viven en la pestaña «Keywords».
  *
- * Las LÍNEAS son las REALES de la marca (etiquetas `vertical`, las mismas de métricas y feeds):
- * se leen de `/api/etiquetas?clase=vertical`. Más dos filas especiales del motor: «Última hora»
+ * Las LÍNEAS son las REALES de la marca (etiquetas `categoria`, las mismas de métricas y feeds):
+ * se leen de `/api/etiquetas?clase=categoria`. Más dos filas especiales del motor: «Última hora»
  * (breaking, sin horario: sale al instante) y «Evergreen» (cajón de reciclaje). Por debajo toca:
  *   - la CANTIDAD por línea escribe `KENI_PLAN_DIA::<marca>` ("clave:n,…", clave = id de línea o
  *     'breaking'/'evergreen'), el ajuste que lee la admisión del pipeline;
@@ -99,9 +99,9 @@ export function PanelPlan({ marca }: { marca: string }) {
     queryFn: ({ signal }) => api.franjas(signal),
   });
   const lineasQuery = useQuery({
-    queryKey: ["etiquetas", "vertical", marca],
+    queryKey: ["etiquetas", "categoria", marca],
     queryFn: ({ signal }) =>
-      api.etiquetas({ marca, clase: "vertical", activas: true }, signal),
+      api.etiquetas({ marca, clase: "categoria", activas: true }, signal),
   });
 
   // Filas del plan: Última hora (breaking) + las líneas reales de la marca + Evergreen.
@@ -124,10 +124,10 @@ export function PanelPlan({ marca }: { marca: string }) {
   const [inicializado, setInicializado] = React.useState(false);
   const [nuevaLinea, setNuevaLinea] = React.useState("");
 
-  const claveLineas = ["etiquetas", "vertical", marca] as const;
+  const claveLineas = ["etiquetas", "categoria", marca] as const;
   const crearLinea = useMutation({
     mutationFn: (nombre: string) =>
-      api.crearEtiqueta({ nombre: nombre.trim(), clase: "vertical", marca }),
+      api.crearEtiqueta({ nombre: nombre.trim(), clase: "categoria", marca }),
     onSuccess: () => {
       setNuevaLinea("");
       void queryClient.invalidateQueries({ queryKey: claveLineas });

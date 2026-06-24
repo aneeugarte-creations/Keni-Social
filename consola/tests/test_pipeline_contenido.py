@@ -1572,11 +1572,11 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
-    # El plan se clava por LÍNEA (id de etiqueta vertical): los feeds 'mx'/'internacional' se
+    # El plan se clava por LÍNEA (id de etiqueta categoria): los feeds 'mx'/'internacional' se
     # re-clavan a sus líneas Nacional/Internacional; la deportiva ('futbol') cae fuera del plan.
     bootstrap_lineas.inicializar_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
-    internacional = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
+    internacional = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,{internacional['id']}:1")
     ver = pc.VERIFICACION_VERIFICADO  # admisión solo promueve verificadas (no hay atajo `saltada`)
     _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx", verificacion_fuente=ver)
@@ -1648,7 +1648,7 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     bootstrap_lineas.inicializar_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # El plan declara la línea 'breaking' para que la última hora consuma SU cupo y salga a la
     # vez que la nacional (sin él competiría por el cupo de su línea y la desplazaría).
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,breaking:1")
@@ -1744,7 +1744,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     from keni_consola import bootstrap_lineas
 
     bootstrap_lineas.inicializar_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1")
     _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
                      categoria="mx", breaking=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO)
@@ -1763,7 +1763,7 @@ def test_clusters_para_promover_clasifica_por_contenido_si_el_feed_no_mapea(ento
     from keni_consola import bootstrap_lineas
 
     bootstrap_lineas.inicializar_lineas()
-    intl = repos.obtener_etiqueta_por_nombre("Internacional", "vertical", "unotv")
+    intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     repos.actualizar_etiqueta(intl["id"], {"keywords": "groenlandia, vikingos, fosil"})
     # Solo se prueba el enrutado por categoría: se neutralizan los umbrales de score y marca.
     monkeypatch.setenv("KENI_PROMOVER_MIN_MARCA", "0")
@@ -2286,7 +2286,7 @@ def test_auto_etiquetar_linea_hereda_la_linea_del_feed(entorno):
     from keni_consola.pipeline_contenido import _admitir
 
     # Línea de la marca + feed enganchado a ella (sin keywords -> el clasificador no casa).
-    linea = repos.crear_etiqueta(nombre="Nacional", clase="vertical", marca="unotv")
+    linea = repos.crear_etiqueta(nombre="Nacional", clase="categoria", marca="unotv")
     feed = repos.crear_fuente_rss(
         "Diario", "https://e.example/f.xml", marca="unotv", linea_id=linea["id"]
     )

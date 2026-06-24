@@ -5,7 +5,7 @@
   - `piezas_listado`: listado COMPLETO de piezas del periodo (con línea editorial).
   - `pieza_historico`: serie histórica de UNA pieza + velocidad de crecimiento.
   - `piezas_por_etiqueta`: rendimiento del periodo por SERIE/TIPO.
-  - `lineas`: rendimiento del periodo por LÍNEA (clase `vertical`) y ORIGEN (clase `origen`).
+  - `lineas`: rendimiento del periodo por LÍNEA (clase `categoria`) y ORIGEN (clase `origen`).
 """
 
 from __future__ import annotations
@@ -418,7 +418,7 @@ async def lineas(request: Request) -> Response:
     """GET /api/metricas/lineas: rendimiento del periodo por LÍNEA y por ORIGEN.
 
     Agrupa el rendimiento REAL de las piezas del periodo por su LÍNEA editorial (etiqueta
-    clase `vertical`) y por su ORIGEN (clase `origen`), cruzando las piezas de la fuente
+    clase `categoria`) y por su ORIGEN (clase `origen`), cruzando las piezas de la fuente
     única de métricas con su `contenido` de la BD (enlace por `id_post_metricool`; fallback
     fuzzy por título), igual que `piezas-por-etiqueta`. Devuelve, por cada cubo, nº de
     piezas + suma de visualizaciones + suma de interacciones + engagement medio. Las piezas

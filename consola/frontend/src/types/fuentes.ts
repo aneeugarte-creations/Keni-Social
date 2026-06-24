@@ -191,7 +191,7 @@ export interface Preset {
   categoria: string;
   /** Marca sugerida para asignar el feed al activarlo (id canónico). */
   marca_sugerida: string;
-  /** Línea editorial sugerida al activar. */
+  /** Categoría sugerida al activar. */
   linea_sugerida: string;
   /** Código de idioma del feed (p. ej. "en", "es", "fr"). */
   idioma: string;
@@ -243,7 +243,7 @@ export interface FuenteRss {
   propia: boolean;
   /** Categoría del feed (slug legado): vínculo editorial reemplazado por `linea_id`. */
   categoria: string;
-  /** LÍNEA editorial (id de etiqueta `vertical`) de la que cuelga el feed; `""` = catch-all
+  /** CATEGORÍA (id de etiqueta `categoria`) de la que cuelga el feed; `""` = catch-all
    *  "General". La cadencia de sondeo se deriva de la línea. */
   linea_id: string;
   /** Peso editorial de la fuente: pondera la corroboración del ranking (potente 2.0 /
@@ -277,7 +277,7 @@ export interface CuerpoCrearFuenteRss {
   propia?: boolean;
   /** Categoría del feed (slug legado, opcional). */
   categoria?: string;
-  /** Línea editorial (id de etiqueta `vertical`) de la que cuelga el feed; `""` = General. */
+  /** Categoría (id de etiqueta `categoria`) de la que cuelga el feed; `""` = General. */
   linea_id?: string;
   /** Peso editorial (opcional; sin él, el back usa el seed por host). */
   peso?: number;

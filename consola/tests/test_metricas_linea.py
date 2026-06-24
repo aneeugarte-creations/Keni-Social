@@ -1,4 +1,4 @@
-"""Agregación del rendimiento del periodo por LÍNEA (clase `vertical`) y por ORIGEN.
+"""Agregación del rendimiento del periodo por LÍNEA (clase `categoria`) y por ORIGEN.
 
 Prueba la lógica PURA de `metricas_linea` (sin BD ni golpear Metricool): se le pasan las
 piezas del periodo + los índices de enlace + las etiquetas en memoria, y se verifica la
@@ -24,18 +24,18 @@ def _pieza(id_post, titulo, vis, inter, eng):
 
 def test_linea_de_categoria_eje_unico_categoria():
     """La LÍNEA sale SOLO de la `categoria` (eje único): las señales del motor son su propio cubo
-    («Última hora», «Evergreen»); vertical activa por id; vacía/retirada/desconocida → "" (Sin
-    línea). Ya NO se respalda con la etiqueta vertical asignada (eso lo cubre el backfill 0046)."""
-    verticales = {"et-nac": "Nacional", "et-int": "Internacional"}
+    («Última hora», «Evergreen»); categoría activa por id; vacía/retirada/desconocida → "" (Sin
+    línea). Ya NO se respalda con la etiqueta categoria asignada (eso lo cubre el backfill 0046)."""
+    categorias = {"et-nac": "Nacional", "et-int": "Internacional"}
     f = metricas_linea.linea_de_categoria
     # Señales del motor: cada una su propio cubo (coincide con los chips/el filtro).
-    assert f("evergreen", vertical_por_id=verticales) == "Evergreen"
-    assert f("breaking", vertical_por_id=verticales) == "Última hora"
-    # Id de vertical ACTIVA → su nombre.
-    assert f("et-nac", vertical_por_id=verticales) == "Nacional"
-    # Vacía o id de vertical RETIRADA/desconocida → "" (cae en "Sin línea").
-    assert f("", vertical_por_id=verticales) == ""
-    assert f("et-ciencia", vertical_por_id=verticales) == ""
+    assert f("evergreen", categoria_por_id=categorias) == "Evergreen"
+    assert f("breaking", categoria_por_id=categorias) == "Última hora"
+    # Id de categoría ACTIVA → su nombre.
+    assert f("et-nac", categoria_por_id=categorias) == "Nacional"
+    # Vacía o id de categoría RETIRADA/desconocida → "" (cae en "Sin línea").
+    assert f("", categoria_por_id=categorias) == ""
+    assert f("et-ciencia", categoria_por_id=categorias) == ""
 
 
 def test_agrupar_por_eje_suma_y_engagement_medio():
@@ -64,7 +64,7 @@ def test_agrupar_por_eje_suma_y_engagement_medio():
 
 
 def test_piezas_sin_linea_caen_en_cubo_sin_linea():
-    """Pieza enlazada a contenido sin etiqueta vertical -> cubo 'Sin línea'."""
+    """Pieza enlazada a contenido sin etiqueta categoria -> cubo 'Sin línea'."""
     piezas = [_pieza("M9", "Nota suelta", 500, 20, 4.0)]
     cubos = metricas_linea.agrupar_por_eje(
         piezas,
@@ -188,9 +188,9 @@ def test_agrupar_lineas_y_origenes_combina_los_dos_ejes():
 def test_valor_por_contenido_toma_solo_etiquetas_de_la_clase():
     """`_valor_por_contenido` resuelve solo las etiquetas de la clase pedida."""
     asignaciones = {"c1": ["et-fut", "et-interno"], "c2": ["et-interno"]}
-    verticales = {"et-fut": "Futbol"}  # solo las de clase vertical
-    out = metricas_linea._valor_por_contenido(asignaciones, verticales)
-    assert out == {"c1": "Futbol"}  # c2 no tiene etiqueta vertical
+    categorias = {"et-fut": "Futbol"}  # solo las de clase categoria
+    out = metricas_linea._valor_por_contenido(asignaciones, categorias)
+    assert out == {"c1": "Futbol"}  # c2 no tiene etiqueta categoria
 
 
 def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
@@ -204,7 +204,7 @@ def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
     monkeypatch.setattr(
         repos,
         "listar_publicacion",
-        # La LÍNEA vive en `categoria` (id de la vertical), no en el tag asignado.
+        # La LÍNEA vive en `categoria` (id de la categoría), no en el tag asignado.
         lambda marca=None: [
             {"id": "c1", "titulo": "Gol", "id_post_metricool": "M1", "categoria": "et-vir"}
         ],

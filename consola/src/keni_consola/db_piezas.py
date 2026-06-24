@@ -68,14 +68,14 @@ _SELECT_PUBLICACION = (
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
     "c.formato AS formato, c.espejo AS espejo, "
-    # Hashtags de la LÍNEA: salen de la etiqueta vertical cuyo id ES la `categoria` del contenido.
+    # Hashtags de la LÍNEA: salen de la etiqueta categoria cuyo id ES la `categoria` del contenido.
     # `categoria` es la ÚNICA fuente de verdad operativa (filtros, programación, aprobación,
     # métricas, hashtags); el tema (tag del clasificador) es solo metadata y no alimenta nada de
     # esto. Columna calculada en el mismo SELECT (no un query por pieza) para que el gate
     # `falta_hashtags` la exija sin N+1. "" si la categoría es señal del motor (breaking/evergreen),
     # vacía, o sin hashtag fijado.
     "(SELECT e.hashtags FROM etiquetas e "
-    "WHERE e.id = c.categoria AND e.clase = 'vertical' AND e.activo = 1) AS linea_hashtags "
+    "WHERE e.id = c.categoria AND e.clase = 'categoria' AND e.activo = 1) AS linea_hashtags "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
     # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
@@ -502,12 +502,12 @@ def _filtros_publicacion(
         clausulas.append("c.categoria = ?")
         params.append(categoria)
     # GRUPO de líneas (barra agrupada del feed, marcas con grupos como Claro Sports): casa las
-    # piezas cuya `categoria` es una LÍNEA (etiqueta vertical) de ese grupo. Mismo eje `categoria`
+    # piezas cuya `categoria` es una LÍNEA (etiqueta categoria) de ese grupo. Mismo eje `categoria`
     # que el filtro de arriba, pero abarcando todas las líneas del grupo.
     if grupo:
         clausulas.append(
             "c.categoria IN (SELECT e.id FROM etiquetas e "
-            "WHERE e.clase = 'vertical' AND e.grupo = ?)"
+            "WHERE e.clase = 'categoria' AND e.grupo = ?)"
         )
         params.append(grupo)
     if tipo_contenido:

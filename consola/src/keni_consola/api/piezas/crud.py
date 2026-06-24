@@ -176,15 +176,15 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
 
 
 def _opciones() -> dict[str, Any]:
-    # Lineas editoriales = etiquetas de clase `vertical` (la LÍNEA de contenido). Pueblan el
+    # Lineas editoriales = etiquetas de clase `categoria` (la LÍNEA de contenido). Pueblan el
     # selector de "Línea editorial" de las superficies Lista/Calendario/Feed. Se devuelven
     # TODAS las activas con su marca; el SPA acota por la marca activa del switch global.
     lineas = [
         {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", ""), "grupo": e.get("grupo", "")}
-        for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
+        for e in repos.listar_etiquetas(clase="categoria", solo_activas=True)
     ]
     # CATEGORÍAS del plan POR MARCA = la TAXONOMÍA del plan completa (la misma de Programa › Plan):
-    # «Última hora» (breaking) + las LÍNEAS de la marca (verticales) + «Evergreen». Es la ÚNICA
+    # «Última hora» (breaking) + las LÍNEAS de la marca (categorías) + «Evergreen». Es la ÚNICA
     # fuente de verdad de "líneas/categorías" para el usuario: la usan los chips del Feed, el filtro
     # de la Lista y el alta «Crear post». Cada entrada trae `franja` (si tiene horario configurado):
     # «Crear post» solo ofrece las que SÍ casan franja (si no, la pieza no se programaría); los
@@ -218,7 +218,7 @@ def _opciones() -> dict[str, Any]:
                 "grupo": "",
             }
         ]
-        # Líneas (verticales) de la marca + las globales (marca=''), en el orden del catálogo.
+        # Líneas (categorías) de la marca + las globales (marca=''), en el orden del catálogo.
         items += [
             {
                 "id": ln["id"],
@@ -256,7 +256,7 @@ def _opciones() -> dict[str, Any]:
             }
             for m in marcas.catalogo()
         ],
-        # `lineas`: catálogo plano de verticales (id→nombre) para RESOLVER el nombre de
+        # `lineas`: catálogo plano de categorías (id→nombre) para RESOLVER el nombre de
         # `pieza.categoria` en el editor; NO es un eje de filtro (el filtro es `categorias`).
         "lineas": lineas,
         # `categorias`: taxonomía del plan por marca (Última hora + líneas + Evergreen, con flag

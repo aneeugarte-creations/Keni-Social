@@ -2,7 +2,7 @@
  * Tabla CONSOLIDADA de piezas del periodo (fusiona Lista + Top/Peores + Rendimiento).
  *
  * UNA sola tabla rica con todo el kit, consistente:
- *   - Filtros (client-side): línea editorial y buscador por título. El foco de red lo
+ *   - Filtros (client-side): categoría y buscador por título. El foco de red lo
  *     manda el selector GLOBAL de la cabecera; la marca, el switch global.
  *   - Estadísticas del conjunto filtrado: nº de piezas, vistas media/mediana y
  *     engagement medio/mediana (top/peores = ordenar por la columna Vistas).

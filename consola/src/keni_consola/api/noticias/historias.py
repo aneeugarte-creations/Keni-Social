@@ -424,7 +424,7 @@ _LINEA_FUERA = "__fuera__"
 
 
 def _linea_de_cluster_plan(
-    marca: str, cluster: dict[str, Any], plan: dict[str, int], vert_etiquetas: list[dict[str, Any]]
+    marca: str, cluster: dict[str, Any], plan: dict[str, int], cat_etiquetas: list[dict[str, Any]]
 ) -> str:
     """Clave de LÍNEA del plan con la que una candidata compite (marcas SIN grupos).
 
@@ -434,14 +434,14 @@ def _linea_de_cluster_plan(
     """
     from ...pipeline_contenido import _admitir as _pc_ingesta
 
-    cat = _pc_ingesta.linea_de_cluster(marca, cluster, vert_etiquetas)
+    cat = _pc_ingesta.linea_de_cluster(marca, cluster, cat_etiquetas)
     return cat if cat in plan else _LINEA_FUERA
 
 
 def _linea_de_cluster_grupo(
-    cluster: dict[str, Any], vert_etiquetas: list[dict[str, Any]]
+    cluster: dict[str, Any], cat_etiquetas: list[dict[str, Any]]
 ) -> str:
-    """Id de LÍNEA vertical de una candidata por LÉXICO (marcas CON grupos, p. ej. Claro Sports).
+    """Id de LÍNEA categoría de una candidata por LÉXICO (marcas CON grupos, p. ej. Claro Sports).
 
     La MISMA clasificación de la barra de grupos: clasifica el texto contra las líneas de la
     marca. '' si nada casa. PURA (recibe las líneas ya leídas).
@@ -449,7 +449,7 @@ def _linea_de_cluster_grupo(
     from ...dominio import clasificador_lineas
 
     texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
-    return clasificador_lineas.clasificar(texto, vert_etiquetas) or ""
+    return clasificador_lineas.clasificar(texto, cat_etiquetas) or ""
 
 
 def _serializar_historias(
@@ -515,14 +515,14 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
         """Escala un conteo de la MUESTRA al pool REAL (exacto si la muestra no se topó)."""
         return n_muestra if _factor == 1.0 else round(n_muestra * _factor)
 
-    # Líneas (vertical) de la marca: el reparto al plan y la barra de grupos las reusan.
-    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
-    grupos_orden = _grupos_ordenados(vert_etiquetas)
+    # Líneas (categoría) de la marca: el reparto al plan y la barra de grupos las reusan.
+    cat_etiquetas = repos.listar_etiquetas(marca=marca, clase="categoria", solo_activas=True)
+    grupos_orden = _grupos_ordenados(cat_etiquetas)
     # Reparto por LÍNEA (el pool ya viene ordenado por score: cada lista queda rankeada). Una
     # historia compite por la línea de su feed (id); si el slug del feed no cae en una línea del
     # plan, se clasifica por CONTENIDO (keywords) — así un feed mixto (divulgación) reparte cada
     # nota a su línea. Las marcas con grupos clasifican aparte (abajo) y aquí no reclasifican.
-    etiquetas_fallback = [] if grupos_orden else vert_etiquetas
+    etiquetas_fallback = [] if grupos_orden else cat_etiquetas
     por_linea_pool: dict[str, list[dict[str, Any]]] = {}
     for c in clusters:
         destino = _linea_de_cluster_plan(marca, c, plan, etiquetas_fallback)
@@ -536,9 +536,9 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     conteo_grupo: dict[str, int] = dict.fromkeys(grupos_orden, 0)
     conteo_linea: dict[str, int] = {}
     if grupos_orden:
-        grupo_de_linea = {e["id"]: (e.get("grupo") or "") for e in vert_etiquetas}
+        grupo_de_linea = {e["id"]: (e.get("grupo") or "") for e in cat_etiquetas}
         for c in clusters:
-            lid = _linea_de_cluster_grupo(c, vert_etiquetas)
+            lid = _linea_de_cluster_grupo(c, cat_etiquetas)
             grupo = grupo_de_linea.get(lid, "")
             grupo_por_cluster[c["id"]] = grupo
             linea_por_cluster[c["id"]] = lid
@@ -605,10 +605,10 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
             h["grupo"] = grupo_por_cluster.get(h["id"], "")
             h["linea"] = linea_por_cluster.get(h["id"], "")
         # Líneas de cada grupo (2º nivel de navegación): id, nombre y candidatas en pool. Orden:
-        # las que tienen candidatas primero (mayor conteo arriba), las vacías al final. `vert_etiquetas`
+        # las que tienen candidatas primero (mayor conteo arriba), las vacías al final. `cat_etiquetas`
         # ya viene alfabético por nombre, así que el orden estable rompe empates alfabéticamente.
         lineas_por_grupo: dict[str, list[dict[str, Any]]] = {}
-        for e in vert_etiquetas:
+        for e in cat_etiquetas:
             g = e.get("grupo") or ""
             if not g:
                 continue
@@ -692,17 +692,17 @@ def _clusters_de_linea(
 
     Si la marca usa grupos (Claro Sports) clasifica por LÉXICO (`_linea_de_cluster_grupo`); si no,
     por el reparto del plan (`_linea_de_cluster_plan`, que incluye `breaking` y `_LINEA_FUERA`). La
-    `linea` pedida casa la clave de ese reparto: un id de etiqueta vertical, `breaking`/`evergreen`,
+    `linea` pedida casa la clave de ese reparto: un id de etiqueta categoria, `breaking`/`evergreen`,
     o `__fuera__` (alias `fuera`). El pool ya viene rankeado por score, así que la salida también.
     """
-    vert_etiquetas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
-    grupos_orden = _grupos_ordenados(vert_etiquetas)
+    cat_etiquetas = repos.listar_etiquetas(marca=marca, clase="categoria", solo_activas=True)
+    grupos_orden = _grupos_ordenados(cat_etiquetas)
     objetivo = _LINEA_FUERA if linea in (_LINEA_FUERA, "fuera") else linea
     if grupos_orden:
-        return [c for c in clusters if _linea_de_cluster_grupo(c, vert_etiquetas) == objetivo]
+        return [c for c in clusters if _linea_de_cluster_grupo(c, cat_etiquetas) == objetivo]
     plan = config.plan_dia(marca)
     return [
-        c for c in clusters if _linea_de_cluster_plan(marca, c, plan, vert_etiquetas) == objetivo
+        c for c in clusters if _linea_de_cluster_plan(marca, c, plan, cat_etiquetas) == objetivo
     ]
 
 
@@ -738,7 +738,7 @@ async def mesa_linea(request: Request) -> Response:
 
     El complemento navegable de la Mesa: mientras `mesa` resume el top-N por línea, esto recorre
     TODAS las candidatas (`estado='nuevo'`) de una marca+línea, rankeadas por score, en páginas
-    (offset/limit, def 30). `linea` es la clave del reparto de la Mesa: un id de etiqueta vertical,
+    (offset/limit, def 30). `linea` es la clave del reparto de la Mesa: un id de etiqueta categoria,
     `breaking`/`evergreen`, o `__fuera__` (alias `fuera`) para lo que el plan no contempla. Devuelve
     `{historias, total}` (el total es el de la línea entera, no el de la página) con el contrato
     `Historia` completo. Marca obligatoria; sin `linea` es 400.

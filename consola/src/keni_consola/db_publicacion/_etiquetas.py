@@ -23,7 +23,7 @@ __all__ = [
 ]
 
 # --------------------------------------------------------------------------- #
-# Etiquetas editoriales (campaña / vertical / tipo) y su N:M con `contenido`     #
+# Etiquetas editoriales (campaña / categoria / tipo) y su N:M con `contenido`     #
 # --------------------------------------------------------------------------- #
 # Una etiqueta clasifica transversalmente las piezas del tablero. `marca = ''` =
 # etiqueta GLOBAL. La capa API valida `clase`/`marca`/unicidad; db.py NO valida.

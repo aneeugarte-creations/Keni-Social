@@ -4,7 +4,7 @@ Generaliza `marca_assets.py` (que solo conocia logo/marca-agua/pleca como PNGs e
 catalogo en Postgres (`marca_activos`) + objetos en el almacen (S3/disco). Cada activo tiene un
 `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo), un `objeto` (uuid+ext del
 binario, salvo `paleta` que vive solo en `metadatos`), `metadatos` por tipo (p.ej. familia/peso de
-una tipografia, lista de hex de una paleta) y `lineas` (ids de `etiquetas` clase=vertical que lo
+una tipografia, lista de hex de una paleta) y `lineas` (ids de `etiquetas` clase=categoria que lo
 etiquetan por linea editorial). El editor lo muestra agrupado por tipo y arrastra cada activo al
 lienzo como una capa.
 
@@ -55,7 +55,7 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
 
 
 def _normalizar_lineas(valor: object) -> list[str]:
-    """Lista de ids de linea (etiquetas clase=vertical) normalizada: strings no vacios, sin duplicados."""
+    """Lista de ids de linea (etiquetas clase=categoria) normalizada: strings no vacios, sin duplicados."""
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []
@@ -114,7 +114,7 @@ def _coincide_busqueda(activo: dict, q: str) -> bool:
 async def listar(request: Request) -> Response:
     """GET /api/marca-activos: activos catalogados (mas recientes primero).
 
-    Filtros opcionales: `marca`, `tipo` (lista blanca), `linea` (id de etiqueta vertical) y `q`
+    Filtros opcionales: `marca`, `tipo` (lista blanca), `linea` (id de etiqueta categoria) y `q`
     (substring por nombre, en memoria). Devuelve `{activos: [...]}`.
     """
     q = request.query_params
@@ -189,7 +189,7 @@ async def crear(request: Request) -> Response:
     """POST /api/marca-activos: cataloga un activo de marca.
 
     Cuerpo: `tipo` (lista blanca), `marca` ('' = global), `nombre`, `objeto` (id de media;
-    obligatorio salvo `tipo=paleta`), `metadatos` (objeto), `lineas` (ids de etiqueta vertical).
+    obligatorio salvo `tipo=paleta`), `metadatos` (objeto), `lineas` (ids de etiqueta categoria).
     -> `{activo}` | 400.
     """
     datos = await leer_json(request)

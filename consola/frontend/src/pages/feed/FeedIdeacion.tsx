@@ -103,7 +103,7 @@ function guardarPref(clave: string, valor: number): void {
 }
 
 /**
- * Filtro de línea editorial en texto sobrio (mismo lenguaje que la barra de categorías de la
+ * Filtro de categoría en texto sobrio (mismo lenguaje que la barra de categorías de la
  * Mesa de Investigación): sin borde ni píldora; el activo se distingue por oscurecer y engrosar
  * la etiqueta.
  */

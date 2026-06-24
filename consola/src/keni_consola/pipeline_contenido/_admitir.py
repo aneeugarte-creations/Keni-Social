@@ -108,7 +108,7 @@ _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
 def _linea_de_feed(items: list[dict[str, Any]] | None) -> str:
-    """LÍNEA (id de etiqueta `vertical`) del feed del que nació la historia, o '' si no aplica.
+    """LÍNEA (id de etiqueta `categoria`) del feed del que nació la historia, o '' si no aplica.
 
     La resuelve del feed del item líder (`fuente_id` -> `fuentes_rss.linea_id`). Sirve de
     fallback de clasificación cuando el clasificador por keywords no casa: una pieza de un feed
@@ -127,7 +127,7 @@ def _linea_de_feed(items: list[dict[str, Any]] | None) -> str:
 def _auto_etiquetar_linea(
     tema: dict[str, Any], titulo: str, resumen: str, *, linea_feed: str = ""
 ) -> None:
-    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN (siempre, dentro de la etapa de Redactar).
+    """Auto-etiqueta la pieza con su LÍNEA (categoria) y ORIGEN (siempre, dentro de la etapa de Redactar).
 
     La línea sale del clasificador por keywords; si NINGUNA casa, hereda la LÍNEA DEL FEED
     (`linea_feed`) del que nació. Sin ninguna de las dos → aviso en `notas` (la pieza NO se
@@ -137,8 +137,8 @@ def _auto_etiquetar_linea(
         from ..dominio import clasificador_lineas
 
         res = clasificador_lineas.clasificar_pieza(titulo, resumen, tema.get("marca", ""))
-        if res.get("vertical"):
-            repos.asignar_etiqueta(tema["id"], str(res["vertical"]))
+        if res.get("categoria"):
+            repos.asignar_etiqueta(tema["id"], str(res["categoria"]))
         elif linea_feed:
             repos.asignar_etiqueta(tema["id"], linea_feed)
         else:
@@ -1063,13 +1063,13 @@ def categoria_efectiva(cluster: dict[str, Any]) -> str:
 def linea_de_cluster(
     marca: str, cluster: dict[str, Any], lineas: list[dict[str, Any]]
 ) -> str:
-    """LÍNEA (id de etiqueta vertical) con la que un cluster compite en el plan. PURA (recibe
+    """LÍNEA (id de etiqueta categoria) con la que un cluster compite en el plan. PURA (recibe
     las líneas ya leídas).
 
     'breaking' si lo es; si el SLUG de su feed cae en una línea, esa; si no, la línea por
     CONTENIDO (keywords de `lineas`, clasificador léxico) — así un feed MIXTO (divulgación,
     buenas noticias) reparte cada nota a su línea en vez de caer entera a una sola. '' si nada
-    casa. `lineas` son las etiquetas vertical de la marca; con la lista vacía no hay fallback por
+    casa. `lineas` son las etiquetas categoria de la marca; con la lista vacía no hay fallback por
     contenido y se queda con el slug (el comportamiento anterior)."""
     from .. import bootstrap_lineas
     from ..dominio import clasificador_lineas
@@ -1082,12 +1082,12 @@ def linea_de_cluster(
 
 
 def _categoria_plan(marca: str, cluster: dict[str, Any]) -> str:
-    """Clave de PLAN/PROGRAMACIÓN de una historia: su LÍNEA (id de etiqueta vertical), con
+    """Clave de PLAN/PROGRAMACIÓN de una historia: su LÍNEA (id de etiqueta categoria), con
     'breaking' como señal y '' = genérico. Re-clava el slug de feed a la línea (que es con lo
     que el equipo planifica y programa); si el feed no casa ninguna línea, clasifica por
     CONTENIDO contra las líneas de la marca. Best-effort: '' si no resuelve."""
     try:
-        lineas = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+        lineas = repos.listar_etiquetas(marca=marca, clase="categoria", solo_activas=True)
     except Exception:  # noqa: BLE001 -- sin líneas legibles, cae al slug puro
         lineas = []
     return linea_de_cluster(marca, cluster, lineas)

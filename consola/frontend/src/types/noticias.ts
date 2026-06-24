@@ -216,7 +216,7 @@ export interface Historia {
    */
   grupo?: string;
   /**
-   * Línea de navegación de la historia (el 2º nivel bajo el grupo: id de la etiqueta vertical,
+   * Línea de navegación de la historia (el 2º nivel bajo el grupo: id de la etiqueta categoria,
    * p. ej. "fut-bundesliga"). Lo asigna el mismo clasificador léxico que el grupo en la Mesa;
    * '' o ausente para marcas sin grupos o candidatas sin clasificar.
    */
@@ -233,7 +233,7 @@ export interface RespuestaHistorias {
 
 /** Una línea del plan editorial diario en la Mesa: cupo + progreso + top candidatas. */
 export interface MesaLinea {
-  /** Clave de la línea: id de etiqueta vertical o señal del motor ('breaking'/'evergreen'). */
+  /** Clave de la línea: id de etiqueta categoria o señal del motor ('breaking'/'evergreen'). */
   linea: string;
   /** Nombre legible de la línea (o "Última hora"/"Evergreen"). */
   etiqueta?: string;
@@ -252,7 +252,7 @@ export interface MesaLinea {
 
 /** Una línea del 2º nivel de navegación, colgada de su grupo (id + nombre + candidatas). */
 export interface LineaGrupo {
-  /** Id de la etiqueta vertical (p. ej. "fut-bundesliga"). Es lo que filtra `historias_grupo`. */
+  /** Id de la etiqueta categoria (p. ej. "fut-bundesliga"). Es lo que filtra `historias_grupo`. */
   linea: string;
   /** Nombre visible de la línea ("Bundesliga"). */
   nombre: string;

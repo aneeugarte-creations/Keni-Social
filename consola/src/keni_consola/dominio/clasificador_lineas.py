@@ -1,4 +1,4 @@
-"""Clasifica una pieza en su LÍNEA (etiqueta clase 'vertical') y su ORIGEN (clase 'origen').
+"""Clasifica una pieza en su LÍNEA (etiqueta clase 'categoria') y su ORIGEN (clase 'origen').
 
 Determinístico y sin IA: casa las palabras clave (`keywords`, CSV de cada etiqueta) contra el
 título + resumen de la nota, normalizando acentos y mayúsculas. Gana la línea con más keywords
@@ -8,9 +8,9 @@ Diseño:
   - `clasificar(texto, etiquetas)` es PURO (sin BD): recibe las etiquetas candidatas y
     devuelve el id de la mejor o None. Fácil de testear.
   - `clasificar_pieza(titulo, resumen, marca)` es el envoltorio con BD: trae las etiquetas
-    de la marca (vertical y origen) vía `repos` y devuelve `{vertical, origen}`.
+    de la marca (categoria y origen) vía `repos` y devuelve `{categoria, origen}`.
 
-Política de "sin línea": si NINGUNA vertical casa, `vertical` queda None — la pieza NO se
+Política de "sin línea": si NINGUNA categoría casa, `categoria` queda None — la pieza NO se
 descarta; quien llama la marca con un aviso. El ORIGEN nunca queda vacío: si ninguna etiqueta
 de origen con keywords casa, se usa el ORIGEN POR DEFECTO (la etiqueta de origen sin keywords,
 convención = 'interno').
@@ -80,20 +80,20 @@ def origen_por_defecto(origenes: list[dict[str, Any]]) -> str | None:
 
 
 def clasificar_pieza(titulo: str, resumen: str, marca: str) -> dict[str, str | None]:
-    """Clasifica una pieza de `marca`: devuelve `{"vertical": id|None, "origen": id|None}`.
+    """Clasifica una pieza de `marca`: devuelve `{"categoria": id|None, "origen": id|None}`.
 
-    `vertical` None = sin línea (la pieza se marca con aviso, no se descarta). `origen` solo
+    `categoria` None = sin línea (la pieza se marca con aviso, no se descarta). `origen` solo
     es None si la marca no tiene ninguna etiqueta de origen inicializada.
     """
     from .. import repos  # import perezoso: mantiene `clasificar` puro/testeable
 
     texto = f"{titulo or ''}\n{resumen or ''}"
-    verticales = repos.listar_etiquetas(marca=marca, clase="vertical", solo_activas=True)
+    categorias = repos.listar_etiquetas(marca=marca, clase="categoria", solo_activas=True)
     origenes = repos.listar_etiquetas(marca=marca, clase="origen", solo_activas=True)
 
-    vertical_id = clasificar(texto, verticales)
+    categoria_id = clasificar(texto, categorias)
     # Origen: solo las que tienen keywords compiten; lo que no casa cae al fallback (interno).
     origenes_con_kw = [o for o in origenes if _keywords(o)]
     origen_id = clasificar(texto, origenes_con_kw) or origen_por_defecto(origenes)
 
-    return {"vertical": vertical_id, "origen": origen_id}
+    return {"categoria": categoria_id, "origen": origen_id}

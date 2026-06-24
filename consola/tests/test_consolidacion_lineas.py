@@ -1,7 +1,7 @@
 """Consolidación de LÍNEAS (un solo eje por marca): `grupo`/`cadencia` en `etiquetas`,
 `linea_id` en `fuentes_rss`, y el backfill `categoria`->`linea_id` del bootstrap.
 
-Slice 1 del rediseño: las líneas editoriales (clase `vertical`) pasan a llevar su agrupación
+Slice 1 del rediseño: las líneas editoriales (clase `categoria`) pasan a llevar su agrupación
 (`grupo`) y su ritmo de sondeo (`cadencia`); cada feed cuelga de una línea (`linea_id`) en vez
 del slug libre `categoria`. Aquí se cubre el round-trip de persistencia y la siembra por marca.
 """
@@ -14,10 +14,10 @@ from keni_consola import bootstrap_lineas, db, repos
 def test_etiqueta_roundtrip_grupo_cadencia(entorno):
     # Explícitos: grupo + cadencia viajan a la BD y vuelven.
     et = repos.crear_etiqueta(
-        nombre="Liga MX", clase="vertical", marca="claro-sports",
+        nombre="Liga MX", clase="categoria", marca="claro-sports",
         grupo="Fútbol", cadencia="rapida",
     )
-    leida = repos.obtener_etiqueta_por_nombre("Liga MX", "vertical", "claro-sports")
+    leida = repos.obtener_etiqueta_por_nombre("Liga MX", "categoria", "claro-sports")
     assert leida is not None
     assert leida["grupo"] == "Fútbol"
     assert leida["cadencia"] == "rapida"
@@ -26,8 +26,8 @@ def test_etiqueta_roundtrip_grupo_cadencia(entorno):
 
 def test_etiqueta_defaults_grupo_cadencia(entorno):
     # Omitidos: grupo '' (línea plana) y cadencia 'normal' (ritmo por defecto).
-    repos.crear_etiqueta(nombre="Nacional", clase="vertical", marca="unotv")
-    leida = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    repos.crear_etiqueta(nombre="Nacional", clase="categoria", marca="unotv")
+    leida = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert leida is not None
     assert leida["grupo"] == ""
     assert leida["cadencia"] == "normal"
@@ -55,16 +55,16 @@ def test_fuente_roundtrip_linea_id(entorno):
 def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
     bootstrap_lineas.inicializar_lineas()
     # Claro: la competición cuelga del grupo "Fútbol" y sondea rápido.
-    liga = repos.obtener_etiqueta_por_nombre("Liga MX", "vertical", "claro-sports")
+    liga = repos.obtener_etiqueta_por_nombre("Liga MX", "categoria", "claro-sports")
     assert liga is not None and liga["grupo"] == "Fútbol" and liga["cadencia"] == "rapida"
     # UnoTV: solo sus líneas reales (Nacional/Internacional/Entretenimiento), planas y normales.
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert nacional is not None and nacional["grupo"] == "" and nacional["cadencia"] == "normal"
     # Fundación: sus pilares de misión quedan sembrados (no nace sin líneas).
-    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "categoria", "fundacion")
     assert salud is not None and salud["cadencia"] == "evergreen"
     # Nación Gamer: al menos su línea base.
-    gaming = repos.obtener_etiqueta_por_nombre("Gaming", "vertical", "nacion-gamer")
+    gaming = repos.obtener_etiqueta_por_nombre("Gaming", "categoria", "nacion-gamer")
     assert gaming is not None
 
 
@@ -72,8 +72,8 @@ def test_bootstrap_siembra_keywords_de_fundacion(entorno):
     # Las líneas de Fundación reciben su catálogo de keywords: sus feeds traen slugs gruesos que
     # no mapean a sus líneas, así que la Mesa y la admisión las clasifican por CONTENIDO.
     bootstrap_lineas.inicializar_lineas()
-    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
-    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "categoria", "fundacion")
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "categoria", "fundacion")
     assert "cientifico" in (ciencia["keywords"] or "")
     assert "vacuna" in (salud["keywords"] or "")
 
@@ -91,9 +91,9 @@ def test_bootstrap_siembra_hashtag_de_linea(entorno):
     # Cada línea recibe su hashtag (slug del nombre): la firma de la sección que la etapa Keywords
     # inyecta siempre, para que el desglose de métricas por línea exista también en el caption.
     bootstrap_lineas.inicializar_lineas()
-    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "vertical", "fundacion")
+    ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "categoria", "fundacion")
     assert ciencia is not None and ciencia["hashtags"] == "cienciatech"
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert nacional is not None and nacional["hashtags"] == "nacional"
 
 
@@ -101,19 +101,19 @@ def test_bootstrap_fuerza_el_hashtag_de_linea_aunque_difiera(entorno):
     # Línea = hashtag (1:1, derivado del nombre): NO es un campo libre. El bootstrap reconcilia
     # forzando el slug aunque una línea existente tuviera otro valor (lo mantiene en sincronía).
     repos.crear_etiqueta(
-        nombre="Salud", clase="vertical", marca="fundacion", hashtags="otracosa",
+        nombre="Salud", clase="categoria", marca="fundacion", hashtags="otracosa",
     )
     bootstrap_lineas.inicializar_lineas()
-    salud = repos.obtener_etiqueta_por_nombre("Salud", "vertical", "fundacion")
+    salud = repos.obtener_etiqueta_por_nombre("Salud", "categoria", "fundacion")
     assert salud is not None and salud["hashtags"] == "salud"
 
 
 def test_crear_linea_deriva_el_hashtag_del_nombre_e_ignora_lo_enviado(entorno):
-    # Una línea nueva (clase vertical) deriva su hashtag del nombre, pase lo que pase en `hashtags`.
+    # Una línea nueva (clase categoria) deriva su hashtag del nombre, pase lo que pase en `hashtags`.
     from keni_consola.api.etiquetas import _crear
 
     status, cuerpo = _crear(
-        nombre="Ciencia/Tech", clase="vertical", marca="fundacion", color="",
+        nombre="Ciencia/Tech", clase="categoria", marca="fundacion", color="",
         keywords="", hashtags="loquesea", ttl_dias=0, es_evergreen=True, grupo="", cadencia="evergreen",
     )
     assert status == 200 and cuerpo["etiqueta"]["hashtags"] == "cienciatech"
@@ -135,7 +135,7 @@ def test_renombrar_linea_resincroniza_su_hashtag(entorno):
     from keni_consola.api.etiquetas import _actualizar, _crear
 
     _status, c = _crear(
-        nombre="Salud", clase="vertical", marca="fundacion", color="",
+        nombre="Salud", clase="categoria", marca="fundacion", color="",
         keywords="", hashtags="", ttl_dias=0, es_evergreen=True, grupo="", cadencia="evergreen",
     )
     status, cuerpo = _actualizar(c["etiqueta"]["id"], {"nombre": "Medio ambiente"})
@@ -146,7 +146,7 @@ def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
     bootstrap_lineas.inicializar_lineas()
 
     def g(nombre: str) -> dict:
-        et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", "claro-sports")
+        et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", "claro-sports")
         assert et is not None, nombre
         return et
 
@@ -171,18 +171,18 @@ def test_reconcilia_regrupa_y_siembra_keywords_guarded(entorno):
     # keywords puestos a mano (el equipo): la reconciliación debe re-grupar la primera y sembrar
     # sus keywords, pero NUNCA pisar las ediciones a mano de la segunda.
     repos.crear_etiqueta(
-        nombre="NFL", clase="vertical", marca="claro-sports",
+        nombre="NFL", clase="categoria", marca="claro-sports",
         grupo="Otros deportes", cadencia="rapida",
     )
     repos.crear_etiqueta(
-        nombre="Boxeo", clase="vertical", marca="claro-sports",
+        nombre="Boxeo", clase="categoria", marca="claro-sports",
         grupo="Mi grupo a mano", keywords="mis, keywords", cadencia="rapida",
     )
     bootstrap_lineas.inicializar_lineas()
-    nfl = repos.obtener_etiqueta_por_nombre("NFL", "vertical", "claro-sports")
+    nfl = repos.obtener_etiqueta_por_nombre("NFL", "categoria", "claro-sports")
     assert nfl["grupo"] == "NFL"  # re-grupado (grupo gestionado por el bootstrap)
     assert "nfl" in nfl["keywords"]  # keywords sembradas (estaban vacías)
-    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")
+    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "categoria", "claro-sports")
     assert boxeo["grupo"] == "Mi grupo a mano"  # grupo a mano: intacto
     assert boxeo["keywords"] == "mis, keywords"  # keywords a mano: intactas
 
@@ -194,8 +194,8 @@ def test_clasificador_asigna_linea_claro_por_keywords_sembradas(entorno):
     res = clasificador_lineas.clasificar_pieza(
         "Canelo Álvarez ya tendría pactada su próxima pelea de box", "", "claro-sports",
     )
-    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "vertical", "claro-sports")
-    assert res["vertical"] == boxeo["id"]
+    boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "categoria", "claro-sports")
+    assert res["categoria"] == boxeo["id"]
 
 
 def test_vincular_fuentes_a_lineas_mapea_por_marca(entorno):
@@ -205,7 +205,7 @@ def test_vincular_fuentes_a_lineas_mapea_por_marca(entorno):
     # Feed con slug sin equivalencia 1:1 -> se queda en catch-all (linea_id '').
     suelta = repos.crear_fuente_rss("UnoTV otra", "https://u.example/x.xml", marca="unotv", categoria="negocios")
     bootstrap_lineas.vincular_fuentes_a_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert db.obtener_fuente_rss(mapeada["id"])["linea_id"] == nacional["id"]
     assert db.obtener_fuente_rss(suelta["id"])["linea_id"] == ""
 
@@ -229,7 +229,7 @@ _URL_OK = "https://93.184.216.34/feed.xml"  # IP pública literal: pasa el guard
 def test_api_etiqueta_acepta_grupo_y_cadencia(cliente):
     r = cliente.post(
         "/api/etiquetas",
-        json={"nombre": "Liga MX", "clase": "vertical", "marca": "claro-sports",
+        json={"nombre": "Liga MX", "clase": "categoria", "marca": "claro-sports",
               "grupo": "Fútbol", "cadencia": "rapida"},
     )
     assert r.status_code == 200, r.text
@@ -240,7 +240,7 @@ def test_api_etiqueta_acepta_grupo_y_cadencia(cliente):
 def test_api_etiqueta_cadencia_invalida_cae_a_normal(cliente):
     r = cliente.post(
         "/api/etiquetas",
-        json={"nombre": "X", "clase": "vertical", "marca": "unotv", "cadencia": "turbo"},
+        json={"nombre": "X", "clase": "categoria", "marca": "unotv", "cadencia": "turbo"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["etiqueta"]["cadencia"] == "normal"
@@ -249,7 +249,7 @@ def test_api_etiqueta_cadencia_invalida_cae_a_normal(cliente):
 def test_api_fuente_acepta_linea_id_valida(cliente):
     et = cliente.post(
         "/api/etiquetas",
-        json={"nombre": "Nacional", "clase": "vertical", "marca": "unotv"},
+        json={"nombre": "Nacional", "clase": "categoria", "marca": "unotv"},
     ).json()["etiqueta"]
     r = cliente.post(
         "/api/rss/fuentes",
@@ -274,7 +274,7 @@ def test_api_fuente_rechaza_linea_inexistente(cliente):
 
 def test_linea_id_de_slug_resuelve_y_es_idempotente(entorno):
     bootstrap_lineas.inicializar_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # Señales del motor: pasan tal cual.
     assert bootstrap_lineas.linea_id_de_slug("unotv", "breaking") == "breaking"
     assert bootstrap_lineas.linea_id_de_slug("unotv", "evergreen") == "evergreen"
@@ -291,7 +291,7 @@ def test_migrar_plan_y_franjas_a_lineas(entorno):
     from keni_consola import ajustes
 
     bootstrap_lineas.inicializar_lineas()
-    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # Plan y franja en forma SLUG (la forma de entrada, anterior al re-clavado a líneas).
     ajustes.guardar("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
     franja = repos.crear_franja(1, "09:00", marca="unotv", red="x", categoria="mx")
@@ -311,15 +311,15 @@ def test_migrar_plan_y_franjas_a_lineas(entorno):
 def test_retirar_lineas_obsoletas_desactiva_pero_conserva(entorno):
     bootstrap_lineas.inicializar_lineas()
     # Una etiqueta vieja que ya no es línea del plan (creada como activa).
-    com = repos.crear_etiqueta(nombre="Comercial", clase="vertical", marca="unotv")
+    com = repos.crear_etiqueta(nombre="Comercial", clase="categoria", marca="unotv")
     assert com["activo"] is True
     n = bootstrap_lineas.retirar_lineas_obsoletas()
     assert n >= 1
     # Desactivada (no borrada): sigue existiendo pero activo=False.
-    leida = repos.obtener_etiqueta_por_nombre("Comercial", "vertical", "unotv")
+    leida = repos.obtener_etiqueta_por_nombre("Comercial", "categoria", "unotv")
     assert leida is not None and leida["activo"] is False
     # Una línea real de UnoTV sigue activa.
-    nac = repos.obtener_etiqueta_por_nombre("Nacional", "vertical", "unotv")
+    nac = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert nac is not None and nac["activo"] is True
     # Idempotente: una segunda pasada no toca nada (ya inactiva).
     assert bootstrap_lineas.retirar_lineas_obsoletas() == 0

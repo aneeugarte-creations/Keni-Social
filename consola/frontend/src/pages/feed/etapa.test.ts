@@ -154,7 +154,7 @@ describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () 
     ).toBe("lista_para_revisar");
   });
 
-  it("con hashtags pero sin el de la LÍNEA editorial deriva 'falta_hashtag_editorial'", () => {
+  it("con hashtags pero sin el de la CATEGORÍA deriva 'falta_hashtag_editorial'", () => {
     // Lleva hashtags (no gatea `falta_hashtags`) pero NO el obligatorio de su línea: etapa propia.
     expect(
       etapaDePieza(

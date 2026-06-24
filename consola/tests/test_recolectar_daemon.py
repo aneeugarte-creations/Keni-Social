@@ -252,7 +252,7 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
 
     El feed fuera de plan NO se sondea y se APLAZA (registrar_sondeo_feed con proximo_sondeo
     futuro). Fail-open: un feed sin LÍNEA se sondea aunque la marca tenga plan. El plan se
-    clava por LÍNEA (id de etiqueta vertical), no por el slug de categoría."""
+    clava por LÍNEA (id de etiqueta categoria), no por el slug de categoría."""
     en_plan = {"id": "mx1", "nombre": "MX", "url": "https://93.184.216.34/a",
                "linea_id": "lin-nacional", "marca": "unotv", "errores_seguidos": 0}
     fuera = {"id": "dep1", "nombre": "Dep", "url": "https://93.184.216.34/b",

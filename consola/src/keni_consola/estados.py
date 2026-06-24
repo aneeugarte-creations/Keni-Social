@@ -310,12 +310,14 @@ ORIGENES_AUTOGEN: tuple[str, ...] = (
 )
 
 # Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta
-# clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección
-# editorial ("futbol", "espectaculos") o un TIPO de formato ("reel", "carrusel", "nota").
-CLASES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "tipo", "origen")
+# clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una CATEGORIA (la sección
+# editorial: "Nacional", "Liga MX" — la misma que referencia `publicacion.categoria`) o un TIPO
+# de formato ("reel", "carrusel", "nota"). Jerarquía editorial: grupo (de categorías) > categoria
+# > tema. Antes la clase "categoria" se llamaba "vertical" (mismo concepto; renombrada).
+CLASES_ETIQUETA: tuple[str, ...] = ("campania", "categoria", "tipo", "origen")
 CLASE_ETIQUETA_DEFECTO = "campania"
 
-# Cadencia de sondeo de las fuentes de una LÍNEA (clase `vertical`). La línea —no el feed—
+# Cadencia de sondeo de las fuentes de una CATEGORÍA (clase `categoria`). La categoría —no el feed—
 # dicta el ritmo; el feed la hereda de su línea/grupo. Sustituye al mapa de slugs de feed:
 #   - `rapida`    ~3 min  (deporte en vivo, última hora)
 #   - `normal`    ~10 min (noticia general)

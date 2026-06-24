@@ -4,7 +4,7 @@
  * UN SOLO bloque mientras al copy le FALTE algo y la pieza no esté publicada. Dentro conviven los
  * dos sistemas, no en dos mensajes separados:
  *
- *  - LÍNEA (rojo): el hashtag de la línea editorial de la pieza (`hashtags_linea`). Es la firma de
+ *  - LÍNEA (rojo): el hashtag de la categoría de la pieza (`hashtags_linea`). Es la firma de
  *    la sección y SIN él las analíticas no trackean bien por línea, así que se pinta en ROJO. Es
  *    OBLIGATORIO: se recalcula del copy en cada render, así que si se borra a mano REAPARECE; no se
  *    puede descartar.

@@ -159,7 +159,7 @@ def test_aplicar_sugerencia_no_mete_la_linea_en_el_gris(entorno):
     # y en rojo. El gris es solo firma + temáticos del pool.
     pid, ids = _crear_contenido(["instagram", "x"], "Cuerpo del post sin hashtags")
     et = repos.crear_etiqueta(
-        nombre="Ciencia/Tech", clase="vertical", marca=_MARCA, hashtags="cienciatech",
+        nombre="Ciencia/Tech", clase="categoria", marca=_MARCA, hashtags="cienciatech",
     )
     repos.asignar_etiqueta(pid, et["id"])
     guardados = dom_sh.aplicar_sugerencia(pid, ["#internacional"])

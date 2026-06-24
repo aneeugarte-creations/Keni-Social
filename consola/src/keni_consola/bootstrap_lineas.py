@@ -1,4 +1,4 @@
-"""Inicializacion idempotente de LÍNEAS de contenido (etiquetas clase 'vertical') y ORÍGENES
+"""Inicializacion idempotente de LÍNEAS de contenido (etiquetas clase 'categoria') y ORÍGENES
 (clase 'origen') por marca.
 
 - Las LÍNEAS las dicta el equipo. UnoTV, Claro Sports, Nación Gamer y Fundación están
@@ -43,7 +43,7 @@ def slug_hashtag(nombre: str) -> str:
     base = "".join(c for c in base if not unicodedata.combining(c))
     return "".join(c for c in base.lower() if c.isalnum())
 
-# Líneas (clase 'vertical') por marca. SOLO las reales dadas por el equipo. El resto vacío.
+# Líneas (clase 'categoria') por marca. SOLO las reales dadas por el equipo. El resto vacío.
 # Formato: (nombre, ttl_dias, es_evergreen, grupo, cadencia)
 #   ttl_dias=0 -> sin caducidad
 #   es_evergreen=True -> evergreen, reutilizable en fines de semana
@@ -96,7 +96,7 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
         ("NBA",           0, False, "NBA", "rapida"),
         ("MLB",           0, False, "Béisbol", "rapida"),
         ("LMB",           0, False, "Béisbol", "rapida"),
-        # Boxeo: vertical propia (motor de volumen mexicano: Canelo).
+        # Boxeo: categoría propia (motor de volumen mexicano: Canelo).
         ("Boxeo",         0, False, "Boxeo", "rapida"),
         # Otros deportes: cola larga bajo un solo chip (Golf es de ritmo lento).
         ("Tenis",         0, False, "Otros deportes", "rapida"),
@@ -212,7 +212,7 @@ KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.
 ORIGENES_GLOBALES: list[str] = ["Interno", "Externo"]
 
-# LÍNEAS (clase 'vertical') que se RETIRAN por marca: etiquetas viejas que no son líneas reales
+# LÍNEAS (clase 'categoria') que se RETIRAN por marca: etiquetas viejas que no son líneas reales
 # del plan. Se desactivan (activo=0), no se borran: salen del editor «Plan y horarios», del
 # selector de feeds y del catálogo, pero su historial de métricas se conserva. UnoTV publica solo
 # por Nacional/Internacional/Entretenimiento (+ Última hora/Evergreen, que son señales del motor).
@@ -277,7 +277,7 @@ def _reconciliar_linea(
       - hashtags: se FUERZA al slug del nombre (línea = hueco de programación = hashtag, 1:1; no es
         un campo libre). Mantiene en sincronía todas las líneas existentes.
     """
-    et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+    et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
     if et is None:
         return False
     cambios: dict[str, Any] = {}
@@ -300,7 +300,7 @@ def _reconciliar_linea(
 
 
 def inicializar_lineas() -> int:
-    """Inicializa líneas (vertical) por marca y orígenes (global). Devuelve cuántas creó.
+    """Inicializa líneas (categoria) por marca y orígenes (global). Devuelve cuántas creó.
 
     Idempotente y tolerante a fallos por etiqueta (no aborta el resto). Pensada para el
     bootstrap del arranque.
@@ -313,7 +313,7 @@ def inicializar_lineas() -> int:
             ht = slug_hashtag(nombre)
             try:
                 if _crear_si_falta(
-                    nombre=nombre, clase="vertical", marca=marca, ttl_dias=ttl_dias,
+                    nombre=nombre, clase="categoria", marca=marca, ttl_dias=ttl_dias,
                     es_evergreen=es_evergreen, grupo=grupo, cadencia=cadencia, keywords=kw,
                     hashtags=ht,
                 ):
@@ -351,7 +351,7 @@ def retirar_lineas_obsoletas() -> int:
     for marca, nombres in _LINEAS_RETIRADAS.items():
         for nombre in nombres:
             try:
-                et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+                et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
                 if et is None or not et.get("activo", True):
                     continue
                 repos.actualizar_etiqueta(et["id"], {"activo": False})
@@ -395,7 +395,7 @@ _CLAVES_NO_LINEA: frozenset[str] = frozenset({"", "breaking", "evergreen"})
 
 # ÚNICA fuente de verdad del nombre legible de las señales del motor (las claves de plan que
 # NO son una línea editorial). El nombre del resto de categorías —ids de línea— lo da la BD
-# (la etiqueta vertical). La consume cualquier superficie que muestre una categoría de plan
+# (la etiqueta categoria). La consume cualquier superficie que muestre una categoría de plan
 # (franjas, producción, mesa de noticias, dropdown de «Crear post»): así no se duplica el rótulo.
 ETIQUETAS_CLAVE_NO_LINEA: dict[str, str] = {
     "breaking": "Última hora",
@@ -423,7 +423,7 @@ def linea_id_de_slug(marca: str, clave: str) -> str:
     """Traduce una clave de plan/franja (slug de categoría) al id de su LÍNEA por marca.
 
     Idempotente: las señales del motor ('', 'breaking', 'evergreen') y una clave que YA es un
-    id de línea (etiqueta vertical existente) se devuelven sin tocar. Un slug temático conocido
+    id de línea (etiqueta categoria existente) se devuelven sin tocar. Un slug temático conocido
     (`_CATEGORIA_A_LINEA`) se resuelve al id de su línea; lo no mapeable cae a '' (genérico).
     """
     clave = (clave or "").strip()
@@ -431,14 +431,14 @@ def linea_id_de_slug(marca: str, clave: str) -> str:
         return clave.lower()
     try:
         ya = repos.obtener_etiqueta(clave)
-        if ya is not None and ya.get("clase") == "vertical":
+        if ya is not None and ya.get("clase") == "categoria":
             return clave  # ya es un id de línea -> idempotente
     except Exception:  # noqa: BLE001 -- resolver es best-effort
         pass
     nombre = _CATEGORIA_A_LINEA.get(marca, {}).get(clave.lower())
     if not nombre:
         return ""
-    et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+    et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
     return et["id"] if et else ""
 
 
@@ -464,7 +464,7 @@ def vincular_fuentes_a_lineas() -> int:
         if not nombre:
             continue
         try:
-            et = repos.obtener_etiqueta_por_nombre(nombre, "vertical", marca)
+            et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
             if et is None:
                 continue
             repos.actualizar_fuente_rss(fuente["id"], {"linea_id": et["id"]})
@@ -479,7 +479,7 @@ def vincular_fuentes_a_lineas() -> int:
 def migrar_plan_y_franjas_a_lineas() -> int:
     """Re-clava el PLAN DIARIO y las FRANJAS del slug de categoría al id de LÍNEA, por marca.
 
-    El scheduler pasa a programar por LÍNEA (etiqueta vertical), no por slug de feed. Esto
+    El scheduler pasa a programar por LÍNEA (etiqueta categoria), no por slug de feed. Esto
     reescribe las dos claves persistentes del motor a ids de línea:
       - `KENI_PLAN_DIA::marca` (cupos "clave:n,…"): cada slug temático -> id de su línea; las
         señales 'breaking'/'evergreen' se conservan; un cupo no mapeable se descarta.

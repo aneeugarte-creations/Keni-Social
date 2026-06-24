@@ -12,7 +12,7 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/piezas-export`: descarga del Top 5 / Peores 5 de piezas (csv|md|json).
   - `/api/metricas/piezas-por-etiqueta`: rendimiento del periodo por serie/tipo (cruce
     piezas↔contenido para resolver tipo_contenido + etiquetas; Item C).
-  - `/api/metricas/lineas`: rendimiento del periodo por LÍNEA (etiqueta clase `vertical`)
+  - `/api/metricas/lineas`: rendimiento del periodo por LÍNEA (etiqueta clase `categoria`)
     y por ORIGEN (clase `origen`); "qué línea funciona" + dual editorial-vs-impuesto.
   - `/api/metricas/export.{csv,md,json}`: descargas (misma serializacion que el CLI).
 

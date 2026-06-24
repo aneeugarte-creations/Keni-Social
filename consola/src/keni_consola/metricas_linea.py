@@ -5,7 +5,7 @@ PROBLEMA QUE RESUELVE
 Las analíticas saben qué pieza rinde (`metricas_pieza`) y qué tipo/etiqueta rinde
 (`metricas_pieza.analitica_por_etiqueta`), pero el equipo razona en términos de LÍNEAS
 editoriales (futbol, presidencia, virales…) y de ORIGEN (interno vs petición externa).
-Estos dos ejes son etiquetas N:M de la pieza, de las clases `vertical` (= LÍNEA) y
+Estos dos ejes son etiquetas N:M de la pieza, de las clases `categoria` (= LÍNEA) y
 `origen`. Aquí cerramos "qué LÍNEA funciona" y el dual editorial-vs-impuesto.
 
 CÓMO
@@ -22,7 +22,7 @@ resto de agregaciones del módulo. El orquestador `lineas_y_origenes` hace las l
 (repos + fachada de métricas) y delega en la función pura.
 
 La LÍNEA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO, el mismo de los chips y
-el filtro): las verticales activas + las señales del motor como su propio cubo («Última hora»,
+el filtro): las categorías activas + las señales del motor como su propio cubo («Última hora»,
 «Evergreen»). Las piezas sin categoría resoluble caen en "Sin línea". El ORIGEN sí es la
 etiqueta de clase `origen` (puente N:M). Por cada cubo devuelve:
 nº de piezas, suma de visualizaciones, suma de interacciones y engagement medio; las piezas
@@ -46,7 +46,7 @@ from .metricas_pieza import (
 _log = logging.getLogger("keni_consola.metricas_linea")
 
 # Clases de etiqueta de cada eje de agrupación (etiquetas.clase).
-CLASE_VERTICAL = "vertical"
+CLASE_CATEGORIA = "categoria"
 CLASE_ORIGEN = "origen"
 
 # Cubos por defecto para las piezas sin valor en el eje (honesto: no se inventa una línea).
@@ -187,17 +187,17 @@ def _valor_por_contenido(
 def linea_de_categoria(
     categoria: str,
     *,
-    vertical_por_id: dict[str, str],
+    categoria_por_id: dict[str, str],
 ) -> str:
     """Nombre de la LÍNEA del plan de un contenido a partir de su `categoria` (única fuente).
 
     `categoria` es el eje ÚNICO de línea/categoría (la misma columna del plan, los chips y el
     filtro). Resolución:
       - `breaking` → "Última hora", `evergreen` → "Evergreen" (señales del motor, su propio cubo);
-      - id de vertical ACTIVA → su nombre (`vertical_por_id`);
-      - vacía o id de vertical retirada/desconocida → "" (cae en "Sin línea").
+      - id de categoría ACTIVA → su nombre (`categoria_por_id`);
+      - vacía o id de categoría retirada/desconocida → "" (cae en "Sin línea").
 
-    Ya NO se respalda con la etiqueta `vertical` asignada: la línea vive solo en `categoria` (las
+    Ya NO se respalda con la etiqueta `categoria` asignada: la línea vive solo en `categoria` (las
     piezas viejas cuya línea estaba en el tag se backfillearon a `categoria`, migración 0046).
     """
     if not categoria:
@@ -205,12 +205,12 @@ def linea_de_categoria(
     senal = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
     if senal:
         return senal
-    return vertical_por_id.get(categoria, "")
+    return categoria_por_id.get(categoria, "")
 
 
 def _lineas_por_contenido_plan(
     contenidos: list[dict[str, Any]],
-    vertical_por_id: dict[str, str],
+    categoria_por_id: dict[str, str],
 ) -> dict[str, str]:
     """`publicacion_id -> nombre de su LÍNEA del plan`, derivado SOLO de `categoria`."""
     salida: dict[str, str] = {}
@@ -219,7 +219,7 @@ def _lineas_por_contenido_plan(
         if not cid:
             continue
         salida[cid] = linea_de_categoria(
-            (c.get("categoria") or "").strip(), vertical_por_id=vertical_por_id
+            (c.get("categoria") or "").strip(), categoria_por_id=categoria_por_id
         )
     return salida
 
@@ -227,7 +227,7 @@ def _lineas_por_contenido_plan(
 def lineas_por_pieza(
     marca_consola: str | None, piezas: list[dict[str, Any]]
 ) -> dict[str, str]:
-    """Mapa `id de pieza -> nombre de su LÍNEA editorial` (clase `vertical`), best-effort.
+    """Mapa `id de pieza -> nombre de su LÍNEA editorial` (clase `categoria`), best-effort.
 
     Cruza cada pieza con su `contenido` de la Consola por el MISMO criterio que
     `lineas_y_origenes` (enlace fuerte por `id_post_metricool`; fallback fuzzy por
@@ -241,13 +241,13 @@ def lineas_por_pieza(
     contenidos = repos.listar_publicacion(marca=marca_consola)
     plataformas = repos.listar_piezas_fila()
     enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
-    vertical_por_id = {
+    categoria_por_id = {
         e.get("id", ""): e.get("nombre", "")
-        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL, solo_activas=True)
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
         if e.get("id")
     }
     # Línea de PLAN por contenido (eje único `categoria`: Última hora · líneas · Evergreen).
-    linea_por_contenido = _lineas_por_contenido_plan(contenidos, vertical_por_id)
+    linea_por_contenido = _lineas_por_contenido_plan(contenidos, categoria_por_id)
     salida: dict[str, str] = {}
     for p in piezas:
         pid = str(p.get("id") or "")
@@ -267,7 +267,7 @@ def lineas_y_origenes(
     redes: tuple[str, ...] = (),
     formatos: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Rendimiento del periodo por LÍNEA (clase `vertical`) y por ORIGEN (clase `origen`).
+    """Rendimiento del periodo por LÍNEA (clase `categoria`) y por ORIGEN (clase `origen`).
 
     Orquesta las lecturas (BD via `repos` + piezas del periodo via la fachada única de
     métricas) y delega la agregación en la función PURA `agrupar_lineas_y_origenes`. Reusa
@@ -296,19 +296,19 @@ def lineas_y_origenes(
     # lo tuvieran caen en "Sin línea"/"Sin origen").
     lineas_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
-        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL, solo_activas=True)
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
     ]
     origenes_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_ORIGEN, solo_activas=True)
     ]
     # `etiqueta_id -> nombre` por clase, para resolver la etiqueta de cada contenido.
-    vertical_por_id = {e["id"]: e["nombre"] for e in lineas_def if e.get("id")}
+    categoria_por_id = {e["id"]: e["nombre"] for e in lineas_def if e.get("id")}
     origen_por_id = {e["id"]: e["nombre"] for e in origenes_def if e.get("id")}
 
     # La LÍNEA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO: Última hora · líneas ·
     # Evergreen). El ORIGEN sí es una etiqueta de su clase (puente `publicacion_etiquetas`).
-    linea_por_contenido = _lineas_por_contenido_plan(contenidos, vertical_por_id)
+    linea_por_contenido = _lineas_por_contenido_plan(contenidos, categoria_por_id)
     origen_por_contenido = _valor_por_contenido(repos.etiquetas_por_contenido(), origen_por_id)
 
     agregados = agrupar_lineas_y_origenes(

@@ -60,9 +60,9 @@ def test_produccion_dia_contrato_y_admision(entorno):
     # Detalle por tema, más recientes primero, con su estado del admision.
     assert len(data["piezas"]) == 2
     assert {p["estado"] for p in data["piezas"]} == {"en_borrador", "programado"}
-    # Sin etiquetas de vertical asignadas, caen al cajón "(sin vertical)".
-    assert data["por_vertical"][0]["vertical"] == "(sin vertical)"
-    assert data["por_vertical"][0]["total"] == 2
+    # Sin etiquetas de categoría asignadas, caen al cajón "(sin categoría)".
+    assert data["por_categoria_etiqueta"][0]["categoria"] == "(sin categoría)"
+    assert data["por_categoria_etiqueta"][0]["total"] == 2
 
 
 def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):

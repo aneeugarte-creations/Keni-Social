@@ -39,6 +39,7 @@ from .migraciones_columnas import (
     _backfill_pesos_fuente,
     _forzar_reset_password_existentes,
     _materializar_passkey_requerido_existentes,
+    _migrar_clase_vertical_a_categoria,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_config_franjas,
@@ -478,6 +479,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # asignada para los contenidos viejos cuya línea solo vivía en el tag (categoria vacía). One-shot
     # e idempotente. Ver `_backfill_categoria_desde_linea`.
     Migracion("0046-backfill-categoria-linea", _backfill_categoria_desde_linea),
+    # NOMENCLATURA: la clase de etiqueta 'vertical' (= las CATEGORÍAS editoriales: Nacional, Liga
+    # MX…) se renombra a 'categoria', el mismo término que la columna `publicacion.categoria` que
+    # las referencia. Así desaparece el doble nombre para un solo concepto. One-shot e idempotente.
+    Migracion("0047-clase-vertical-a-categoria", _migrar_clase_vertical_a_categoria),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

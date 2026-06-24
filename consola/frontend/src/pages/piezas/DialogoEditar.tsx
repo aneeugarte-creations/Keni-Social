@@ -67,7 +67,7 @@ function DialogoEditarInterno({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // Catálogo de opciones (query cacheada del feed): da las `lineas` para nombrar la categoría de
-  // la pieza, cuyo `categoria` suele ser el ID de la vertical (un hash), no un slug legible.
+  // la pieza, cuyo `categoria` suele ser el ID de la categoría (un hash), no un slug legible.
   const opcionesQuery = useQuery({
     queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),

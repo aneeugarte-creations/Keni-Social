@@ -242,15 +242,15 @@ def _migrar_columnas_video_composiciones(con: Any) -> None:
 def _migrar_columnas_etiquetas(con: Any) -> None:
     """Anade columnas nuevas a `etiquetas` si una BD ya creada no las tuviera (idempotente).
 
-    - `keywords` (CSV) alimenta el auto-etiquetado de líneas (clase `vertical`) y de
+    - `keywords` (CSV) alimenta el auto-etiquetado de categorías (clase `categoria`) y de
       orígenes (clase `origen`) en la ingesta.
     - `ttl_dias` (INTEGER, def 0): días que un ítem de esta línea se considera fresco.
       0 = sin caducidad / evergreen.
     - `es_evergreen` (INTEGER, def 0): 1 = línea evergreen reutilizable en fines de semana.
     - `hashtags` (CSV/JSON, def ''): hashtags propios de la línea/estrategia, que se inyectan al
       final del copy de sus piezas (un único sitio para hashtags + estrategia de marca).
-    - `grupo` (TEXT, def ''): agrupación de líneas (clase `vertical`) de una marca, p. ej.
-      "Fútbol"/"Otros deportes" en Claro Sports. '' = línea plana (sin grupo): el caso de
+    - `grupo` (TEXT, def ''): agrupación de CATEGORÍAS (clase `categoria`) de una marca, p. ej.
+      "Fútbol"/"Otros deportes" en Claro Sports. '' = categoría plana (sin grupo): el caso de
       UnoTV/Fundación. Las fuentes se cuelgan de una línea o de un grupo; las piezas reciben
       la línea fina.
     - `cadencia` (TEXT, def 'normal'): ritmo de sondeo de las fuentes de esta línea —
@@ -316,8 +316,21 @@ def _migrar_green_a_evergreen(con: Any) -> None:
         )
 
 
+def _migrar_clase_vertical_a_categoria(con: Any) -> None:
+    """Renombra la CLASE de etiqueta 'vertical' -> 'categoria' (idempotente, preserva datos).
+
+    Las etiquetas de clase 'vertical' SON las categorías editoriales (Nacional, Liga MX…) que
+    referencia `publicacion.categoria`. Se unifica el nombre para que no convivan dos términos
+    ('vertical' y 'categoria') para el MISMO concepto. One-shot e idempotente (tras correr no
+    quedan filas 'vertical'). No toca las demás clases (campania/tipo/origen).
+    """
+    if not _tabla_existe(con, "etiquetas"):
+        return
+    con.execute("UPDATE etiquetas SET clase = 'categoria' WHERE clase = 'vertical'")
+
+
 def _backfill_categoria_desde_linea(con: Any) -> None:
-    """Backfill ONE-SHOT: `publicacion.categoria` <- la etiqueta vertical (LÍNEA) asignada.
+    """Backfill ONE-SHOT: `publicacion.categoria` <- la etiqueta de categoría (LÍNEA) asignada.
 
     La "línea" de un contenido vivía en DOS sitios: la columna `categoria` (eje del plan) y la
     etiqueta vertical asignada en `publicacion_etiquetas` (el puente). Al unificar en `categoria`
@@ -952,7 +965,7 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # (potente 2.0 / normal 1.0 / baja 0.5, ver `dominio/fuentes_pesos.py`). Editable
     # desde la UI de Fuentes; el seed por host lo asigna `0026-backfill-pesos-fuente`.
     ("peso", "REAL NOT NULL DEFAULT 1.0"),
-    # LÍNEA editorial de la fuente (id de `etiquetas` clase=vertical): de qué línea cuelga este
+    # CATEGORÍA editorial de la fuente (id de `etiquetas` clase=categoria): de qué categoría cuelga este
     # feed. Reemplaza al slug libre `categoria` como vínculo editorial (la cadencia de sondeo
     # pasa a derivarse de la línea). '' = catch-all "General" (cadencia normal). El backfill
     # `categoria`->`linea_id` por marca lo hace `bootstrap_lineas.vincular_fuentes_a_lineas`

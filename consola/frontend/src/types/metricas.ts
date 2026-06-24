@@ -20,7 +20,7 @@ export interface GrupoPorEtiqueta {
 
 /** Una serie graficable: un eje de agrupación con sus grupos. */
 export interface SeriePorEtiqueta {
-  /** Clave del eje (tipo|campania|vertical|etiqueta_tipo). */
+  /** Clave del eje (tipo|campania|categoria|etiqueta_tipo). */
   eje: string;
   /** Etiqueta legible del eje para el tab/título. */
   etiqueta: string;

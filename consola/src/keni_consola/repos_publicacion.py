@@ -445,7 +445,7 @@ def adjuntar_video_a_pieza(publicacion_id: str, clave_media: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
-# Etiquetas editoriales (campaña / vertical / tipo) y su N:M con `contenido`     #
+# Etiquetas editoriales (campaña / categoria / tipo) y su N:M con `contenido`     #
 # --------------------------------------------------------------------------- #
 # Clasifican transversalmente las piezas del tablero. `marca=''` = etiqueta global.
 # La fachada delega 1:1 en `db.py`; la validacion vive en `api/etiquetas`.

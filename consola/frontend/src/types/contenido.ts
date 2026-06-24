@@ -83,11 +83,11 @@ export interface RespuestaMetricasPublicacion {
 }
 
 /**
- * Eje (clase) de una etiqueta editorial: campaña, vertical (= LÍNEA de contenido),
+ * Eje (clase) de una etiqueta editorial: campaña, categoría (= LÍNEA de contenido),
  * tipo de formato, u origen (interno / petición externa). `string` deja pasar ejes
  * nuevos del backend sin romper el tipado.
  */
-export type ClaseEtiqueta = "campania" | "vertical" | "tipo" | "origen" | string;
+export type ClaseEtiqueta = "campania" | "categoria" | "tipo" | "origen" | string;
 
 /** Una etiqueta editorial del catálogo (clasifica transversalmente las piezas del tablero).
  *
@@ -113,7 +113,7 @@ export interface Etiqueta {
   ttl_dias: number;
   /** True = línea evergreen reutilizable en fines de semana; nunca caduca. */
   es_evergreen: boolean;
-  /** Grupo de líneas (clase `vertical`), p. ej. "Fútbol". `""` = línea plana (sin grupo). */
+  /** Grupo de líneas (clase `categoria`), p. ej. "Fútbol". `""` = línea plana (sin grupo). */
   grupo: string;
   /** Cadencia de sondeo de las fuentes de esta línea: "rapida" | "normal" | "evergreen". */
   cadencia: string;
@@ -228,7 +228,7 @@ export interface RespuestaIdeaEvergreen {
   generacion?: Generacion;
 }
 
-// --- Métrica por línea (vertical) y por origen -------------------------------
+// --- Métrica por línea (categoría) y por origen -------------------------------
 
 /** Rendimiento agregado de una LÍNEA (o un ORIGEN) en el periodo. */
 export interface FilaMetricaLinea {

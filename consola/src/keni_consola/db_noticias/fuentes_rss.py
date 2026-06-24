@@ -65,7 +65,7 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         # Planificación del motor de ingesta (Ola A).
         "intervalo_min": int(fila["intervalo_min"] or 0),
         "categoria": fila["categoria"] or "",
-        # Línea editorial (id de `etiquetas` clase=vertical / grupo) de la que cuelga el feed.
+        # Línea editorial (id de `etiquetas` clase=categoria / grupo) de la que cuelga el feed.
         # '' = catch-all "General" (cadencia normal). La cadencia de sondeo se deriva de aquí.
         "linea_id": fila["linea_id"] or "",
         "prioridad": int(fila["prioridad"] or 0),

@@ -621,7 +621,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
 
     @mcp.tool()
     async def keni_metricas_lineas(rango: str = "mes", marca: str = "") -> dict:
-        """Rendimiento del periodo por LÍNEA editorial (etiqueta de clase `vertical`) y por
+        """Rendimiento del periodo por LÍNEA editorial (etiqueta de clase `categoria`) y por
         ORIGEN: nº de piezas, visualizaciones, interacciones y engagement medio por cubo.
         Responde "qué línea funciona" (p. ej. Liga MX vs NFL en Claro Sports)."""
         cli = _cli()
@@ -768,7 +768,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
     async def keni_produccion_dia(marca: str = "") -> dict:
         """Producción del DÍA de una marca, de un vistazo: el flujo de las últimas 24 h
         (temas creados → generando → en borrador → en revisión → programado →
-        publicado), desglosado por vertical y por origen, contra el objetivo diario
+        publicado), desglosado por categoría y por origen, contra el objetivo diario
         (`KENI_CUPO_DIA`); más la cola de generación y la de programación (programadas con
         su hora y próximos huecos de franja por red). Para monitorizar el objetivo de N
         contenidos diarios sin sumar a mano."""
@@ -1376,7 +1376,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         nombre: str, clase: str = "", marca: str = "", color: str = "",
         keywords: str = "", hashtags: str = "", grupo: str = "",
     ) -> dict:
-        """Crea una etiqueta. `nombre` obligatorio; `clase` (p. ej. vertical), `marca`,
+        """Crea una etiqueta. `nombre` obligatorio; `clase` (p. ej. categoria), `marca`,
         `color`, `keywords`, `hashtags` y `grupo` opcionales."""
         cli = _cli()
         if cli is None:
