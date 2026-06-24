@@ -683,6 +683,9 @@ export interface RespuestaConfigFranjas {
   /** Muestra el rango horario junto a cada franja en el calendario de «Equipo». Por marca; por
    *  defecto `false` (oculto): la gente de una franja puede tener horas distintas. */
   mostrar_horas_equipo: boolean;
+  /** Muestra la funcionalidad de tiempo libre/ausencias (vacaciones, baja, descanso) en Turnos.
+   *  Por marca; por defecto `true` (visible): el admin la apaga si su equipo no la usa. */
+  tiempo_libre_activo: boolean;
   actualizado?: string;
 }
 
@@ -692,6 +695,8 @@ export interface CuerpoGuardarConfigFranjas {
   franjas?: PlantillaFranja[];
   /** Activa/oculta el rango horario en «Equipo». Omitir = no tocar el flag. */
   mostrar_horas_equipo?: boolean;
+  /** Activa/oculta el tiempo libre/ausencias. Omitir = no tocar el flag. */
+  tiempo_libre_activo?: boolean;
 }
 
 /**

@@ -586,3 +586,76 @@ def test_patch_toggle_tipo_invalido_400(entorno):
         headers=_ORIGIN,
     )
     assert r.status_code == 400, r.text
+
+
+# --------------------------------------------------------------------------- #
+# tiempo_libre_activo: toggle por marca (funcionalidad de tiempo libre/ausencias) #
+# --------------------------------------------------------------------------- #
+
+
+def test_config_franjas_get_tiempo_libre_default_true(cliente):
+    """Sin fila guardada, GET incluye `tiempo_libre_activo` y por defecto es True (la feature ya
+    estaba desplegada; el admin la apaga por excepción)."""
+    r = cliente.get(f"/api/rota/config/franjas?marca={MARCA}")
+    assert r.status_code == 200, r.text
+    assert r.json()["tiempo_libre_activo"] is True
+
+
+def test_patch_apaga_tiempo_libre_persiste_y_conserva_resto(entorno):
+    """PATCH con SOLO `{tiempo_libre_activo: false}` apaga el flag SIN tocar franjas ni el toggle de
+    horas; persiste tras releer."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    # Estado de partida: franjas + horas activadas.
+    cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "Tarde", "inicio": "16:00", "fin": "24:00"},
+            ],
+            "mostrar_horas_equipo": True,
+        },
+        headers=_ORIGIN,
+    )
+    # PATCH SOLO el flag de tiempo libre.
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"tiempo_libre_activo": False},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["tiempo_libre_activo"] is False
+    # Lo demás intacto.
+    assert cuerpo["mostrar_horas_equipo"] is True
+    assert [f["nombre"] for f in cuerpo["franjas"]] == ["Mañana", "Tarde"]
+    # Persiste tras releer por GET.
+    releido = cli.get(f"/api/rota/config/franjas?marca={MARCA}").json()
+    assert releido["tiempo_libre_activo"] is False
+    assert releido["mostrar_horas_equipo"] is True
+
+
+def test_patch_solo_franjas_no_cambia_tiempo_libre(entorno):
+    """PATCH con SOLO `franjas` no toca `tiempo_libre_activo` (queda en su default True)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"franjas": [{"nombre": "Mañana", "inicio": "09:00", "fin": "15:00"}]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["tiempo_libre_activo"] is True
+
+
+def test_patch_tiempo_libre_tipo_invalido_400(entorno):
+    """`tiempo_libre_activo` debe ser booleano: un string -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"tiempo_libre_activo": "sí"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text

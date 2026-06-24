@@ -68,6 +68,7 @@ import { ReparteMes } from "./ReparteMes";
 import { lunesDeFecha } from "@/lib/rota-reparto";
 import { CambiosYAusencias } from "./CambiosYAusencias";
 import { DialogoTiempoLibre } from "./DialogoTiempoLibre";
+import { useTiempoLibreActivo } from "./useConfigRota";
 import { ResumenDia } from "./ResumenDia";
 import { DialogFranjas, DialogoAjustesTurnos } from "./Franjas";
 import { VistaMensualTurnos, imprimirMes } from "./MisTurnos";
@@ -148,6 +149,11 @@ export function Calendario({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
   });
+  // Flag por marca: ¿está activa la funcionalidad de tiempo libre/ausencias? Apagada, se oculta el
+  // diálogo «Tiempo libre», su acción del menú, los chips de ausencia del calendario y la mitad de
+  // ausencias de «Cambios y ausencias». NO afecta al cómputo de cobertura: el reparto sigue
+  // respetando las ausencias ya guardadas (no se asigna a quien esté de vacaciones).
+  const tiempoLibreActivo = useTiempoLibreActivo();
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
@@ -332,9 +338,17 @@ export function Calendario({
     return m;
   }, [turnos]);
 
-  // Ausencias que solapan con la semana.
+  // Fuente única de ausencias del calendario: vacía si la feature está apagada por marca, así el
+  // calendario (chips de día, indicadores por turno, filtro del dropdown «Añadir», aviso al
+  // asignar) ignora las ausencias de raíz. El motor de COBERTURA (useTableroMes/useTablero, otra
+  // capa) lee las suyas y sigue respetando lo ya guardado.
+  const ausenciasRaw = React.useMemo(
+    () => (tiempoLibreActivo ? (ausenciasQ.data?.ausencias ?? []) : []),
+    [tiempoLibreActivo, ausenciasQ.data?.ausencias],
+  );
+  // Ausencias que solapan con la semana (para PINTAR los chips de día).
   const finSemana = dias[6] ?? desde;
-  const ausenciasSemana = (ausenciasQ.data?.ausencias ?? []).filter(
+  const ausenciasSemana = ausenciasRaw.filter(
     (a) => a.desde <= finSemana && a.hasta >= desde,
   );
   const ausenciasPorDia = new Map<string, AusenciaRota[]>();
@@ -352,13 +366,13 @@ export function Calendario({
   // Índice por miembro para resolver rápido "¿esta persona tiene ausencia este día?".
   const ausenciasPorMiembro = React.useMemo(() => {
     const m = new Map<string, AusenciaRota[]>();
-    for (const a of ausenciasQ.data?.ausencias ?? []) {
+    for (const a of ausenciasRaw) {
       const lista = m.get(a.miembro_id) ?? [];
       lista.push(a);
       m.set(a.miembro_id, lista);
     }
     return m;
-  }, [ausenciasQ.data?.ausencias]);
+  }, [ausenciasRaw]);
   const ausenciaDe = React.useCallback(
     (miembroId: string, fecha: string): AusenciaRota | undefined =>
       (ausenciasPorMiembro.get(miembroId) ?? []).find(
@@ -590,10 +604,12 @@ export function Calendario({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[13.5px] font-medium text-foreground">
-            Cambios y ausencias
+            {tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno"}
           </span>
           <span className="block text-[11.5px] text-muted-foreground">
-            Solicitudes y ausencias del equipo
+            {tiempoLibreActivo
+              ? "Solicitudes y ausencias del equipo"
+              : "Solicitudes de cambio de turno"}
           </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
@@ -649,7 +665,9 @@ export function Calendario({
         <Dialog open onOpenChange={setAbrirCambios}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Cambios y ausencias</DialogTitle>
+              <DialogTitle>
+                {tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno"}
+              </DialogTitle>
             </DialogHeader>
             <div className="max-h-[70vh] overflow-y-auto">
               <CambiosYAusencias esAdmin={esAdmin} />
@@ -658,10 +676,12 @@ export function Calendario({
         </Dialog>
       )}
       {dialogoAjustes}
-      <DialogoTiempoLibre
-        abierto={abrirTiempoLibre}
-        onCerrar={() => setAbrirTiempoLibre(false)}
-      />
+      {tiempoLibreActivo && (
+        <DialogoTiempoLibre
+          abierto={abrirTiempoLibre}
+          onCerrar={() => setAbrirTiempoLibre(false)}
+        />
+      )}
     </>
   ) : null;
 
@@ -684,7 +704,7 @@ export function Calendario({
         onCopiarMes={() => copiarMes.mutate()}
         onAbrirFranjas={() => setAbrirFranjas(true)}
         onAbrirAjustes={() => setAbrirAjustes(true)}
-        onAbrirTiempoLibre={() => setAbrirTiempoLibre(true)}
+        onAbrirTiempoLibre={tiempoLibreActivo ? () => setAbrirTiempoLibre(true) : undefined}
         onAbrirCarga={() => setAbrirCarga(true)}
         onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
         onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}

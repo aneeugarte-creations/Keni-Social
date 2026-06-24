@@ -128,16 +128,20 @@ export function VistaMensualTurnos({
   });
   const mostrarHoras =
     mostrarHorasEquipo ?? configFranjasQ.data?.mostrar_horas_equipo ?? false;
+  // Flag por marca: ¿está activa la funcionalidad de tiempo libre/ausencias? Apagada, el calendario
+  // no pinta ninguna banda de ausencia (default activo mientras carga). Misma config/clave.
+  const tiempoLibreActivo = configFranjasQ.data?.tiempo_libre_activo ?? true;
   // Ausencias (vacaciones/baja/…) superpuestas al calendario: en «Equipo» dicen QUIÉN está fuera y
   // por qué; en «Yo», el tiempo libre propio. Lista global (misma clave que Panorama y el panel de
   // coordinación); cada vista la filtra al mes y a su ámbito.
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"],
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+    enabled: tiempoLibreActivo,
   });
   const ausencias = React.useMemo(
-    () => ausenciasQ.data?.ausencias ?? [],
-    [ausenciasQ.data],
+    () => (tiempoLibreActivo ? (ausenciasQ.data?.ausencias ?? []) : []),
+    [ausenciasQ.data, tiempoLibreActivo],
   );
   const [ambitoSel, setAmbito] = React.useState<Ambito>(esAdmin ? "equipo" : "yo");
   const ambito: Ambito = soloEquipo ? "equipo" : ambitoSel;

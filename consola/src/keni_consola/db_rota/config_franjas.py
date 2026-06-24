@@ -115,7 +115,7 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
     try:
         fila = con.execute(
             "SELECT franjas, matutino_inicio, matutino_fin, vespertino_inicio, "
-            "vespertino_fin, mostrar_horas_equipo, actualizado "
+            "vespertino_fin, mostrar_horas_equipo, tiempo_libre_activo, actualizado "
             "FROM rota_config_franjas WHERE id = ?",
             (marca or "default",),
         ).fetchone()
@@ -127,7 +127,12 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
             nombre_manana=NOMBRE_FRANJA_MANANA_DEFAULT,
             nombre_tarde=NOMBRE_FRANJA_TARDE_DEFAULT,
         )
-        return {"franjas": franjas, "mostrar_horas_equipo": False, "actualizado": ""}
+        return {
+            "franjas": franjas,
+            "mostrar_horas_equipo": False,
+            "tiempo_libre_activo": True,
+            "actualizado": "",
+        }
     franjas = resolver_franjas_plantilla(
         fila["franjas"],
         fila["matutino_inicio"],
@@ -140,6 +145,7 @@ def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
     return {
         "franjas": franjas,
         "mostrar_horas_equipo": bool(fila["mostrar_horas_equipo"]),
+        "tiempo_libre_activo": bool(fila["tiempo_libre_activo"]),
         "actualizado": fila["actualizado"] or "",
     }
 
@@ -149,12 +155,14 @@ def guardar_plantilla_franjas(
     marca: str = "",
     *,
     mostrar_horas_equipo: bool | None = None,
+    tiempo_libre_activo: bool | None = None,
 ) -> dict[str, Any]:
     """Hace UPSERT PARCIAL de la PLANTILLA de franjas DE UNA MARCA. Devuelve la plantilla.
 
     Actualiza SOLO los campos provistos:
       - `franjas` (lista JSON): si es None no toca la columna `franjas`.
       - `mostrar_horas_equipo` (bool): si es None no toca esa columna.
+      - `tiempo_libre_activo` (bool): si es None no toca esa columna.
     En el UPSERT, ON CONFLICT actualiza solo las columnas provistas; si la fila no existe aun,
     se crea con la plantilla derivada/por defecto (de `franjas` o de las columnas legadas) y el
     toggle apagado para el campo que no llegue. Las columnas legadas matutino/vespertino quedan
@@ -184,6 +192,10 @@ def guardar_plantilla_franjas(
         columnas.append("mostrar_horas_equipo")
         valores.append(mostrar_horas_equipo)
         set_conflicto.append("mostrar_horas_equipo = EXCLUDED.mostrar_horas_equipo")
+    if tiempo_libre_activo is not None:
+        columnas.append("tiempo_libre_activo")
+        valores.append(tiempo_libre_activo)
+        set_conflicto.append("tiempo_libre_activo = EXCLUDED.tiempo_libre_activo")
     columnas.append("actualizado")
     valores.append(ahora)
     marcadores = ", ".join("?" for _ in columnas)

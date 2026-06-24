@@ -20,6 +20,7 @@ import { CambiosYAusencias } from "./CambiosYAusencias";
 import { VistaMensualTurnos } from "./MisTurnos";
 import { PanelCoordinacion, useSenalesCoordinacion } from "./PanelCoordinacion";
 import { contarSwapsPendientes } from "./comun";
+import { useTiempoLibreActivo } from "./useConfigRota";
 
 
 // ===========================================================================
@@ -42,6 +43,8 @@ export default function Rota() {
   const { marcaActiva } = useMarcaActiva();
   const navigate = useNavigate();
   const esAdmin = usuario?.rol === "admin";
+  // Si el tiempo libre está apagado por marca, la pestaña del trabajador es solo «Cambios de turno».
+  const tiempoLibreActivo = useTiempoLibreActivo();
 
   // Badge de la pestaña «Cambios y ausencias»: nº de cambios de turno que esperan MI
   // acción (responder como destinatario o, si soy admin, aprobar). Comparte la queryKey
@@ -119,7 +122,7 @@ export default function Rota() {
       : [
           {
             valor: "cambios-ausencias",
-            etiqueta: "Cambios y ausencias",
+            etiqueta: tiempoLibreActivo ? "Cambios y ausencias" : "Cambios de turno",
             icono: ArrowLeftRight,
             insignia:
               pendientesCambios > 0 ? (

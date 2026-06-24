@@ -684,6 +684,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         vespertino_fin      TEXT NOT NULL DEFAULT '24:00',
         franjas             TEXT NOT NULL DEFAULT '',
         mostrar_horas_equipo BOOLEAN NOT NULL DEFAULT FALSE,
+        tiempo_libre_activo BOOLEAN NOT NULL DEFAULT TRUE,
         actualizado         TEXT NOT NULL DEFAULT ''
     )
     """,

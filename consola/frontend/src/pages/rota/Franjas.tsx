@@ -23,6 +23,7 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   CuerpoCrearFranjaSemana,
+  CuerpoGuardarConfigFranjas,
   FranjaSemana,
   PlantillaFranja,
 } from "@/types";
@@ -544,10 +545,11 @@ export function DialogFranjas({
 // --- Dialog «Ajustes de turnos» (preferencias de visualización por marca, solo admin) -------
 
 /**
- * Ajustes de presentación del calendario de turnos, por marca. Hoy: si el calendario de «Equipo»
- * muestra el rango horario junto a cada franja. Se guarda en la misma config por marca que las
- * franjas (PATCH parcial: solo toca el flag). La vista «Yo» no se ve afectada (siempre muestra las
- * horas propias).
+ * Ajustes de presentación del calendario de turnos, por marca. Dos preferencias: si «Equipo»
+ * muestra el rango horario junto a cada franja, y si la funcionalidad de tiempo libre/ausencias
+ * (vacaciones, baja, descanso) está visible. Se guardan en la misma config por marca que las
+ * franjas (PATCH parcial: solo toca el campo cambiado). La vista «Yo» no se ve afectada por el
+ * primero (siempre muestra las horas propias).
  */
 export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
   const queryClient = useQueryClient();
@@ -557,21 +559,21 @@ export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
     queryFn: ({ signal }) =>
       api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
   });
-  // Eco local para feedback inmediato del interruptor; al confirmar el servidor, la query manda.
-  const [eco, setEco] = React.useState<boolean | null>(null);
-  const mostrar = eco ?? q.data?.mostrar_horas_equipo ?? false;
+  // Eco local por interruptor para feedback inmediato; al confirmar el servidor, la query manda.
+  const [ecoHoras, setEcoHoras] = React.useState<boolean | null>(null);
+  const [ecoTiempoLibre, setEcoTiempoLibre] = React.useState<boolean | null>(null);
+  const mostrarHoras = ecoHoras ?? q.data?.mostrar_horas_equipo ?? false;
+  const tiempoLibre = ecoTiempoLibre ?? q.data?.tiempo_libre_activo ?? true;
 
   const guardar = useMutation({
-    mutationFn: (valor: boolean) =>
-      api.guardarConfigFranjas(
-        { mostrar_horas_equipo: valor },
-        marcaActiva ?? undefined,
-      ),
+    mutationFn: (cambio: CuerpoGuardarConfigFranjas) =>
+      api.guardarConfigFranjas(cambio, marcaActiva ?? undefined),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["rota"] });
     },
     onError: (e) => {
-      setEco(null);
+      setEcoHoras(null);
+      setEcoTiempoLibre(null);
       toast.error(mensajeError(e));
     },
   });
@@ -595,27 +597,50 @@ export function DialogoAjustesTurnos({ onCerrar }: { onCerrar: () => void }) {
             cargando={q.isFetching}
           />
         ) : (
-          <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
-            <div>
-              <Label htmlFor="ajuste-horas-equipo" className="text-sm font-medium">
-                Mostrar horas en el calendario de «Equipo»
-              </Label>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Apagado, en «Equipo» se ve solo «Mañana / Tarde / Noche», sin el rango de horas:
-                cada persona tiene su propio horario dentro de la franja. La vista «Yo» siempre
-                muestra tus horas.
-              </p>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+              <div>
+                <Label htmlFor="ajuste-horas-equipo" className="text-sm font-medium">
+                  Mostrar horas en el calendario de «Equipo»
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Apagado, en «Equipo» se ve solo «Mañana / Tarde / Noche», sin el rango de horas:
+                  cada persona tiene su propio horario dentro de la franja. La vista «Yo» siempre
+                  muestra tus horas.
+                </p>
+              </div>
+              <Switch
+                id="ajuste-horas-equipo"
+                checked={mostrarHoras}
+                onCheckedChange={(v) => {
+                  setEcoHoras(v);
+                  guardar.mutate({ mostrar_horas_equipo: v });
+                }}
+                disabled={guardar.isPending}
+                aria-label="Mostrar horas en el calendario de Equipo"
+              />
             </div>
-            <Switch
-              id="ajuste-horas-equipo"
-              checked={mostrar}
-              onCheckedChange={(v) => {
-                setEco(v);
-                guardar.mutate(v);
-              }}
-              disabled={guardar.isPending}
-              aria-label="Mostrar horas en el calendario de Equipo"
-            />
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+              <div>
+                <Label htmlFor="ajuste-tiempo-libre" className="text-sm font-medium">
+                  Tiempo libre (vacaciones, baja, descanso)
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Activado, el equipo puede registrar y ver el tiempo libre en el calendario y
+                  gestionarlo. Apagado, esa función se oculta por completo.
+                </p>
+              </div>
+              <Switch
+                id="ajuste-tiempo-libre"
+                checked={tiempoLibre}
+                onCheckedChange={(v) => {
+                  setEcoTiempoLibre(v);
+                  guardar.mutate({ tiempo_libre_activo: v });
+                }}
+                disabled={guardar.isPending}
+                aria-label="Activar tiempo libre y ausencias"
+              />
+            </div>
           </div>
         )}
         <DialogFooter>

@@ -59,6 +59,7 @@ import type {
 
 import { NuevaAusencia, TarjetaAusencia } from "./Ausencias";
 import { ChipToggle, ETIQUETA_FRANJA, filtrarEquipoPorMarca, formatearFechaCorta } from "./comun";
+import { useTiempoLibreActivo } from "./useConfigRota";
 
 
 // --- Flujo (todo lo orquesta el backend; el cliente solo informa) -----------
@@ -252,9 +253,13 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
     queryKey: ["rota", "swaps", filtrosSwaps] as const,
     queryFn: ({ signal }) => api.listarSwaps(filtrosSwaps, signal),
   });
+  // Flag por marca: si el tiempo libre/ausencias está apagado, esta vista queda SOLO con los
+  // cambios de turno (sin la mitad de ausencias ni su formulario).
+  const tiempoLibreActivo = useTiempoLibreActivo();
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+    enabled: tiempoLibreActivo,
   });
   const equipoQ = useQuery({
     queryKey: ["rota", "equipo"],
@@ -270,9 +275,10 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
   // Cargando: si AMBOS estan pendientes (mostramos skeleton); de lo contrario
   // mezclamos lo que tengamos (evitamos parpadeos al cambiar de filtro).
   const cargandoTodo =
-    (usuario !== null && swapsQ.isPending) || ausenciasQ.isPending;
+    (usuario !== null && swapsQ.isPending) ||
+    (tiempoLibreActivo && ausenciasQ.isPending);
   const errorSwaps = swapsQ.isError;
-  const errorAusencias = ausenciasQ.isError;
+  const errorAusencias = tiempoLibreActivo && ausenciasQ.isError;
 
   // Lista cronologica unificada: cada item es discriminado por `tipo` para que
   // el render decida que tarjeta usar. Orden DESC: el mas reciente primero.
@@ -302,7 +308,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
         lista.push({ tipo: "cambio", orden: s.creado || s.actualizado || "", swap: s });
       }
     }
-    if (filtroTipo !== "cambios") {
+    if (tiempoLibreActivo && filtroTipo !== "cambios") {
       for (const a of ausencias) {
         const activa = esAusenciaActiva(a);
         if (filtroEstado === "activos" && !activa) continue;
@@ -326,7 +332,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
         (y.orden || "").localeCompare(x.orden || ""),
     );
     return lista;
-  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado, usuario?.id, esAdmin]);
+  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado, usuario?.id, esAdmin, tiempoLibreActivo]);
 
   // Sin sesion no hay "yo": el backend devuelve [] para `mio=true` y la creacion
   // de swap requiere usuario logueado. Avisamos honestamente.
@@ -340,24 +346,35 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
           mismo que "Aprobar y publicar" del Calendario — no el negro de antes. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Tipo
-          </span>
-          <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
-            Todo
-          </ChipToggle>
-          <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
-            Cambios
-          </ChipToggle>
-          <ChipToggle
-            activo={filtroTipo === "ausencias"}
-            onClick={() => setFiltroTipo("ausencias")}
-          >
-            Ausencias
-          </ChipToggle>
-          <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Estado
-          </span>
+          {/* El filtro por TIPO solo tiene sentido si conviven cambios y ausencias. Con el tiempo
+              libre apagado, todo es «cambio de turno» → se oculta. */}
+          {tiempoLibreActivo && (
+            <>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Tipo
+              </span>
+              <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
+                Todo
+              </ChipToggle>
+              <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
+                Cambios
+              </ChipToggle>
+              <ChipToggle
+                activo={filtroTipo === "ausencias"}
+                onClick={() => setFiltroTipo("ausencias")}
+              >
+                Ausencias
+              </ChipToggle>
+              <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Estado
+              </span>
+            </>
+          )}
+          {!tiempoLibreActivo && (
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Estado
+            </span>
+          )}
           <ChipToggle
             activo={filtroEstado === "activos"}
             onClick={() => setFiltroEstado("activos")}
@@ -393,26 +410,30 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
       {formAbierto && (
         <Card>
           <CardContent className="space-y-4 p-6">
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                ¿Qué quieres registrar?
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                <ChipToggle
-                  activo={tipoSolicitud === "cambio"}
-                  onClick={() => setTipoSolicitud("cambio")}
-                >
-                  <ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Cambio de turno
-                </ChipToggle>
-                <ChipToggle
-                  activo={tipoSolicitud === "ausencia"}
-                  onClick={() => setTipoSolicitud("ausencia")}
-                >
-                  <CalendarOff className="mr-1 h-3.5 w-3.5" /> Ausencia
-                </ChipToggle>
+            {/* El selector cambio/ausencia solo aparece si el tiempo libre está activo; si no, solo
+                se registran cambios de turno. */}
+            {tiempoLibreActivo && (
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                  ¿Qué quieres registrar?
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  <ChipToggle
+                    activo={tipoSolicitud === "cambio"}
+                    onClick={() => setTipoSolicitud("cambio")}
+                  >
+                    <ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Cambio de turno
+                  </ChipToggle>
+                  <ChipToggle
+                    activo={tipoSolicitud === "ausencia"}
+                    onClick={() => setTipoSolicitud("ausencia")}
+                  >
+                    <CalendarOff className="mr-1 h-3.5 w-3.5" /> Ausencia
+                  </ChipToggle>
+                </div>
               </div>
-            </div>
-            {tipoSolicitud === "cambio" ? (
+            )}
+            {!tiempoLibreActivo || tipoSolicitud === "cambio" ? (
               sinSesion ? (
                 <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
                   Inicia sesión para continuar.
@@ -468,7 +489,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
         </div>
       ) : items.length === 0 ? (
         <EstadoVacio
-          icono={filtroTipo === "ausencias" ? CalendarOff : ArrowLeftRight}
+          icono={tiempoLibreActivo && filtroTipo === "ausencias" ? CalendarOff : ArrowLeftRight}
           titulo={
             filtroEstado === "historial"
               ? "Sin historial todavía"
@@ -476,8 +497,12 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
           }
           texto={
             filtroEstado === "historial"
-              ? "Aquí aparecerán los cambios y ausencias ya cerrados."
-              : "Pide cambiar un turno con un compañero o registra una ausencia."
+              ? tiempoLibreActivo
+                ? "Aquí aparecerán los cambios y ausencias ya cerrados."
+                : "Aquí aparecerán los cambios de turno ya cerrados."
+              : tiempoLibreActivo
+                ? "Pide cambiar un turno con un compañero o registra una ausencia."
+                : "Pide cambiar un turno con un compañero."
           }
           accion={
             filtroEstado === "historial" ? undefined : (

@@ -96,10 +96,12 @@ async def guardar_config_franjas(request: Request) -> Response:
     datos = await leer_json(request) or {}
     tiene_franjas = "franjas" in datos
     tiene_toggle = "mostrar_horas_equipo" in datos
-    if not tiene_franjas and not tiene_toggle:
+    tiene_tiempo_libre = "tiempo_libre_activo" in datos
+    if not tiene_franjas and not tiene_toggle and not tiene_tiempo_libre:
         return JSONResponse(
             {
-                "error": "Indica `franjas` (lista) y/o `mostrar_horas_equipo` (bool) a editar."
+                "error": "Indica `franjas` (lista), `mostrar_horas_equipo` (bool) "
+                "y/o `tiempo_libre_activo` (bool) a editar."
             },
             status_code=400,
         )
@@ -160,11 +162,21 @@ async def guardar_config_franjas(request: Request) -> Response:
                 status_code=400,
             )
         mostrar = bruto
+    tiempo_libre: bool | None = None
+    if tiene_tiempo_libre:
+        bruto_tl = datos.get("tiempo_libre_activo")
+        if not isinstance(bruto_tl, bool):
+            return JSONResponse(
+                {"error": "`tiempo_libre_activo` debe ser un booleano."},
+                status_code=400,
+            )
+        tiempo_libre = bruto_tl
     plantilla = await run_in_threadpool(
         repos.guardar_plantilla_franjas,
         limpias,
         marca,
         mostrar_horas_equipo=mostrar,
+        tiempo_libre_activo=tiempo_libre,
     )
     return JSONResponse(plantilla)
 

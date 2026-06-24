@@ -24,6 +24,7 @@ import type {
 
 import { contarSwapsPendientes } from "./comun";
 import { conflictosDeLaSemana } from "./ResumenDia";
+import { useTiempoLibreActivo } from "./useConfigRota";
 
 /** Las cuatro señales agregadas del panel para una semana. Conteos puros (sin presentación). */
 export interface SenalesCoordinacion {
@@ -133,6 +134,8 @@ export function useSenalesCoordinacion({
 }): { senales: SenalesCoordinacion; todoEnOrden: boolean; cargando: boolean } {
   const marca = marcaActiva ?? undefined;
   const habilitado = esAdmin && activo;
+  // Con el tiempo libre apagado no se cuentan conflictos por ausencia (sí los solapes de turno).
+  const tiempoLibreActivo = useTiempoLibreActivo();
 
   // Misma queryKey que el Calendario (turnos/franjas/aprobada de la semana) y que el tablero de
   // Cobertura (tareas + eventos): la cache se comparte y el panel late con el resto de Turnos.
@@ -154,7 +157,7 @@ export function useSenalesCoordinacion({
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
-    enabled: habilitado,
+    enabled: habilitado && tiempoLibreActivo,
   });
   const swapsQ = useQuery({
     queryKey: ["rota", "swaps", marca ? { marca } : {}] as const,
@@ -171,7 +174,7 @@ export function useSenalesCoordinacion({
         tareasQ.data?.contenidos ?? [],
         semana?.turnos ?? [],
         semana?.franjas ?? [],
-        ausenciasQ.data?.ausencias ?? [],
+        tiempoLibreActivo ? (ausenciasQ.data?.ausencias ?? []) : [],
         swapsQ.data?.swaps ?? [],
         usuarioId,
         esAdmin,
@@ -186,6 +189,7 @@ export function useSenalesCoordinacion({
       swapsQ.data?.swaps,
       usuarioId,
       esAdmin,
+      tiempoLibreActivo,
     ],
   );
 

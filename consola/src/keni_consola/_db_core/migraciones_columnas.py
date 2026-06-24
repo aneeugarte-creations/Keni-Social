@@ -454,6 +454,10 @@ _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # la vista "Equipo". Legado -> FALSE (oculto): la vista muestra solo el nombre de la franja
     # hasta que el admin lo activa por marca.
     ("mostrar_horas_equipo", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    # tiempo_libre_activo: muestra la funcionalidad de tiempo libre/ausencias (vacaciones, baja,
+    # descanso) en Turnos. Legado -> TRUE (visible): la feature ya estaba desplegada; el admin la
+    # apaga por marca si su equipo no la quiere.
+    ("tiempo_libre_activo", "BOOLEAN NOT NULL DEFAULT TRUE"),
 )
 
 

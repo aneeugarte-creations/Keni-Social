@@ -21,6 +21,7 @@ import type { AusenciaRota, FranjaSemana, TurnoRota } from "@/types";
 
 import { ausenciaTocaDia, formatearFechaCorta, franjasSolapan } from "./comun";
 import { aMinutos24 } from "./DialogoAsignarTurnos";
+import { useTiempoLibreActivo } from "./useConfigRota";
 
 /**
  * Horario EFECTIVO de un turno ("HH:MM"–"HH:MM"): sus horas a medida si las tiene; si no, las de
@@ -203,6 +204,11 @@ export function ResumenDia({
   onClose: () => void;
 }) {
   const t = useTablero(marca, usuarioId, fecha);
+  // Si el tiempo libre está apagado por marca, el resumen del día ignora las ausencias (ni KPI de
+  // cobertura penalizada por ausente ni incidencias «con turno pero ausente»). El motor de cobertura
+  // del cockpit sigue intacto; aquí solo se omite su presentación.
+  const tiempoLibreActivo = useTiempoLibreActivo();
+  const ausenciasDia = tiempoLibreActivo ? t.ausencias : [];
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
   const toggle = (clave: string) =>
     setAbiertas((prev) => {
@@ -232,7 +238,7 @@ export function ResumenDia({
   });
 
   const minutosTotales = horasTotalesDelDia(t.turnosHoy, franjaPorId);
-  const incidencias = conflictosDelDia(fecha, t.turnosHoy, franjaPorId, t.ausencias);
+  const incidencias = conflictosDelDia(fecha, t.turnosHoy, franjaPorId, ausenciasDia);
 
   const fila = (i: Item, asignarResaltado = false) => (
     <FilaAgenda
@@ -268,7 +274,7 @@ export function ResumenDia({
               claims={t.claimsCobertura}
               turnos={t.turnosHoy}
               franjas={t.franjasHoy}
-              ausencias={t.ausencias}
+              ausencias={ausenciasDia}
               hechas={t.hechasHoy}
             />
 

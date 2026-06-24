@@ -560,7 +560,11 @@ def guardar_plantilla_franjas(
     marca: str = "",
     *,
     mostrar_horas_equipo: bool | None = None,
+    tiempo_libre_activo: bool | None = None,
 ) -> dict[str, Any]:
     return db.guardar_plantilla_franjas(
-        franjas, marca, mostrar_horas_equipo=mostrar_horas_equipo
+        franjas,
+        marca,
+        mostrar_horas_equipo=mostrar_horas_equipo,
+        tiempo_libre_activo=tiempo_libre_activo,
     )
