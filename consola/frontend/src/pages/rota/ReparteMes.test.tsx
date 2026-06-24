@@ -82,6 +82,8 @@ describe("ReparteMes — matriz editable por persona", () => {
     // Elegir Luis: 2 días marcados × 1 persona = 2 turnos (todas las celdas ON por defecto).
     fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
     expect(screen.getByRole("button", { name: "Asignar 2 turnos" })).toBeEnabled();
+    // Hay celdas vacías que rellenar → aparece el horario de las altas.
+    expect(screen.getByText("Horario de los turnos nuevos")).toBeInTheDocument();
 
     // Apagar la celda de Luis del día 16 → su patrón baja a 1 día.
     fireEvent.click(screen.getByRole("checkbox", { name: "Luis 16" }));
@@ -222,5 +224,25 @@ describe("ReparteMes — matriz editable por persona", () => {
       expect(actualizar).toHaveBeenCalledWith("t-1", { inicio: "09:00", fin: "16:00" }),
     );
     await waitFor(() => expect(onCambio).toHaveBeenCalled());
+  });
+
+  it("oculta el «Horario de los turnos nuevos» cuando no hay nada que añadir", () => {
+    montar(
+      <ReparteMes
+        diasSel={new Set(["2026-06-15"])}
+        cms={CMS}
+        franjasPorSemana={FRANJAS_POR_SEMANA}
+        turnosExistentes={new Map([["u-luis|2026-06-15", [turno()]]])}
+        onCambio={vi.fn()}
+        onCerrar={vi.fn()}
+        onLimpiarDias={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis" }));
+    // Su único día ya tiene turno → ninguna celda vacía → el horario de altas no se pinta…
+    expect(screen.queryByText("Horario de los turnos nuevos")).toBeNull();
+    // …pero tocar el turno SÍ abre su editor de hora propio.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Luis 15" }));
+    expect(screen.getByLabelText("Nueva hora de inicio")).toBeInTheDocument();
   });
 });

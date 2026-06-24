@@ -308,6 +308,10 @@ export function ReparteMes({
   const totalAdds = personasElegidas.reduce((acc, m) => acc + addsDePersona(m.id).length, 0);
   const totalDels = personasElegidas.reduce((acc, m) => acc + delsDePersona(m.id).length, 0);
   const horasValidas = esHoraValida(inicio) && esHoraValida(fin);
+  // El «Horario» solo gobierna las ALTAS (qué hora y franja toma un turno NUEVO). Si no hay celdas
+  // vacías entre las personas elegidas, no se puede añadir nada: lo ocultamos para no confundir con
+  // el editor de hora de cada turno existente.
+  const puedeAniadir = personasElegidas.some((m) => dias.some((f) => !existe(m.id, f)));
 
   const incompleto =
     (totalAdds === 0 && totalDels === 0) || (totalAdds > 0 && !horasValidas);
@@ -509,31 +513,34 @@ export function ReparteMes({
         </div>
       </div>
 
-      {/* Horario */}
-      <div className="space-y-2">
-        <Label className={eyebrow}>Horario (CDMX)</Label>
-        <div className="flex items-center gap-3">
-          <Input
-            value={inicio}
-            onChange={(e) => setInicio(e.target.value)}
-            placeholder="08:00"
-            className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-            aria-label="Hora de inicio (CDMX)"
-          />
-          <span className="text-muted-foreground">–</span>
-          <Input
-            value={fin}
-            onChange={(e) => setFin(e.target.value)}
-            placeholder="16:00"
-            className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
-            aria-label="Hora de fin (CDMX)"
-          />
+      {/* Horario de las ALTAS: solo cuando hay celdas vacías que rellenar (si no, sobra y confunde
+          con el editor de hora de cada turno). */}
+      {puedeAniadir && (
+        <div className="space-y-2">
+          <Label className={eyebrow}>Horario de los turnos nuevos</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              value={inicio}
+              onChange={(e) => setInicio(e.target.value)}
+              placeholder="08:00"
+              className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
+              aria-label="Hora de inicio (CDMX)"
+            />
+            <span className="text-muted-foreground">–</span>
+            <Input
+              value={fin}
+              onChange={(e) => setFin(e.target.value)}
+              placeholder="16:00"
+              className="h-8 w-[68px] rounded-none border-0 border-b border-input bg-transparent px-1 tabular-nums focus-visible:border-keni-400 focus-visible:ring-0"
+              aria-label="Hora de fin (CDMX)"
+            />
+          </div>
+          {!horasValidas && (inicio || fin) && (
+            <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
+          )}
+          <AvisoZonaOperativa que="Los turnos" />
         </div>
-        {!horasValidas && (inicio || fin) && (
-          <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
-        )}
-        <AvisoZonaOperativa que="Los turnos" />
-      </div>
+      )}
 
       {/* Matriz: filas = personas elegidas, columnas = días marcados en el calendario. */}
       <div className="space-y-2">
