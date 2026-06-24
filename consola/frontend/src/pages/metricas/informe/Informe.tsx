@@ -6,6 +6,7 @@
  * Dirigido EXCLUSIVAMENTE por `InformeProps` (los insights se calculan en `desdeEntradas`).
  */
 import { AreaChart } from "@tremor/react";
+import qrcode from "qrcode-generator";
 import * as React from "react";
 
 import { nombreRed, numeroCompacto } from "@/lib/formato";
@@ -143,6 +144,42 @@ function flechaSigno(signo?: string): string {
 }
 /** Espacio fino entre cifra y unidad (M / %) para que el dato lea como uno solo. */
 const finos = (s: string): string => s.replace(/ /g, "\u202f");
+
+/** Etiqueta legible del formato del post. */
+const FORMATO_LABEL: Record<string, string> = {
+  reel: "Reel",
+  foto: "Foto",
+  carrusel: "Carrusel",
+  video: "Video",
+  link: "Enlace",
+  texto: "Texto",
+};
+
+/**
+ * QR de una URL como SVG VECTORIAL (n\u00edtido a cualquier escala al rasterizar a PDF; sin red ni
+ * CORS). S\u00edncrono: genera la matriz y pinta un solo `path` con los m\u00f3dulos oscuros.
+ */
+function QR({ valor, size }: { valor: string; size: number }) {
+  const qr = qrcode(0, "M");
+  qr.addData(valor);
+  qr.make();
+  const n = qr.getModuleCount();
+  const cell = size / n;
+  let d = "";
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) {
+        const s = cell.toFixed(2);
+        d += `M${(c * cell).toFixed(2)} ${(r * cell).toFixed(2)}h${s}v${s}h-${s}z`;
+      }
+    }
+  }
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} shapeRendering="crispEdges" aria-hidden>
+      <path d={d} fill="#262626" />
+    </svg>
+  );
+}
 
 /** Diapositiva 16:9: lienzo (gris claro, o color de marca en portada), etiqueta, título y pie. */
 function Marco({
@@ -291,7 +328,7 @@ function AreaSerena({
 type Slide = { clave: string; nodo: React.ReactNode };
 
 /** Lista ordenada de diapositivas del informe a partir de las props. */
-function diapositivas(data: InformeProps): Slide[] {
+function diapositivas(data: InformeProps, breve: boolean): Slide[] {
   const {
     marcaId,
     marcaLabel,
@@ -346,6 +383,158 @@ function diapositivas(data: InformeProps): Slide[] {
     ),
   });
 
+  // Versión BREVE (lectura ejecutiva, SIN explicaciones): portada + 2 láminas de DATOS puros,
+  // para revisar de un vistazo sin frases que leer. A = el cuadro de cifras (números + flechas
+  // verde/rojo). B = el reparto en barras (por red, o por marca en "todas").
+  if (breve) {
+    const periodoTitulo = periodo.charAt(0).toUpperCase() + periodo.slice(1);
+    // A · Las cifras del mes: Visualizaciones como héroe; el resto + seguidores netos como
+    // 4 KPIs de respaldo, jerarquía 2:1. La dirección la dicen las flechas, no una frase.
+    const heroKpi = kpis.find((k) => k.etiqueta === "Visualizaciones") ?? kpis[1];
+    const porNombre = (n: string) => kpis.find((k) => k.etiqueta === n);
+    const tileSeguidores: KpiInforme | undefined = seguidoresNeto
+      ? {
+          etiqueta: "Seguidores netos",
+          valor: seguidoresNeto.texto,
+          titulo: seguidoresNeto.texto,
+          delta: { texto: seguidoresNeto.pct, signo: seguidoresNeto.signo },
+        }
+      : porNombre("Piezas");
+    const kpisBreve = [porNombre("Alcance"), porNombre("Interacciones"), porNombre("Engagement"), tileSeguidores].filter(
+      (k): k is KpiInforme => Boolean(k),
+    );
+    const valorVerde = (k: KpiInforme) => k.etiqueta === "Seguidores netos" && seguidoresNeto?.signo === "sube";
+
+    slides.push({
+      clave: "breve-veredicto",
+      nodo: (
+        <Marco
+          marca={marcaLabel}
+          periodo={periodo}
+          etiqueta={etiqueta}
+          titulo={periodoTitulo}
+        >
+          <div className="flex h-full flex-col justify-center">
+            {heroKpi && (
+              <div>
+                <div className="flex items-baseline gap-4">
+                  <span className="text-[64px] font-light leading-none tracking-[-0.03em] tabular-nums text-neutral-900">
+                    {finos(heroKpi.valor)}
+                  </span>
+                  {heroKpi.delta && (
+                    <span className={`text-base font-medium tabular-nums ${colorSigno(heroKpi.delta.signo)}`}>
+                      {flechaSigno(heroKpi.delta.signo) && <span className="mr-1">{flechaSigno(heroKpi.delta.signo)}</span>}
+                      {heroKpi.delta.texto}
+                    </span>
+                  )}
+                </div>
+                <p className={`mt-3 ${EYEBROW} ${TONO.kpiLabel}`}>
+                  {heroKpi.etiqueta}
+                  <span className="ml-2 font-normal normal-case tracking-normal text-neutral-400">vs. {mesAnterior}</span>
+                </p>
+              </div>
+            )}
+            <div className="mt-14 grid grid-cols-4">
+              {kpisBreve.map((k, i) => (
+                <div key={k.etiqueta} className={`flex flex-col ${i > 0 ? "border-l border-neutral-100 pl-8" : "pr-8"}`}>
+                  <p className={`${EYEBROW} ${TONO.kpiLabel}`}>{k.etiqueta}</p>
+                  <p
+                    className={`mt-3 text-[30px] font-light leading-none tracking-[-0.02em] tabular-nums ${
+                      valorVerde(k) ? "text-emerald-600" : TONO.kpiValor
+                    }`}
+                  >
+                    {finos(k.valor)}
+                  </p>
+                  {k.delta && (
+                    <p className={`mt-2 text-xs font-medium tabular-nums ${colorSigno(k.delta.signo)}`}>
+                      {flechaSigno(k.delta.signo) && <span className="mr-1">{flechaSigno(k.delta.signo)}</span>}
+                      {k.delta.texto}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Marco>
+      ),
+    });
+
+    // B · El reparto en barras: por red (marca individual) o por marca ("todas"). Visual puro,
+    // sin frases: la barra más larga es la que manda.
+    const filasReparto = esTodas ? cuentas : porRed;
+    slides.push({
+      clave: "breve-foco",
+      nodo: (
+        <Marco
+          marca={marcaLabel}
+          periodo={periodo}
+          etiqueta={etiqueta}
+          titulo={`Visualizaciones por ${esTodas ? "marca" : "red"}`}
+        >
+          <div className="flex h-full items-center pb-4">
+            <div className="w-full max-w-3xl">
+              <Ranking filas={filasReparto} />
+            </div>
+          </div>
+        </Marco>
+      ),
+    });
+
+    // C · (solo si hay enlaces) Lo más visto: las piezas top como tarjetas — cifra de impacto +
+    // caption + un QR que abre el post real (el backend de métricas no da la miniatura, sí el url).
+    const piezasConUrl = topPiezas.filter((p) => p.url).slice(0, 3);
+    if (piezasConUrl.length > 0) {
+      const cols = piezasConUrl.length === 1 ? "grid-cols-1" : piezasConUrl.length === 2 ? "grid-cols-2" : "grid-cols-3";
+      slides.push({
+        clave: "breve-piezas",
+        nodo: (
+          <Marco marca={marcaLabel} periodo={periodo} etiqueta={etiqueta} titulo="Lo más visto">
+            <div className="flex h-full items-center">
+              <div className={`grid w-full gap-x-14 ${cols}`}>
+                {piezasConUrl.map((p, i) => {
+                  const caption = p.titulo.length > 90 ? `${p.titulo.slice(0, 87)}…` : p.titulo;
+                  return (
+                    <div key={i} className="flex flex-col items-start">
+                      <p className={`${EYEBROW} ${TONO.kpiLabel}`}>
+                        {nombreRed(p.red)}
+                        {p.formato ? ` · ${FORMATO_LABEL[p.formato] ?? p.formato}` : ""}
+                      </p>
+                      <p className="mt-3 text-[40px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
+                        {finos(numeroCompacto(p.vistas))}
+                      </p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-neutral-400">Visualizaciones</p>
+                      <p className="mt-4 text-sm leading-snug text-neutral-700">«{caption}»</p>
+                      {/* Zona enlazable: el QR (escanear) + «Abrir el post» (tocar en el móvil).
+                          `data-pdf-enlace` la convierte en enlace clicable que el exportador
+                          superpone sobre la imagen rasterizada. */}
+                      <a
+                        href={p.url ?? ""}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-pdf-enlace={p.url}
+                        className="mt-6 flex items-center gap-3.5 no-underline"
+                      >
+                        <div className="rounded-lg border border-neutral-200 bg-white p-2">
+                          <QR valor={p.url ?? ""} size={78} />
+                        </div>
+                        <span className="text-[13px] font-medium leading-snug text-orange-600">
+                          Abrir el post ↗
+                          <span className="mt-0.5 block text-[11px] font-normal text-neutral-400">o escanea el QR</span>
+                        </span>
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Marco>
+        ),
+      });
+    }
+
+    return slides;
+  }
+
   // 2 · Resumen ejecutivo — el TÍTULO es el titular del mes; debajo, 5 KPIs con su variación.
   slides.push({
     clave: "resumen",
@@ -376,7 +565,7 @@ function diapositivas(data: InformeProps): Slide[] {
         etiqueta={etiqueta}
         titulo={
           picoVistas
-            ? `El ${picoVistas.fecha} concentró el ${picoVistas.pct}\u202f% de las vistas del mes`
+            ? `El ${picoVistas.fecha} concentró el ${picoVistas.pct} % de las vistas del mes`
             : "Tendencia diaria"
         }
         subtitulo="Visualizaciones e interacciones por día"
@@ -479,7 +668,7 @@ function diapositivas(data: InformeProps): Slide[] {
           etiqueta="Todas las marcas"
           titulo={
             cuentas.length
-              ? `${cuentas[0].nombre} lidera con el ${cuentas[0].pct}\u202f% de las vistas`
+              ? `${cuentas[0].nombre} lidera con el ${cuentas[0].pct} % de las vistas`
               : "Comparativa por marca"
           }
           subtitulo="Visualizaciones del periodo por marca"
@@ -561,7 +750,7 @@ function diapositivas(data: InformeProps): Slide[] {
         etiqueta={etiqueta}
         titulo={
           desgloseMix.total > 0
-            ? `El ${desgloseMix.altoValorPct}\u202f% de las interacciones se comparte o se guarda`
+            ? `El ${desgloseMix.altoValorPct} % de las interacciones se comparte o se guarda`
             : "Mezcla de interacciones"
         }
         subtitulo={
@@ -605,7 +794,7 @@ function diapositivas(data: InformeProps): Slide[] {
         etiqueta={etiqueta}
         titulo={
           pctEstrella > 0
-            ? `Una pieza valió el ${pctEstrella}\u202f% de las vistas del mes`
+            ? `Una pieza valió el ${pctEstrella} % de las vistas del mes`
             : "Top piezas"
         }
         subtitulo={
@@ -628,12 +817,16 @@ function diapositivas(data: InformeProps): Slide[] {
           </thead>
           <tbody>
             {topPiezas.map((p, i) => (
-              <tr key={i} className="border-b border-neutral-100">
+              // La fila es enlace clicable al post (toca en el móvil); el exportador lo superpone.
+              <tr key={i} className="border-b border-neutral-100" data-pdf-enlace={p.url}>
                 <td className={`py-3 text-left tabular-nums ${i === 0 ? "font-medium text-orange-600" : "text-neutral-400"}`}>
                   {i + 1}
                 </td>
-                <td className={`max-w-[380px] truncate py-3 pr-4 ${i === 0 ? "font-medium text-neutral-900" : TONO.tablaCelda}`}>
-                  {p.titulo}
+                <td className={`max-w-[380px] py-3 pr-4 ${i === 0 ? "font-medium text-neutral-900" : TONO.tablaCelda}`}>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate">{p.titulo}</span>
+                    {p.url && <span className="shrink-0 text-neutral-300">↗</span>}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-neutral-500">{nombreRed(p.red)}</td>
                 <td className="px-4 py-3 tabular-nums text-neutral-500">{p.publicado}</td>
@@ -701,8 +894,8 @@ function diapositivas(data: InformeProps): Slide[] {
  * Deck completo del informe como pila vertical de diapositivas a tamaño real, para que el
  * exportador lo rasterice a PDF. No interactivo: sin toolbar, sin selectores, sin scroll propio.
  */
-export function Informe({ data }: { data: InformeProps }) {
-  const slides = diapositivas(data);
+export function Informe({ data, breve = false }: { data: InformeProps; breve?: boolean }) {
+  const slides = diapositivas(data, breve);
   return (
     <div className="flex flex-col">
       {slides.map((s) => (

@@ -94,9 +94,11 @@ export async function descargarPresentacion(
   entradas: Array<[readonly unknown[], unknown]>,
   ctx: ContextoDeck,
   nombreArchivo: string,
+  opciones?: { breve?: boolean },
 ): Promise<void> {
   if (entradas.length === 0) throw new Error("No hay datos cargados para el PDF.");
   const props = desdeEntradas(entradas, ctx);
+  const breve = opciones?.breve ?? false;
 
   const [{ createRoot }, { Informe }, { toJpeg }, { jsPDF }] = await Promise.all([
     importarModulo(() => import("react-dom/client")),
@@ -112,7 +114,7 @@ export async function descargarPresentacion(
   const root = createRoot(host);
 
   try {
-    root.render(createElement(Informe, { data: props }));
+    root.render(createElement(Informe, { data: props, breve }));
     if (document.fonts?.ready) await document.fonts.ready;
     await esperarPintado();
 
@@ -135,8 +137,18 @@ export async function descargarPresentacion(
       });
       if (i > 0) doc.addPage([W, H], "landscape");
       doc.addImage(img, "JPEG", 0, 0, W, H);
+      // Enlaces clicables: la imagen rasterizada no conserva los `<a>`, así que superponemos
+      // una zona de enlace de jsPDF sobre cada región marcada con `data-pdf-enlace` (el QR/post).
+      // El lienzo del PDF es 1280×720 px = los mismos px CSS de la diapositiva (1:1).
+      const sRect = slides[i].getBoundingClientRect();
+      slides[i].querySelectorAll<HTMLElement>("[data-pdf-enlace]").forEach((el) => {
+        const url = el.getAttribute("data-pdf-enlace");
+        if (!url) return;
+        const r = el.getBoundingClientRect();
+        doc.link(r.left - sRect.left, r.top - sRect.top, r.width, r.height, { url });
+      });
     }
-    doc.save(`informe-${nombreArchivo}.pdf`);
+    doc.save(`informe${breve ? "-breve" : ""}-${nombreArchivo}.pdf`);
   } finally {
     root.unmount();
     host.remove();

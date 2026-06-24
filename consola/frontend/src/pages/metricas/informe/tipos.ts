@@ -52,6 +52,10 @@ export interface FilaPiezaInforme {
   vistas: number;
   interacciones: number;
   engagement: number;
+  /** Enlace público al post en su red (para el QR de "lo más visto"); ausente si no hay. */
+  url?: string;
+  /** Formato del post (reel/foto/carrusel/video/…) si el backend lo da. */
+  formato?: string;
 }
 
 /** Conclusión del cierre: cifra grande + mini explicación. */

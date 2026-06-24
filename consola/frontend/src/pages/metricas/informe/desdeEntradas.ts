@@ -86,10 +86,13 @@ interface PuntoSeguidores {
 interface PiezaCruda {
   titulo?: string;
   plataforma?: string;
+  red?: string;
   publicado?: string;
   visualizaciones?: number;
   interacciones?: number;
   engagement_pct?: number;
+  url?: string;
+  formato?: string;
 }
 interface CeldaDesglose {
   marca?: string;
@@ -343,11 +346,13 @@ export function desdeEntradas(
   const piezasCrudo = (datos.get("piezas") ?? {}) as { top?: PiezaCruda[] };
   const topPiezas: FilaPiezaInforme[] = (piezasCrudo.top ?? []).slice(0, 8).map((p) => ({
     titulo: String(p.titulo ?? ""),
-    red: redCanonica(String(p.plataforma ?? "")),
+    red: redCanonica(String(p.red ?? p.plataforma ?? "")),
     publicado: String(p.publicado ?? ""),
     vistas: num(p.visualizaciones),
     interacciones: num(p.interacciones),
     engagement: num(p.engagement_pct),
+    url: typeof p.url === "string" && p.url ? p.url : undefined,
+    formato: typeof p.formato === "string" && p.formato ? p.formato : undefined,
   }));
   const vistasTotal = num(total.visualizaciones);
   const pctEstrella =

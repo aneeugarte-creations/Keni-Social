@@ -59,10 +59,11 @@ beforeEach(() => {
 });
 
 describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
-  it("ofrece CSV y PDF (sin formatos antiguos)", () => {
+  it("ofrece CSV y PDF (completo + breve, sin formatos antiguos)", () => {
     renderYAbrir();
     expect(screen.getByRole("menuitem", { name: /Descargar CSV/ })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Descargar PDF/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Descargar PDF \(presentación\)/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Descargar PDF breve/ })).toBeInTheDocument();
     expect(screen.queryByText(/Markdown/)).not.toBeInTheDocument();
     expect(screen.queryByText(/JSON/)).not.toBeInTheDocument();
   });
@@ -77,15 +78,26 @@ describe("ItemsDescarga (menú ⋮ de Métricas)", () => {
     expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
-  it("PDF genera el deck con los datasets activos y el contexto", async () => {
+  it("PDF (presentación) genera el deck completo con los datasets activos y el contexto", async () => {
     const espia = vi.spyOn(pdf, "descargarPresentacion").mockResolvedValue();
     renderYAbrir();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF \(presentación\)/ }));
 
     await waitFor(() => expect(espia).toHaveBeenCalledTimes(1));
-    const [entradas, ctx] = espia.mock.calls[0];
+    const [entradas, ctx, , opciones] = espia.mock.calls[0];
     expect(entradas.length).toBeGreaterThan(0);
     expect(ctx).toMatchObject({ marca: "Claro Sports", red: "Instagram", periodo: "junio 2026" });
+    expect(opciones).toEqual({ breve: false });
+  });
+
+  it("PDF breve genera el deck con la opción breve", async () => {
+    const espia = vi.spyOn(pdf, "descargarPresentacion").mockResolvedValue();
+    renderYAbrir();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Descargar PDF breve/ }));
+
+    await waitFor(() => expect(espia).toHaveBeenCalledTimes(1));
+    expect(espia.mock.calls[0][3]).toEqual({ breve: true });
   });
 });
