@@ -107,7 +107,12 @@ function LogoOWordmark({
   return <Wordmark id={id} nombre={nombre} size={Math.round(box.h * 0.62)} />;
 }
 
-/** Diapositiva 16:9: lienzo blanco con márgenes generosos, etiqueta de marca, título y pie discreto. */
+/** Portadas con fondo del color de la marca (logo en blanco + caption claro encima). */
+const COVER_BG: Record<string, string> = {
+  unotv: "#16273F",
+};
+
+/** Diapositiva 16:9: lienzo (gris claro, o color de marca en portada), etiqueta, título y pie. */
 function Marco({
   marca,
   periodo,
@@ -116,6 +121,7 @@ function Marco({
   subtitulo,
   children,
   portada = false,
+  bg,
 }: {
   marca: string;
   periodo: string;
@@ -124,9 +130,11 @@ function Marco({
   subtitulo?: string;
   children?: React.ReactNode;
   portada?: boolean;
+  /** Fondo del lienzo (override del gris por defecto); para portadas con color de marca. */
+  bg?: string;
 }) {
   return (
-    <section className="informe-slide">
+    <section className="informe-slide" style={bg ? { background: bg } : undefined}>
       <div className="flex h-full flex-col px-20 pb-12 pt-16">
         {!portada && (
           <header className="mb-9">
@@ -203,16 +211,20 @@ function diapositivas(data: InformeProps): Slide[] {
     foco,
   } = data;
   const etiqueta = esTodas ? "Todas las marcas" : marcaLabel;
+  // Color de fondo de la portada según la marca (logo en blanco sobre su color); null = gris.
+  const coverBg = !esTodas && marcaId ? COVER_BG[marcaId] : undefined;
   const slides: Slide[] = [];
 
   // 1 · Portada — la marca es la protagonista (escala + aire), sin cabeceros.
   slides.push({
     clave: "portada",
     nodo: (
-      <Marco marca={marcaLabel} periodo={periodo} portada>
+      <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
         <div className="flex h-full flex-col items-center justify-center text-center">
           <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 300, w: 940 }} />
-          <p className={`mt-20 text-[11px] font-medium uppercase tracking-[0.3em] ${TONO.coverCaption}`}>
+          <p
+            className={`mt-20 text-[11px] font-medium uppercase tracking-[0.3em] ${coverBg ? "text-white/75" : TONO.coverCaption}`}
+          >
             Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
             {periodo}
           </p>
