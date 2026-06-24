@@ -66,8 +66,16 @@ function DialogoEditarInterno({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  // Categoría de la pieza con el MISMO rótulo que la Mesa de Noticias (p. ej. "salud" → "Salud").
-  const nombreCategoria = pieza ? etiquetaCategoriaPieza(pieza.categoria) : "";
+  // Catálogo de opciones (query cacheada del feed): da las `lineas` para nombrar la categoría de
+  // la pieza, cuyo `categoria` suele ser el ID de la vertical (un hash), no un slug legible.
+  const opcionesQuery = useQuery({
+    queryKey: ["piezas", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: pieza !== null,
+  });
+  const nombreCategoria = pieza
+    ? etiquetaCategoriaPieza(pieza.categoria, opcionesQuery.data?.lineas)
+    : "";
   const [contenido, setPublicacion] = React.useState("");
   // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.
   const [copyIn, setCopyIn] = React.useState("");
