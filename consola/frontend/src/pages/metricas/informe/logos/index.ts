@@ -5,8 +5,8 @@
  */
 import claroSports from "./claro-sports.png";
 import fundacion from "./fundacion.png";
-import nacionGamer from "./nacion-gamer.jpg";
-import piso15 from "./piso-15.jpg";
+import nacionGamer from "./nacion-gamer.png";
+import piso15 from "./piso-15.png";
 import unotv from "./unotv.png";
 
 /** marcaId → URL del logo (vacío si la marca no tiene logo; entonces se usa el wordmark). */
