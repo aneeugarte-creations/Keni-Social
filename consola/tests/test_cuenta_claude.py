@@ -7,7 +7,12 @@ cubren aparte / en el listener de control.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from keni_consola import cuenta_claude as cc
+
+# Reloj fijo para inferir el ano del reset (que el CLI no incluye): mediados de junio 2026.
+_AHORA = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 
 # Salida REAL de `claude -p /usage` con login de suscripcion (medidor completo).
 _USAGE_COMPLETO = """You are currently using your subscription to power your Claude Code usage
@@ -22,7 +27,7 @@ _USAGE_SOLO_FRASE = "You are currently using your subscription to power your Cla
 
 
 def test_parsear_uso_medidor_completo():
-    r = cc.parsear_uso(_USAGE_COMPLETO)
+    r = cc.parsear_uso(_USAGE_COMPLETO, ahora=_AHORA)
     assert r["disponible"] is True
     assert r["mensaje"].startswith("You are currently using")
     medidores = r["medidores"]
@@ -30,6 +35,27 @@ def test_parsear_uso_medidor_completo():
     assert medidores[0]["etiqueta"] == "Current session"
     assert medidores[1]["etiqueta"] == "Current week (all models)"
     assert "Jun 15 at 7:39pm" in medidores[0]["reset"]
+    # 7:39pm CDMX (UTC-6) = 01:39 UTC del dia siguiente; el front lo pinta en zona de display.
+    assert medidores[0]["reset_iso"] == "2026-06-16T01:39:00Z"
+
+
+def test_reset_a_iso_zona_utc_y_separador_coma():
+    # Forma del CLI con la zona del servidor (UTC) y separador ", " en vez de " at ".
+    assert cc._reset_a_iso("Jun 25, 2:39am (UTC)", _AHORA) == "2026-06-25T02:39:00Z"
+    assert cc._reset_a_iso("Jul 1 at 1:00pm (UTC)", _AHORA) == "2026-07-01T13:00:00Z"
+
+
+def test_reset_a_iso_infiere_vuelta_de_ano():
+    # Reset en enero leido a fin de diciembre: el ano que viene (el reset siempre es futuro).
+    fin_anio = datetime(2026, 12, 31, 23, 0, tzinfo=timezone.utc)
+    assert cc._reset_a_iso("Jan 2 at 6:00am (UTC)", fin_anio) == "2027-01-02T06:00:00Z"
+
+
+def test_reset_a_iso_intratable_es_none():
+    # Sin reset, frase irreconocible o zona desconocida -> None (el front cae a la frase cruda).
+    assert cc._reset_a_iso(None, _AHORA) is None
+    assert cc._reset_a_iso("en cuanto se pueda", _AHORA) is None
+    assert cc._reset_a_iso("Jun 15 at 7:39pm (Marte/Olympus)", _AHORA) is None
 
 
 def test_parsear_uso_solo_frase_no_disponible():
@@ -42,9 +68,10 @@ def test_parsear_uso_solo_frase_no_disponible():
 def test_parsear_uso_tolera_ansi_y_cr():
     # Una TTY mete colores ANSI y \r: el parser debe limpiarlos y aun reconocer el medidor.
     sucio = "\x1b[2mCurrent session: 10% used · resets Jul 1 at 1:00pm (UTC)\x1b[0m\r\n"
-    r = cc.parsear_uso(sucio)
+    r = cc.parsear_uso(sucio, ahora=_AHORA)
     assert r["disponible"] is True
     assert r["medidores"][0]["pct"] == 10
+    assert r["medidores"][0]["reset_iso"] == "2026-07-01T13:00:00Z"
 
 
 def test_parsear_estado_login_credenciales():

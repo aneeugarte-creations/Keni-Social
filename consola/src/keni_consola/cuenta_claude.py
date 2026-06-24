@@ -40,6 +40,8 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 _log = logging.getLogger("keni_consola.cuenta_claude")
 
@@ -136,6 +138,71 @@ _RE_MEDIDOR = re.compile(
     re.IGNORECASE,
 )
 
+# Componentes de la frase de reset del CLI: "Jun 15 at 7:39pm (America/Mexico_City)" o
+# "Jun 25, 2:39am (UTC)". El separador dia->hora puede ser " at " o ", "; la zona entre
+# parentesis es la que el CLI uso para formatear (la del servidor, que corre en UTC). El ano
+# no aparece: lo infiere `_reset_a_iso`. Sin zona explicita se asume UTC.
+_RE_RESET = re.compile(
+    r"(?P<mes>[A-Za-z]{3,9})\s+(?P<dia>\d{1,2})(?:,|\s+at)?\s+"
+    r"(?P<hora>\d{1,2}):(?P<min>\d{2})\s*(?P<ampm>[ap]m)"
+    r"(?:\s*\((?P<zona>[^)]+)\))?",
+    re.IGNORECASE,
+)
+_MESES = {
+    m: i
+    for i, m in enumerate(
+        ["jan", "feb", "mar", "apr", "may", "jun",
+         "jul", "aug", "sep", "oct", "nov", "dec"],
+        start=1,
+    )
+}
+
+
+def _zona_de(nombre: str):
+    """La frase de reset entre parentesis -> tzinfo. "UTC"/"GMT"/"Z" -> UTC; un nombre IANA
+    ("America/Mexico_City") -> ZoneInfo; cualquier otra cosa (abreviatura rara) -> None."""
+    n = (nombre or "").strip()
+    if n.upper() in {"UTC", "GMT", "Z"}:
+        return timezone.utc
+    try:
+        return ZoneInfo(n)
+    except Exception:  # noqa: BLE001 -- zona desconocida: el front cae a la frase cruda
+        return None
+
+
+def _reset_a_iso(reset: str | None, ahora: datetime | None = None) -> str | None:
+    """Convierte la frase de reset del CLI (sin ano, en la zona del servidor) a un instante UTC
+    ISO ("2026-06-15T01:39:00Z"), para que el front lo pinte en la zona de display del usuario.
+
+    El CLI no incluye el ano; el reset SIEMPRE es futuro (sesion 5h / semana), asi que se toma el
+    ano actual y, si el instante cae mas de dos dias en el pasado, es el de vuelta de ano
+    (Dic->Ene). Si no se puede parsear (frase rara, zona desconocida) -> None: el front sirve la
+    frase cruda."""
+    if not reset:
+        return None
+    m = _RE_RESET.search(reset)
+    if not m:
+        return None
+    mes = _MESES.get(m.group("mes")[:3].lower())
+    if not mes:
+        return None
+    tz = _zona_de(m.group("zona") or "UTC")
+    if tz is None:
+        return None
+    hora = int(m.group("hora")) % 12
+    if m.group("ampm").lower() == "pm":
+        hora += 12
+    if ahora is None:
+        ahora = datetime.now(timezone.utc)
+    anio = ahora.astimezone(tz).year
+    try:
+        local = datetime(anio, mes, int(m.group("dia")), hora, int(m.group("min")), tzinfo=tz)
+        if local.astimezone(timezone.utc) < ahora - timedelta(days=2):
+            local = local.replace(year=anio + 1)
+    except ValueError:
+        return None
+    return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 # --------------------------------------------------------------------------- #
 # Parsers PUROS (texto -> dict). Sin subprocess: testeables en aislamiento.    #
@@ -176,12 +243,15 @@ def parsear_estado(stdout: str) -> dict:
     }
 
 
-def parsear_uso(stdout: str) -> dict:
-    """Parsea `claude -p /usage` -> {disponible, mensaje, medidores:[{etiqueta,pct,reset}], crudo}.
+def parsear_uso(stdout: str, ahora: datetime | None = None) -> dict:
+    """Parsea `claude -p /usage` -> {disponible, mensaje, medidores:[{etiqueta,pct,reset,reset_iso}], crudo}.
 
     `disponible` es False cuando el CLI solo devuelve la frase generica sin medidor (p.ej. con
     auth por API key). Cada medidor mantiene la etiqueta tal cual la da el CLI
-    ("Current session", "Current week (all models)", ...): el front la traduce/pinta.
+    ("Current session", "Current week (all models)", ...): el front la traduce/pinta. `reset` es la
+    frase cruda del CLI (en la zona del servidor) y `reset_iso` su instante UTC parseado (o None si
+    no se pudo), para que el front lo muestre en la zona de display del usuario. `ahora` permite
+    fijar el reloj en tests; en produccion se toma el instante actual.
     """
     crudo = _limpiar(stdout).strip()
     medidores: list[dict] = []
@@ -192,11 +262,13 @@ def parsear_uso(stdout: str) -> dict:
             continue
         m = _RE_MEDIDOR.match(linea)
         if m:
+            reset = (m.group("reset") or "").strip() or None
             medidores.append(
                 {
                     "etiqueta": m.group("etiqueta").strip(),
                     "pct": int(m.group("pct")),
-                    "reset": (m.group("reset") or "").strip() or None,
+                    "reset": reset,
+                    "reset_iso": _reset_a_iso(reset, ahora),
                 }
             )
         elif not mensaje:

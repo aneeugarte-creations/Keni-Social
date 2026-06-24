@@ -898,8 +898,12 @@ export interface MedidorUso {
   etiqueta: string;
   /** Porcentaje usado (0–100). */
   pct: number;
-  /** Texto del reset ("Jun 15 at 7:39pm (America/Mexico_City)") o null. */
+  /** Texto crudo del reset tal cual lo da el CLI ("Jun 15 at 7:39pm (UTC)"), en la zona del
+   *  servidor (UTC); fallback si no se pudo parsear a instante. Null si no hay reset. */
   reset: string | null;
+  /** Instante UTC ISO del reset ("2026-06-15T01:39:00Z"), parseado por el backend para
+   *  mostrarlo en la zona de display del usuario. Null si el CLI no trajo reset o no se parseó. */
+  reset_iso?: string | null;
 }
 
 /** Medidor de uso de la suscripción (`claude -p /usage`). */

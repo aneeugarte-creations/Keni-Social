@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
-import { haceSegundos } from "@/lib/fecha";
+import { formatearFechaHoraCorta, haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CuentaAuth, CuentaUso, MedidorUso } from "@/types";
 
@@ -91,8 +91,10 @@ function Medidor({ m }: { m: MedidorUso }) {
           style={{ width: `${ancho}%` }}
         />
       </div>
-      {m.reset && (
-        <p className="text-xs text-muted-foreground">Se renueva: {m.reset}</p>
+      {(m.reset_iso || m.reset) && (
+        <p className="text-xs text-muted-foreground">
+          Se renueva: {m.reset_iso ? formatearFechaHoraCorta(m.reset_iso) : m.reset}
+        </p>
       )}
     </div>
   );
