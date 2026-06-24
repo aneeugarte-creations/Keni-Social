@@ -3,13 +3,14 @@
  *
  * Pinta la evolución día a día del total de seguidores (LineChart de Tremor con
  * `autoMinValue`: es una serie de NIVEL, así que el eje truncado es legítimo y evita la
- * línea "plana") con opción de desglosar por red. El neto del periodo (`neto` global +
- * `neto_por_red`) se muestra como KPIs arriba. Si la fuente activa no expone seguidores
- * (`puntos=[]`) lo dice con honestidad en vez de inventar una serie; una red sin datos
- * en el periodo no se pinta como serie (su ausencia queda explicada con "—" en los KPIs).
+ * línea "plana") con opción de desglosar por red. Arriba, un KPI por red con el total
+ * ACTUAL de seguidores (el dato protagonista, como en Metricool) y el neto del periodo
+ * (`neto` / `neto_por_red`) como insignia de variación. Si la fuente activa no expone
+ * seguidores (`puntos=[]`) lo dice con honestidad en vez de inventar una serie; una red
+ * sin datos en el periodo no se pinta como serie (su ausencia queda explicada con "—").
  */
 import { useQuery } from "@tanstack/react-query";
-import { LineChart } from "@tremor/react";
+import { BadgeDelta, type DeltaType, LineChart } from "@tremor/react";
 import { Users } from "lucide-react";
 import * as React from "react";
 
@@ -18,8 +19,22 @@ import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, numeroCompleto, REDES_CANONICAS } from "@/lib/formato";
+import {
+  nombreRed,
+  numeroCompacto,
+  numeroCompleto,
+  REDES_CANONICAS,
+  variacion,
+} from "@/lib/formato";
 import type { PuntoSeguidores } from "@/types";
 
 import { colorDe } from "./coloresRed";
@@ -98,79 +113,258 @@ export function CrecimientoSeguidores({
         </label>
       }
     >
-      <Card className="space-y-4 p-4 sm:p-6">
-        {isPending ? (
-          <Skeleton className="h-56 w-full rounded-lg" />
-        ) : isError ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No se pudo cargar la serie de seguidores.
-          </p>
-        ) : (data.puntos ?? []).length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            Aún no hay datos de seguidores para este periodo
-          </p>
-        ) : (
-          <>
-            <KpisNeto neto={data.neto} netoPorRed={data.neto_por_red} />
-            {/* Alternativa textual del chart para lectores de pantalla. */}
-            <div
-              role="img"
-              aria-label={`Seguidores del periodo: neto ${netoSeguidores(data.neto)}`}
-            >
-              <LineChart
-                data={datos}
-                index="fecha"
-                categories={categorias}
-                colors={colores}
-                valueFormatter={numeroCompacto}
-                showLegend={porRed}
-                showAnimation
-                startEndOnly
-                curveType="monotone"
-                autoMinValue
-                className="h-56"
+      <div className="space-y-4">
+        <Card className="space-y-4 p-4 sm:p-6">
+          {isPending ? (
+            <Skeleton className="h-56 w-full rounded-lg" />
+          ) : isError ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No se pudo cargar la serie de seguidores.
+            </p>
+          ) : (data.puntos ?? []).length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Aún no hay datos de seguidores para este periodo
+            </p>
+          ) : (
+            <>
+              <KpisSeguidores
+                puntos={data.puntos}
+                neto={data.neto}
+                netoPorRed={data.neto_por_red}
               />
-            </div>
-          </>
+              {/* Alternativa textual del chart para lectores de pantalla. */}
+              <div
+                role="img"
+                aria-label={`Seguidores del periodo: neto ${netoSeguidores(data.neto)}`}
+              >
+                <LineChart
+                  data={datos}
+                  index="fecha"
+                  categories={categorias}
+                  colors={colores}
+                  valueFormatter={numeroCompacto}
+                  showLegend={porRed}
+                  showAnimation
+                  startEndOnly
+                  curveType="monotone"
+                  autoMinValue
+                  className="h-56"
+                />
+              </div>
+            </>
+          )}
+        </Card>
+        {/* Cifras EXACTAS por red: stock al inicio del periodo → actual, crecimiento y %.
+            Complementa el chart (abreviado) y los KPIs con el detalle numérico. */}
+        {!isPending && !isError && data && data.puntos.length > 0 && (
+          <TablaSeguidores
+            puntos={data.puntos}
+            neto={data.neto}
+            netoPorRed={data.neto_por_red}
+          />
         )}
-      </Card>
+      </div>
     </Seccion>
   );
 }
 
-/** Neto del periodo: el global como destacado + un KPI por red. */
-function KpisNeto({
+/** `deltaType` de Tremor según el signo del neto: verde sube, rojo baja, gris sin cambio. */
+function deltaNeto(neto: number): DeltaType {
+  if (!Number.isFinite(neto) || neto === 0) return "unchanged";
+  return neto > 0 ? "moderateIncrease" : "moderateDecrease";
+}
+
+/** Insignia con la variación de seguidores del periodo (flecha + neto con signo). */
+function InsigniaNeto({ neto }: { neto: number }) {
+  return (
+    <BadgeDelta
+      deltaType={deltaNeto(neto)}
+      size="xs"
+      className="shrink-0"
+      title={`${numeroCompleto(neto)} en el periodo`}
+    >
+      {netoSeguidores(neto)}
+    </BadgeDelta>
+  );
+}
+
+/**
+ * Total ACTUAL de seguidores como destacado + un KPI por red, cada uno con el neto del
+ * periodo como insignia de variación. El total absoluto es el dato protagonista (lo que
+ * Metricool muestra en grande); el neto queda como insignia secundaria.
+ */
+function KpisSeguidores({
+  puntos,
   neto,
   netoPorRed,
 }: {
+  puntos: PuntoSeguidores[];
   neto: number;
   netoPorRed: Record<string, number>;
 }) {
+  // Total actual GLOBAL = último punto (mismo valor que el extremo derecho de la línea
+  // "Total" del chart). Por red, el último valor conocido: una red con hueco al final
+  // conserva su stock, no cae a "—".
+  const totalActual = puntos[puntos.length - 1]?.total ?? 0;
+  const totalRedActual = (red: string): number | null => {
+    for (let i = puntos.length - 1; i >= 0; i--) {
+      const v = puntos[i].por_red[red];
+      if (v != null) return v;
+    }
+    return null;
+  };
+
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <TarjetaKpi
-        etiqueta="Neto del periodo"
-        valor={netoSeguidores(neto)}
-        titulo={`${numeroCompleto(neto)} seguidores`}
+        etiqueta="Seguidores totales"
+        valor={numeroCompacto(totalActual)}
+        titulo={`${numeroCompleto(totalActual)} seguidores`}
+        insignia={<InsigniaNeto neto={neto} />}
       />
       {REDES_CANONICAS.map((red) => {
-        // Distinguimos "red ausente" (no está en neto_por_red → "—") de un neto real de 0
-        // (la red existe pero no ganó/perdió → "0"). Usamos la presencia de la clave.
-        const presente = Object.prototype.hasOwnProperty.call(netoPorRed, red);
-        const valor = presente ? netoPorRed[red] : null;
+        const total = totalRedActual(red);
+        // Red ausente en el periodo (sin un solo punto): "—" honesto, sin insignia.
+        if (total === null) {
+          return (
+            <TarjetaKpi
+              key={red}
+              etiqueta={nombreRed(red)}
+              valor="—"
+              titulo="Sin datos para este periodo"
+            />
+          );
+        }
+        // El neto puede faltar aunque haya stock (presencia de la clave): sin neto, sin
+        // insignia (pero el total sí se muestra).
+        const netoRed = Object.prototype.hasOwnProperty.call(netoPorRed, red)
+          ? netoPorRed[red]
+          : null;
         return (
           <TarjetaKpi
             key={red}
             etiqueta={nombreRed(red)}
-            valor={valor === null ? "—" : netoSeguidores(valor)}
-            titulo={
-              valor === null
-                ? "Sin datos para este periodo"
-                : `${numeroCompleto(valor)} seguidores`
-            }
+            valor={numeroCompacto(total)}
+            titulo={`${numeroCompleto(total)} seguidores`}
+            insignia={netoRed === null ? undefined : <InsigniaNeto neto={netoRed} />}
           />
         );
       })}
     </div>
+  );
+}
+
+/** Crecimiento exacto con signo: conteo COMPLETO con separadores (+13,640 / −5,200 / 0). */
+function crecimientoExacto(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  return `${n > 0 ? "+" : "−"}${numeroCompleto(Math.abs(n))}`;
+}
+
+/** Color del % de crecimiento: verde sube, rojo baja, neutro sin cambio o sin base. */
+function colorCrecimiento(pct: number | null): string {
+  if (pct === null || pct === 0) return "text-muted-foreground";
+  return pct > 0
+    ? "text-emerald-700 dark:text-emerald-300"
+    : "text-red-700 dark:text-red-300";
+}
+
+/** Primer y último valor CONOCIDO de una red en la serie (ignora huecos en los extremos). */
+function extremosRed(
+  puntos: PuntoSeguidores[],
+  red: string,
+): { inicio: number; actual: number } | null {
+  let inicio: number | null = null;
+  let actual: number | null = null;
+  for (const p of puntos) {
+    const v = p.por_red[red];
+    if (v != null) {
+      if (inicio === null) inicio = v;
+      actual = v;
+    }
+  }
+  return inicio === null || actual === null ? null : { inicio, actual };
+}
+
+/** Celda de % de crecimiento, coloreada y con "—" honesto cuando no hay base de cálculo. */
+function CeldaPct({ crecimiento, inicio }: { crecimiento: number; inicio: number }) {
+  const pct = inicio > 0 ? (crecimiento / inicio) * 100 : null;
+  return (
+    <TableCell className={`pr-6 text-right tabular-nums last:pr-6 ${colorCrecimiento(pct)}`}>
+      {pct === null ? "—" : variacion(pct)}
+    </TableCell>
+  );
+}
+
+/**
+ * Tabla de cifras EXACTAS de seguidores por red: stock al inicio del periodo y actual
+ * (los extremos de la serie), el crecimiento absoluto (`neto_por_red`, autoritativo) y el
+ * % sobre el inicio. Al pie, los totales. Solo redes CON datos en el periodo (una red sin
+ * un solo punto se omite, no se pinta una fila de "—"). Mismo lenguaje visual que
+ * «Detalle por red», con las dos columnas de stock encabezadas por su fecha.
+ */
+function TablaSeguidores({
+  puntos,
+  neto,
+  netoPorRed,
+}: {
+  puntos: PuntoSeguidores[];
+  neto: number;
+  netoPorRed: Record<string, number>;
+}) {
+  const redes = REDES_CANONICAS.filter((red) => puntos.some((p) => p.por_red[red] != null));
+  // Totales globales = extremos de la serie `total` (igual que la línea "Total" del chart).
+  const inicioTotal = puntos[0]?.total ?? 0;
+  const actualTotal = puntos[puntos.length - 1]?.total ?? 0;
+  // Fechas de los extremos para encabezar las dos columnas de stock (como MARZO/ABRIL).
+  const fechaInicio = puntos[0] ? fechaCorta(puntos[0].fecha) : "Inicio";
+  const fechaActual = puntos[puntos.length - 1]
+    ? fechaCorta(puntos[puntos.length - 1].fecha)
+    : "Actual";
+
+  return (
+    <Card className="overflow-hidden py-2">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="pl-6">Red</TableHead>
+            <TableHead className="text-right">{fechaInicio}</TableHead>
+            <TableHead className="text-right">{fechaActual}</TableHead>
+            <TableHead className="text-right">Crecimiento</TableHead>
+            <TableHead className="pr-6 text-right last:pr-6">%</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {redes.map((red) => {
+            const ex = extremosRed(puntos, red);
+            if (ex === null) return null;
+            const crecimiento = Object.prototype.hasOwnProperty.call(netoPorRed, red)
+              ? netoPorRed[red]
+              : ex.actual - ex.inicio;
+            return (
+              <TableRow key={red}>
+                <TableCell className="pl-6 font-medium">{nombreRed(red)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {numeroCompleto(ex.inicio)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {numeroCompleto(ex.actual)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {crecimientoExacto(crecimiento)}
+                </TableCell>
+                <CeldaPct crecimiento={crecimiento} inicio={ex.inicio} />
+              </TableRow>
+            );
+          })}
+          <TableRow className="border-t-2 font-medium">
+            <TableCell className="pl-6">Total</TableCell>
+            <TableCell className="text-right tabular-nums">{numeroCompleto(inicioTotal)}</TableCell>
+            <TableCell className="text-right tabular-nums">{numeroCompleto(actualTotal)}</TableCell>
+            <TableCell className="text-right tabular-nums">{crecimientoExacto(neto)}</TableCell>
+            <CeldaPct crecimiento={neto} inicio={inicioTotal} />
+          </TableRow>
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
