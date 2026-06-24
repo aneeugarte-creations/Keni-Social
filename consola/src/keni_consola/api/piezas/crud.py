@@ -313,9 +313,6 @@ async def listar(request: Request) -> Response:
     marca = qp.get("marca") or None
     red = qp.get("red") or None
     estado = qp.get("estado") or None
-    # `linea` = id de una etiqueta editorial de clase `vertical` (la LÍNEA de contenido):
-    # filtra las piezas cuyo `contenido` padre la tiene asignada (ver `opciones`).
-    linea = qp.get("linea") or None
     # REPARTO ("la lista" de ClaroSports): `?responsable=<id>` = piezas COGIDAS por ese
     # usuario; `?responsable=sin` = piezas LIBRES (por coger). El responsable vive en el
     # `contenido` PADRE (el reparto es del tema); el filtro junta hijo->padre en SQL.
@@ -387,7 +384,7 @@ async def listar(request: Request) -> Response:
     # síncrono, que comparte el MISMO diccionario de filtros entre listado y conteo.
     filtros = {
         "marca": marca_efectiva, "red": red, "estado": estado, "evergreen": evergreen,
-        "linea": linea, "responsable": responsable, "desde": desde, "hasta": hasta,
+        "responsable": responsable, "desde": desde, "hasta": hasta,
         "origen": origen, "categoria": categoria, "tipo_contenido": tipo_contenido,
         "fuente": fuente, "fase": fase, "creado_antes": creado_antes,
         "excluir_origen": excluir_origen, "busqueda": busqueda,

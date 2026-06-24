@@ -34,6 +34,7 @@ from .migraciones_columnas import (
     _COLUMNAS_USUARIOS_AMPLIADAS,
     _COLUMNAS_USUARIOS_RETIRADAS,
     _asegurar_marca_grid_rota,
+    _backfill_categoria_desde_linea,
     _backfill_gasto_ia_proceso,
     _backfill_pesos_fuente,
     _forzar_reset_password_existentes,
@@ -472,6 +473,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # masiva sobre `mfa_requerido`. Para no des-forzar al equipo actual en el deploy, materializa
     # ese estado marcando `mfa_requerido=1` en las cuentas existentes. One-shot; no-op en BD vacía/tests.
     Migracion("0045-materializar-passkey-requerido", _materializar_passkey_requerido_existentes),
+    # UNA SOLA FUENTE de "línea/categoría": `publicacion.categoria` pasa a ser el único eje (lo
+    # consumen filtros, métricas y hashtag). Backfillea `categoria` desde la etiqueta vertical
+    # asignada para los contenidos viejos cuya línea solo vivía en el tag (categoria vacía). One-shot
+    # e idempotente. Ver `_backfill_categoria_desde_linea`.
+    Migracion("0046-backfill-categoria-linea", _backfill_categoria_desde_linea),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

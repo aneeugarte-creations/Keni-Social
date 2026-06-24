@@ -219,18 +219,14 @@ def test_opciones_incluye_lineas(cliente):
     assert "Mundial" not in nombres
 
 
-def test_filtro_linea(cliente):
-    """`?linea=<id>` deja solo las piezas cuyo contenido padre tiene esa etiqueta vertical."""
-    from keni_consola import repos
-
-    etiqueta = repos.crear_etiqueta(nombre="Política", clase="vertical", marca="unotv")
-    con_linea = _crear(cliente, titulo="Con línea").json()["pieza"]
-    _crear(cliente, titulo="Sin línea")
-    repos.asignar_etiqueta(con_linea["publicacion_id"], etiqueta["id"])
-
-    filtrado = cliente.get(f"/api/piezas?linea={etiqueta['id']}").json()
-    assert [p["titulo"] for p in filtrado["piezas"]] == ["Con línea"]
-    assert filtrado["paginacion"]["total"] == 1
+def test_filtro_linea_retirado_es_ignorado(cliente):
+    """El eje de línea es ÚNICO (`?categoria=`); el viejo `?linea=` se retiró y se IGNORA (no
+    filtra): pasar `?linea=<id>` no recorta el listado."""
+    _crear(cliente, titulo="Una")
+    _crear(cliente, titulo="Otra")
+    r = cliente.get("/api/piezas?linea=loquesea").json()
+    assert {p["titulo"] for p in r["piezas"]} == {"Una", "Otra"}
+    assert r["paginacion"]["total"] == 2
 
 
 def test_payload_incluye_responsable(cliente):

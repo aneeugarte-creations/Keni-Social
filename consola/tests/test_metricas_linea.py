@@ -22,23 +22,20 @@ def _pieza(id_post, titulo, vis, inter, eng):
     }
 
 
-def test_linea_de_categoria_evergreen_es_linea_breaking_no():
-    """La LÍNEA sale de la `categoria` del contenido: EVERGREEN es línea; `breaking` es SEÑAL
-    (cae a la vertical, no es una línea); vertical activa por id; retirada/desconocida → ""
-    (Sin línea); alta manual (categoria vacía) → la etiqueta vertical asignada."""
+def test_linea_de_categoria_eje_unico_categoria():
+    """La LÍNEA sale SOLO de la `categoria` (eje único): las señales del motor son su propio cubo
+    («Última hora», «Evergreen»); vertical activa por id; vacía/retirada/desconocida → "" (Sin
+    línea). Ya NO se respalda con la etiqueta vertical asignada (eso lo cubre el backfill 0046)."""
     verticales = {"et-nac": "Nacional", "et-int": "Internacional"}
     f = metricas_linea.linea_de_categoria
-    # Evergreen SÍ es una línea del plan.
-    assert f("evergreen", vertical_por_id=verticales, etiqueta_vertical="") == "Evergreen"
-    # Breaking es señal, no línea: cae a la vertical de la pieza (o "Sin línea" si no tiene).
-    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="Nacional") == "Nacional"
-    assert f("breaking", vertical_por_id=verticales, etiqueta_vertical="") == ""
+    # Señales del motor: cada una su propio cubo (coincide con los chips/el filtro).
+    assert f("evergreen", vertical_por_id=verticales) == "Evergreen"
+    assert f("breaking", vertical_por_id=verticales) == "Última hora"
     # Id de vertical ACTIVA → su nombre.
-    assert f("et-nac", vertical_por_id=verticales, etiqueta_vertical="") == "Nacional"
-    # Id de vertical RETIRADA/desconocida → "" (cae en "Sin línea").
-    assert f("et-ciencia", vertical_por_id=verticales, etiqueta_vertical="") == ""
-    # Alta manual sin categoría → respaldo a la etiqueta vertical asignada.
-    assert f("", vertical_por_id=verticales, etiqueta_vertical="Nacional") == "Nacional"
+    assert f("et-nac", vertical_por_id=verticales) == "Nacional"
+    # Vacía o id de vertical RETIRADA/desconocida → "" (cae en "Sin línea").
+    assert f("", vertical_por_id=verticales) == ""
+    assert f("et-ciencia", vertical_por_id=verticales) == ""
 
 
 def test_agrupar_por_eje_suma_y_engagement_medio():
@@ -199,15 +196,18 @@ def test_valor_por_contenido_toma_solo_etiquetas_de_la_clase():
 def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
     """`lineas_por_pieza` resuelve la LÍNEA de cada pieza vía BD (monkeypatcheada).
 
-    Cruza por `id_post_metricool` -> contenido -> etiqueta vertical. Una pieza sin
-    contenido enlazado NO aparece en el mapa (el llamante usa "Sin línea"): honesto.
+    Cruza por `id_post_metricool` -> contenido y lee su `categoria` (eje único de línea). Una
+    pieza sin contenido enlazado NO aparece en el mapa (el llamante usa "Sin línea"): honesto.
     """
     from keni_consola import repos
 
     monkeypatch.setattr(
         repos,
         "listar_publicacion",
-        lambda marca=None: [{"id": "c1", "titulo": "Gol", "id_post_metricool": "M1"}],
+        # La LÍNEA vive en `categoria` (id de la vertical), no en el tag asignado.
+        lambda marca=None: [
+            {"id": "c1", "titulo": "Gol", "id_post_metricool": "M1", "categoria": "et-vir"}
+        ],
     )
     monkeypatch.setattr(repos, "listar_piezas_fila", lambda: [])
     monkeypatch.setattr(
@@ -215,11 +215,10 @@ def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
         "listar_etiquetas",
         lambda marca=None, clase=None, solo_activas=False: [{"id": "et-vir", "nombre": "Virales"}],
     )
-    monkeypatch.setattr(repos, "etiquetas_por_contenido", lambda: {"c1": ["et-vir"]})
 
     piezas = [
         {"id": "M1", "titulo": "Gol"},
         {"id": "M2", "titulo": "Pieza sin contenido"},
     ]
     salida = metricas_linea.lineas_por_pieza("unotv", piezas)
-    assert salida == {"M1": "Virales"}  # M2 no enlaza -> no aparece (Sin línea antes (en el flujo))
+    assert salida == {"M1": "Virales"}  # M2 no enlaza -> no aparece (Sin línea en el flujo)

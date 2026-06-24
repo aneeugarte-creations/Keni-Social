@@ -316,6 +316,41 @@ def _migrar_green_a_evergreen(con: Any) -> None:
         )
 
 
+def _backfill_categoria_desde_linea(con: Any) -> None:
+    """Backfill ONE-SHOT: `publicacion.categoria` <- la etiqueta vertical (LÍNEA) asignada.
+
+    La "línea" de un contenido vivía en DOS sitios: la columna `categoria` (eje del plan) y la
+    etiqueta vertical asignada en `publicacion_etiquetas` (el puente). Al unificar en `categoria`
+    como ÚNICA fuente, los contenidos viejos/manuales con `categoria=''` cuya línea solo estaba en
+    el tag perderían su línea (caerían en "Sin línea"). Esto la copia a `categoria`.
+
+    Idempotente: tras correr, esas filas tienen `categoria` no vacía y la WHERE las excluye. No
+    toca `breaking`/`evergreen` ni las ya pobladas, ni los contenidos sin tag vertical.
+    """
+    if not (
+        _tabla_existe(con, "publicacion")
+        and _tabla_existe(con, "publicacion_etiquetas")
+        and _tabla_existe(con, "etiquetas")
+    ):
+        return
+    con.execute(
+        "UPDATE publicacion SET categoria = ("
+        " SELECT e.id FROM publicacion_etiquetas pe"
+        " JOIN etiquetas e ON pe.etiqueta_id = e.id"
+        " WHERE pe.publicacion_id = publicacion.id"
+        " AND e.clase = 'vertical' AND e.activo = 1"
+        " ORDER BY e.id LIMIT 1"
+        ") WHERE clase = 'contenido'"
+        " AND (categoria IS NULL OR categoria = '')"
+        " AND EXISTS ("
+        " SELECT 1 FROM publicacion_etiquetas pe2"
+        " JOIN etiquetas e2 ON pe2.etiqueta_id = e2.id"
+        " WHERE pe2.publicacion_id = publicacion.id"
+        " AND e2.clase = 'vertical' AND e2.activo = 1"
+        ")"
+    )
+
+
 # ETAPAS CON NOMBRE DE VERBO (Fase 2): las columnas de etapa legacy `qa_*` (la etapa "verificación" pasó a
 # "Verificar" en todo el código) se renombran a `verificar_*` en las BDs productivas (piloto AMX),
 # preservando los datos (Postgres conserva los valores en un RENAME COLUMN). Cada tupla es

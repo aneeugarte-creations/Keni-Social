@@ -68,13 +68,12 @@ _SELECT_PUBLICACION = (
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
     "c.formato AS formato, c.espejo AS espejo, "
-    # Hashtags de la LÍNEA editorial del contenido (etiqueta activa clase 'vertical'): columna
-    # calculada en el mismo SELECT (no un query por pieza) para que el gate `falta_hashtags` exija
-    # también el hashtag de la sección sin N+1. "" si el contenido no tiene línea o esta no lo fija.
-    "(SELECT e.hashtags FROM publicacion_etiquetas pe "
-    "JOIN etiquetas e ON pe.etiqueta_id = e.id "
-    "WHERE pe.publicacion_id = c.id AND e.clase = 'vertical' AND e.activo = 1 "
-    "ORDER BY e.id LIMIT 1) AS linea_hashtags "
+    # Hashtags de la LÍNEA del contenido: se leen de la etiqueta vertical cuyo id ES la `categoria`
+    # del contenido (eje ÚNICO de línea; no del tag asignado). Columna calculada en el mismo SELECT
+    # (no un query por pieza) para que el gate `falta_hashtags` exija el hashtag de la sección sin
+    # N+1. "" si la categoría es una señal del motor (breaking/evergreen), vacía, o sin hashtag fijado.
+    "(SELECT e.hashtags FROM etiquetas e "
+    "WHERE e.id = c.categoria AND e.clase = 'vertical' AND e.activo = 1) AS linea_hashtags "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
     # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
@@ -414,7 +413,6 @@ def _filtros_publicacion(
     red: str | None,
     estado: str | None,
     evergreen: bool | None,
-    linea: str | None = None,
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
@@ -464,14 +462,6 @@ def _filtros_publicacion(
     if excluir_origen:
         clausulas.append("(c.origen IS NULL OR c.origen != ?)")
         params.append(excluir_origen)
-    # Línea editorial = etiqueta de clase `vertical` asignada al `contenido` padre. Se filtra
-    # con un EXISTS sobre la tabla puente (no JOIN, para no duplicar filas si hubiera varias).
-    if linea:
-        clausulas.append(
-            "EXISTS (SELECT 1 FROM publicacion_etiquetas ce "
-            "WHERE ce.publicacion_id = c.id AND ce.etiqueta_id = ?)"
-        )
-        params.append(linea)
     if estado:
         # PSEUDO-ESTADO `pendiente` (NO es un estado real: el vocabulario es borrador/
         # en_revision/programado/publicado): la partición "Pendientes" del feed = TODO lo que aún
@@ -552,7 +542,6 @@ def listar_piezas(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
-    linea: str | None = None,
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
@@ -580,7 +569,7 @@ def listar_piezas(
         nuevas al principio (no desplaza páginas), ideal para el feed social.
     """
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
+        marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
         excluir_origen=excluir_origen, busqueda=busqueda,
     )
@@ -614,7 +603,6 @@ def contar_piezas(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
-    linea: str | None = None,
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
@@ -629,7 +617,7 @@ def contar_piezas(
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen,
+        marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
         excluir_origen=excluir_origen, busqueda=busqueda,
     )

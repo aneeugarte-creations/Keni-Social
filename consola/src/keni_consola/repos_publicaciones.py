@@ -65,7 +65,6 @@ def listar_piezas(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
-    linea: str | None = None,
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
@@ -93,7 +92,6 @@ def listar_piezas(
         red=red,
         estado=estado,
         evergreen=evergreen,
-        linea=linea,
         responsable=responsable,
         desde=desde,
         hasta=hasta,
@@ -116,7 +114,6 @@ def contar_piezas(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
-    linea: str | None = None,
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
@@ -130,7 +127,7 @@ def contar_piezas(
     busqueda: str | None = None,
 ) -> int:
     return db.contar_piezas(
-        marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
+        marca=marca, red=red, estado=estado, evergreen=evergreen,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente,
         fase=fase, creado_antes=creado_antes, excluir_origen=excluir_origen,

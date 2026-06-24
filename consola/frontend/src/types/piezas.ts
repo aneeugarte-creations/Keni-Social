@@ -215,8 +215,6 @@ export interface FiltrosPiezas {
   fase?: string;
   /** Antigüedad MÍNIMA en horas (presets >24h=24, >48h=48, >1 semana=168…). */
   antiguedad_h?: string;
-  /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
-  linea?: string;
   /** BÚSQUEDA por titular: subcadena (case-insensitive) sobre el título del tema padre. */
   busqueda?: string;
   /**
