@@ -60,7 +60,7 @@ export function DialogoTiempoLibre({
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tiempo libre</DialogTitle>
+          <DialogTitle>Ausencias del equipo</DialogTitle>
         </DialogHeader>
         <div className="max-h-[70vh] space-y-6 overflow-y-auto">
           <NuevaAusencia

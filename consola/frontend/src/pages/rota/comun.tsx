@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BellRing,
   CalendarDays,
+  CalendarOff,
   CalendarPlus,
   CheckCircle2,
   ChevronLeft,
@@ -372,8 +373,8 @@ export function MenuMasAcciones({
   if (esAdmin) {
     if (onAbrirTiempoLibre) {
       items.push({
-        etiqueta: "Tiempo libre",
-        icono: Plane,
+        etiqueta: "Ausencias del equipo",
+        icono: CalendarOff,
         onClick: onAbrirTiempoLibre,
       });
       items.push({ separador: true });
