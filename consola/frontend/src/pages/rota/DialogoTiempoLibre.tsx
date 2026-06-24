@@ -58,39 +58,44 @@ export function DialogoTiempoLibre({
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>Ausencias del equipo</DialogTitle>
         </DialogHeader>
-        <div className="max-h-[70vh] space-y-6 overflow-y-auto">
+        {/* Dos columnas en ancho: registrar a la izquierda, quién está fuera a la derecha, para
+            ver todo de una sin scroll. En estrecho se apilan; solo la lista de la derecha scrollea
+            cuando hay muchas ausencias, dejando el formulario siempre completo. */}
+        <div className="grid gap-6 md:grid-cols-2 md:gap-8">
           <NuevaAusencia
             equipo={equipo}
             esAdmin={esAdmin}
             miId={miId}
             onCreada={refrescar}
           />
-          <div className="space-y-2">
+          <div className="space-y-2 md:border-l md:pl-8">
             <div className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
               Quién está fuera
             </div>
-            {ausenciasQ.isPending ? (
-              <Skeleton className="h-20 w-full rounded-lg" />
-            ) : proximas.length === 0 ? (
-              <EstadoVacio
-                icono={CalendarOff}
-                titulo="Nadie de vacaciones"
-                texto="No hay tiempo libre vigente ni próximo registrado."
-              />
-            ) : (
-              proximas.map((a) => (
-                <TarjetaAusencia
-                  key={a.id}
-                  ausencia={a}
-                  puedeGestionar={esAdmin || a.miembro_id === miId}
-                  onCambio={refrescar}
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto">
+              {ausenciasQ.isPending ? (
+                <Skeleton className="h-20 w-full rounded-lg" />
+              ) : proximas.length === 0 ? (
+                <EstadoVacio
+                  icono={CalendarOff}
+                  titulo="Nadie de vacaciones"
+                  texto="No hay tiempo libre vigente ni próximo registrado."
                 />
-              ))
-            )}
+              ) : (
+                proximas.map((a) => (
+                  <TarjetaAusencia
+                    key={a.id}
+                    ausencia={a}
+                    puedeGestionar={esAdmin || a.miembro_id === miId}
+                    onCambio={refrescar}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>
