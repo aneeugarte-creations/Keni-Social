@@ -141,9 +141,18 @@ export default function Rota() {
       {/* «Horario»: el calendario MENSUAL de turnos (Yo/Equipo · Imprimir/PDF), de CONSULTA. Solo
           jornada — sin eventos ni cobertura (`mostrarCobertura={false}`): eso vive en «Trabajo». No
           tiene vista Semana; la rejilla editable + reparto están en «Gestión». «Equipo» muestra la
-          hora de cada persona (`horasPorPersona`), igual que «Yo» enseña la del usuario. */}
+          hora de cada persona (`horasPorPersona`), igual que «Yo» enseña la del usuario.
+          En lg+ el mes LLENA la pantalla (`llenarAltura` + alto fijo `100dvh − topbar − padding`):
+          se ve entero sin scroll de página, igual que Gestión. En móvil cae a su flujo natural. */}
       {pestaniaEfectiva === "calendario" && (
-        <VistaMensualTurnos esAdmin={esAdmin} mostrarCobertura={false} horasPorPersona />
+        <div className="flex flex-col lg:h-[calc(100dvh-5.5rem)] lg:overflow-hidden">
+          <VistaMensualTurnos
+            esAdmin={esAdmin}
+            mostrarCobertura={false}
+            horasPorPersona
+            llenarAltura
+          />
+        </div>
       )}
 
       {/* «Gestión» (admin): el Panel de coordinación reúne arriba las señales de la semana que piden

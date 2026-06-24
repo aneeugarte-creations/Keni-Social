@@ -58,6 +58,7 @@ export function VistaMensualTurnos({
   mostrarCobertura = true,
   mostrarHorasEquipo,
   horasPorPersona = false,
+  llenarAltura = false,
   ocultarImprimir = false,
   controlesPre,
   marcadorSalud,
@@ -84,6 +85,9 @@ export function VistaMensualTurnos({
    *  una franja difieren, se parten por hora (en vez de un único rango por franja). Lo activan
    *  «Horario» y Gestión; cuando está activo manda sobre `mostrarHorasEquipo` (la hora se ve igual). */
   horasPorPersona?: boolean;
+  /** «Horario»: el mes LLENA el alto de su contenedor (filas a partes iguales) para que se vea
+   *  entero sin scroll de página. El host debe acotar el alto (p. ej. `h-[calc(100dvh-5.5rem)]`). */
+  llenarAltura?: boolean;
   /** Oculta el botón-icono «Imprimir» de la barra para que el host lo ofrezca en su menú ⋯ (junto a
    *  las descargas). Gestión lo usa para no repetir la acción suelta; «Horario» lo deja visible. */
   ocultarImprimir?: boolean;
@@ -148,11 +152,17 @@ export function VistaMensualTurnos({
   const onAbrirDia = mostrarCobertura ? setDiaResumen : undefined;
 
   return (
-    <div className="space-y-4">
+    <div
+      className={cn(
+        llenarAltura
+          ? "space-y-4 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0"
+          : "space-y-4",
+      )}
+    >
       {/* UNA barra de tres zonas: izquierda (modo de vista) · centro (el mes, foco) · derecha
           (estado + acción). En md+ es un grid 1fr·auto·1fr para centrar ópticamente el mes; en móvil
           las tres zonas se apilan. */}
-      <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
+      <div className="grid shrink-0 grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]">
         <div className="flex flex-wrap items-center gap-2 md:justify-self-start">
           {controlesPre}
           {!soloEquipo && <SelectorAmbito ambito={ambito} setAmbito={setAmbito} />}
@@ -179,28 +189,32 @@ export function VistaMensualTurnos({
         </div>
       </div>
 
-      {ambito === "equipo" ? (
-        <VistaMesEquipo
-          mes={mes}
-          cobertura={cobertura}
-          onAbrirDia={onAbrirDia}
-          mostrarHoras={mostrarHoras}
-          horasPorPersona={horasPorPersona}
-          ausencias={ausencias}
-          seleccionable={seleccionable}
-          diasSel={diasSel}
-          onToggleDia={onToggleDia}
-        />
-      ) : (
-        <VistaMesYo
-          mes={mes}
-          esAdmin={esAdmin}
-          onVerSemana={onVerSemana}
-          cobertura={cobertura}
-          onAbrirDia={onAbrirDia}
-          ausencias={ausencias.filter((a) => a.miembro_id === (usuario?.id ?? ""))}
-        />
-      )}
+      <div className={cn(llenarAltura && "lg:min-h-0 lg:flex-1")}>
+        {ambito === "equipo" ? (
+          <VistaMesEquipo
+            mes={mes}
+            cobertura={cobertura}
+            onAbrirDia={onAbrirDia}
+            mostrarHoras={mostrarHoras}
+            horasPorPersona={horasPorPersona}
+            ausencias={ausencias}
+            llenarAltura={llenarAltura}
+            seleccionable={seleccionable}
+            diasSel={diasSel}
+            onToggleDia={onToggleDia}
+          />
+        ) : (
+          <VistaMesYo
+            mes={mes}
+            esAdmin={esAdmin}
+            onVerSemana={onVerSemana}
+            cobertura={cobertura}
+            onAbrirDia={onAbrirDia}
+            ausencias={ausencias.filter((a) => a.miembro_id === (usuario?.id ?? ""))}
+            llenarAltura={llenarAltura}
+          />
+        )}
+      </div>
 
       {diaResumen && (
         <ResumenDia
@@ -329,6 +343,7 @@ function RejillaMensual({
   seleccionable = false,
   diasSel,
   onToggleDia,
+  llenarAltura = false,
 }: {
   mes: string;
   renderDia: (fecha: string, delMes: boolean) => React.ReactNode;
@@ -338,19 +353,38 @@ function RejillaMensual({
   seleccionable?: boolean;
   diasSel?: Set<string>;
   onToggleDia?: (fechaIso: string) => void;
+  /** «Horario»: la rejilla LLENA el alto disponible (filas a partes iguales, sin scroll de página);
+   *  cada celda recorta su exceso. Por defecto crece con el contenido (la página scrollea). */
+  llenarAltura?: boolean;
 }) {
   const hoy = hoyCDMX();
   const dias = React.useMemo(() => semanasDelMes(mes).flat(), [mes]);
   return (
-    <div className="overflow-hidden rounded-lg border-l border-t">
-      <div className="grid grid-cols-7 bg-muted/40 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground print:bg-transparent">
+    // En lg+ con `llenarAltura` la rejilla es una columna flex que llena su contenedor; en móvil se
+    // queda en su flujo natural (un mes no cabe en un teléfono → scroll, como debe).
+    <div
+      className={cn(
+        "overflow-hidden rounded-lg border-l border-t",
+        llenarAltura && "lg:flex lg:h-full lg:min-h-0 lg:flex-col",
+      )}
+    >
+      <div className="grid shrink-0 grid-cols-7 bg-muted/40 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground print:bg-transparent">
         {DIAS_CABECERA.map((d) => (
           <div key={d} className="border-b border-r py-2">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      {/* `minmax(min-content,1fr)`: cada semana mide AL MENOS lo que pide su contenido (no se recorta
+          nada) y reparte el alto sobrante a partes iguales para llenar la pantalla. Si un mes muy
+          denso no cupiera, la rejilla scrollea (no la página); el caso normal cabe sin scroll. */}
+      <div
+        className={cn(
+          "grid grid-cols-7",
+          llenarAltura &&
+            "lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:[grid-auto-rows:minmax(min-content,1fr)]",
+        )}
+      >
         {dias.map((fecha) => {
           const delMes = mismoMes(fecha, mes);
           const finde = esFinDeSemana(fecha);
@@ -499,6 +533,7 @@ function VistaMesYo({
   cobertura,
   onAbrirDia,
   ausencias = [],
+  llenarAltura = false,
 }: {
   mes: string;
   esAdmin?: boolean;
@@ -507,6 +542,8 @@ function VistaMesYo({
   onAbrirDia?: (fecha: string) => void;
   /** Tiempo libre PROPIO del usuario, pintado como banda (vacaciones/baja/…) en sus días. */
   ausencias?: AusenciaRota[];
+  /** «Horario»: el mes LLENA el alto disponible (sin scroll de página). */
+  llenarAltura?: boolean;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
@@ -554,8 +591,8 @@ function VistaMesYo({
     );
 
   return (
-    <>
-      <div className="print-mes">
+    <div className={cn(llenarAltura && "lg:flex lg:h-full lg:min-h-0 lg:flex-col")}>
+      <div className={cn("print-mes", llenarAltura && "lg:min-h-0 lg:flex-1")}>
         <EncabezadoImpresion
           mes={mes}
           subtitulo={`Mis turnos${datos?.miembro_nombre ? ` — ${datos.miembro_nombre}` : ""}`}
@@ -564,6 +601,7 @@ function VistaMesYo({
           mes={mes}
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
+          llenarAltura={llenarAltura}
           renderDia={(fecha, delMes) => (
             <>
               {(porFecha.get(fecha) ?? []).map((t) => (
@@ -578,10 +616,10 @@ function VistaMesYo({
           )}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className={cn("pt-2 text-xs text-muted-foreground", llenarAltura && "lg:shrink-0")}>
         Tus turnos del mes con los eventos y huecos de cada día. Pulsa un día para ver su resumen.
       </p>
-    </>
+    </div>
   );
 }
 
@@ -684,6 +722,7 @@ function VistaMesEquipo({
   mostrarHoras = true,
   horasPorPersona = false,
   ausencias = [],
+  llenarAltura = false,
   seleccionable = false,
   diasSel,
   onToggleDia,
@@ -697,6 +736,8 @@ function VistaMesEquipo({
   horasPorPersona?: boolean;
   /** Tiempo libre del equipo: una banda por persona ausente ese día (quién está fuera y por qué). */
   ausencias?: AusenciaRota[];
+  /** «Horario»: el mes LLENA el alto disponible (sin scroll de página). */
+  llenarAltura?: boolean;
   /** Gestión: celdas de día clicables para marcar la selección de reparto. */
   seleccionable?: boolean;
   diasSel?: Set<string>;
@@ -736,13 +777,14 @@ function VistaMesEquipo({
     );
 
   return (
-    <>
-      <div className="print-mes">
+    <div className={cn(llenarAltura && "lg:flex lg:h-full lg:min-h-0 lg:flex-col")}>
+      <div className={cn("print-mes", llenarAltura && "lg:min-h-0 lg:flex-1")}>
         <EncabezadoImpresion mes={mes} subtitulo="Turnos del equipo" />
         <RejillaMensual
           mes={mes}
           cobertura={cobertura}
           onAbrirDia={onAbrirDia}
+          llenarAltura={llenarAltura}
           seleccionable={seleccionable}
           diasSel={diasSel}
           onToggleDia={onToggleDia}
@@ -774,11 +816,11 @@ function VistaMesEquipo({
           )}
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className={cn("pt-2 text-xs text-muted-foreground", llenarAltura && "lg:shrink-0")}>
         Jornada de todo el equipo con los eventos y huecos de cada día. Pulsa un día para ver su
         resumen.
       </p>
-    </>
+    </div>
   );
 }
 
