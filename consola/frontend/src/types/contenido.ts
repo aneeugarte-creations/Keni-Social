@@ -379,6 +379,10 @@ export interface CuerpoActualizarPlataforma {
   falta_publicar?: boolean;
   copy?: string;
   imagen?: string;
+  /** Origen PROPIO declarado al REEMPLAZAR la imagen (galeria/subida/ia): el back LIMPIA el metadato
+   *  de licencia heredado. Solo lo envían las acciones de reemplazo; las composiciones lo OMITEN
+   *  para conservar el crédito de la foto compuesta. */
+  imagen_origen?: string;
   imagen_fuente?: string;
   enlace?: string;
   fecha_programada?: string;

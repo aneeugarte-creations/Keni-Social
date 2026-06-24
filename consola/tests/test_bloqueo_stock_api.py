@@ -256,6 +256,92 @@ def test_composicion_placa_preserva_licencia_y_bloqueo(entorno):
     assert "NO permite publicarla" in r2.json().get("error", "")
 
 
+def _marcar_stock_by_sa_falta(pieza_id: str) -> None:
+    """Foto de stock BY-SA SIN autorizar y con `falta_imagen` activo (bloquea por licencia)."""
+    repos.actualizar_pieza_fila(
+        pieza_id,
+        {
+            "foto": "stock123.jpg",
+            "imagen": "",
+            "falta_imagen": True,
+            "imagen_origen": "stock",
+            "imagen_proveedor": "wikimedia",
+            "imagen_licencia": "CC BY-SA 4.0",
+            "imagen_autor": "A",
+            "imagen_autorizada": False,
+        },
+    )
+
+
+def test_reemplazo_imagen_galeria_limpia_licencia_stale(entorno):
+    """REEMPLAZO por `imagen`: elegir un ARTE de galería declara origen propio y limpia el stock BY-SA.
+
+    El editor sin marca SUSTITUYE la `imagen` (no la `foto`) al elegir un arte/IA/subida; declara
+    `imagen_origen` para que la normalización VACÍE la metadata heredada, deje `falta_imagen=0` y
+    desbloquee (deja de pedir "Autorizar").
+    """
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"imagen": "galeria/arte.png", "imagen_origen": "galeria"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen"] == "galeria/arte.png"
+    assert fila["imagen_origen"] == "galeria"
+    assert fila["imagen_licencia"] == ""
+    assert fila["imagen_proveedor"] == ""
+    assert fila["imagen_autor"] == ""
+    assert fila["imagen_autorizada"] in (False, 0)
+    assert fila["falta_imagen"] in (False, 0)
+    # Ya no bloquea: se puede programar sin autorizar.
+    r2 = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"estado": "programado", "fecha_programada": "2030-01-01T10:00"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+
+
+def test_reemplazo_imagen_ia_por_put_limpia_licencia(entorno):
+    """REEMPLAZO por PUT: adjuntar una IA manual (campo `imagen` + origen 'ia') limpia el stock BY-SA."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])
+    r = cli.put(
+        f"/api/piezas/{pieza['id']}",
+        json={"imagen": "ia/generada.png", "imagen_origen": "ia"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen"] == "ia/generada.png"
+    assert fila["imagen_origen"] == "ia"
+    assert fila["imagen_licencia"] == ""
+    assert fila["imagen_proveedor"] == ""
+    assert fila["imagen_autorizada"] in (False, 0)
+    assert fila["falta_imagen"] in (False, 0)
+
+
+def test_reemplazo_imagen_sin_origen_preserva_stock(entorno):
+    """COMPOSICIÓN por `imagen` SIN declarar origen (placa sobre la misma foto): PRESERVA el stock."""
+    cli = _cli()
+    pieza = _crear_borrador(cli)
+    _marcar_stock_by_sa_falta(pieza["id"])
+    r = cli.patch(
+        f"/api/publicaciones/{pieza['publicacion_id']}/plataformas/{pieza['id']}",
+        json={"imagen": "placa.png"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    fila = repos.obtener_pieza_fila(pieza["id"])
+    assert fila["imagen_origen"] == "stock"
+    assert fila["imagen_licencia"] == "CC BY-SA 4.0"
+
+
 def test_reemplazo_por_put_se_espeja_y_limpia_licencia_en_hermana(entorno):
     """ESPEJO: reemplazar la foto por PUT propaga la limpieza de licencia a la red hermana."""
     cli = _cli()

@@ -74,6 +74,10 @@ function DialogoEditarInterno({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
+  // Origen PROPIO declarado al REEMPLAZAR la imagen en esta sesión (galeria/subida/ia): se manda al
+  // guardar para que el back LIMPIE el metadato de licencia heredado (p. ej. de una foto de stock).
+  // "" = sin reemplazo en esta sesión (no se envía: una COMPOSICIÓN conserva su crédito).
+  const [imagenOrigen, setImagenOrigen] = React.useState("");
   // Estado de imagen de STOCK (origen/proveedor/autorización): condiciona el tratamiento
   // "SIN LICENCIA" y el bloqueo de publicar mientras no esté autorizada.
   const [stock, setStock] = React.useState<DatosStock>({});
@@ -387,6 +391,8 @@ function DialogoEditarInterno({
     setCopyIn(pieza.copy_in ?? "");
     setImagen(pieza.imagen ?? "");
     setImagenUrl(pieza.imagen_url ?? "");
+    // Sin reemplazo aún: no declaramos origen al cargar (la pieza conserva su metadato de licencia).
+    setImagenOrigen("");
     setStock({
       imagen_origen: pieza.imagen_origen,
       imagen_proveedor: pieza.imagen_proveedor,
@@ -480,6 +486,10 @@ function DialogoEditarInterno({
       // Collage completo (todas las fotos por hueco) como JSON.
       fotos: serializarFotos(fotos),
     };
+    // REEMPLAZO de imagen (galería/IA/subida en el editor sin marca): declara el origen PROPIO para
+    // que el back limpie el metadato de licencia heredado. Se OMITE si no hubo reemplazo en la
+    // sesión: una COMPOSICIÓN (placa/reframe/render sobre la misma foto) conserva su crédito.
+    if (imagenOrigen) cuerpo.imagen_origen = imagenOrigen;
     // CARRUSEL: solo se envían los slides cuando la pieza ES carrusel (en otros formatos el
     // backend ya los limpió en el flip; reenviar el estado local viejo los resucitaría). MIENTRAS
     // se genera el carrusel los OMITIMOS: el worker está rellenando ese campo y un PUT con la lista
@@ -513,7 +523,7 @@ function DialogoEditarInterno({
         /* carrera / ya en revisión: lo ignoramos (el feed reflejará el estado real) */
       }
     }
-  }, [pieza, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel, formato, slides, bloqueoStock]);
+  }, [pieza, fotos, copyIn, placaOculta, plantillaId, imagen, imagenOrigen, contenido, documentoSel, formato, slides, bloqueoStock]);
 
   // Solo se autoguarda cuando hay contenido (el copy del post) y la pieza NO está publicada
   // (publicada = inmutable: nada que persistir). Sin título: ya no lo exige.
@@ -814,9 +824,13 @@ function DialogoEditarInterno({
               <EditorImagen
                 imagen={imagen}
                 imagenUrl={imagenUrl}
-                onCambio={(nombre, url) => {
+                onCambio={(nombre, url, origen) => {
                   setImagen(nombre);
                   setImagenUrl(url);
+                  // REEMPLAZO (galería/IA/subida): recuerda el origen propio para declararlo al
+                  // guardar (limpia el metadato de licencia heredado). Quitar la imagen no trae
+                  // origen y deja intacto el último declarado.
+                  if (origen) setImagenOrigen(origen);
                 }}
                 idPrefijo="editar"
                 piezaId={pieza.id}

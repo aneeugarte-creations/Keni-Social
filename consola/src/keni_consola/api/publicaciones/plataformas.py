@@ -106,13 +106,18 @@ def _actualizar_plataforma(pieza_id: str, datos: dict) -> tuple[int, dict]:
     if campos.get("video") and "falta_video" not in datos:
         campos["falta_video"] = False
 
-    # FOTO PROPIA: CAMBIAR la `foto` por esta vía (galería, subida, «usar original») es siempre
-    # una imagen PROPIA — el stock/licenciada se adjunta por su puerta (autogen_stock/agencias),
-    # nunca por este PATCH. Declara el origen PROPIO (el que indique el cliente: galeria/subida/
-    # ia, o '' por defecto; jamás stock/licenciada) para que la normalización LIMPIE el metadato
-    # de stock heredado. Solo al CAMBIAR de foto (no si reenvían la misma), para no pisar el badge.
-    if "foto" in campos and campos["foto"] != (previa.get("foto") or ""):
+    # REEMPLAZO de imagen: cuando el editor SUSTITUYE la imagen por una PROPIA (elegir arte de
+    # galería, adjuntar una IA manual, subir foto propia) DECLARA `imagen_origen`; se valida a un
+    # origen PROPIO (galeria/subida/ia/'', jamás stock/licenciada) para que la normalización LIMPIE
+    # el metadato de licencia heredado de la foto anterior. Las COMPOSICIONES (placa/reframe/render
+    # sobre la MISMA foto) NO lo declaran y conservan su crédito.
+    if "imagen_origen" in datos:
         campos["imagen_origen"] = licencia_imagen.origen_propio(datos.get("imagen_origen"))
+    # CAMBIAR la `foto` por esta vía (galería, subida, «usar original») es siempre una imagen PROPIA
+    # aunque no se declare el origen — el stock/licenciada se adjunta por su puerta, nunca por este
+    # PATCH. Solo al CAMBIAR de foto (no si reenvían la misma), para no pisar el badge.
+    elif "foto" in campos and campos["foto"] != (previa.get("foto") or ""):
+        campos["imagen_origen"] = licencia_imagen.origen_propio(None)
     # INVARIANTE de metadata de licencia: el metadato solo es significativo si el origen RESULTANTE
     # es stock/licenciada; en cualquier otro caso queda vacío (no se arrastra una licencia stale).
     campos = licencia_imagen.normalizar_campos_imagen(campos, previa)

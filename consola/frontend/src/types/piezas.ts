@@ -123,6 +123,10 @@ export interface CuerpoActualizarPieza {
   imagen?: string;
   /** Media id de la FOTO CRUDA de fondo (separada de la placa compuesta `imagen`). */
   foto?: string;
+  /** Origen PROPIO declarado al REEMPLAZAR la imagen (galeria/subida/ia): el back LIMPIA el metadato
+   *  de licencia heredado. Solo lo envían las acciones de reemplazo; las composiciones lo OMITEN
+   *  para conservar el crédito de la foto compuesta. */
+  imagen_origen?: string;
   /** "Quitar plantilla": publicar solo la foto, sin la placa de marca encima. */
   placa_oculta?: boolean;
   /** Plantilla del estudio elegida ("" para volver a la placa de marca por defecto). */

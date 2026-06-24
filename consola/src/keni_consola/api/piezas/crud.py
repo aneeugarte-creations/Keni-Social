@@ -571,12 +571,17 @@ def _actualizar(pieza_id: str, datos: dict[str, Any]) -> tuple[int, dict[str, An
             return 400, {"error": "El campo espejo debe ser verdadero o falso."}
         campos["espejo"] = espejo
 
-    # FOTO PROPIA: CAMBIAR la `foto` por este PUT es una imagen PROPIA (galería/subida/usar
-    # original); el stock/licenciada se adjunta por su puerta, nunca aquí. Declara el origen PROPIO
-    # (el que indique el cliente, jamás stock/licenciada) y FUERZA la invariante de metadata: el
-    # crédito/licencia stale de una foto anterior se LIMPIA (si no, el gate leería una licencia vieja).
-    if "foto" in campos and campos["foto"] != (pieza.get("foto") or ""):
+    # REEMPLAZO de imagen: cuando el editor SUSTITUYE la imagen por una PROPIA (elegir arte de
+    # galería, adjuntar una IA manual, subir foto propia) DECLARA `imagen_origen`; se valida a un
+    # origen PROPIO (jamás stock/licenciada) y FUERZA la invariante: el crédito/licencia stale de la
+    # foto anterior se LIMPIA (si no, el gate leería una licencia vieja). Las COMPOSICIONES (placa/
+    # reframe/render sobre la MISMA foto) NO lo declaran y conservan su crédito.
+    if "imagen_origen" in datos:
         campos["imagen_origen"] = licencia_imagen.origen_propio(datos.get("imagen_origen"))
+    # CAMBIAR la `foto` por este PUT es PROPIA aunque no se declare el origen; el stock/licenciada
+    # se adjunta por su puerta, nunca aquí. Solo al CAMBIAR de foto (no si reenvían la misma).
+    elif "foto" in campos and campos["foto"] != (pieza.get("foto") or ""):
+        campos["imagen_origen"] = licencia_imagen.origen_propio(None)
     campos = licencia_imagen.normalizar_campos_imagen(campos, pieza)
 
     # PUBLICADO ES TERMINAL para la fecha: el post de una pieza publicada ya salió en su

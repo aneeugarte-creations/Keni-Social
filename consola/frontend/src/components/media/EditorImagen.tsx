@@ -61,6 +61,11 @@ function ratioDe(txt: string): number | null {
   return w && h ? w / h : null;
 }
 
+/** Origen PROPIO de un REEMPLAZO de imagen (espejo de `ORIGENES_PROPIOS` del back, sin el `''`):
+ *  elegir arte de galería, subir foto propia o usar una IA generada. Declararlo limpia el metadato
+ *  de licencia heredado de la foto anterior (p. ej. una de stock). */
+export type OrigenImagenPropio = "galeria" | "subida" | "ia";
+
 /** Fondo elegido en esta sesión. */
 interface Fondo {
   id: string;
@@ -74,8 +79,12 @@ export interface EditorImagenProps {
   imagen: string;
   /** URL conocida para servir la imagen (de la publicación); opcional. */
   imagenUrl?: string;
-  /** Notifica el nuevo nombre de imagen (o `""` al quitarla). */
-  onCambio: (nombre: string, url: string) => void;
+  /**
+   * Notifica el nuevo nombre de imagen (o `""` al quitarla). `origen` es el origen PROPIO de un
+   * REEMPLAZO (galeria/subida/ia): el padre lo declara al guardar para que el back LIMPIE el
+   * metadato de licencia heredado. Ausente al quitar la imagen (no es un reemplazo).
+   */
+  onCambio: (nombre: string, url: string, origen?: OrigenImagenPropio) => void;
   disabled?: boolean;
   idPrefijo?: string;
   /**
@@ -185,11 +194,12 @@ export function EditorImagen({
     ratioRec != null &&
     Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
 
-  /** Aplica un fondo recién elegido: lo recuerda y lo adjunta. */
+  /** Aplica un fondo recién elegido: lo recuerda y lo adjunta DECLARANDO su origen propio (REEMPLAZO:
+   *  el padre lo manda al guardar para que el back limpie el metadato de licencia heredado). */
   const aplicarFondo = React.useCallback(
-    (base: Fondo) => {
+    (base: Fondo, origen: OrigenImagenPropio) => {
       setFondo(base);
-      onCambio(base.id, base.url);
+      onCambio(base.id, base.url, origen);
     },
     [onCambio],
   );
@@ -197,7 +207,7 @@ export function EditorImagen({
   // --- Subir un archivo como fondo --- //
   const subir = useMutation({
     mutationFn: (archivo: File) => api.subirMedia(archivo),
-    onSuccess: (data) => aplicarFondo({ id: data.id, url: data.url, tipo: "subida" }),
+    onSuccess: (data) => aplicarFondo({ id: data.id, url: data.url, tipo: "subida" }, "subida"),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -225,7 +235,7 @@ export function EditorImagen({
       const r = genIA.resultado;
       if (r?.id && r?.url) {
         setPrompt("");
-        aplicarFondo({ id: r.id, url: r.url, tipo: "ia" });
+        aplicarFondo({ id: r.id, url: r.url, tipo: "ia" }, "ia");
       }
     } else if (genIA.estado === "error") {
       iaTerminal.current = genIA.id;
@@ -250,7 +260,7 @@ export function EditorImagen({
   }
 
   function elegirArte(arte: Arte) {
-    aplicarFondo({ id: arte.objeto, url: arte.url, tipo: arte.tipo || "subida" });
+    aplicarFondo({ id: arte.objeto, url: arte.url, tipo: arte.tipo || "subida" }, "galeria");
   }
 
   function quitar() {
