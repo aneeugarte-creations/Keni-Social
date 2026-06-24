@@ -139,11 +139,11 @@ function Marco({
         <div className="min-h-0 flex-1">{children}</div>
 
         {!portada && (
-          <footer className={`mt-8 flex items-center justify-between border-t border-neutral-100 pt-4 text-[10px] tracking-wide ${TONO.pie}`}>
-            <span className="uppercase tracking-[0.18em]">
+          <footer className={`mt-8 flex items-center justify-between gap-6 border-t border-neutral-100 pt-4 text-[10px] tracking-wide ${TONO.pie}`}>
+            <span className="truncate whitespace-nowrap uppercase tracking-[0.18em]">
               {marca} · Todas las redes · {periodo}
             </span>
-            <span className="uppercase tracking-[0.25em]">keni</span>
+            <span className="shrink-0 uppercase tracking-[0.25em]">keni</span>
           </footer>
         )}
       </div>
