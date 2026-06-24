@@ -133,19 +133,40 @@ def contar_rechazados(cadena: list[dict[str, Any]]) -> int:
     return sum(1 for n in cadena if n.get("decision") == DECISION_RECHAZADO)
 
 
-def estado_cadena(cadena: list[dict[str, Any]]) -> str:
+def estado_cadena(
+    cadena: list[dict[str, Any]], minimo_humano: int | None = None
+) -> str:
     """Resume una cadena de niveles en su estado global.
 
     "sin_cadena" si esta vacia; "rechazado" cuando los rechazos acumulados alcanzan el umbral
-    (`umbral_rechazo`: dos dislikes, o uno en cadenas de 1 nivel); "aprobado" si TODOS los
-    niveles lo estan; "pendiente" en cualquier otro caso (aun caben decisiones, incluido el
-    caso en que ya hay UN rechazo pero falta el segundo para parar la cadena).
+    (`umbral_rechazo`: dos dislikes, o uno en cadenas de 1 nivel); "aprobado" si la cadena cumple
+    su condicion de aprobacion; "pendiente" en cualquier otro caso (aun caben decisiones, incluido
+    el caso en que ya hay UN rechazo pero falta el segundo para parar la cadena).
+
+    `minimo_humano` (opcional, el umbral de la marca `marcas.likes_aprobacion_de`): cuando se
+    pasa (> 0), la cadena queda APROBADA al reunir ese nº de OK HUMANOS —acotado a los niveles
+    humanos que la cadena tiene— y, si lleva nivel "Crítica IA", al aprobarlo tambien; aunque
+    queden niveles humanos EXTRA sin decidir. Asi una cadena LEGADA mas larga que el umbral de
+    su marca (p. ej. una pieza de `fundacion` con dos niveles cuando la marca pide un solo OK)
+    no exige mas OK que los que pide la marca. Sin `minimo_humano` (None o <= 0) exige que TODOS
+    los niveles esten aprobados (comportamiento clasico).
     """
     if not cadena:
         return "sin_cadena"
     if contar_rechazados(cadena) >= umbral_rechazo(cadena):
         return DECISION_RECHAZADO
-    if all(n.get("decision") == DECISION_APROBADO for n in cadena):
+    if minimo_humano is None or minimo_humano <= 0:
+        if all(n.get("decision") == DECISION_APROBADO for n in cadena):
+            return DECISION_APROBADO
+        return DECISION_PENDIENTE
+    humanos = [n for n in cadena if not es_nivel_critica_ia(n)]
+    objetivo = min(minimo_humano, len(humanos))
+    aprobados_humanos = sum(
+        1 for n in humanos if n.get("decision") == DECISION_APROBADO
+    )
+    ia = nivel_critica_ia(cadena)
+    ia_ok = ia is None or ia.get("decision") == DECISION_APROBADO
+    if aprobados_humanos >= objetivo and ia_ok:
         return DECISION_APROBADO
     return DECISION_PENDIENTE
 
@@ -388,19 +409,32 @@ def nivel_critica_ia(cadena: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
-def humanos_aprobados_ia_pendiente(cadena: list[dict[str, Any]]) -> bool:
-    """True si TODOS los niveles humanos estan aprobados y el nivel IA sigue PENDIENTE.
+def humanos_aprobados_ia_pendiente(
+    cadena: list[dict[str, Any]], minimo_humano: int | None = None
+) -> bool:
+    """True si la parte HUMANA esta cerrada y el nivel IA sigue PENDIENTE.
 
-    Es la condicion que dispara el encolado del critico: los dos OK humanos ya estan, y solo
-    falta que la Critica IA vote. Si no hay nivel IA (flag OFF) devuelve False (no aplica).
+    Es la condicion que dispara el encolado del critico: los OK humanos ya estan y solo falta que
+    la Critica IA vote. Si no hay nivel IA (flag OFF) devuelve False (no aplica).
+
+    `minimo_humano` (opcional, el umbral de la marca): si se pasa (> 0), la parte humana se da por
+    cerrada al reunir ese nº de OK —acotado a los niveles humanos que hay—, aunque queden niveles
+    humanos extra sin decidir (cadena legada mas larga que el umbral). Sin el (None o <= 0) exige
+    que TODOS los niveles humanos esten aprobados.
     """
     ia = nivel_critica_ia(cadena)
     if ia is None or ia.get("decision") != DECISION_PENDIENTE:
         return False
     humanos = [n for n in cadena if not es_nivel_critica_ia(n)]
-    return bool(humanos) and all(
-        n.get("decision") == DECISION_APROBADO for n in humanos
+    if not humanos:
+        return False
+    aprobados = sum(1 for n in humanos if n.get("decision") == DECISION_APROBADO)
+    objetivo = (
+        len(humanos)
+        if (minimo_humano is None or minimo_humano <= 0)
+        else min(minimo_humano, len(humanos))
     )
+    return aprobados >= objetivo
 
 # --------------------------------------------------------------------------- #
 # ROLES en la cadena: cargo requerido por nivel (item C)                       #

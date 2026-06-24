@@ -69,6 +69,78 @@ def test_estado_cadena_un_solo_nivel_se_rechaza_con_un_dislike():
     assert colaboracion.estado_cadena(cadena) == "rechazado"
 
 
+def _nivel_ia(id_: str, nivel: int, decision: str = "pendiente") -> dict[str, object]:
+    """Nivel automático «Crítica IA» (marcado por su cargo reservado)."""
+    n = _nivel(id_, nivel, decision)
+    n["cargo_requerido"] = colaboracion.CARGO_IA_CRITICO
+    return n
+
+
+# --------------------------------------------------------------------------- #
+# estado_cadena: umbral de marca (la cadena legada más larga no exige más OK)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_estado_cadena_aprobado_al_umbral_aunque_queden_niveles():
+    # Cadena LEGADA de 2 niveles humanos pero la marca solo pide 1 OK: con 1 aprobado, APROBADA.
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "pendiente")]
+    assert colaboracion.estado_cadena(cadena, 1) == "aprobado"
+
+
+def test_estado_cadena_sin_umbral_exige_todos_los_niveles():
+    # Sin `minimo_humano` (comportamiento clásico): 1 de 2 aprobados sigue pendiente.
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "pendiente")]
+    assert colaboracion.estado_cadena(cadena) == "pendiente"
+
+
+def test_estado_cadena_umbral_no_alcanzado_sigue_pendiente():
+    cadena = [_nivel("a", 1, "pendiente"), _nivel("b", 2, "pendiente")]
+    assert colaboracion.estado_cadena(cadena, 1) == "pendiente"
+
+
+def test_estado_cadena_umbral_acotado_a_los_niveles_humanos():
+    # La marca pide 3 OK pero la cadena solo tiene 2 niveles humanos: el techo es 2 (no deadlock).
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado")]
+    assert colaboracion.estado_cadena(cadena, 3) == "aprobado"
+
+
+def test_estado_cadena_umbral_con_critica_ia_pendiente_no_aprueba():
+    # Alcanzado el umbral humano, pero el nivel IA sigue pendiente: aún NO está aprobada.
+    cadena = [
+        _nivel("a", 1, "aprobado"),
+        _nivel("b", 2, "pendiente"),
+        _nivel_ia("ia", 3, "pendiente"),
+    ]
+    assert colaboracion.estado_cadena(cadena, 1) == "pendiente"
+
+
+def test_estado_cadena_umbral_con_critica_ia_aprobada_aprueba():
+    cadena = [
+        _nivel("a", 1, "aprobado"),
+        _nivel("b", 2, "pendiente"),
+        _nivel_ia("ia", 3, "aprobado"),
+    ]
+    assert colaboracion.estado_cadena(cadena, 1) == "aprobado"
+
+
+def test_estado_cadena_umbral_no_pisa_el_rechazo():
+    # El rechazo por umbral manda aunque se pase `minimo_humano`.
+    cadena = [_nivel("a", 1, "rechazado"), _nivel("b", 2, "rechazado")]
+    assert colaboracion.estado_cadena(cadena, 1) == "rechazado"
+
+
+def test_humanos_aprobados_ia_pendiente_al_umbral_aunque_queden_humanos():
+    # Cadena legada: 2 niveles humanos, umbral 1, 1 aprobado, IA pendiente -> encola la crítica.
+    cadena = [
+        _nivel("a", 1, "aprobado"),
+        _nivel("b", 2, "pendiente"),
+        _nivel_ia("ia", 3, "pendiente"),
+    ]
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena, 1) is True
+    # Sin umbral exige TODOS los humanos: con uno pendiente, aún no toca la crítica.
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena) is False
+
+
 def test_umbral_rechazo_es_dos_o_el_largo_de_la_cadena():
     assert colaboracion.umbral_rechazo([_nivel("a", 1), _nivel("b", 2), _nivel("c", 3)]) == 2
     assert colaboracion.umbral_rechazo([_nivel("a", 1)]) == 1

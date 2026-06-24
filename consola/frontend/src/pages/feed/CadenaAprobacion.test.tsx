@@ -106,6 +106,53 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.getByText("2/2")).toBeInTheDocument();
   });
 
+  it("umbral de marca: cadena de 2 niveles con minimo_aprobaciones=1 pinta '0/1', no '0/2'", () => {
+    // Pieza de una marca que solo pide UN OK (p. ej. `fundacion`) pero con una cadena LEGADA de
+    // dos niveles humanos. El denominador es el umbral de la marca (1), no los niveles (2).
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+      estado: "pendiente",
+      nivel_actual: "n1",
+      minimo_aprobaciones: 1,
+    });
+    renderCadena(c);
+    expect(screen.getByText("0/1")).toBeInTheDocument();
+    expect(screen.queryByText("0/2")).not.toBeInTheDocument();
+  });
+
+  it("umbral de marca: con 1 OK y minimo_aprobaciones=1 pinta '1/1' y «Lista para publicar»", () => {
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+      estado: "aprobado",
+      nivel_actual: "",
+      minimo_aprobaciones: 1,
+    });
+    renderCadena(c);
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.getByText(/lista para publicar/i)).toBeInTheDocument();
+  });
+
+  it("acota la X mostrada al umbral: 2 OK con minimo_aprobaciones=1 no pinta '2/1'", () => {
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", decision: "aprobado", decisor_id: "leo", decisor_nombre: "Leo" }),
+      ],
+      estado: "aprobado",
+      nivel_actual: "",
+      minimo_aprobaciones: 1,
+    });
+    renderCadena(c);
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByText("2/1")).not.toBeInTheDocument();
+  });
+
   it("con la Crítica IA aprobada muestra su like (3er OK, el de la máquina), no solo el desenlace", () => {
     const c = cadenaOK({
       niveles: [

@@ -203,10 +203,16 @@ def _responder_aprobada(
     auto-programación encuentre hueco).
     """
     cadena = repos.listar_aprobaciones(pieza_id)
-    if colaboracion.estado_cadena(cadena) == DECISION_APROBADO:
-        # Evento público `pieza.aprobada`: el momento REAL de la aprobación es juntar los 2 OK
-        # (no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES de la
-        # auto-programación. Best-effort: nunca rompe el OK ya registrado.
+    # La aprobacion se COMPLETA al alcanzar el umbral de la marca (acotado a los niveles humanos),
+    # no al llenar TODOS los niveles: una cadena legada mas larga que el umbral no exige mas OK.
+    minimo = min(
+        _km.likes_aprobacion_de(str(actualizada.get("marca") or "")),
+        colaboracion.niveles_humanos(cadena),
+    )
+    if colaboracion.estado_cadena(cadena, minimo) == DECISION_APROBADO:
+        # Evento público `pieza.aprobada`: el momento REAL de la aprobación es reunir los OK que
+        # exige la marca (no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES
+        # de la auto-programación. Best-effort: nunca rompe el OK ya registrado.
         _emitir_pieza_aprobada(actualizada)
         from .. import auto_programar
 
@@ -351,7 +357,14 @@ def _encolar_critica_si_corresponde(pieza_id: str) -> None:
     if not config.critica_ia_activa():
         return
     cadena = repos.listar_aprobaciones(pieza_id)
-    if not colaboracion.humanos_aprobados_ia_pendiente(cadena):
+    # La parte humana se cierra al alcanzar el umbral de la marca (acotado a sus niveles humanos),
+    # no al llenar TODOS los niveles: una cadena legada mas larga encola igual al critico.
+    pub = repos.obtener_pieza(pieza_id) or {}
+    minimo = min(
+        _km.likes_aprobacion_de(str(pub.get("marca") or "")),
+        colaboracion.niveles_humanos(cadena),
+    )
+    if not colaboracion.humanos_aprobados_ia_pendiente(cadena, minimo):
         return
     try:
         from ..dominio import critica_ia

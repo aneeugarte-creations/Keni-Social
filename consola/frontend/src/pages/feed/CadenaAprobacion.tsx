@@ -54,7 +54,13 @@ export function CadenaAprobacion({
   const humanos = niveles.filter((n) => !esNivelAutomatico(n));
   const okDados = humanos.filter((n) => n.decision === "aprobado");
   const disDados = humanos.filter((n) => n.decision === "rechazado");
-  const totalOK = humanos.length || 1;
+  // DENOMINADOR de "X/N": los OK que exige la MARCA (`minimo_aprobaciones`, lo decide el
+  // backend, p. ej. 1 para `fundacion`), no cuántos niveles tenga la cadena (una cadena legada
+  // más larga que el umbral pintaría "0/2" cuando la marca solo pide uno). Fallback defensivo a
+  // los niveles humanos si el payload no trajera el umbral.
+  const totalOK = cadena.minimo_aprobaciones || humanos.length || 1;
+  // X acotada al umbral: nunca "3/1"; como mucho "N/N".
+  const okMostrados = Math.min(okDados.length, totalOK);
   // Crítica IA: existe solo si el flag la añadió. Su estado se enseña cuando los humanos ya
   // cerraron su parte (entonces el crítico está revisando / ya votó); antes no se anuncia.
   const ia = niveles.find(esCriticaIA);
@@ -77,11 +83,11 @@ export function CadenaAprobacion({
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <span
           className="inline-flex items-center gap-1 font-medium tabular-nums"
-          title={`OK del equipo: ${okDados.length} de ${totalOK}`}
-          aria-label={`OK del equipo: ${okDados.length} de ${totalOK}`}
+          title={`OK del equipo: ${okMostrados} de ${totalOK}`}
+          aria-label={`OK del equipo: ${okMostrados} de ${totalOK}`}
         >
           <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          {okDados.length}/{totalOK}
+          {okMostrados}/{totalOK}
         </span>
         {okDados.length > 0 && (
           <span className="text-muted-foreground">

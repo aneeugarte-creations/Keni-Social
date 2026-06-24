@@ -142,7 +142,7 @@ def lanzar_para_publicacion(pieza_id: str) -> dict[str, Any] | None:
     if not config.etapa_activa(config.ENV_CRITICA_IA, str(pub.get("marca") or "")):
         return None
     cadena = repos.listar_aprobaciones(pieza_id)
-    if not colaboracion.humanos_aprobados_ia_pendiente(cadena):
+    if not colaboracion.humanos_aprobados_ia_pendiente(cadena, _minimo_humano(pub, cadena)):
         return None
 
     marca = str(pub.get("marca") or "")
@@ -238,10 +238,28 @@ def _texto_comentario(revision: dict[str, Any] | None) -> str:
     return "\n".join(lineas)
 
 
+def _minimo_humano(
+    pub: dict[str, Any] | None, cadena: list[dict[str, Any]]
+) -> int:
+    """OK humanos que exige la marca de la pieza, acotado a los niveles humanos de la cadena.
+
+    Una cadena LEGADA mas larga que el umbral de su marca no pide mas OK que la marca (ni mas que
+    niveles humanos tiene): la aprobacion se completa al alcanzar este minimo.
+    """
+    from .. import marcas
+
+    return min(
+        marcas.likes_aprobacion_de(str((pub or {}).get("marca") or "")),
+        colaboracion.niveles_humanos(cadena),
+    )
+
+
 def _reflejar_y_programar(pieza_id: str) -> None:
     """Aplica el estado de la cadena a la pieza y, si quedó aprobada, la programa (best-effort)."""
     cadena = repos.listar_aprobaciones(pieza_id)
-    estado_global = colaboracion.estado_cadena(cadena)
+    estado_global = colaboracion.estado_cadena(
+        cadena, _minimo_humano(repos.obtener_pieza(pieza_id), cadena)
+    )
     estado_pieza = colaboracion.estado_publicacion_para(estado_global)
     campos: dict[str, Any] = {
         "revisor_id": colaboracion.DECISOR_CRITICA_ID,

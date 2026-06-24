@@ -344,15 +344,16 @@ def _cadena_publica(pieza_id: str) -> dict[str, object]:
     sin_resolver = repos.comentarios_sin_resolver(
         (plat or {}).get("publicacion_id", "") or "", pieza_id
     )
+    likes = _km.likes_aprobacion_de(str((plat or {}).get("marca") or ""))
+    # Umbral efectivo de la marca, acotado a los niveles humanos que la cadena tiene (una cadena
+    # legada mas larga que el umbral no exige mas OK que pide la marca; ni mas que niveles hay).
+    minimo = min(likes, colaboracion.niveles_humanos(cadena)) if cadena else likes
     return {
         "niveles": cadena,
-        "estado": colaboracion.estado_cadena(cadena),
+        "estado": colaboracion.estado_cadena(cadena, minimo),
         "nivel_actual": (colaboracion.nivel_actual(cadena) or {}).get("id", ""),
         "aprobados": colaboracion.contar_aprobados(cadena),
-        "minimo_aprobaciones": min(
-            _km.likes_aprobacion_de(str((plat or {}).get("marca") or "")),
-            colaboracion.niveles_humanos(cadena),
-        ) if cadena else _km.likes_aprobacion_de(str((plat or {}).get("marca") or "")),
+        "minimo_aprobaciones": minimo,
         "comentarios_sin_resolver": sin_resolver,
     }
 
@@ -520,7 +521,13 @@ def _decidir_nivel(
     # No hay estado de reposo `aprobado`: la cadena aprobada deja la pieza `en_revision` y es la
     # auto-programación quien la mueve a `programado` al hallar hueco.
     cadena = repos.listar_aprobaciones(pieza_id)
-    estado_global = colaboracion.estado_cadena(cadena)
+    # La aprobacion se COMPLETA al alcanzar el umbral de la marca (acotado a los niveles humanos),
+    # no al llenar TODOS los niveles: una cadena legada mas larga que el umbral no exige mas OK.
+    minimo = min(
+        _km.likes_aprobacion_de(str((plat or {}).get("marca") or "")),
+        colaboracion.niveles_humanos(cadena),
+    )
+    estado_global = colaboracion.estado_cadena(cadena, minimo)
     if plat is not None:
         estado_pieza = colaboracion.estado_publicacion_para(estado_global)
         if estado_pieza is not None:
