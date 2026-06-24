@@ -23,6 +23,7 @@ import {
   Lightbulb,
   ListOrdered,
   Loader2,
+  Mic,
   Pause,
   Pencil,
   Play,
@@ -30,6 +31,7 @@ import {
   RefreshCw,
   Scissors,
   SpellCheck,
+  Square,
   Trash2,
   Upload,
   X,
@@ -55,6 +57,7 @@ import {
 import { Markdown } from "@/components/ui/Markdown";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useGrabadoraVoz } from "@/hooks/use-grabadora-voz";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -1569,16 +1572,44 @@ function DialogoSubida({
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [sel, setSel] = React.useState<Record<string, boolean>>({});
   const [ambito, setAmbito] = React.useState<string>(marcaDefecto);
+  const [modo, setModo] = React.useState<"archivo" | "grabar">("archivo");
+  const grab = useGrabadoraVoz();
   React.useEffect(() => {
     if (abierto) {
       setAmbito(marcaDefecto);
     } else {
       setArchivo(null);
       setSel({});
+      grab.limpiar();
+      setModo("archivo");
     }
-  }, [abierto, marcaDefecto]);
+    // grab.limpiar es estable (useCallback); depender del objeto grab re-ejecutaría cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, marcaDefecto, grab.limpiar]);
 
   const tratamientos = TRATAMIENTOS_SUBIDA.filter((t) => sel[t.tipo]).map((t) => t.tipo);
+  const mmss = `${String(Math.floor(grab.segundos / 60)).padStart(2, "0")}:${String(grab.segundos % 60).padStart(2, "0")}`;
+
+  const iniciarGrabacion = async () => {
+    try {
+      await grab.iniciar();
+    } catch {
+      toast.error("No se pudo acceder al micrófono. Revisa los permisos del navegador.");
+    }
+  };
+
+  const transcribir = () => {
+    if (modo === "grabar") {
+      if (!grab.audioBlob) return;
+      const f = new File([grab.audioBlob], "grabacion.webm", { type: grab.audioBlob.type || "audio/webm" });
+      onSubir(f, tratamientos, ambito);
+      grab.limpiar();
+      return;
+    }
+    if (archivo) onSubir(archivo, tratamientos, ambito);
+  };
+
+  const sinFuente = modo === "grabar" ? !grab.audioBlob : !archivo;
 
   return (
     <Dialog open={abierto} onOpenChange={onAbierto}>
@@ -1587,15 +1618,72 @@ function DialogoSubida({
           <DialogTitle>Subir audio o vídeo</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div>
-            <input
-              type="file"
-              accept="audio/*,video/*"
-              onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">Se extrae la voz y se transcribe con timestamps (SRT por defecto).</p>
-          </div>
+          {grab.soportado && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={modo === "archivo" ? "default" : "outline"}
+                size="sm"
+                className="gap-2"
+                onClick={() => setModo("archivo")}
+              >
+                <Upload className="h-4 w-4" />
+                Subir archivo
+              </Button>
+              <Button
+                variant={modo === "grabar" ? "default" : "outline"}
+                size="sm"
+                className="gap-2"
+                onClick={() => setModo("grabar")}
+              >
+                <Mic className="h-4 w-4" />
+                Grabar voz
+              </Button>
+            </div>
+          )}
+          {modo === "archivo" ? (
+            <div>
+              <input
+                type="file"
+                accept="audio/*,video/*"
+                onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-muted file:px-3 file:py-1.5 file:text-sm"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Se extrae la voz y se transcribe con timestamps (SRT por defecto).</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 py-6">
+              {grab.estado === "idle" && (
+                <>
+                  <Button size="lg" className="gap-2" onClick={iniciarGrabacion}>
+                    <Mic className="h-5 w-5" />
+                    Empezar a grabar
+                  </Button>
+                  <p className="text-xs text-muted-foreground">Graba una nota de voz con el micrófono del dispositivo.</p>
+                </>
+              )}
+              {grab.estado === "grabando" && (
+                <>
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
+                    Grabando · {mmss}
+                  </div>
+                  <Button size="lg" variant="destructive" className="gap-2" onClick={grab.detener}>
+                    <Square className="h-5 w-5" />
+                    Detener
+                  </Button>
+                </>
+              )}
+              {grab.estado === "listo" && grab.audioUrl && (
+                <>
+                  <audio src={grab.audioUrl} controls className="w-full max-w-xs" />
+                  <Button size="sm" variant="outline" className="gap-2" onClick={grab.reset}>
+                    <RefreshCw className="h-4 w-4" />
+                    Volver a grabar
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
           <div>
             <p className="mb-1.5 text-sm font-medium">Ámbito</p>
             <select
@@ -1631,8 +1719,8 @@ function DialogoSubida({
             Cancelar
           </Button>
           <Button
-            disabled={!archivo || subiendo}
-            onClick={() => archivo && onSubir(archivo, tratamientos, ambito)}
+            disabled={sinFuente || subiendo}
+            onClick={transcribir}
             className="gap-2"
           >
             {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
