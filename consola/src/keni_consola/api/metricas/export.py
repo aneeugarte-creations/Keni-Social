@@ -7,6 +7,9 @@ MISMO cache que la pantalla `/api/metricas/piezas` (no recalcula nada nuevo).
 
 from __future__ import annotations
 
+import asyncio
+from datetime import date
+
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
@@ -20,8 +23,9 @@ from ._comun import (
     metricas_cache,
     servicio,
 )
+from ._digital import ensamblar_datos, meses_ventana, render_csv_digital
 
-__all__ = ["export_csv", "export_md", "export_json", "piezas_export"]
+__all__ = ["export_csv", "export_md", "export_json", "piezas_export", "export_digitales"]
 
 
 def _nombre_descarga(rango: str, marca: str | None, ext: str) -> str:
@@ -78,6 +82,65 @@ async def export_json(request: Request) -> Response:
         _log.exception("Fallo al exportar JSON (rango=%s, marca=%s).", rango, marca or "todas")
         return PlainTextResponse("No se pudo generar el reporte.", status_code=500)
     return _descarga(texto, _nombre_descarga(rango, marca, "json"), "application/json; charset=utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Métricas Digitales: reporte mensual por plataforma (el Excel de dirección)    #
+# --------------------------------------------------------------------------- #
+#
+# Reproduce el reporte que el equipo arma a mano cada mes para su dirección: por cada red
+# (TikTok/IG/FB/X/YouTube), una serie de 13 meses de cada métrica + la comparativa de los
+# dos últimos meses con datos. Lee del MISMO cache que el dashboard, un combo `mes:AAAA-MM`
+# por mes (cacheado en Postgres): la primera descarga llena los meses fríos, las siguientes
+# son inmediatas. Lo que la fuente no provee (monetización USD, impresiones/horas de YouTube)
+# sale como celda vacía, igual que hoy el equipo la completa de otra fuente. Ver `_digital.py`.
+
+# Tope de concurrencia de los fetch por mes (13 reportes + 13 desgloses): evita martillear la
+# fuente y saturar el thread-pool del loop en la primera carga (todavía fría).
+_CONCURRENCIA_DIGITAL = asyncio.Semaphore(6)
+
+
+async def _cacheado(fn, rango: str, marca: str | None) -> dict:
+    """Lee un combo del cache de métricas (lazy fill) respetando el tope de concurrencia."""
+    async with _CONCURRENCIA_DIGITAL:
+        payload, _ = await fn(rango, marca)
+    return payload
+
+
+async def export_digitales(request: Request) -> Response:
+    """GET /api/metricas/export.digitales?marca=<id>: reporte mensual por plataforma (CSV).
+
+    13 meses por red + comparativa de los dos últimos meses con datos, en el layout exacto
+    del Excel del cliente (`;`, números europeos, BOM para Excel es-MX). Necesita una marca
+    concreta —el reporte es por marca—; sin ella (vista "todas") devuelve 400.
+    """
+    marca, _ = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if not marca:
+        return PlainTextResponse(
+            "Métricas Digitales necesita una marca concreta. Elígela en el selector.",
+            status_code=400,
+        )
+    ref = date.today()
+    meses = meses_ventana(ref)
+    tokens = [token for token, _, _, _ in meses]
+    desde = f"{meses[0][2]:04d}-{meses[0][3]:02d}-01"
+    rango_seguidores = f"rango:{desde}_{ref.isoformat()}"
+    try:
+        reportes = await asyncio.gather(
+            *(_cacheado(metricas_cache.reporte_async, t, marca) for t in tokens)
+        )
+        desgloses = await asyncio.gather(
+            *(_cacheado(metricas_cache.desglose_async, t, marca) for t in tokens)
+        )
+        seguidores = await _cacheado(metricas_cache.seguidores_async, rango_seguidores, marca)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar Métricas Digitales (marca=%s).", marca)
+        return PlainTextResponse("No se pudo generar el reporte.", status_code=500)
+    datos = ensamblar_datos(tokens, reportes, desgloses, seguidores)
+    csv = render_csv_digital(datos, meses)
+    nombre = f"metricas-digitales-{marca}-{ref:%Y-%m}.csv"
+    # BOM para que Excel (es-MX) abra los acentos sin recodificar.
+    return _descarga("\ufeff" + csv, nombre, "text/csv; charset=utf-8")
 
 
 # --------------------------------------------------------------------------- #

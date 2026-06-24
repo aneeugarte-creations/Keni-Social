@@ -47,7 +47,7 @@ from starlette.routing import Route
 
 from .analisis import analisis
 from .estado import estado, refrescar
-from .export import export_csv, export_json, export_md, piezas_export
+from .export import export_csv, export_digitales, export_json, export_md, piezas_export
 from .piezas import (
     lineas,
     pieza_historico,
@@ -96,6 +96,7 @@ __all__ = [
     "export_csv",
     "export_md",
     "export_json",
+    "export_digitales",
     "_comparar_totales",
     "_suma_clics",
     "_cobertura_por_marca",
@@ -127,4 +128,5 @@ RUTAS = [
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),
     Route("/api/metricas/export.md", export_md, methods=["GET"]),
     Route("/api/metricas/export.json", export_json, methods=["GET"]),
+    Route("/api/metricas/export.digitales", export_digitales, methods=["GET"]),
 ]

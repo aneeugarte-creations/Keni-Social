@@ -1,6 +1,10 @@
 /**
- * Descargas del dashboard de Métricas: DOS comandos del menú "⋮" de la página, CSV y PDF.
+ * Descargas del dashboard de Métricas: TRES comandos del menú "⋮" de la página.
  *
+ *   - "Métricas Digitales": el reporte mensual por plataforma que el equipo entrega a su
+ *     dirección (13 meses por red + comparativa de los dos últimos meses). Lo genera el
+ *     BACKEND a partir de los últimos 13 meses de la marca activa (no de lo que esté en
+ *     pantalla), así que necesita una marca concreta. Ver `api/metricas/_digital.py`.
  *   - "Descargar CSV": TODO lo que está en pantalla volcado a un único CSV (KPIs, por marca,
  *     por red, cobertura, tendencia, seguidores, desglose, cruces, correlación, líneas,
  *     publicidad y las listas de piezas), leído de las queries ACTIVAS de la caché de React
@@ -13,10 +17,11 @@
  * deja sitio a los FILTROS (periodo, red) y a Configurar vista / Vistas guardadas.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, Presentation } from "lucide-react";
+import { FileSpreadsheet, Presentation, Table2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ItemMenu } from "@/components/layout/MenuAcciones";
+import { api } from "@/lib/api";
 
 import { construirCsvCompleto, descargarTexto } from "./exportarCsv";
 import { descargarPresentacion } from "./exportarPdf";
@@ -106,8 +111,23 @@ export function ItemsDescarga({
     }
   };
 
+  // Reporte mensual por plataforma (el Excel de dirección): lo genera el backend a partir de
+  // los últimos 13 meses de la marca activa, así que NO depende de lo que esté en pantalla,
+  // pero SÍ necesita una marca concreta (no "todas las marcas").
+  const descargarDigitales = () => {
+    if (!marca) {
+      toast.error("Elige una marca para descargar Métricas Digitales.");
+      return;
+    }
+    toast.info("Generando Métricas Digitales… la descarga empezará en breve.");
+    api.exportarMetricasDigitales({ marca });
+  };
+
   return (
     <>
+      <ItemMenu icono={Table2} onClick={descargarDigitales}>
+        Métricas Digitales
+      </ItemMenu>
       <ItemMenu icono={FileSpreadsheet} onClick={descargarCsv}>
         Descargar CSV (todo)
       </ItemMenu>

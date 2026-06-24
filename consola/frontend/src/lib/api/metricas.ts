@@ -109,5 +109,10 @@ export const apiMetricas = {
   // analítica de piezas, serializado en csv|md|json. `fmt` viaja como query param.
   exportarPiezas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/piezas-export${query({ fmt: formato, ...params })}`),
+  // Reporte mensual por plataforma ("Métricas Digitales", el Excel que el equipo entrega a
+  // dirección): 13 meses por red + comparativa de los dos últimos meses. CSV directo del
+  // backend (sin rango ni red: el reporte es por marca y siempre de los últimos 13 meses).
+  exportarMetricasDigitales: (params: { marca?: string }) =>
+    descargar(`/metricas/export.digitales${query(params)}`),
 
 };
