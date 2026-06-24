@@ -74,6 +74,8 @@ export function ItemsDescarga({
     formato: formatoEtiqueta,
     periodo: periodoEtiqueta,
     generadoEn,
+    // Id de métricas de la marca activa (para resolver su logo en el PDF); undefined si todas.
+    marcaId: marca,
   };
   const nombre = [marca ?? "todas", redEtiqueta, formatoEtiqueta, rango]
     .map(slug)

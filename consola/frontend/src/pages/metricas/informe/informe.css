@@ -1,0 +1,9 @@
+/* Diapositiva del informe (1280×720): lienzo blanco a tamaño real, sin sombra ni redondeo
+   porque se rasteriza a PDF (no es la previa interactiva, que sí flota sobre el fondo). */
+.informe-slide {
+  width: 1280px;
+  height: 720px;
+  background: #fafafa;
+  overflow: hidden;
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
