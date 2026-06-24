@@ -76,6 +76,8 @@ export interface CategoriaPlanOpcion {
   /** ¿Tiene FRANJA (horario)? «Crear post» solo ofrece las que sí (para que la pieza se
    *  programe); los FILTROS muestran toda la taxonomía. Ausente = trátala como sin franja. */
   franja?: boolean;
+  /** Grupo que la agrupa en la barra del feed (p. ej. "Fútbol"); "" / ausente = sin grupo. */
+  grupo?: string;
 }
 
 export interface OpcionesPiezas {
@@ -207,6 +209,8 @@ export interface FiltrosPiezas {
   /** LIMPIEZA del feed (filtros sobre el contenido padre): categoría del plan
    *  (breaking|mx|evergreen|internacional…). */
   categoria?: string;
+  /** GRUPO de líneas (p. ej. "Fútbol"): casa las piezas cuya `categoria` es una línea del grupo. */
+  grupo?: string;
   /** Tipo de contenido: ia | galeria | fuente. */
   tipo?: string;
   /** Nombre del medio de origen (fuente_nombre). */

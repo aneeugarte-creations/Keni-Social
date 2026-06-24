@@ -424,6 +424,7 @@ def _filtros_publicacion(
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
     busqueda: str | None = None,
+    grupo: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -498,6 +499,15 @@ def _filtros_publicacion(
     if categoria:
         clausulas.append("c.categoria = ?")
         params.append(categoria)
+    # GRUPO de líneas (barra agrupada del feed, marcas con grupos como Claro Sports): casa las
+    # piezas cuya `categoria` es una LÍNEA (etiqueta vertical) de ese grupo. Mismo eje `categoria`
+    # que el filtro de arriba, pero abarcando todas las líneas del grupo.
+    if grupo:
+        clausulas.append(
+            "c.categoria IN (SELECT e.id FROM etiquetas e "
+            "WHERE e.clase = 'vertical' AND e.grupo = ?)"
+        )
+        params.append(grupo)
     if tipo_contenido:
         clausulas.append("c.tipo_contenido = ?")
         params.append(tipo_contenido)
@@ -553,6 +563,7 @@ def listar_piezas(
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
     busqueda: str | None = None,
+    grupo: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -571,7 +582,7 @@ def listar_piezas(
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
-        excluir_origen=excluir_origen, busqueda=busqueda,
+        excluir_origen=excluir_origen, busqueda=busqueda, grupo=grupo,
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -614,12 +625,13 @@ def contar_piezas(
     creado_antes: str | None = None,
     excluir_origen: str | None = None,
     busqueda: str | None = None,
+    grupo: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
-        excluir_origen=excluir_origen, busqueda=busqueda,
+        excluir_origen=excluir_origen, busqueda=busqueda, grupo=grupo,
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "

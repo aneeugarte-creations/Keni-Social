@@ -27,7 +27,7 @@
  *  - `PostFeed`: cada pieza como post + aprobación en línea + comentarios.
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { Minus, Plus, Search, X } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
@@ -44,8 +44,9 @@ import { FILTRO_TODOS, useFiltrosPublicacion } from "@/hooks/filtros-contenido-c
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { NavGruposLineas } from "@/pages/noticias/MesaNoticias";
 import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
-import type { CategoriaPlanOpcion } from "@/types";
+import type { CategoriaPlanOpcion, GrupoMesa } from "@/types";
 
 import { DialogoCrearPost } from "./DialogoCrearPost";
 import { GRID_COLS, MAX_W_FEED, REDES_POR_FORMATO } from "./formato";
@@ -131,6 +132,121 @@ function ChipLinea({
   );
 }
 
+// Orden de los GRUPOS en la barra (espejo de `_ORDEN_GRUPOS`, backend api/noticias/historias.py):
+// el mismo peso editorial que la Mesa de Investigación. Un grupo fuera de la lista va detrás, alfabético.
+const ORDEN_GRUPOS = [
+  "Fútbol", "Motor", "Olímpicos", "NFL", "Boxeo", "NBA", "Béisbol", "Otros deportes", "Actualidad",
+] as const;
+
+/**
+ * Reparte la taxonomía del plan en la barra agrupada del feed: las categorías CON grupo se pliegan
+ * en su grupo (Fútbol, Motor…, con desplegable de líneas); las SIN grupo («Última hora», «Evergreen»)
+ * quedan como chips planos al final. Devuelve además los índices para traducir la selección de
+ * `NavGruposLineas` (que habla por nombre de grupo) al eje real `categoria`.
+ */
+function agruparCategorias(cats: CategoriaPlanOpcion[]): {
+  grupos: GrupoMesa[];
+  metaPorGrupo: Map<string, { categoria?: string }>;
+  grupoPorCategoria: Map<string, string>;
+  planas: Set<string>;
+} {
+  const porGrupo = new Map<string, NonNullable<GrupoMesa["lineas"]>>();
+  const planasCats: CategoriaPlanOpcion[] = [];
+  for (const c of cats) {
+    const g = c.grupo ?? "";
+    if (!g) {
+      planasCats.push(c);
+      continue;
+    }
+    const arr = porGrupo.get(g) ?? [];
+    arr.push({ linea: c.id, nombre: c.nombre, en_pool: 0 });
+    porGrupo.set(g, arr);
+  }
+  const orden = (g: string) => {
+    const i = (ORDEN_GRUPOS as readonly string[]).indexOf(g);
+    return i === -1 ? ORDEN_GRUPOS.length : i;
+  };
+  const metaPorGrupo = new Map<string, { categoria?: string }>();
+  const grupoPorCategoria = new Map<string, string>();
+  const planas = new Set<string>();
+  const grupos: GrupoMesa[] = [];
+  for (const g of [...porGrupo.keys()].sort((a, b) => orden(a) - orden(b) || a.localeCompare(b, "es"))) {
+    const lineas = porGrupo.get(g)!;
+    grupos.push({ grupo: g, en_pool: 0, lineas });
+    metaPorGrupo.set(g, {});
+    for (const l of lineas) grupoPorCategoria.set(l.linea, g);
+  }
+  for (const c of planasCats) {
+    grupos.push({ grupo: c.nombre, en_pool: 0, lineaId: c.id });
+    metaPorGrupo.set(c.nombre, { categoria: c.id });
+    grupoPorCategoria.set(c.id, c.nombre);
+    planas.add(c.id);
+  }
+  return { grupos, metaPorGrupo, grupoPorCategoria, planas };
+}
+
+/**
+ * Conteo de PIEZAS por chip de la barra agrupada: una consulta ligera (`limite=1`, lee
+ * `paginacion.total`) por chip MÁS el total sin filtrar, con los MISMOS filtros que el listado
+ * (marca/red/vista/búsqueda/origen) para que los números cuadren con lo que se ve. Cada chip
+ * cuenta por SU eje: grupo real → `?grupo=`; chip plano (señal) → `?categoria=`.
+ */
+function useConteosGrupos(
+  grupos: GrupoMesa[],
+  filtros: {
+    marca?: string;
+    red?: string;
+    estado?: "pendiente" | "publicado";
+    busqueda?: string;
+    origen?: string;
+    excluirOrigen?: string;
+  },
+  habilitado: boolean,
+): { total: number | undefined; por: Map<string, number | undefined> } {
+  const base = {
+    marca: filtros.marca,
+    red: filtros.red,
+    estado: filtros.estado,
+    busqueda: filtros.busqueda,
+    origen: filtros.origen,
+    excluir_origen: filtros.excluirOrigen,
+    limite: "1",
+  };
+  const claveBase = [
+    ...CLAVE_PIEZAS,
+    "conteo-grupo",
+    filtros.marca ?? MARCA_ACTIVA_TODAS,
+    filtros.red ?? FILTRO_TODOS,
+    filtros.estado ?? "todos",
+    filtros.busqueda ?? "",
+    filtros.origen ?? "",
+    filtros.excluirOrigen ?? "",
+  ];
+  const consultas = useQueries({
+    queries: [
+      {
+        queryKey: [...claveBase, "__total__"],
+        queryFn: ({ signal }: { signal?: AbortSignal }) => api.piezas(base, signal),
+        enabled: habilitado,
+        staleTime: 30_000,
+      },
+      ...grupos.map((g) => {
+        const filtro = g.lineas ? { grupo: g.grupo } : { categoria: g.lineaId };
+        return {
+          queryKey: [...claveBase, g.lineas ? `g:${g.grupo}` : `c:${g.lineaId}`],
+          queryFn: ({ signal }: { signal?: AbortSignal }) =>
+            api.piezas({ ...base, ...filtro }, signal),
+          enabled: habilitado,
+          staleTime: 30_000,
+        };
+      }),
+    ],
+  });
+  const por = new Map<string, number | undefined>();
+  grupos.forEach((g, i) => por.set(g.grupo, consultas[i + 1]?.data?.paginacion?.total));
+  return { total: consultas[0]?.data?.paginacion?.total, por };
+}
+
 export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
@@ -163,6 +279,9 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // LOCAL de la página (`""` = todas); va al servidor como `?categoria=`.
   const [categoria, setCategoria] = React.useState("");
   const categoriaServidor = categoria || undefined;
+  // GRUPO seleccionado en la barra agrupada (marcas con grupos). Excluyente con `categoria`:
+  // elegir un grupo limpia la línea/señal y viceversa. `""` = sin grupo (Todas o filtro por línea).
+  const [grupoSel, setGrupoSel] = React.useState("");
 
   // La vista activa vive SOLO en la URL (`?vista=`): derivada, sin useState que se
   // desincronice. "pendiente" (el default: el trabajo por hacer) va sin parámetro para no
@@ -191,7 +310,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     setLotesBusqueda(1);
     const scroller = rootRef.current?.closest("main");
     if (scroller) scroller.scrollTop = 0;
-  }, [vista, categoria, busquedaAplicada]);
+  }, [vista, categoria, grupoSel, busquedaAplicada]);
 
   // Nº de posts por fila. Preferencia local, persistida por dispositivo.
   const [columnas, setColumnas] = React.useState(() =>
@@ -278,6 +397,18 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     if (categoria && !categoriasPlan.some((c) => c.id === categoria)) setCategoria("");
   }, [categoriasPlan, categoria]);
 
+  // Barra agrupada: la marca usa grupos si alguna de sus categorías trae `grupo` (Claro Sports).
+  // En ese caso se pinta el navegador de la Mesa de Investigación en vez de los chips planos.
+  const tieneGrupos = categoriasPlan.some((c) => (c.grupo ?? "") !== "");
+  const { grupos: gruposBase, metaPorGrupo, grupoPorCategoria, planas } = React.useMemo(
+    () => agruparCategorias(categoriasPlan),
+    [categoriasPlan],
+  );
+  // Si el grupo elegido deja de existir (cambio de marca): vuelve a "Todas".
+  React.useEffect(() => {
+    if (grupoSel && !gruposBase.some((g) => g.grupo === grupoSel && g.lineas)) setGrupoSel("");
+  }, [gruposBase, grupoSel]);
+
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
@@ -287,6 +418,29 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // EXCLUSIÓN: el feed NORMAL (sin canal propio) excluye el canal Portal para mantener los dos
   // feeds INDEPENDIENTES; el clon Portal no excluye nada (ya filtra POR su canal con `origen`).
   const excluirOrigen = origen ? undefined : ORIGEN_PORTAL;
+
+  // Conteos por chip de la barra agrupada + total, con los mismos filtros que el listado.
+  const { total: totalGrupos, por: conteoPorGrupo } = useConteosGrupos(
+    gruposBase,
+    {
+      marca: marcaActiva ?? undefined,
+      red: red === FILTRO_TODOS ? undefined : red,
+      estado: estadoServidor,
+      busqueda: busquedaServidor,
+      origen: origenServidor,
+      excluirOrigen,
+    },
+    tieneGrupos,
+  );
+  const gruposNav = gruposBase.map((g) => ({ ...g, en_pool: conteoPorGrupo.get(g.grupo) ?? 0 }));
+
+  // FILTRO que viaja al servidor: grupo real → `?grupo=`; línea/señal o sin barra → `?categoria=`.
+  const filtroGrupo = tieneGrupos && grupoSel ? grupoSel : undefined;
+  const filtroCategoria = filtroGrupo ? undefined : categoriaServidor;
+  // Resalte del navegador: el grupo activo (o el grupo de la categoría elegida); la línea activa
+  // solo si la categoría es una línea de un grupo (no una señal plana).
+  const navGrupoSel = grupoSel || (categoria ? grupoPorCategoria.get(categoria) ?? "" : "");
+  const navLineaSel = grupoSel ? "" : categoria && !planas.has(categoria) ? categoria : "";
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
   // y más al hacer scroll (sentinel + IntersectionObserver). El backend devuelve
@@ -298,7 +452,8 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
       busquedaAplicada,
-      categoria,
+      filtroCategoria ?? "",
+      filtroGrupo ?? "",
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
       origenServidor ?? "",
@@ -311,7 +466,8 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
           marca: marcaActiva ?? undefined,
           red: red === FILTRO_TODOS ? undefined : red,
           busqueda: busquedaServidor,
-          categoria: categoriaServidor,
+          categoria: filtroCategoria,
+          grupo: filtroGrupo,
           estado: estadoServidor,
           origen: origenServidor,
           excluir_origen: excluirOrigen,
@@ -336,7 +492,8 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     busqueda: busquedaServidor,
-    categoria: categoriaServidor,
+    categoria: filtroCategoria,
+    grupo: filtroGrupo,
     origen,
     excluirOrigen,
   });
@@ -510,7 +667,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
 
   // VACÍO con buscador/línea activos: el "no hay nada" genérico mentiría (sí hay piezas, no con
   // ESTE filtro). Cuando el buscador o la línea acotan, el vacío lo dice y ofrece limpiar.
-  const hayFiltroLocal = !!busquedaServidor || !!categoriaServidor;
+  const hayFiltroLocal = !!busquedaServidor || !!filtroCategoria || !!filtroGrupo;
   const vacioTitulo = hayFiltroLocal ? "Sin resultados" : vistaActual.vacio.titulo;
   const vacioTexto = busquedaServidor
     ? `Ninguna pieza con «${busquedaServidor}» en el titular. Prueba con otras palabras o cambia la línea.`
@@ -524,6 +681,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       onClick={() => {
         setBusqueda("");
         setCategoria("");
+        setGrupoSel("");
       }}
     >
       Limpiar filtros
@@ -616,25 +774,53 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
               </button>
             )}
           </div>
-          {categoriasPlan.length > 0 && (
-            <div
-              role="radiogroup"
-              aria-label="Filtrar por línea"
-              className="flex flex-wrap gap-x-5 gap-y-1"
-            >
-              <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
-                Todas
-              </ChipLinea>
-              {categoriasPlan.map((c) => (
-                <ChipLinea
-                  key={c.id}
-                  activo={categoria === c.id}
-                  onClick={() => setCategoria(c.id)}
-                >
-                  {c.nombre}
+          {tieneGrupos ? (
+            <NavGruposLineas
+              grupos={gruposNav}
+              total={totalGrupos ?? 0}
+              grupoSel={navGrupoSel}
+              lineaSel={navLineaSel}
+              onSelGrupo={(g) => {
+                if (!g) {
+                  setGrupoSel("");
+                  setCategoria("");
+                  return;
+                }
+                const meta = metaPorGrupo.get(g);
+                if (meta?.categoria) {
+                  setCategoria(meta.categoria);
+                  setGrupoSel("");
+                } else {
+                  setGrupoSel(g);
+                  setCategoria("");
+                }
+              }}
+              onSelLinea={(_g, lineaId) => {
+                setCategoria(lineaId);
+                setGrupoSel("");
+              }}
+            />
+          ) : (
+            categoriasPlan.length > 0 && (
+              <div
+                role="radiogroup"
+                aria-label="Filtrar por línea"
+                className="flex flex-wrap gap-x-5 gap-y-1"
+              >
+                <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
+                  Todas
                 </ChipLinea>
-              ))}
-            </div>
+                {categoriasPlan.map((c) => (
+                  <ChipLinea
+                    key={c.id}
+                    activo={categoria === c.id}
+                    onClick={() => setCategoria(c.id)}
+                  >
+                    {c.nombre}
+                  </ChipLinea>
+                ))}
+              </div>
+            )
           )}
         </div>
 

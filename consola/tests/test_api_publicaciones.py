@@ -229,6 +229,35 @@ def test_filtro_linea_retirado_es_ignorado(cliente):
     assert r["paginacion"]["total"] == 2
 
 
+def test_opciones_categorias_incluyen_grupo(cliente):
+    """Cada categoría-línea de `opciones.categorias` trae su `grupo` (la barra agrupada lo usa)."""
+    from keni_consola import repos
+
+    repos.crear_etiqueta(nombre="Bundesliga", clase="vertical", marca="unotv", grupo="Fútbol")
+    cats = cliente.get("/api/piezas/opciones").json()["categorias"]["unotv"]
+    bundesliga = next(c for c in cats if c["nombre"] == "Bundesliga")
+    assert bundesliga["grupo"] == "Fútbol"
+
+
+def test_filtro_grupo(cliente):
+    """`?grupo=<grupo>` deja las piezas cuya `categoria` es una línea (vertical) de ese grupo."""
+    from keni_consola import repos
+
+    bund = repos.crear_etiqueta(nombre="Bundesliga", clase="vertical", marca="unotv", grupo="Fútbol")
+    nascar = repos.crear_etiqueta(nombre="NASCAR", clase="vertical", marca="unotv", grupo="Motor")
+    fut = repos.crear_pieza("unotv", "x", titulo="De fútbol", contenido="C")
+    mot = repos.crear_pieza("unotv", "x", titulo="De motor", contenido="C")
+    repos.actualizar_publicacion(
+        repos.obtener_pieza_fila(fut["id"])["publicacion_id"], {"categoria": bund["id"]}
+    )
+    repos.actualizar_publicacion(
+        repos.obtener_pieza_fila(mot["id"])["publicacion_id"], {"categoria": nascar["id"]}
+    )
+    filtrado = cliente.get("/api/piezas?grupo=Fútbol").json()
+    assert [p["titulo"] for p in filtrado["piezas"]] == ["De fútbol"]
+    assert filtrado["paginacion"]["total"] == 1
+
+
 def test_payload_incluye_responsable(cliente):
     """Toda publicación expone `responsable_id`/`responsable_nombre` ("" = libre)."""
     pub = _crear(cliente).json()["pieza"]

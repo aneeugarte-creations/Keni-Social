@@ -180,7 +180,7 @@ def _opciones() -> dict[str, Any]:
     # selector de "Línea editorial" de las superficies Lista/Calendario/Feed. Se devuelven
     # TODAS las activas con su marca; el SPA acota por la marca activa del switch global.
     lineas = [
-        {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
+        {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", ""), "grupo": e.get("grupo", "")}
         for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
     ]
     # CATEGORÍAS del plan POR MARCA = la TAXONOMÍA del plan completa (la misma de Programa › Plan):
@@ -208,16 +208,24 @@ def _opciones() -> dict[str, Any]:
 
     def _taxonomia_plan(m_id: str) -> list[dict[str, Any]]:
         con_franja = cats_por_marca.get(m_id, set()) | cats_globales
+        # `grupo` agrupa las líneas en la barra del feed (Fútbol, Motor…); "" = sin grupo
+        # («Última hora»/«Evergreen», señales del motor, y marcas sin grupos como UnoTV).
         items: list[dict[str, Any]] = [
             {
                 "id": "breaking",
                 "nombre": bootstrap_lineas.etiqueta_categoria("breaking", nombres_linea),
                 "franja": "breaking" in con_franja,
+                "grupo": "",
             }
         ]
         # Líneas (verticales) de la marca + las globales (marca=''), en el orden del catálogo.
         items += [
-            {"id": ln["id"], "nombre": ln["nombre"], "franja": ln["id"] in con_franja}
+            {
+                "id": ln["id"],
+                "nombre": ln["nombre"],
+                "franja": ln["id"] in con_franja,
+                "grupo": ln.get("grupo", ""),
+            }
             for ln in lineas
             if ln.get("marca", "") in ("", m_id)
         ]
@@ -226,6 +234,7 @@ def _opciones() -> dict[str, Any]:
                 "id": "evergreen",
                 "nombre": bootstrap_lineas.etiqueta_categoria("evergreen", nombres_linea),
                 "franja": "evergreen" in con_franja,
+                "grupo": "",
             }
         )
         return items
@@ -345,6 +354,9 @@ async def listar(request: Request) -> Response:
     # BÚSQUEDA por titular (`?busqueda=`): palabras del título del tema. Subcadena
     # case-insensitive sobre `c.titulo`; transversal al estado y a la paginación keyset.
     busqueda = qp.get("busqueda") or None
+    # GRUPO de líneas (`?grupo=`): casa las piezas cuya `categoria` es una línea de ese grupo. Lo
+    # usa la barra agrupada del feed (marcas con grupos, p. ej. Claro Sports).
+    grupo = qp.get("grupo") or None
     creado_antes: str | None = None
     antiguedad_h = qp.get("antiguedad_h")
     if antiguedad_h:
@@ -387,7 +399,7 @@ async def listar(request: Request) -> Response:
         "responsable": responsable, "desde": desde, "hasta": hasta,
         "origen": origen, "categoria": categoria, "tipo_contenido": tipo_contenido,
         "fuente": fuente, "fase": fase, "creado_antes": creado_antes,
-        "excluir_origen": excluir_origen, "busqueda": busqueda,
+        "excluir_origen": excluir_origen, "busqueda": busqueda, "grupo": grupo,
     }
     cuerpo = await run_in_threadpool(
         _listar, filtros, limite, desplazamiento, cursor, modo_feed, sin_limite

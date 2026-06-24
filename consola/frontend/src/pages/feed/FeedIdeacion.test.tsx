@@ -1187,4 +1187,79 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
     expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
+
+  it("barra agrupada: si las categorías traen `grupo`, se pliegan como en Noticias (filtra ?grupo= / ?categoria=)", async () => {
+    const OPCIONES_GRUPOS = {
+      ...OPCIONES,
+      marcas: [{ id: "claro-sports", nombre: "Claro Sports" }],
+      // Taxonomía CON grupo: las líneas se pliegan en grupos (Fútbol, NFL…); Última hora/Evergreen
+      // (sin grupo) quedan como chips planos.
+      categorias: {
+        "claro-sports": [
+          { id: "breaking", nombre: "Última hora", franja: false, grupo: "" },
+          { id: "fut-bundesliga", nombre: "Bundesliga", franja: true, grupo: "Fútbol" },
+          { id: "fut-laliga", nombre: "LaLiga", franja: true, grupo: "Fútbol" },
+          { id: "nfl", nombre: "NFL", franja: true, grupo: "NFL" },
+          { id: "evergreen", nombre: "Evergreen", franja: true, grupo: "" },
+        ],
+      },
+    };
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/piezas/opciones")) {
+          return new Response(JSON.stringify(OPCIONES_GRUPOS), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas")) {
+          urls.push(ruta);
+          return new Response(
+            JSON.stringify({
+              piezas: [{ ...PIEZA, marca: "claro-sports", marca_nombre: "Claro Sports" }],
+              paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    renderFeed({ marcas: ["claro-sports"] });
+    // Barra de grupos (no chips planos): un chip por grupo + las señales sueltas como chips planos.
+    const chipFutbol = await screen.findByTestId("chip-grupo-Fútbol");
+    expect(chipFutbol).toBeInTheDocument();
+    expect(screen.getByTestId("chip-grupo-NFL")).toBeInTheDocument();
+    expect(screen.getByTestId("chip-grupo-Última hora")).toBeInTheDocument();
+    // Clicar un grupo filtra el LISTADO por `?grupo=` (la consulta del feed lleva `feed=1`).
+    fireEvent.click(chipFutbol);
+    await waitFor(() =>
+      expect(
+        urls.some((u) => u.includes("feed=1") && decodeURIComponent(u).includes("grupo=Fútbol")),
+      ).toBe(true),
+    );
+    // El grupo despliega sus líneas; elegir una afina a `?categoria=` (su id).
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /Bundesliga/ }));
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes("feed=1") && /[?&]categoria=fut-bundesliga/.test(u))).toBe(true),
+    );
+    // Un chip plano (Última hora) filtra por su categoría directa (`?categoria=breaking`).
+    fireEvent.click(screen.getByTestId("chip-grupo-Última hora"));
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes("feed=1") && /[?&]categoria=breaking/.test(u))).toBe(true),
+    );
+  });
 });
