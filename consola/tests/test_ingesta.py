@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola.dominio import dedup, ingesta
+from keni_consola.dominio import dedup, http_feed, ingesta
 
 # IP pública literal: pasa el guard SSRF de http_feed sin tocar DNS.
 _URL_FEED = "https://93.184.216.34/feed.xml"
@@ -221,3 +221,41 @@ def test_filtrar_por_vocabulario_normaliza_acentos_y_puntuacion():
         [_item_pool("México: arranca la jornada electoral")], pal
     )
     assert len(aptos) == 1 and descartados == []
+
+
+# --------------------------------------------------------------------------- #
+# extraer_etiquetas + descargar_html (etiquetas del sitio, Fase 2)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_extraer_etiquetas_dedup_y_orden():
+    html = (
+        '<a href="/etiqueta/w-radio/">W Radio</a>'
+        '<a href="/etiqueta/deportes/">Deportes</a>'
+        '<a href="/etiqueta/w-radio/">otra vez</a>'
+    )
+    # Deduplicado preservando el orden de aparición.
+    assert http_feed.extraer_etiquetas(html) == ["w-radio", "deportes"]
+
+
+def test_extraer_etiquetas_sin_chips_o_vacio_es_lista_vacia():
+    assert http_feed.extraer_etiquetas("<p>una nota sin etiquetas</p>") == []
+    assert http_feed.extraer_etiquetas("") == []
+
+
+def test_descargar_html_usa_el_descargador_inyectable(monkeypatch):
+    monkeypatch.setattr(http_feed, "_DESCARGADOR", lambda _u: "<html>ok</html>")
+    assert http_feed.descargar_html(_URL_FEED) == "<html>ok</html>"
+
+
+def test_descargar_html_url_invalida_devuelve_none():
+    # Esquema no http(s): ni siquiera intenta descargar.
+    assert http_feed.descargar_html("ftp://ejemplo/x") is None
+
+
+def test_descargar_html_descarga_que_falla_devuelve_none(monkeypatch):
+    def _boom(_u):
+        raise http_feed.RSSError("no se pudo contactar")
+
+    monkeypatch.setattr(http_feed, "_DESCARGADOR", _boom)
+    assert http_feed.descargar_html(_URL_FEED) is None

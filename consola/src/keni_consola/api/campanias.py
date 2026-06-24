@@ -76,8 +76,13 @@ async def crear_campania(request: Request) -> Response:
     tags, error = _leer_hashtags(datos.get("hashtags"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    etiqueta_web = datos.get("etiqueta_web", "")
+    if not isinstance(etiqueta_web, str):
+        return JSONResponse({"error": "La etiqueta web debe ser texto."}, status_code=400)
     try:
-        cam = campanias.crear_campania(marcas_ids=marcas_ids, nombre=nombre, hashtags=tags)
+        cam = campanias.crear_campania(
+            marcas_ids=marcas_ids, nombre=nombre, hashtags=tags, etiqueta_web=etiqueta_web
+        )
     except campanias.CampaniaInvalida as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"campania": cam}, status_code=201)
@@ -109,6 +114,10 @@ async def actualizar_campania(request: Request) -> Response:
         if error is not None:
             return JSONResponse({"error": error}, status_code=400)
         campos["hashtags"] = tags
+    if "etiqueta_web" in datos:
+        if not isinstance(datos["etiqueta_web"], str):
+            return JSONResponse({"error": "La etiqueta web debe ser texto."}, status_code=400)
+        campos["etiqueta_web"] = datos["etiqueta_web"]
     if "activa" in datos:
         campos["activa"] = bool(datos["activa"])
     try:

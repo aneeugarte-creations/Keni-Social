@@ -54,11 +54,15 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         marcas               TEXT NOT NULL DEFAULT '[]',
         nombre               TEXT NOT NULL DEFAULT '',
         hashtags             TEXT NOT NULL DEFAULT '[]',
+        etiqueta_web         TEXT NOT NULL DEFAULT '',
         activa               INTEGER NOT NULL DEFAULT 1,
         fecha_creacion       TEXT NOT NULL DEFAULT '',
         fecha_actualizacion  TEXT NOT NULL DEFAULT ''
     )
     """,
+    # `etiqueta_web` (slug de la etiqueta del sitio, p.ej. 'w-radio') vincula la campaña con
+    # las notas web que la llevan, para cruzar su tráfico de GA4. ADD COLUMN para BDs viejas.
+    "ALTER TABLE campanias ADD COLUMN IF NOT EXISTS etiqueta_web TEXT NOT NULL DEFAULT ''",
     # Enlaces PÚBLICOS de una campaña: capability-URL de solo lectura. El `token`
     # (indescifrable) es la única llave: resuelve a UNA campaña y un periodo+modo CONGELADOS
     # (`rango` absoluto + `ocultar_ads`), nada más. `expira` (ISO UTC, '' = sin caducidad) y
@@ -1411,9 +1415,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         estado         TEXT NOT NULL DEFAULT 'nuevo',
         publicacion_id   TEXT NOT NULL DEFAULT '',
         fuente_peso    REAL NOT NULL DEFAULT 1.0,
+        tags           TEXT NOT NULL DEFAULT '[]',
         creado         TEXT NOT NULL DEFAULT ''
     )
     """,
+    # `tags` (array JSON de slugs de etiqueta del sitio, p.ej. ["w-radio"]) se extrae del
+    # HTML del artículo; vincula la nota con una campaña por su etiqueta. ADD COLUMN para BDs viejas.
+    "ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS tags TEXT NOT NULL DEFAULT '[]'",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup ON noticias_items (fuente_id, clave)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_capturado ON noticias_items (capturado_en)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",

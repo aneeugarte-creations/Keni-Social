@@ -10,6 +10,8 @@ inyectado (`monkeypatch`), sin depender de datos inicializados.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from keni_consola import campanias
 
 
@@ -345,6 +347,102 @@ def test_comparativa_piezas_cuenta_inorganico_en_ambos_periodos(cliente, monkeyp
 def test_analitica_campania_inexistente_es_404(cliente):
     r = cliente.get("/api/campanias/nada/analitica")
     assert r.status_code == 404
+
+
+# --- Etiqueta web + sección web (tráfico GA4 de las notas etiquetadas) ---------
+
+
+def test_crear_con_etiqueta_web_guarda_el_slug(cliente):
+    # Se puede pegar una URL de etiqueta: se guarda solo el slug (minúsculas, sin barras).
+    r = _crear(cliente, etiqueta_web="https://www.unotv.com/etiqueta/Chihuahua/")
+    assert r.status_code == 201, r.text
+    assert r.json()["campania"]["etiqueta_web"] == "chihuahua"
+
+
+def test_crear_sin_etiqueta_web_queda_vacia(cliente):
+    assert _crear(cliente).json()["campania"]["etiqueta_web"] == ""
+
+
+def test_editar_etiqueta_web(cliente):
+    cam = _crear(cliente).json()["campania"]
+    u = cliente.put(f"/api/campanias/{cam['id']}", json={"etiqueta_web": "  Turismo-MX "})
+    assert u.status_code == 200, u.text
+    assert u.json()["campania"]["etiqueta_web"] == "turismo-mx"
+
+
+def _mock_ga(monkeypatch, *, conectada: bool, paginas=None, id_metricas="unotv"):
+    """Parchea el seam GA de `campanias`: config + cliente GA4. `paginas` son las filas
+    que devuelve `reporte_paginas` (`[{ruta, titulo, vistas, usuarios}]`)."""
+    gacfg = SimpleNamespace(
+        conectada=conectada,
+        client_id="cid",
+        client_secret="sec",
+        refresh_token="ref",
+        marcas={id_metricas: {"property_id": "111", "dominio": "www.unotv.com"}},
+    )
+    monkeypatch.setattr(
+        campanias.km_config,
+        "cargar_config",
+        lambda: SimpleNamespace(google_analytics=gacfg),
+    )
+
+    class _ClienteFalso:
+        def __init__(self, *a, **k):
+            pass
+
+        def reporte_paginas(self, property_id, desde, hasta, limite=100):
+            return list(paginas or [])
+
+    monkeypatch.setattr(campanias.ga4, "ClienteGA4", _ClienteFalso)
+
+
+def test_analitica_seccion_web_cruza_notas_con_ga(cliente, monkeypatch):
+    """Con GA conectado y etiqueta web, la sección `web` cruza las notas etiquetadas con el
+    tráfico GA4 por su URL: agrega vistas/usuarios y descarta las notas sin la etiqueta."""
+    cam = _crear(cliente, etiqueta_web="chihuahua").json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    _mock_ga(
+        monkeypatch,
+        conectada=True,
+        paginas=[
+            {"ruta": "/estados/chihuahua/nota-1/", "titulo": "Nota 1", "vistas": 500, "usuarios": 300},
+            {"ruta": "/otra/cosa", "titulo": "Otra", "vistas": 999, "usuarios": 999},
+        ],
+    )
+    monkeypatch.setattr(
+        campanias.repos,
+        "notas_por_etiqueta",
+        lambda slug, *, desde, dominios: [
+            {"url": "https://www.unotv.com/estados/chihuahua/nota-1/", "titulo": "Nota 1",
+             "marca": "unotv", "tags": ["chihuahua"]},
+            {"url": "https://www.unotv.com/estados/sonora/nota-2/", "titulo": "Nota 2",
+             "marca": "unotv", "tags": ["sonora"]},
+        ],
+        raising=False,
+    )
+    web = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()["web"]
+    assert web["conectado"] is True
+    assert web["etiqueta"] == "chihuahua"
+    assert web["piezas"] == 1  # solo la nota con la etiqueta
+    assert web["vistas"] == 500 and web["usuarios"] == 300
+    assert web["notas"] == [
+        {"url": "https://www.unotv.com/estados/chihuahua/nota-1/", "titulo": "Nota 1",
+         "vistas": 500, "usuarios": 300, "marca": "unotv"}
+    ]
+
+
+def test_analitica_web_es_none_si_ga_no_conectado(cliente, monkeypatch):
+    cam = _crear(cliente, etiqueta_web="chihuahua").json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    _mock_ga(monkeypatch, conectada=False)
+    assert cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()["web"] is None
+
+
+def test_analitica_web_es_none_sin_etiqueta(cliente, monkeypatch):
+    # Sin etiqueta web no se toca GA (la sección es None aunque GA esté conectado).
+    cam = _crear(cliente).json()["campania"]
+    monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", lambda *a, **k: [])
+    assert cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()["web"] is None
 
 
 # --- Descarga de la analítica (export csv|md|json) ----------------------------

@@ -162,6 +162,20 @@ def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
     return db.feeds_vencidos(ahora, limite)
 
 
+def items_sin_tags(dominios: list[str], limite: int) -> list[dict[str, Any]]:
+    return db.items_sin_tags(dominios, limite)
+
+
+def actualizar_tags_item(item_id: str, tags: list[str]) -> None:
+    return db.actualizar_tags_item(item_id, tags)
+
+
+def notas_por_etiqueta(
+    slug: str, *, desde: str, dominios: list[str]
+) -> list[dict[str, Any]]:
+    return db.notas_por_etiqueta(slug, desde=desde, dominios=dominios)
+
+
 def categoria_promovida_de_contenido(publicacion_id: str) -> str:
     """Categoría del plan de un contenido promovido ('' si no aplica). Delegado en `db.py`."""
     return db.categoria_promovida_de_contenido(publicacion_id)

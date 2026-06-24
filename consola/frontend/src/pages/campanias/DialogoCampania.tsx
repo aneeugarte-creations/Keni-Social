@@ -64,6 +64,7 @@ export function DialogoCampania({
 
   const [nombre, setNombre] = React.useState("");
   const [hashtagsTexto, setHashtagsTexto] = React.useState("");
+  const [etiquetaWeb, setEtiquetaWeb] = React.useState("");
   const [marcasSel, setMarcasSel] = React.useState<string[]>([]);
 
   // Al abrir, inicializar el formulario: en edición, con los datos de la campaña; en alta,
@@ -72,6 +73,7 @@ export function DialogoCampania({
     if (!abierto) return;
     setNombre(campania?.nombre ?? "");
     setHashtagsTexto(campania ? campania.hashtags.map((h) => `#${h}`).join(" ") : "");
+    setEtiquetaWeb(campania?.etiqueta_web ?? "");
     setMarcasSel(campania ? campania.marcas : marcaActiva ? [marcaActiva] : []);
   }, [abierto, campania, marcaActiva]);
 
@@ -82,7 +84,12 @@ export function DialogoCampania({
 
   const guardar = useMutation({
     mutationFn: () => {
-      const cuerpo = { marcas: marcasSel, nombre: nombre.trim(), hashtags };
+      const cuerpo = {
+        marcas: marcasSel,
+        nombre: nombre.trim(),
+        hashtags,
+        etiqueta_web: etiquetaWeb.trim(),
+      };
       return editando
         ? api.actualizarCampania(campania.id, cuerpo)
         : api.crearCampania(cuerpo);
@@ -168,6 +175,20 @@ export function DialogoCampania({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="campania-etiqueta-web">Etiqueta web (URL o slug)</Label>
+            <Input
+              id="campania-etiqueta-web"
+              value={etiquetaWeb}
+              onChange={(e) => setEtiquetaWeb(e.target.value)}
+              placeholder="https://…/etiqueta/w-radio/"
+            />
+            <p className="text-xs text-muted-foreground">
+              Opcional. Pega la URL de la etiqueta del sitio (p. ej. …/etiqueta/w-radio/) o solo
+              el slug para cruzar el tráfico web de las notas en GA4.
+            </p>
           </div>
         </div>
 

@@ -12,9 +12,16 @@ from ._repos_comun import (
 
 
 def crear_campania(
-    *, marcas: list[str], nombre: str, hashtags: list[str], activa: bool = True
+    *,
+    marcas: list[str],
+    nombre: str,
+    hashtags: list[str],
+    etiqueta_web: str = "",
+    activa: bool = True,
 ) -> dict[str, Any]:
-    return db.crear_campania(marcas=marcas, nombre=nombre, hashtags=hashtags, activa=activa)
+    return db.crear_campania(
+        marcas=marcas, nombre=nombre, hashtags=hashtags, etiqueta_web=etiqueta_web, activa=activa
+    )
 
 
 def listar_campanias(marca: str | None = None) -> list[dict[str, Any]]:

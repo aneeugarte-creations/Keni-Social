@@ -21,12 +21,13 @@ _COLS_CAMPANIA = (
     "marcas",
     "nombre",
     "hashtags",
+    "etiqueta_web",
     "activa",
     "fecha_creacion",
     "fecha_actualizacion",
 )
 _SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM campanias"
-_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "activa")
+_CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "etiqueta_web", "activa")
 
 
 def _lista_json(valor: Any) -> list[str]:
@@ -39,6 +40,7 @@ def _fila_a_campania(fila: Any) -> dict[str, Any]:
     cam = {col: fila[col] for col in _COLS_CAMPANIA}
     cam["marcas"] = _lista_json(fila["marcas"])
     cam["hashtags"] = _lista_json(fila["hashtags"])
+    cam["etiqueta_web"] = fila["etiqueta_web"] or ""
     cam["activa"] = bool(fila["activa"])
     return cam
 
@@ -48,6 +50,7 @@ def crear_campania(
     marcas: list[str],
     nombre: str,
     hashtags: list[str],
+    etiqueta_web: str = "",
     activa: bool = True,
 ) -> dict[str, Any]:
     """Inserta una campaña (multimarca) y la devuelve. NO valida (lo hace `campanias.py`)."""
@@ -57,6 +60,7 @@ def crear_campania(
         "marcas": a_json_lista(list(marcas)),
         "nombre": nombre,
         "hashtags": a_json_lista(list(hashtags)),
+        "etiqueta_web": etiqueta_web,
         "activa": 1 if activa else 0,
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,

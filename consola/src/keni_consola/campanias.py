@@ -20,10 +20,12 @@ import logging
 import re
 import secrets
 import unicodedata
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
-from keni_metricas import servicio
+from keni_metricas import config as km_config
+from keni_metricas import ga4, servicio
 
 from . import marcas, metricas_cache, repos
 from .tiempo import ahora_iso
@@ -64,6 +66,20 @@ def normalizar_hashtag(tag: str) -> str:
     y '#Manana' son hashtags distintos. Devuelve "" si tras limpiar no queda nada.
     """
     return tag.strip().lstrip("#").strip()
+
+
+def normalizar_etiqueta_web(valor: str) -> str:
+    """Slug de la etiqueta web de una campaña (la del sitio, p. ej. 'chihuahua').
+
+    Acepta el slug directo o una URL de etiqueta (`.../etiqueta/<slug>/`), de la que toma
+    el último segmento. Devuelve el slug en minúsculas, sin barras ni espacios alrededor;
+    "" si no queda nada.
+    """
+    s = (valor or "").strip()
+    if "/" in s:
+        partes = [p for p in s.split("?", 1)[0].split("/") if p]
+        s = partes[-1] if partes else ""
+    return s.strip().lower()
 
 
 def _normalizar_lista(tags: list[str]) -> list[str]:
@@ -111,7 +127,9 @@ def _validar_marcas(marcas_ids: list[str]) -> list[str]:
 # --- CRUD de configuración ----------------------------------------------------
 
 
-def crear_campania(*, marcas_ids: list[str], nombre: str, hashtags: list[str]) -> dict[str, Any]:
+def crear_campania(
+    *, marcas_ids: list[str], nombre: str, hashtags: list[str], etiqueta_web: str = ""
+) -> dict[str, Any]:
     """Crea una campaña (multimarca) validando marcas, nombre y al menos un hashtag."""
     marcas_validas = _validar_marcas(marcas_ids)
     nombre = (nombre or "").strip()
@@ -120,7 +138,12 @@ def crear_campania(*, marcas_ids: list[str], nombre: str, hashtags: list[str]) -
     tags = _normalizar_lista(hashtags)
     if not tags:
         raise CampaniaInvalida("La campaña necesita al menos un hashtag.")
-    cam = repos.crear_campania(marcas=marcas_validas, nombre=nombre, hashtags=tags)
+    cam = repos.crear_campania(
+        marcas=marcas_validas,
+        nombre=nombre,
+        hashtags=tags,
+        etiqueta_web=normalizar_etiqueta_web(etiqueta_web),
+    )
     return _enriquecer(cam)
 
 
@@ -150,6 +173,8 @@ def actualizar_campania(campania_id: str, campos: dict[str, Any]) -> dict[str, A
         if not tags:
             raise CampaniaInvalida("La campaña necesita al menos un hashtag.")
         cambios["hashtags"] = tags
+    if "etiqueta_web" in campos:
+        cambios["etiqueta_web"] = normalizar_etiqueta_web(campos["etiqueta_web"])
     if "activa" in campos:
         cambios["activa"] = bool(campos["activa"])
     cam = repos.actualizar_campania(campania_id, cambios)
@@ -435,6 +460,86 @@ def _pieza_tabla(p: dict[str, Any], por_cross_post: bool = False) -> dict[str, A
     }
 
 
+# Tope de páginas a leer de GA4 por marca: alto, para que las notas de la campaña
+# (que no tienen por qué estar entre las más vistas del sitio) entren en el cruce.
+_LIMITE_PAGINAS_WEB = 100000
+
+
+def _ruta_web(url: str) -> str:
+    """Path de una URL para cruzar con el `pagePath` de GA4: sin host, query ni '/' final."""
+    ruta = urlsplit(url or "").path
+    return ruta.rstrip("/") or "/"
+
+
+def _seccion_web(
+    cam: dict[str, Any], ids_metricas: list[str], desde: date, hasta: date
+) -> dict[str, Any] | None:
+    """Tráfico web (GA4) de las notas que llevan la etiqueta web de la campaña.
+
+    Cruza la etiqueta web de la campaña (slug del sitio) con GA4: por cada marca con
+    propiedad GA4 descarga las páginas más vistas del periodo y empareja, por su URL
+    normalizada, las notas que llevan la etiqueta. None si la campaña no tiene etiqueta o
+    GA no está conectado. Cada marca degrada a 0 si su lectura GA falla (no rompe la
+    analítica). NO suma a los KPIs de redes: el tráfico web vive en su propia sección.
+    """
+    etiqueta = cam.get("etiqueta_web") or ""
+    if not etiqueta:
+        return None
+    gacfg = km_config.cargar_config().google_analytics
+    if not gacfg.conectada:
+        return None
+    cliente = ga4.ClienteGA4(gacfg.client_id, gacfg.client_secret, gacfg.refresh_token)
+    paginas: dict[str, tuple[int, int]] = {}
+    dominios: list[str] = []
+    for idm in ids_metricas:
+        marca_ga = gacfg.marcas.get(idm) or {}
+        property_id = marca_ga.get("property_id")
+        if not property_id:
+            continue
+        dominio = str(marca_ga.get("dominio") or "")
+        if dominio:
+            dominios.append(dominio)
+        try:
+            filas = cliente.reporte_paginas(property_id, desde, hasta, _LIMITE_PAGINAS_WEB)
+        except Exception:  # noqa: BLE001 -- esa marca aporta 0, no rompe la analítica web
+            _log.exception("campanias: no se pudo leer GA4 (marca=%s).", idm)
+            continue
+        for f in filas:
+            ruta = _ruta_web(f.get("ruta", ""))
+            vistas_prev, usuarios_prev = paginas.get(ruta, (0, 0))
+            paginas[ruta] = (
+                vistas_prev + int(f.get("vistas") or 0),
+                usuarios_prev + int(f.get("usuarios") or 0),
+            )
+    notas_crudas = repos.notas_por_etiqueta(etiqueta, desde=desde.isoformat(), dominios=dominios)
+    notas: list[dict[str, Any]] = []
+    total_vistas = 0
+    total_usuarios = 0
+    for nota in notas_crudas:
+        if etiqueta not in (nota.get("tags") or []):
+            continue
+        vistas, usuarios = paginas.get(_ruta_web(nota.get("url", "")), (0, 0))
+        total_vistas += vistas
+        total_usuarios += usuarios
+        notas.append(
+            {
+                "url": nota.get("url", ""),
+                "titulo": nota.get("titulo", ""),
+                "vistas": vistas,
+                "usuarios": usuarios,
+                "marca": nota.get("marca", ""),
+            }
+        )
+    return {
+        "conectado": True,
+        "etiqueta": etiqueta,
+        "piezas": len(notas),
+        "vistas": total_vistas,
+        "usuarios": total_usuarios,
+        "notas": notas,
+    }
+
+
 async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[str, Any] | None:
     """Analítica completa de una campaña en un periodo (None si la campaña no existe).
 
@@ -524,6 +629,7 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "desglose_red": _desglose_por_red(piezas),
         "cross_posts": len(ids_cross),
         "inorganico": inorganico,
+        "web": _seccion_web(cam, ids_metricas, desde, hasta),
         "piezas": tabla,
         "generado_en": ahora_iso(),
     }

@@ -90,6 +90,7 @@ from ._comun import (  # noqa: F401
 from .pasos.agencias import paso_agencias  # noqa: F401
 from .pasos.caducidad import paso_caducidad  # noqa: F401
 from .pasos.agrupar import paso_agrupar  # noqa: F401
+from .pasos.etiquetas import paso_etiquetas  # noqa: F401
 from .pasos.fusionar_semantica import paso_fusionar_semantica  # noqa: F401
 from .pasos.rescore import paso_rescore  # noqa: F401
 from .pasos.traducir import paso_traducir  # noqa: F401
@@ -101,6 +102,7 @@ __all__ = [
     "paso_agencias",
     "paso_caducidad",
     "paso_agrupar",
+    "paso_etiquetas",
     "paso_fusionar_semantica",
     "paso_rescore",
     "paso_traducir",

@@ -6,7 +6,7 @@
  */
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink, Megaphone } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ExternalLink, Globe, Megaphone } from "lucide-react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,7 @@ import type {
   ComparativaKpi,
   DesgloseRedCampania,
   PiezaCampania,
+  SeccionWebCampania,
 } from "@/types";
 
 import { Bloque } from "@/pages/metricas/Bloque";
@@ -147,7 +148,7 @@ export function PanelCampania({
 
   const datos = datosProp ?? consulta.data;
   if (!datos) return null;
-  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas } = datos;
+  const { kpis, comparativa, tendencia, desglose_red, inorganico, piezas, web } = datos;
 
   return (
     <div className="space-y-6">
@@ -177,6 +178,8 @@ export function PanelCampania({
       </div>
 
       {!ocultarAds && <BloqueInorganico inorganico={inorganico} />}
+
+      {web && web.piezas > 0 && <BloqueWeb web={web} />}
 
       <Bloque id="campania-tendencia" titulo="Tendencia de la campaña">
         <Seccion id="campania-tendencia" titulo="Tendencia de la campaña">
@@ -221,6 +224,101 @@ function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorg
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Tráfico WEB (GA4) de la campaña: notas del sitio que cruzan con su etiqueta. Es tráfico de
+ * la PÁGINA, no de redes: los pageviews van aparte y nunca se suman a las vistas sociales. */
+function BloqueWeb({ web }: { web: SeccionWebCampania }) {
+  const notas = [...web.notas].sort((a, b) => b.vistas - a.vistas);
+  return (
+    <Bloque id="campania-web" titulo="Tráfico web (GA4)">
+      <Seccion
+        id="campania-web"
+        titulo="Tráfico web (GA4)"
+        descripcion="Visitas a las notas del sitio por la etiqueta de la campaña. No son vistas de redes."
+      >
+        <Card className="border-sky-300/60 bg-sky-50/40 dark:border-sky-500/30 dark:bg-sky-500/5">
+          <CardContent className="space-y-4 p-5">
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                <span className="text-sm font-medium">Tráfico web</span>
+                {web.etiqueta && (
+                  <Badge variant="outline" className="font-normal">
+                    {web.etiqueta}
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">Notas</p>
+                <p className="text-xl font-semibold tabular-nums">{numeroCompleto(web.piezas)}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">Vistas de página</p>
+                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.vistas)}>
+                  {numeroCompacto(web.vistas)}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">Usuarios</p>
+                <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(web.usuarios)}>
+                  {numeroCompacto(web.usuarios)}
+                </p>
+              </div>
+            </div>
+
+            {notas.length > 0 && (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-4">Nota</TableHead>
+                      <TableHead>Marca</TableHead>
+                      <TableHead className="text-right">Vistas</TableHead>
+                      <TableHead className="pr-4 text-right">Usuarios</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {notas.map((n) => (
+                      <TableRow key={n.url || n.titulo}>
+                        <TableCell className="pl-4">
+                          <span className="flex max-w-[24rem] items-center gap-1.5">
+                            <span className="truncate font-medium" title={n.titulo || n.url}>
+                              {n.titulo || n.url || "Nota"}
+                            </span>
+                            {n.url && (
+                              <a
+                                href={n.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="shrink-0 text-muted-foreground hover:text-foreground"
+                                aria-label="Abrir nota"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {n.marca || <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums" title={numeroCompleto(n.vistas)}>
+                          {numeroCompacto(n.vistas)}
+                        </TableCell>
+                        <TableCell className="pr-4 text-right tabular-nums" title={numeroCompleto(n.usuarios)}>
+                          {numeroCompacto(n.usuarios)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </Seccion>
+    </Bloque>
   );
 }
 

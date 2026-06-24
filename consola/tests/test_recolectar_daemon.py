@@ -529,6 +529,46 @@ def test_paso_agencias_ingiere_items_al_pool(monkeypatch):
     assert all(f["categoria"] == "agencias" for f in persistidos)
 
 
+def test_paso_etiquetas_persiste_tags_de_notas_propias(monkeypatch):
+    # Una fuente propia -> dominio unotv.com; dos items sin tags; descargador FALSO con chips.
+    monkeypatch.setattr(
+        recolectar_daemon.repos, "listar_fuentes_rss",
+        lambda **k: [{"url": "https://unotv.com/feed/nacional.xml", "propia": True}],
+    )
+    items = [
+        {"id": "n1", "url": "https://www.unotv.com/nota-1"},
+        {"id": "n2", "url": "https://www.unotv.com/nota-2"},
+    ]
+    monkeypatch.setattr(recolectar_daemon.repos, "items_sin_tags", lambda dominios, limite: items)
+    htmls = {
+        "https://www.unotv.com/nota-1": '<a href="/etiqueta/w-radio/">W</a>',
+        "https://www.unotv.com/nota-2": "<p>sin etiquetas</p>",
+    }
+    monkeypatch.setattr(recolectar_daemon.http_feed, "descargar_html", lambda url: htmls.get(url))
+    persistidos: dict[str, list[str]] = {}
+    monkeypatch.setattr(
+        recolectar_daemon.repos, "actualizar_tags_item",
+        lambda item_id, tags: persistidos.__setitem__(item_id, tags),
+    )
+
+    # Solo la nota con chip de etiqueta se persiste; la otra se omite sin tocar la BD.
+    assert recolectar_daemon.paso_etiquetas() == {"notas": 1}
+    assert persistidos == {"n1": ["w-radio"]}
+
+
+def test_paso_etiquetas_sin_fuentes_propias_es_noop(monkeypatch):
+    monkeypatch.setattr(
+        recolectar_daemon.repos, "listar_fuentes_rss",
+        lambda **k: [{"url": "https://agencia.com/feed.xml", "propia": False}],
+    )
+
+    def _no_consultar(*a, **k):  # noqa: ANN002, ANN003
+        raise AssertionError("no debería consultar items sin fuentes propias")
+
+    monkeypatch.setattr(recolectar_daemon.repos, "items_sin_tags", _no_consultar)
+    assert recolectar_daemon.paso_etiquetas() == {"notas": 0}
+
+
 def test_paso_agencias_best_effort_una_agencia_que_falla_no_aborta(monkeypatch):
     # Reuters revienta; AFP debe seguir ingiriendo (best-effort por agencia).
     def _traer(ag):

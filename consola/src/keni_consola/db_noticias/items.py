@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .._db_comun import UTC, Any, _conectar, datetime, timedelta, uuid
+from .._db_json import a_json_lista, de_json_lista
 from ..tiempo import ahora_iso, iso_utc
 from .fuentes_rss import _SELECT_FUENTE_RSS, _fila_a_fuente_rss
 
@@ -36,6 +37,7 @@ _COLS_NOTICIA_ITEM: tuple[str, ...] = (
     "estado",
     "publicacion_id",
     "fuente_peso",
+    "tags",
     "creado",
 )
 _SELECT_NOTICIA_ITEM = f"SELECT {', '.join(_COLS_NOTICIA_ITEM)} FROM noticias_items"
@@ -68,6 +70,8 @@ def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
         "publicacion_id": fila["publicacion_id"] or "",
         # Peso de la fuente del item, denormalizado al archivar (ranking ponderado).
         "fuente_peso": float(fila["fuente_peso"] or 1.0),
+        # Etiquetas del sitio (slugs de `/etiqueta/<slug>/`) extraídas del HTML de la nota.
+        "tags": [str(x) for x in de_json_lista(fila["tags"])],
         "creado": fila["creado"] or "",
     }
 
@@ -114,6 +118,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
                 "estado": it.get("estado") or "nuevo",
                 "publicacion_id": it.get("publicacion_id") or "",
                 "fuente_peso": float(it.get("fuente_peso") or 1.0),
+                "tags": a_json_lista(it.get("tags") or []),
                 "creado": it.get("creado") or ahora,
             }
             cur = con.execute(
@@ -275,6 +280,69 @@ def actualizar_noticia_item(
     finally:
         con.close()
     return obtener_noticia_item(item_id)
+
+
+def items_sin_tags(dominios: list[str], limite: int) -> list[dict[str, Any]]:
+    """Items de archivo de `dominios` aún SIN etiquetas extraídas (para el paso de etiquetas).
+
+    Filtra `tags = '[]'` (sin extraer todavía), `url <> ''` y url que contenga ALGUNO de los
+    `dominios` (`url LIKE %dom%`, para acotar a las notas web propias). MÁS NUEVAS primero
+    (`capturado_en` desc); `limite` acota el lote por barrido. [] si no se pasan dominios.
+    """
+    dominios = [d for d in dominios if d]
+    if not dominios:
+        return []
+    likes = " OR ".join("url LIKE ?" for _ in dominios)
+    params: list[Any] = [f"%{d}%" for d in dominios]
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- marcadores parametrizados; dominios de allowlist
+            f"{_SELECT_NOTICIA_ITEM} WHERE tags = '[]' AND url <> '' AND ({likes}) "
+            "ORDER BY capturado_en DESC, creado DESC, id DESC LIMIT ?",
+            (*params, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_item(f) for f in filas]
+
+
+def actualizar_tags_item(item_id: str, tags: list[str]) -> None:
+    """Persiste las etiquetas (slugs) extraídas de un item (best-effort, una escritura)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET tags = ? WHERE id = ?",
+            (a_json_lista(list(tags)), item_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def notas_por_etiqueta(slug: str, *, desde: str, dominios: list[str]) -> list[dict[str, Any]]:
+    """Notas web de `dominios` capturadas desde `desde` que llevan la etiqueta `slug`.
+
+    Prefiltra en SQL por dominio (`url LIKE %dom%`), ventana (`capturado_en >= desde`) y una
+    coincidencia COARSE del slug en el JSON de `tags` (`LIKE %"slug"%`); el consumidor impone el
+    filtro fino por slug exacto en Python. Devuelve filas (con `url`, `titulo`, `marca`, `tags`),
+    MÁS NUEVAS primero. [] si falta `slug` o `dominios`.
+    """
+    slug = (slug or "").strip().lower()
+    dominios = [d for d in dominios if d]
+    if not slug or not dominios:
+        return []
+    likes = " OR ".join("url LIKE ?" for _ in dominios)
+    params: list[Any] = [f"%{d}%" for d in dominios]
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- marcadores parametrizados; dominios de allowlist
+            f"{_SELECT_NOTICIA_ITEM} WHERE ({likes}) AND capturado_en >= ? AND tags LIKE ? "
+            "ORDER BY capturado_en DESC, creado DESC, id DESC",
+            (*params, desde, f'%"{slug}"%'),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_item(f) for f in filas]
 
 
 def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:

@@ -11,6 +11,8 @@ export interface Campania {
   nombre: string;
   /** Hashtags tal como se escribieron (sin '#', conservando casing). */
   hashtags: string[];
+  /** Etiqueta del sitio web (slug o URL) que cruza el tráfico de notas en GA4. "" si no hay. */
+  etiqueta_web: string;
   activa: boolean;
   fecha_creacion: string;
   fecha_actualizacion: string;
@@ -92,6 +94,26 @@ export interface InorganicoCampania {
   moneda: string;
 }
 
+/** Una nota del sitio (GA4) que cruza con la etiqueta web de la campaña. */
+export interface NotaWebCampania {
+  url: string;
+  titulo: string;
+  vistas: number;
+  usuarios: number;
+  marca: string;
+}
+
+/** Tráfico WEB (GA4) atribuido a la campaña por su etiqueta del sitio. Aparte de lo social:
+ * los pageviews NO se mezclan con las visualizaciones de redes. */
+export interface SeccionWebCampania {
+  conectado: boolean;
+  etiqueta: string;
+  piezas: number;
+  vistas: number;
+  usuarios: number;
+  notas: NotaWebCampania[];
+}
+
 export interface AnaliticaCampania {
   campania: Campania;
   rango: string;
@@ -107,6 +129,9 @@ export interface AnaliticaCampania {
   inorganico: InorganicoCampania;
   /** Piezas del periodo: orgánicas + inorgánicas (boosts), estas con `es_inorganico`. */
   piezas: PiezaCampania[];
+  /** Tráfico WEB (GA4) por la etiqueta del sitio. Ausente/null si GA no está conectado, no
+   * hay etiqueta o no cruza ninguna nota; solo se pinta si existe y `piezas > 0`. */
+  web?: SeccionWebCampania | null;
   generado_en: string;
 }
 
@@ -146,11 +171,13 @@ export interface CuerpoCrearCampania {
   marcas: string[];
   nombre: string;
   hashtags: string[];
+  etiqueta_web?: string;
 }
 
 export interface CuerpoActualizarCampania {
   nombre?: string;
   marcas?: string[];
   hashtags?: string[];
+  etiqueta_web?: string;
   activa?: boolean;
 }

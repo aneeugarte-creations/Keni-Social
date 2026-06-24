@@ -529,3 +529,36 @@ def leer_items_fuente(
         {**item, "fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"]}
         for item in items
     ]
+
+
+# Chips de etiqueta del sitio en el HTML de una nota (`/etiqueta/<slug>/`): el slug vincula la
+# nota con una campaña. Solo minúsculas/dígitos/guiones (la forma del slug en estos portales).
+_RE_ETIQUETA = re.compile(r"/etiqueta/([a-z0-9\-]+)/")
+
+
+def descargar_html(url: str) -> str | None:
+    """Descarga el HTML de una página web (valida URL + guard SSRF); None si no es válida o falla.
+
+    Reusa el descargador inyectable de feeds (`_DESCARGADOR`, mismo timeout/tamaño máximo y punto
+    que los tests parchean para no tocar la red). Devuelve el HTML como texto, o None ante una URL
+    inválida/no permitida o un fallo de descarga (best-effort: el llamante omite esa nota).
+    """
+    limpia, error = validar_url(url)
+    if error is not None:
+        return None
+    try:
+        return _DESCARGADOR(limpia)
+    except RSSError:
+        return None
+
+
+def extraer_etiquetas(html: str) -> list[str]:
+    """Slugs de las etiquetas del sitio (`/etiqueta/<slug>/`) presentes en un HTML (PURA).
+
+    Devuelve los slugs en minúsculas, DEDUPLICADOS y preservando el orden de aparición. '' o un
+    HTML sin chips de etiqueta -> []. No toca red ni BD.
+    """
+    if not html:
+        return []
+    slugs = (m.group(1).lower() for m in _RE_ETIQUETA.finditer(html))
+    return list(dict.fromkeys(slugs))

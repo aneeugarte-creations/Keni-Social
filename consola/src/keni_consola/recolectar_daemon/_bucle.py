@@ -257,6 +257,15 @@ def ejecutar_barrido() -> dict[str, Any]:
             _log.exception("recolectar_daemon: fallo en el paso de agencias.")
         items_nuevos += agencias_resumen["items"]
 
+        # Paso de ETIQUETAS (Fase 2): extrae las etiquetas del sitio (`/etiqueta/<slug>/`) de las
+        # notas web PROPIAS ya archivadas y las persiste en `noticias_items.tags` (vínculo
+        # nota↔campaña). Best-effort: un fallo se loguea y NO invalida el barrido. No suma a
+        # `items_nuevos` (no crea filas, solo enriquece las existentes).
+        try:
+            _pkg.paso_etiquetas()
+        except Exception:  # noqa: BLE001 -- las etiquetas son aditivas; nunca tumban la recolección
+            _log.exception("recolectar_daemon: fallo en el paso de etiquetas.")
+
         # Paso de AGRUPAR (Ola B): agrupa en historias los items recién insertados (y
         # cualquier reciente sin cluster), recalcula y puntúa. Best-effort: un fallo del paso
         # se loguea y NO invalida el barrido de recolección (que ya persistió los artículos).
