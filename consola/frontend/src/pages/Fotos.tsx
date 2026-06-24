@@ -132,8 +132,9 @@ export default function Fotos() {
             <Download className="h-4 w-4" aria-hidden="true" />
             Descargar app
           </Button>
-          <p className="text-xs text-muted-foreground">
-            Doble clic para abrirla. La primera vez: clic derecho → Abrir (app sin firmar).
+          <p className="max-w-md text-xs text-muted-foreground">
+            Doble clic para abrirla. La primera vez macOS la bloquea (app sin firmar): ve a
+            Ajustes del Sistema → Privacidad y seguridad → «Abrir de todos modos».
           </p>
         </section>
 

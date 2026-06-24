@@ -30,13 +30,13 @@ from starlette.routing import Route
 
 # Versión de la herramienta local que sirve este lanzador. Es la fuente de verdad del
 # auto-update: la app local compara su versión contra esta y se actualiza si va por detrás.
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # Changelog corto (2-3 líneas) de la versión actual; se muestra en la ficha de la página.
 CHANGELOG = [
-    "App de escritorio: elige la carpeta, nombra el partido y procesa con un clic.",
-    "Copia o descarta fotos y ráfagas (a la Papelera, recuperable) desde la galería.",
-    "Detecta Claude y se mantiene actualizada sola.",
+    "Mismo marco que keni-social: menú de usuario, tema claro/oscuro y página Sistema.",
+    "Galería con la lista de partidos procesados; sube y revisa varios.",
+    "Copia y descarta fotos/ráfagas (a la Papelera) y detecta Claude al instante.",
 ]
 
 # Prompt que el equipo pega en su Claude local tras descomprimir el bundle. El Claude local NO
