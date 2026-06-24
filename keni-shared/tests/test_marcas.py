@@ -89,5 +89,14 @@ def test_etiqueta_investigacion_por_marca():
     assert marcas.marca_de("fundacion").etiqueta_investigacion == "Curiosidades"
 
 
+def test_likes_aprobacion_por_marca():
+    # Por defecto una pieza necesita 2 OK ("cuatro ojos"). La Fundación la opera una sola
+    # persona, así que la semilla baja su umbral a 1 (un único OK la programa).
+    assert marcas.likes_aprobacion_de("unotv") == 2
+    assert marcas.likes_aprobacion_de("fundacion") == 1
+    # Marca desconocida: cae al defecto razonable de 2.
+    assert marcas.likes_aprobacion_de("zzz") == 2
+
+
 def test_es_noticias_falso_para_marca_desconocida():
     assert not marcas.es_noticias("zzz")

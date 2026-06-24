@@ -56,6 +56,9 @@ tipo = "propio"
 # Su panel de investigación se llama "Curiosidades" (datos curiosos / novedades, estilo Pubity),
 # no "Noticias". Se activa al ponerla en tipo = "noticias" desde la consola.
 etiqueta_investigacion = "Curiosidades"
+# La opera una sola persona: un único OK basta para programar (las demás marcas piden 2,
+# "cuatro ojos"). Ajustable por el admin de la marca en Contexto › Producción › Cadena de aprobación.
+likes_aprobacion = 1
 
 [cuentas]
 # Cuenta principal del reporte de deportes (su id_metricas). Coincide con la marca
