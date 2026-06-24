@@ -93,7 +93,8 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
       new Date(2026, 5, 15),
     );
     fireEvent.click(screen.getByRole("button", { name: "semana" }));
-    const pildora = screen.getByText("Gol").closest("button");
+    // El arrastre vive en el contenedor de la píldora (un <div>), no en el botón del título.
+    const pildora = screen.getByText("Gol").closest("[draggable]");
     expect(pildora).toHaveAttribute("draggable", "false");
   });
 
@@ -104,8 +105,25 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
       new Date(2026, 5, 15),
     );
     fireEvent.click(screen.getByRole("button", { name: "semana" }));
-    const pildora = screen.getByText("Gol").closest("button");
+    // El arrastre vive en el contenedor de la píldora (un <div>), no en el botón del título.
+    const pildora = screen.getByText("Gol").closest("[draggable]");
     expect(pildora).toHaveAttribute("draggable", "true");
+  });
+
+  it("clic en la hora abre el editor EN SITIO (popover con campo de hora CDMX)", () => {
+    renderCalendario(
+      [pub({ titulo: "Gol", estado: "programado" })],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    // La hora del chip es un botón aparte; lo identifica su `title` estable (no el texto,
+    // que depende de la zona). Al pulsarlo aparece el popover para personalizar la hora.
+    fireEvent.click(screen.getByTitle("Cambiar la hora de este post"));
+    expect(
+      screen.getByRole("dialog", { name: "Cambiar la hora del post" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Hora (CDMX)")).toBeInTheDocument();
   });
 });
 

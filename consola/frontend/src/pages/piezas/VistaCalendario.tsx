@@ -21,6 +21,7 @@ import { colorLinea, ETIQUETA_LINEA } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
 
+import { BotonHoraPieza } from "./BotonHoraPieza";
 import { CLAVE_PIEZAS } from "./claves";
 import { DialogoReprogramar } from "./DialogoReprogramar";
 import {
@@ -129,16 +130,19 @@ function diasDeSemana(ancla: Date): Date[] {
 }
 
 /**
- * Una píldora de publicación: arrastrable, click abre el editor, clic-derecho el menú.
+ * Una píldora de publicación: arrastrable, clic en el título abre el editor, clic-derecho el
+ * menú. La HORA es editable EN SITIO: un botón aparte (`BotonHoraPieza`) abre un popover para
+ * personalizar el instante de ese post sin salir del calendario (solo para piezas no publicadas).
  *
- * `MenuContextual` solo dispara por `contextmenu`/`click`/`ambos`, y aquí el click primario
- * ya abre el editor, así que no hay disparador adicional sin colisión.
+ * La fila es un `<div>` arrastrable que envuelve dos botones (hora + título): así el editor de
+ * hora y el del post no se anidan y cada uno recibe su propio clic.
  */
 function PildoraPub({
   pieza,
   onAbrir,
   onDesprogramar,
   onReprogramar,
+  onCambiarHora,
   onPublicarYa,
   ocupado,
 }: {
@@ -146,6 +150,7 @@ function PildoraPub({
   onAbrir: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
+  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   ocupado: boolean;
 }) {
@@ -198,8 +203,7 @@ function PildoraPub({
           : []),
       ]}
     >
-      <button
-        type="button"
+      <div
         draggable={!publicado}
         onDragStart={(e) => {
           if (publicado) {
@@ -209,17 +213,9 @@ function PildoraPub({
           e.dataTransfer.setData("text/plain", pieza.id);
           e.dataTransfer.effectAllowed = "move";
         }}
-        onClick={() => onAbrir(pieza)}
-        title={
-          publicado
-            ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · abre para ver`
-            : vencida
-              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-              : `${pieza.titulo} (${nombreRed(pieza.red)}) · arrastra para mover · más acciones en el menú contextual (clic derecho)`
-        }
         className={cn(
           CLASES_ENTRADA_CALENDARIO,
-          "w-full truncate border-transparent text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          "w-full max-w-full border-transparent transition-colors",
           publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
@@ -233,9 +229,34 @@ function PildoraPub({
         ) : (
           <Icono className="h-3 w-3 shrink-0" />
         )}
-        <span className="shrink-0 tabular-nums">{formatearHoraOperativa(pieza.fecha_programada)}</span>
-        <span className="truncate">{pieza.titulo}</span>
-      </button>
+        {/* Una pieza publicada ya salió: su hora es histórica (texto plano, no editable). */}
+        {publicado ? (
+          <span className="shrink-0 tabular-nums">
+            {formatearHoraOperativa(pieza.fecha_programada)}
+          </span>
+        ) : (
+          <BotonHoraPieza
+            iso={pieza.fecha_programada}
+            ocupado={ocupado}
+            onGuardar={(hhmm) => onCambiarHora(pieza, hhmm)}
+            onOtroDia={() => onReprogramar(pieza)}
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => onAbrir(pieza)}
+          title={
+            publicado
+              ? `${pieza.titulo} (${nombreRed(pieza.red)}) · ya publicada · abre para ver`
+              : vencida
+                ? `${pieza.titulo} (${nombreRed(pieza.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+                : `${pieza.titulo} (${nombreRed(pieza.red)}) · clic para editar · arrastra para mover · clic en la hora para reprogramarla`
+          }
+          className="min-w-0 flex-1 truncate text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {pieza.titulo}
+        </button>
+      </div>
     </MenuContextual>
   );
 }
@@ -335,6 +356,14 @@ export function VistaCalendario({
   const ocupado = reprogramar.isPending || desprogramar.isPending || publicarYa.isPending;
   const haciaDesprogramar = (p: Pieza) => desprogramar.mutate(p.id);
   const haciaReprogramar = (p: Pieza) => setReprogramarPub(p);
+  // Cambia SOLO la hora (HH:MM CDMX) conservando el DÍA de la pieza; reusa la mutación de
+  // reprogramar (mismo toast/invalidación). El día sale del instante actual proyectado a CDMX.
+  const haciaCambiarHora = (p: Pieza, hhmm: string) => {
+    if (!p.fecha_programada) return;
+    const dia = isoADatetimeLocal(p.fecha_programada).slice(0, 10);
+    const iso = datetimeLocalAIso(`${dia}T${hhmm}`);
+    if (iso) reprogramar.mutate({ id: p.id, iso });
+  };
   const haciaPublicarYa = async (p: Pieza) => {
     if (
       await confirmar({
@@ -569,6 +598,7 @@ export function VistaCalendario({
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
             onReprogramar={haciaReprogramar}
+            onCambiarHora={haciaCambiarHora}
             onPublicarYa={haciaPublicarYa}
             onAbrirDia={abrirDia}
             onSoltarEnDia={moverADia}
@@ -583,6 +613,7 @@ export function VistaCalendario({
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
             onReprogramar={haciaReprogramar}
+            onCambiarHora={haciaCambiarHora}
             onPublicarYa={haciaPublicarYa}
             onVolver={() => setVista("semana")}
             ocupado={ocupado}
@@ -778,6 +809,7 @@ function VistaSemana({
   onAbrir,
   onDesprogramar,
   onReprogramar,
+  onCambiarHora,
   onPublicarYa,
   onAbrirDia,
   onSoltarEnDia,
@@ -792,6 +824,7 @@ function VistaSemana({
   onAbrir: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
+  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
@@ -858,6 +891,7 @@ function VistaSemana({
                     onAbrir={onAbrir}
                     onDesprogramar={onDesprogramar}
                     onReprogramar={onReprogramar}
+                    onCambiarHora={onCambiarHora}
                     onPublicarYa={onPublicarYa}
                     ocupado={ocupado}
                   />
@@ -882,6 +916,7 @@ function VistaDia({
   onAbrir,
   onDesprogramar,
   onReprogramar,
+  onCambiarHora,
   onPublicarYa,
   onVolver,
   ocupado,
@@ -892,6 +927,7 @@ function VistaDia({
   onAbrir: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
+  onCambiarHora: (p: Pieza, hhmm: string) => void;
   onPublicarYa: (p: Pieza) => void;
   onVolver: () => void;
   ocupado: boolean;
@@ -933,6 +969,7 @@ function VistaDia({
                 onAbrir={onAbrir}
                 onDesprogramar={onDesprogramar}
                 onReprogramar={onReprogramar}
+                onCambiarHora={onCambiarHora}
                 onPublicarYa={onPublicarYa}
                 ocupado={ocupado}
               />
