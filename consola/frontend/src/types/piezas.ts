@@ -67,22 +67,27 @@ export interface LineaEditorialOpcion {
   marca: string;
 }
 
-/** Una categoría del plan (la que tiene franja): su `id` y su `nombre` legible (resuelto en
- *  el backend). El `id` es lo que viaja al crear la pieza; el `nombre` es lo que se muestra. */
+/** Una entrada de la TAXONOMÍA del plan (Última hora · líneas · Evergreen): su `id` y su `nombre`
+ *  legible (resuelto en el backend). El `id` es lo que viaja como `categoria` al crear/filtrar; el
+ *  `nombre` es lo que se muestra. `franja` indica si tiene horario configurado. */
 export interface CategoriaPlanOpcion {
   id: string;
   nombre: string;
+  /** ¿Tiene FRANJA (horario)? «Crear post» solo ofrece las que sí (para que la pieza se
+   *  programe); los FILTROS muestran toda la taxonomía. Ausente = trátala como sin franja. */
+  franja?: boolean;
 }
 
 export interface OpcionesPiezas {
   redes: RedPieza[];
   estados: EstadoOpcion[];
   marcas: MarcaOpcion[];
-  /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
+  /** Catálogo PLANO de verticales (id→nombre) SOLO para resolver el nombre de `pieza.categoria`
+   *  en el editor. NO es un eje de filtro: el filtro de líneas/categorías es `categorias`. */
   lineas: LineaEditorialOpcion[];
-  /** Categorías del plan con franja, POR marca. Cada una llega con su `nombre` legible ya
-   *  resuelto en el backend (líneas por su nombre de BD; señales del motor por su rótulo):
-   *  pueblan el dropdown obligatorio de «Crear post» y el SPA pinta el nombre tal cual. */
+  /** TAXONOMÍA del plan POR marca (Última hora · líneas · Evergreen), nombre resuelto en el
+   *  backend. ÚNICA fuente de "líneas/categorías" para el usuario: filtros (Feed/Lista) y alta
+   *  «Crear post» (que se acota a las que tienen `franja`). */
   categorias: Record<string, CategoriaPlanOpcion[]>;
   /**
    * Gate maestro `KENI_PUBLICAR_REAL`. Si es `false`, las piezas programadas NO salen

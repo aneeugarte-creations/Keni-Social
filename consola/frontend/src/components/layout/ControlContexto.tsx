@@ -1,13 +1,14 @@
 /**
- * CONTROL DE CONTEXTO unificado de la barra superior: junta en UN solo dropdown los tres
- * selectores de contexto (`SwitchMarca` + Red + Línea de `SwitchFiltrosPublicacion`).
+ * CONTROL DE CONTEXTO unificado de la barra superior: junta en UN solo dropdown los selectores
+ * de contexto (`SwitchMarca` + Red de `SwitchFiltrosPublicacion`).
  *
  *   - MARCA (workspace): la consola entera trabaja sobre la marca activa. Si el usuario es de
  *     una sola marca y la ruta no usa filtros, se muestra un chip fijo (nada que cambiar). Si
  *     está FUERA de su marca de casa, el trigger se resalta en ámbar y el panel ofrece "Volver",
  *     para no publicar en la marca equivocada por inercia.
- *   - RED y LÍNEA: filtros globales de la superficie de contenido/feed. Solo aparecen en las
- *     rutas donde aplican (`rutaUsaFiltrosPublicacion`).
+ *   - RED: filtro global de la superficie de contenido/feed. Solo aparece en las rutas donde
+ *     aplica (`rutaUsaFiltrosPublicacion`). La LÍNEA del plan se filtra por página (chips del
+ *     Feed / dropdown de Categoría de la Lista), eje `categoria`, no aquí.
  *
  * Es un popover hand-rolled (como `MenuAcciones`): cierra al hacer clic fuera o con Escape. No
  * anida `Select` de Radix (que portaliza) para evitar conflictos con el clic-fuera; pinta sus
@@ -83,7 +84,7 @@ export function ControlContexto() {
     cambiarMarca,
     volverAPrimaria,
   } = useMarcaActiva();
-  const { red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea } = useFiltrosPublicacion();
+  const { red, redes, cambiarRed } = useFiltrosPublicacion();
 
   const [abierto, setAbierto] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -116,7 +117,7 @@ export function ControlContexto() {
   const fuenteActiva = marcaActiva ? fuentesMarca.get(marcaActiva) : undefined;
 
   const usaFiltros = rutaUsaFiltrosPublicacion(pathname);
-  const filtrosActivos = usaFiltros && (red !== FILTRO_TODOS || linea !== FILTRO_TODOS);
+  const filtrosActivos = usaFiltros && red !== FILTRO_TODOS;
   const etiquetaMarca = marcaActiva ? (nombreActiva ?? marcaActiva) : "Todas las marcas";
 
   // Editor de una sola marca en una ruta SIN filtros: no hay nada que conmutar → chip fijo.
@@ -230,16 +231,6 @@ export function ControlContexto() {
                 {redes.map((r) => (
                   <Fila key={r.id} activo={red === r.id} onClick={() => cambiarRed(r.id)}>
                     {r.nombre}
-                  </Fila>
-                ))}
-              </Grupo>
-              <Grupo titulo="Línea editorial">
-                <Fila activo={linea === FILTRO_TODOS} onClick={() => cambiarLinea(FILTRO_TODOS)}>
-                  Todas las líneas editoriales
-                </Fila>
-                {lineasElegibles.map((l) => (
-                  <Fila key={l.id} activo={linea === l.id} onClick={() => cambiarLinea(l.id)}>
-                    {l.nombre}
                   </Fila>
                 ))}
               </Grupo>

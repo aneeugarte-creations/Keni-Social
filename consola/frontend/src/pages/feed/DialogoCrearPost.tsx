@@ -111,10 +111,13 @@ export function DialogoCrearPost({
   const [redesInicializadas, setRedesInicializadas] = React.useState(false);
   const archivoRef = React.useRef<HTMLInputElement>(null);
 
-  // Marca efectiva del alta (la fija activa o la elegida en "Todas") y SUS categorías con franja.
+  // Marca efectiva del alta (la fija activa o la elegida en "Todas") y SUS categorías CON FRANJA:
+  // de la taxonomía del plan se ofrecen solo las que tienen horario (si no, la pieza no casaría
+  // ninguna franja y se quedaría sin programar tras aprobarse). Los FILTROS sí ven la taxonomía
+  // entera; aquí el alta se acota a lo programable.
   const marcaEfectiva = marcaFija ?? marca;
   const categoriasMarca = React.useMemo(
-    () => opcionesQuery.data?.categorias?.[marcaEfectiva] ?? [],
+    () => (opcionesQuery.data?.categorias?.[marcaEfectiva] ?? []).filter((c) => c.franja),
     [opcionesQuery.data, marcaEfectiva],
   );
 

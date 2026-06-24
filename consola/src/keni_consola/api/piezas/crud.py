@@ -183,10 +183,13 @@ def _opciones() -> dict[str, Any]:
         {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
         for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
     ]
-    # CATEGORÍAS del plan POR MARCA: las que tienen FRANJA configurada (las que SÍ encuentran
-    # hueco al programar). Las usa el alta «Crear post» para OBLIGAR a elegir una: una pieza
-    # manual sin categoría no casa con ninguna franja (todas la llevan) y se quedaría sin
-    # programar. Las franjas globales (marca='') aplican a todas las marcas.
+    # CATEGORÍAS del plan POR MARCA = la TAXONOMÍA del plan completa (la misma de Programa › Plan):
+    # «Última hora» (breaking) + las LÍNEAS de la marca (verticales) + «Evergreen». Es la ÚNICA
+    # fuente de verdad de "líneas/categorías" para el usuario: la usan los chips del Feed, el filtro
+    # de la Lista y el alta «Crear post». Cada entrada trae `franja` (si tiene horario configurado):
+    # «Crear post» solo ofrece las que SÍ casan franja (si no, la pieza no se programaría); los
+    # FILTROS muestran toda la taxonomía. `breaking`/`evergreen` son señales del motor, no líneas,
+    # pero conviven en el mismo eje `categoria` de la pieza (su rótulo lo da `etiqueta_categoria`).
     franjas = repos.listar_franjas()
     cats_globales = {
         (f.get("categoria") or "").strip()
@@ -199,17 +202,35 @@ def _opciones() -> dict[str, Any]:
         m = (f.get("marca") or "").strip()
         if cat and m:
             cats_por_marca.setdefault(m, set()).add(cat)
-    # Nombre legible de cada categoría resuelto EN EL BACKEND (única fuente de verdad): las
-    # líneas vía su nombre de BD, las señales del motor ('breaking'/'evergreen') vía
-    # `etiqueta_categoria`. El SPA pinta `nombre` tal cual; no traduce ids.
+    # Nombre legible resuelto EN EL BACKEND (única fuente de verdad): las líneas por su nombre de
+    # BD, las señales del motor ('breaking'/'evergreen') vía `etiqueta_categoria`.
     nombres_linea = {ln["id"]: ln["nombre"] for ln in lineas}
-    categorias = {
-        m.id: [
-            {"id": c, "nombre": bootstrap_lineas.etiqueta_categoria(c, nombres_linea)}
-            for c in sorted(cats_por_marca.get(m.id, set()) | cats_globales)
+
+    def _taxonomia_plan(m_id: str) -> list[dict[str, Any]]:
+        con_franja = cats_por_marca.get(m_id, set()) | cats_globales
+        items: list[dict[str, Any]] = [
+            {
+                "id": "breaking",
+                "nombre": bootstrap_lineas.etiqueta_categoria("breaking", nombres_linea),
+                "franja": "breaking" in con_franja,
+            }
         ]
-        for m in marcas.catalogo()
-    }
+        # Líneas (verticales) de la marca + las globales (marca=''), en el orden del catálogo.
+        items += [
+            {"id": ln["id"], "nombre": ln["nombre"], "franja": ln["id"] in con_franja}
+            for ln in lineas
+            if ln.get("marca", "") in ("", m_id)
+        ]
+        items.append(
+            {
+                "id": "evergreen",
+                "nombre": bootstrap_lineas.etiqueta_categoria("evergreen", nombres_linea),
+                "franja": "evergreen" in con_franja,
+            }
+        )
+        return items
+
+    categorias = {m.id: _taxonomia_plan(m.id) for m in marcas.catalogo()}
     from ... import config
 
     return {
@@ -226,8 +247,11 @@ def _opciones() -> dict[str, Any]:
             }
             for m in marcas.catalogo()
         ],
+        # `lineas`: catálogo plano de verticales (id→nombre) para RESOLVER el nombre de
+        # `pieza.categoria` en el editor; NO es un eje de filtro (el filtro es `categorias`).
         "lineas": lineas,
-        # Categorías del plan con franja, por marca (para el dropdown obligatorio de «Crear post»).
+        # `categorias`: taxonomía del plan por marca (Última hora + líneas + Evergreen, con flag
+        # `franja`). Única fuente de "líneas/categorías" para filtros y alta.
         "categorias": categorias,
         # Gate maestro de pieza real (KENI_PUBLICAR_REAL). OFF => las piezas
         # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.

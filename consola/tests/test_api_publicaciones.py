@@ -23,17 +23,21 @@ def _crear(cliente, **campos):
 def test_opciones(cliente):
     datos = cliente.get("/api/piezas/opciones").json()
     assert {"redes", "estados", "marcas", "categorias"} <= set(datos)
-    # `categorias`: mapa marca -> categorías con franja (pueblan el dropdown obligatorio de
-    # «Crear post»). Cada categoría llega ya con su nombre legible resuelto en el backend
-    # ({id, nombre}); el SPA no traduce ids. Sin franjas en el entorno de test el mapa puede ir
-    # vacío por marca, pero la forma (dict de listas de {id, nombre}) es estable.
+    # `categorias`: mapa marca -> TAXONOMÍA del plan (Última hora · líneas · Evergreen). Única
+    # fuente de "líneas/categorías" para el usuario: los FILTROS muestran toda la taxonomía y
+    # «Crear post» se acota a las que tienen `franja`. Cada entrada llega con su nombre legible
+    # resuelto en el backend ({id, nombre, franja}); el SPA no traduce ids.
     assert isinstance(datos["categorias"], dict)
     assert all(isinstance(v, list) for v in datos["categorias"].values())
     assert all(
-        isinstance(c, dict) and {"id", "nombre"} <= set(c)
+        isinstance(c, dict) and {"id", "nombre", "franja"} <= set(c)
         for v in datos["categorias"].values()
         for c in v
     )
+    # Las señales del motor SIEMPRE están en la taxonomía de cada marca, con su rótulo resuelto.
+    taxonomia_unotv = {c["id"]: c["nombre"] for c in datos["categorias"]["unotv"]}
+    assert taxonomia_unotv.get("breaking") == "Última hora"
+    assert taxonomia_unotv.get("evergreen") == "Evergreen"
     # redes en orden fijo con limite
     ids = [r["id"] for r in datos["redes"]]
     assert ids == ["x", "instagram", "facebook", "tiktok", "youtube"]

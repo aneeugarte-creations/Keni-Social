@@ -38,7 +38,6 @@ type FiltrosBase = Pick<
   FiltrosPiezas,
   | "marca"
   | "red"
-  | "linea"
   | "estado"
   | "origen"
   | "categoria"
@@ -165,9 +164,9 @@ function Cuerpo({
   marcaActiva: string | null;
   onConfigurarHorarios?: () => void;
 }) {
-  // RED y LÍNEA las mandan los selectores GLOBALES de la topbar (la elegibilidad de
-  // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
-  const { red, linea } = useFiltrosPublicacion();
+  // La RED la manda el selector GLOBAL de la topbar; la MARCA, el switch de marca. La LÍNEA del
+  // plan se filtra con el dropdown de Categoría de los filtros de limpieza (eje `categoria`).
+  const { red } = useFiltrosPublicacion();
   const [editando, setEditando] = React.useState<Pieza | null>(null);
   // Filtros de LIMPIEZA por lotes (solo en modo lista): antigüedad/fase/tipo/categoría/fuente.
   // Acotan la lista —y por tanto lo que la selección múltiple borra— para barrer lo viejo o
@@ -218,7 +217,6 @@ function Cuerpo({
   const filtrosBase: FiltrosBase = {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
-    linea: linea === FILTRO_TODOS ? undefined : linea,
     estado: estadoVista,
     // Los filtros de limpieza solo aplican a la LISTA (el calendario es la programación).
     ...(calendario ? {} : limpieza),
@@ -244,7 +242,6 @@ function Cuerpo({
       "calendario",
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
-      filtrosBase.linea ?? "",
       rangoCal.desde,
       rangoCal.hasta,
     ],
@@ -271,7 +268,6 @@ function Cuerpo({
       "lista",
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
-      filtrosBase.linea ?? "",
       estadoVista ?? "todos",
       limpieza.antiguedad_h ?? "",
       limpieza.fase ?? "",
@@ -332,7 +328,9 @@ function Cuerpo({
   const calendarioTruncado = calendario && totalRangoCalendario > piezas.length;
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando =
-    red !== FILTRO_TODOS || linea !== FILTRO_TODOS || estadoVista != null;
+    red !== FILTRO_TODOS ||
+    estadoVista != null ||
+    (!calendario && Object.values(limpieza).some(Boolean));
 
   // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, al publicarlas
   // solo se previsualizan (no salen a redes). Es justo el fallo que dejaba piezas sin publicar en
@@ -411,12 +409,10 @@ function Cuerpo({
           marca={marcaActiva}
           ancla={anclaCalendario}
           onAncla={setAnclaCalendario}
-          // Los huecos del plan van POR RED, así que un filtro NO los apaga: se le pasan la red
-          // y la línea activas y el calendario acota los huecos a ese filtro (sin riesgo de
-          // doble-reserva). `null` = sin ese filtro → huecos de todas las redes del plan.
+          // Los huecos del plan van POR RED: se le pasa la red activa para acotarlos (sin riesgo
+          // de doble-reserva). `null` = sin filtro → huecos de todas las redes del plan.
           mostrarHuecosPlan
           filtroRed={red === FILTRO_TODOS ? null : red}
-          filtroLinea={linea === FILTRO_TODOS ? null : linea}
         />
       ) : piezas.length === 0 ? (
         <EstadoVacio

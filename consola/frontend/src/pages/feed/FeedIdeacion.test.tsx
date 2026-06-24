@@ -18,11 +18,12 @@ const OPCIONES = {
     { id: "aprobado", nombre: "Aprobado" },
   ],
   marcas: [{ id: "unotv", nombre: "Uno TV" }],
-  // Categorías con franja por marca ({id, nombre}): pueblan el dropdown OBLIGATORIO de «Crear post».
+  // Taxonomía del plan por marca ({id, nombre, franja}): pueblan los chips del Feed (toda la
+  // taxonomía) y el dropdown de «Crear post» (solo las que tienen `franja`).
   categorias: {
     unotv: [
-      { id: "mx", nombre: "Nacional" },
-      { id: "internacional", nombre: "Internacional" },
+      { id: "mx", nombre: "Nacional", franja: true },
+      { id: "internacional", nombre: "Internacional", franja: true },
     ],
   },
 };
@@ -1125,17 +1126,20 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
 
-  it("chips fallback: una marca sin categorías del plan (Claro Sports) usa sus LÍNEAS y filtra por ?linea=", async () => {
-    const OPCIONES_SIN_CATS = {
+  it("una marca organizada por verticales (Claro Sports) recibe sus líneas en `categorias` y filtra por ?categoria=", async () => {
+    // El backend devuelve la TAXONOMÍA del plan por marca en `categorias` (verticales incluidas):
+    // un solo eje. No hay fallback a `linea`; los chips salen siempre de `categorias[marca]`.
+    const OPCIONES_CLARO = {
       ...OPCIONES,
       marcas: [{ id: "claro-sports", nombre: "Claro Sports" }],
-      // Claro Sports organiza su plan por VERTICALES, no por categorías con franja: el catálogo de
-      // categorías no la incluye, así que los chips caen al fallback = sus líneas editoriales.
-      categorias: {},
-      lineas: [
-        { id: "nfl", nombre: "NFL", marca: "claro-sports" },
-        { id: "boxeo", nombre: "Boxeo", marca: "claro-sports" },
-      ],
+      categorias: {
+        "claro-sports": [
+          { id: "breaking", nombre: "Última hora", franja: false },
+          { id: "nfl", nombre: "NFL", franja: true },
+          { id: "boxeo", nombre: "Boxeo", franja: true },
+          { id: "evergreen", nombre: "Evergreen", franja: true },
+        ],
+      },
     };
     const urls: string[] = [];
     vi.stubGlobal(
@@ -1143,7 +1147,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
         if (ruta.includes("/api/piezas/opciones")) {
-          return new Response(JSON.stringify(OPCIONES_SIN_CATS), { status: 200 });
+          return new Response(JSON.stringify(OPCIONES_CLARO), { status: 200 });
         }
         if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
@@ -1172,14 +1176,15 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
 
     renderFeed({ marcas: ["claro-sports"] });
-    // Los chips SIGUEN apareciendo aunque no haya categorías del plan: son las líneas de la marca.
+    // Los chips son las verticales de la marca (vía `categorias`), más Última hora/Evergreen.
     expect(await screen.findByRole("radio", { name: "NFL" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Boxeo" })).toBeInTheDocument();
-    // Clicar «NFL» filtra por la LÍNEA global (`?linea=nfl`), no por categoría.
+    expect(screen.getByRole("radio", { name: "Última hora" })).toBeInTheDocument();
+    // Clicar «NFL» filtra por CATEGORÍA (eje único), nunca por `linea`.
     fireEvent.click(screen.getByRole("radio", { name: "NFL" }));
     await waitFor(() =>
-      expect(urls.some((u) => u.includes("/api/piezas?") && /[?&]linea=nfl/.test(u))).toBe(true),
+      expect(urls.some((u) => u.includes("/api/piezas?") && /[?&]categoria=nfl/.test(u))).toBe(true),
     );
-    expect(urls.some((u) => /[?&]categoria=/.test(u))).toBe(false);
+    expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
 });

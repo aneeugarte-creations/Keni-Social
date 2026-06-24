@@ -1,13 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
-import type { LineaEditorialOpcion, RedPieza } from "@/types";
+import type { RedPieza } from "@/types";
 
 import {
-  claveLineaActiva,
   claveRedActiva,
   FILTRO_TODOS,
   FiltrosPublicacionContexto,
@@ -33,21 +31,19 @@ function guardarPersistido(clave: string, valor: string): void {
 }
 
 /**
- * Provider de los FILTROS GLOBALES de contenido (Red + Línea), hermano del de marca.
- * Deriva las opciones del catálogo canónico (`/api/piezas/opciones`, que ya
- * consumen las páginas de contenido, así que no añade carga) y persiste la elección
- * por usuario. Por defecto ambos en "Todas" → no cambia el comportamiento inicial.
+ * Provider del FILTRO GLOBAL de RED, hermano del de marca. Deriva el catálogo de redes del
+ * canónico (`/api/piezas/opciones`, que ya consumen las páginas, así que no añade carga) y
+ * persiste la elección por usuario. Por defecto "Todas" → no cambia el comportamiento inicial.
  *
- * Se monta DEBAJO del provider de marca: las líneas elegibles dependen de la marca
- * activa, y si la línea persistida deja de serlo, cae a "Todas".
+ * La LÍNEA del plan NO se gestiona aquí: se filtra por página (chips del Feed / dropdown de
+ * Categoría de la Lista) sobre el eje `categoria` con el catálogo de `opciones.categorias`.
  */
 export function FiltrosPublicacionProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useSesion();
   const usuarioId = usuario?.id ?? "";
-  const { marcaActiva } = useMarcaActiva();
 
-  // Catálogo de redes + líneas. Se cachea (mismo queryKey que las páginas), así se
-  // resuelve una sola vez. Mientras carga, los selectores quedan con solo "Todas".
+  // Catálogo de redes. Se cachea (mismo queryKey que las páginas), así se resuelve una sola vez.
+  // Mientras carga, el selector queda con solo "Todas".
   const opcionesQuery = useQuery({
     queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
@@ -57,44 +53,21 @@ export function FiltrosPublicacionProvider({ children }: { children: React.React
     () => opcionesQuery.data?.redes ?? [],
     [opcionesQuery.data],
   );
-  const lineas = React.useMemo<LineaEditorialOpcion[]>(
-    () => opcionesQuery.data?.lineas ?? [],
-    [opcionesQuery.data],
-  );
 
   // Estado inicial: preferencia persistida por usuario (o "Todas").
   const [red, setRed] = React.useState<string>(() =>
     usuarioId ? leerPersistido(claveRedActiva(usuarioId)) : FILTRO_TODOS,
   );
-  const [linea, setLinea] = React.useState<string>(() =>
-    usuarioId ? leerPersistido(claveLineaActiva(usuarioId)) : FILTRO_TODOS,
-  );
 
-  // Re-inicializa al cambiar de usuario (login distinto): cada quien arranca en SUS
-  // filtros persistidos, no heredando los del usuario anterior.
+  // Re-inicializa al cambiar de usuario (login distinto): cada quien arranca en SU filtro
+  // persistido, no heredando el del usuario anterior.
   const refUsuario = React.useRef(usuarioId);
   React.useEffect(() => {
     if (refUsuario.current !== usuarioId) {
       refUsuario.current = usuarioId;
       setRed(usuarioId ? leerPersistido(claveRedActiva(usuarioId)) : FILTRO_TODOS);
-      setLinea(usuarioId ? leerPersistido(claveLineaActiva(usuarioId)) : FILTRO_TODOS);
     }
   }, [usuarioId]);
-
-  // Líneas elegibles: las de la marca activa + las globales (marca === ""). Con marca
-  // activa null ("Todas") se muestran todas.
-  const lineasElegibles = React.useMemo<LineaEditorialOpcion[]>(
-    () => lineas.filter((l) => l.marca === "" || marcaActiva == null || l.marca === marcaActiva),
-    [lineas, marcaActiva],
-  );
-
-  // Si la línea activa deja de pertenecer a la marca activa, se resetea a "Todas".
-  React.useEffect(() => {
-    if (linea !== FILTRO_TODOS && !lineasElegibles.some((l) => l.id === linea)) {
-      setLinea(FILTRO_TODOS);
-      if (usuarioId) guardarPersistido(claveLineaActiva(usuarioId), FILTRO_TODOS);
-    }
-  }, [lineasElegibles, linea, usuarioId]);
 
   const cambiarRed = React.useCallback(
     (id: string) => {
@@ -104,17 +77,9 @@ export function FiltrosPublicacionProvider({ children }: { children: React.React
     [usuarioId],
   );
 
-  const cambiarLinea = React.useCallback(
-    (id: string) => {
-      setLinea(id);
-      if (usuarioId) guardarPersistido(claveLineaActiva(usuarioId), id);
-    },
-    [usuarioId],
-  );
-
   const valor = React.useMemo<ValorFiltrosPublicacion>(
-    () => ({ red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea }),
-    [red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea],
+    () => ({ red, redes, cambiarRed }),
+    [red, redes, cambiarRed],
   );
 
   return (

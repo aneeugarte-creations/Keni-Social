@@ -45,6 +45,7 @@ import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-context
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
+import type { CategoriaPlanOpcion } from "@/types";
 
 import { DialogoCrearPost } from "./DialogoCrearPost";
 import { GRID_COLS, MAX_W_FEED, REDES_POR_FORMATO } from "./formato";
@@ -134,11 +135,9 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   // La marca la manda el switch global de la barra superior (deriva del perfil).
   // El feed se filtra implícitamente por la marca activa; no hay selector local.
   const { marcaActiva } = useMarcaActiva();
-  // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar.
-  // Se aplican en SERVIDOR (van en la query), igual que el `estado` de las vistas dedicadas.
-  // `lineasElegibles`/`cambiarLinea` alimentan el FALLBACK de los chips (marcas sin categorías
-  // del plan): mismos chips, pero pilotando el filtro de línea global.
-  const { red, linea, lineasElegibles, cambiarLinea } = useFiltrosPublicacion();
+  // Filtro de RED (selector global de la topbar). La LÍNEA del plan se filtra con los chips de
+  // la página (`categoria`, abajo): un solo eje, sin selector de línea en el topbar.
+  const { red } = useFiltrosPublicacion();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
@@ -158,12 +157,10 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   }, [busqueda]);
   const busquedaServidor = busquedaAplicada || undefined;
 
-  // FILTRO de la página por chips. Por defecto son las CATEGORÍAS del plan de la marca (Última
-  // hora, Entretenimiento, Nacional, Evergreen…) — las filas de Programa › Plan, mismo catálogo
-  // que «Crear post» y la Lista. Cada pieza cae en UNA categoría del plan (`c.categoria`), así
-  // que filtra exacto: una pieza de «Última hora» NO se cuela en «Nacional». Estado LOCAL de la
-  // página (`""` = todas); va al servidor como `?categoria=`. Las marcas SIN categorías del plan
-  // (p. ej. Claro Sports, organizado por verticales) caen al fallback por línea (más abajo).
+  // FILTRO de la página por chips = la LÍNEA del plan (las filas de Programa › Plan: Última hora,
+  // las líneas de la marca, Evergreen). Único eje de línea/categoría: cada pieza cae en UNA
+  // (`c.categoria`), así que filtra exacto (una «Última hora» NO se cuela en «Nacional»). Estado
+  // LOCAL de la página (`""` = todas); va al servidor como `?categoria=`.
   const [categoria, setCategoria] = React.useState("");
   const categoriaServidor = categoria || undefined;
 
@@ -194,7 +191,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     setLotesBusqueda(1);
     const scroller = rootRef.current?.closest("main");
     if (scroller) scroller.scrollTop = 0;
-  }, [vista, linea, categoria, busquedaAplicada]);
+  }, [vista, categoria, busquedaAplicada]);
 
   // Nº de posts por fila. Preferencia local, persistida por dispositivo.
   const [columnas, setColumnas] = React.useState(() =>
@@ -263,35 +260,23 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
-  // CATEGORÍAS del plan para los chips de línea: del CATÁLOGO (`{id, nombre}`), no de las piezas.
-  // Con una marca activa, las suyas; en la vista "Todas", la unión de todas (dedupe por id). Misma
-  // fuente y forma que «Crear post» y la Lista; el chip pinta el `nombre` y filtra por el `id`.
-  const categoriasPlan = React.useMemo(() => {
+  // Taxonomía del plan para los chips: del CATÁLOGO único `opciones.categorias` (Última hora ·
+  // líneas · Evergreen). Con una marca activa, las suyas; en la vista "Todas", la unión (dedupe por
+  // id). El chip pinta el `nombre` y filtra por el `id` (`?categoria=`).
+  const categoriasPlan = React.useMemo<CategoriaPlanOpcion[]>(() => {
     const porMarca = opcionesQuery.data?.categorias ?? {};
     if (marcaActiva) return porMarca[marcaActiva] ?? [];
-    const mapa = new Map<string, { id: string; nombre: string }>();
+    const mapa = new Map<string, CategoriaPlanOpcion>();
     for (const lista of Object.values(porMarca)) {
       for (const c of lista) if (!mapa.has(c.id)) mapa.set(c.id, c);
     }
     return [...mapa.values()];
   }, [opcionesQuery.data, marcaActiva]);
-  // Si la categoría elegida deja de existir (cambio de marca): vuelve a "Todas" para no filtrar
-  // por una línea que esta marca no tiene (listado vacío sin causa visible).
+  // Si la línea elegida deja de existir (cambio de marca): vuelve a "Todas" para no filtrar por
+  // una que esta marca no tiene (listado vacío sin causa visible).
   React.useEffect(() => {
     if (categoria && !categoriasPlan.some((c) => c.id === categoria)) setCategoria("");
   }, [categoriasPlan, categoria]);
-
-  // CHIPS efectivos: las categorías del plan si la marca las tiene; si no, sus LÍNEAS editoriales
-  // (verticales), que pilotan el filtro de línea GLOBAL —el mismo del topbar—. Así una marca como
-  // Claro Sports (sin categorías del plan, organizada por verticales) conserva sus chips. `""` =
-  // "Todas" en ambos modos.
-  const usaCategorias = categoriasPlan.length > 0;
-  const chips = usaCategorias
-    ? categoriasPlan
-    : lineasElegibles.map((l) => ({ id: l.id, nombre: l.nombre }));
-  const chipActivo = usaCategorias ? categoria : linea === FILTRO_TODOS ? "" : linea;
-  const elegirChip = (id: string) =>
-    usaCategorias ? setCategoria(id) : cambiarLinea(id || FILTRO_TODOS);
 
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
@@ -312,7 +297,6 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       "feed-ideacion",
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
-      linea,
       busquedaAplicada,
       categoria,
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
@@ -326,7 +310,6 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
         {
           marca: marcaActiva ?? undefined,
           red: red === FILTRO_TODOS ? undefined : red,
-          linea: linea === FILTRO_TODOS ? undefined : linea,
           busqueda: busquedaServidor,
           categoria: categoriaServidor,
           estado: estadoServidor,
@@ -352,7 +335,6 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   const { totalRevision, conteoVista } = useConteosFeed({
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
-    linea: linea === FILTRO_TODOS ? undefined : linea,
     busqueda: busquedaServidor,
     categoria: categoriaServidor,
     origen,
@@ -526,16 +508,13 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
       </Button>
     ) : undefined;
 
-  // VACÍO con buscador/línea/línea-editorial activos: el "no hay nada" genérico mentiría (sí hay
-  // piezas, no con ESTE filtro). Cuando algo de la página acota, el vacío lo dice y ofrece limpiar.
-  // Filtros LOCALES de la página (buscador + línea del plan): los limpia el botón del vacío. La
-  // línea editorial GLOBAL (topbar) cuenta para el "Sin resultados" pero se quita desde el topbar.
+  // VACÍO con buscador/línea activos: el "no hay nada" genérico mentiría (sí hay piezas, no con
+  // ESTE filtro). Cuando el buscador o la línea acotan, el vacío lo dice y ofrece limpiar.
   const hayFiltroLocal = !!busquedaServidor || !!categoriaServidor;
-  const filtrandoPagina = hayFiltroLocal || linea !== FILTRO_TODOS;
-  const vacioTitulo = filtrandoPagina ? "Sin resultados" : vistaActual.vacio.titulo;
+  const vacioTitulo = hayFiltroLocal ? "Sin resultados" : vistaActual.vacio.titulo;
   const vacioTexto = busquedaServidor
     ? `Ninguna pieza con «${busquedaServidor}» en el titular. Prueba con otras palabras o cambia la línea.`
-    : filtrandoPagina
+    : hayFiltroLocal
       ? "No hay piezas en esta línea. Prueba con otra o quita el filtro."
       : vistaActual.vacio.texto;
   const accionVacioFiltro = hayFiltroLocal ? (
@@ -637,20 +616,20 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
               </button>
             )}
           </div>
-          {chips.length > 0 && (
+          {categoriasPlan.length > 0 && (
             <div
               role="radiogroup"
               aria-label="Filtrar por línea"
               className="flex flex-wrap gap-x-5 gap-y-1"
             >
-              <ChipLinea activo={chipActivo === ""} onClick={() => elegirChip("")}>
+              <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
                 Todas
               </ChipLinea>
-              {chips.map((c) => (
+              {categoriasPlan.map((c) => (
                 <ChipLinea
                   key={c.id}
-                  activo={chipActivo === c.id}
-                  onClick={() => elegirChip(c.id)}
+                  activo={categoria === c.id}
+                  onClick={() => setCategoria(c.id)}
                 >
                   {c.nombre}
                 </ChipLinea>

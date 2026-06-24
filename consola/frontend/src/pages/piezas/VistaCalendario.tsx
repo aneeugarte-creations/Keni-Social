@@ -259,7 +259,6 @@ export function VistaCalendario({
   onAncla,
   mostrarHuecosPlan = true,
   filtroRed = null,
-  filtroLinea = null,
 }: {
   piezas: Pieza[];
   onEditar: (p: Pieza) => void;
@@ -275,14 +274,12 @@ export function VistaCalendario({
   /**
    * Pintar el overlay de HUECOS LIBRES del plan. El padre lo apaga si la foto no es fiable
    * (p. ej. el rango venía truncado). Los huecos se expanden POR RED, así que un filtro por
-   * red/línea NO obliga a apagarlos: basta acotar los huecos a ese filtro (`filtroRed`/
-   * `filtroLinea`), sin riesgo de doble-reserva.
+   * red NO obliga a apagarlos: basta acotar los huecos a ese filtro (`filtroRed`), sin riesgo
+   * de doble-reserva.
    */
   mostrarHuecosPlan?: boolean;
   /** Red activa en el filtro del padre (id canónico), o `null` si no se filtra por red. */
   filtroRed?: string | null;
-  /** Línea activa en el filtro del padre, o `null` si no se filtra por línea. */
-  filtroLinea?: string | null;
 }) {
   const [vista, setVista] = React.useState<Vista>("semana");
   // Ancla CONTROLADA-O-NO: si el padre la eleva (para acotar la query por rango), manda la
@@ -438,7 +435,6 @@ export function VistaCalendario({
       );
       const huecos: Hueco[] = [];
       for (const sl of slots) {
-        if (filtroLinea && sl.categoria !== filtroLinea) continue;
         for (const red of redesDelPlan) {
           if (filtroRed && red !== filtroRed) continue;
           if (ocupadas.has(`${sl.hora}|${red}`)) continue;
@@ -447,7 +443,7 @@ export function VistaCalendario({
       }
       return huecos;
     },
-    [slotsPorDiaCdmx, porDia, mostrarHuecosPlan, redesDelPlan, filtroRed, filtroLinea],
+    [slotsPorDiaCdmx, porDia, mostrarHuecosPlan, redesDelPlan, filtroRed],
   );
 
   const hoy = hoyCDMX();

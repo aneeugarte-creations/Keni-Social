@@ -1,52 +1,37 @@
 import * as React from "react";
 
-import type { LineaEditorialOpcion, RedPieza } from "@/types";
+import type { RedPieza } from "@/types";
 
 /**
- * Contexto de los FILTROS GLOBALES de contenido (Red + Línea editorial), hermanos
- * del switch de MARCA (`marca-activa-contexto`). Son los filtros que antes vivían
- * por página en el Feed y en Gestión de piezas (Lista/Calendario): ahora la
- * elección la mandan DOS selectores globales de la barra superior, igual que la
- * marca, y las páginas solo leen de aquí.
+ * Contexto del FILTRO GLOBAL de RED, hermano del switch de MARCA (`marca-activa-contexto`).
+ * La elección la manda el selector global de la barra superior y las páginas solo leen de aquí.
  *
- * Por defecto FUERTE: ambos en "Todas" (centinela `FILTRO_TODOS`, el mismo que ya
- * usaban las páginas), de modo que el comportamiento inicial NO cambia (se ve todo).
- * La elección se PERSISTE por usuario (localStorage), como la marca.
+ * La LÍNEA del plan NO vive aquí: se filtra POR PÁGINA (chips del Feed, dropdown de Categoría de
+ * la Lista) sobre el eje `categoria` —único eje de línea/categoría— con el catálogo de
+ * `opciones.categorias`. Antes había aquí un filtro de "Línea editorial" (eje de tags) paralelo;
+ * se retiró para no tener dos ejes que el usuario veía como lo mismo.
  *
- * Dependencia marca → línea: las líneas elegibles dependen de la marca activa (las de
- * la marca + las globales). El provider (`use-filtros-contenido.tsx`) resetea la línea
- * a "Todas" si la persistida deja de ser elegible con la marca activa actual. Por eso
- * el provider se monta DEBAJO del de marca.
+ * Por defecto FUERTE: "Todas" (centinela `FILTRO_TODOS`), de modo que el comportamiento inicial
+ * NO cambia (se ve todo). La elección se PERSISTE por usuario (localStorage), como la marca.
  *
- * Visibilidad: el provider es global, pero los filtros de Red/Línea solo se ofrecen (dentro
- * del control de contexto unificado de la topbar, `ControlContexto`) en las rutas de
- * contenido/feed donde aplican (ver `RUTAS_FILTROS_CONTENIDO` y `rutaUsaFiltrosPublicacion`);
- * en métricas/ajustes/usuarios no aparecen.
+ * Visibilidad: el provider es global, pero el filtro de Red solo se ofrece (dentro del control de
+ * contexto unificado de la topbar, `ControlContexto`) en las rutas de contenido/feed donde aplica
+ * (ver `RUTAS_FILTROS_CONTENIDO` y `rutaUsaFiltrosPublicacion`); en métricas/ajustes/usuarios no.
  */
 export interface ValorFiltrosPublicacion {
   /** Red activa (id), o `FILTRO_TODOS` para no filtrar por red. */
   red: string;
-  /** Línea editorial activa (id), o `FILTRO_TODOS` para no filtrar por línea. */
-  linea: string;
   /** Catálogo de redes para el selector (de `/api/piezas/opciones`). */
   redes: RedPieza[];
-  /**
-   * Líneas elegibles con la marca activa actual: las de la marca + las globales
-   * (`marca === ""`). En la vista "Todas" (marca activa null) son todas.
-   */
-  lineasElegibles: LineaEditorialOpcion[];
   /** Cambia la red activa (persiste por usuario). */
   cambiarRed: (id: string) => void;
-  /** Cambia la línea activa (persiste por usuario). */
-  cambiarLinea: (id: string) => void;
 }
 
 export const FiltrosPublicacionContexto = React.createContext<ValorFiltrosPublicacion | null>(null);
 
 /**
- * Hook para leer los filtros globales de contenido. Debe usarse dentro del
- * `FiltrosPublicacionProvider`. Las páginas de contenido/feed lo usan para acotar sus
- * queries: `red === FILTRO_TODOS ? undefined : red` (igual con `linea`).
+ * Hook para leer el filtro global de Red. Debe usarse dentro del `FiltrosPublicacionProvider`.
+ * Las páginas de contenido/feed lo usan para acotar sus queries: `red === FILTRO_TODOS ? undefined : red`.
  */
 export function useFiltrosPublicacion(): ValorFiltrosPublicacion {
   const valor = React.useContext(FiltrosPublicacionContexto);
@@ -57,9 +42,8 @@ export function useFiltrosPublicacion(): ValorFiltrosPublicacion {
 }
 
 /**
- * Centinela de "todas / sin filtrar" para red y línea. Es el MISMO valor que ya usaban
- * las páginas (`FILTRO_TODOS` / `MARCA_TODAS` / `RED_TODAS`, todos `"__todas__"`), así
- * que al recablear no cambia ningún valor por el cable.
+ * Centinela de "todas / sin filtrar" para la red. Es el MISMO valor que ya usaban las páginas
+ * (`FILTRO_TODOS` / `MARCA_TODAS` / `RED_TODAS`, todos `"__todas__"`).
  */
 export const FILTRO_TODOS = "__todas__";
 
@@ -68,17 +52,11 @@ export function claveRedActiva(usuarioId: string): string {
   return `keni:red-activa:${usuarioId}`;
 }
 
-/** Clave de localStorage de la línea activa, por usuario (sobrevive recargas). */
-export function claveLineaActiva(usuarioId: string): string {
-  return `keni:linea-activa:${usuarioId}`;
-}
-
 /**
- * Rutas donde APLICAN (y se pintan) los selectores globales de Red y Línea: las
- * superficies de contenido/feed que antes llevaban esos filtros por página —el Feed
- * de ideación (`/operacion/feed/feed`), la Lista de contenido (`/operacion/feed/lista`)
+ * Rutas donde APLICA (y se pinta) el selector global de Red: las superficies de contenido/feed
+ * —el Feed de ideación (`/operacion/feed/feed`), la Lista de contenido (`/operacion/feed/lista`)
  * y la Programación (`/operacion/programa/programacion`)—. En métricas/ajustes/usuarios NO se
- * muestran (el provider sigue siendo global; solo se oculta la UI).
+ * muestra (el provider sigue siendo global; solo se oculta la UI).
  */
 export const RUTAS_FILTROS_CONTENIDO = [
   "/operacion/feed/feed",
@@ -86,7 +64,7 @@ export const RUTAS_FILTROS_CONTENIDO = [
   "/operacion/programa/programacion",
 ];
 
-/** ¿La ruta actual usa los filtros globales de contenido (Red/Línea)? */
+/** ¿La ruta actual usa el filtro global de contenido (Red)? */
 export function rutaUsaFiltrosPublicacion(pathname: string): boolean {
   return RUTAS_FILTROS_CONTENIDO.some(
     (ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`),
