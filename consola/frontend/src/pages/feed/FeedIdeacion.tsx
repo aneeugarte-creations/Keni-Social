@@ -136,7 +136,9 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   const { marcaActiva } = useMarcaActiva();
   // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar.
   // Se aplican en SERVIDOR (van en la query), igual que el `estado` de las vistas dedicadas.
-  const { red, linea } = useFiltrosPublicacion();
+  // `lineasElegibles`/`cambiarLinea` alimentan el FALLBACK de los chips (marcas sin categorías
+  // del plan): mismos chips, pero pilotando el filtro de línea global.
+  const { red, linea, lineasElegibles, cambiarLinea } = useFiltrosPublicacion();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
@@ -156,11 +158,12 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   }, [busqueda]);
   const busquedaServidor = busquedaAplicada || undefined;
 
-  // FILTRO POR LÍNEA del plan (chips): son las CATEGORÍAS del plan de la marca (Última hora,
-  // Entretenimiento, Internacional, Nacional, Evergreen…) — las mismas filas de Programa › Plan
-  // y el mismo catálogo que «Crear post» y la Lista. Cada pieza cae en UNA categoría del plan
-  // (`c.categoria`), así que filtrar por ella es exacto: una pieza de «Última hora» NO se cuela
-  // en «Nacional». Estado LOCAL de la página (`""` = todas); va al servidor como `?categoria=`.
+  // FILTRO de la página por chips. Por defecto son las CATEGORÍAS del plan de la marca (Última
+  // hora, Entretenimiento, Nacional, Evergreen…) — las filas de Programa › Plan, mismo catálogo
+  // que «Crear post» y la Lista. Cada pieza cae en UNA categoría del plan (`c.categoria`), así
+  // que filtra exacto: una pieza de «Última hora» NO se cuela en «Nacional». Estado LOCAL de la
+  // página (`""` = todas); va al servidor como `?categoria=`. Las marcas SIN categorías del plan
+  // (p. ej. Claro Sports, organizado por verticales) caen al fallback por línea (más abajo).
   const [categoria, setCategoria] = React.useState("");
   const categoriaServidor = categoria || undefined;
 
@@ -277,6 +280,18 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
   React.useEffect(() => {
     if (categoria && !categoriasPlan.some((c) => c.id === categoria)) setCategoria("");
   }, [categoriasPlan, categoria]);
+
+  // CHIPS efectivos: las categorías del plan si la marca las tiene; si no, sus LÍNEAS editoriales
+  // (verticales), que pilotan el filtro de línea GLOBAL —el mismo del topbar—. Así una marca como
+  // Claro Sports (sin categorías del plan, organizada por verticales) conserva sus chips. `""` =
+  // "Todas" en ambos modos.
+  const usaCategorias = categoriasPlan.length > 0;
+  const chips = usaCategorias
+    ? categoriasPlan
+    : lineasElegibles.map((l) => ({ id: l.id, nombre: l.nombre }));
+  const chipActivo = usaCategorias ? categoria : linea === FILTRO_TODOS ? "" : linea;
+  const elegirChip = (id: string) =>
+    usaCategorias ? setCategoria(id) : cambiarLinea(id || FILTRO_TODOS);
 
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
@@ -622,20 +637,20 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
               </button>
             )}
           </div>
-          {categoriasPlan.length > 0 && (
+          {chips.length > 0 && (
             <div
               role="radiogroup"
-              aria-label="Filtrar por línea del plan"
+              aria-label="Filtrar por línea"
               className="flex flex-wrap gap-x-5 gap-y-1"
             >
-              <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>
+              <ChipLinea activo={chipActivo === ""} onClick={() => elegirChip("")}>
                 Todas
               </ChipLinea>
-              {categoriasPlan.map((c) => (
+              {chips.map((c) => (
                 <ChipLinea
                   key={c.id}
-                  activo={categoria === c.id}
-                  onClick={() => setCategoria(c.id)}
+                  activo={chipActivo === c.id}
+                  onClick={() => elegirChip(c.id)}
                 >
                   {c.nombre}
                 </ChipLinea>

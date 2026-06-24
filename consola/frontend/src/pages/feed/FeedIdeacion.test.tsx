@@ -1124,4 +1124,62 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // El filtro de los chips NO entra como `linea=` (ese es el eje editorial global, no estos chips).
     expect(urls.some((u) => /[?&]linea=/.test(u))).toBe(false);
   });
+
+  it("chips fallback: una marca sin categorías del plan (Claro Sports) usa sus LÍNEAS y filtra por ?linea=", async () => {
+    const OPCIONES_SIN_CATS = {
+      ...OPCIONES,
+      marcas: [{ id: "claro-sports", nombre: "Claro Sports" }],
+      // Claro Sports organiza su plan por VERTICALES, no por categorías con franja: el catálogo de
+      // categorías no la incluye, así que los chips caen al fallback = sus líneas editoriales.
+      categorias: {},
+      lineas: [
+        { id: "nfl", nombre: "NFL", marca: "claro-sports" },
+        { id: "boxeo", nombre: "Boxeo", marca: "claro-sports" },
+      ],
+    };
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const ruta = String(url);
+        if (ruta.includes("/api/piezas/opciones")) {
+          return new Response(JSON.stringify(OPCIONES_SIN_CATS), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas/cadenas")) {
+          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
+        }
+        if (ruta.includes("/aprobacion")) {
+          return new Response(
+            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
+            { status: 200 },
+          );
+        }
+        if (ruta.includes("/comentarios")) {
+          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
+        }
+        if (ruta.includes("/api/piezas")) {
+          urls.push(ruta);
+          return new Response(
+            JSON.stringify({
+              piezas: [{ ...PIEZA, marca: "claro-sports", marca_nombre: "Claro Sports" }],
+              paginacion: { total: 1, limite: 50, desplazamiento: 0 },
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+
+    renderFeed({ marcas: ["claro-sports"] });
+    // Los chips SIGUEN apareciendo aunque no haya categorías del plan: son las líneas de la marca.
+    expect(await screen.findByRole("radio", { name: "NFL" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Boxeo" })).toBeInTheDocument();
+    // Clicar «NFL» filtra por la LÍNEA global (`?linea=nfl`), no por categoría.
+    fireEvent.click(screen.getByRole("radio", { name: "NFL" }));
+    await waitFor(() =>
+      expect(urls.some((u) => u.includes("/api/piezas?") && /[?&]linea=nfl/.test(u))).toBe(true),
+    );
+    expect(urls.some((u) => /[?&]categoria=/.test(u))).toBe(false);
+  });
 });
