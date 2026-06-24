@@ -68,15 +68,14 @@ _SELECT_PUBLICACION = (
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, c.categoria AS categoria, "
     "c.formato AS formato, c.espejo AS espejo, "
-    # Hashtags para la pieza: salen del TEMA (la etiqueta vertical asignada por el clasificador),
-    # NO de `categoria`. `categoria` es el eje de FILTROS/métricas (la sección manda ahí); el tema
-    # es una etiqueta informativa que nutre sistemas periféricos como la sugerencia de hashtags. Así
-    # una «Última hora» de NFL (categoria=breaking, tema=NFL) igual propone #NFL. Columna calculada
-    # en el mismo SELECT (no un query por pieza) para que el gate `falta_hashtags` la exija sin N+1.
-    "(SELECT e.hashtags FROM publicacion_etiquetas pe "
-    "JOIN etiquetas e ON pe.etiqueta_id = e.id "
-    "WHERE pe.publicacion_id = c.id AND e.clase = 'vertical' AND e.activo = 1 "
-    "ORDER BY e.id LIMIT 1) AS linea_hashtags "
+    # Hashtags de la LÍNEA: salen de la etiqueta vertical cuyo id ES la `categoria` del contenido.
+    # `categoria` es la ÚNICA fuente de verdad operativa (filtros, programación, aprobación,
+    # métricas, hashtags); el tema (tag del clasificador) es solo metadata y no alimenta nada de
+    # esto. Columna calculada en el mismo SELECT (no un query por pieza) para que el gate
+    # `falta_hashtags` la exija sin N+1. "" si la categoría es señal del motor (breaking/evergreen),
+    # vacía, o sin hashtag fijado.
+    "(SELECT e.hashtags FROM etiquetas e "
+    "WHERE e.id = c.categoria AND e.clase = 'vertical' AND e.activo = 1) AS linea_hashtags "
     "FROM pieza cp JOIN publicacion c ON cp.publicacion_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una pieza:
     # el muro `es_publicacion` no se usa. La columna persiste por compatibilidad pero
