@@ -1,0 +1,32 @@
+# Manifest de la app «Fotos» · lanzador de la herramienta local keni-fotos (ADR 0005).
+#
+# Fotos NO renderiza la galería: es la página de DESCARGA/arranque. La consola en la nube no
+# puede leer el disco del equipo, así que desde aquí Ale descarga `keni-fotos` y obtiene el prompt
+# de Claude + los comandos para montarla y procesar las fotos de un partido EN SU PC (un Claude
+# local termina el trabajo sobre su carpeta).
+#
+# Declarativo: lo lee `apps/registro.py`. Claves de nivel superior ANTES de los `[[nav]]` (TOML).
+
+id = "fotos"
+etiqueta = "Galería"
+# Frase corta para la tarjeta del launcher (cajón de apps).
+descripcion = "Archivo fotográfico local por partido"
+icono = "Camera"
+flag_activacion = "KENI_APP_FOTOS"
+permisos = ["editor", "admin"]
+
+# Router propio (`api/fotos.py`): info del lanzador + descarga del bundle. App propia, sin cruces.
+modulos_backend = ["fotos"]
+
+rutas_frontend = ["/fotos"]
+
+# Bloque CONTENIDO (grupo_orden 20): herramientas para crear/editar a mano (Imagen·Video·Audio).
+# Fotos es la cuarta, tras Audio (orden 30): produce el archivo fotográfico original de un partido.
+[[nav]]
+ruta = "/fotos"
+etiqueta = "Galería"
+icono = "Camera"
+descripcion = "Descarga la herramienta local y procesa las fotos de un partido en tu equipo."
+grupo = "contenido"
+grupo_orden = 20
+orden = 40

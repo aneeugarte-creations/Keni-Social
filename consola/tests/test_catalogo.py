@@ -29,9 +29,10 @@ _SIDEBAR_BLOQUES = [
     # cosa que el flujo de contenido, así que se separa de él.
     ["Trabajo", "Calendario"],
     # "Contenido": páginas planas por tipo de contenido — Imagen (editor por capas + IA), Video
-    # (estudio de video) y Audio (gestor audio→texto: transcripción whisper + agentes de Claude).
-    # La página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
-    ["Imagen", "Video", "Audio"],
+    # (estudio de video), Audio (gestor audio→texto: transcripción whisper + agentes de Claude) y
+    # Fotos (lanzador de la herramienta local keni-fotos: archivo fotográfico por partido). La
+    # página «Texto»/Prompts se retiró: los prompts viven en cada fase del pipeline en «Contexto».
+    ["Imagen", "Video", "Audio", "Galería"],
     # "Máquina": «Contexto» (la máquina en una página — el pipeline de cada motor como estructura,
     # con prompt/contexto/logs y on/off por fase) + «Agentes» (la sala de máquinas: Cómputo/cola en
     # vivo y, en pestañas hermanas, Economía —coste— y Actividad —la traza—).
@@ -51,15 +52,15 @@ def _entorno(**flags: str) -> dict[str, str]:
     return dict(flags)
 
 
-def test_se_cargan_las_cuatro_unidades():
+def test_se_cargan_las_unidades():
     ids = sorted(a.id for a in registro.cargar_apps())
-    assert ids == ["metricas", "operacion", "produccion", "shell"]
+    assert ids == ["fotos", "metricas", "operacion", "produccion", "shell"]
 
 
 def test_apps_de_catalogo_excluyen_el_shell():
-    # Por defecto (sin flags) las 3 apps de producto están activas; el shell no es app.
+    # Por defecto (sin flags) las apps de producto están activas; el shell no es app.
     ids = sorted(a.id for a in registro.apps_activas(_entorno()))
-    assert ids == ["metricas", "operacion", "produccion"]
+    assert ids == ["fotos", "metricas", "operacion", "produccion"]
 
 
 def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
@@ -103,6 +104,8 @@ def test_iconos_de_nav_son_strings_lucide():
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/contenido/imagen"] == "Image"
     assert iconos["/contenido/video"] == "Clapperboard"
+    # Fotos (lanzador de la herramienta local) cierra el bloque Contenido.
+    assert iconos["/fotos"] == "Camera"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programa"] == "CalendarDays"
@@ -126,7 +129,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     cat = registro.catalogo(_entorno(KENI_APP_METRICAS="0"))
     ids = [a["id"] for a in cat["apps"]]
     assert "metricas" not in ids
-    assert ids == ["operacion", "produccion"]
+    assert ids == ["fotos", "operacion", "produccion"]
     # Y su entrada de nav (Analíticas) desaparece del sidebar.
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/datos/analiticas" not in rutas
@@ -170,7 +173,12 @@ def test_modulo_a_app_cubre_todos_los_routers_sin_solapes():
 # --------------------------------------------------------------------------- #
 def test_endpoint_catalogo_sirve_apps_y_navegacion(cliente):
     datos = cliente.get("/api/catalogo").json()
-    assert sorted(a["id"] for a in datos["apps"]) == ["metricas", "operacion", "produccion"]
+    assert sorted(a["id"] for a in datos["apps"]) == [
+        "fotos",
+        "metricas",
+        "operacion",
+        "produccion",
+    ]
     grupos = [[i["etiqueta"] for i in g["items"]] for g in datos["navegacion"]]
     assert grupos == _SIDEBAR_BLOQUES
 

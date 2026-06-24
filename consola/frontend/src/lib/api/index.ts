@@ -48,6 +48,7 @@ import { apiFuentesAcciones } from "./fuentesAcciones";
 import { apiMarcas } from "./marcas";
 import { apiRalph } from "./ralph";
 import { apiVistas } from "./vistas";
+import { apiFotos } from "./fotos";
 
 /** Cliente fetch tipado de la Consola Keni: composición de todos los fragmentos. */
 export const api = {
@@ -98,6 +99,7 @@ export const api = {
   ...apiMarcas,
   ...apiRalph,
   ...apiVistas,
+  ...apiFotos,
 };
 
 // Helpers + clase de error que consumen páginas/componentes vía `@/lib/api`.
@@ -113,3 +115,4 @@ export {
 // Tipos públicos re-exportados (los consumen el editor y tests).
 export type { ActivoMarca, PlantillaDiseno, Bloque } from "./_core";
 export type { EtiquetaPlantilla } from "./etiquetasPlantilla";
+export type { RespuestaFotosInfo } from "./fotos";

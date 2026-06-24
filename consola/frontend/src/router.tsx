@@ -16,6 +16,8 @@ import { Loader2 } from "lucide-react";
 const Imagen = lazy(() => import("@/pages/Imagen"));
 const Video = lazy(() => import("@/pages/Video"));
 const Audio = lazy(() => import("@/pages/Audio"));
+// Fotos: lanzador de la herramienta local keni-fotos (descarga + prompt/comandos). Página plana.
+const Fotos = lazy(() => import("@/pages/Fotos"));
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
@@ -464,6 +466,9 @@ export const router = createBrowserRouter([
       // sidebar la sirve el catálogo del backend (GET /api/catalogo, ADR 0005); aquí
       // solo se registra la ruta del SPA.
       { path: "marcas", element: <Marcas /> },
+      // Fotos: lanzador de la herramienta local keni-fotos. Página plana; su entrada de nav la
+      // sirve el catálogo del backend (GET /api/catalogo, ADR 0005), aquí solo se registra la ruta.
+      { path: "fotos", element: <Fotos /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando

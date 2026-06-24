@@ -1,0 +1,3 @@
+# Directorio del bundle descargable de la app Fotos (keni-fotos.zip).
+# El zip real lo coloca otro agente / el deploy; este `.gitkeep` versiona el directorio
+# aunque el zip aún no exista. Si falta, `GET /api/fotos/bundle` responde 404 claro.
