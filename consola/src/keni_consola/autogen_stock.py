@@ -26,6 +26,7 @@ from typing import Any
 
 from . import config, repos, stock_fotos
 from .dominio import extraccion_url, licencia_imagen
+from .pipeline_contenido._comun import ORIGEN_PORTAL
 
 _log = logging.getLogger("keni_consola.autogen_stock")
 
@@ -147,6 +148,9 @@ def topics_sin_stock(
         if (item.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
             continue
         if (item.get("estado") or "") == _ESTADO_CERRADO:
+            continue
+        # PORTAL: usa SOLO su foto propia (la del artículo). Nunca foto de stock.
+        if (item.get("origen") or "") == ORIGEN_PORTAL:
             continue
         if not (item.get("titulo") or "").strip():
             continue

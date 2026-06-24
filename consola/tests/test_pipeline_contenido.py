@@ -431,6 +431,72 @@ def test_macro_evento_guarda_de_carrera_cluster_ya_absorbido(monkeypatch):
     assert reg["crear"] == []  # ninguna publicación nueva
 
 
+def _cluster_portal(cid):
+    """Cluster de fuente PROPIA (canal Portal), monofuente y sin macro-evento (ruta por-cluster)."""
+    return {
+        "id": cid, "marca": "unotv", "titulo": "Nota propia", "titulo_es": "Nota propia",
+        "resumen": "Resumen", "categoria": "mx", "breaking": 0,
+        "verificacion_fuente": "", "verificar_hallazgos": "",
+        "primer_visto": "2026-06-01T00:00:00+00:00", "score": 0.5,
+        "tema_macro": "", "subtema": "",
+    }
+
+
+def test_portal_con_foto_propia_crea_el_tema(monkeypatch):
+    """Un cluster del Portal CON foto propia se materializa (origen='portal')."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    c = _cluster_portal("c1")
+    items = [_item_propio("c1")]  # `_item_propio` trae `imagen` (foto propia del artículo)
+    reg = _fake_repos_familia(monkeypatch, familia=[c], items_por_cid={"c1": items})
+
+    tema = _admitir.crear_tema_de_cluster(
+        c, items, claves_vistas=set(), portal=True, eventos_titulos=set()
+    )
+
+    assert tema == {"id": "tema-macro-1"}
+    assert len(reg["crear"]) == 1
+    kw = reg["crear"][0]
+    assert kw["origen"] == _admitir.ORIGEN_PORTAL
+    assert kw["copy_pendiente"]  # lleva la foto propia en copy_pendiente
+
+
+def test_portal_sin_foto_propia_no_crea_el_tema(monkeypatch):
+    """Un cluster del Portal SIN foto propia (artículo sin imagen ni og:image) se omite."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    c = _cluster_portal("c1")
+    item_sin_foto = {**_item_propio("c1"), "imagen": ""}
+    reg = _fake_repos_familia(monkeypatch, familia=[c], items_por_cid={"c1": [item_sin_foto]})
+    _mock_og_image(monkeypatch, "")  # el artículo tampoco resuelve og:image
+
+    tema = _admitir.crear_tema_de_cluster(
+        c, [item_sin_foto], claves_vistas=set(), portal=True, eventos_titulos=set()
+    )
+
+    assert tema is None
+    assert reg["crear"] == []  # ninguna publicación nueva
+
+
+def test_no_portal_sin_foto_si_crea_el_tema(monkeypatch):
+    """El skip por falta de foto SOLO aplica al Portal: un tema normal del pipeline sí se crea
+    (su arte lo pondrá luego la etapa Ilustrar/Stock)."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    c = _cluster_portal("c1")
+    item_sin_foto = {**_item_propio("c1"), "imagen": ""}
+    reg = _fake_repos_familia(monkeypatch, familia=[c], items_por_cid={"c1": [item_sin_foto]})
+    _mock_og_image(monkeypatch, "")
+
+    tema = _admitir.crear_tema_de_cluster(
+        c, [item_sin_foto], claves_vistas=set(), portal=False, eventos_titulos=set()
+    )
+
+    assert tema == {"id": "tema-macro-1"}
+    assert len(reg["crear"]) == 1
+    assert reg["crear"][0]["origen"] == _admitir.ORIGEN_PIPELINE
+
+
 def test_contexto_feed_evento_lista_piezas_previas(monkeypatch):
     """El productor recibe las piezas YA en el feed del mismo evento, para no repetir ángulos."""
     from keni_consola.pipeline_contenido import _admitir

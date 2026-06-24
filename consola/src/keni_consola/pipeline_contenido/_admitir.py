@@ -698,6 +698,13 @@ def crear_tema_de_cluster(
             items_foto = []
         if items_foto:
             imagen = _imagen_de_cluster(items_foto)
+    # PORTAL: la pieza usa SOLO su foto propia (la del artículo) y nunca recibe stock ni arte IA.
+    # Sin foto propia no hay nada publicable que mostrar -> no se crea el tema (se omite el cluster).
+    if portal and not imagen:
+        _log.info(
+            "portal: historia sin foto propia, se omite el tema «%s» (%s)", titulo[:60], marca
+        )
+        return None
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
     # `n_notas` (cuántas SUB-HISTORIAS agrupa) + `fotos_notas` (foto propia por nota) habilitan
     # el output CARRUSEL en la fase CD (una placa por sub-historia; Claude decide).

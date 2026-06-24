@@ -65,6 +65,25 @@ def test_omite_si_ya_tiene_imagen():
     assert elegidos == []
 
 
+def test_omite_portal():
+    # PORTAL: trae su foto propia; nunca recibe imagen generada por IA.
+    elegidos = aa.topics_sin_arte(
+        [_item(origen=aa.ORIGEN_PORTAL)],
+        plataformas_por_item={"c1": [_plat()]},
+        ya_procesados=set(),
+        maximo=3,
+    )
+    assert elegidos == []
+    # El mismo tema como pipeline normal SÍ se auto-ilustra.
+    elegidos_pipeline = aa.topics_sin_arte(
+        [_item(origen="pipeline")],
+        plataformas_por_item={"c1": [_plat()]},
+        ya_procesados=set(),
+        maximo=3,
+    )
+    assert [e["id"] for e in elegidos_pipeline] == ["c1"]
+
+
 def test_omite_si_no_tiene_plataformas():
     elegidos = aa.topics_sin_arte(
         [_item()],

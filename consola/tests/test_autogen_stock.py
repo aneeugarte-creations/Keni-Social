@@ -71,6 +71,20 @@ def test_topics_omite_tema_completo(entorno):
     assert out == []
 
 
+def test_topics_omite_portal(entorno):
+    # PORTAL: usa SOLO su foto propia; nunca foto de stock, aunque la pieza esté en gris.
+    items = [_item(origen=autogen_stock.ORIGEN_PORTAL)]
+    plats = {"t": [_plat(id="a", copy="c")]}
+    out = autogen_stock.topics_sin_stock(items, plataformas_por_item=plats, ya_procesados=set(), maximo=5)
+    assert out == []
+    # Un tema del pipeline normal en la misma situación SÍ se elige.
+    items_pipeline = [_item(origen="pipeline")]
+    out_pipeline = autogen_stock.topics_sin_stock(
+        items_pipeline, plataformas_por_item=plats, ya_procesados=set(), maximo=5
+    )
+    assert [i["id"] for i in out_pipeline] == ["t"]
+
+
 # --- relleno robusto (BD) --------------------------------------------------- #
 
 
