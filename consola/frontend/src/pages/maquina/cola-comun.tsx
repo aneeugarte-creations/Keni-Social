@@ -32,8 +32,8 @@ import { PROC_META } from "@/pages/monitor/comun";
 import type { ColaJob, PresupuestoIA, PresupuestoProcesoIA, Proceso } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. Si se
- *  pasa `href`, la tarjeta ENTERA es un enlace (el contador es el botón) con realce naranja al
- *  hover, en vez de un botón aparte. */
+ *  pasa `href`, la tarjeta ENTERA es un enlace con realce naranja al hover, en vez de un botón
+ *  aparte. */
 export function Kpi({
   icono: Icono,
   titulo,
@@ -52,16 +52,14 @@ export function Kpi({
 }) {
   const cuerpo = (
     <Card className={cn("h-full", href && "transition-colors hover:border-keni-300")}>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+      <CardContent className="space-y-1.5 p-5">
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Icono className="h-4 w-4" aria-hidden="true" />
           {titulo}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 p-4 pt-0">
+        </p>
         <div
           className={cn(
-            "text-2xl font-semibold tabular-nums",
+            "truncate text-2xl font-semibold tracking-tight tabular-nums",
             tono === "alerta" && "text-destructive",
             tono === "ok" && "text-emerald-600",
             tono === "espera" && "text-amber-600",
@@ -115,11 +113,11 @@ export function TablaJobs({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Generación</TableHead>
+          <TableHead className="pl-6">Generación</TableHead>
           <TableHead className="hidden sm:table-cell">Tipo</TableHead>
           <TableHead className="hidden md:table-cell">Marca</TableHead>
           {mostrarWorker && <TableHead className="hidden lg:table-cell">Worker</TableHead>}
-          <TableHead>{mostrarWorker ? "Corriendo" : "En cola"}</TableHead>
+          <TableHead className="pr-6">{mostrarWorker ? "Corriendo" : "En cola"}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -164,7 +162,7 @@ export function TablaJobs({
               }
               etiquetaAcciones={`Acciones de ${j.etiqueta || j.gen_id}`}
             >
-              <TableCell className="font-medium">
+              <TableCell className="pl-6 font-medium">
                 <span className="inline-flex items-center gap-1.5">
                   {j.etiqueta || j.gen_id}
                   {j.prioridad > 0 && (
@@ -181,7 +179,7 @@ export function TablaJobs({
                   {j.worker || "—"}
                 </TableCell>
               )}
-              <TableCell className="tabular-nums text-muted-foreground">
+              <TableCell className="pr-6 tabular-nums text-muted-foreground">
                 {haceSegundos(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
               </TableCell>
             </FilaConAcciones>
@@ -409,9 +407,9 @@ export function PanelPresupuesto({
   const etiquetaUsd = marca ? "Presupuesto de la marca (tope)" : "Gasto global (tope)";
   return (
     <Card>
-      <CardHeader className="p-4 pb-2">
+      <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
             <Coins className="h-4 w-4 text-muted-foreground" />
             Presupuesto y parada de emergencia
             {marca && (
@@ -421,7 +419,7 @@ export function PanelPresupuesto({
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-2">
+      <CardContent className="space-y-4">
         {/* Cabecera: gasto de hoy (del ámbito) + parada de emergencia (global o de la marca). */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="text-sm">

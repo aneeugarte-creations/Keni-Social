@@ -306,22 +306,22 @@ function ColumnaPestana({
   return (
     <section className="space-y-4">
       <div className="space-y-3">
-        <h2 className={cn("flex items-center gap-2 text-lg font-semibold", meta.texto)}>
-          <span className={cn("h-2.5 w-2.5 rounded-full", meta.barra)} aria-hidden="true" />
+        <h2 className={cn("flex items-center gap-2 text-base font-semibold tracking-tight", meta.texto)}>
+          <span className={cn("h-2 w-2 rounded-full", meta.barra)} aria-hidden="true" />
           {meta.etiqueta}
         </h2>
         {cargando ? (
           <Skeleton className="h-24 w-full rounded-xl" />
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
+          <div className="grid grid-cols-3 gap-4">
+            <TarjetaKpi variante="borde" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
             <TarjetaKpi
-              variante="card"
+              variante="borde"
               etiqueta="Tokens"
               valor={numeroCompacto(total.tokens)}
               titulo={numeroCompleto(total.tokens)}
             />
-            <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
+            <TarjetaKpi variante="borde" etiqueta="Coste" valor={costeUsd(total.coste_usd)} />
           </div>
         )}
       </div>
@@ -418,7 +418,7 @@ export default function Economia() {
       )}
 
       {/* Presupuesto + parada de emergencia (GLOBAL o de la marca activa). */}
-      <div className="mb-4">
+      <div className="mb-6">
         {cola.isError ? (
           <BloqueError
             titulo="No se pudo leer el presupuesto"
@@ -443,7 +443,7 @@ export default function Economia() {
           (un solo selector, no 3 filtros). */}
       <section className="mb-6 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">
+          <h2 className="text-lg font-semibold tracking-tight">
             Total{" "}
             <span className="font-normal text-muted-foreground">
               · 4 pestañas · {etiquetaVentana.toLowerCase()}
@@ -462,15 +462,15 @@ export default function Economia() {
             </SelectContent>
           </Select>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(agregado.items)} />
+        <div className="grid grid-cols-3 gap-4">
+          <TarjetaKpi variante="borde" etiqueta="Trabajos IA" valor={numeroCompleto(agregado.items)} />
           <TarjetaKpi
-            variante="card"
+            variante="borde"
             etiqueta="Tokens"
             valor={numeroCompacto(agregado.tokens)}
             titulo={numeroCompleto(agregado.tokens)}
           />
-          <TarjetaKpi variante="card" etiqueta="Coste" valor={costeUsd(agregado.coste_usd)} />
+          <TarjetaKpi variante="borde" etiqueta="Coste" valor={costeUsd(agregado.coste_usd)} />
         </div>
       </section>
 

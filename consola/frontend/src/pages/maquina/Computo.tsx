@@ -5,7 +5,7 @@
  * máquina; el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Clock, Cpu, Trash2, Users } from "lucide-react";
+import { Activity, Clock, Cpu, type LucideIcon, Trash2, Users } from "lucide-react";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -33,8 +33,8 @@ function ColaCard({
   borde,
   children,
 }: {
-  titulo: React.ReactNode;
-  icono: typeof Activity;
+  titulo: string;
+  icono: LucideIcon;
   jobs: ColaJob[];
   vacio: string;
   borde?: string;
@@ -42,15 +42,15 @@ function ColaCard({
 }) {
   return (
     <Card className={borde}>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
           <Icono className="h-4 w-4 text-sky-600" aria-hidden="true" />
-          {titulo} ({jobs.length})
+          {titulo} <span className="font-normal text-muted-foreground">({jobs.length})</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         {jobs.length === 0 ? (
-          <p className="p-4 pt-0 text-sm text-muted-foreground">{vacio}</p>
+          <p className="px-6 pb-6 text-sm text-muted-foreground">{vacio}</p>
         ) : (
           children
         )}
@@ -125,7 +125,7 @@ export default function Computo() {
 
   if (cola.isError) {
     return (
-      <div className="space-y-4 p-4">
+      <div className="space-y-4">
         <BloqueError
           titulo="No se pudo leer la cola"
           mensaje={mensajeError(cola.error)}
@@ -137,7 +137,7 @@ export default function Computo() {
   }
   if (cola.isPending) {
     return (
-      <div className="space-y-4 p-4">
+      <div className="space-y-4">
         <Skeleton className="h-24 w-full rounded-xl" />
         <Skeleton className="h-48 w-full rounded-xl" />
       </div>
@@ -149,7 +149,7 @@ export default function Computo() {
   const esperando = proceso ? snap.esperando.filter((j) => j.proceso === proceso) : snap.esperando;
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-6">
       {/* El título lo pinta la tira de pestañas del hub (Cómputo). La cola se auto-refresca
           (INTERVALO_VIVO_MS); el kebab queda solo para la acción admin de purgar. */}
       {esAdmin && (
@@ -191,7 +191,7 @@ export default function Computo() {
       )}
 
       {/* Estado en vivo. (El presupuesto y la parada de emergencia viven en «Economía».) */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Kpi
           icono={Cpu}
           titulo="En curso"
@@ -212,38 +212,40 @@ export default function Computo() {
         />
       </div>
 
-      {/* La cola por dentro. */}
-      <ColaCard titulo="En curso" icono={Activity} jobs={enCurso} vacio="—">
-        <TablaJobs
-          jobs={enCurso}
-          mostrarWorker
-          esAdmin={esAdmin}
-          onCancelar={(id) => cancelar.mutate(id)}
-          cancelandoId={cancelandoId}
-          onReintentar={(id) => reintentar.mutate(id)}
-          reintentandoId={reintentandoId}
-        />
-      </ColaCard>
+      {/* La cola por dentro: los dos estados en paralelo (de lado a lado en pantallas anchas). */}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+        <ColaCard titulo="En curso" icono={Activity} jobs={enCurso} vacio="Sin generaciones en curso.">
+          <TablaJobs
+            jobs={enCurso}
+            mostrarWorker
+            esAdmin={esAdmin}
+            onCancelar={(id) => cancelar.mutate(id)}
+            cancelandoId={cancelandoId}
+            onReintentar={(id) => reintentar.mutate(id)}
+            reintentandoId={reintentandoId}
+          />
+        </ColaCard>
 
-      <ColaCard
-        titulo="Esperando"
-        icono={Clock}
-        jobs={esperando}
-        vacio="—"
-        borde={esperando.length > 0 ? "border-amber-500/30" : undefined}
-      >
-        <TablaJobs
+        <ColaCard
+          titulo="Esperando"
+          icono={Clock}
           jobs={esperando}
-          mostrarWorker={false}
-          esAdmin={esAdmin}
-          onCancelar={(id) => cancelar.mutate(id)}
-          cancelandoId={cancelandoId}
-          onPriorizar={(id) => priorizar.mutate(id)}
-          priorizandoId={priorizandoId}
-          onReintentar={(id) => reintentar.mutate(id)}
-          reintentandoId={reintentandoId}
-        />
-      </ColaCard>
+          vacio="Cola vacía."
+          borde={esperando.length > 0 ? "border-amber-500/30" : undefined}
+        >
+          <TablaJobs
+            jobs={esperando}
+            mostrarWorker={false}
+            esAdmin={esAdmin}
+            onCancelar={(id) => cancelar.mutate(id)}
+            cancelandoId={cancelandoId}
+            onPriorizar={(id) => priorizar.mutate(id)}
+            priorizandoId={priorizandoId}
+            onReintentar={(id) => reintentar.mutate(id)}
+            reintentandoId={reintentandoId}
+          />
+        </ColaCard>
+      </div>
     </div>
   );
 }
