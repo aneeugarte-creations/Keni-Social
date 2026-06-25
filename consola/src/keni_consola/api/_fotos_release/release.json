@@ -1,9 +1,9 @@
 {
-  "version": "0.1.1",
-  "notes": "Conexión estable (heartbeat) y galería compartida por marca: elige en la app con qué marcas compartir y el equipo de esas marcas la ve.",
-  "pub_date": "2026-06-24T00:00:00Z",
+  "version": "0.1.2",
+  "notes": "Auto-actualización automática (se instala y reinicia sola) y versión mostrada correcta. Incluye conexión estable y galería compartida por marca.",
+  "pub_date": "2026-06-25T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGErc3RSa2txZXB1L3ZZcUlQT3Yza0N0aGhVcGtUZGs2cVQzeTZGZnVmZjVKaEpXcVQ1dTNGY0RHNnlSd3grUTlIWnpnem1qVmNXajFMbTA0clR2TUFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzU4Nzg0CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnBFeEJ0a2RQY1E2blRaanF6RVFVRklnUDMzS2pyaFhNb2xMMjQvM1hWOFZGNnpXUXQ4QU9NZkd1amxWbUdwWXRqdVpCZTAyUkZ4NElTN2tGYlo0MkRBPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGNxcEdDdTNaeHdZUVd4N3RnN1ZGcjFOcytEUm9lSDdMVlVoaVV0WFdPVU5CeFQ0NXFMdndXWWFmdi9hNTlSZlB5TDc2UHFqZ0Vnano0eW0wTFBXMncwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzk4MTA0CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CmI1ekFZb1N4S0RERFZJdzBxU1NlM1RNVkgwZjR1YkNWR2dWeERxRmZCUWRqT1E5c2t5T2l0blFVczJQZ3JzQ1pxVkZva0hMNGN1RU95VW1TRE44NERBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
