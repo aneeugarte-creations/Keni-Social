@@ -126,13 +126,18 @@ def test_reorg_mueve_objeto_y_reapunta_referencias(entorno):
     cm = repos.crear_media_catalogo(
         objeto=viejo, tipo="original", titulo="Portada", fuente="portal", origen_fuente_id="f1",
     )
+    # Las piezas exigen una publicacion padre (FK fk_pieza_publicacion_id).
+    pub = repos.crear_publicacion(titulo="Portada")
     # Tres formas de referenciar la foto desde piezas: `foto`, collage `fotos`, slide `carrusel`.
     con = motor_db.conectar_cruda()
     try:
-        _crear_pieza(con, id="p-foto", foto=viejo, imagen=viejo)
-        _crear_pieza(con, id="p-collage", fotos=json.dumps([{"objeto": viejo, "foco": None, "zoom": 0}]))
+        _crear_pieza(con, id="p-foto", publicacion_id=pub["id"], foto=viejo, imagen=viejo)
         _crear_pieza(
-            con, id="p-carrusel",
+            con, id="p-collage", publicacion_id=pub["id"],
+            fotos=json.dumps([{"objeto": viejo, "foco": None, "zoom": 0}]),
+        )
+        _crear_pieza(
+            con, id="p-carrusel", publicacion_id=pub["id"],
             carrusel=json.dumps([{"tipo": "imagen", "objeto": "artes/slide.png", "foto": viejo}]),
         )
         con.commit()
