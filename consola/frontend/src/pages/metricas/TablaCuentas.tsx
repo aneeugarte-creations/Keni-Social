@@ -30,39 +30,55 @@ import type { CuentaMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { idsColumnas, metaColumnas, TABLA_CUENTAS } from "./columnasMeta";
-import { METRICAS, valorMetrica, type ClaveMetrica } from "./metricas-meta";
 import { PieMostrarMas } from "./PieMostrarMas";
 import { Seccion } from "./Seccion";
 import { useFilasPlegables } from "./useFilasPlegables";
 import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
+type ClaveCuenta = "visualizaciones" | "impresiones" | "interacciones" | "engagement_pct";
+
+/** Etiqueta legible de cada columna numérica. El VOLUMEN por marca son las impresiones
+ * (aditivas, sumables); el alcance único no es agregable por cuenta y se lee como tendencia
+ * en su propia sección, no aquí. */
+const ETIQUETA_METRICA: Record<ClaveCuenta, string> = {
+  visualizaciones: "Vistas",
+  impresiones: "Impresiones",
+  interacciones: "Interacciones",
+  engagement_pct: "Engagement",
+};
+
 /** Accesores de ordenación (constante de módulo: identidad estable para el useMemo del hook). */
-const ACCESORES: Record<ClaveMetrica, (c: CuentaMetrica) => number> = {
+const ACCESORES: Record<ClaveCuenta, (c: CuentaMetrica) => number> = {
   visualizaciones: (c) => c.visualizaciones,
-  alcance: (c) => c.alcance,
+  impresiones: (c) => c.impresiones,
   interacciones: (c) => c.interacciones,
   engagement_pct: (c) => c.engagement_pct,
 };
 
-/** Metadatos de métrica por clave (para resolver etiqueta/formato desde un id de columna). */
-const META_POR_CLAVE = new Map(METRICAS.map((m) => [m.clave, m]));
-
 const IDS_BASE = idsColumnas(TABLA_CUENTAS);
+
+/** Formatea el valor de una columna. */
+function valorCelda(c: CuentaMetrica, clave: ClaveCuenta): string {
+  if (clave === "engagement_pct") {
+    return porcentaje(c.engagement_pct);
+  }
+  return numeroCompleto(c[clave]);
+}
 
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
 function calcularTotales(cuentas: CuentaMetrica[]): {
   visualizaciones: number;
-  alcance: number;
+  impresiones: number;
   interacciones: number;
   engagement_pct: number;
 } {
   const visualizaciones = cuentas.reduce((s, c) => s + c.visualizaciones, 0);
-  const alcance = cuentas.reduce((s, c) => s + c.alcance, 0);
+  const impresiones = cuentas.reduce((s, c) => s + c.impresiones, 0);
   const interacciones = cuentas.reduce((s, c) => s + c.interacciones, 0);
   // Engagement global = interacciones totales ÷ vistas totales (no la media de %).
   const engagement_pct = visualizaciones > 0 ? (interacciones / visualizaciones) * 100 : 0;
-  return { visualizaciones, alcance, interacciones, engagement_pct };
+  return { visualizaciones, impresiones, interacciones, engagement_pct };
 }
 
 export function TablaCuentas({
@@ -79,7 +95,7 @@ export function TablaCuentas({
   const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_BASE, cfg);
 
-  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CuentaMetrica, ClaveMetrica>(
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<CuentaMetrica, ClaveCuenta>(
     cuentas,
     ACCESORES,
   );
@@ -97,16 +113,16 @@ export function TablaCuentas({
         </TableHead>
       );
     }
-    const m = META_POR_CLAVE.get(id as ClaveMetrica)!;
+    const clave = id as ClaveCuenta;
     return (
       <CabeceraOrdenable
         key={id}
-        activa={estado.clave === m.clave}
+        activa={estado.clave === clave}
         direccion={estado.direccion}
-        onClick={() => alClicar(m.clave)}
+        onClick={() => alClicar(clave)}
         alinear="right"
       >
-        {m.etiqueta}
+        {ETIQUETA_METRICA[clave]}
       </CabeceraOrdenable>
     );
   };
@@ -130,12 +146,9 @@ export function TablaCuentas({
         </TableCell>
       );
     }
-    const m = META_POR_CLAVE.get(id as ClaveMetrica)!;
-    // alcance puede venir tipado como null (forma compartida con el total): se pinta "—".
-    const valor = valorMetrica(c, m.clave);
     return (
       <TableCell key={id} className="text-right tabular-nums">
-        {valor === null ? "—" : m.completo(valor)}
+        {valorCelda(c, id as ClaveCuenta)}
       </TableCell>
     );
   };
@@ -152,7 +165,7 @@ export function TablaCuentas({
       <TableCell key={id} className="text-right tabular-nums">
         {id === "engagement_pct"
           ? porcentaje(totales.engagement_pct)
-          : numeroCompleto(totales[id as "visualizaciones" | "alcance" | "interacciones"])}
+          : numeroCompleto(totales[id as "visualizaciones" | "impresiones" | "interacciones"])}
       </TableCell>
     );
   };
