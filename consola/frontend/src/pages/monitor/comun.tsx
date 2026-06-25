@@ -6,6 +6,7 @@
 import { Coins } from "lucide-react";
 import * as React from "react";
 
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { CardTitle } from "@/components/ui/card";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
@@ -104,7 +105,7 @@ export function SerieProceso({
   );
 
   if (dias.length === 0) {
-    return <p className="text-sm text-muted-foreground">Sin actividad en la ventana.</p>;
+    return <EstadoVacioTexto texto="Sin actividad en la ventana." />;
   }
   const porDia = new Map(serie.resultados.map((r) => [r.dia, r]));
   return (

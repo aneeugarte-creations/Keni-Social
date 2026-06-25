@@ -22,6 +22,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { AccionesPaginaFin, TituloPagina } from "@/components/layout/encabezado";
+import { Badge } from "@/components/ui/badge";
 import { EditorSubtitulos } from "@/components/video/EditorSubtitulos";
 import { GestorComposiciones } from "@/components/video/GestorComposiciones";
 // El editor de capas (Konva) se carga PEREZOSAMENTE: pesa y solo se necesita en la sección
@@ -476,16 +477,10 @@ export default function Video() {
           />
 
           {/* Badge de estado. */}
-          <span
-            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              estado === "listo"
-                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
-            }`}
-          >
+          <Badge variant={estado === "listo" ? "ok" : "aviso"} className="shrink-0 gap-1">
             {estado === "listo" ? <CheckCircle2 className="h-3 w-3" /> : null}
             {estado === "listo" ? "Listo" : "Borrador"}
-          </span>
+          </Badge>
 
           {/* El indicador de guardado vive en la cabecera unificada (arriba), no aquí:
               un solo sitio para ese dato, igual que en Imagen. */}

@@ -13,6 +13,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
@@ -972,7 +973,7 @@ function VistaDia({
         </div>
       </div>
       {items.length === 0 && huecos.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Nada programado este día.</p>
+        <EstadoVacioTexto texto="Nada programado este día." className="py-8" />
       ) : (
         <div className="space-y-1">
           {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}

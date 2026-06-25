@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
-import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { EstadoVacio, EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
@@ -285,9 +285,7 @@ export default function Algoritmos() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="py-2 text-sm text-muted-foreground">
-                    Aún no hay fuentes configuradas.
-                  </p>
+                  <EstadoVacioTexto texto="Aún no hay fuentes configuradas." className="py-2" />
                 )}
               </CardContent>
             </Card>

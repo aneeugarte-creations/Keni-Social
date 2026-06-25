@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, FileText, XCircle } from "lucide-react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -54,7 +55,7 @@ export function LogBarridos({ daemon, limite = LIMITE_BARRIDOS }: { daemon: stri
             cargando={query.isFetching}
           />
         ) : query.data.barridos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin barridos</p>
+          <EstadoVacioTexto texto="Sin barridos" />
         ) : (
           <Table>
             <TableHeader>

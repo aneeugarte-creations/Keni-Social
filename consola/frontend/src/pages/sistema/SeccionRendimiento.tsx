@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Gauge } from "lucide-react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -70,7 +71,7 @@ export function SeccionRendimiento() {
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {filas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin peticiones registradas.</p>
+          <EstadoVacioTexto texto="Sin peticiones registradas." />
         ) : (
           <Table>
             <TableHeader>

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 import { MedidorPassword } from "@/components/auth/MedidorPassword";
 import { confirmar } from "@/components/comunes/confirmar";
-import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { EstadoVacio, EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
 import {
@@ -598,7 +598,7 @@ export default function UsuarioDetalle() {
             {passkeysQuery.isPending ? (
               <Skeleton className="h-12 w-full rounded-md" />
             ) : (passkeysQuery.data?.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground">Sin llaves de acceso registradas.</p>
+              <EstadoVacioTexto texto="Sin llaves de acceso registradas." />
             ) : (
               <ul className="divide-y rounded-md border">
                 {passkeysQuery.data!.map((cred) => (

@@ -16,6 +16,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ChipEstado } from "@/components/comunes/ChipEstado";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
 import { PanelContextoInyectado } from "@/components/prompts/PanelContextoInyectado";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +92,7 @@ function LogsFase({
     if (historico.isPending) return <Skeleton className="h-24 w-full" />;
     const runs = historico.data?.pipelines ?? [];
     if (runs.length === 0) {
-      return <p className="text-sm text-muted-foreground">Sin runs recientes en esta etapa.</p>;
+      return <EstadoVacioTexto texto="Sin runs recientes en esta etapa." />;
     }
     return (
       <ul className="divide-y divide-border/60 rounded-md border border-border/60">
@@ -124,7 +125,7 @@ function LogsFase({
     );
   }
   if (enCurso.length === 0 && esperando.length === 0) {
-    return <p className="text-sm text-muted-foreground">Sin trabajos en curso ni en cola.</p>;
+    return <EstadoVacioTexto texto="Sin trabajos en curso ni en cola." />;
   }
   return (
     <div className="space-y-3">

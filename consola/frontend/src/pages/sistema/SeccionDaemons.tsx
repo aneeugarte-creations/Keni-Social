@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstadoDaemon } from "@/components/comunes/ChipEstado";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
@@ -312,7 +313,7 @@ export function SeccionDaemons({
         {error ? (
           <p className="text-sm text-muted-foreground">{error}</p>
         ) : ordenados.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin latidos</p>
+          <EstadoVacioTexto texto="Sin latidos" />
         ) : (
           <TablaDaemons
             filas={ordenados}
