@@ -138,9 +138,10 @@ export default function MapaGlobo({
     });
     mapaRef.current = map;
     formatoAplicadoRef.current = formatoRef.current;
-    // Deja libre la esquina del panel (abajo-izda) y la leyenda: la ubicacion lider, que es la
-    // torre mas alta, queda arriba-centro y no la tapa el panel.
-    map.setPadding({ top: 0, right: 0, bottom: 150, left: 240 });
+    // Planeta centrado HORIZONTALMENTE (sin padding lateral); solo un margen inferior para que
+    // la ubicacion lider (la torre mas alta) quede algo por encima del centro y el panel
+    // flotante de abajo-izquierda no la tape.
+    map.setPadding({ top: 0, right: 0, bottom: 150, left: 0 });
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
     popupRef.current = popup;
     registrarTooltip(map, popup);
