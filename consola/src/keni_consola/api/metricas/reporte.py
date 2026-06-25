@@ -219,8 +219,8 @@ def _comparar_por_marca(rep_a: dict, rep_b: dict) -> list[dict]:
 def _agregar_por_red(rep: dict) -> list[dict]:
     """Agrega el `por_plataforma` de TODAS las cuentas del reporte, por red.
 
-    Suma `visualizaciones` e `interacciones`; el `alcance` suma solo los no-null y
-    queda `None` si NINGUNA cuenta mide esa red (criterio igual que el `total`:
+    Suma `visualizaciones`, `impresiones` e `interacciones`; el `alcance` suma solo los
+    no-null y queda `None` si NINGUNA cuenta mide esa red (criterio igual que el `total`:
     no se inventa un 0). El engagement se recalcula sobre los agregados de la red.
     Devuelve las redes ordenadas por visualizaciones desc. La red se emite como id de
     plataforma (el frontend lo traduce a nombre legible).
@@ -231,9 +231,11 @@ def _agregar_por_red(rep: dict) -> list[dict]:
         for p in r.get("por_plataforma", []) or []:
             red = p.get("plataforma", "")
             d = acc.setdefault(
-                red, {"visualizaciones": 0, "alcance": None, "interacciones": 0}
+                red,
+                {"visualizaciones": 0, "impresiones": 0, "alcance": None, "interacciones": 0},
             )
             d["visualizaciones"] += p.get("visualizaciones", 0) or 0
+            d["impresiones"] += p.get("impresiones", 0) or 0
             d["interacciones"] += p.get("interacciones", 0) or 0
             alcance = p.get("alcance")
             if alcance is not None:
@@ -246,6 +248,7 @@ def _agregar_por_red(rep: dict) -> list[dict]:
             {
                 "red": red,
                 "visualizaciones": vis,
+                "impresiones": d["impresiones"],
                 "alcance": d["alcance"],
                 "interacciones": inter,
                 "engagement_pct": _engagement_pct(inter, vis),
@@ -384,21 +387,24 @@ def _filtrar_reporte_por_red(rep: dict, red, piezas_red: int) -> dict:
     """
     reds = _conjunto_redes(red)
     cuentas: list[dict] = []
-    tot_vis = tot_inter = 0
+    tot_vis = tot_inter = tot_impr = 0
     tot_alc: int | None = None
     for fila in rep.get("cuentas", []):
         r = dict(fila.get("resumen") or {})
         de_red = [p for p in (r.get("por_plataforma") or []) if p.get("plataforma") in reds]
         vis = sum(p.get("visualizaciones", 0) or 0 for p in de_red)
+        impr = sum(p.get("impresiones", 0) or 0 for p in de_red)
         inter = sum(p.get("interacciones", 0) or 0 for p in de_red)
         alcs = [p.get("alcance") for p in de_red if p.get("alcance") is not None]
         alc = sum(alcs) if alcs else None
         r["visualizaciones"] = vis
+        r["impresiones"] = impr
         r["interacciones"] = inter
         r["alcance"] = alc
         r["por_plataforma"] = de_red
         cuentas.append({**fila, "resumen": r})
         tot_vis += vis
+        tot_impr += impr
         tot_inter += inter
         if alc is not None:
             tot_alc = (tot_alc or 0) + alc
@@ -407,6 +413,7 @@ def _filtrar_reporte_por_red(rep: dict, red, piezas_red: int) -> dict:
     nuevo["total"] = {
         **(rep.get("total") or {}),
         "visualizaciones": tot_vis,
+        "impresiones": tot_impr,
         "alcance": tot_alc,
         "interacciones": tot_inter,
         "engagement_pct": None,
@@ -438,14 +445,20 @@ def _recomputar_reporte_por_formato(salida: dict, listado: dict, redes, formatos
     def _vis(p: dict) -> int:
         return int(p.get("visualizaciones") or 0)
 
+    def _impr(p: dict) -> int:
+        return int(p.get("impresiones") or 0)
+
     def _inter(p: dict) -> int:
         return int(p.get("interacciones") or 0)
 
     tot_vis = sum(_vis(p) for p in piezas)
+    tot_impr = sum(_impr(p) for p in piezas)
     tot_inter = sum(_inter(p) for p in piezas)
     salida = dict(salida)
     salida["total"] = {
         "visualizaciones": tot_vis,
+        # impresiones (veces mostrada) SÍ es aditiva entre piezas: se suma como las vistas.
+        "impresiones": tot_impr,
         # El alcance (usuarios únicos) no es sumable entre piezas: con filtro de formato
         # no hay un agregado honesto, así que se omite (None) en vez de inventar una suma.
         "alcance": None,
@@ -461,18 +474,25 @@ def _recomputar_reporte_por_formato(salida: dict, listado: dict, redes, formatos
     cuentas_acc: dict[str, dict[str, int]] = {}
     for p in piezas:
         red = p.get("red") or ""
-        dr = por_red_acc.setdefault(red, {"visualizaciones": 0, "interacciones": 0})
+        dr = por_red_acc.setdefault(
+            red, {"visualizaciones": 0, "impresiones": 0, "interacciones": 0}
+        )
         dr["visualizaciones"] += _vis(p)
+        dr["impresiones"] += _impr(p)
         dr["interacciones"] += _inter(p)
         cid = p.get("cuenta") or ""
-        dc = cuentas_acc.setdefault(cid, {"visualizaciones": 0, "interacciones": 0})
+        dc = cuentas_acc.setdefault(
+            cid, {"visualizaciones": 0, "impresiones": 0, "interacciones": 0}
+        )
         dc["visualizaciones"] += _vis(p)
+        dc["impresiones"] += _impr(p)
         dc["interacciones"] += _inter(p)
 
     por_red = [
         {
             "red": red,
             "visualizaciones": d["visualizaciones"],
+            "impresiones": d["impresiones"],
             "alcance": None,
             "interacciones": d["interacciones"],
             "engagement_pct": _engagement_pct(d["interacciones"], d["visualizaciones"]),
@@ -487,6 +507,7 @@ def _recomputar_reporte_por_formato(salida: dict, listado: dict, redes, formatos
             "marca_id": cid,
             "marca": nombres.get(cid) or _nombre_marca_id(cid, {}),
             "visualizaciones": d["visualizaciones"],
+            "impresiones": d["impresiones"],
             "alcance": None,
             "interacciones": d["interacciones"],
             "engagement_pct": _engagement_pct(d["interacciones"], d["visualizaciones"]),
@@ -508,6 +529,9 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
                 "marca_id": cid,
                 "marca": _nombre_marca_id(cid, nombres),
                 "visualizaciones": r.get("visualizaciones", 0),
+                # impresiones: veces que el contenido se mostró (volumen aditivo). 0 si la
+                # fuente no la expone.
+                "impresiones": r.get("impresiones") or 0,
                 # alcance: suma de alcances por post Meta (IG/FB); 0 si ningún post lo
                 # reporta o la red no es Meta.
                 "alcance": r.get("alcance") or 0,
@@ -527,7 +551,12 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
         "fuente": rep.get("fuente") or "muestra",
         "total": {
             "visualizaciones": t.get("visualizaciones", 0),
-            "alcance": t.get("alcance") or 0,
+            # impresiones: cifra de VOLUMEN de cabecera (aditiva por post → red → total). 0
+            # si la fuente no la expone.
+            "impresiones": t.get("impresiones") or 0,
+            # alcance: usuarios únicos. None cuando la fuente no mide alcance de cuenta (no
+            # se coacciona a 0: un 0 falso ocultaría que el dato no existe).
+            "alcance": t.get("alcance"),
             "interacciones": t.get("interacciones", 0),
             "engagement_pct": _engagement_pct(t.get("interacciones"), t.get("visualizaciones")),
             "piezas": t.get("piezas", 0),

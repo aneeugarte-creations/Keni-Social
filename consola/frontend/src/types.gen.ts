@@ -48,7 +48,8 @@ export interface OpcionesMetricas {
 }
 export interface TotalMetricas {
   visualizaciones: number;
-  alcance: number;
+  impresiones: number;
+  alcance: number | null;
   interacciones: number;
   engagement_pct: number;
   piezas: number;
@@ -57,6 +58,7 @@ export interface CuentaMetrica {
   marca_id: string;
   marca: string;
   visualizaciones: number;
+  impresiones: number;
   alcance: number;
   interacciones: number;
   engagement_pct: number;
@@ -71,6 +73,7 @@ export interface CuentaMetrica {
 export interface RedMetrica {
   red: string;
   visualizaciones: number;
+  impresiones: number;
   alcance: number | null;
   interacciones: number;
   engagement_pct: number;

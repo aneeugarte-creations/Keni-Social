@@ -159,8 +159,18 @@
         "visualizaciones": {
           "type": "integer"
         },
-        "alcance": {
+        "impresiones": {
           "type": "integer"
+        },
+        "alcance": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "interacciones": {
           "type": "integer"
@@ -174,6 +184,7 @@
       },
       "required": [
         "visualizaciones",
+        "impresiones",
         "alcance",
         "interacciones",
         "engagement_pct",
@@ -193,6 +204,9 @@
         "visualizaciones": {
           "type": "integer"
         },
+        "impresiones": {
+          "type": "integer"
+        },
         "alcance": {
           "type": "integer"
         },
@@ -207,6 +221,7 @@
         "marca_id",
         "marca",
         "visualizaciones",
+        "impresiones",
         "alcance",
         "interacciones",
         "engagement_pct"
@@ -220,6 +235,9 @@
           "type": "string"
         },
         "visualizaciones": {
+          "type": "integer"
+        },
+        "impresiones": {
           "type": "integer"
         },
         "alcance": {
@@ -243,6 +261,7 @@
       "required": [
         "red",
         "visualizaciones",
+        "impresiones",
         "alcance",
         "interacciones",
         "engagement_pct"

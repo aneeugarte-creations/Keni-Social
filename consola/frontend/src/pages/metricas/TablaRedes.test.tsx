@@ -14,6 +14,7 @@ const REDES: RedMetrica[] = [
   {
     red: "instagram",
     visualizaciones: 120000,
+    impresiones: 145000,
     alcance: 45000,
     interacciones: 6000,
     engagement_pct: 5,
@@ -22,6 +23,7 @@ const REDES: RedMetrica[] = [
     // tiktok no mide alcance: null, no 0.
     red: "tiktok",
     visualizaciones: 90000,
+    impresiones: 108000,
     alcance: null,
     interacciones: 4500,
     engagement_pct: 5,

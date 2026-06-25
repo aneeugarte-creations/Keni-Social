@@ -68,7 +68,11 @@ class OpcionesMetricas(TypedDict):
 
 class TotalMetricas(TypedDict):
     visualizaciones: int
-    alcance: int
+    # impresiones: veces que el contenido se mostró (volumen aditivo); cifra de cabecera.
+    impresiones: int
+    # alcance: usuarios únicos. None = la fuente no mide alcance de cuenta (Metricool ya no
+    # lo da) o el filtro de formato lo deja sin agregado honesto (no es sumable por pieza).
+    alcance: int | None
     interacciones: int
     engagement_pct: float
     # Nº de piezas del periodo (todas las piezas, no solo las top).
@@ -79,6 +83,7 @@ class CuentaMetrica(TypedDict):
     marca_id: str
     marca: str
     visualizaciones: int
+    impresiones: int
     alcance: int
     interacciones: int
     engagement_pct: float
@@ -94,6 +99,8 @@ class RedMetrica(TypedDict):
 
     red: str
     visualizaciones: int
+    # impresiones: veces mostrada en esta red (volumen aditivo entre marcas).
+    impresiones: int
     # alcance: None = ninguna cuenta mide alcance en esta red (no es 0 real).
     alcance: int | None
     interacciones: int

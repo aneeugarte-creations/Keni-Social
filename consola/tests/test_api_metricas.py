@@ -28,8 +28,21 @@ def test_reporte_expone_fuente_muestra(cliente):
     assert data["fuente"] == "muestra"
     assert "total" in data
     assert "cuentas" in data
+    # impresiones (volumen de cabecera, aditiva) viaja en el total; el alcance honesto
+    # está presente (número de la muestra Meta, o null si la fuente no lo mide).
+    assert isinstance(data["total"]["impresiones"], int)
+    assert "alcance" in data["total"]
     # Servido desde la cache (lazy fill): la respuesta lleva cuándo se calculó.
     assert data["generado_en"]
+
+
+def test_reporte_total_cuentas_y_por_red_llevan_impresiones(cliente):
+    # impresiones es la cifra de volumen aditiva (post → red → total): viaja en el total,
+    # en cada cuenta y en cada red, para que la cabecera la pueda mostrar.
+    data = cliente.get("/api/metricas/reporte?rango=mes").json()
+    assert isinstance(data["total"]["impresiones"], int)
+    assert data["cuentas"] and all(isinstance(c["impresiones"], int) for c in data["cuentas"])
+    assert data["por_red"] and all(isinstance(r["impresiones"], int) for r in data["por_red"])
 
 
 def test_reporte_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
@@ -265,6 +278,8 @@ def test_reporte_filtra_por_formato_recompone_desde_piezas(cliente):
     assert data["total"]["visualizaciones"] == sum(p.get("visualizaciones") or 0 for p in coincide)
     assert data["total"]["interacciones"] == sum(p.get("interacciones") or 0 for p in coincide)
     assert data["total"]["piezas"] == len(coincide)
+    # impresiones SÍ es aditiva entre piezas: se recompone como la suma del formato.
+    assert data["total"]["impresiones"] == sum(p.get("impresiones") or 0 for p in coincide)
     # alcance NO es sumable a nivel pieza: con filtro de formato queda null.
     assert data["total"]["alcance"] is None
     # por_red queda restringido a las redes que aportan piezas de ese formato.
@@ -592,9 +607,9 @@ def test_filtrar_reporte_por_red_resume_solo_esa_red():
                 "resumen": {
                     "cuenta": "unotv",
                     "por_plataforma": [
-                        {"plataforma": "instagram", "visualizaciones": 100,
+                        {"plataforma": "instagram", "visualizaciones": 100, "impresiones": 130,
                          "alcance": 10, "interacciones": 20, "engagement_pct": 20.0},
-                        {"plataforma": "tiktok", "visualizaciones": 500,
+                        {"plataforma": "tiktok", "visualizaciones": 500, "impresiones": 600,
                          "alcance": None, "interacciones": 5, "engagement_pct": 1.0},
                     ],
                 }
@@ -605,10 +620,13 @@ def test_filtrar_reporte_por_red_resume_solo_esa_red():
     r = out["cuentas"][0]["resumen"]
     assert [p["plataforma"] for p in r["por_plataforma"]] == ["instagram"]
     assert r["visualizaciones"] == 100 and r["interacciones"] == 20 and r["alcance"] == 10
+    # impresiones re-sumadas sobre la red filtrada (solo IG), no las del global.
+    assert r["impresiones"] == 130
     # Total re-sumado sobre la red, NO el global; piezas vienen del listado (no del resumen).
     assert out["total"]["visualizaciones"] == 100
     assert out["total"]["interacciones"] == 20
     assert out["total"]["alcance"] == 10
+    assert out["total"]["impresiones"] == 130
     assert out["total"]["piezas"] == 3
 
 

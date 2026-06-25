@@ -83,10 +83,11 @@ export const METRICAS: MetaMetrica[] = [
   },
 ];
 
-/** Lee el valor de una métrica desde un total o una cuenta de forma tipada. */
+/** Lee el valor de una métrica desde un total o una cuenta de forma tipada. `alcance`
+ * puede ser `null` (el total no mide alcance de cuenta): el llamador lo pinta "—". */
 export function valorMetrica(
   fuente: TotalMetricas | CuentaMetrica,
   clave: ClaveMetrica,
-): number {
+): number | null {
   return fuente[clave];
 }

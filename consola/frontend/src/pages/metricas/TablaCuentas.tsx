@@ -131,9 +131,11 @@ export function TablaCuentas({
       );
     }
     const m = META_POR_CLAVE.get(id as ClaveMetrica)!;
+    // alcance puede venir tipado como null (forma compartida con el total): se pinta "—".
+    const valor = valorMetrica(c, m.clave);
     return (
       <TableCell key={id} className="text-right tabular-nums">
-        {m.completo(valorMetrica(c, m.clave))}
+        {valor === null ? "—" : m.completo(valor)}
       </TableCell>
     );
   };

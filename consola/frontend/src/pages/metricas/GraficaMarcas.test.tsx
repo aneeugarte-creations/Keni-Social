@@ -22,6 +22,7 @@ function cuenta(over: Partial<CuentaMetrica>): CuentaMetrica {
     marca_id: "unotv",
     marca: "UnoTV",
     visualizaciones: 1_500_000,
+    impresiones: 1_800_000,
     alcance: 1_000_000,
     interacciones: 42_000,
     engagement_pct: 2.8,

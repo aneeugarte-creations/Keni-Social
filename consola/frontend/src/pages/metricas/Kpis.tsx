@@ -123,17 +123,18 @@ export function Kpis({
     }
     const m = METRICAS.find((x) => x.clave === id);
     if (!m) return null;
+    // alcance puede ser null (el total no mide alcance de cuenta): se pinta "—", igual que
+    // la tabla por red, en vez de un 0 falso.
+    const valor = valorMetrica(total, m.clave);
+    const compacto = valor === null ? "—" : m.compacto(valor);
+    const completo = valor === null ? "—" : m.completo(valor);
     return (
       <TarjetaKpi
         key={m.clave}
         variante="card"
         etiqueta={m.etiqueta}
-        valor={m.compacto(valorMetrica(total, m.clave))}
-        titulo={
-          m.descripcion
-            ? `${m.completo(valorMetrica(total, m.clave))} — ${m.descripcion}`
-            : m.completo(valorMetrica(total, m.clave))
-        }
+        valor={compacto}
+        titulo={m.descripcion ? `${completo} — ${m.descripcion}` : completo}
         insignia={insigniaDe(m.metrica)}
       />
     );

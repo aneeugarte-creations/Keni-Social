@@ -33,6 +33,7 @@ beforeEach(() => {
 
 const TOTAL: TotalMetricas = {
   visualizaciones: 950,
+  impresiones: 1100,
   alcance: 0,
   interacciones: 500,
   engagement_pct: 1.8,
@@ -75,7 +76,8 @@ describe("Kpis", () => {
     expect(screen.getByText("1,234")).toBeInTheDocument(); // separador de miles es-MX
     expect(screen.getByText("Vistas")).toBeInTheDocument();
     expect(screen.getByText("950")).toBeInTheDocument();
-    expect(screen.getByText("Alcance")).toBeInTheDocument();
+    // El total trae impresiones, así que la cifra de volumen de cabecera es "Impresiones".
+    expect(screen.getByText("Impresiones")).toBeInTheDocument();
     expect(screen.getByText("Interacciones")).toBeInTheDocument();
     expect(screen.getByText("500")).toBeInTheDocument();
     expect(screen.getByText("Engagement")).toBeInTheDocument();
@@ -193,14 +195,6 @@ describe("Kpis", () => {
     expect(await screen.findByText("Impresiones")).toBeInTheDocument();
     expect(screen.getByText("12.3 k")).toBeInTheDocument();
     expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
-  });
-
-  it("sin impresiones en el total: degrada y mantiene la tarjeta de Alcance", () => {
-    vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
-    renderConProviders(<Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes" />);
-
-    expect(screen.getByText("Alcance")).toBeInTheDocument();
-    expect(screen.queryByText("Impresiones")).not.toBeInTheDocument();
   });
 
   it("sin rangoActual: pinta los KPIs sin insignias y NO consulta la comparativa", () => {
