@@ -22,6 +22,7 @@ import {
   puntosPct,
   rendimientoRel,
   tiempoVis,
+  tituloLimpio,
   variacion,
 } from "./formato";
 
@@ -383,5 +384,28 @@ describe("formatoEnFoco", () => {
     expect(formatoEnFoco("reel", "feed_reel")).toBe(true);
     expect(formatoEnFoco("reel,carrusel", "photo")).toBe(false);
     expect(formatoEnFoco("foto", "feed_image")).toBe(true);
+  });
+});
+
+describe("tituloLimpio", () => {
+  it("deja intacto un título corto y limpio", () => {
+    expect(tituloLimpio("Gol de último minuto", 40)).toBe("Gol de último minuto");
+  });
+
+  it("quita emojis y colapsa el hueco que dejan", () => {
+    expect(tituloLimpio("INTERNET, HAZ LO TUYO\u{1F605} Buscamos", 60)).toBe("INTERNET, HAZ LO TUYO Buscamos");
+  });
+
+  it("trunca en frontera de palabra (nunca a media palabra) con elipsis", () => {
+    const r = tituloLimpio("INTERNET, HAZ LO TUYO Buscamos a este joven fan del Tricolor", 40);
+    expect(r.endsWith("…")).toBe(true);
+    expect(r.length).toBeLessThanOrEqual(41);
+    // No corta a media palabra: el carácter previo a la elipsis es fin de palabra completa.
+    expect(/\s\S+…$/.test(` ${r}`)).toBe(true);
+    expect(r).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it("no deja signo de puntuación pegado antes de la elipsis", () => {
+    expect(tituloLimpio("Hola, mundo cruel y larguísimo de verdad aquí", 6)).toBe("Hola…");
   });
 });

@@ -9,7 +9,7 @@ import { AreaChart } from "@tremor/react";
 import qrcode from "qrcode-generator";
 import * as React from "react";
 
-import { nombreRed, numeroCompactoFijo } from "@/lib/formato";
+import { nombreRed, numeroCompactoFijo, tituloLimpio } from "@/lib/formato";
 
 import { LOGOS_MARCA } from "./logos";
 import type {
@@ -545,7 +545,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             <div className="flex h-full items-center">
               <div className={`grid w-full gap-x-14 ${cols}`}>
                 {piezasConUrl.map((p, i) => {
-                  const caption = p.titulo.length > 90 ? `${p.titulo.slice(0, 87)}…` : p.titulo;
+                  const caption = tituloLimpio(p.titulo, 88);
                   return (
                     <div key={i} className="flex flex-col items-start">
                       <p className={`${EYEBROW} ${TONO.kpiLabel}`}>
@@ -954,11 +954,20 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
           </div>
           <div className="border-t border-neutral-100 pt-6">
             <p className={`${EYEBROW} text-neutral-500`}>Foco del próximo periodo</p>
-            <ul className="mt-4 space-y-3">
+            {/* space-y-7 (28px) > interlineado (leading-relaxed ≈ 24px): la separación ENTRE viñetas
+                supera la separación de líneas DENTRO de una, así una recomendación de dos líneas se
+                lee como un grupo y nunca se confunde con la siguiente. El punto va en una caja de la
+                altura de una línea (items-center) para alinearse a la PRIMERA línea pase lo que pase. */}
+            <ul className="mt-4 space-y-7">
               {recomendaciones.map((r, i) => (
-                <li key={i} className="flex gap-3 text-[15px] font-light leading-snug text-neutral-800">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
-                  <span className="max-w-4xl">{r}</span>
+                <li
+                  key={i}
+                  className="flex max-w-3xl items-start gap-3 text-[15px] font-light leading-relaxed text-neutral-800"
+                >
+                  <span aria-hidden className="flex h-6 shrink-0 items-center">
+                    <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                  </span>
+                  <span>{r}</span>
                 </li>
               ))}
             </ul>

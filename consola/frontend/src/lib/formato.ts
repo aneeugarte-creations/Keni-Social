@@ -409,3 +409,24 @@ export function nombreMarca(
   );
   return encontrada?.nombre ?? id;
 }
+
+/**
+ * Título de pieza saneado para INCRUSTAR en prosa del deck (recomendaciones, captions citados):
+ * quita emojis y símbolos pictográficos, colapsa el hueco que dejan y trunca en frontera de
+ * palabra (nunca a media palabra) con elipsis. La tabla "Top piezas" muestra el título íntegro
+ * aparte (recorte por CSS), así que esto es solo para títulos citados dentro de una frase.
+ */
+export function tituloLimpio(t: string, maxLen: number): string {
+  const limpio = t
+    // Quita emojis/pictogramas, tonos de piel y banderas (propiedades Unicode, no rangos
+    // literales: evita el falso positivo de no-misleading-character-class).
+    .replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}]/gu, "")
+    .replace(/[\uFE00-\uFE0F\u200D]/g, "") // selector de variación emoji + zero-width joiner
+    .replace(/\s+/g, " ")
+    .trim();
+  if (limpio.length <= maxLen) return limpio;
+  const recorte = limpio.slice(0, maxLen);
+  const corte = recorte.lastIndexOf(" ");
+  const base = corte > 0 ? recorte.slice(0, corte) : recorte;
+  return `${base.replace(/[\s.,;:¡!¿?·-]+$/u, "")}…`;
+}

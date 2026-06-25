@@ -13,6 +13,7 @@ import {
   numeroCompleto,
   porcentaje,
   redCanonica,
+  tituloLimpio,
   variacion,
 } from "@/lib/formato";
 import type {
@@ -584,8 +585,9 @@ function construirRecomendaciones(
 
   // 1 · Pieza estrella → replicar el ángulo que funcionó (con el múltiplo, que impresiona más).
   if (topPiezas.length && pctEstrella > 0) {
-    const t = topPiezas[0].titulo;
-    const corto = t.length > 60 ? `${t.slice(0, 57)}…` : t;
+    // Título saneado (sin emoji, corte por palabra) y CORTO: así la frase entera cabe en una
+    // línea del deck y nunca queda partida ni con un emoji incrustado.
+    const corto = tituloLimpio(topPiezas[0].titulo, 40);
     const rendimiento =
       multiploEstrella > 1
         ? `rindió ${multiploEstrella}× la pieza media`
