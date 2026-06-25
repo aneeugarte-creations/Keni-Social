@@ -25,6 +25,13 @@ CI="${KENI_KEEPER_CI:-0}"
 CI_WATCH="${KENI_KEEPER_CI_WATCH:-/keeper/ci_watch.py}"
 CI_MAX="${KENI_KEEPER_CI_MAX:-3}"        # tope de sesiones de fix de CI por ventana
 CI_VENTANA_MIN="${KENI_KEEPER_CI_VENTANA_MIN:-30}"
+# Rastro de sesiones para la UI INDEPENDIENTE (guardian-ui): el keeper deja aquí, en el volumen
+# compartido /data, el stream-json de cada sesión + su meta + un heartbeat de vigilancia. La UI
+# (otro contenedor) sólo LEE esto; no depende del back/db.
+KEEPER_DIR="$(dirname "$0")"             # /keeper (dir bind-montado con keeper.sh + helpers)
+DATA="${KENI_KEEPER_DATA:-${KENI_DATA_DIR:-/data}/keeper}"
+ESTADO_VIGILANCIA="$DATA/estado.json"
+RETENCION="${KENI_KEEPER_RETENCION:-50}" # sesiones a conservar
 LATIDO=/tmp/keni-incident-keeper.latido
 LOCK=/tmp/keni-incident-keeper.lock
 CI_ULTIMO=/tmp/keni-keeper.ci-ultimo      # nº del último pipeline rojo ya intentado
@@ -33,15 +40,26 @@ CI_INTENTOS=/tmp/keni-keeper.ci-intentos  # marcas de tiempo de intentos recient
 log() { echo "incident-keeper: $*"; }
 
 # Lanza UNA sesión claude -p en un worktree limpio desde origin/main. $1 = texto del incidente.
-correr_keeper() {
-  texto="$1"
+correr_keeper() {  # $1 = texto del incidente ; $2 = trigger (etiqueta corta para la UI)
+  texto="$1"; trigger="${2:-incidente}"
   : > "$LOCK"
+  mkdir -p "$DATA" 2>/dev/null || true
+  sid="$(date +%s)"
+  jsonl="$DATA/$sid.jsonl"
+  meta="$DATA/$sid.meta.json"
+  titulo="$(printf '%s' "$texto" | head -1 | cut -c1-160)"
+  # Meta inicial (estado=corriendo) para que la UI vea la sesión en cuanto arranca.
+  python3 "$KEEPER_DIR/sesion.py" "$meta" - id="$sid" trigger="$trigger" titulo="$titulo" \
+    inicio="$(date -u +%Y-%m-%dT%H:%M:%SZ)" estado=corriendo 2>/dev/null || true
+
   git -C "$REPO" fetch origin -q 2>/dev/null || log "aviso: git fetch falló"
-  rama="keeper-$(date +%s)"
+  base="$(git -C "$REPO" rev-parse origin/main 2>/dev/null)"
+  rama="keeper-$sid"
   wt="$REPO/.wt-incident-keeper"
   git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true
   rm -rf "$wt" 2>/dev/null || true
 
+  estado=error; commit_sha=""; commit_msg=""
   if git -C "$REPO" worktree add -b "$rama" "$wt" origin/main >/dev/null 2>&1; then
     prompt="$(cat "$ROL" 2>/dev/null)
 
@@ -55,16 +73,33 @@ verde. Si debes ESCALAR (fuera de tus límites o causa no clara), NO actúes: de
 diagnóstico claro y el plan para un humano."
 
     log "claude -p en $wt (rama $rama)"
+    # `tee` al jsonl de la sesión (lectura casi en vivo para la UI) y a stdout (docker logs).
     ( cd "$wt" && claude -p "$prompt" \
         --output-format stream-json --verbose --include-partial-messages \
-        --dangerously-skip-permissions --model "$MODELO" ) 2>&1 || log "claude -p terminó con error"
+        --dangerously-skip-permissions --model "$MODELO" ) 2>&1 | tee "$jsonl"
 
+    # ¿Commiteó/pusheó? El HEAD del worktree distinto de la base = fix promovido.
+    head="$(git -C "$wt" rev-parse HEAD 2>/dev/null)"
+    if [ -n "$head" ] && [ "$head" != "$base" ]; then
+      commit_sha="$head"; commit_msg="$(git -C "$wt" log -1 --format=%s 2>/dev/null)"; estado=resuelto
+    else
+      estado=escalado   # terminó sin commitear: o escaló, o no había nada que arreglar
+    fi
     git -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || true
     git -C "$REPO" branch -D "$rama" >/dev/null 2>&1 || true
-    log "fin de la sesión; worktree limpio"
+    log "fin de la sesión ($estado); worktree limpio"
   else
     log "no pude crear worktree desde origin/main; ESCALO: revisa $REPO a mano"
   fi
+
+  # Meta final: estado + commit + coste/tokens (sesion.py parsea el `result` del jsonl). Si el
+  # jsonl trae is_error, sesion.py lo marca y la UI lo pinta.
+  python3 "$KEEPER_DIR/sesion.py" "$meta" "$jsonl" estado="$estado" \
+    fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)" commit_sha="$commit_sha" commit_msg="$commit_msg" 2>/dev/null || true
+  # Retención: conserva los $RETENCION más recientes (jsonl + meta).
+  ls -1t "$DATA"/*.meta.json 2>/dev/null | tail -n +"$((RETENCION + 1))" | while read -r m; do
+    rm -f "$m" "${m%.meta.json}.jsonl" 2>/dev/null || true
+  done
   rm -f "$LOCK"
 }
 
@@ -84,8 +119,12 @@ gh auth setup-git >/dev/null 2>&1 || log "aviso: gh auth setup-git falló (¿gh 
 
 log "arranca (repo=$REPO modelo=$MODELO intervalo=${INTERVALO}s CI=$CI)"
 
+mkdir -p "$DATA" 2>/dev/null || true
+
 while :; do
   : > "$LATIDO" 2>/dev/null || true   # latido para el healthcheck
+  # Heartbeat de vigilancia para guardian-ui: estado de la vigilancia + último pipeline visto.
+  python3 "$CI_WATCH" --heartbeat "$ESTADO_VIGILANCIA" "$CI" 2>/dev/null || true
 
   # No tocar `main` durante un deploy ni con un keeper ya en marcha.
   if [ -f "$FLAG_DEPLOY" ] || [ -f "$LOCK" ]; then
@@ -106,7 +145,7 @@ while :; do
         correr_keeper "El pipeline #$num de \`main\` está ROJO en el CI (Woodpecker). Es un fix de
 CÓDIGO: arréglalo según la sección de CI de tu rol y promueve a main. Evidencia:
 
-$ci"
+$ci" "CI #$num"
       fi
     fi
   fi
@@ -115,7 +154,7 @@ $ci"
   if [ -f "$TRIGGER" ] && [ ! -f "$LOCK" ]; then
     inc="$(cat "$TRIGGER" 2>/dev/null)"
     log "incidente de prod recibido; lanzo diagnóstico+fix"
-    correr_keeper "$inc"
+    correr_keeper "$inc" "incidente prod"
     # Archiva el trigger procesado (no re-disparar el mismo en bucle; si persiste, el guardian
     # escribirá uno nuevo). El antiflapping del guardian limita la cadencia.
     mv "$TRIGGER" "$ESTADO/incidente-$(date +%s).done" 2>/dev/null || rm -f "$TRIGGER"

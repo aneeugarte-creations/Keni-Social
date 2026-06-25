@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guardián · incident-keeper</title>
+<style>
+  :root {
+    --bg: #0b0c0e; --panel: #131519; --linea: #23262d; --txt: #e7e9ec; --apag: #8a909a;
+    --azul: #4f86ff; --verde: #34c759; --ambar: #ffb02e; --rojo: #ff5c5c; --acc: #1b1e24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--txt); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--linea); position: sticky; top: 0; background: var(--bg); z-index: 2; }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+  header h1 small { color: var(--apag); font-weight: 400; }
+  .vig { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 12.5px; color: var(--apag); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .on { background: rgba(52,199,89,.12); color: var(--verde); } .off { background: var(--acc); color: var(--apag); }
+  main { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 49px); }
+  #lista { border-right: 1px solid var(--linea); overflow-y: auto; }
+  .ses { padding: 12px 16px; border-bottom: 1px solid var(--linea); cursor: pointer; }
+  .ses:hover { background: var(--panel); } .ses.sel { background: var(--acc); }
+  .ses .fila { display: flex; align-items: center; gap: 8px; }
+  .trig { font-weight: 600; font-size: 13px; }
+  .hora { color: var(--apag); font-size: 11.5px; margin-left: auto; }
+  .ses .meta2 { display: flex; gap: 10px; align-items: center; margin-top: 5px; color: var(--apag); font-size: 12px; flex-wrap: wrap; }
+  .estado { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .e-corriendo { color: var(--azul); } .e-resuelto { color: var(--verde); } .e-escalado { color: var(--ambar); } .e-error { color: var(--rojo); }
+  .blink { animation: bl 1s steps(2) infinite; } @keyframes bl { 50% { opacity: .35; } }
+  .coste { font-variant-numeric: tabular-nums; } a { color: var(--azul); text-decoration: none; } a:hover { text-decoration: underline; }
+  #detalle { overflow-y: auto; padding: 18px 22px; }
+  #detalle .vacio { color: var(--apag); margin-top: 40px; text-align: center; }
+  .cab { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .cab h2 { font-size: 15px; margin: 0; } .titulo { color: var(--apag); font-size: 13px; margin: 2px 0 16px; }
+  .kpis { display: flex; gap: 22px; margin: 0 0 18px; padding: 12px 0; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
+  .kpi b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; } .kpi span { color: var(--apag); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .item { padding: 9px 0; border-bottom: 1px solid var(--acc); white-space: pre-wrap; word-break: break-word; }
+  .item.razonamiento { color: var(--apag); font-style: italic; }
+  .item.accion { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--ambar); }
+  .item .et { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--apag); margin-right: 8px; vertical-align: 1px; }
+  .cursor::after { content: "▋"; color: var(--azul); animation: bl .9s steps(2) infinite; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Guardián <small>· incident-keeper</small></h1>
+  <div class="vig" id="vig">…</div>
+</header>
+<main>
+  <div id="lista"></div>
+  <div id="detalle"><div class="vacio">Selecciona una detección para ver el razonamiento.</div></div>
+</main>
+<script>
+const REPO = "https://github.com/kenitech-io/keni-social/commit/";
+let sel = null, timerDet = null;
+
+const esc = s => (s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const fmtHora = iso => { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-ES", {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}); } catch { return iso; } };
+const fmtCoste = m => m.coste_usd != null ? "$" + Number(m.coste_usd).toFixed(4) : "—";
+const fmtTok = m => (m.tokens_in != null || m.tokens_out != null) ? `${(m.tokens_in||0)+(m.tokens_out||0)} tok` : "";
+
+function pintarVig(v) {
+  const el = document.getElementById("vig");
+  if (!v) { el.textContent = ""; return; }
+  const ci = v.ci_on ? `<span class="pill on"><span class="dot" style="background:var(--verde)"></span>CI vigilada</span>`
+                     : `<span class="pill off"><span class="dot" style="background:var(--apag)"></span>CI off</span>`;
+  let pipe = "";
+  if (v.ultimo_pipeline) {
+    const p = v.ultimo_pipeline, rojo = p.status==="failure"||p.status==="error";
+    pipe = `<span>último pipeline <a href="https://ci-social.kenitech.io" target="_blank">#${p.number}</a> <b style="color:${rojo?'var(--rojo)':'var(--verde)'}">${esc(p.status)}</b></span>`;
+  }
+  el.innerHTML = ci + pipe + (v.ultimo_chequeo ? `<span>chequeo ${fmtHora(v.ultimo_chequeo)}</span>` : "");
+}
+
+function pintarLista(ses) {
+  const el = document.getElementById("lista");
+  if (!ses.length) { el.innerHTML = `<div class="ses" style="cursor:default;color:var(--apag)">Aún no hay detecciones.</div>`; return; }
+  el.innerHTML = ses.map(m => {
+    const corr = m.estado === "corriendo";
+    return `<div class="ses ${m.id===sel?'sel':''}" data-id="${m.id}">
+      <div class="fila"><span class="trig">${esc(m.trigger||"incidente")}</span>
+        <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(m.estado||"")}</span>
+        <span class="hora">${fmtHora(m.inicio)}</span></div>
+      <div class="meta2">
+        <span class="coste">${fmtCoste(m)}</span><span>${fmtTok(m)}</span>
+        ${m.commit_sha ? `<a href="${REPO}${m.commit_sha}" target="_blank" title="${esc(m.commit_msg)}">${m.commit_sha.slice(0,7)} ✓</a>` : ""}
+        ${m.is_error ? `<span style="color:var(--rojo)">error</span>` : ""}
+      </div></div>`;
+  }).join("");
+  el.querySelectorAll(".ses[data-id]").forEach(d => d.onclick = () => seleccionar(d.dataset.id));
+}
+
+function pintarDetalle(d) {
+  const el = document.getElementById("detalle"); const m = d.meta;
+  const corr = m.estado === "corriendo";
+  const items = (d.transcript||[]).map(it => {
+    const et = it.tipo==="razonamiento" ? "razonamiento" : it.tipo==="accion" ? "acción" : "";
+    return `<div class="item ${it.tipo} ${it.vivo?'cursor':''}">${et?`<span class="et">${et}</span>`:""}${esc(it.texto)}</div>`;
+  }).join("");
+  el.innerHTML = `
+    <div class="cab"><h2>${esc(m.trigger||"incidente")}</h2>
+      <span class="estado e-${m.estado} ${corr?'blink':''}">${esc(m.estado||"")}</span>
+      ${m.commit_sha ? `<a href="${REPO}${m.commit_sha}" target="_blank">${m.commit_sha.slice(0,7)} · ${esc(m.commit_msg)}</a>` : ""}</div>
+    <div class="titulo">${esc(m.titulo||"")}</div>
+    <div class="kpis">
+      <div class="kpi"><b class="coste">${fmtCoste(m)}</b><span>coste</span></div>
+      <div class="kpi"><b>${m.tokens_in!=null?m.tokens_in:"—"}</b><span>tokens in</span></div>
+      <div class="kpi"><b>${m.tokens_out!=null?m.tokens_out:"—"}</b><span>tokens out</span></div>
+      <div class="kpi"><b>${m.num_turns!=null?m.num_turns:"—"}</b><span>turnos</span></div>
+    </div>
+    ${items || `<div class="vacio">Sin razonamiento todavía…</div>`}`;
+}
+
+async function seleccionar(id) {
+  sel = id;
+  document.querySelectorAll(".ses").forEach(s => s.classList.toggle("sel", s.dataset.id===id));
+  if (timerDet) clearInterval(timerDet);
+  const cargar = async () => {
+    try {
+      const r = await fetch(`/guardian/api/sesiones/${id}`); if (!r.ok) return;
+      const d = await r.json(); pintarDetalle(d);
+      if (d.meta.estado !== "corriendo" && timerDet) { clearInterval(timerDet); timerDet = null; }
+    } catch {}
+  };
+  await cargar();
+  timerDet = setInterval(cargar, 1500);   // sondeo => sensación de streaming mientras corre
+}
+
+async function refrescarLista() {
+  try {
+    const r = await fetch("/guardian/api/sesiones"); if (!r.ok) return;
+    const d = await r.json(); pintarVig(d.vigilancia); pintarLista(d.sesiones || []);
+    if (sel === null && d.sesiones && d.sesiones.length) seleccionar(d.sesiones[0].id);
+  } catch {}
+}
+refrescarLista();
+setInterval(refrescarLista, 2500);
+</script>
+</body>
+</html>

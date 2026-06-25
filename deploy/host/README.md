@@ -177,6 +177,16 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   `docker logs keni-social-incident-keeper-1`. keeper.sh/ROL.md/ci_watch.py van bind-montados desde
   el dir estable: el ROL se relee en cada incidente; un cambio estructural aplica al próximo recreate.
 
+- **guardian-ui: UI INDEPENDIENTE del keeper (PROMOVIBLE):** en `https://social.kenitech.io/guardian`
+  se ven las detecciones, el razonamiento en streaming, el coste/tokens y los commits del keeper.
+  CLAVE: es un contenedor APARTE que NO depende del back/db/front — sólo de Traefik (ingress) y del
+  rastro que el keeper deja en `/data/keeper` (jsonl + meta + heartbeat), montado read-only. Así,
+  cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba (compruébalo parando el back:
+  `/guardian` sigue sirviendo). Reusa la imagen del worker (starlette+uvicorn) con `app.py`+`index.html`
+  bind-montados; sin build propio. **Auth PROPIA** por basicauth de Traefik (no la sesión del back, que
+  puede estar caída): pon `KENI_GUARDIAN_HTPASSWD` en el `.env` (genera con `htpasswd -nB <usuario>`);
+  vacío => 401 a todos (cerrado por defecto). Registro: `docker logs keni-social-guardian-ui-1`.
+
 - **mensaje honesto en un hueco (PROMOVIBLE):** `deploy.sh` crea `deploy/estado/desplegando` al
   empezar y lo borra al salir (trap, pase lo que pase). El nginx del `front` lo lee con
   `if (-f /estado/desplegando)`: durante un deploy real dice "actualizando" (transitorio); sin el

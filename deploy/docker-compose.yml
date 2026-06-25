@@ -1243,6 +1243,54 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # UI INDEPENDIENTE de observación del incident-keeper. Sirve en social.kenitech.io/guardian las
+  # detecciones, el razonamiento en streaming, el coste y los commits del keeper. CLAVE: NO depende
+  # del back/db/front — sólo de Traefik (ingress) y del rastro que el keeper deja en /data/keeper
+  # (montado read-only). Así, cuando la app está caída y el keeper la arregla, esta UI SIGUE arriba.
+  # Reusa la imagen del worker (trae starlette+uvicorn) con app.py bind-montado; sin build propio.
+  guardian-ui:
+    image: keni-social/worker:${WORKER_VERSION:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "--app-dir", "/guardian-ui", "app:app", "--host", "0.0.0.0", "--port", "8080"]
+    environment:
+      KENI_KEEPER_DATA: /data/keeper
+    volumes:
+      - keni-data:/data:ro              # SOLO lectura del rastro del keeper
+      - ./guardian-ui:/guardian-ui:ro   # app.py + index.html (bind-mount; sin imagen propia)
+    networks:
+      - edge                            # lo enruta Traefik; NO data/internal (no usa db ni egress)
+    labels:
+      - autoheal=true
+      - traefik.enable=true
+      - traefik.docker.network=keni-social_edge
+      # Router PROPIO en /guardian, prioridad ALTA (gana a front/back). Auth PROPIA por basicauth
+      # (htpasswd en KENI_GUARDIAN_HTPASSWD del .env), INDEPENDIENTE de la sesión del back (que
+      # puede estar caída). Sin htpasswd configurado => 401 a todos (cerrado por defecto).
+      - traefik.http.routers.guardian.rule=Host(`${KENI_HOST}`) && PathPrefix(`/guardian`)
+      - traefik.http.routers.guardian.priority=20
+      - traefik.http.routers.guardian.entrypoints=websecure
+      - traefik.http.routers.guardian.tls.certresolver=le
+      - traefik.http.routers.guardian.middlewares=keni-guardian-auth
+      - traefik.http.middlewares.keni-guardian-auth.basicauth.users=${KENI_GUARDIAN_HTPASSWD:-}
+      - traefik.http.services.guardian.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/guardian/api/sesiones',timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    mem_limit: 256m
+    cpus: 0.5
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   # AUTOHEAL de contenedores EXITED — el hueco que willfarrell/autoheal NO cubre. Aquel solo
   # reinicia contenedores unhealthy-pero-VIVOS; y `restart: unless-stopped` NO revive un
   # contenedor parado a propósito (un deploy que hace `stop` y luego falla deja el servicio

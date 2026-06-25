@@ -9,6 +9,8 @@ frontera). El keeper usa esa salida como evidencia para lanzar un claude -p que 
 No imprime nada si el último pipeline está verde, corriendo/pendiente, o no hay datos: en esos
 casos no hay nada que arreglar. La conexión es read-only e idempotente (no toca Woodpecker).
 """
+import datetime
+import json
 import os
 import sqlite3
 import sys
@@ -35,7 +37,46 @@ def _es_fallo_real(linea: str) -> bool:
     )
 
 
+def _ultimo_pipeline():
+    """Último pipeline de `main`: (number, status, message) o None. Read-only, tolerante."""
+    if not os.path.exists(DB):
+        return None
+    try:
+        con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+        fila = con.execute(
+            "SELECT number, status, message FROM pipelines WHERE repo_id=? ORDER BY number DESC LIMIT 1",
+            (REPO,),
+        ).fetchone()
+        con.close()
+        return fila
+    except sqlite3.Error:
+        return None
+
+
+def heartbeat(destino: str, ci_on: str) -> None:
+    """Escribe el estado de vigilancia para guardian-ui: si el keeper vigila el CI y qué ve."""
+    ult = _ultimo_pipeline() if ci_on == "1" else None
+    estado = {
+        "ci_on": ci_on == "1",
+        "ultimo_chequeo": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ultimo_pipeline": (
+            {"number": ult[0], "status": ult[1], "message": ult[2]} if ult else None
+        ),
+    }
+    try:
+        tmp = destino + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(estado, fh, ensure_ascii=False)
+        os.replace(tmp, destino)
+    except OSError:
+        pass
+
+
 def main() -> None:
+    # Modo heartbeat: `ci_watch.py --heartbeat <estado.json> <ci_on>` y sale.
+    if len(sys.argv) >= 4 and sys.argv[1] == "--heartbeat":
+        heartbeat(sys.argv[2], sys.argv[3])
+        return
     if not os.path.exists(DB):
         return
     try:
