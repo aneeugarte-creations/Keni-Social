@@ -44,6 +44,9 @@ from .migraciones_columnas import (
     _migrar_columnas_campanias,
     _migrar_columnas_catalogo_media,
     _migrar_clasificar_originales_portal,
+    _migrar_fts_catalogo_media,
+    _migrar_fuente_subidas,
+    _migrar_heredar_keywords_media,
     _migrar_columnas_config_franjas,
     _migrar_columnas_publicacion,
     _migrar_columnas_pieza,
@@ -289,17 +292,16 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # dependientes y columnas FK). PRE-DDL OBLIGATORIO: renombra ANTES de que el DDL cree las
     # tablas nuevas vacías (mismo motivo que 0041-recuperar-campanias). Idempotente, guardada.
     Migracion("0042-renombre-entidades", _migrar_renombre_entidades),
-    # BIBLIOTECA DE MEDIOS UNIFICADA: columnas `fuente` (carpeta de origen: portal|originales|
-    # fotografias) y `grupo` (carpeta lógica, p. ej. el partido) en `catalogo_media` para BDs ya
-    # creadas (las nuevas las traen del DDL). PRE-DDL: `fuente` la usa el índice declarativo
-    # `idx_catalogo_media_fuente`, que el DDL crea sobre una tabla preexistente sin la columna;
-    # debe añadirse antes (mismo motivo que 0003/0004/0005). Re-aplicable (idempotente:
-    # ADD COLUMN/CREATE INDEX IF NOT EXISTS); no destructivo ('' = sin clasificar).
+    # BIBLIOTECA DE MEDIOS: columnas `fuente`/`grupo` (0049) y la búsqueda FTS `spanish`+trigram
+    # (0051) en `catalogo_media`. PRE-DDL como 0003/0004/0005: sus columnas/extensión las usan
+    # índices del DDL declarativo (`idx_catalogo_media_fuente`, `_tsv`, `_titulo_trgm`), que el DDL
+    # crea sobre una tabla preexistente; deben existir antes. Idempotentes y no destructivas.
     Migracion(
         "0049-columnas-catalogo-media",
         _migrar_columnas_catalogo_media,
         re_aplicar_si_cambia=True,
     ),
+    Migracion("0051-fts-catalogo-media", _migrar_fts_catalogo_media, re_aplicar_si_cambia=True),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -510,6 +512,15 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         _migrar_clasificar_originales_portal,
         re_aplicar_si_cambia=True,
     ),
+    # HERENCIA de KEYWORDS → etiquetas de media: rellena las etiquetas vacías de las fotos usadas por
+    # alguna pieza (`pieza.foto == catalogo_media.objeto`) con las keywords de las etiquetas de esa
+    # pieza. Enriquece las fotos del portal con titular pero sin etiquetas, mejorando la búsqueda FTS.
+    # Re-aplicable e idempotente (solo toca filas con etiquetas vacías).
+    Migracion("0052-heredar-keywords-media", _migrar_heredar_keywords_media, re_aplicar_si_cambia=True),
+    # CARPETA `subidas`: las fotos subidas a mano (`tipo='subida'`) son la carpeta `subidas` de la
+    # biblioteca. Clasifica las ya catalogadas sin fuente. Re-aplicable e idempotente (solo toca
+    # filas sin clasificar).
+    Migracion("0053-fuente-subidas", _migrar_fuente_subidas, re_aplicar_si_cambia=True),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

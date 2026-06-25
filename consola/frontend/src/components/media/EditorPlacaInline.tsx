@@ -98,7 +98,7 @@ export function EditorPlacaInline({
   const [buscadorAgencias, setBuscadorAgencias] = React.useState(false);
   // Buscador de fotos PROPIAS (galería local del equipo vía el túnel keni-fotos), por marca.
   const [buscadorPropio, setBuscadorPropio] = React.useState(false);
-  // Buscador de la BIBLIOTECA (catálogo de medios del equipo: portal/originales/fotografías).
+  // Buscador de la BIBLIOTECA (catálogo de medios del equipo: portal/subidas/fotografías).
   const [buscadorBiblioteca, setBuscadorBiblioteca] = React.useState(false);
   // Opciones de ORIGEN de la foto (Texto / Subir / Generar con IA): se abren al TOCAR un hueco
   // (fuera del titular), no como bloque permanente en el panel de edición. El origen elegido se
@@ -742,6 +742,16 @@ export function EditorPlacaInline({
         onBuscarAgencias={piezaId ? () => setBuscadorAgencias(true) : undefined}
         onBuscarPropio={piezaId && marca ? () => setBuscadorPropio(true) : undefined}
         onBuscarBiblioteca={piezaId ? () => setBuscadorBiblioteca(true) : undefined}
+        piezaId={piezaId}
+        onAdjuntarSugerida={
+          piezaId
+            ? (plataforma) => {
+                cambiarFotoActiva(plataforma.foto);
+                onStockCambio?.(plataforma);
+                setFuenteAbierta(false);
+              }
+            : undefined
+        }
         onGenerar={iniciarGeneracion}
       />
 

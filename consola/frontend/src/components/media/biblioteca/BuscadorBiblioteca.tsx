@@ -1,6 +1,6 @@
 /**
  * Buscador de la BIBLIOTECA para dar imagen a una pieza desde el editor, junto a stock/agencias/
- * propio. Lee `catalogo_media` (todas las carpetas: portal · originales · fotografías) por
+ * propio. Lee `catalogo_media` (todas las carpetas: portal · subidas · fotografías) por
  * título + etiquetas y, al elegir un item (`POST /api/biblioteca/adjuntar {pieza_id, id}`), el back
  * lo adjunta a la pieza dejándola publicable y devuelve la `PlataformaStock` para refrescar.
  */
@@ -85,7 +85,7 @@ export function BuscadorBiblioteca({
         <DialogHeader>
           <DialogTitle>Buscar en la biblioteca</DialogTitle>
           <DialogDescription>
-            Fotos catalogadas del equipo (portal, originales y fotografías). Al adjuntar una, la pieza
+            Fotos catalogadas del equipo (portal, subidas y fotografías). Al adjuntar una, la pieza
             queda lista para publicar.
           </DialogDescription>
         </DialogHeader>

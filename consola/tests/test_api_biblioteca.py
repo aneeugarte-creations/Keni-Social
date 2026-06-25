@@ -11,7 +11,8 @@ from __future__ import annotations
 import base64
 import json
 
-from keni_consola import fotos_tunel, media, repos
+from keni_consola import fotos_tunel, media, motor_db, repos
+from keni_consola._db_core.migraciones_columnas import _migrar_heredar_keywords_media
 
 # PNG 1x1 válido: binario de prueba (objeto de media / original del túnel).
 _PNG_1x1 = (
@@ -39,7 +40,7 @@ def _catalogar(*, fuente: str, grupo: str = "", titulo: str = "", etiquetas=None
 
 def test_crear_y_filtrar_por_fuente_y_grupo(entorno):
     a = _catalogar(fuente="fotografias", grupo="colombia uzbekistan", sufijo=b"a")
-    _catalogar(fuente="originales", grupo="", sufijo=b"b")
+    _catalogar(fuente="subidas", grupo="", sufijo=b"b")
 
     leido = repos.obtener_media_catalogo(a["id"])
     assert leido["fuente"] == "fotografias"
@@ -58,11 +59,11 @@ def test_crear_y_filtrar_por_fuente_y_grupo(entorno):
 
 def test_biblioteca_global_cruza_las_fuentes(cliente):
     _catalogar(fuente="fotografias", titulo="Estadio", sufijo=b"1")
-    _catalogar(fuente="originales", titulo="Rueda de prensa", sufijo=b"2")
+    _catalogar(fuente="subidas", titulo="Rueda de prensa", sufijo=b"2")
     _catalogar(fuente="portal", titulo="Nota portal", sufijo=b"3")
 
     items = cliente.get("/api/biblioteca").json()["items"]
-    assert {i["fuente"] for i in items} >= {"fotografias", "originales", "portal"}
+    assert {i["fuente"] for i in items} >= {"fotografias", "subidas", "portal"}
     # Forma del item: url/thumb por /api/media.
     uno = next(i for i in items if i["titulo"] == "Estadio")
     assert uno["url"] == f"/api/media/{uno['key']}"
@@ -90,6 +91,31 @@ def test_biblioteca_fuente_invalida_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# GET /api/biblioteca?q=: FTS por relevancia + fallback trigram (erratas)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_busqueda_fts_rankea_por_relevancia(cliente):
+    """El término en el TÍTULO (peso A) rankea por delante del que solo está en ETIQUETAS (peso B)."""
+    _catalogar(fuente="fotografias", titulo="Gol de Colombia", sufijo=b"r1")
+    _catalogar(fuente="fotografias", titulo="Afición en el estadio",
+               etiquetas=["gol"], sufijo=b"r2")
+    titulos = [i["titulo"] for i in cliente.get("/api/biblioteca?q=gol").json()["items"]]
+    assert titulos[0] == "Gol de Colombia"  # mayor ts_rank (título > etiquetas)
+    assert "Afición en el estadio" in titulos
+
+
+def test_busqueda_fallback_trigram_tolera_errata(cliente):
+    """Una errata (no es un lexema FTS válido) cae al fallback trigram por similitud de título."""
+    _catalogar(fuente="fotografias", titulo="Colombia campeona", sufijo=b"t1")
+    _catalogar(fuente="fotografias", titulo="Banca vacía", sufijo=b"t2")
+    items = cliente.get("/api/biblioteca?q=colmbia").json()["items"]
+    titulos = [i["titulo"] for i in items]
+    assert "Colombia campeona" in titulos
+    assert "Banca vacía" not in titulos
+
+
+# --------------------------------------------------------------------------- #
 # GET /api/biblioteca/carpetas: conteos                                         #
 # --------------------------------------------------------------------------- #
 
@@ -97,11 +123,11 @@ def test_biblioteca_fuente_invalida_400(cliente):
 def test_carpetas_cuenta_por_fuente_y_grupo(cliente):
     _catalogar(fuente="fotografias", grupo="partido x", sufijo=b"1")
     _catalogar(fuente="fotografias", grupo="partido x", sufijo=b"2")
-    _catalogar(fuente="originales", sufijo=b"3")
+    _catalogar(fuente="subidas", sufijo=b"3")
 
     carpetas = {c["fuente"]: c for c in cliente.get("/api/biblioteca/carpetas").json()["carpetas"]}
     assert carpetas["fotografias"]["total"] == 2
-    assert carpetas["originales"]["total"] == 1
+    assert carpetas["subidas"]["total"] == 1
     assert carpetas["portal"]["total"] == 0
     grupos = {g["grupo"]: g["total"] for g in carpetas["fotografias"]["grupos"]}
     assert grupos == {"partido x": 2}
@@ -215,6 +241,91 @@ def test_adjuntar_item_a_pieza(cliente):
     assert fila["imagen_origen"] == "galeria"
     assert bool(fila["falta_imagen"]) is False
     assert fila["foto"]
+
+
+def test_adjuntar_hereda_keywords_de_la_pieza(cliente):
+    """Adjuntar fusiona en la foto las keywords de las etiquetas de la pieza (dedup, sin pisar)."""
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
+    etq = repos.crear_etiqueta(
+        nombre="Gol", clase="categoria", marca="claro-sports", keywords="gol, colombia"
+    )
+    repos.asignar_etiqueta(tema["id"], etq["id"])
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
+    item = _catalogar(fuente="fotografias", titulo="Foto", etiquetas=["estadio"], sufijo=b"hk")
+
+    r = cliente.post("/api/biblioteca/adjuntar", json={"pieza_id": pid, "id": item["id"]})
+    assert r.status_code == 200, r.text
+    tags = json.loads(repos.obtener_media_catalogo(item["id"])["etiquetas"])
+    assert "estadio" in tags  # conserva lo que ya tenía
+    assert "gol" in tags and "colombia" in tags  # hereda las keywords de la pieza
+
+
+def test_backfill_hereda_keywords_a_media_vacia(cliente):
+    """El backfill rellena las etiquetas VACÍAS de una foto usada por una pieza con sus keywords."""
+    item = _catalogar(fuente="portal", titulo="Nota", etiquetas=[], sufijo=b"bf")
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
+    etq = repos.crear_etiqueta(
+        nombre="LigaMX", clase="categoria", marca="claro-sports", keywords="liga mx, futbol"
+    )
+    repos.asignar_etiqueta(tema["id"], etq["id"])
+    # La pieza USA la foto: su `foto` es el objeto del catálogo.
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", copy="c", foto=item["objeto"]
+    )
+
+    con = motor_db.conectar_cruda()
+    try:
+        _migrar_heredar_keywords_media(con)
+        con.commit()
+    finally:
+        con.close()
+
+    tags = json.loads(repos.obtener_media_catalogo(item["id"])["etiquetas"])
+    assert "liga mx" in tags and "futbol" in tags
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/biblioteca/sugerir: foto→pieza por titular + keywords (por marca)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_sugerir_por_marca_y_keywords(cliente):
+    """Sugiere las fotos que casan el titular/keywords de la pieza, acotadas a su marca."""
+    relevante = _catalogar(
+        fuente="fotografias", titulo="Gol de Colombia", marca="claro-sports", sufijo=b"s1"
+    )
+    _catalogar(  # otra marca: no debe cruzarse
+        fuente="fotografias", titulo="Gol de Colombia", marca="unotv", sufijo=b"s2"
+    )
+    _catalogar(  # no casa el texto
+        fuente="fotografias", titulo="Banca vacía", marca="claro-sports", sufijo=b"s3"
+    )
+    tema = repos.crear_publicacion(
+        clase="contenido", titulo="Gol de Colombia en el último minuto", marca="claro-sports"
+    )
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
+
+    items = cliente.get(f"/api/biblioteca/sugerir?pieza_id={pid}").json()["items"]
+    ids = [i["id"] for i in items]
+    assert relevante["id"] in ids
+    assert all(i["marca"] in ("claro-sports", "") for i in items)  # no cruza marca
+    assert all(i["titulo"] != "Banca vacía" for i in items)
+
+
+def test_sugerir_degrada_a_recientes_de_la_marca(cliente):
+    """Sin titular ni keywords, degrada a las fotos recientes de la marca de la pieza."""
+    reciente = _catalogar(
+        fuente="fotografias", titulo="Cualquiera", marca="claro-sports", sufijo=b"d1"
+    )
+    tema = repos.crear_publicacion(clase="contenido", titulo="", marca="claro-sports")
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
+
+    items = cliente.get(f"/api/biblioteca/sugerir?pieza_id={pid}&limite=5").json()["items"]
+    assert reciente["id"] in [i["id"] for i in items]
+
+
+def test_sugerir_pieza_inexistente_404(cliente):
+    assert cliente.get("/api/biblioteca/sugerir?pieza_id=noexiste").status_code == 404
 
 
 def test_adjuntar_item_inexistente_404(cliente):

@@ -63,6 +63,23 @@ def listar_media_catalogo(
     )
 
 
+def buscar_media_catalogo(
+    *,
+    q: str,
+    marca: str | None = None,
+    tipo: str | None = None,
+    fuente: str | None = None,
+    grupo: str | None = None,
+    solo_aprobados: bool = False,
+    incluir_globales: bool = False,
+    limite: int | None = None,
+) -> list[dict[str, Any]]:
+    return db.buscar_media_catalogo(
+        q=q, marca=marca, tipo=tipo, fuente=fuente, grupo=grupo,
+        solo_aprobados=solo_aprobados, incluir_globales=incluir_globales, limite=limite,
+    )
+
+
 def obtener_media_catalogo(media_id: str) -> dict[str, Any] | None:
     return db.obtener_media_catalogo(media_id)
 

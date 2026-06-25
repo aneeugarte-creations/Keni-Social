@@ -1,11 +1,11 @@
 /**
  * Página «Galería» — la BIBLIOTECA de medios unificada del equipo + las galerías locales en vivo.
  *
- * La biblioteca cataloga las fotos disponibles para postear en tres carpetas (portal · originales ·
+ * La biblioteca cataloga las fotos disponibles para postear en tres carpetas (portal · subidas ·
  * fotografías) sobre `catalogo_media`. Esta página ofrece:
  *  - Un BUSCADOR GLOBAL (sobre `GET /api/biblioteca`, por título + etiquetas) cruzando las tres
  *    carpetas, en posición estable y DESACOPLADO de cualquier sondeo.
- *  - CARPETAS navegables (de `GET /api/biblioteca/carpetas`): Portal · Originales · Fotografías;
+ *  - CARPETAS navegables (de `GET /api/biblioteca/carpetas`): Portal · Subidas · Fotografías;
  *    dentro de Fotografías, por grupo (partido). Cada foto: thumb, título, etiquetas, descargar y
  *    —en fotografías— navegar la ráfaga del burst.
  *  - El explorador de galerías LOCALES en vivo (apps keni-fotos conectadas por túnel, por SSE): se
@@ -43,10 +43,10 @@ import type {
 
 const ETIQUETA_FUENTE: Record<FuenteBiblioteca, string> = {
   portal: "Portal",
-  originales: "Originales",
+  subidas: "Subidas",
   fotografias: "Fotografías",
 };
-const FUENTES: FuenteBiblioteca[] = ["portal", "originales", "fotografias"];
+const FUENTES: FuenteBiblioteca[] = ["portal", "subidas", "fotografias"];
 
 /** ¿Este item de fotografías trae las coordenadas del túnel para navegar su ráfaga? */
 function refRafaga(item: ItemBiblioteca, marca?: string): RafagaRef | null {
@@ -136,7 +136,7 @@ function BuscadorGlobalBiblioteca({
   );
 }
 
-/** Carpetas navegables: Portal · Originales · Fotografías (esta por grupo/partido). */
+/** Carpetas navegables: Portal · Subidas · Fotografías (esta por grupo/partido). */
 function CarpetasBiblioteca({
   marca,
   onRafaga,
@@ -471,7 +471,7 @@ export default function Fotos() {
           </CardContent>
         </Card>
 
-        {/* Carpetas navegables: Portal · Originales · Fotografías. */}
+        {/* Carpetas navegables: Portal · Subidas · Fotografías. */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

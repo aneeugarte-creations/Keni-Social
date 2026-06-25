@@ -35,7 +35,7 @@ def _migrar_renombre_catalogo_media(con: Any) -> None:
 def _migrar_columnas_catalogo_media(con: Any) -> None:
     """Anade `fuente` y `grupo` a `catalogo_media` si una BD ya creada no las tuviera (idempotente).
 
-    BIBLIOTECA DE MEDIOS UNIFICADA: `fuente` es la carpeta de origen (`portal|originales|
+    BIBLIOTECA DE MEDIOS UNIFICADA: `fuente` es la carpeta de origen (`portal|subidas|
     fotografias`) y `grupo` una carpeta lógica dentro de ella (p. ej. el partido). '' en ambas =
     sin clasificar (los artes catalogados antes de la biblioteca). `ADD COLUMN IF NOT EXISTS` es
     seguro y no-op si ya están. El índice por `fuente` (navegación por carpeta) lo crea el DDL.
@@ -73,6 +73,98 @@ def _migrar_clasificar_originales_portal(con: Any) -> None:
     con.execute(
         "UPDATE catalogo_media SET fuente = 'portal' "
         "WHERE objeto LIKE 'originales/%%' AND (fuente IS NULL OR fuente = '')"
+    )
+
+
+def _migrar_fts_catalogo_media(con: Any) -> None:
+    """Habilita la BÚSQUEDA FTS + trigram de la biblioteca de medios en BDs ya creadas (idempotente).
+
+    Crea la extensión `pg_trgm`, la columna GENERATED `busqueda_tsv` (vector `spanish` ponderado
+    titulo(A)/etiquetas(B)/descripcion(C)) y los índices GIN: uno sobre el vector (FTS por
+    relevancia) y otro trigram sobre `titulo` (fallback fuzzy para erratas/nombres propios). Es
+    PRE-DDL para que la columna y la extensión existan ANTES de que el DDL declarativo cree sus
+    índices. ADD COLUMN/CREATE ... IF NOT EXISTS: no-op si ya están (las BDs nuevas las traen del DDL).
+
+    Solo aplica si la tabla existe (un primer arranque la crea ya con la columna y los índices).
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    con.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+    if "busqueda_tsv" not in _columnas_existentes(con, "catalogo_media"):
+        con.execute(
+            "ALTER TABLE catalogo_media ADD COLUMN busqueda_tsv tsvector GENERATED ALWAYS AS ("
+            "setweight(to_tsvector('spanish', coalesce(titulo, '')), 'A') || "
+            "setweight(to_tsvector('spanish', coalesce(etiquetas, '')), 'B') || "
+            "setweight(to_tsvector('spanish', coalesce(descripcion, '')), 'C')) STORED"
+        )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_catalogo_media_tsv "
+        "ON catalogo_media USING gin (busqueda_tsv)"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_catalogo_media_titulo_trgm "
+        "ON catalogo_media USING gin (titulo gin_trgm_ops)"
+    )
+
+
+def _migrar_heredar_keywords_media(con: Any) -> None:
+    """Backfill: rellena `catalogo_media.etiquetas` vacías con las keywords de la pieza que usa la foto.
+
+    Una foto de la biblioteca (`catalogo_media.objeto`) usada por una pieza (`pieza.foto == objeto`)
+    hereda las keywords de las etiquetas asignadas a la publicación de esa pieza: así las fotos del
+    portal con titular pero etiquetas vacías quedan buscables por su contexto editorial. Dedup, tope
+    de 12, normalizadas en minúsculas. Idempotente: solo toca filas con `etiquetas` vacía ('[]'/'').
+
+    Solo aplica si existen las tablas implicadas (BD ya inicializada).
+    """
+    for tabla in ("catalogo_media", "pieza", "publicacion_etiquetas", "etiquetas"):
+        if not _tabla_existe(con, tabla):
+            return
+    # Para cada foto sin etiquetar, junta las keywords (CSV) de las etiquetas de las piezas que la
+    # usan. Una sola consulta agregada; el troceo CSV/dedup/tope se hace en Python (portable).
+    filas = con.execute(
+        "SELECT cm.id AS media_id, e.keywords AS keywords "
+        "FROM catalogo_media cm "
+        "JOIN pieza p ON p.foto = cm.objeto "
+        "JOIN publicacion_etiquetas pe ON pe.publicacion_id = p.publicacion_id "
+        "JOIN etiquetas e ON e.id = pe.etiqueta_id "
+        "WHERE coalesce(cm.etiquetas, '') IN ('', '[]') "
+        "AND coalesce(e.keywords, '') <> ''"
+    ).fetchall()
+    if not filas:
+        return
+    por_media: dict[str, list[str]] = {}
+    for fila in filas:
+        acc = por_media.setdefault(fila["media_id"], [])
+        for cruda in (fila["keywords"] or "").split(","):
+            kw = cruda.strip().lower()
+            if kw and kw not in acc and len(acc) < 12:
+                acc.append(kw)
+    for media_id, keywords in por_media.items():
+        if not keywords:
+            continue
+        con.execute(
+            "UPDATE catalogo_media SET etiquetas = ? "
+            "WHERE id = ? AND coalesce(etiquetas, '') IN ('', '[]')",
+            (json.dumps(keywords, ensure_ascii=False), media_id),
+        )
+
+
+def _migrar_fuente_subidas(con: Any) -> None:
+    """Backfill: las fotos SUBIDAS a mano (`tipo='subida'`) son la carpeta `subidas` de la biblioteca.
+
+    La subida manual se cataloga con `tipo='subida'`; su carpeta lógica en la biblioteca es
+    `subidas`. Clasifica las ya catalogadas sin fuente. Idempotente: solo toca filas sin clasificar.
+
+    Solo aplica si la tabla existe y ya tiene la columna `fuente`.
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    con.execute(
+        "UPDATE catalogo_media SET fuente = 'subidas' "
+        "WHERE tipo = 'subida' AND (fuente IS NULL OR fuente = '')"
     )
 
 

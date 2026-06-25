@@ -190,6 +190,7 @@ from .db_editor import (  # noqa: F401
     borrar_marca_activo,
     borrar_media_catalogo,
     borrar_plantilla_diseno,
+    buscar_media_catalogo,
     borrar_video_composicion,
     crear_audio_transcripcion,
     crear_bloque,

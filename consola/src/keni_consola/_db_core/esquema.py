@@ -40,6 +40,10 @@ def arrancar_persistencia() -> None:
 # todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
 # autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
 _DDL_ESQUEMA: tuple[str, ...] = (
+    # Búsqueda fuzzy (trigramas) de la biblioteca de medios: la usa el índice trigram de
+    # `catalogo_media.titulo` (red de seguridad para erratas/nombres propios cuando la FTS no
+    # devuelve nada). Idempotente y barato. Va al frente para que exista antes de su índice.
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
     # Campañas: agrupan piezas por uno o varios HASHTAGS configurables, y pueden abarcar
     # VARIAS marcas (multimarca). Definen un filtro (marcas + hashtags) y la analítica se
     # computa AL VUELO sobre el listado de piezas del periodo (`servicio.construir_listado_piezas`,
@@ -942,7 +946,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         credito      TEXT NOT NULL DEFAULT '',
         aprobado     INTEGER NOT NULL DEFAULT 1,
         -- BIBLIOTECA DE MEDIOS UNIFICADA: `fuente` es la CARPETA de origen del objeto
-        -- (portal | originales | fotografias), `grupo` una carpeta lógica dentro de la fuente
+        -- (portal | subidas | fotografias), `grupo` una carpeta lógica dentro de la fuente
         -- (p. ej. el partido «colombia uzbekistan» en fotografias). '' = sin clasificar (artes
         -- catalogados antes de la biblioteca). El buscador global cruza las tres fuentes.
         fuente       TEXT NOT NULL DEFAULT '',
@@ -950,13 +954,24 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',
-        actualizado  TEXT NOT NULL DEFAULT ''
+        actualizado  TEXT NOT NULL DEFAULT '',
+        -- BÚSQUEDA FTS: vector `spanish` mantenido por Postgres (GENERATED) sobre titulo(A),
+        -- etiquetas(B) y descripcion(C). El buscador de la biblioteca rankea por `ts_rank` y
+        -- cae a similitud trigram sobre `titulo` cuando la FTS no devuelve nada (erratas).
+        busqueda_tsv tsvector GENERATED ALWAYS AS (
+            setweight(to_tsvector('spanish', coalesce(titulo, '')), 'A') ||
+            setweight(to_tsvector('spanish', coalesce(etiquetas, '')), 'B') ||
+            setweight(to_tsvector('spanish', coalesce(descripcion, '')), 'C')
+        ) STORED
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_marca ON catalogo_media (marca)",
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_tipo ON catalogo_media (tipo)",
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_aprobado ON catalogo_media (aprobado)",
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_fuente ON catalogo_media (fuente)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_tsv ON catalogo_media USING gin (busqueda_tsv)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_titulo_trgm "
+    "ON catalogo_media USING gin (titulo gin_trgm_ops)",
     # ACTIVOS DE MARCA (editor profesional): el kit visual reutilizable de cada marca, agrupado
     # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
     # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en

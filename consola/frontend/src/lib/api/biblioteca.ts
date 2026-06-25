@@ -1,5 +1,5 @@
 // Fragmento del cliente API: dominio «biblioteca» (galería de medios unificada). El índice es
-// `catalogo_media` con su dimensión de carpeta (`fuente`: portal | originales | fotografias). El
+// `catalogo_media` con su dimensión de carpeta (`fuente`: portal | subidas | fotografias). El
 // objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { descargar, peticion, query } from "./_core";
 import type {
@@ -27,6 +27,13 @@ export const apiBiblioteca = {
         marca: filtros.marca,
         grupo: filtros.grupo,
       })}`,
+      { signal },
+    ),
+  // Sugerencias de foto para una pieza: las mejores candidatas de la biblioteca según su contenido
+  // (mismo `{items}` que el buscador). Para el sugeridor del editor; vacío si no hay nada que sugerir.
+  sugerirBiblioteca: (pieza_id: string, limite = 6, signal?: AbortSignal) =>
+    peticion<RespuestaBiblioteca>(
+      `/biblioteca/sugerir${query({ pieza_id, limite: String(limite) })}`,
       { signal },
     ),
   // Resumen por carpeta (fuente) y por grupo (conteos) para navegar las secciones.

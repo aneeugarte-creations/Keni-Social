@@ -7,6 +7,8 @@ import { Camera, FolderOpen, Library, Newspaper, ScanSearch, Upload } from "luci
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import { SugeridasBiblioteca } from "@/components/media/biblioteca/SugeridasBiblioteca";
+import type { PlataformaStock } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -49,6 +51,10 @@ export interface DialogoFuenteFotoProps {
   onBuscarPropio?: () => void;
   /** Abre el buscador de la BIBLIOTECA (catálogo de medios del equipo); ausente si no hay pieza. */
   onBuscarBiblioteca?: () => void;
+  /** Pieza activa: habilita el sugeridor «Fotos sugeridas» de la biblioteca. */
+  piezaId?: string;
+  /** Tras adjuntar una foto sugerida: la fila por plataforma actualizada, para refrescar el hueco. */
+  onAdjuntarSugerida?: (plataforma: PlataformaStock) => void;
   /** Lanza la generación con IA. */
   onGenerar: () => void;
 }
@@ -71,6 +77,8 @@ export function DialogoFuenteFoto({
   onBuscarAgencias,
   onBuscarPropio,
   onBuscarBiblioteca,
+  piezaId,
+  onAdjuntarSugerida,
   onGenerar,
 }: DialogoFuenteFotoProps) {
   return (
@@ -152,6 +160,13 @@ export function DialogoFuenteFoto({
               </Button>
             )}
           </div>
+          {piezaId && onAdjuntarSugerida && (
+            <SugeridasBiblioteca
+              piezaId={piezaId}
+              onAdjuntada={onAdjuntarSugerida}
+              ocupado={ocupado}
+            />
+          )}
           <div className="space-y-1.5">
             <span className="text-xs text-muted-foreground">
               O genera con IA:

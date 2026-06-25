@@ -1,9 +1,9 @@
 // Tipos del dominio «Biblioteca de medios unificada»: el índice `catalogo_media` más la dimensión
-// de carpeta (`fuente`: portal | originales | fotografias). Un buscador global cruza las tres
+// de carpeta (`fuente`: portal | subidas | fotografias). Un buscador global cruza las tres
 // carpetas; dentro de fotografías, los items se agrupan por `grupo` (el partido).
 
 /** Carpeta lógica de origen de un item de la biblioteca. */
-export type FuenteBiblioteca = "portal" | "originales" | "fotografias";
+export type FuenteBiblioteca = "portal" | "subidas" | "fotografias";
 
 /** Un item de la biblioteca: una imagen del catálogo, servible y descargable, con su carpeta. */
 export interface ItemBiblioteca {

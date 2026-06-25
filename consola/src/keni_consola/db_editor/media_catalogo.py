@@ -124,7 +124,7 @@ def listar_media_catalogo(
     `incluir_globales` (def False): al filtrar por `marca`, suma también los artes GLOBALES
     (marca='') — "compartidos entre marcas" —, de modo que un arte global (p.ej. una foto
     generada por IA y catalogada para reutilizar) aparezca en la galería de CUALQUIER marca.
-    `fuente`/`grupo` acotan a una CARPETA de la biblioteca unificada (portal|originales|
+    `fuente`/`grupo` acotan a una CARPETA de la biblioteca unificada (portal|subidas|
     fotografias) y a una carpeta lógica dentro de ella (p. ej. un partido).
     """
     clausulas: list[str] = []
@@ -153,6 +153,79 @@ def listar_media_catalogo(
     con = _conectar()
     try:
         filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_media_catalogo(f) for f in filas]
+
+
+# Umbral de similitud de palabra (pg_trgm `word_similarity`) del fallback fuzzy: una palabra de la
+# consulta debe parecerse AL MENOS esto a algún fragmento del título para considerarse coincidencia.
+# Conservador (deja pasar erratas leves de nombres propios sin inundar de ruido).
+_UMBRAL_TRGM = 0.3
+
+
+def buscar_media_catalogo(
+    *,
+    q: str,
+    marca: str | None = None,
+    tipo: str | None = None,
+    fuente: str | None = None,
+    grupo: str | None = None,
+    solo_aprobados: bool = False,
+    incluir_globales: bool = False,
+    limite: int | None = None,
+) -> list[dict[str, Any]]:
+    """Busca en el catálogo por RELEVANCIA: FTS `spanish` (ts_rank) con fallback trigram en `titulo`.
+
+    Mismos filtros combinables (AND) que `listar_media_catalogo`. Primero corre FTS sobre el vector
+    ponderado (`busqueda_tsv`, titulo>etiquetas>descripcion) ordenando por `ts_rank`; si no devuelve
+    NADA (erratas, nombres propios), cae a similitud de palabra (`word_similarity`) sobre `titulo`
+    ordenando por similitud. `q` vacío devuelve [] (el listado sin búsqueda usa
+    `listar_media_catalogo`). `limite` (opcional) acota el top-N.
+    """
+    aguja = (q or "").strip()
+    if not aguja:
+        return []
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        if incluir_globales:
+            clausulas.append("(marca = ? OR marca = '')")
+        else:
+            clausulas.append("marca = ?")
+        params.append(marca)
+    if tipo:
+        clausulas.append("tipo = ?")
+        params.append(tipo)
+    if fuente:
+        clausulas.append("fuente = ?")
+        params.append(fuente)
+    if grupo:
+        clausulas.append("grupo = ?")
+        params.append(grupo)
+    if solo_aprobados:
+        clausulas.append("aprobado = 1")
+    base = (" AND " + " AND ".join(clausulas)) if clausulas else ""
+    cola = f" LIMIT {int(limite)}" if limite else ""
+
+    sql_fts = (
+        f"{_SELECT_CATALOGO_MEDIA} "
+        "WHERE busqueda_tsv @@ websearch_to_tsquery('spanish', ?)" + base + " "
+        "ORDER BY ts_rank(busqueda_tsv, websearch_to_tsquery('spanish', ?)) DESC, "
+        "creado DESC, id DESC" + cola
+    )
+    sql_trgm = (
+        f"{_SELECT_CATALOGO_MEDIA} "
+        "WHERE word_similarity(?, titulo) >= ?" + base + " "
+        "ORDER BY word_similarity(?, titulo) DESC, creado DESC, id DESC" + cola
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(sql_fts, (aguja, *params, aguja)).fetchall()
+        if not filas:
+            filas = con.execute(
+                sql_trgm, (aguja, _UMBRAL_TRGM, *params, aguja)
+            ).fetchall()
     finally:
         con.close()
     return [_fila_a_media_catalogo(f) for f in filas]

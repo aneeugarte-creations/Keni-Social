@@ -70,6 +70,24 @@ def test_crear_arte_idempotente(cliente):
     assert sum(1 for x in artes if x["objeto"] == a["objeto"]) == 1
 
 
+def test_crear_arte_subida_es_fuente_subidas(cliente):
+    """Una SUBIDA manual (`tipo='subida'`) se cataloga en la carpeta `subidas` de la biblioteca."""
+    objeto = _subir_objeto(cliente, sufijo=b"sub")
+    arte = cliente.post(
+        "/api/artes", json={"objeto": objeto, "marca": "unotv", "tipo": "subida"},
+    ).json()["arte"]
+    assert repos.obtener_media_catalogo(arte["id"])["fuente"] == "subidas"
+
+
+def test_crear_arte_estudio_sin_fuente(cliente):
+    """Estudio/IA no son una carpeta de origen navegable: la `fuente` queda sin clasificar ('')."""
+    objeto = _subir_objeto(cliente, sufijo=b"est")
+    arte = cliente.post(
+        "/api/artes", json={"objeto": objeto, "marca": "unotv", "tipo": "estudio"},
+    ).json()["arte"]
+    assert repos.obtener_media_catalogo(arte["id"])["fuente"] == ""
+
+
 def test_crear_objeto_inexistente_400(cliente):
     r = cliente.post("/api/artes", json={"objeto": "noexiste.png", "marca": "unotv"})
     assert r.status_code == 400

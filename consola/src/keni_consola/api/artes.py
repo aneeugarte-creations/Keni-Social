@@ -184,12 +184,17 @@ def _crear(
     titulo = (titulo_crudo or "").strip()[:_MAX_TITULO]
     etiquetas = _normalizar_etiquetas(etiquetas_crudas)
 
+    # Las fotos SUBIDAS a mano forman la carpeta `subidas` de la biblioteca unificada (las demás
+    # vías —estudio/IA— no son una carpeta de origen navegable, quedan sin clasificar).
+    fuente = "subidas" if tipo == "subida" else ""
+
     arte = repos.crear_media_catalogo(
         objeto=objeto,
         tipo=tipo,
         marca=marca or "",
         titulo=titulo,
         etiquetas=json.dumps(etiquetas, ensure_ascii=False),
+        fuente=fuente,
         autor=autor,
     )
     return 200, {"arte": _arte_a_dict(arte)}

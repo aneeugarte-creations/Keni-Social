@@ -1,16 +1,18 @@
 """API Biblioteca de medios UNIFICADA: una galería buscable y navegable sobre `catalogo_media`.
 
 Reúne en un solo índice las tres CARPETAS de origen (`fuente`) de las fotos disponibles para
-postear —`portal` · `originales` · `fotografias`— con un buscador GLOBAL (cruza las tres si no se
+postear —`portal` · `subidas` · `fotografias`— con un buscador GLOBAL (cruza las tres si no se
 filtra) y navegación por carpeta (`fuente`) y carpeta lógica (`grupo`, p. ej. el partido). No
 reinventa el almacén: el índice es `catalogo_media` (via `repos.*_media_catalogo`), los binarios
 viven en el almacén de media (`almacen_media`/`media`) y se sirven por `/api/media/<key>`.
 
-  - `GET  /api/biblioteca`                 buscador global + filtros `fuente`/`marca`/`grupo`/`q`.
+  - `GET  /api/biblioteca`                 buscador global (FTS+trigram) + filtros `fuente`/`marca`/`grupo`/`q`.
   - `GET  /api/biblioteca/carpetas`        conteos por `fuente` y por `grupo` (para navegar).
+  - `GET  /api/biblioteca/sugerir`         top-N fotos para una pieza (FTS del titular+keywords, por marca).
   - `POST /api/biblioteca/guardar-remoto`  baja el original de un dispositivo (túnel keni-fotos),
                                            lo sube a `fotografias` y lo cataloga (conserva etiquetas).
-  - `POST /api/biblioteca/adjuntar`        adjunta un item del catálogo a una pieza (foto propia).
+  - `POST /api/biblioteca/adjuntar`        adjunta un item del catálogo a una pieza (foto propia) y
+                                           hereda en la foto las keywords de las etiquetas de la pieza.
   - `GET  /api/biblioteca/descargar/{id}`  descarga (attachment) el binario del item.
 
 Auth: sesión normal del SPA (el middleware exige sesión completa; no es público). Errores en
@@ -34,12 +36,16 @@ from ..seguridad import autor_de_peticion
 
 _log = logging.getLogger("keni_consola.biblioteca")
 
-# Carpetas de origen válidas de la biblioteca (espejo de las categorías S3 + `fuente`).
-_FUENTES = ("portal", "originales", "fotografias")
+# Carpetas de origen válidas de la biblioteca (la dimensión lógica `fuente`; la categoría FÍSICA
+# S3 de las subidas sigue siendo `originales/`, esto es solo la carpeta navegable de la biblioteca).
+_FUENTES = ("portal", "subidas", "fotografias")
 
 _MAX_TITULO = 120
 _MAX_ETIQUETAS = 12
 _MAX_ETIQUETA = 40
+# Sugerencias foto→pieza por defecto y tope (cada item es una miniatura en una fila de propuesta).
+_SUGERIR_LIMITE = 8
+_SUGERIR_MAX = 24
 
 
 def _normalizar_etiquetas(valor: object) -> list[str]:
@@ -89,16 +95,6 @@ def _item_a_dict(item: dict) -> dict:
     }
 
 
-def _coincide(item: dict, q: str) -> bool:
-    """Coincidencia substring (case-insensitive) por título, descripción o etiquetas."""
-    aguja = q.lower()
-    if aguja in (item.get("titulo") or "").lower():
-        return True
-    if aguja in (item.get("descripcion") or "").lower():
-        return True
-    return any(aguja in t.lower() for t in _etiquetas_lista(item.get("etiquetas")))
-
-
 def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     """'' (global) es válido; cualquier otra debe ser una marca del catálogo único."""
     if marca in (None, ""):
@@ -114,20 +110,26 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
 
 
 def _listar(marca: str | None, fuente: str | None, grupo: str | None, busqueda: str) -> dict:
-    crudos = repos.listar_media_catalogo(
-        marca=marca, fuente=fuente, grupo=grupo, incluir_globales=True
-    )
     if busqueda:
-        crudos = [c for c in crudos if _coincide(c, busqueda)]
+        # Búsqueda por RELEVANCIA: FTS `spanish` (ts_rank) con fallback trigram para erratas.
+        crudos = repos.buscar_media_catalogo(
+            q=busqueda, marca=marca, fuente=fuente, grupo=grupo, incluir_globales=True
+        )
+    else:
+        crudos = repos.listar_media_catalogo(
+            marca=marca, fuente=fuente, grupo=grupo, incluir_globales=True
+        )
     return {"items": [_item_a_dict(c) for c in crudos]}
 
 
 async def listar(request: Request) -> Response:
     """GET /api/biblioteca?fuente=&marca=&grupo=&q= → buscador GLOBAL de la biblioteca.
 
-    Sin filtros, cruza las tres carpetas (`portal`/`originales`/`fotografias`). `q` busca substring
-    (case-insensitive) en título+descripción+etiquetas. `marca` acota a esa marca MÁS los globales
-    (marca=''); `fuente`/`grupo` acotan a una carpeta y subcarpeta. → `{items:[...]}`.
+    Sin filtros, cruza las tres carpetas (`portal`/`subidas`/`fotografias`). `q` busca por
+    RELEVANCIA: FTS en español (título>etiquetas>descripción, ordenado por `ts_rank`) con fallback
+    a similitud trigram sobre el título cuando la FTS no devuelve nada (erratas, nombres propios).
+    `marca` acota a esa marca MÁS los globales (marca=''); `fuente`/`grupo` acotan a una carpeta y
+    subcarpeta. → `{items:[...]}`.
     """
     q = request.query_params
     marca, err = _validar_marca(q.get("marca"))
@@ -257,12 +259,65 @@ async def guardar_remoto(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _keywords_de_publicacion(publicacion_id: str) -> list[str]:
+    """Keywords (CSV de las etiquetas asignadas) de una publicación, normalizadas y dedup.
+
+    Cada etiqueta (categoría/origen) lleva un CSV `keywords` que el clasificador casa contra el
+    texto; aquí las cosechamos para enriquecer la foto adjunta y para componer la consulta del
+    sugeridor. Minúsculas, recortadas, sin vacíos ni duplicados.
+    """
+    palabras: list[str] = []
+    vistas: set[str] = set()
+    for etiqueta_id in repos.etiqueta_ids_de_contenido(publicacion_id):
+        etiqueta = repos.obtener_etiqueta(etiqueta_id)
+        if etiqueta is None:
+            continue
+        for cruda in (etiqueta.get("keywords") or "").split(","):
+            kw = cruda.strip().lower()
+            if kw and kw not in vistas:
+                palabras.append(kw)
+                vistas.add(kw)
+    return palabras
+
+
+def _fusionar_etiquetas(existentes: list[str], nuevas: list[str]) -> list[str]:
+    """Une etiquetas conservando las existentes primero; dedup case-insensitive; tope `_MAX_ETIQUETAS`."""
+    fusion: list[str] = []
+    vistas: set[str] = set()
+    for et in (*existentes, *nuevas):
+        clave = et.lower()
+        if et and clave not in vistas:
+            fusion.append(et)
+            vistas.add(clave)
+        if len(fusion) >= _MAX_ETIQUETAS:
+            break
+    return fusion
+
+
+def _heredar_keywords_en_media(media_id: str, item: dict, pieza: dict) -> None:
+    """MERGE en `catalogo_media.etiquetas` las keywords de las etiquetas de la pieza (idempotente).
+
+    Al adjuntar una foto a una pieza, la foto hereda el contexto editorial de la pieza (las keywords
+    de sus etiquetas) para quedar buscable por él. No pisa lo que ya tenía: une, dedup y tope a 12.
+    """
+    keywords = _keywords_de_publicacion(pieza.get("publicacion_id") or "")
+    if not keywords:
+        return
+    existentes = _etiquetas_lista(item.get("etiquetas"))
+    fusion = _fusionar_etiquetas(existentes, keywords)
+    if fusion != existentes:
+        repos.actualizar_media_catalogo(
+            media_id, {"etiquetas": json.dumps(fusion, ensure_ascii=False)}
+        )
+
+
 def _adjuntar(pieza_id: str, media_id: str) -> tuple[int, dict]:
     """Lee el binario del item del catálogo y lo fija en la pieza como foto de galería (publicable)."""
     item = repos.obtener_media_catalogo(media_id)
     if item is None:
         return 404, {"error": "Esa imagen ya no está en la biblioteca."}
-    if repos.obtener_pieza_fila(pieza_id) is None:
+    pieza = repos.obtener_pieza_fila(pieza_id)
+    if pieza is None:
         return 404, {"error": "Esa pieza ya no existe."}
     datos = almacen_media.leer_objeto(item.get("objeto") or "")
     if datos is None:
@@ -281,6 +336,7 @@ def _adjuntar(pieza_id: str, media_id: str) -> tuple[int, dict]:
         return 400, {"error": str(e)}
     if actualizada is None:
         return 404, {"error": "Esa pieza ya no existe."}
+    _heredar_keywords_en_media(media_id, item, pieza)
     return 200, {"plataforma": _plataforma_a_dict(actualizada)}
 
 
@@ -314,6 +370,61 @@ async def adjuntar(request: Request) -> Response:
     if not media_id:
         return JSONResponse({"error": "Falta la imagen a adjuntar."}, status_code=400)
     status, cuerpo = await run_in_threadpool(_adjuntar, pieza_id, media_id)
+    return JSONResponse(cuerpo, status_code=status)
+
+
+# --------------------------------------------------------------------------- #
+# Sugeridor foto→pieza (v1, por keywords/titular sobre la FTS)                   #
+# --------------------------------------------------------------------------- #
+
+
+def _sugerir(pieza_id: str, limite: int) -> tuple[int, dict]:
+    """Top-N fotos de la biblioteca para una pieza: FTS del titular+keywords, filtrada por marca.
+
+    Compone la consulta con el TITULAR de la pieza más las KEYWORDS de sus etiquetas y la corre por
+    la FTS acotada a la marca de la pieza (+ globales) y a fotos APROBADAS. Si la pieza no tiene
+    marca o no hay texto del que tirar (sin titular ni keywords), degrada a las fotos RECIENTES de la
+    marca. Misma forma que `/api/biblioteca`: `{items:[...]}`.
+    """
+    pieza = repos.obtener_pieza_fila(pieza_id)
+    if pieza is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    marca = pieza.get("marca") or ""
+    publicacion_id = pieza.get("publicacion_id") or ""
+    publicacion = repos.obtener_publicacion(publicacion_id) if publicacion_id else None
+    titular = (publicacion or {}).get("titulo", "") or ""
+    keywords = _keywords_de_publicacion(publicacion_id) if publicacion_id else []
+    consulta = " ".join(p for p in (titular, *keywords) if p).strip()
+
+    if marca and consulta:
+        crudos = repos.buscar_media_catalogo(
+            q=consulta, marca=marca, incluir_globales=True,
+            solo_aprobados=True, limite=limite,
+        )
+    else:
+        # Degradación: sin marca o sin texto que buscar, las más recientes de la marca (aprobadas).
+        crudos = repos.listar_media_catalogo(
+            marca=marca or None, incluir_globales=True, solo_aprobados=True
+        )[:limite]
+    return 200, {"items": [_item_a_dict(c) for c in crudos]}
+
+
+async def sugerir(request: Request) -> Response:
+    """GET /api/biblioteca/sugerir?pieza_id=&limite= → fotos sugeridas para la pieza (`{items:[...]}`).
+
+    Sugerencia, no auto-adjuntado: el criterio humano decide. Rankea por relevancia (FTS del titular
+    + keywords de la pieza) dentro de la marca; degrada a recientes de la marca si no hay texto.
+    """
+    q = request.query_params
+    pieza_id = (q.get("pieza_id") or "").strip()
+    if not pieza_id:
+        return JSONResponse({"error": "Falta la pieza."}, status_code=400)
+    try:
+        limite = int(q.get("limite") or _SUGERIR_LIMITE)
+    except (TypeError, ValueError):
+        limite = _SUGERIR_LIMITE
+    limite = max(1, min(limite, _SUGERIR_MAX))
+    status, cuerpo = await run_in_threadpool(_sugerir, pieza_id, limite)
     return JSONResponse(cuerpo, status_code=status)
 
 
@@ -352,6 +463,7 @@ async def descargar(request: Request) -> Response:
 RUTAS = [
     Route("/api/biblioteca", listar, methods=["GET"]),
     Route("/api/biblioteca/carpetas", carpetas, methods=["GET"]),
+    Route("/api/biblioteca/sugerir", sugerir, methods=["GET"]),
     Route("/api/biblioteca/guardar-remoto", guardar_remoto, methods=["POST"]),
     Route("/api/biblioteca/adjuntar", adjuntar, methods=["POST"]),
     Route("/api/biblioteca/descargar/{media_id}", descargar, methods=["GET"]),
