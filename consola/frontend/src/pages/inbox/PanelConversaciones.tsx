@@ -1,8 +1,9 @@
 /**
  * Panel de MENSAJES DIRECTOS (solo lectura): por cada red, sus conversaciones con la
  * audiencia. Cada conversación se pinta como un hilo tipo chat; la alineación de cada
- * mensaje (entrante/saliente) la decide `heuristica.ts`. `adjuntos` se muestra como un
- * contador, no se descargan las imágenes.
+ * mensaje (entrante/saliente) la decide `heuristica.ts`. El contenido del mensaje suele
+ * venir en `adjuntos` (URLs): un link a una publicación compartida se enlaza como tal y
+ * cualquier otra URL (media) como un adjunto abrible.
  */
 import { Paperclip } from "lucide-react";
 
@@ -17,6 +18,34 @@ import type { Conversacion, ConversacionesPorRed, MensajeDM } from "@/types";
 import { AvatarPersona } from "./AvatarPersona";
 import { avatarAudiencia, esMensajeEntrante, nombreAudiencia } from "./heuristica";
 
+/** Una URL que apunta a una publicación de Instagram (compartida en el DM), no a media. */
+function esEnlacePublicacion(url: string): boolean {
+  return url.includes("instagram.com/");
+}
+
+/** Etiqueta de un enlace a una publicación compartida; distingue reel de publicación. */
+function etiquetaPublicacion(url: string): string {
+  return url.includes("/reel/") ? "Compartió un reel" : "Compartió una publicación";
+}
+
+function Adjunto({ url, entrante }: { url: string; entrante: boolean }) {
+  const publicacion = esEnlacePublicacion(url);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "inline-flex items-center gap-1 text-xs underline underline-offset-2",
+        entrante ? "text-muted-foreground" : "text-primary-foreground/90",
+      )}
+    >
+      <Paperclip className="h-3 w-3" aria-hidden="true" />
+      {publicacion ? etiquetaPublicacion(url) : "Ver adjunto"}
+    </a>
+  );
+}
+
 function Mensaje({
   mensaje,
   entrante,
@@ -24,6 +53,7 @@ function Mensaje({
   mensaje: MensajeDM;
   entrante: boolean;
 }) {
+  const sinContenido = !mensaje.texto && mensaje.adjuntos.length === 0;
   return (
     <div className={cn("flex", entrante ? "justify-start" : "justify-end")}>
       <div
@@ -35,18 +65,13 @@ function Mensaje({
         )}
       >
         {mensaje.texto && <p className="whitespace-pre-wrap break-words">{mensaje.texto}</p>}
-        {mensaje.adjuntos > 0 && (
-          <p
-            className={cn(
-              "mt-1 inline-flex items-center gap-1 text-xs",
-              entrante ? "text-muted-foreground" : "text-primary-foreground/80",
-            )}
-          >
-            <Paperclip className="h-3 w-3" aria-hidden="true" />
-            {mensaje.adjuntos} {mensaje.adjuntos === 1 ? "adjunto" : "adjuntos"}
-          </p>
-        )}
-        {!mensaje.texto && mensaje.adjuntos === 0 && (
+        {!mensaje.texto &&
+          mensaje.adjuntos.map((url, i) => (
+            <div key={i} className="mt-1 first:mt-0">
+              <Adjunto url={url} entrante={entrante} />
+            </div>
+          ))}
+        {sinContenido && (
           <p className="text-xs italic opacity-70">(sin texto)</p>
         )}
         {mensaje.fecha && (

@@ -22,8 +22,12 @@ export interface MensajeDM {
   autor_id: string | null;
   texto: string | null;
   fecha: string | null;
-  /** Número de adjuntos (se muestra como contador, no se descargan las imágenes). */
-  adjuntos: number;
+  /**
+   * URLs del contenido del mensaje: publicaciones compartidas (links de instagram.com),
+   * media enviada (URLs de CDN) o menciones de historia. El DM suele venir sin `texto` y
+   * traer el contenido aquí.
+   */
+  adjuntos: string[];
 }
 
 /** Una conversación de mensajes directos, con sus mensajes embebidos. */

@@ -58,7 +58,7 @@ const CONVERSACIONES: RespuestaInboxConversaciones = {
           actualizado: "2026-06-20T12:00:00-06:00",
           participantes: [{ id: "aud-1", nombre: "Ana Audiencia", avatar: null }],
           mensajes: [
-            { id: "m-1", autor_id: "aud-1", texto: "Hola", fecha: "2026-06-20T12:00:00-06:00", adjuntos: 0 },
+            { id: "m-1", autor_id: "aud-1", texto: "Hola", fecha: "2026-06-20T12:00:00-06:00", adjuntos: [] },
           ],
         },
       ],

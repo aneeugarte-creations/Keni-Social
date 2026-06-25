@@ -14,15 +14,15 @@ function conversacion(over: Partial<Conversacion> = {}): Conversacion {
     actualizado: "2026-06-20T12:30:00-06:00",
     participantes: [{ id: "aud-1", nombre: "Ana Audiencia", avatar: null }],
     mensajes: [
-      { id: "m-1", autor_id: "aud-1", texto: "Hola, ¿precio?", fecha: "2026-06-20T12:00:00-06:00", adjuntos: 0 },
-      { id: "m-2", autor_id: "pagina", texto: "Te paso info", fecha: "2026-06-20T12:30:00-06:00", adjuntos: 2 },
+      { id: "m-1", autor_id: "aud-1", texto: "Hola, ¿precio?", fecha: "2026-06-20T12:00:00-06:00", adjuntos: [] },
+      { id: "m-2", autor_id: "pagina", texto: "Te paso info", fecha: "2026-06-20T12:30:00-06:00", adjuntos: [] },
     ],
     ...over,
   };
 }
 
 describe("PanelConversaciones", () => {
-  it("pinta la conversación con red, audiencia, badge pendiente y contador de adjuntos", () => {
+  it("pinta la conversación con red, audiencia, badge pendiente y el texto del mensaje", () => {
     const porRed: ConversacionesPorRed[] = [
       { red: "facebook", conversaciones: [conversacion()] },
     ];
@@ -31,7 +31,40 @@ describe("PanelConversaciones", () => {
     expect(screen.getByText("Ana Audiencia")).toBeInTheDocument();
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
     expect(screen.getByText("Hola, ¿precio?")).toBeInTheDocument();
-    expect(screen.getByText("2 adjuntos")).toBeInTheDocument();
+  });
+
+  it("enlaza una publicación compartida cuando el adjunto es un link de instagram.com", () => {
+    const conv = conversacion({
+      mensajes: [
+        { id: "m-1", autor_id: "aud-1", texto: null, fecha: null, adjuntos: ["https://www.instagram.com/reel/DaBGGZzRUbA/"] },
+      ],
+    });
+    render(<PanelConversaciones porRed={[{ red: "facebook", conversaciones: [conv] }]} />);
+    const enlace = screen.getByRole("link", { name: /Compartió un reel/ });
+    expect(enlace).toHaveAttribute("href", "https://www.instagram.com/reel/DaBGGZzRUbA/");
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(screen.queryByText("(sin texto)")).not.toBeInTheDocument();
+  });
+
+  it("muestra un adjunto abrible cuando el adjunto es media (URL de CDN, no instagram.com)", () => {
+    const conv = conversacion({
+      mensajes: [
+        { id: "m-1", autor_id: "aud-1", texto: null, fecha: null, adjuntos: ["https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=x"] },
+      ],
+    });
+    render(<PanelConversaciones porRed={[{ red: "facebook", conversaciones: [conv] }]} />);
+    const enlace = screen.getByRole("link", { name: /Ver adjunto/ });
+    expect(enlace).toHaveAttribute("href", "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=x");
+  });
+
+  it("muestra (sin texto) solo cuando el mensaje no trae texto ni adjuntos", () => {
+    const conv = conversacion({
+      mensajes: [
+        { id: "m-1", autor_id: "aud-1", texto: null, fecha: null, adjuntos: [] },
+      ],
+    });
+    render(<PanelConversaciones porRed={[{ red: "facebook", conversaciones: [conv] }]} />);
+    expect(screen.getByText("(sin texto)")).toBeInTheDocument();
   });
 
   it("no muestra el badge pendiente cuando la conversación no lo está", () => {
