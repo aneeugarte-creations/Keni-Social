@@ -105,6 +105,16 @@ async function hayVersionNueva(entrada: string | null, signal?: AbortSignal): Pr
 }
 
 /**
+ * ¿Hay un deploy más reciente que ESTE bundle? Pensado para llamarlo JUSTO ANTES de una
+ * operación cliente cara que depende del código actual (p. ej. generar el PDF del Informe):
+ * si la pestaña lleva el bundle viejo en memoria, el resultado saldría con el diseño antiguo.
+ * No lanza; en desarrollo (sin `buildId` horneado) devuelve `false`.
+ */
+export function comprobarVersionNueva(signal?: AbortSignal): Promise<boolean> {
+  return hayVersionNueva(entradaActual(), signal);
+}
+
+/**
  * Hook (móntalo UNA vez en el cascarón): vigila si hay una versión nueva desplegada y,
  * cuando la hay, recarga sola y EN SILENCIO en la siguiente navegación de ruta (sin toast
  * ni confirmación). No hace nada en desarrollo.

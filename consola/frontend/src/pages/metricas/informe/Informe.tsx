@@ -263,7 +263,10 @@ function FilaRank({ fila, max }: { fila: FilaRanking; max: number }) {
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: fila.color }} />
           {fila.nombre}
         </span>
-        <span className="shrink-0 text-sm tabular-nums text-neutral-900">
+        {/* whitespace-nowrap: cifra y % SIEMPRE en la misma línea. Al rasterizar a PDF
+            (html-to-image) un span encogido podía partir el % a otra línea por redondeo
+            subpíxel; fijarlo lo impide pase lo que pase. */}
+        <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-neutral-900">
           {finos(numeroCompactoFijo(fila.valor))}
           {/* El % en su propia caja de ancho fijo right-aligned: un % de un dígito ("6 %") no empuja
               la cifra principal, así las cifras forman una columna vertical limpia. */}

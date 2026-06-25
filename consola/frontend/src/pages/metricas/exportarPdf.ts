@@ -7,7 +7,7 @@
  */
 import { createElement } from "react";
 
-import { recargaSegura } from "@/lib/version";
+import { comprobarVersionNueva, recargaSegura } from "@/lib/version";
 import type { RangoMetrica } from "@/types";
 
 import { desdeEntradas } from "./informe/desdeEntradas";
@@ -97,6 +97,24 @@ export async function descargarPresentacion(
   opciones?: { breve?: boolean },
 ): Promise<void> {
   if (entradas.length === 0) throw new Error("No hay datos cargados para el PDF.");
+
+  // Antes de montar nada: si ya hay un deploy más reciente que ESTE bundle, la pestaña tiene el
+  // JS antiguo en memoria y el deck saldría con el diseño viejo (causa típica de "lo arreglé pero
+  // el PDF sigue igual": una pestaña abierta desde antes del deploy). Refrescamos para generar el
+  // PDF con el diseño DESPLEGADO; tras la recarga el usuario vuelve a pulsar. Timeout corto: si
+  // `/version.json` no responde, seguimos sin bloquear (comprobarVersionNueva nunca lanza).
+  {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 2500);
+    let hayNueva = false;
+    try {
+      hayNueva = await comprobarVersionNueva(ac.signal);
+    } finally {
+      clearTimeout(t);
+    }
+    if (hayNueva && recargaSegura()) await new Promise<never>(() => {}); // la recarga corta la ejecución
+  }
+
   const props = desdeEntradas(entradas, ctx);
   const breve = opciones?.breve ?? false;
 
