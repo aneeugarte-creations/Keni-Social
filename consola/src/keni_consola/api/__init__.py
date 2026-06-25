@@ -7,9 +7,10 @@ PARA QUIEN ANADE UN MODULO DE API NUEVO (leeme entero, esto es el contrato)
 La consola es ahora una API JSON pura consumida por un SPA React (que construye
 otra persona). Cada area funcional (estado, config, proyectos, ...) vive en su
 propio modulo dentro de `consola/api/` y exporta una variable de modulo llamada
-exactamente `RUTAS`: una secuencia de `starlette.routing.Route` con sus paths
-definitivos (todos bajo `/api/...`). `app.py` NO conoce los modulos concretos:
-los descubre (con `pkgutil.iter_modules` sobre este paquete) y monta sus `RUTAS`.
+exactamente `RUTAS`: una secuencia de `starlette.routing.Route` (o `WebSocketRoute`
+para un canal en vivo, p. ej. el túnel keni-fotos) con sus paths definitivos (todos bajo
+`/api/...`). `app.py` NO conoce los modulos concretos: los descubre (con
+`pkgutil.iter_modules` sobre este paquete) y monta sus `RUTAS`.
 
 Anadir un area = soltar UN archivo `consola/api/<area>.py` con su `RUTAS`, sin
 tocar `app.py`.
@@ -45,16 +46,21 @@ import logging
 import pkgutil
 from collections.abc import Sequence
 
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
 
 _log = logging.getLogger("keni_consola.api")
 
+# Tipos de ruta admitidos en `RUTAS`: HTTP (`Route`) y, para los canales en vivo (el
+# túnel keni-fotos), `WebSocketRoute`. Ambos son `starlette.routing.BaseRoute` y exponen
+# `.path`; la app los monta igual.
+_TIPOS_RUTA = (Route, WebSocketRoute)
+
 # Cache del descubrimiento (los modulos solo se importan una vez). `crear_app` lo
 # reusa; los tests pueden forzar un redescubrimiento con `descubrir(refresco=True)`.
-_cache: list[Route] | None = None
+_cache: list[Route | WebSocketRoute] | None = None
 
 
-def descubrir(refresco: bool = False) -> list[Route]:
+def descubrir(refresco: bool = False) -> list[Route | WebSocketRoute]:
     """Auto-descubre los modulos de `consola/api/` y devuelve todas sus `RUTAS`.
 
     Cada submodulo (no `_`-privado) que exporte una secuencia `RUTAS` aporta sus
@@ -65,7 +71,7 @@ def descubrir(refresco: bool = False) -> list[Route]:
     if _cache is not None and not refresco:
         return _cache
 
-    rutas: list[Route] = []
+    rutas: list[Route | WebSocketRoute] = []
     for info in sorted(pkgutil.iter_modules(__path__), key=lambda i: i.name):
         if info.name.startswith("_"):
             continue
@@ -87,10 +93,10 @@ def descubrir(refresco: bool = False) -> list[Route]:
                 f"secuencia de Route (encontrado: {type(crudas).__name__})."
             )
         for r in crudas:
-            if not isinstance(r, Route):
+            if not isinstance(r, _TIPOS_RUTA):
                 raise TypeError(
                     f"El modulo de API '{info.name}' exporta en RUTAS algo que no es "
-                    f"un Route: {type(r).__name__}."
+                    f"un Route/WebSocketRoute: {type(r).__name__}."
                 )
             rutas.append(r)
 

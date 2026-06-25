@@ -8,6 +8,10 @@
  *  - "agencias": fotos LICENCIADAS de agencia (AFP). Se muestran con su crédito y SIN overlay de
  *    "Sin licencia": al adjuntarlas (`POST /api/artes/agencias/adjuntar`) la pieza queda PUBLICABLE
  *    (`imagen_origen="licenciada"`, `imagen_autorizada=true`), arrastrando su crédito obligatorio.
+ *  - "propio": fotos de la galería LOCAL del equipo (apps keni-fotos conectadas por el túnel; solo
+ *    Claro Sports). Se muestran limpias y al elegirlas (`POST /api/artes/propio/adjuntar`, por
+ *    `galeria_id`+`archivo`, no por URL) el back trae el original por el túnel y deja la pieza
+ *    PUBLICABLE (`imagen_origen="propia"`). Si no hay dispositivos conectados, se avisa.
  *
  * El padre recibe la `PlataformaStock` para refrescar.
  */
@@ -33,7 +37,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { atribucionStock, nombreProveedor } from "@/lib/stock";
 import { cn } from "@/lib/utils";
-import type { CandidataStock, PlataformaStock } from "@/types";
+import type { CandidataStock, FuenteFoto, PlataformaStock } from "@/types";
 
 export interface BuscadorStockProps {
   open: boolean;
@@ -41,9 +45,10 @@ export interface BuscadorStockProps {
   piezaId: string;
   /**
    * Fuente de la búsqueda. "stock" (def): bancos gratuitos, AYUDA VISUAL no publicable. "agencias":
-   * fotos LICENCIADAS de agencia (AFP), publicables con crédito y sin overlay "Sin licencia".
+   * fotos LICENCIADAS de agencia (AFP), publicables con crédito. "propio": galería local del equipo
+   * (apps keni-fotos por el túnel; solo Claro Sports), publicable y adjuntada por el túnel.
    */
-  fuente?: "stock" | "agencias";
+  fuente?: FuenteFoto;
   /** Marca de la pieza: acota las fuentes a las habilitadas para ella (toggles de la etapa Stock). */
   marca?: string;
   /** URL original del artículo de la fuente (RSS): si la hay, se ofrece "Usar foto original". */
@@ -64,7 +69,9 @@ export function BuscadorStock({
   consultaInicial = "",
   onAdjuntada,
 }: BuscadorStockProps) {
+  const esStock = fuente === "stock";
   const esAgencias = fuente === "agencias";
+  const esPropio = fuente === "propio";
   const [q, setQ] = React.useState(consultaInicial);
   const [qDebounced, setQDebounced] = React.useState(consultaInicial.trim());
   // Proveedor activo ("" = todos).
@@ -86,25 +93,29 @@ export function BuscadorStock({
   }, [q]);
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: [esAgencias ? "agencias" : "stock", proveedor, qDebounced, marca ?? ""],
-    queryFn: ({ signal }) =>
-      esAgencias
-        ? api.buscarAgencias({ q: qDebounced || undefined }, signal)
-        : api.buscarStock(
-            {
-              q: qDebounced || undefined,
-              proveedor: proveedor || undefined,
-              marca: marca || undefined,
-            },
-            signal,
-          ),
+    queryKey: [fuente, proveedor, qDebounced, marca ?? ""],
+    queryFn: ({ signal }) => {
+      if (esAgencias) return api.buscarAgencias({ q: qDebounced || undefined }, signal);
+      if (esPropio)
+        return api.buscarPropio({ q: qDebounced || undefined, marca: marca || undefined }, signal);
+      return api.buscarStock(
+        {
+          q: qDebounced || undefined,
+          proveedor: proveedor || undefined,
+          marca: marca || undefined,
+        },
+        signal,
+      );
+    },
     enabled: open,
   });
 
   const proveedores = data?.proveedores ?? [];
   const candidatos = data?.candidatos ?? [];
-  // Agencias: el (único) proveedor sin credenciales/caído trae el motivo a mostrar en vez del grid.
-  const agenciaNoDisponible = esAgencias && proveedores.length > 0 && !proveedores[0].disponible;
+  // Agencias/propio: el (único) proveedor sin credenciales/dispositivos trae el motivo a mostrar en
+  // vez del grid (p. ej. «Sin dispositivos conectados»).
+  const proveedorNoDisponible =
+    (esAgencias || esPropio) && proveedores.length > 0 && !proveedores[0].disponible;
 
   // Adjuntar STOCK: descarga la candidata (o la foto original) y la deja como stock no autorizado.
   const adjuntar = useMutation({
@@ -126,9 +137,30 @@ export function BuscadorStock({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const adjuntando = adjuntar.isPending || adjuntarLicenciada.isPending;
+  // Adjuntar PROPIA: el back trae el original por el túnel, lo sube a keni-media y deja la pieza
+  // publicable. Se identifica por galería + archivo (no por URL, que es una miniatura efímera).
+  const adjuntarPropia = useMutation({
+    mutationFn: (cuerpo: Parameters<typeof api.adjuntarPropio>[0]) => api.adjuntarPropio(cuerpo),
+    onSuccess: (res) => {
+      onAdjuntada(res.plataforma);
+      toast.success("Foto propia adjuntada. Lista para publicar.");
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const adjuntando = adjuntar.isPending || adjuntarLicenciada.isPending || adjuntarPropia.isPending;
 
   const elegir = (c: CandidataStock) => {
+    if (esPropio) {
+      if (!c.galeria_id || !c.archivo) return;
+      adjuntarPropia.mutate({
+        pieza_id: piezaId,
+        galeria_id: c.galeria_id,
+        archivo: c.archivo,
+        dispositivo: c.dispositivo,
+      });
+      return;
+    }
     if (esAgencias) {
       adjuntarLicenciada.mutate({
         pieza_id: piezaId,
@@ -155,16 +187,22 @@ export function BuscadorStock({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {esAgencias ? "Buscar foto de agencia (AFP)" : "Buscar foto de stock"}
+            {esAgencias
+              ? "Buscar foto de agencia (AFP)"
+              : esPropio
+                ? "Buscar foto propia"
+                : "Buscar foto de stock"}
           </DialogTitle>
           <DialogDescription>
             {esAgencias
               ? "Fotos licenciadas de agencia, publicables con crédito obligatorio. Al adjuntar una, la pieza queda lista para publicar."
-              : "Ayuda visual de bancos gratuitos. Toda foto entra SIN LICENCIA: autorízala (bajo tu responsabilidad) o sustitúyela antes de publicar."}
+              : esPropio
+                ? "Fotos de la galería local del equipo (apps keni-fotos conectadas). Al adjuntar una, la pieza queda lista para publicar."
+                : "Ayuda visual de bancos gratuitos. Toda foto entra SIN LICENCIA: autorízala (bajo tu responsabilidad) o sustitúyela antes de publicar."}
           </DialogDescription>
         </DialogHeader>
 
-        {!esAgencias && imagenFuente && (
+        {esStock && imagenFuente && (
           <Button
             type="button"
             variant="outline"
@@ -181,7 +219,7 @@ export function BuscadorStock({
         {/* Chips de proveedor (solo stock): deshabilitados los no disponibles (su `motivo` va al
             tooltip). En agencias hay un único proveedor (AFP): su indisponibilidad se muestra como
             aviso, no como chip. */}
-        {!esAgencias && (
+        {esStock && (
           <div className="flex flex-wrap items-center gap-1.5">
             <ChipProveedor
               etiqueta="Todos"
@@ -222,10 +260,13 @@ export function BuscadorStock({
             <p className="flex h-48 items-center justify-center text-sm text-destructive">
               {mensajeError(error)}
             </p>
-          ) : agenciaNoDisponible ? (
+          ) : proveedorNoDisponible ? (
             <div className="flex h-48 items-center justify-center px-4">
               <Aviso>
-                {proveedores[0].motivo || "La agencia (AFP) no está disponible ahora mismo."}
+                {proveedores[0].motivo ||
+                  (esPropio
+                    ? "Sin dispositivos conectados."
+                    : "La agencia (AFP) no está disponible ahora mismo.")}
               </Aviso>
             </div>
           ) : !qDebounced ? (
@@ -255,14 +296,16 @@ export function BuscadorStock({
                   title={
                     esAgencias
                       ? "Adjuntar foto licenciada (publicable con crédito)"
-                      : "Adjuntar como referencia (SIN LICENCIA)"
+                      : esPropio
+                        ? "Adjuntar foto propia (publicable)"
+                        : "Adjuntar como referencia (SIN LICENCIA)"
                   }
                 >
-                  {esAgencias ? (
-                    // Foto licenciada: nítida y publicable, sin overlay "Sin licencia".
+                  {!esStock ? (
+                    // Foto publicable (agencia licenciada o propia): nítida, sin overlay "Sin licencia".
                     <img
                       src={c.thumb || c.url}
-                      alt={c.titulo || "Foto de agencia"}
+                      alt={c.titulo || (esPropio ? "Foto propia" : "Foto de agencia")}
                       loading="lazy"
                       className="aspect-square w-full object-cover"
                     />

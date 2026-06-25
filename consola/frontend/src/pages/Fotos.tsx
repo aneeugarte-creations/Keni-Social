@@ -1,212 +1,230 @@
 /**
- * Página «Galería» — la FICHA (estilo marketplace) de la herramienta local keni-fotos.
+ * Página «Galería» — el panel de la galería LOCAL del equipo (apps keni-fotos conectadas).
  *
- * La consola en la nube no puede leer el disco del equipo, así que la galería se procesa EN LOCAL:
- * esta página explica qué es la herramienta y ofrece un botón simple para descargarla. Un Claude
- * local (con el CLAUDE.md del bundle) termina el trabajo sobre la carpeta de fotos del partido.
+ * La consola en la nube no lee el disco del equipo: la galería se procesa EN LOCAL con la app de
+ * escritorio keni-fotos, que abre un túnel hacia keni-social. Esta página muestra los dispositivos
+ * conectados con sus galerías (`GET /api/artes/propio/dispositivos`) y un buscador de exploración
+ * (`GET /api/artes/propio/buscar`, marca fija Claro Sports) — aquí solo se MIRA; el adjuntar a una
+ * pieza vive en el editor del feed. Arriba, un botón discreto para descargar la app (`/api/fotos/app`).
  *
- * El texto (prompt, comandos y pasos) lo sirve `GET /api/fotos/info`; si la carga falla, la página
- * cae a unas constantes embebidas (espejo del backend) para seguir siendo útil sin red.
+ * Si no hay dispositivos conectados, la página explica cómo empezar y destaca la descarga.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Check, Copy, Download, Terminal } from "lucide-react";
+import { Camera, Download, ImageOff, Search, Terminal } from "lucide-react";
 import * as React from "react";
-import { toast } from "sonner";
+import { useEffect } from "react";
 
-import { TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
-import type { RespuestaFotosInfo } from "@/lib/api";
 
-/** Texto de respaldo (espejo de `api/fotos.py`) si `GET /api/fotos/info` no carga. */
-const RESPALDO: RespuestaFotosInfo = {
-  version: "",
-  changelog: [],
-  prompt_claude:
-    "Eres el agente local de keni-fotos. Tu ÚNICO trabajo es compilar y lanzar la app: " +
-    "lee el CLAUDE.md de esta carpeta y déjala abierta en el navegador. NO proceses fotos " +
-    "tú; la propia app guía a la persona para elegir la carpeta del partido, ponerle nombre " +
-    "y ejecutar el etiquetado. Cuando la app esté abierta, avísame.",
-  comandos: ["cd ~/Downloads", 'unzip -o "$(ls -t keni-fotos*.zip | head -1)"', "cd keni-fotos && claude"],
-  instrucciones: [
-    "Descarga keni-fotos y descomprímelo (los comandos de abajo lo hacen por ti).",
-    "Abre Claude Code en la carpeta keni-fotos y pega el prompt: compila y lanza la app.",
-    "En la app: elige tu carpeta de fotos, ponle nombre al partido y pulsa Procesar.",
-  ],
-};
+/** Marca cuya galería local sirve la página (la del piloto de fotos propias). */
+const MARCA = "claro-sports";
 
-/** Pasos del flujo de la app (sin terminal ni Claude). */
-const PASOS_APP = [
-  "Descarga la app y ábrela (la primera vez: clic derecho → Abrir).",
-  "Elige la carpeta del partido y ponle nombre.",
-  "Pulsa Procesar; al terminar verás la galería.",
-];
+/** Buscador de EXPLORACIÓN de la galería local: muestra candidatas en grid, sin adjuntar. */
+function BuscadorPropio() {
+  const [q, setQ] = React.useState("");
+  const [qDebounced, setQDebounced] = React.useState("");
 
-/** Lo que hace la herramienta (la «descripción de producto» de la ficha). */
-const QUE_HACE = [
-  "Agrupa automáticamente las ráfagas de cada cámara.",
-  "Etiqueta cada ráfaga con IA: jugadores, momento y tipo de plano.",
-  "Separa pre-partido, in-game y post-partido en orden cronológico.",
-  "Abre una galería local buscable. Nunca toca tus fotos originales.",
-];
+  // Debounce de 350ms: el túnel hace fan-out a las apps; no lo golpeamos en cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setQDebounced(q.trim()), 350);
+    return () => clearTimeout(t);
+  }, [q]);
 
-/** Botón que copia un texto al portapapeles y confirma con un check efímero + toast. */
-function BotonCopiar({ texto, etiqueta }: { texto: string; etiqueta: string }) {
-  const [copiado, setCopiado] = React.useState(false);
+  const { data, isLoading, isFetching, isError } = useQuery({
+    queryKey: ["propio", "explorar", qDebounced],
+    queryFn: ({ signal }) => api.buscarPropio({ q: qDebounced || undefined, marca: MARCA }, signal),
+  });
 
-  const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(texto);
-      setCopiado(true);
-      toast.success("Copiado al portapapeles.");
-      window.setTimeout(() => setCopiado(false), 1500);
-    } catch {
-      toast.error("No se pudo copiar al portapapeles.");
-    }
-  };
+  const candidatos = data?.candidatos ?? [];
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="shrink-0"
-      onClick={() => void copiar()}
-      aria-label={`Copiar ${etiqueta}`}
-    >
-      {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-      Copiar
-    </Button>
-  );
-}
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar en tus galerías… (ej. portero atajada)"
+          className="h-9 rounded-lg border-transparent bg-muted/60 pl-8 placeholder:text-muted-foreground focus-visible:border-border"
+          aria-label="Buscar fotos en la galería local"
+        />
+      </div>
 
-/** Bloque de texto monoespaciado para copiar (prompt o comando), con su botón de copia. */
-function BloqueCopiable({ texto, etiqueta }: { texto: string; etiqueta: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-words rounded-md border bg-muted px-3 py-2 font-mono text-xs text-foreground">
-        {texto}
-      </pre>
-      <BotonCopiar texto={texto} etiqueta={etiqueta} />
+      <div className="min-h-[10rem]">
+        {isLoading || (isFetching && candidatos.length === 0) ? (
+          <div className="flex h-40 items-center justify-center text-muted-foreground">
+            <Spinner className="h-5 w-5" />
+          </div>
+        ) : isError ? (
+          <p className="flex h-40 items-center justify-center text-sm text-destructive">
+            No se pudo buscar en la galería local.
+          </p>
+        ) : !qDebounced ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <Search className="h-6 w-6" />
+            <p className="text-sm">Escribe qué foto buscas en tus galerías.</p>
+          </div>
+        ) : candidatos.length === 0 ? (
+          <div className="flex h-40 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+            <ImageOff className="h-6 w-6" />
+            <p className="text-sm">Sin resultados. Prueba otra búsqueda.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {candidatos.map((c, i) => (
+              <figure
+                key={`${c.galeria_id ?? ""}-${c.archivo ?? c.url}-${i}`}
+                className="overflow-hidden rounded-lg border border-border bg-muted/20"
+              >
+                <img
+                  src={c.thumb || c.url}
+                  alt={c.titulo || "Foto de la galería local"}
+                  loading="lazy"
+                  className="aspect-square w-full object-cover"
+                />
+                <figcaption className="space-y-0.5 px-2 py-1">
+                  <span className="block truncate text-[11px] text-foreground">
+                    {c.titulo || c.archivo || "Foto"}
+                  </span>
+                  {c.dispositivo && (
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {c.dispositivo}
+                    </span>
+                  )}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function Fotos() {
-  const { data } = useQuery({
-    queryKey: ["fotos", "info"],
-    queryFn: ({ signal }) => api.fotosInfo(signal),
+  const { data, isLoading } = useQuery({
+    queryKey: ["propio", "dispositivos"],
+    queryFn: ({ signal }) => api.dispositivosPropio(signal),
+    refetchInterval: 15_000,
   });
 
-  // Mientras carga (o si falla) usamos el respaldo embebido: la página siempre muestra el texto.
-  const info = data ?? RESPALDO;
+  const dispositivos = data?.dispositivos ?? [];
+  const hayDispositivos = dispositivos.length > 0;
 
   return (
     <>
       <TituloPagina titulo="Galería" icono={Camera} />
+      {/* Descarga de la app: discreta arriba, ya que el cuerpo es la galería conectada. */}
+      <AccionesPagina>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-2"
+          onClick={() => api.descargarFotosApp()}
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Descargar app
+        </Button>
+      </AccionesPagina>
 
-      <div className="mx-auto w-full max-w-2xl pb-12">
-        {/* Ficha de producto: icono, nombre, qué es y el botón simple de descarga. */}
-        <section className="flex flex-col items-center gap-4 py-10 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-keni/10 text-keni">
-            <Camera className="h-8 w-8" aria-hidden="true" />
+      <div className="mx-auto w-full max-w-3xl pb-12">
+        {isLoading ? (
+          <div className="flex h-48 items-center justify-center text-muted-foreground">
+            <Spinner className="h-5 w-5" />
           </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-center gap-2">
-              <h2 className="text-lg font-semibold tracking-tight">keni-fotos</h2>
-              {info.version && <Badge variant="secondary">v{info.version}</Badge>}
+        ) : !hayDispositivos ? (
+          // Vacío explicativo: nadie ha conectado su app; se destaca la descarga.
+          <section className="flex flex-col items-center gap-4 py-12 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-keni/10 text-keni">
+              <Camera className="h-8 w-8" aria-hidden="true" />
             </div>
-            <p className="text-xs text-muted-foreground">Herramienta local · macOS</p>
-          </div>
-
-          <p className="max-w-md text-sm text-muted-foreground">
-            Ordena las fotos de un partido en tu propio equipo. La web no puede leer tu disco, así
-            que la descargas y la app hace el trabajo en local. Nada de lo que elijas sale de tu
-            equipo, y se mantiene actualizada sola.
-          </p>
-
-          <Button variant="outline" className="gap-2" onClick={() => api.descargarFotosApp()}>
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Descargar app
-          </Button>
-          <p className="max-w-md text-xs text-muted-foreground">
-            Doble clic para abrirla. La primera vez macOS la bloquea (app sin firmar): ve a
-            Ajustes del Sistema → Privacidad y seguridad → «Abrir de todos modos».
-          </p>
-        </section>
-
-        {/* Novedades — changelog corto de la versión actual. */}
-        {info.changelog.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Novedades
-                {info.version && <Badge variant="secondary">v{info.version}</Badge>}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-1.5">
-                {info.changelog.map((linea) => (
-                  <li key={linea} className="flex items-start gap-2 text-sm text-muted-foreground">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-                    <span>{linea}</span>
-                  </li>
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold tracking-tight">Sin dispositivos conectados</h2>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Descarga la app keni-fotos en el equipo que tiene las fotos del partido. Al abrirla
+                e iniciar sesión, sus galerías aparecen aquí y podrás usarlas en tus piezas.
+              </p>
+            </div>
+            <Button className="gap-2" onClick={() => api.descargarFotosApp()}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Descargar para macOS
+            </Button>
+            <p className="max-w-md text-xs text-muted-foreground">
+              Abre el .dmg y arrastra keni-fotos a Aplicaciones. La primera vez macOS la bloquea
+              (app sin firmar): ábrela con clic derecho → Abrir. Procesa la carpeta del partido y
+              deja la app abierta con tu sesión iniciada.
+            </p>
+          </section>
+        ) : (
+          <div className="space-y-6 py-6">
+            {/* Dispositivos conectados con sus galerías. */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Dispositivos conectados
+                  <Badge variant="secondary">{dispositivos.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {dispositivos.map((d) => (
+                  <div key={`${d.dispositivo}-${d.version}`} className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-keni" aria-hidden="true" />
+                      <span className="text-sm font-medium">{d.dispositivo}</span>
+                      {d.version && <Badge variant="secondary">v{d.version}</Badge>}
+                    </div>
+                    {d.galerias.length === 0 ? (
+                      <p className="pl-6 text-xs text-muted-foreground">Sin galerías procesadas.</p>
+                    ) : (
+                      <ul className="space-y-1 pl-6">
+                        {d.galerias.map((g) => (
+                          <li
+                            key={g.id}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span className="min-w-0 truncate">{g.nombre}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {g.dia} · {g.fotos} fotos
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ))}
-              </ul>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Explorar la galería local (solo mirar; adjuntar se hace desde el editor). */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Explorar fotos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <BuscadorPropio />
+              </CardContent>
+            </Card>
+          </div>
         )}
 
-        {/* Qué hace — la «descripción» del producto. */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Qué hace</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2.5">
-              {QUE_HACE.map((linea) => (
-                <li key={linea} className="flex items-start gap-2.5 text-sm">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-keni" aria-hidden="true" />
-                  <span>{linea}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        {/* Cómo usarla: el flujo de la app (sin terminal ni Claude). */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Cómo usarla</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="space-y-3">
-              {PASOS_APP.map((paso, i) => (
-                <li key={paso} className="flex items-start gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-                    {i + 1}
-                  </span>
-                  <span className="pt-0.5 text-sm">{paso}</span>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-
-        {/* Modo avanzado: para quien prefiera montarla con Claude desde el código. */}
+        {/* Modo avanzado: descargar el código y montar la app con Claude. */}
         <Card className="mt-6">
           <CardContent className="pt-6">
             <details>
               <summary className="cursor-pointer text-sm font-medium">
                 Modo avanzado · montar con Claude
               </summary>
-              <div className="mt-4 space-y-6">
+              <div className="mt-4 space-y-3">
                 <p className="text-sm text-muted-foreground">
                   ¿No puedes abrir la app? Descarga el código y deja que un Claude local la compile y
-                  lance. La app guía igual el resto (elegir carpeta, nombre y Procesar).
+                  lance.
                 </p>
                 <Button
                   variant="outline"
@@ -214,22 +232,9 @@ export default function Fotos() {
                   className="gap-2"
                   onClick={() => api.descargarFotosBundle()}
                 >
-                  <Download className="h-4 w-4" aria-hidden="true" />
+                  <Terminal className="h-4 w-4" aria-hidden="true" />
                   Descargar código
                 </Button>
-                <div className="space-y-2">
-                  <p className="text-label">Prompt para Claude</p>
-                  <BloqueCopiable texto={info.prompt_claude} etiqueta="el prompt" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-label flex items-center gap-1.5">
-                    <Terminal className="h-3.5 w-3.5" aria-hidden="true" />
-                    Comandos
-                  </p>
-                  {info.comandos.map((comando) => (
-                    <BloqueCopiable key={comando} texto={comando} etiqueta="el comando" />
-                  ))}
-                </div>
               </div>
             </details>
           </CardContent>

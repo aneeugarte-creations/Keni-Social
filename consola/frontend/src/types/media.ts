@@ -132,6 +132,14 @@ export interface CandidataStock {
   licencia?: string;
   credito_url?: string;
   titulo?: string;
+  // Campos EXTRA solo de la fuente «propio» (galería local del equipo vía el túnel keni-fotos):
+  // identifican la foto original en la app de escritorio para adjuntarla por el túnel, no por URL.
+  /** Id de la galería (partido) en la app de escritorio. */
+  galeria_id?: string;
+  /** Nombre del archivo original dentro de la galería. */
+  archivo?: string;
+  /** Dispositivo conectado que sirvió la candidata. */
+  dispositivo?: string;
 }
 
 /** Respuesta de `GET /api/artes/stock/buscar`. */
@@ -176,6 +184,47 @@ export interface CuerpoAdjuntarAgencia {
   autor?: string;
   licencia?: string;
   credito_url?: string;
+}
+
+// --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos; solo Claro Sports) ---
+// Las apps de escritorio keni-fotos del usuario abren un túnel hacia keni-social; el backend hace
+// fan-out de la búsqueda y, al adjuntar, trae el ORIGINAL por el túnel. Publicables sin licencia.
+
+/** Fuente de la búsqueda de fotos del editor: bancos de stock, agencia licenciada o galería propia. */
+export type FuenteFoto = "stock" | "agencias" | "propio";
+
+/**
+ * Respuesta de `GET /api/artes/propio/buscar`: misma forma que la de stock (proveedores +
+ * candidatos). El único proveedor es «propio» y trae `dispositivos` (cuántas apps conectadas).
+ */
+export type RespuestaBuscarPropio = RespuestaBuscarStock;
+
+/** Cuerpo de `POST /api/artes/propio/adjuntar`: la foto propia elegida (por túnel, no por URL). */
+export interface CuerpoAdjuntarPropio {
+  pieza_id: string;
+  galeria_id: string;
+  archivo: string;
+  dispositivo?: string;
+}
+
+/** Una galería (partido) que ofrece una app de escritorio conectada. */
+export interface GaleriaPropio {
+  id: string;
+  nombre: string;
+  dia: string;
+  fotos: number;
+}
+
+/** Un dispositivo (app de escritorio) conectado por el túnel, con sus galerías. */
+export interface DispositivoPropio {
+  dispositivo: string;
+  version: string;
+  galerias: GaleriaPropio[];
+}
+
+/** Respuesta de `GET /api/artes/propio/dispositivos`: las apps conectadas del usuario. */
+export interface RespuestaDispositivosPropio {
+  dispositivos: DispositivoPropio[];
 }
 
 /**

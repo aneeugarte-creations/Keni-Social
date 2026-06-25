@@ -364,6 +364,36 @@ def _es_publica_campania(metodo: str, ruta: str) -> bool:
         and len(ruta) > len(_PREFIJO_PUBLICO_CAMPANIA)
     )
 
+
+# GET del endpoint del AUTO-UPDATE de la app de escritorio keni-fotos (`tauri-plugin-updater`):
+# `/api/fotos/actualizacion/<target>/<arch>/<version>`. La app lo poletea al arrancar SIN sesion
+# (el login a keni-social es opcional), asi que debe pasar sin credencial. Solo expone metadatos
+# de la release publica (version, notas, y la firma+url del binario, ya hosteado en S3). El resto
+# de `/api/fotos` (info, descargas) sigue exigiendo sesion: solo se sirve desde la pagina logueada.
+_PREFIJO_FOTOS_ACTUALIZACION = "/api/fotos/actualizacion/"
+
+
+def _es_fotos_actualizacion(metodo: str, ruta: str) -> bool:
+    """True si es el GET del endpoint publico del updater de keni-fotos (ver nota de arriba)."""
+    return (
+        metodo == "GET"
+        and ruta.startswith(_PREFIJO_FOTOS_ACTUALIZACION)
+        and len(ruta) > len(_PREFIJO_FOTOS_ACTUALIZACION)
+    )
+
+
+# GET de la validacion del token de escritorio keni-fotos (`/api/fotos/sesion`): la app de
+# escritorio se identifica con su token opaco (`Authorization: Bearer`), no con la cookie de sesion
+# ni el token de mantenimiento de la Consola, asi que el endpoint hace su PROPIA auth (token MCP) y
+# debe pasar el middleware sin credencial de Consola. Solo expone `{usuario}` a quien ya presenta un
+# token valido. El resto de `/api/fotos` (info, descargas, autorizar) sigue exigiendo sesion.
+_RUTA_FOTOS_SESION = "/api/fotos/sesion"
+
+
+def _es_fotos_sesion(metodo: str, ruta: str) -> bool:
+    """True si es el GET de la validacion del token de escritorio keni-fotos (auth propia)."""
+    return metodo == "GET" and ruta == _RUTA_FOTOS_SESION
+
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
 # servidor, no solo en el frontend). El token de mantenimiento NO tiene usuario asociado,
@@ -427,6 +457,8 @@ class SeguridadConsola:
             ruta in _RUTAS_API_PUBLICAS
             or _es_media_publica(metodo, ruta)
             or _es_publica_campania(metodo, ruta)
+            or _es_fotos_actualizacion(metodo, ruta)
+            or _es_fotos_sesion(metodo, ruta)
         )
         if not publica:
             # 1) Credencial: sesion valida (cookie) O token interino (si esta configurado).

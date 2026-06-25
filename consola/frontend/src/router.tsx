@@ -79,6 +79,11 @@ const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
 // AppShell: se abre, avisa al panel y se cierra. No se registra en el catálogo de apps.
 const OauthConectado = lazy(() => import("@/pages/OauthConectado"));
 
+// Autorización del escritorio keni-fotos (login OPCIONAL del Tauri, flujo loopback): página mínima
+// hermana del AppShell (sin sidebar) pero DETRÁS de la puerta de sesión. Emite el token y redirige
+// al loopback de la app. No se registra en el catálogo de apps.
+const FotosAutorizar = lazy(() => import("@/pages/FotosAutorizar"));
+
 // Informe PÚBLICO de campaña (`/c/:token`): capability-URL de solo lectura, sin login ni
 // sidebar. Vive FUERA del AppShell (layout propio); el token es la única llave.
 const InformePublico = lazy(() => import("@/pages/InformePublico"));
@@ -151,6 +156,25 @@ export const router = createBrowserRouter([
           }
         >
           <OauthConectado />
+        </Suspense>
+      </FronteraError>
+    ),
+  },
+  // Autorización del escritorio keni-fotos: ruta hermana del AppShell (sin sidebar) pero detrás de
+  // la puerta de sesión (PuertaSesion envuelve al router): si no hay sesión se ve el login y al
+  // entrar se vuelve aquí con `cb`/`state` intactos. Su propia frontera de error + Suspense.
+  {
+    path: "/fotos/autorizar",
+    element: (
+      <FronteraError>
+        <Suspense
+          fallback={
+            <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+            </div>
+          }
+        >
+          <FotosAutorizar />
         </Suspense>
       </FronteraError>
     ),

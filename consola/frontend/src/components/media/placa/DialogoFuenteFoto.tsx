@@ -3,7 +3,7 @@
  * TOCAR un hueco (no es un bloque fijo del panel). Escribe en el HUECO ACTIVO (lo gobierna el
  * componente padre vía callbacks).
  */
-import { Library, Newspaper, ScanSearch, Upload } from "lucide-react";
+import { Camera, Library, Newspaper, ScanSearch, Upload } from "lucide-react";
 
 import { Aviso } from "@/components/comunes/Aviso";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -45,6 +45,8 @@ export interface DialogoFuenteFotoProps {
   onBuscarStock?: () => void;
   /** Abre el buscador de fotos LICENCIADAS de agencia (AFP); ausente si no hay pieza. */
   onBuscarAgencias?: () => void;
+  /** Abre el buscador de fotos PROPIAS (galería local del equipo); solo en piezas de Claro Sports. */
+  onBuscarPropio?: () => void;
   /** Lanza la generación con IA. */
   onGenerar: () => void;
 }
@@ -65,6 +67,7 @@ export function DialogoFuenteFoto({
   onSubir,
   onBuscarStock,
   onBuscarAgencias,
+  onBuscarPropio,
   onGenerar,
 }: DialogoFuenteFotoProps) {
   return (
@@ -119,6 +122,18 @@ export function DialogoFuenteFoto({
               >
                 <Newspaper className="h-4 w-4" />
                 Foto de agencia (AFP)
+              </Button>
+            )}
+            {onBuscarPropio && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onBuscarPropio}
+                disabled={ocupado}
+              >
+                <Camera className="h-4 w-4" />
+                Foto propia
               </Button>
             )}
           </div>

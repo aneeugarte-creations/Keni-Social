@@ -30,7 +30,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
-from starlette.routing import Mount, Route
+from starlette.routing import Mount, Route, WebSocketRoute
 
 from . import api, config, db, seguridad
 from ._repos_comun import PiezaPublicadaInmutable
@@ -304,7 +304,7 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por el backfill
             _logger.warning("No se pudo reconstruir el histórico por pieza.", exc_info=True)
 
-    rutas: list[Route] = list(api.descubrir(refresco=True))
+    rutas: list[Route | WebSocketRoute] = list(api.descubrir(refresco=True))
 
     # Cualquier OTRA sub-ruta /api (no descubierta) -> 404 JSON. Va despues de las
     # rutas reales y ANTES del fallback del SPA, para que un /api/... inexistente no

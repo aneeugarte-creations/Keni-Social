@@ -4,6 +4,7 @@ import { peticion, query } from "./_core";
 import type {
   CosteMedioArte,
   CuerpoAdjuntarAgencia,
+  CuerpoAdjuntarPropio,
   CuerpoAdjuntarStock,
   CuerpoAutorizarStock,
   CuerpoGenerarArte,
@@ -12,7 +13,9 @@ import type {
   RespuestaArte,
   RespuestaArtes,
   RespuestaBuscarAgencias,
+  RespuestaBuscarPropio,
   RespuestaBuscarStock,
+  RespuestaDispositivosPropio,
   RespuestaGenerarArte,
   RespuestaGeneracion,
   RespuestaMedia,
@@ -112,4 +115,26 @@ export const apiMedia = {
   adjuntarAgencia: (cuerpo: CuerpoAdjuntarAgencia) =>
     peticion<RespuestaStock>("/artes/agencias/adjuntar", { metodo: "POST", json: cuerpo }),
 
+  // --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos; solo Claro Sports) ---
+  // Hace fan-out a las apps de escritorio conectadas del usuario y agrega sus candidatas. El
+  // proveedor «propio» trae su disponibilidad (≥1 dispositivo conectado) y el nº de dispositivos.
+  buscarPropio: (
+    filtros: { q?: string; limite?: number; marca?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaBuscarPropio>(
+      `/artes/propio/buscar${query({
+        q: filtros.q,
+        limite: filtros.limite != null ? String(filtros.limite) : undefined,
+        marca: filtros.marca,
+      })}`,
+      { signal },
+    ),
+  // Pide el ORIGINAL por el túnel (no por URL), lo sube a keni-media y lo adjunta como imagen
+  // PUBLICABLE (`imagen_origen="propia"`). Identifica la foto por galería + archivo.
+  adjuntarPropio: (cuerpo: CuerpoAdjuntarPropio) =>
+    peticion<RespuestaStock>("/artes/propio/adjuntar", { metodo: "POST", json: cuerpo }),
+  // Apps de escritorio conectadas del usuario, con sus galerías (para la página Galería).
+  dispositivosPropio: (signal?: AbortSignal) =>
+    peticion<RespuestaDispositivosPropio>("/artes/propio/dispositivos", { signal }),
 };

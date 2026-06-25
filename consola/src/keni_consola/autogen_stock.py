@@ -249,6 +249,80 @@ def adjuntar_candidata(
     nombre = extraccion_url.descargar_imagen_a_media(
         url, min_lado=_MIN_LADO_FOTO, categoria="copyright"
     )
+    return _fijar_foto(
+        pieza_id,
+        nombre,
+        proveedor=proveedor,
+        autor=autor,
+        licencia=licencia,
+        credito_url=credito_url,
+        origen=origen,
+        autorizada=autorizada,
+        falta_imagen=falta_imagen,
+    )
+
+
+def adjuntar_bytes(
+    pieza_id: str,
+    datos: bytes,
+    *,
+    proveedor: str,
+    autor: str = "",
+    licencia: str = "",
+    credito_url: str = "",
+    origen: str = licencia_imagen.ORIGEN_GALERIA,
+    autorizada: bool = True,
+    falta_imagen: bool = False,
+) -> dict[str, Any] | None:
+    """Guarda una imagen ya en memoria (no una URL) en media y la fija en la pieza.
+
+    Misma puerta que `adjuntar_candidata` para una foto que llega como BYTES (la galería local
+    «Propio» por el túnel keni-fotos), no por descarga HTTP. Valida que el contenido es una imagen
+    soportada, la sube a media (S3/Garage) y reparte a las hermanas en gris como cualquier otra
+    foto adjunta. Por defecto publicable (foto PROPIA del equipo). Lanza `extraccion_url.ExtraccionError`
+    si los bytes no son una imagen reconocible.
+    """
+    from . import media
+
+    ext = extraccion_url._ext_imagen(datos)
+    if ext is None:
+        raise extraccion_url.ExtraccionError(
+            "El contenido recibido no es una imagen (png/jpg/gif/webp)."
+        )
+    try:
+        nombre = media.guardar_bytes(datos, ext=ext, categoria="fotos")
+    except media.MediaError as e:
+        raise extraccion_url.ExtraccionError(str(e)) from e
+    return _fijar_foto(
+        pieza_id,
+        nombre,
+        proveedor=proveedor,
+        autor=autor,
+        licencia=licencia,
+        credito_url=credito_url,
+        origen=origen,
+        autorizada=autorizada,
+        falta_imagen=falta_imagen,
+    )
+
+
+def _fijar_foto(
+    pieza_id: str,
+    nombre: str,
+    *,
+    proveedor: str,
+    autor: str,
+    licencia: str,
+    credito_url: str,
+    origen: str,
+    autorizada: bool,
+    falta_imagen: bool,
+) -> dict[str, Any] | None:
+    """Fija la foto `nombre` (ya en media) en la pieza con sus flags y la reparte a las hermanas.
+
+    Núcleo común de `adjuntar_candidata` (descarga URL) y `adjuntar_bytes` (bytes del túnel):
+    escribe los campos de imagen en la pieza y propaga la MISMA foto a las redes del tema en gris.
+    """
     campos = {
         "foto": nombre,
         "imagen": "",
@@ -264,7 +338,7 @@ def adjuntar_candidata(
     if objetivo is None:
         return None
     # Reparte la MISMA foto a las redes del tema que aún están en gris (robusto, no depende del
-    # toggle `espejo`): así nunca queda una red con la foto SIN LICENCIA sin su aviso, ni en gris.
+    # toggle `espejo`): así nunca queda una red con la foto sin su aviso, ni en gris.
     propagar_stock(str(objetivo.get("publicacion_id") or ""), campos)
     return objetivo
 

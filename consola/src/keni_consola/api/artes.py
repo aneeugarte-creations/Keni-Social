@@ -33,6 +33,7 @@ from .. import (
     agencias_fotos,
     almacen_media,
     autogen_stock,
+    fotos_tunel,
     libprompts,
     marcas,
     media,
@@ -647,6 +648,152 @@ async def adjuntar_agencias(request: Request) -> Response:
     return JSONResponse(cuerpo, status_code=status)
 
 
+# --------------------------------------------------------------------------- #
+# GALERÍA LOCAL «PROPIO» (túnel keni-fotos): foto PROPIA del equipo, publicable  #
+# --------------------------------------------------------------------------- #
+# Fuente paralela a stock/agencias, pero las fotos NO viven en la nube: están en el equipo de
+# la persona, expuestas por la app de escritorio keni-fotos sobre un WebSocket saliente
+# (`fotos_tunel`). El backend hace fan-out de la búsqueda a las apps conectadas del usuario y, al
+# adjuntar, pide el ORIGINAL por el túnel, lo sube a keni-media y lo liga como foto propia
+# (`imagen_origen='propia'`, publicable). SOLO para la marca `claro-sports` (el piloto del archivo
+# fotográfico): con otra marca o sin dispositivos, la fuente sale `disponible=False` y sin candidatos.
+
+# Id canónico de la única marca con galería local (ver `keni_shared.marcas`).
+_MARCA_PROPIO = "claro-sports"
+# Origen de imagen de la galería local: foto PROPIA del equipo (no stock ni licenciada -> publicable).
+_ORIGEN_PROPIO = "propia"
+
+
+def _usuario_id(request: Request) -> str | None:
+    """Id del usuario de la sesión (None si se entró por token de mantenimiento)."""
+    usuario = getattr(request.state, "usuario", None)
+    return usuario.get("id") if isinstance(usuario, dict) else None
+
+
+def _proveedor_propio(*, disponible: bool, dispositivos: int, motivo: str = "") -> dict:
+    """Estado de la fuente «Propio» (misma forma que `estado_fuente` de stock + `dispositivos`)."""
+    return {
+        "proveedor": "propio",
+        "nombre": "Galería local",
+        "requiere_clave": False,
+        "disponible": disponible,
+        "activa": True,
+        "motivo": motivo if motivo else ("" if disponible else "Sin dispositivos conectados"),
+        "dispositivos": dispositivos,
+    }
+
+
+def _candidato_propio(crudo: dict) -> dict:
+    """Convierte un candidato del túnel (forma del contrato §1) a la forma de candidato de stock §2."""
+    thumb = crudo.get("thumb_b64") or ""
+    partes = [
+        p
+        for p in (crudo.get("nombre"), crudo.get("fase"), crudo.get("en_foco"))
+        if isinstance(p, str) and p.strip()
+    ]
+    return {
+        "proveedor": "propio",
+        "url": thumb,
+        "thumb": thumb,
+        "autor": "Galería local",
+        "licencia": "Propio",
+        "credito_url": "",
+        "titulo": " · ".join(partes),
+        "galeria_id": crudo.get("galeria_id") or "",
+        "archivo": crudo.get("archivo") or "",
+        "dispositivo": crudo.get("dispositivo") or "",
+    }
+
+
+async def _buscar_propio(usuario_id: str | None, q: str, limite: int, marca: str) -> dict:
+    """Búsqueda «Propio»: fan-out a las apps del usuario (solo si la marca es claro-sports)."""
+    if marca != _MARCA_PROPIO:
+        proveedor = _proveedor_propio(
+            disponible=False, dispositivos=0, motivo="La galería local solo está en Claro Sports."
+        )
+        return {"proveedores": [proveedor], "candidatos": []}
+    n = len(fotos_tunel.dispositivos(usuario_id))
+    disponible = n > 0
+    proveedor = _proveedor_propio(disponible=disponible, dispositivos=n)
+    if not disponible or not q.strip():
+        return {"proveedores": [proveedor], "candidatos": []}
+    crudos = await fotos_tunel.buscar(usuario_id, q, limite)
+    return {"proveedores": [proveedor], "candidatos": [_candidato_propio(c) for c in crudos]}
+
+
+async def buscar_propio(request: Request) -> Response:
+    """GET /api/artes/propio/buscar?q=&limite=&marca= -> {proveedores, candidatos}.
+
+    Inerte salvo `marca=claro-sports`. `disponible` refleja si el usuario tiene ≥1 dispositivo
+    conectado; los candidatos se agregan de todas sus apps y se trocean a `limite`.
+    """
+    q = (request.query_params.get("q") or "").strip()
+    marca = (request.query_params.get("marca") or "").strip()
+    try:
+        limite = int(request.query_params.get("limite") or _STOCK_LIMITE_DEF)
+    except ValueError:
+        limite = _STOCK_LIMITE_DEF
+    limite = max(1, min(_STOCK_LIMITE_MAX, limite))
+    cuerpo = await _buscar_propio(_usuario_id(request), q, limite, marca)
+    return JSONResponse(cuerpo)
+
+
+def _subir_propio(pieza_id: str, datos: bytes) -> dict | None:
+    """Sube los bytes del original a keni-media y los liga a la pieza como foto PROPIA (publicable)."""
+    return autogen_stock.adjuntar_bytes(
+        pieza_id,
+        datos,
+        proveedor="propio",
+        origen=_ORIGEN_PROPIO,
+        autorizada=True,
+        falta_imagen=False,
+    )
+
+
+async def _adjuntar_propio(
+    usuario_id: str | None, pieza_id: str, galeria_id: str, archivo: str, dispositivo: str
+) -> tuple[int, dict]:
+    """Pide el original por el túnel, lo sube a keni-media y lo adjunta a la pieza. Gate a claro-sports."""
+    plat = await run_in_threadpool(repos.obtener_pieza_fila, pieza_id)
+    if plat is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    if (plat.get("marca") or "") != _MARCA_PROPIO:
+        return 400, {"error": "La galería local solo está disponible para Claro Sports."}
+    try:
+        datos, _mime = await fotos_tunel.pedir_original(usuario_id, galeria_id, archivo, dispositivo)
+    except fotos_tunel.TunelError as e:
+        return 400, {"error": str(e)}
+    try:
+        actualizada = await run_in_threadpool(_subir_propio, pieza_id, datos)
+    except extraccion_url.ExtraccionError as e:
+        return 400, {"error": str(e)}
+    if actualizada is None:
+        return 404, {"error": "Esa pieza ya no existe."}
+    return 200, {"plataforma": _plataforma_stock_a_dict(actualizada)}
+
+
+async def adjuntar_propio(request: Request) -> Response:
+    """POST /api/artes/propio/adjuntar {pieza_id, galeria_id, archivo, dispositivo?}."""
+    datos = await leer_json(request)
+    pieza_id = (datos.get("pieza_id") or "").strip()
+    galeria_id = (datos.get("galeria_id") or "").strip()
+    archivo = (datos.get("archivo") or "").strip()
+    dispositivo = (datos.get("dispositivo") or "").strip()
+    if not pieza_id:
+        return JSONResponse({"error": "Falta la pieza."}, status_code=400)
+    if not galeria_id or not archivo:
+        return JSONResponse({"error": "Falta la foto a adjuntar."}, status_code=400)
+    status, cuerpo = await _adjuntar_propio(
+        _usuario_id(request), pieza_id, galeria_id, archivo, dispositivo
+    )
+    return JSONResponse(cuerpo, status_code=status)
+
+
+async def dispositivos_propio(request: Request) -> Response:
+    """GET /api/artes/propio/dispositivos -> {dispositivos:[{dispositivo, version, galerias}]}."""
+    return JSONResponse({"dispositivos": fotos_tunel.dispositivos(_usuario_id(request))})
+
+
 RUTAS = [
     Route("/api/artes", listar, methods=["GET"]),
     Route("/api/artes", crear, methods=["POST"]),
@@ -657,5 +804,8 @@ RUTAS = [
     Route("/api/artes/stock/autorizar", autorizar_stock, methods=["POST"]),
     Route("/api/artes/agencias/buscar", buscar_agencias, methods=["GET"]),
     Route("/api/artes/agencias/adjuntar", adjuntar_agencias, methods=["POST"]),
+    Route("/api/artes/propio/buscar", buscar_propio, methods=["GET"]),
+    Route("/api/artes/propio/adjuntar", adjuntar_propio, methods=["POST"]),
+    Route("/api/artes/propio/dispositivos", dispositivos_propio, methods=["GET"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),
 ]
