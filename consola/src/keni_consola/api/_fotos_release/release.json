@@ -1,9 +1,9 @@
 {
-  "version": "0.1.4",
-  "notes": "Sin diálogos del llavero y conexión estable (el token deja de usar el keychain). La app muestra el estado real del túnel. Tras actualizar, autoriza una vez más.",
+  "version": "0.1.5",
+  "notes": "Navega la ráfaga de una foto desde la galería de keni-social. Incluye conexión estable, galería compartida por marca y la biblioteca de medios.",
   "pub_date": "2026-06-25T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGR3VWk0TitEOVRReHI2SUQvNmxhMnpLVThKbmVlZFJHaFM5bEtEYytxYVJZYlVGVm1JcURWV1VubVdGM1dhT1o2NlZwNkErT1Q2NXhzdjY4MFc2bFFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzk5ODYwCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck9qTGdmL21NeU9kNW9UOXlsR1pQTXkwL2RaZTJjWWw2N1pqMU5MZDFiVTJEeC8yb2ZuMVA0TnpzdllYeGlYYkhSUmswbVQ3MWQwY2xIZldUMDEwakJ3PT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGZraVFoakErWFNrSUhybHFUZFRiSFZvektxaFZXVDRVRHZEQWF6akdTeU9qN0Yvb1diQ0xKbUdreU5MU2NoS2loSkJ3bndxYngvYXMrc25ldlBmY2drPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDA2NjkzCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ci9oMit2bnlrS1d6UUJqOFFHVE5jRVBmQU56SEszTW9IMCtKelFyUHgyanNZZFUrQ2J5Tzlybno5a1JLRXVlRUVuWVh6OVk3MmM3YTVUbFBUcWp4YkRRPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
