@@ -122,31 +122,50 @@ export async function descargarPresentacion(
     if (slides.length === 0) throw new Error("No se pudo construir el informe.");
     hornearColoresSvg(host);
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H] });
-    for (let i = 0; i < slides.length; i++) {
+    type Enlace = { x: number; y: number; w: number; h: number; url: string };
+    const imagenes: string[] = new Array(slides.length);
+    const enlaces: Enlace[][] = new Array(slides.length);
+
+    // Se rasteriza de la ÚLTIMA lámina a la PRIMERA. html-to-image degrada las rasterizaciones
+    // sucesivas y encoge las láminas DENSAS capturadas tarde (tabla y cierre salían reducidas en
+    // una esquina); como esas láminas densas van al final del deck, capturarlas primero las deja
+    // intactas, y las del principio (portada, resumen) aguantan bien aunque caigan tarde. Las
+    // páginas se ensamblan luego en el orden correcto.
+    for (let i = slides.length - 1; i >= 0; i--) {
       // JPEG (no PNG): el PNG sin pérdida dispara el peso a cientos de MB; el JPEG de calidad
       // alta sobre lienzo plano mantiene nitidez con un archivo ligero. pixelRatio 3 da texto
       // crujiente (a 2× se veía algo borroso) y sigue pesando poco al ser fondo casi plano.
-      const img = await toJpeg(slides[i], {
+      // El fondo de la imagen = el fondo REAL de la lámina (gris por defecto, o el color de
+      // marca en la portada). La opción `backgroundColor` de html-to-image pisa el fondo del
+      // nodo, así que hay que leerlo de la propia lámina o la portada saldría gris.
+      const fondoSlide = getComputedStyle(slides[i]).backgroundColor || FONDO;
+      imagenes[i] = await toJpeg(slides[i], {
         width: W,
         height: H,
         pixelRatio: 3,
-        backgroundColor: FONDO,
+        backgroundColor: fondoSlide,
         quality: 0.97,
         cacheBust: true,
       });
-      if (i > 0) doc.addPage([W, H], "landscape");
-      doc.addImage(img, "JPEG", 0, 0, W, H);
-      // Enlaces clicables: la imagen rasterizada no conserva los `<a>`, así que superponemos
-      // una zona de enlace de jsPDF sobre cada región marcada con `data-pdf-enlace` (el QR/post).
-      // El lienzo del PDF es 1280×720 px = los mismos px CSS de la diapositiva (1:1).
+      // Enlaces clicables (QR/post): la imagen rasterizada no conserva los `<a>`. Guardamos las
+      // zonas ahora —la lámina está en el DOM— y superponemos los enlaces al ensamblar el PDF.
       const sRect = slides[i].getBoundingClientRect();
-      slides[i].querySelectorAll<HTMLElement>("[data-pdf-enlace]").forEach((el) => {
-        const url = el.getAttribute("data-pdf-enlace");
-        if (!url) return;
-        const r = el.getBoundingClientRect();
-        doc.link(r.left - sRect.left, r.top - sRect.top, r.width, r.height, { url });
-      });
+      enlaces[i] = Array.from(slides[i].querySelectorAll<HTMLElement>("[data-pdf-enlace]"))
+        .map((el) => {
+          const url = el.getAttribute("data-pdf-enlace");
+          if (!url) return null;
+          const r = el.getBoundingClientRect();
+          return { x: r.left - sRect.left, y: r.top - sRect.top, w: r.width, h: r.height, url };
+        })
+        .filter((e): e is Enlace => e != null);
+    }
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "px", format: [W, H] });
+    for (let i = 0; i < slides.length; i++) {
+      if (i > 0) doc.addPage([W, H], "landscape");
+      doc.addImage(imagenes[i], "JPEG", 0, 0, W, H);
+      // El lienzo del PDF es 1280×720 px = los mismos px CSS de la diapositiva (1:1).
+      for (const e of enlaces[i]) doc.link(e.x, e.y, e.w, e.h, { url: e.url });
     }
     doc.save(`informe${breve ? "-breve" : ""}-${nombreArchivo}.pdf`);
   } finally {

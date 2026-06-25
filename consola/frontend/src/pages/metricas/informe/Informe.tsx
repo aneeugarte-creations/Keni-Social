@@ -288,20 +288,22 @@ function Ranking({ filas, columnas = 1 }: { filas: FilaRanking[]; columnas?: num
   );
 }
 
-/** Un AreaChart Tremor ya domado (sin grid/ejes/tooltip/animación), color por hex. */
+/**
+ * Un AreaChart Tremor ya domado (sin grid/ejes/tooltip/animación), color por hex. Sin eje X: las
+ * etiquetas de los extremos las recorta el rasterizador (salían "i1 may"/"29 jui"); el rango de
+ * fechas se pone como texto bajo la gráfica, donde no se corta.
+ */
 function AreaSerena({
   data,
   categoria,
   color,
   alto,
-  conEjeX,
 }: {
   data: PuntoTendencia[];
   categoria: "Vistas" | "Interacciones";
   /** Nombre de color Tremor (mapea a clase Tailwind safelisteada; el hex no lo está). */
   color: string;
   alto: number;
-  conEjeX: boolean;
 }) {
   return (
     <AreaChart
@@ -313,7 +315,7 @@ function AreaSerena({
       showLegend={false}
       showGridLines={false}
       showYAxis={false}
-      showXAxis={conEjeX}
+      showXAxis={false}
       showTooltip={false}
       showAnimation={false}
       startEndOnly
@@ -321,6 +323,17 @@ function AreaSerena({
       className={`w-full ${CHART_SERENO}`}
       style={{ height: alto }}
     />
+  );
+}
+
+/** Rango de fechas de una serie como texto bajo la gráfica (sustituye al eje X recortado). */
+function RangoFechas({ data }: { data: Array<{ fecha: string }> }) {
+  if (data.length < 2) return null;
+  return (
+    <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-neutral-400">
+      <span>{data[0].fecha}</span>
+      <span>{data[data.length - 1].fecha}</span>
+    </div>
   );
 }
 
@@ -584,11 +597,12 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                 )}
               </span>
             </p>
-            <AreaSerena data={tendencia} categoria="Vistas" color="orange" alto={210} conEjeX={false} />
+            <AreaSerena data={tendencia} categoria="Vistas" color="orange" alto={210} />
           </div>
           <div>
             <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>Interacciones</p>
-            <AreaSerena data={tendencia} categoria="Interacciones" color="violet" alto={150} conEjeX />
+            <AreaSerena data={tendencia} categoria="Interacciones" color="violet" alto={150} />
+            <RangoFechas data={tendencia} />
           </div>
         </div>
       </Marco>
@@ -726,6 +740,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
               showLegend={false}
               showGridLines={false}
               showYAxis={false}
+              showXAxis={false}
               showTooltip={false}
               showAnimation={false}
               startEndOnly
@@ -734,6 +749,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
               className={`w-full ${CHART_SERENO} [&_.recharts-area-area]:opacity-[0.2]`}
               style={{ height: 300 }}
             />
+            <RangoFechas data={seguidores} />
           </div>
         </div>
       </Marco>
