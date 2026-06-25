@@ -267,10 +267,10 @@ function FilaRank({ fila, max }: { fila: FilaRanking; max: number }) {
           {finos(numeroCompactoFijo(fila.valor))}
           {/* El % en su propia caja de ancho fijo right-aligned: un % de un dígito ("6 %") no empuja
               la cifra principal, así las cifras forman una columna vertical limpia. */}
-          <span className="ml-2 inline-block w-9 text-right text-xs text-neutral-500">{fila.pct}&#8239;%</span>
+          <span className="ml-2 inline-block w-9 text-right text-xs text-neutral-600">{fila.pct}&#8239;%</span>
         </span>
       </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
         <div
           className="h-full rounded-full"
           style={{ width: `${max > 0 ? (fila.valor / max) * 100 : 0}%`, background: fila.color }}
@@ -709,7 +709,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                       </span>
                       <span className="shrink-0 text-sm tabular-nums text-neutral-900">{r.rate.toFixed(1)}&#8239;%</span>
                     </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
                       <div
                         className="h-full rounded-full"
                         style={{ width: `${(r.rate / maxRate) * 100}%`, background: r.color }}
