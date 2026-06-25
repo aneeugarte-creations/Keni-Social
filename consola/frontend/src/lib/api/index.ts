@@ -115,4 +115,4 @@ export {
 // Tipos públicos re-exportados (los consumen el editor y tests).
 export type { ActivoMarca, PlantillaDiseno, Bloque } from "./_core";
 export type { EtiquetaPlantilla } from "./etiquetasPlantilla";
-export type { RespuestaFotosInfo, RespuestaFotosAutorizar } from "./fotos";
+export type { RespuestaFotosAutorizar } from "./fotos";

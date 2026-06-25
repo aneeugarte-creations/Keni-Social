@@ -10,7 +10,7 @@
  * Si no hay dispositivos conectados, la página explica cómo empezar y destaca la descarga.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, ImageOff, Search, Terminal } from "lucide-react";
+import { Camera, Download, ImageOff, Search } from "lucide-react";
 import * as React from "react";
 import { useEffect } from "react";
 
@@ -140,27 +140,16 @@ export default function Fotos() {
             <Spinner className="h-5 w-5" />
           </div>
         ) : !hayDispositivos ? (
-          // Vacío explicativo: nadie ha conectado su app; se destaca la descarga.
+          // Vacío: nadie ha conectado su app; solo icono, título y la descarga.
           <section className="flex flex-col items-center gap-4 py-12 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-keni/10 text-keni">
               <Camera className="h-8 w-8" aria-hidden="true" />
             </div>
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold tracking-tight">Sin dispositivos conectados</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                Descarga la app keni-fotos en el equipo que tiene las fotos del partido. Al abrirla
-                e iniciar sesión, sus galerías aparecen aquí y podrás usarlas en tus piezas.
-              </p>
-            </div>
+            <h2 className="text-lg font-semibold tracking-tight">Sin dispositivos conectados</h2>
             <Button className="gap-2" onClick={() => api.descargarFotosApp()}>
               <Download className="h-4 w-4" aria-hidden="true" />
               Descargar para macOS
             </Button>
-            <p className="max-w-md text-xs text-muted-foreground">
-              Abre el .dmg y arrastra keni-fotos a Aplicaciones. La primera vez macOS la bloquea
-              (app sin firmar): ábrela con clic derecho → Abrir. Procesa la carpeta del partido y
-              deja la app abierta con tu sesión iniciada.
-            </p>
           </section>
         ) : (
           <div className="space-y-6 py-6">
@@ -213,32 +202,6 @@ export default function Fotos() {
             </Card>
           </div>
         )}
-
-        {/* Modo avanzado: descargar el código y montar la app con Claude. */}
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <details>
-              <summary className="cursor-pointer text-sm font-medium">
-                Modo avanzado · montar con Claude
-              </summary>
-              <div className="mt-4 space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  ¿No puedes abrir la app? Descarga el código y deja que un Claude local la compile y
-                  lance.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => api.descargarFotosBundle()}
-                >
-                  <Terminal className="h-4 w-4" aria-hidden="true" />
-                  Descargar código
-                </Button>
-              </div>
-            </details>
-          </CardContent>
-        </Card>
       </div>
     </>
   );
