@@ -110,7 +110,7 @@ function BuscadorPropio({ marca }: { marca: string }) {
 export default function Fotos() {
   // La Galería se acota a la marca del selector global del encabezado. Sin marca concreta ("Todas")
   // no hay filtro: se listan todos los dispositivos conectados.
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const marca = marcaActiva ?? undefined;
 
   const { data, isLoading } = useQuery({
@@ -158,21 +158,16 @@ export default function Fotos() {
             <Spinner className="h-5 w-5" />
           </div>
         ) : !hayDispositivos ? (
-          // Vacío: nadie comparte a esta marca; solo icono, título y la descarga.
-          <section className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-keni/10 text-keni">
-              <Camera className="h-8 w-8" aria-hidden="true" />
-            </div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              {marca
-                ? `Sin dispositivos para ${nombreActiva ?? nombreMarca(marca)}`
-                : "Sin dispositivos conectados"}
-            </h2>
-            <Button className="gap-2" onClick={() => api.descargarFotosApp()}>
+          // Vacío: nadie comparte a esta marca. Sobrio como Audio: la acción + una línea, centrado.
+          <div className="flex min-h-[calc(100dvh-8rem)] flex-col items-center justify-center gap-3 text-center">
+            <Button variant="outline" className="gap-2" onClick={() => api.descargarFotosApp()}>
               <Download className="h-4 w-4" aria-hidden="true" />
               Descargar para macOS
             </Button>
-          </section>
+            <p className="text-xs text-muted-foreground">
+              Descarga la app en tu Mac y conéctala para ver aquí las galerías del equipo
+            </p>
+          </div>
         ) : (
           <div className="space-y-6 py-6">
             {/* Dispositivos que comparten a la marca: dueño, marcas compartidas y galerías. */}
