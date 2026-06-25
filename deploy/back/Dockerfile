@@ -113,6 +113,12 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=5s 
 #   mem_limit/cpus del back en el compose estan dimensionados para 2). Concurrencia real de
 #   GENERACION = KENI_MAX_JOBS por proceso worker (el tope de admision lo respeta tambien el
 #   encolado del back).
+# `--ws-max-size` (96 MiB) + keepalive: la app keni-fotos manda el ORIGINAL de una foto por la
+# WebSocket del túnel en UN frame base64 (un JPEG de cámara pro inflado ~+33%); con el default de
+# uvicorn (16 MiB) el server cierra la conexión (1009) a mitad y «Guardar» falla. Mismos valores que
+# `__main__.py` para que prod y local se comporten igual.
 CMD ["uvicorn", "keni_consola.app:crear_app", "--factory", \
      "--host", "0.0.0.0", "--port", "8765", "--workers", "2", \
+     "--ws-max-size", "100663296", \
+     "--ws-ping-interval", "20", "--ws-ping-timeout", "20", \
      "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]
