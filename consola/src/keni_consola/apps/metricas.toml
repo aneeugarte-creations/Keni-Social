@@ -19,6 +19,7 @@ modulos_backend = [
   "metricas",
   "campanias",
   "vistas",
+  "inbox",
 ]
 
 rutas_frontend = [

@@ -525,6 +525,90 @@ class CorrelacionSeguidores(BaseModel):
     nota: str = ""
 
 
+# --- Inbox de lectura (DMs + comentarios) -----------------------------------
+# Lectura del buzón de Metricool (mensajes directos y comentarios de publicaciones)
+# para que una persona los lea y actúe con criterio. SOLO lectura: estos modelos no
+# llevan nada de responder/escribir. Se evita la PII innecesaria (los adjuntos de un DM
+# se cuentan, no se exponen sus URLs privadas).
+
+
+class Participante(BaseModel):
+    """Una persona en una conversación o el autor de un comentario.
+
+    `avatar` (imageProfileUrl) solo lo trae el buzón de mensajes; en comentarios el
+    participante viene sin foto -> None.
+    """
+
+    id: str | None = None
+    nombre: str | None = None
+    avatar: str | None = None
+
+
+class MensajeDM(BaseModel):
+    """Un mensaje dentro de una conversación de mensajes directos.
+
+    `autor_id` es el `from` del mensaje (id del emisor) para distinguir quién escribió
+    cada turno. `adjuntos` es el NÚMERO de adjuntos (no sus URLs: son media privada del
+    DM, no se expone). `fecha` es el instante ISO en CDMX.
+    """
+
+    id: str | None = None
+    autor_id: str | None = None
+    texto: str | None = None
+    fecha: str | None = None
+    adjuntos: int = 0
+
+
+class Conversacion(BaseModel):
+    """Una conversación de mensajes directos (DMs) de una red, con sus mensajes embebidos.
+
+    `pendiente` = la conversación está sin leer (status PENDING en Metricool). `creado` y
+    `actualizado` son instantes ISO en CDMX. Los mensajes vienen EMBEBIDOS (Metricool no
+    expone un detalle aparte).
+    """
+
+    id: str
+    red: str
+    pendiente: bool = False
+    creado: str | None = None
+    actualizado: str | None = None
+    participantes: list[Participante] = Field(default_factory=list)
+    mensajes: list[MensajeDM] = Field(default_factory=list)
+
+
+class RespuestaComentario(BaseModel):
+    """Una respuesta anidada a un comentario (un nivel; sin la publicación asociada)."""
+
+    id: str
+    autor: Participante | None = None
+    texto: str | None = None
+    fecha: str | None = None
+    pendiente: bool = False
+
+
+class Comentario(BaseModel):
+    """Un comentario en una publicación, con el contexto de la publicación y sus respuestas.
+
+    El COMENTARIO es lo que escribió la audiencia (`texto`, `autor`, `fecha`, `permalink`);
+    los campos `post_*` describen la PUBLICACIÓN a la que responde (su texto, enlace y media)
+    para leer el comentario con contexto. `respuestas` son las contestaciones anidadas (un
+    nivel). `pendiente` = sin atender (status PENDING).
+    """
+
+    id: str
+    red: str
+    pendiente: bool = False
+    autor: Participante | None = None
+    texto: str | None = None
+    fecha: str | None = None
+    permalink: str | None = None
+    post_id: str | None = None
+    post_texto: str | None = None
+    post_enlace: str | None = None
+    post_media: list[str] = Field(default_factory=list)
+    respuestas: list[RespuestaComentario] = Field(default_factory=list)
+
+
 # --- Rangos -----------------------------------------------------------------
 
 # Rangos RODANTES: ventana de N dias que TERMINA hoy (incluido). El mapa da los

@@ -752,6 +752,28 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.mejores_horas(cuenta_id, red)
 
+    def conversaciones(self, cuenta_id: str):
+        """Delega las conversaciones (DMs) del inbox si la fuente envuelta las expone.
+
+        Solo Metricool lo implementa (muestra/compuesta no). Si la envuelta no lo tiene,
+        propaga `AttributeError` para que el llamante degrade a vacío — igual que `demografia`.
+        """
+        if not hasattr(self._fuente, "conversaciones"):
+            raise AttributeError("la fuente envuelta no expone conversaciones")
+        self._verificar(cuenta_id)
+        return self._fuente.conversaciones(cuenta_id)
+
+    def comentarios(self, cuenta_id: str, dias: int = 7):
+        """Delega los comentarios del inbox si la fuente envuelta los expone.
+
+        Solo Metricool lo implementa (muestra/compuesta no). Si la envuelta no lo tiene,
+        propaga `AttributeError` para que el llamante degrade a vacío — igual que `demografia`.
+        """
+        if not hasattr(self._fuente, "comentarios"):
+            raise AttributeError("la fuente envuelta no expone comentarios")
+        self._verificar(cuenta_id)
+        return self._fuente.comentarios(cuenta_id, dias)
+
     def metricas_de_post(self, cuenta_id: str, plat, id_post: str, **kw):
         """Delega el rendimiento de un post si la fuente envuelta lo expone (dispatch opcional).
 

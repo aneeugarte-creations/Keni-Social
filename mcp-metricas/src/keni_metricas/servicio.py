@@ -137,6 +137,8 @@ __all__ = [
     "construir_ads_desglose",
     "construir_flujo_audiencia",
     "construir_demografia",
+    "construir_inbox_conversaciones",
+    "construir_inbox_comentarios",
     "construir_serie_seguidores",
     "construir_serie_alcance",
     "construir_desglose_interacciones",
@@ -512,6 +514,65 @@ def construir_flujo_audiencia(rango: str = "mes", marca: str | None = None) -> d
                     a["bajas"] = (a["bajas"] or 0) + fila["bajas"]
                 a["neto"] += fila.get("neto") or 0
     return {"por_red": [acc[r] for r in sorted(acc)]}
+
+
+def _instante_orden(item) -> str:
+    """Mejor instante disponible de un item de inbox para ordenar (ISO, "" si no tiene).
+
+    Como todos los instantes se normalizan a la MISMA zona (CDMX), el orden lexicográfico de
+    la cadena ISO coincide con el cronológico."""
+    for attr in ("actualizado", "fecha", "creado"):
+        v = getattr(item, attr, None)
+        if v:
+            return v
+    return ""
+
+
+def _construir_inbox(marca: str, metodo: str, clave: str, *args) -> dict:
+    """Agrega los items de inbox (`metodo`) de una marca por red, lo más reciente primero.
+
+    Dispatch por capacidad (como `construir_demografia`): usa `fuente.<metodo>` si la fuente la
+    expone (Metricool, también vía `FuenteScoped`); si no, degrada a `{"por_red": []}`. Cada
+    item trae su `red`; se agrupan por ella, se ordenan por instante descendente y se serializan.
+    `clave` es el nombre de la lista en cada grupo (`conversaciones`/`comentarios`). Propaga
+    `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    fuente = _fuente(marca)
+    fn = getattr(fuente, metodo, None)
+    por_red: dict[str, list] = {}
+    if fn is not None:
+        for c in fuente.cuentas():
+            try:
+                items = fn(c.id, *args)
+            except AttributeError:
+                # La fuente envuelta no lo implementa (FuenteScoped lo propaga): inbox vacío.
+                return {"por_red": []}
+            except Exception:  # noqa: BLE001 -- una cuenta que falla no aborta el resto
+                _log.exception("_construir_inbox(%s): cuenta %s falló.", metodo, c.id)
+                continue
+            for it in items:
+                por_red.setdefault(it.red, []).append(it)
+    salida = []
+    for red in sorted(por_red):
+        items = sorted(por_red[red], key=_instante_orden, reverse=True)
+        salida.append({"red": red, clave: [it.model_dump(mode="json") for it in items]})
+    return {"por_red": salida}
+
+
+def construir_inbox_conversaciones(marca: str) -> dict:
+    """Conversaciones (DMs) de UNA marca agregadas por red. `{"por_red": [{red, conversaciones}]}`.
+
+    `por_red` vacío si la fuente no expone el inbox (muestra/compuesta) o no hay DMs. Propaga
+    `CuentaNoEncontrada` (marca fuera de alcance)."""
+    return _construir_inbox(marca, "conversaciones", "conversaciones")
+
+
+def construir_inbox_comentarios(marca: str, dias: int = 7) -> dict:
+    """Comentarios de publicaciones de UNA marca (últimos `dias`) por red. `{"por_red": [...]}`.
+
+    `por_red` vacío si la fuente no expone el inbox o no hay comentarios. Propaga
+    `CuentaNoEncontrada` (marca fuera de alcance)."""
+    return _construir_inbox(marca, "comentarios", "comentarios", dias)
 
 
 def construir_ads_desglose(

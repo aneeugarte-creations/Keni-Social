@@ -61,14 +61,19 @@ import httpx
 from ..schema import (
     CampaniaAds,
     Cobertura,
+    Comentario,
+    Conversacion,
     Cuenta,
+    MensajeDM,
     MetricaPieza,
     MetricaPlataforma,
     MotivoOmision,
+    Participante,
     Periodo,
     Pieza,
     Plataforma,
     PuntoSerie,
+    RespuestaComentario,
     ResumenMetricas,
     agregar_alcance,
     agregar_engagement,
@@ -286,6 +291,29 @@ ENDPOINT_SCHEDULER_POST = "/v2/scheduler/posts"
 ENDPOINT_BESTTIMES = "/v2/scheduler/besttimes"
 # Ventana histórica (días) que se le pide a besttimes para computar las franjas.
 _DIAS_BESTTIMES = 90
+
+# Inbox de LECTURA (mensajes directos + comentarios de publicaciones). Confirmado en vivo
+# contra UnoTV/Claro Sports. Todos exigen `provider` en MAYÚSCULAS además de la identidad
+# por marca (userId/blogId/X-Mc-Auth):
+#   - authorizations: `{data:{missingScopes:[...], allowAccessToMessages:bool}}` — gate de si
+#     el provider tiene el buzón habilitado (missingScopes vacío + allowAccessToMessages true).
+#   - conversations:  `{data:[conversación...]}` — DMs, ~25 recientes, mensajes EMBEBIDOS, NO pagina.
+#   - post-comments:  `{data:[hilo...]}` — comentarios; ALTO VOLUMEN (payloads de MB), acepta
+#     from/to/timezone, se acota por ventana corta y se trocea por día.
+ENDPOINT_INBOX_AUTH = "/v2/inbox/conversations/authorizations"
+ENDPOINT_INBOX_CONVERSACIONES = "/v2/inbox/conversations"
+ENDPOINT_INBOX_COMENTARIOS = "/v2/inbox/post-comments"
+
+# Plataforma (keni) -> provider del inbox (MAYÚSCULAS). Solo FB/IG están conectadas en el
+# piloto; las demás no aplican aún (TikTok sería TIKTOKBUSINESS).
+_PROVIDER_INBOX: dict[Plataforma, str] = {
+    Plataforma.facebook: "FACEBOOK",
+    Plataforma.instagram: "INSTAGRAM",
+}
+
+# Ventana por defecto (días) de los comentarios. El endpoint es de ALTO VOLUMEN: se acota a
+# una ventana corta y se trocea por día (un request por día) para no timeoutear ni traer MB.
+_DIAS_COMENTARIOS = 7
 
 
 def _hora_en_tz(hora: int, origen: str, destino: str) -> int:
@@ -694,6 +722,154 @@ def _acotar_posts_por_rango(posts: list[dict], desde: date) -> list[dict]:
         if margen > 16:
             return posts[: i + 1]
     return posts
+
+
+# --- Inbox de lectura: parseo defensivo de DMs y comentarios ------------------
+def _instante_mx(v) -> str | None:
+    """Instante de un mensaje/comentario como ISO datetime en CDMX (`_TZ`), o None.
+
+    A diferencia de `_fecha` (que devuelve solo el día) conserva la HORA: un DM o un
+    comentario se ordenan por instante, no por día. Acepta `{dateTime}`, string ISO (con o
+    sin offset) o epoch (s/ms). Un naive se localiza a la zona de Metricool antes de pasar a
+    CDMX; un string no parseable se devuelve crudo (mejor que perderlo)."""
+    if isinstance(v, dict):
+        v = v.get("dateTime") or v.get("date") or v.get("value") or v.get("iso")
+    if isinstance(v, bool):  # bool es subclase de int: no es una fecha
+        return None
+    if isinstance(v, (int, float)):
+        try:
+            ts = float(v)
+            if ts > 1e11:  # epoch en milisegundos
+                ts /= 1000.0
+            return datetime.fromtimestamp(ts, tz=UTC).astimezone(ZoneInfo(_TZ)).isoformat()
+        except (ValueError, OSError, OverflowError):
+            return None
+    if isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        if s.isdigit():
+            return _instante_mx(int(s))
+        try:
+            dt = datetime.fromisoformat(s)
+        except ValueError:
+            try:
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except ValueError:
+                return s
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo(_TZ_METRICOOL))
+        return dt.astimezone(ZoneInfo(_TZ)).isoformat()
+    return None
+
+
+def _es_pendiente(status) -> bool:
+    """True si el status del buzón es PENDING (sin leer/atender); cualquier otro = atendido."""
+    return str(status or "").strip().upper() == "PENDING"
+
+
+def _participante(p: dict) -> Participante:
+    """Persona de una conversación/comentario. `avatar` solo viene en DMs (imageProfileUrl)."""
+    return Participante(
+        id=_str_opt(p.get("id")),
+        nombre=_str_opt(p.get("name")),
+        avatar=_str_opt(p.get("imageProfileUrl")),
+    )
+
+
+def _mensaje_dm(m: dict) -> MensajeDM:
+    """Un mensaje de una conversación. Los adjuntos se CUENTAN (su media privada no se expone)."""
+    adjuntos = m.get("attachments")
+    return MensajeDM(
+        id=_str_opt(m.get("id")),
+        autor_id=_str_opt(m.get("from")),
+        texto=_str_opt(m.get("text")),
+        fecha=_instante_mx(m.get("publicationDateTime")),
+        adjuntos=len(adjuntos) if isinstance(adjuntos, list) else 0,
+    )
+
+
+def _parsear_conversacion(item: dict, plat: Plataforma) -> Conversacion | None:
+    """Mapea un item de `/v2/inbox/conversations` a `Conversacion`, o None si no tiene id."""
+    if not isinstance(item, dict):
+        return None
+    cid = _str_opt(item.get("id"))
+    if cid is None:
+        return None
+    return Conversacion(
+        id=cid,
+        red=plat.value,
+        pendiente=_es_pendiente(item.get("status")),
+        creado=_instante_mx(item.get("creationDate")),
+        actualizado=_instante_mx(item.get("lastUpdateTime")),
+        participantes=[
+            _participante(p) for p in item.get("participants") or [] if isinstance(p, dict)
+        ],
+        mensajes=[_mensaje_dm(m) for m in item.get("messages") or [] if isinstance(m, dict)],
+    )
+
+
+def _parsear_respuesta(c: dict) -> RespuestaComentario | None:
+    """Una respuesta anidada (`root.comments[]`) a `RespuestaComentario`, None si no tiene id."""
+    if not isinstance(c, dict):
+        return None
+    cid = _str_opt(c.get("id"))
+    if cid is None:
+        return None
+    participantes = c.get("participants") or []
+    autor = None
+    if participantes and isinstance(participantes[0], dict):
+        autor = _participante(participantes[0])
+    elif c.get("owner"):
+        autor = Participante(nombre=_str_opt(c.get("owner")))
+    return RespuestaComentario(
+        id=cid,
+        autor=autor,
+        texto=_str_opt(c.get("text")),
+        fecha=_instante_mx(c.get("creationDate")),
+        pendiente=_es_pendiente(c.get("status")),
+    )
+
+
+def _parsear_comentario(item: dict, plat: Plataforma) -> Comentario | None:
+    """Mapea un item de `/v2/inbox/post-comments` a `Comentario`, o None si no tiene id.
+
+    En la forma de Metricool `root` es el COMENTARIO (texto/autor/fecha/permalink) y
+    `root.element` la PUBLICACIÓN a la que responde (texto/enlace/media). Las respuestas
+    anidadas viven en `root.comments`."""
+    if not isinstance(item, dict):
+        return None
+    root = item.get("root") if isinstance(item.get("root"), dict) else {}
+    cid = _str_opt(root.get("id")) or _str_opt(item.get("id"))
+    if cid is None:
+        return None
+    elemento = root.get("element") if isinstance(root.get("element"), dict) else {}
+    props = root.get("properties") if isinstance(root.get("properties"), dict) else {}
+    participantes = item.get("participants") or []
+    autor = None
+    if participantes and isinstance(participantes[0], dict):
+        autor = _participante(participantes[0])
+    elif root.get("owner"):
+        autor = Participante(nombre=_str_opt(root.get("owner")))
+    media = [u for u in (elemento.get("mediaUrls") or []) if isinstance(u, str)]
+    return Comentario(
+        id=cid,
+        red=plat.value,
+        pendiente=_es_pendiente(item.get("status")),
+        autor=autor,
+        texto=_str_opt(root.get("text")),
+        fecha=_instante_mx(root.get("creationDate") or item.get("creationDate")),
+        permalink=_str_opt(props.get("permalink")),
+        post_id=_str_opt(elemento.get("id")),
+        post_texto=_str_opt(elemento.get("text")),
+        post_enlace=_str_opt(elemento.get("link")),
+        post_media=media,
+        respuestas=[
+            r
+            for r in (_parsear_respuesta(c) for c in root.get("comments") or [])
+            if r is not None
+        ],
+    )
 
 
 class FuenteMetricool:
@@ -1193,6 +1369,128 @@ class FuenteMetricool:
                 continue
             out.append({"clave": str(clave), "valor": int(num) if num.is_integer() else round(num, 2)})
         return out
+
+    # --- Inbox de lectura (DMs + comentarios) ------------------------------
+    def _provider_inbox(self, cuenta_id: str, plat: Plataforma) -> str | None:
+        """Provider de inbox de la red si su buzón está HABILITADO, o None.
+
+        Consulta `/v2/inbox/conversations/authorizations`: solo devuelve el provider si la
+        red mapea a uno de inbox, no le faltan scopes y permite leer mensajes. None si la red
+        no aplica, no está autorizada o la consulta falla (se OMITE esa red, sin romper el resto).
+        """
+        provider = _PROVIDER_INBOX.get(plat)
+        if not provider:
+            return None
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}{ENDPOINT_INBOX_AUTH}",
+                params={**self._params_base(cuenta_id), "provider": provider},
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — sin autorización: red omitida (honesto)
+            log.warning("metricool: inbox auth %s/%s falló: %s", provider, cuenta_id, e)
+            return None
+        d = datos.get("data")
+        if not isinstance(d, dict):
+            return None
+        if (d.get("missingScopes") or []) or not d.get("allowAccessToMessages"):
+            return None
+        return provider
+
+    def _redes_inbox(self, cuenta_id: str) -> list[tuple[Plataforma, str]]:
+        """Pares (red, provider) con buzón habilitado para la marca, en orden canónico.
+
+        Cruza el universo de plataformas con las que tienen provider de inbox, descarta las no
+        conectadas en Metricool (si se sabe) y filtra por `authorizations`. Una red sin buzón
+        habilitado se omite (no rompe las demás)."""
+        conectadas = self._redes_conectadas(cuenta_id)
+        salida: list[tuple[Plataforma, str]] = []
+        for plat in self._universo_plataformas(cuenta_id, conectadas):
+            if plat not in _PROVIDER_INBOX:
+                continue
+            if conectadas is not None and plat not in conectadas:
+                continue
+            provider = self._provider_inbox(cuenta_id, plat)
+            if provider is not None:
+                salida.append((plat, provider))
+        return salida
+
+    def conversaciones(self, cuenta_id: str) -> list[Conversacion]:
+        """Conversaciones de mensajes directos (DMs) de la marca, por red con buzón habilitado.
+
+        Lee `/v2/inbox/conversations` por provider (trae ~25 recientes con los mensajes
+        EMBEBIDOS; no pagina). Degrada por red: un fallo de una red se OMITE con log, no rompe
+        el resto. Parseo defensivo (campos ausentes → None / listas vacías)."""
+        self._marca(cuenta_id)
+        out: list[Conversacion] = []
+        for plat, provider in self._redes_inbox(cuenta_id):
+            try:
+                datos = get_json(
+                    self._cli,
+                    f"{BASE}{ENDPOINT_INBOX_CONVERSACIONES}",
+                    params={**self._params_base(cuenta_id), "provider": provider},
+                    headers=self._headers(cuenta_id),
+                )
+            except Exception as e:  # noqa: BLE001 — una red que falla no aborta el resto
+                log.warning("metricool: conversaciones %s/%s falló: %s", provider, cuenta_id, e)
+                continue
+            for item in datos.get("data") or []:
+                conv = _parsear_conversacion(item, plat)
+                if conv is not None:
+                    out.append(conv)
+        return out
+
+    def comentarios(self, cuenta_id: str, dias: int = _DIAS_COMENTARIOS) -> list[Comentario]:
+        """Comentarios de publicaciones de la marca en los últimos `dias`, por red habilitada.
+
+        Lee `/v2/inbox/post-comments` (ALTO VOLUMEN): se acota a una ventana corta y se trocea
+        por DÍA para no timeoutear ni traer MB de golpe. Degrada por red y por día (un día que
+        falla se omite con log). Parseo defensivo."""
+        self._marca(cuenta_id)
+        dias = max(int(dias), 1)
+        hoy = date.today()
+        desde = hoy - timedelta(days=dias - 1)
+        out: list[Comentario] = []
+        for plat, provider in self._redes_inbox(cuenta_id):
+            out.extend(self._comentarios_red(cuenta_id, plat, provider, desde, hoy))
+        return out
+
+    def _comentarios_red(
+        self, cuenta_id: str, plat: Plataforma, provider: str, desde: date, hasta: date
+    ) -> list[Comentario]:
+        """Comentarios de UNA red en la ventana, un request por día (acota el payload).
+
+        Dedupe por id de comentario entre días. Un día que falla se omite con log (no rompe el
+        resto de la red ni de las demás)."""
+        vistos: set[str] = set()
+        salida: list[Comentario] = []
+        dia = desde
+        while dia <= hasta:
+            try:
+                datos = get_json(
+                    self._cli,
+                    f"{BASE}{ENDPOINT_INBOX_COMENTARIOS}",
+                    params={
+                        **self._params_base(cuenta_id),
+                        "provider": provider,
+                        **self._rango_params(dia, dia),
+                    },
+                    headers=self._headers(cuenta_id),
+                )
+            except Exception as e:  # noqa: BLE001 — un día que falla se omite, no rompe la red
+                log.warning(
+                    "metricool: comentarios %s/%s %s falló: %s", provider, cuenta_id, dia, e
+                )
+                dia += timedelta(days=1)
+                continue
+            for item in datos.get("data") or []:
+                com = _parsear_comentario(item, plat)
+                if com is not None and com.id not in vistos:
+                    vistos.add(com.id)
+                    salida.append(com)
+            dia += timedelta(days=1)
+        return salida
 
     def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
         """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.
