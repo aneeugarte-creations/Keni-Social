@@ -336,6 +336,33 @@ def _migrar_tabla_daemon_barridos(con: Any) -> None:
     )
 
 
+def _migrar_tablas_tunel(con: Any) -> None:
+    """Crea las tablas del túnel keni-fotos multi-worker (BDs ya creadas; registro compartido).
+
+    `tunel_conexiones` (registro de WebSockets vivos, cross-worker) y `tunel_rpc` (bus de
+    llamadas `buscar`/`original`/`rafaga` enrutadas al worker dueño): el DDL declarativo ya las
+    trae para BDs virgenes; esta migracion (0054) las garantiza en las hosted existentes. One-shot
+    e idempotente (`CREATE TABLE/INDEX IF NOT EXISTS`); sin backfill (el registro es efímero/vivo).
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS tunel_conexiones ("
+        "id TEXT PRIMARY KEY, worker TEXT NOT NULL DEFAULT '', usuario TEXT NOT NULL DEFAULT '', "
+        "dispositivo TEXT NOT NULL DEFAULT '', version TEXT NOT NULL DEFAULT '', "
+        "marcas TEXT NOT NULL DEFAULT '[]', galerias TEXT NOT NULL DEFAULT '[]', "
+        "visto_en TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_tunel_conexiones_visto ON tunel_conexiones (visto_en)"
+    )
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS tunel_rpc ("
+        "id TEXT PRIMARY KEY, tipo TEXT NOT NULL DEFAULT '', conexion_id TEXT NOT NULL DEFAULT '', "
+        "payload TEXT NOT NULL DEFAULT '{}', estado TEXT NOT NULL DEFAULT 'pendiente', "
+        "resultado TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_tunel_rpc_estado ON tunel_rpc (estado)")
+
+
 def _drop_tabla_sugerencias_editoriales(con: Any) -> None:
     """Elimina la tabla `sugerencias_editoriales` (feature retirada: agente de sugerencias).
 

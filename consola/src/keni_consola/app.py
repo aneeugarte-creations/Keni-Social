@@ -22,6 +22,7 @@ en espanol (sin tracebacks crudos).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import mimetypes
 from pathlib import Path
@@ -369,15 +370,31 @@ def crear_app(
     # autorizado antes que nada) y el lifespan del padre arranca el session manager del
     # MCP + abre el cliente in-proceso (Starlette no corre el lifespan de un sub-app
     # montado, hay que engancharlo aqui). Ver `mcp_operativo.ServidorMcp.lifespan`.
-    lifespan = None
+    mcp_lifespan = servidor_mcp.lifespan if servidor_mcp is not None else None
     if servidor_mcp is not None:
         middleware.insert(0, Middleware(mcp_operativo.GuardBearerMcp, bearer=bearer_mcp))
-        lifespan = servidor_mcp.lifespan
+
+    # Bus del túnel keni-fotos (registro de dispositivos COMPARTIDO entre workers vía Postgres
+    # LISTEN/NOTIFY): cada worker del back arranca su bus al iniciarse y lo para al cerrar. Se
+    # compone con el lifespan del MCP si lo hay (Starlette admite un único lifespan).
+    @contextlib.asynccontextmanager
+    async def _lifespan(app_: Starlette):  # noqa: ANN202 -- contrato de Starlette
+        from . import fotos_tunel
+
+        fotos_tunel.iniciar_bus()
+        try:
+            if mcp_lifespan is not None:
+                async with mcp_lifespan(app_):
+                    yield
+            else:
+                yield
+        finally:
+            await fotos_tunel.detener_bus()
 
     app = Starlette(
         routes=rutas,
         middleware=middleware,
-        lifespan=lifespan,
+        lifespan=_lifespan,
         # ColaLlenaError ANTES que Exception: Starlette elige el handler por tipo mas
         # especifico, pero lo dejamos explicito (cola al tope -> 429, no 500).
         exception_handlers={

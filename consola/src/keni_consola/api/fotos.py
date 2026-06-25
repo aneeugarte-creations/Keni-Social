@@ -35,6 +35,7 @@ el lanzador son de solo lectura; la autorización del escritorio emite un token 
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -188,8 +189,9 @@ async def actualizacion(request: Request) -> Response:
 # `auth.crear_token_mcp`) es el único secreto del escritorio: hoy lo valida `GET /api/fotos/sesion`
 # (quién está conectado) y mañana autenticará el túnel y el updater.
 
-# Etiqueta humana del token de escritorio en el listado de tokens del usuario.
-_ETIQUETA_TOKEN_FOTOS = "keni-fotos (escritorio)"
+# Etiqueta humana del token de escritorio en el listado de tokens del usuario. Es la MISMA que el
+# túnel usa para saber quién está registrado en keni-fotos (fuente única en `fotos_tunel`).
+_ETIQUETA_TOKEN_FOTOS = fotos_tunel.ETIQUETA_ESCRITORIO
 
 # Topes anti-DoS de los parámetros del callback (se reflejan en la URL de retorno).
 _MAX_LARGO_CB = 512
@@ -303,14 +305,21 @@ async def marcas_disponibles(request: Request) -> Response:
 # así que la auth la hace este handler a mano (Bearer -> `auth.token_mcp_valido`).
 
 
-def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
+# Periodo del heartbeat del túnel: refresca `visto_en` de la conexión para que CUALQUIER worker la
+# vea viva. Menor que el TTL (`fotos_tunel._TTL_CONEXION`, ~90 s) con holgura.
+_HEARTBEAT = 20.0
+
+
+async def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
     """Despacha un mensaje de la app: `hola`/`marcas` (registro) o respuesta de un RPC pendiente."""
     tipo = mensaje.get("tipo")
     if tipo == "hola":
         conexion.registrar_hola(mensaje)
+        await fotos_tunel.actualizar(conexion)
         return
     if tipo == "marcas":
         conexion.actualizar_marcas(mensaje.get("marcas"))
+        await fotos_tunel.actualizar(conexion)
         return
     reqid = mensaje.get("id")
     if not isinstance(reqid, str):
@@ -321,13 +330,21 @@ def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
         conexion.fallar(reqid, str(mensaje.get("mensaje") or ""))
 
 
+async def _latir(conexion: fotos_tunel.Conexion) -> None:
+    """Refresca el heartbeat de la conexión cada `_HEARTBEAT` s mientras el WebSocket viva."""
+    while True:
+        await asyncio.sleep(_HEARTBEAT)
+        await fotos_tunel.latido(conexion)
+
+
 async def tunel(websocket: WebSocket) -> None:
     """WebSocket del túnel keni-fotos: la app de escritorio se conecta y queda registrada por marca.
 
     Acepta, valida el token de escritorio (`Authorization: Bearer`); si no vale, cierra (4401). Mientras
-    dure, procesa `hola`/`marcas`/`resultado`/`rafaga_datos`/`original_datos`/`error` (los RPC se resuelven por su `id`).
-    Los frames de control (Ping/Pong, keepalive) y los binarios NO son mensajes del protocolo: se ignoran.
-    Al desconectar, limpia el registro y falla los RPC vivos.
+    dure, procesa `hola`/`marcas`/`resultado`/`rafaga_datos`/`original_datos`/`error` (los RPC se resuelven por su `id`)
+    y refresca su heartbeat en `tunel_conexiones` (registro compartido entre workers). Los frames de
+    control (Ping/Pong, keepalive) y los binarios NO son mensajes del protocolo: se ignoran. Al
+    desconectar, limpia el registro (su fila) y falla los RPC vivos.
     """
     await websocket.accept()
     token = _token_bearer_ws(websocket)
@@ -336,7 +353,8 @@ async def tunel(websocket: WebSocket) -> None:
         await websocket.close(code=4401)
         return
     conexion = fotos_tunel.Conexion(websocket, usuario["id"])
-    fotos_tunel.registrar(conexion)
+    await fotos_tunel.registrar(conexion)
+    latido = asyncio.ensure_future(_latir(conexion))
     try:
         while True:
             evento = await websocket.receive()
@@ -351,11 +369,12 @@ async def tunel(websocket: WebSocket) -> None:
             except (ValueError, TypeError):
                 continue
             if isinstance(mensaje, dict):
-                _procesar_mensaje(conexion, mensaje)
+                await _procesar_mensaje(conexion, mensaje)
     except Exception:  # noqa: BLE001 -- cualquier fallo del canal cierra la conexión limpiamente
         _log.debug("Túnel keni-fotos: conexión terminada por un error.", exc_info=True)
     finally:
-        fotos_tunel.desregistrar(conexion)
+        latido.cancel()
+        await fotos_tunel.desregistrar(conexion)
 
 
 def _token_bearer_ws(websocket: WebSocket) -> str | None:

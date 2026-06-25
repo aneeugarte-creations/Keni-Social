@@ -1747,6 +1747,43 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Listado/limpieza por daemon, recientes primero (desempate por id para orden estable).
     "CREATE INDEX IF NOT EXISTS idx_daemon_barridos_daemon_ts "
     "ON daemon_barridos (daemon, ts_inicio DESC, id DESC)",
+    # REGISTRO COMPARTIDO del túnel keni-fotos (multi-worker): una fila por conexión WebSocket
+    # VIVA de la app de escritorio. El WebSocket sigue en memoria del worker que lo acepta; esta
+    # tabla deja que CUALQUIER worker sepa qué dispositivos hay y a qué marcas comparten, para
+    # listar la Galería y enrutar los RPC al worker dueño. `worker` identifica el proceso dueño
+    # (`host:pid`); `visto_en` (ISO UTC) lo refresca un heartbeat ~20 s — una fila con `visto_en`
+    # viejo (>90 s) es de un worker caído y se barre. `marcas`/`galerias` son JSON (declarados en
+    # el `hola`). Migracion 0054 para BDs ya creadas.
+    """
+    CREATE TABLE IF NOT EXISTS tunel_conexiones (
+        id           TEXT PRIMARY KEY,
+        worker       TEXT NOT NULL DEFAULT '',
+        usuario      TEXT NOT NULL DEFAULT '',
+        dispositivo  TEXT NOT NULL DEFAULT '',
+        version      TEXT NOT NULL DEFAULT '',
+        marcas       TEXT NOT NULL DEFAULT '[]',
+        galerias     TEXT NOT NULL DEFAULT '[]',
+        visto_en     TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tunel_conexiones_visto ON tunel_conexiones (visto_en)",
+    # BUS RPC cross-worker del túnel: el worker que recibe la petición HTTP encola aquí una
+    # llamada (`buscar`/`original`/`rafaga`) dirigida a una `conexion_id`; el worker que tiene ese
+    # WebSocket en memoria la ejecuta y deja el `resultado` (puede ser GRANDE: thumbs/original en
+    # base64 — Postgres aguanta MB, por eso va en la columna y NUNCA en el NOTIFY, limitado a 8 KB).
+    # `estado` ∈ pendiente|listo|error. Las filas consumidas/viejas se barren. Migracion 0054.
+    """
+    CREATE TABLE IF NOT EXISTS tunel_rpc (
+        id           TEXT PRIMARY KEY,
+        tipo         TEXT NOT NULL DEFAULT '',
+        conexion_id  TEXT NOT NULL DEFAULT '',
+        payload      TEXT NOT NULL DEFAULT '{}',
+        estado       TEXT NOT NULL DEFAULT 'pendiente',
+        resultado    TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tunel_rpc_estado ON tunel_rpc (estado)",
 )
 
 

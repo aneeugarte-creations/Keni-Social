@@ -11,6 +11,8 @@ from __future__ import annotations
 import base64
 import json
 
+import anyio
+
 from keni_consola import fotos_tunel, media, motor_db, repos
 from keni_consola._db_core.migraciones_columnas import _migrar_heredar_keywords_media
 
@@ -167,12 +169,12 @@ def _conexion_original(marca: str):
     conexion.galerias = [{"id": "g1", "nombre": "Colombia vs Uzbekistán"}]
     conexion.marcas = {marca}
     ws.conexion = conexion
-    fotos_tunel.registrar(conexion)
+    anyio.run(fotos_tunel.registrar, conexion)
     return conexion
 
 
 def test_guardar_remoto_cataloga_en_fotografias_y_conserva_etiquetas(cliente):
-    fotos_tunel._REGISTRO.clear()
+    fotos_tunel._CONEXIONES.clear()
     try:
         _conexion_original("claro-sports")
         r = cliente.post(
@@ -191,11 +193,11 @@ def test_guardar_remoto_cataloga_en_fotografias_y_conserva_etiquetas(cliente):
         # Persistió en el catálogo y aparece en el buscador.
         assert any(i["id"] == item["id"] for i in cliente.get("/api/biblioteca").json()["items"])
     finally:
-        fotos_tunel._REGISTRO.clear()
+        fotos_tunel._CONEXIONES.clear()
 
 
 def test_rafaga_propio_lista_el_burst(cliente):
-    fotos_tunel._REGISTRO.clear()
+    fotos_tunel._CONEXIONES.clear()
     try:
         _conexion_original("claro-sports")
         r = cliente.get(
@@ -206,16 +208,16 @@ def test_rafaga_propio_lista_el_burst(cliente):
         assert [f["archivo"] for f in fotos] == ["keeper.jpg", "keeper2.jpg"]
         assert all(f["thumb"] for f in fotos)
     finally:
-        fotos_tunel._REGISTRO.clear()
+        fotos_tunel._CONEXIONES.clear()
 
 
 def test_rafaga_propio_sin_datos_devuelve_vacio(cliente):
-    fotos_tunel._REGISTRO.clear()
+    fotos_tunel._CONEXIONES.clear()
     assert cliente.get("/api/artes/propio/rafaga?galeria_id=g1").json() == {"fotos": []}
 
 
 def test_guardar_remoto_sin_dispositivo_400(cliente):
-    fotos_tunel._REGISTRO.clear()
+    fotos_tunel._CONEXIONES.clear()
     r = cliente.post(
         "/api/biblioteca/guardar-remoto",
         json={"galeria_id": "g1", "archivo": "keeper.jpg", "marca": "claro-sports"},

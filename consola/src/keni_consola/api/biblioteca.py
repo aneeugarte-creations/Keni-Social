@@ -234,7 +234,7 @@ async def guardar_remoto(request: Request) -> Response:
     except fotos_tunel.TunelError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    grupo = fotos_tunel.nombre_galeria(marca, galeria_id) or galeria_id
+    grupo = await run_in_threadpool(fotos_tunel.nombre_galeria, marca, galeria_id) or galeria_id
     titulo = (datos_req.get("titulo") or "").strip()[:_MAX_TITULO]
     etiquetas = _normalizar_etiquetas(datos_req.get("etiquetas"))
     autor = autor_de_peticion(request)

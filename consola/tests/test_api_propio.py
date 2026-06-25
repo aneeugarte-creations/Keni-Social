@@ -1,30 +1,36 @@
-"""Lado-backend del túnel keni-fotos (fuente «Propio»): dispatcher por MARCA + endpoints HTTP.
+"""Lado-backend del túnel keni-fotos (fuente «Propio»): registro COMPARTIDO + bus RPC cross-worker.
 
-OFFLINE y sin red real: el WebSocket de la app se simula con conexiones FAKE que resuelven los
-RPC del dispatcher en memoria. El registro es POR MARCA (cruza usuarios). Cubre:
-  - registro/fan-out de `fotos_tunel.buscar` por marca, cruzando usuarios (un dispositivo del
-    usuario A compartiendo a `m` lo ve una búsqueda hecha para `m`, sea quien sea quien busca),
-  - un dispositivo que NO comparte `m` no aparece ni sirve el original de esa marca,
-  - `_adjuntar_propio` pide el original (a un dispositivo que comparte la marca), lo SUBE a media
-    y lo LIGA como foto propia; sin dispositivo de esa marca da 400,
-  - `GET /api/fotos/marcas` exige token de escritorio (Bearer) y devuelve el catálogo,
-  - el WebSocket RECHAZA un token inválido (cierra sin registrar), registra con `hola` (incluidas
-    sus marcas) y actualiza las marcas en vivo con el mensaje `marcas`; ignora frames no-texto.
+OFFLINE pero sobre Postgres (el registro y el bus viven en tablas): el WebSocket de la app se
+simula con conexiones FAKE que resuelven los RPC en memoria. El registro es POR MARCA (cruza
+usuarios) y vive en `tunel_conexiones`; las llamadas (`buscar`/`original`/`rafaga`) se encolan en
+`tunel_rpc` y las ejecuta el worker que tiene el WebSocket en memoria. Cubre:
+  - registro en tabla (alta/heartbeat/baja) y barrido de conexiones muertas (stale),
+  - `dispositivos_registrados` = usuarios con token de escritorio + flag `online`, cruzando workers,
+  - fan-out de `buscar` por marca cruzando usuarios; exclusión de quien no comparte la marca,
+  - RPC enrutado a OTRO worker (la fila vive con `worker` ajeno; el dueño la ejecuta al recibirla),
+  - payload GRANDE (original en base64 de ~2 MB) viajando por la columna `resultado`,
+  - `_adjuntar_propio` pide el original (de un dispositivo que comparte la marca), lo SUBE y lo LIGA,
+  - `GET /api/fotos/marcas` (auth Bearer) y el WebSocket (auth + registro/actualización por marca).
 
-Los tests que crean piezas usan la fixture `entorno` (BD de pruebas); el resto corre sin BD.
+Casi todos los tests usan la fixture `entorno` (Postgres): el registro/bus son tablas.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import anyio
+import pytest
+from starlette.concurrency import run_in_threadpool
 
-from keni_consola import auth, fotos_tunel
+from keni_consola import auth, fotos_tunel, repos
 from keni_consola.api import artes
 from keni_consola.api import fotos as fotos_api
+from keni_consola.tiempo import ahora_iso, iso_utc
 
 # PNG 1x1 válido: el original que la app «manda» por el túnel (base64).
 _PNG_1x1 = (
@@ -32,6 +38,17 @@ _PNG_1x1 = (
     b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
     b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
+_CLAVE = "Xx12345!abcd"
+
+
+@pytest.fixture(autouse=True)
+def _limpiar_conexiones_locales():
+    """El mapa de WebSockets en memoria (`_CONEXIONES`) es global del proceso: aíslalo por test."""
+    fotos_tunel._CONEXIONES.clear()
+    fotos_tunel._EN_CURSO.clear()
+    yield
+    fotos_tunel._CONEXIONES.clear()
+    fotos_tunel._EN_CURSO.clear()
 
 
 class _FakeWS:
@@ -74,7 +91,41 @@ def _conexion(
     galerias=None,
     marcas=("claro-sports",),
 ):
-    """Registra una conexión FAKE de `usuario` que comparte a `marcas` y la devuelve."""
+    """Registra una conexión FAKE de `usuario` (WS LOCAL + fila en `tunel_conexiones`)."""
+    conexion = _construir_conexion(
+        usuario, responder, dispositivo=dispositivo, galerias=galerias, marcas=marcas
+    )
+    anyio.run(fotos_tunel.registrar, conexion)
+    return conexion
+
+
+def _conexion_remota(
+    usuario: str,
+    responder=None,
+    *,
+    dispositivo="Mac de Ale",
+    galerias=None,
+    marcas=("claro-sports",),
+    worker="otro-host:999",
+):
+    """Conexión cuyo WebSocket vive en OTRO worker: solo la fila en `tunel_conexiones` (no local)."""
+    conexion = _construir_conexion(
+        usuario, responder, dispositivo=dispositivo, galerias=galerias, marcas=marcas
+    )
+    repos.tunel_upsert_conexion(
+        id=conexion.id,
+        worker=worker,
+        usuario=usuario,
+        dispositivo=conexion.dispositivo,
+        version="",
+        marcas=json.dumps(sorted(conexion.marcas)),
+        galerias=json.dumps(conexion.galerias),
+        visto_en=ahora_iso(),
+    )
+    return conexion
+
+
+def _construir_conexion(usuario, responder, *, dispositivo, galerias, marcas):
     ws = _FakeWS()
     conexion = fotos_tunel.Conexion(ws, usuario)
     conexion.dispositivo = dispositivo
@@ -82,8 +133,27 @@ def _conexion(
     conexion.marcas = set(marcas)
     ws.conexion = conexion
     ws.responder = responder
-    fotos_tunel.registrar(conexion)
     return conexion
+
+
+async def _esperar_pendientes(n):
+    """Espera a que el peticionario haya encolado `n` RPC en `tunel_rpc` (aún sin worker local)."""
+    for _ in range(500):
+        filas = await run_in_threadpool(repos.tunel_rpc_pendientes)
+        if len(filas) >= n:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("no aparecieron los RPC pendientes esperados")
+
+
+async def _ejecutar_como_dueno(tarea, *conexiones):
+    """El worker dueño recibe los WebSockets en memoria y drena el bus hasta cerrar la petición."""
+    for c in conexiones:
+        fotos_tunel._CONEXIONES[c.id] = c
+    while not tarea.done():
+        await fotos_tunel._pasada_local()
+        await asyncio.sleep(0.02)
+    return await tarea
 
 
 def _resultado(msg, n):
@@ -105,178 +175,6 @@ def _resultado(msg, n):
     }
 
 
-# --------------------------------------------------------------------------- #
-# Dispatcher por marca: registro + fan-out + troceo, cruzando usuarios          #
-# --------------------------------------------------------------------------- #
-
-
-def test_buscar_agrega_y_trocea_a_limite():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("u1", lambda m: _resultado(m, 5), dispositivo="Mac de Ale")
-        res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 3)
-        assert len(res) == 3  # 5 candidatos troceados a `limite`
-        assert all(c["dispositivo"] == "Mac de Ale" for c in res)
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_buscar_cruza_usuarios_por_marca():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        # Dispositivos de DOS dueños distintos, ambos compartiendo a claro-sports.
-        _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale")
-        _conexion("ane", lambda m: _resultado(m, 2), dispositivo="Mac de Ane")
-        res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 10)
-        assert len(res) == 4  # 2 + 2: la búsqueda por marca cruza usuarios
-        assert {c["dispositivo"] for c in res} == {"Mac de Ale", "Mac de Ane"}
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_buscar_excluye_dispositivo_que_no_comparte_la_marca():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale", marcas=("claro-sports",))
-        _conexion("ane", lambda m: _resultado(m, 2), dispositivo="Mac de Ane", marcas=("unotv",))
-        res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 10)
-        assert {c["dispositivo"] for c in res} == {"Mac de Ale"}  # Ane no comparte claro-sports
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_buscar_sin_dispositivos_de_la_marca_devuelve_vacio():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", lambda m: _resultado(m, 2), marcas=("unotv",))
-        res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 4)
-        assert res == []
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_dispositivos_por_marca_lleva_dueno_y_marcas():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", dispositivo="Mac de Ale", marcas=("claro-sports", "unotv"))
-        items = fotos_tunel.dispositivos("claro-sports")
-        assert len(items) == 1
-        assert items[0]["usuario"] == "ale"
-        assert items[0]["dispositivo"] == "Mac de Ale"
-        assert items[0]["marcas"] == ["claro-sports", "unotv"]
-        assert fotos_tunel.dispositivos("nacion-gamer") == []  # nadie comparte esa marca
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_pubsub_notifica_alta_cambio_marcas_y_baja():
-    """El SSE de la Galería se suscribe: alta, cambio de marcas y baja encolan un aviso."""
-    fotos_tunel._REGISTRO.clear()
-    cola = fotos_tunel.suscribir()
-    try:
-        assert cola.empty()  # aún sin cambios
-        conexion = _conexion("ale", marcas=("claro-sports",))
-        assert cola.get_nowait() is None  # alta -> aviso
-        assert cola.empty()
-        conexion.actualizar_marcas(["unotv"])
-        assert cola.get_nowait() is None  # cambio de marcas -> aviso
-        fotos_tunel.desregistrar(conexion)
-        assert cola.get_nowait() is None  # baja -> aviso
-    finally:
-        fotos_tunel.desuscribir(cola)
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_pubsub_avisos_seguidos_colapsan_en_uno():
-    """Cola de tamaño 1: varios cambios seguidos dejan un único aviso pendiente."""
-    fotos_tunel._REGISTRO.clear()
-    cola = fotos_tunel.suscribir()
-    try:
-        _conexion("ale", marcas=("claro-sports",))
-        _conexion("ane", marcas=("unotv",))
-        assert cola.get_nowait() is None
-        assert cola.empty()  # el segundo aviso colapsó en el primero pendiente
-    finally:
-        fotos_tunel.desuscribir(cola)
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_pubsub_snapshot_inicial_lista_la_marca():
-    """El snapshot que reenvía el SSE es el de `dispositivos(marca)` (la verdad del registro)."""
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", dispositivo="Mac de Ale", marcas=("claro-sports",))
-        snapshot = fotos_tunel.dispositivos("claro-sports")
-        assert [d["dispositivo"] for d in snapshot] == ["Mac de Ale"]
-        assert fotos_tunel.dispositivos("unotv") == []
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_dispositivos_sin_marca_lista_todos_los_conectados():
-    """La página Galería pide SIN marca: ve TODOS los conectados (aunque uno no comparta ninguna)."""
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", dispositivo="Mac de Ale", marcas=("claro-sports",))
-        _conexion("ane", dispositivo="Mac de Ane", marcas=())
-        todos = fotos_tunel.dispositivos(None)
-        assert {d["usuario"] for d in todos} == {"ale", "ane"}
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-# --------------------------------------------------------------------------- #
-# `_buscar_propio` por marca (sin gate a claro-sports)                          #
-# --------------------------------------------------------------------------- #
-
-
-def test_buscar_propio_sin_marca_inerte():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", lambda m: _resultado(m, 3))  # hay dispositivo, pero no se pide marca
-        res = anyio.run(artes._buscar_propio, "portero", 4, "")
-        assert res["candidatos"] == []
-        assert res["proveedores"][0]["disponible"] is False
-        assert res["proveedores"][0]["proveedor"] == "propio"
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_buscar_propio_marca_sin_dispositivos_inerte():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", lambda m: _resultado(m, 3), marcas=("claro-sports",))
-        res = anyio.run(artes._buscar_propio, "portero", 4, "unotv")  # nadie comparte unotv
-        assert res["candidatos"] == []
-        assert res["proveedores"][0]["disponible"] is False
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-def test_buscar_propio_con_dispositivo_devuelve_candidatos():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale")
-        # Cualquiera que trabaje claro-sports ve la galería de Ale (registro por marca).
-        res = anyio.run(artes._buscar_propio, "portero", 4, "claro-sports")
-        prov = res["proveedores"][0]
-        assert prov["disponible"] is True
-        assert prov["dispositivos"] == 1
-        cand = res["candidatos"][0]
-        assert cand["proveedor"] == "propio"
-        assert cand["galeria_id"] == "g1"
-        assert cand["archivo"] == "f0.jpg"
-        assert cand["dispositivo"] == "Mac de Ale"
-        assert cand["titulo"] == "Colombia vs Uzbekistán · in-game · portero"
-    finally:
-        fotos_tunel._REGISTRO.clear()
-
-
-# --------------------------------------------------------------------------- #
-# Adjuntar: pide el original por el túnel (de un dispositivo que comparte marca) #
-# --------------------------------------------------------------------------- #
-
-
 def _responder_original(msg):
     if msg.get("tipo") != "original":
         return None
@@ -289,51 +187,279 @@ def _responder_original(msg):
     }
 
 
-def test_adjuntar_propio_pide_original_sube_y_liga(entorno):
-    from keni_consola import repos
+# --------------------------------------------------------------------------- #
+# Registro compartido en `tunel_conexiones`: alta / heartbeat / baja / stale     #
+# --------------------------------------------------------------------------- #
 
-    fotos_tunel._REGISTRO.clear()
+
+def test_registro_alta_heartbeat_y_baja(entorno):
+    conexion = _conexion("ale", marcas=("claro-sports",))
+    vivas = repos.tunel_conexiones_vivas(fotos_tunel._umbral_vivo())
+    assert any(v["id"] == conexion.id for v in vivas)
+
+    anyio.run(fotos_tunel.latido, conexion)  # heartbeat: la fila sigue viva
+    assert any(
+        v["id"] == conexion.id
+        for v in repos.tunel_conexiones_vivas(fotos_tunel._umbral_vivo())
+    )
+
+    anyio.run(fotos_tunel.desregistrar, conexion)  # baja: borra la fila
+    assert all(
+        v["id"] != conexion.id
+        for v in repos.tunel_conexiones_vivas(fotos_tunel._umbral_vivo())
+    )
+
+
+def test_conexion_stale_se_ignora_y_se_barre(entorno):
+    viejo = iso_utc(datetime.now(UTC) - timedelta(seconds=600))  # > TTL (90 s)
+    repos.tunel_upsert_conexion(
+        id="muerta",
+        worker="caido:1",
+        usuario="ale",
+        dispositivo="Mac de Ale",
+        version="",
+        marcas=json.dumps(["claro-sports"]),
+        galerias="[]",
+        visto_en=viejo,
+    )
+    # La lectura ignora la fila muerta y la barre de paso.
+    assert fotos_tunel.conexiones_de_marca("claro-sports") == []
+    assert repos.tunel_conexiones_vivas(fotos_tunel._umbral_vivo()) == []
+
+
+# --------------------------------------------------------------------------- #
+# `dispositivos_registrados`: registrados + online, cruzando workers             #
+# --------------------------------------------------------------------------- #
+
+
+def test_dispositivos_registrados_online_offline_cruza_workers(entorno):
+    ale = auth.crear_usuario("ale", _CLAVE, "editor")
+    ane = auth.crear_usuario("ane", _CLAVE, "editor")
+    bob = auth.crear_usuario("bob", _CLAVE, "editor")
+    for u in (ale, ane, bob):
+        auth.crear_token_mcp(u["id"], fotos_tunel.ETIQUETA_ESCRITORIO)
+
+    # ale conectado en el "worker A", ane en el "worker B", bob registrado pero offline.
+    repos.tunel_upsert_conexion(
+        id="cA", worker="hostA:1", usuario=ale["id"], dispositivo="Mac de Ale",
+        version="", marcas=json.dumps(["claro-sports"]), galerias="[]", visto_en=ahora_iso(),
+    )
+    repos.tunel_upsert_conexion(
+        id="cB", worker="hostB:1", usuario=ane["id"], dispositivo="Mac de Ane",
+        version="", marcas=json.dumps(["unotv"]), galerias="[]", visto_en=ahora_iso(),
+    )
+
+    por = {i["usuario"]: i for i in fotos_tunel.dispositivos_registrados()}
+    assert por[ale["id"]]["online"] is True
+    assert por[ale["id"]]["dispositivo"] == "Mac de Ale"
+    assert por[ale["id"]]["marcas"] == ["claro-sports"]
+    assert por[ane["id"]]["online"] is True
+    assert por[ane["id"]]["dispositivo"] == "Mac de Ane"
+    assert por[bob["id"]]["online"] is False
+    assert "dispositivo" not in por[bob["id"]]  # offline -> solo {usuario, online}
+
+
+def test_dispositivos_registrados_no_filtra_por_marca(entorno):
+    """El listado es de QUIÉN está registrado/online, no de quién comparte una marca dada."""
+    ale = auth.crear_usuario("ale", _CLAVE, "editor")
+    auth.crear_token_mcp(ale["id"], fotos_tunel.ETIQUETA_ESCRITORIO)
+    repos.tunel_upsert_conexion(
+        id="cA", worker="hostA:1", usuario=ale["id"], dispositivo="Mac de Ale",
+        version="", marcas=json.dumps(["unotv"]), galerias="[]", visto_en=ahora_iso(),
+    )
+    items = fotos_tunel.dispositivos_registrados()
+    assert [i["usuario"] for i in items] == [ale["id"]]
+    assert items[0]["online"] is True  # aparece aunque solo comparta unotv
+
+
+# --------------------------------------------------------------------------- #
+# Fan-out de `buscar` por marca (cruza usuarios), vía el bus de RPC               #
+# --------------------------------------------------------------------------- #
+
+
+def test_buscar_agrega_y_trocea_a_limite(entorno):
+    _conexion("u1", lambda m: _resultado(m, 5), dispositivo="Mac de Ale")
+    res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 3)
+    assert len(res) == 3  # 5 candidatos troceados a `limite`
+    assert all(c["dispositivo"] == "Mac de Ale" for c in res)
+
+
+def test_buscar_cruza_usuarios_por_marca(entorno):
+    _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale")
+    _conexion("ane", lambda m: _resultado(m, 2), dispositivo="Mac de Ane")
+    res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 10)
+    assert len(res) == 4  # 2 + 2: la búsqueda por marca cruza usuarios
+    assert {c["dispositivo"] for c in res} == {"Mac de Ale", "Mac de Ane"}
+
+
+def test_buscar_excluye_dispositivo_que_no_comparte_la_marca(entorno):
+    _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale", marcas=("claro-sports",))
+    _conexion("ane", lambda m: _resultado(m, 2), dispositivo="Mac de Ane", marcas=("unotv",))
+    res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 10)
+    assert {c["dispositivo"] for c in res} == {"Mac de Ale"}  # Ane no comparte claro-sports
+
+
+def test_buscar_sin_dispositivos_de_la_marca_devuelve_vacio(entorno):
+    _conexion("ale", lambda m: _resultado(m, 2), marcas=("unotv",))
+    res = anyio.run(fotos_tunel.buscar, "claro-sports", "portero", 4)
+    assert res == []
+
+
+# --------------------------------------------------------------------------- #
+# RPC enrutado a OTRO worker + payload grande en `resultado`                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_rpc_original_se_enruta_al_worker_dueno(entorno):
+    """La fila vive con un `worker` ajeno; el dueño la recibe en memoria y la ejecuta vía la tabla."""
+    conexion = _conexion_remota("ane", _responder_original, galerias=[{"id": "g1", "nombre": "X"}])
+
+    async def escenario():
+        tarea = asyncio.create_task(fotos_tunel.pedir_original("claro-sports", "g1", "keeper.jpg"))
+        await _esperar_pendientes(1)  # el peticionario encoló el RPC SIN tener el WS local
+        return await _ejecutar_como_dueno(tarea, conexion)
+
+    datos, mime = anyio.run(escenario)
+    assert datos == _PNG_1x1
+    assert mime == "image/png"
+
+
+def test_rpc_buscar_fan_out_cross_worker(entorno):
+    c1 = _conexion_remota("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale")
+    c2 = _conexion_remota("ane", lambda m: _resultado(m, 2), dispositivo="Mac de Ane")
+
+    async def escenario():
+        tarea = asyncio.create_task(fotos_tunel.buscar("claro-sports", "portero", 10))
+        await _esperar_pendientes(2)  # fan-out: un RPC encolado por cada dispositivo de la marca
+        return await _ejecutar_como_dueno(tarea, c1, c2)
+
+    res = anyio.run(escenario)
+    assert len(res) == 4
+    assert {c["dispositivo"] for c in res} == {"Mac de Ale", "Mac de Ane"}
+
+
+def test_rpc_payload_grande_viaja_por_resultado(entorno):
+    grande = base64.b64encode(b"\xff" * 2_000_000).decode("ascii")  # original de ~2 MB
+
+    def responder(msg):
+        if msg.get("tipo") != "original":
+            return None
+        return {"tipo": "original_datos", "id": msg["id"], "mime": "image/jpeg", "datos_b64": grande}
+
+    conexion = _conexion_remota("ale", responder, galerias=[{"id": "g1", "nombre": "X"}])
+
+    async def escenario():
+        tarea = asyncio.create_task(fotos_tunel.pedir_original("claro-sports", "g1", "big.jpg"))
+        await _esperar_pendientes(1)
+        return await _ejecutar_como_dueno(tarea, conexion)
+
+    datos, mime = anyio.run(escenario)
+    assert len(datos) == 2_000_000
+    assert mime == "image/jpeg"
+
+
+# --------------------------------------------------------------------------- #
+# Pub/sub LOCAL del SSE de la Galería (sin BD)                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_manejar_notify_traduce_cada_canal():
+    """El listener traduce cada NOTIFY a su efecto local (SSE / ejecutar RPC / despertar waiters)."""
+    cola = fotos_tunel.suscribir()
     try:
-        tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
-        pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
-        # Dispositivo de OTRO usuario (ane) compartiendo a claro-sports: la búsqueda/adjuntar de
-        # cualquiera que trabaje la marca lo alcanza (registro por marca, cruza usuarios).
-        _conexion("ane", _responder_original, galerias=[{"id": "g1", "nombre": "X"}])
+        async def run():
+            await fotos_tunel._manejar_notify("tunel_cambio", "")  # re-empuja el SSE local
+            assert cola.get_nowait() is None
+            # Sin conexiones locales, `tunel_rpc` no toca la BD ni lanza; `tunel_rpc_done` despierta.
+            await fotos_tunel._manejar_notify("tunel_rpc", "x")
+            await fotos_tunel._manejar_notify("tunel_rpc_done", "x")
 
-        status, cuerpo = anyio.run(
-            artes._adjuntar_propio, pid, "g1", "keeper.jpg", "", "claro-sports"
-        )
-        assert status == 200
-        assert cuerpo["plataforma"]["foto"]
-
-        fila = repos.obtener_pieza_fila(pid)
-        assert fila["imagen_origen"] == "propia"
-        assert bool(fila["falta_imagen"]) is False
-        assert fila["foto"]  # objeto subido a media
+        anyio.run(run)
     finally:
-        fotos_tunel._REGISTRO.clear()
+        fotos_tunel.desuscribir(cola)
+
+
+def test_pubsub_local_avisos_colapsan_en_uno():
+    cola = fotos_tunel.suscribir()
+    try:
+        assert cola.empty()
+        fotos_tunel._notificar_cambio()
+        assert cola.get_nowait() is None
+        fotos_tunel._notificar_cambio()
+        fotos_tunel._notificar_cambio()
+        assert cola.get_nowait() is None  # varios cambios -> un único aviso pendiente
+        assert cola.empty()
+    finally:
+        fotos_tunel.desuscribir(cola)
+
+
+# --------------------------------------------------------------------------- #
+# `_buscar_propio` por marca (sin gate a claro-sports)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_buscar_propio_sin_marca_inerte(entorno):
+    _conexion("ale", lambda m: _resultado(m, 3))  # hay dispositivo, pero no se pide marca
+    res = anyio.run(artes._buscar_propio, "portero", 4, "")
+    assert res["candidatos"] == []
+    assert res["proveedores"][0]["disponible"] is False
+    assert res["proveedores"][0]["proveedor"] == "propio"
+
+
+def test_buscar_propio_marca_sin_dispositivos_inerte(entorno):
+    _conexion("ale", lambda m: _resultado(m, 3), marcas=("claro-sports",))
+    res = anyio.run(artes._buscar_propio, "portero", 4, "unotv")  # nadie comparte unotv
+    assert res["candidatos"] == []
+    assert res["proveedores"][0]["disponible"] is False
+
+
+def test_buscar_propio_con_dispositivo_devuelve_candidatos(entorno):
+    _conexion("ale", lambda m: _resultado(m, 2), dispositivo="Mac de Ale")
+    res = anyio.run(artes._buscar_propio, "portero", 4, "claro-sports")
+    prov = res["proveedores"][0]
+    assert prov["disponible"] is True
+    assert prov["dispositivos"] == 1
+    cand = res["candidatos"][0]
+    assert cand["proveedor"] == "propio"
+    assert cand["galeria_id"] == "g1"
+    assert cand["archivo"] == "f0.jpg"
+    assert cand["dispositivo"] == "Mac de Ale"
+    assert cand["titulo"] == "Colombia vs Uzbekistán · in-game · portero"
+
+
+# --------------------------------------------------------------------------- #
+# Adjuntar: pide el original por el túnel (de un dispositivo que comparte marca) #
+# --------------------------------------------------------------------------- #
+
+
+def test_adjuntar_propio_pide_original_sube_y_liga(entorno):
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
+    # Dispositivo de OTRO usuario (ane) compartiendo a claro-sports: lo alcanza por marca.
+    _conexion("ane", _responder_original, galerias=[{"id": "g1", "nombre": "X"}])
+
+    status, cuerpo = anyio.run(
+        artes._adjuntar_propio, pid, "g1", "keeper.jpg", "", "claro-sports"
+    )
+    assert status == 200
+    assert cuerpo["plataforma"]["foto"]
+
+    fila = repos.obtener_pieza_fila(pid)
+    assert fila["imagen_origen"] == "propia"
+    assert bool(fila["falta_imagen"]) is False
+    assert fila["foto"]  # objeto subido a media
 
 
 def test_adjuntar_propio_no_expone_galeria_a_marca_no_compartida(entorno):
-    from keni_consola import repos
-
-    fotos_tunel._REGISTRO.clear()
-    try:
-        tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="unotv")
-        pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
-        # El dispositivo solo comparte a claro-sports: adjuntar a una marca distinta no lo alcanza.
-        _conexion("ale", _responder_original, marcas=("claro-sports",))
-        status, cuerpo = anyio.run(artes._adjuntar_propio, pid, "g1", "keeper.jpg", "", "unotv")
-        assert status == 400
-        assert "error" in cuerpo
-    finally:
-        fotos_tunel._REGISTRO.clear()
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="unotv")
+    pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
+    _conexion("ale", _responder_original, marcas=("claro-sports",))
+    status, cuerpo = anyio.run(artes._adjuntar_propio, pid, "g1", "keeper.jpg", "", "unotv")
+    assert status == 400
+    assert "error" in cuerpo
 
 
 def test_adjuntar_propio_sin_marca_da_400(entorno):
-    from keni_consola import repos
-
-    fotos_tunel._REGISTRO.clear()
     tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
     pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
     status, cuerpo = anyio.run(artes._adjuntar_propio, pid, "g1", "keeper.jpg", "", "")
@@ -342,9 +468,6 @@ def test_adjuntar_propio_sin_marca_da_400(entorno):
 
 
 def test_adjuntar_propio_sin_dispositivo_da_400(entorno):
-    from keni_consola import repos
-
-    fotos_tunel._REGISTRO.clear()
     tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
     pid = repos.crear_pieza_fila(publicacion_id=tema["id"], red="instagram", copy="c")["id"]
     status, cuerpo = anyio.run(
@@ -382,13 +505,13 @@ def test_marcas_con_token_devuelve_catalogo(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_ws_token_invalido_cierra_y_no_registra():
-    fotos_tunel._REGISTRO.clear()
+def test_ws_token_invalido_cierra_y_no_registra(monkeypatch):
+    monkeypatch.setattr(auth, "token_mcp_valido", lambda t: None)
     ws = _FakeWS(headers={})  # sin Authorization -> token None -> cierra
     anyio.run(fotos_api.tunel, ws)
     assert ws.aceptado is True
     assert ws.cerrado == 4401
-    assert fotos_tunel._REGISTRO == set()
+    assert fotos_tunel._CONEXIONES == {}
 
 
 class _FakeWSGuion(_FakeWS):
@@ -416,8 +539,7 @@ class _FakeWSGuion(_FakeWS):
         return {"type": "websocket.receive", "text": json.dumps(item)}
 
 
-def test_ws_hola_registra_por_marca_y_limpia_al_desconectar(monkeypatch):
-    fotos_tunel._REGISTRO.clear()
+def test_ws_hola_registra_por_marca_y_limpia_al_desconectar(entorno, monkeypatch):
     monkeypatch.setattr(
         auth, "token_mcp_valido", lambda t: {"id": "u1", "usuario": "ale", "rol": "editor"}
     )
@@ -425,8 +547,8 @@ def test_ws_hola_registra_por_marca_y_limpia_al_desconectar(monkeypatch):
 
     def _comprobar_y_cortar():
         # En pleno bucle, la conexión ya está registrada con su `hola` (marcas incluidas).
-        visto["claro"] = fotos_tunel.dispositivos("claro-sports")
-        visto["unotv"] = fotos_tunel.dispositivos("unotv")
+        visto["claro"] = fotos_tunel.conexiones_de_marca("claro-sports")
+        visto["unotv"] = fotos_tunel.conexiones_de_marca("unotv")
         return None  # -> desconexión
 
     guion = [
@@ -448,11 +570,10 @@ def test_ws_hola_registra_por_marca_y_limpia_al_desconectar(monkeypatch):
     assert visto["claro"][0]["usuario"] == "u1"
     assert visto["claro"][0]["galerias"][0]["id"] == "g1"
     assert visto["unotv"] == []  # solo comparte claro-sports
-    assert fotos_tunel._REGISTRO == set()  # limpio tras desconectar
+    assert fotos_tunel._CONEXIONES == {}  # limpio tras desconectar
 
 
-def test_ws_mensaje_marcas_actualiza_en_vivo(monkeypatch):
-    fotos_tunel._REGISTRO.clear()
+def test_ws_mensaje_marcas_actualiza_en_vivo(entorno, monkeypatch):
     monkeypatch.setattr(
         auth, "token_mcp_valido", lambda t: {"id": "u1", "usuario": "ale", "rol": "editor"}
     )
@@ -460,8 +581,8 @@ def test_ws_mensaje_marcas_actualiza_en_vivo(monkeypatch):
 
     def _comprobar_y_cortar():
         # Tras el mensaje `marcas`, la conexión comparte a unotv (ya no a claro-sports).
-        visto["claro"] = fotos_tunel.dispositivos("claro-sports")
-        visto["unotv"] = fotos_tunel.dispositivos("unotv")
+        visto["claro"] = fotos_tunel.conexiones_de_marca("claro-sports")
+        visto["unotv"] = fotos_tunel.conexiones_de_marca("unotv")
         return None
 
     guion = [
@@ -474,14 +595,17 @@ def test_ws_mensaje_marcas_actualiza_en_vivo(monkeypatch):
 
     assert visto["claro"] == []  # ya no comparte claro-sports
     assert visto["unotv"][0]["dispositivo"] == "Mac de Ale"
-    assert fotos_tunel._REGISTRO == set()
+    assert fotos_tunel._CONEXIONES == {}
 
 
-def test_procesar_mensaje_marcas_actualiza_conexion():
-    fotos_tunel._REGISTRO.clear()
-    try:
-        conexion = _conexion("u1", marcas=("claro-sports",))
-        fotos_api._procesar_mensaje(conexion, {"tipo": "marcas", "marcas": ["unotv", "nacion-gamer"]})
-        assert conexion.marcas == {"unotv", "nacion-gamer"}
-    finally:
-        fotos_tunel._REGISTRO.clear()
+def test_procesar_mensaje_marcas_actualiza_conexion(entorno):
+    conexion = _conexion("u1", marcas=("claro-sports",))
+    anyio.run(
+        fotos_api._procesar_mensaje,
+        conexion,
+        {"tipo": "marcas", "marcas": ["unotv", "nacion-gamer"]},
+    )
+    assert conexion.marcas == {"unotv", "nacion-gamer"}
+    # La fila compartida refleja el cambio (cualquier worker la vería en unotv, no en claro-sports).
+    assert fotos_tunel.conexiones_de_marca("claro-sports") == []
+    assert any(c["id"] == conexion.id for c in fotos_tunel.conexiones_de_marca("unotv"))

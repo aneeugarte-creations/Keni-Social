@@ -40,6 +40,10 @@ _TABLAS = (
     "sesiones",
     "tokens_mcp",
     "usuarios",
+    # Túnel keni-fotos multi-worker: registro compartido de conexiones + bus RPC. Sin truncar,
+    # las filas de un test (dispositivos/RPC) contaminarían los listados/búsquedas del siguiente.
+    "tunel_conexiones",
+    "tunel_rpc",
     "campanias",
     "vistas_metricas",
     "gasto_ia",

@@ -87,6 +87,7 @@ from .migraciones_integridad import (
     _migrar_indice_generaciones,
     _migrar_indice_pieza_estado_marca,
     _migrar_tabla_daemon_barridos,
+    _migrar_tablas_tunel,
     _migrar_tipos_fecha,
     _migrar_tipos_jsonb,
     _migrar_version_optimista,
@@ -521,6 +522,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # biblioteca. Clasifica las ya catalogadas sin fuente. Re-aplicable e idempotente (solo toca
     # filas sin clasificar).
     Migracion("0053-fuente-subidas", _migrar_fuente_subidas, re_aplicar_si_cambia=True),
+    # TÚNEL keni-fotos MULTI-WORKER: tablas `tunel_conexiones` (registro compartido de WebSockets
+    # vivos) y `tunel_rpc` (bus de RPC enrutado al worker dueño) para BDs ya creadas (las nuevas
+    # las traen del DDL). One-shot e idempotente (`CREATE TABLE/INDEX IF NOT EXISTS`).
+    Migracion("0054-tablas-tunel", _migrar_tablas_tunel),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

@@ -708,7 +708,8 @@ def _candidato_propio(crudo: dict) -> dict:
 async def _buscar_propio(q: str, limite: int, marca: str) -> dict:
     """Búsqueda «Propio»: fan-out a las apps que comparten `marca` (cualquier dueño)."""
     marca = (marca or "").strip()
-    n = len(fotos_tunel.dispositivos(marca)) if marca else 0
+    conns = await run_in_threadpool(fotos_tunel.conexiones_de_marca, marca) if marca else []
+    n = len(conns)
     disponible = n > 0
     proveedor = _proveedor_propio(disponible=disponible, dispositivos=n)
     if not disponible or not q.strip():
@@ -804,11 +805,12 @@ async def rafaga_propio(request: Request) -> Response:
 
 
 async def dispositivos_propio(request: Request) -> Response:
-    """GET /api/artes/propio/dispositivos?marca= -> {dispositivos:[{usuario, dispositivo, version, marcas, galerias}]}.
+    """GET /api/artes/propio/dispositivos -> {dispositivos:[{usuario, online, dispositivo?, marcas?, galerias?}]}.
 
-    Dispositivos que comparten `marca` (cualquier dueño)."""
-    marca = (request.query_params.get("marca") or "").strip()
-    return JSONResponse({"dispositivos": fotos_tunel.dispositivos(marca)})
+    Usuarios REGISTRADOS en keni-fotos (token de escritorio) con flag `online`. NO se filtra por
+    marca: el listado es de quién está dado de alta y conectado; la marca filtra la BÚSQUEDA."""
+    dispositivos = await run_in_threadpool(fotos_tunel.dispositivos_registrados)
+    return JSONResponse({"dispositivos": dispositivos})
 
 
 # Keepalive del SSE de dispositivos: un comentario `: ping` cada 20 s mantiene viva la conexión
@@ -816,43 +818,43 @@ async def dispositivos_propio(request: Request) -> Response:
 _SSE_KEEPALIVE = 20.0
 
 
-def _frame_dispositivos(marca: str) -> str:
-    """Frame SSE (`data: <json>\\n\\n`) con el snapshot de dispositivos que comparten `marca`."""
-    cuerpo = json.dumps({"dispositivos": fotos_tunel.dispositivos(marca)}, ensure_ascii=False)
+async def _frame_dispositivos() -> str:
+    """Frame SSE (`data: <json>\\n\\n`) con el snapshot de dispositivos registrados (online/offline)."""
+    dispositivos = await run_in_threadpool(fotos_tunel.dispositivos_registrados)
+    cuerpo = json.dumps({"dispositivos": dispositivos}, ensure_ascii=False)
     return f"data: {cuerpo}\n\n"
 
 
-async def _eventos_dispositivos(marca: str) -> AsyncIterator[str]:
+async def _eventos_dispositivos() -> AsyncIterator[str]:
     """Stream SSE: snapshot inicial + un snapshot nuevo por cada cambio del registro del túnel.
 
-    Se suscribe al pub/sub de `fotos_tunel`; ante cada aviso (alta/baja/cambio de marcas) reenvía
-    el snapshot vigente. Sin cambios, emite un comentario keepalive cada `_SSE_KEEPALIVE` s. Se da
-    de baja del pub/sub al cerrarse el generador (cliente desconectado).
+    Se suscribe al pub/sub LOCAL de `fotos_tunel` (que un NOTIFY `tunel_cambio` de cualquier worker
+    dispara): ante cada aviso (alta/baja/cambio de marcas) reenvía el snapshot vigente. Sin cambios,
+    emite un comentario keepalive cada `_SSE_KEEPALIVE` s. Se da de baja al cerrarse el generador.
     """
     cola = fotos_tunel.suscribir()
     try:
-        yield _frame_dispositivos(marca)
+        yield await _frame_dispositivos()
         while True:
             try:
                 await asyncio.wait_for(cola.get(), _SSE_KEEPALIVE)
             except TimeoutError:
                 yield ": ping\n\n"
                 continue
-            yield _frame_dispositivos(marca)
+            yield await _frame_dispositivos()
     finally:
         fotos_tunel.desuscribir(cola)
 
 
 async def eventos_propio(request: Request) -> Response:
-    """GET /api/artes/propio/eventos?marca= -> stream SSE de dispositivos conectados (push en vivo).
+    """GET /api/artes/propio/eventos -> stream SSE de dispositivos registrados (push en vivo).
 
     Sustituye al sondeo: manda un snapshot inicial (`{dispositivos:[...]}`, misma forma que
     `GET /api/artes/propio/dispositivos`) y reenvía el snapshot cada vez que un dispositivo
     conecta/desconecta o cambia las marcas que comparte. Autenticado por la sesión del SPA (cookie).
     """
-    marca = (request.query_params.get("marca") or "").strip()
     return StreamingResponse(
-        _eventos_dispositivos(marca),
+        _eventos_dispositivos(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
