@@ -163,6 +163,16 @@ _METRICA_ALC = "alc"
 _METRICA_SEG = "seg"
 # Valor de `subject` para las métricas de cuenta/community en timelines (followers).
 _SUBJECT_CUENTA = "account"
+
+# Métricas de FLUJO de audiencia (altas/bajas del periodo) por red, vía timelines
+# subject=account. Solo FB y YouTube exponen altas y bajas BRUTAS por separado; TikTok da el
+# delta neto diario (no separa altas/bajas) e Instagram solo el stock (se diferencia). X no
+# expone seguidores de cuenta. Confirmado contra la API real del piloto.
+_METRICA_FB_ALTAS = "page_daily_follows_unique"
+_METRICA_FB_BAJAS = "page_daily_unfollows_unique"
+_METRICA_TK_DELTA = "followers_delta_count"
+_METRICA_YT_ALTAS = "subscribersGained"
+_METRICA_YT_BAJAS = "subscribersLost"
 _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.facebook: {
         _METRICA_VIS: "impressions",
@@ -1054,6 +1064,55 @@ class FuenteMetricool:
         if maximo <= 0:
             return matriz
         return [[v / maximo for v in fila] for fila in matriz]
+
+    def flujo_audiencia(self, cuenta_id: str, rango: str) -> list[dict]:
+        """Altas y bajas de seguidores del periodo por red: `[{red, altas, bajas, neto}, ...]`.
+
+        Por red (subject=account): FB suma `page_daily_follows_unique`/`page_daily_unfollows_unique`
+        y YouTube `subscribersGained`/`subscribersLost` (altas y bajas BRUTAS, neto=altas−bajas);
+        TikTok da el delta neto diario (`followers_delta_count`) sin separar altas/bajas, e
+        Instagram solo el stock de followers (neto=último−primer punto): en ambos `altas`/`bajas`
+        son None (no se inventan). X no expone seguidores de cuenta -> se omite. Una red sin datos
+        (serie vacía) se omite (degradación honesta).
+        """
+        marca = self._marca(cuenta_id)
+        desde, hasta, _ = resolver_rango(rango)
+        out: list[dict] = []
+        for plat in self._plataformas(marca):
+            fila = self._flujo_red(cuenta_id, plat, desde, hasta)
+            if fila is not None:
+                out.append(fila)
+        return out
+
+    def _flujo_red(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> dict | None:
+        """Altas/bajas/neto de UNA red en el periodo, o None si no expone flujo o no hay datos."""
+        if plat in (Plataforma.facebook, Plataforma.youtube):
+            if plat is Plataforma.facebook:
+                m_altas, m_bajas = _METRICA_FB_ALTAS, _METRICA_FB_BAJAS
+            else:
+                m_altas, m_bajas = _METRICA_YT_ALTAS, _METRICA_YT_BAJAS
+            altas_pts = self._serie_cuenta_metrica(cuenta_id, plat, m_altas, desde, hasta)
+            bajas_pts = self._serie_cuenta_metrica(cuenta_id, plat, m_bajas, desde, hasta)
+            if not altas_pts and not bajas_pts:
+                return None
+            altas = sum(v for _f, v in altas_pts)
+            bajas = sum(v for _f, v in bajas_pts)
+            return {"red": plat.value, "altas": altas, "bajas": bajas, "neto": altas - bajas}
+        if plat is Plataforma.tiktok:
+            pts = self._serie_cuenta_metrica(cuenta_id, plat, _METRICA_TK_DELTA, desde, hasta)
+            if not pts:
+                return None
+            return {"red": plat.value, "altas": None, "bajas": None,
+                    "neto": sum(v for _f, v in pts)}
+        if plat is Plataforma.instagram:
+            pts = self._stock_seguidores_plataforma(cuenta_id, plat, desde, hasta)
+            if not pts:
+                return None
+            neto = (pts[-1][1] - pts[0][1]) if len(pts) >= 2 else 0
+            return {"red": plat.value, "altas": None, "bajas": None, "neto": neto}
+        return None  # X u otras: sin flujo de seguidores de cuenta
 
     def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
         """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.

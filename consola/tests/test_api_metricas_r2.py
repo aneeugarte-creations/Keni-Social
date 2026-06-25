@@ -282,6 +282,57 @@ def test_mejor_hora_sin_red_400(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# /api/metricas/audiencia (altas/bajas de seguidores)                          #
+# --------------------------------------------------------------------------- #
+
+
+def _audiencia(rango="mes", marca=None):
+    return {
+        "por_red": [
+            {"red": "facebook", "altas": 50, "bajas": 10, "neto": 40},
+            {"red": "instagram", "altas": None, "bajas": None, "neto": 75},
+        ]
+    }
+
+
+def test_audiencia_200_shape(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_flujo_audiencia=_audiencia)
+    r = cliente.get("/api/metricas/audiencia?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    fb = next(x for x in data["por_red"] if x["red"] == "facebook")
+    assert fb == {"red": "facebook", "altas": 50, "bajas": 10, "neto": 40}
+    ig = next(x for x in data["por_red"] if x["red"] == "instagram")
+    assert ig["altas"] is None and ig["neto"] == 75
+    assert data["etiqueta_rango"] and data["etiqueta_rango"] != "ignored"
+    assert data["generado_en"]
+
+
+def test_audiencia_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_flujo_audiencia=_audiencia)
+    r = cliente.get("/api/metricas/audiencia?rango=mes&red=facebook")
+    assert r.status_code == 200
+    assert [x["red"] for x in r.json()["por_red"]] == ["facebook"]
+
+
+def test_audiencia_red_invalida_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_flujo_audiencia=_audiencia)
+    r = cliente.get("/api/metricas/audiencia?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_audiencia_degrada_vacio(cliente, monkeypatch):
+    _mock_servicio(
+        monkeypatch,
+        construir_flujo_audiencia=lambda rango="mes", marca=None: {"por_red": []},
+    )
+    r = cliente.get("/api/metricas/audiencia?rango=semana")
+    assert r.status_code == 200
+    assert r.json()["por_red"] == []
+
+
+# --------------------------------------------------------------------------- #
 # /api/metricas/desglose                                                       #
 # --------------------------------------------------------------------------- #
 

@@ -359,6 +359,45 @@ def test_mejor_hora_none_si_sin_datos_o_red_invalida(monkeypatch):
     assert servicio.mejor_hora("claro_sports", "threads") is None
 
 
+def test_flujo_audiencia_agrega_por_red(monkeypatch):
+    """construir_flujo_audiencia suma altas/bajas/neto por red sobre las cuentas; altas/bajas
+    None se conservan None si NINGUNA cuenta de esa red las separa."""
+    class _Cuenta:
+        def __init__(self, cid):
+            self.id = cid
+
+    class _Fuente:
+        nombre = "metricool"
+
+        def cuentas(self):
+            return [_Cuenta("a"), _Cuenta("b")]
+
+        def flujo_audiencia(self, cuenta_id, rango):
+            if cuenta_id == "a":
+                return [
+                    {"red": "facebook", "altas": 50, "bajas": 10, "neto": 40},
+                    {"red": "instagram", "altas": None, "bajas": None, "neto": 75},
+                ]
+            return [{"red": "facebook", "altas": 20, "bajas": 5, "neto": 15}]
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _Fuente())
+    d = servicio.construir_flujo_audiencia(RANGO)
+    por_red = {r["red"]: r for r in d["por_red"]}
+    assert por_red["facebook"] == {"red": "facebook", "altas": 70, "bajas": 15, "neto": 55}
+    assert por_red["instagram"] == {"red": "instagram", "altas": None, "bajas": None, "neto": 75}
+
+
+def test_flujo_audiencia_degrada_sin_fuente(monkeypatch):
+    class _FuenteSinFlujo:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return FuenteMuestra().cuentas()[:1]
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _FuenteSinFlujo())
+    assert servicio.construir_flujo_audiencia(RANGO) == {"por_red": []}
+
+
 def test_mejor_hora_none_si_fuente_sin_besttimes(monkeypatch):
     class _FuenteSinBesttimes:
         nombre = "muestra"

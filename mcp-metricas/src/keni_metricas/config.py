@@ -717,6 +717,17 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.serie_alcance(cuenta_id, rango)
 
+    def flujo_audiencia(self, cuenta_id: str, rango: str):
+        """Delega el flujo de audiencia (altas/bajas de seguidores) si la fuente lo expone.
+
+        Solo Metricool lo implementa (muestra/compuesta no). Si la envuelta no lo tiene, propaga
+        `AttributeError` para que el llamante degrade a vacío — igual que `serie_seguidores`.
+        """
+        if not hasattr(self._fuente, "flujo_audiencia"):
+            raise AttributeError("la fuente envuelta no expone flujo_audiencia")
+        self._verificar(cuenta_id)
+        return self._fuente.flujo_audiencia(cuenta_id, rango)
+
     def mejores_horas(self, cuenta_id: str, red):
         """Delega la matriz de mejores horas (besttimes) si la fuente envuelta la expone.
 

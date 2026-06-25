@@ -135,6 +135,7 @@ __all__ = [
     "construir_listado_piezas",
     "construir_tendencia_diaria",
     "construir_ads_desglose",
+    "construir_flujo_audiencia",
     "construir_serie_seguidores",
     "construir_serie_alcance",
     "construir_desglose_interacciones",
@@ -438,6 +439,39 @@ def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
             d["cuenta"] = c.id
             salida.append(d)
     return salida
+
+
+def construir_flujo_audiencia(rango: str = "mes", marca: str | None = None) -> dict:
+    """Altas y bajas de seguidores del periodo por red (suma de las cuentas en alcance).
+
+    Dispatch por capacidad (como `construir_ads`): usa `fuente.flujo_audiencia` si la fuente la
+    expone (Metricool, también vía `FuenteScoped`); si no, degrada a `{"por_red": []}`. Agrega
+    por red sobre las cuentas: `altas`/`bajas` suman donde la red las da (None si NINGUNA cuenta
+    de esa red las separa — TikTok/IG), `neto` siempre suma. Propaga `ValueError` (rango
+    inválido) y `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    fuente = _fuente(marca)
+    fn = getattr(fuente, "flujo_audiencia", None)
+    acc: dict[str, dict] = {}
+    if fn is not None:
+        for c in fuente.cuentas():
+            try:
+                filas = fn(c.id, rango)
+            except AttributeError:
+                # La fuente envuelta no la implementa (FuenteScoped lo propaga): flujo vacío.
+                return {"por_red": []}
+            except Exception:  # noqa: BLE001 -- una cuenta que falla no aborta el resto
+                _log.exception("construir_flujo_audiencia: cuenta %s falló (rango=%s).", c.id, rango)
+                continue
+            for fila in filas:
+                red = fila["red"]
+                a = acc.setdefault(red, {"red": red, "altas": None, "bajas": None, "neto": 0})
+                if fila.get("altas") is not None:
+                    a["altas"] = (a["altas"] or 0) + fila["altas"]
+                if fila.get("bajas") is not None:
+                    a["bajas"] = (a["bajas"] or 0) + fila["bajas"]
+                a["neto"] += fila.get("neto") or 0
+    return {"por_red": [acc[r] for r in sorted(acc)]}
 
 
 def construir_ads_desglose(

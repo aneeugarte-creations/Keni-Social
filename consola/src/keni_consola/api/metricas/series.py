@@ -35,8 +35,8 @@ from ._comun import (
 )
 
 __all__ = [
-    "tendencia", "seguidores", "serie_alcance", "desglose", "crosstab", "correlacion",
-    "ads", "ads_desglose", "ingesta", "mejor_hora",
+    "tendencia", "seguidores", "serie_alcance", "audiencia", "desglose", "crosstab",
+    "correlacion", "ads", "ads_desglose", "ingesta", "mejor_hora",
 ]
 
 # Un canal (marca×red×formato) se marca ESTANCADO si su última pieza es >= este nº de días
@@ -385,6 +385,32 @@ async def mejor_hora(request: Request) -> Response:
         _log.exception("Fallo al calcular la mejor hora (marca=%s, red=%s).", marca, red)
         return JSONResponse({"error": "No se pudo calcular la mejor hora."}, status_code=500)
     return JSONResponse({"hora": hora})
+
+
+async def audiencia(request: Request) -> Response:
+    """GET /api/metricas/audiencia: altas y bajas de seguidores del periodo por red.
+
+    `{"por_red": [{red, altas, bajas, neto}]}`. `altas`/`bajas` son None donde la red no las
+    separa (TikTok/IG: solo neto). `?marca=` acota el ámbito; sin marca, todas. `?red=` acota a
+    esa(s) red(es) (red desconocida →400). Computado al vuelo (en executor). `por_red` vacío = la
+    fuente no expone flujo de audiencia (degradación honesta).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        redes = _validar_redes(request.query_params.get("red"))
+        payload = await run_in_threadpool(servicio.construir_flujo_audiencia, rango, marca)
+        generado_en = ahora_iso()
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar el flujo de audiencia (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar el flujo de audiencia."}, status_code=500)
+    if redes:
+        payload = {**payload, "por_red": [r for r in (payload.get("por_red") or []) if r.get("red") in redes]}
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
 async def desglose(request: Request) -> Response:

@@ -68,6 +68,7 @@ from .reporte import (
 from .series import (
     ads,
     ads_desglose,
+    audiencia,
     correlacion,
     crosstab,
     desglose,
@@ -98,6 +99,7 @@ __all__ = [
     "tendencia",
     "seguidores",
     "serie_alcance",
+    "audiencia",
     "desglose",
     "crosstab",
     "correlacion",
@@ -133,6 +135,7 @@ RUTAS = [
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
     Route("/api/metricas/serie-alcance", serie_alcance, methods=["GET"]),
+    Route("/api/metricas/audiencia", audiencia, methods=["GET"]),
     Route("/api/metricas/desglose", desglose, methods=["GET"]),
     Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
     Route("/api/metricas/correlacion", correlacion, methods=["GET"]),

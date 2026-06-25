@@ -1132,6 +1132,43 @@ def test_mejores_horas_degrada_a_ceros_si_falla():
 
 
 @respx.mock
+def test_flujo_audiencia_altas_bajas_por_red():
+    """flujo_audiencia: FB suma altas/bajas brutas (neto=altas−bajas); IG solo da neto del stock
+    (altas/bajas None). Una red sin datos se omite."""
+    marcas = {
+        "claro_sports": {
+            **MARCAS["claro_sports"],
+            "plataformas": [Plataforma.facebook, Plataforma.instagram],
+        }
+    }
+
+    def serie(metric, *valores):
+        return {"data": [{"metric": metric, "values": [
+            {"dateTime": f"2026-05-{20 + i:02d}T00:00:00", "value": v}
+            for i, v in enumerate(valores)
+        ]}]}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        metric = request.url.params.get("metric")
+        if metric == "page_daily_follows_unique":
+            return httpx.Response(200, json=serie(metric, 30, 20))  # altas 50
+        if metric == "page_daily_unfollows_unique":
+            return httpx.Response(200, json=serie(metric, 5, 5))    # bajas 10
+        if metric == "followers":
+            return httpx.Response(200, json=serie(metric, 1000, 1075))  # IG stock -> neto 75
+        return httpx.Response(200, json={"data": []})
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        flujo = FuenteMetricool(marcas=marcas, cliente=cli).flujo_audiencia("claro_sports", RANGO)
+
+    por_red = {f["red"]: f for f in flujo}
+    assert por_red["facebook"] == {"red": "facebook", "altas": 50, "bajas": 10, "neto": 40}
+    # IG: solo neto del stock; altas/bajas None (no se inventan).
+    assert por_red["instagram"] == {"red": "instagram", "altas": None, "bajas": None, "neto": 75}
+
+
+@respx.mock
 def test_cuentas_lista_marcas_configuradas():
     with httpx.Client() as cli:
         cuentas = _fuente(cli).cuentas()
