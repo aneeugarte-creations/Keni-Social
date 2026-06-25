@@ -410,9 +410,13 @@ class FuenteMuestra:
             if plat in PLATAFORMAS_CON_ALCANCE
             else None
         )
+        # impresiones (volumen aditivo): algo por encima de las visualizaciones (la pieza se
+        # muestra más veces de las que se "ven"); coherente y determinista para la demo.
+        impresiones = int(vistas * _entre(_rand(cuenta_id, plat, rango, "i"), 1.05, 1.3))
         return MetricaPlataforma(
             plataforma=plat,
             visualizaciones=vistas,
+            impresiones=impresiones,
             alcance=alcance,
             interacciones=interacciones,
             engagement_pct=eng,
@@ -432,6 +436,7 @@ class FuenteMuestra:
         ]
 
         vis = sum(m.visualizaciones for m in por_plataforma)
+        impr = sum(m.impresiones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
         alc = agregar_alcance(por_plataforma)  # solo suma el alcance medido
         # engagement combinado: la muestra es una fuente única y determinista, su
@@ -446,6 +451,7 @@ class FuenteMuestra:
             rango=rango,
             periodo=Periodo(desde=desde, hasta=hasta),
             visualizaciones=vis,
+            impresiones=impr,
             alcance=alc,
             interacciones=inter,
             engagement_pct=eng,

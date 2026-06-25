@@ -47,7 +47,7 @@ def construir_reporte(
     """Estructura JSON-serializable con el total y el desglose por marca."""
     cuentas = fuente.cuentas()
     filas: list[dict] = []
-    tot_vis = tot_inter = tot_piezas = 0
+    tot_vis = tot_inter = tot_piezas = tot_impr = 0
     tot_alc: int | None = None  # se suma solo el alcance medido; None = nadie lo mide
     cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
     # Mapa id->nombre legible (mismo origen que el dashboard). El resumen guarda
@@ -73,6 +73,7 @@ def construir_reporte(
             }
         )
         tot_vis += r.visualizaciones
+        tot_impr += r.impresiones
         if r.alcance is not None:
             # solo suma el alcance realmente medido; deja None si nadie lo mide
             tot_alc = (tot_alc or 0) + r.alcance
@@ -86,6 +87,7 @@ def construir_reporte(
         "fuente": fuente.nombre,
         "total": {
             "visualizaciones": tot_vis,
+            "impresiones": tot_impr,
             "alcance": tot_alc,
             "interacciones": tot_inter,
             # engagement global no comparable: el total combina varias plataformas
@@ -134,6 +136,7 @@ def render_markdown(rep: dict) -> str:
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")
     out.append("## Total")
     out.append(f"- **Visualizaciones:** {miles(t['visualizaciones'])}")
+    out.append(f"- **Impresiones:** {miles(t.get('impresiones', 0))}")
     out.append(f"- **Alcance:** {cifra(t['alcance'])}")
     out.append(f"- **Interacciones:** {miles(t['interacciones'])}")
     out.append(f"- **Engagement:** {pct(t['engagement_pct'])} (ver por plataforma)")
@@ -179,6 +182,7 @@ CSV_ENCABEZADOS = [
     "marca",
     "plataforma",
     "visualizaciones",
+    "impresiones",
     "alcance",
     "interacciones",
     "engagement_pct",
@@ -210,6 +214,7 @@ def render_csv(rep: dict) -> str:
                     marca,
                     m["plataforma"],
                     m["visualizaciones"],
+                    m.get("impresiones", 0),
                     m["alcance"],
                     m["interacciones"],
                     m["engagement_pct"],
@@ -221,6 +226,7 @@ def render_csv(rep: dict) -> str:
                 marca,
                 CSV_TOTAL,
                 r["visualizaciones"],
+                r.get("impresiones", 0),
                 r["alcance"],
                 r["interacciones"],
                 r["engagement_pct"],
@@ -234,6 +240,7 @@ def render_csv(rep: dict) -> str:
             CSV_TOTAL,
             CSV_TOTAL,
             t["visualizaciones"],
+            t.get("impresiones", 0),
             t["alcance"],
             t["interacciones"],
             t["engagement_pct"],

@@ -55,8 +55,14 @@ class MetricaPlataforma(BaseModel):
 
     plataforma: Plataforma
     visualizaciones: int
-    # alcance (usuarios únicos): None = la plataforma NO lo mide (YouTube/X/TikTok),
-    # distinto de 0 (Meta lo mide y dio 0). Ver docstring de la clase.
+    # impresiones: veces que el contenido se mostró en el periodo (impressions en FB/IG/X,
+    # reproducciones en TikTok/YouTube). A diferencia del alcance SÍ es aditiva: se suma por
+    # post → por red → total. Es la cifra de VOLUMEN de cabecera (alcance único no lo da
+    # Metricool de forma fiable). 0 si la red no expone ninguna impresión por post.
+    impresiones: int = 0
+    # alcance (usuarios únicos): None = no medido. Metricool no da un alcance único de
+    # cuenta/periodo fiable (la agregación de reach 500ea y el reach por post no es aditivo),
+    # así que aquí queda AUSENTE; el reach por post vive en `Pieza.alcance` como detalle.
     alcance: int | None = None
     interacciones: int
     engagement_pct: float
@@ -149,7 +155,10 @@ class ResumenMetricas(BaseModel):
     rango: str
     periodo: Periodo
     visualizaciones: int
-    # alcance: None = ninguna plataforma del resumen mide alcance (no es 0 real).
+    # impresiones: suma de las impresiones de cada plataforma (aditiva). Cifra de VOLUMEN
+    # de cabecera del periodo (ver `MetricaPlataforma.impresiones`).
+    impresiones: int = 0
+    # alcance: None = ninguna plataforma del resumen aporta alcance (no es 0 real).
     alcance: int | None = None
     interacciones: int
     # engagement_pct: None = no es comparable (bases de visualización heterogéneas).
@@ -189,6 +198,10 @@ class Pieza(BaseModel):
     # nivel post (`reach`/`postImpressionsUnique`); el resto de redes no lo miden -> None
     # (no es 0 real). Distinto de `visualizaciones` (impresiones/reproducciones, no únicas).
     alcance: int | None = None
+    # impresiones (veces mostrada ESTA pieza): impressions en FB/IG/X, reproducciones en
+    # TikTok/YouTube. Aditiva; se suma para el VOLUMEN por red. None si la red no la expone
+    # a nivel post (degradación honesta), nunca 0 inventado.
+    impresiones: int | None = None
     # --- Métricas granulares por pieza (issue métricas granulares) -----------
     # OPCIONALES y con default None/0: degradación honesta. Si Metricool no trae
     # el campo a nivel post (la forma de `/v2/analytics/posts/{network}` NO está

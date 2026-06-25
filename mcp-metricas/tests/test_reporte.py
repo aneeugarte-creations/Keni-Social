@@ -109,8 +109,9 @@ def test_render_csv_estructura_y_totales():
     glob = cuerpo[-1]
     assert glob[0] == "TOTAL" and glob[1] == "TOTAL"
     assert int(glob[2]) == rep["total"]["visualizaciones"]
-    assert int(glob[3]) == rep["total"]["alcance"]
-    assert int(glob[4]) == rep["total"]["interacciones"]
+    assert int(glob[3]) == rep["total"]["impresiones"]
+    assert int(glob[4]) == rep["total"]["alcance"]
+    assert int(glob[5]) == rep["total"]["interacciones"]
 
     # el TOTAL de la primera marca = suma de sus filas de plataforma
     primera = rep["cuentas"][0]["resumen"]

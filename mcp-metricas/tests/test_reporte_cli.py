@@ -161,6 +161,7 @@ def test_formato_csv_es_parseable_con_encabezados_y_filas(capsys):
         "marca",
         "plataforma",
         "visualizaciones",
+        "impresiones",
         "alcance",
         "interacciones",
         "engagement_pct",

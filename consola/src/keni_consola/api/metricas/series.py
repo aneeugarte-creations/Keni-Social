@@ -33,7 +33,10 @@ from ._comun import (
     servicio,
 )
 
-__all__ = ["tendencia", "seguidores", "desglose", "crosstab", "correlacion", "ads", "ingesta"]
+__all__ = [
+    "tendencia", "seguidores", "serie_alcance", "desglose", "crosstab", "correlacion",
+    "ads", "ingesta",
+]
 
 # Un canal (marca×red×formato) se marca ESTANCADO si su última pieza es >= este nº de días
 # MÁS VIEJA que la última pieza de su marca: el resto del feed avanza y este se quedó atrás
@@ -83,6 +86,21 @@ def _filtrar_seguidores_por_red(payload: dict, red) -> dict:
         "neto": sum(neto_por_red.values()),
         "neto_por_red": neto_por_red,
     }
+
+
+def _filtrar_alcance_por_red(payload: dict, red) -> dict:
+    """Restringe la serie de alcance a una o VARIAS redes (re-suma el total por día).
+
+    `red` admite un id, una colección o None. Cada día conserva solo el `por_red` de las redes
+    elegidas y su `total` pasa a ser la suma de esas. Coste 0: solo proyecta el desglose que ya
+    existe (el alcance solo lo trae Instagram, pero el filtro funciona igual con cualquier red).
+    """
+    reds = _conjunto_redes(red)
+    puntos = []
+    for pt in payload.get("puntos") or []:
+        por_red_pt = {r: v for r, v in (pt.get("por_red") or {}).items() if r in reds and v is not None}
+        puntos.append({**pt, "total": sum(por_red_pt.values()), "por_red": por_red_pt})
+    return {**payload, "puntos": puntos}
 
 
 def _filtrar_desglose_por_red(payload: dict, red) -> dict:
@@ -286,6 +304,32 @@ async def seguidores(request: Request) -> Response:
         return JSONResponse({"error": "No se pudo generar la serie de seguidores."}, status_code=500)
     if redes:
         payload = _filtrar_seguidores_por_red(payload, redes)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def serie_alcance(request: Request) -> Response:
+    """GET /api/metricas/serie-alcance: serie diaria de alcance de cuenta (total + por red).
+
+    Solo Instagram expone alcance de cuenta (reach diario); el resto se omite (degradación
+    honesta). `?marca=` acota el ámbito; sin marca, todas. `?red=` acota a esa(s) red(es) (red
+    desconocida →400). Computado al vuelo (en executor), no cacheado. `puntos` vacío = la fuente
+    no expone alcance de cuenta.
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        redes = _validar_redes(request.query_params.get("red"))
+        payload = await run_in_threadpool(servicio.construir_serie_alcance, rango, marca)
+        generado_en = ahora_iso()
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar la serie de alcance (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar la serie de alcance."}, status_code=500)
+    if redes:
+        payload = _filtrar_alcance_por_red(payload, redes)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 

@@ -226,6 +226,10 @@ _ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClick
 # FB como `impressionsUnique`/`postImpressionsUnique` (los reels FB usan este último). El
 # resto de redes no lo miden -> None (degradación honesta, no un 0 inventado).
 _ALIAS_ALCANCE = ("reach", "impressionsUnique", "postImpressionsUnique", "impressionsunique")
+# Impresiones (veces MOSTRADA la pieza) por red, aditivas: IG `impressionsTotal`/`impressions`;
+# FB `impressions`; TikTok `viewCount`; Twitter `impressions`; YouTube `views`. Es la cifra de
+# VOLUMEN; distinta del alcance (usuarios únicos). None si ninguna viene (degradación honesta).
+_ALIAS_IMPRESIONES = ("impressionsTotal", "impressions", "viewCount", "views")
 _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "videoType")
 # Seguidores ganados/atribuidos a UN post: casi seguro Metricool no lo expone a
 # nivel post; se captura si algún alias lo trae, si no queda None.
@@ -259,6 +263,11 @@ _RE_STORY_FB = re.compile(r"/posts/(\d+)")
 #                postImpressionsUnique, engagement, postVideoReactions, reelUrl/videoUrl.
 # Redes con endpoint de reels (las demás no lo tienen):
 _RED_CON_REELS: frozenset[Plataforma] = frozenset({Plataforma.facebook, Plataforma.instagram})
+# Redes que exponen una SERIE DIARIA de alcance de cuenta (timelines subject=account
+# metric=reach). Confirmado contra la API real: solo Instagram; Facebook no tiene reach en
+# ningún sitio. Es un flujo diario (no un stock), distinto del alcance único de periodo —que
+# Metricool no da de forma fiable—, así que se expone como serie, no como total de cabecera.
+_RED_CON_ALCANCE_CUENTA: frozenset[Plataforma] = frozenset({Plataforma.instagram})
 # Redes con endpoint de stories (`/v2/analytics/stories/{network}`). Solo se usa para CONTAR
 # stories del periodo (volumen): Metricool casi no expone su rendimiento (FB ninguna métrica;
 # IG con impresiones/alcance deprecados por Meta), así que no entran en vis/interacciones.
@@ -721,6 +730,7 @@ class FuenteMetricool:
 
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
+        impresiones = sum(m.impresiones for m in por_plataforma)
         # Seguidores NETOS del periodo: suma, sobre las plataformas que respondieron,
         # de (último punto - primer punto) de su serie de followers. Defensivo: una
         # plataforma sin métrica de seguidores o con serie vacía aporta 0 (no inventa).
@@ -733,6 +743,7 @@ class FuenteMetricool:
             rango=rango,
             periodo=Periodo(desde=desde, hasta=hasta),
             visualizaciones=vis,
+            impresiones=impresiones,
             alcance=agregar_alcance(por_plataforma),
             interacciones=inter,
             engagement_pct=agregar_engagement(por_plataforma, inter),
@@ -790,52 +801,6 @@ class FuenteMetricool:
         puntos.sort(key=lambda p: p[0])
         return int(puntos[-1][1] - puntos[0][1])
 
-    def _alcance_cuenta_plataforma(
-        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
-    ) -> int | None:
-        """Alcance (usuarios ÚNICOS) a NIVEL CUENTA del periodo para UNA red, o None.
-
-        El alcance NO es aditivo: sumar el reach de cada post sobreestima (cuenta dos veces a
-        quien vio varios posts). Aquí se toma el alcance agregado de la cuenta vía
-        `/v2/analytics/timelines` (subject=account) con la métrica de reach de cada red
-        (IG: `reach`; FB: `impressionsunique`), leyendo el `aggregate` que Metricool ya
-        calcula sobre la ventana. Solo Meta lo expone: una red sin métrica de alcance
-        (`_METRICA_ALC` ausente en `_METRICAS_RED`: X/TikTok/YouTube) devuelve None de
-        inmediato. Degradación honesta: si la API falla o no trae agregado, None (no se
-        inventa, ni se vuelve a la suma engañosa por-post).
-        """
-        metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_ALC)
-        if not metrica:
-            return None
-        try:
-            datos = get_json(
-                self._cli,
-                f"{BASE}/v2/analytics/timelines",
-                params={
-                    **self._params_base(cuenta_id),
-                    "network": _RED_METRICOOL[plat],
-                    "metric": metrica,
-                    # subject=account: el alcance a nivel cuenta del periodo, no por post.
-                    "subject": _SUBJECT_CUENTA,
-                    **self._rango_params(desde, hasta),
-                },
-                headers=self._headers(cuenta_id),
-            )
-        except Exception as e:  # noqa: BLE001 — degrada a None, como el resto
-            log.warning("metricool: alcance cuenta %s/%s falló: %s", plat.value, cuenta_id, e)
-            return None
-        # `aggregate.value` es el total de la ventana que Metricool ya consolida; combina por
-        # si la red devuelve varias series. None si ninguna serie trae agregado (honesto).
-        total = 0.0
-        visto = False
-        for serie in datos.get("data") or []:
-            agg = serie.get("aggregate") if isinstance(serie, dict) else None
-            valor = agg.get("value") if isinstance(agg, dict) else None
-            if valor is not None:
-                total += float(valor)
-                visto = True
-        return int(total) if visto else None
-
     def serie_seguidores(self, cuenta_id: str, rango: str) -> list[dict]:
         """Stock DIARIO de followers por red sobre el periodo (no flujo).
 
@@ -861,17 +826,15 @@ class FuenteMetricool:
             {"fecha": f.isoformat(), "por_red": por_dia[f]} for f in sorted(por_dia)
         ]
 
-    def _stock_seguidores_plataforma(
-        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    def _serie_cuenta_metrica(
+        self, cuenta_id: str, plat: Plataforma, metrica: str, desde: date, hasta: date
     ) -> list[tuple[date, int]]:
-        """Puntos (fecha, stock de followers) de UNA red, ordenados por fecha.
+        """Puntos (fecha, valor) de UNA métrica de CUENTA (timelines subject=account).
 
-        Degrada a [] si la red no declara métrica de seguidores, la API falla o la
-        serie viene vacía (mismo criterio honesto que `_seguidores_netos_plataforma`).
+        Fuente única de las series de cuenta (followers, alcance diario): pide
+        `/v2/analytics/timelines` con `subject=account` y la `metrica` dada. Degrada a []
+        si la API falla o la serie viene vacía (degradación honesta).
         """
-        metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_SEG)
-        if not metrica:
-            return []
         try:
             datos = get_json(
                 self._cli,
@@ -880,14 +843,14 @@ class FuenteMetricool:
                     **self._params_base(cuenta_id),
                     "network": _RED_METRICOOL[plat],
                     "metric": metrica,
-                    # subject=account: imprescindible para la serie de followers.
+                    # subject=account: imprescindible para las métricas de cuenta.
                     "subject": _SUBJECT_CUENTA,
                     **self._rango_params(desde, hasta),
                 },
                 headers=self._headers(cuenta_id),
             )
         except Exception as e:  # noqa: BLE001 — degrada a [], como el resto
-            log.warning("metricool: serie seguidores %s/%s fallo: %s", plat.value, cuenta_id, e)
+            log.warning("metricool: serie %s %s/%s fallo: %s", metrica, plat.value, cuenta_id, e)
             return []
         # Un valor por día: si una fecha aparece en varias series, gana el último.
         por_fecha: dict[date, int] = {}
@@ -903,6 +866,46 @@ class FuenteMetricool:
                     continue
                 por_fecha[f] = _entero(valor)
         return sorted(por_fecha.items())
+
+    def _stock_seguidores_plataforma(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[tuple[date, int]]:
+        """Puntos (fecha, stock de followers) de UNA red, ordenados por fecha.
+
+        Degrada a [] si la red no declara métrica de seguidores, la API falla o la
+        serie viene vacía (mismo criterio honesto que `_seguidores_netos_plataforma`).
+        """
+        metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_SEG)
+        if not metrica:
+            return []
+        return self._serie_cuenta_metrica(cuenta_id, plat, metrica, desde, hasta)
+
+    def serie_alcance(self, cuenta_id: str, rango: str) -> list[dict]:
+        """Serie DIARIA de alcance de cuenta por red sobre el periodo (flujo, no stock).
+
+        Solo Instagram expone alcance de cuenta (`reach`) como serie diaria vía
+        `/v2/analytics/timelines` subject=account; el resto de redes no lo miden y se
+        OMITEN (degradación honesta, nunca 0 falso). Devuelve puntos ordenados por fecha:
+
+            [{"fecha": "AAAA-MM-DD", "por_red": {"instagram": 12000, ...}}, ...]
+
+        Una red sin alcance de cuenta (o con serie vacía) no aparece en `por_red`. Si
+        NINGUNA red lo expone, la lista sale vacía. El total lo calcula el llamante.
+        """
+        marca = self._marca(cuenta_id)
+        desde, hasta, _ = resolver_rango(rango)
+        por_dia: dict[date, dict[str, int]] = {}
+        for plat in self._plataformas(marca):
+            if plat not in _RED_CON_ALCANCE_CUENTA:
+                continue
+            metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_ALC)
+            if not metrica:
+                continue
+            for f, valor in self._serie_cuenta_metrica(cuenta_id, plat, metrica, desde, hasta):
+                por_dia.setdefault(f, {})[plat.value] = valor
+        return [
+            {"fecha": f.isoformat(), "por_red": por_dia[f]} for f in sorted(por_dia)
+        ]
 
     def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
         """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.
@@ -952,11 +955,11 @@ class FuenteMetricool:
         FB/IG, que viven en `/v2/analytics/reels/{network}`), en vez de
         `/v2/analytics/timelines` (vocabulario de métrica distinto por red; solo daba TikTok).
         Así el agregado por red es consistente con las piezas/desglose que ve el usuario: una
-        red que solo publica reels (FB/IG) aporta sus vistas+interacciones, no 0/0. `alcance`
-        NO se suma por post (eso sobreestimaría: doble-cuenta a quien vio varios): se toma el
-        alcance a NIVEL CUENTA del periodo (`_alcance_cuenta_plataforma`), None si la red no lo
-        mide o el agregado falla. Una red conectada sin actividad en el rango devuelve 0/0 (la
-        UI lo muestra como "sin métricas", no como error).
+        red que solo publica reels (FB/IG) aporta sus vistas+interacciones, no 0/0. `impresiones`
+        (veces mostrada, aditiva) se SUMA por post; es la cifra de VOLUMEN. `alcance` (usuarios
+        únicos) queda None: Metricool no da un alcance único de cuenta/periodo fiable, y el reach
+        por post no es aditivo (vive en `Pieza.alcance` como detalle). Una red conectada sin
+        actividad en el rango devuelve 0/0 (la UI lo muestra como "sin métricas", no como error).
         """
         try:
             posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
@@ -971,13 +974,12 @@ class FuenteMetricool:
             piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
         vis = sum(p.visualizaciones for p in piezas)
         inter = sum(p.interacciones for p in piezas)
-        # Alcance a nivel CUENTA del periodo (no la suma de reach por post, que doble-cuenta):
-        # None si la red no lo mide (X/TikTok/YouTube) o el agregado falla. El reach por post
-        # sigue vivo en el detalle de cada `Pieza.alcance`, donde sí tiene sentido.
+        impresiones = sum(p.impresiones or 0 for p in piezas)
         return MetricaPlataforma(
             plataforma=plat,
             visualizaciones=vis,
-            alcance=self._alcance_cuenta_plataforma(cuenta_id, plat, desde, hasta),
+            impresiones=impresiones,
+            alcance=None,
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )
@@ -1248,6 +1250,8 @@ class FuenteMetricool:
             url=_primero(reel, _ALIAS_REEL_URL),
             cuenta=cuenta_id,
             alcance=_a_int_opt(_primero(reel, _ALIAS_ALCANCE)),
+            # Impresiones del reel: sus reproducciones (la métrica de volumen del vídeo).
+            impresiones=vis,
             **gran,
         )
 
@@ -1302,6 +1306,7 @@ class FuenteMetricool:
             url=str(u) if (u := _primero(post, _ALIAS_URL)) is not None else None,
             cuenta=cuenta_id,
             alcance=_a_int_opt(_primero(post, _ALIAS_ALCANCE)),
+            impresiones=_a_int_opt(_primero(post, _ALIAS_IMPRESIONES)),
             **gran,
         )
 

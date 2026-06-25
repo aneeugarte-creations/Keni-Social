@@ -279,6 +279,46 @@ def test_serie_seguidores_cuenta_conectada_a_mitad_no_pinta_escalon():
     assert s["neto"] == s["puntos"][-1]["total"] - s["puntos"][0]["total"]
 
 
+def test_serie_alcance_agrega_por_dia_y_red():
+    """serie_alcance_desde_fuente suma el alcance diario por red sobre las cuentas en alcance;
+    cada día trae `total` (suma de `por_red`). No hay neto (el alcance es un flujo diario)."""
+    class _Cuenta:
+        def __init__(self, cid):
+            self.id = cid
+
+    class _Fuente:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return [_Cuenta("a"), _Cuenta("b")]
+
+        def serie_alcance(self, cuenta_id, rango):
+            if cuenta_id == "a":
+                return [{"fecha": "2026-05-20", "por_red": {"instagram": 12000}}]
+            return [
+                {"fecha": "2026-05-20", "por_red": {"instagram": 3000}},
+                {"fecha": "2026-05-21", "por_red": {"instagram": 9000}},
+            ]
+
+    s = servicio.serie_alcance_desde_fuente(_Fuente(), RANGO)
+    puntos = {p["fecha"]: p for p in s["puntos"]}
+    assert puntos["2026-05-20"]["por_red"] == {"instagram": 15000}  # 12000 + 3000
+    assert puntos["2026-05-20"]["total"] == 15000
+    assert puntos["2026-05-21"]["total"] == 9000
+    assert "neto" not in s
+
+
+def test_serie_alcance_degrada_sin_alcance():
+    class _FuenteSinAlcance:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return FuenteMuestra().cuentas()[:1]
+
+    s = servicio.serie_alcance_desde_fuente(_FuenteSinAlcance(), RANGO)
+    assert s["puntos"] == []
+
+
 # --------------------------------------------------------------------------- #
 # Metricool (respx): serie de seguidores REUSA /v2/analytics/timelines         #
 # --------------------------------------------------------------------------- #

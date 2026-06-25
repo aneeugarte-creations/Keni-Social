@@ -65,7 +65,16 @@ from .reporte import (
     opciones,
     reporte,
 )
-from .series import ads, correlacion, crosstab, desglose, ingesta, seguidores, tendencia
+from .series import (
+    ads,
+    correlacion,
+    crosstab,
+    desglose,
+    ingesta,
+    seguidores,
+    serie_alcance,
+    tendencia,
+)
 
 # `_comparar_totales`, `_suma_clics`, `_cobertura_por_marca` y `_filtrar_reporte_por_red` se
 # re-exportan porque la suite (`test_api_metricas.py`) los importa de
@@ -86,6 +95,7 @@ __all__ = [
     "categorias",
     "tendencia",
     "seguidores",
+    "serie_alcance",
     "desglose",
     "crosstab",
     "correlacion",
@@ -118,6 +128,7 @@ RUTAS = [
     Route("/api/metricas/categorias", categorias, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
+    Route("/api/metricas/serie-alcance", serie_alcance, methods=["GET"]),
     Route("/api/metricas/desglose", desglose, methods=["GET"]),
     Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
     Route("/api/metricas/correlacion", correlacion, methods=["GET"]),

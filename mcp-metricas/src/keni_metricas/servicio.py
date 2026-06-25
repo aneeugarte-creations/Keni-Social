@@ -135,6 +135,7 @@ __all__ = [
     "construir_listado_piezas",
     "construir_tendencia_diaria",
     "construir_serie_seguidores",
+    "construir_serie_alcance",
     "construir_desglose_interacciones",
     "construir_crosstab",
     "construir_correlacion_seguidores",
@@ -664,6 +665,52 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
         neto_por_red=neto_por_red,
     )
     return serie.model_dump(mode="json")
+
+
+def construir_serie_alcance(rango: str = "mes", marca: str | None = None) -> dict:
+    """Alcance de cuenta POR DÍA y por red (suma de las cuentas en alcance).
+
+    Solo Instagram expone alcance de cuenta (reach diario vía `/v2/analytics/timelines`),
+    así que `por_red` solo trae `instagram`. El alcance es un FLUJO diario (no un stock como
+    los followers): por eso no hay `neto`, solo la serie. `puntos=[]` si la fuente no lo
+    soporta (degradación honesta). Devuelve un dict JSON-serializable.
+    """
+    return serie_alcance_desde_fuente(_fuente(marca), rango, marca)
+
+
+def serie_alcance_desde_fuente(fuente, rango: str, marca: str | None = None) -> dict:
+    """Worker de `construir_serie_alcance` sobre una `fuente` explícita (lo usa el MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    serie_fn = getattr(fuente, "serie_alcance", None)
+    por_dia: dict[str, dict[str, int]] = {}
+    if serie_fn is not None:
+        for c in fuente.cuentas():
+            try:
+                puntos = serie_fn(c.id, rango)
+            except AttributeError:
+                # La fuente envuelta no la implementa (FuenteScoped lo propaga): degrada.
+                puntos = []
+            for punto in puntos:
+                f = punto["fecha"]
+                for red, valor in (punto.get("por_red") or {}).items():
+                    dia = por_dia.setdefault(f, {})
+                    dia[red] = dia.get(red, 0) + int(valor)
+    puntos_out = [
+        {
+            "fecha": f,
+            "total": sum(por_dia[f].values()),
+            "por_red": dict(sorted(por_dia[f].items())),
+        }
+        for f in sorted(por_dia)
+    ]
+    return {
+        "cuenta": marca,
+        "rango": rango,
+        "etiqueta_rango": etiqueta_rango(rango),
+        "periodo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
+        "fuente": fuente.nombre,
+        "puntos": puntos_out,
+    }
 
 
 def construir_desglose_interacciones(

@@ -191,6 +191,64 @@ def test_seguidores_red_invalida_devuelve_400(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# /api/metricas/serie-alcance                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _serie_alcance(rango="mes", marca=None):
+    return {
+        "cuenta": marca,
+        "rango": rango,
+        "etiqueta_rango": "ignored",  # el endpoint lo recalcula
+        "periodo": {"desde": "2026-05-01", "hasta": "2026-05-31"},
+        "fuente": "muestra",
+        "puntos": [
+            {"fecha": "2026-05-20", "total": 12000, "por_red": {"instagram": 12000}},
+            {"fecha": "2026-05-21", "total": 9000, "por_red": {"instagram": 9000}},
+        ],
+    }
+
+
+def test_serie_alcance_200_y_shape(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_serie_alcance=_serie_alcance)
+    r = cliente.get("/api/metricas/serie-alcance?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cuenta"] == "claro_sports"
+    assert data["puntos"][0]["por_red"]["instagram"] == 12000
+    assert data["etiqueta_rango"] and data["etiqueta_rango"] != "ignored"
+    assert data["generado_en"]
+
+
+def test_serie_alcance_degrada_con_honestidad_si_vacio(cliente, monkeypatch):
+    def vacio(rango="mes", marca=None):
+        s = _serie_alcance(rango, marca)
+        s["puntos"] = []
+        return s
+
+    _mock_servicio(monkeypatch, construir_serie_alcance=vacio)
+    r = cliente.get("/api/metricas/serie-alcance?rango=semana")
+    assert r.status_code == 200
+    assert r.json()["puntos"] == []
+
+
+def test_serie_alcance_filtra_por_red(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_serie_alcance=_serie_alcance)
+    r = cliente.get("/api/metricas/serie-alcance?rango=mes&red=instagram")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["puntos"][0]["por_red"] == {"instagram": 12000}
+    assert data["puntos"][0]["total"] == 12000
+
+
+def test_serie_alcance_red_invalida_devuelve_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_serie_alcance=_serie_alcance)
+    r = cliente.get("/api/metricas/serie-alcance?rango=mes&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+# --------------------------------------------------------------------------- #
 # /api/metricas/desglose                                                       #
 # --------------------------------------------------------------------------- #
 

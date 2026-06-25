@@ -87,6 +87,7 @@ def _post_ig(id_: str, vis: int, inter: int, fecha: str = "2026-05-20T10:00:00")
         "postId": id_,
         "publishedAt": {"dateTime": fecha, "timezone": "UTC"},
         "views": vis,
+        "impressionsTotal": vis,  # impresiones (volumen aditivo); IG las trae así
         "interactions": inter,
         "url": f"https://instagram.com/p/{id_}",
     }
@@ -121,6 +122,7 @@ def test_resumen_agrega_los_posts_del_periodo_por_red():
     assert resumen.cuenta == "claro_sports"
     assert resumen.fuente == "metricool"
     assert resumen.visualizaciones == 10000  # 6000 + 4000
+    assert resumen.impresiones == 10000  # impressionsTotal por post, aditivo
     assert resumen.interacciones == 300  # 200 + 100
     # posts sin campo 'reach'/'impressionsUnique' -> alcance None (honesto, no se inventa).
     assert resumen.alcance is None
@@ -130,10 +132,10 @@ def test_resumen_agrega_los_posts_del_periodo_por_red():
 
 
 @respx.mock
-def test_resumen_alcance_desde_agregado_de_cuenta_no_suma_posts():
-    """El alcance del resumen sale del agregado de CUENTA (timelines, subject=account), no de
-    sumar el reach por post (que doble-contaría a quien vio varios). La suma por post queda
-    SOLO en el detalle de cada `Pieza.alcance`, donde sí tiene sentido."""
+def test_resumen_alcance_none_y_volumen_es_impresiones():
+    """Metricool no da un alcance único de cuenta fiable: `alcance` queda None en cabecera y
+    por plataforma (no se inventa un total). La cifra de VOLUMEN es `impresiones`, aditiva por
+    post. El reach por post sigue vivo en el detalle de cada `Pieza.alcance`."""
     _mock_perfiles(_perfil(instagram="unotv_"))  # IG conectada
     _mock_posts(
         "instagram",
@@ -143,34 +145,18 @@ def test_resumen_alcance_desde_agregado_de_cuenta_no_suma_posts():
         ],
     )
 
-    # `timelines` con subject=account y metric=reach trae el alcance ÚNICO del periodo en su
-    # `aggregate`: 4200, MENOR que la suma por post (5500) porque no doble-cuenta. El resto de
-    # métricas (followers) no aportan agregado de alcance.
-    def responder(request: httpx.Request) -> httpx.Response:
-        valor = 4200 if request.url.params.get("metric") == "reach" else 0
-        return httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "metric": request.url.params.get("metric"),
-                        "values": [{"dateTime": "2026-05-20T00:00:00", "value": valor}],
-                        "aggregate": {"aggregation": "SUM", "value": valor},
-                    }
-                ]
-            },
-        )
-
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
     with httpx.Client() as cli:
         f = _fuente(cli)
         resumen = f.resumen("claro_sports", RANGO)
         piezas = f.mejores_piezas("claro_sports", RANGO, 5)
 
-    # Cabecera y por-plataforma: el agregado de cuenta (4200), NO la suma por post (5500).
-    assert resumen.alcance == 4200
+    # Alcance AUSENTE (None), no inventado, en cabecera y por plataforma.
+    assert resumen.alcance is None
     ig = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.instagram)
-    assert ig.alcance == 4200
+    assert ig.alcance is None
+    # Volumen = impresiones aditivas por post (6000 + 4000).
+    assert resumen.impresiones == 10000
+    assert ig.impresiones == 10000
     # El reach por post sigue vivo en el detalle de cada pieza.
     assert {p.alcance for p in piezas} == {3000, 2500}
 
@@ -983,8 +969,7 @@ def test_seguidores_van_con_subject_account_y_metrica_por_red():
         resumen = _fuente(cli).resumen("claro_sports", RANGO)
 
     assert resumen.seguidores_netos == 50  # 1050 - 1000
-    # `timelines` lo pegan tanto el alcance de cuenta (metric=reach) como los followers; se
-    # localiza la petición de followers entre las capturadas (no se asume su orden).
+    # Se localiza la petición de followers entre las capturadas (no se asume su orden).
     req = next((r for r in capturadas if r.url.params.get("metric") == "followers"), None)
     assert req is not None, "no se llamó a timelines para followers"
     assert req.url.params.get("subject") == "account"
@@ -1049,6 +1034,44 @@ def test_seguidores_netos_degrada_a_cero_sin_serie():
         resumen = _fuente(cli).resumen("claro_sports", RANGO)
 
     assert resumen.seguidores_netos == 0
+
+
+@respx.mock
+def test_serie_alcance_solo_instagram_via_timelines_reach():
+    """serie_alcance pide el reach diario de cuenta (timelines subject=account metric=reach)
+    SOLO para Instagram y devuelve un punto por día con `por_red`."""
+    _mock_perfiles(_perfil(instagram="x"))
+    capturadas: list[httpx.Request] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
+        if request.url.params.get("metric") != "reach":
+            return httpx.Response(200, json={"data": []})
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": "reach",
+                        "values": [
+                            {"dateTime": "2026-05-20T00:00:00", "value": 12000},
+                            {"dateTime": "2026-05-21T00:00:00", "value": 9000},
+                        ],
+                    }
+                ]
+            },
+        )
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        serie = _fuente(cli).serie_alcance("claro_sports", RANGO)
+
+    assert serie == [
+        {"fecha": "2026-05-20", "por_red": {"instagram": 12000}},
+        {"fecha": "2026-05-21", "por_red": {"instagram": 9000}},
+    ]
+    req = next((r for r in capturadas if r.url.params.get("metric") == "reach"), None)
+    assert req is not None and req.url.params.get("subject") == "account"
 
 
 @respx.mock
