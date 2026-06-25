@@ -48,7 +48,7 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
     secciones: [
       { id: "seguidores", etiqueta: "Crecimiento de seguidores" },
       { id: "audiencia", etiqueta: "Altas y bajas de seguidores" },
-      { id: "alcance-serie", etiqueta: "Alcance de cuenta" },
+      { id: "alcance-serie", etiqueta: "Alcance y frecuencia" },
       { id: "demografia", etiqueta: "Demografía de la audiencia" },
       { id: "alcance-mundial", etiqueta: "Alcance mundial" },
       { id: "desglose", etiqueta: "Desglose de interacciones" },
