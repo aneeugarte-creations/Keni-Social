@@ -146,6 +146,26 @@ describe("PuertaSesion · guard de sesión", () => {
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
   });
 
+  it("RED sin cuerpo PERO con deploy en curso (sonda): SÍ 'actualizando'", async () => {
+    // El `me` cae por RESET de conexión (sin cuerpo con `motivo`): el flag del 503 no llega. La
+    // sonda /estado-deploy (que NO pasa por el back) dice que hay deploy -> "actualizando", no
+    // "no disponible". Es el fallo que veíamos: un deploy stop-the-world mostraba "incidente".
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const u = String(url);
+        if (u.includes("/api/auth/me")) throw new TypeError("network down");
+        if (u.includes("/estado-deploy"))
+          return new Response(JSON.stringify({ desplegando: true }), { status: 200 });
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderPuerta();
+
+    expect(await screen.findByText(/Estamos actualizando la consola/i)).toBeInTheDocument();
+    expect(screen.queryByText(/La consola no está disponible/i)).not.toBeInTheDocument();
+  });
+
   it("estado degradado cuando el me da 503 con motivo=deploy: SÍ 'actualizando'", async () => {
     stubFetch({ me: { status: 503, motivo: "deploy" } });
     renderPuerta();

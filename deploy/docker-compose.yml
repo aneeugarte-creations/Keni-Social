@@ -203,6 +203,10 @@ services:
     restart: unless-stopped
     networks:
       - edge
+    # Flag de deploy (solo lectura): mantenimiento sirve la sonda /estado-deploy cuando el front se
+    # recrea, así que también necesita ver el flag que pone/quita deploy.sh.
+    volumes:
+      - ./estado:/estado:ro
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge

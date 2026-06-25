@@ -113,7 +113,8 @@ export {
   srcsetMedia,
   urlS3Objeto,
   ApiError,
-  motivoDeError,
+  resolverMotivoCaida,
+  deployActivo,
 } from "./_core";
 // Tipos públicos re-exportados (los consumen el editor y tests).
 export type { ActivoMarca, PlantillaDiseno, Bloque, MotivoCaida } from "./_core";

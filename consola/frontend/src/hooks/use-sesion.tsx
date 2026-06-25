@@ -1,7 +1,7 @@
 import { startAuthentication } from "@simplewebauthn/browser";
 import * as React from "react";
 
-import { api, ApiError, motivoDeError, type MotivoCaida } from "@/lib/api";
+import { api, ApiError, resolverMotivoCaida, type MotivoCaida } from "@/lib/api";
 import { establecerZonaDisplay } from "@/lib/fecha";
 import type { UsuarioSesion } from "@/types";
 
@@ -55,8 +55,9 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
         setMotivoCaida(null);
       } else {
         setErrorConexion(true);
-        // deploy vs avería: el front lo marca en el `motivo` del 503; sin prueba => incidente.
-        setMotivoCaida(motivoDeError(e));
+        // deploy vs avería: el `motivo` del 503 del front si lo trae; si el error no lo lleva
+        // (reset de red), se sonda /estado-deploy. Es async; el panel arranca como deploy-incierto.
+        void resolverMotivoCaida(e).then(setMotivoCaida);
       }
     }
   }, []);

@@ -126,15 +126,37 @@ export class ApiError extends Error {
 export type MotivoCaida = "deploy" | "incidente";
 
 /**
- * Clasifica un error de "back no disponible" para que la UI diga la VERDAD. El nginx del front
- * devuelve `{"motivo":"deploy"|"incidente"}` según exista el flag de deploy (lo pone deploy.sh).
- * Solo afirmamos "deploy" con prueba positiva de ese motivo; ante cualquier duda (fallo de red
- * sin cuerpo, motivo ausente) caemos a `incidente`: es más honesto no prometer un retorno
- * automático que no podemos garantizar. Llámalo SOLO cuando ya sabes que es una caída de conexión.
+ * Sonda "¿hay un deploy en curso?" contra `/estado-deploy`, un endpoint SIEMPRE disponible que NO
+ * pasa por el back: lo sirve el front (nginx) leyendo el flag que pone/quita deploy.sh, y si el
+ * front se está recreando lo sirve `mantenimiento` (el catch-all). Así el SPA distingue deploy de
+ * avería incluso cuando el `me` falló por un RESET de conexión (sin cuerpo con `motivo`). Sin
+ * respuesta (todo caído) => `false`: no afirmamos un deploy que no podemos confirmar.
  */
-export function motivoDeError(error: unknown): MotivoCaida {
+export async function deployActivo(): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch("/estado-deploy", { cache: "no-store", signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return false;
+    const j = (await res.json()) as { desplegando?: boolean };
+    return j?.desplegando === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Clasifica una caída de conexión para que la UI diga la VERDAD: `deploy` (transitorio, barra de
+ * progreso) vs `incidente` (avería, "equipo avisado"). Prioridad: el `motivo` que el front pone en
+ * el cuerpo del 503; si el error no lo trae (reset de red, 503 servido por otro componente), SONDA
+ * `/estado-deploy`. Solo afirmamos `deploy` con prueba positiva; ante la duda, `incidente` (no
+ * prometemos un retorno automático que no podemos garantizar). Úsalo SOLO ante una caída de conexión.
+ */
+export async function resolverMotivoCaida(error: unknown): Promise<MotivoCaida> {
   if (error instanceof ApiError && error.cuerpo?.motivo === "deploy") return "deploy";
-  return "incidente";
+  if (error instanceof ApiError && error.cuerpo?.motivo === "incidente") return "incidente";
+  return (await deployActivo()) ? "deploy" : "incidente";
 }
 
 /**
