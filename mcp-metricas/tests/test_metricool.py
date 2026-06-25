@@ -885,22 +885,29 @@ def test_metricas_de_post_no_encontrado_si_scheduler_no_resuelve():
     assert m is None
 
 
-def test_fecha_parsea_objeto_publishedAt_y_no_fabrica():
-    """_fecha extrae el `dateTime` del OBJETO publishedAt de Metricool, acepta ISO/epoch,
-    y devuelve None (sin fabricar) cuando no hay fecha reconocible."""
-    # Metricool devuelve publishedAt como objeto {dateTime, timezone}.
-    assert _fecha({"dateTime": "2026-05-20T07:27:58", "timezone": "Europe/Madrid"}) == date(2026, 5, 20)
+def test_fecha_parsea_objeto_publishedAt_y_normaliza_a_cdmx():
+    """_fecha extrae el `dateTime` del OBJETO publishedAt, NORMALIZA su hora (Madrid) a CDMX
+    para ubicar el día local, acepta ISO/epoch, y devuelve None cuando no hay fecha."""
+    # Metricool sirve el dateTime en Europe/Madrid: 07:27 Madrid = 23:27 del día ANTERIOR en
+    # CDMX, así que el post cae en el 19, no en el 20 (este es el bug que C4 arregla).
+    assert _fecha({"dateTime": "2026-05-20T07:27:58", "timezone": "Europe/Madrid"}) == date(2026, 5, 19)
+    # 12:00 Madrid = 04:00 CDMX: mismo día.
     assert _fecha("2026-05-20T12:00:00") == date(2026, 5, 20)  # string ISO con hora
-    assert _fecha("2026-05-20") == date(2026, 5, 20)  # string fecha
+    assert _fecha("2026-05-20") == date(2026, 5, 20)  # string fecha (sin hora: no se convierte)
     assert isinstance(_fecha(1716163200), date)  # epoch segundos
-    # Epoch se interpreta en UTC, no en la TZ local del runner: un instante tras la
-    # medianoche UTC cae en SU día UTC aunque el runner esté en una zona con offset negativo.
-    assert _fecha(int(datetime(2026, 5, 20, 0, 30, tzinfo=UTC).timestamp())) == date(2026, 5, 20)
+    # Epoch es un instante absoluto: 00:30 UTC = 18:30 del día anterior en CDMX -> día 19.
+    assert _fecha(int(datetime(2026, 5, 20, 0, 30, tzinfo=UTC).timestamp())) == date(2026, 5, 19)
     # Sin fecha reconocible -> None (NO se fabrica una fecha de hoy).
     assert _fecha(None) is None
     assert _fecha("") is None
     assert _fecha({}) is None
     assert _fecha({"timezone": "Europe/Madrid"}) is None  # objeto sin dateTime
+
+
+def test_fecha_post_a_las_2330_cdmx_cae_en_su_dia_local():
+    """Un post de las 23:30 CDMX —que Metricool reporta como la madrugada del día siguiente en
+    Madrid (07:30)— se ubica en SU día CDMX (el 20), no en el 21."""
+    assert _fecha({"dateTime": "2026-05-21T07:30:00", "timezone": "Europe/Madrid"}) == date(2026, 5, 20)
 
 
 @respx.mock

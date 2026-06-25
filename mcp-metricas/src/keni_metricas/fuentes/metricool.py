@@ -570,13 +570,38 @@ def _objetivos_de_enlace(id_post: str, nativo: str | None, url_publica: str | No
     return objetivos
 
 
+def _fecha_iso_a_mx(s: str) -> date | None:
+    """Convierte un dateTime ISO de Metricool a la FECHA en CDMX (`_TZ`), o None.
+
+    Metricool sirve el `dateTime` de un post en hora de su server (Europe/Madrid) aunque se
+    pida otra zona, y SIN offset explícito. Se localiza ese naive a `_TZ_METRICOOL` (o se usa
+    el offset que traiga, si lo trae) y se convierte a CDMX antes de tomar el día: así un post
+    de las 23:30 CDMX (que Metricool reporta como la madrugada del día siguiente en Madrid) cae
+    en el día correcto. Si la hora no es parseable, cae a la fecha cruda (mejor que perderla).
+    """
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                return date.fromisoformat(s[:10])
+            except ValueError:
+                return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ZoneInfo(_TZ_METRICOOL))
+    return dt.astimezone(ZoneInfo(_TZ)).date()
+
+
 def _fecha(v) -> date | None:
-    """Fecha de publicación del post -> `date`, o None si no se puede determinar.
+    """Fecha de publicación del post (en CDMX) -> `date`, o None si no se puede determinar.
 
     Metricool devuelve `publishedAt` como OBJETO `{'dateTime': 'AAAA-MM-DDTHH:MM:SS',
-    'timezone': '...'}`, no como string plano. Se extrae el `dateTime` del objeto, y se
-    acepta también string ISO (con o sin hora) o epoch (segundos/milisegundos). Devuelve
-    None si no hay fecha reconocible: el llamante NO debe fabricar una fecha (ver
+    'timezone': '...'}`, no como string plano. Se extrae el `dateTime` del objeto, y se acepta
+    también string ISO (con o sin hora) o epoch (segundos/milisegundos). Cuando hay HORA, se
+    normaliza a CDMX (`_fecha_iso_a_mx`/epoch→CDMX) para ubicar el post en el día local correcto.
+    Devuelve None si no hay fecha reconocible: el llamante NO debe fabricar una fecha (ver
     `_pieza_desde_post`)."""
     if isinstance(v, dict):
         v = v.get("dateTime") or v.get("date") or v.get("value") or v.get("iso")
@@ -587,18 +612,20 @@ def _fecha(v) -> date | None:
             ts = float(v)
             if ts > 1e11:  # epoch en milisegundos
                 ts /= 1000.0
-            return datetime.fromtimestamp(ts, tz=UTC).date()
+            return datetime.fromtimestamp(ts, tz=UTC).astimezone(ZoneInfo(_TZ)).date()
         except (ValueError, OSError, OverflowError):
             return None
     if isinstance(v, str):
         s = v.strip()
         if s.isdigit():
             return _fecha(int(s))
-        if len(s) >= 10:
+        if len(s) == 10:  # solo fecha, sin hora: ya es un día (no hay tz que convertir)
             try:
-                return date.fromisoformat(s[:10])
+                return date.fromisoformat(s)
             except ValueError:
                 return None
+        if len(s) > 10:
+            return _fecha_iso_a_mx(s)
     return None
 
 
