@@ -188,6 +188,8 @@ _DISTRIBUCION_RED: dict[Plataforma, tuple[str, ...]] = {
     Plataforma.instagram: ("gender", "age", "country", "city", "postsTypes"),
     Plataforma.facebook: ("page_follows_country", "postsTypes"),
 }
+# Ventana (días) sobre la que `distribution` calcula la demografía de cuenta.
+_DIAS_DEMOGRAFIA = 30
 _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.facebook: {
         _METRICA_VIS: "impressions",
@@ -1322,23 +1324,27 @@ class FuenteMetricool:
 
         Lee `/v2/analytics/distribution` subject=account por cada métrica que la red expone
         (`_DISTRIBUCION_RED`): IG gender/age/country/city (en %) + postsTypes (conteos); FB
-        page_follows_country (%) + postsTypes (conteos). Una métrica sin datos (serie vacía o
-        deprecada) se OMITE; una red sin distribución de cuenta devuelve {} (degradación honesta).
+        page_follows_country (%) + postsTypes (conteos). La distribución se calcula sobre una
+        ventana reciente (`_DIAS_DEMOGRAFIA`). Una métrica sin datos (serie vacía o deprecada) se
+        OMITE; una red sin distribución de cuenta devuelve {} (degradación honesta).
         """
+        hoy = date.today()
+        desde = hoy - timedelta(days=_DIAS_DEMOGRAFIA)
         out: dict[str, list[dict]] = {}
         for metrica in _DISTRIBUCION_RED.get(red, ()):
-            dist = self._distribucion_cuenta(cuenta_id, red, metrica)
+            dist = self._distribucion_cuenta(cuenta_id, red, metrica, desde, hoy)
             if dist:
                 out[metrica] = dist
         return out
 
     def _distribucion_cuenta(
-        self, cuenta_id: str, plat: Plataforma, metrica: str
+        self, cuenta_id: str, plat: Plataforma, metrica: str, desde: date, hasta: date
     ) -> list[dict]:
         """Items `[{clave, valor}]` de UNA distribución de cuenta, [] si falla o viene vacía.
 
         `valor` se conserva como entero cuando es un conteo (postsTypes) y como float (2
-        decimales) cuando es un porcentaje, sin inventar nada si la clave/valor falta.
+        decimales) cuando es un porcentaje, sin inventar nada si la clave/valor falta. `distribution`
+        exige ventana `from`/`to`: sin ella responde 500 y la demografía saldría vacía.
         """
         try:
             datos = get_json(
@@ -1346,6 +1352,7 @@ class FuenteMetricool:
                 f"{BASE}/v2/analytics/distribution",
                 params={
                     **self._params_base(cuenta_id),
+                    **self._rango_params(desde, hasta),
                     "network": _RED_METRICOOL[plat],
                     "metric": metrica,
                     "subject": _SUBJECT_CUENTA,

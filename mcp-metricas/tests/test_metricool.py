@@ -1204,7 +1204,10 @@ def test_flujo_audiencia_altas_bajas_por_red():
 def test_demografia_distribuciones_por_red():
     """demografia lee distribution subject=account por métrica de la red: IG gender/age/...
     en % (float) y postsTypes en conteos (int); una métrica vacía se omite."""
+    capturadas: list[httpx.Request] = []
+
     def responder(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
         metric = request.url.params.get("metric")
         if metric == "gender":
             data = [{"key": "M", "value": 47.5}, {"key": "F", "value": 50.0}, {"key": "U", "value": 2.5}]
@@ -1226,6 +1229,9 @@ def test_demografia_distribuciones_por_red():
     # postsTypes son conteos -> int, no float.
     assert demo["postsTypes"] == [{"clave": "reel", "valor": 12}, {"clave": "image", "valor": 8}]
     assert "city" not in demo  # vacía -> omitida
+    # distribution EXIGE ventana from/to (sin ella responde 500 -> demografía vacía).
+    params = capturadas[0].url.params
+    assert params.get("from") and params.get("to")
 
 
 @respx.mock
