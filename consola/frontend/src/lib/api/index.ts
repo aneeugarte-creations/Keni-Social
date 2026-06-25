@@ -36,6 +36,7 @@ import { apiParrilla } from "./parrilla";
 import { apiMetricas } from "./metricas";
 import { apiConexiones } from "./conexiones";
 import { apiStock } from "./stock";
+import { apiBiblioteca } from "./biblioteca";
 import { apiSugerencias } from "./sugerencias";
 import { apiCampanias } from "./campanias";
 import { apiNotificaciones } from "./notificaciones";
@@ -87,6 +88,7 @@ export const api = {
   ...apiMetricas,
   ...apiConexiones,
   ...apiStock,
+  ...apiBiblioteca,
   ...apiSugerencias,
   ...apiCampanias,
   ...apiNotificaciones,

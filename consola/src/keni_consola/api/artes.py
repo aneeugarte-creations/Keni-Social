@@ -780,6 +780,24 @@ async def adjuntar_propio(request: Request) -> Response:
     return JSONResponse(cuerpo, status_code=status)
 
 
+async def rafaga_propio(request: Request) -> Response:
+    """GET /api/artes/propio/rafaga?galeria_id=&archivo=&marca=&dispositivo= -> {fotos:[{archivo,thumb}]}.
+
+    Fotos del MISMO burst (ráfaga) del keeper que `archivo`, por el túnel keni-fotos, para navegarlas
+    como thumbs antes de elegir cuál guardar. Degrada a `{fotos:[]}` si no hay dispositivo de la marca
+    o la app no soporta/responde la ráfaga.
+    """
+    q = request.query_params
+    marca = (q.get("marca") or "").strip()
+    galeria_id = (q.get("galeria_id") or "").strip()
+    archivo = (q.get("archivo") or "").strip()
+    dispositivo = (q.get("dispositivo") or "").strip()
+    if not marca or not galeria_id or not archivo:
+        return JSONResponse({"fotos": []})
+    fotos = await fotos_tunel.rafaga(marca, galeria_id, archivo, dispositivo)
+    return JSONResponse({"fotos": fotos})
+
+
 async def dispositivos_propio(request: Request) -> Response:
     """GET /api/artes/propio/dispositivos?marca= -> {dispositivos:[{usuario, dispositivo, version, marcas, galerias}]}.
 
@@ -847,6 +865,7 @@ RUTAS = [
     Route("/api/artes/agencias/adjuntar", adjuntar_agencias, methods=["POST"]),
     Route("/api/artes/propio/buscar", buscar_propio, methods=["GET"]),
     Route("/api/artes/propio/adjuntar", adjuntar_propio, methods=["POST"]),
+    Route("/api/artes/propio/rafaga", rafaga_propio, methods=["GET"]),
     Route("/api/artes/propio/dispositivos", dispositivos_propio, methods=["GET"]),
     Route("/api/artes/propio/eventos", eventos_propio, methods=["GET"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),

@@ -21,6 +21,8 @@ _COLS_CATALOGO_MEDIA = (
     "etiquetas",
     "credito",
     "aprobado",
+    "fuente",
+    "grupo",
     "autor_id",
     "autor_nombre",
     "creado",
@@ -41,6 +43,8 @@ _CAMPOS_EDITABLES_CATALOGO_MEDIA: tuple[str, ...] = (
     "etiquetas",
     "credito",
     "aprobado",
+    "fuente",
+    "grupo",
 )
 
 
@@ -50,6 +54,8 @@ def _fila_a_media_catalogo(fila: Any) -> dict[str, Any]:
     item["aprobado"] = bool(fila["aprobado"])
     item["etiquetas"] = fila["etiquetas"] or "[]"
     item["tipo"] = fila["tipo"] or "imagen"
+    item["fuente"] = fila["fuente"] or ""
+    item["grupo"] = fila["grupo"] or ""
     return item
 
 
@@ -63,6 +69,8 @@ def crear_media_catalogo(
     etiquetas: str = "[]",
     credito: str = "",
     aprobado: bool = True,
+    fuente: str = "",
+    grupo: str = "",
     autor: dict[str, str] | None = None,
     id: str = "",
     creado: str = "",
@@ -81,6 +89,8 @@ def crear_media_catalogo(
         "etiquetas": etiquetas or "[]",
         "credito": credito or "",
         "aprobado": 1 if aprobado else 0,
+        "fuente": fuente or "",
+        "grupo": grupo or "",
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
         "creado": creado or ahora,
@@ -104,6 +114,8 @@ def listar_media_catalogo(
     *,
     marca: str | None = None,
     tipo: str | None = None,
+    fuente: str | None = None,
+    grupo: str | None = None,
     solo_aprobados: bool = False,
     incluir_globales: bool = False,
 ) -> list[dict[str, Any]]:
@@ -112,6 +124,8 @@ def listar_media_catalogo(
     `incluir_globales` (def False): al filtrar por `marca`, suma también los artes GLOBALES
     (marca='') — "compartidos entre marcas" —, de modo que un arte global (p.ej. una foto
     generada por IA y catalogada para reutilizar) aparezca en la galería de CUALQUIER marca.
+    `fuente`/`grupo` acotan a una CARPETA de la biblioteca unificada (portal|originales|
+    fotografias) y a una carpeta lógica dentro de ella (p. ej. un partido).
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -124,6 +138,12 @@ def listar_media_catalogo(
     if tipo:
         clausulas.append("tipo = ?")
         params.append(tipo)
+    if fuente:
+        clausulas.append("fuente = ?")
+        params.append(fuente)
+    if grupo:
+        clausulas.append("grupo = ?")
+        params.append(grupo)
     if solo_aprobados:
         clausulas.append("aprobado = 1")
     sql = _SELECT_CATALOGO_MEDIA

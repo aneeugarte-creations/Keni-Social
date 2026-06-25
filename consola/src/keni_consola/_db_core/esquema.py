@@ -941,6 +941,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         etiquetas    TEXT NOT NULL DEFAULT '[]',
         credito      TEXT NOT NULL DEFAULT '',
         aprobado     INTEGER NOT NULL DEFAULT 1,
+        -- BIBLIOTECA DE MEDIOS UNIFICADA: `fuente` es la CARPETA de origen del objeto
+        -- (portal | originales | fotografias), `grupo` una carpeta lógica dentro de la fuente
+        -- (p. ej. el partido «colombia uzbekistan» en fotografias). '' = sin clasificar (artes
+        -- catalogados antes de la biblioteca). El buscador global cruza las tres fuentes.
+        fuente       TEXT NOT NULL DEFAULT '',
+        grupo        TEXT NOT NULL DEFAULT '',
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',
@@ -950,6 +956,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_marca ON catalogo_media (marca)",
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_tipo ON catalogo_media (tipo)",
     "CREATE INDEX IF NOT EXISTS idx_catalogo_media_aprobado ON catalogo_media (aprobado)",
+    "CREATE INDEX IF NOT EXISTS idx_catalogo_media_fuente ON catalogo_media (fuente)",
     # ACTIVOS DE MARCA (editor profesional): el kit visual reutilizable de cada marca, agrupado
     # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
     # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en

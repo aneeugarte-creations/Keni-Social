@@ -32,6 +32,32 @@ def _migrar_renombre_catalogo_media(con: Any) -> None:
         con.execute(f"ALTER INDEX IF EXISTS {viejo} RENAME TO {nuevo}")
 
 
+def _migrar_columnas_catalogo_media(con: Any) -> None:
+    """Anade `fuente` y `grupo` a `catalogo_media` si una BD ya creada no las tuviera (idempotente).
+
+    BIBLIOTECA DE MEDIOS UNIFICADA: `fuente` es la carpeta de origen (`portal|originales|
+    fotografias`) y `grupo` una carpeta lógica dentro de ella (p. ej. el partido). '' en ambas =
+    sin clasificar (los artes catalogados antes de la biblioteca). `ADD COLUMN IF NOT EXISTS` es
+    seguro y no-op si ya están. El índice por `fuente` (navegación por carpeta) lo crea el DDL.
+
+    Solo aplica si la tabla existe (un primer arranque ya la crea con las columnas).
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    cols = _columnas_existentes(con, "catalogo_media")
+    if "fuente" not in cols:
+        con.execute(
+            "ALTER TABLE catalogo_media ADD COLUMN IF NOT EXISTS fuente TEXT NOT NULL DEFAULT ''"
+        )
+    if "grupo" not in cols:
+        con.execute(
+            "ALTER TABLE catalogo_media ADD COLUMN IF NOT EXISTS grupo TEXT NOT NULL DEFAULT ''"
+        )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_catalogo_media_fuente ON catalogo_media (fuente)"
+    )
+
+
 def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
     """Anade `sugerida` a `noticias_algoritmo` si una BD ya creada no la tuviera (idempotente).
 

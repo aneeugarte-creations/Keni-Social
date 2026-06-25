@@ -61,6 +61,11 @@ CATEGORIAS: frozenset[str] = frozenset(
         "originales",   # fotos ORIGINALES de articulo de portal/marca propia (confiadas/publicables):
                         # su propia carpeta por procedencia. Catalogadas (tipo=original); el GC las
                         # conserva mientras exista su fila de catalogo o una pieza que las use
+        "fotografias",  # BIBLIOTECA UNIFICADA: fotos ORIGINALES del archivo fotografico del equipo
+                        # (keni-fotos), guardadas a mano desde un dispositivo por partido (`grupo`).
+                        # Catalogadas (fuente=fotografias); reusables/publicables (foto propia)
+        "portal",       # BIBLIOTECA UNIFICADA: imagenes de la ingesta de PORTAL/noticia (fuente=portal),
+                        # catalogadas para reutilizar; conserva sus keywords como etiquetas
         "texto",        # soporte para servir objetos ya promovidos a `texto/`.
     }
 )

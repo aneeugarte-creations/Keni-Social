@@ -23,6 +23,8 @@ def crear_media_catalogo(
     etiquetas: str = "[]",
     credito: str = "",
     aprobado: bool = True,
+    fuente: str = "",
+    grupo: str = "",
     autor: dict[str, str] | None = None,
     id: str = "",
     creado: str = "",
@@ -37,6 +39,8 @@ def crear_media_catalogo(
         etiquetas=etiquetas,
         credito=credito,
         aprobado=aprobado,
+        fuente=fuente,
+        grupo=grupo,
         autor=autor,
         id=id,
         creado=creado,
@@ -48,12 +52,14 @@ def listar_media_catalogo(
     *,
     marca: str | None = None,
     tipo: str | None = None,
+    fuente: str | None = None,
+    grupo: str | None = None,
     solo_aprobados: bool = False,
     incluir_globales: bool = False,
 ) -> list[dict[str, Any]]:
     return db.listar_media_catalogo(
-        marca=marca, tipo=tipo, solo_aprobados=solo_aprobados,
-        incluir_globales=incluir_globales,
+        marca=marca, tipo=tipo, fuente=fuente, grupo=grupo,
+        solo_aprobados=solo_aprobados, incluir_globales=incluir_globales,
     )
 
 

@@ -315,7 +315,7 @@ def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
     reqid = mensaje.get("id")
     if not isinstance(reqid, str):
         return
-    if tipo in ("resultado", "original_datos"):
+    if tipo in ("resultado", "rafaga_datos", "original_datos"):
         conexion.resolver(reqid, mensaje)
     elif tipo == "error":
         conexion.fallar(reqid, str(mensaje.get("mensaje") or ""))
@@ -325,7 +325,7 @@ async def tunel(websocket: WebSocket) -> None:
     """WebSocket del túnel keni-fotos: la app de escritorio se conecta y queda registrada por marca.
 
     Acepta, valida el token de escritorio (`Authorization: Bearer`); si no vale, cierra (4401). Mientras
-    dure, procesa `hola`/`marcas`/`resultado`/`original_datos`/`error` (los RPC se resuelven por su `id`).
+    dure, procesa `hola`/`marcas`/`resultado`/`rafaga_datos`/`original_datos`/`error` (los RPC se resuelven por su `id`).
     Los frames de control (Ping/Pong, keepalive) y los binarios NO son mensajes del protocolo: se ignoran.
     Al desconectar, limpia el registro y falla los RPC vivos.
     """

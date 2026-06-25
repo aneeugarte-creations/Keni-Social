@@ -255,7 +255,7 @@ def _descargar_original_a_biblioteca(
         objeto = almacen_media.promover_objeto(objeto, "originales")
         repos.crear_media_catalogo(
             objeto=objeto, tipo=TIPO_ARTE_ORIGINAL, marca=marca or "",
-            titulo=titulo or "", autor=autor,
+            titulo=titulo or "", fuente="originales", autor=autor,
         )
     except Exception:  # noqa: BLE001 -- sin fila de catalogo la imagen sigue sirviendo en la pieza
         pass

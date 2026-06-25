@@ -29,6 +29,7 @@ _log = logging.getLogger("keni_consola.fotos_tunel")
 
 # Timeouts por RPC (segundos): la búsqueda aplana ráfagas; el original viaja en base64.
 _TIMEOUT_BUSCAR = 20.0
+_TIMEOUT_RAFAGA = 20.0
 _TIMEOUT_ORIGINAL = 60.0
 
 # Recortes defensivos de los metadatos que declara la app al saludar.
@@ -204,6 +205,24 @@ def dispositivos(marca: str | None) -> list[dict[str, Any]]:
     return [c.describir() for c in conexiones]
 
 
+def nombre_galeria(marca: str | None, galeria_id: str) -> str:
+    """Nombre declarado de la galería `galeria_id` (entre las apps que comparten `marca`); '' si no hay.
+
+    La biblioteca lo usa como `grupo` (carpeta lógica, p. ej. el partido) al guardar una foto
+    remota: la app declara sus galerías como `{id, nombre}` en el `hola`. Si ninguna conexión la
+    declara con nombre, devuelve '' (el llamante cae al `galeria_id`).
+    """
+    if not galeria_id:
+        return ""
+    for conexion in _conexiones_de_marca(marca) if marca else list(_REGISTRO):
+        for g in conexion.galerias:
+            if str(g.get("id") or "") == galeria_id:
+                nombre = str(g.get("nombre") or "").strip()
+                if nombre:
+                    return nombre
+    return ""
+
+
 async def buscar(marca: str | None, q: str, limite: int) -> list[dict[str, Any]]:
     """Fan-out de la búsqueda a las apps que comparten `marca`; agrega candidatos y trocea a `limite`.
 
@@ -236,6 +255,39 @@ async def buscar(marca: str | None, q: str, limite: int) -> list[dict[str, Any]]
     grupos = await asyncio.gather(*(_una(c) for c in conns))
     agregados = [candidato for grupo in grupos for candidato in grupo]
     return agregados[:limite]
+
+
+async def rafaga(
+    marca: str | None, galeria_id: str, archivo: str, dispositivo: str = "", limite: int = 24
+) -> list[dict[str, Any]]:
+    """Fotos del MISMO burst (ráfaga) que `archivo`, por el túnel; lista de `{archivo, thumb}`.
+
+    Pide a la app (la que mejor encaja: por `dispositivo`, luego la que declaró la galería, luego la
+    primera que comparte `marca`) las fotos del disparo continuo del keeper, para navegarlas como
+    thumbs. Devuelve `[]` si no hay dispositivo, no responde o la respuesta llega vacía/corrupta (la
+    UI degrada a "sin ráfaga"). El `thumb` es el `thumb_b64` que manda la app (data URL o desnudo).
+    """
+    conexion = _elegir_conexion(marca, galeria_id, dispositivo)
+    if conexion is None or not archivo:
+        return []
+    try:
+        respuesta = await conexion.rpc(
+            {"tipo": "rafaga", "galeria_id": galeria_id, "archivo": archivo, "limite": limite},
+            _TIMEOUT_RAFAGA,
+        )
+    except TunelError:
+        _log.debug("Túnel keni-fotos: la app no respondió a la ráfaga; se omite.")
+        return []
+    crudos = respuesta.get("fotos") if isinstance(respuesta, dict) else None
+    salida: list[dict[str, Any]] = []
+    for foto in crudos or []:
+        if not isinstance(foto, dict):
+            continue
+        nombre = str(foto.get("archivo") or "")
+        thumb = str(foto.get("thumb_b64") or foto.get("thumb") or "")
+        if nombre:
+            salida.append({"archivo": nombre, "thumb": thumb})
+    return salida[:limite]
 
 
 async def pedir_original(

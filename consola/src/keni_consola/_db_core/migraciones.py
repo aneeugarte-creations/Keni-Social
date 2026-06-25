@@ -42,6 +42,7 @@ from .migraciones_columnas import (
     _migrar_clase_vertical_a_categoria,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
+    _migrar_columnas_catalogo_media,
     _migrar_columnas_config_franjas,
     _migrar_columnas_publicacion,
     _migrar_columnas_pieza,
@@ -489,6 +490,15 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # deja de existir; todo es "categoría". One-shot e idempotente (RENAME guardado por la
     # existencia de la columna). Ver `_migrar_renombre_lineas_a_categorias_editor`.
     Migracion("0048-renombre-lineas-categorias-editor", _migrar_renombre_lineas_a_categorias_editor),
+    # BIBLIOTECA DE MEDIOS UNIFICADA: columnas `fuente` (carpeta de origen: portal|originales|
+    # fotografias) y `grupo` (carpeta lógica, p. ej. el partido) en `catalogo_media` para BDs ya
+    # creadas (las nuevas las traen del DDL), más el índice por `fuente`. Re-aplicable (idempotente:
+    # ADD COLUMN/CREATE INDEX IF NOT EXISTS); no destructivo ('' = sin clasificar).
+    Migracion(
+        "0049-columnas-catalogo-media",
+        _migrar_columnas_catalogo_media,
+        re_aplicar_si_cambia=True,
+    ),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

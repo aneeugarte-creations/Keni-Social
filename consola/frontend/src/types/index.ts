@@ -94,6 +94,7 @@ export * from "./rota";
 export * from "./metricas";
 export * from "./piezas";
 export * from "./media";
+export * from "./biblioteca";
 export * from "./buzon";
 export * from "./campanias";
 export * from "./auth";
