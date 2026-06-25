@@ -15,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { Label } from "@/components/ui/label";
 import type { PlantillaDiseno } from "@/lib/api";
 import {
   CATEGORIA_GENERAL,
@@ -504,12 +505,12 @@ function SelectorCategoria({
           >
             {onRenombrar && (
               <div className="border-b border-border p-2">
-                <label
+                <Label
                   htmlFor={idNombre}
                   className="mb-1 block text-[11px] font-medium text-muted-foreground"
                 >
                   Nombre
-                </label>
+                </Label>
                 <input
                   id={idNombre}
                   value={nombreEdit}
@@ -523,12 +524,12 @@ function SelectorCategoria({
             )}
             <div className="border-b border-border p-1.5">
               {onRenombrar && (
-                <label
+                <Label
                   htmlFor={idEtiqueta}
                   className="mb-1 block px-0.5 text-[11px] font-medium text-muted-foreground"
                 >
                   Etiqueta
-                </label>
+                </Label>
               )}
               {/* Crear etiqueta nueva: acción APARTE del buscador (campo propio). */}
               {creando ? (

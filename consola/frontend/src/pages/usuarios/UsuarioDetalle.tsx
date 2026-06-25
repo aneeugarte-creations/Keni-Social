@@ -510,20 +510,20 @@ export default function UsuarioDetalle() {
             </div>
 
             <div className="flex flex-wrap gap-x-8 gap-y-3">
-              <label className="flex items-center gap-2 text-sm">
+              <Label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={Boolean(usuario.cobertura)}
                   onCheckedChange={(v) => guardar.mutate({ cobertura: Boolean(v) })}
                 />
                 Entra en la rota de turnos
-              </label>
-              <label className="flex items-center gap-2 text-sm">
+              </Label>
+              <Label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={Boolean(usuario.puede_coordinar)}
                   onCheckedChange={(v) => guardar.mutate({ puede_coordinar: Boolean(v) })}
                 />
                 Puede coordinar
-              </label>
+              </Label>
             </div>
           </CardContent>
         </Card>

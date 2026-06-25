@@ -54,6 +54,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/ui/Markdown";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
@@ -1726,7 +1727,7 @@ function DialogoSubida({
         {modoMostrado === "archivo" ? (
           // Subir archivo: una sola superficie para soltar o elegir.
           <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <label
+            <Label
               className={cn(
                 "flex w-full cursor-pointer flex-col items-center gap-3 rounded-xl border border-dashed border-border px-10 py-8 text-sm text-muted-foreground transition-colors hover:bg-accent",
                 ANILLO_FOCO,
@@ -1749,7 +1750,7 @@ function DialogoSubida({
                 className="sr-only"
                 onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
               />
-            </label>
+            </Label>
             <p className="text-xs text-muted-foreground">
               Se extrae la voz y se transcribe con timestamps (SRT por defecto).
             </p>

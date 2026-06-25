@@ -17,6 +17,7 @@ import * as React from "react";
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -102,7 +103,7 @@ export function CrecimientoSeguidores({
       titulo="Crecimiento de seguidores"
       icono={Users}
       acciones={
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Label className="flex items-center gap-2 text-sm text-muted-foreground">
           <Switch
             checked={porRed}
             onCheckedChange={setPorRed}
@@ -110,7 +111,7 @@ export function CrecimientoSeguidores({
             disabled={redesConDatos.length === 0}
           />
           Por red
-        </label>
+        </Label>
       }
     >
       <div className="space-y-4">

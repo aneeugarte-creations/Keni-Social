@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -362,7 +363,7 @@ function Resumen({
             ? "Se borrarán y se sustituirán por los del origen."
             : "Sin reemplazar, los del origen se añaden a los actuales."}
         </p>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+        <Label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
           <input
             type="checkbox"
             checked={reemplazar}
@@ -370,7 +371,7 @@ function Resumen({
             className="h-3.5 w-3.5"
           />
           Reemplazar lo que ya hay
-        </label>
+        </Label>
       </div>
     );
   }

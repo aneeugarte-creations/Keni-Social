@@ -6,6 +6,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -205,7 +206,7 @@ function ConmutadorMarca({
 }) {
   const activo = bloqueado ? false : Boolean(ajuste.valor);
   return (
-    <label
+    <Label
       className={cn("flex items-center gap-2", bloqueado && "opacity-50")}
       title={bloqueado ? "El maestro de esta etapa está apagado: la excepción no aplica." : undefined}
     >
@@ -216,7 +217,7 @@ function ConmutadorMarca({
         disabled={guardando || bloqueado}
         aria-label={ajuste.etiqueta}
       />
-    </label>
+    </Label>
   );
 }
 

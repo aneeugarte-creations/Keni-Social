@@ -399,7 +399,7 @@ export function DialogoCrearTarea({
                 rows={2}
               />
               <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent">
+                <Label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent">
                   <Upload className="h-3.5 w-3.5" />
                   {archivo ? archivo.name : "Subir documento"}
                   <input
@@ -408,7 +408,7 @@ export function DialogoCrearTarea({
                     accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.txt"
                     onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
                   />
-                </label>
+                </Label>
                 {archivo && (
                   <button
                     type="button"

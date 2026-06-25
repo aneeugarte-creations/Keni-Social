@@ -31,6 +31,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { EditorDocumento } from "@/editor/EditorDocumento";
 import { PublicacionPlantillas } from "@/editor/GaleriaPlantillas";
 import { DialogoFotoMuestra } from "@/editor/DialogoFotoMuestra";
@@ -1128,9 +1129,9 @@ export default function Imagen() {
           </div>
           {/* Categoría: combobox del catálogo (datalist) + texto libre. Vacía cae a «General». */}
           <div className="space-y-1">
-            <label htmlFor="plantilla-categoria" className="text-xs text-muted-foreground">
+            <Label htmlFor="plantilla-categoria" className="text-xs text-muted-foreground">
               Categoría (opcional)
-            </label>
+            </Label>
             <Input
               id="plantilla-categoria"
               list="categorias-plantilla"

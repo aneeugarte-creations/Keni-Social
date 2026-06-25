@@ -136,7 +136,7 @@ export function DialogoCampania({
               {marcasParaSwitch.map((m) => {
                 const marcada = marcasSel.includes(m.id);
                 return (
-                  <label
+                  <Label
                     key={m.id}
                     className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
                   >
@@ -146,7 +146,7 @@ export function DialogoCampania({
                       aria-label={m.nombre}
                     />
                     <span className="truncate">{m.nombre}</span>
-                  </label>
+                  </Label>
                 );
               })}
             </div>

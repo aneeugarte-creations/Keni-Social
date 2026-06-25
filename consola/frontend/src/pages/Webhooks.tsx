@@ -376,14 +376,14 @@ function DialogoCrearWebhook({
             </p>
             <div className="grid gap-2">
               {eventos.map((ev) => (
-                <label key={ev} className="flex items-center gap-2 text-sm">
+                <Label key={ev} className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={seleccion.includes(ev)}
                     onCheckedChange={() => alternarEvento(ev)}
                     aria-label={ETIQUETA_EVENTO[ev] ?? ev}
                   />
                   {ETIQUETA_EVENTO[ev] ?? ev}
-                </label>
+                </Label>
               ))}
             </div>
           </div>

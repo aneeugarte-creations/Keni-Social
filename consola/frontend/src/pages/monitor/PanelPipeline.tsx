@@ -30,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -234,7 +235,7 @@ function FilaInterruptor({
   nota: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 px-1.5 py-1.5 text-sm">
+    <Label className="flex items-center justify-between gap-3 px-1.5 py-1.5 text-sm">
       <span className="min-w-0">
         <span className="text-foreground">{ajuste.etiqueta}</span>
         <span
@@ -248,7 +249,7 @@ function FilaInterruptor({
         <span className="block text-xs text-muted-foreground">{nota}</span>
       </span>
       <SwitchAjuste ajuste={ajuste} ariaLabel={ariaLabel} tono="estado" />
-    </label>
+    </Label>
   );
 }
 

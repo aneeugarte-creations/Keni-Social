@@ -307,14 +307,14 @@ export function FormCrearFranjaSemana({
           className="h-8"
         />
       </div>
-      <label className="flex items-center gap-1 text-xs">
+      <Label className="flex items-center gap-1 text-xs">
         <input
           type="checkbox"
           checked={esDescanso}
           onChange={(e) => setEsDescanso(e.target.checked)}
         />
         Descanso
-      </label>
+      </Label>
       <Button size="sm" onClick={submit} disabled={cargando || !nombre.trim()}>
         <Plus className="h-4 w-4" /> Añadir
       </Button>

@@ -89,7 +89,7 @@ function CampoNum({
   disabled?: boolean;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+    <Label className="flex flex-col gap-1 text-xs text-muted-foreground">
       {etiqueta}
       <input
         type="number"
@@ -101,6 +101,6 @@ function CampoNum({
         className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50"
         aria-label={`PiP ${etiqueta}`}
       />
-    </label>
+    </Label>
   );
 }

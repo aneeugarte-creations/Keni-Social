@@ -208,7 +208,7 @@ function DialogoCambiarCuenta({
 
         {!url ? (
           <div className="space-y-4">
-            <label className="flex items-center gap-2 text-sm">
+            <Label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 className="h-4 w-4"
@@ -216,7 +216,7 @@ function DialogoCambiarCuenta({
                 onChange={(e) => setUsarConsola(e.target.checked)}
               />
               Usar consola de Anthropic (facturación por API) en vez de suscripción
-            </label>
+            </Label>
             <DialogFooter>
               <Button onClick={() => iniciar.mutate()} disabled={iniciar.isPending}>
                 {iniciar.isPending ? (

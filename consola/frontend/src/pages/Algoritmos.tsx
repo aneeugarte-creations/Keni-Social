@@ -10,6 +10,7 @@ import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -185,14 +186,14 @@ export default function Algoritmos() {
                   ))}
                 </SelectContent>
               </Select>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Switch
                   checked={soloCambios}
                   onCheckedChange={setSoloCambios}
                   aria-label="Solo cambios de algoritmo"
                 />
                 Solo cambios de algoritmo
-              </label>
+              </Label>
             </div>
 
             <Card>

@@ -15,6 +15,7 @@ import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual"
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -224,7 +225,7 @@ function PresupuestoEditable({
     }
   };
   return (
-    <label className="inline-flex items-center gap-1.5">
+    <Label className="inline-flex items-center gap-1.5">
       {etiqueta}
       <Input
         type="number"
@@ -242,7 +243,7 @@ function PresupuestoEditable({
       />
       {unidad}
       {valor === 0 && <span className="text-muted-foreground/80">(Sin límite)</span>}
-    </label>
+    </Label>
   );
 }
 
@@ -430,7 +431,7 @@ export function PanelPresupuesto({
             tok · {costeUsd(presupuesto.gastado.coste_usd)} · {presupuesto.gastado.generaciones} gen
           </p>
           {esAdmin && (
-            <label className="flex items-center gap-2 text-sm">
+            <Label className="flex items-center gap-2 text-sm">
               <span
                 className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}
               >
@@ -446,7 +447,7 @@ export function PanelPresupuesto({
                     : "Parada de emergencia: corta toda la generación con IA, incluida la manual"
                 }
               />
-            </label>
+            </Label>
           )}
         </div>
         {/* Tope en USD del ámbito (global o de la marca): el control de coste editable por admin. */}

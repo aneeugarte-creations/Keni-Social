@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { nombreMarca, nombreRed, plural, porcentaje } from "@/lib/formato";
 import type { MarcaDisponible, PuntoDistribucion } from "@/types";
@@ -277,13 +278,13 @@ export function MapaAlcance({
             ciudad para una vista MÁS DENSA (muchas más torres). Solo Instagram expone ciudades;
             en el resto de redes la píldora queda deshabilitada con honestidad. */}
         <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 shadow-lg backdrop-blur">
-          <label
+          <Label
             htmlFor="alcance-ciudades"
             className="cursor-pointer select-none text-xs font-medium text-neutral-700"
             title={redSel === "instagram" ? undefined : "Solo Instagram expone ciudades"}
           >
             Ciudades
-          </label>
+          </Label>
           <Switch
             id="alcance-ciudades"
             checked={usaCiudades}

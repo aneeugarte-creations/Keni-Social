@@ -107,14 +107,14 @@ export function VistaRevisarCambios({
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitulo}</p>
             ) : null}
           </div>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <Label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
             Solo cambios
             <Switch
               checked={soloCambios}
               onCheckedChange={setSoloCambios}
               aria-label="Solo cambios"
             />
-          </label>
+          </Label>
         </header>
 
         {/* ───────── Cuerpo: el diff, centrado a ancho de lectura ───────── */}
