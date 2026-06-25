@@ -242,7 +242,7 @@ def _migrar_reorg_originales_a_portal(con: Any) -> None:
         return
     filas = con.execute(
         "SELECT id, objeto FROM catalogo_media "
-        "WHERE fuente = 'portal' AND objeto LIKE 'originales/%'"
+        "WHERE fuente = 'portal' AND objeto LIKE 'originales/%%'"
     ).fetchall()
     if not filas:
         return
