@@ -54,6 +54,7 @@ import os
 import re
 import time
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -87,6 +88,11 @@ NOMBRE = "metricool"
 # `America/Mexico_City` alinea los días del piloto con los del medio. Configurable por env
 # para otros husos sin tocar código.
 _TZ = os.environ.get("KENI_METRICAS_TZ", "America/Mexico_City")
+
+# Zona en la que Metricool sirve sus datos (server tz): devuelve Europe/Madrid aunque se pida
+# otra. Las horas-del-día de `besttimes` se convierten desde aquí a `_TZ` (CDMX) para que la
+# recomendación caiga en la hora local del medio. Configurable por env.
+_TZ_METRICOOL = os.environ.get("KENI_METRICAS_TZ_ORIGEN", "Europe/Madrid")
 
 # Timeout del cliente HTTP de Metricool. El agregado mensual de posts de cuentas
 # muy activas (p.ej. YouTube de Claro Sports: ~10k posts/mes) tarda 25-30s en
@@ -244,6 +250,21 @@ _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
 # El puente es `GET /v2/scheduler/posts/{id}`: su `providers[].id`/`publicUrl` dan el id
 # nativo (o la URL pública) con el que SÍ se casa la analítica.
 ENDPOINT_SCHEDULER_POST = "/v2/scheduler/posts"
+
+# Mejores horas de publicación por red: `/v2/scheduler/besttimes/{provider}` (provider = nombre
+# Metricool de la red). Devuelve `{data:[{dayOfWeek:1-7, bestTimesByHour:[{hourOfDay:0-23,
+# value}]}]}`; `value` es un score SIN normalizar cuya magnitud varía por red.
+ENDPOINT_BESTTIMES = "/v2/scheduler/besttimes"
+
+
+def _hora_en_tz(hora: int, origen: str, destino: str) -> int:
+    """Convierte una hora-del-día (0..23) de la zona `origen` a la zona `destino`.
+
+    Usa la fecha de hoy como referencia para resolver el offset (DST incluido). Como
+    `besttimes` da hora-del-día sin fecha, es una aproximación suficiente para una franja.
+    """
+    ref = datetime.now(ZoneInfo(origen)).replace(hour=hora, minute=0, second=0, microsecond=0)
+    return ref.astimezone(ZoneInfo(destino)).hour
 
 # Shortcode de Instagram dentro de una URL `/p/{shortcode}/` o `/reel/{shortcode}/`
 # (publicUrl del scheduler o `url`/`reelUrl` del registro de analítica): es la clave de
@@ -906,6 +927,55 @@ class FuenteMetricool:
         return [
             {"fecha": f.isoformat(), "por_red": por_dia[f]} for f in sorted(por_dia)
         ]
+
+    def mejores_horas(self, cuenta_id: str, red: Plataforma) -> list[list[float]]:
+        """Matriz 7x24 (día×hora) de score de mejor hora de publicación, normalizada a 0..1.
+
+        Lee `/v2/scheduler/besttimes/{provider}` (provider = nombre Metricool de la red). El
+        `value` de cada (dayOfWeek, hourOfDay) es un score SIN normalizar cuya magnitud varía
+        por red, así que se divide por el máximo de la matriz → 0..1 (comparable entre redes).
+        Las horas se convierten de la zona de Metricool (`_TZ_METRICOOL`) a CDMX (`_TZ`); las
+        filas son dayOfWeek 1..7 → índice 0..6 (sin corrección de día al cruzar medianoche: solo
+        la hora se expone aguas abajo). Degrada a una matriz de ceros si la red no está en el
+        catálogo, la API falla o no trae datos (honesto, sin inventar franjas).
+        """
+        matriz = [[0.0] * 24 for _ in range(7)]
+        provider = _RED_METRICOOL.get(red)
+        if not provider:
+            return matriz
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}{ENDPOINT_BESTTIMES}/{provider}",
+                params=self._params_base(cuenta_id),
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — sin besttimes: matriz de ceros (honesto)
+            log.warning("metricool: besttimes %s/%s falló: %s", provider, cuenta_id, e)
+            return matriz
+        for dia in datos.get("data") or []:
+            if not isinstance(dia, dict):
+                continue
+            dow = _entero(dia.get("dayOfWeek"))
+            if not 1 <= dow <= 7:
+                continue
+            fila = matriz[dow - 1]
+            for slot in dia.get("bestTimesByHour") or []:
+                if not isinstance(slot, dict):
+                    continue
+                hora = _entero(slot.get("hourOfDay"))
+                if not 0 <= hora <= 23:
+                    continue
+                try:
+                    valor = float(slot.get("value") or 0.0)
+                except (TypeError, ValueError):
+                    valor = 0.0
+                if valor > 0:
+                    fila[_hora_en_tz(hora, _TZ_METRICOOL, _TZ)] = valor
+        maximo = max((v for fila in matriz for v in fila), default=0.0)
+        if maximo <= 0:
+            return matriz
+        return [[v / maximo for v in fila] for fila in matriz]
 
     def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
         """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.

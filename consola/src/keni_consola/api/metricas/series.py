@@ -27,6 +27,7 @@ from ._comun import (
     _log,
     _validar_formatos,
     _validar_rango,
+    _validar_red,
     _validar_redes,
     marcas,
     metricas_cache,
@@ -35,7 +36,7 @@ from ._comun import (
 
 __all__ = [
     "tendencia", "seguidores", "serie_alcance", "desglose", "crosstab", "correlacion",
-    "ads", "ingesta",
+    "ads", "ingesta", "mejor_hora",
 ]
 
 # Un canal (marca×red×formato) se marca ESTANCADO si su última pieza es >= este nº de días
@@ -331,6 +332,31 @@ async def serie_alcance(request: Request) -> Response:
     if redes:
         payload = _filtrar_alcance_por_red(payload, redes)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def mejor_hora(request: Request) -> Response:
+    """GET /api/programacion/mejor-hora: mejor hora de publicación (CDMX) de una marca×red.
+
+    `?marca=` y `?red=` (ambos obligatorios): devuelve `{"hora": "HH:mm"|null}`. null si la
+    fuente no expone besttimes o no hay datos para esa red. Computado al vuelo (en executor).
+    """
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        red = _validar_red(request.query_params.get("red"))
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if not marca or not red:
+        return JSONResponse(
+            {"error": "Faltan parámetros obligatorios: marca y red."}, status_code=400
+        )
+    try:
+        hora = await run_in_threadpool(servicio.mejor_hora, marca, red)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al calcular la mejor hora (marca=%s, red=%s).", marca, red)
+        return JSONResponse({"error": "No se pudo calcular la mejor hora."}, status_code=500)
+    return JSONResponse({"hora": hora})
 
 
 async def desglose(request: Request) -> Response:

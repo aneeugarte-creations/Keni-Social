@@ -140,6 +140,7 @@ __all__ = [
     "construir_crosstab",
     "construir_correlacion_seguidores",
     "construir_metricas_pieza",
+    "mejor_hora",
     "etiqueta_rango",
     "instantanea_config",
     "guardar_fuente_y_alcance",
@@ -665,6 +666,39 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
         neto_por_red=neto_por_red,
     )
     return serie.model_dump(mode="json")
+
+
+def mejor_hora(marca: str, red: str) -> str | None:
+    """Mejor hora de publicación (CDMX, "HH:mm") para una marca×red, o None si no hay datos.
+
+    Reúsa `fuente.mejores_horas` (matriz 7x24 normalizada de besttimes): la mejor franja es la
+    celda de mayor score; se devuelve solo su HORA (la franja, sin día). None si la fuente no
+    expone besttimes (muestra/compuesta), la red no es válida o no hay datos para esa red.
+    """
+    fuente = _fuente(marca)
+    fn = getattr(fuente, "mejores_horas", None)
+    if fn is None:
+        return None
+    try:
+        plat = Plataforma(red)
+    except ValueError:
+        return None
+    mejor_val = 0.0
+    mejor_hora_int: int | None = None
+    for c in fuente.cuentas():
+        try:
+            matriz = fn(c.id, plat)
+        except AttributeError:
+            # La fuente envuelta no la implementa (FuenteScoped lo propaga): sin besttimes.
+            return None
+        for fila in matriz:
+            for hora, val in enumerate(fila):
+                if val > mejor_val:
+                    mejor_val = val
+                    mejor_hora_int = hora
+    if mejor_hora_int is None:
+        return None
+    return f"{mejor_hora_int:02d}:00"
 
 
 def construir_serie_alcance(rango: str = "mes", marca: str | None = None) -> dict:

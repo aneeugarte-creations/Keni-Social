@@ -249,6 +249,39 @@ def test_serie_alcance_red_invalida_devuelve_400(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# /api/programacion/mejor-hora                                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_mejor_hora_200_devuelve_hora(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+    r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=instagram")
+    assert r.status_code == 200
+    assert r.json() == {"hora": "20:00"}
+
+
+def test_mejor_hora_null_si_sin_datos(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: None)
+    r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=instagram")
+    assert r.status_code == 200
+    assert r.json() == {"hora": None}
+
+
+def test_mejor_hora_red_invalida_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+    r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_mejor_hora_sin_red_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, mejor_hora=lambda marca, red: "20:00")
+    r = cliente.get("/api/programacion/mejor-hora?marca=claro_sports")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+# --------------------------------------------------------------------------- #
 # /api/metricas/desglose                                                       #
 # --------------------------------------------------------------------------- #
 

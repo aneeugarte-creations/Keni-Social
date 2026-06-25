@@ -24,6 +24,7 @@ from keni_metricas.fuentes.metricool import (
     FuenteMetricool,
     _acotar_posts_por_rango,
     _fecha,
+    _hora_en_tz,
 )
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.schema import MotivoOmision, Plataforma, ResumenMetricas
@@ -1072,6 +1073,55 @@ def test_serie_alcance_solo_instagram_via_timelines_reach():
     ]
     req = next((r for r in capturadas if r.url.params.get("metric") == "reach"), None)
     assert req is not None and req.url.params.get("subject") == "account"
+
+
+@respx.mock
+def test_mejores_horas_matriz_normalizada_y_convertida_a_cdmx():
+    """mejores_horas lee besttimes del provider, normaliza el score a 0..1 y coloca la franja
+    en su hora CDMX (Metricool sirve en Europe/Madrid)."""
+    capturadas: list[httpx.Request] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "dayOfWeek": 1,
+                        "bestTimesByHour": [
+                            {"hourOfDay": 18, "value": 80.0},  # franja fuerte
+                            {"hourOfDay": 9, "value": 40.0},
+                        ],
+                    }
+                ]
+            },
+        )
+
+    respx.get(f"{BASE}/v2/scheduler/besttimes/instagram").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        matriz = _fuente(cli).mejores_horas("claro_sports", Plataforma.instagram)
+
+    assert len(matriz) == 7 and all(len(fila) == 24 for fila in matriz)
+    # La franja más fuerte queda normalizada a 1.0; la otra a 0.5 (40/80).
+    valores = [v for fila in matriz for v in fila if v > 0]
+    assert max(valores) == 1.0
+    assert sorted(valores) == [0.5, 1.0]
+    # La hora 18 de Madrid se reubica a su hora CDMX (≠ 18) en la matriz.
+    h18_cdmx = _hora_en_tz(18, "Europe/Madrid", "America/Mexico_City")
+    assert matriz[0][h18_cdmx] == 1.0
+    assert capturadas[0].url.params.get("userId") == "999"
+
+
+@respx.mock
+def test_mejores_horas_degrada_a_ceros_si_falla():
+    """Sin besttimes (API caída) -> matriz 7x24 de ceros (sin inventar franjas)."""
+    respx.get(f"{BASE}/v2/scheduler/besttimes/instagram").mock(
+        return_value=httpx.Response(500)
+    )
+    with httpx.Client() as cli:
+        matriz = _fuente(cli).mejores_horas("claro_sports", Plataforma.instagram)
+    assert matriz == [[0.0] * 24 for _ in range(7)]
 
 
 @respx.mock

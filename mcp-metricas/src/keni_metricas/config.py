@@ -704,6 +704,32 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.serie_seguidores(cuenta_id, rango)
 
+    def serie_alcance(self, cuenta_id: str, rango: str):
+        """Delega la serie de alcance de cuenta si la fuente envuelta la expone.
+
+        Solo Metricool la implementa (muestra/compuesta no). Si la envuelta no la tiene,
+        propaga `AttributeError` para que el llamante (`servicio`) degrade a serie vacía —
+        igual que `serie_seguidores`. SIN esto, el alcance por-marca (siempre envuelto en
+        `FuenteScoped`) salía siempre vacío.
+        """
+        if not hasattr(self._fuente, "serie_alcance"):
+            raise AttributeError("la fuente envuelta no expone serie_alcance")
+        self._verificar(cuenta_id)
+        return self._fuente.serie_alcance(cuenta_id, rango)
+
+    def mejores_horas(self, cuenta_id: str, red):
+        """Delega la matriz de mejores horas (besttimes) si la fuente envuelta la expone.
+
+        Solo Metricool la implementa (muestra/compuesta no). Si la envuelta no la tiene,
+        propaga `AttributeError` para que el llamante (`servicio.mejor_hora`) degrade a None —
+        igual que `serie_seguidores`. SIN esto, la mejor hora por-marca (siempre envuelta en
+        `FuenteScoped`) no se calcularía.
+        """
+        if not hasattr(self._fuente, "mejores_horas"):
+            raise AttributeError("la fuente envuelta no expone mejores_horas")
+        self._verificar(cuenta_id)
+        return self._fuente.mejores_horas(cuenta_id, red)
+
     def metricas_de_post(self, cuenta_id: str, plat, id_post: str, **kw):
         """Delega el rendimiento de un post si la fuente envuelta lo expone (dispatch opcional).
 

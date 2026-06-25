@@ -319,6 +319,57 @@ def test_serie_alcance_degrada_sin_alcance():
     assert s["puntos"] == []
 
 
+def test_mejor_hora_devuelve_la_franja_de_mayor_score(monkeypatch):
+    """mejor_hora toma la celda de mayor score de la matriz de besttimes y devuelve su hora."""
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "metricool"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def mejores_horas(self, cuenta_id, red):
+            matriz = [[0.0] * 24 for _ in range(7)]
+            matriz[2][20] = 1.0  # la mejor franja: 20:00
+            matriz[0][7] = 0.4
+            return matriz
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _Fuente())
+    assert servicio.mejor_hora("claro_sports", "instagram") == "20:00"
+
+
+def test_mejor_hora_none_si_sin_datos_o_red_invalida(monkeypatch):
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "metricool"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def mejores_horas(self, cuenta_id, red):
+            return [[0.0] * 24 for _ in range(7)]  # sin franjas
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _Fuente())
+    assert servicio.mejor_hora("claro_sports", "instagram") is None
+    # Red no válida -> None (no revienta).
+    assert servicio.mejor_hora("claro_sports", "threads") is None
+
+
+def test_mejor_hora_none_si_fuente_sin_besttimes(monkeypatch):
+    class _FuenteSinBesttimes:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return FuenteMuestra().cuentas()[:1]
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _FuenteSinBesttimes())
+    assert servicio.mejor_hora("claro_sports", "instagram") is None
+
+
 # --------------------------------------------------------------------------- #
 # Metricool (respx): serie de seguidores REUSA /v2/analytics/timelines         #
 # --------------------------------------------------------------------------- #
