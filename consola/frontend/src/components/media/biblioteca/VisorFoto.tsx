@@ -3,18 +3,20 @@
  * navegación (flechas / teclado) + una ficha lateral con título, etiquetas y las acciones de control.
  *
  * Trabaja sobre fotos NORMALIZADAS (`FotoVista`), así que sirve igual para una foto GUARDADA de la
- * biblioteca y para un candidato EN VIVO del túnel. Las acciones se deciden por el `origen`:
- *  - túnel (en vivo): «Guardar en Fotografías» (baja el original por el túnel y lo cataloga).
- *  - biblioteca (guardada): «Descargar» (attachment) y «Borrar» (la quita de la biblioteca).
- *  - cualquiera con coordenadas de túnel: «Ráfaga» (navegar el burst del keeper).
- * El visor solo orquesta: las mutaciones viven en la página, que pasa los callbacks y los estados.
+ * biblioteca y para un candidato EN VIVO del túnel. Dos modos de navegación con las MISMAS flechas:
+ *  - GALERÍA (por defecto): recorre las fotos de la rejilla.
+ *  - RÁFAGA: cuando la foto tiene coordenadas de túnel, «Ráfaga» entra en el burst del keeper y las
+ *    flechas recorren los frames del mismo disparo, sin abrir otra ventana (como keni-fotos).
+ * Las acciones se deciden por el `origen`: túnel → Guardar; biblioteca → Descargar + Borrar.
  */
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Download, Images, Save, Trash2, X } from "lucide-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { api } from "@/lib/api";
 import type { FotoVista } from "@/types";
 
 const ETIQUETA_FUENTE: Record<string, string> = {
@@ -29,14 +31,14 @@ export interface VisorFotoProps {
   indice: number | null;
   onIndice: (indice: number) => void;
   onCerrar: () => void;
+  /** Marca activa (para pedir la ráfaga del túnel). */
+  marca?: string;
   /** Guardar en Fotografías (solo túnel). */
   onGuardar?: (foto: FotoVista) => void;
   /** Descargar el binario (solo biblioteca). */
   onDescargar?: (foto: FotoVista) => void;
   /** Quitar de la biblioteca (solo biblioteca). */
   onBorrar?: (foto: FotoVista) => void;
-  /** Navegar la ráfaga del burst (cuando hay coordenadas de túnel). */
-  onRafaga?: (foto: FotoVista) => void;
   /** Clave de la foto que se está guardando ahora (para el spinner). */
   guardandoClave?: string | null;
   /** Clave de la foto que se está borrando ahora. */
@@ -61,41 +63,83 @@ export function VisorFoto({
   indice,
   onIndice,
   onCerrar,
+  marca,
   onGuardar,
   onDescargar,
   onBorrar,
-  onRafaga,
   guardandoClave,
   borrandoClave,
 }: VisorFotoProps) {
   const abierto = indice !== null && indice >= 0 && indice < fotos.length;
+  const foto: FotoVista | null = abierto ? fotos[indice] : null;
+  const tieneRafaga = !!foto?.galeria_id && !!foto?.archivo;
+
+  // Modo RÁFAGA: navegar el burst del keeper DENTRO del visor (sin segundo modal).
+  const [modoRafaga, setModoRafaga] = React.useState(false);
+  const [indiceRafaga, setIndiceRafaga] = React.useState(0);
+  // Cambiar de foto (o cerrar) sale del modo ráfaga.
+  React.useEffect(() => {
+    setModoRafaga(false);
+  }, [foto?.clave]);
+
+  const rafaga = useQuery({
+    queryKey: ["rafaga", foto?.galeria_id ?? "", foto?.archivo ?? "", marca ?? ""],
+    queryFn: ({ signal }) =>
+      api.rafagaPropio(
+        {
+          galeria_id: foto!.galeria_id!,
+          archivo: foto!.archivo!,
+          marca,
+          dispositivo: foto!.dispositivo,
+        },
+        signal,
+      ),
+    enabled: abierto && modoRafaga && tieneRafaga,
+  });
+  const frames = rafaga.data?.fotos ?? [];
+  // Al cargar el burst, arranca en el keeper (la foto desde la que se entró).
+  React.useEffect(() => {
+    if (frames.length === 0) return;
+    const k = frames.findIndex((f) => f.archivo === foto?.archivo);
+    setIndiceRafaga(k >= 0 ? k : 0);
+  }, [rafaga.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const enRafaga = modoRafaga && frames.length > 0;
 
   const ir = React.useCallback(
     (delta: number) => {
-      if (indice === null || fotos.length === 0) return;
-      onIndice((indice + delta + fotos.length) % fotos.length);
+      if (enRafaga) {
+        setIndiceRafaga((i) => (i + delta + frames.length) % frames.length);
+      } else if (indice !== null && fotos.length > 0) {
+        onIndice((indice + delta + fotos.length) % fotos.length);
+      }
     },
-    [indice, fotos.length, onIndice],
+    [enRafaga, frames.length, indice, fotos.length, onIndice],
   );
 
   React.useEffect(() => {
     if (!abierto) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCerrar();
-      else if (e.key === "ArrowLeft") ir(-1);
+      if (e.key === "Escape") {
+        if (modoRafaga) setModoRafaga(false);
+        else onCerrar();
+      } else if (e.key === "ArrowLeft") ir(-1);
       else if (e.key === "ArrowRight") ir(1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [abierto, ir, onCerrar]);
+  }, [abierto, modoRafaga, ir, onCerrar]);
 
-  if (!abierto || indice === null) return null;
-  const foto = fotos[indice];
+  if (!abierto || foto === null) return null;
   const esTunel = foto.origen === "tunel";
   const guardando = guardandoClave === foto.clave;
   const borrando = borrandoClave === foto.clave;
   const fuenteLabel = foto.fuente ? ETIQUETA_FUENTE[foto.fuente] : "";
-  const tieneRafaga = !!foto.galeria_id && !!foto.archivo;
+
+  const frameActual = enRafaga ? frames[indiceRafaga] : null;
+  const src = frameActual ? frameActual.thumb : foto.url || foto.thumb;
+  const nombreArchivo = frameActual ? frameActual.archivo : foto.archivo;
+  const navegables = enRafaga ? frames.length > 1 : fotos.length > 1;
 
   return (
     <div
@@ -112,12 +156,12 @@ export function VisorFoto({
         {/* Imagen + navegación */}
         <div className="relative flex min-h-[40vh] flex-1 items-center justify-center bg-black md:min-h-0">
           <img
-            src={foto.url || foto.thumb}
-            alt={foto.titulo || foto.archivo || "Foto"}
+            src={src}
+            alt={foto.titulo || nombreArchivo || "Foto"}
             className="max-h-[calc(100dvh-2rem)] w-full object-contain md:w-auto md:max-w-full"
           />
 
-          {fotos.length > 1 && (
+          {navegables && (
             <>
               <Button
                 variant="secondary"
@@ -137,14 +181,35 @@ export function VisorFoto({
               >
                 <ChevronRight className="h-5 w-5" />
               </Button>
-              <div className="absolute left-3 top-3 rounded-md bg-black/70 px-2 py-1 font-mono text-xs font-medium text-white">
-                {indice + 1} / {fotos.length}
-              </div>
             </>
           )}
-          {foto.archivo && (
+
+          <div className="absolute left-3 top-3 flex items-center gap-2">
+            {enRafaga ? (
+              <>
+                <span className="rounded-md bg-black/70 px-2 py-1 font-mono text-xs font-medium text-white">
+                  {indiceRafaga + 1} / {frames.length}
+                </span>
+                {frameActual?.archivo === foto.archivo && <Badge variant="aviso">keeper</Badge>}
+              </>
+            ) : (
+              fotos.length > 1 && (
+                <span className="rounded-md bg-black/70 px-2 py-1 font-mono text-xs font-medium text-white">
+                  {indice + 1} / {fotos.length}
+                </span>
+              )
+            )}
+          </div>
+
+          {modoRafaga && rafaga.isLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <Spinner className="h-6 w-6 text-white" />
+            </div>
+          )}
+
+          {nombreArchivo && (
             <div className="absolute bottom-3 left-3 max-w-[80%] truncate rounded-md bg-black/70 px-2 py-1 font-mono text-xs text-white">
-              {foto.archivo}
+              {nombreArchivo}
             </div>
           )}
         </div>
@@ -195,15 +260,16 @@ export function VisorFoto({
                 Descargar
               </Button>
             )}
-            {tieneRafaga && onRafaga && (
+            {tieneRafaga && (
               <Button
-                variant="outline"
+                variant={modoRafaga ? "secondary" : "outline"}
                 size="sm"
                 className="flex-1 gap-1"
-                onClick={() => onRafaga(foto)}
+                aria-pressed={modoRafaga}
+                onClick={() => setModoRafaga((v) => !v)}
               >
                 <Images className="h-4 w-4" />
-                Ráfaga
+                {modoRafaga ? "Salir de ráfaga" : "Ráfaga"}
               </Button>
             )}
             {!esTunel && onBorrar && (
@@ -219,6 +285,13 @@ export function VisorFoto({
               </Button>
             )}
           </div>
+
+          {/* En modo ráfaga sin más frames: el disparo fue único. */}
+          {modoRafaga && !rafaga.isLoading && frames.length <= 1 && (
+            <p className="text-xs text-muted-foreground">
+              Disparo único: no hay más fotos en esta ráfaga.
+            </p>
+          )}
 
           {foto.etiquetas.length > 0 && (
             <Campo titulo="Etiquetas">

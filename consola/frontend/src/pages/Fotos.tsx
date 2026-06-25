@@ -35,7 +35,6 @@ import { toast } from "sonner";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { VisorFoto } from "@/components/media/biblioteca/VisorFoto";
-import { VisorRafaga, type RafagaRef } from "@/components/media/biblioteca/VisorRafaga";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -488,9 +487,6 @@ export default function Fotos() {
   const [visor, setVisor] = React.useState<{ fotos: FotoVista[]; indice: number } | null>(null);
   const abrirVisor = (fotos: FotoVista[], indice: number) => setVisor({ fotos, indice });
 
-  // Visor de ráfaga (burst del keeper).
-  const [rafagaRef, setRafagaRef] = React.useState<RafagaRef | null>(null);
-
   // Dispositivos conectados (SSE): alimentan las carpetas de partidos vivos + el indicador.
   const [dispositivos, setDispositivos] = React.useState<DispositivoPropio[]>([]);
   useEffect(() => {
@@ -597,25 +593,15 @@ export default function Fotos() {
         indice={visor?.indice ?? null}
         onIndice={(indice) => setVisor((v) => (v ? { ...v, indice } : v))}
         onCerrar={() => setVisor(null)}
+        marca={marca}
         onGuardar={(foto) => guardar.mutate(foto)}
         onDescargar={(foto) => foto.id && api.descargarBiblioteca(foto.id)}
         onBorrar={(foto) => {
           if (window.confirm("¿Quitar esta foto de la biblioteca?")) borrar.mutate(foto);
         }}
-        onRafaga={(foto) =>
-          setRafagaRef({
-            galeria_id: foto.galeria_id!,
-            archivo: foto.archivo!,
-            marca: foto.marca || marca,
-            dispositivo: foto.dispositivo,
-            titulo: foto.titulo,
-          })
-        }
         guardandoClave={guardar.isPending ? (guardar.variables as FotoVista)?.clave : null}
         borrandoClave={borrar.isPending ? (borrar.variables as FotoVista)?.clave : null}
       />
-
-      <VisorRafaga ref_={rafagaRef} onCerrar={() => setRafagaRef(null)} />
     </>
   );
 }
