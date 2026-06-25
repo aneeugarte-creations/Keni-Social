@@ -1571,6 +1571,40 @@ def test_copiar_semana_dos_veces_no_duplica_huecos(cliente):
     assert len(huecos) == 1
 
 
+def test_copiar_mes_de_mes_explicito(cliente):
+    """`copiar-mes` admite `de_mes`: siembra el mes destino desde el mes ORIGEN elegido (no solo el
+    anterior). 2026-05-25 + alineación de 1ª semana (35 d) cae en 2026-06-29."""
+    equipo = _crear_equipo(1)
+    luis = equipo[0]
+    _crear_turno(LUNES1, "2026-05-25", luis, franja="matutino", marca=MARCA)
+    r = cliente.post(
+        "/api/rota/copiar-mes",
+        json={"a_mes": "2026-06", "de_mes": "2026-05", "marca": MARCA},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["copiados"] == 1
+    semana = cliente.get(f"/api/rota/turnos?lunes=2026-06-29&marca={MARCA}").json()
+    assert any(
+        t["miembro_id"] == luis["id"] and t["estado"] == "propuesto" for t in semana["turnos"]
+    )
+
+
+def test_copiar_mes_de_mes_invalido_400(cliente):
+    r = cliente.post(
+        "/api/rota/copiar-mes",
+        json={"a_mes": "2026-06", "de_mes": "nope", "marca": MARCA},
+    )
+    assert r.status_code == 400
+
+
+def test_copiar_mes_de_mes_igual_destino_400(cliente):
+    r = cliente.post(
+        "/api/rota/copiar-mes",
+        json={"a_mes": "2026-06", "de_mes": "2026-06", "marca": MARCA},
+    )
+    assert r.status_code == 400
+
+
 def test_semana_nueva_se_prellena_desde_anterior(entorno):
     """Al abrir por PRIMERA vez una semana nueva (admin, marca concreta), sus turnos se
     prellenan copiando la anterior como borrador (propuesto). Ocurre una sola vez: reabrir

@@ -51,28 +51,36 @@ _MES_RE = re.compile(r"^\d{4}-\d{2}$")
 
 
 async def copiar_mes(request: Request) -> Response:
-    """POST /api/rota/copiar-mes: siembra el mes destino con el rol del MES ANTERIOR, semana a
+    """POST /api/rota/copiar-mes: siembra el mes destino con el rol de un mes origen, semana a
     semana (alineado por dia de semana: lunes<->lunes).
 
-    Cuerpo: `{a_mes: "YYYY-MM", marca, reemplazar?: bool}`. NO copia eventos; copia la rejilla
-    (franjas + turnos) de UNA marca. Con `reemplazar=true`, sobrescribe cada semana destino antes de
-    copiar (si no, rellena lo que falte). Es el punto de partida: luego el coordinador edita.
-    Devuelve `{copiados: N}`.
+    Cuerpo: `{a_mes: "YYYY-MM", de_mes?: "YYYY-MM", marca, reemplazar?: bool}`. `de_mes` elige el mes
+    origen; ausente -> el MES ANTERIOR al destino. NO copia eventos; copia la rejilla (franjas +
+    turnos) de UNA marca. Con `reemplazar=true`, sobrescribe cada semana destino antes de copiar (si
+    no, rellena lo que falte). Es el punto de partida: luego el coordinador edita. Devuelve
+    `{copiados: N}`.
 
     GRID POR MARCA: exige una marca concreta (no "Todas": cada rejilla se copia aparte).
     """
     datos = await leer_json(request)
     a_mes = str(datos.get("a_mes", "")).strip()
+    de_mes = str(datos.get("de_mes", "")).strip() or None
     reemplazar = bool(datos.get("reemplazar", False))
 
     if not _MES_RE.match(a_mes):
         return JSONResponse({"error": "Indica el mes destino (AAAA-MM)."}, status_code=400)
+    if de_mes is not None and not _MES_RE.match(de_mes):
+        return JSONResponse({"error": "Indica el mes origen (AAAA-MM)."}, status_code=400)
+    if de_mes is not None and de_mes == a_mes:
+        return JSONResponse(
+            {"error": "El mes origen y el destino no pueden ser el mismo."}, status_code=400
+        )
     marca, error = _marca_cuerpo(datos)
     if error is not None:
         return error
 
     n = await run_in_threadpool(
-        repos.copiar_mes_rota, a_mes, reemplazar=reemplazar, marca=marca
+        repos.copiar_mes_rota, a_mes, de_mes=de_mes, reemplazar=reemplazar, marca=marca
     )
     return JSONResponse({"copiados": n})
 

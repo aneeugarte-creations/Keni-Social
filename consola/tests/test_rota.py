@@ -96,6 +96,32 @@ def test_pares_semanas_copia_mes_entrada_invalida_vacio():
     assert r.pares_semanas_copia_mes("2026-06-01") == []
 
 
+def test_pares_semanas_copia_mes_origen_explicito_equivale_a_anterior():
+    # Pasar el mes anterior como origen explícito reproduce exactamente el comportamiento por
+    # defecto (junio es el mes anterior a julio).
+    assert r.pares_semanas_copia_mes("2026-07", "2026-06") == r.pares_semanas_copia_mes("2026-07")
+
+
+def test_pares_semanas_copia_mes_origen_distinto_del_anterior():
+    # Un origen que NO es el mes anterior (mayo -> agosto): cada par mapea una semana de mayo a una
+    # de la rejilla de agosto, alineado por día (offset múltiplo de 7) y la 1ª semana del origen cae
+    # en la 1ª del destino. Difiere del comportamiento por defecto (cuyo origen sería julio).
+    pares = r.pares_semanas_copia_mes("2026-08", "2026-05")
+    assert pares
+    primer_lunes_ago = r.lunes_de_semana_iso("2026-08-01")
+    ultimo_lunes_ago = r.lunes_de_semana_iso("2026-08-31")
+    for de_lunes, a_lunes in pares:
+        assert (date.fromisoformat(a_lunes) - date.fromisoformat(de_lunes)).days % 7 == 0
+        assert primer_lunes_ago <= a_lunes <= ultimo_lunes_ago
+    assert pares[0][1] == primer_lunes_ago
+    assert pares != r.pares_semanas_copia_mes("2026-08")
+
+
+def test_pares_semanas_copia_mes_origen_invalido_vacio():
+    assert r.pares_semanas_copia_mes("2026-06", "no-mes") == []
+    assert r.pares_semanas_copia_mes("2026-06", "2026-13") == []
+
+
 # --------------------------------------------------------------------------- #
 # Dataclasses (forma del dominio: la API construye estas instancias)            #
 # --------------------------------------------------------------------------- #

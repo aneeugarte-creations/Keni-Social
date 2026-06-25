@@ -171,14 +171,18 @@ def _lunes_semanas_del_mes(anio: int, mes: int) -> list[date]:
     return [l_primero + timedelta(weeks=i) for i in range(n + 1)]
 
 
-def pares_semanas_copia_mes(mes_destino_iso: str) -> list[tuple[str, str]]:
-    """Pares `(de_lunes, a_lunes)` para sembrar el mes `mes_destino_iso` ("YYYY-MM") con el rol del
-    MES ANTERIOR, alineado por dia de semana (lunes<->lunes; el offset es multiplo de 7).
+def pares_semanas_copia_mes(
+    mes_destino_iso: str, mes_origen_iso: str | None = None
+) -> list[tuple[str, str]]:
+    """Pares `(de_lunes, a_lunes)` para sembrar el mes `mes_destino_iso` ("YYYY-MM") con el rol de un
+    mes origen, alineado por dia de semana (lunes<->lunes; el offset es multiplo de 7).
 
-    Cada semana que solapa el mes anterior se mapea a la semana que cae `offset` dias despues; se
-    incluye solo si esa semana sigue solapando el mes destino. Las semanas del destino sin
-    equivalente en el origen quedan FUERA (no se siembran). Lista vacia si `mes_destino_iso` no es un
-    "YYYY-MM" valido. Pura (sin BD): la composicion con la copia real vive en `repos.copiar_mes_rota`.
+    `mes_origen_iso` (tambien "YYYY-MM") elige el mes que se copia; si es `None` se toma el MES
+    ANTERIOR al destino (comportamiento por defecto). La primera semana del origen se alinea con la
+    primera del destino y el resto sigue el mismo offset. Cada semana del origen se incluye solo si su
+    equivalente sigue solapando el mes destino; las semanas del destino sin equivalente quedan FUERA.
+    Lista vacia si algun mes no es un "YYYY-MM" valido. Pura (sin BD): la composicion con la copia
+    real vive en `repos.copiar_mes_rota`.
     """
     try:
         partes = mes_destino_iso.split("-")
@@ -188,14 +192,24 @@ def pares_semanas_copia_mes(mes_destino_iso: str) -> list[tuple[str, str]]:
         date(anio, mes, 1)  # valida que el mes sea 1..12
     except (ValueError, TypeError, AttributeError):
         return []
-    anio_ant, mes_ant = (anio - 1, 12) if mes == 1 else (anio, mes - 1)
+    if mes_origen_iso is None:
+        anio_ori, mes_ori = (anio - 1, 12) if mes == 1 else (anio, mes - 1)
+    else:
+        try:
+            partes_ori = mes_origen_iso.split("-")
+            if len(partes_ori) != 2:
+                return []
+            anio_ori, mes_ori = int(partes_ori[0]), int(partes_ori[1])
+            date(anio_ori, mes_ori, 1)
+        except (ValueError, TypeError, AttributeError):
+            return []
     lunes_dest = _lunes_semanas_del_mes(anio, mes)
-    lunes_ant = _lunes_semanas_del_mes(anio_ant, mes_ant)
-    offset = (lunes_dest[0] - lunes_ant[0]).days  # multiplo de 7 (ambos extremos son lunes)
+    lunes_ori = _lunes_semanas_del_mes(anio_ori, mes_ori)
+    offset = (lunes_dest[0] - lunes_ori[0]).days  # multiplo de 7 (ambos extremos son lunes)
     dest = set(lunes_dest)
     return [
         (ls.isoformat(), (ls + timedelta(days=offset)).isoformat())
-        for ls in lunes_ant
+        for ls in lunes_ori
         if (ls + timedelta(days=offset)) in dest
     ]
 

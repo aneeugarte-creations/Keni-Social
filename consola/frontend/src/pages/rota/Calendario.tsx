@@ -64,6 +64,7 @@ import {
   type ItemEventoCalendario,
 } from "./comun";
 import { ReparteMes } from "./ReparteMes";
+import { CopiarPeriodo } from "./CopiarPeriodo";
 import { lunesDeFecha } from "@/lib/rota-reparto";
 import { DialogoTiempoLibre } from "./DialogoTiempoLibre";
 import { useTiempoLibreActivo } from "./useConfigRota";
@@ -589,6 +590,8 @@ export function Calendario({
       <div className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
         Más opciones
       </div>
+      <CopiarPeriodo marca={marcaRejilla} mesActual={mesGestion} onCopiado={invalidar} />
+      <div className="my-1 h-px bg-border" />
       <ImportarDocumentoParrilla
         marca={marcaActiva ?? ""}
         onAplicado={invalidar}

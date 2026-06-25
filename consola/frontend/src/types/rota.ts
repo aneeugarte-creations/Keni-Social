@@ -742,6 +742,8 @@ export interface RespuestaCopiarSemana {
 export interface CuerpoCopiarMes {
   /** Mes destino "YYYY-MM". */
   a_mes: string;
+  /** Mes origen "YYYY-MM". Ausente => el mes anterior al destino. */
+  de_mes?: string;
   /** Si `true`, sobrescribe cada semana destino antes de copiar (si no, rellena). */
   reemplazar?: boolean;
   /** GRID POR MARCA: marca concreta cuya rejilla se copia (no "Todas"). */
