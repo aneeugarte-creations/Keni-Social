@@ -130,9 +130,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Label de seccion estilo dashboard: mayusculas, tracking ligero, gris. */
+  /* Label de seccion: tipo frase, peso medio, gris. Fuente unica del rotulo pequeno. */
   .text-label {
-    @apply text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground;
+    @apply text-xs font-medium text-muted-foreground;
   }
 
 }

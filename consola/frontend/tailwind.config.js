@@ -140,8 +140,6 @@ export default {
         mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
-        // Label de seccion guia Keni: mayusculas + tracking amplio + peso medio.
-        label: ["0.75rem", { lineHeight: "1rem", letterSpacing: "0.15em", fontWeight: "500" }],
         "tremor-label": ["0.75rem", { lineHeight: "1rem" }],
         "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
         "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],
