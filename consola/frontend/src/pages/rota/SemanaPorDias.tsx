@@ -3,7 +3,7 @@
 // número arriba a la derecha y sus franjas en texto («Mañana · 08:00–16:00» + los nombres). Se lee
 // como una FILA del mes, más alta. El color del bloque de franja indica el PERIODO del turno
 // (mañana ámbar · tarde naranja · noche rosa, vía `presentacionTurnoPorHora`); franja vacía =
-// hueco discontinuo neutro; «hoy» = anillo `keni-500` + número naranja. Sigue siendo editable: cada
+// hueco discontinuo neutro; «hoy» = tinte `keni-50` + número naranja. Sigue siendo editable: cada
 // persona lleva su × (al pasar el ratón) y cada franja su «+ Añadir»; el número del día abre el
 // «Resumen del día».
 import * as React from "react";
@@ -93,7 +93,7 @@ export function SemanaPorDias({
               className={cn(
                 "min-h-[16rem] min-w-0 border-b border-r bg-background p-1.5",
                 !esHoy && finde && "bg-muted/30 dark:bg-muted/10",
-                esHoy && "ring-1 ring-inset ring-keni-500/50",
+                esHoy && "bg-keni-50 dark:bg-keni-900/30",
               )}
             >
               {/* Número del día, arriba a la derecha y clicable (abre el resumen), como la celda

@@ -402,14 +402,14 @@ function RejillaMensual({
             <div
               key={fecha}
               className={`min-h-[5.25rem] border-b border-r p-1.5 print:min-h-[3.25rem] ${
-                sel
+                sel || esHoy
                   ? "bg-keni-50 dark:bg-keni-900/30"
                   : !delMes
                     ? "bg-muted/20"
                     : finde
                       ? "bg-muted/30"
                       : "bg-background"
-              } ${esHoy ? "ring-1 ring-inset ring-keni-500/50" : ""}`}
+              }`}
             >
               {seleccionable && delMes ? (
                 <button

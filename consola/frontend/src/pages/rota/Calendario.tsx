@@ -807,7 +807,7 @@ export function Calendario({
                         key={fecha}
                         className={`flex flex-col gap-1 px-2 py-2 ${
                           esHoy
-                            ? "bg-keni-50/70 ring-1 ring-inset ring-keni-500/40 dark:bg-keni-900/20"
+                            ? "bg-keni-50/70 dark:bg-keni-900/20"
                             : finde
                               ? "bg-muted/60 dark:bg-muted/30"
                               : "bg-background"
