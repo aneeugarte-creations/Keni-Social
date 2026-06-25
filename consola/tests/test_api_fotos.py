@@ -95,11 +95,11 @@ def test_actualizacion_es_publica_sin_sesion(entorno, monkeypatch, tmp_path):
     assert r.status_code == 200
 
 
-def test_fotos_info_sigue_exigiendo_sesion(entorno, monkeypatch, tmp_path):
+def test_fotos_descarga_sigue_exigiendo_sesion(entorno, monkeypatch, tmp_path):
     """El resto de `/api/fotos` NO es público: sin sesión -> 401 (solo lo abre el updater)."""
     _con_release(monkeypatch, tmp_path, _RELEASE)
     cli = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))  # sin cabecera de auth
-    assert cli.get("/api/fotos/info").status_code == 401
+    assert cli.get("/api/fotos/app").status_code == 401
 
 
 # --------------------------------------------------------------------------- #

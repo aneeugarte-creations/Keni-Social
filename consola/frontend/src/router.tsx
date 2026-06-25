@@ -16,7 +16,7 @@ import { Loader2 } from "lucide-react";
 const Imagen = lazy(() => import("@/pages/Imagen"));
 const Video = lazy(() => import("@/pages/Video"));
 const Audio = lazy(() => import("@/pages/Audio"));
-// Fotos: lanzador de la herramienta local keni-fotos (descarga + prompt/comandos). Página plana.
+// Fotos: Galería — descarga la app local keni-fotos + busca en las galerías conectadas. Página plana.
 const Fotos = lazy(() => import("@/pages/Fotos"));
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la

@@ -377,8 +377,8 @@ _RUTA_FOTOS_UPDATER = "/api/fotos/updater"
 
 
 def _es_fotos_actualizacion(metodo: str, ruta: str) -> bool:
-    """True si es un GET publico del auto-update de keni-fotos (manifiesto o binario; ver arriba)."""
-    if metodo != "GET":
+    """True si es un GET/HEAD publico del auto-update de keni-fotos (manifiesto o binario; ver arriba)."""
+    if metodo not in ("GET", "HEAD"):
         return False
     if ruta == _RUTA_FOTOS_UPDATER:
         return True

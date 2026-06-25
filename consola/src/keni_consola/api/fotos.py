@@ -1,20 +1,17 @@
-"""API HTTP de la app «Fotos» — el LANZADOR de la herramienta local keni-fotos.
+"""API HTTP de la app «Fotos» — descarga y auto-update de la app local keni-fotos, más el
+túnel y el login OPCIONAL del escritorio.
 
-Fotos no procesa imágenes en la nube: la consola no puede leer el disco del equipo de
-Ale, así que esta superficie sirve para DESCARGAR la herramienta local (el `.dmg` de la app
-de escritorio Tauri) y entregar el prompt + los comandos para montarla con un Claude local.
+Fotos no procesa imágenes en la nube: la consola no puede leer el disco del equipo de Ale.
+Esta superficie sirve para DESCARGAR la app de escritorio (el `.dmg`), auto-actualizarla y,
+vía el túnel, buscar en sus galerías locales.
 
 QUE VIVE AQUI
 =============
-  - `GET /api/fotos/info`    -> `{version, prompt_claude, comandos, instrucciones}`: el texto
-                                que la página muestra para copiar (prompt de Claude, comandos y
-                                pasos). Constantes legibles, fuente única de verdad del lanzador.
   - `GET /api/fotos/app`     -> descarga el `.dmg` de la app de escritorio (FileResponse,
                                 attachment). La ruta sale de `KENI_FOTOS_APP`; por defecto, el
                                 fichero colocado junto a este módulo en `_fotos_bundle/`.
-  - `GET /api/fotos/bundle`  -> descarga `keni-fotos.zip` (el código, modo avanzado con Claude).
-                                Ruta de `KENI_FOTOS_BUNDLE` o el de por defecto en `_fotos_bundle/`.
-                                Si falta el fichero, responde 404 claro, no casca.
+  - `GET /api/fotos/updater` -> el `.app.tar.gz` firmado que descarga el auto-update de Tauri.
+                                PUBLICO (la app lo baja sin sesión); ver la exención en `seguridad.py`.
   - `GET /api/fotos/actualizacion/{target}/{arch}/{version}` -> endpoint del auto-update de Tauri
                                 (`tauri-plugin-updater`). 204 si la versión instalada ya es la
                                 última; 200 con el JSON Tauri (version/notes/pub_date/platforms)
@@ -53,51 +50,11 @@ from .._http_json import leer_json
 
 _log = logging.getLogger("keni_consola.fotos")
 
-# Versión de la herramienta local que sirve este lanzador. Es la fuente de verdad del
-# auto-update: la app local compara su versión contra esta y se actualiza si va por detrás.
-VERSION = "0.3.0"
-
-# Changelog corto (2-3 líneas) de la versión actual; se muestra en la ficha de la página.
-CHANGELOG = [
-    "Mismo marco que keni-social: menú de usuario, tema claro/oscuro y página Sistema.",
-    "Galería con la lista de partidos procesados; sube y revisa varios.",
-    "Copia y descarta fotos/ráfagas (a la Papelera) y detecta Claude al instante.",
-]
-
-# Prompt que el equipo pega en su Claude local tras descomprimir el bundle. El Claude local NO
-# procesa fotos: su único trabajo es COMPILAR y LANZAR la app; la propia app guía a la persona.
-PROMPT_CLAUDE = (
-    "Eres el agente local de keni-fotos. Tu ÚNICO trabajo es compilar y lanzar la app: "
-    "lee el CLAUDE.md de esta carpeta y déjala abierta en el navegador. NO proceses fotos "
-    "tú; la propia app guía a la persona para elegir la carpeta del partido, ponerle nombre "
-    "y ejecutar el etiquetado. Cuando la app esté abierta, avísame."
-)
-
-# Comandos para descomprimir y arrancar, en orden. `ls -t … | head -1` coge el zip más reciente,
-# así funciona aunque el navegador lo guarde como «keni-fotos (1).zip», «(2)», etc.
-COMANDOS = [
-    "cd ~/Downloads",
-    'unzip -o "$(ls -t keni-fotos*.zip | head -1)"',
-    "cd keni-fotos && claude",
-]
-
-# Pasos 1·2·3 que guían a la persona desde la descarga hasta tener la app abierta.
-INSTRUCCIONES = [
-    "Descarga keni-fotos y descomprímelo (los comandos de abajo lo hacen por ti).",
-    "Abre Claude Code en la carpeta keni-fotos y pega el prompt: compila y lanza la app.",
-    "En la app: elige tu carpeta de fotos, ponle nombre al partido y pulsa Procesar.",
-]
-
-# Dos artefactos descargables (Content-Disposition attachment):
-#  - keni-fotos.dmg : la app de escritorio Tauri (.dmg), vía principal de la página ("Descargar app").
-#  - keni-fotos.zip : el código, que usa el modo avanzado (montar con Claude). Ambos en `_fotos_bundle/`.
-# Binarios servidos desde aquí (Garage es interno, no tiene URL pública): el .dmg de descarga,
-# el zip del modo avanzado y el .app.tar.gz firmado del auto-update (al que apunta `release.json`).
-_NOMBRE_BUNDLE = "keni-fotos.zip"
+# Binarios servidos desde aquí (Garage es interno, no tiene URL pública): el `.dmg` de descarga
+# y el `.app.tar.gz` firmado del auto-update (al que apunta `release.json`). Ambos en `_fotos_bundle/`.
 _NOMBRE_UPDATER = "keni-fotos.app.tar.gz"
 _DIR_BUNDLE = Path(__file__).parent / "_fotos_bundle"
 _APP_DEFECTO = _DIR_BUNDLE / "keni-fotos.dmg"
-_BUNDLE_DEFECTO = _DIR_BUNDLE / _NOMBRE_BUNDLE
 _UPDATER_DEFECTO = _DIR_BUNDLE / _NOMBRE_UPDATER
 
 # Manifiesto de la release actual (lo actualiza el release script de keni-fotos en cada versión).
@@ -112,12 +69,6 @@ def _ruta_app() -> Path:
     """Ruta del .dmg de la app: `KENI_FOTOS_APP` si está definida, si no la de por defecto."""
     env = (os.environ.get("KENI_FOTOS_APP") or "").strip()
     return Path(env) if env else _APP_DEFECTO
-
-
-def _ruta_bundle() -> Path:
-    """Ruta del zip a servir: `KENI_FOTOS_BUNDLE` si está definida, si no la de por defecto."""
-    env = (os.environ.get("KENI_FOTOS_BUNDLE") or "").strip()
-    return Path(env) if env else _BUNDLE_DEFECTO
 
 
 def _ruta_updater() -> Path:
@@ -161,19 +112,6 @@ def _parsear_version(texto: str) -> tuple[int, int, int] | None:
     return (nums[0], nums[1], nums[2])
 
 
-async def info(request: Request) -> Response:
-    """GET /api/fotos/info: el texto del lanzador (prompt, comandos y pasos) + la versión."""
-    return JSONResponse(
-        {
-            "version": VERSION,
-            "changelog": CHANGELOG,
-            "prompt_claude": PROMPT_CLAUDE,
-            "comandos": COMANDOS,
-            "instrucciones": INSTRUCCIONES,
-        }
-    )
-
-
 def _servir_descarga(ruta: Path, nombre: str, media_type: str) -> Response:
     """Sirve un fichero como descarga, o 404 con mensaje si aún no está colocado."""
     if not ruta.is_file():
@@ -194,11 +132,6 @@ def _nombre_dmg() -> str:
 async def app_descarga(request: Request) -> Response:
     """GET /api/fotos/app: descarga el `.dmg` de la app de escritorio Tauri (macOS Apple Silicon)."""
     return _servir_descarga(_ruta_app(), _nombre_dmg(), "application/x-apple-diskimage")
-
-
-async def bundle(request: Request) -> Response:
-    """GET /api/fotos/bundle: el código `keni-fotos.zip` (modo avanzado, montar con Claude)."""
-    return _servir_descarga(_ruta_bundle(), _NOMBRE_BUNDLE, "application/zip")
 
 
 async def updater(request: Request) -> Response:
@@ -404,9 +337,7 @@ def _token_bearer_ws(websocket: WebSocket) -> str | None:
 
 
 RUTAS = [
-    Route("/api/fotos/info", info, methods=["GET"]),
     Route("/api/fotos/app", app_descarga, methods=["GET"]),
-    Route("/api/fotos/bundle", bundle, methods=["GET"]),
     Route("/api/fotos/updater", updater, methods=["GET"]),
     Route(
         "/api/fotos/actualizacion/{target}/{arch}/{version}",
