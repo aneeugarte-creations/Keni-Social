@@ -158,23 +158,24 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   (45min), lo borra y retoma el autoheal. El dir `estado` se crea 0777 para que el guardian (otro
   uid) pueda borrar ese flag rancio.
 
-- **incident-keeper: el autoheal que ARREGLA código (PROMOVIBLE):** el guardian solo RESUCITA
-  (`docker start`); no arregla la causa. Cuando un servicio FLAPEA (resucitado N veces y sigue
-  cayendo: típicamente un commit reciente rompió el arranque/migración), el guardian recoge la
-  evidencia (logs del contenedor vía su proxy) y escribe `estado/incidente.json`. El servicio
-  `incident-keeper` (imagen del worker reutilizada; sin build propio) lo detecta y lanza UN
-  `claude -p` con el ROL de `deploy/incident-keeper/ROL.md` —clon del "green keeper" para incidentes
-  de prod— que diagnostica, decide operativo vs. de código y, si es de código, COMMITEA el fix a
-  `main` (que dispara test->deploy) con la credencial gh de `/data/gh` y la cuenta de Claude de
-  `/data/claude-cfg` (las mismas que worker-dev). Salvaguardas: NO toca docker (mitigación = guardian)
-  ni datos/Postgres/secretos (límites duros en el ROL -> escala dejando diagnóstico en su log); un
-  fix malo lo atrapa el CI (deploy gateado por tests) y el rollback `:previa`; escalada rate-limitada
-  (1/ventana) y un solo keeper a la vez (lock). DORMIDO por defecto: el guardián trae
-  `KENI_GUARDIAN_ESCALAR=0`, así que el keeper se despliega y queda LISTO pero NO se le dispara (solo
-  sigue el autoheal de EXITED). Para ACTIVAR el auto-fix de código pon `KENI_GUARDIAN_ESCALAR=1` (env
-  del guardian o `.env`) y recrea el guardián. Registro: `docker logs keni-social-incident-keeper-1`.
-  keeper.sh/ROL.md van bind-montados desde el dir estable: el ROL se relee en cada incidente; un
-  cambio estructural en keeper.sh aplica al próximo recreate (bump del worker).
+- **incident-keeper: el green keeper en la nube (PROMOVIBLE):** servicio `claude -p` (imagen del
+  worker reutilizada, sin build propio) que mantiene `main` sano y promueve el fix a `main` con la
+  credencial gh de `/data/gh` y la cuenta de Claude de `/data/claude-cfg` (las mismas que worker-dev).
+  Rol en `deploy/incident-keeper/ROL.md`. DOS disparos, mismo motor (un solo keeper a la vez, lock):
+  - **CI ROJO (el principal, réplica de ci-verde):** `ci_watch.py` lee el datastore de Woodpecker
+    (sqlite montado read-only en `/woodpecker`) y, si el ÚLTIMO pipeline de `main` está en rojo REAL
+    (excluye cancelaciones exit 126), el keeper lo arregla y promueve hasta volver a verde. Tope de
+    intentos por ventana. Activar con `KENI_KEEPER_CI=1`.
+  - **INCIDENTE de prod:** cuando un servicio FLAPEA, el guardian recoge la evidencia (logs vía su
+    proxy) y escribe `estado/incidente.json`; el keeper lo lee y arregla. Activar con
+    `KENI_GUARDIAN_ESCALAR=1` (en el guardian).
+  Salvaguardas: el keeper NO toca docker ni datos/Postgres/secretos (límites duros en el ROL ->
+  escala dejando diagnóstico en su log); un fix malo lo atrapa el CI (deploy gateado por tests) y el
+  rollback `:previa`; no actúa durante un deploy (flag). DORMIDO por defecto: `KENI_KEEPER_CI=0` y
+  `KENI_GUARDIAN_ESCALAR=0` — el servicio se despliega LISTO pero no se dispara. Para activar, pon la
+  env correspondiente (en el `.env` o el servicio) y recrea. Registro:
+  `docker logs keni-social-incident-keeper-1`. keeper.sh/ROL.md/ci_watch.py van bind-montados desde
+  el dir estable: el ROL se relee en cada incidente; un cambio estructural aplica al próximo recreate.
 
 - **mensaje honesto en un hueco (PROMOVIBLE):** `deploy.sh` crea `deploy/estado/desplegando` al
   empezar y lo borra al salir (trap, pase lo que pase). El nginx del `front` lo lee con
