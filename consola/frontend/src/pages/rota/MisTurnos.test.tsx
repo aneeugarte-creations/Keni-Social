@@ -100,6 +100,14 @@ describe("agruparEquipoPorFecha", () => {
     expect(dia[0].personas.map((p) => p.nombre)).toEqual(["Ana", "Beto"]);
   });
 
+  it("a partir de las 13:00 ya es Tarde (aunque la franja diga Mañana)", () => {
+    const dia = agruparEquipoPorFecha([
+      turno({ franja_nombre: "Mañana", inicio: "13:00", fin: "21:00" }),
+    ]).get("2026-06-03")!;
+    expect(dia.map((f) => f.nombre)).toEqual(["Tarde"]);
+    expect(dia[0].clave).toBe("tarde");
+  });
+
   it("no mezcla tarde y noche: cada hora va a su banda", () => {
     const dia = agruparEquipoPorFecha([
       turno({ inicio: "17:00", fin: "01:00", miembro_id: "a", miembro_nombre: "Ana" }),
