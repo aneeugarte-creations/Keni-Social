@@ -1,19 +1,20 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /**
- * Tarjeta unificada "Estamos actualizando la consola": el mismo lenguaje calmado para CUALQUIER
+ * Panel unificado "Estamos actualizando la consola": el mismo lenguaje calmado para CUALQUIER
  * indisponibilidad temporal —el front recreándose (página de mantenimiento) o el back desplegando
  * (puerta de sesión + velo en la app)—. Nunca un error rojo alarmante: una actualización es algo
- * esperado y reversible, no un fallo. Wordmark KENI + título + barra de progreso (curva que frena
- * cerca del 94%, nunca llega sola al 100%) + opcionalmente un botón "Reintentar".
+ * esperado y reversible, no un fallo.
  *
- * El 100% solo lo pone una señal REAL de disponibilidad (`sondearListo`); si no se provee, la
- * barra avanza y el padre desmonta el panel cuando el servicio vuelve (la app reaparece sola).
+ * Lenguaje minimalista (sin caja ni sombra, como los estados vacíos de la app): un eyebrow KENI
+ * apagado, el título en la tipografía de la app, el progreso reducido a un HILO de 1px que cruza
+ * el panel (curva que frena cerca del 94%, nunca llega sola al 100%) y, opcional, un "Reintentar"
+ * discreto. El 100% solo lo pone una señal REAL de disponibilidad (`sondearListo`); si no se
+ * provee, la barra avanza y el padre desmonta el panel cuando el servicio vuelve (reaparece sola).
  */
 
 // Tiempo medio aproximado de vuelta del servicio tras un deploy. La curva escala con esto.
@@ -90,27 +91,29 @@ export function PanelActualizando({
   }, [sondearListo, onListo]);
 
   return (
-    <Card
+    <div
       role="status"
       aria-live="polite"
       className={cn(
-        "w-full max-w-sm p-8 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_30px_rgba(0,0,0,0.06)]",
+        "flex w-full max-w-sm flex-col items-center gap-6 text-center",
         className,
       )}
     >
-      <h2 className="mb-6 text-base font-light uppercase tracking-[0.3em] text-foreground">
-        <span className="inline-block [margin-right:-0.3em]">KENI</span>
-      </h2>
-      <h1 className="text-lg font-semibold text-foreground">{tituloEfectivo}</h1>
+      <div className="flex flex-col items-center gap-2.5">
+        <span className="text-[0.7rem] font-light uppercase tracking-[0.35em] text-muted-foreground">
+          KENI
+        </span>
+        <h1 className="text-sm font-medium text-foreground">{tituloEfectivo}</h1>
+      </div>
 
       {esIncidente ? (
-        // Avería: ni barra ni promesa de retorno automático. Decimos la verdad y que ya se sabe.
-        <p className="mt-3 text-sm text-muted-foreground">
+        // Avería: ni hilo ni promesa de retorno automático. Decimos la verdad y que ya se sabe.
+        <p className="text-xs text-muted-foreground">
           El equipo ya ha sido avisado y está trabajando en ello.
         </p>
       ) : (
         <div
-          className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          className="h-px w-full overflow-hidden bg-border"
           role="progressbar"
           aria-label="Progreso de la actualización"
           aria-valuemin={0}
@@ -118,7 +121,7 @@ export function PanelActualizando({
           aria-valuenow={Math.round(pct)}
         >
           <div
-            className="h-full rounded-full bg-foreground ease-out"
+            className="h-full bg-foreground"
             style={{
               width: `${pct}%`,
               // Avance lento por curva; el salto al 100% (señal real) es rápido.
@@ -131,19 +134,16 @@ export function PanelActualizando({
       {onReintentar && (
         <Button
           type="button"
-          variant="outline"
-          className="mt-6 w-full"
+          variant="ghost"
+          size="sm"
+          className="h-auto px-2 py-1 font-normal text-muted-foreground hover:text-foreground"
           onClick={onReintentar}
           disabled={reintentando}
         >
-          {reintentando ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <RefreshCw className="h-4 w-4" aria-hidden />
-          )}
+          {reintentando ? <Loader2 className="animate-spin" aria-hidden /> : null}
           Reintentar
         </Button>
       )}
-    </Card>
+    </div>
   );
 }
