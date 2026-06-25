@@ -3,31 +3,28 @@
  *
  * Pinta quién es la audiencia de la cuenta (género, edad, país, ciudad) y con qué mezcla de
  * formatos se publica (`postsTypes`). La fuente la da por CUENTA, así que es una vista marca×
- * red con selectores propios (no el foco global): Instagram trae el reparto demográfico
- * completo; Facebook, el país de los seguidores. Las distribuciones demográficas son
- * porcentajes; la mezcla de formatos son conteos. Si la red elegida no expone demografía
- * (`distribuciones` vacío) se dice con honestidad en vez de inventar barras.
+ * red: Instagram trae el reparto demográfico completo; Facebook, el país de los seguidores.
+ * La marca y la red salen de los FILTROS GLOBALES de la cabecera (no hay selectores propios):
+ * sin foco de red se pinta un panel por cada red que expone demografía (IG, FB); con una red
+ * concreta en foco, solo esa. Las distribuciones demográficas son porcentajes; la mezcla de
+ * formatos son conteos. Si la red no expone demografía (`distribuciones` vacío) se dice con
+ * honestidad en vez de inventar barras.
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
 import { PieChart } from "lucide-react";
 import * as React from "react";
 
+import { marcaParam } from "@/components/comunes/selectores";
 import { Card } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { nombreFormato, nombreMarca, nombreRed, numeroCompleto, porcentaje } from "@/lib/formato";
-import type { MarcaDisponible, PuntoDistribucion } from "@/types";
+import { nombreFormato, nombreRed, numeroCompleto, porcentaje, redEnFoco } from "@/lib/formato";
+import type { PuntoDistribucion } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import { Seccion } from "./Seccion";
+import { useVistaConfig } from "./vistaConfig";
 
 /** Redes que exponen demografía de cuenta (IG: reparto completo; FB: país de seguidores). */
 const REDES_DEMOGRAFIA = ["instagram", "facebook"] as const;
@@ -94,23 +91,11 @@ function DistribucionCard({ metrica, puntos }: { metrica: string; puntos: PuntoD
   );
 }
 
-export function Demografia({
-  marcas,
-  marcaActual = MARCA_TODAS,
-}: {
-  marcas: MarcaDisponible[];
-  marcaActual?: string;
-}) {
-  // Selectores PROPIOS (la demografía es por cuenta, no agregable): marca concreta + una red.
-  // La marca arranca en la del foco global si es concreta; si no (o "Todas"), la primera.
-  const marcaInicial = marcas.some((m) => m.id === marcaActual) ? marcaActual : marcas[0]?.id ?? "";
-  const [marcaSel, setMarcaSel] = React.useState(marcaInicial);
-  const [redSel, setRedSel] = React.useState<string>(REDES_DEMOGRAFIA[0]);
-
+/** Panel de demografía de UNA red para la marca en foco (cada red es su propia consulta). */
+function PanelRed({ marca, red }: { marca?: string; red: string }) {
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "demografia", marcaSel, redSel],
-    queryFn: ({ signal }) => api.metricasDemografia({ marca: marcaSel, red: redSel }, signal),
-    enabled: Boolean(marcaSel && redSel),
+    queryKey: ["metricas", "demografia", marca ?? "todas", red],
+    queryFn: ({ signal }) => api.metricasDemografia({ marca, red }, signal),
     staleTime: 5 * 60_000,
   });
 
@@ -123,43 +108,9 @@ export function Demografia({
     return [...enCatalogo, ...resto];
   }, [distribuciones]);
 
-  const selectores = (
-    <div className="flex items-center gap-2">
-      <Select value={marcaSel} onValueChange={setMarcaSel}>
-        <SelectTrigger className="h-8 w-[160px] text-xs" aria-label="Marca">
-          <SelectValue placeholder="Marca">{nombreMarca(marcaSel, marcas)}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {marcas.map((m) => (
-            <SelectItem key={m.id} value={m.id} className="text-xs">
-              {m.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select value={redSel} onValueChange={setRedSel}>
-        <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Red">
-          <SelectValue placeholder="Red">{nombreRed(redSel)}</SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {REDES_DEMOGRAFIA.map((r) => (
-            <SelectItem key={r} value={r} className="text-xs">
-              {nombreRed(r)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-
   return (
-    <Seccion
-      id="demografia"
-      titulo="Demografía de la audiencia"
-      icono={PieChart}
-      descripcion="Quién sigue la cuenta (género, edad, lugar) y con qué mezcla de formatos se publica. La fuente la da por cuenta: elige marca y red."
-      acciones={selectores}
-    >
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">{nombreRed(red)}</h3>
       {isPending ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Skeleton className="h-72 w-full rounded-xl" />
@@ -174,7 +125,7 @@ export function Demografia({
       ) : claves.length === 0 ? (
         <Card className="p-6">
           <p className="py-6 text-center text-sm text-muted-foreground">
-            {nombreRed(redSel)} no expone demografía de audiencia para esta marca.
+            {nombreRed(red)} no expone demografía de audiencia para esta marca.
           </p>
         </Card>
       ) : (
@@ -183,6 +134,41 @@ export function Demografia({
             <DistribucionCard key={k} metrica={k} puntos={distribuciones[k]} />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+export function Demografia({
+  marcaActual = MARCA_TODAS,
+}: {
+  marcaActual?: string;
+}) {
+  // Marca y red salen de los filtros globales: la marca como `id_metricas` (o "todas", que el
+  // backend resuelve al foco por defecto de la sesión) y el foco de red del selector global.
+  const marca_ = marcaParam(marcaActual);
+  const red = useVistaConfig((s) => s.red);
+
+  // Redes a pintar: las que exponen demografía Y están en foco. Sin foco de red (todas) → IG y
+  // FB; con un foco que no incluye ninguna red demográfica → ninguna (mensaje honesto).
+  const redes = REDES_DEMOGRAFIA.filter((r) => redEnFoco(red, r));
+
+  return (
+    <Seccion
+      id="demografia"
+      titulo="Demografía de la audiencia"
+      icono={PieChart}
+      descripcion="Quién sigue la cuenta (género, edad, lugar) y con qué mezcla de formatos se publica. La fuente la da por cuenta: usa la marca y la red de los filtros de arriba."
+      contentClassName="space-y-8"
+    >
+      {redes.length === 0 ? (
+        <Card className="p-6">
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Las redes en foco no exponen demografía de audiencia (solo Instagram y Facebook).
+          </p>
+        </Card>
+      ) : (
+        redes.map((r) => <PanelRed key={r} marca={marca_} red={r} />)
       )}
     </Seccion>
   );

@@ -339,7 +339,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <SerieAlcance marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="demografia">
-            <Demografia marcas={marcas} marcaActual={marca} />
+            <Demografia marcaActual={marca} />
           </Bloque>
           <Bloque id="desglose">
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
