@@ -1,9 +1,10 @@
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { costeUsd, duracion, numeroCompleto } from "@/lib/formato";
 import type { Generacion, MetricasRun } from "@/types";
@@ -95,7 +96,7 @@ function StreamTexto({ texto, ejecutando }: { texto: string; ejecutando: boolean
   if (!texto) {
     return (
       <p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        <Spinner className="h-4 w-4" aria-hidden />
         Pensando…
       </p>
     );
@@ -125,7 +126,7 @@ function RazonamientoVivo({ texto, ejecutando }: { texto: string; ejecutando: bo
   return (
     <div className="space-y-1">
       <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        <Spinner className="h-3.5 w-3.5" aria-hidden />
         Razonando…
       </p>
       <pre
@@ -174,7 +175,7 @@ export function ProgresoGeneracion({
           <CardTitle className="text-base">{generacion.etiqueta || ""}</CardTitle>
           {ejecutando ? (
             <Badge variant="aviso" className="gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              <Spinner className="h-3 w-3" aria-hidden />
               {etiquetaFase(generacion.fase)}
             </Badge>
           ) : error ? (
@@ -191,7 +192,7 @@ export function ProgresoGeneracion({
               disabled={cancelando}
             >
               {cancelando ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                <Spinner className="h-3.5 w-3.5" aria-hidden />
               ) : (
                 <X className="h-3.5 w-3.5" aria-hidden />
               )}

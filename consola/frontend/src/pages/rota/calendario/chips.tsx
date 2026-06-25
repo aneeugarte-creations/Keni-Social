@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   BellRing,
   Copy,
-  Loader2,
   Pencil,
   Plane,
   Trash2,
@@ -21,6 +20,7 @@ import {
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { COBERTURA_BADGE } from "@/lib/estado-color";
 import {
@@ -321,7 +321,7 @@ export function ChipTurnoCM({
               : "ml-0.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-50"
           }
         >
-          {borrar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+          {borrar.isPending ? <Spinner className="h-3 w-3" /> : <X className="h-3 w-3" />}
         </button>
       </span>
     </MenuContextual>

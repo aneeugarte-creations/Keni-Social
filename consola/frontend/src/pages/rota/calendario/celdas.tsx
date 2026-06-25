@@ -1,7 +1,7 @@
 // Celdas de la rejilla del calendario de la rota: la celda (franja × día) con el recuadro
 // por persona (CAPACIDAD), el botón «Añadir turno» y los chips de evento (titularidad real).
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -278,7 +279,7 @@ export function DropdownAnadirPersona({
                 }
                 disabled={crear.isPending}
               >
-                {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {crear.isPending && <Spinner className="h-4 w-4" />}
                 <AlertTriangle className="h-4 w-4" /> Forzar override
               </Button>
             </DialogFooter>

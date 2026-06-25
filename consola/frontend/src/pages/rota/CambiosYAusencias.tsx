@@ -6,7 +6,6 @@ import {
   Check,
   Circle,
   Clock,
-  Loader2,
   Plus,
   Send,
   Shield,
@@ -39,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -733,7 +733,7 @@ export function FormularioNuevoSwap({
       <div className="flex justify-end">
         <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
           {crear.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="h-4 w-4" />
           ) : (
             <Send className="h-4 w-4" />
           )}
@@ -942,7 +942,7 @@ export function TarjetaSwap({
               disabled={cancelar.isPending}
             >
               {cancelar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Trash2 className="h-4 w-4" />
               )}
@@ -1060,7 +1060,7 @@ export function DialogAccionSwap({
             </Button>
             <Button variant="secondary" onClick={() => mutar.mutate()} disabled={mutar.isPending}>
               {mutar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : null}
               {meta.botonConfirmar}
             </Button>

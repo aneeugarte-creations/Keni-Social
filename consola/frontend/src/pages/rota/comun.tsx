@@ -15,7 +15,6 @@ import {
   Download,
   HeartPulse,
   HelpCircle,
-  Loader2,
   MoreHorizontal,
   Plane,
   Printer,
@@ -31,6 +30,7 @@ import {
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { ZONA_CDMX } from "@/lib/fecha";
 import {
@@ -437,7 +437,7 @@ export function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; o
       disabled={marcar.isPending}
     >
       {marcar.isPending ? (
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Spinner className="h-3 w-3" />
       ) : (
         <CheckCircle2 className="h-3 w-3" />
       )}

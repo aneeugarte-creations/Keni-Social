@@ -1,7 +1,7 @@
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -140,7 +140,7 @@ export function PanelActualizando({
           onClick={onReintentar}
           disabled={reintentando}
         >
-          {reintentando ? <Loader2 className="animate-spin" aria-hidden /> : null}
+          {reintentando ? <Spinner aria-hidden /> : null}
           Reintentar
         </Button>
       )}

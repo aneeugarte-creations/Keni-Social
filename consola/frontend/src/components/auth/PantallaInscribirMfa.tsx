@@ -1,5 +1,5 @@
 import { startRegistration } from "@simplewebauthn/browser";
-import { Fingerprint, Loader2, ShieldCheck } from "lucide-react";
+import { Fingerprint, ShieldCheck } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 
@@ -75,7 +76,7 @@ export function PantallaInscribirMfa() {
             </div>
             <Button type="submit" className="w-full" disabled={enviando || registrada}>
               {enviando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Fingerprint className="h-4 w-4" />
               )}

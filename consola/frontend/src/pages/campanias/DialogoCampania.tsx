@@ -6,7 +6,6 @@
  * previsualizan conservando su casing ('#Chihuahua') tal como los guardará el backend.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { Campania } from "@/types";
@@ -197,7 +197,7 @@ export function DialogoCampania({
             Cancelar
           </Button>
           <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
-            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {guardar.isPending && <Spinner className="h-4 w-4" />}
             {editando ? "Guardar cambios" : "Crear campaña"}
           </Button>
         </DialogFooter>

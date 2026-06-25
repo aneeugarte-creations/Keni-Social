@@ -13,7 +13,7 @@
  * Solo admin (la API de ajustes rechaza al resto).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Save, X } from "lucide-react";
+import { Plus, Save, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -263,7 +264,7 @@ export function PanelPlan({ marca }: { marca: string }) {
       <AvisoZonaOperativa que="Las horas del plan" className="mb-5" />
       {cargando ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+          <Spinner className="h-4 w-4" /> Cargando…
         </div>
       ) : (
         <div>
@@ -404,7 +405,7 @@ export function PanelPlan({ marca }: { marca: string }) {
               onClick={() => crearLinea.mutate(nuevaLinea)}
             >
               {crearLinea.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Plus className="h-4 w-4" />
               )}
@@ -425,7 +426,7 @@ export function PanelPlan({ marca }: { marca: string }) {
               disabled={guardar.isPending}
             >
               {guardar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Save className="h-4 w-4" />
               )}

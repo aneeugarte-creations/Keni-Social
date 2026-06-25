@@ -8,7 +8,7 @@
  * `reprogramar` (con su toast/invalidación) y la pasa como `onConfirmar(iso)`. Aquí
  * solo se convierte el valor del picker (CDMX) a instante UTC con `datetimeLocalAIso`.
  */
-import { CalendarClock, Loader2 } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
 import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import type { Pieza } from "@/types";
 
 import { datetimeLocalAIso, isoADatetimeLocal, nombreRed } from "./meta";
@@ -85,7 +86,7 @@ export function DialogoReprogramar({
           </Button>
           <Button onClick={confirmar} disabled={ocupado || !iso}>
             {ocupado ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <CalendarClock className="h-4 w-4" />
             )}

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Link2, ListChecks, Loader2, Pencil, Sparkles, Upload } from "lucide-react";
+import { CalendarDays, Check, Link2, ListChecks, Pencil, Sparkles, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
@@ -252,7 +253,7 @@ export function DialogoCrearTarea({
           <div className="space-y-3">
             {generando || !propuesta ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
                 Analizando… esto puede tardar un momento.
               </div>
             ) : propuesta.estado === "error" ? (
@@ -425,7 +426,7 @@ export function DialogoCrearTarea({
                   disabled={nadaQueAnalizar || analizar.isPending}
                 >
                   {analizar.isPending ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    <Spinner className="mr-1 h-3.5 w-3.5" />
                   ) : esUrl(pegado) ? (
                     <Link2 className="mr-1 h-3.5 w-3.5" />
                   ) : (

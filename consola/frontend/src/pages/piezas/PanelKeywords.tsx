@@ -7,12 +7,13 @@
  * Las líneas se dan de alta/baja en la pestaña «Horarios»; aquí solo se editan sus keywords.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { api, mensajeError } from "@/lib/api";
 
@@ -52,7 +53,7 @@ export function PanelKeywords({ marca }: { marca: string }) {
       </p>
       {lineasQuery.isPending ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+          <Spinner className="h-4 w-4" /> Cargando…
         </div>
       ) : lineas.length === 0 ? (
         <p className="py-6 text-sm text-muted-foreground">
@@ -91,7 +92,7 @@ export function PanelKeywords({ marca }: { marca: string }) {
                     onClick={() => guardar.mutate({ id: l.id, keywords: valor })}
                   >
                     {guardar.isPending && guardar.variables?.id === l.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Spinner className="h-4 w-4" />
                     ) : (
                       <Save className="h-4 w-4" />
                     )}

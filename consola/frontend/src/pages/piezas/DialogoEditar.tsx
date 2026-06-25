@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clapperboard, Loader2, Sparkles } from "lucide-react";
+import { Clapperboard, Sparkles } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, mensajeError } from "@/lib/api";
@@ -733,7 +734,7 @@ function DialogoEditarInterno({
                 <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-sm">
                   {generandoCarrusel ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      <Spinner className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Creando el carrusel desde el copy…</span>
                       <Button
                         type="button"

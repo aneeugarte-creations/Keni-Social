@@ -10,7 +10,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Newspaper, Trash2 } from "lucide-react";
+import { Newspaper, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { AvisoSalud } from "@/pages/noticias/AvisoSalud";
@@ -210,7 +211,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
             <span className="text-xs text-muted-foreground">
               {total.toLocaleString("es-MX")} historia{total !== 1 ? "s" : ""}
               {query.isFetching && !query.isPending && (
-                <Loader2 className="inline ml-1 h-3 w-3 animate-spin" />
+                <Spinner className="inline ml-1 h-3 w-3" />
               )}
             </span>
           )}
@@ -256,7 +257,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
                   disabled={descartarLoteMut.isPending || borrarLoteMut.isPending}
                   data-testid="btn-descartar-seleccion"
                 >
-                  {descartarLoteMut.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {descartarLoteMut.isPending && <Spinner className="h-3 w-3" />}
                   Descartar {seleccion.size}
                 </Button>
                 <Button
@@ -268,7 +269,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
                   data-testid="btn-borrar-seleccion"
                 >
                   {borrarLoteMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Spinner className="h-3 w-3" />
                   ) : (
                     <Trash2 className="h-3 w-3" />
                   )}
@@ -285,7 +286,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
               data-testid="btn-borrar-todo"
             >
               {borrarTodoMut.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Spinner className="h-3 w-3" />
               ) : (
                 <Trash2 className="h-3 w-3" />
               )}

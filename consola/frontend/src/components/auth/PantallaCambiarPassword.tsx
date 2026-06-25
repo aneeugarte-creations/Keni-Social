@@ -1,4 +1,4 @@
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { api, ApiError } from "@/lib/api";
 import { MIN_PASSWORD } from "@/lib/password";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -107,7 +108,7 @@ export function PantallaCambiarPassword() {
             )}
 
             <Button type="submit" className="w-full" disabled={!puedeEnviar}>
-              {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {enviando ? <Spinner className="h-4 w-4" /> : null}
               Cambiar contraseña
             </Button>
           </form>

@@ -26,7 +26,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -159,7 +160,7 @@ function DialogoCrear({
               Cancelar
             </Button>
             <Button type="submit" disabled={!puedeCrear}>
-              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {crear.isPending && <Spinner className="h-4 w-4" />}
               Crear
             </Button>
           </DialogFooter>

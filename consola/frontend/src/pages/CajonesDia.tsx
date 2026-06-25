@@ -18,7 +18,6 @@ import {
   Clock,
   EyeOff,
   Inbox,
-  Loader2,
   MapPin,
   Send,
   Trash2,
@@ -51,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -261,7 +261,7 @@ function DialogoEditarItem({ item, abierto, onCerrar, onGuardado }: PropsDialogo
             Cancelar
           </Button>
           <Button onClick={() => mutacion.mutate()} disabled={mutacion.isPending}>
-            {mutacion.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {mutacion.isPending && <Spinner className="h-4 w-4" />}
             Guardar
           </Button>
         </DialogFooter>
@@ -401,7 +401,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                     aria-label="Crear evento"
                   >
                     {crearEventoMut.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="h-3 w-3" />
                     ) : (
                       <CalendarPlus className="h-3 w-3" />
                     )}
@@ -420,7 +420,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                       title="Forzar al feed ahora"
                     >
                       {usarMut.isPending ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <Spinner className="h-3 w-3" />
                       ) : (
                         <Send className="h-3 w-3" />
                       )}
@@ -444,7 +444,7 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                   variant="aviso"
                   className="gap-1"
                 >
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                   Generando…
                 </Badge>
               ) : item.pieza_estado === "en_cola" ? (
@@ -631,7 +631,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
             aria-label={`Procesar ${def.titulo}`}
           >
             {aportarMut.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <UploadCloud className="h-4 w-4" />
             )}
@@ -649,7 +649,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
             {genActual && genEjecutando ? (
               <div className="space-y-2">
                 <p className="flex items-center gap-2 font-medium">
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <Spinner className="h-3.5 w-3.5 shrink-0" />
                   Procesando con IA…
                 </p>
                 <ProgresoGeneracion
@@ -660,7 +660,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <Spinner className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1">Procesando con Haiku…</span>
               </div>
             )}

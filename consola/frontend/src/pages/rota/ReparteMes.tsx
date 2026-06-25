@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { asignarMatriz } from "@/lib/rota-reparto";
 import { cn } from "@/lib/utils";
@@ -178,7 +179,7 @@ function EditorHoraCelda({
             disabled={guardar.isPending}
             onClick={() => guardar.mutate(true)}
           >
-            {guardar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            {guardar.isPending && <Spinner className="mr-1.5 h-3.5 w-3.5" />}
             Forzar
           </Button>
         ) : (
@@ -188,7 +189,7 @@ function EditorHoraCelda({
             disabled={!horasValidas || sinCambios || guardar.isPending}
             onClick={() => guardar.mutate(false)}
           >
-            {guardar.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            {guardar.isPending && <Spinner className="mr-1.5 h-3.5 w-3.5" />}
             Guardar hora
           </Button>
         )}
@@ -668,7 +669,7 @@ export function ReparteMes({
           onClick={() => void onAplicar()}
           disabled={incompleto || aplicar.isPending}
         >
-          {aplicar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          {aplicar.isPending && <Spinner className="mr-1.5 h-4 w-4" />}
           {aplicar.isPending
             ? "Aplicando…"
             : totalAdds > 0 && totalDels > 0

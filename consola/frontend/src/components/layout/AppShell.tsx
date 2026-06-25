@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
@@ -12,6 +12,7 @@ import { EncabezadoSeccion } from "@/components/layout/EncabezadoSeccion";
 import { ProveedorEncabezado, type EncabezadoCtx } from "@/components/layout/encabezado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
 import { useConexionDegradada, useMotivoConexion } from "@/lib/estado-red";
@@ -23,7 +24,7 @@ import { hidratarLimites } from "@/pages/piezas/meta";
 function CargandoPagina() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
-      <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+      <Spinner className="h-6 w-6" aria-label="Cargando" />
     </div>
   );
 }

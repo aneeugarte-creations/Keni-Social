@@ -6,7 +6,6 @@ import {
   Coins,
   ExternalLink,
   Hammer,
-  Loader2,
   MessageSquareWarning,
   Pencil,
   RefreshCw,
@@ -43,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -177,7 +177,7 @@ function BloquePreview({ sugerenciaId, esSuper }: { sugerenciaId: string; esSupe
             disabled={reconstruir.isPending}
           >
             {reconstruir.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
@@ -262,7 +262,7 @@ function DialogoAccionFlujo({
                 Cancelar
               </Button>
               <Button onClick={() => accion.ejecutar(nota)} disabled={ocupado}>
-                {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {ocupado ? <Spinner className="h-4 w-4" /> : null}
                 {accion.etiquetaConfirmar}
               </Button>
             </DialogFooter>
@@ -346,7 +346,7 @@ function EdicionTexto({
           onClick={() => guardar.mutate()}
           disabled={!titulo.trim() || guardar.isPending}
         >
-          {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {guardar.isPending ? <Spinner className="h-4 w-4" /> : null}
           Guardar
         </Button>
       </div>
@@ -707,7 +707,7 @@ export default function DetalleSugerenciaPagina() {
                   disabled={ocupado}
                 >
                   {borrar.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Spinner className="h-4 w-4" />
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}

@@ -1,8 +1,9 @@
-import { AlertTriangle, Home, Loader2, RefreshCw, RotateCw } from "lucide-react";
+import { AlertTriangle, Home, RefreshCw, RotateCw } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Spinner } from "@/components/ui/spinner";
 import { recargaSegura } from "@/lib/version";
 
 /**
@@ -75,7 +76,7 @@ export class FronteraError extends React.Component<Props, Estado> {
       return (
         <Card className="mx-auto mt-8 max-w-lg">
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <Spinner className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">
               Hay una versión nueva de la consola. Actualizando…
             </p>

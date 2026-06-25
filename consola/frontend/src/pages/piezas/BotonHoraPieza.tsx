@@ -8,12 +8,13 @@
  * Para mover también el día están el atajo «Cambiar también el día…» (abre el diálogo de
  * reprogramar) y el arrastre entre columnas de la semana.
  */
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { origenBajoDisparador, type PosicionMenu } from "@/components/comunes/menuPos";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { isoADatetimeLocal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 
@@ -190,7 +191,7 @@ function PopoverHora({
           className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
         <Button type="button" size="sm" onClick={guardar} disabled={ocupado || !valida}>
-          {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
+          {ocupado ? <Spinner className="h-4 w-4" /> : "Guardar"}
         </Button>
       </div>
       {sugerencia && (

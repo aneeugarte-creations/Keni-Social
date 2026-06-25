@@ -16,7 +16,6 @@ import {
   CircleSlash,
   Leaf,
   Lightbulb,
-  Loader2,
   Plus,
   RotateCcw,
   Trash2,
@@ -45,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -274,7 +274,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
             disabled={!puedeProponer}
             className="w-full"
           >
-            {proponiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
+            {proponiendo ? <Spinner className="h-4 w-4" /> : <MarcaIA />}
             {proponiendo ? "Proponiendo…" : "Proponer"}
           </Button>
 
@@ -353,7 +353,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
             disabled={marca === "" || tituloManual.trim().length === 0 || crearManual.isPending}
           >
             {crearManual.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Plus className="h-4 w-4" />
             )}

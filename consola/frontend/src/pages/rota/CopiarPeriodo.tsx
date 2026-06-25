@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowDown, CalendarDays, ChevronDown, ChevronRight, Copy, Loader2 } from "lucide-react";
+import { ArrowDown, CalendarDays, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { hoyCDMX } from "@/lib/fecha";
 import {
@@ -393,7 +394,7 @@ function Acciones({
         Cancelar
       </Button>
       <Button variant="secondary" size="sm" disabled={deshabilitado || cargando} onClick={onCopiar}>
-        {cargando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+        {cargando && <Spinner className="mr-1.5 h-4 w-4" />}
         Copiar
       </Button>
     </div>

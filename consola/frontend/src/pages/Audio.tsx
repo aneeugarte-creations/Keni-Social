@@ -23,7 +23,6 @@ import {
   HelpCircle,
   Lightbulb,
   ListOrdered,
-  Loader2,
   Mic,
   Pause,
   Pencil,
@@ -56,6 +55,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Markdown } from "@/components/ui/Markdown";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { grabacionSoportada, useGrabadoraVoz } from "@/hooks/use-grabadora-voz";
@@ -422,7 +422,7 @@ function ProgresoVivo({
     <div className="flex min-h-0 flex-col gap-1.5 rounded-md border border-border/70 bg-muted/20 p-2.5">
       <div className="flex items-center gap-2">
         {corriendo ? (
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+          <Spinner className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         ) : g?.estado === "error" ? (
           <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
         ) : (
@@ -514,7 +514,7 @@ function RailColapsado({
                   )}
                 >
                   {a.estado === "generando" ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <Spinner className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <Icono className="h-4 w-4" />
                   )}
@@ -664,7 +664,7 @@ function FilaAudio({
       <div className="mt-0.5 flex items-center gap-2 text-muted-foreground">
         {enProceso ? (
           <span className="inline-flex items-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" /> Transcribiendo…
+            <Spinner className="h-3 w-3" /> Transcribiendo…
           </span>
         ) : t.estado === "error" ? (
           <span className="text-destructive">Error</span>
@@ -764,7 +764,7 @@ function PanelArtefactos({
                 >
                   <span className="truncate font-medium">{a.titulo || TITULO_ARTEFACTO[a.tipo] || a.tipo}</span>
                   {a.estado === "generando" ? (
-                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+                    <Spinner className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   ) : a.estado === "error" ? (
                     <Badge variant="outline" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
                   ) : (
@@ -784,7 +784,7 @@ function PanelArtefactos({
               >
                 <span className="truncate">{TITULO_ARTEFACTO[t]}</span>
                 {transcribiendo ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <Spinner className="h-3.5 w-3.5 shrink-0" />
                 ) : (
                   <span className="shrink-0 text-xs">en cola</span>
                 )}
@@ -949,7 +949,7 @@ function Lector({
                     }
                   >
                     {cargando ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Spinner className="h-3 w-3" />
                     ) : (
                       <Icono className="h-3 w-3" />
                     )}
@@ -1020,7 +1020,7 @@ function Lector({
               />
             ) : (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Generando «{artefacto.titulo}»…
+                <Spinner className="h-4 w-4" /> Generando «{artefacto.titulo}»…
               </div>
             )}
           </div>
@@ -1318,7 +1318,7 @@ function FormularioIdeas({
                         onClick={() => guardar(i)}
                       >
                         {ocupada === i ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Spinner className="h-3.5 w-3.5" />
                         ) : (
                           <Lightbulb className="h-3.5 w-3.5" />
                         )}
@@ -1564,7 +1564,7 @@ function FormularioPreguntas({
         </span>
         <Button size="sm" disabled={!algunaResp || corregir.isPending} onClick={() => corregir.mutate()}>
           {corregir.isPending ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            <Spinner className="mr-1.5 h-3.5 w-3.5" />
           ) : (
             <SpellCheck className="mr-1.5 h-3.5 w-3.5" />
           )}
@@ -1878,7 +1878,7 @@ function DialogoSubida({
               onClick={transcribir}
               className="gap-2"
             >
-              {subiendo && <Loader2 className="h-4 w-4 animate-spin" />}
+              {subiendo && <Spinner className="h-4 w-4" />}
               Transcribir
             </Button>
           </DialogFooter>

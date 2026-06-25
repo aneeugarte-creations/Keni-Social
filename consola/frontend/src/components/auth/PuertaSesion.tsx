@@ -1,16 +1,15 @@
-import { Loader2 } from "lucide-react";
-
 import { PantallaCambiarPassword } from "@/components/auth/PantallaCambiarPassword";
 import { PantallaDegradada } from "@/components/auth/PantallaDegradada";
 import { PantallaInscribirMfa } from "@/components/auth/PantallaInscribirMfa";
 import { PantallaLogin } from "@/components/auth/PantallaLogin";
+import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 
 /** Pantalla de carga a pantalla completa mientras se resuelve el `me` inicial. */
 function CargandoSesion() {
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-background text-muted-foreground">
-      <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+      <Spinner className="h-6 w-6" aria-label="Cargando" />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Rss } from "lucide-react";
+import { Plus, Rss } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import type { FuenteRss, MarcaDisponible } from "@/types";
@@ -252,7 +253,7 @@ function FormularioFuente({
         </Button>
         <Button size="sm" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
           {guardar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="h-4 w-4" />
           ) : (
             <Plus className="h-4 w-4" />
           )}

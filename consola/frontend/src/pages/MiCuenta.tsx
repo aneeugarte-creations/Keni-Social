@@ -19,7 +19,6 @@ import {
   Copy,
   Fingerprint,
   KeyRound,
-  Loader2,
   Pencil,
   Plug,
   Trash2,
@@ -61,6 +60,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora as fmtFechaHoraCdmx } from "@/lib/fecha";
@@ -333,7 +333,7 @@ function SeccionZonaHoraria() {
             </Select>
             <Button type="submit" disabled={!puedeGuardar} className="shrink-0">
               {guardar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 <Clock className="h-4 w-4" />
               )}
@@ -440,7 +440,7 @@ function SeccionCambiarPassword() {
           </div>
           <Button type="submit" disabled={!puedeEnviar}>
             {cambiar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <KeyRound className="h-4 w-4" />
             )}
@@ -534,7 +534,7 @@ function FilaCredencial({
           onClick={onBorrar}
           aria-label={`Eliminar ${credencial.nombre || "llave de acceso"}`}
         >
-          {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {ocupado ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
         </Button>
       </div>
     </div>
@@ -675,7 +675,7 @@ function SeccionLlavesAcceso() {
           </div>
           <Button type="submit" disabled={anadir.isPending}>
             {anadir.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Fingerprint className="h-4 w-4" />
             )}
@@ -752,7 +752,7 @@ function FilaTokenMcp({
           onClick={onRevocar}
           aria-label={`Revocar ${token.etiqueta}`}
         >
-          {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {ocupado ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
         </Button>
       )}
     </div>
@@ -933,7 +933,7 @@ function SeccionTokensMcp() {
           </div>
           <Button type="submit" disabled={!puedeCrear}>
             {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Plug className="h-4 w-4" />
             )}

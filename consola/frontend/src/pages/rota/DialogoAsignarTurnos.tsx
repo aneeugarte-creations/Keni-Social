@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { FranjaSemana, MiembroRota } from "@/types";
@@ -567,7 +568,7 @@ export function DialogoAsignarTurnos({
       onClick={() => asignar.mutate()}
       disabled={incompleto || asignar.isPending}
     >
-      {asignar.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+      {asignar.isPending && <Spinner className="mr-1.5 h-4 w-4" />}
       {asignar.isPending
         ? "Asignando…"
         : totalTurnos > 0

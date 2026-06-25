@@ -3,7 +3,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  Loader2,
   Trash2,
   Users,
 } from "lucide-react";
@@ -33,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -303,7 +303,7 @@ export function DialogEditarEvento({
             disabled={enviando || borrar.isPending}
           >
             {borrar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Trash2 className="h-4 w-4" />
             )}
@@ -326,7 +326,7 @@ export function DialogEditarEvento({
               }}
               disabled={enviando || guardar.isPending || recurrenciaIncompleta}
             >
-              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {guardar.isPending && <Spinner className="h-4 w-4" />}
               Guardar
             </Button>
           </div>
@@ -560,12 +560,12 @@ export function DialogEditarTurno({
               onClick={() => guardar.mutate(true)}
               disabled={guardar.isPending}
             >
-              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {guardar.isPending && <Spinner className="h-4 w-4" />}
               <AlertTriangle className="h-4 w-4" /> Forzar override
             </Button>
           ) : (
             <Button onClick={() => guardar.mutate(false)} disabled={sinCambios || guardar.isPending}>
-              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {guardar.isPending && <Spinner className="h-4 w-4" />}
               Guardar
             </Button>
           )}

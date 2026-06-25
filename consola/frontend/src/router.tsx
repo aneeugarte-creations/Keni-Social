@@ -6,8 +6,8 @@ import { FronteraError } from "@/components/comunes/FronteraError";
 import { RedirigirCola } from "@/components/comunes/RedirigirCola";
 import { RedirigirMonitor } from "@/components/comunes/RedirigirMonitor";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
+import { Spinner } from "@/components/ui/spinner";
 import Error404 from "@/pages/Error404";
-import { Loader2 } from "lucide-react";
 
 // Carga diferida por ruta (code-splitting): cada pagina viaja en su propio chunk
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
@@ -135,7 +135,7 @@ export const router = createBrowserRouter([
         <Suspense
           fallback={
             <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+              <Spinner className="h-6 w-6" aria-label="Cargando" />
             </div>
           }
         >
@@ -153,7 +153,7 @@ export const router = createBrowserRouter([
         <Suspense
           fallback={
             <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+              <Spinner className="h-6 w-6" aria-label="Cargando" />
             </div>
           }
         >
@@ -172,7 +172,7 @@ export const router = createBrowserRouter([
         <Suspense
           fallback={
             <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+              <Spinner className="h-6 w-6" aria-label="Cargando" />
             </div>
           }
         >
@@ -190,7 +190,7 @@ export const router = createBrowserRouter([
         <Suspense
           fallback={
             <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+              <Spinner className="h-6 w-6" aria-label="Cargando" />
             </div>
           }
         >

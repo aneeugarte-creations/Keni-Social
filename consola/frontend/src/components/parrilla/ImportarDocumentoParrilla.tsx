@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   FileText,
   Inbox,
-  Loader2,
   Upload,
   X,
 } from "lucide-react";
@@ -39,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import {
   MenuContextual,
   type EntradaMenuContextual,
@@ -384,7 +384,7 @@ function DialogImportarParrilla({
               <ProgresoGeneracion generacion={generacion} />
             ) : (
               <div className="flex flex-col items-center gap-3 py-10 text-center">
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                <Spinner className="h-7 w-7 text-primary" />
                 <p className="text-sm font-medium">Analizando el documento…</p>
               </div>
             )}
@@ -460,7 +460,7 @@ function DialogImportarParrilla({
                 disabled={!archivo || subir.isPending}
                 data-testid="rota-importar-subir"
               >
-                {subir.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {subir.isPending && <Spinner className="h-4 w-4" />}
                 <Upload className="h-4 w-4" />
                 Subir y analizar
               </Button>
@@ -474,7 +474,7 @@ function DialogImportarParrilla({
                 disabled={descartar.isPending || aplicar.isPending}
               >
                 {descartar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <X className="h-4 w-4" />
                 )}
@@ -486,7 +486,7 @@ function DialogImportarParrilla({
                 data-testid="rota-importar-aceptar"
               >
                 {aplicar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}

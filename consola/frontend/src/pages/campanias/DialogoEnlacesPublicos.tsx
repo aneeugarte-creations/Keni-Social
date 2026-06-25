@@ -5,7 +5,7 @@
  * a todos al instante). Quien tenga el enlace ve SOLO esa campaña, sin login.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Link2, Loader2, Plus, Trash2 } from "lucide-react";
+import { Copy, Link2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import type { Campania, EnlacePublicoCampania } from "@/types";
 
@@ -151,7 +152,7 @@ export function DialogoEnlacesPublicos({
 
         <div className="space-y-3">
           <Button onClick={() => crear.mutate()} disabled={crear.isPending || !campaniaId}>
-            {crear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {crear.isPending ? <Spinner className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             Crear enlace {ocultarAds ? "(sin Ads)" : ""}
           </Button>
 

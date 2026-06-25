@@ -1,6 +1,7 @@
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle } from "lucide-react";
 import * as React from "react";
 
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 
 /**
@@ -84,7 +85,7 @@ export default function OauthConectado() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-6 text-center">
       {estado === "cargando" ? (
-        <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" aria-hidden="true" />
+        <Spinner className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
       ) : estado === "error" ? (
         <XCircle className="h-10 w-10 text-destructive" aria-hidden="true" />
       ) : (

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, Loader2, Plus, RefreshCw, Unplug } from "lucide-react";
+import { LayoutGrid, Plus, RefreshCw, Unplug } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -138,7 +139,7 @@ function AccionRed({
         disabled={ocupada || !red.perfil_id}
         onClick={onDesconectar}
       >
-        {ocupada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+        {ocupada ? <Spinner className="h-3.5 w-3.5" /> : <Unplug className="h-3.5 w-3.5" />}
         Desconectar
       </Button>
     );
@@ -151,7 +152,7 @@ function AccionRed({
       disabled={ocupada}
       onClick={onConectar}
     >
-      {ocupada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+      {ocupada ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
       {red.estado === "expired" ? "Reconectar" : "Conectar"}
     </Button>
   );

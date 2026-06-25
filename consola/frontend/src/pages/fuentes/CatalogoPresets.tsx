@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   ExternalLink,
   Globe,
-  Loader2,
   Plus,
 } from "lucide-react";
 import * as React from "react";
@@ -24,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -148,7 +148,7 @@ export function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
             disabled={!haySeleccionados || activar.isPending}
           >
             {activar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Plus className="h-4 w-4" />
             )}

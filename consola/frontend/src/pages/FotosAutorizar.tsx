@@ -1,7 +1,8 @@
-import { AlertTriangle, Camera, Loader2 } from "lucide-react";
+import { AlertTriangle, Camera } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 
@@ -100,7 +101,7 @@ export default function FotosAutorizar() {
         <Button onClick={autorizar} disabled={autorizando}>
           {autorizando ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <Spinner className="h-4 w-4" aria-hidden="true" />
               Conectando…
             </>
           ) : (

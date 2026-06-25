@@ -10,11 +10,12 @@
  * misma alta de evento que hace el import. Mientras está pendiente sigue visible en «Mis tareas».
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Calendar, Check, Loader2, X } from "lucide-react";
+import { Bell, Calendar, Check, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
@@ -53,7 +54,7 @@ function Fila({
             disabled={ocupada}
           >
             {ocupada ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              <Spinner className="mr-1 h-3.5 w-3.5" />
             ) : (
               <Check className="mr-1 h-3.5 w-3.5" />
             )}

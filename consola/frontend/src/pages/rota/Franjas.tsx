@@ -1,6 +1,6 @@
 // Diálogos de FRANJAS (de la semana y plantilla global). Partido de pages/Rota.tsx.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
@@ -478,7 +479,7 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
           onClick={() => guardar.mutate()}
           disabled={!puedeGuardar || guardar.isPending}
         >
-          {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {guardar.isPending && <Spinner className="h-4 w-4" />}
           Guardar
         </Button>
       </DialogFooter>

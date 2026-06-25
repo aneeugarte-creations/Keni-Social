@@ -11,7 +11,7 @@
  * Las vistas son COMPARTIDAS (piloto AMX): cualquiera las ve, aplica y borra.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, Loader2, Plus, Trash2 } from "lucide-react";
+import { Bookmark, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { VistaGuardada } from "@/types";
@@ -215,7 +216,7 @@ export function VistasGuardadas({
                 Cancelar
               </Button>
               <Button type="submit" disabled={!nombre.trim() || crear.isPending}>
-                {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {crear.isPending && <Spinner className="h-4 w-4" />}
                 Guardar
               </Button>
             </DialogFooter>

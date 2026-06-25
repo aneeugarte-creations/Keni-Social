@@ -1,7 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   CalendarOff,
-  Loader2,
   Pencil,
   Plus,
   Trash2,
@@ -31,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import {
   formatearRango,
@@ -156,7 +156,7 @@ export function NuevaAusencia({
       <div className="flex justify-end">
         <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
           {crear.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="h-4 w-4" />
           ) : (
             <Plus className="h-4 w-4" />
           )}
@@ -379,7 +379,7 @@ export function DialogoEditarAusencia({
             Cancelar
           </Button>
           <Button variant="secondary" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
-            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {guardar.isPending && <Spinner className="h-4 w-4" />}
             Guardar
           </Button>
         </DialogFooter>

@@ -7,7 +7,7 @@
  * `POST /api/piezas/{id}/clonar`; toast + invalidación.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Loader2 } from "lucide-react";
+import { Copy } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import type { Pieza } from "@/types";
 
@@ -92,7 +93,7 @@ export function DialogoClonar({
           </Button>
           <Button onClick={() => clonar.mutate()} disabled={clonar.isPending || !red}>
             {clonar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Spinner className="h-4 w-4" />
             ) : (
               <Copy className="h-4 w-4" />
             )}

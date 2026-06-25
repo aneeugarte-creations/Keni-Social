@@ -5,11 +5,12 @@
  * servidos por el backend. Se marca `noindex` para que el enlace no acabe en buscadores.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import * as React from "react";
 import { useParams } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
+import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 import { PanelCampania } from "@/pages/campanias/PanelCampania";
 
@@ -47,7 +48,7 @@ export default function InformePublico() {
   if (consulta.isPending) {
     return (
       <Centrado>
-        <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando informe" />
+        <Spinner className="h-6 w-6" aria-label="Cargando informe" />
       </Centrado>
     );
   }

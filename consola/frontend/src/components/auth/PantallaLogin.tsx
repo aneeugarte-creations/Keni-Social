@@ -1,10 +1,11 @@
-import { Eye, EyeOff, Fingerprint, Loader2, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError } from "@/lib/api";
 import { useSesion } from "@/hooks/sesion-contexto";
 
@@ -158,7 +159,7 @@ export function PantallaLogin() {
                 // Por defecto: la passkey se está abriendo SOLA. Solo un indicador; el sistema
                 // muestra el diálogo nativo (Face ID / huella / teléfono).
                 <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="h-4 w-4" />
                   Esperando tu llave de acceso…
                 </div>
               ) : (
@@ -258,7 +259,7 @@ export function PantallaLogin() {
             disabled={!puedeEnviar}
             className="mt-3 h-11 w-full rounded-md border-neutral-900 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
           >
-            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
+            {enviando ? <Spinner className="h-4 w-4" /> : "Entrar"}
           </Button>
 
           {/* Atajo passwordless: la contraseña sigue siendo la base; esto entra directo con la
