@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
@@ -108,6 +109,14 @@ _PERFIL_RED: dict[str, Plataforma] = {
     "tiktok": Plataforma.tiktok,
     "youtube": Plataforma.youtube,
 }
+
+# Validez (segundos) de la lectura cacheada de redes conectadas (`/admin/simpleProfiles`).
+# La instancia de la fuente se reusa mientras el config.toml no cambie, así que una caché
+# sin caducidad ocultaría para siempre los cambios hechos EN Metricool (un alta o una
+# desconexión de red no toca nuestro config). Con esta ventana corta, la siguiente pasada
+# del daemon —o cualquier lectura tras expirar— vuelve a consultar perfiles y refleja
+# altas y desconexiones sin reiniciar el proceso.
+_TTL_CONECTADAS_S = 300.0
 
 # Métricas de Metricool por red para (visualizaciones, interacciones, alcance).
 #
@@ -557,9 +566,11 @@ class FuenteMetricool:
     ):
         self._marcas = marcas
         self._cli = cliente or cliente_http(timeout=_TIMEOUT)
-        # cache cuenta_id -> set[Plataforma] conectadas (de simpleProfiles); None si la
-        # consulta de perfiles falló (entonces no se filtra por conexión: se intenta todo).
-        self._conectadas_cache: dict[str, set[Plataforma] | None] = {}
+        # cache cuenta_id -> (instante_monotónico, set[Plataforma] conectadas) de
+        # simpleProfiles; valor None si la consulta de perfiles falló (entonces no se filtra
+        # por conexión: se intenta todo). Caduca a los `_TTL_CONECTADAS_S` para detectar
+        # altas/desconexiones hechas en Metricool sin reiniciar el proceso.
+        self._conectadas_cache: dict[str, tuple[float, set[Plataforma] | None]] = {}
         # Cobertura de la ÚLTIMA llamada a `mejores_piezas` (igual que en FuenteCompuesta):
         # qué plataformas aportaron piezas vs. fallaron. Las tools la leen vía
         # `cobertura_piezas()` para exponer la degradación parcial en vez de callarla.
@@ -591,6 +602,22 @@ class FuenteMetricool:
         plats = marca.get("plataformas") or list(_RED_METRICOOL)
         return [p if isinstance(p, Plataforma) else Plataforma(p) for p in plats]
 
+    def _universo_plataformas(
+        self, cuenta_id: str, conectadas: set[Plataforma] | None
+    ) -> list[Plataforma]:
+        """Redes a auditar: las configuradas de la marca UNIDAS con las conectadas AHORA.
+
+        La lista `plataformas` del config es un mínimo curado, no un tope: una red dada de
+        alta EN Metricool (la fuente de verdad de "conectada", vía simpleProfiles) que el
+        config no liste DEBE auditarse igual, o un alta jamás se detectaría. Conserva el
+        orden de las configuradas y añade al final, en orden canónico, las conectadas que
+        falten. Si la detección falló (`conectadas` None) se queda con las configuradas.
+        """
+        universo = self._plataformas(self._marca(cuenta_id))
+        if conectadas:
+            universo += [p for p in _RED_METRICOOL if p in conectadas and p not in universo]
+        return universo
+
     # --- contrato FuenteMetricas -------------------------------------------
     def cuentas(self) -> list[Cuenta]:
         return [
@@ -603,10 +630,10 @@ class FuenteMetricool:
         ]
 
     def resumen(self, cuenta_id: str, rango: str) -> ResumenMetricas:
-        marca = self._marca(cuenta_id)
+        self._marca(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
-        plats = self._plataformas(marca)
         conectadas = self._redes_conectadas(cuenta_id)
+        plats = self._universo_plataformas(cuenta_id, conectadas)
 
         por_plataforma: list[MetricaPlataforma] = []
         cobertura = Cobertura()
@@ -791,12 +818,15 @@ class FuenteMetricool:
         El perfil de la marca (su `blogId`) trae un campo por red (`facebook`,
         `instagram`, `twitter`, `tiktok`, `youtube`) con el id de la cuenta enlazada o
         `null`; un valor truthy = conectada. Permite marcar "no conectada" con honestidad
-        en vez de "error" (la conexión de cada red varía por marca). Se
-        cachea por instancia. Devuelve None si la consulta falla: el llamante NO filtra
-        por conexión (intenta leer todas, comportamiento previo) en vez de ocultar redes.
+        en vez de "error" (la conexión de cada red varía por marca). Se cachea por instancia
+        con caducidad (`_TTL_CONECTADAS_S`) para que un alta o una desconexión hecha EN
+        Metricool se refleje sin reiniciar el proceso. Devuelve None si la consulta falla: el
+        llamante NO filtra por conexión (intenta leer todas, comportamiento previo) en vez de
+        ocultar redes.
         """
-        if cuenta_id in self._conectadas_cache:
-            return self._conectadas_cache[cuenta_id]
+        cacheada = self._conectadas_cache.get(cuenta_id)
+        if cacheada is not None and (time.monotonic() - cacheada[0]) < _TTL_CONECTADAS_S:
+            return cacheada[1]
         try:
             datos = get_json(
                 self._cli,
@@ -806,7 +836,7 @@ class FuenteMetricool:
             )
         except Exception as e:  # noqa: BLE001 — sin perfiles no filtramos (None)
             log.warning("metricool: simpleProfiles %s falló: %s", cuenta_id, e)
-            self._conectadas_cache[cuenta_id] = None
+            self._conectadas_cache[cuenta_id] = (time.monotonic(), None)
             return None
         blog_id = str(self._marca(cuenta_id).get("blog_id", ""))
         perfil = None
@@ -815,10 +845,10 @@ class FuenteMetricool:
                 perfil = p
                 break
         if perfil is None:
-            self._conectadas_cache[cuenta_id] = None
+            self._conectadas_cache[cuenta_id] = (time.monotonic(), None)
             return None
         conectadas = {plat for clave, plat in _PERFIL_RED.items() if perfil.get(clave)}
-        self._conectadas_cache[cuenta_id] = conectadas
+        self._conectadas_cache[cuenta_id] = (time.monotonic(), conectadas)
         return conectadas
 
     def _metrica_plataforma_desde_posts(
@@ -865,11 +895,11 @@ class FuenteMetricool:
         n = max(n, 0)
         if n == 0:
             return []
-        marca = self._marca(cuenta_id)
+        self._marca(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
         piezas: list[Pieza] = []
         cobertura = Cobertura()
-        for plat in self._plataformas(marca):
+        for plat in self._universo_plataformas(cuenta_id, self._redes_conectadas(cuenta_id)):
             # A diferencia de `_piezas_plataforma` (que degrada a [] en silencio para
             # otros agregados), aquí el fallo del fetch se REGISTRA en la cobertura:
             # un top sin una plataforma configurada no debe pasar por completo.

@@ -16,6 +16,7 @@ import httpx
 import pytest
 import respx
 
+import keni_metricas.fuentes.metricool as metricool_mod
 from keni_metricas.config import Config, MetricoolConfig, construir_fuente
 from keni_metricas.fuentes.base import FuenteMetricas
 from keni_metricas.fuentes.metricool import (
@@ -215,6 +216,93 @@ def test_red_no_conectada_se_omite_con_motivo():
     assert resumen.cobertura is not None
     assert Plataforma.instagram in resumen.cobertura.omitidas
     assert resumen.cobertura.motivo["instagram"] == MotivoOmision.no_conectada
+
+
+@respx.mock
+def test_alta_de_red_se_detecta_al_caducar_la_cache(monkeypatch):
+    """Una red dada de alta EN Metricool tras la 1ª lectura se detecta al caducar la cache."""
+    perfiles = respx.get(f"{BASE}/admin/simpleProfiles").mock(
+        side_effect=[
+            httpx.Response(200, json=[_perfil()]),  # IG aún NO conectada
+            httpx.Response(200, json=[_perfil(instagram="uno")]),  # IG ya dada de alta
+        ]
+    )
+    _mock_posts("instagram", [_post_ig("p1", 6000, 200)])
+
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        antes = f.resumen("claro_sports", RANGO)
+        assert antes.por_plataforma == []
+        assert antes.cobertura.motivo["instagram"] == MotivoOmision.no_conectada
+
+        # Caduca la cache de conexiones: la siguiente lectura vuelve a consultar perfiles.
+        monkeypatch.setattr(metricool_mod, "_TTL_CONECTADAS_S", -1.0)
+        despues = f.resumen("claro_sports", RANGO)
+
+    assert [m.plataforma for m in despues.por_plataforma] == [Plataforma.instagram]
+    assert despues.visualizaciones == 6000
+    assert perfiles.call_count == 2
+
+
+@respx.mock
+def test_desconexion_de_red_se_detecta_al_caducar_la_cache(monkeypatch):
+    """Desconectar una red EN Metricool tras la 1ª lectura se refleja al caducar la cache."""
+    perfiles = respx.get(f"{BASE}/admin/simpleProfiles").mock(
+        side_effect=[
+            httpx.Response(200, json=[_perfil(instagram="uno")]),  # conectada
+            httpx.Response(200, json=[_perfil()]),  # ya desconectada
+        ]
+    )
+    _mock_posts("instagram", [_post_ig("p1", 6000, 200)])
+
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        antes = f.resumen("claro_sports", RANGO)
+        assert [m.plataforma for m in antes.por_plataforma] == [Plataforma.instagram]
+
+        monkeypatch.setattr(metricool_mod, "_TTL_CONECTADAS_S", -1.0)
+        despues = f.resumen("claro_sports", RANGO)
+
+    assert despues.por_plataforma == []
+    assert despues.cobertura.motivo["instagram"] == MotivoOmision.no_conectada
+    assert perfiles.call_count == 2
+
+
+@respx.mock
+def test_alta_fuera_del_config_se_audita_por_simpleprofiles():
+    """Una red conectada EN Metricool pero NO listada en el config se audita igual (alta).
+
+    `claro_sports` solo lista `instagram` en su config, pero X aparece conectada en
+    simpleProfiles: debe leerse igual (si no, un alta hecha en Metricool sería invisible).
+    """
+    _mock_perfiles(_perfil(twitter="cs_x"))  # solo X conectada; IG no
+    _mock_posts("twitter", [_post_ig("x1", 500, 50)])
+
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    plats = [m.plataforma for m in resumen.por_plataforma]
+    assert Plataforma.x in plats  # X auditada pese a no estar en el config
+    x = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.x)
+    assert x.visualizaciones == 500
+    # IG sí está en el config pero NO conectada -> se omite como no_conectada (desconexión).
+    assert resumen.cobertura.motivo["instagram"] == MotivoOmision.no_conectada
+
+
+@respx.mock
+def test_conexiones_se_cachean_dentro_del_ttl():
+    """Dentro del TTL, simpleProfiles se consulta UNA sola vez (la 2ª lee de cache)."""
+    perfiles = respx.get(f"{BASE}/admin/simpleProfiles").mock(
+        return_value=httpx.Response(200, json=[_perfil(instagram="uno")])
+    )
+    _mock_posts("instagram", [_post_ig("p1", 6000, 200)])
+
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        f.resumen("claro_sports", RANGO)
+        f.resumen("claro_sports", RANGO)
+
+    assert perfiles.call_count == 1
 
 
 @respx.mock
