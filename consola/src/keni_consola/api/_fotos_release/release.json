@@ -1,9 +1,9 @@
 {
-  "version": "0.1.0",
-  "notes": "Primera versión: procesado local de partidos (ráfagas, keeper, fases, búsqueda) + galería conectada con Claro Sports.",
+  "version": "0.1.1",
+  "notes": "Conexión estable (heartbeat) y galería compartida por marca: elige en la app con qué marcas compartir y el equipo de esas marcas la ve.",
   "pub_date": "2026-06-24T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFV3U1NqWUY1NUttTGxzVHdEY0gvRkt6anBzWEJ1aE5JWlhhbUVBbE5qNlBlcCthKzdld0RGd1VHWGU3ZFJIQUlkTmlZNTZIZFloRTBtTytJNCtQMWdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzU1Nzc3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClFVM01DMWU5MWc3dnBSNzdsZlUxYUxCMkgxMkZ3VkQyanhKTlI5TDJ6KzRHK1djYVYvQXh5djVzTURzblJ4dGpnOUdTZEhDZWJkMjhUblVSNWRoeERRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGErc3RSa2txZXB1L3ZZcUlQT3Yza0N0aGhVcGtUZGs2cVQzeTZGZnVmZjVKaEpXcVQ1dTNGY0RHNnlSd3grUTlIWnpnem1qVmNXajFMbTA0clR2TUFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzU4Nzg0CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnBFeEJ0a2RQY1E2blRaanF6RVFVRklnUDMzS2pyaFhNb2xMMjQvM1hWOFZGNnpXUXQ4QU9NZkd1amxWbUdwWXRqdVpCZTAyUkZ4NElTN2tGYlo0MkRBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
