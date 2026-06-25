@@ -534,21 +534,21 @@ export default function Fotos() {
                   {/* Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */}
                   <div className="flex flex-wrap items-center gap-1.5 pl-6">
                     <span className="text-xs text-muted-foreground">Comparte con:</span>
-                    {d.marcas.length === 0 ? (
+                    {(d.marcas?.length ?? 0) === 0 ? (
                       <span className="text-xs text-muted-foreground">ninguna marca</span>
                     ) : (
-                      d.marcas.map((m) => (
+                      (d.marcas ?? []).map((m) => (
                         <Badge key={m} variant="outline">
                           {nombreMarca(m)}
                         </Badge>
                       ))
                     )}
                   </div>
-                  {d.galerias.length === 0 ? (
+                  {(d.galerias?.length ?? 0) === 0 ? (
                     <p className="pl-6 text-xs text-muted-foreground">Sin galerías procesadas.</p>
                   ) : (
                     <ul className="space-y-1 pl-6">
-                      {d.galerias.map((g) => (
+                      {(d.galerias ?? []).map((g) => (
                         <li key={g.id} className="flex items-center justify-between gap-3 text-sm">
                           <span className="min-w-0 truncate">{g.nombre}</span>
                           <span className="shrink-0 text-xs text-muted-foreground">
