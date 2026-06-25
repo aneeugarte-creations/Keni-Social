@@ -421,7 +421,10 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             // ancho, Fundación finísimo, Claro casi cuadrado) para un tamaño óptico parejo.
             <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 140, w: 250 }} />
           )}
-          <p className={`mt-16 ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/90" : TONO.coverCaption}`}>
+          {/* Ancho completo (no encogido al texto): así el interletrado final nunca empuja la
+              última palabra a otra línea. Cabe en una sola; text-balance reparte en dos solo si
+              algún periodo llegara a ser larguísimo. */}
+          <p className={`mt-16 w-full text-balance ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/90" : TONO.coverCaption}`}>
             Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
             {periodo}
           </p>
