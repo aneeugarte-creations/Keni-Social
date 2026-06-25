@@ -72,7 +72,7 @@ def _migrar_clasificar_originales_portal(con: Any) -> None:
         return
     con.execute(
         "UPDATE catalogo_media SET fuente = 'portal' "
-        "WHERE objeto LIKE 'originales/%' AND (fuente IS NULL OR fuente = '')"
+        "WHERE objeto LIKE 'originales/%%' AND (fuente IS NULL OR fuente = '')"
     )
 
 

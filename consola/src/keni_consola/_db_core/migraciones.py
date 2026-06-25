@@ -289,6 +289,17 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # dependientes y columnas FK). PRE-DDL OBLIGATORIO: renombra ANTES de que el DDL cree las
     # tablas nuevas vacías (mismo motivo que 0041-recuperar-campanias). Idempotente, guardada.
     Migracion("0042-renombre-entidades", _migrar_renombre_entidades),
+    # BIBLIOTECA DE MEDIOS UNIFICADA: columnas `fuente` (carpeta de origen: portal|originales|
+    # fotografias) y `grupo` (carpeta lógica, p. ej. el partido) en `catalogo_media` para BDs ya
+    # creadas (las nuevas las traen del DDL). PRE-DDL: `fuente` la usa el índice declarativo
+    # `idx_catalogo_media_fuente`, que el DDL crea sobre una tabla preexistente sin la columna;
+    # debe añadirse antes (mismo motivo que 0003/0004/0005). Re-aplicable (idempotente:
+    # ADD COLUMN/CREATE INDEX IF NOT EXISTS); no destructivo ('' = sin clasificar).
+    Migracion(
+        "0049-columnas-catalogo-media",
+        _migrar_columnas_catalogo_media,
+        re_aplicar_si_cambia=True,
+    ),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -491,15 +502,6 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # deja de existir; todo es "categoría". One-shot e idempotente (RENAME guardado por la
     # existencia de la columna). Ver `_migrar_renombre_lineas_a_categorias_editor`.
     Migracion("0048-renombre-lineas-categorias-editor", _migrar_renombre_lineas_a_categorias_editor),
-    # BIBLIOTECA DE MEDIOS UNIFICADA: columnas `fuente` (carpeta de origen: portal|originales|
-    # fotografias) y `grupo` (carpeta lógica, p. ej. el partido) en `catalogo_media` para BDs ya
-    # creadas (las nuevas las traen del DDL), más el índice por `fuente`. Re-aplicable (idempotente:
-    # ADD COLUMN/CREATE INDEX IF NOT EXISTS); no destructivo ('' = sin clasificar).
-    Migracion(
-        "0049-columnas-catalogo-media",
-        _migrar_columnas_catalogo_media,
-        re_aplicar_si_cambia=True,
-    ),
     # PORTAL: las fotos de artículo ya catalogadas (S3 `originales/`, con su titular) son del
     # portal; clasifícalas como `fuente='portal'` para que aparezcan en esa carpeta de la
     # biblioteca. Re-aplicable e idempotente (solo toca filas sin clasificar).

@@ -364,3 +364,43 @@ def test_materializar_passkey_requerido_existentes(pg):
 
     for u in auth.listar_usuarios():
         assert auth.obtener_usuario_por_id(u["id"])["mfa_requerido"] is True
+
+
+def test_columna_fuente_se_anade_antes_del_indice_ddl(pg):
+    """0049 va en PRE-DDL: en una BD vieja sin `catalogo_media.fuente`, asegurar el esquema NO
+    debe caer al crear el indice declarativo `idx_catalogo_media_fuente`.
+
+    El indice vive en `_DDL_ESQUEMA` (paso 3, SIEMPRE) y la columna la anade la migracion 0049.
+    Si 0049 corriera en POST-DDL (paso 4) el indice se crearia ANTES que la columna y Postgres
+    lanzaria UndefinedColumn (fallo real de deploy: el Postgres hosted preexiste sin la columna,
+    el CREATE TABLE IF NOT EXISTS no la anade). Reproducimos esa BD vieja soltando columna+indice
+    y despendiendo 0049 del journal; re-asegurar el esquema debe volver a anadir la columna.
+    """
+    db.listar_swaps_turno()  # primer asegurado: crea catalogo_media (con fuente) y journaliza
+    con = motor_db.conectar_cruda()
+    try:
+        con.execute("DROP INDEX IF EXISTS idx_catalogo_media_fuente")
+        con.execute("ALTER TABLE catalogo_media DROP COLUMN IF EXISTS fuente")
+        con.execute("ALTER TABLE catalogo_media DROP COLUMN IF EXISTS grupo")
+        con.execute("DELETE FROM schema_migraciones WHERE id LIKE ?", ("0049-%",))
+        con.commit()
+    finally:
+        con.close()
+
+    db._esquemas_asegurados.clear()
+    db.listar_swaps_turno()  # re-asegura: 0049 (PRE-DDL) anade la columna antes del indice del DDL
+
+    con = motor_db.conectar_cruda()
+    try:
+        cols = {
+            fila["column_name"]
+            for fila in con.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = ?",
+                ("catalogo_media",),
+            ).fetchall()
+        }
+    finally:
+        con.close()
+    assert "fuente" in cols
+    assert "grupo" in cols
