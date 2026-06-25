@@ -1357,6 +1357,8 @@ def test_crear_tema_de_cluster_resuelve_og_image_de_fuente_propia(entorno, monke
     pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
     assert pend["imagen"] == "https://casa.test/foto-nota.jpg"
     assert pend["tipo_contenido"] == "fuente"
+    # ORIGEN real de la imagen: la fuente RSS propia de la que se resolvió la og:image.
+    assert pend["origen_fuente_id"] == fuente["id"]
 
 
 def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, monkeypatch):

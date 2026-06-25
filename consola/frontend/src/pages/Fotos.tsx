@@ -429,14 +429,6 @@ export default function Fotos() {
     return () => fuente.close();
   }, [marca]);
 
-  // Catálogo de marcas (id → nombre) para rotular a qué marcas comparte cada dispositivo.
-  const { data: opciones } = useQuery({
-    queryKey: ["piezas", "opciones"],
-    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
-  });
-  const nombreMarca = (id: string): string =>
-    opciones?.marcas.find((m) => m.id === id)?.nombre ?? id;
-
   const hayDispositivos = dispositivos.length > 0;
 
   return (
@@ -516,50 +508,32 @@ export default function Fotos() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                Dispositivos conectados
+                Dispositivos
                 <Badge variant="secondary">{dispositivos.length}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              {dispositivos.map((d) => (
-                <div key={`${d.usuario}-${d.dispositivo}`} className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Camera className="h-4 w-4 text-keni" aria-hidden="true" />
-                    <span className="text-sm font-medium">{d.dispositivo}</span>
-                    {d.version && <Badge variant="secondary">v{d.version}</Badge>}
-                    {d.usuario && (
-                      <span className="text-xs text-muted-foreground">de {d.usuario}</span>
-                    )}
-                  </div>
-                  {/* Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */}
-                  <div className="flex flex-wrap items-center gap-1.5 pl-6">
-                    <span className="text-xs text-muted-foreground">Comparte con:</span>
-                    {(d.marcas?.length ?? 0) === 0 ? (
-                      <span className="text-xs text-muted-foreground">ninguna marca</span>
-                    ) : (
-                      (d.marcas ?? []).map((m) => (
-                        <Badge key={m} variant="outline">
-                          {nombreMarca(m)}
-                        </Badge>
-                      ))
-                    )}
-                  </div>
-                  {(d.galerias?.length ?? 0) === 0 ? (
-                    <p className="pl-6 text-xs text-muted-foreground">Sin galerías procesadas.</p>
-                  ) : (
-                    <ul className="space-y-1 pl-6">
-                      {(d.galerias ?? []).map((g) => (
-                        <li key={g.id} className="flex items-center justify-between gap-3 text-sm">
-                          <span className="min-w-0 truncate">{g.nombre}</span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {g.dia} · {g.fotos} fotos
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+            {/* Línea minimal por usuario registrado: punto verde (online) / gris (offline) + usuario. */}
+            <CardContent className="space-y-2">
+              {[...dispositivos]
+                .sort((a, b) => Number(b.online !== false) - Number(a.online !== false))
+                .map((d, i) => {
+                  const online = d.online !== false;
+                  return (
+                    <div key={`${d.usuario}-${i}`} className="flex items-center gap-2 text-sm">
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "h-2 w-2 shrink-0 rounded-full",
+                          online ? "bg-emerald-500" : "bg-muted-foreground/40",
+                        )}
+                      />
+                      <span className="sr-only">{online ? "en línea" : "desconectado"}</span>
+                      <span className={online ? "text-foreground" : "text-muted-foreground"}>
+                        {d.usuario}
+                      </span>
+                    </div>
+                  );
+                })}
             </CardContent>
           </Card>
         )}

@@ -150,6 +150,138 @@ def _migrar_heredar_keywords_media(con: Any) -> None:
         )
 
 
+def _migrar_columnas_origen_fuente(con: Any) -> None:
+    """Anade `origen_fuente_id` a `catalogo_media` si una BD ya creada no la tuviera (idempotente).
+
+    TRACKING DE ORIGEN: guarda el id de la `fuentes_rss` de la que provino la imagen del artículo
+    (`tipo='original'`). Cruzar con `fuentes_rss.propia` distingue portal-PROPIO de RSS-externo.
+    `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya está. Solo aplica si la tabla existe (un
+    primer arranque ya la crea con la columna desde el DDL).
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "origen_fuente_id" not in _columnas_existentes(con, "catalogo_media"):
+        con.execute(
+            "ALTER TABLE catalogo_media ADD COLUMN IF NOT EXISTS "
+            "origen_fuente_id TEXT NOT NULL DEFAULT ''"
+        )
+
+
+def _migrar_backfill_origen_catalogo(con: Any) -> None:
+    """Backfill: recupera el ORIGEN real de las fotos de artículo ya catalogadas (best-effort).
+
+    Las fotos del portal (`tipo='original'`) catalogadas antes del tracking de origen perdieron su
+    `fuentes_rss`. Esta migración la recupera cruzando el `titulo` del catálogo con el `titulo` de
+    `noticias_items` (el titular de la nota): donde haya UN único item con ese titular, copia su
+    `fuente_id` a `catalogo_media.origen_fuente_id`. Si esa fuente resulta EXTERNA
+    (`fuentes_rss.propia=0`), saca la foto de la carpeta `portal` (deja `fuente=''`: no es ninguna
+    de las 3 carpetas de la biblioteca —portal/subidas/fotografias—, igual que IA/externas); si es
+    PROPIA o no hay match, conserva `fuente='portal'`. NO borra nada: solo etiqueta.
+
+    Idempotente: solo toca filas con `origen_fuente_id=''` y `tipo='original'`. Solo aplica si
+    existen las tablas y la columna (BD ya inicializada con `_migrar_columnas_origen_fuente`).
+    """
+    for tabla in ("catalogo_media", "noticias_items", "fuentes_rss"):
+        if not _tabla_existe(con, tabla):
+            return
+    if "origen_fuente_id" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    # Un único item con ese titular -> su fuente es el origen. Agrupa por titulo para descartar
+    # los titulares ambiguos (varias fuentes con el mismo titular: no podemos atribuir el origen).
+    filas = con.execute(
+        "SELECT cm.id AS media_id, MIN(ni.fuente_id) AS fuente_id, "
+        "       COUNT(DISTINCT ni.fuente_id) AS n_fuentes "
+        "FROM catalogo_media cm "
+        "JOIN noticias_items ni ON ni.titulo = cm.titulo AND ni.titulo <> '' "
+        "WHERE cm.tipo = 'original' AND coalesce(cm.origen_fuente_id, '') = '' "
+        "GROUP BY cm.id "
+        "HAVING COUNT(DISTINCT ni.fuente_id) = 1"
+    ).fetchall()
+    if not filas:
+        return
+    # Fuentes EXTERNAS (propia=0): la foto no es portal-propio; sale de la carpeta `portal`.
+    externas = {
+        f["id"]
+        for f in con.execute("SELECT id FROM fuentes_rss WHERE coalesce(propia, 0) = 0").fetchall()
+    }
+    for fila in filas:
+        fuente_id = fila["fuente_id"] or ""
+        if not fuente_id:
+            continue
+        con.execute(
+            "UPDATE catalogo_media SET origen_fuente_id = ? "
+            "WHERE id = ? AND coalesce(origen_fuente_id, '') = ''",
+            (fuente_id, fila["media_id"]),
+        )
+        if fuente_id in externas:
+            # Externa: fuera de la carpeta `portal` (queda sin carpeta, como IA/externas).
+            con.execute(
+                "UPDATE catalogo_media SET fuente = '' WHERE id = ? AND fuente = 'portal'",
+                (fila["media_id"],),
+            )
+
+
+def _migrar_reorg_originales_a_portal(con: Any) -> None:
+    """REORG físico S3: mueve las fotos del PORTAL de la carpeta `originales/` a `portal/`.
+
+    La foto del artículo se promovía a la carpeta física `originales/`; ahora su carpeta física
+    coincide con su carpeta lógica (`portal/`). Para cada `catalogo_media` portal-propio
+    (`fuente='portal'`) cuyo objeto siga en `originales/`: COPIA el binario a `portal/<base>`
+    (`promover_objeto`, idempotente), reapunta TODAS las referencias en la misma transacción
+    —`catalogo_media.objeto` + `pieza.imagen`/`foto` + las keys dentro de los JSON `pieza.fotos`
+    (collage) y `pieza.carrusel` (slides)—, VERIFICA que la copia existe y solo entonces borra el
+    objeto viejo. Si la copia no se puede verificar, NO toca refs ni borra (deja log).
+
+    Las fotos EXTERNAS/IA no se mueven (el backfill ya las sacó de `fuente='portal'`). Idempotente:
+    una foto ya en `portal/` no entra al SELECT; un corte tras reapuntar deja la fila en `portal/`
+    (no se re-procesa) y a lo sumo un binario huérfano en `originales/` (sin referencias, inofensivo).
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    filas = con.execute(
+        "SELECT id, objeto FROM catalogo_media "
+        "WHERE fuente = 'portal' AND objeto LIKE 'originales/%'"
+    ).fetchall()
+    if not filas:
+        return
+    from .. import almacen_media
+
+    tiene_pieza = _tabla_existe(con, "pieza")
+    for fila in filas:
+        viejo = fila["objeto"] or ""
+        base = viejo.split("/", 1)[1] if "/" in viejo else viejo
+        nuevo = f"portal/{base}"
+        try:
+            destino = almacen_media.promover_objeto(viejo, "portal")
+        except Exception:  # noqa: BLE001 -- una copia fallida no debe abortar el resto del reorg
+            _log.warning("reorg portal: no se pudo copiar %s -> %s; se deja sin mover", viejo, nuevo)
+            continue
+        # Solo reapunta+borra si la copia EXISTE de verdad en su nueva carpeta (verificación).
+        if destino != nuevo or not almacen_media.objeto_existe(nuevo):
+            _log.warning(
+                "reorg portal: la copia de %s a %s no se pudo verificar; se conserva el original",
+                viejo, nuevo,
+            )
+            continue
+        con.execute("UPDATE catalogo_media SET objeto = ? WHERE id = ?", (nuevo, fila["id"]))
+        if tiene_pieza:
+            con.execute("UPDATE pieza SET imagen = ? WHERE imagen = ?", (nuevo, viejo))
+            con.execute("UPDATE pieza SET foto = ? WHERE foto = ?", (nuevo, viejo))
+            # JSON (collage `fotos`, slides `carrusel`): la key vieja es única, replace textual seguro.
+            con.execute(
+                "UPDATE pieza SET fotos = replace(fotos, ?, ?) WHERE fotos LIKE ?",
+                (viejo, nuevo, f"%{viejo}%"),
+            )
+            con.execute(
+                "UPDATE pieza SET carrusel = replace(carrusel, ?, ?) WHERE carrusel LIKE ?",
+                (viejo, nuevo, f"%{viejo}%"),
+            )
+        # Refs reapuntadas y copia verificada: ya es seguro borrar el binario viejo.
+        almacen_media.borrar_objeto(viejo)
+
+
 def _migrar_fuente_subidas(con: Any) -> None:
     """Backfill: las fotos SUBIDAS a mano (`tipo='subida'`) son la carpeta `subidas` de la biblioteca.
 

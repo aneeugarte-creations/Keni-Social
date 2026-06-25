@@ -223,13 +223,15 @@ export interface GaleriaPropio {
 /** Un dispositivo (app de escritorio) conectado por el túnel, con su dueño, las marcas a las que
  *  comparte su galería y sus galerías procesadas. */
 export interface DispositivoPropio {
-  /** Dueño del dispositivo (usuario que abrió el túnel). */
+  /** Dueño del dispositivo (usuario que registró keni-fotos). */
   usuario: string;
-  dispositivo: string;
+  /** ¿Tiene una conexión viva ahora? Registrado pero sin túnel abierto -> false. */
+  online?: boolean;
+  dispositivo?: string;
   version?: string;
-  /** Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */
-  marcas: string[];
-  galerias: GaleriaPropio[];
+  /** Marcas a las que comparte su galería (solo si está online). */
+  marcas?: string[];
+  galerias?: GaleriaPropio[];
 }
 
 /** Respuesta de `GET /api/artes/propio/dispositivos`: dispositivos conectados (de cualquier dueño). */

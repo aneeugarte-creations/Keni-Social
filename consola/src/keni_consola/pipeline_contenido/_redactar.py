@@ -87,6 +87,9 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
     tipo_contenido = "fuente" if imagen else ""
     fuente_id = (pend.get("fuente_id") or "").strip() or None
     clave = (pend.get("clave") or "").strip() or None
+    # ORIGEN real de la IMAGEN del artículo (id de `fuentes_rss` del item que la traía): viaja
+    # hasta el catálogo de esa foto para distinguir portal-propio de RSS-externo.
+    origen_fuente_id = (pend.get("origen_fuente_id") or "").strip()
     gen = gen_dom.lanzar_copy(
         # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
         # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/verificación— no cuesta).
@@ -102,6 +105,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         clave=clave,
         publicacion_id=tema_id,
         imagen_fuente=imagen,
+        origen_fuente_id=origen_fuente_id,
         fotos_notas=fotos_notas,
         n_notas=n_notas,
         camino=camino,

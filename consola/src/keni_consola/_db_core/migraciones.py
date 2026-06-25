@@ -43,6 +43,9 @@ from .migraciones_columnas import (
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_catalogo_media,
+    _migrar_columnas_origen_fuente,
+    _migrar_backfill_origen_catalogo,
+    _migrar_reorg_originales_a_portal,
     _migrar_clasificar_originales_portal,
     _migrar_fts_catalogo_media,
     _migrar_fuente_subidas,
@@ -526,6 +529,18 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # vivos) y `tunel_rpc` (bus de RPC enrutado al worker dueño) para BDs ya creadas (las nuevas
     # las traen del DDL). One-shot e idempotente (`CREATE TABLE/INDEX IF NOT EXISTS`).
     Migracion("0054-tablas-tunel", _migrar_tablas_tunel),
+    # TRACKING DE ORIGEN: columna `origen_fuente_id` en `catalogo_media` (id de `fuentes_rss` de la
+    # imagen del artículo). One-shot e idempotente (`ADD COLUMN IF NOT EXISTS`). El DDL la trae para
+    # BDs vírgenes. Ver `_migrar_columnas_origen_fuente`.
+    Migracion("0055-origen-fuente-catalogo-media", _migrar_columnas_origen_fuente),
+    # BACKFILL del origen de las fotos del portal ya catalogadas: cruza su titular con
+    # `noticias_items` para recuperar la `fuentes_rss`; si es externa, las saca de la carpeta
+    # `portal`. Idempotente (solo filas con `origen_fuente_id=''`). Ver `_migrar_backfill_origen_catalogo`.
+    Migracion("0056-backfill-origen-catalogo", _migrar_backfill_origen_catalogo),
+    # REORG físico S3: mueve las fotos del PORTAL de `originales/` a `portal/` (copia, reapunta TODAS
+    # las referencias —catálogo + piezas—, verifica y borra el viejo). Idempotente; las externas/IA no
+    # se mueven. Corre DESPUÉS del backfill (que ya sacó las externas de `fuente='portal'`).
+    Migracion("0057-reorg-originales-a-portal", _migrar_reorg_originales_a_portal),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

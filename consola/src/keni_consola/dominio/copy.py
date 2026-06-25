@@ -218,7 +218,7 @@ def _avisar_voz(avisos: list[str], *, publicacion_id: str, marca: str) -> None:
 # --------------------------------------------------------------------------- #
 
 # `tipo` de catalogo de la foto ORIGINAL del articulo (RSS de marca propia). La Biblioteca
-# (Galeria de Artes) la agrupa en su carpeta "Originales".
+# la agrupa en su carpeta "Portal" (`fuente="portal"`).
 TIPO_ARTE_ORIGINAL = "original"
 
 
@@ -230,15 +230,18 @@ _MIN_LADO_FOTO_ORIGINAL = 320
 
 
 def _descargar_original_a_biblioteca(
-    imagen_fuente: str, *, marca: str, titulo: str, autor: dict[str, str] | None
+    imagen_fuente: str, *, marca: str, titulo: str, autor: dict[str, str] | None,
+    origen_fuente_id: str = "",
 ) -> str:
     """Descarga la foto ORIGINAL del articulo, la CATALOGA en la Biblioteca y devuelve su key.
 
-    La foto de una fuente PROPIA se baja a S3, se promueve a su carpeta de procedencia
-    `originales` y se registra en el catalogo (`tipo="original"`, por marca): asi APARECE en la
-    Galeria de Artes bajo su carpeta "Originales", el GC no la borra y la pieza nace con ESA key
+    La foto de una fuente PROPIA se baja a S3, se promueve a su carpeta de procedencia `portal`
+    y se registra en el catalogo (`tipo="original"`, `fuente="portal"`, por marca): asi APARECE
+    en la carpeta "Portal" de la Biblioteca, el GC no la borra y la pieza nace con ESA key
     auto-inyectada al feed COMO `foto` (foto cruda real: cuenta como imagen y la placa de marca
-    se compone sobre ella). Tolerante: "" si la descarga falla o la imagen es demasiado pequeña
+    se compone sobre ella). `origen_fuente_id` es el id de la `fuentes_rss` de la que salió la
+    imagen: se persiste como ORIGEN real para distinguir portal-propio de RSS-externo
+    (`fuentes_rss.propia`). Tolerante: "" si la descarga falla o la imagen es demasiado pequeña
     (la pieza queda sin foto, a criterio humano); si solo falla el catalogo, se devuelve
     igualmente la key promovida (la imagen sirve en la pieza).
     """
@@ -252,12 +255,13 @@ def _descargar_original_a_biblioteca(
     except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generacion
         return ""
     try:
-        objeto = almacen_media.promover_objeto(objeto, "originales")
+        objeto = almacen_media.promover_objeto(objeto, "portal")
         repos.crear_media_catalogo(
-            # La foto viene del ARTÍCULO del portal (`imagen_fuente`): su carpeta lógica en la
-            # biblioteca es `portal` (la carpeta física S3 sigue siendo `originales`).
+            # La foto viene del ARTÍCULO del portal (`imagen_fuente`): su carpeta es `portal`
+            # (física y lógica). El `origen_fuente_id` guarda de QUÉ fuente RSS provino.
             objeto=objeto, tipo=TIPO_ARTE_ORIGINAL, marca=marca or "",
-            titulo=titulo or "", fuente="portal", autor=autor,
+            titulo=titulo or "", fuente="portal", origen_fuente_id=origen_fuente_id or "",
+            autor=autor,
         )
     except Exception:  # noqa: BLE001 -- sin fila de catalogo la imagen sigue sirviendo en la pieza
         pass
@@ -339,6 +343,7 @@ def crear_publicaciones_desde_piezas(
     publicacion_id: str = "",
     atomico: bool = False,
     imagen_fuente: str = "",
+    origen_fuente_id: str = "",
     tipo_contenido: str = "",
     slides_carrusel: list[dict[str, str]] | None = None,
 ) -> list[dict[str, object]]:
@@ -386,6 +391,7 @@ def crear_publicaciones_desde_piezas(
     if imagen_fuente:
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
+            origen_fuente_id=origen_fuente_id,
         )
     # CARRUSEL: el modelo eligió `tipo=carrusel` y emitió un PANEL multi-historia (`slides_carrusel`):
     # se hornea una placa por sub-historia (titular + su foto) y se arma el `carrusel` de la pieza;
@@ -570,6 +576,7 @@ def construir_procesar_copy(
     autor: dict[str, str] | None = None,
     publicacion_id: str = "",
     imagen_fuente: str = "",
+    origen_fuente_id: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
     revision_inicial: str = "",
@@ -593,6 +600,8 @@ def construir_procesar_copy(
     NOTA (`[{titulo, imagen}, …]`, mismo orden numerado que vio el modelo en el prompt). Si
     la salida declara `tipo=carrusel` con 2+ `slides`, cada slide se resuelve a su foto por
     número y se HORNEA como placa; si no, post de foto como siempre.
+    `origen_fuente_id` (pipeline/RSS): id de la `fuentes_rss` de la que salió `imagen_fuente`.
+    Viaja hasta el catálogo de la foto del artículo como ORIGEN real (portal-propio vs externo).
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -633,7 +642,8 @@ def construir_procesar_copy(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=verdicto, origen=historial_id, autor=autor,
             publicacion_id=publicacion_id,
-            imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
+            imagen_fuente=imagen_fuente, origen_fuente_id=origen_fuente_id,
+            tipo_contenido=tipo_contenido,
             slides_carrusel=slides_resueltos,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de

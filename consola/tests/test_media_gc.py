@@ -88,11 +88,13 @@ def test_protege_media_de_audio(monkeypatch):
     )
     assert "audios/abc.mp3" in media_gc.referencias_vivas()
 
-    _objetos(monkeypatch, [("audios/abc.mp3", _VIEJO), ("audios/huerfano.mp3", _VIEJO)])
+    # `audios/` no es categoría borrable por el GC: aunque el audio quedara sin fila, no se
+    # recolecta. El huérfano que SÍ se borra es una caché regenerable (`render/`).
+    _objetos(monkeypatch, [("audios/abc.mp3", _VIEJO), ("render/huerfano.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
     media_gc.limpiar(antiguedad_horas=24)
-    # Borra el huérfano viejo, conserva el del audio referenciado.
-    assert borrados == ["audios/huerfano.mp3"]
+    # Borra el huérfano viejo regenerable, conserva el del audio referenciado.
+    assert borrados == ["render/huerfano.png"]
 
 
 def test_catalogo_media_es_red_de_seguridad_opcional_si_existe(monkeypatch):
@@ -111,11 +113,11 @@ def test_gc_no_falla_si_catalogo_media_no_existe(monkeypatch):
     monkeypatch.setattr(media_gc.repos, "listar_piezas", lambda *a, **k: [])
     monkeypatch.delattr(media_gc.repos, "listar_media_catalogo", raising=False)
     assert media_gc.referencias_vivas() == set()
-    # Y un suelto viejo se borra igual (sin la red de seguridad de catalogo-media).
-    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
+    # Y un suelto viejo regenerable se borra igual (sin la red de seguridad de catalogo-media).
+    _objetos(monkeypatch, [("render/suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["suelto.png"] and res["borrados"] == 1
+    assert borrados == ["render/suelto.png"] and res["borrados"] == 1
 
 
 def test_protege_foto_cruda_de_publicacion(monkeypatch):
@@ -408,13 +410,13 @@ def test_no_borra_reciente_aunque_suelto(monkeypatch, repos_vacios):
 
 
 def test_borra_el_suelto_viejo(monkeypatch, repos_vacios):
-    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
+    _objetos(monkeypatch, [("render/suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["suelto.png"]
+    assert borrados == ["render/suelto.png"]
     assert res["borrados"] == 1 and res["conservados"] == 0
-    assert res["nombres"] == ["suelto.png"] and res["dry_run"] is False
+    assert res["nombres"] == ["render/suelto.png"] and res["dry_run"] is False
 
 
 def test_mezcla_solo_borra_el_suelto_viejo(monkeypatch):
@@ -429,14 +431,14 @@ def test_mezcla_solo_borra_el_suelto_viejo(monkeypatch):
         [
             ("viva.png", _VIEJO),       # referenciada -> conservar
             ("cat.png", _VIEJO),        # catalogada -> conservar
-            ("reciente.png", _NUEVO),   # suelta pero reciente -> conservar
-            ("basura.png", _VIEJO),     # suelta y vieja -> BORRAR
+            ("generadas/reciente.png", _NUEVO),  # suelta pero reciente -> conservar
+            ("render/basura.png", _VIEJO),        # suelta, vieja y regenerable -> BORRAR
         ],
     )
     borrados = _captura_borrados(monkeypatch)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["basura.png"]
+    assert borrados == ["render/basura.png"]
     assert res["borrados"] == 1 and res["conservados"] == 3
 
 
@@ -461,31 +463,77 @@ def test_borra_copyright_viejo_al_cambiar_la_foto(monkeypatch):
     assert res["borrados"] == 1 and res["conservados"] == 1
 
 
+def test_no_borra_foto_de_biblioteca_aunque_sin_uso(monkeypatch, repos_vacios):
+    # DEFENSA: la biblioteca persiste por sí misma. Una foto original/portal/subida/del archivo
+    # fotográfico (y los artes/plantillas/logos reusables) NO es borrable por el GC aunque sea
+    # vieja y NINGUNA pieza la use: solo lo son las efímeras (copyright) y las cachés.
+    _objetos(
+        monkeypatch,
+        [
+            ("originales/foto.jpg", _VIEJO),
+            ("portal/nota.jpg", _VIEJO),
+            ("fotos/subida.jpg", _VIEJO),
+            ("fotografias/cancha.jpg", _VIEJO),
+            ("artes/arte.png", _VIEJO),
+            ("plantillas/plantilla.png", _VIEJO),
+            ("logos/logo.png", _VIEJO),
+        ],
+    )
+    borrados = _captura_borrados(monkeypatch)
+
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert borrados == []
+    assert res["borrados"] == 0 and res["conservados"] == 7
+
+
+def test_borra_caches_regenerables_y_copyright_sin_uso(monkeypatch, repos_vacios):
+    # Solo categorías efímeras/regenerables: stock sin licencia (copyright) y cachés
+    # (render/deriv/previews/generadas) viejas y sin uso SÍ se recolectan.
+    _objetos(
+        monkeypatch,
+        [
+            ("copyright/stock.jpg", _VIEJO),
+            ("render/r.png", _VIEJO),
+            ("deriv/d.webp", _VIEJO),
+            ("previews/p.png", _VIEJO),
+            ("generadas/g.png", _VIEJO),
+        ],
+    )
+    borrados = _captura_borrados(monkeypatch)
+
+    res = media_gc.limpiar(antiguedad_horas=24)
+    assert sorted(borrados) == [
+        "copyright/stock.jpg", "deriv/d.webp", "generadas/g.png",
+        "previews/p.png", "render/r.png",
+    ]
+    assert res["borrados"] == 5 and res["conservados"] == 0
+
+
 def test_dry_run_no_borra(monkeypatch, repos_vacios):
-    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
+    _objetos(monkeypatch, [("render/suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
     res = media_gc.limpiar(antiguedad_horas=24, dry_run=True)
     assert borrados == []  # NO se llamo a borrar_objeto
     assert res["dry_run"] is True
     assert res["borrados"] == 0 and res["conservados"] == 0
-    assert res["nombres"] == ["suelto.png"]
+    assert res["nombres"] == ["render/suelto.png"]
 
 
 def test_limpiar_robusto_ante_fallo_por_objeto(monkeypatch, repos_vacios):
     # Dos sueltos viejos: el primer borrado falla, el segundo debe seguir adelante.
-    _objetos(monkeypatch, [("falla.png", _VIEJO), ("ok.png", _VIEJO)])
+    _objetos(monkeypatch, [("render/falla.png", _VIEJO), ("render/ok.png", _VIEJO)])
     borrados: list[str] = []
 
     def _borrar(nombre):
-        if nombre == "falla.png":
+        if nombre == "render/falla.png":
             raise OSError("disco lleno")
         borrados.append(nombre)
 
     monkeypatch.setattr(media_gc.almacen_media, "borrar_objeto", _borrar)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["ok.png"]          # el segundo se borro pese al fallo del primero
+    assert borrados == ["render/ok.png"]   # el segundo se borro pese al fallo del primero
     assert res["borrados"] == 1            # solo cuenta el que de verdad se borro
     assert res["conservados"] == 0
 
@@ -539,21 +587,21 @@ def test_daemon_barre_si_gate_encendido(monkeypatch):
 def test_limpiar_reverifica_referencias_antes_de_borrar(monkeypatch, repos_vacios):
     """Anti-TOCTOU: si un objeto se vuelve REFERENCIADO entre el calculo de sueltos y el
     borrado (una pieza nueva lo fija como imagen), el barrido lo RESCATA (no lo borra)."""
-    _objetos(monkeypatch, [("rescatado.png", _VIEJO), ("suelto.png", _VIEJO)])
+    _objetos(monkeypatch, [("render/rescatado.png", _VIEJO), ("render/suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
     # 1a llamada (dentro de `sueltos`): nada referenciado. 2a llamada (re-verificacion
-    # previa al borrado): "rescatado.png" ya esta referenciado por una pieza nueva.
+    # previa al borrado): "render/rescatado.png" ya esta referenciado por una pieza nueva.
     llamadas = {"n": 0}
 
     def _vivas_cambiantes():
         llamadas["n"] += 1
-        return set() if llamadas["n"] == 1 else {"rescatado.png"}
+        return set() if llamadas["n"] == 1 else {"render/rescatado.png"}
 
     monkeypatch.setattr(media_gc, "referencias_vivas", _vivas_cambiantes)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["suelto.png"]  # el rescatado NO se borro
+    assert borrados == ["render/suelto.png"]  # el rescatado NO se borro
     assert res["borrados"] == 1
     assert res["conservados"] == 1  # el rescatado cuenta como conservado
-    assert "rescatado.png" not in res["nombres"]
+    assert "render/rescatado.png" not in res["nombres"]

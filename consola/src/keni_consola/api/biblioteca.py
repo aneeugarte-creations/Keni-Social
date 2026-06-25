@@ -311,6 +311,35 @@ def _heredar_keywords_en_media(media_id: str, item: dict, pieza: dict) -> None:
         )
 
 
+def _catalogo_por_objeto(objeto: str) -> dict | None:
+    """Item del catálogo que cataloga `objeto` (o None). El `objeto` es UNIQUE en el catálogo."""
+    if not objeto:
+        return None
+    for item in repos.listar_media_catalogo():
+        if (item.get("objeto") or "").strip() == objeto:
+            return item
+    return None
+
+
+def _limpiar_etiquetas_huerfanas(foto_vieja: str) -> None:
+    """Al reemplazar la foto de una pieza, vacía las etiquetas heredadas de la foto VIEJA si ya
+    no la usa NINGUNA pieza.
+
+    Las etiquetas de una foto del catálogo se enriquecen con las keywords de las piezas que la
+    usan (`_heredar_keywords_en_media`). Cuando una pieza cambia de foto, las que heredó de esa
+    pieza dejan de tener dueño; si NINGUNA otra pieza referencia la foto vieja, se vacían (la fila
+    del catálogo permanece: la foto sigue en la biblioteca, solo pierde el contexto heredado).
+    """
+    if not foto_vieja:
+        return
+    if any((p.get("foto") or "").strip() == foto_vieja for p in repos.listar_piezas()):
+        return
+    item = _catalogo_por_objeto(foto_vieja)
+    if item is None or not _etiquetas_lista(item.get("etiquetas")):
+        return
+    repos.actualizar_media_catalogo(item.get("id") or "", {"etiquetas": "[]"})
+
+
 def _adjuntar(pieza_id: str, media_id: str) -> tuple[int, dict]:
     """Lee el binario del item del catálogo y lo fija en la pieza como foto de galería (publicable)."""
     item = repos.obtener_media_catalogo(media_id)
@@ -322,6 +351,9 @@ def _adjuntar(pieza_id: str, media_id: str) -> tuple[int, dict]:
     datos = almacen_media.leer_objeto(item.get("objeto") or "")
     if datos is None:
         return 404, {"error": "No se encontró el archivo de esa imagen."}
+    # Foto que la pieza tenía ANTES de sobrescribirla (para liberar sus etiquetas heredadas si
+    # tras el cambio queda sin dueño).
+    foto_vieja = (pieza.get("foto") or "").strip()
     try:
         actualizada = autogen_stock.adjuntar_bytes(
             pieza_id,
@@ -337,6 +369,7 @@ def _adjuntar(pieza_id: str, media_id: str) -> tuple[int, dict]:
     if actualizada is None:
         return 404, {"error": "Esa pieza ya no existe."}
     _heredar_keywords_en_media(media_id, item, pieza)
+    _limpiar_etiquetas_huerfanas(foto_vieja)
     return 200, {"plataforma": _plataforma_a_dict(actualizada)}
 
 

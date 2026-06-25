@@ -951,6 +951,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- catalogados antes de la biblioteca). El buscador global cruza las tres fuentes.
         fuente       TEXT NOT NULL DEFAULT '',
         grupo        TEXT NOT NULL DEFAULT '',
+        -- ORIGEN REAL del objeto: id de la `fuentes_rss` de la que provino la imagen del artículo
+        -- (foto del portal, `tipo='original'`). Cruzar con `fuentes_rss.propia` distingue
+        -- portal-PROPIO (1, UnoTV/ClaroSports) de RSS-externo (0). '' = sin origen RSS conocido
+        -- (subidas/fotografias/IA, o foto de portal catalogada antes de este tracking).
+        origen_fuente_id TEXT NOT NULL DEFAULT '',
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
         creado       TEXT NOT NULL DEFAULT '',

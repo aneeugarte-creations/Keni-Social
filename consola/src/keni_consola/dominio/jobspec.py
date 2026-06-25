@@ -258,6 +258,7 @@ def construir_copy(
     clave: str | None = None,
     publicacion_id: str = "",
     imagen_fuente: str = "",
+    origen_fuente_id: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
     revision_inicial: str = "",
@@ -305,6 +306,9 @@ def construir_copy(
         "clave": clave or "",
         "publicacion_id": publicacion_id or "",
         "imagen_fuente": imagen_fuente or "",
+        # ORIGEN real de `imagen_fuente`: id de `fuentes_rss`. Viaja hasta el catálogo de la foto
+        # del artículo para distinguir portal-propio de RSS-externo (`fuentes_rss.propia`).
+        "origen_fuente_id": origen_fuente_id or "",
         "fotos_notas": [dict(f) for f in (fotos_notas or []) if isinstance(f, dict)],
         "tipo_contenido": tipo_contenido or "",
         "revision_inicial": revision_inicial or "",
@@ -800,6 +804,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
             publicacion_id=p.get("publicacion_id", "") or "",
             imagen_fuente=p.get("imagen_fuente", "") or "",
+            origen_fuente_id=p.get("origen_fuente_id", "") or "",
             fotos_notas=[f for f in (p.get("fotos_notas") or []) if isinstance(f, dict)],
             tipo_contenido=p.get("tipo_contenido", "") or "",
             revision_inicial=p.get("revision_inicial", "") or "",

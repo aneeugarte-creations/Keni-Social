@@ -96,6 +96,13 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
             "fuente_id": fuente.get("id") or "",
             "clave": (item.get("clave") or "").strip(),
             "imagen": imagen,
+            # ORIGEN real de `imagen`: id de la `fuentes_rss` del item del que salió la foto.
+            # Por defecto el de la `fuente` (item RSS suelto: la foto es de esa misma fuente);
+            # un cluster lo pasa explícito en `trabajo` (la foto puede venir de otro item propio).
+            "origen_fuente_id": (
+                trabajo.get("origen_fuente_id") or fuente.get("id") or ""
+                if imagen else ""
+            ),
             "fotos_notas": fotos_notas,
             "n_notas": n_notas,
             "tipo_contenido": "fuente" if imagen else "",
@@ -527,12 +534,27 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
     historia). "" si nada: el arte lo pone la etapa de Ilustrar
     (o el equipo). Nunca la foto de un medio ajeno.
     """
-    fotos = _fotos_notas_de_cluster(items)
-    if fotos:
-        return fotos[0]["imagen"]
+    return _imagen_de_cluster_con_origen(items)[0]
+
+
+def _imagen_de_cluster_con_origen(items: list[dict[str, Any]]) -> tuple[str, str]:
+    """Igual que `_imagen_de_cluster` pero devuelve `(imagen, origen_fuente_id)`.
+
+    `origen_fuente_id` es el id de la `fuentes_rss` del item PROPIO del que salió esa foto: se
+    propaga hasta el catálogo de la imagen para registrar su ORIGEN real. `("", "")` si nada.
+    """
     cache: dict[str, bool] = {}
     for it in items:
-        if not _es_fuente_propia(it.get("fuente_id") or "", cache):
+        fuente_id = (it.get("fuente_id") or "").strip()
+        if not _es_fuente_propia(fuente_id, cache):
+            continue
+        img = (it.get("imagen") or "").strip()
+        if img:
+            return img, fuente_id
+    # Ningún item propio traía foto de feed: cae a la og:image del primer artículo propio.
+    for it in items:
+        fuente_id = (it.get("fuente_id") or "").strip()
+        if not _es_fuente_propia(fuente_id, cache):
             continue
         enlace = (it.get("url") or "").strip()
         if not enlace:
@@ -543,8 +565,8 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
             resuelta = ""
         # Sigue probando los demás artículos propios si este no resolvió og:image.
         if resuelta:
-            return resuelta
-    return ""
+            return resuelta, fuente_id
+    return "", ""
 
 
 def _fotos_notas_de_familia(
@@ -688,7 +710,7 @@ def crear_tema_de_cluster(
     nota = (_nota_de_cluster(titulo, resumen, items, cuerpos)
             + _contexto_feed_evento(marca, tema_macro))[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
-    imagen = _imagen_de_cluster(items)
+    imagen, origen_fuente_id = _imagen_de_cluster_con_origen(items)
     if not imagen and cid:
         # Amplía la ventana de la PORTADA más allá de los items de la nota: un item PROPIO (con
         # derechos de imagen) queda fuera si hay agencias más recientes encima.
@@ -697,7 +719,7 @@ def crear_tema_de_cluster(
         except Exception:  # noqa: BLE001 -- la ampliación de la portada es best-effort
             items_foto = []
         if items_foto:
-            imagen = _imagen_de_cluster(items_foto)
+            imagen, origen_fuente_id = _imagen_de_cluster_con_origen(items_foto)
     # PORTAL: la pieza usa SOLO su foto propia (la del artículo) y nunca recibe stock ni arte IA.
     # Sin foto propia no hay nada publicable que mostrar -> no se crea el tema (se omite el cluster).
     if portal and not imagen:
@@ -708,8 +730,10 @@ def crear_tema_de_cluster(
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
     # `n_notas` (cuántas SUB-HISTORIAS agrupa) + `fotos_notas` (foto propia por nota) habilitan
     # el output CARRUSEL en la fase CD (una placa por sub-historia; Claude decide).
+    # `origen_fuente_id`: la fuente RSS propia de la que salió `imagen` (su origen real).
     trabajo = {
         "fuente": {}, "item": {"clave": ""}, "imagen": imagen,
+        "origen_fuente_id": origen_fuente_id,
         "fotos_notas": _fotos_notas_de_cluster(items),
         "n_notas": min(len(items), _MAX_ENLACES_CLUSTER),
     }
@@ -795,11 +819,13 @@ def _crear_carrusel_de_familia(
     nota = (_nota_de_familia(tema_macro, familia_con_items, cuerpos_por_cluster)
             + _contexto_feed_evento(marca, tema_macro))[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
-    imagen = _imagen_de_cluster(items_lead)
+    imagen, origen_fuente_id = _imagen_de_cluster_con_origen(items_lead)
     # `n_notas` = nº de SUB-HISTORIAS (≥2): habilita el output CARRUSEL (una placa por ángulo)
     # en la fase CD; `fotos_notas` numera la foto propia de cada sub-historia para asignarla a su slide.
+    # `origen_fuente_id`: la fuente RSS propia de la que salió la PORTADA (su origen real).
     trabajo = {
         "fuente": {}, "item": {"clave": ""}, "imagen": imagen,
+        "origen_fuente_id": origen_fuente_id,
         "fotos_notas": fotos_notas_familia,
         "n_notas": len(fotos_notas_familia) or len(familia),
     }

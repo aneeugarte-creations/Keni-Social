@@ -54,6 +54,16 @@ from .. import almacen_media, repos
 
 _log = logging.getLogger("keni_consola.media_gc")
 
+# CATEGORIAS borrables por el GC: stock SIN LICENCIA (`copyright`, efímero por contrato) y las
+# cachés REGENERABLES (`render`/`deriv`/`previews`/`generadas`, que se reconstruyen de la receta).
+# DEFENSA DE DATOS: el GC NUNCA toca la biblioteca persistente (originales/portal/subidas/
+# fotografias/fotos/artes) ni los activos reusables (plantillas/logos) — esos objetos se conservan
+# aunque ninguna pieza los use, porque la biblioteca persiste por sí misma. Un objeto cuya categoría
+# NO esté aquí (incl. keys planas sin categoría) jamás se considera suelto borrable.
+_CATEGORIAS_GC: frozenset[str] = frozenset(
+    {"copyright", "render", "deriv", "previews", "generadas"}
+)
+
 
 def _imagenes_de(filas: list[dict[str, Any]]) -> set[str]:
     """Nombres de objeto en el campo `imagen` de una lista de filas (vacios descartados)."""
@@ -335,12 +345,14 @@ def referencias_vivas() -> set[str]:
 
 
 def sueltos(antiguedad_horas: float = 24) -> list[str]:
-    """Objetos SUELTOS borrables: ni referenciados/catalogados ni recientes.
+    """Objetos SUELTOS borrables: efímeros/cache, ni referenciados ni recientes.
 
-    Devuelve los nombres de objeto de `almacen_media.listar_objetos()` que NO estan en
-    `referencias_vivas()` y cuyo mtime es mas viejo que `antiguedad_horas` (medido contra
-    `time.time()`). Un umbral <= 0 se trata como 0 (todo lo no referenciado es candidato),
-    pero el llamante (config) ya impone min 1h.
+    Devuelve los nombres de objeto de `almacen_media.listar_objetos()` que cumplen las TRES
+    condiciones: su categoría está en `_CATEGORIAS_GC` (solo stock efímero y cachés
+    regenerables; la biblioteca persistente nunca entra), NO estan en `referencias_vivas()`, y
+    su mtime es mas viejo que `antiguedad_horas` (medido contra `time.time()`). Un umbral <= 0
+    se trata como 0 (todo lo no referenciado es candidato), pero el llamante (config) ya impone
+    min 1h.
     """
     vivas = referencias_vivas()
     objetos = almacen_media.listar_objetos()
@@ -348,7 +360,9 @@ def sueltos(antiguedad_horas: float = 24) -> list[str]:
     return [
         nombre
         for (nombre, mtime) in objetos
-        if nombre not in vivas and mtime < corte
+        if almacen_media.categoria_de(nombre) in _CATEGORIAS_GC
+        and nombre not in vivas
+        and mtime < corte
     ]
 
 

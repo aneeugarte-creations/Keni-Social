@@ -23,6 +23,7 @@ _COLS_CATALOGO_MEDIA = (
     "aprobado",
     "fuente",
     "grupo",
+    "origen_fuente_id",
     "autor_id",
     "autor_nombre",
     "creado",
@@ -56,6 +57,7 @@ def _fila_a_media_catalogo(fila: Any) -> dict[str, Any]:
     item["tipo"] = fila["tipo"] or "imagen"
     item["fuente"] = fila["fuente"] or ""
     item["grupo"] = fila["grupo"] or ""
+    item["origen_fuente_id"] = fila["origen_fuente_id"] or ""
     return item
 
 
@@ -71,6 +73,7 @@ def crear_media_catalogo(
     aprobado: bool = True,
     fuente: str = "",
     grupo: str = "",
+    origen_fuente_id: str = "",
     autor: dict[str, str] | None = None,
     id: str = "",
     creado: str = "",
@@ -91,6 +94,7 @@ def crear_media_catalogo(
         "aprobado": 1 if aprobado else 0,
         "fuente": fuente or "",
         "grupo": grupo or "",
+        "origen_fuente_id": origen_fuente_id or "",
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
         "creado": creado or ahora,

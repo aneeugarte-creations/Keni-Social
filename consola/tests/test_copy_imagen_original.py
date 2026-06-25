@@ -1,9 +1,9 @@
-"""La foto ORIGINAL de fuente propia se CATALOGA en la Prompts y se inyecta a la pieza.
+"""La foto ORIGINAL de fuente propia se CATALOGA en la Biblioteca y se inyecta a la pieza.
 
 Cuando `crear_publicaciones_desde_piezas` recibe `imagen_fuente` (og:image de un RSS de marca
-propia), descarga la foto, la promueve a la carpeta protegida `artes`, la registra en el
-catálogo de media con `tipo="original"` (así APARECE en la Galería de Artes bajo "Originales" y
-el GC no la borra) y la pieza nace con ESA key como imagen del feed.
+propia), descarga la foto, la promueve a la carpeta `portal`, la registra en el catálogo de
+media con `tipo="original"` y `fuente="portal"` (así APARECE en la carpeta "Portal" de la
+Biblioteca y el GC no la borra) y la pieza nace con ESA key como imagen del feed.
 
 OFFLINE: backend de media en DISCO (S3_* borradas) y descarga binaria parcheada; DB en el
 Postgres de pruebas vía la fixture `entorno`.
@@ -52,20 +52,44 @@ def test_imagen_fuente_se_cataloga_como_original_y_se_inyecta(entorno, monkeypat
     )
 
     # La pieza nace con la foto ORIGINAL como `foto` (foto cruda real, en su carpeta de
-    # procedencia `originales`): así CUENTA como imagen y la pieza queda LISTA (sin "Falta
+    # procedencia `portal`): así CUENTA como imagen y la pieza queda LISTA (sin "Falta
     # imagen"). NO va a `imagen` (ese campo es la placa horneada y en marca no cuenta como foto).
     assert len(creadas) == 1
     foto = str(creadas[0].get("foto") or "")
-    assert foto.startswith("originales/")
+    assert foto.startswith("portal/")
     assert str(creadas[0].get("imagen") or "") == ""
     assert creadas[0].get("falta_imagen") is False
 
-    # Y queda CATALOGADA en la Prompts con tipo="original" y marca de la pieza.
+    # Y queda CATALOGADA en la Biblioteca con tipo="original", fuente="portal" y marca de la pieza.
     catalogo = repos.listar_media_catalogo()
     fila = next((c for c in catalogo if (c.get("objeto") or "") == foto), None)
     assert fila is not None
     assert fila.get("tipo") == dom_copy.TIPO_ARTE_ORIGINAL
+    assert fila.get("fuente") == "portal"
     assert fila.get("marca") == _MARCA
+
+
+def test_origen_fuente_id_se_persiste_al_catalogar(entorno, monkeypatch):
+    """El `origen_fuente_id` (id de la `fuentes_rss` de la imagen) viaja hasta el catálogo."""
+    _almacen_disco(monkeypatch)
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
+
+    creadas = dom_copy.crear_publicaciones_desde_piezas(
+        [{"red": "x", "contenido": "Hola", "copy_in": ""}],
+        marca=_MARCA,
+        titulo="Nota propia",
+        verdicto="",
+        origen="hist-origen",
+        imagen_fuente="https://example.com/foto.png",
+        origen_fuente_id="fuente-unotv-1",
+        tipo_contenido="fuente",
+    )
+
+    foto = str(creadas[0].get("foto") or "")
+    catalogo = repos.listar_media_catalogo()
+    fila = next((c for c in catalogo if (c.get("objeto") or "") == foto), None)
+    assert fila is not None
+    assert fila.get("origen_fuente_id") == "fuente-unotv-1"
 
 
 def test_imagen_fuente_basura_diminuta_no_inyecta_y_queda_sin_foto(entorno, monkeypatch):
@@ -178,7 +202,7 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
         slides = json.loads(str(creada.get("carrusel") or "[]"))
         assert [s["objeto"] for s in slides] == ["artes/slide-1.png", "artes/slide-2.png"]
         assert all(s["tipo"] == "imagen" for s in slides)
-        assert str(creada.get("imagen") or "").startswith("originales/")
+        assert str(creada.get("imagen") or "").startswith("portal/")
         # PROCEDENCIA persistida por slide (para re-editar la placa): titular siempre; foto fuente
         # solo si la sub-historia la traía (el slide A tenía foto; el B era placa de solo texto).
         assert slides[0]["titular"] == "Concierto A"

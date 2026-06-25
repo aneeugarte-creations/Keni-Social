@@ -286,6 +286,46 @@ def test_backfill_hereda_keywords_a_media_vacia(cliente):
     assert "liga mx" in tags and "futbol" in tags
 
 
+def test_cambiar_foto_limpia_etiquetas_heredadas_de_la_vieja(cliente):
+    """Al cambiar la foto de una pieza, la foto VIEJA pierde sus etiquetas heredadas si ya no la
+    usa ninguna otra pieza (la fila del catálogo permanece; solo se vacían las etiquetas)."""
+    a = _catalogar(fuente="fotografias", titulo="Vieja", etiquetas=["estadio"], sufijo=b"vA")
+    b = _catalogar(fuente="fotografias", titulo="Nueva", sufijo=b"vB")
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
+    # La pieza USA la foto vieja (su `foto` es el objeto del catálogo de A).
+    pid = repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", copy="c", foto=a["objeto"]
+    )["id"]
+
+    r = cliente.post("/api/biblioteca/adjuntar", json={"pieza_id": pid, "id": b["id"]})
+    assert r.status_code == 200, r.text
+
+    # A ya no la usa nadie -> etiquetas vaciadas, pero la fila del catálogo sigue.
+    a_tras = repos.obtener_media_catalogo(a["id"])
+    assert a_tras is not None
+    assert json.loads(a_tras["etiquetas"]) == []
+
+
+def test_cambiar_foto_no_limpia_si_otra_pieza_usa_la_vieja(cliente):
+    """Si OTRA pieza sigue usando la foto vieja, sus etiquetas NO se tocan al cambiar la foto."""
+    a = _catalogar(fuente="fotografias", titulo="Vieja", etiquetas=["estadio"], sufijo=b"wA")
+    b = _catalogar(fuente="fotografias", titulo="Nueva", sufijo=b"wB")
+    tema = repos.crear_publicacion(clase="contenido", titulo="T", marca="claro-sports")
+    pid = repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="instagram", copy="c", foto=a["objeto"]
+    )["id"]
+    # Otra pieza distinta también usa A.
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="facebook", copy="c2", foto=a["objeto"]
+    )
+
+    r = cliente.post("/api/biblioteca/adjuntar", json={"pieza_id": pid, "id": b["id"]})
+    assert r.status_code == 200, r.text
+
+    # A la sigue usando la otra pieza -> conserva sus etiquetas.
+    assert json.loads(repos.obtener_media_catalogo(a["id"])["etiquetas"]) == ["estadio"]
+
+
 # --------------------------------------------------------------------------- #
 # GET /api/biblioteca/sugerir: foto→pieza por titular + keywords (por marca)     #
 # --------------------------------------------------------------------------- #
