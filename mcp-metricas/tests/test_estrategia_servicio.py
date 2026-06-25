@@ -398,6 +398,37 @@ def test_flujo_audiencia_degrada_sin_fuente(monkeypatch):
     assert servicio.construir_flujo_audiencia(RANGO) == {"por_red": []}
 
 
+def test_demografia_devuelve_distribuciones(monkeypatch):
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "metricool"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def demografia(self, cuenta_id, red):
+            return {"gender": [{"clave": "F", "valor": 50.0}]}
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _Fuente())
+    d = servicio.construir_demografia("claro_sports", "instagram")
+    assert d == {"red": "instagram", "distribuciones": {"gender": [{"clave": "F", "valor": 50.0}]}}
+
+
+def test_demografia_vacia_si_red_invalida_o_sin_fuente(monkeypatch):
+    class _FuenteSinDemo:
+        nombre = "muestra"
+
+        def cuentas(self):
+            return FuenteMuestra().cuentas()[:1]
+
+    monkeypatch.setattr(servicio, "_fuente", lambda marca=None: _FuenteSinDemo())
+    assert servicio.construir_demografia("claro_sports", "instagram") == {
+        "red": "instagram", "distribuciones": {}
+    }
+
+
 def test_mejor_hora_none_si_fuente_sin_besttimes(monkeypatch):
     class _FuenteSinBesttimes:
         nombre = "muestra"

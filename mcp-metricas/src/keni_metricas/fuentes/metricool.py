@@ -173,6 +173,16 @@ _METRICA_FB_BAJAS = "page_daily_unfollows_unique"
 _METRICA_TK_DELTA = "followers_delta_count"
 _METRICA_YT_ALTAS = "subscribersGained"
 _METRICA_YT_BAJAS = "subscribersLost"
+
+# Distribuciones DEMOGRÁFICAS/de mezcla por red, vía `/v2/analytics/distribution`
+# subject=account (`{data:[{key,value}]}`). Confirmado contra la API real: IG da
+# gender/age/country/city (en %) y postsTypes (conteos); FB da page_follows_country (%) y
+# postsTypes (conteos) —sus demográficas de género/edad vuelven vacías (deprecadas por Meta),
+# así que NO se piden—. El resto de redes no exponen distribución de cuenta.
+_DISTRIBUCION_RED: dict[Plataforma, tuple[str, ...]] = {
+    Plataforma.instagram: ("gender", "age", "country", "city", "postsTypes"),
+    Plataforma.facebook: ("page_follows_country", "postsTypes"),
+}
 _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.facebook: {
         _METRICA_VIS: "impressions",
@@ -1113,6 +1123,59 @@ class FuenteMetricool:
             neto = (pts[-1][1] - pts[0][1]) if len(pts) >= 2 else 0
             return {"red": plat.value, "altas": None, "bajas": None, "neto": neto}
         return None  # X u otras: sin flujo de seguidores de cuenta
+
+    def demografia(self, cuenta_id: str, red: Plataforma) -> dict[str, list[dict]]:
+        """Distribuciones demográficas/de mezcla de la cuenta por red: `{metrica: [{clave,valor}]}`.
+
+        Lee `/v2/analytics/distribution` subject=account por cada métrica que la red expone
+        (`_DISTRIBUCION_RED`): IG gender/age/country/city (en %) + postsTypes (conteos); FB
+        page_follows_country (%) + postsTypes (conteos). Una métrica sin datos (serie vacía o
+        deprecada) se OMITE; una red sin distribución de cuenta devuelve {} (degradación honesta).
+        """
+        out: dict[str, list[dict]] = {}
+        for metrica in _DISTRIBUCION_RED.get(red, ()):
+            dist = self._distribucion_cuenta(cuenta_id, red, metrica)
+            if dist:
+                out[metrica] = dist
+        return out
+
+    def _distribucion_cuenta(
+        self, cuenta_id: str, plat: Plataforma, metrica: str
+    ) -> list[dict]:
+        """Items `[{clave, valor}]` de UNA distribución de cuenta, [] si falla o viene vacía.
+
+        `valor` se conserva como entero cuando es un conteo (postsTypes) y como float (2
+        decimales) cuando es un porcentaje, sin inventar nada si la clave/valor falta.
+        """
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/distribution",
+                params={
+                    **self._params_base(cuenta_id),
+                    "network": _RED_METRICOOL[plat],
+                    "metric": metrica,
+                    "subject": _SUBJECT_CUENTA,
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — sin distribución: [] (honesto)
+            log.warning("metricool: distribución %s %s/%s falló: %s", metrica, plat.value, cuenta_id, e)
+            return []
+        out: list[dict] = []
+        for item in datos.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            clave = item.get("key")
+            valor = item.get("value")
+            if clave is None or valor is None:
+                continue
+            try:
+                num = float(valor)
+            except (TypeError, ValueError):
+                continue
+            out.append({"clave": str(clave), "valor": int(num) if num.is_integer() else round(num, 2)})
+        return out
 
     def _redes_conectadas(self, cuenta_id: str) -> set[Plataforma] | None:
         """Redes que la marca tiene CONECTADAS en Metricool, vía `/admin/simpleProfiles`.

@@ -1169,6 +1169,34 @@ def test_flujo_audiencia_altas_bajas_por_red():
 
 
 @respx.mock
+def test_demografia_distribuciones_por_red():
+    """demografia lee distribution subject=account por métrica de la red: IG gender/age/...
+    en % (float) y postsTypes en conteos (int); una métrica vacía se omite."""
+    def responder(request: httpx.Request) -> httpx.Response:
+        metric = request.url.params.get("metric")
+        if metric == "gender":
+            data = [{"key": "M", "value": 47.5}, {"key": "F", "value": 50.0}, {"key": "U", "value": 2.5}]
+        elif metric == "postsTypes":
+            data = [{"key": "reel", "value": 12}, {"key": "image", "value": 8}]
+        elif metric == "city":
+            data = []  # sin datos -> se omite
+        else:
+            data = [{"key": "x", "value": 1.0}]
+        return httpx.Response(200, json={"data": data})
+
+    respx.get(f"{BASE}/v2/analytics/distribution").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        demo = _fuente(cli).demografia("claro_sports", Plataforma.instagram)
+
+    assert demo["gender"] == [
+        {"clave": "M", "valor": 47.5}, {"clave": "F", "valor": 50.0}, {"clave": "U", "valor": 2.5}
+    ]
+    # postsTypes son conteos -> int, no float.
+    assert demo["postsTypes"] == [{"clave": "reel", "valor": 12}, {"clave": "image", "valor": 8}]
+    assert "city" not in demo  # vacía -> omitida
+
+
+@respx.mock
 def test_cuentas_lista_marcas_configuradas():
     with httpx.Client() as cli:
         cuentas = _fuente(cli).cuentas()

@@ -728,6 +728,17 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.flujo_audiencia(cuenta_id, rango)
 
+    def demografia(self, cuenta_id: str, red):
+        """Delega las distribuciones demográficas de la cuenta si la fuente envuelta las expone.
+
+        Solo Metricool las implementa (muestra/compuesta no). Si la envuelta no las tiene,
+        propaga `AttributeError` para que el llamante degrade a {} — igual que `serie_seguidores`.
+        """
+        if not hasattr(self._fuente, "demografia"):
+            raise AttributeError("la fuente envuelta no expone demografia")
+        self._verificar(cuenta_id)
+        return self._fuente.demografia(cuenta_id, red)
+
     def mejores_horas(self, cuenta_id: str, red):
         """Delega la matriz de mejores horas (besttimes) si la fuente envuelta la expone.
 

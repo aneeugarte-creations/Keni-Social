@@ -249,6 +249,45 @@ def test_serie_alcance_red_invalida_devuelve_400(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# /api/metricas/demografia                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def _demografia(marca, red):
+    return {
+        "red": red,
+        "distribuciones": {
+            "gender": [{"clave": "F", "valor": 50.0}, {"clave": "M", "valor": 47.5}],
+            "postsTypes": [{"clave": "reel", "valor": 12}],
+        },
+    }
+
+
+def test_demografia_200_shape(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_demografia=_demografia)
+    r = cliente.get("/api/metricas/demografia?marca=claro_sports&red=instagram")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["red"] == "instagram"
+    assert data["distribuciones"]["gender"][0] == {"clave": "F", "valor": 50.0}
+    assert data["distribuciones"]["postsTypes"][0]["valor"] == 12
+
+
+def test_demografia_red_invalida_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_demografia=_demografia)
+    r = cliente.get("/api/metricas/demografia?marca=claro_sports&red=threads")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+def test_demografia_sin_red_400(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_demografia=_demografia)
+    r = cliente.get("/api/metricas/demografia?marca=claro_sports")
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
+# --------------------------------------------------------------------------- #
 # /api/programacion/mejor-hora                                                 #
 # --------------------------------------------------------------------------- #
 

@@ -35,8 +35,8 @@ from ._comun import (
 )
 
 __all__ = [
-    "tendencia", "seguidores", "serie_alcance", "audiencia", "desglose", "crosstab",
-    "correlacion", "ads", "ads_desglose", "ingesta", "mejor_hora",
+    "tendencia", "seguidores", "serie_alcance", "audiencia", "demografia", "desglose",
+    "crosstab", "correlacion", "ads", "ads_desglose", "ingesta", "mejor_hora",
 ]
 
 # Un canal (marca×red×formato) se marca ESTANCADO si su última pieza es >= este nº de días
@@ -360,6 +360,33 @@ async def serie_alcance(request: Request) -> Response:
     if redes:
         payload = _filtrar_alcance_por_red(payload, redes)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def demografia(request: Request) -> Response:
+    """GET /api/metricas/demografia: distribuciones demográficas/de mezcla de una marca×red.
+
+    `?marca=` y `?red=` (ambos obligatorios): `{"red": red, "distribuciones": {metrica:
+    [{clave,valor}]}}`. IG trae gender/age/country/city (%) + postsTypes (conteos); FB
+    page_follows_country (%) + postsTypes. `distribuciones` vacío = la fuente no la expone o sin
+    datos. Computado al vuelo (en executor).
+    """
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        red = _validar_red(request.query_params.get("red"))
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    if not marca or not red:
+        return JSONResponse(
+            {"error": "Faltan parámetros obligatorios: marca y red."}, status_code=400
+        )
+    try:
+        payload = await run_in_threadpool(servicio.construir_demografia, marca, red)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al leer la demografía (marca=%s, red=%s).", marca, red)
+        return JSONResponse({"error": "No se pudo leer la demografía."}, status_code=500)
+    return JSONResponse(payload)
 
 
 async def mejor_hora(request: Request) -> Response:

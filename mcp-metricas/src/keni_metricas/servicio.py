@@ -136,6 +136,7 @@ __all__ = [
     "construir_tendencia_diaria",
     "construir_ads_desglose",
     "construir_flujo_audiencia",
+    "construir_demografia",
     "construir_serie_seguidores",
     "construir_serie_alcance",
     "construir_desglose_interacciones",
@@ -439,6 +440,37 @@ def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
             d["cuenta"] = c.id
             salida.append(d)
     return salida
+
+
+def construir_demografia(marca: str, red: str) -> dict:
+    """Distribuciones demográficas/de mezcla de UNA marca×red (audiencia de la cuenta).
+
+    Reúsa `fuente.demografia` (distribution subject=account). `{"red": red, "distribuciones":
+    {metrica: [{clave,valor}]}}`. `distribuciones` vacío si la fuente no la expone (muestra/
+    compuesta), la red no es válida o no hay datos. Propaga `CuentaNoEncontrada` (marca fuera de
+    alcance).
+    """
+    fuente = _fuente(marca)
+    fn = getattr(fuente, "demografia", None)
+    vacio = {"red": red, "distribuciones": {}}
+    if fn is None:
+        return vacio
+    try:
+        plat = Plataforma(red)
+    except ValueError:
+        return vacio
+    for c in fuente.cuentas():
+        try:
+            dist = fn(c.id, plat)
+        except AttributeError:
+            # La fuente envuelta no la implementa (FuenteScoped lo propaga): vacío.
+            return vacio
+        except Exception:  # noqa: BLE001 -- una cuenta que falla no aborta el resto
+            _log.exception("construir_demografia: cuenta %s falló (red=%s).", c.id, red)
+            continue
+        if dist:
+            return {"red": red, "distribuciones": dist}
+    return vacio
 
 
 def construir_flujo_audiencia(rango: str = "mes", marca: str | None = None) -> dict:
