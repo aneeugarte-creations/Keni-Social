@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Coins,
   Cpu,
+  Inbox,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -62,6 +63,8 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
 export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
   { ruta: "/datos/analiticas/campanias", etiqueta: "Campañas", icono: Megaphone },
+  // Inbox: buzón de SOLO lectura (DMs + comentarios de FB/IG), misma frontera Metricool.
+  { ruta: "/datos/analiticas/inbox", etiqueta: "Buzón", icono: Inbox },
 ];
 
 // Programa: el «qué/cuándo» de publicación de una marca. Programación (la rejilla mensual) es la

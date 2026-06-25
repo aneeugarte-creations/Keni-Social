@@ -27,6 +27,8 @@ const PublicacionesHub = lazy(() => import("@/pages/PublicacionesHub"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Campanias = lazy(() => import("@/pages/Campanias"));
+// Inbox: buzón de SOLO lectura (DMs + comentarios de FB/IG), pestaña del hub Analíticas.
+const Inbox = lazy(() => import("@/pages/Inbox"));
 // Marcas: dashboard en vivo de todas las marcas × redes × cuentas.
 const Marcas = lazy(() => import("@/pages/Marcas"));
 
@@ -386,6 +388,7 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="metricas" replace /> },
               { path: "metricas", element: <Metricas /> },
               { path: "campanias", element: <Campanias /> },
+              { path: "inbox", element: <Inbox /> },
               // Bookmark viejo: el apartado se llamaba "comercial".
               { path: "comercial", element: <Navigate to="/datos/analiticas/campanias" replace /> },
             ],
