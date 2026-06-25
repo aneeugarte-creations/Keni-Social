@@ -164,7 +164,10 @@ export default function MapaGlobo({
   onSeleccionRef.current = onSeleccion;
 
   // Crea el mapa UNA vez: estilo satelite, centrado en la ubicacion lider, con halo de
-  // espacio. El drag rota el globo y scroll/trackpad hacen zoom (nativo de MapLibre).
+  // espacio. El drag rota/mueve el globo; el zoom va por los botones +/- o por Cmd/Ctrl +
+  // scroll. Con `cooperativeGestures` el scroll normal de la rueda/trackpad atraviesa el
+  // mapa y deja seguir bajando por la pagina (en movil, dos dedos mueven el globo y uno
+  // scrollea la pagina), evitando que el mapa atrape el scroll.
   React.useEffect(() => {
     const cont = contenedorRef.current;
     if (!cont) return;
@@ -177,6 +180,12 @@ export default function MapaGlobo({
       minZoom: 0.8,
       maxZoom: 16,
       attributionControl: { compact: true },
+      cooperativeGestures: true,
+      locale: {
+        "CooperativeGesturesHandler.WindowsHelpText": "Usa Ctrl + scroll para acercar el mapa",
+        "CooperativeGesturesHandler.MacHelpText": "Usa ⌘ + scroll para acercar el mapa",
+        "CooperativeGesturesHandler.MobileHelpText": "Usa dos dedos para mover el mapa",
+      },
     });
     mapaRef.current = map;
     formatoAplicadoRef.current = formatoRef.current;
