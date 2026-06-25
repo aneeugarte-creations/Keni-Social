@@ -159,8 +159,13 @@ def _conexiones_de_marca(marca: str | None) -> list[Conexion]:
 
 
 def dispositivos(marca: str | None) -> list[dict[str, Any]]:
-    """Dispositivos que comparten a `marca` (forma de `GET /api/artes/propio/dispositivos`)."""
-    return [c.describir() for c in _conexiones_de_marca(marca)]
+    """Dispositivos conectados (forma de `GET /api/artes/propio/dispositivos`).
+
+    Con `marca`, solo los que comparten a ella; SIN marca, TODOS los conectados (la página
+    Galería los lista a todos con las marcas a las que comparte cada uno).
+    """
+    conexiones = _conexiones_de_marca(marca) if marca else list(_REGISTRO)
+    return [c.describir() for c in conexiones]
 
 
 async def buscar(marca: str | None, q: str, limite: int) -> list[dict[str, Any]]:

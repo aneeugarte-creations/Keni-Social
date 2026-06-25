@@ -169,6 +169,18 @@ def test_dispositivos_por_marca_lleva_dueno_y_marcas():
         fotos_tunel._REGISTRO.clear()
 
 
+def test_dispositivos_sin_marca_lista_todos_los_conectados():
+    """La página Galería pide SIN marca: ve TODOS los conectados (aunque uno no comparta ninguna)."""
+    fotos_tunel._REGISTRO.clear()
+    try:
+        _conexion("ale", dispositivo="Mac de Ale", marcas=("claro-sports",))
+        _conexion("ane", dispositivo="Mac de Ane", marcas=())
+        todos = fotos_tunel.dispositivos(None)
+        assert {d["usuario"] for d in todos} == {"ale", "ane"}
+    finally:
+        fotos_tunel._REGISTRO.clear()
+
+
 # --------------------------------------------------------------------------- #
 # `_buscar_propio` por marca (sin gate a claro-sports)                          #
 # --------------------------------------------------------------------------- #
