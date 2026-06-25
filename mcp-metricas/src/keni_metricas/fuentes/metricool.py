@@ -50,6 +50,7 @@ documentados también en el reporte de la tarea):
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from datetime import UTC, date, datetime, timedelta
@@ -79,6 +80,13 @@ log = logging.getLogger("keni_metricas")
 
 BASE = "https://app.metricool.com/api"
 NOMBRE = "metricool"
+
+# Zona horaria con la que se acotan TODAS las ventanas de fecha (from/to) contra la API.
+# Sin `timezone`, Metricool asume su propio default y las fronteras de día quedan corridas
+# para México (un "lunes" nuestro puede cortar a media tarde del domingo allí). Fijarla a
+# `America/Mexico_City` alinea los días del piloto con los del medio. Configurable por env
+# para otros husos sin tocar código.
+_TZ = os.environ.get("KENI_METRICAS_TZ", "America/Mexico_City")
 
 # Timeout del cliente HTTP de Metricool. El agregado mensual de posts de cuentas
 # muy activas (p.ej. YouTube de Claro Sports: ~10k posts/mes) tarda 25-30s en
@@ -117,6 +125,14 @@ _PERFIL_RED: dict[str, Plataforma] = {
 # del daemon —o cualquier lectura tras expirar— vuelve a consultar perfiles y refleja
 # altas y desconexiones sin reiniciar el proceso.
 _TTL_CONECTADAS_S = 300.0
+
+# Validez (segundos) del payload CRUDO de posts/reels memoizado por (cuenta, red, desde,
+# hasta). Una sola pasada del daemon —o un refresco de la UI— arma `resumen`, `mejores_piezas`,
+# desglose, crosstab, tendencia y correlación sobre el MISMO (marca, rango): sin esto cada uno
+# re-descarga los mismos `/v2/analytics/posts/{red}`, 6-8 veces por red. La ventana es corta a
+# propósito: comparte el fetch dentro de una pasada (que dura segundos) sin servir datos rancios
+# entre pasadas (que van minutos aparte y vuelven a consultar al expirar).
+_TTL_FETCH_S = 120.0
 
 # Métricas de Metricool por red para (visualizaciones, interacciones, alcance).
 #
@@ -571,6 +587,11 @@ class FuenteMetricool:
         # por conexión: se intenta todo). Caduca a los `_TTL_CONECTADAS_S` para detectar
         # altas/desconexiones hechas en Metricool sin reiniciar el proceso.
         self._conectadas_cache: dict[str, tuple[float, set[Plataforma] | None]] = {}
+        # Memo del payload CRUDO de posts/reels por (kind, cuenta, red, desde, hasta) con
+        # caducidad (`_TTL_FETCH_S`): comparte UN solo fetch entre `resumen`/`mejores_piezas`/
+        # desglose/… de un mismo (marca, rango) en una pasada. Solo cachea ÉXITOS (un fallo de
+        # fetch se propaga y no se memoiza, para que la cobertura siga omitiendo la red).
+        self._fetch_cache: dict[tuple[str, str, str, str, str], tuple[float, list[dict]]] = {}
         # Cobertura de la ÚLTIMA llamada a `mejores_piezas` (igual que en FuenteCompuesta):
         # qué plataformas aportaron piezas vs. fallaron. Las tools la leen vía
         # `cobertura_piezas()` para exponer la degradación parcial en vez de callarla.
@@ -586,6 +607,33 @@ class FuenteMetricool:
             "userId": str(marca.get("user_id", "")),
             "blogId": str(marca.get("blog_id", "")),
         }
+
+    def _rango_params(self, desde: date, hasta: date) -> dict:
+        """`from`/`to` ISO de la ventana + `timezone` MX (frontera de día consistente).
+
+        Centraliza el acotado de TODAS las peticiones con ventana de fecha (posts, reels,
+        stories, timelines, campañas) para que la zona horaria viaje siempre y los días no
+        se corran (ver `_TZ`)."""
+        return {
+            "from": desde.isoformat() + "T00:00:00",
+            "to": hasta.isoformat() + "T23:59:59",
+            "timezone": _TZ,
+        }
+
+    def _fetch_cacheado(self, clave: tuple, hacer) -> list[dict]:
+        """Devuelve `hacer()` memoizado por `clave` durante `_TTL_FETCH_S` segundos.
+
+        Solo memoiza el ÉXITO: si `hacer` lanza, la excepción se propaga sin tocar la cache
+        (el llamante degrada como hasta ahora). El valor cacheado NO se muta aguas abajo
+        (los parseos solo iteran), así que se comparte la misma lista sin copiarla.
+        """
+        ahora = time.monotonic()
+        hit = self._fetch_cache.get(clave)
+        if hit is not None and (ahora - hit[0]) < _TTL_FETCH_S:
+            return hit[1]
+        datos = hacer()
+        self._fetch_cache[clave] = (ahora, datos)
+        return datos
 
     def _marca(self, cuenta_id: str) -> dict:
         if cuenta_id not in self._marcas:
@@ -719,8 +767,7 @@ class FuenteMetricool:
                     "metric": metrica,
                     # subject=account: imprescindible para las métricas de community/followers.
                     "subject": _SUBJECT_CUENTA,
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
+                    **self._rango_params(desde, hasta),
                 },
                 headers=self._headers(cuenta_id),
             )
@@ -742,6 +789,52 @@ class FuenteMetricool:
             return 0
         puntos.sort(key=lambda p: p[0])
         return int(puntos[-1][1] - puntos[0][1])
+
+    def _alcance_cuenta_plataforma(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> int | None:
+        """Alcance (usuarios ÚNICOS) a NIVEL CUENTA del periodo para UNA red, o None.
+
+        El alcance NO es aditivo: sumar el reach de cada post sobreestima (cuenta dos veces a
+        quien vio varios posts). Aquí se toma el alcance agregado de la cuenta vía
+        `/v2/analytics/timelines` (subject=account) con la métrica de reach de cada red
+        (IG: `reach`; FB: `impressionsunique`), leyendo el `aggregate` que Metricool ya
+        calcula sobre la ventana. Solo Meta lo expone: una red sin métrica de alcance
+        (`_METRICA_ALC` ausente en `_METRICAS_RED`: X/TikTok/YouTube) devuelve None de
+        inmediato. Degradación honesta: si la API falla o no trae agregado, None (no se
+        inventa, ni se vuelve a la suma engañosa por-post).
+        """
+        metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_ALC)
+        if not metrica:
+            return None
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/timelines",
+                params={
+                    **self._params_base(cuenta_id),
+                    "network": _RED_METRICOOL[plat],
+                    "metric": metrica,
+                    # subject=account: el alcance a nivel cuenta del periodo, no por post.
+                    "subject": _SUBJECT_CUENTA,
+                    **self._rango_params(desde, hasta),
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — degrada a None, como el resto
+            log.warning("metricool: alcance cuenta %s/%s falló: %s", plat.value, cuenta_id, e)
+            return None
+        # `aggregate.value` es el total de la ventana que Metricool ya consolida; combina por
+        # si la red devuelve varias series. None si ninguna serie trae agregado (honesto).
+        total = 0.0
+        visto = False
+        for serie in datos.get("data") or []:
+            agg = serie.get("aggregate") if isinstance(serie, dict) else None
+            valor = agg.get("value") if isinstance(agg, dict) else None
+            if valor is not None:
+                total += float(valor)
+                visto = True
+        return int(total) if visto else None
 
     def serie_seguidores(self, cuenta_id: str, rango: str) -> list[dict]:
         """Stock DIARIO de followers por red sobre el periodo (no flujo).
@@ -789,8 +882,7 @@ class FuenteMetricool:
                     "metric": metrica,
                     # subject=account: imprescindible para la serie de followers.
                     "subject": _SUBJECT_CUENTA,
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
+                    **self._rango_params(desde, hasta),
                 },
                 headers=self._headers(cuenta_id),
             )
@@ -861,9 +953,10 @@ class FuenteMetricool:
         `/v2/analytics/timelines` (vocabulario de métrica distinto por red; solo daba TikTok).
         Así el agregado por red es consistente con las piezas/desglose que ve el usuario: una
         red que solo publica reels (FB/IG) aporta sus vistas+interacciones, no 0/0. `alcance`
-        es la suma de los alcances por post (IG: reach; FB: impressionsUnique); None si
-        ningún post lo reporta (red sin la métrica). Una red conectada sin actividad en el
-        rango devuelve 0/0 (la UI lo muestra como "sin métricas", no como error).
+        NO se suma por post (eso sobreestimaría: doble-cuenta a quien vio varios): se toma el
+        alcance a NIVEL CUENTA del periodo (`_alcance_cuenta_plataforma`), None si la red no lo
+        mide o el agregado falla. Una red conectada sin actividad en el rango devuelve 0/0 (la
+        UI lo muestra como "sin métricas", no como error).
         """
         try:
             posts = self._fetch_posts(cuenta_id, plat, desde, hasta)
@@ -878,15 +971,13 @@ class FuenteMetricool:
             piezas.extend(self._reels_plataforma(cuenta_id, plat, desde, hasta))
         vis = sum(p.visualizaciones for p in piezas)
         inter = sum(p.interacciones for p in piezas)
-        # Suma el alcance de los posts que lo exponen (IG: reach; FB: impressionsUnique).
-        # Es la suma de alcances por publicación, en la misma unidad que ya muestra el
-        # desglose por pieza, no el alcance único de la cuenta. None si ningún post lo
-        # reporta (red sin la métrica o sin actividad): honesto, no se inventa 0.
-        alcs = [p.alcance for p in piezas if p.alcance is not None]
+        # Alcance a nivel CUENTA del periodo (no la suma de reach por post, que doble-cuenta):
+        # None si la red no lo mide (X/TikTok/YouTube) o el agregado falla. El reach por post
+        # sigue vivo en el detalle de cada `Pieza.alcance`, donde sí tiene sentido.
         return MetricaPlataforma(
             plataforma=plat,
             visualizaciones=vis,
-            alcance=sum(alcs) if alcs else None,
+            alcance=self._alcance_cuenta_plataforma(cuenta_id, plat, desde, hasta),
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )
@@ -935,10 +1026,7 @@ class FuenteMetricool:
         la clave, todos los conocidos). Degrada por provider: un 403/500 (red de Ads no
         conectada) se OMITE, no rompe el resto."""
         desde, hasta, _ = resolver_rango(rango)
-        params_rango = {
-            "from": desde.isoformat() + "T00:00:00",
-            "to": hasta.isoformat() + "T23:59:59",
-        }
+        params_rango = self._rango_params(desde, hasta)
         out: list[CampaniaAds] = []
         provs = self._marca(cuenta_id).get("ads_proveedores") or _PROVIDERS_ADS
         for prov in provs:
@@ -981,17 +1069,27 @@ class FuenteMetricool:
     def _fetch_posts(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
     ) -> list[dict]:
-        """GET crudo de `/v2/analytics/posts/{network}` (RAISES si la API falla).
+        """Posts crudos de `/v2/analytics/posts/{network}`, memoizados (RAISES si la API falla).
 
         Aislado para compartirlo entre las piezas y el agregado por red, y para que el
-        llamante decida cómo degradar (las piezas → []; el agregado → None/omitida)."""
+        llamante decida cómo degradar (las piezas → []; el agregado → None/omitida). El
+        resultado se memoiza por (cuenta, red, rango) durante `_TTL_FETCH_S` para que los
+        múltiples consumidores de un mismo (marca, rango) no re-peguen a la API."""
+        clave = ("posts", cuenta_id, plat.value, desde.isoformat(), hasta.isoformat())
+        return self._fetch_cacheado(
+            clave, lambda: self._fetch_posts_remoto(cuenta_id, plat, desde, hasta)
+        )
+
+    def _fetch_posts_remoto(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[dict]:
+        """GET crudo a `/v2/analytics/posts/{network}` + acotado por rango (sin cache)."""
         datos = get_json(
             self._cli,
             f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
             params={
                 **self._params_base(cuenta_id),
-                "from": desde.isoformat() + "T00:00:00",
-                "to": hasta.isoformat() + "T23:59:59",
+                **self._rango_params(desde, hasta),
             },
             headers=self._headers(cuenta_id),
         )
@@ -1041,14 +1139,25 @@ class FuenteMetricool:
     def _fetch_reels(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
     ) -> list[dict]:
-        """GET crudo de `/v2/analytics/reels/{network}` (RAISES si la API falla)."""
+        """Reels crudos de `/v2/analytics/reels/{network}`, memoizados (RAISES si la API falla).
+
+        Igual que `_fetch_posts`: se memoiza por (cuenta, red, rango) durante `_TTL_FETCH_S`
+        para compartir el fetch entre los consumidores de un mismo (marca, rango)."""
+        clave = ("reels", cuenta_id, plat.value, desde.isoformat(), hasta.isoformat())
+        return self._fetch_cacheado(
+            clave, lambda: self._fetch_reels_remoto(cuenta_id, plat, desde, hasta)
+        )
+
+    def _fetch_reels_remoto(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[dict]:
+        """GET crudo a `/v2/analytics/reels/{network}` (sin cache)."""
         datos = get_json(
             self._cli,
             f"{BASE}/v2/analytics/reels/{_RED_METRICOOL[plat]}",
             params={
                 **self._params_base(cuenta_id),
-                "from": desde.isoformat() + "T00:00:00",
-                "to": hasta.isoformat() + "T23:59:59",
+                **self._rango_params(desde, hasta),
             },
             headers=self._headers(cuenta_id),
         )
@@ -1070,8 +1179,7 @@ class FuenteMetricool:
                 f"{BASE}/v2/analytics/stories/{_RED_METRICOOL[plat]}",
                 params={
                     **self._params_base(cuenta_id),
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
+                    **self._rango_params(desde, hasta),
                 },
                 headers=self._headers(cuenta_id),
             )

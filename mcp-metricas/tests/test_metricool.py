@@ -130,8 +130,10 @@ def test_resumen_agrega_los_posts_del_periodo_por_red():
 
 
 @respx.mock
-def test_resumen_suma_alcance_de_posts_ig_con_reach():
-    """Cuando los posts de IG exponen 'reach', el resumen lo suma por red."""
+def test_resumen_alcance_desde_agregado_de_cuenta_no_suma_posts():
+    """El alcance del resumen sale del agregado de CUENTA (timelines, subject=account), no de
+    sumar el reach por post (que doble-contaría a quien vio varios). La suma por post queda
+    SOLO en el detalle de cada `Pieza.alcance`, donde sí tiene sentido."""
     _mock_perfiles(_perfil(instagram="unotv_"))  # IG conectada
     _mock_posts(
         "instagram",
@@ -141,12 +143,113 @@ def test_resumen_suma_alcance_de_posts_ig_con_reach():
         ],
     )
 
-    with httpx.Client() as cli:
-        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+    # `timelines` con subject=account y metric=reach trae el alcance ÚNICO del periodo en su
+    # `aggregate`: 4200, MENOR que la suma por post (5500) porque no doble-cuenta. El resto de
+    # métricas (followers) no aportan agregado de alcance.
+    def responder(request: httpx.Request) -> httpx.Response:
+        valor = 4200 if request.url.params.get("metric") == "reach" else 0
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": request.url.params.get("metric"),
+                        "values": [{"dateTime": "2026-05-20T00:00:00", "value": valor}],
+                        "aggregate": {"aggregation": "SUM", "value": valor},
+                    }
+                ]
+            },
+        )
 
-    assert resumen.alcance == 5500  # 3000 + 2500
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        resumen = f.resumen("claro_sports", RANGO)
+        piezas = f.mejores_piezas("claro_sports", RANGO, 5)
+
+    # Cabecera y por-plataforma: el agregado de cuenta (4200), NO la suma por post (5500).
+    assert resumen.alcance == 4200
     ig = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.instagram)
-    assert ig.alcance == 5500
+    assert ig.alcance == 4200
+    # El reach por post sigue vivo en el detalle de cada pieza.
+    assert {p.alcance for p in piezas} == {3000, 2500}
+
+
+@respx.mock
+def test_resumen_alcance_none_si_red_no_mide_alcance():
+    """X/TikTok/YouTube no miden alcance: su `MetricaPlataforma.alcance` es None y, si son las
+    únicas redes del resumen, el alcance de cabecera también (no se inventa 0)."""
+    _mock_perfiles(_perfil(tiktok="ct"))  # solo TikTok conectada
+    _mock_posts("tiktok", [{"id": "t1", "createTime": "2026-05-20T10:00:00",
+                            "viewCount": 9000, "interactions": 300}])
+    f = FuenteMetricool(
+        marcas={"claro_sports": {**MARCAS["claro_sports"], "plataformas": [Plataforma.tiktok]}}
+    )
+
+    with httpx.Client() as cli:
+        f._cli = cli
+        resumen = f.resumen("claro_sports", RANGO)
+
+    tk = next(m for m in resumen.por_plataforma if m.plataforma == Plataforma.tiktok)
+    assert tk.alcance is None
+    assert resumen.alcance is None
+
+
+@respx.mock
+def test_peticiones_con_ventana_llevan_timezone_mx():
+    """Toda petición con ventana de fecha (posts, reels, stories, timelines) lleva `timezone`
+    para que las fronteras de día no se corran (default America/Mexico_City)."""
+    _mock_perfiles(_perfil(instagram="unotv_"))
+    capturadas: list[httpx.Request] = []
+
+    def captura(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
+        return httpx.Response(200, json={"data": []})
+
+    for ep in ("posts/instagram", "reels/instagram", "stories/instagram", "timelines"):
+        respx.get(f"{BASE}/v2/analytics/{ep}").mock(side_effect=captura)
+
+    with httpx.Client() as cli:
+        _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert capturadas, "no se capturó ninguna petición con ventana"
+    for req in capturadas:
+        assert req.url.params.get("timezone") == "America/Mexico_City", req.url
+
+
+@respx.mock
+def test_fetch_posts_memoizado_una_sola_llamada_por_red():
+    """resumen + mejores_piezas del mismo (marca, rango) comparten UN solo GET de posts por red
+    (memoización por instancia con TTL): antes cada consumidor re-pegaba a la API."""
+    _mock_perfiles(_perfil(instagram="unotv_"))
+    ruta = respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json={"data": [_post_ig("p1", 6000, 200)]})
+    )
+    # reels/stories/timelines sin mock: degradan honestamente, no afectan al conteo de posts.
+
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        f.resumen("claro_sports", RANGO)
+        f.mejores_piezas("claro_sports", RANGO, 5)
+
+    assert ruta.call_count == 1  # un solo GET de posts pese a dos consumidores del mismo rango
+
+
+@respx.mock
+def test_fetch_posts_no_comparte_cache_entre_rangos_distintos():
+    """La memoización es por (cuenta, red, desde, hasta): rangos distintos NO se contaminan
+    (p.ej. el reporte mensual no sirve datos a la ventana de 90 días de `metricas_de_post`)."""
+    _mock_perfiles(_perfil(instagram="unotv_"))
+    ruta = respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json={"data": [_post_ig("p1", 6000, 200)]})
+    )
+
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        f.mejores_piezas("claro_sports", "mes:2026-05", 5)
+        f.mejores_piezas("claro_sports", "mes:2026-04", 5)
+
+    assert ruta.call_count == 2  # dos rangos -> dos fetches (no se reusa entre ventanas)
 
 
 @respx.mock
@@ -880,8 +983,10 @@ def test_seguidores_van_con_subject_account_y_metrica_por_red():
         resumen = _fuente(cli).resumen("claro_sports", RANGO)
 
     assert resumen.seguidores_netos == 50  # 1050 - 1000
-    assert capturadas, "no se llamó a timelines para followers"
-    req = capturadas[0]
+    # `timelines` lo pegan tanto el alcance de cuenta (metric=reach) como los followers; se
+    # localiza la petición de followers entre las capturadas (no se asume su orden).
+    req = next((r for r in capturadas if r.url.params.get("metric") == "followers"), None)
+    assert req is not None, "no se llamó a timelines para followers"
     assert req.url.params.get("subject") == "account"
     assert req.url.params.get("metric") == "followers"  # instagram
 
