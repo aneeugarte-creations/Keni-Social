@@ -50,6 +50,7 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
       { id: "audiencia", etiqueta: "Altas y bajas de seguidores" },
       { id: "alcance-serie", etiqueta: "Alcance de cuenta" },
       { id: "demografia", etiqueta: "Demografía de la audiencia" },
+      { id: "alcance-mundial", etiqueta: "Alcance mundial" },
       { id: "desglose", etiqueta: "Desglose de interacciones" },
       { id: "crosstab", etiqueta: "Rendimiento por formato" },
       { id: "por-categoria", etiqueta: "Rendimiento por categoría" },

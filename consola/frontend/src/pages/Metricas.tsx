@@ -35,6 +35,7 @@ import { Demografia } from "./metricas/Demografia";
 import { ItemsDescarga } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { FlujoAudiencia } from "./metricas/FlujoAudiencia";
+import { MapaAlcance } from "./metricas/MapaAlcance";
 import { SerieAlcance } from "./metricas/SerieAlcance";
 import { etiquetaPeriodo } from "./metricas/exportarPdf";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
@@ -340,6 +341,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </Bloque>
           <Bloque id="demografia">
             <Demografia marcaActual={marca} />
+          </Bloque>
+          <Bloque id="alcance-mundial">
+            <MapaAlcance marcas={marcas} marcaActual={marca} />
           </Bloque>
           <Bloque id="desglose">
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
