@@ -34,7 +34,7 @@ def _conversaciones(marca):
                         "red": "facebook",
                         "pendiente": True,
                         "participantes": [{"id": "u1", "nombre": "Ana", "avatar": None}],
-                        "mensajes": [{"id": "m1", "texto": "hola", "adjuntos": 0}],
+                        "mensajes": [{"id": "m1", "texto": "hola", "adjuntos": []}],
                     }
                 ],
             }

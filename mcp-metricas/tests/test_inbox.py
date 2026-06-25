@@ -19,6 +19,7 @@ from keni_metricas.fuentes.metricool import (
     ENDPOINT_INBOX_COMENTARIOS,
     ENDPOINT_INBOX_CONVERSACIONES,
     FuenteMetricool,
+    _adjuntos_dm,
 )
 from keni_metricas.schema import Plataforma
 
@@ -87,7 +88,7 @@ def _conv(id_: str, status: str = "PENDING", texto: str = "hola") -> dict:
                 "to": "page",
                 "text": texto,
                 "publicationDateTime": "2026-06-20T10:00:00",
-                "attachments": [{"url": "x"}],
+                "attachments": ["https://www.instagram.com/reel/DaBGGZzRUbA/"],
             }
         ],
     }
@@ -150,8 +151,35 @@ def test_conversaciones_parsea_y_agrupa_por_red() -> None:
     assert fb.participantes[0].avatar == "http://img/a.jpg"
     assert fb.mensajes[0].texto == "hola"
     assert fb.mensajes[0].autor_id == "u1"
-    assert fb.mensajes[0].adjuntos == 1  # se cuentan, no se exponen las URLs
+    # Las URLs del contenido se exponen tal cual (el operador ve el reel compartido).
+    assert fb.mensajes[0].adjuntos == ["https://www.instagram.com/reel/DaBGGZzRUbA/"]
     assert fb.creado is not None and fb.actualizado is not None
+
+
+def test_adjuntos_dm_recoge_urls_y_mencion_de_historia() -> None:
+    # URLs directas (forma real de IG) y, además, la mención de historia.
+    m = {
+        "attachments": [
+            "https://www.instagram.com/reel/DaBGGZzRUbA/",
+            "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=x",
+        ],
+        "properties": {"story": {"mention": {"link": "https://lookaside.fbsbx.com/s.jpg"}}},
+    }
+    assert _adjuntos_dm(m) == [
+        "https://www.instagram.com/reel/DaBGGZzRUbA/",
+        "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=1&signature=x",
+        "https://lookaside.fbsbx.com/s.jpg",
+    ]
+
+
+def test_adjuntos_dm_acepta_dict_con_url_y_descarta_vacios() -> None:
+    m = {"attachments": [{"url": "https://x/y.jpg"}, {"url": ""}, "", None]}
+    assert _adjuntos_dm(m) == ["https://x/y.jpg"]
+
+
+def test_adjuntos_dm_vacio_sin_contenido() -> None:
+    assert _adjuntos_dm({}) == []
+    assert _adjuntos_dm({"attachments": [], "properties": {}}) == []
 
 
 @respx.mock

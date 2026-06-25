@@ -528,8 +528,9 @@ class CorrelacionSeguidores(BaseModel):
 # --- Inbox de lectura (DMs + comentarios) -----------------------------------
 # Lectura del buzón de Metricool (mensajes directos y comentarios de publicaciones)
 # para que una persona los lea y actúe con criterio. SOLO lectura: estos modelos no
-# llevan nada de responder/escribir. Se evita la PII innecesaria (los adjuntos de un DM
-# se cuentan, no se exponen sus URLs privadas).
+# llevan nada de responder/escribir. Los adjuntos de un DM (publicaciones compartidas,
+# media enviada, menciones en historias) se exponen como URLs para que el operador del
+# buzón vea el contenido real del mensaje.
 
 
 class Participante(BaseModel):
@@ -548,15 +549,16 @@ class MensajeDM(BaseModel):
     """Un mensaje dentro de una conversación de mensajes directos.
 
     `autor_id` es el `from` del mensaje (id del emisor) para distinguir quién escribió
-    cada turno. `adjuntos` es el NÚMERO de adjuntos (no sus URLs: son media privada del
-    DM, no se expone). `fecha` es el instante ISO en CDMX.
+    cada turno. `adjuntos` son las URLs del contenido del mensaje (publicaciones
+    compartidas, media enviada, menciones en historias); el DM suele venir sin `texto`
+    y traer el contenido aquí. `fecha` es el instante ISO en CDMX.
     """
 
     id: str | None = None
     autor_id: str | None = None
     texto: str | None = None
     fecha: str | None = None
-    adjuntos: int = 0
+    adjuntos: list[str] = Field(default_factory=list)
 
 
 class Conversacion(BaseModel):

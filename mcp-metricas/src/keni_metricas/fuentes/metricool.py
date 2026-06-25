@@ -779,15 +779,39 @@ def _participante(p: dict) -> Participante:
     )
 
 
+def _adjuntos_dm(m: dict) -> list[str]:
+    """URLs del contenido de un mensaje: cada `attachments` (link a una publicación
+    compartida o a la media enviada) más, si la trae, la mención de historia en
+    `properties.story.mention.link`. Cada item de `attachments` puede ser la URL directa
+    o un dict con `url`. Lista vacía si no hay contenido."""
+    urls: list[str] = []
+    for a in m.get("attachments") or []:
+        if isinstance(a, str):
+            url = _str_opt(a)
+        elif isinstance(a, dict):
+            url = _str_opt(a.get("url"))
+        else:
+            url = None
+        if url:
+            urls.append(url)
+    props = m.get("properties")
+    if isinstance(props, dict):
+        story = props.get("story")
+        mention = story.get("mention") if isinstance(story, dict) else None
+        link = _str_opt(mention.get("link")) if isinstance(mention, dict) else None
+        if link:
+            urls.append(link)
+    return urls
+
+
 def _mensaje_dm(m: dict) -> MensajeDM:
-    """Un mensaje de una conversación. Los adjuntos se CUENTAN (su media privada no se expone)."""
-    adjuntos = m.get("attachments")
+    """Un mensaje de una conversación. El contenido suele venir en `adjuntos` (URLs), no en `texto`."""
     return MensajeDM(
         id=_str_opt(m.get("id")),
         autor_id=_str_opt(m.get("from")),
         texto=_str_opt(m.get("text")),
         fecha=_instante_mx(m.get("publicationDateTime")),
-        adjuntos=len(adjuntos) if isinstance(adjuntos, list) else 0,
+        adjuntos=_adjuntos_dm(m),
     )
 
 
