@@ -1,9 +1,9 @@
 {
-  "version": "0.1.3",
-  "notes": "La actualización pregunta antes de reiniciar (ya no se reinicia sola de golpe). Incluye versión correcta, auto-actualización, conexión estable y galería compartida por marca.",
+  "version": "0.1.4",
+  "notes": "Sin diálogos del llavero y conexión estable (el token deja de usar el keychain). La app muestra el estado real del túnel. Tras actualizar, autoriza una vez más.",
   "pub_date": "2026-06-25T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFFVWG5mbVVTYTdXaHFyYTZndVlzeWl0UGZxYnJFeW4vcUNwbzFlYXB2UFh0dFdKM2xDTjRTMmtFaUdVK0RhU3JzeFQzTHhpNWNYVzgxUE9VY0YwRkFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzk4NDUxCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6ClNjUGN4d3BiaGpGMEM4U0ZVa3Vxc1lPYUlqREpZMVRJYmFzOWhXRDlROVYyQktadTNqd2hEdlRsd2czZkN5RTFnUHY4L2k3WG1Hd1JNSGZUeDNNSkFRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGR3VWk0TitEOVRReHI2SUQvNmxhMnpLVThKbmVlZFJHaFM5bEtEYytxYVJZYlVGVm1JcURWV1VubVdGM1dhT1o2NlZwNkErT1Q2NXhzdjY4MFc2bFFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzk5ODYwCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ck9qTGdmL21NeU9kNW9UOXlsR1pQTXkwL2RaZTJjWWw2N1pqMU5MZDFiVTJEeC8yb2ZuMVA0TnpzdllYeGlYYkhSUmswbVQ3MWQwY2xIZldUMDEwakJ3PT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }
