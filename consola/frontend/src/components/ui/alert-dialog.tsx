@@ -95,10 +95,9 @@ const AlertDialogDescription = React.forwardRef<
 AlertDialogDescription.displayName = AlertDialogPrimitive.Description.displayName;
 
 // Acción afirmativa = relleno gris suave (guía de diseño Keni): grises, sin relleno
-// oscuro. Es el punto focal de la tarjeta y se lee como botón (el outline hairline
-// quedaba invisible sobre la tarjeta clara). Las confirmaciones destructivas la
-// sobreescriben con `variant="destructive"` (rojo), el único color que el peligro
-// justifica.
+// oscuro ni color. Es el punto focal de la tarjeta y se lee como botón (el outline
+// hairline quedaba invisible sobre la tarjeta clara). El peligro de una acción
+// destructiva lo comunica el texto del diálogo, no el color del botón.
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>

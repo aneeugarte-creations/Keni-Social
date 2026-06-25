@@ -184,7 +184,7 @@ export function ChatRalph({ id }: { id: string }) {
           className="min-h-[40px] flex-1"
         />
         <Button
-          variant="brand"
+          variant="outline"
           size="icon"
           className="h-10 w-10 shrink-0"
           onClick={enviar}

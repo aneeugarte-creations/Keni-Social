@@ -766,7 +766,7 @@ function PanelArtefactos({
                   {a.estado === "generando" ? (
                     <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
                   ) : a.estado === "error" ? (
-                    <Badge variant="destructive" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
+                    <Badge variant="outline" className="px-1.5 py-0 text-xs font-normal">Error</Badge>
                   ) : (
                     <span className="shrink-0 text-xs uppercase text-muted-foreground">{a.formato}</span>
                   )}

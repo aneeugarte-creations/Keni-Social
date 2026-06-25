@@ -55,7 +55,7 @@ export function FilaAjuste({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{ajuste.etiqueta}</span>
         {ajuste.peligroso && (
-          <Badge variant="destructive" className="text-[10px]">
+          <Badge variant="outline" className="text-[10px]">
             Publica de verdad
           </Badge>
         )}

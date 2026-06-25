@@ -36,7 +36,7 @@ export interface OpcionesConfirmar {
   textoConfirmar?: string;
   /** Texto del botón de cancelar. Por defecto "Cancelar". */
   textoCancelar?: string;
-  /** Si la acción es destructiva (borrar): botón rojo. */
+  /** Marca la acción como destructiva (borrar). El peligro lo comunica el texto del diálogo. */
   destructivo?: boolean;
 }
 
@@ -48,7 +48,7 @@ export interface OpcionElegir {
   etiqueta: string;
   /** Sub-etiqueta opcional (gris, a la derecha): aclara la opción sin saturar el texto. */
   descripcion?: string;
-  /** Fila roja (acción destructiva). Por defecto neutra (estilo de la plataforma). */
+  /** Marca la fila como destructiva (borrar). Estilo neutro, como el resto. */
   destructivo?: boolean;
 }
 

@@ -53,7 +53,7 @@ function BadgeAuth({ auth }: { auth: GithubAuth | undefined }) {
   if (auth.logueado) {
     return <Badge variant="ok">GitHub conectado</Badge>;
   }
-  return <Badge variant="destructive">Sin conectar</Badge>;
+  return <Badge variant="outline">Sin conectar</Badge>;
 }
 
 /**
@@ -124,7 +124,7 @@ function DialogoConectar({ conectado, onConectado }: { conectado: boolean; onCon
 
   return (
     <Dialog open={abierto} onOpenChange={cerrar}>
-      <Button variant={conectado ? "outline" : "default"} size="sm" onClick={() => setAbierto(true)}>
+      <Button variant="outline" size="sm" onClick={() => setAbierto(true)}>
         <Github className="mr-2 h-4 w-4" aria-hidden="true" />
         {verbo}
       </Button>

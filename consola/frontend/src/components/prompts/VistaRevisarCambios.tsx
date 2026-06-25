@@ -156,7 +156,7 @@ export function VistaRevisarCambios({
                   Cancelar
                 </Button>
                 <Button
-                  variant="brand"
+                  variant="outline"
                   disabled={!notaValida || enviando}
                   onClick={() => onEnviar?.(nota.trim())}
                 >

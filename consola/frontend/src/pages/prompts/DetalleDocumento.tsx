@@ -417,7 +417,7 @@ export function DetalleDocumento({
           ) : null}
           {esAdmin ? (
             <Button
-              variant="brand"
+              variant="outline"
               size="sm"
               disabled={!puedePublicar}
               title={
@@ -433,7 +433,7 @@ export function DetalleDocumento({
             </Button>
           ) : (
             <Button
-              variant="brand"
+              variant="outline"
               size="sm"
               disabled={!puedePublicar}
               title={
@@ -498,7 +498,7 @@ export function DetalleDocumento({
             </span>
             <Button
               size="sm"
-              variant="brand"
+              variant="outline"
               className="h-7"
               disabled={resolviendoConflicto}
               onClick={() => void sobrescribirConLoMio()}

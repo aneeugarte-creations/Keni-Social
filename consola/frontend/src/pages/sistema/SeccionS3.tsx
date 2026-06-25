@@ -21,7 +21,7 @@ function BadgeSalud({ salud }: { salud: RespuestaS3["salud"] }) {
     return <Badge variant="ok">Conectado</Badge>;
   }
   if (salud === "err") {
-    return <Badge variant="destructive">Error de conexión</Badge>;
+    return <Badge variant="outline">Error de conexión</Badge>;
   }
   return <Badge variant="secondary">Sin configurar</Badge>;
 }

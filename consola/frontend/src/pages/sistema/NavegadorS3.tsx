@@ -140,7 +140,7 @@ function PreviewObjeto({
                     Borrar
                   </Button>
                   <Button
-                    variant="default"
+                    variant="outline"
                     size="sm"
                     onClick={() =>
                       window.open(urlS3Objeto(objeto.key, true), "_blank", "noopener,noreferrer")
@@ -370,7 +370,7 @@ export function SeccionNavegadorS3() {
                 Limpiar
               </Button>
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
                 disabled={borrando}
                 onClick={() => confirmarBorrarLote([...seleccion])}

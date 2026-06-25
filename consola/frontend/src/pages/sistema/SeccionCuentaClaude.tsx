@@ -73,7 +73,7 @@ function BadgeAuth({ auth }: { auth: CuentaAuth | undefined }) {
   if (auth.logueado) {
     return <Badge variant="ok">Cuenta conectada</Badge>;
   }
-  return <Badge variant="destructive">Sin cuenta</Badge>;
+  return <Badge variant="outline">Sin cuenta</Badge>;
 }
 
 /** Barra + texto de un medidor de uso (sesión 5h / semana / …). */
@@ -193,7 +193,7 @@ function DialogoCambiarCuenta({
 
   return (
     <Dialog open={abierto} onOpenChange={cerrar}>
-      <Button variant={conectado ? "outline" : "default"} size="sm" onClick={() => setAbierto(true)}>
+      <Button variant="outline" size="sm" onClick={() => setAbierto(true)}>
         <UserCog className="mr-2 h-4 w-4" aria-hidden="true" />
         {verbo}
       </Button>

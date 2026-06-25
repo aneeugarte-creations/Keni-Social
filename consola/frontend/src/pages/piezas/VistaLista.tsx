@@ -470,7 +470,7 @@ export function VistaLista({
               Cancelar
             </Button>
             <Button
-              variant="destructive"
+              variant="outline"
               size="sm"
               onClick={async () => {
                 if (

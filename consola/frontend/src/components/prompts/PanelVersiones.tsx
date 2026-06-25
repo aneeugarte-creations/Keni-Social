@@ -220,7 +220,7 @@ export function PanelVersiones({
           </p>
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             {onPublicar ? (
-              <Button variant="brand" size="sm" onClick={onPublicar}>
+              <Button variant="outline" size="sm" onClick={onPublicar}>
                 <Rocket className="mr-1 h-3.5 w-3.5" /> Revisar y publicar
                 <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Button>

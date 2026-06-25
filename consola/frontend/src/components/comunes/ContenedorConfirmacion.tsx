@@ -24,7 +24,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function ContenedorConfirmacion() {
@@ -84,9 +83,7 @@ export function ContenedorConfirmacion() {
                       onClick={() => responder(op.valor)}
                       className={cn(
                         "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                        op.destructivo
-                          ? "border-destructive/40 text-destructive hover:bg-destructive/10"
-                          : "border-border bg-background hover:bg-accent hover:text-accent-foreground",
+                        "border-border bg-background hover:bg-accent hover:text-accent-foreground",
                       )}
                     >
                       <span className="text-sm font-medium">{op.etiqueta}</span>
@@ -107,14 +104,7 @@ export function ContenedorConfirmacion() {
                 <AlertDialogCancel onClick={() => responder(valorCancelar)}>
                   {estado.textoCancelar ?? "Cancelar"}
                 </AlertDialogCancel>
-                <AlertDialogAction
-                  className={
-                    estado.destructivo
-                      ? buttonVariants({ variant: "destructive" })
-                      : undefined
-                  }
-                  onClick={() => responder(true)}
-                >
+                <AlertDialogAction onClick={() => responder(true)}>
                   {estado.textoConfirmar ?? "Confirmar"}
                 </AlertDialogAction>
               </AlertDialogFooter>
