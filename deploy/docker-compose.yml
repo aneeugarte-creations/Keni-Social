@@ -1167,6 +1167,66 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # INCIDENT-KEEPER: agente claude -p que ARREGLA lo que el autoheal no puede. Cuando un servicio
+  # FLAPEA (el guardian lo resucitó N veces y sigue cayendo: típicamente un commit reciente rompió
+  # el arranque/migración), el guardian escribe estado/incidente.json con la evidencia y este
+  # servicio lanza UN claude -p con el ROL (clon del "green keeper") que diagnostica y, si es de
+  # código, COMMITEA el fix a `main` (dispara test->deploy). Clon del carril worker-dev: reutiliza
+  # la imagen del worker (claude+git+gh), la cuenta de Claude (/data/claude-cfg) y la credencial de
+  # GitHub (/data/gh); NO toca docker (la mitigación es del guardian) ni la cola/Postgres. Best-effort:
+  # NO gatea el deploy (un keeper caído no tumba prod). Límites duros y escalada-a-humano en el ROL.
+  incident-keeper:
+    image: keni-social/worker:${WORKER_VERSION:-latest}
+    restart: unless-stopped
+    # Hereda el ENTRYPOINT del worker (hidrata la cuenta de Claude + git author) y corre el bucle.
+    command: ["sh", "/keeper/keeper.sh"]
+    labels:
+      - autoheal=true
+    environment:
+      XDG_CONFIG_HOME: /data           # gh lee su credencial de /data/gh
+      KENI_DATA_DIR: /data
+      IS_SANDBOX: "1"                  # habilita --dangerously-skip-permissions (headless)
+      KENI_DEV_REPO: /repo             # clon git donde crea el worktree del fix
+      KENI_KEEPER_ROL: /keeper/ROL.md
+      KENI_KEEPER_ESTADO: /estado
+      KENI_KEEPER_MODELO: ${KENI_KEEPER_MODELO:-opus}
+      KENI_KEEPER_INTERVALO: ${KENI_KEEPER_INTERVALO:-10}
+      # Flag de deploy (no actuar durante un deploy) e identidad de los commits del keeper.
+      KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
+      KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}
+      KENI_GIT_AUTHOR_EMAIL: ${KENI_GIT_AUTHOR_EMAIL:-}
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      CLAUDE_CONFIG_DIR: /data/claude-cfg
+    volumes:
+      - keni-data:/data                # credenciales claude+gh (compartidas con worker-dev)
+      - keni-repo:/repo                # clon git (worktrees del fix)
+      - ./incident-keeper:/keeper:ro   # ROL.md + keeper.sh (bind-mount; sin imagen propia)
+      - ./estado:/estado               # rw: lee el trigger del guardian y lo archiva al procesarlo
+    secrets:
+      - anthropic_api_key
+      - mcp_bearer
+    networks:
+      - internal                       # egress: Anthropic (claude) + GitHub (push a main)
+    # Latido: keeper.sh toca este fichero cada ciclo; si se cuelga >60s, autoheal lo reinicia.
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/keni-incident-keeper.latido -mmin -1 | grep -q . || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    mem_limit: ${KEEPER_MEM_LIMIT:-6g}
+    cpus: ${KEEPER_CPUS:-2.0}
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   # AUTOHEAL de contenedores EXITED — el hueco que willfarrell/autoheal NO cubre. Aquel solo
   # reinicia contenedores unhealthy-pero-VIVOS; y `restart: unless-stopped` NO revive un
   # contenedor parado a propósito (un deploy que hace `stop` y luego falla deja el servicio
@@ -1201,6 +1261,10 @@ services:
       # TTL del flag (min): pasado esto se considera RANCIO (deploy muerto sin limpiar) y el
       # guardián lo borra y retoma el autoheal. Holgado: un deploy real son minutos.
       KENI_GUARDIAN_FLAG_TTL_MIN: "45"
+      # Escalada al incident-keeper: DORMIDA por defecto (0). El keeper se despliega y queda listo,
+      # pero el guardián NO le dispara (solo resucita EXITED). Para ACTIVAR el auto-fix de código,
+      # pon "1" aquí (o KENI_GUARDIAN_ESCALAR=1 en el .env) y recrea el guardián.
+      KENI_GUARDIAN_ESCALAR: "0"
     volumes:
       # Flag de deploy. RW (no :ro): si un deploy muere sin que su trap limpie el flag, el guardián
       # debe poder BORRAR el flag rancio (lo que además corrige el mensaje del front, mismo fichero).

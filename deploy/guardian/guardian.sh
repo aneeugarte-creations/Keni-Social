@@ -31,6 +31,12 @@ FLAG_DEPLOY="${KENI_GUARDIAN_FLAG_DEPLOY:-/estado/desplegando}"
 # como rancio. Holgado (un deploy real son minutos) para no borrarlo a mitad de un deploy lento.
 FLAG_TTL_MIN="${KENI_GUARDIAN_FLAG_TTL_MIN:-45}"
 PROYECTO="${KENI_GUARDIAN_PROYECTO:-keni-social}"
+# Escalada al incident-keeper: cuando un servicio FLAPEA (el autoheal no basta), el guardián
+# recoge la evidencia (logs) y escribe $TRIGGER; el keeper lo lee y lanza un claude -p que lo
+# arregla de fondo. ESCALAR=0 lo desactiva (deja solo el autoheal). Rate-limit: 1 por ventana.
+ESCALAR="${KENI_GUARDIAN_ESCALAR:-1}"
+TRIGGER="${KENI_GUARDIAN_TRIGGER:-/estado/incidente.json}"
+VENTANA_MIN=$(( VENTANA / 60 )); [ "$VENTANA_MIN" -lt 1 ] && VENTANA_MIN=1
 
 LATIDO=/tmp/keni-guardian.latido
 ARRANQUES=/tmp/keni-guardian.arranques   # líneas "<epoch> <servicio>" de arranques recientes
@@ -68,6 +74,33 @@ arrancar() {  # $1 = id ; $2 = servicio
     304) : ;;  # ya estaba corriendo: nada que decir
     *)   notificar "FALLO al arrancar '$2' (HTTP ${codigo:-sin-respuesta})" ;;
   esac
+}
+
+# Escala al incident-keeper: recoge la evidencia (logs del contenedor caído, vía el proxy) y
+# escribe $TRIGGER para que el keeper lance un claude -p que diagnostique y, si es de código,
+# commitee el fix. Rate-limit 1/ventana por servicio (marca con TTL=ventana): no inunda de
+# triggers ni spawnea keepers en cadena mientras un servicio flapea sostenido.
+escalar() {  # $1 = id ; $2 = servicio
+  [ "$ESCALAR" = 1 ] || return 0
+  m="/tmp/keni-guardian.escalado.$2"
+  [ -z "$(find "$m" -mmin "-$VENTANA_MIN" 2>/dev/null)" ] || return 0   # ya escalado en la ventana
+  : > "$m" 2>/dev/null || true
+  # Logs recientes: el stream de /logs viene multiplexado (cabeceras de 8 bytes por frame); lo
+  # pasamos a texto legible quitando lo no imprimible. Suficiente para que el agente diagnostique.
+  logs="$(curl -sG -m 10 "$DOCKER/containers/$1/logs" \
+            --data-urlencode 'stdout=true' --data-urlencode 'stderr=true' \
+            --data-urlencode 'tail=200' 2>/dev/null | tr -cd '[:print:]\n\t' | tail -c 8000)"
+  {
+    echo "Servicio caído (flapping): $2"
+    echo "Contenedor: $1"
+    echo "Detección: el guardián lo resucitó $MAX_ARRANQUES veces en ${VENTANA}s y sigue cayendo."
+    echo "Proyecto compose: $PROYECTO"
+    echo ""
+    echo "## Logs recientes (docker logs --tail 200, desmultiplexado):"
+    echo "$logs"
+  } > "$TRIGGER.tmp" 2>/dev/null && mv "$TRIGGER.tmp" "$TRIGGER" 2>/dev/null \
+    && notificar "ESCALADO a incident-keeper: '$2' (evidencia en $TRIGGER)" \
+    || notificar "no pude escribir el trigger de escalada $TRIGGER"
 }
 
 notificar "arranca (proyecto=$PROYECTO intervalo=${INTERVALO}s servicios=[$SERVICIOS])"
@@ -109,12 +142,14 @@ while :; do
       if [ -f "$VISTOS_PREV" ] && grep -q "^$id\$" "$VISTOS_PREV" 2>/dev/null; then
         n="$(arranques_recientes "$svc")"
         if [ "$n" -ge "$MAX_ARRANQUES" ]; then
-          # Flapping: no insistir. Aviso rate-limitado (1/min) para no inundar el log.
+          # Flapping: el autoheal no basta. Aviso rate-limitado (1/min) y ESCALA al incident-keeper
+          # (1/ventana) para que un agente lo arregle de fondo (lee logs+commits, commitea el fix).
           marca="/tmp/keni-guardian.flap.$svc"
           if [ -z "$(find "$marca" -mmin -1 2>/dev/null)" ]; then
-            notificar "'$svc' FLAPEA (${n} arranques en ${VENTANA}s): dejo de reintentar; requiere intervención"
+            notificar "'$svc' FLAPEA (${n} arranques en ${VENTANA}s): dejo de reintentar; escalo al incident-keeper"
             : > "$marca" 2>/dev/null || true
           fi
+          escalar "$id" "$svc"
         else
           arrancar "$id" "$svc"
         fi
