@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock,
   Coffee,
-  Copy,
   Download,
   HeartPulse,
   HelpCircle,
@@ -311,32 +310,23 @@ export function AyudaLeyenda() {
  */
 export function MenuMasAcciones({
   esAdmin,
-  semanaAprobada,
   onAsignar,
   asignarActivo,
   onImprimir,
-  onCopiarAnterior,
-  onCopiarMes,
   onAbrirFranjas,
   onAbrirAjustes,
   onAbrirTiempoLibre,
   onAbrirCarga,
   onExportExcel,
   onExportCsv,
-  copiarPendiente,
 }: {
   esAdmin: boolean;
-  semanaAprobada: boolean;
   /** Conmuta el panel de reparto «Asignar turnos» (Mes único). Solo Gestión lo pasa; sin él, el
    *  ítem no aparece. `asignarActivo` marca el punto cuando el panel está abierto. */
   onAsignar?: () => void;
   asignarActivo?: boolean;
   /** Imprime / guarda el mes como PDF. Solo Gestión lo pasa (en «Horario» es un icono suelto). */
   onImprimir?: () => void;
-  onCopiarAnterior: () => void;
-  /** «Copiar mes anterior»: siembra el mes en vista con el rol del mes anterior. Solo Gestión (Mes)
-   *  lo pasa; sin él, el ítem no aparece. */
-  onCopiarMes?: () => void;
   /** Abre el diálogo «Franjas» (pestañas: esta semana / plantilla por defecto). */
   onAbrirFranjas: () => void;
   /** Abre «Ajustes de turnos» (preferencias de visualización por marca). Oculto si no se pasa. */
@@ -346,7 +336,6 @@ export function MenuMasAcciones({
   onAbrirCarga: () => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
-  copiarPendiente: boolean;
 }) {
   const items: EntradaMenuContextual[] = [];
 
@@ -393,21 +382,6 @@ export function MenuMasAcciones({
       etiqueta: "Franjas",
       icono: Clock,
       onClick: onAbrirFranjas,
-    });
-    items.push({ separador: true });
-    if (onCopiarMes) {
-      items.push({
-        etiqueta: copiarPendiente ? "Copiando…" : "Copiar mes anterior",
-        icono: Copy,
-        onClick: onCopiarMes,
-        deshabilitado: copiarPendiente || semanaAprobada,
-      });
-    }
-    items.push({
-      etiqueta: copiarPendiente ? "Copiando…" : "Copiar semana anterior",
-      icono: Copy,
-      onClick: onCopiarAnterior,
-      deshabilitado: copiarPendiente || semanaAprobada,
     });
     items.push({ separador: true });
   }

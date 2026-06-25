@@ -1,5 +1,5 @@
 // Pestaña CALENDARIO de la rota (rejilla semanal de turnos + cobertura derivada).
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BellRing,
@@ -10,7 +10,6 @@ import {
   UserPlus,
 } from "lucide-react";
 import * as React from "react";
-import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -283,35 +282,13 @@ export function Calendario({
   // «Tiempo libre»: registrar vacaciones/baja y ver quién está fuera, desde el menú ⋯ del gestor.
   const [abrirTiempoLibre, setAbrirTiempoLibre] = React.useState(false);
 
-  // Copiar la semana anterior. GRID POR MARCA: muta UNA rejilla -> exige marca concreta; en
-  // "Todas" (marcaActiva null) mandamos "" y el backend responde 400 accionable.
+  // Rejilla que copia el bloque «Copiar semana/mes». GRID POR MARCA: muta UNA rejilla -> exige marca
+  // concreta; en "Todas" (marcaActiva null) es "" y el panel inhabilita Copiar con una pista.
   const marcaRejilla = marcaActiva ?? "";
-  const copiarAnterior = useMutation({
-    mutationFn: () =>
-      api.copiarSemana({
-        de_lunes: lunesSiguiente(lunes, -1),
-        a_lunes: lunes,
-        reemplazar: false,
-        marca: marcaRejilla,
-      }),
-    onSuccess: (res) => {
-      toast.success(`Copiados ${res.copiados ?? 0} turnos de la semana anterior.`);
-      invalidar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
 
-  // Mes en vista del calendario mensual de Gestión (lo notifica `VistaMensualTurnos.onMes`): es el
-  // mes que «Copiar mes anterior» siembra desde el mes anterior, alineado por día de semana.
+  // Mes en vista del calendario mensual de Gestión (lo notifica `VistaMensualTurnos.onMes`): ancla
+  // los selectores del bloque «Copiar mes».
   const [mesGestion, setMesGestion] = React.useState("");
-  const copiarMes = useMutation({
-    mutationFn: () => api.copiarMes({ a_mes: mesGestion, reemplazar: false, marca: marcaRejilla }),
-    onSuccess: (res) => {
-      toast.success(`Copiados ${res.copiados ?? 0} turnos del mes anterior — edita lo que quieras.`);
-      invalidar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
 
   // Eventos con su cobertura derivada (el backend ya excluyó los `no_cubrir`).
   const eventosCobertura = React.useMemo(
@@ -654,17 +631,14 @@ export function Calendario({
     // Barra del mensual (una sola fila de tres zonas). En CONSULTA lleva el conmutador Semana|Mes +
     // ✓ «Al día» (vía `controlesPre`). En GESTIÓN (Mes único, sin conmutador) toda la gestión vive
     // en el menú ⋯: «Asignar turnos» (abre/cierra el panel de reparto), Imprimir, y el resto
-    // (copiar/franjas/carga/export). Así la barra queda con el mes centrado y nada más.
+    // (franjas/carga/export). Copiar semana/mes vive en el panel de reparto («Más opciones»), no
+    // aquí. Así la barra queda con el mes centrado y nada más.
     const accionesMes = esGestion ? (
       <MenuMasAcciones
         esAdmin={esAdmin}
-        semanaAprobada={false}
-        copiarPendiente={copiarAnterior.isPending || copiarMes.isPending}
         onAsignar={() => setAbrirAsignar((v) => !v)}
         asignarActivo={abrirAsignar}
         onImprimir={imprimirMes}
-        onCopiarAnterior={() => copiarAnterior.mutate()}
-        onCopiarMes={() => copiarMes.mutate()}
         onAbrirFranjas={() => setAbrirFranjas(true)}
         onAbrirAjustes={() => setAbrirAjustes(true)}
         onAbrirTiempoLibre={tiempoLibreActivo ? () => setAbrirTiempoLibre(true) : undefined}
