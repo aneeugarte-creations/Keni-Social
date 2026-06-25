@@ -110,31 +110,25 @@ function VistaComentarios({ marca }: { marca: string }) {
 
 export default function Inbox() {
   // La marca activa global (id canónico, o null = "Todas"). El buzón es por marca.
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const [tab, setTab] = React.useState("mensajes");
 
   if (!marcaActiva) {
     return (
-      <div className="mx-auto max-w-4xl p-4">
-        <EstadoVacio
-          icono={IconoInbox}
-          titulo="Elige una marca"
-          texto="El buzón muestra los mensajes y comentarios de una marca. Selecciona una marca concreta en el control de arriba para verlos."
-        />
-      </div>
+      <EstadoVacio
+        icono={IconoInbox}
+        titulo="Elige una marca"
+        texto="El buzón muestra los mensajes y comentarios de una marca. Selecciona una marca concreta en el control de arriba para verlos."
+      />
     );
   }
 
   const marca = marcaMetricasDesdeCanonica(marcaActiva);
 
+  // El título de la sección lo pinta la subnav del hub («Buzón») en la barra superior; el cuerpo va
+  // a ancho completo, como Métricas y Campañas (sin cabecera ni columna centrada propias).
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4">
-      <div>
-        <h2 className="text-lg font-semibold">Buzón</h2>
-        <p className="text-sm text-muted-foreground">
-          Mensajes directos y comentarios de {nombreActiva ?? "la marca"} en Facebook e Instagram.
-        </p>
-      </div>
+    <div className="space-y-4">
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="mensajes">

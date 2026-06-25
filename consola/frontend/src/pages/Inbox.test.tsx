@@ -111,9 +111,7 @@ describe("Inbox", () => {
 
     renderConProviders("claro-sports");
 
-    expect(
-      screen.getByText(/Mensajes directos y comentarios de Claro Sports/),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Mensajes directos/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Ana Audiencia")).toBeInTheDocument());
     expect(dms).toHaveBeenCalledWith(
       { marca: "claro_sports" },
