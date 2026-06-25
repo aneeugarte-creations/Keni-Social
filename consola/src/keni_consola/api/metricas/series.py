@@ -36,7 +36,7 @@ from ._comun import (
 
 __all__ = [
     "tendencia", "seguidores", "serie_alcance", "desglose", "crosstab", "correlacion",
-    "ads", "ingesta", "mejor_hora",
+    "ads", "ads_desglose", "ingesta", "mejor_hora",
 ]
 
 # Un canal (marca×red×formato) se marca ESTANCADO si su última pieza es >= este nº de días
@@ -192,6 +192,34 @@ async def ads(request: Request) -> Response:
     return JSONResponse(
         {"ads": lista, "total": total, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en}
     )
+
+
+async def ads_desglose(request: Request) -> Response:
+    """GET /api/metricas/ads/{provider_campaign_id}/desglose: adgroups + ads de UNA campaña.
+
+    Drill-down del inorgánico: `{"adgroups": [...], "ads": [...]}` de la campaña pedida (por su
+    `providerCampaignId`). `?marca=` acota a una marca; sin marca, todas. `?rango=` acota la
+    ventana de métricas (def 'mes'). Listas vacías = sin Ads conectado o sin esa campaña en el
+    periodo (degradación honesta). Computado al vuelo (en executor)."""
+    provider_campaign_id = request.path_params["provider_campaign_id"]
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
+    try:
+        payload = await run_in_threadpool(
+            servicio.construir_ads_desglose, rango, marca, provider_campaign_id
+        )
+        generado_en = ahora_iso()
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al leer el desglose de Ads (campaña=%s, marca=%s).",
+            provider_campaign_id, marca or "todas",
+        )
+        return JSONResponse({"error": "No se pudo leer el desglose de la campaña."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
 async def ingesta(request: Request) -> Response:

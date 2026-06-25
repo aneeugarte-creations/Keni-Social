@@ -754,6 +754,18 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.campanias_ads(cuenta_id, rango)
 
+    def campanias_ads_desglose(self, cuenta_id: str, provider_campaign_id: str, rango: str = "mes"):
+        """Delega el drill-down de una campaña (adgroups+ads) si la fuente envuelta lo expone.
+
+        Solo Metricool lo implementa (muestra/compuesta no). Si la envuelta no lo tiene, propaga
+        `AttributeError` para que el llamante degrade a un desglose vacío — igual que
+        `campanias_ads`.
+        """
+        if not hasattr(self._fuente, "campanias_ads_desglose"):
+            raise AttributeError("la fuente envuelta no expone campanias_ads_desglose")
+        self._verificar(cuenta_id)
+        return self._fuente.campanias_ads_desglose(cuenta_id, provider_campaign_id, rango)
+
 
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     """Construye `FuenteMetricool` o, sin credenciales, una fuente Metricool VACÍA.

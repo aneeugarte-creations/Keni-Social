@@ -579,6 +579,50 @@ def test_ads_red_invalida_devuelve_400(cliente, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# /api/metricas/ads/{provider_campaign_id}/desglose (drill-down)              #
+# --------------------------------------------------------------------------- #
+
+
+def _ads_desglose(rango="mes", marca=None, provider_campaign_id=""):
+    return {
+        "provider_campaign_id": provider_campaign_id,
+        "adgroups": [
+            {"provider_adgroup_id": "ag_1", "nombre": "Grupo A", "impresiones": 5000,
+             "clics": 100, "gasto": 40.0, "ctr": 2.0, "cuenta": marca},
+        ],
+        "ads": [
+            {"ad_id": "ad_1", "nombre": "Anuncio 1", "tipo": "SINGLE_IMAGE",
+             "impresiones": 3000, "clics": 60, "gasto": 25.0, "cuenta": marca},
+        ],
+    }
+
+
+def test_ads_desglose_200_shape(cliente, monkeypatch):
+    _mock_servicio(monkeypatch, construir_ads_desglose=_ads_desglose)
+    r = cliente.get("/api/metricas/ads/camp_1/desglose?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["provider_campaign_id"] == "camp_1"
+    assert data["adgroups"][0]["provider_adgroup_id"] == "ag_1"
+    assert data["ads"][0]["ad_id"] == "ad_1"
+    assert data["etiqueta_rango"] and data["etiqueta_rango"] != "ignored"
+    assert data["generado_en"]
+
+
+def test_ads_desglose_vacio_si_sin_campania(cliente, monkeypatch):
+    _mock_servicio(
+        monkeypatch,
+        construir_ads_desglose=lambda rango="mes", marca=None, provider_campaign_id="": {
+            "provider_campaign_id": provider_campaign_id, "adgroups": [], "ads": []
+        },
+    )
+    r = cliente.get("/api/metricas/ads/desconocida/desglose")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["adgroups"] == [] and data["ads"] == []
+
+
+# --------------------------------------------------------------------------- #
 # /api/metricas/ingesta (canales con la sincronización estancada)             #
 # --------------------------------------------------------------------------- #
 

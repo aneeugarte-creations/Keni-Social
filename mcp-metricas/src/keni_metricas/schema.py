@@ -287,6 +287,22 @@ class CampaniaAds(BaseModel):
     es_post_impulsado: bool = False
     # caption extraído del nombre cuando es post impulsado (para atribuirlo a su pieza).
     caption: str = ""
+    # --- Rendimiento y metadatos de la campaña (issue Ads enriquecido) -------
+    # OPCIONALES (None si la API no los trae): degradación honesta. `ctr`/`cpc`/`cpm` y las
+    # conversiones vienen del objeto `metrics` (CTR/CPC/CPM/CONVERSIONS/CONVERSION_RATE/
+    # CONVERSIONS_VALUE); el resto son metadatos de la campaña.
+    ctr: float | None = None
+    cpc: float | None = None
+    cpm: float | None = None
+    conversiones: int | None = None
+    tasa_conversion: float | None = None
+    valor_conversiones: float | None = None
+    objetivo: str | None = None  # objective de la campaña
+    estado: str | None = None  # status de la campaña
+    presupuesto_diario: float | None = None  # dailyBudget
+    network: str | None = None  # red cruda de la campaña en Metricool
+    # id de la campaña en la red (providerCampaignId): clave para el drill-down de adgroups/ads.
+    provider_campaign_id: str | None = None
     # id_metricas de la marca dueña (lo sella el servicio al agregar varias cuentas).
     cuenta: str | None = None
 

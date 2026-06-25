@@ -67,6 +67,7 @@ from .reporte import (
 )
 from .series import (
     ads,
+    ads_desglose,
     correlacion,
     crosstab,
     desglose,
@@ -101,6 +102,7 @@ __all__ = [
     "crosstab",
     "correlacion",
     "ads",
+    "ads_desglose",
     "ingesta",
     "mejor_hora",
     "estado",
@@ -135,6 +137,7 @@ RUTAS = [
     Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
     Route("/api/metricas/correlacion", correlacion, methods=["GET"]),
     Route("/api/metricas/ads", ads, methods=["GET"]),
+    Route("/api/metricas/ads/{provider_campaign_id}/desglose", ads_desglose, methods=["GET"]),
     Route("/api/metricas/ingesta", ingesta, methods=["GET"]),
     Route("/api/programacion/mejor-hora", mejor_hora, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),

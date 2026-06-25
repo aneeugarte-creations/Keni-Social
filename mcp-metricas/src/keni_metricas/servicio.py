@@ -134,6 +134,7 @@ __all__ = [
     "construir_analitica_piezas",
     "construir_listado_piezas",
     "construir_tendencia_diaria",
+    "construir_ads_desglose",
     "construir_serie_seguidores",
     "construir_serie_alcance",
     "construir_desglose_interacciones",
@@ -437,6 +438,39 @@ def construir_ads(rango: str = "mes", marca: str | None = None) -> list[dict]:
             d["cuenta"] = c.id
             salida.append(d)
     return salida
+
+
+def construir_ads_desglose(
+    rango: str = "mes", marca: str | None = None, provider_campaign_id: str = ""
+) -> dict:
+    """Drill-down de UNA campaña de Ads: sus adgroups y ads (Meta/TikTok Ads).
+
+    Dispatch por capacidad (como `construir_ads`): usa `fuente.campanias_ads_desglose` si la
+    fuente la expone (Metricool, también vía `FuenteScoped`). Si no, degrada a vacío. Sella el
+    `cuenta` (id_metricas) en cada item. Propaga `ValueError` (rango inválido) y
+    `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    fuente = _fuente(marca)
+    fn = getattr(fuente, "campanias_ads_desglose", None)
+    adgroups: list[dict] = []
+    ads: list[dict] = []
+    if fn is not None and provider_campaign_id:
+        for c in fuente.cuentas():
+            try:
+                d = fn(c.id, provider_campaign_id, rango)
+            except AttributeError:
+                # La fuente envuelta no lo implementa (FuenteScoped lo propaga): desglose vacío.
+                return {"adgroups": [], "ads": [], "provider_campaign_id": provider_campaign_id}
+            except Exception:  # noqa: BLE001 -- una cuenta que falla no aborta el resto
+                _log.exception(
+                    "construir_ads_desglose: cuenta %s falló (rango=%s).", c.id, rango
+                )
+                continue
+            for g in d.get("adgroups") or []:
+                adgroups.append({**g, "cuenta": c.id})
+            for a in d.get("ads") or []:
+                ads.append({**a, "cuenta": c.id})
+    return {"adgroups": adgroups, "ads": ads, "provider_campaign_id": provider_campaign_id}
 
 
 def construir_tendencia_diaria(

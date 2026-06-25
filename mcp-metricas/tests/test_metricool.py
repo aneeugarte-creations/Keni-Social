@@ -1324,7 +1324,17 @@ def test_campanias_ads_parsea_filtra_y_degrada_por_provider():
                         "currency": "MXN",
                         "start": {"dateTime": "2026-05-25T21:40:19"},
                         "stop": {"dateTime": "2026-06-08T21:40:19"},
-                        "metrics": {"IMPRESSIONS": 118696.0, "SPENT": 993.62, "CLICKS": 3077.0},
+                        "providerCampaignId": "camp_1",
+                        "objective": "OUTCOME_TRAFFIC",
+                        "status": "ACTIVE",
+                        "dailyBudget": 50.0,
+                        "network": "facebook",
+                        "metrics": {
+                            "IMPRESSIONS": 118696.0, "SPENT": 993.62, "CLICKS": 3077.0,
+                            "CTR": 2.59, "CPC": 0.32, "CPM": 8.37,
+                            "CONVERSIONS": 12.0, "CONVERSION_RATE": 0.39,
+                            "CONVERSIONS_VALUE": 3500.0,
+                        },
                     },
                     {
                         "name": "ALCANCE CAMPAÑA CHIHUAHUA",
@@ -1346,9 +1356,18 @@ def test_campanias_ads_parsea_filtra_y_degrada_por_provider():
     assert boost.impresiones == 118696 and boost.gasto == 993.62 and boost.clics == 3077
     assert boost.caption == "MÉXICO TAMBIÉN SE DESCUBRE" and boost.red == "facebook"
     assert boost.inicio == "2026-05-25" and boost.fin == "2026-06-08"
+    # Métricas enriquecidas de la campaña.
+    assert boost.ctr == 2.59 and boost.cpc == 0.32 and boost.cpm == 8.37
+    assert boost.conversiones == 12 and boost.tasa_conversion == 0.39
+    assert boost.valor_conversiones == 3500.0
+    assert boost.objetivo == "OUTCOME_TRAFFIC" and boost.estado == "ACTIVE"
+    assert boost.presupuesto_diario == 50.0 and boost.network == "facebook"
+    assert boost.provider_campaign_id == "camp_1"
     named = next(a for a in ads if not a.es_post_impulsado)
     assert named.nombre == "ALCANCE CAMPAÑA CHIHUAHUA" and named.impresiones == 244093
     assert named.caption == ""
+    # Sin esas claves en `metrics` -> None (degradación honesta, no 0 inventado).
+    assert named.ctr is None and named.conversiones is None and named.provider_campaign_id is None
 
 
 @respx.mock
@@ -1364,6 +1383,45 @@ def test_campanias_ads_respeta_proveedores_por_marca():
 
     providers = [c.request.url.params.get("providers[]") for c in ruta.calls]
     assert providers == ["facebookads"]  # tiktokads NI se consulta
+
+
+@respx.mock
+def test_campanias_ads_desglose_filtra_por_campania():
+    """El drill-down trae los adgroups de la campaña (por campaignId) y sus ads (por adgroupId,
+    que el ad no siempre trae el id de campaña). Otra campaña/adgroup queda fuera."""
+    marcas = {"claro_sports": {**MARCAS["claro_sports"], "ads_proveedores": ["facebookads"]}}
+    respx.get(f"{BASE}/v2/advertising/adgroups").mock(
+        return_value=httpx.Response(200, json={"data": [
+            {
+                "providerAdgroupId": "ag_1", "campaignId": "camp_1", "campaignName": "C1",
+                "name": "Grupo A", "status": "ACTIVE", "network": "facebook",
+                "metrics": {"IMPRESSIONS": 5000.0, "CLICKS": 100.0, "SPENT": 40.0, "CTR": 2.0},
+            },
+            {
+                "providerAdgroupId": "ag_otra", "campaignId": "camp_otra",
+                "metrics": {"IMPRESSIONS": 1.0},
+            },
+        ]})
+    )
+    respx.get(f"{BASE}/v2/advertising/ads").mock(
+        return_value=httpx.Response(200, json={"data": [
+            {
+                "adId": "ad_1", "adgroupId": "ag_1", "adgroupName": "Grupo A",
+                "adType": "SINGLE_IMAGE", "thumbnailUrl": "https://x/t.jpg",
+                "metrics": {"IMPRESSIONS": 3000.0, "CLICKS": 60.0, "SPENT": 25.0},
+            },
+            {"adId": "ad_otra", "adgroupId": "ag_otra", "metrics": {"IMPRESSIONS": 1.0}},
+        ]})
+    )
+    with httpx.Client() as cli:
+        d = FuenteMetricool(marcas=marcas, cliente=cli).campanias_ads_desglose(
+            "claro_sports", "camp_1", RANGO
+        )
+
+    assert [g["provider_adgroup_id"] for g in d["adgroups"]] == ["ag_1"]
+    assert d["adgroups"][0]["impresiones"] == 5000 and d["adgroups"][0]["ctr"] == 2.0
+    assert [a["ad_id"] for a in d["ads"]] == ["ad_1"]
+    assert d["ads"][0]["tipo"] == "SINGLE_IMAGE" and d["ads"][0]["impresiones"] == 3000
 
 
 def _post_yt(id_: str, fecha: str) -> dict:

@@ -392,6 +392,57 @@ def _a_int_opt(v) -> int | None:
         return None
 
 
+def _a_float_opt(v, ndigits: int = 2) -> float | None:
+    """Convierte a float redondeado, o None si el valor es ausente/no numérico.
+
+    Igual que `_a_int_opt` pero para tasas/costes (CTR/CPC/CPM…): la ausencia es None
+    (degradación honesta), no un 0 que parecería un dato real.
+    """
+    if v is None or v == "":
+        return None
+    try:
+        return round(float(v), ndigits)
+    except (TypeError, ValueError):
+        return None
+
+
+def _str_opt(v) -> str | None:
+    """Cadena no vacía o None (degradación honesta para metadatos de Ads opcionales)."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def _metricas_ads(m: dict) -> dict:
+    """Métricas normalizadas de una entidad de Ads (campaña/adgroup/ad) desde su `metrics`.
+
+    Las claves de Metricool van en MAYÚSCULAS. `impresiones`/`clics`/`gasto` caen a 0 (la
+    entidad existe aunque no entregue); el resto (CTR/CPC/CPM y conversiones) son None si la
+    API no los trae (degradación honesta).
+    """
+    return {
+        "impresiones": _entero(m.get("IMPRESSIONS") or 0),
+        "clics": _entero(m.get("CLICKS") or 0),
+        "gasto": round(float(m.get("SPENT") or 0.0), 2),
+        "ctr": _a_float_opt(m.get("CTR")),
+        "cpc": _a_float_opt(m.get("CPC")),
+        "cpm": _a_float_opt(m.get("CPM")),
+        "conversiones": _a_int_opt(m.get("CONVERSIONS")),
+        "tasa_conversion": _a_float_opt(m.get("CONVERSION_RATE")),
+        "valor_conversiones": _a_float_opt(m.get("CONVERSIONS_VALUE")),
+    }
+
+
+def _pertenece_a_campania(item: dict, provider_campaign_id: str) -> bool:
+    """True si un adgroup/ad referencia la campaña `provider_campaign_id` por alguno de sus
+    ids de campaña (`campaignId`/`providerCampaignId`)."""
+    return any(
+        _str_opt(item.get(k)) == provider_campaign_id
+        for k in ("campaignId", "providerCampaignId")
+    )
+
+
 _GRANULAR_INTERACCION = ("likes", "comentarios", "compartidos", "guardados")
 
 
@@ -1115,9 +1166,8 @@ class FuenteMetricool:
             for c in datos.get("data") or []:
                 if not isinstance(c, dict):
                     continue
-                m = c.get("metrics") or {}
-                impresiones = _entero(m.get("IMPRESSIONS") or 0)
-                if impresiones <= 0:
+                mets = _metricas_ads(c.get("metrics") or {})
+                if mets["impresiones"] <= 0:
                     continue  # sin entrega en la ventana: no es del periodo
                 nombre = str(c.get("name") or "")
                 caption = _caption_de_anuncio(nombre)
@@ -1125,9 +1175,20 @@ class FuenteMetricool:
                     CampaniaAds(
                         nombre=nombre,
                         red=_RED_DE_PROVIDER_ADS.get(prov, prov),
-                        impresiones=impresiones,
-                        gasto=round(float(m.get("SPENT") or 0.0), 2),
-                        clics=_entero(m.get("CLICKS") or 0),
+                        impresiones=mets["impresiones"],
+                        gasto=mets["gasto"],
+                        clics=mets["clics"],
+                        ctr=mets["ctr"],
+                        cpc=mets["cpc"],
+                        cpm=mets["cpm"],
+                        conversiones=mets["conversiones"],
+                        tasa_conversion=mets["tasa_conversion"],
+                        valor_conversiones=mets["valor_conversiones"],
+                        objetivo=_str_opt(c.get("objective")),
+                        estado=_str_opt(c.get("status")),
+                        presupuesto_diario=_a_float_opt(c.get("dailyBudget")),
+                        network=_str_opt(c.get("network")),
+                        provider_campaign_id=_str_opt(c.get("providerCampaignId")),
                         moneda=str(c.get("currency") or ""),
                         inicio=_fecha_ads(c.get("start")),
                         fin=_fecha_ads(c.get("stop")),
@@ -1137,6 +1198,83 @@ class FuenteMetricool:
                     )
                 )
         return out
+
+    def _fetch_ads_entidades(
+        self, cuenta_id: str, kind: str, prov: str, params_rango: dict
+    ) -> list[dict]:
+        """Lista cruda de `/v2/advertising/{kind}` (adgroups|ads) de un provider, [] si falla."""
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/advertising/{kind}",
+                params={**self._params_base(cuenta_id), **params_rango, "providers[]": prov},
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 -- provider no conectado/caído (o 500 de ads): se omite.
+            log.warning("metricool: ads %s %s/%s fallaron: %s", kind, prov, cuenta_id, e)
+            return []
+        return [d for d in (datos.get("data") or []) if isinstance(d, dict)]
+
+    def campanias_ads_desglose(
+        self, cuenta_id: str, provider_campaign_id: str, rango: str = "mes"
+    ) -> dict:
+        """Drill-down de UNA campaña: sus adgroups y ads (`/v2/advertising/adgroups`+`/ads`).
+
+        Filtra por la campaña pedida: un adgroup pertenece si su `campaignId`/`providerCampaignId`
+        casa; un ad pertenece si casa por campaña O si su `adgroupId` está entre los adgroups de
+        la campaña (los ads no siempre traen el id de campaña). Las métricas se acotan a la
+        ventana de `rango`. Degrada por provider/entidad (un 403/500 omite esa parte, no rompe).
+        Devuelve `{"adgroups": [...], "ads": [...]}` con dicts normalizados.
+        """
+        desde, hasta, _ = resolver_rango(rango)
+        params_rango = self._rango_params(desde, hasta)
+        provs = self._marca(cuenta_id).get("ads_proveedores") or _PROVIDERS_ADS
+        objetivo = str(provider_campaign_id)
+
+        adgroups: list[dict] = []
+        adgroup_ids: set[str] = set()
+        for prov in provs:
+            for g in self._fetch_ads_entidades(cuenta_id, "adgroups", prov, params_rango):
+                if not _pertenece_a_campania(g, objetivo):
+                    continue
+                adgroups.append(
+                    {
+                        "provider_adgroup_id": _str_opt(_primero(g, ("providerAdgroupId", "id"))),
+                        "nombre": _str_opt(_primero(g, ("name", "adgroupName"))),
+                        "campaign_id": _str_opt(g.get("campaignId")),
+                        "campaign_name": _str_opt(g.get("campaignName")),
+                        "network": _str_opt(g.get("network")),
+                        "estado": _str_opt(g.get("status")),
+                        **_metricas_ads(g.get("metrics") or {}),
+                    }
+                )
+                for k in ("providerAdgroupId", "id", "adgroupId"):
+                    if (v := _str_opt(g.get(k))) is not None:
+                        adgroup_ids.add(v)
+
+        ads: list[dict] = []
+        for prov in provs:
+            for a in self._fetch_ads_entidades(cuenta_id, "ads", prov, params_rango):
+                if not (
+                    _pertenece_a_campania(a, objetivo)
+                    or _str_opt(a.get("adgroupId")) in adgroup_ids
+                ):
+                    continue
+                ads.append(
+                    {
+                        "ad_id": _str_opt(_primero(a, ("adId", "id"))),
+                        "nombre": _str_opt(_primero(a, ("name", "adgroupName"))),
+                        "tipo": _str_opt(a.get("adType")),
+                        "adgroup_id": _str_opt(a.get("adgroupId")),
+                        "adgroup_name": _str_opt(a.get("adgroupName")),
+                        "thumbnail_url": _str_opt(a.get("thumbnailUrl")),
+                        "spark_ad_content": _str_opt(a.get("sparkAdContent")),
+                        "network": _str_opt(a.get("network")),
+                        "estado": _str_opt(a.get("status")),
+                        **_metricas_ads(a.get("metrics") or {}),
+                    }
+                )
+        return {"adgroups": adgroups, "ads": ads}
 
     def _fetch_posts(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
