@@ -8,7 +8,7 @@
  * Para mover también el día están el atajo «Cambiar también el día…» (abre el diálogo de
  * reprogramar) y el arrastre entre columnas de la semana.
  */
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
@@ -31,6 +31,7 @@ export function BotonHoraPieza({
   ocupado,
   onGuardar,
   onOtroDia,
+  horaSugerida,
   className,
 }: {
   /** Instante programado (UTC ISO) de la pieza. */
@@ -41,6 +42,8 @@ export function BotonHoraPieza({
   onGuardar: (hhmm: string) => void;
   /** Abrir el flujo de cambiar también el día (diálogo de reprogramar). */
   onOtroDia: () => void;
+  /** Mejor hora ("HH:MM" CDMX) para esta red, o null si no hay sugerencia. */
+  horaSugerida?: string | null;
   className?: string;
 }) {
   const [abierto, setAbierto] = React.useState(false);
@@ -70,6 +73,7 @@ export function BotonHoraPieza({
           <PopoverHora
             anchor={triggerRef.current}
             horaInicial={horaCdmx(iso)}
+            horaSugerida={horaSugerida}
             ocupado={ocupado}
             onGuardar={(hhmm) => {
               onGuardar(hhmm);
@@ -95,6 +99,7 @@ export function BotonHoraPieza({
 function PopoverHora({
   anchor,
   horaInicial,
+  horaSugerida,
   ocupado,
   onGuardar,
   onOtroDia,
@@ -102,6 +107,7 @@ function PopoverHora({
 }: {
   anchor: HTMLElement | null;
   horaInicial: string;
+  horaSugerida?: string | null;
   ocupado: boolean;
   onGuardar: (hhmm: string) => void;
   onOtroDia: () => void;
@@ -151,6 +157,9 @@ function PopoverHora({
   }, []);
 
   const valida = RE_HORA.test(hora);
+  // Solo ofrecemos la sugerencia si es una hora válida y distinta de la del campo.
+  const sugerencia =
+    horaSugerida && RE_HORA.test(horaSugerida) && horaSugerida !== hora ? horaSugerida : null;
 
   function guardar() {
     if (!valida || ocupado) return;
@@ -184,6 +193,21 @@ function PopoverHora({
           {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
         </Button>
       </div>
+      {sugerencia && (
+        <button
+          type="button"
+          onClick={() => onGuardar(sugerencia)}
+          disabled={ocupado}
+          aria-label={`Usar la mejor hora para publicar: ${sugerencia}`}
+          className="mt-2 flex w-full items-center gap-2 rounded-md border bg-muted/30 px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-60"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Mejor hora:{" "}
+            <strong className="font-semibold tabular-nums text-foreground">{sugerencia}</strong>
+          </span>
+        </button>
+      )}
       <button
         type="button"
         onClick={onOtroDia}

@@ -16,6 +16,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
+import { useMejorHora } from "@/lib/api/programacion";
 import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
 import { colorCategoria, ETIQUETA_CATEGORIA } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
@@ -139,6 +140,7 @@ function diasDeSemana(ancla: Date): Date[] {
  */
 function PildoraPub({
   pieza,
+  marca,
   onAbrir,
   onDesprogramar,
   onReprogramar,
@@ -147,6 +149,8 @@ function PildoraPub({
   ocupado,
 }: {
   pieza: Pieza;
+  /** Marca activa: con ella y la red de la pieza se pide la mejor hora sugerida. */
+  marca?: string | null;
   onAbrir: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
@@ -159,6 +163,9 @@ function PildoraPub({
   // programado a futuro → ámbar.
   const publicado = pieza.estado === "publicado";
   const vencida = estaVencida(pieza.estado, pieza.fecha_programada);
+  // Mejor hora sugerida para esta red. Solo aplica a piezas no publicadas (la de una pieza ya
+  // salida es histórica); pasar marca=null cuando está publicada deshabilita la query.
+  const horaSugerida = useMejorHora(publicado ? null : marca, pieza.red).data ?? null;
 
   return (
     <MenuContextual
@@ -238,6 +245,7 @@ function PildoraPub({
           <BotonHoraPieza
             iso={pieza.fecha_programada}
             ocupado={ocupado}
+            horaSugerida={horaSugerida}
             onGuardar={(hhmm) => onCambiarHora(pieza, hhmm)}
             onOtroDia={() => onReprogramar(pieza)}
           />
@@ -591,6 +599,7 @@ export function VistaCalendario({
           <VistaSemana
             dias={diasSemana}
             porDia={porDia}
+            marca={marca}
             huecosDe={huecosDe}
             hoy={hoy}
             colActiva={colActiva}
@@ -610,6 +619,7 @@ export function VistaCalendario({
             huecosDe={huecosDe}
             diaClave={diaSel ?? claveDia(ancla)}
             porDia={porDia}
+            marca={marca}
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
             onReprogramar={haciaReprogramar}
@@ -803,6 +813,7 @@ function entradasDelDia(
 function VistaSemana({
   dias,
   porDia,
+  marca,
   hoy,
   colActiva,
   setColActiva,
@@ -818,6 +829,7 @@ function VistaSemana({
 }: {
   dias: Date[];
   porDia: Map<string, Pieza[]>;
+  marca?: string | null;
   hoy: string;
   colActiva: string | null;
   setColActiva: (v: string | null) => void;
@@ -888,6 +900,7 @@ function VistaSemana({
                   <PildoraPub
                     key={e.p.id}
                     pieza={e.p}
+                    marca={marca}
                     onAbrir={onAbrir}
                     onDesprogramar={onDesprogramar}
                     onReprogramar={onReprogramar}
@@ -913,6 +926,7 @@ function VistaDia({
   huecosDe,
   diaClave,
   porDia,
+  marca,
   onAbrir,
   onDesprogramar,
   onReprogramar,
@@ -924,6 +938,7 @@ function VistaDia({
   huecosDe: (dia: Date) => Hueco[];
   diaClave: string;
   porDia: Map<string, Pieza[]>;
+  marca?: string | null;
   onAbrir: (p: Pieza) => void;
   onDesprogramar: (p: Pieza) => void;
   onReprogramar: (p: Pieza) => void;
@@ -966,6 +981,7 @@ function VistaDia({
               <PildoraPub
                 key={e.p.id}
                 pieza={e.p}
+                marca={marca}
                 onAbrir={onAbrir}
                 onDesprogramar={onDesprogramar}
                 onReprogramar={onReprogramar}
