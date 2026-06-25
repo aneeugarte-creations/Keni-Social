@@ -121,6 +121,17 @@
     "descripcion": "Feed de video de Claro Sports (fuente propia)."
   },
   {
+    "id": "clarosports-en-vivo",
+    "nombre": "Claro Sports — En vivo",
+    "url": "https://www.clarosports.com/feed/en-vivo.xml",
+    "categoria": "otros-deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Programas en vivo de Claro Sports, incluido Claro Sports por W Radio (fuente propia)."
+  },
+  {
     "id": "clarosports-futbol",
     "nombre": "Claro Sports — Fútbol",
     "url": "https://www.clarosports.com/feed/futbol.xml",

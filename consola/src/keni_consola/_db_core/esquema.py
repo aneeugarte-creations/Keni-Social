@@ -1416,12 +1416,18 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         publicacion_id   TEXT NOT NULL DEFAULT '',
         fuente_peso    REAL NOT NULL DEFAULT 1.0,
         tags           TEXT NOT NULL DEFAULT '[]',
+        etiquetas_revisadas INTEGER NOT NULL DEFAULT 0,
         creado         TEXT NOT NULL DEFAULT ''
     )
     """,
     # `tags` (array JSON de slugs de etiqueta del sitio, p.ej. ["w-radio"]) se extrae del
     # HTML del artículo; vincula la nota con una campaña por su etiqueta. ADD COLUMN para BDs viejas.
     "ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS tags TEXT NOT NULL DEFAULT '[]'",
+    # `etiquetas_revisadas` = ya se intentó extraer sus etiquetas (aunque no tuviera ninguna).
+    # Evita que las notas SIN chips de etiqueta se vuelvan a descargar en cada barrido y atasquen
+    # la cola del paso de etiquetas. Las ya etiquetadas se marcan revisadas de una vez (backfill).
+    "ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS etiquetas_revisadas INTEGER NOT NULL DEFAULT 0",
+    "UPDATE noticias_items SET etiquetas_revisadas = 1 WHERE tags <> '[]' AND etiquetas_revisadas = 0",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_items_dedup ON noticias_items (fuente_id, clave)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_capturado ON noticias_items (capturado_en)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_items_marca_capturado ON noticias_items (marca, capturado_en)",

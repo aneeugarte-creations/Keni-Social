@@ -342,6 +342,7 @@ from .db_noticias import (  # noqa: F401
     marcar_cluster_traducido,
     marcar_clusters_subtema,
     marcar_clusters_tema_macro,
+    marcar_etiquetas_revisadas,
     marcar_item,
     marcar_items_cluster_usados,
     marcar_noticia_algoritmo,
@@ -619,6 +620,7 @@ __all__ = [
     "resumen_cobertura",
     "items_sin_tags",
     "actualizar_tags_item",
+    "marcar_etiquetas_revisadas",
     "notas_por_etiqueta",
     "ESTADOS_NOTICIA_ITEM",
     # Monitor de cobertura (Ola D).

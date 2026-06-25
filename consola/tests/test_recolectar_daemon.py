@@ -550,10 +550,15 @@ def test_paso_etiquetas_persiste_tags_de_notas_propias(monkeypatch):
         recolectar_daemon.repos, "actualizar_tags_item",
         lambda item_id, tags: persistidos.__setitem__(item_id, tags),
     )
+    revisadas: list[str] = []
+    monkeypatch.setattr(
+        recolectar_daemon.repos, "marcar_etiquetas_revisadas", revisadas.append
+    )
 
-    # Solo la nota con chip de etiqueta se persiste; la otra se omite sin tocar la BD.
+    # La nota con chip se persiste; la SIN chip se marca revisada (para no re-pedirla y atascar la cola).
     assert recolectar_daemon.paso_etiquetas() == {"notas": 1}
     assert persistidos == {"n1": ["w-radio"]}
+    assert revisadas == ["n2"]
 
 
 def test_paso_etiquetas_sin_fuentes_propias_es_noop(monkeypatch):
@@ -567,6 +572,33 @@ def test_paso_etiquetas_sin_fuentes_propias_es_noop(monkeypatch):
 
     monkeypatch.setattr(recolectar_daemon.repos, "items_sin_tags", _no_consultar)
     assert recolectar_daemon.paso_etiquetas() == {"notas": 0}
+
+
+def test_etiquetas_revisadas_no_reaparecen_y_etiqueta_sin_dominios(entorno):
+    """El flag `etiquetas_revisadas` saca a las notas de la cola; `notas_por_etiqueta` sin dominios."""
+    from keni_consola import repos
+
+    repos.crear_noticias_items([
+        {"fuente_id": "f", "fuente_nombre": "F", "categoria": "deportes", "marca": "claro-sports",
+         "titulo": "Con W Radio", "resumen": "r", "url": "https://www.clarosports.com/n/1",
+         "url_canonica": "clarosports.com/n/1", "clave": "k1", "cluster_id": "",
+         "capturado_en": "2026-06-20T00:00:00+00:00"},
+        {"fuente_id": "f", "fuente_nombre": "F", "categoria": "deportes", "marca": "claro-sports",
+         "titulo": "Sin chips", "resumen": "r", "url": "https://www.clarosports.com/n/2",
+         "url_canonica": "clarosports.com/n/2", "clave": "k2", "cluster_id": "",
+         "capturado_en": "2026-06-20T00:00:00+00:00"},
+    ])
+    doms = ["clarosports.com"]
+    por_clave = {it["clave"]: it["id"] for it in repos.items_sin_tags(doms, 50)}
+    assert set(por_clave) == {"k1", "k2"}  # ambas pendientes de revisar
+
+    repos.actualizar_tags_item(por_clave["k1"], ["w-radio"])  # etiquetada -> revisada
+    repos.marcar_etiquetas_revisadas(por_clave["k2"])         # sin chips -> revisada igualmente
+
+    assert repos.items_sin_tags(doms, 50) == []  # ninguna reaparece (no atascan la cola)
+    # notas_por_etiqueta SIN dominios encuentra la etiquetada (el slug basta)
+    notas = repos.notas_por_etiqueta("w-radio", desde="2026-06-01", dominios=[])
+    assert [n["clave"] for n in notas] == ["k1"]
 
 
 def test_paso_agencias_best_effort_una_agencia_que_falla_no_aborta(monkeypatch):

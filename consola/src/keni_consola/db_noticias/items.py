@@ -283,11 +283,12 @@ def actualizar_noticia_item(
 
 
 def items_sin_tags(dominios: list[str], limite: int) -> list[dict[str, Any]]:
-    """Items de archivo de `dominios` aún SIN etiquetas extraídas (para el paso de etiquetas).
+    """Items de archivo de `dominios` aún SIN revisar sus etiquetas (para el paso de etiquetas).
 
-    Filtra `tags = '[]'` (sin extraer todavía), `url <> ''` y url que contenga ALGUNO de los
-    `dominios` (`url LIKE %dom%`, para acotar a las notas web propias). MÁS NUEVAS primero
-    (`capturado_en` desc); `limite` acota el lote por barrido. [] si no se pasan dominios.
+    Filtra `etiquetas_revisadas = 0` (aún no se intentó extraer), `url <> ''` y url que contenga
+    ALGUNO de los `dominios` (`url LIKE %dom%`, para acotar a las notas web propias). Usar el flag
+    `etiquetas_revisadas` (no `tags = '[]'`) evita que una nota SIN chips se vuelva a pedir cada
+    barrido y atasque la cola. MÁS NUEVAS primero; `limite` acota el lote. [] si no hay dominios.
     """
     dominios = [d for d in dominios if d]
     if not dominios:
@@ -297,7 +298,7 @@ def items_sin_tags(dominios: list[str], limite: int) -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(  # noqa: S608 -- marcadores parametrizados; dominios de allowlist
-            f"{_SELECT_NOTICIA_ITEM} WHERE tags = '[]' AND url <> '' AND ({likes}) "
+            f"{_SELECT_NOTICIA_ITEM} WHERE etiquetas_revisadas = 0 AND url <> '' AND ({likes}) "
             "ORDER BY capturado_en DESC, creado DESC, id DESC LIMIT ?",
             (*params, max(1, int(limite))),
         ).fetchall()
@@ -307,11 +308,11 @@ def items_sin_tags(dominios: list[str], limite: int) -> list[dict[str, Any]]:
 
 
 def actualizar_tags_item(item_id: str, tags: list[str]) -> None:
-    """Persiste las etiquetas (slugs) extraídas de un item (best-effort, una escritura)."""
+    """Persiste las etiquetas (slugs) extraídas de un item y lo marca revisado (una escritura)."""
     con = _conectar()
     try:
         con.execute(
-            "UPDATE noticias_items SET tags = ? WHERE id = ?",
+            "UPDATE noticias_items SET tags = ?, etiquetas_revisadas = 1 WHERE id = ?",
             (a_json_lista(list(tags)), item_id),
         )
         con.commit()
@@ -319,26 +320,44 @@ def actualizar_tags_item(item_id: str, tags: list[str]) -> None:
         con.close()
 
 
-def notas_por_etiqueta(slug: str, *, desde: str, dominios: list[str]) -> list[dict[str, Any]]:
-    """Notas web de `dominios` capturadas desde `desde` que llevan la etiqueta `slug`.
+def marcar_etiquetas_revisadas(item_id: str) -> None:
+    """Marca un item como revisado SIN tocar sus tags (para notas que no traen chips de etiqueta).
 
-    Prefiltra en SQL por dominio (`url LIKE %dom%`), ventana (`capturado_en >= desde`) y una
-    coincidencia COARSE del slug en el JSON de `tags` (`LIKE %"slug"%`); el consumidor impone el
-    filtro fino por slug exacto en Python. Devuelve filas (con `url`, `titulo`, `marca`, `tags`),
-    MÁS NUEVAS primero. [] si falta `slug` o `dominios`.
+    Así una nota sin etiqueta no se vuelve a descargar en cada barrido (no atasca la cola); su
+    `tags` queda `[]` (no pertenece a ninguna campaña)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_items SET etiquetas_revisadas = 1 WHERE id = ?", (item_id,)
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def notas_por_etiqueta(slug: str, *, desde: str, dominios: list[str]) -> list[dict[str, Any]]:
+    """Notas capturadas desde `desde` que llevan la etiqueta `slug` (acotadas a `dominios` si los hay).
+
+    Filtra en SQL por ventana (`capturado_en >= desde`) y coincidencia COARSE del slug en el JSON de
+    `tags` (`LIKE %"slug"%`); el consumidor impone el filtro fino por slug exacto en Python. Si se
+    pasan `dominios`, acota además por `url LIKE %dom%`; SIN dominios no filtra por dominio (la
+    etiqueta del sitio ya es propia de una web, así que el slug basta). Devuelve filas (con `url`,
+    `titulo`, `marca`, `tags`), MÁS NUEVAS primero. [] si falta `slug`.
     """
     slug = (slug or "").strip().lower()
-    dominios = [d for d in dominios if d]
-    if not slug or not dominios:
+    if not slug:
         return []
-    likes = " OR ".join("url LIKE ?" for _ in dominios)
-    params: list[Any] = [f"%{d}%" for d in dominios]
+    dominios = [d for d in dominios if d]
+    where = "capturado_en >= ? AND tags LIKE ?"
+    params: list[Any] = [desde, f'%"{slug}"%']
+    if dominios:
+        where += " AND (" + " OR ".join("url LIKE ?" for _ in dominios) + ")"
+        params += [f"%{d}%" for d in dominios]
     con = _conectar()
     try:
         filas = con.execute(  # noqa: S608 -- marcadores parametrizados; dominios de allowlist
-            f"{_SELECT_NOTICIA_ITEM} WHERE ({likes}) AND capturado_en >= ? AND tags LIKE ? "
-            "ORDER BY capturado_en DESC, creado DESC, id DESC",
-            (*params, desde, f'%"{slug}"%'),
+            f"{_SELECT_NOTICIA_ITEM} WHERE {where} ORDER BY capturado_en DESC, creado DESC, id DESC",
+            tuple(params),
         ).fetchall()
     finally:
         con.close()

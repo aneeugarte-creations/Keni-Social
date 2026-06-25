@@ -170,6 +170,10 @@ def actualizar_tags_item(item_id: str, tags: list[str]) -> None:
     return db.actualizar_tags_item(item_id, tags)
 
 
+def marcar_etiquetas_revisadas(item_id: str) -> None:
+    return db.marcar_etiquetas_revisadas(item_id)
+
+
 def notas_por_etiqueta(
     slug: str, *, desde: str, dominios: list[str]
 ) -> list[dict[str, Any]]:

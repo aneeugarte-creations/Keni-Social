@@ -57,6 +57,10 @@ def paso_etiquetas() -> dict[str, Any]:
             if tags:
                 repos.actualizar_tags_item(it["id"], tags)
                 etiquetadas += 1
+            else:
+                # Sin chips (o no descargó): marca revisada para no volver a pedirla cada barrido
+                # (si no, las notas sin etiqueta atascan la cola y bloquean a las que sí la tienen).
+                repos.marcar_etiquetas_revisadas(it["id"])
         except Exception:  # noqa: BLE001 -- una nota no debe tumbar el paso ni el barrido
             _log.exception(
                 "recolectar_daemon: fallo extrayendo etiquetas de la nota %s.", it.get("id")
