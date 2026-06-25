@@ -165,7 +165,10 @@ services:
       #     anadirlo AQUI a la vez.
       # img-src incluye los CDN de THUMBNAIL de los bancos de foto de stock (ayuda visual del
       # buscador y de la foto adjuntada SIN LICENCIA): Wikimedia, NASA, Openverse, Pexels, Pixabay.
-      - "traefik.http.middlewares.keni-sec.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://upload.wikimedia.org https://images-assets.nasa.gov https://api.openverse.org https://images.pexels.com https://cdn.pixabay.com https://pixabay.com; media-src 'self' blob:; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+      # El globo de alcance (MapLibre, Metricas > Alcance mundial) carga teselas de mapa de ESRI
+      # World Imagery y CARTO (img-src + connect-src) y monta su pipeline de teselas en web
+      # workers creados desde blobs (worker-src/child-src blob:).
+      - "traefik.http.middlewares.keni-sec.headers.contentSecurityPolicy=default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://upload.wikimedia.org https://images-assets.nasa.gov https://api.openverse.org https://images.pexels.com https://cdn.pixabay.com https://pixabay.com https://server.arcgisonline.com https://*.basemaps.cartocdn.com; media-src 'self' blob:; connect-src 'self' https://server.arcgisonline.com https://*.basemaps.cartocdn.com; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     # nginx estatico no-root: huella minima. 127.0.0.1 (no `localhost`): el busybox wget de
     # alpine intenta ::1 (IPv6) primero y nginx solo escucha IPv4 (ver front/Dockerfile).
     healthcheck:
