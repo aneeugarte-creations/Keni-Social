@@ -102,14 +102,15 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("MapaAlcance", () => {
-  it("pinta selectores y toggle de ciudades", () => {
+  it("pinta selectores y el toggle de ciudades sobre el globo", async () => {
     vi.spyOn(api, "metricasDemografia").mockResolvedValue(RESP_IG);
     renderConProviders(<MapaAlcance marcas={MARCAS} marcaActual="claro_sports" />);
 
     expect(screen.getByText("Alcance mundial")).toBeInTheDocument();
     expect(screen.getByLabelText("Marca")).toBeInTheDocument();
     expect(screen.getByLabelText("Red")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Mostrar ciudades" })).toBeInTheDocument();
+    // El toggle «Ciudades» vive ahora como pildora sobre el globo (aparece con datos).
+    expect(await screen.findByRole("switch", { name: "Ver por ciudades" })).toBeInTheDocument();
   });
 
   it("ubica los países resueltos en el panel y cuenta los no ubicados", async () => {

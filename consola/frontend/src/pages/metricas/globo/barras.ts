@@ -31,7 +31,7 @@ interface PropsBarra {
 
 const METROS_POR_GRADO = 111_320;
 const LADO_PAIS_M = 95_000;
-const LADO_CIUDAD_M = 55_000;
+const LADO_CIUDAD_M = 38_000;
 
 /** Cuadrado centrado en (lat,lng) de lado `ladoMetros`, con la longitud compensada por latitud. */
 function huella(lat: number, lng: number, ladoMetros: number): Polygon["coordinates"] {

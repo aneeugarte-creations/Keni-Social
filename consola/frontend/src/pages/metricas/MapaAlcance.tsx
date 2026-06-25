@@ -171,22 +171,6 @@ export function MapaAlcance({
           ))}
         </SelectContent>
       </Select>
-      <span className="flex items-center gap-1.5">
-        <Switch
-          id="alcance-ciudades"
-          checked={usaCiudades}
-          onCheckedChange={setCiudades}
-          disabled={redSel !== "instagram"}
-          aria-label="Mostrar ciudades"
-        />
-        <label
-          htmlFor="alcance-ciudades"
-          className="cursor-pointer text-xs text-muted-foreground"
-          title={redSel === "instagram" ? undefined : "Solo Instagram expone ciudades"}
-        >
-          Ciudades
-        </label>
-      </span>
     </div>
   );
 
@@ -222,7 +206,7 @@ export function MapaAlcance({
               </div>
             }
           >
-            <MapaGlobo puntos={ubicados} centro={{ lat: top.lat, lng: top.lng }} />
+            <MapaGlobo puntos={ubicados} centro={{ lat: top.lat, lng: top.lng }} nivel={nivel} />
           </React.Suspense>
         ) : (
           <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/70">
@@ -254,6 +238,26 @@ export function MapaAlcance({
               ))}
             </ul>
           ) : null}
+        </div>
+
+        {/* Toggle «Ciudades» (abajo-centro, estilo Climate TRACE): cambia la granularidad a
+            ciudad para una vista MÁS DENSA (muchas más torres). Solo Instagram expone ciudades;
+            en el resto de redes la píldora queda deshabilitada con honestidad. */}
+        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 shadow-lg backdrop-blur">
+          <label
+            htmlFor="alcance-ciudades"
+            className="cursor-pointer select-none text-xs font-medium text-neutral-700"
+            title={redSel === "instagram" ? undefined : "Solo Instagram expone ciudades"}
+          >
+            Ciudades
+          </label>
+          <Switch
+            id="alcance-ciudades"
+            checked={usaCiudades}
+            onCheckedChange={setCiudades}
+            disabled={redSel !== "instagram"}
+            aria-label="Ver por ciudades"
+          />
         </div>
 
         {/* Leyenda (arriba-derecha): la rampa de color de intensidad de audiencia. */}

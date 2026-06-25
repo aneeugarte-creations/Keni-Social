@@ -102,9 +102,11 @@ function OpcionFormato({
 export default function MapaGlobo({
   puntos,
   centro,
+  nivel,
 }: {
   puntos: PuntoGlobo[];
   centro: { lat: number; lng: number };
+  nivel: "pais" | "ciudad";
 }) {
   const contenedorRef = React.useRef<HTMLDivElement | null>(null);
   const mapaRef = React.useRef<maplibregl.Map | null>(null);
@@ -120,6 +122,7 @@ export default function MapaGlobo({
 
   puntosRef.current = puntos;
   formatoRef.current = formato;
+  centroRef.current = centro;
 
   // Crea el mapa UNA vez: estilo satelite, centrado en la ubicacion lider, con halo de
   // espacio. El drag rota el globo y scroll/trackpad hacen zoom (nativo de MapLibre).
@@ -158,6 +161,24 @@ export default function MapaGlobo({
       popupRef.current = null;
     };
   }, []);
+
+  // Al cambiar de granularidad (pais <-> ciudad) vuela a la region de la ubicacion lider: en
+  // ciudad acerca a vista regional para ver el bosque denso de torres; en pais vuelve a la
+  // panoramica del globo. No se dispara en el primer render (la camara inicial ya esta puesta).
+  const nivelMontadoRef = React.useRef(true);
+  React.useEffect(() => {
+    const map = mapaRef.current;
+    if (!map) return;
+    if (nivelMontadoRef.current) {
+      nivelMontadoRef.current = false;
+      return;
+    }
+    map.flyTo({
+      center: [centroRef.current.lng, centroRef.current.lat],
+      zoom: nivel === "ciudad" ? 4.2 : 2.5,
+      duration: 1400,
+    });
+  }, [nivel]);
 
   // Conmuta de basemap sin perder la camara: setStyle conserva el encuadre, la proyeccion y
   // el cielo (van en el propio estilo); solo hay que re-anadir las barras (capa custom).
