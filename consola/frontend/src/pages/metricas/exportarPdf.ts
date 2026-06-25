@@ -70,6 +70,26 @@ function esperarPintado(): Promise<void> {
 }
 
 /**
+ * Espera a que cada `<img>` del host esté cargada Y decodificada. `document.fonts.ready` solo
+ * cubre fuentes; el logo de la portada es la única imagen raster del deck, y rasterizarlo antes
+ * de tenerlo en memoria lo deja en blanco. Tras esto el asset vive en la caché del navegador, así
+ * que el fetch interno de `html-to-image` lo incrusta desde caché caliente en vez de pedirlo crudo.
+ */
+async function esperarImagenes(raiz: HTMLElement): Promise<void> {
+  await Promise.all(
+    Array.from(raiz.querySelectorAll("img")).map(async (img) => {
+      if (!img.complete || img.naturalWidth === 0) {
+        await new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        });
+      }
+      if (img.decode) await img.decode().catch(() => {});
+    }),
+  );
+}
+
+/**
  * Hornea el color COMPUTADO (fill/stroke/stop-color) como atributo inline en cada elemento
  * SVG. `html-to-image` no captura el color de los SVG cuando viene por CLASE CSS (las gráficas
  * Tremor lo aplican así); en el bundle de producción el CSS es externo y el rasterizado salía
@@ -132,6 +152,7 @@ export async function descargarPresentacion(
   try {
     root.render(createElement(Informe, { data: props }));
     if (document.fonts?.ready) await document.fonts.ready;
+    await esperarImagenes(host);
     await esperarPintado();
 
     const slides = Array.from(host.querySelectorAll<HTMLElement>(".informe-slide"));
@@ -161,7 +182,6 @@ export async function descargarPresentacion(
         pixelRatio: 3,
         backgroundColor: fondoSlide,
         quality: 0.97,
-        cacheBust: true,
       });
       // Enlaces clicables (QR/post): la imagen rasterizada no conserva los `<a>`. Guardamos las
       // zonas ahora —la lámina está en el DOM— y superponemos los enlaces al ensamblar el PDF.
