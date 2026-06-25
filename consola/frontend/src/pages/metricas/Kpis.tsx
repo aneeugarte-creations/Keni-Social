@@ -20,13 +20,13 @@ import * as React from "react";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { marcaParam } from "@/components/comunes/selectores";
 import { api } from "@/lib/api";
-import type { TotalMetricas } from "@/types";
+import type { TotalConImpresiones } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import type { ColumnaMeta } from "./columnasMeta";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 import { InsigniaComparativa } from "./InsigniaComparativa";
-import { numeroCompleto } from "./formato";
+import { numeroCompacto, numeroCompleto } from "./formato";
 import { METRICAS, valorMetrica } from "./metricas-meta";
 import { parComparable } from "./rango";
 import { Seccion } from "./Seccion";
@@ -43,7 +43,7 @@ export function Kpis({
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
-  total: TotalMetricas;
+  total: TotalConImpresiones;
   marcaActual?: string;
   rangoActual?: string;
 }) {
@@ -101,6 +101,23 @@ export function Kpis({
           variante="card"
           etiqueta="Piezas publicadas"
           valor={numeroCompleto(total.piezas)}
+        />
+      );
+    }
+    // La cifra de cabecera de VOLUMEN son las impresiones (aditivas: veces que el contenido se
+    // mostró). Cuando el reporte las trae, la tarjeta de "alcance" pasa a ser la de impresiones;
+    // el alcance ÚNICO no es una cifra agregable de periodo y se lee como tendencia en su sección.
+    // Sin impresiones en el reporte, la tarjeta se mantiene como alcance (degradación honesta).
+    if (id === "alcance" && total.impresiones != null) {
+      return (
+        <TarjetaKpi
+          key="impresiones"
+          variante="card"
+          etiqueta="Impresiones"
+          valor={numeroCompacto(total.impresiones)}
+          titulo={`${numeroCompleto(
+            total.impresiones,
+          )} — volumen total del periodo (veces que el contenido se mostró). El alcance único se lee como tendencia.`}
         />
       );
     }

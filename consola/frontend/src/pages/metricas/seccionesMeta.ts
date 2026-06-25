@@ -47,6 +47,9 @@ export const GRUPOS_SECCIONES: GrupoSecciones[] = [
     titulo: "Estrategia digital",
     secciones: [
       { id: "seguidores", etiqueta: "Crecimiento de seguidores" },
+      { id: "audiencia", etiqueta: "Altas y bajas de seguidores" },
+      { id: "alcance-serie", etiqueta: "Alcance de cuenta" },
+      { id: "demografia", etiqueta: "Demografía de la audiencia" },
       { id: "desglose", etiqueta: "Desglose de interacciones" },
       { id: "crosstab", etiqueta: "Rendimiento por formato" },
       { id: "por-categoria", etiqueta: "Rendimiento por categoría" },

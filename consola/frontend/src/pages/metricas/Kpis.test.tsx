@@ -183,6 +183,26 @@ describe("Kpis", () => {
     expect(espia).not.toHaveBeenCalled();
   });
 
+  it("con impresiones en el total: la cabecera de volumen es Impresiones (no Alcance)", async () => {
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    renderConProviders(
+      <Kpis total={{ ...TOTAL, impresiones: 12345 }} marcaActual={MARCA_TODAS} rangoActual="mes" />,
+    );
+
+    // El volumen aditivo (impresiones) sustituye al alcance como cifra de cabecera.
+    expect(await screen.findByText("Impresiones")).toBeInTheDocument();
+    expect(screen.getByText("12.3 k")).toBeInTheDocument();
+    expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
+  });
+
+  it("sin impresiones en el total: degrada y mantiene la tarjeta de Alcance", () => {
+    vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
+    renderConProviders(<Kpis total={TOTAL} marcaActual={MARCA_TODAS} rangoActual="mes" />);
+
+    expect(screen.getByText("Alcance")).toBeInTheDocument();
+    expect(screen.queryByText("Impresiones")).not.toBeInTheDocument();
+  });
+
   it("sin rangoActual: pinta los KPIs sin insignias y NO consulta la comparativa", () => {
     const espia = vi.spyOn(api, "metricasComparar").mockResolvedValue(COMPARAR);
     renderConProviders(<Kpis total={TOTAL} />);

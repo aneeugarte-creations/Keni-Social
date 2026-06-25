@@ -31,8 +31,11 @@ import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
+import { Demografia } from "./metricas/Demografia";
 import { ItemsDescarga } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
+import { FlujoAudiencia } from "./metricas/FlujoAudiencia";
+import { SerieAlcance } from "./metricas/SerieAlcance";
 import { etiquetaPeriodo } from "./metricas/exportarPdf";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
@@ -328,6 +331,15 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </Bloque>
           <Bloque id="seguidores">
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
+          </Bloque>
+          <Bloque id="audiencia">
+            <FlujoAudiencia marcaActual={marca} rangoActual={rango} />
+          </Bloque>
+          <Bloque id="alcance-serie">
+            <SerieAlcance marcaActual={marca} rangoActual={rango} />
+          </Bloque>
+          <Bloque id="demografia">
+            <Demografia marcas={marcas} marcaActual={marca} />
           </Bloque>
           <Bloque id="desglose">
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
