@@ -115,9 +115,10 @@ export const apiMedia = {
   adjuntarAgencia: (cuerpo: CuerpoAdjuntarAgencia) =>
     peticion<RespuestaStock>("/artes/agencias/adjuntar", { metodo: "POST", json: cuerpo }),
 
-  // --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos; solo Claro Sports) ---
-  // Hace fan-out a las apps de escritorio conectadas del usuario y agrega sus candidatas. El
-  // proveedor «propio» trae su disponibilidad (≥1 dispositivo conectado) y el nº de dispositivos.
+  // --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos) ---
+  // Hace fan-out a los dispositivos que comparten `marca` (de cualquier dueño) y agrega sus
+  // candidatas. El proveedor «propio» trae su disponibilidad (≥1 dispositivo compartiendo a la
+  // marca) y el nº de dispositivos; si ninguno, `disponible:false` con su motivo.
   buscarPropio: (
     filtros: { q?: string; limite?: number; marca?: string } = {},
     signal?: AbortSignal,
@@ -131,10 +132,14 @@ export const apiMedia = {
       { signal },
     ),
   // Pide el ORIGINAL por el túnel (no por URL), lo sube a keni-media y lo adjunta como imagen
-  // PUBLICABLE (`imagen_origen="propia"`). Identifica la foto por galería + archivo.
+  // PUBLICABLE (`imagen_origen="propia"`). Identifica la foto por galería + archivo; el original
+  // solo se pide a un dispositivo que comparte la `marca` de la pieza.
   adjuntarPropio: (cuerpo: CuerpoAdjuntarPropio) =>
     peticion<RespuestaStock>("/artes/propio/adjuntar", { metodo: "POST", json: cuerpo }),
-  // Apps de escritorio conectadas del usuario, con sus galerías (para la página Galería).
-  dispositivosPropio: (signal?: AbortSignal) =>
-    peticion<RespuestaDispositivosPropio>("/artes/propio/dispositivos", { signal }),
+  // Dispositivos conectados (de cualquier dueño), con dueño, marcas y galerías (página Galería).
+  // Sin `marca` lista TODOS los conectados; con `marca` solo los que comparten a ella.
+  dispositivosPropio: (marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaDispositivosPropio>(`/artes/propio/dispositivos${query({ marca })}`, {
+      signal,
+    }),
 };

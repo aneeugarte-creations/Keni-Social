@@ -1,11 +1,12 @@
 """Túnel keni-fotos ↔ keni-social: registro de conexiones + RPC sobre WebSocket.
 
-La app de escritorio keni-fotos abre un WebSocket SALIENTE hacia la Consola y se registra
-por usuario (autenticada con su token de escritorio; la auth la hace el handler del WS). El
-backend hace FAN-OUT de las búsquedas a las apps conectadas de ese usuario, agrega los
-resultados y, al adjuntar, pide el ORIGINAL por el mismo canal. Es infra transversal: los
-endpoints HTTP (`api/artes.py`, fuente «Propio») y el handler del WS (`api/fotos.py`) la usan;
-el GATE a la marca `claro-sports` vive en esos endpoints, no aquí.
+La app de escritorio keni-fotos abre un WebSocket SALIENTE hacia la Consola (autenticada con su
+token de escritorio; la auth la hace el handler del WS) y declara a qué MARCAS comparte su galería.
+El registro es POR MARCA, no por usuario: las búsquedas y el listado de dispositivos cruzan usuarios
+(si Ale comparte a `claro-sports`, quien trabaja esa marca ve la galería de Ale). El backend hace
+FAN-OUT de las búsquedas a las apps que comparten la marca, agrega los resultados y, al adjuntar,
+pide el ORIGINAL por el mismo canal. Es infra transversal: los endpoints HTTP (`api/artes.py`,
+fuente «Propio») y el handler del WS (`api/fotos.py`) la usan.
 
 REGISTRO EN MEMORIA del proceso `back` (un solo contenedor; suficiente para el piloto). Si algún
 día se escala horizontal hará falta un broker compartido — NO se construye ahora.
@@ -39,33 +40,53 @@ class TunelError(RuntimeError):
     """Fallo de un RPC del túnel (timeout, conexión cerrada, dato corrupto o `error` de la app)."""
 
 
+def _normalizar_marcas(valor: Any) -> set[str]:
+    """Conjunto de ids de marca (cadenas no vacías) a partir de la lista declarada por la app."""
+    if not isinstance(valor, list):
+        return set()
+    return {m.strip() for m in valor if isinstance(m, str) and m.strip()}
+
+
 class Conexion:
     """Una app de escritorio conectada: su WebSocket + lo que declaró al saludar (`hola`).
 
-    Correla los RPC por `id` con un `asyncio.Future` por petición pendiente. Al cerrarse,
-    `cancelar_todo` falla los futuros vivos para que ningún `await` quede colgado.
+    Guarda el `usuario` dueño, el `dispositivo`, sus `galerias` y el set de `marcas` a las que
+    comparte la galería. Correla los RPC por `id` con un `asyncio.Future` por petición pendiente.
+    Al cerrarse, `cancelar_todo` falla los futuros vivos para que ningún `await` quede colgado.
     """
 
-    def __init__(self, websocket: Any, usuario_id: str) -> None:
+    def __init__(self, websocket: Any, usuario: str) -> None:
         self.ws = websocket
-        self.usuario_id = usuario_id
+        self.usuario = usuario
         self.dispositivo = ""
         self.version = ""
         self.galerias: list[dict[str, Any]] = []
+        self.marcas: set[str] = set()
         self._pendientes: dict[str, asyncio.Future] = {}
 
     def registrar_hola(self, datos: dict[str, Any]) -> None:
-        """Guarda dispositivo/versión/galerías declarados en el `hola` de la app."""
+        """Guarda dispositivo/versión/galerías/marcas declarados en el `hola` de la app."""
         self.dispositivo = str(datos.get("dispositivo") or "")[:_MAX_DISPOSITIVO]
         self.version = str(datos.get("version") or "")[:_MAX_VERSION]
         galerias = datos.get("galerias")
         self.galerias = [g for g in galerias if isinstance(g, dict)] if isinstance(galerias, list) else []
+        self.marcas = _normalizar_marcas(datos.get("marcas"))
+
+    def actualizar_marcas(self, valor: Any) -> None:
+        """Reemplaza las marcas a las que comparte (mensaje `marcas`, sin reconectar)."""
+        self.marcas = _normalizar_marcas(valor)
+
+    def comparte(self, marca: str) -> bool:
+        """True si esta app comparte su galería a `marca`."""
+        return bool(marca) and marca in self.marcas
 
     def describir(self) -> dict[str, Any]:
         """Forma del dispositivo para `GET /api/artes/propio/dispositivos`."""
         return {
+            "usuario": self.usuario,
             "dispositivo": self.dispositivo,
             "version": self.version,
+            "marcas": sorted(self.marcas),
             "galerias": self.galerias,
         }
 
@@ -115,44 +136,41 @@ class Conexion:
         self._pendientes.clear()
 
 
-# Registro EN MEMORIA: usuario_id -> conexiones vivas de ese usuario.
-_REGISTRO: dict[str, set[Conexion]] = {}
+# Registro EN MEMORIA: todas las conexiones vivas. El filtro por marca lo hacen las consultas.
+_REGISTRO: set[Conexion] = set()
 
 
 def registrar(conexion: Conexion) -> None:
-    """Da de alta una conexión bajo su usuario."""
-    _REGISTRO.setdefault(conexion.usuario_id, set()).add(conexion)
+    """Da de alta una conexión."""
+    _REGISTRO.add(conexion)
 
 
 def desregistrar(conexion: Conexion) -> None:
     """Da de baja una conexión y falla sus RPC vivos. Idempotente."""
-    conjunto = _REGISTRO.get(conexion.usuario_id)
-    if conjunto is not None:
-        conjunto.discard(conexion)
-        if not conjunto:
-            _REGISTRO.pop(conexion.usuario_id, None)
+    _REGISTRO.discard(conexion)
     conexion.cancelar_todo()
 
 
-def conexiones(usuario_id: str | None) -> list[Conexion]:
-    """Conexiones vivas de un usuario (lista nueva, segura de iterar)."""
-    if not usuario_id:
+def _conexiones_de_marca(marca: str | None) -> list[Conexion]:
+    """Conexiones vivas que comparten su galería a `marca` (lista nueva, segura de iterar)."""
+    if not marca:
         return []
-    return list(_REGISTRO.get(usuario_id, ()))
+    return [c for c in _REGISTRO if marca in c.marcas]
 
 
-def dispositivos(usuario_id: str | None) -> list[dict[str, Any]]:
-    """Dispositivos conectados de un usuario (forma de `GET /api/artes/propio/dispositivos`)."""
-    return [c.describir() for c in conexiones(usuario_id)]
+def dispositivos(marca: str | None) -> list[dict[str, Any]]:
+    """Dispositivos que comparten a `marca` (forma de `GET /api/artes/propio/dispositivos`)."""
+    return [c.describir() for c in _conexiones_de_marca(marca)]
 
 
-async def buscar(usuario_id: str | None, q: str, limite: int) -> list[dict[str, Any]]:
-    """Fan-out de la búsqueda a todas las apps del usuario; agrega candidatos y trocea a `limite`.
+async def buscar(marca: str | None, q: str, limite: int) -> list[dict[str, Any]]:
+    """Fan-out de la búsqueda a las apps que comparten `marca`; agrega candidatos y trocea a `limite`.
 
-    Cada candidato lleva su `dispositivo` (de qué app vino) para que el adjuntar luego sepa a
-    quién pedir el original. Una app caída/lenta no rompe la búsqueda: aporta `[]`.
+    Cruza usuarios: cualquier dueño que comparta `marca` participa. Cada candidato lleva su
+    `dispositivo` (de qué app vino) para que el adjuntar luego sepa a quién pedir el original. Una
+    app caída/lenta no rompe la búsqueda: aporta `[]`.
     """
-    conns = conexiones(usuario_id)
+    conns = _conexiones_de_marca(marca)
     if not conns or not q.strip() or limite <= 0:
         return []
 
@@ -180,15 +198,16 @@ async def buscar(usuario_id: str | None, q: str, limite: int) -> list[dict[str, 
 
 
 async def pedir_original(
-    usuario_id: str | None, galeria_id: str, archivo: str, dispositivo: str = ""
+    marca: str | None, galeria_id: str, archivo: str, dispositivo: str = ""
 ) -> tuple[bytes, str]:
     """Pide el ORIGINAL (`galeria_id`/`archivo`) por el túnel; devuelve `(bytes, mime)`.
 
-    Elige la app que mejor encaja: la del `dispositivo` indicado, si no la que declaró esa
-    galería, y si no la primera conectada. Lanza `TunelError` si no hay dispositivo, no responde
-    o la imagen llega vacía/corrupta.
+    Solo a apps que comparten `marca` (no se expone una galería a una marca que no tiene permitida).
+    Entre ellas elige la que mejor encaja: la del `dispositivo` indicado, si no la que declaró esa
+    galería, y si no la primera. Lanza `TunelError` si no hay dispositivo, no responde o la imagen
+    llega vacía/corrupta.
     """
-    conexion = _elegir_conexion(usuario_id, galeria_id, dispositivo)
+    conexion = _elegir_conexion(marca, galeria_id, dispositivo)
     if conexion is None:
         raise TunelError("No hay ningún dispositivo conectado con esa galería.")
     respuesta = await conexion.rpc(
@@ -210,9 +229,9 @@ async def pedir_original(
     return datos, mime
 
 
-def _elegir_conexion(usuario_id: str | None, galeria_id: str, dispositivo: str) -> Conexion | None:
-    """Conexión que sirve el original: por `dispositivo`, luego por galería, luego la primera."""
-    conns = conexiones(usuario_id)
+def _elegir_conexion(marca: str | None, galeria_id: str, dispositivo: str) -> Conexion | None:
+    """Conexión que sirve el original (de las que comparten `marca`): por `dispositivo`, luego galería, luego la primera."""
+    conns = _conexiones_de_marca(marca)
     if not conns:
         return None
     if dispositivo:

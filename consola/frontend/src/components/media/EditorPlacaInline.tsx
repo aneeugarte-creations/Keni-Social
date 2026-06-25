@@ -69,9 +69,6 @@ import type { Arte } from "@/types";
 
 export type { EditorPlacaInlineProps } from "@/components/media/placa/tipos";
 
-/** Marca cuyas piezas pueden tirar de la galería local del equipo (túnel keni-fotos). */
-const MARCA_FOTOS_PROPIAS = "claro-sports";
-
 export function EditorPlacaInline({
   marca,
   piezaId,
@@ -98,7 +95,7 @@ export function EditorPlacaInline({
   const [buscadorStock, setBuscadorStock] = React.useState(false);
   // Buscador de fotos LICENCIADAS de agencia (AFP) para el hueco activo: publicables con crédito.
   const [buscadorAgencias, setBuscadorAgencias] = React.useState(false);
-  // Buscador de fotos PROPIAS (galería local del equipo vía el túnel keni-fotos): solo Claro Sports.
+  // Buscador de fotos PROPIAS (galería local del equipo vía el túnel keni-fotos), por marca.
   const [buscadorPropio, setBuscadorPropio] = React.useState(false);
   // Opciones de ORIGEN de la foto (Texto / Subir / Generar con IA): se abren al TOCAR un hueco
   // (fuera del titular), no como bloque permanente en el panel de edición. El origen elegido se
@@ -740,9 +737,7 @@ export function EditorPlacaInline({
         onSubir={() => inputRef.current?.click()}
         onBuscarStock={piezaId ? () => setBuscadorStock(true) : undefined}
         onBuscarAgencias={piezaId ? () => setBuscadorAgencias(true) : undefined}
-        onBuscarPropio={
-          piezaId && marca === MARCA_FOTOS_PROPIAS ? () => setBuscadorPropio(true) : undefined
-        }
+        onBuscarPropio={piezaId && marca ? () => setBuscadorPropio(true) : undefined}
         onGenerar={iniciarGeneracion}
       />
 
@@ -788,9 +783,9 @@ export function EditorPlacaInline({
         />
       )}
 
-      {/* Foto PROPIA de la galería local (túnel keni-fotos; solo Claro Sports): el back trae el
-          original por el túnel, deja la pieza publicable y la fijamos en el hueco activo. */}
-      {piezaId && marca === MARCA_FOTOS_PROPIAS && (
+      {/* Foto PROPIA de la galería local (túnel keni-fotos) que comparte a la marca de la pieza: el
+          back trae el original por el túnel, deja la pieza publicable y la fijamos en el hueco activo. */}
+      {piezaId && marca && (
         <BuscadorStock
           open={buscadorPropio}
           onCerrar={() => setBuscadorPropio(false)}

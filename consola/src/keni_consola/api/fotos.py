@@ -25,6 +25,8 @@ QUE VIVE AQUI
   - `GET /api/fotos/sesion`  -> identifica al escritorio por su token (`Authorization: Bearer`) ->
                                 `{usuario}`. PUBLICO en el middleware: hace su PROPIA auth con el
                                 token de escritorio (no usa cookie de sesión ni token de Consola).
+  - `GET /api/fotos/marcas`  -> catálogo de marcas (`{id, etiqueta}`) para el checklist «Compartir
+                                galería con» de la app. Misma auth Bearer y exención que `sesion`.
 
 App propia (`apps/fotos.toml`, modulos_backend=["fotos"]): sin cruces de frontera. Las descargas y
 el lanzador son de solo lectura; la autorización del escritorio emite un token MCP por identidad
@@ -43,9 +45,9 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route, WebSocketRoute
-from starlette.websockets import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocket
 
-from .. import auth, fotos_tunel
+from .. import auth, fotos_tunel, marcas
 from .._http_json import leer_json
 
 _log = logging.getLogger("keni_consola.fotos")
@@ -271,6 +273,25 @@ async def sesion(request: Request) -> Response:
     )
 
 
+async def marcas_disponibles(request: Request) -> Response:
+    """GET /api/fotos/marcas: catálogo de marcas para el checklist «Compartir galería con» de la app.
+
+    PUBLICO en el middleware (la app no tiene cookie de sesión): hace su PROPIA auth con el token de
+    escritorio (`Authorization: Bearer <token>`, validado por `auth.token_mcp_valido`); 401 si falta o
+    no vale. Devuelve TODAS las marcas del catálogo (`{"marcas": [{"id", "etiqueta"}, ...]}`); la
+    SELECCIÓN la persiste la app en local y la manda por el túnel.
+    """
+    token = _token_bearer(request)
+    usuario = auth.token_mcp_valido(token) if token else None
+    if usuario is None:
+        return JSONResponse(
+            {"error": "Token de keni-fotos inválido o caducado."}, status_code=401
+        )
+    return JSONResponse(
+        {"marcas": [{"id": mid, "etiqueta": etiqueta} for mid, etiqueta in marcas.opciones()]}
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Túnel keni-fotos (WebSocket app -> backend)                                   #
 # --------------------------------------------------------------------------- #
@@ -283,10 +304,13 @@ async def sesion(request: Request) -> Response:
 
 
 def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
-    """Despacha un mensaje de la app: `hola` (registro) o respuesta de un RPC pendiente."""
+    """Despacha un mensaje de la app: `hola`/`marcas` (registro) o respuesta de un RPC pendiente."""
     tipo = mensaje.get("tipo")
     if tipo == "hola":
         conexion.registrar_hola(mensaje)
+        return
+    if tipo == "marcas":
+        conexion.actualizar_marcas(mensaje.get("marcas"))
         return
     reqid = mensaje.get("id")
     if not isinstance(reqid, str):
@@ -298,11 +322,12 @@ def _procesar_mensaje(conexion: fotos_tunel.Conexion, mensaje: dict) -> None:
 
 
 async def tunel(websocket: WebSocket) -> None:
-    """WebSocket del túnel keni-fotos: la app de escritorio se conecta y queda registrada por usuario.
+    """WebSocket del túnel keni-fotos: la app de escritorio se conecta y queda registrada por marca.
 
     Acepta, valida el token de escritorio (`Authorization: Bearer`); si no vale, cierra (4401). Mientras
-    dure, procesa `hola`/`resultado`/`original_datos`/`error` (los dos del medio resuelven los RPC del
-    dispatcher). Al desconectar, limpia el registro y falla los RPC vivos.
+    dure, procesa `hola`/`marcas`/`resultado`/`original_datos`/`error` (los RPC se resuelven por su `id`).
+    Los frames de control (Ping/Pong, keepalive) y los binarios NO son mensajes del protocolo: se ignoran.
+    Al desconectar, limpia el registro y falla los RPC vivos.
     """
     await websocket.accept()
     token = _token_bearer_ws(websocket)
@@ -314,10 +339,17 @@ async def tunel(websocket: WebSocket) -> None:
     fotos_tunel.registrar(conexion)
     try:
         while True:
-            try:
-                mensaje = await websocket.receive_json()
-            except WebSocketDisconnect:
+            evento = await websocket.receive()
+            if evento["type"] == "websocket.disconnect":
                 break
+            texto = evento.get("text")
+            if texto is None:
+                # Frame de control (Ping/Pong) o binario: no es un mensaje JSON del protocolo.
+                continue
+            try:
+                mensaje = json.loads(texto)
+            except (ValueError, TypeError):
+                continue
             if isinstance(mensaje, dict):
                 _procesar_mensaje(conexion, mensaje)
     except Exception:  # noqa: BLE001 -- cualquier fallo del canal cierra la conexión limpiamente
@@ -346,5 +378,6 @@ RUTAS = [
     ),
     Route("/api/fotos/autorizar", autorizar, methods=["POST"]),
     Route("/api/fotos/sesion", sesion, methods=["GET"]),
+    Route("/api/fotos/marcas", marcas_disponibles, methods=["GET"]),
     WebSocketRoute("/api/tunel/fotos", tunel),
 ]

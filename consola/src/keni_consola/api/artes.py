@@ -653,21 +653,14 @@ async def adjuntar_agencias(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 # Fuente paralela a stock/agencias, pero las fotos NO viven en la nube: están en el equipo de
 # la persona, expuestas por la app de escritorio keni-fotos sobre un WebSocket saliente
-# (`fotos_tunel`). El backend hace fan-out de la búsqueda a las apps conectadas del usuario y, al
-# adjuntar, pide el ORIGINAL por el túnel, lo sube a keni-media y lo liga como foto propia
-# (`imagen_origen='propia'`, publicable). SOLO para la marca `claro-sports` (el piloto del archivo
-# fotográfico): con otra marca o sin dispositivos, la fuente sale `disponible=False` y sin candidatos.
+# (`fotos_tunel`). El registro es POR MARCA (cruza usuarios): cada dispositivo declara a qué marcas
+# comparte su galería. El backend hace fan-out de la búsqueda a las apps que comparten la marca de
+# la pieza y, al adjuntar, pide el ORIGINAL por el túnel, lo sube a keni-media y lo liga como foto
+# propia (`imagen_origen='propia'`, publicable). Opera para CUALQUIER marca con ≥1 dispositivo
+# compartiendo a ella; sin dispositivos, la fuente sale `disponible=False` y sin candidatos.
 
-# Id canónico de la única marca con galería local (ver `keni_shared.marcas`).
-_MARCA_PROPIO = "claro-sports"
 # Origen de imagen de la galería local: foto PROPIA del equipo (no stock ni licenciada -> publicable).
 _ORIGEN_PROPIO = "propia"
-
-
-def _usuario_id(request: Request) -> str | None:
-    """Id del usuario de la sesión (None si se entró por token de mantenimiento)."""
-    usuario = getattr(request.state, "usuario", None)
-    return usuario.get("id") if isinstance(usuario, dict) else None
 
 
 def _proveedor_propio(*, disponible: bool, dispositivos: int, motivo: str = "") -> dict:
@@ -705,27 +698,23 @@ def _candidato_propio(crudo: dict) -> dict:
     }
 
 
-async def _buscar_propio(usuario_id: str | None, q: str, limite: int, marca: str) -> dict:
-    """Búsqueda «Propio»: fan-out a las apps del usuario (solo si la marca es claro-sports)."""
-    if marca != _MARCA_PROPIO:
-        proveedor = _proveedor_propio(
-            disponible=False, dispositivos=0, motivo="La galería local solo está en Claro Sports."
-        )
-        return {"proveedores": [proveedor], "candidatos": []}
-    n = len(fotos_tunel.dispositivos(usuario_id))
+async def _buscar_propio(q: str, limite: int, marca: str) -> dict:
+    """Búsqueda «Propio»: fan-out a las apps que comparten `marca` (cualquier dueño)."""
+    marca = (marca or "").strip()
+    n = len(fotos_tunel.dispositivos(marca)) if marca else 0
     disponible = n > 0
     proveedor = _proveedor_propio(disponible=disponible, dispositivos=n)
     if not disponible or not q.strip():
         return {"proveedores": [proveedor], "candidatos": []}
-    crudos = await fotos_tunel.buscar(usuario_id, q, limite)
+    crudos = await fotos_tunel.buscar(marca, q, limite)
     return {"proveedores": [proveedor], "candidatos": [_candidato_propio(c) for c in crudos]}
 
 
 async def buscar_propio(request: Request) -> Response:
     """GET /api/artes/propio/buscar?q=&limite=&marca= -> {proveedores, candidatos}.
 
-    Inerte salvo `marca=claro-sports`. `disponible` refleja si el usuario tiene ≥1 dispositivo
-    conectado; los candidatos se agregan de todas sus apps y se trocean a `limite`.
+    Opera para cualquier `marca`: `disponible` refleja si hay ≥1 dispositivo compartiendo a esa
+    marca (de cualquier dueño); los candidatos se agregan de esas apps y se trocean a `limite`.
     """
     q = (request.query_params.get("q") or "").strip()
     marca = (request.query_params.get("marca") or "").strip()
@@ -734,7 +723,7 @@ async def buscar_propio(request: Request) -> Response:
     except ValueError:
         limite = _STOCK_LIMITE_DEF
     limite = max(1, min(_STOCK_LIMITE_MAX, limite))
-    cuerpo = await _buscar_propio(_usuario_id(request), q, limite, marca)
+    cuerpo = await _buscar_propio(q, limite, marca)
     return JSONResponse(cuerpo)
 
 
@@ -751,16 +740,17 @@ def _subir_propio(pieza_id: str, datos: bytes) -> dict | None:
 
 
 async def _adjuntar_propio(
-    usuario_id: str | None, pieza_id: str, galeria_id: str, archivo: str, dispositivo: str
+    pieza_id: str, galeria_id: str, archivo: str, dispositivo: str, marca: str
 ) -> tuple[int, dict]:
-    """Pide el original por el túnel, lo sube a keni-media y lo adjunta a la pieza. Gate a claro-sports."""
+    """Pide el original (a un dispositivo que comparte `marca`), lo sube a keni-media y lo adjunta a la pieza."""
+    marca = (marca or "").strip()
+    if not marca:
+        return 400, {"error": "Falta la marca."}
     plat = await run_in_threadpool(repos.obtener_pieza_fila, pieza_id)
     if plat is None:
         return 404, {"error": "Esa pieza ya no existe."}
-    if (plat.get("marca") or "") != _MARCA_PROPIO:
-        return 400, {"error": "La galería local solo está disponible para Claro Sports."}
     try:
-        datos, _mime = await fotos_tunel.pedir_original(usuario_id, galeria_id, archivo, dispositivo)
+        datos, _mime = await fotos_tunel.pedir_original(marca, galeria_id, archivo, dispositivo)
     except fotos_tunel.TunelError as e:
         return 400, {"error": str(e)}
     try:
@@ -773,25 +763,27 @@ async def _adjuntar_propio(
 
 
 async def adjuntar_propio(request: Request) -> Response:
-    """POST /api/artes/propio/adjuntar {pieza_id, galeria_id, archivo, dispositivo?}."""
+    """POST /api/artes/propio/adjuntar {pieza_id, galeria_id, archivo, marca, dispositivo?}."""
     datos = await leer_json(request)
     pieza_id = (datos.get("pieza_id") or "").strip()
     galeria_id = (datos.get("galeria_id") or "").strip()
     archivo = (datos.get("archivo") or "").strip()
     dispositivo = (datos.get("dispositivo") or "").strip()
+    marca = (datos.get("marca") or "").strip()
     if not pieza_id:
         return JSONResponse({"error": "Falta la pieza."}, status_code=400)
     if not galeria_id or not archivo:
         return JSONResponse({"error": "Falta la foto a adjuntar."}, status_code=400)
-    status, cuerpo = await _adjuntar_propio(
-        _usuario_id(request), pieza_id, galeria_id, archivo, dispositivo
-    )
+    status, cuerpo = await _adjuntar_propio(pieza_id, galeria_id, archivo, dispositivo, marca)
     return JSONResponse(cuerpo, status_code=status)
 
 
 async def dispositivos_propio(request: Request) -> Response:
-    """GET /api/artes/propio/dispositivos -> {dispositivos:[{dispositivo, version, galerias}]}."""
-    return JSONResponse({"dispositivos": fotos_tunel.dispositivos(_usuario_id(request))})
+    """GET /api/artes/propio/dispositivos?marca= -> {dispositivos:[{usuario, dispositivo, version, marcas, galerias}]}.
+
+    Dispositivos que comparten `marca` (cualquier dueño)."""
+    marca = (request.query_params.get("marca") or "").strip()
+    return JSONResponse({"dispositivos": fotos_tunel.dispositivos(marca)})
 
 
 RUTAS = [

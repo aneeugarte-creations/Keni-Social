@@ -8,10 +8,11 @@
  *  - "agencias": fotos LICENCIADAS de agencia (AFP). Se muestran con su crédito y SIN overlay de
  *    "Sin licencia": al adjuntarlas (`POST /api/artes/agencias/adjuntar`) la pieza queda PUBLICABLE
  *    (`imagen_origen="licenciada"`, `imagen_autorizada=true`), arrastrando su crédito obligatorio.
- *  - "propio": fotos de la galería LOCAL del equipo (apps keni-fotos conectadas por el túnel; solo
- *    Claro Sports). Se muestran limpias y al elegirlas (`POST /api/artes/propio/adjuntar`, por
- *    `galeria_id`+`archivo`, no por URL) el back trae el original por el túnel y deja la pieza
- *    PUBLICABLE (`imagen_origen="propia"`). Si no hay dispositivos conectados, se avisa.
+ *  - "propio": fotos de la galería LOCAL del equipo (apps keni-fotos conectadas por el túnel) que
+ *    comparten a la MARCA de la pieza. Se muestran limpias y al elegirlas (`POST /api/artes/propio/
+ *    adjuntar`, por `galeria_id`+`archivo`+`marca`, no por URL) el back trae el original por el túnel
+ *    y deja la pieza PUBLICABLE (`imagen_origen="propia"`). Si ningún dispositivo comparte a esa
+ *    marca, el proveedor llega `disponible:false` y se muestra su motivo.
  *
  * El padre recibe la `PlataformaStock` para refrescar.
  */
@@ -46,7 +47,7 @@ export interface BuscadorStockProps {
   /**
    * Fuente de la búsqueda. "stock" (def): bancos gratuitos, AYUDA VISUAL no publicable. "agencias":
    * fotos LICENCIADAS de agencia (AFP), publicables con crédito. "propio": galería local del equipo
-   * (apps keni-fotos por el túnel; solo Claro Sports), publicable y adjuntada por el túnel.
+   * (apps keni-fotos por el túnel que comparten a la marca), publicable y adjuntada por el túnel.
    */
   fuente?: FuenteFoto;
   /** Marca de la pieza: acota las fuentes a las habilitadas para ella (toggles de la etapa Stock). */
@@ -158,6 +159,7 @@ export function BuscadorStock({
         galeria_id: c.galeria_id,
         archivo: c.archivo,
         dispositivo: c.dispositivo,
+        marca,
       });
       return;
     }

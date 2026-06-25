@@ -392,10 +392,16 @@ def _es_fotos_actualizacion(metodo: str, ruta: str) -> bool:
 # token valido. El resto de `/api/fotos` (info, descargas, autorizar) sigue exigiendo sesion.
 _RUTA_FOTOS_SESION = "/api/fotos/sesion"
 
+# GET del catalogo de marcas para el checklist «Compartir galeria con» de la app de escritorio
+# (`/api/fotos/marcas`): igual que `sesion`, la app se identifica con su token opaco
+# (`Authorization: Bearer`), no con cookie ni token de mantenimiento, asi que hace su PROPIA auth
+# (token MCP) y debe pasar el middleware sin credencial de Consola.
+_RUTA_FOTOS_MARCAS = "/api/fotos/marcas"
+
 
 def _es_fotos_sesion(metodo: str, ruta: str) -> bool:
-    """True si es el GET de la validacion del token de escritorio keni-fotos (auth propia)."""
-    return metodo == "GET" and ruta == _RUTA_FOTOS_SESION
+    """True si es un GET con auth propia del escritorio keni-fotos (validacion de token o catalogo de marcas)."""
+    return metodo == "GET" and ruta in (_RUTA_FOTOS_SESION, _RUTA_FOTOS_MARCAS)
 
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el

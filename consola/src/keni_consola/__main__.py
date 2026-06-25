@@ -41,6 +41,8 @@ def _puerto() -> int:
 # Tope de tamaño de un frame WebSocket. El túnel keni-fotos manda los ORIGINALES de cámara
 # (~48 MB) en base64 (~64 MB) en un solo frame, muy por encima del default de uvicorn (16 MB);
 # lo subimos a 96 MB para que el original quepa. Solo afecta al límite de mensaje, no a la red.
+# El keepalive (ws_ping_interval/timeout=20 s en `uvicorn.run`) hace que el server también haga
+# ping y detecte conexiones muertas del túnel; el handler ignora los frames de control Ping/Pong.
 _WS_MAX_SIZE = 96 * 1024 * 1024
 
 
@@ -268,7 +270,15 @@ def main() -> int:
 
     iniciar_limpiador()
 
-    uvicorn.run(app, host=HOST, port=puerto, log_level="warning", ws_max_size=_WS_MAX_SIZE)
+    uvicorn.run(
+        app,
+        host=HOST,
+        port=puerto,
+        log_level="warning",
+        ws_max_size=_WS_MAX_SIZE,
+        ws_ping_interval=20,
+        ws_ping_timeout=20,
+    )
     return 0
 
 

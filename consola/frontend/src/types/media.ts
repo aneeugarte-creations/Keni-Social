@@ -186,16 +186,19 @@ export interface CuerpoAdjuntarAgencia {
   credito_url?: string;
 }
 
-// --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos; solo Claro Sports) ---
-// Las apps de escritorio keni-fotos del usuario abren un túnel hacia keni-social; el backend hace
-// fan-out de la búsqueda y, al adjuntar, trae el ORIGINAL por el túnel. Publicables sin licencia.
+// --- Fotos PROPIAS (galería local del equipo, vía el túnel keni-fotos) ---
+// Las apps de escritorio keni-fotos abren un túnel hacia keni-social; cada dispositivo declara a
+// qué MARCAS comparte su galería. La búsqueda y el adjuntar van POR MARCA, cruzando dueños: el
+// backend hace fan-out a los dispositivos que comparten esa marca y, al adjuntar, trae el ORIGINAL
+// por el túnel. Publicables sin licencia.
 
 /** Fuente de la búsqueda de fotos del editor: bancos de stock, agencia licenciada o galería propia. */
 export type FuenteFoto = "stock" | "agencias" | "propio";
 
 /**
  * Respuesta de `GET /api/artes/propio/buscar`: misma forma que la de stock (proveedores +
- * candidatos). El único proveedor es «propio» y trae `dispositivos` (cuántas apps conectadas).
+ * candidatos). El único proveedor es «propio» y trae `dispositivos` (cuántas apps comparten a la
+ * marca pedida); si ninguna, `disponible:false` con su `motivo`.
  */
 export type RespuestaBuscarPropio = RespuestaBuscarStock;
 
@@ -205,6 +208,8 @@ export interface CuerpoAdjuntarPropio {
   galeria_id: string;
   archivo: string;
   dispositivo?: string;
+  /** Marca de la pieza: el original solo se pide a un dispositivo que comparte esta marca. */
+  marca?: string;
 }
 
 /** Una galería (partido) que ofrece una app de escritorio conectada. */
@@ -215,14 +220,19 @@ export interface GaleriaPropio {
   fotos: number;
 }
 
-/** Un dispositivo (app de escritorio) conectado por el túnel, con sus galerías. */
+/** Un dispositivo (app de escritorio) conectado por el túnel, con su dueño, las marcas a las que
+ *  comparte su galería y sus galerías procesadas. */
 export interface DispositivoPropio {
+  /** Dueño del dispositivo (usuario que abrió el túnel). */
+  usuario: string;
   dispositivo: string;
-  version: string;
+  version?: string;
+  /** Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */
+  marcas: string[];
   galerias: GaleriaPropio[];
 }
 
-/** Respuesta de `GET /api/artes/propio/dispositivos`: las apps conectadas del usuario. */
+/** Respuesta de `GET /api/artes/propio/dispositivos`: dispositivos conectados (de cualquier dueño). */
 export interface RespuestaDispositivosPropio {
   dispositivos: DispositivoPropio[];
 }
