@@ -6,12 +6,21 @@
 // (`index.ts`).
 // NOTA: `fuente` es REQUERIDO (el backend siempre lo emite; "" si es desconocida).
 
-import type { PeriodoMetricas, TotalMetricas } from "../types.gen";
+import type { PeriodoMetricas, PiezaMetrica } from "../types.gen";
 
-/** El total del reporte con `impresiones`: el VOLUMEN aditivo del periodo (impresiones en
- * FB/IG/X, reproducciones en TikTok/YouTube). Es la cifra de cabecera del periodo. El campo
- * es opcional porque solo está presente cuando la fuente lo aporta; la UI degrada si falta. */
-export type TotalConImpresiones = TotalMetricas & { impresiones?: number };
+/** Una pieza con los granulares de IMPULSO e INVERSIÓN que solo trae la fuente cuando la red
+ * los expone a nivel post: las impresiones (VOLUMEN aditivo) y su reparto pagado/orgánico, el
+ * gasto del impulso, la tasa de visionado completo (fracción 0–1) y los marcadores (bookmarks).
+ * Todos OPCIONALES; la UI los muestra solo en su presencia ("—" si vienen `null`). Augmenta la
+ * pieza hasta que el tipo generado los incluya. */
+export type PiezaConImpulso = PiezaMetrica & {
+  impresiones?: number | null;
+  impresiones_pagadas?: number | null;
+  impresiones_organicas?: number | null;
+  gasto?: number | null;
+  tasa_visionado_completo?: number | null;
+  marcadores?: number | null;
+};
 
 /** Un día de la serie de alcance de cuenta: total + desglose por red. */
 export interface PuntoAlcance {

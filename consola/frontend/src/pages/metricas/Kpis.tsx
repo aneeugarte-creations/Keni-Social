@@ -20,7 +20,7 @@ import * as React from "react";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { marcaParam } from "@/components/comunes/selectores";
 import { api } from "@/lib/api";
-import type { TotalConImpresiones } from "@/types";
+import type { TotalMetricas } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 import type { ColumnaMeta } from "./columnasMeta";
@@ -43,7 +43,7 @@ export function Kpis({
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
-  total: TotalConImpresiones;
+  total: TotalMetricas;
   marcaActual?: string;
   rangoActual?: string;
 }) {

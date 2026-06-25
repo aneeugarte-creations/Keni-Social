@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
-import type { HistoricoPieza, PiezaMetrica } from "@/types";
+import type { HistoricoPieza, PiezaConImpulso, PiezaMetrica } from "@/types";
 
 import { DetallePieza } from "./DetallePieza";
 
@@ -147,5 +147,55 @@ describe("DetallePieza", () => {
       <DetallePieza pieza={PIEZA} abierto={false} onOpenChange={() => {}} />,
     );
     expect(espia).not.toHaveBeenCalled();
+  });
+
+  it("muestra el bloque de impulso e inversión cuando la fuente trae los granulares", () => {
+    vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(SIN_HISTORICO);
+    const conImpulso: PiezaConImpulso = {
+      ...PIEZA,
+      impresiones: 50000,
+      impresiones_pagadas: 30000,
+      impresiones_organicas: 20000,
+      gasto: 12.5,
+      // fracción 0–1: se pinta como porcentaje (×100).
+      tasa_visionado_completo: 0.42,
+      marcadores: 17,
+    };
+    renderConProviders(
+      <DetallePieza pieza={conImpulso} abierto onOpenChange={() => {}} />,
+    );
+
+    expect(screen.getByText("Impulso e inversión")).toBeInTheDocument();
+    // El operador ve el reparto pagado/orgánico, el gasto, el visionado y los marcadores.
+    expect(screen.getByText("Impresiones pagadas")).toBeInTheDocument();
+    expect(screen.getByText("30,000")).toBeInTheDocument();
+    expect(screen.getByText("Impresiones orgánicas")).toBeInTheDocument();
+    expect(screen.getByText("20,000")).toBeInTheDocument();
+    expect(screen.getByText("Gasto")).toBeInTheDocument();
+    expect(screen.getByText("Visionado completo")).toBeInTheDocument();
+    expect(screen.getByText("42.0 %")).toBeInTheDocument();
+    expect(screen.getByText("Marcadores")).toBeInTheDocument();
+    expect(screen.getByText("17")).toBeInTheDocument();
+  });
+
+  it("pinta '—' en un granular de impulso que viene null (no un 0 falso)", () => {
+    vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(SIN_HISTORICO);
+    const conGastoNulo: PiezaConImpulso = { ...PIEZA, impresiones: 50000, gasto: null };
+    renderConProviders(
+      <DetallePieza pieza={conGastoNulo} abierto onOpenChange={() => {}} />,
+    );
+
+    // El gasto viene en la respuesta pero es null: su celda muestra "—", no "$0".
+    const celdaGasto = screen.getByText("Gasto").closest("div")!;
+    expect(within(celdaGasto).getByText("—")).toBeInTheDocument();
+  });
+
+  it("oculta el bloque de impulso cuando la pieza no trae esos granulares", () => {
+    vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(SIN_HISTORICO);
+    renderConProviders(
+      <DetallePieza pieza={PIEZA} abierto onOpenChange={() => {}} />,
+    );
+
+    expect(screen.queryByText("Impulso e inversión")).not.toBeInTheDocument();
   });
 });

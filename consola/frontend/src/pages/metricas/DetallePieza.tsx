@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { formatearDia, formatearFechaHoraCorta } from "@/lib/fecha";
 import {
+  costeUsd,
   nombreFormato,
   nombreRed,
   numeroCompacto,
@@ -34,7 +35,7 @@ import {
   rendimientoRel,
   tiempoVis,
 } from "@/lib/formato";
-import type { PiezaMetrica } from "@/types";
+import type { PiezaConImpulso } from "@/types";
 
 /** Una métrica granular: muestra "—" cuando la fuente no la trae (null), no un 0 falso. */
 function granular(valor: number | null): string {
@@ -71,7 +72,7 @@ export function DetallePieza({
   onOpenChange,
 }: {
   /** Pieza a detallar; null = sin selección (el modal queda cerrado). */
-  pieza: PiezaMetrica | null;
+  pieza: PiezaConImpulso | null;
   abierto: boolean;
   onOpenChange: (abierto: boolean) => void;
 }) {
@@ -84,8 +85,19 @@ export function DetallePieza({
   );
 }
 
-function Publicacion({ pieza }: { pieza: PiezaMetrica }) {
+function Publicacion({ pieza }: { pieza: PiezaConImpulso }) {
   const titulo = pieza.titulo || "(sin título)";
+
+  // Bloque de impulso/inversión: solo cuando la fuente aporta ALGUNO de estos granulares
+  // (red que separa pagado/orgánico, gasto, visionado o marcadores a nivel post). Cada dato
+  // se pinta solo si viene; "—" si viene pero es null.
+  const tieneImpulso =
+    pieza.impresiones !== undefined ||
+    pieza.impresiones_pagadas !== undefined ||
+    pieza.impresiones_organicas !== undefined ||
+    pieza.gasto !== undefined ||
+    pieza.tasa_visionado_completo !== undefined ||
+    pieza.marcadores !== undefined;
 
   return (
     <>
@@ -144,6 +156,46 @@ function Publicacion({ pieza }: { pieza: PiezaMetrica }) {
           />
         </dl>
       </div>
+
+      {/* Impulso e inversión: paid vs orgánico, gasto y visionado. Solo si la fuente los trae. */}
+      {tieneImpulso && (
+        <div>
+          <h3 className="mb-2 text-sm font-medium">Impulso e inversión</h3>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+            {pieza.impresiones !== undefined && (
+              <Dato etiqueta="Impresiones" valor={granular(pieza.impresiones)} />
+            )}
+            {pieza.impresiones_pagadas !== undefined && (
+              <Dato etiqueta="Impresiones pagadas" valor={granular(pieza.impresiones_pagadas)} />
+            )}
+            {pieza.impresiones_organicas !== undefined && (
+              <Dato
+                etiqueta="Impresiones orgánicas"
+                valor={granular(pieza.impresiones_organicas)}
+              />
+            )}
+            {pieza.gasto !== undefined && (
+              <Dato
+                etiqueta="Gasto"
+                valor={pieza.gasto == null ? "—" : costeUsd(pieza.gasto)}
+              />
+            )}
+            {pieza.tasa_visionado_completo !== undefined && (
+              <Dato
+                etiqueta="Visionado completo"
+                valor={
+                  pieza.tasa_visionado_completo == null
+                    ? "—"
+                    : porcentaje(pieza.tasa_visionado_completo * 100)
+                }
+              />
+            )}
+            {pieza.marcadores !== undefined && (
+              <Dato etiqueta="Marcadores" valor={granular(pieza.marcadores)} />
+            )}
+          </dl>
+        </div>
+      )}
 
       <Historico piezaId={pieza.id} />
     </>
