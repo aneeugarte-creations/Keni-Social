@@ -111,7 +111,10 @@ export default function Fotos() {
   const { data, isLoading } = useQuery({
     queryKey: ["propio", "dispositivos"],
     queryFn: ({ signal }) => api.dispositivosPropio(signal),
-    refetchInterval: 15_000,
+    // Sondeo corto: cuando alguien abre la app y conecta el túnel, su equipo aparece casi al
+    // instante sin recargar. Refresca también al volver a la pestaña.
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
 
   const dispositivos = data?.dispositivos ?? [];
