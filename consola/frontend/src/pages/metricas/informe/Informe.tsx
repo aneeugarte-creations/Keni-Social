@@ -416,7 +416,10 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
               ))}
             </div>
           ) : (
-            <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 300, w: 940 }} />
+            // Logo de la marca centrado en una caja sobria y común: presencia discreta con aire
+            // alrededor, no a sangre. object-contain lo encaja sea cual sea su proporción (UnoTV
+            // ancho, Fundación finísimo, Claro casi cuadrado) para un tamaño óptico parejo.
+            <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 140, w: 250 }} />
           )}
           <p className={`mt-16 ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/90" : TONO.coverCaption}`}>
             Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
