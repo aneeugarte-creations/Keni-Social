@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
   // Estilo de boton Geist (Vercel): rectangulo de esquina suave (rounded-md),
-  // peso medio, sin sombras. Primario negro solido; secundario blanco con borde.
+  // peso medio, sin sombras. Monocromo: por defecto `outline` (gris); el boton
+  // principal se distingue por posicion, no por color.
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
@@ -31,7 +32,7 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "outline",
       size: "default",
     },
   },

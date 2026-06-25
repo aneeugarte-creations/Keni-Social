@@ -37,8 +37,8 @@ const TabsTrigger = React.forwardRef<
       "disabled:pointer-events-none disabled:opacity-50",
       // Inactiva
       "text-muted-foreground hover:text-foreground",
-      // Activa: item resaltado sobre `muted` con sombra (mismo tratamiento que «Semana | Mes»).
-      "data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:shadow-sm",
+      // Activa: item resaltado plano sobre `muted` (mismo tratamiento que «Semana | Mes»).
+      "data-[state=active]:bg-muted data-[state=active]:text-foreground",
       className,
     )}
     {...props}
