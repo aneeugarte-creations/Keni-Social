@@ -1,7 +1,7 @@
 /**
- * Métrica por LÍNEA de contenido (categoría) y por ORIGEN.
+ * Métrica por CATEGORÍA de contenido y por ORIGEN.
  *
- * Consume `/api/metricas/lineas` y muestra dos tablas: rendimiento del periodo por línea
+ * Consume `/api/metricas/lineas` y muestra dos tablas: rendimiento del periodo por categoría
  * y por origen, con piezas / vistas / interacciones / engagement (promedio por pieza:
  * media simple de porcentajes, como lo agrega el backend). Sigue el selector de marca +
  * rango global del dashboard (la marca viaja en forma `id_metricas`, que es justo lo que
@@ -9,10 +9,10 @@
  *
  * Ambas tablas comparten el mismo conjunto de métricas, así que comparten también el editor
  * de campos (`tablaId` "por-linea"): ocultar/reordenar columnas aplica a las dos a la vez.
- * La primera columna (dimensión) cambia de etiqueta por tabla (Línea vs Origen).
+ * La primera columna (dimensión) cambia de etiqueta por tabla (Categoría vs Origen).
  *
  * Estados honestos (carga / vacío / error) como el resto de Métricas: si la fuente no
- * expone líneas/orígenes para el periodo, lo dice en vez de inventar.
+ * expone categorías/orígenes para el periodo, lo dice en vez de inventar.
  */
 import { useQuery } from "@tanstack/react-query";
 import { GitBranch } from "lucide-react";
@@ -48,7 +48,7 @@ type ClaveMetrica = "piezas" | "visualizaciones" | "interacciones" | "engagement
 
 /**
  * Catálogo de campos COMPARTIDO por las dos tablas. La primera columna ("dimension") es la
- * categoría de cada fila: se etiqueta "Línea" u "Origen" según la tabla en el render. El resto
+ * categoría de cada fila: se etiqueta "Categoría" u "Origen" según la tabla en el render. El resto
  * son las métricas comunes. Su orden aquí es el orden base.
  */
 const COLUMNAS: ColumnaMeta[] = [
@@ -88,7 +88,7 @@ function valorCelda(f: FilaMetricaLinea, clave: ClaveMetrica): string {
   return numeroCompleto(f[clave]);
 }
 
-export function MetricaPorLinea({
+export function MetricaPorCategoria({
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
@@ -110,7 +110,7 @@ export function MetricaPorLinea({
   return (
     <Seccion
       id="por-linea"
-      titulo="Rendimiento por línea"
+      titulo="Rendimiento por categoría"
       icono={GitBranch}
       tablaId={TABLA_POR_LINEA}
       columnas={COLUMNAS}
@@ -120,19 +120,19 @@ export function MetricaPorLinea({
         <Skeleton className="h-72 w-full rounded-lg" />
       ) : isError ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          No se pudo cargar el rendimiento por línea.
+          No se pudo cargar el rendimiento por categoría.
         </p>
       ) : data.lineas.length === 0 && data.origenes.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay rendimiento por línea u origen para este periodo.
+          Aún no hay rendimiento por categoría u origen para este periodo.
         </p>
       ) : (
         <>
           <TablaLineas
-            titulo="Por línea de contenido"
+            titulo="Por categoría de contenido"
             filas={data.lineas}
             total={data.total}
-            etiquetaPrimera="Línea"
+            etiquetaPrimera="Categoría"
           />
           <TablaLineas
             titulo="Por origen"
@@ -239,7 +239,7 @@ function TablaLineas({
               <TableRow>{columnas.map(encabezado)}</TableRow>
             </TableHeader>
             <TableBody>
-              {/* La línea Evergreen y "Sin línea" comparten id vacío: la clave usa el nombre
+              {/* La categoría Evergreen y "Sin categoría" comparten id vacío: la clave usa el nombre
                   (único por cubo) para no colisionar. */}
               {visibles.map((f) => (
                 <TableRow key={f.id || f.nombre}>

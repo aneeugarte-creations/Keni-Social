@@ -14,7 +14,7 @@ describe("etiquetaCategoriaPieza", () => {
     expect(etiquetaCategoriaPieza("9f1c2d3e4a5b", LINEAS)).toBe("Educación");
   });
 
-  it("resuelve un slug de categoría conocido vía etiquetaLinea (señal del motor / ingesta)", () => {
+  it("resuelve un slug de categoría conocido vía etiquetaCategoria (señal del motor / ingesta)", () => {
     expect(etiquetaCategoriaPieza("breaking", LINEAS)).toBe("Última hora");
     expect(etiquetaCategoriaPieza("salud", LINEAS)).toBe("Salud");
   });

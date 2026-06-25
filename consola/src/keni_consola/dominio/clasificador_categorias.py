@@ -1,7 +1,7 @@
-"""Clasifica una pieza en su LÍNEA (etiqueta clase 'categoria') y su ORIGEN (clase 'origen').
+"""Clasifica una pieza en su CATEGORÍA (etiqueta clase 'categoria') y su ORIGEN (clase 'origen').
 
 Determinístico y sin IA: casa las palabras clave (`keywords`, CSV de cada etiqueta) contra el
-título + resumen de la nota, normalizando acentos y mayúsculas. Gana la línea con más keywords
+título + resumen de la nota, normalizando acentos y mayúsculas. Gana la categoría con más keywords
 casados (empate → la primera, orden estable de entrada).
 
 Diseño:
@@ -10,7 +10,7 @@ Diseño:
   - `clasificar_pieza(titulo, resumen, marca)` es el envoltorio con BD: trae las etiquetas
     de la marca (categoria y origen) vía `repos` y devuelve `{categoria, origen}`.
 
-Política de "sin línea": si NINGUNA categoría casa, `categoria` queda None — la pieza NO se
+Política de "sin categoría": si NINGUNA categoría casa, `categoria` queda None — la pieza NO se
 descarta; quien llama la marca con un aviso. El ORIGEN nunca queda vacío: si ninguna etiqueta
 de origen con keywords casa, se usa el ORIGEN POR DEFECTO (la etiqueta de origen sin keywords,
 convención = 'interno').
@@ -82,7 +82,7 @@ def origen_por_defecto(origenes: list[dict[str, Any]]) -> str | None:
 def clasificar_pieza(titulo: str, resumen: str, marca: str) -> dict[str, str | None]:
     """Clasifica una pieza de `marca`: devuelve `{"categoria": id|None, "origen": id|None}`.
 
-    `categoria` None = sin línea (la pieza se marca con aviso, no se descarta). `origen` solo
+    `categoria` None = sin categoría (la pieza se marca con aviso, no se descarta). `origen` solo
     es None si la marca no tiene ninguna etiqueta de origen inicializada.
     """
     from .. import repos  # import perezoso: mantiene `clasificar` puro/testeable

@@ -1,12 +1,12 @@
-"""Rendimiento REAL del periodo AGRUPADO por LÍNEA de contenido y por ORIGEN.
+"""Rendimiento REAL del periodo AGRUPADO por CATEGORÍA de contenido y por ORIGEN.
 
 PROBLEMA QUE RESUELVE
 =====================
 Las analíticas saben qué pieza rinde (`metricas_pieza`) y qué tipo/etiqueta rinde
-(`metricas_pieza.analitica_por_etiqueta`), pero el equipo razona en términos de LÍNEAS
+(`metricas_pieza.analitica_por_etiqueta`), pero el equipo razona en términos de CATEGORÍAS
 editoriales (futbol, presidencia, virales…) y de ORIGEN (interno vs petición externa).
-Estos dos ejes son etiquetas N:M de la pieza, de las clases `categoria` (= LÍNEA) y
-`origen`. Aquí cerramos "qué LÍNEA funciona" y el dual editorial-vs-impuesto.
+Estos dos ejes son etiquetas N:M de la pieza, de las clases `categoria` (= CATEGORÍA) y
+`origen`. Aquí cerramos "qué CATEGORÍA funciona" y el dual editorial-vs-impuesto.
 
 CÓMO
 ====
@@ -17,16 +17,16 @@ las enlaza a su `contenido` de la BD por `id_post_metricool` (fallback fuzzy por
 y lee sus etiquetas por clase. NO duplica la conexión a Metricool ni toca `repos`/`db`.
 
 La agregación es PURA y separada de la lectura de BD (`agrupar_por_eje` /
-`agrupar_lineas_y_origenes`): recibe datos en memoria y es testeable sin BD, igual que el
-resto de agregaciones del módulo. El orquestador `lineas_y_origenes` hace las lecturas
+`agrupar_categorias_y_origenes`): recibe datos en memoria y es testeable sin BD, igual que el
+resto de agregaciones del módulo. El orquestador `categorias_y_origenes` hace las lecturas
 (repos + fachada de métricas) y delega en la función pura.
 
-La LÍNEA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO, el mismo de los chips y
+La CATEGORÍA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO, el mismo de los chips y
 el filtro): las categorías activas + las señales del motor como su propio cubo («Última hora»,
-«Evergreen»). Las piezas sin categoría resoluble caen en "Sin línea". El ORIGEN sí es la
+«Evergreen»). Las piezas sin categoría resoluble caen en "Sin categoría". El ORIGEN sí es la
 etiqueta de clase `origen` (puente N:M). Por cada cubo devuelve:
 nº de piezas, suma de visualizaciones, suma de interacciones y engagement medio; las piezas
-sin valor caen en "Sin línea" / "Sin origen". Solo LECTURA; no muta nada.
+sin valor caen en "Sin categoría" / "Sin origen". Solo LECTURA; no muta nada.
 """
 
 from __future__ import annotations
@@ -36,21 +36,21 @@ from typing import Any
 
 from keni_metricas import servicio
 
-from . import bootstrap_lineas, repos
+from . import bootstrap_categorias, repos
 from .metricas_pieza import (
     _indice_contenido_por_post,
     _normalizar_titulo,
     filtrar_piezas_periodo,
 )
 
-_log = logging.getLogger("keni_consola.metricas_linea")
+_log = logging.getLogger("keni_consola.metricas_categoria")
 
 # Clases de etiqueta de cada eje de agrupación (etiquetas.clase).
 CLASE_CATEGORIA = "categoria"
 CLASE_ORIGEN = "origen"
 
-# Cubos por defecto para las piezas sin valor en el eje (honesto: no se inventa una línea).
-SIN_LINEA = "Sin línea"
+# Cubos por defecto para las piezas sin valor en el eje (honesto: no se inventa una categoría).
+SIN_CATEGORIA = "Sin categoría"
 SIN_ORIGEN = "Sin origen"
 
 
@@ -74,8 +74,8 @@ def agrupar_por_eje(
         (`id_post_metricool -> publicacion_id` y `titulo_normalizado -> publicacion_id`),
         idénticos a los de `metricas_pieza` (enlace fuerte por id; fallback fuzzy por título).
       - `etiquetas_definidas`: las etiquetas del eje de la marca (`[{"id","nombre"}, …]`),
-        para que una LÍNEA definida SIN piezas en el periodo aparezca igualmente con ceros.
-      - `sin_valor`: nombre del cubo de las piezas sin valor en el eje ("Sin línea"/…).
+        para que una CATEGORÍA definida SIN piezas en el periodo aparezca igualmente con ceros.
+      - `sin_valor`: nombre del cubo de las piezas sin valor en el eje ("Sin categoría"/…).
 
     Devuelve la lista de cubos `[{id, nombre, piezas, visualizaciones, interacciones,
     engagement_pct}]` ordenada por nº de piezas desc y luego visualizaciones desc. El cubo
@@ -130,7 +130,7 @@ def agrupar_por_eje(
     return salida
 
 
-def agrupar_lineas_y_origenes(
+def agrupar_categorias_y_origenes(
     piezas: list[dict[str, Any]],
     *,
     linea_por_contenido: dict[str, str],
@@ -140,7 +140,7 @@ def agrupar_lineas_y_origenes(
     lineas_definidas: list[dict[str, str]],
     origenes_definidos: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """Agrega el periodo por LÍNEA y por ORIGEN a la vez. PURA (sin BD).
+    """Agrega el periodo por CATEGORÍA y por ORIGEN a la vez. PURA (sin BD).
 
     Combina dos llamadas a `agrupar_por_eje` (una por eje) sobre el MISMO listado de piezas.
     Devuelve `{"lineas": [...], "origenes": [...]}` con la forma del contrato del endpoint.
@@ -151,7 +151,7 @@ def agrupar_lineas_y_origenes(
         enlace_por_id=enlace_por_id,
         enlace_por_titulo=enlace_por_titulo,
         etiquetas_definidas=lineas_definidas,
-        sin_valor=SIN_LINEA,
+        sin_valor=SIN_CATEGORIA,
     )
     origenes = agrupar_por_eje(
         piezas,
@@ -184,59 +184,59 @@ def _valor_por_contenido(
     return salida
 
 
-def linea_de_categoria(
+def nombre_de_categoria(
     categoria: str,
     *,
     categoria_por_id: dict[str, str],
 ) -> str:
-    """Nombre de la LÍNEA del plan de un contenido a partir de su `categoria` (única fuente).
+    """Nombre de la CATEGORÍA del plan de un contenido a partir de su `categoria` (única fuente).
 
-    `categoria` es el eje ÚNICO de línea/categoría (la misma columna del plan, los chips y el
+    `categoria` es el eje ÚNICO de categoría/categoría (la misma columna del plan, los chips y el
     filtro). Resolución:
       - `breaking` → "Última hora", `evergreen` → "Evergreen" (señales del motor, su propio cubo);
       - id de categoría ACTIVA → su nombre (`categoria_por_id`);
-      - vacía o id de categoría retirada/desconocida → "" (cae en "Sin línea").
+      - vacía o id de categoría retirada/desconocida → "" (cae en "Sin categoría").
 
-    Ya NO se respalda con la etiqueta `categoria` asignada: la línea vive solo en `categoria` (las
-    piezas viejas cuya línea estaba en el tag se backfillearon a `categoria`, migración 0046).
+    Ya NO se respalda con la etiqueta `categoria` asignada: la categoría vive solo en `categoria` (las
+    piezas viejas cuya categoría estaba en el tag se backfillearon a `categoria`, migración 0046).
     """
     if not categoria:
         return ""
-    senal = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
+    senal = bootstrap_categorias.ETIQUETAS_CLAVE_NO_LINEA.get(categoria)
     if senal:
         return senal
     return categoria_por_id.get(categoria, "")
 
 
-def _lineas_por_contenido_plan(
+def _categorias_por_contenido(
     contenidos: list[dict[str, Any]],
     categoria_por_id: dict[str, str],
 ) -> dict[str, str]:
-    """`publicacion_id -> nombre de su LÍNEA del plan`, derivado SOLO de `categoria`."""
+    """`publicacion_id -> nombre de su CATEGORÍA del plan`, derivado SOLO de `categoria`."""
     salida: dict[str, str] = {}
     for c in contenidos:
         cid = c.get("id") or ""
         if not cid:
             continue
-        salida[cid] = linea_de_categoria(
+        salida[cid] = nombre_de_categoria(
             (c.get("categoria") or "").strip(), categoria_por_id=categoria_por_id
         )
     return salida
 
 
-def lineas_por_pieza(
+def categorias_por_pieza(
     marca_consola: str | None, piezas: list[dict[str, Any]]
 ) -> dict[str, str]:
-    """Mapa `id de pieza -> nombre de su LÍNEA editorial` (clase `categoria`), best-effort.
+    """Mapa `id de pieza -> nombre de su CATEGORÍA editorial` (clase `categoria`), best-effort.
 
     Cruza cada pieza con su `contenido` de la Consola por el MISMO criterio que
-    `lineas_y_origenes` (enlace fuerte por `id_post_metricool`; fallback fuzzy por
-    título) y devuelve la línea de ESE contenido. Recibe las `piezas` ya leídas (de
+    `categorias_y_origenes` (enlace fuerte por `id_post_metricool`; fallback fuzzy por
+    título) y devuelve la categoría de ESE contenido. Recibe las `piezas` ya leídas (de
     `servicio.construir_listado_piezas`), así que NO vuelve a golpear Metricool: solo
-    lee la BD (contenidos, plataformas, etiquetas) para resolver la línea.
+    lee la BD (contenidos, plataformas, etiquetas) para resolver la categoría.
 
-    Las piezas SIN línea atribuible NO aparecen en el mapa (el llamante usa "Sin
-    línea"): honesto, no se inventa una línea. La clave es el `id` de la pieza.
+    Las piezas SIN categoría atribuible NO aparecen en el mapa (el llamante usa "Sin
+    categoría"): honesto, no se inventa una categoría. La clave es el `id` de la pieza.
     """
     contenidos = repos.listar_publicacion(marca=marca_consola)
     plataformas = repos.listar_piezas_fila()
@@ -246,8 +246,8 @@ def lineas_por_pieza(
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
         if e.get("id")
     }
-    # Línea de PLAN por contenido (eje único `categoria`: Última hora · líneas · Evergreen).
-    linea_por_contenido = _lineas_por_contenido_plan(contenidos, categoria_por_id)
+    # Línea de PLAN por contenido (eje único `categoria`: Última hora · categorías · Evergreen).
+    linea_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
     salida: dict[str, str] = {}
     for p in piezas:
         pid = str(p.get("id") or "")
@@ -260,17 +260,17 @@ def lineas_por_pieza(
     return salida
 
 
-def lineas_y_origenes(
+def categorias_y_origenes(
     rango: str,
     marca_consola: str | None,
     marca_metricas: str | None,
     redes: tuple[str, ...] = (),
     formatos: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Rendimiento del periodo por LÍNEA (clase `categoria`) y por ORIGEN (clase `origen`).
+    """Rendimiento del periodo por CATEGORÍA (clase `categoria`) y por ORIGEN (clase `origen`).
 
     Orquesta las lecturas (BD via `repos` + piezas del periodo via la fachada única de
-    métricas) y delega la agregación en la función PURA `agrupar_lineas_y_origenes`. Reusa
+    métricas) y delega la agregación en la función PURA `agrupar_categorias_y_origenes`. Reusa
     el MISMO cruce pieza↔contenido que `analitica_por_etiqueta` (enlace por
     `id_post_metricool`; fallback fuzzy por título). No duplica la conexión a Metricool.
 
@@ -279,7 +279,7 @@ def lineas_y_origenes(
 
     Devuelve `{"lineas": [...], "origenes": [...], "total": <piezas del periodo>,
     "fuente": <muestra|real|…>}`. Best-effort/honesto: si nada enlaza, todas las piezas
-    caen en "Sin línea"/"Sin origen".
+    caen en "Sin categoría"/"Sin origen".
     """
     piezas = filtrar_piezas_periodo(
         servicio.construir_listado_piezas(rango, marca_metricas), redes, formatos
@@ -292,8 +292,8 @@ def lineas_y_origenes(
 
     # Etiquetas ACTIVAS de la marca por eje (incluye globales; `listar_etiquetas` ya las
     # mezcla con marca=''). Filtra por clase en la BD para no traer de más, y SOLO activas:
-    # una línea/origen retirado del plan no debe aparecer como cubo (las piezas antiguas que
-    # lo tuvieran caen en "Sin línea"/"Sin origen").
+    # una categoría/origen retirado del plan no debe aparecer como cubo (las piezas antiguas que
+    # lo tuvieran caen en "Sin categoría"/"Sin origen").
     lineas_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
@@ -306,12 +306,12 @@ def lineas_y_origenes(
     categoria_por_id = {e["id"]: e["nombre"] for e in lineas_def if e.get("id")}
     origen_por_id = {e["id"]: e["nombre"] for e in origenes_def if e.get("id")}
 
-    # La LÍNEA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO: Última hora · líneas ·
+    # La CATEGORÍA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO: Última hora · categorías ·
     # Evergreen). El ORIGEN sí es una etiqueta de su clase (puente `publicacion_etiquetas`).
-    linea_por_contenido = _lineas_por_contenido_plan(contenidos, categoria_por_id)
+    linea_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
     origen_por_contenido = _valor_por_contenido(repos.etiquetas_por_contenido(), origen_por_id)
 
-    agregados = agrupar_lineas_y_origenes(
+    agregados = agrupar_categorias_y_origenes(
         piezas,
         linea_por_contenido=linea_por_contenido,
         origen_por_contenido=origen_por_contenido,

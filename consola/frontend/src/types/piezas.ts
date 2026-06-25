@@ -59,11 +59,11 @@ export interface EstadoOpcion {
   nombre: string;
 }
 
-/** Una categoría editorial = etiqueta de clase `categoria` (la LÍNEA de contenido de una marca). */
-export interface LineaEditorialOpcion {
+/** Una categoría editorial = etiqueta de clase `categoria` (la CATEGORÍA de contenido de una marca). */
+export interface CategoriaOpcion {
   id: string;
   nombre: string;
-  /** Marca dueña; "" = línea global (visible en todas las marcas). */
+  /** Marca dueña; "" = categoría global (visible en todas las marcas). */
   marca: string;
 }
 
@@ -86,7 +86,7 @@ export interface OpcionesPiezas {
   marcas: MarcaOpcion[];
   /** Catálogo PLANO de categorías (id→nombre) SOLO para resolver el nombre de `pieza.categoria`
    *  en el editor. NO es un eje de filtro: el filtro de líneas/categorías es `categorias`. */
-  lineas: LineaEditorialOpcion[];
+  lineas: CategoriaOpcion[];
   /** TAXONOMÍA del plan POR marca (Última hora · líneas · Evergreen), nombre resuelto en el
    *  backend. ÚNICA fuente de "líneas/categorías" para el usuario: filtros (Feed/Lista) y alta
    *  «Crear post» (que se acota a las que tienen `franja`). */

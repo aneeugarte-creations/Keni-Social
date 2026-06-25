@@ -1,21 +1,21 @@
-"""Inicializacion idempotente de LÍNEAS de contenido (etiquetas clase 'categoria') y ORÍGENES
+"""Inicializacion idempotente de CATEGORÍAS de contenido (etiquetas clase 'categoria') y ORÍGENES
 (clase 'origen') por marca.
 
-- Las LÍNEAS las dicta el equipo. UnoTV, Claro Sports, Nación Gamer y Fundación están
+- Las CATEGORÍAS las dicta el equipo. UnoTV, Claro Sports, Nación Gamer y Fundación están
   definidas (las dio la dirección); el resto de marcas se deja VACÍO a propósito hasta que el
   equipo las cree desde la pestaña de Líneas.
 - Los ORÍGENES son GLOBALES (marca=''): "Interno" y "Externo".
-- Las `keywords` (auto-etiquetado léxico, `dominio.clasificador_lineas`) se SIEMBRAN para las
-  líneas de Claro Sports (catálogo curado en `KEYWORDS_POR_LINEA`, editable por el equipo desde
-  la UI); para el resto nacen vacías. Una línea sin keywords no casa ninguna pieza (queda "sin
-  línea", aviso, nunca se descarta). La siembra es guarded: solo rellena una línea cuyo campo
+- Las `keywords` (auto-etiquetado léxico, `dominio.clasificador_categorias`) se SIEMBRAN para las
+  categorías de Claro Sports (catálogo curado en `KEYWORDS_POR_CATEGORIA`, editable por el equipo desde
+  la UI); para el resto nacen vacías. Una categoría sin keywords no casa ninguna pieza (queda "sin
+  categoría", aviso, nunca se descarta). La siembra es guarded: solo rellena una categoría cuyo campo
   siga vacío (nunca pisa lo que el equipo edite).
 
-Frescura (TTL) por línea editorial:
+Frescura (TTL) por categoría editorial:
 - `ttl_dias=0` significa sin caducidad / evergreen.
-- `es_evergreen=True` marca líneas evergreen reutilizables en fines de semana.
-- Al crear se aplican tal cual. Para una línea YA existente, `_reconciliar_linea` reconcilia
-  guarded (ttl/grupo/cadencia/keywords): lleva la taxonomía nueva a las líneas sembradas sin
+- `es_evergreen=True` marca categorías evergreen reutilizables en fines de semana.
+- Al crear se aplican tal cual. Para una categoría YA existente, `_reconciliar_linea` reconcilia
+  guarded (ttl/grupo/cadencia/keywords): lleva la taxonomía nueva a las categorías sembradas sin
   pisar lo que el equipo haya editado a mano.
 
 Idempotente: solo crea lo que no exista ya (por nombre+clase+marca); NUNCA pisa lo que el
@@ -36,7 +36,7 @@ _log = logging.getLogger(__name__)
 
 
 def slug_hashtag(nombre: str) -> str:
-    """Cuerpo (sin '#') del hashtag de una LÍNEA, derivado de su nombre: sin acentos, en
+    """Cuerpo (sin '#') del hashtag de una CATEGORÍA, derivado de su nombre: sin acentos, en
     minúscula y solo alfanumérico. "Ciencia/Tech" -> "cienciatech", "Medio ambiente" ->
     "medioambiente", "LaLiga (España)" -> "laligaespana". "" si el nombre no deja nada."""
     base = unicodedata.normalize("NFKD", str(nombre or ""))
@@ -47,25 +47,25 @@ def slug_hashtag(nombre: str) -> str:
 # Formato: (nombre, ttl_dias, es_evergreen, grupo, cadencia)
 #   ttl_dias=0 -> sin caducidad
 #   es_evergreen=True -> evergreen, reutilizable en fines de semana
-#   grupo -> agrupación de líneas ('' = línea plana, sin grupo). Solo Claro la usa: es el
+#   grupo -> agrupación de categorías ('' = categoría plana, sin grupo). Solo Claro la usa: es el
 #            nivel de la BARRA de navegación de Noticias (un chip por grupo distinto).
 #   cadencia -> ritmo de sondeo de sus fuentes: 'rapida' (~3 min) | 'normal' (~10 min) |
 #               'evergreen' (~30 min, temas de cambio lento).
-LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
-    # UnoTV publica por estas LÍNEAS reales (las dio la dirección). «Última hora» (breaking) y
-    # «Evergreen» son señales del motor, no líneas. Las etiquetas viejas que sobraban se retiran
-    # (ver `_LINEAS_RETIRADAS`).
+CATEGORIAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
+    # UnoTV publica por estas CATEGORÍAS reales (las dio la dirección). «Última hora» (breaking) y
+    # «Evergreen» son señales del motor, no categorías. Las etiquetas viejas que sobraban se retiran
+    # (ver `_CATEGORIAS_RETIRADAS`).
     "unotv": [
         ("Nacional",        1, False, "", "normal"),
         ("Internacional",   1, False, "", "normal"),
         ("Entretenimiento", 1, False, "", "normal"),
     ],
-    # Claro Sports: una LÍNEA fina por competición/disciplina, agrupadas por GRUPO. El grupo es
+    # Claro Sports: una CATEGORÍA fina por competición/disciplina, agrupadas por GRUPO. El grupo es
     # el nivel de la barra de navegación de Noticias (Fútbol · Motor · Olímpicos · NFL · Boxeo ·
     # NBA · Béisbol · Otros Deportes · Actualidad). El feed se cuelga del grupo y el clasificador
-    # léxico (keywords en `KEYWORDS_POR_LINEA`) asigna la línea fina a cada pieza.
+    # léxico (keywords en `KEYWORDS_POR_CATEGORIA`) asigna la categoría fina a cada pieza.
     "claro-sports": [
-        # Fútbol — una línea por competición (sondeo rápido: deporte en vivo)
+        # Fútbol — una categoría por competición (sondeo rápido: deporte en vivo)
         ("Liga MX",              0, False, "Fútbol", "rapida"),
         ("Premier League",       0, False, "Fútbol", "rapida"),
         ("LaLiga (España)",      0, False, "Fútbol", "rapida"),
@@ -110,7 +110,7 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
         ("Comercial",    0, False, "Actualidad", "normal"),
         ("Virales",      0, False, "Actualidad", "normal"),
     ],
-    # Nación Gamer (noticias de videojuegos). El equipo sumará el resto de líneas.
+    # Nación Gamer (noticias de videojuegos). El equipo sumará el resto de categorías.
     "nacion-gamer": [
         ("Gaming",       0, False, "", "normal"),
     ],
@@ -126,13 +126,13 @@ LINEAS_POR_MARCA: dict[str, list[tuple[str, int, bool, str, str]]] = {
     ],
 }
 
-# Palabras clave (CSV) por LÍNEA para el clasificador léxico (`dominio.clasificador_lineas`):
+# Palabras clave (CSV) por CATEGORÍA para el clasificador léxico (`dominio.clasificador_categorias`):
 # casan como palabra contra título+resumen normalizado (sin acentos, minúsculas). Catálogo de
 # arranque para Claro Sports; el equipo lo refina desde la UI de Líneas. Tokens distintivos para
-# minimizar el cruce entre líneas (gana la línea con más coincidencias). SOLO Claro trae
+# minimizar el cruce entre categorías (gana la categoría con más coincidencias). SOLO Claro trae
 # catálogo; «Portal web»/«Comercial» se dejan sin keywords (operativas, no son destino de
-# clasificación de noticias). La siembra es guarded: solo rellena una línea con keywords vacías.
-KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
+# clasificación de noticias). La siembra es guarded: solo rellena una categoría con keywords vacías.
+KEYWORDS_POR_CATEGORIA: dict[str, dict[str, str]] = {
     "claro-sports": {
         # — Fútbol —
         "Liga MX": "liga mx, club america, chivas, guadalajara, cruz azul, pumas, tigres, rayados, monterrey, toluca, santos laguna, pachuca, atlas, leon, necaxa, queretaro, mazatlan, fc juarez, xolos, tijuana, puebla, atletico de san luis, apertura, clausura, liguilla",
@@ -178,9 +178,9 @@ KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
         "Virales": "viral, se viraliza, redes sociales, polemica en redes",
     },
     # Fundación: sus feeds son MIXTOS (divulgación, buenas noticias) y vienen con slugs gruesos
-    # (entretenimiento/internacional/mx) que no mapean a estas líneas; el clasificador léxico
-    # asigna la línea fina por CONTENIDO de cada nota. Catálogo de arranque; el equipo lo refina
-    # desde la UI de Líneas. Tokens distintivos para minimizar el cruce (gana la línea con más
+    # (entretenimiento/internacional/mx) que no mapean a estas categorías; el clasificador léxico
+    # asigna la categoría fina por CONTENIDO de cada nota. Catálogo de arranque; el equipo lo refina
+    # desde la UI de Líneas. Tokens distintivos para minimizar el cruce (gana la categoría con más
     # coincidencias; empate -> la primera del orden, Ciencia/Tech).
     "fundacion": {
         "Ciencia/Tech": "ciencia, cientifico, cientificos, cientifica, investigacion, estudio, "
@@ -212,11 +212,11 @@ KEYWORDS_POR_LINEA: dict[str, dict[str, str]] = {
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.
 ORIGENES_GLOBALES: list[str] = ["Interno", "Externo"]
 
-# LÍNEAS (clase 'categoria') que se RETIRAN por marca: etiquetas viejas que no son líneas reales
+# CATEGORÍAS (clase 'categoria') que se RETIRAN por marca: etiquetas viejas que no son categorías reales
 # del plan. Se desactivan (activo=0), no se borran: salen del editor «Plan y horarios», del
 # selector de feeds y del catálogo, pero su historial de métricas se conserva. UnoTV publica solo
 # por Nacional/Internacional/Entretenimiento (+ Última hora/Evergreen, que son señales del motor).
-_LINEAS_RETIRADAS: dict[str, list[str]] = {
+_CATEGORIAS_RETIRADAS: dict[str, list[str]] = {
     "unotv": [
         "Virales", "Presidencia", "Comercial", "Reportero/Corresponsales",
         "Ciencia/Tech", "Geek/Pop", "Eventos", "Green",
@@ -230,9 +230,9 @@ def _crear_si_falta(
 ) -> bool:
     """Crea la etiqueta si no existe (nombre+clase+marca). True si la creó.
 
-    `keywords` (CSV) siembra el clasificador léxico; '' deja la línea sin auto-etiquetado.
-    `hashtags` (CSV, sin '#') es el hashtag de la línea que la etapa Keywords inyecta en sus
-    piezas (para que el desglose de métricas por línea exista también en el caption).
+    `keywords` (CSV) siembra el clasificador léxico; '' deja la categoría sin auto-etiquetado.
+    `hashtags` (CSV, sin '#') es el hashtag de la categoría que la etapa Keywords inyecta en sus
+    piezas (para que el desglose de métricas por categoría exista también en el caption).
     """
     if repos.existe_etiqueta_nombre(nombre, clase, marca):
         return False
@@ -253,11 +253,11 @@ def _crear_si_falta(
 def _grupos_gestionados(marca: str) -> set[str]:
     """Grupos que el bootstrap administra para `marca` (los del seed + el legacy 'Transversal').
 
-    La reconciliación de `grupo` solo re-mapea una línea cuyo grupo ACTUAL esté en este conjunto:
-    así la taxonomía nueva llega a las líneas ya sembradas, pero NUNCA pisa un grupo que el equipo
+    La reconciliación de `grupo` solo re-mapea una categoría cuyo grupo ACTUAL esté en este conjunto:
+    así la taxonomía nueva llega a las categorías ya sembradas, pero NUNCA pisa un grupo que el equipo
     haya puesto a mano.
     """
-    seed = {g for (_n, _t, _e, g, _c) in LINEAS_POR_MARCA.get(marca, [])}
+    seed = {g for (_n, _t, _e, g, _c) in CATEGORIAS_POR_MARCA.get(marca, [])}
     return seed | {"", "Transversal"}
 
 
@@ -265,17 +265,17 @@ def _reconciliar_linea(
     *, nombre: str, marca: str, ttl_dias: int, es_evergreen: bool,
     grupo: str = "", cadencia: str = "normal", keywords: str = "", hashtags: str = "",
 ) -> bool:
-    """Reconcilia una línea YA existente con su definición del seed. True si tocó algo.
+    """Reconcilia una categoría YA existente con su definición del seed. True si tocó algo.
 
     La mayoría de ejes son guarded (nunca pisan una edición del equipo); el hashtag NO:
-      - ttl/es_evergreen: solo si la línea sigue en defaults (ttl 0 / es_evergreen False).
+      - ttl/es_evergreen: solo si la categoría sigue en defaults (ttl 0 / es_evergreen False).
       - grupo: re-mapea a la taxonomía canónica del seed SOLO si el grupo actual lo administra el
         bootstrap (`_grupos_gestionados`); un grupo puesto a mano se respeta. Lleva el re-grupado
-        (p. ej. Transversal->Actualidad, Otros deportes->Motor/NFL/…) a líneas ya sembradas.
+        (p. ej. Transversal->Actualidad, Otros deportes->Motor/NFL/…) a categorías ya sembradas.
       - cadencia: solo si sigue en 'normal'.
-      - keywords: siembra el catálogo SOLO si la línea aún no tiene keywords.
-      - hashtags: se FUERZA al slug del nombre (línea = hueco de programación = hashtag, 1:1; no es
-        un campo libre). Mantiene en sincronía todas las líneas existentes.
+      - keywords: siembra el catálogo SOLO si la categoría aún no tiene keywords.
+      - hashtags: se FUERZA al slug del nombre (categoría = hueco de programación = hashtag, 1:1; no es
+        un campo libre). Mantiene en sincronía todas las categorías existentes.
     """
     et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
     if et is None:
@@ -299,17 +299,17 @@ def _reconciliar_linea(
     return False
 
 
-def inicializar_lineas() -> int:
-    """Inicializa líneas (categoria) por marca y orígenes (global). Devuelve cuántas creó.
+def inicializar_categorias() -> int:
+    """Inicializa categorías (categoria) por marca y orígenes (global). Devuelve cuántas creó.
 
     Idempotente y tolerante a fallos por etiqueta (no aborta el resto). Pensada para el
     bootstrap del arranque.
     """
     creadas = 0
     actualizadas = 0
-    for marca, lineas in LINEAS_POR_MARCA.items():
+    for marca, lineas in CATEGORIAS_POR_MARCA.items():
         for nombre, ttl_dias, es_evergreen, grupo, cadencia in lineas:
-            kw = KEYWORDS_POR_LINEA.get(marca, {}).get(nombre, "")
+            kw = KEYWORDS_POR_CATEGORIA.get(marca, {}).get(nombre, "")
             ht = slug_hashtag(nombre)
             try:
                 if _crear_si_falta(
@@ -327,7 +327,7 @@ def inicializar_lineas() -> int:
                     ):
                         actualizadas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto
-                _log.warning("inicializacion líneas: no se pudo crear/actualizar %s/%s", marca, nombre, exc_info=True)
+                _log.warning("inicializacion categorías: no se pudo crear/actualizar %s/%s", marca, nombre, exc_info=True)
     for nombre in ORIGENES_GLOBALES:
         try:
             if _crear_si_falta(nombre=nombre, clase="origen", marca=""):
@@ -335,12 +335,12 @@ def inicializar_lineas() -> int:
         except Exception:  # noqa: BLE001
             _log.warning("inicializacion orígenes: no se pudo crear %s", nombre, exc_info=True)
     if creadas or actualizadas:
-        _log.info("inicializacion líneas/orígenes: %d creadas, %d actualizadas (TTL backfill)", creadas, actualizadas)
+        _log.info("inicializacion categorías/orígenes: %d creadas, %d actualizadas (TTL backfill)", creadas, actualizadas)
     return creadas
 
 
-def retirar_lineas_obsoletas() -> int:
-    """Desactiva (activo=0) las líneas viejas que no son del plan (`_LINEAS_RETIRADAS`). Devuelve
+def retirar_categorias_obsoletas() -> int:
+    """Desactiva (activo=0) las categorías viejas que no son del plan (`_CATEGORIAS_RETIRADAS`). Devuelve
     cuántas tocó.
 
     Reversible y no destructivo: la etiqueta y su historial de métricas se conservan; solo deja de
@@ -348,7 +348,7 @@ def retirar_lineas_obsoletas() -> int:
     Idempotente (una etiqueta ya inactiva se salta). Best-effort.
     """
     retiradas = 0
-    for marca, nombres in _LINEAS_RETIRADAS.items():
+    for marca, nombres in _CATEGORIAS_RETIRADAS.items():
         for nombre in nombres:
             try:
                 et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", marca)
@@ -357,16 +357,16 @@ def retirar_lineas_obsoletas() -> int:
                 repos.actualizar_etiqueta(et["id"], {"activo": False})
                 retiradas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto
-                _log.warning("retirar líneas: fallo en %s/%s", marca, nombre, exc_info=True)
+                _log.warning("retirar categorías: fallo en %s/%s", marca, nombre, exc_info=True)
     if retiradas:
-        _log.info("retirar líneas obsoletas: %d desactivadas", retiradas)
+        _log.info("retirar categorías obsoletas: %d desactivadas", retiradas)
     return retiradas
 
 
-# Mapeo categoria(slug de feed) -> nombre de LÍNEA por marca, para el backfill de `linea_id`.
+# Mapeo categoria(slug de feed) -> nombre de CATEGORÍA por marca, para el backfill de `linea_id`.
 # Solo los casos 1:1 con confianza; lo no mapeado queda en catch-all "General" (linea_id='').
-# Claro Sports NO está: sus feeds son GRUESOS (futbol/motor/otros-deportes) y sus líneas FINAS
-# (Liga MX…); sin 1:1, se quedan en catch-all y el clasificador por pieza asigna la línea fina.
+# Claro Sports NO está: sus feeds son GRUESOS (futbol/motor/otros-deportes) y sus categorías FINAS
+# (Liga MX…); sin 1:1, se quedan en catch-all y el clasificador por pieza asigna la categoría fina.
 # Fundación: sus pilares de misión usan los mismos slugs que las categorías de fuente.
 _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
     "unotv": {
@@ -388,13 +388,13 @@ _CATEGORIA_A_LINEA: dict[str, dict[str, str]] = {
 }
 
 
-# Claves de PLAN/FRANJA que NO son líneas sino señales del motor: se dejan TAL CUAL.
+# Claves de PLAN/FRANJA que NO son categorías sino señales del motor: se dejan TAL CUAL.
 #   - 'breaking' = última hora (prioridad), '' = genérico (cualquier pieza).
 #   - 'evergreen' = flujo de reciclaje (lo llena su automatismo diario).
 _CLAVES_NO_LINEA: frozenset[str] = frozenset({"", "breaking", "evergreen"})
 
 # ÚNICA fuente de verdad del nombre legible de las señales del motor (las claves de plan que
-# NO son una línea editorial). El nombre del resto de categorías —ids de línea— lo da la BD
+# NO son una categoría editorial). El nombre del resto de categorías —ids de categoría— lo da la BD
 # (la etiqueta categoria). La consume cualquier superficie que muestre una categoría de plan
 # (franjas, producción, mesa de noticias, dropdown de «Crear post»): así no se duplica el rótulo.
 ETIQUETAS_CLAVE_NO_LINEA: dict[str, str] = {
@@ -407,7 +407,7 @@ def etiqueta_categoria(categoria: str, lineas: Mapping[str, str]) -> str:
     """Nombre legible de una categoría de plan/franja.
 
     - señal del motor ('breaking'/'evergreen') -> su rótulo fijo;
-    - id de línea -> su nombre (vía el mapa `lineas` id->nombre);
+    - id de categoría -> su nombre (vía el mapa `lineas` id->nombre);
     - '' -> genérico (cadena vacía);
     - desconocida -> la propia clave (último recurso, nunca un id crudo si está en `lineas`).
     """
@@ -420,11 +420,11 @@ def etiqueta_categoria(categoria: str, lineas: Mapping[str, str]) -> str:
 
 
 def linea_id_de_slug(marca: str, clave: str) -> str:
-    """Traduce una clave de plan/franja (slug de categoría) al id de su LÍNEA por marca.
+    """Traduce una clave de plan/franja (slug de categoría) al id de su CATEGORÍA por marca.
 
     Idempotente: las señales del motor ('', 'breaking', 'evergreen') y una clave que YA es un
-    id de línea (etiqueta categoria existente) se devuelven sin tocar. Un slug temático conocido
-    (`_CATEGORIA_A_LINEA`) se resuelve al id de su línea; lo no mapeable cae a '' (genérico).
+    id de categoría (etiqueta categoria existente) se devuelven sin tocar. Un slug temático conocido
+    (`_CATEGORIA_A_LINEA`) se resuelve al id de su categoría; lo no mapeable cae a '' (genérico).
     """
     clave = (clave or "").strip()
     if clave.lower() in _CLAVES_NO_LINEA:
@@ -432,7 +432,7 @@ def linea_id_de_slug(marca: str, clave: str) -> str:
     try:
         ya = repos.obtener_etiqueta(clave)
         if ya is not None and ya.get("clase") == "categoria":
-            return clave  # ya es un id de línea -> idempotente
+            return clave  # ya es un id de categoría -> idempotente
     except Exception:  # noqa: BLE001 -- resolver es best-effort
         pass
     nombre = _CATEGORIA_A_LINEA.get(marca, {}).get(clave.lower())
@@ -446,14 +446,14 @@ def vincular_fuentes_a_lineas() -> int:
     """Backfilla `fuentes_rss.linea_id` desde el slug `categoria` por marca. Devuelve cuántas tocó.
 
     Idempotente: solo toca fuentes cuyo `linea_id` aún esté vacío (nunca pisa una asociación del
-    equipo). Las fuentes cuya categoría no mapea a una línea de su marca quedan en catch-all
-    (linea_id=''). Requiere las líneas ya sembradas (`inicializar_lineas`).
+    equipo). Las fuentes cuya categoría no mapea a una categoría de su marca quedan en catch-all
+    (linea_id=''). Requiere las categorías ya sembradas (`inicializar_categorias`).
     """
     vinculadas = 0
     try:
         fuentes = repos.listar_fuentes_rss(marca=None)
     except Exception:  # noqa: BLE001 -- el arranque no debe romper por el backfill
-        _log.warning("vincular fuentes->líneas: no se pudo listar fuentes", exc_info=True)
+        _log.warning("vincular fuentes->categorías: no se pudo listar fuentes", exc_info=True)
         return 0
     for fuente in fuentes:
         if fuente.get("linea_id") or "":
@@ -470,28 +470,28 @@ def vincular_fuentes_a_lineas() -> int:
             repos.actualizar_fuente_rss(fuente["id"], {"linea_id": et["id"]})
             vinculadas += 1
         except Exception:  # noqa: BLE001 -- una fuente no debe romper el resto
-            _log.warning("vincular fuentes->líneas: fallo en %s", fuente.get("id"), exc_info=True)
+            _log.warning("vincular fuentes->categorías: fallo en %s", fuente.get("id"), exc_info=True)
     if vinculadas:
-        _log.info("vincular fuentes->líneas: %d fuentes asociadas a su línea", vinculadas)
+        _log.info("vincular fuentes->categorías: %d fuentes asociadas a su categoría", vinculadas)
     return vinculadas
 
 
 def migrar_plan_y_franjas_a_lineas() -> int:
-    """Re-clava el PLAN DIARIO y las FRANJAS del slug de categoría al id de LÍNEA, por marca.
+    """Re-clava el PLAN DIARIO y las FRANJAS del slug de categoría al id de CATEGORÍA, por marca.
 
-    El scheduler pasa a programar por LÍNEA (etiqueta categoria), no por slug de feed. Esto
-    reescribe las dos claves persistentes del motor a ids de línea:
-      - `KENI_PLAN_DIA::marca` (cupos "clave:n,…"): cada slug temático -> id de su línea; las
+    El scheduler pasa a programar por CATEGORÍA (etiqueta categoria), no por slug de feed. Esto
+    reescribe las dos claves persistentes del motor a ids de categoría:
+      - `KENI_PLAN_DIA::marca` (cupos "clave:n,…"): cada slug temático -> id de su categoría; las
         señales 'breaking'/'evergreen' se conservan; un cupo no mapeable se descarta.
       - `franjas_editoriales.categoria`: idem (sin update en la capa db, se borra+recrea).
     Idempotente (las claves ya en forma de id/sentinela no se tocan) y best-effort. Devuelve
-    cuántas filas/claves tocó. Requiere las líneas ya sembradas. Lo no mapeable (p. ej. el cajón
-    'mx' de Claro, sin línea fina) cae a '' = genérico, sin romper la programación.
+    cuántas filas/claves tocó. Requiere las categorías ya sembradas. Lo no mapeable (p. ej. el cajón
+    'mx' de Claro, sin categoría fina) cae a '' = genérico, sin romper la programación.
     """
     from . import ajustes
 
     tocadas = 0
-    marcas = set(LINEAS_POR_MARCA)
+    marcas = set(CATEGORIAS_POR_MARCA)
     try:
         franjas = repos.listar_franjas()
     except Exception:  # noqa: BLE001
@@ -513,7 +513,7 @@ def migrar_plan_y_franjas_a_lineas() -> int:
             nueva = linea_id_de_slug(marca, k.strip())
             if nueva != k.strip():
                 cambiado = True
-            if nueva:  # descarta cupos no mapeables (sin línea)
+            if nueva:  # descarta cupos no mapeables (sin categoría)
                 partes.append(f"{nueva}:{n.strip()}")
         if cambiado:
             try:
@@ -537,7 +537,7 @@ def migrar_plan_y_franjas_a_lineas() -> int:
         except Exception:  # noqa: BLE001 -- una franja no debe romper el resto
             _log.warning("migrar franjas: fallo en %s", f.get("id"), exc_info=True)
     if tocadas:
-        _log.info("migrar plan/franjas a líneas: %d claves/filas re-clavadas", tocadas)
+        _log.info("migrar plan/franjas a categorías: %d claves/filas re-clavadas", tocadas)
     return tocadas
 
 

@@ -968,7 +968,7 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # CATEGORÍA editorial de la fuente (id de `etiquetas` clase=categoria): de qué categoría cuelga este
     # feed. Reemplaza al slug libre `categoria` como vínculo editorial (la cadencia de sondeo
     # pasa a derivarse de la línea). '' = catch-all "General" (cadencia normal). El backfill
-    # `categoria`->`linea_id` por marca lo hace `bootstrap_lineas.vincular_fuentes_a_lineas`
+    # `categoria`->`linea_id` por marca lo hace `bootstrap_categorias.vincular_fuentes_a_lineas`
     # en el arranque (necesita las líneas ya sembradas, que no existen aún en la migración).
     ("linea_id", "TEXT NOT NULL DEFAULT ''"),
 )

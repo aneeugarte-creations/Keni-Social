@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import type { MetricasLineas } from "@/types";
 
-import { MetricaPorLinea } from "./MetricaPorLinea";
+import { MetricaPorCategoria } from "./MetricaPorCategoria";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -74,18 +74,18 @@ function renderConProviders(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-describe("MetricaPorLinea", () => {
-  it("muestra las dos tablas (por línea y por origen) con sus encabezados y filas", async () => {
+describe("MetricaPorCategoria", () => {
+  it("muestra las dos tablas (por categoría y por origen) con sus encabezados y filas", async () => {
     vi.spyOn(api, "metricasLineas").mockResolvedValue(RESP);
-    renderConProviders(<MetricaPorLinea marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);
 
     // Espera al dato cargado (el título de la sección ya se pinta durante la carga).
-    expect(await screen.findByText("Por línea de contenido")).toBeInTheDocument();
-    expect(screen.getByText("Rendimiento por línea")).toBeInTheDocument();
+    expect(await screen.findByText("Por categoría de contenido")).toBeInTheDocument();
+    expect(screen.getByText("Rendimiento por categoría")).toBeInTheDocument();
     expect(screen.getByText("Por origen")).toBeInTheDocument();
 
     // Cada tabla con la primera columna propia + las columnas comunes (en ambas).
-    expect(screen.getByText("Línea")).toBeInTheDocument();
+    expect(screen.getByText("Categoría")).toBeInTheDocument();
     expect(screen.getByText("Origen")).toBeInTheDocument();
     expect(screen.getAllByText("Piezas").length).toBe(2);
     expect(screen.getAllByText("Vistas").length).toBe(2);
@@ -104,7 +104,7 @@ describe("MetricaPorLinea", () => {
 
   it("dice con honestidad cuando un corte no trae filas pero el otro sí", async () => {
     vi.spyOn(api, "metricasLineas").mockResolvedValue({ ...RESP, origenes: [] });
-    renderConProviders(<MetricaPorLinea marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Deportes")).toBeInTheDocument();
     // La tabla "Por origen" sigue presente, con su vacío local honesto.
@@ -114,17 +114,17 @@ describe("MetricaPorLinea", () => {
     ).toBeInTheDocument();
   });
 
-  it("muestra el vacío global honesto cuando no hay líneas ni orígenes", async () => {
+  it("muestra el vacío global honesto cuando no hay categorías ni orígenes", async () => {
     vi.spyOn(api, "metricasLineas").mockResolvedValue({
       ...RESP,
       lineas: [],
       origenes: [],
     });
-    renderConProviders(<MetricaPorLinea marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);
 
     expect(
-      await screen.findByText(/aún no hay rendimiento por línea u origen para este periodo/i),
+      await screen.findByText(/aún no hay rendimiento por categoría u origen para este periodo/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Por línea de contenido")).not.toBeInTheDocument();
+    expect(screen.queryByText("Por categoría de contenido")).not.toBeInTheDocument();
   });
 });

@@ -17,7 +17,7 @@ import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx, hoyCDMX } from "@/lib/fecha";
-import { colorLinea, ETIQUETA_LINEA } from "@/lib/lineas";
+import { colorCategoria, ETIQUETA_CATEGORIA } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
 import type { Pieza } from "@/types";
 
@@ -723,13 +723,13 @@ function VistaMes({
             {delMes && (
               <div className="space-y-px">
                 {huecosDe(dia).map((h) => {
-                  const col = colorLinea(h.categoria);
+                  const col = colorCategoria(h.categoria);
                   const IconoRed = iconoRed(h.red);
                   return (
                     <div
                       key={`${h.hora}-${h.categoria}-${h.red}`}
                       className="flex items-center gap-1 truncate text-[9px] leading-tight text-muted-foreground/80"
-                      title={`Hueco del plan: falta ${nombreRed(h.red)} · ${h.etiqueta || ETIQUETA_LINEA[h.categoria] || h.categoria} a las ${h.hora}`}
+                      title={`Hueco del plan: falta ${nombreRed(h.red)} · ${h.etiqueta || ETIQUETA_CATEGORIA[h.categoria] || h.categoria} a las ${h.hora}`}
                     >
                       <span
                         className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.punto)}
@@ -764,8 +764,8 @@ const LINEA_CORTA: Record<string, string> = {
 
 /** Chip fantasma de UN hueco libre del plan (hora CDMX + RED que falta + línea). */
 function ChipHueco({ hueco }: { hueco: Hueco }) {
-  const nombre = hueco.etiqueta || ETIQUETA_LINEA[hueco.categoria] || hueco.categoria;
-  const col = colorLinea(hueco.categoria);
+  const nombre = hueco.etiqueta || ETIQUETA_CATEGORIA[hueco.categoria] || hueco.categoria;
+  const col = colorCategoria(hueco.categoria);
   const IconoRed = iconoRed(hueco.red);
   return (
     <div

@@ -36,7 +36,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora, tiempoRelativoCorto } from "@/lib/fecha";
-import { etiquetaLinea } from "@/lib/lineas";
+import { etiquetaCategoria } from "@/lib/categorias";
 import { estadoCorroboracion, fraseCorroboracion } from "@/lib/noticias/ranking-editorial";
 import { nombreFuente } from "@/lib/trends";
 import { cn } from "@/lib/utils";
@@ -212,7 +212,7 @@ export default function DetalleHistoriaPagina() {
               <ChipMarca historia={historia} />
               {badgeEstado}
               <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
-                {etiquetaLinea(historia.breaking === 1 ? "breaking" : historia.categoria)}
+                {etiquetaCategoria(historia.breaking === 1 ? "breaking" : historia.categoria)}
               </Badge>
               <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />
               {historia.traducido && historia.idioma && (

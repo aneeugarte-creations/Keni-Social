@@ -38,7 +38,7 @@ import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { Kpis } from "./metricas/Kpis";
-import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
+import { MetricaPorCategoria } from "./metricas/MetricaPorCategoria";
 import { PanoramaPiezas } from "./metricas/PanoramaPiezas";
 import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
 import { diasDePeriodo } from "./metricas/rango";
@@ -336,7 +336,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="por-linea">
-            <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
+            <MetricaPorCategoria marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="correlacion">
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />

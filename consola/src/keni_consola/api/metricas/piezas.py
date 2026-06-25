@@ -26,7 +26,7 @@ from ._comun import (
     _validar_redes,
     marcas,
     metricas_cache,
-    metricas_linea,
+    metricas_categoria,
     metricas_pieza,
     repos,
     servicio,
@@ -204,7 +204,7 @@ async def piezas_listado(request: Request) -> Response:
     marca_consola = _marca_consola_de_metricas(marca)
     try:
         linea_map = await run_in_threadpool(
-            metricas_linea.lineas_por_pieza, marca_consola, piezas_crudas
+            metricas_categoria.categorias_por_pieza, marca_consola, piezas_crudas
         )
     except Exception:  # noqa: BLE001 -- la línea es best-effort; sin ella, todo "Sin línea"
         _log.exception("Fallo al resolver líneas del listado (marca=%s).", marca or "todas")
@@ -441,7 +441,7 @@ async def lineas(request: Request) -> Response:
         redes = _validar_redes(request.query_params.get("red"))
         formatos = _validar_formatos(request.query_params.get("formato"))
         payload = await run_in_threadpool(
-            metricas_linea.lineas_y_origenes,
+            metricas_categoria.categorias_y_origenes,
             rango, marca_consola, marca_metricas, redes, formatos,
         )
     except ValueError as e:

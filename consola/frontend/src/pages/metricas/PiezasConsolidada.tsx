@@ -122,7 +122,7 @@ const META_INTERACCION = new Map(COLS_INTERACCION.map((c) => [c.clave as string,
 const IDS_PIEZAS_BASE = idsColumnas(TABLA_PIEZAS);
 
 const TODAS = "__todas__";
-const SIN_LINEA = "Sin línea";
+const SIN_LINEA = "Sin categoría";
 
 /** Media aritmética (null si no hay datos). */
 function media(nums: number[]): number | null {
@@ -322,7 +322,7 @@ export function PiezasConsolidada({
             />
           </div>
           <Select value={lineaFiltro} onValueChange={setLineaFiltro}>
-            <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por línea">
+            <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por categoría">
               <SelectValue placeholder="Línea" />
             </SelectTrigger>
             <SelectContent>

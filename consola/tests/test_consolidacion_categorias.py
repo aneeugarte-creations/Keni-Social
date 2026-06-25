@@ -8,7 +8,7 @@ del slug libre `categoria`. Aquí se cubre el round-trip de persistencia y la si
 
 from __future__ import annotations
 
-from keni_consola import bootstrap_lineas, db, repos
+from keni_consola import bootstrap_categorias, db, repos
 
 
 def test_etiqueta_roundtrip_grupo_cadencia(entorno):
@@ -53,7 +53,7 @@ def test_fuente_roundtrip_linea_id(entorno):
 
 
 def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     # Claro: la competición cuelga del grupo "Fútbol" y sondea rápido.
     liga = repos.obtener_etiqueta_por_nombre("Liga MX", "categoria", "claro-sports")
     assert liga is not None and liga["grupo"] == "Fútbol" and liga["cadencia"] == "rapida"
@@ -71,7 +71,7 @@ def test_bootstrap_siembra_grupos_cadencia_y_pilares(entorno):
 def test_bootstrap_siembra_keywords_de_fundacion(entorno):
     # Las líneas de Fundación reciben su catálogo de keywords: sus feeds traen slugs gruesos que
     # no mapean a sus líneas, así que la Mesa y la admisión las clasifican por CONTENIDO.
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "categoria", "fundacion")
     salud = repos.obtener_etiqueta_por_nombre("Salud", "categoria", "fundacion")
     assert "cientifico" in (ciencia["keywords"] or "")
@@ -80,17 +80,17 @@ def test_bootstrap_siembra_keywords_de_fundacion(entorno):
 
 def test_slug_hashtag_normaliza_nombre_de_linea():
     # El hashtag de una línea es el slug de su nombre: sin acentos, minúscula, solo alfanumérico.
-    assert bootstrap_lineas.slug_hashtag("Ciencia/Tech") == "cienciatech"
-    assert bootstrap_lineas.slug_hashtag("Medio ambiente") == "medioambiente"
-    assert bootstrap_lineas.slug_hashtag("LaLiga (España)") == "laligaespana"
-    assert bootstrap_lineas.slug_hashtag("Educación") == "educacion"
-    assert bootstrap_lineas.slug_hashtag("  ") == ""
+    assert bootstrap_categorias.slug_hashtag("Ciencia/Tech") == "cienciatech"
+    assert bootstrap_categorias.slug_hashtag("Medio ambiente") == "medioambiente"
+    assert bootstrap_categorias.slug_hashtag("LaLiga (España)") == "laligaespana"
+    assert bootstrap_categorias.slug_hashtag("Educación") == "educacion"
+    assert bootstrap_categorias.slug_hashtag("  ") == ""
 
 
 def test_bootstrap_siembra_hashtag_de_linea(entorno):
     # Cada línea recibe su hashtag (slug del nombre): la firma de la sección que la etapa Keywords
     # inyecta siempre, para que el desglose de métricas por línea exista también en el caption.
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     ciencia = repos.obtener_etiqueta_por_nombre("Ciencia/Tech", "categoria", "fundacion")
     assert ciencia is not None and ciencia["hashtags"] == "cienciatech"
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
@@ -103,7 +103,7 @@ def test_bootstrap_fuerza_el_hashtag_de_linea_aunque_difiera(entorno):
     repos.crear_etiqueta(
         nombre="Salud", clase="categoria", marca="fundacion", hashtags="otracosa",
     )
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     salud = repos.obtener_etiqueta_por_nombre("Salud", "categoria", "fundacion")
     assert salud is not None and salud["hashtags"] == "salud"
 
@@ -143,7 +143,7 @@ def test_renombrar_linea_resincroniza_su_hashtag(entorno):
 
 
 def test_bootstrap_claro_grupos_de_navegacion_y_lineas_nuevas(entorno):
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
 
     def g(nombre: str) -> dict:
         et = repos.obtener_etiqueta_por_nombre(nombre, "categoria", "claro-sports")
@@ -178,7 +178,7 @@ def test_reconcilia_regrupa_y_siembra_keywords_guarded(entorno):
         nombre="Boxeo", clase="categoria", marca="claro-sports",
         grupo="Mi grupo a mano", keywords="mis, keywords", cadencia="rapida",
     )
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nfl = repos.obtener_etiqueta_por_nombre("NFL", "categoria", "claro-sports")
     assert nfl["grupo"] == "NFL"  # re-grupado (grupo gestionado por el bootstrap)
     assert "nfl" in nfl["keywords"]  # keywords sembradas (estaban vacías)
@@ -188,10 +188,10 @@ def test_reconcilia_regrupa_y_siembra_keywords_guarded(entorno):
 
 
 def test_clasificador_asigna_linea_claro_por_keywords_sembradas(entorno):
-    from keni_consola.dominio import clasificador_lineas
+    from keni_consola.dominio import clasificador_categorias
 
-    bootstrap_lineas.inicializar_lineas()
-    res = clasificador_lineas.clasificar_pieza(
+    bootstrap_categorias.inicializar_categorias()
+    res = clasificador_categorias.clasificar_pieza(
         "Canelo Álvarez ya tendría pactada su próxima pelea de box", "", "claro-sports",
     )
     boxeo = repos.obtener_etiqueta_por_nombre("Boxeo", "categoria", "claro-sports")
@@ -199,24 +199,24 @@ def test_clasificador_asigna_linea_claro_por_keywords_sembradas(entorno):
 
 
 def test_vincular_fuentes_a_lineas_mapea_por_marca(entorno):
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     # Feed de UnoTV con slug 'mx' -> debe quedar enganchado a la línea "Nacional".
     mapeada = repos.crear_fuente_rss("UnoTV MX", "https://u.example/mx.xml", marca="unotv", categoria="mx")
     # Feed con slug sin equivalencia 1:1 -> se queda en catch-all (linea_id '').
     suelta = repos.crear_fuente_rss("UnoTV otra", "https://u.example/x.xml", marca="unotv", categoria="negocios")
-    bootstrap_lineas.vincular_fuentes_a_lineas()
+    bootstrap_categorias.vincular_fuentes_a_lineas()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert db.obtener_fuente_rss(mapeada["id"])["linea_id"] == nacional["id"]
     assert db.obtener_fuente_rss(suelta["id"])["linea_id"] == ""
 
 
 def test_vincular_fuentes_es_idempotente_y_no_pisa(entorno):
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     # Una asociación ya puesta a mano no se sobreescribe aunque la categoría mapearía a otra línea.
     fija = repos.crear_fuente_rss(
         "Fija", "https://u.example/f.xml", marca="unotv", categoria="mx", linea_id="manual-x",
     )
-    bootstrap_lineas.vincular_fuentes_a_lineas()
+    bootstrap_categorias.vincular_fuentes_a_lineas()
     assert db.obtener_fuente_rss(fija["id"])["linea_id"] == "manual-x"
 
 
@@ -273,29 +273,29 @@ def test_api_fuente_rechaza_linea_inexistente(cliente):
 
 
 def test_linea_id_de_slug_resuelve_y_es_idempotente(entorno):
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # Señales del motor: pasan tal cual.
-    assert bootstrap_lineas.linea_id_de_slug("unotv", "breaking") == "breaking"
-    assert bootstrap_lineas.linea_id_de_slug("unotv", "evergreen") == "evergreen"
-    assert bootstrap_lineas.linea_id_de_slug("unotv", "") == ""
+    assert bootstrap_categorias.linea_id_de_slug("unotv", "breaking") == "breaking"
+    assert bootstrap_categorias.linea_id_de_slug("unotv", "evergreen") == "evergreen"
+    assert bootstrap_categorias.linea_id_de_slug("unotv", "") == ""
     # Slug temático -> id de su línea.
-    assert bootstrap_lineas.linea_id_de_slug("unotv", "mx") == nacional["id"]
+    assert bootstrap_categorias.linea_id_de_slug("unotv", "mx") == nacional["id"]
     # Idempotente: un id de línea ya migrado se devuelve igual.
-    assert bootstrap_lineas.linea_id_de_slug("unotv", nacional["id"]) == nacional["id"]
+    assert bootstrap_categorias.linea_id_de_slug("unotv", nacional["id"]) == nacional["id"]
     # No mapeable (cajón 'mx' de Claro, sin línea fina) -> genérico ''.
-    assert bootstrap_lineas.linea_id_de_slug("claro-sports", "mx") == ""
+    assert bootstrap_categorias.linea_id_de_slug("claro-sports", "mx") == ""
 
 
 def test_migrar_plan_y_franjas_a_lineas(entorno):
     from keni_consola import ajustes
 
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # Plan y franja en forma SLUG (la forma de entrada, anterior al re-clavado a líneas).
     ajustes.guardar("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
     franja = repos.crear_franja(1, "09:00", marca="unotv", red="x", categoria="mx")
-    bootstrap_lineas.migrar_plan_y_franjas_a_lineas()
+    bootstrap_categorias.migrar_plan_y_franjas_a_lineas()
     # Plan re-clavado: 'mx' -> id de Nacional; 'breaking' conservado.
     assert ajustes.obtener("KENI_PLAN_DIA::unotv") == f"{nacional['id']}:4,breaking:2"
     # Franja re-clavada a la línea (borrada+recreada con la nueva categoría).
@@ -304,16 +304,16 @@ def test_migrar_plan_y_franjas_a_lineas(entorno):
     assert not any(f["categoria"] == "mx" for f in franjas_unotv)
     # Idempotente: una segunda pasada no cambia nada.
     antes = ajustes.obtener("KENI_PLAN_DIA::unotv")
-    assert bootstrap_lineas.migrar_plan_y_franjas_a_lineas() == 0
+    assert bootstrap_categorias.migrar_plan_y_franjas_a_lineas() == 0
     assert ajustes.obtener("KENI_PLAN_DIA::unotv") == antes
 
 
-def test_retirar_lineas_obsoletas_desactiva_pero_conserva(entorno):
-    bootstrap_lineas.inicializar_lineas()
+def test_retirar_categorias_obsoletas_desactiva_pero_conserva(entorno):
+    bootstrap_categorias.inicializar_categorias()
     # Una etiqueta vieja que ya no es línea del plan (creada como activa).
     com = repos.crear_etiqueta(nombre="Comercial", clase="categoria", marca="unotv")
     assert com["activo"] is True
-    n = bootstrap_lineas.retirar_lineas_obsoletas()
+    n = bootstrap_categorias.retirar_categorias_obsoletas()
     assert n >= 1
     # Desactivada (no borrada): sigue existiendo pero activo=False.
     leida = repos.obtener_etiqueta_por_nombre("Comercial", "categoria", "unotv")
@@ -322,4 +322,4 @@ def test_retirar_lineas_obsoletas_desactiva_pero_conserva(entorno):
     nac = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     assert nac is not None and nac["activo"] is True
     # Idempotente: una segunda pasada no toca nada (ya inactiva).
-    assert bootstrap_lineas.retirar_lineas_obsoletas() == 0
+    assert bootstrap_categorias.retirar_categorias_obsoletas() == 0

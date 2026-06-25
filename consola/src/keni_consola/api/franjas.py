@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import bootstrap_lineas, marcas, redes, repos
+from .. import bootstrap_categorias, marcas, redes, repos
 from .._http_json import leer_json
 
 # La logica de scheduling (PURA y testeable) vive en el dominio `dominio.franjas`. Se
@@ -44,7 +44,7 @@ _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 def _label_linea(categoria: str, lineas: dict[str, str]) -> str:
     """Nombre legible de la línea de una franja: id -> su nombre; señales con su rótulo; '' = genérica."""
-    return bootstrap_lineas.etiqueta_categoria(categoria, lineas)
+    return bootstrap_categorias.etiqueta_categoria(categoria, lineas)
 
 
 def _franja_a_dict(franja: dict[str, Any], etiqueta: str = "") -> dict[str, Any]:

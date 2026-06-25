@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from keni_consola.dominio import clasificador_lineas as cl
+from keni_consola.dominio import clasificador_categorias as cl
 
 
 def _et(id_: str, keywords: str) -> dict[str, str]:

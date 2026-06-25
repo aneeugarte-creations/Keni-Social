@@ -159,13 +159,13 @@ def test_obtener_preset_inexistente_devuelve_none():
 
 
 # --------------------------------------------------------------------------- #
-# Auto-seed (bootstrap_lineas._preset_va_en_seed). PURO.                        #
+# Auto-seed (bootstrap_categorias._preset_va_en_seed). PURO.                        #
 # --------------------------------------------------------------------------- #
 
 
 def test_seed_activa_la_inicial_entera():
     """La inicial YA es el conjunto curado: el auto-seed la activa entera (no es un subset)."""
-    from keni_consola import bootstrap_lineas as bl
+    from keni_consola import bootstrap_categorias as bl
 
     todos = fuentes_presets.listar_presets()
     seed = [p for p in todos if bl._preset_va_en_seed(p)]
@@ -174,7 +174,7 @@ def test_seed_activa_la_inicial_entera():
 
 
 def test_seed_cubre_las_marcas_del_piloto():
-    from keni_consola import bootstrap_lineas as bl
+    from keni_consola import bootstrap_categorias as bl
 
     seed = [p for p in fuentes_presets.listar_presets() if bl._preset_va_en_seed(p)]
     cats_por_marca: dict[str, set[str]] = {}
@@ -188,7 +188,7 @@ def test_seed_cubre_las_marcas_del_piloto():
 
 def test_seed_excluye_plantillas_sinteticas():
     """El guarda defensivo `_es_plantilla` sigue vetando plantillas (aunque la inicial no traiga)."""
-    from keni_consola import bootstrap_lineas as bl
+    from keni_consola import bootstrap_categorias as bl
 
     plantilla = {
         "id": "x",
@@ -202,7 +202,7 @@ def test_seed_excluye_plantillas_sinteticas():
 
 def test_seed_excluye_google_news_sintetico():
     """El guarda defensivo `_es_google_news` sigue vetando Google News (snippet sin cuerpo)."""
-    from keni_consola import bootstrap_lineas as bl
+    from keni_consola import bootstrap_categorias as bl
 
     gn = {
         "id": "x",

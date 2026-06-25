@@ -319,7 +319,7 @@ def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
     monkeypatch.setattr(_admitir.marcas, "es_marca", lambda m: True)
     monkeypatch.setattr(_admitir.redes, "redes_de_formato", lambda formato: ["x"])
     monkeypatch.setattr(_admitir, "_auto_etiquetar_linea", lambda *a, **k: None)
-    # La clave de plan resuelve la LÍNEA contra la BD (bootstrap_lineas); sin BD aquí, la
+    # La clave de plan resuelve la LÍNEA contra la BD (bootstrap_categorias); sin BD aquí, la
     # dejamos en el slug (estos tests cubren el carrusel, no el mapeo a línea del plan).
     monkeypatch.setattr(_admitir, "_categoria_plan", lambda marca, cluster: _admitir.categoria_efectiva(cluster))
     return reg
@@ -1567,14 +1567,14 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
 
 def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     """Con plan, cada LÍNEA se lleva SUS mejores historias y las demás no compiten."""
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     # El plan se clava por LÍNEA (id de etiqueta categoria): los feeds 'mx'/'internacional' se
     # re-clavan a sus líneas Nacional/Internacional; la deportiva ('futbol') cae fuera del plan.
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     internacional = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1,{internacional['id']}:1")
@@ -1644,10 +1644,10 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     El scheduler programa por LÍNEA: una historia de feed 'mx' se promueve con la categoría
     re-clavada al id de su línea (Nacional); la última hora conserva la señal 'breaking'.
     """
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     # El plan declara la línea 'breaking' para que la última hora consuma SU cupo y salga a la
     # vez que la nacional (sin él competiría por el cupo de su línea y la desplazaría).
@@ -1741,9 +1741,9 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
 def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     """Si el plan no declara 'breaking', la última hora no queda invisible: compite por el
     cupo de SU LÍNEA (la del feed del que nació)."""
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nacional = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nacional['id']}:1")
     _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
@@ -1760,9 +1760,9 @@ def test_clusters_para_promover_clasifica_por_contenido_si_el_feed_no_mapea(ento
     slugs gruesos que no son sus líneas); aquí se reproduce con UnoTV dándole keywords a una
     línea y un feed sin mapeo ('gaming' no es línea de UnoTV).
     """
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     repos.actualizar_etiqueta(intl["id"], {"keywords": "groenlandia, vikingos, fosil"})
     # Solo se prueba el enrutado por categoría: se neutralizan los umbrales de score y marca.

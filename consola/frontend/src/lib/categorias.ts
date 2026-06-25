@@ -1,13 +1,13 @@
 /**
  * Rótulos legibles de los SLUGS de categoría del pool de NOTICIAS (mx, internacional, breaking…).
  *
- * El Plan, la programación y las métricas hablan ya en LÍNEAS reales (etiquetas categoria); este
+ * El Plan, la programación y las métricas hablan ya en CATEGORÍAS reales (etiquetas categoria); este
  * mapa solo traduce el slug de categoría que arrastra una HISTORIA del pool (pre-pieza, capa de
  * ingesta) a un nombre legible para la Mesa de Noticias y el Detalle. No es el catálogo del plan.
  */
 
 /** Catálogo de slugs de categoría conocidos (clave = slug, etiqueta = nombre legible). */
-export const CATALOGO_LINEAS: { clave: string; etiqueta: string }[] = [
+export const CATALOGO_CATEGORIAS: { clave: string; etiqueta: string }[] = [
   { clave: "mx", etiqueta: "Nacional" },
   { clave: "internacional", etiqueta: "Internacional" },
   { clave: "breaking", etiqueta: "Última hora" },
@@ -29,20 +29,20 @@ export const CATALOGO_LINEAS: { clave: string; etiqueta: string }[] = [
   { clave: "impacto-social", etiqueta: "Impacto social" },
 ];
 
-/** Etiquetas legibles de las líneas (fallback: la categoría capitalizada). */
-export const ETIQUETA_LINEA: Record<string, string> = Object.fromEntries(
-  CATALOGO_LINEAS.map((l) => [l.clave, l.etiqueta]),
+/** Etiquetas legibles de las categorías (fallback: la categoría capitalizada). */
+export const ETIQUETA_CATEGORIA: Record<string, string> = Object.fromEntries(
+  CATALOGO_CATEGORIAS.map((c) => [c.clave, c.etiqueta]),
 );
 
-/** Etiqueta humana de una línea ('' → "Sin línea"; desconocida → capitalizada). */
-export function etiquetaLinea(linea: string): string {
-  if (!linea) return "Sin línea";
-  return ETIQUETA_LINEA[linea] ?? linea.charAt(0).toUpperCase() + linea.slice(1);
+/** Etiqueta humana de una categoría ('' → "Sin categoría"; desconocida → capitalizada). */
+export function etiquetaCategoria(categoria: string): string {
+  if (!categoria) return "Sin categoría";
+  return ETIQUETA_CATEGORIA[categoria] ?? categoria.charAt(0).toUpperCase() + categoria.slice(1);
 }
 
-/** Clases Tailwind del color de UNA línea, para señal visual consistente en programación. */
-export interface ColorLinea {
-  /** Texto en el tono de la línea (con su variante dark). */
+/** Clases Tailwind del color de UNA categoría, para señal visual consistente en programación. */
+export interface ColorCategoria {
+  /** Texto en el tono de la categoría (con su variante dark). */
   texto: string;
   /** Punto/acento sólido (un círculo de color). */
   punto: string;
@@ -54,21 +54,21 @@ export interface ColorLinea {
   barraSuave: string;
 }
 
-// Color por CATEGORÍA: cada línea (Evergreen, Internacional, Nacional…) tiene un tono fijo
+// Color por CATEGORÍA: cada categoría (Evergreen, Internacional, Nacional…) tiene un tono fijo
 // para distinguirlas de un vistazo en el plan y los KPIs. Tonos del 500/700 (texto legible);
 // las clases son literales porque el JIT de Tailwind solo ve cadenas completas (no concatenadas).
-// VERDE y ROJO NO se usan como color de línea: están reservados para ESTADO (bien/mal) —
-// p. ej. la píldora de una pieza (publicada=verde, vencida=rojo). Un punto de línea verde/rojo
-// se confundiría con ese significado, así que la identidad de línea usa otros tonos.
+// VERDE y ROJO NO se usan como color de categoría: están reservados para ESTADO (bien/mal) —
+// p. ej. la píldora de una pieza (publicada=verde, vencida=rojo). Un punto de categoría verde/rojo
+// se confundiría con ese significado, así que la identidad de categoría usa otros tonos.
 const _c = (
   texto: string,
   punto: string,
   borde: string,
   barra: string,
   barraSuave: string,
-): ColorLinea => ({ texto, punto, borde, barra, barraSuave });
+): ColorCategoria => ({ texto, punto, borde, barra, barraSuave });
 
-export const COLOR_LINEA: Record<string, ColorLinea> = {
+export const COLOR_CATEGORIA: Record<string, ColorCategoria> = {
   evergreen: _c("text-violet-700 dark:text-violet-300", "bg-violet-500", "border-violet-400 dark:border-violet-500", "bg-violet-500", "bg-violet-500/30"),
   internacional: _c("text-sky-700 dark:text-sky-300", "bg-sky-500", "border-sky-400 dark:border-sky-500", "bg-sky-500", "bg-sky-500/30"),
   mx: _c("text-indigo-700 dark:text-indigo-300", "bg-indigo-500", "border-indigo-400 dark:border-indigo-500", "bg-indigo-500", "bg-indigo-500/30"),
@@ -90,8 +90,8 @@ export const COLOR_LINEA: Record<string, ColorLinea> = {
   "impacto-social": _c("text-purple-700 dark:text-purple-300", "bg-purple-500", "border-purple-400 dark:border-purple-500", "bg-purple-500", "bg-purple-500/30"),
 };
 
-/** Color neutro (líneas desconocidas o sin línea): mantiene el look minimalista en gris. */
-export const COLOR_LINEA_NEUTRO: ColorLinea = _c(
+/** Color neutro (categorías desconocidas o sin categoría): mantiene el look minimalista en gris. */
+export const COLOR_CATEGORIA_NEUTRO: ColorCategoria = _c(
   "text-muted-foreground",
   "bg-muted-foreground/50",
   "border-border",
@@ -99,7 +99,7 @@ export const COLOR_LINEA_NEUTRO: ColorLinea = _c(
   "bg-foreground/20",
 );
 
-/** Color (clases Tailwind) de una línea; cae a neutro si la línea no está catalogada. */
-export function colorLinea(linea: string): ColorLinea {
-  return COLOR_LINEA[linea] ?? COLOR_LINEA_NEUTRO;
+/** Color (clases Tailwind) de una categoría; cae a neutro si la categoría no está catalogada. */
+export function colorCategoria(categoria: string): ColorCategoria {
+  return COLOR_CATEGORIA[categoria] ?? COLOR_CATEGORIA_NEUTRO;
 }

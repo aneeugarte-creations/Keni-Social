@@ -6,7 +6,7 @@ La mesa devuelve el pool segmentado por las líneas del plan editorial diario de
 
 from __future__ import annotations
 
-from keni_consola import bootstrap_lineas, repos
+from keni_consola import bootstrap_categorias, repos
 
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
@@ -16,7 +16,7 @@ def _linea_nacional() -> str:
 
     El plan y la mesa se clavan por id de línea; un feed 'mx' se reparte en esta línea.
     """
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     return repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")["id"]
 
 
@@ -64,9 +64,9 @@ def test_mesa_requiere_marca_concreta(cliente):
 def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     # El plan y la mesa se clavan por LÍNEA (id de etiqueta categoria): un feed 'mx' se reparte
     # en la línea Nacional; 'breaking'/'evergreen' son señales del motor.
-    from keni_consola import bootstrap_lineas, repos
+    from keni_consola import bootstrap_categorias, repos
 
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     nac = repos.obtener_etiqueta_por_nombre("Nacional", "categoria", "unotv")["id"]
     intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")["id"]
     monkeypatch.setenv("KENI_PLAN_DIA", f"{nac}:2,{intl}:1,breaking:1")
@@ -107,7 +107,7 @@ def test_mesa_clasifica_por_contenido_si_el_feed_no_mapea(cliente, monkeypatch):
     Fundación, cuyos feeds traen slugs gruesos (entretenimiento/internacional) que no mapean a
     sus líneas; aquí se reproduce con UnoTV dándole keywords a una línea y un feed sin mapeo.
     """
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     intl = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")["id"]
     # Como las líneas de Fundación, esta línea recibe keywords: una candidata cuyo feed NO
     # mapea ('gaming' no es línea de UnoTV) se clasifica por su texto.
@@ -240,7 +240,7 @@ def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
     # Claro Sports usa GRUPOS: la mesa devuelve la barra de chips (ordenada por prioridad
     # editorial, con su conteo) y la lista de candidatas con su grupo, clasificadas por keywords.
     # Sin plan, el front navega por estos grupos en vez de degradar a lista plana.
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     monkeypatch.delenv("KENI_PLAN_DIA", raising=False)
     monkeypatch.delenv("KENI_PLAN_DIA::claro-sports", raising=False)
     _inicializar("box1", score=0.9, marca="claro-sports", categoria="otros-deportes",
@@ -283,7 +283,7 @@ def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
 def test_mesa_sin_grupos_no_trae_barra(cliente):
     # UnoTV no usa grupos: el back NO emite `grupos`/`historias_grupo` (manda el plan en `lineas`).
     # El front deriva de ahí los chips planos de navegación (sin desplegable), conservando el plan.
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     _inicializar("c1", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["grupos"] == [] and datos["historias_grupo"] == []
@@ -367,7 +367,7 @@ def test_mesa_linea_marca_con_grupos_filtra_por_linea(cliente):
     """Para una marca con grupos (Claro Sports), la paginación por línea clasifica el pool por
     LÉXICO (la misma clasificación que la barra de grupos) y filtra a la línea (id de etiqueta).
     """
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     box = repos.obtener_etiqueta_por_nombre("Boxeo", "categoria", "claro-sports")["id"]
     _inicializar("box1", score=0.9, marca="claro-sports", categoria="otros-deportes",
                  titulo="Canelo Álvarez confirma su próxima pelea de box")

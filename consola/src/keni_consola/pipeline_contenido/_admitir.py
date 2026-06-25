@@ -35,7 +35,7 @@ from ._comun import (
 
 __all__ = [
     "_copy_pendiente_de",
-    "_AVISO_SIN_LINEA",
+    "_AVISO_SIN_CATEGORIA",
     "_auto_etiquetar_linea",
     "asegurar_cluster_es",
     "crear_tema_de_cluster",
@@ -104,7 +104,7 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
         return ""
 
 
-_AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
+_AVISO_SIN_CATEGORIA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
 def _linea_de_feed(items: list[dict[str, Any]] | None) -> str:
@@ -134,15 +134,15 @@ def _auto_etiquetar_linea(
     descarta). Best-effort: un fallo no rompe la ingesta.
     """
     try:
-        from ..dominio import clasificador_lineas
+        from ..dominio import clasificador_categorias
 
-        res = clasificador_lineas.clasificar_pieza(titulo, resumen, tema.get("marca", ""))
+        res = clasificador_categorias.clasificar_pieza(titulo, resumen, tema.get("marca", ""))
         if res.get("categoria"):
             repos.asignar_etiqueta(tema["id"], str(res["categoria"]))
         elif linea_feed:
             repos.asignar_etiqueta(tema["id"], linea_feed)
         else:
-            repos.actualizar_publicacion(tema["id"], {"notas": _AVISO_SIN_LINEA})
+            repos.actualizar_publicacion(tema["id"], {"notas": _AVISO_SIN_CATEGORIA})
         if res.get("origen"):
             repos.asignar_etiqueta(tema["id"], str(res["origen"]))
     except Exception:  # noqa: BLE001 -- el etiquetado es best-effort; nunca rompe el barrido
@@ -1071,14 +1071,14 @@ def linea_de_cluster(
     buenas noticias) reparte cada nota a su línea en vez de caer entera a una sola. '' si nada
     casa. `lineas` son las etiquetas categoria de la marca; con la lista vacía no hay fallback por
     contenido y se queda con el slug (el comportamiento anterior)."""
-    from .. import bootstrap_lineas
-    from ..dominio import clasificador_lineas
+    from .. import bootstrap_categorias
+    from ..dominio import clasificador_categorias
 
-    cat = bootstrap_lineas.linea_id_de_slug(marca, categoria_efectiva(cluster))
+    cat = bootstrap_categorias.linea_id_de_slug(marca, categoria_efectiva(cluster))
     if cat:
         return cat
     texto = f"{_titulo_es(cluster)}\n{_resumen_es(cluster)}"
-    return clasificador_lineas.clasificar(texto, lineas) or ""
+    return clasificador_categorias.clasificar(texto, lineas) or ""
 
 
 def _categoria_plan(marca: str, cluster: dict[str, Any]) -> str:

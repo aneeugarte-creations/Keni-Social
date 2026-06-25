@@ -40,7 +40,7 @@ vi.mock("./metricas/Crosstab", () => ({ Crosstab: () => null }));
 vi.mock("./metricas/DesgloseInteracciones", () => ({ DesgloseInteracciones: () => null }));
 vi.mock("./metricas/CrecimientoSeguidores", () => ({ CrecimientoSeguidores: () => null }));
 vi.mock("./metricas/GraficaPorSerie", () => ({ GraficaPorSerie: () => null }));
-vi.mock("./metricas/MetricaPorLinea", () => ({ MetricaPorLinea: () => null }));
+vi.mock("./metricas/MetricaPorCategoria", () => ({ MetricaPorCategoria: () => null }));
 vi.mock("./metricas/SeccionAds", () => ({ SeccionAds: () => null }));
 // Marcador para comprobar que una sección oculta NO monta su contenido.
 vi.mock("./metricas/GraficaMarcas", () => ({

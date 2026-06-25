@@ -103,10 +103,10 @@ def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[
     if not config.rendimiento_ranking_activo():
         return set(), {}, []
     try:
-        from .. import metricas_linea
+        from .. import metricas_categoria
         from ..dominio import rendimiento_tema
 
-        data = metricas_linea.lineas_y_origenes(
+        data = metricas_categoria.categorias_y_origenes(
             "mes", marca or None, marcas.id_metricas_de(marca) if marca else None
         )
         top = rendimiento_tema.lineas_top(
@@ -129,10 +129,10 @@ def _rendimiento_bonus(
     vert_etiquetas: list[dict[str, Any]],
 ) -> float:
     """Bonus [0,1] de una historia: 1.0 si su línea (clasificación léxica) está en el top. 0 si no."""
-    from ..dominio import clasificador_lineas, rendimiento_tema
+    from ..dominio import clasificador_categorias, rendimiento_tema
 
     texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
-    lid = clasificador_lineas.clasificar(texto, vert_etiquetas)
+    lid = clasificador_categorias.clasificar(texto, vert_etiquetas)
     nombre = vert_id_a_nombre.get(lid or "", "")
     return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
 

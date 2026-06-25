@@ -139,7 +139,7 @@ from ._redactar import (
     temas_para_redactar,
 )
 from ._admitir import (
-    _AVISO_SIN_LINEA,
+    _AVISO_SIN_CATEGORIA,
     _auto_etiquetar_linea,
     _claves_dedup_marca,
     _copy_pendiente_de,
@@ -235,7 +235,7 @@ __all__ = [
     "marcar_fallo_etapa",
     # CI
     "_copy_pendiente_de",
-    "_AVISO_SIN_LINEA",
+    "_AVISO_SIN_CATEGORIA",
     "_auto_etiquetar_linea",
     "crear_tema_de_cluster",
     "clusters_para_promover",

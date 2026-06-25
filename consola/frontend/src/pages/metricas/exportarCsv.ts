@@ -18,7 +18,7 @@ const TITULOS: Record<string, string> = {
   desglose: "Desglose de interacciones",
   crosstab: "Cruce de métricas",
   correlacion: "Correlación con seguidores",
-  lineas: "Rendimiento por línea",
+  lineas: "Rendimiento por categoría",
   ads: "Publicidad pagada",
   piezas: "Piezas del periodo (top y peores)",
   "piezas-listado": "Listado de piezas",

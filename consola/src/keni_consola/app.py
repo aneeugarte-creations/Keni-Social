@@ -254,35 +254,35 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por el bootstrap
             _logger.warning("No se pudo ejecutar el bootstrap del admin inicial.", exc_info=True)
         try:
-            from . import bootstrap_lineas
+            from . import bootstrap_categorias
 
-            bootstrap_lineas.inicializar_lineas()
+            bootstrap_categorias.inicializar_categorias()
             # Retira las etiquetas viejas que no son líneas del plan (desactiva; reversible).
-            bootstrap_lineas.retirar_lineas_obsoletas()
+            bootstrap_categorias.retirar_categorias_obsoletas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron inicializar las líneas/orígenes.", exc_info=True)
         try:
             # Motor de ingesta (Ola A): si el catálogo de feeds está vacío, activa los presets
             # como `fuentes_rss` para que el motor tenga de dónde leer. Idempotente por URL.
-            from . import bootstrap_lineas
+            from . import bootstrap_categorias
 
-            bootstrap_lineas.inicializar_fuentes_ingesta()
+            bootstrap_categorias.inicializar_fuentes_ingesta()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron inicializar las fuentes del motor de ingesta.", exc_info=True)
         try:
             # Asocia cada feed a su LÍNEA (backfill `categoria`->`linea_id` por marca). Corre tras
             # sembrar líneas y fuentes; idempotente (solo toca feeds sin línea).
-            from . import bootstrap_lineas
+            from . import bootstrap_categorias
 
-            bootstrap_lineas.vincular_fuentes_a_lineas()
+            bootstrap_categorias.vincular_fuentes_a_lineas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron vincular las fuentes a sus líneas.", exc_info=True)
         try:
             # Re-clava el plan diario y las franjas del slug de categoría al id de LÍNEA.
             # Idempotente; corre tras sembrar/vincular líneas.
-            from . import bootstrap_lineas
+            from . import bootstrap_categorias
 
-            bootstrap_lineas.migrar_plan_y_franjas_a_lineas()
+            bootstrap_categorias.migrar_plan_y_franjas_a_lineas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudo migrar el plan/franjas a líneas.", exc_info=True)
         # Lleva tareas, piezas de la rota y

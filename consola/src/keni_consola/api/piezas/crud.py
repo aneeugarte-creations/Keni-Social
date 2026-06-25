@@ -18,7 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import bootstrap_lineas, marcas, permisos, redes, repos
+from ... import bootstrap_categorias, marcas, permisos, redes, repos
 from ...dominio import licencia_imagen
 from ..._http_json import (
     cursor_query,
@@ -213,7 +213,7 @@ def _opciones() -> dict[str, Any]:
         items: list[dict[str, Any]] = [
             {
                 "id": "breaking",
-                "nombre": bootstrap_lineas.etiqueta_categoria("breaking", nombres_linea),
+                "nombre": bootstrap_categorias.etiqueta_categoria("breaking", nombres_linea),
                 "franja": "breaking" in con_franja,
                 "grupo": "",
             }
@@ -232,7 +232,7 @@ def _opciones() -> dict[str, Any]:
         items.append(
             {
                 "id": "evergreen",
-                "nombre": bootstrap_lineas.etiqueta_categoria("evergreen", nombres_linea),
+                "nombre": bootstrap_categorias.etiqueta_categoria("evergreen", nombres_linea),
                 "franja": "evergreen" in con_franja,
                 "grupo": "",
             }

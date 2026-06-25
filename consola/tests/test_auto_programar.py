@@ -164,11 +164,11 @@ def test_slug_de_categoria_se_traduce_a_linea_del_plan(cliente, ahora_fijo):
     franja de la línea Internacional (su id), NO en la genérica. SIN la traducción, el slug no
     casaría con el id y la pieza caería en la genérica de las 12:00.
     """
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
-    bootstrap_lineas.inicializar_lineas()  # siembra las líneas (categoria) de unotv
+    bootstrap_categorias.inicializar_categorias()  # siembra las líneas (categoria) de unotv
     et = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
-    assert et is not None, "la línea Internacional debe existir tras inicializar_lineas"
+    assert et is not None, "la línea Internacional debe existir tras inicializar_categorias"
     cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "12:00", "marca": "unotv"})  # genérica
     cliente.post(
         "/api/franjas",
@@ -184,9 +184,9 @@ def test_slug_de_categoria_se_traduce_a_linea_del_plan(cliente, ahora_fijo):
 def test_sin_categoria_sin_genericas_cae_al_plan(cliente, ahora_fijo):
     """Marca de una línea sin franjas genéricas: una pieza sin categoría usa el plan, no se queda
     sin programar."""
-    from keni_consola import bootstrap_lineas
+    from keni_consola import bootstrap_categorias
 
-    bootstrap_lineas.inicializar_lineas()
+    bootstrap_categorias.inicializar_categorias()
     et = repos.obtener_etiqueta_por_nombre("Internacional", "categoria", "unotv")
     assert et is not None
     # ÚNICA franja de la marca, con categoría de línea (no hay genérica).

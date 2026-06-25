@@ -36,7 +36,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, repos
-from ..bootstrap_lineas import slug_hashtag
+from ..bootstrap_categorias import slug_hashtag
 from .._http_json import leer_json
 from ..estados import (
     CADENCIA_LINEA_DEFECTO,

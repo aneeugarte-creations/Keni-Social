@@ -804,7 +804,7 @@ export default function FeedIdeacion({ origen }: { origen?: string } = {}) {
             categoriasPlan.length > 0 && (
               <div
                 role="radiogroup"
-                aria-label="Filtrar por línea"
+                aria-label="Filtrar por categoría"
                 className="flex flex-wrap gap-x-5 gap-y-1"
               >
                 <ChipLinea activo={categoria === ""} onClick={() => setCategoria("")}>

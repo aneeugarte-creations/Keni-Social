@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_redactar, bootstrap_lineas, config, estados, marcas, repos
+from ... import autogen_redactar, bootstrap_categorias, config, estados, marcas, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
@@ -446,10 +446,10 @@ def _linea_de_cluster_grupo(
     La MISMA clasificación de la barra de grupos: clasifica el texto contra las líneas de la
     marca. '' si nada casa. PURA (recibe las líneas ya leídas).
     """
-    from ...dominio import clasificador_lineas
+    from ...dominio import clasificador_categorias
 
     texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
-    return clasificador_lineas.clasificar(texto, cat_etiquetas) or ""
+    return clasificador_categorias.clasificar(texto, cat_etiquetas) or ""
 
 
 def _serializar_historias(
@@ -548,7 +548,7 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
                 conteo_linea[lid] = conteo_linea.get(lid, 0) + 1
 
     def _etiqueta_linea(clave: str) -> str:
-        rotulo = bootstrap_lineas.ETIQUETAS_CLAVE_NO_LINEA.get(clave)
+        rotulo = bootstrap_categorias.ETIQUETAS_CLAVE_NO_LINEA.get(clave)
         if rotulo is not None:
             return rotulo
         et = repos.obtener_etiqueta(clave)

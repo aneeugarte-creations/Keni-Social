@@ -20,7 +20,7 @@ from starlette.responses import Response
 from ... import (
     marcas,
     metricas_cache,
-    metricas_linea,
+    metricas_categoria,
     metricas_pieza,
     permisos,
     repos,
@@ -32,7 +32,7 @@ __all__ = [
     "engagement_pct",
     "marcas",
     "metricas_cache",
-    "metricas_linea",
+    "metricas_categoria",
     "metricas_pieza",
     "permisos",
     "repos",

@@ -8,7 +8,7 @@ premia todo), de modo que el feed no se monotematiza.
 
 Este módulo es PURO (sin BD ni red): recibe la analítica por línea ya leída y devuelve el conjunto
 de líneas top. El daemon obtiene la analítica (fachada de métricas, cacheada), clasifica cada
-historia a su línea (léxico, `clasificador_lineas`) y aplica el bonus. GATEADO y best-effort: sin
+historia a su línea (léxico, `clasificador_categorias`) y aplica el bonus. GATEADO y best-effort: sin
 datos suficientes el conjunto top sale vacío y la señal es inerte.
 """
 
@@ -22,10 +22,10 @@ def lineas_top(
 ) -> set[str]:
     """Nombres de las líneas con MEJOR engagement, con muestra mínima (anti-sesgo) y tope N.
 
-    `lineas`: cubos `{nombre|id, piezas, engagement_pct}` (de `metricas_linea`). Se descartan las
+    `lineas`: cubos `{nombre|id, piezas, engagement_pct}` (de `metricas_categoria`). Se descartan las
     líneas con menos de `minimo_piezas` piezas medidas (evita el sesgo de "una pieza con suerte")
     y la línea "Sin línea" (id/nombre vacío). Se ordena por engagement desc y se toman las N
-    primeras. Devuelve un set de NOMBRES (lo que `clasificador_lineas` resuelve por historia).
+    primeras. Devuelve un set de NOMBRES (lo que `clasificador_categorias` resuelve por historia).
     """
     if n <= 0:
         return set()

@@ -20,7 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
-import { etiquetaLinea } from "@/lib/lineas";
+import { etiquetaCategoria } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
 import type { GrupoMesa, Historia, LineaGrupo, MesaLinea } from "@/types";
 
@@ -362,7 +362,7 @@ export function chipsDeLineas(
   const chips: GrupoMesa[] = [];
   const browse: Historia[] = [];
   for (const l of lineas) {
-    const etiqueta = l.etiqueta || etiquetaLinea(l.linea);
+    const etiqueta = l.etiqueta || etiquetaCategoria(l.linea);
     if (l.en_pool > 0 || l.cupo > 0)
       chips.push({ grupo: etiqueta, en_pool: l.en_pool, lineaId: l.linea });
     for (const h of l.historias) browse.push({ ...h, grupo: etiqueta });
@@ -600,7 +600,7 @@ function SeccionLinea({
   linea: MesaLinea;
   onAbrirLinea: (linea: string, etiqueta: string) => void;
 }) {
-  const etiqueta = linea.etiqueta || etiquetaLinea(linea.linea);
+  const etiqueta = linea.etiqueta || etiquetaCategoria(linea.linea);
   // La sección resume las top candidatas; el botón abre la lista paginada con TODO el pool de la
   // línea (cuando hay más candidatas que las visibles del resumen).
   const visibles = Math.min(linea.historias.length, linea.en_pool);

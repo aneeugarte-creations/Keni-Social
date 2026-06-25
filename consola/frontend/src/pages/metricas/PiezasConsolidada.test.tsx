@@ -90,7 +90,7 @@ describe("PiezasConsolidada", () => {
 
     expect(await screen.findByText("Gol de último minuto")).toBeInTheDocument();
     expect(screen.getByText(/Facebook · Virales/)).toBeInTheDocument();
-    expect(screen.getByText(/Facebook · Sin línea/)).toBeInTheDocument();
+    expect(screen.getByText(/Facebook · Sin categoría/)).toBeInTheDocument();
     // Stats del conjunto filtrado: 2 piezas; vistas promedio (5K) y mediana (5K) presentes.
     expect(screen.getByText("Piezas")).toBeInTheDocument();
     expect(screen.getByText("Vistas promedio")).toBeInTheDocument();
