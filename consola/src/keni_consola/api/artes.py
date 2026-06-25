@@ -739,6 +739,41 @@ async def buscar_propio(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
+# Listar una galería entera (carpeta de partido) trae muchos más keepers que una búsqueda puntual.
+_GALERIA_LIMITE_DEF = 120
+_GALERIA_LIMITE_MAX = 400
+
+
+async def _galeria_propio(galeria_id: str, dispositivo: str, limite: int, marca: str) -> dict:
+    """Lista los keepers de una galería conectada como candidatos (forma de candidato de stock)."""
+    marca = (marca or "").strip()
+    if not marca or not galeria_id:
+        return {"candidatos": []}
+    crudos = await fotos_tunel.galeria(marca, galeria_id, dispositivo, limite)
+    return {"candidatos": [_candidato_propio(c) for c in crudos]}
+
+
+async def galeria_propio(request: Request) -> Response:
+    """GET /api/artes/propio/galeria?galeria_id=&marca=&dispositivo=&limite= -> {candidatos}.
+
+    Lista los KEEPERS de una galería (partido) conectada por el túnel keni-fotos, para navegarla como
+    una carpeta. Misma forma de candidato que `propio/buscar` (con `galeria_id`/`archivo`/`dispositivo`
+    para luego guardar el original). Degrada a `{candidatos:[]}` si no hay dispositivo de la marca o la
+    app no responde.
+    """
+    q = request.query_params
+    galeria_id = (q.get("galeria_id") or "").strip()
+    marca = (q.get("marca") or "").strip()
+    dispositivo = (q.get("dispositivo") or "").strip()
+    try:
+        limite = int(q.get("limite") or _GALERIA_LIMITE_DEF)
+    except ValueError:
+        limite = _GALERIA_LIMITE_DEF
+    limite = max(1, min(_GALERIA_LIMITE_MAX, limite))
+    cuerpo = await _galeria_propio(galeria_id, dispositivo, limite, marca)
+    return JSONResponse(cuerpo)
+
+
 def _subir_propio(pieza_id: str, datos: bytes) -> dict | None:
     """Sube los bytes del original a keni-media y los liga a la pieza como foto PROPIA (publicable)."""
     return autogen_stock.adjuntar_bytes(
@@ -877,6 +912,7 @@ RUTAS = [
     Route("/api/artes/propio/buscar", buscar_propio, methods=["GET"]),
     Route("/api/artes/propio/adjuntar", adjuntar_propio, methods=["POST"]),
     Route("/api/artes/propio/rafaga", rafaga_propio, methods=["GET"]),
+    Route("/api/artes/propio/galeria", galeria_propio, methods=["GET"]),
     Route("/api/artes/propio/dispositivos", dispositivos_propio, methods=["GET"]),
     Route("/api/artes/propio/eventos", eventos_propio, methods=["GET"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),

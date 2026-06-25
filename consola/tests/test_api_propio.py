@@ -428,6 +428,53 @@ def test_buscar_propio_con_dispositivo_devuelve_candidatos(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Listar una galería (carpeta de partido) por el túnel: RPC `galeria`            #
+# --------------------------------------------------------------------------- #
+
+
+def _responder_galeria(msg, n):
+    """Responde al RPC `galeria` (lista de keepers) con la MISMA forma que `buscar` (`resultado`)."""
+    if msg.get("tipo") != "galeria":
+        return None
+    return _resultado(msg, n)
+
+
+def test_galeria_lista_keepers_de_una_galeria(entorno):
+    _conexion(
+        "ale", lambda m: _responder_galeria(m, 3),
+        dispositivo="Mac de Ale", galerias=[{"id": "g1", "nombre": "X"}],
+    )
+    res = anyio.run(fotos_tunel.galeria, "claro-sports", "g1", "", 120)
+    assert len(res) == 3  # lista la galería entera (no exige query)
+    assert all(c["dispositivo"] == "Mac de Ale" for c in res)
+    assert res[0]["galeria_id"] == "g1"
+
+
+def test_galeria_sin_dispositivo_de_la_marca_vacio(entorno):
+    _conexion("ale", lambda m: _responder_galeria(m, 2), marcas=("unotv",))
+    res = anyio.run(fotos_tunel.galeria, "claro-sports", "g1", "", 120)
+    assert res == []  # nadie comparte claro-sports
+
+
+def test_galeria_propio_endpoint_mapea_candidatos(entorno):
+    _conexion(
+        "ale", lambda m: _responder_galeria(m, 2),
+        dispositivo="Mac de Ale", galerias=[{"id": "g1", "nombre": "X"}],
+    )
+    res = anyio.run(artes._galeria_propio, "g1", "", 120, "claro-sports")
+    cands = res["candidatos"]
+    assert len(cands) == 2
+    assert cands[0]["proveedor"] == "propio"
+    assert cands[0]["galeria_id"] == "g1"
+    assert cands[0]["dispositivo"] == "Mac de Ale"
+
+
+def test_galeria_propio_sin_marca_vacio(entorno):
+    res = anyio.run(artes._galeria_propio, "g1", "", 120, "")
+    assert res["candidatos"] == []
+
+
+# --------------------------------------------------------------------------- #
 # Adjuntar: pide el original por el túnel (de un dispositivo que comparte marca) #
 # --------------------------------------------------------------------------- #
 

@@ -16,6 +16,7 @@ import type {
   RespuestaBuscarPropio,
   RespuestaBuscarStock,
   RespuestaDispositivosPropio,
+  RespuestaGaleriaPropio,
   RespuestaGenerarArte,
   RespuestaGeneracion,
   RespuestaMedia,
@@ -128,6 +129,22 @@ export const apiMedia = {
         q: filtros.q,
         limite: filtros.limite != null ? String(filtros.limite) : undefined,
         marca: filtros.marca,
+      })}`,
+      { signal },
+    ),
+  // Lista los KEEPERS de una galería (partido) conectada para navegarla como una carpeta. Misma
+  // forma de candidato que `buscarPropio` (galeria_id/archivo/dispositivo para luego guardar el
+  // original). Degrada a `{candidatos:[]}` si no hay dispositivo de la marca o la app no responde.
+  galeriaPropio: (
+    filtros: { galeria_id: string; marca?: string; dispositivo?: string; limite?: number },
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaGaleriaPropio>(
+      `/artes/propio/galeria${query({
+        galeria_id: filtros.galeria_id,
+        marca: filtros.marca,
+        dispositivo: filtros.dispositivo,
+        limite: filtros.limite != null ? String(filtros.limite) : undefined,
       })}`,
       { signal },
     ),

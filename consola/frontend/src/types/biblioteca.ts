@@ -85,3 +85,30 @@ export interface FotoRafaga {
 export interface RespuestaRafaga {
   fotos: FotoRafaga[];
 }
+
+/**
+ * Foto NORMALIZADA para la rejilla y el visor de la Galería. Unifica un item GUARDADO de la
+ * biblioteca (`origen='biblioteca'`, con `id` para descargar/borrar) y un candidato EN VIVO del
+ * túnel keni-fotos (`origen='tunel'`, con `galeria_id`/`archivo`/`dispositivo` para guardar). Así la
+ * rejilla y el visor tratan ambos de forma idéntica y las acciones se deciden por el `origen`.
+ */
+export interface FotoVista {
+  /** Clave estable y única en la rejilla. */
+  clave: string;
+  origen: "biblioteca" | "tunel";
+  titulo: string;
+  /** Miniatura para la rejilla. */
+  thumb: string;
+  /** Imagen a tamaño grande para el visor (en túnel es la mejor disponible sin bajar el original). */
+  url: string;
+  etiquetas: string[];
+  // Biblioteca (foto ya catalogada):
+  id?: string;
+  fuente?: FuenteBiblioteca;
+  grupo?: string;
+  marca?: string;
+  // Túnel (coordenadas para guardar el original / navegar la ráfaga):
+  galeria_id?: string;
+  archivo?: string;
+  dispositivo?: string;
+}

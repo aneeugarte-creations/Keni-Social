@@ -437,6 +437,12 @@ def _mensaje_rpc(tipo: str, payload: dict[str, Any]) -> tuple[dict[str, Any] | N
             "archivo": payload.get("archivo", ""),
             "limite": payload.get("limite", 24),
         }, _TIMEOUT_RAFAGA
+    if tipo == "galeria":
+        return {
+            "tipo": "galeria",
+            "galeria_id": payload.get("galeria_id", ""),
+            "limite": payload.get("limite", 200),
+        }, _TIMEOUT_BUSCAR
     return None, 0.0
 
 
@@ -631,6 +637,38 @@ async def rafaga(
         thumb = str(foto.get("thumb_b64") or foto.get("thumb") or "")
         if nombre:
             salida.append({"archivo": nombre, "thumb": thumb})
+    return salida[:limite]
+
+
+async def galeria(
+    marca: str | None, galeria_id: str, dispositivo: str = "", limite: int = 200
+) -> list[dict[str, Any]]:
+    """Lista los KEEPERS de una galería (partido) conectada, para navegarla como una carpeta.
+
+    Pide a la app que mejor encaja (por `dispositivo`, luego la que declaró la galería, luego la
+    primera que comparte `marca`) los candidatos del manifiesto de `galeria_id`, en la MISMA forma
+    que `buscar` (cada candidato con su `thumb_b64`). Cada candidato se etiqueta con el `dispositivo`
+    que lo sirvió para poder pedir luego el original. Devuelve `[]` si no hay dispositivo, no responde
+    o la respuesta llega vacía/corrupta (la UI degrada a "carpeta vacía").
+    """
+    conexion = await run_in_threadpool(_elegir_conexion, marca, galeria_id, dispositivo)
+    if conexion is None or not galeria_id or limite <= 0:
+        return []
+    try:
+        respuesta = await _pedir_rpc(
+            "galeria", conexion["id"], {"galeria_id": galeria_id, "limite": limite}, _TIMEOUT_BUSCAR
+        )
+    except TunelError:
+        _log.debug("Túnel keni-fotos: la app no respondió al listado de la galería; se omite.")
+        return []
+    crudos = respuesta.get("candidatos") if isinstance(respuesta, dict) else None
+    salida: list[dict[str, Any]] = []
+    for candidato in crudos or []:
+        if not isinstance(candidato, dict):
+            continue
+        etiquetado = dict(candidato)
+        etiquetado.setdefault("dispositivo", conexion["dispositivo"])
+        salida.append(etiquetado)
     return salida[:limite]
 
 

@@ -1,9 +1,9 @@
 {
-  "version": "0.1.5",
-  "notes": "Navega la ráfaga de una foto desde la galería de keni-social. Incluye conexión estable, galería compartida por marca y la biblioteca de medios.",
+  "version": "0.1.6",
+  "notes": "Navega los partidos de los keni-fotos conectados como carpetas desde la Galería de keni-social. Incluye la ráfaga, la galería compartida por marca y la biblioteca de medios.",
   "pub_date": "2026-06-25T00:00:00Z",
   "darwin-aarch64": {
-    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcGZraVFoakErWFNrSUhybHFUZFRiSFZvektxaFZXVDRVRHZEQWF6akdTeU9qN0Yvb1diQ0xKbUdreU5MU2NoS2loSkJ3bndxYngvYXMrc25ldlBmY2drPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDA2NjkzCWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6Ci9oMit2bnlrS1d6UUJqOFFHVE5jRVBmQU56SEszTW9IMCtKelFyUHgyanNZZFUrQ2J5Tzlybno5a1JLRXVlRUVuWVh6OVk3MmM3YTVUbFBUcWp4YkRRPT0K",
+    "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTN0hGQnhzNVZYcFVSbXRRVnB3cUtNelNiVGd6b2wrV0ZqZGprVkw2djFoc3RIeStaamc3YWN1L1hhTkg1WTl3WTBYa1dyL2d4aVVRSkFDaDRhRGxUeUhFeFpKVjM3cUFBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDI2OTg3CWZpbGU6a2VuaS1mb3Rvcy5hcHAudGFyLmd6CnE5VEt5Nk9GRlYrbnNzbkZzVHJoRDdMRzRqWjVmaHBoV3dEYThSeE9PTmNCTkVDUHl1QlBnTWN6bGpaOGNxM0ltVWk5UzhmVUlEcjkraXdmVmFLUENBPT0K",
     "url": "https://social.kenitech.io/api/fotos/updater"
   }
 }

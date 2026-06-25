@@ -202,6 +202,14 @@ export type FuenteFoto = "stock" | "agencias" | "propio";
  */
 export type RespuestaBuscarPropio = RespuestaBuscarStock;
 
+/**
+ * Respuesta de `GET /api/artes/propio/galeria`: los KEEPERS de una galería (partido) conectada, como
+ * candidatas (misma forma que las de `buscarPropio`), para navegar el partido como una carpeta.
+ */
+export interface RespuestaGaleriaPropio {
+  candidatos: CandidataStock[];
+}
+
 /** Cuerpo de `POST /api/artes/propio/adjuntar`: la foto propia elegida (por túnel, no por URL). */
 export interface CuerpoAdjuntarPropio {
   pieza_id: string;
