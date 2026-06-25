@@ -152,9 +152,23 @@ export default function Fotos() {
         </Button>
       </AccionesPagina>
 
-      <div className="mx-auto w-full max-w-3xl pb-12">
-        {isLoading ? (
-          <div className="flex h-48 items-center justify-center text-muted-foreground">
+      <div className="mx-auto w-full max-w-3xl space-y-6 py-6 pb-12">
+        {/* Buscador SIEMPRE montado (cuando hay marca), en posición estable y DESACOPLADO del sondeo
+            de dispositivos: así el refetch de la lista no lo desmonta ni le borra el texto/foco. */}
+        {marca && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Explorar fotos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <BuscadorPropio marca={marca} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dispositivos conectados: su parpadeo (conectar/desconectar) NO afecta al buscador. */}
+        {isLoading && !hayDispositivos ? (
+          <div className="flex h-32 items-center justify-center text-muted-foreground">
             <Spinner className="h-5 w-5" />
           </div>
         ) : !hayDispositivos ? (
@@ -169,74 +183,55 @@ export default function Fotos() {
             </p>
           </div>
         ) : (
-          <div className="space-y-6 py-6">
-            {/* Dispositivos que comparten a la marca: dueño, marcas compartidas y galerías. */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  Dispositivos conectados
-                  <Badge variant="secondary">{dispositivos.length}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {dispositivos.map((d) => (
-                  <div key={`${d.usuario}-${d.dispositivo}`} className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Camera className="h-4 w-4 text-keni" aria-hidden="true" />
-                      <span className="text-sm font-medium">{d.dispositivo}</span>
-                      {d.version && <Badge variant="secondary">v{d.version}</Badge>}
-                      {d.usuario && (
-                        <span className="text-xs text-muted-foreground">de {d.usuario}</span>
-                      )}
-                    </div>
-                    {/* Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */}
-                    <div className="flex flex-wrap items-center gap-1.5 pl-6">
-                      <span className="text-xs text-muted-foreground">Comparte con:</span>
-                      {d.marcas.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">ninguna marca</span>
-                      ) : (
-                        d.marcas.map((m) => (
-                          <Badge key={m} variant="outline">
-                            {nombreMarca(m)}
-                          </Badge>
-                        ))
-                      )}
-                    </div>
-                    {d.galerias.length === 0 ? (
-                      <p className="pl-6 text-xs text-muted-foreground">Sin galerías procesadas.</p>
-                    ) : (
-                      <ul className="space-y-1 pl-6">
-                        {d.galerias.map((g) => (
-                          <li
-                            key={g.id}
-                            className="flex items-center justify-between gap-3 text-sm"
-                          >
-                            <span className="min-w-0 truncate">{g.nombre}</span>
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {g.dia} · {g.fotos} fotos
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Dispositivos conectados
+                <Badge variant="secondary">{dispositivos.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {dispositivos.map((d) => (
+                <div key={`${d.usuario}-${d.dispositivo}`} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Camera className="h-4 w-4 text-keni" aria-hidden="true" />
+                    <span className="text-sm font-medium">{d.dispositivo}</span>
+                    {d.version && <Badge variant="secondary">v{d.version}</Badge>}
+                    {d.usuario && (
+                      <span className="text-xs text-muted-foreground">de {d.usuario}</span>
                     )}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            {/* Explorar las galerías de la marca (solo mirar; adjuntar se hace desde el editor).
-                Sin marca concreta ("Todas") no hay una galería única que explorar. */}
-            {marca && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Explorar fotos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <BuscadorPropio marca={marca} />
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                  {/* Marcas a las que este dispositivo comparte su galería (las eligió su dueño). */}
+                  <div className="flex flex-wrap items-center gap-1.5 pl-6">
+                    <span className="text-xs text-muted-foreground">Comparte con:</span>
+                    {d.marcas.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">ninguna marca</span>
+                    ) : (
+                      d.marcas.map((m) => (
+                        <Badge key={m} variant="outline">
+                          {nombreMarca(m)}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                  {d.galerias.length === 0 ? (
+                    <p className="pl-6 text-xs text-muted-foreground">Sin galerías procesadas.</p>
+                  ) : (
+                    <ul className="space-y-1 pl-6">
+                      {d.galerias.map((g) => (
+                        <li key={g.id} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="min-w-0 truncate">{g.nombre}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {g.dia} · {g.fotos} fotos
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         )}
       </div>
     </>
