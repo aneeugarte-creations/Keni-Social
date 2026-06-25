@@ -1,7 +1,7 @@
 import { startAuthentication } from "@simplewebauthn/browser";
 import * as React from "react";
 
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, motivoDeError, type MotivoCaida } from "@/lib/api";
 import { establecerZonaDisplay } from "@/lib/fecha";
 import type { UsuarioSesion } from "@/types";
 
@@ -35,12 +35,14 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = React.useState<UsuarioSesion | null>(null);
   const [cargando, setCargando] = React.useState(true);
   const [errorConexion, setErrorConexion] = React.useState(false);
+  const [motivoCaida, setMotivoCaida] = React.useState<MotivoCaida | null>(null);
 
   const cargarMe = React.useCallback(async () => {
     try {
       const { usuario } = await api.me();
       setUsuario(usuario);
       setErrorConexion(false);
+      setMotivoCaida(null);
     } catch (e) {
       // 401 = sin sesión (esperado): mostramos el login sin alarmas y limpiamos el
       // estado degradado (el back respondió). Cualquier OTRO fallo (red/timeout =>
@@ -50,8 +52,11 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       if (e instanceof ApiError && e.status === 401) {
         setUsuario(null);
         setErrorConexion(false);
+        setMotivoCaida(null);
       } else {
         setErrorConexion(true);
+        // deploy vs avería: el front lo marca en el `motivo` del 503; sin prueba => incidente.
+        setMotivoCaida(motivoDeError(e));
       }
     }
   }, []);
@@ -132,6 +137,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       usuario,
       cargando,
       errorConexion,
+      motivoCaida,
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,
@@ -142,6 +148,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       usuario,
       cargando,
       errorConexion,
+      motivoCaida,
       iniciarSesion,
       verificarConPasskey,
       entrarConPasskey,

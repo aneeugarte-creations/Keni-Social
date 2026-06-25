@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import type { MotivoCaida } from "@/lib/api";
 import type { UsuarioSesion } from "@/types";
 
 /**
@@ -22,6 +23,14 @@ export interface ValorSesion {
    * 401 limpio sí lleva al login. Se apaga en cuanto un `me` vuelve a responder (200 o 401).
    */
   errorConexion: boolean;
+  /**
+   * Por qué cayó la conexión, cuando `errorConexion` es `true`: `deploy` (actualización
+   * transitoria, vuelve sola) o `incidente` (avería). Lo dicta el campo `motivo` del 503 del
+   * front. La pantalla degradada elige con esto entre la barra de progreso (deploy) y el aviso
+   * honesto "no disponible, equipo avisado" (incidente). `null`/ausente cuando no hay caída.
+   * Opcional para no obligar a cada mock de test a declararlo (los consumidores leen `?? null`).
+   */
+  motivoCaida?: MotivoCaida | null;
   /**
    * Inicia sesión; el backend pone la cookie. Lanza `ApiError` (401 genérico).
    * Devuelve `{ mfaRequerido: true }` cuando el backend pide un segundo factor (MFA ON y

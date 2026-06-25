@@ -20,6 +20,8 @@ secretos.toml
 .env
 # Ficheros de secreto renderizados por deploy.sh desde el .env (montados en /run/secrets).
 deploy/secrets/
+# Estado de runtime en el host (flag "deploy en curso" que pone/quita deploy.sh).
+deploy/estado/
 
 # SO / editor
 .DS_Store

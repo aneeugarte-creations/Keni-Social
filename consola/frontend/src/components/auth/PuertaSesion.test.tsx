@@ -18,7 +18,9 @@ interface Captura {
  * `loginResponde` controla `POST /api/auth/login`.
  */
 function stubFetch(opciones: {
-  me?: { status: number; usuario?: unknown };
+  // `motivo` simula el campo del 503 del front (deploy|incidente) que distingue actualización
+  // de avería; ausente => el cuerpo no lo trae (caída sin pista => la UI cae a "incidente").
+  me?: { status: number; usuario?: unknown; motivo?: "deploy" | "incidente" };
   login?: { status: number; usuario?: unknown };
   capturas?: Captura[];
 }) {
@@ -35,7 +37,10 @@ function stubFetch(opciones: {
         if (me.status === 200) {
           return new Response(JSON.stringify({ usuario: me.usuario }), { status: 200 });
         }
-        return new Response(JSON.stringify({ error: "no autenticado" }), { status: me.status });
+        const cuerpo = me.motivo
+          ? { error: "no disponible", motivo: me.motivo }
+          : { error: "no autenticado" };
+        return new Response(JSON.stringify(cuerpo), { status: me.status });
       }
       if (ruta.includes("/api/auth/login")) {
         const l = login ?? { status: 401 };
@@ -122,8 +127,9 @@ describe("PuertaSesion · guard de sesión", () => {
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
   });
 
-  it("estado degradado (no login) cuando el me falla por RED", async () => {
-    // fetch rechaza => ApiError status 0: no es "sin sesión", es back inalcanzable.
+  it("estado degradado HONESTO cuando el me falla por RED: avería, no 'actualizando'", async () => {
+    // fetch rechaza => ApiError status 0, sin cuerpo: no es "sin sesión" ni un deploy, es una
+    // caída. NO mentimos con "actualizando"; decimos la verdad y que el equipo ya lo sabe.
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -133,17 +139,27 @@ describe("PuertaSesion · guard de sesión", () => {
     );
     renderPuerta();
 
-    expect(await screen.findByText(/Estamos actualizando la consola/i)).toBeInTheDocument();
+    expect(await screen.findByText(/La consola no está disponible/i)).toBeInTheDocument();
+    expect(screen.getByText(/equipo ya ha sido avisado/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Estamos actualizando la consola/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
     expect(screen.queryByText("CONTENIDO PROTEGIDO")).not.toBeInTheDocument();
   });
 
-  it("estado degradado cuando el me da 503 (back desplegando), no login", async () => {
-    stubFetch({ me: { status: 503 } });
+  it("estado degradado cuando el me da 503 con motivo=deploy: SÍ 'actualizando'", async () => {
+    stubFetch({ me: { status: 503, motivo: "deploy" } });
     renderPuerta();
 
     expect(await screen.findByText(/Estamos actualizando la consola/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
+  });
+
+  it("estado degradado cuando el me da 503 SIN motivo: avería, no 'actualizando'", async () => {
+    stubFetch({ me: { status: 503 } });
+    renderPuerta();
+
+    expect(await screen.findByText(/La consola no está disponible/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Estamos actualizando la consola/i)).not.toBeInTheDocument();
   });
 
   it("Reintentar tras una caída entra a la app cuando el me se recupera", async () => {
@@ -161,11 +177,11 @@ describe("PuertaSesion · guard de sesión", () => {
     );
     renderPuerta();
 
-    await screen.findByText(/Estamos actualizando la consola/i);
+    await screen.findByText(/La consola no está disponible/i);
     caido = false;
     fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
 
     expect(await screen.findByText("CONTENIDO PROTEGIDO")).toBeInTheDocument();
-    expect(screen.queryByText(/Estamos actualizando la consola/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/La consola no está disponible/i)).not.toBeInTheDocument();
   });
 });

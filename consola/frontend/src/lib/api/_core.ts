@@ -122,6 +122,21 @@ export class ApiError extends Error {
   }
 }
 
+/** Por qué la consola no responde: `deploy` (transitorio) o `incidente` (avería). */
+export type MotivoCaida = "deploy" | "incidente";
+
+/**
+ * Clasifica un error de "back no disponible" para que la UI diga la VERDAD. El nginx del front
+ * devuelve `{"motivo":"deploy"|"incidente"}` según exista el flag de deploy (lo pone deploy.sh).
+ * Solo afirmamos "deploy" con prueba positiva de ese motivo; ante cualquier duda (fallo de red
+ * sin cuerpo, motivo ausente) caemos a `incidente`: es más honesto no prometer un retorno
+ * automático que no podemos garantizar. Llámalo SOLO cuando ya sabes que es una caída de conexión.
+ */
+export function motivoDeError(error: unknown): MotivoCaida {
+  if (error instanceof ApiError && error.cuerpo?.motivo === "deploy") return "deploy";
+  return "incidente";
+}
+
 /**
  * Mensaje legible (en español) para CUALQUIER error capturado en la UI. Fuente única que
  * reemplaza las ~30 copias locales que vivían en páginas y componentes:

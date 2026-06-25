@@ -20,8 +20,18 @@ import { cn } from "@/lib/utils";
 const DURACION_ESTIMADA_MS = 22000;
 const INTERVALO_SONDEO_MS = 2000;
 
+/**
+ * `deploy`: actualización transitoria, vuelve sola -> barra de progreso (lenguaje calmado).
+ * `incidente`: avería real, NO vuelve sin intervención -> SIN barra (una barra prometería un
+ * retorno automático que no va a pasar) + aviso honesto de que el equipo ya lo sabe.
+ */
+export type VariantePanel = "deploy" | "incidente";
+
 export function PanelActualizando({
-  titulo = "Estamos actualizando la consola",
+  // Por defecto `deploy`: preserva el comportamiento previo (todo uso existente es un deploy).
+  variante = "deploy",
+  // Si no se pasa, el título lo decide la variante (actualizando vs no disponible).
+  titulo,
   // Sondeo de disponibilidad real (p. ej. la página de mantenimiento sondea `/version.json`): si
   // resuelve `true`, la barra salta al 100% y se llama a `onListo` (recargar / refrescar).
   sondearListo,
@@ -31,6 +41,7 @@ export function PanelActualizando({
   reintentando = false,
   className,
 }: {
+  variante?: VariantePanel;
   titulo?: string;
   sondearListo?: () => Promise<boolean>;
   onListo?: () => void;
@@ -38,6 +49,9 @@ export function PanelActualizando({
   reintentando?: boolean;
   className?: string;
 }) {
+  const esIncidente = variante === "incidente";
+  const tituloEfectivo =
+    titulo ?? (esIncidente ? "La consola no está disponible" : "Estamos actualizando la consola");
   const [pct, setPct] = useState(0);
   const [completo, setCompleto] = useState(false);
 
@@ -87,25 +101,32 @@ export function PanelActualizando({
       <h2 className="mb-6 text-base font-light uppercase tracking-[0.3em] text-foreground">
         <span className="inline-block [margin-right:-0.3em]">KENI</span>
       </h2>
-      <h1 className="text-lg font-semibold text-foreground">{titulo}</h1>
+      <h1 className="text-lg font-semibold text-foreground">{tituloEfectivo}</h1>
 
-      <div
-        className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label="Progreso de la actualización"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(pct)}
-      >
+      {esIncidente ? (
+        // Avería: ni barra ni promesa de retorno automático. Decimos la verdad y que ya se sabe.
+        <p className="mt-3 text-sm text-muted-foreground">
+          El equipo ya ha sido avisado y está trabajando en ello.
+        </p>
+      ) : (
         <div
-          className="h-full rounded-full bg-foreground ease-out"
-          style={{
-            width: `${pct}%`,
-            // Avance lento por curva; el salto al 100% (señal real) es rápido.
-            transition: `width ${completo ? 500 : DURACION_ESTIMADA_MS}ms ${completo ? "ease-out" : "cubic-bezier(0,0.6,0.2,1)"}`,
-          }}
-        />
-      </div>
+          className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-label="Progreso de la actualización"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(pct)}
+        >
+          <div
+            className="h-full rounded-full bg-foreground ease-out"
+            style={{
+              width: `${pct}%`,
+              // Avance lento por curva; el salto al 100% (señal real) es rápido.
+              transition: `width ${completo ? 500 : DURACION_ESTIMADA_MS}ms ${completo ? "ease-out" : "cubic-bezier(0,0.6,0.2,1)"}`,
+            }}
+          />
+        </div>
+      )}
 
       {onReintentar && (
         <Button

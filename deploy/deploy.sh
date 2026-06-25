@@ -20,6 +20,23 @@ PROYECTO="keni-social"   # nombre de proyecto de compose (`name:` en docker-comp
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
 REPO_VOL="keni-social_keni-repo"  # clon git del carril de auto-desarrollo (worker-dev/worker-ralph)
 
+# FLAG "deploy en curso": la ÚNICA fuente de verdad de que un deploy está corriendo. El front
+# lo lee (./estado:/estado:ro) para decir la VERDAD durante un hueco —"actualizando" si hay
+# deploy, "caído, equipo avisado" si no— en vez de afirmar siempre que se actualiza; y el
+# `guardian` lo lee para NO auto-curar el churn esperado del deploy (recreaciones, stops). Se
+# crea ahora y se borra SIEMPRE al salir (éxito, fallo en cualquier `exit 1`, o rollback) vía
+# trap EXIT, así nunca queda un flag huérfano marcando un deploy que ya terminó.
+ESTADO_DIR="$(pwd)/estado"
+FLAG_DEPLOY="$ESTADO_DIR/desplegando"
+mkdir -p "$ESTADO_DIR"
+# 0777: el `guardian` corre con OTRO uid y, si un deploy muere sin que su trap limpie el flag,
+# debe poder BORRAR ese flag rancio (retoma el autoheal y deja de mentir el front). El dir solo
+# contiene este flag transitorio (sin secretos), gitignored; en este host todo proceso local ya
+# es de confianza (acceso al docker.sock), así que abrirlo no añade superficie real.
+chmod 0777 "$ESTADO_DIR" 2>/dev/null || true
+trap 'rm -f "$FLAG_DEPLOY"' EXIT
+: > "$FLAG_DEPLOY"
+
 # Id del contenedor VIVO de un servicio, por las ETIQUETAS de compose (no por `$DC ps -q`).
 # Es ROBUSTO al índice que deja el blue-green (back-2, front-62…) y al estado de `--scale`: tras
 # retirar el VIEJO por identidad (`docker rm`), el `--scale=2` queda en la memoria de compose y su
@@ -131,8 +148,12 @@ MCP_VERSION="$(hash_entradas "" keni-shared mcp-metricas deploy/mcp)"
 # reconstruye cuando cambia el shell, en sincronía con él. El prune de hash_entradas ya descarta
 # node_modules/webapp/dist, así que no entra basura de build en el hash.
 MANTENIMIENTO_VERSION="$(hash_entradas "" consola/frontend deploy/mantenimiento)"
-export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION
-echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION transcriptor=$TRANSCRIPTOR_VERSION mcp=$MCP_VERSION mantenimiento=$MANTENIMIENTO_VERSION"
+# El guardián es una imagen NUESTRA pequeña (alpine + curl/jq + guardian.sh): solo depende de
+# su propio dir de build. Resucita contenedores EXITED que ni autoheal (solo unhealthy-vivos)
+# ni `restart: unless-stopped` (no revive un stop deliberado) tocan.
+GUARDIAN_VERSION="$(hash_entradas "" deploy/guardian)"
+export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION GUARDIAN_VERSION
+echo "==> versiones por contenido: front=$FRONT_VERSION back=$BACK_VERSION worker=$WORKER_VERSION transcriptor=$TRANSCRIPTOR_VERSION mcp=$MCP_VERSION mantenimiento=$MANTENIMIENTO_VERSION guardian=$GUARDIAN_VERSION"
 
 # Render de secretos ANTES de cualquier `compose build/run/up`: los servicios montan
 # ./secrets/<n> en /run/secrets; si no existieran al instanciar contenedores, Compose
@@ -210,6 +231,7 @@ construir worker "keni-social/worker:$WORKER_VERSION"
 construir transcriptor "keni-social/transcriptor:$TRANSCRIPTOR_VERSION"
 construir mcp    "keni-social/mcp:$MCP_VERSION"
 construir mantenimiento "keni-social/mantenimiento:$MANTENIMIENTO_VERSION"
+construir guardian "keni-social/guardian:$GUARDIAN_VERSION"
 
 # ── GUARDA blue-green: stop-the-world si hay MIGRACIÓN de esquema pendiente ────────────
 # El cutover blue-green deja al back VIEJO sirviendo mientras [4/6] aplica el esquema. Solo es
@@ -325,7 +347,7 @@ foto_previa() {  # $1 = servicio. SOLO fotografía un contenedor SANO: si un dep
   if [ -n "$id" ]; then docker tag "$id" "keni-social/$1:previa"; fi
 }
 foto_previa front; foto_previa back; foto_previa worker; foto_previa transcriptor; foto_previa mcp
-foto_previa mantenimiento
+foto_previa mantenimiento; foto_previa guardian
 
 # Espera a que un contenedor CONCRETO (por id) quede 'healthy'; timeout $2 s (0 si lo logra).
 # El blue-green identifica el back NUEVO por su id (capturado por diferencia con el VIEJO), así
@@ -464,11 +486,14 @@ else
   # suyo tambien debe disparar el rollback (que ya cubre el tag worker:previa de abajo).
   # mantenimiento: imagen NUESTRA y red de seguridad del 404; si no queda sana, Traefik no
   # enrutaría el catch-all y el hueco del front volvería a ser 404, así que también gatea.
+  # guardian: imagen NUESTRA; healthcheck por latido (toca un fichero cada ciclo). Si no queda
+  # sano, el autoheal de EXITED no estaría vigilando, así que también gatea el rollback.
   if espera_sano back 300 && espera_sano front 120 \
       && espera_sano daemons 150 && espera_sano worker 120 \
       && espera_sano transcriptor 120 && espera_sano mantenimiento 60 \
-      && espera_sano worker-dev 120 && espera_sano worker-ralph 120; then
-    echo "==> salud OK (back, front, daemons, worker, transcriptor, mantenimiento, worker-dev y worker-ralph healthy)"
+      && espera_sano worker-dev 120 && espera_sano worker-ralph 120 \
+      && espera_sano guardian 60; then
+    echo "==> salud OK (back, front, daemons, worker, transcriptor, mantenimiento, worker-dev, worker-ralph y guardian healthy)"
     # db y files: si NO estan sanos el problema es de CONFIG/estado (sus imagenes son
     # upstream y no entran en el rollback :previa), asi que NO se intenta rollback —
     # pero el pipeline DEBE quedar rojo para que un operador mire (p.ej. un cambio de
@@ -481,7 +506,7 @@ else
     printf '\033[31m==> VERIFICACION FALLIDA: rollback a las imagenes :previa\033[0m\n' >&2
     FRONT_NUEVA="$FRONT_VERSION"; BACK_NUEVA="$BACK_VERSION"
     WORKER_NUEVA="$WORKER_VERSION"; MCP_NUEVA="$MCP_VERSION"; TRANSCRIPTOR_NUEVA="$TRANSCRIPTOR_VERSION"
-    MANTENIMIENTO_NUEVA="$MANTENIMIENTO_VERSION"
+    MANTENIMIENTO_NUEVA="$MANTENIMIENTO_VERSION"; GUARDIAN_NUEVA="$GUARDIAN_VERSION"
     hay_previa() { docker image inspect "keni-social/$1:previa" >/dev/null 2>&1; }
     hay_previa front  && FRONT_VERSION=previa
     hay_previa back   && BACK_VERSION=previa
@@ -489,7 +514,8 @@ else
     hay_previa transcriptor && TRANSCRIPTOR_VERSION=previa
     hay_previa mcp    && MCP_VERSION=previa
     hay_previa mantenimiento && MANTENIMIENTO_VERSION=previa
-    export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION
+    hay_previa guardian && GUARDIAN_VERSION=previa
+    export FRONT_VERSION BACK_VERSION WORKER_VERSION TRANSCRIPTOR_VERSION MCP_VERSION MANTENIMIENTO_VERSION GUARDIAN_VERSION
     $DC up -d || true
     $DC ps || true
     # RE-VERIFICA que la foto :previa SÍ levanta sana, para distinguir «rollback recuperó» de
@@ -508,6 +534,7 @@ else
     [ "$TRANSCRIPTOR_VERSION" = previa ] && docker rmi "keni-social/transcriptor:$TRANSCRIPTOR_NUEVA" >/dev/null 2>&1 || true
     [ "$MCP_VERSION" = previa ]    && docker rmi "keni-social/mcp:$MCP_NUEVA"       >/dev/null 2>&1 || true
     [ "$MANTENIMIENTO_VERSION" = previa ] && docker rmi "keni-social/mantenimiento:$MANTENIMIENTO_NUEVA" >/dev/null 2>&1 || true
+    [ "$GUARDIAN_VERSION" = previa ] && docker rmi "keni-social/guardian:$GUARDIAN_NUEVA" >/dev/null 2>&1 || true
     exit 1
   fi
 fi

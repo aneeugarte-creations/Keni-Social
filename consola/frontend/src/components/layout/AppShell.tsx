@@ -14,7 +14,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
-import { useConexionDegradada } from "@/lib/estado-red";
+import { useConexionDegradada, useMotivoConexion } from "@/lib/estado-red";
 import { cn } from "@/lib/utils";
 import { useDetectorActualizacion } from "@/lib/version";
 import { hidratarLimites } from "@/pages/piezas/meta";
@@ -56,6 +56,7 @@ export function AppShell() {
   // "Estamos actualizando" cubre el contenido. Sustituye al banner ámbar y, con el guard de
   // `BloqueError`, garantiza que NUNCA aparezca un muro de errores rojos por sección.
   const conexionDegradada = useConexionDegradada();
+  const motivoConexion = useMotivoConexion();
 
   // Estado colapsado del sidebar (rail de solo iconos), persistido en
   // localStorage para que sobreviva al refresco. Inicializa leyéndolo (lazy).
@@ -270,7 +271,8 @@ export function AppShell() {
             topbar (z-30) y los overlays en portal (menú móvil z-40, diálogos z-50). */}
         {conexionDegradada && (
           <div className="absolute inset-x-0 bottom-0 top-12 z-20 grid place-items-center bg-background/80 p-6 backdrop-blur">
-            <PanelActualizando />
+            {/* `deploy` => barra de progreso (vuelve solo); avería => aviso honesto sin barra. */}
+            <PanelActualizando variante={motivoConexion === "deploy" ? "deploy" : "incidente"} />
           </div>
         )}
       </div>

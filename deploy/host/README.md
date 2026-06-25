@@ -135,6 +135,35 @@ sudo install -m 0644 deploy/host/apt/52-keni-auto-reboot.conf /etc/apt/apt.conf.
   `willfarrell/autoheal:1.2.0` mapeaba `tcp://`→HTTPS+mTLS (incompatible con un proxy HTTP plano);
   el soporte de `tcp://`→`http://` llego despues, asi que la imagen se fija por DIGEST de `latest`
   (ver `deploy/docker-compose.yml`). El cambio del compose es PROMOVIBLE (no requiere setup de host).
+
+- **guardian: autoheal de contenedores EXITED (PROMOVIBLE):** `autoheal` solo reinicia
+  contenedores unhealthy-pero-VIVOS, y `restart: unless-stopped` NO revive un contenedor parado a
+  proposito (un deploy que hace `stop` y luego falla deja el servicio EXITED para siempre — el
+  incidente que motivo esto). El servicio `guardian` cubre ese hueco: sondea la API Docker (via su
+  propio `guardian-docker-proxy`, misma superficie `CONTAINERS`+`POST` que el de autoheal — `start`
+  es el mismo recurso+verbo que `restart`, no amplia el radio) y hace `POST /containers/<id>/start`
+  a los contenedores del stack que quedan `exited`. Regla de DOS CICLOS (solo actua si sigue exited
+  en dos sondeos: no se pelea con la politica de reinicio de Docker), antiflapping
+  (`KENI_GUARDIAN_MAX_ARRANQUES`/`VENTANA`) y respeta el flag de deploy `deploy/estado/desplegando`
+  (durante un deploy, stops/recreaciones son churn esperado y no se tocan). Cubre tambien `db`, que
+  esta fuera de autoheal. Registro: `docker logs keni-social-guardian-1` (prefijo `keni-guardian:`).
+  Hoy la notificacion es solo a ese log; enchufar un canal externo (Telegram/ntfy/email) es cambiar
+  SOLO el cuerpo de la funcion `notificar()` en `deploy/guardian/guardian.sh`, sin tocar nada mas.
+
+  ENGANCHE deploy->autoheal: `deploy.sh` borra el flag `deploy/estado/desplegando` en su `trap EXIT`,
+  asi que cuando el deploy de CI SALE —exito o `exit 1` de rollback— el guardian ve que ya no hay
+  deploy y resucita lo que quedara EXITED (p.ej. un `back` que el deploy paro y no relevanto: el
+  incidente que motivo esto). Si el deploy MUERE sin salir limpio (SIGKILL/OOM/agente caido), el
+  trap no corre y el flag queda; el guardian lo trata como RANCIO pasado `KENI_GUARDIAN_FLAG_TTL_MIN`
+  (45min), lo borra y retoma el autoheal. El dir `estado` se crea 0777 para que el guardian (otro
+  uid) pueda borrar ese flag rancio.
+
+- **mensaje honesto en un hueco (PROMOVIBLE):** `deploy.sh` crea `deploy/estado/desplegando` al
+  empezar y lo borra al salir (trap, pase lo que pase). El nginx del `front` lo lee con
+  `if (-f /estado/desplegando)`: durante un deploy real dice "actualizando" (transitorio); sin el
+  flag dice la verdad — "no disponible, el equipo ya ha sido avisado" — en vez de afirmar siempre
+  que se actualiza. El SPA refleja lo mismo via el campo `motivo` del 503 (barra de progreso para
+  deploy, aviso honesto sin barra para averia).
 - **Cuenta `ubuntu` con password usable:** SSH es solo-clave, asi que el password solo sirve en
   consola/su. Se deja a proposito como break-glass de consola (Latitude OOB). Bloquearlo
   (`passwd -l ubuntu`) endurece un pelo a cambio de perder ese fallback; decision del operador.

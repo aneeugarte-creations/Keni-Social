@@ -117,6 +117,11 @@ services:
     restart: unless-stopped
     networks:
       - edge
+    # Flag "deploy en curso" (lo pone/quita deploy.sh en el host). nginx lo lee con
+    # `if (-f /estado/desplegando)` para decir la verdad en un hueco: "actualizando" si hay
+    # deploy, "caído, equipo avisado" si no. Solo-lectura: el front nunca lo escribe.
+    volumes:
+      - ./estado:/estado:ro
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
@@ -1162,6 +1167,96 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # AUTOHEAL de contenedores EXITED — el hueco que willfarrell/autoheal NO cubre. Aquel solo
+  # reinicia contenedores unhealthy-pero-VIVOS; y `restart: unless-stopped` NO revive un
+  # contenedor parado a propósito (un deploy que hace `stop` y luego falla deja el servicio
+  # EXITED para siempre: justo el incidente que motivó esto). Este daemon sondea la API Docker
+  # (vía proxy filtrado) cada pocos segundos y hace `POST /containers/<id>/start` a los
+  # contenedores del stack en estado `exited`/`dead`, con guarda anti-flapping y respetando el
+  # flag de deploy (./estado/desplegando): durante un deploy, stops/recreaciones son churn
+  # ESPERADO y no se tocan. Complementa a autoheal (no lo sustituye).
+  guardian:
+    build:
+      context: ./guardian
+      dockerfile: Dockerfile
+    image: keni-social/guardian:${GUARDIAN_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      - guardian-docker-proxy
+    environment:
+      # API Docker FILTRADA (el proxy), no el socket crudo.
+      KENI_GUARDIAN_DOCKER: http://guardian-docker-proxy:2375
+      # Servicios del stack que el guardián mantiene VIVOS (resucita si quedan EXITED). Cubre el
+      # set de autoheal (label autoheal=true) + db, que está FUERA de autoheal a propósito. NO
+      # incluye traefik (ingress host-network) ni los propios sidecars/proxies.
+      KENI_GUARDIAN_SERVICIOS: "back front mantenimiento daemons worker transcriptor worker-dev worker-ralph mcp db files"
+      # Cada cuánto sondea el estado (s). 5s = resucitación casi inmediata sin martillear la API.
+      KENI_GUARDIAN_INTERVALO: "5"
+      # Antiflapping: máx arranques por servicio en la ventana, y la ventana (s). Superado el
+      # tope, deja de intentar y lo registra (en fase 2 escalaría al incident-keeper).
+      KENI_GUARDIAN_MAX_ARRANQUES: "5"
+      KENI_GUARDIAN_VENTANA: "600"
+      # Flag de deploy: si existe y es FRESCO, el guardián NO actúa (churn esperado del deploy).
+      KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
+      # TTL del flag (min): pasado esto se considera RANCIO (deploy muerto sin limpiar) y el
+      # guardián lo borra y retoma el autoheal. Holgado: un deploy real son minutos.
+      KENI_GUARDIAN_FLAG_TTL_MIN: "45"
+    volumes:
+      # Flag de deploy. RW (no :ro): si un deploy muere sin que su trap limpie el flag, el guardián
+      # debe poder BORRAR el flag rancio (lo que además corrige el mensaje del front, mismo fichero).
+      - ./estado:/estado
+    networks:
+      - guardian-proxy
+    # Latido: guardian.sh toca este fichero cada ciclo; si se cuelga >60s, autoheal lo reinicia.
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/keni-guardian.latido -mmin -1 | grep -q . || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - autoheal=true  # el guardián también se auto-vigila vía el sidecar autoheal
+    mem_limit: 64m
+    cpus: 0.25
+    cpuset: "3-11"  # fuera de los nucleos del back (0-2)
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Proxy de la API Docker (tecnativa) para `guardian`: UNICO con acceso al socket crudo (en :ro).
+  # Expone la API FILTRADA a solo lo que el guardián usa —GET /containers/json (listar) y POST
+  # /containers/<id>/start (resucitar)— y DENIEGA por defecto todo lo demas. En su PROPIA red
+  # interna `guardian-proxy` (sin egress); solo el guardián la alcanza. Mismo patrón y misma
+  # superficie (CONTAINERS+POST) que el proxy de autoheal: `start` es el mismo recurso+verbo que
+  # el `restart` de aquel, así que NO amplía el radio de impacto respecto al sidecar ya existente.
+  guardian-docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    privileged: false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Listar contenedores (CONTAINERS) y POST /containers/<id>/start (POST). Resto en DENY.
+      CONTAINERS: "1"
+      POST: "1"
+    networks:
+      - guardian-proxy
+    mem_limit: 64m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
 networks:
   # NOTA SUBREDES (auditoria 2026-06): en el server real `edge` = 172.19.0.0/16 e
   # `internal` = 172.18.0.0/16, ambas DENTRO de 172.16.0.0/12 (el pool por defecto de
@@ -1184,6 +1279,10 @@ networks:
   # Red dedicada autoheal<->proxy. `internal`: sin egress y ningun otro servicio la ve, asi que
   # solo autoheal alcanza la API Docker filtrada del proxy (que es quien monta el sock en :ro).
   autoheal-proxy:
+    internal: true
+  # Red dedicada guardian<->su proxy. Misma lógica que autoheal-proxy: `internal` (sin egress) y
+  # aislada, así que solo el guardián alcanza la API Docker filtrada de su proxy.
+  guardian-proxy:
     internal: true
 
 volumes:
