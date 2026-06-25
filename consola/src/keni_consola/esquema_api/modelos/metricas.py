@@ -453,11 +453,11 @@ class PiezasRendimiento(TypedDict):
 class PiezaListado(TypedDict):
     """Una pieza del listado COMPLETO del periodo (tabla "Todas las piezas").
 
-    Misma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la
-    LÍNEA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto
-    cruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene
-    línea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra
-    "Sin línea". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.
+    Misma forma que `PiezaMetrica` (granulares incluidos) MÁS `categoria`: el nombre de la
+    CATEGORÍA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto
+    cruzándola con su contenido de la Consola. `categoria` es `null` cuando la pieza no tiene
+    categoría atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra
+    "Sin categoría". Se separa de `PiezaMetrica` para no forzar `categoria` en top/peores.
     """
 
     id: str
@@ -480,8 +480,8 @@ class PiezaListado(TypedDict):
     formato: str | None
     cuenta: str | None
     rendimiento_relativo: float | None
-    # linea: nombre de la línea editorial de la pieza; null si no es atribuible.
-    linea: str | None
+    # categoria: nombre de la categoría editorial de la pieza; null si no es atribuible.
+    categoria: str | None
 
 
 class PiezasListado(TypedDict):
@@ -489,7 +489,7 @@ class PiezasListado(TypedDict):
 
     TODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única
     (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae
-    su `id` (de Metricool), granulares, url y su `linea` editorial. Es el insumo de la
+    su `id` (de Metricool), granulares, url y su `categoria` editorial. Es el insumo de la
     tabla "Todas las piezas del periodo" (filtros + orden + paginación por día + detalle
     por pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.
     """

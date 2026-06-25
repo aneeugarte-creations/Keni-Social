@@ -206,15 +206,15 @@ def test_filtro_pendiente_pseudo_estado(cliente):
     assert pend["paginacion"]["total"] + pub["paginacion"]["total"] == total
 
 
-def test_opciones_incluye_lineas(cliente):
-    """`opciones.lineas` expone las etiquetas de categoría (líneas editoriales) activas."""
+def test_opciones_incluye_categorias_catalogo(cliente):
+    """`opciones.categorias_catalogo` expone las etiquetas de categoría (líneas editoriales) activas."""
     from keni_consola import repos
 
     repos.crear_etiqueta(nombre="Deportes", clase="categoria", marca="unotv")
-    # Una etiqueta de OTRA clase no debe colarse como línea editorial.
+    # Una etiqueta de OTRA clase no debe colarse como categoría editorial.
     repos.crear_etiqueta(nombre="Mundial", clase="campania", marca="unotv")
-    lineas = cliente.get("/api/piezas/opciones").json()["lineas"]
-    nombres = {l["nombre"] for l in lineas}
+    catalogo = cliente.get("/api/piezas/opciones").json()["categorias_catalogo"]
+    nombres = {l["nombre"] for l in catalogo}
     assert "Deportes" in nombres
     assert "Mundial" not in nombres
 

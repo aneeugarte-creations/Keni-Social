@@ -335,7 +335,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <Bloque id="crosstab">
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </Bloque>
-          <Bloque id="por-linea">
+          <Bloque id="por-categoria">
             <MetricaPorCategoria marcaActual={marca} rangoActual={rango} />
           </Bloque>
           <Bloque id="correlacion">

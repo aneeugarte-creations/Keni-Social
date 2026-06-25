@@ -1,13 +1,13 @@
 """API Almacén de BLOQUES: grupos de capas reutilizables (editor profesional).
 
 Un bloque es un conjunto de capas con sentido propio (lower-third, módulo de infografía, pleca de
-marca) que se guarda una vez y se suelta en cualquier documento. Se etiqueta por `marca` y `lineas`
-(ids de `etiquetas` clase=categoria).
+marca) que se guarda una vez y se suelta en cualquier documento. Se etiqueta por `marca` y
+`categorias` (ids de `etiquetas` clase=categoria).
 
   - `GET    /api/bloques`        lista (filtros `?marca=&q=`).
   - `POST   /api/bloques`        crea un bloque a partir de una lista de capas (validadas).
   - `GET    /api/bloques/{id}`   un bloque (con sus capas listas para insertar).
-  - `PATCH  /api/bloques/{id}`   edita nombre/capas/lineas/miniatura.
+  - `PATCH  /api/bloques/{id}`   edita nombre/capas/categorias/miniatura.
   - `DELETE /api/bloques/{id}`   borra.
 
 SEGURIDAD: `marca` (si llega) del catálogo único; las `capas` se validan en el dominio
@@ -29,7 +29,7 @@ from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
 
 _MAX_NOMBRE = 120
-_MAX_LINEAS = 24
+_MAX_CATEGORIAS = 24
 
 
 def _validar_marca(marca: object) -> tuple[str | None, str | None]:
@@ -40,14 +40,14 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     return marca, None
 
 
-def _normalizar_lineas(valor: object) -> list[str]:
+def _normalizar_categorias(valor: object) -> list[str]:
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []
     for item in valor:
         if isinstance(item, str) and item.strip() and item.strip() not in vistas:
             vistas.append(item.strip())
-        if len(vistas) >= _MAX_LINEAS:
+        if len(vistas) >= _MAX_CATEGORIAS:
             break
     return vistas
 
@@ -60,16 +60,16 @@ def _bloque_a_dict(item: dict) -> dict:
     if not isinstance(capas, list):
         capas = []
     try:
-        lineas = json.loads(item.get("lineas") or "[]")
+        categorias = json.loads(item.get("categorias") or "[]")
     except (ValueError, TypeError):
-        lineas = []
-    if not isinstance(lineas, list):
-        lineas = []
+        categorias = []
+    if not isinstance(categorias, list):
+        categorias = []
     miniatura = item.get("miniatura") or ""
     return {
         **item,
         "capas": capas,
-        "lineas": [x for x in lineas if isinstance(x, str)],
+        "categorias": [x for x in categorias if isinstance(x, str)],
         "miniatura_url": f"/api/media/{miniatura}" if miniatura else "",
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
     }
@@ -90,12 +90,12 @@ async def listar(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
-def _crear(*, marca: str, nombre: str, capas: str, lineas: str, miniatura: str, autor: object) -> dict:
+def _crear(*, marca: str, nombre: str, capas: str, categorias: str, miniatura: str, autor: object) -> dict:
     bloque = repos.crear_bloque(
         marca=marca,
         nombre=nombre,
         capas=capas,
-        lineas=lineas,
+        categorias=categorias,
         miniatura=miniatura,
         autor=autor,
     )
@@ -122,14 +122,14 @@ async def crear(request: Request) -> Response:
 
     nombre = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     miniatura = (datos.get("miniatura") or "").strip() if isinstance(datos.get("miniatura"), str) else ""
-    lineas = _normalizar_lineas(datos.get("lineas"))
+    categorias = _normalizar_categorias(datos.get("categorias"))
 
     cuerpo = await run_in_threadpool(
         _crear,
         marca=marca or "",
         nombre=nombre,
         capas=json.dumps(capas_ok, ensure_ascii=False),
-        lineas=json.dumps(lineas, ensure_ascii=False),
+        categorias=json.dumps(categorias, ensure_ascii=False),
         miniatura=miniatura,
         autor=autor_de_peticion(request),
     )
@@ -157,7 +157,7 @@ def _actualizar(bloque_id: str, campos: dict) -> tuple[int, dict]:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/bloques/{id}: edita nombre/capas/lineas/miniatura. -> `{bloque}` | 400/404."""
+    """PATCH /api/bloques/{id}: edita nombre/capas/categorias/miniatura. -> `{bloque}` | 400/404."""
     bloque_id = request.path_params["bloque_id"]
     datos = await leer_json(request)
     if not isinstance(datos, dict):
@@ -168,8 +168,8 @@ async def actualizar(request: Request) -> Response:
         campos["nombre"] = (datos.get("nombre") or "").strip()[:_MAX_NOMBRE]
     if "miniatura" in datos:
         campos["miniatura"] = (datos.get("miniatura") or "").strip()
-    if "lineas" in datos:
-        campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
+    if "categorias" in datos:
+        campos["categorias"] = json.dumps(_normalizar_categorias(datos.get("categorias")), ensure_ascii=False)
     if "capas" in datos:
         if not isinstance(datos["capas"], list) or not datos["capas"]:
             return JSONResponse({"error": "Un bloque necesita al menos una capa."}, status_code=400)

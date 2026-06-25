@@ -4,10 +4,11 @@ import { peticion } from "./_core";
 import type { PlantillaDiseno } from "./_core";
 
 export const apiPlantillasDiseno = {
-  // --- Texto de plantillas de diseño (N por marca, etiquetadas por línea) ---
-  // `tipo` filtra por "foto" (plantillas de imagen) o "miniatura" (portadas de video).
+  // --- Texto de plantillas de diseño (N por marca, etiquetadas por categoría) ---
+  // `tipo` filtra por "foto" (plantillas de imagen) o "miniatura" (portadas de video). `categoria`
+  // filtra por el SLUG de la plantilla; `categorias` por membresía en su lista de categorías.
   plantillasDiseno: (
-    filtros: { marca?: string; categoria?: string; linea?: string; q?: string; tipo?: "foto" | "miniatura" } = {},
+    filtros: { marca?: string; categoria?: string; categorias?: string; q?: string; tipo?: "foto" | "miniatura" } = {},
     signal?: AbortSignal,
   ) => {
     const qp = new URLSearchParams();
@@ -27,14 +28,14 @@ export const apiPlantillasDiseno = {
     foto_muestra?: string;
     titular_muestra?: string;
     etiqueta_muestra?: string;
-    lineas?: string[];
+    categorias?: string[];
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
   // Muestra de la galería: `foto_muestra`/`titular_muestra`/`etiqueta_muestra`; `""` en cada uno limpia
   // ese campo (foto -> huecos grises; titular -> "TITULAR"; pleca -> el texto literal de la capa).
   actualizarPlantillaDiseno: (
     id: string,
-    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; foto_muestra?: string; titular_muestra?: string; etiqueta_muestra?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
+    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; foto_muestra?: string; titular_muestra?: string; etiqueta_muestra?: string; categorias?: string[]; activo?: boolean; rotar?: boolean },
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),

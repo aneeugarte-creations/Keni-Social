@@ -20,7 +20,7 @@ def test_listar_vacio(cliente):
 def test_crear_y_listar(cliente):
     r = cliente.post("/api/plantillas-diseno", json={
         "marca": "unotv", "nombre": "Última hora", "categoria": "Última hora",
-        "documento": _DOC, "lineas": ["linea-nacional", "linea-nacional"],
+        "documento": _DOC, "categorias": ["cat-nacional", "cat-nacional"],
     })
     assert r.status_code == 200, r.text
     p = r.json()["plantilla"]
@@ -28,7 +28,7 @@ def test_crear_y_listar(cliente):
     assert p["categoria"] == "ultima-hora"  # texto libre normalizado a slug
     assert p["documento"]["formato"]["w"] == 1080
     assert p["documento"]["version"] == 1  # validado/normalizado por el dominio
-    assert p["lineas"] == ["linea-nacional"]
+    assert p["categorias"] == ["cat-nacional"]
     assert p["marca_nombre"]
 
     assert len(cliente.get("/api/plantillas-diseno?marca=unotv").json()["plantillas"]) == 1
@@ -36,8 +36,8 @@ def test_crear_y_listar(cliente):
     assert len(cliente.get("/api/plantillas-diseno?categoria=ultima-hora").json()["plantillas"]) == 1
     assert len(cliente.get("/api/plantillas-diseno?categoria=%C3%9Altima%20hora").json()["plantillas"]) == 1
     assert len(cliente.get("/api/plantillas-diseno?categoria=historia").json()["plantillas"]) == 0
-    assert len(cliente.get("/api/plantillas-diseno?linea=linea-nacional").json()["plantillas"]) == 1
-    assert len(cliente.get("/api/plantillas-diseno?linea=otra").json()["plantillas"]) == 0
+    assert len(cliente.get("/api/plantillas-diseno?categorias=cat-nacional").json()["plantillas"]) == 1
+    assert len(cliente.get("/api/plantillas-diseno?categorias=otra").json()["plantillas"]) == 0
 
 
 def test_crear_documento_invalido_400(cliente):

@@ -86,7 +86,7 @@ export interface OpcionesPiezas {
   marcas: MarcaOpcion[];
   /** Catálogo PLANO de categorías (id→nombre) SOLO para resolver el nombre de `pieza.categoria`
    *  en el editor. NO es un eje de filtro: el filtro de líneas/categorías es `categorias`. */
-  lineas: CategoriaOpcion[];
+  categorias_catalogo: CategoriaOpcion[];
   /** TAXONOMÍA del plan POR marca (Última hora · líneas · Evergreen), nombre resuelto en el
    *  backend. ÚNICA fuente de "líneas/categorías" para el usuario: filtros (Feed/Lista) y alta
    *  «Crear post» (que se acota a las que tienen `franja`). */

@@ -17,14 +17,14 @@ def test_listar_vacio(cliente):
 
 def test_crear_y_listar(cliente):
     r = cliente.post("/api/bloques", json={
-        "marca": "claro-sports", "nombre": "Lower-third gol", "capas": _CAPAS, "lineas": ["l1"],
+        "marca": "claro-sports", "nombre": "Lower-third gol", "capas": _CAPAS, "categorias": ["l1"],
     })
     assert r.status_code == 200, r.text
     b = r.json()["bloque"]
     assert b["nombre"] == "Lower-third gol" and b["marca"] == "claro-sports"
     assert len(b["capas"]) == 2
     assert all("id" in c for c in b["capas"])  # capas normalizadas por el dominio
-    assert b["lineas"] == ["l1"] and b["marca_nombre"]
+    assert b["categorias"] == ["l1"] and b["marca_nombre"]
 
     assert len(cliente.get("/api/bloques?marca=claro-sports").json()["bloques"]) == 1
     assert len(cliente.get("/api/bloques?marca=unotv").json()["bloques"]) == 0

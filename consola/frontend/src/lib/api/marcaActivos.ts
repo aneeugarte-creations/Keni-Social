@@ -6,7 +6,7 @@ import type { ActivoMarca } from "./_core";
 export const apiMarcaActivos = {
   // --- Texto de activos por marca (logos, tipografías, artes, infografías, …) ---
   marcaActivos: (
-    filtros: { marca?: string; tipo?: string; linea?: string; q?: string } = {},
+    filtros: { marca?: string; tipo?: string; categoria?: string; q?: string } = {},
     signal?: AbortSignal,
   ) => {
     const qp = new URLSearchParams();
@@ -20,7 +20,7 @@ export const apiMarcaActivos = {
     nombre?: string;
     objeto?: string;
     metadatos?: Record<string, unknown>;
-    lineas?: string[];
+    categorias?: string[];
   }) => peticion<{ activo: ActivoMarca }>("/marca-activos", { metodo: "POST", json: cuerpo }),
   actualizarMarcaActivo: (id: string, cuerpo: Record<string, unknown>) =>
     peticion<{ activo: ActivoMarca }>(`/marca-activos/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),

@@ -231,32 +231,32 @@ export interface RespuestaHistorias {
 
 // ── Mesa de redacción (GET /api/noticias/mesa) ────────────────────────────────
 
-/** Una línea del plan editorial diario en la Mesa: cupo + progreso + top candidatas. */
-export interface MesaLinea {
-  /** Clave de la línea: id de etiqueta categoria o señal del motor ('breaking'/'evergreen'). */
+/** Una categoría del plan editorial diario en la Mesa: cupo + progreso + top candidatas. */
+export interface MesaCategoria {
+  /** Clave de la categoría: id de etiqueta categoria o señal del motor ('breaking'/'evergreen'). */
   linea: string;
-  /** Nombre legible de la línea (o "Última hora"/"Evergreen"). */
+  /** Nombre legible de la categoría (o "Última hora"/"Evergreen"). */
   etiqueta?: string;
-  /** Objetivo diario de la línea según el plan. */
+  /** Objetivo diario de la categoría según el plan. */
   cupo: number;
   /** Temas generados en 24 h móviles (el mismo conteo que la admisión). */
   generados: number;
   publicados: number;
   /** Cuántos faltan para el objetivo de hoy. */
   restante: number;
-  /** Candidatas (`estado='nuevo'`) de esta línea en el pool. */
+  /** Candidatas (`estado='nuevo'`) de esta categoría en el pool. */
   en_pool: number;
   /** Top-N candidatas rankeadas (contrato Historia completo). */
   historias: Historia[];
 }
 
-/** Una línea del 2º nivel de navegación, colgada de su grupo (id + nombre + candidatas). */
-export interface LineaGrupo {
+/** Una categoría del 2º nivel de navegación, colgada de su grupo (id + nombre + candidatas). */
+export interface CategoriaGrupo {
   /** Id de la etiqueta categoria (p. ej. "fut-bundesliga"). Es lo que filtra `historias_grupo`. */
   linea: string;
-  /** Nombre visible de la línea ("Bundesliga"). */
+  /** Nombre visible de la categoría ("Bundesliga"). */
   nombre: string;
-  /** Candidatas (`estado='nuevo'`) clasificadas en esta línea. */
+  /** Candidatas (`estado='nuevo'`) clasificadas en esta categoría. */
   en_pool: number;
 }
 
@@ -267,10 +267,10 @@ export interface GrupoMesa {
   /** Candidatas (`estado='nuevo'`) clasificadas en este grupo. */
   en_pool: number;
   /**
-   * Líneas del grupo (2º nivel de navegación), con candidatas arriba y las vacías al final.
+   * Categorías del grupo (2º nivel de navegación), con candidatas arriba y las vacías al final.
    * Ausente en payloads sin grupos; la UI degrada a la barra de grupos a secas.
    */
-  lineas?: LineaGrupo[];
+  lineas?: CategoriaGrupo[];
   /**
    * Solo en chips DERIVADOS de líneas del plan (marca sin grupos): la CLAVE de reparto de la
    * línea ('breaking'/id de etiqueta/'__fuera__') para paginar TODO su pool. No la trae el back;
@@ -284,7 +284,7 @@ export interface RespuestaMesa {
   marca: string;
   /** false si la marca no tiene plan configurado (todo va en `fuera_de_plan`). */
   plan: boolean;
-  lineas: MesaLinea[];
+  categorias: MesaCategoria[];
   fuera_de_plan: { en_pool: number; historias: Historia[] };
   /** Σ cupos del plan (el objetivo del día, p. ej. 12). */
   total_objetivo: number;
@@ -304,7 +304,7 @@ export interface RespuestaMesa {
  * Respuesta de `GET /api/noticias/mesa/linea?marca=&linea=`: la página de candidatas de UNA
  * línea (rankeadas por score) + el TOTAL real de la línea (no el de la página).
  */
-export interface RespuestaMesaLinea {
+export interface RespuestaMesaCategoria {
   historias: Historia[];
   total: number;
 }

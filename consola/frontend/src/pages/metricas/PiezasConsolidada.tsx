@@ -188,7 +188,7 @@ export function PiezasConsolidada({
   );
   const lineasDisponibles = React.useMemo(() => {
     const set = new Set<string>();
-    for (const p of piezas) set.add(p.linea || SIN_LINEA);
+    for (const p of piezas) set.add(p.categoria || SIN_LINEA);
     return Array.from(set).sort((a, b) =>
       a === SIN_LINEA ? 1 : b === SIN_LINEA ? -1 : a.localeCompare(b, "es-MX"),
     );
@@ -201,7 +201,7 @@ export function PiezasConsolidada({
     return piezas.filter((p) => {
       if (!redEnFoco(redGlobal, p.plataforma)) return false;
       if (!formatoEnFoco(formato, p.formato)) return false;
-      if (lineaFiltro !== TODAS && (p.linea || SIN_LINEA) !== lineaFiltro) return false;
+      if (lineaFiltro !== TODAS && (p.categoria || SIN_LINEA) !== lineaFiltro) return false;
       if (q && !(p.titulo || "").toLowerCase().includes(q)) return false;
       return true;
     });
@@ -479,7 +479,7 @@ function FilaPieza({
   // discreto solo si existe (evita "Sin formato" en todas).
   const partes = [
     nombreRed(pieza.plataforma),
-    pieza.linea || SIN_LINEA,
+    pieza.categoria || SIN_LINEA,
     mostrarMarca && pieza.cuenta ? nombreMarca(pieza.cuenta, marcas) : "",
     pieza.formato ? nombreFormato(pieza.formato) : "",
   ].filter(Boolean);

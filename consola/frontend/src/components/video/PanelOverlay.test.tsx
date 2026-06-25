@@ -79,7 +79,7 @@ function plantilla(): PlantillaDiseno {
     foto_muestra_url: "",
     titular_muestra: "",
     etiqueta_muestra: "",
-    lineas: [],
+    categorias: [],
     activo: true,
     rotar: false,
     orden: 0,

@@ -279,7 +279,7 @@ def test_tools_registradas(entorno):
         "keni_metricas_seguidores", "keni_metricas_desglose",
         "keni_metricas_crosstab", "keni_metricas_correlacion",
         "keni_metricas_pieza_historico", "keni_metricas_comparar",
-        "keni_metricas_lineas", "keni_metricas_ads",
+        "keni_metricas_categorias", "keni_metricas_ads",
         "keni_patrones_marca", "keni_verificar_voz",
         "keni_listar_noticias", "keni_usar_noticia", "keni_descartar_noticia",
         "keni_noticias_cobertura",

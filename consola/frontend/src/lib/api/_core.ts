@@ -352,7 +352,7 @@ export function descargar(ruta: string): void {
 }
 
 // Activo de marca (texto del editor): logo, tipografía, arte, infografía, icono, paleta o
-// fondo, con sus metadatos y líneas. Espejo de `api/marca_activos.py::_activo_a_dict`.
+// fondo, con sus metadatos y categorías. Espejo de `api/marca_activos.py::_activo_a_dict`.
 export interface ActivoMarca {
   id: string;
   marca: string;
@@ -360,7 +360,7 @@ export interface ActivoMarca {
   nombre: string;
   objeto: string;
   metadatos: Record<string, unknown>;
-  lineas: string[];
+  categorias: string[];
   aprobado: boolean;
   url: string;
   marca_nombre: string;
@@ -370,7 +370,7 @@ export interface ActivoMarca {
   actualizado: string;
 }
 
-// Plantilla de diseño: un Documento de capas reutilizable por marca (categoría + líneas).
+// Plantilla de diseño: un Documento de capas reutilizable por marca (categoría + categorías).
 // Espejo de `api/plantillas_diseno.py::_plantilla_a_dict`. `documento` es unknown aquí para no
 // acoplar el cliente API a los tipos del editor (el editor lo castea a Documento).
 export interface PlantillaDiseno {
@@ -394,7 +394,7 @@ export interface PlantillaDiseno {
    * literal de la capa para la pleca). No entra al documento editable. */
   titular_muestra: string;
   etiqueta_muestra: string;
-  lineas: string[];
+  categorias: string[];
   activo: boolean;
   /** Entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva la siguiente del grupo). */
   rotar: boolean;
@@ -414,7 +414,7 @@ export interface Bloque {
   marca: string;
   nombre: string;
   capas: unknown[];
-  lineas: string[];
+  categorias: string[];
   miniatura: string;
   miniatura_url: string;
   marca_nombre: string;

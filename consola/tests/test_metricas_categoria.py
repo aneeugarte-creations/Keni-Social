@@ -157,27 +157,27 @@ def test_orden_por_piezas_desc_y_sin_linea_al_final():
 
 
 def test_agrupar_categorias_y_origenes_combina_los_dos_ejes():
-    """`agrupar_categorias_y_origenes` agrega el MISMO listado por línea y por origen."""
+    """`agrupar_categorias_y_origenes` agrega el MISMO listado por categoría y por origen."""
     piezas = [
         _pieza("M1", "Gol", 1000, 100, 10.0),  # c1: Futbol / interno
         _pieza("M2", "Petición club", 2000, 100, 5.0),  # c2: Futbol / peticion_externa
     ]
     out = metricas_categoria.agrupar_categorias_y_origenes(
         piezas,
-        linea_por_contenido={"c1": "Futbol", "c2": "Futbol"},
+        categoria_por_contenido={"c1": "Futbol", "c2": "Futbol"},
         origen_por_contenido={"c1": "interno", "c2": "peticion_externa"},
         enlace_por_id={"M1": "c1", "M2": "c2"},
         enlace_por_titulo={},
-        lineas_definidas=[{"id": "l1", "nombre": "Futbol"}],
+        categorias_definidas=[{"id": "l1", "nombre": "Futbol"}],
         origenes_definidos=[
             {"id": "o1", "nombre": "interno"},
             {"id": "o2", "nombre": "peticion_externa"},
         ],
     )
-    assert set(out) == {"lineas", "origenes"}
-    lineas = {c["nombre"]: c for c in out["lineas"]}
-    assert lineas["Futbol"]["piezas"] == 2
-    assert lineas["Futbol"]["visualizaciones"] == 3000
+    assert set(out) == {"categorias", "origenes"}
+    categorias = {c["nombre"]: c for c in out["categorias"]}
+    assert categorias["Futbol"]["piezas"] == 2
+    assert categorias["Futbol"]["visualizaciones"] == 3000
     origenes = {c["nombre"]: c for c in out["origenes"]}
     assert origenes["interno"]["piezas"] == 1
     assert origenes["interno"]["visualizaciones"] == 1000

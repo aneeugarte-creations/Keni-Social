@@ -39,7 +39,7 @@ function pieza(over: Partial<PiezaListado>): PiezaListado {
     formato: null,
     cuenta: null,
     rendimiento_relativo: null,
-    linea: null,
+    categoria: null,
     ...over,
   };
 }

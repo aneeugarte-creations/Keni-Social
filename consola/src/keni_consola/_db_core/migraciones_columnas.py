@@ -446,6 +446,33 @@ def _migrar_renombre_columnas_veredicto(con: Any) -> None:
         con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_contenido_verificar_veredicto")
 
 
+# RENOMBRE de "línea" -> "categoría" en los activos de diseño del editor: la columna `lineas`
+# (lista de ids de `etiquetas` clase=categoria a las que aplica un activo) pasa a `categorias`.
+# "Línea" deja de existir como término; todo es "categoría". Cada tabla del editor que la lleva:
+_TABLAS_RENOMBRE_LINEAS_CATEGORIAS: tuple[str, ...] = (
+    "bloques",
+    "marca_activos",
+    "plantillas_diseno",
+)
+
+
+def _migrar_renombre_lineas_a_categorias_editor(con: Any) -> None:
+    """Renombra la columna `lineas` -> `categorias` en las tablas del editor (idempotente, preserva
+    datos).
+
+    Por cada tabla de `_TABLAS_RENOMBRE_LINEAS_CATEGORIAS`: si existe y tiene la columna VIEJA
+    (`lineas`) pero aún NO la nueva (`categorias`), `ALTER TABLE ... RENAME COLUMN` (Postgres
+    conserva los valores). Re-ejecutable: una vez renombrada, el guard la salta. En una BD virgen
+    las tablas las crea el DDL declarativo ya con `categorias`, así que el guard hace no-op.
+    """
+    for tabla in _TABLAS_RENOMBRE_LINEAS_CATEGORIAS:
+        if not _tabla_existe(con, tabla):
+            continue
+        cols = _columnas_existentes(con, tabla)
+        if "lineas" in cols and "categorias" not in cols:
+            con.execute(f"ALTER TABLE {tabla} RENAME COLUMN lineas TO categorias")  # noqa: S608 -- allowlist fija
+
+
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original.
 # Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
 # retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):

@@ -110,7 +110,7 @@ def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[
             "mes", marca or None, marcas.id_metricas_de(marca) if marca else None
         )
         top = rendimiento_tema.lineas_top(
-            data.get("lineas", []),
+            data.get("categorias", []),
             minimo_piezas=config.rendimiento_min_piezas(),
             n=config.rendimiento_top_n(),
         )

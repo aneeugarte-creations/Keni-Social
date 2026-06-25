@@ -12,8 +12,8 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/piezas-export`: descarga del Top 5 / Peores 5 de piezas (csv|md|json).
   - `/api/metricas/piezas-por-etiqueta`: rendimiento del periodo por serie/tipo (cruce
     piezas↔contenido para resolver tipo_contenido + etiquetas; Item C).
-  - `/api/metricas/lineas`: rendimiento del periodo por LÍNEA (etiqueta clase `categoria`)
-    y por ORIGEN (clase `origen`); "qué línea funciona" + dual editorial-vs-impuesto.
+  - `/api/metricas/categorias`: rendimiento del periodo por CATEGORÍA (etiqueta clase `categoria`)
+    y por ORIGEN (clase `origen`); "qué categoría funciona" + dual editorial-vs-impuesto.
   - `/api/metricas/export.{csv,md,json}`: descargas (misma serializacion que el CLI).
 
 DEFERIDO / BLOQUEADO — "procedencia de la audiencia" (de dónde viene quién ve el
@@ -34,7 +34,7 @@ variable `RUTAS` que este `__init__` exporta (mismo orden/paths/métodos que ant
   - `reporte.py` : opciones, reporte, comparar.
   - `analisis.py`: analisis.
   - `piezas.py`  : piezas, piezas_rendimiento, piezas_listado, pieza_historico,
-                   piezas_por_etiqueta, lineas.
+                   piezas_por_etiqueta, categorias.
   - `series.py`  : tendencia, seguidores, desglose, crosstab, correlacion.
   - `estado.py`  : estado, refrescar.
   - `export.py`  : export_csv, export_md, export_json, piezas_export.
@@ -49,7 +49,7 @@ from .analisis import analisis
 from .estado import estado, refrescar
 from .export import export_csv, export_digitales, export_json, export_md, piezas_export
 from .piezas import (
-    lineas,
+    categorias,
     pieza_historico,
     piezas,
     piezas_listado,
@@ -83,7 +83,7 @@ __all__ = [
     "piezas_listado",
     "pieza_historico",
     "piezas_por_etiqueta",
-    "lineas",
+    "categorias",
     "tendencia",
     "seguidores",
     "desglose",
@@ -115,7 +115,7 @@ RUTAS = [
     Route("/api/metricas/piezas-listado", piezas_listado, methods=["GET"]),
     Route("/api/metricas/pieza-historico", pieza_historico, methods=["GET"]),
     Route("/api/metricas/piezas-por-etiqueta", piezas_por_etiqueta, methods=["GET"]),
-    Route("/api/metricas/lineas", lineas, methods=["GET"]),
+    Route("/api/metricas/categorias", categorias, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
     Route("/api/metricas/desglose", desglose, methods=["GET"]),

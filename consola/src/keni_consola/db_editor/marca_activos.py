@@ -15,7 +15,7 @@ _COLS_MARCA_ACTIVOS = (
     "nombre",
     "objeto",
     "metadatos",
-    "lineas",
+    "categorias",
     "aprobado",
     "autor_id",
     "autor_nombre",
@@ -30,7 +30,7 @@ _CAMPOS_EDITABLES_MARCA_ACTIVOS: tuple[str, ...] = (
     "tipo",
     "nombre",
     "metadatos",
-    "lineas",
+    "categorias",
     "aprobado",
 )
 
@@ -40,7 +40,7 @@ def _fila_a_marca_activo(fila: Any) -> dict[str, Any]:
     item: dict[str, Any] = {col: fila[col] for col in _COLS_MARCA_ACTIVOS}
     item["aprobado"] = bool(fila["aprobado"])
     item["metadatos"] = fila["metadatos"] or "{}"
-    item["lineas"] = fila["lineas"] or "[]"
+    item["categorias"] = fila["categorias"] or "[]"
     item["tipo"] = fila["tipo"] or "arte"
     return item
 
@@ -52,7 +52,7 @@ def crear_marca_activo(
     nombre: str = "",
     objeto: str = "",
     metadatos: str = "{}",
-    lineas: str = "[]",
+    categorias: str = "[]",
     aprobado: bool = True,
     autor: dict[str, str] | None = None,
     id: str = "",
@@ -69,7 +69,7 @@ def crear_marca_activo(
         "nombre": nombre or "",
         "objeto": objeto or "",
         "metadatos": metadatos or "{}",
-        "lineas": lineas or "[]",
+        "categorias": categorias or "[]",
         "aprobado": 1 if aprobado else 0,
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",

@@ -12,7 +12,7 @@ import type {
   EstadoMetricas,
   HistoricoPieza,
   IngestaMetricas,
-  MetricasLineas,
+  MetricasCategorias,
   OpcionesMetricas,
   PiezasListado,
   PiezasPorEtiqueta,
@@ -66,12 +66,12 @@ export const apiMetricas = {
     params: { rango?: string; marca?: string; red?: string; formato?: string },
     signal?: AbortSignal,
   ) => peticion<PiezasPorEtiqueta>(`/metricas/piezas-por-etiqueta${query(params)}`, { signal }),
-  // Rendimiento del periodo agregado por LÍNEA de contenido (categoría) y por ORIGEN.
+  // Rendimiento del periodo agregado por CATEGORÍA de contenido y por ORIGEN.
   // `marca` viaja en forma `id_metricas` (guion_bajo), igual que el resto de Métricas.
-  metricasLineas: (
+  metricasCategorias: (
     params: { rango?: string; marca?: string; red?: string; formato?: string },
     signal?: AbortSignal,
-  ) => peticion<MetricasLineas>(`/metricas/lineas${query(params)}`, { signal }),
+  ) => peticion<MetricasCategorias>(`/metricas/categorias${query(params)}`, { signal }),
   // --- Estrategia digital ---
   // Evolución de seguidores del periodo (total + por red) con el neto ganado/perdido.
   metricasSeguidores: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>

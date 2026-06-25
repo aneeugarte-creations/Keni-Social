@@ -11,7 +11,7 @@ export const apiBloques = {
     const cola = qp.toString();
     return peticion<{ bloques: Bloque[] }>(`/bloques${cola ? `?${cola}` : ""}`, { signal });
   },
-  crearBloque: (cuerpo: { marca?: string; nombre?: string; capas: unknown[]; lineas?: string[]; miniatura?: string }) =>
+  crearBloque: (cuerpo: { marca?: string; nombre?: string; capas: unknown[]; categorias?: string[]; miniatura?: string }) =>
     peticion<{ bloque: Bloque }>("/bloques", { metodo: "POST", json: cuerpo }),
   borrarBloque: (id: string) =>
     peticion<{ mensaje: string }>(`/bloques/${encodeURIComponent(id)}`, { metodo: "DELETE" }),

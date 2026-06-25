@@ -44,7 +44,7 @@ function pieza(over: Partial<PiezaListado>): PiezaListado {
     formato: "reel",
     cuenta: "unotv",
     rendimiento_relativo: 1.2,
-    linea: "Virales",
+    categoria: "Virales",
     ...over,
   };
 }
@@ -70,8 +70,8 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 const MISMO_DIA: PiezaListado[] = [
-  pieza({ id: "p1", titulo: "Gol de último minuto", visualizaciones: 1000, linea: "Virales" }),
-  pieza({ id: "p2", titulo: "Noticia local", visualizaciones: 9000, linea: null }),
+  pieza({ id: "p1", titulo: "Gol de último minuto", visualizaciones: 1000, categoria: "Virales" }),
+  pieza({ id: "p2", titulo: "Noticia local", visualizaciones: 9000, categoria: null }),
 ];
 
 /** Filas de DATOS de la tabla (las que tienen celdas `td`), en orden de pintado.

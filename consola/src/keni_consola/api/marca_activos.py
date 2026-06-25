@@ -4,11 +4,11 @@ Generaliza `marca_assets.py` (que solo conocia logo/marca-agua/pleca como PNGs e
 catalogo en Postgres (`marca_activos`) + objetos en el almacen (S3/disco). Cada activo tiene un
 `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo), un `objeto` (uuid+ext del
 binario, salvo `paleta` que vive solo en `metadatos`), `metadatos` por tipo (p.ej. familia/peso de
-una tipografia, lista de hex de una paleta) y `lineas` (ids de `etiquetas` clase=categoria que lo
-etiquetan por linea editorial). El editor lo muestra agrupado por tipo y arrastra cada activo al
-lienzo como una capa.
+una tipografia, lista de hex de una paleta) y `categorias` (ids de `etiquetas` clase=categoria que
+lo etiquetan por categoria editorial). El editor lo muestra agrupado por tipo y arrastra cada activo
+al lienzo como una capa.
 
-  - `GET    /api/marca-activos`        lista (filtros `?marca=&tipo=&linea=&q=`).
+  - `GET    /api/marca-activos`        lista (filtros `?marca=&tipo=&categoria=&q=`).
   - `POST   /api/marca-activos`        cataloga un objeto de media ya existente como activo.
   - `PATCH  /api/marca-activos/{id}`   edita metadatos del activo (no reasigna el binario).
   - `DELETE /api/marca-activos/{id}`   descataloga (con `?purgar=1` borra tambien el binario).
@@ -41,7 +41,7 @@ _TIPO_DEFECTO = "arte"
 _TIPOS_SIN_OBJETO = ("paleta",)
 
 _MAX_NOMBRE = 120
-_MAX_LINEAS = 24
+_MAX_CATEGORIAS = 24
 _MAX_METADATOS = 4000  # bytes del JSON serializado (defensa contra payloads gigantes)
 
 
@@ -54,8 +54,8 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     return marca, None
 
 
-def _normalizar_lineas(valor: object) -> list[str]:
-    """Lista de ids de linea (etiquetas clase=categoria) normalizada: strings no vacios, sin duplicados."""
+def _normalizar_categorias(valor: object) -> list[str]:
+    """Lista de ids de categoria (etiquetas clase=categoria) normalizada: strings no vacios, sin duplicados."""
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []
@@ -65,7 +65,7 @@ def _normalizar_lineas(valor: object) -> list[str]:
         et = item.strip()
         if et and et not in vistas:
             vistas.append(et)
-        if len(vistas) >= _MAX_LINEAS:
+        if len(vistas) >= _MAX_CATEGORIAS:
             break
     return vistas
 
@@ -83,7 +83,7 @@ def _metadatos_json(valor: object) -> tuple[str | None, str | None]:
 
 
 def _activo_a_dict(item: dict) -> dict:
-    """Serializa un activo: metadatos/lineas como objeto/lista, url y nombre de marca."""
+    """Serializa un activo: metadatos/categorias como objeto/lista, url y nombre de marca."""
     try:
         meta = json.loads(item.get("metadatos") or "{}")
     except (ValueError, TypeError):
@@ -91,16 +91,16 @@ def _activo_a_dict(item: dict) -> dict:
     if not isinstance(meta, dict):
         meta = {}
     try:
-        lineas = json.loads(item.get("lineas") or "[]")
+        categorias = json.loads(item.get("categorias") or "[]")
     except (ValueError, TypeError):
-        lineas = []
-    if not isinstance(lineas, list):
-        lineas = []
+        categorias = []
+    if not isinstance(categorias, list):
+        categorias = []
     objeto = item.get("objeto") or ""
     return {
         **item,
         "metadatos": meta,
-        "lineas": [x for x in lineas if isinstance(x, str)],
+        "categorias": [x for x in categorias if isinstance(x, str)],
         "url": f"/api/media/{objeto}" if objeto else "",
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
     }
@@ -114,7 +114,7 @@ def _coincide_busqueda(activo: dict, q: str) -> bool:
 async def listar(request: Request) -> Response:
     """GET /api/marca-activos: activos catalogados (mas recientes primero).
 
-    Filtros opcionales: `marca`, `tipo` (lista blanca), `linea` (id de etiqueta categoria) y `q`
+    Filtros opcionales: `marca`, `tipo` (lista blanca), `categoria` (id de etiqueta categoria) y `q`
     (substring por nombre, en memoria). Devuelve `{activos: [...]}`.
     """
     q = request.query_params
@@ -122,13 +122,13 @@ async def listar(request: Request) -> Response:
         _listar,
         q.get("marca") or None,
         q.get("tipo") or None,
-        (q.get("linea") or "").strip(),
+        (q.get("categoria") or "").strip(),
         (q.get("q") or "").strip(),
     )
     return JSONResponse(cuerpo)
 
 
-def _listar(marca: str | None, tipo: str | None, linea: str, busqueda: str) -> dict:
+def _listar(marca: str | None, tipo: str | None, categoria: str, busqueda: str) -> dict:
     activos = [
         _activo_a_dict(item)
         for item in repos.listar_marca_activos(
@@ -136,8 +136,8 @@ def _listar(marca: str | None, tipo: str | None, linea: str, busqueda: str) -> d
             tipo=tipo,
         )
     ]
-    if linea:
-        activos = [a for a in activos if linea in a.get("lineas", [])]
+    if categoria:
+        activos = [a for a in activos if categoria in a.get("categorias", [])]
     if busqueda:
         activos = [a for a in activos if _coincide_busqueda(a, busqueda)]
     return {"activos": activos}
@@ -150,7 +150,7 @@ def _crear(
     marca_cruda: object,
     metadatos_crudos: object,
     nombre_crudo: object,
-    lineas_crudas: object,
+    categorias_crudas: object,
     autor: dict | None,
 ) -> tuple[int, dict]:
     if tipo not in _TIPOS_SIN_OBJETO:
@@ -171,7 +171,7 @@ def _crear(
         return 400, {"error": err}
 
     nombre = (nombre_crudo or "").strip()[:_MAX_NOMBRE]
-    lineas = _normalizar_lineas(lineas_crudas)
+    categorias = _normalizar_categorias(categorias_crudas)
 
     activo = repos.crear_marca_activo(
         marca=marca or "",
@@ -179,7 +179,7 @@ def _crear(
         nombre=nombre,
         objeto=objeto,
         metadatos=metadatos,
-        lineas=json.dumps(lineas, ensure_ascii=False),
+        categorias=json.dumps(categorias, ensure_ascii=False),
         autor=autor,
     )
     return 200, {"activo": _activo_a_dict(activo)}
@@ -189,7 +189,7 @@ async def crear(request: Request) -> Response:
     """POST /api/marca-activos: cataloga un activo de marca.
 
     Cuerpo: `tipo` (lista blanca), `marca` ('' = global), `nombre`, `objeto` (id de media;
-    obligatorio salvo `tipo=paleta`), `metadatos` (objeto), `lineas` (ids de etiqueta categoria).
+    obligatorio salvo `tipo=paleta`), `metadatos` (objeto), `categorias` (ids de etiqueta categoria).
     -> `{activo}` | 400.
     """
     datos = await leer_json(request)
@@ -209,7 +209,7 @@ async def crear(request: Request) -> Response:
         marca_cruda=datos.get("marca"),
         metadatos_crudos=datos.get("metadatos"),
         nombre_crudo=datos.get("nombre"),
-        lineas_crudas=datos.get("lineas"),
+        categorias_crudas=datos.get("categorias"),
         autor=autor_de_peticion(request),
     )
     return JSONResponse(cuerpo, status_code=status)
@@ -223,7 +223,7 @@ def _actualizar(activo_id: str, campos: dict) -> tuple[int, dict]:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/marca-activos/{id}: edita nombre/tipo/metadatos/lineas/aprobado. -> `{activo}` | 404."""
+    """PATCH /api/marca-activos/{id}: edita nombre/tipo/metadatos/categorias/aprobado. -> `{activo}` | 404."""
     activo_id = request.path_params["activo_id"]
     datos = await leer_json(request)
     if not isinstance(datos, dict):
@@ -241,8 +241,8 @@ async def actualizar(request: Request) -> Response:
         if err:
             return JSONResponse({"error": err}, status_code=400)
         campos["metadatos"] = meta
-    if "lineas" in datos:
-        campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
+    if "categorias" in datos:
+        campos["categorias"] = json.dumps(_normalizar_categorias(datos.get("categorias")), ensure_ascii=False)
     if "aprobado" in datos:
         campos["aprobado"] = bool(datos["aprobado"])
 

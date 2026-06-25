@@ -26,7 +26,7 @@ def test_crear_logo_y_listar(cliente, _media_ok):
     r = cliente.post("/api/marca-activos", json={
         "tipo": "logo", "marca": "claro-sports", "nombre": "Logo principal",
         "objeto": "logo-abc.png", "metadatos": {"fondo_claro": True},
-        "lineas": ["linea-ligamx", "linea-ligamx", ""],
+        "categorias": ["cat-ligamx", "cat-ligamx", ""],
     })
     assert r.status_code == 200, r.text
     activo = r.json()["activo"]
@@ -34,16 +34,16 @@ def test_crear_logo_y_listar(cliente, _media_ok):
     assert activo["nombre"] == "Logo principal"
     assert activo["url"] == "/api/media/logo-abc.png"
     assert activo["metadatos"] == {"fondo_claro": True}
-    assert activo["lineas"] == ["linea-ligamx"]  # dedup + sin vacios
+    assert activo["categorias"] == ["cat-ligamx"]  # dedup + sin vacios
     assert activo["marca_nombre"]  # nombre humano de la marca
 
-    # Aparece al listar y se filtra por marca/tipo/linea.
+    # Aparece al listar y se filtra por marca/tipo/categoria.
     assert len(cliente.get("/api/marca-activos").json()["activos"]) == 1
     assert len(cliente.get("/api/marca-activos?tipo=logo").json()["activos"]) == 1
     assert len(cliente.get("/api/marca-activos?tipo=arte").json()["activos"]) == 0
     assert len(cliente.get("/api/marca-activos?marca=claro-sports").json()["activos"]) == 1
-    assert len(cliente.get("/api/marca-activos?linea=linea-ligamx").json()["activos"]) == 1
-    assert len(cliente.get("/api/marca-activos?linea=otra").json()["activos"]) == 0
+    assert len(cliente.get("/api/marca-activos?categoria=cat-ligamx").json()["activos"]) == 1
+    assert len(cliente.get("/api/marca-activos?categoria=otra").json()["activos"]) == 0
 
 
 def test_crear_objeto_inexistente_400(cliente, monkeypatch):
@@ -79,10 +79,10 @@ def test_actualizar_y_borrar(cliente, _media_ok):
     }).json()["activo"]
     aid = creado["id"]
 
-    r = cliente.patch(f"/api/marca-activos/{aid}", json={"nombre": "Flecha azul", "lineas": ["l1"]})
+    r = cliente.patch(f"/api/marca-activos/{aid}", json={"nombre": "Flecha azul", "categorias": ["l1"]})
     assert r.status_code == 200
     assert r.json()["activo"]["nombre"] == "Flecha azul"
-    assert r.json()["activo"]["lineas"] == ["l1"]
+    assert r.json()["activo"]["categorias"] == ["l1"]
 
     assert cliente.patch("/api/marca-activos/inexistente", json={"nombre": "x"}).status_code == 404
 

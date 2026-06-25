@@ -2,15 +2,15 @@
 
 Cada plantilla es un DOCUMENTO de capas completo (logo + textos + marcos + …) que el equipo
 guarda para reutilizar; se etiqueta por `categoria` (texto LIBRE normalizado a slug: ultima-hora |
-marcador | efemerides | … con "general" como fallback; sin enum en BD) y por `lineas` (ids de
-`etiquetas` clase=categoria) para filtrar por línea editorial. A diferencia de `plantillas_marca`
+marcador | efemerides | … con "general" como fallback; sin enum en BD) y por `categorias` (ids de
+`etiquetas` clase=categoria) para filtrar por categoria editorial. A diferencia de `plantillas_marca`
 (1 plantilla POR DEFECTO por marca), aquí hay muchas. El catálogo legible de categorías vive en
 el frontend (`lib/categoriasPlantilla.ts`); el legado "post" se trata como "general".
 
-  - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&linea=&q=`).
+  - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&categorias=&q=`).
   - `POST   /api/plantillas-diseno`        crea una plantilla a partir de un documento (validado).
   - `GET    /api/plantillas-diseno/{id}`   una plantilla (con su documento listo para cargar).
-  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/foto_muestra/activo/rotar.
+  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/categorias/miniatura/foto_muestra/activo/rotar.
   - `DELETE /api/plantillas-diseno/{id}`   borra.
 
 SEGURIDAD: `marca` (si llega) del catálogo único; el `documento` se valida en el dominio
@@ -36,7 +36,7 @@ from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
 
 _MAX_NOMBRE = 120
-_MAX_LINEAS = 24
+_MAX_CATEGORIAS = 24
 _MAX_MUESTRA_TEXTO = 200  # tope del titular/pleca de muestra (solo overview de la galería)
 _TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
 
@@ -108,14 +108,14 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     return marca, None
 
 
-def _normalizar_lineas(valor: object) -> list[str]:
+def _normalizar_categorias(valor: object) -> list[str]:
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []
     for item in valor:
         if isinstance(item, str) and item.strip() and item.strip() not in vistas:
             vistas.append(item.strip())
-        if len(vistas) >= _MAX_LINEAS:
+        if len(vistas) >= _MAX_CATEGORIAS:
             break
     return vistas
 
@@ -135,23 +135,23 @@ def _texto_muestra(valor: object) -> str:
 
 
 def _plantilla_a_dict(item: dict) -> dict:
-    """Serializa una plantilla: documento/lineas como objeto/lista, url de miniatura y marca_nombre."""
+    """Serializa una plantilla: documento/categorias como objeto/lista, url de miniatura y marca_nombre."""
     try:
         doc = json.loads(item.get("documento") or "{}")
     except (ValueError, TypeError):
         doc = {}
     try:
-        lineas = json.loads(item.get("lineas") or "[]")
+        categorias = json.loads(item.get("categorias") or "[]")
     except (ValueError, TypeError):
-        lineas = []
-    if not isinstance(lineas, list):
-        lineas = []
+        categorias = []
+    if not isinstance(categorias, list):
+        categorias = []
     miniatura = item.get("miniatura") or ""
     foto_muestra = item.get("foto_muestra") or ""
     return {
         **item,
         "documento": doc,
-        "lineas": [x for x in lineas if isinstance(x, str)],
+        "categorias": [x for x in categorias if isinstance(x, str)],
         "miniatura_url": f"/api/media/{miniatura}" if miniatura else "",
         "foto_muestra_url": f"/api/media/{foto_muestra}" if foto_muestra else "",
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
@@ -168,14 +168,16 @@ def _coincide(p: dict, q: str) -> bool:
     return _normalizar_categoria(q) in _normalizar_categoria(p.get("categoria"))
 
 
-def _listar(marca: str | None, tipo: str | None, cat_q: str, linea: str, busqueda: str) -> list[dict]:
+def _listar(marca: str | None, tipo: str | None, cat_q: str, categorias_filtro: str, busqueda: str) -> list[dict]:
     plantillas = [
         _plantilla_a_dict(item)
         for item in repos.listar_plantillas_diseno(marca=marca, tipo=tipo)
     ]
-    # Filtro de categoría: acepta el valor crudo (igualdad exacta, p. ej. el legado "post") o
-    # cualquier forma que normalice al mismo slug («Última hora» == `ultima-hora`). Se filtra en
-    # memoria, como `linea` y `q`, para no acoplar la normalización al SQL del repo.
+    # DOS ejes "categoría" distintos: `cat_q` (`?categoria=`) filtra por el SLUG de la plantilla
+    # (ultima-hora | marcador | …); `categorias_filtro` (`?categorias=`) filtra por MEMBRESÍA en la
+    # lista `categorias` (ids de etiquetas a las que aplica la plantilla). El slug acepta el valor
+    # crudo (igualdad exacta, p. ej. el legado "post") o cualquier forma que normalice al mismo slug
+    # («Última hora» == `ultima-hora`). Se filtra en memoria, como `q`, para no acoplar al SQL.
     if cat_q:
         cat_norm = _normalizar_categoria(cat_q)
         plantillas = [
@@ -183,8 +185,8 @@ def _listar(marca: str | None, tipo: str | None, cat_q: str, linea: str, busqued
             for p in plantillas
             if p.get("categoria") == cat_q or _normalizar_categoria(p.get("categoria")) == cat_norm
         ]
-    if linea:
-        plantillas = [p for p in plantillas if linea in p.get("lineas", [])]
+    if categorias_filtro:
+        plantillas = [p for p in plantillas if categorias_filtro in p.get("categorias", [])]
     if busqueda:
         plantillas = [p for p in plantillas if _coincide(p, busqueda)]
     return plantillas
@@ -201,7 +203,7 @@ async def listar(request: Request) -> Response:
         q.get("marca") or None,
         tipo_q,
         (q.get("categoria") or "").strip(),
-        (q.get("linea") or "").strip(),
+        (q.get("categorias") or "").strip(),
         (q.get("q") or "").strip(),
     )
     return JSONResponse({"plantillas": plantillas})
@@ -241,7 +243,7 @@ async def crear(request: Request) -> Response:
     foto_muestra = _promover_foto_muestra(datos.get("foto_muestra"))
     titular_muestra = _texto_muestra(datos.get("titular_muestra"))
     etiqueta_muestra = _texto_muestra(datos.get("etiqueta_muestra"))
-    lineas = _normalizar_lineas(datos.get("lineas"))
+    categorias = _normalizar_categorias(datos.get("categorias"))
 
     plantilla = await run_in_threadpool(
         repos.crear_plantilla_diseno,
@@ -254,7 +256,7 @@ async def crear(request: Request) -> Response:
         foto_muestra=foto_muestra,
         titular_muestra=titular_muestra,
         etiqueta_muestra=etiqueta_muestra,
-        lineas=json.dumps(lineas, ensure_ascii=False),
+        categorias=json.dumps(categorias, ensure_ascii=False),
         rotar=bool(datos.get("rotar")),
         autor=autor_de_peticion(request),
     )
@@ -312,8 +314,8 @@ async def actualizar(request: Request) -> Response:
         campos["titular_muestra"] = _texto_muestra(datos.get("titular_muestra"))
     if "etiqueta_muestra" in datos:
         campos["etiqueta_muestra"] = _texto_muestra(datos.get("etiqueta_muestra"))
-    if "lineas" in datos:
-        campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
+    if "categorias" in datos:
+        campos["categorias"] = json.dumps(_normalizar_categorias(datos.get("categorias")), ensure_ascii=False)
     if "activo" in datos:
         campos["activo"] = bool(datos["activo"])
     if "rotar" in datos:

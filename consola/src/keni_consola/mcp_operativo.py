@@ -307,7 +307,7 @@ class ServidorMcp:
                 "copy con la biblioteca de prompts y verificar la voz contra los patrones "
                 "medidos; ideas evergreen, sugerencias e insumos; campañas, etiquetas y "
                 "notificaciones; mover piezas por el flujo de aprobación (hasta aprobar/"
-                "rechazar/deshacer); leer métricas (incl. líneas, comparativas y Ads); y la "
+                "rechazar/deshacer); leer métricas (incl. categorías, comparativas y Ads); y la "
                 "rota del equipo (turnos y canjes). NO cubre, a propósito: administración de "
                 "usuarios, publicar/programar real (eso es de la UI) y la edición de media "
                 "(audio, vídeo, imagen). Empieza por `keni_contexto` para conocer marcas, "
@@ -620,14 +620,14 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         )
 
     @mcp.tool()
-    async def keni_metricas_lineas(rango: str = "mes", marca: str = "") -> dict:
-        """Rendimiento del periodo por LÍNEA editorial (etiqueta de clase `categoria`) y por
+    async def keni_metricas_categorias(rango: str = "mes", marca: str = "") -> dict:
+        """Rendimiento del periodo por CATEGORÍA editorial (etiqueta de clase `categoria`) y por
         ORIGEN: nº de piezas, visualizaciones, interacciones y engagement medio por cubo.
-        Responde "qué línea funciona" (p. ej. Liga MX vs NFL en Claro Sports)."""
+        Responde "qué categoría funciona" (p. ej. Liga MX vs NFL en Claro Sports)."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/metricas/lineas", rango=rango, marca=marca)
+        return await cli.get("/api/metricas/categorias", rango=rango, marca=marca)
 
     @mcp.tool()
     async def keni_metricas_ads(rango: str = "mes", marca: str = "") -> dict:

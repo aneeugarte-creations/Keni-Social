@@ -1,11 +1,11 @@
-"""Endpoints de piezas: analítica, rendimiento, listado, histórico, por etiqueta y líneas.
+"""Endpoints de piezas: analítica, rendimiento, listado, histórico, por etiqueta y categorías.
 
   - `piezas`: estadísticas + top/peores + distribución del periodo (filtrable por red).
   - `piezas_rendimiento`: drill-down marca -> pieza publicada con rendimiento REAL.
-  - `piezas_listado`: listado COMPLETO de piezas del periodo (con línea editorial).
+  - `piezas_listado`: listado COMPLETO de piezas del periodo (con categoría editorial).
   - `pieza_historico`: serie histórica de UNA pieza + velocidad de crecimiento.
   - `piezas_por_etiqueta`: rendimiento del periodo por SERIE/TIPO.
-  - `lineas`: rendimiento del periodo por LÍNEA (clase `categoria`) y ORIGEN (clase `origen`).
+  - `categorias`: rendimiento del periodo por CATEGORÍA (clase `categoria`) y ORIGEN (clase `origen`).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ __all__ = [
     "piezas_listado",
     "pieza_historico",
     "piezas_por_etiqueta",
-    "lineas",
+    "categorias",
 ]
 
 
@@ -197,19 +197,19 @@ async def piezas_listado(request: Request) -> Response:
             {"error": "No se pudo generar el listado de piezas."}, status_code=500
         )
     piezas_crudas = payload.get("piezas", [])
-    # Enriquecemos cada pieza con su LÍNEA editorial (cruce con la BD) y normalizamos el
-    # campo `red` -> `plataforma` (contrato `PiezaListado`). El cruce de líneas es trabajo
+    # Enriquecemos cada pieza con su CATEGORÍA editorial (cruce con la BD) y normalizamos el
+    # campo `red` -> `plataforma` (contrato `PiezaListado`). El cruce de categorías es trabajo
     # bloqueante de BD: va en el threadpool para no congelar el event loop. La cache guarda
-    # el listado crudo; la línea se resuelve aquí (lectura de BD barata, sin volver a Metricool).
+    # el listado crudo; la categoría se resuelve aquí (lectura de BD barata, sin volver a Metricool).
     marca_consola = _marca_consola_de_metricas(marca)
     try:
-        linea_map = await run_in_threadpool(
+        categoria_map = await run_in_threadpool(
             metricas_categoria.categorias_por_pieza, marca_consola, piezas_crudas
         )
-    except Exception:  # noqa: BLE001 -- la línea es best-effort; sin ella, todo "Sin línea"
-        _log.exception("Fallo al resolver líneas del listado (marca=%s).", marca or "todas")
-        linea_map = {}
-    piezas = [_pieza_listado_serializable(p, linea_map) for p in piezas_crudas]
+    except Exception:  # noqa: BLE001 -- la categoría es best-effort; sin ella, todo "Sin categoría"
+        _log.exception("Fallo al resolver categorías del listado (marca=%s).", marca or "todas")
+        categoria_map = {}
+    piezas = [_pieza_listado_serializable(p, categoria_map) for p in piezas_crudas]
     total = payload.get("total", 0)
     # Recorte por red(es): el contrato `PiezaListado` emite la red en `plataforma`
     # (con `twitter` ya normalizado a `x` en la fuente). Una pieza fuera del foco
@@ -237,18 +237,18 @@ async def piezas_listado(request: Request) -> Response:
     )
 
 
-def _pieza_listado_serializable(p: dict, linea_map: dict[str, str]) -> dict:
+def _pieza_listado_serializable(p: dict, categoria_map: dict[str, str]) -> dict:
     """Adapta una pieza del listado crudo al contrato `PiezaListado`.
 
     El listado de la fuente (`construir_listado_piezas`) emite la red como `red`; el
-    contrato (y la UI) la esperan como `plataforma`. Además añade `linea` (nombre de la
-    línea editorial, o `null` si no es atribuible — `linea_map` solo trae las resueltas).
+    contrato (y la UI) la esperan como `plataforma`. Además añade `categoria` (nombre de la
+    categoría editorial, o `null` si no es atribuible — `categoria_map` solo trae las resueltas).
     El resto de campos (granulares, url, cuenta, rendimiento_relativo) pasa tal cual.
     """
     salida = dict(p)
     salida["plataforma"] = p.get("plataforma") or p.get("red") or ""
     salida.pop("red", None)
-    salida["linea"] = linea_map.get(str(p.get("id") or "")) or None
+    salida["categoria"] = categoria_map.get(str(p.get("id") or "")) or None
     return salida
 
 
@@ -414,15 +414,15 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     )
 
 
-async def lineas(request: Request) -> Response:
-    """GET /api/metricas/lineas: rendimiento del periodo por LÍNEA y por ORIGEN.
+async def categorias(request: Request) -> Response:
+    """GET /api/metricas/categorias: rendimiento del periodo por CATEGORÍA y por ORIGEN.
 
-    Agrupa el rendimiento REAL de las piezas del periodo por su LÍNEA editorial (etiqueta
+    Agrupa el rendimiento REAL de las piezas del periodo por su CATEGORÍA editorial (etiqueta
     clase `categoria`) y por su ORIGEN (clase `origen`), cruzando las piezas de la fuente
     única de métricas con su `contenido` de la BD (enlace por `id_post_metricool`; fallback
     fuzzy por título), igual que `piezas-por-etiqueta`. Devuelve, por cada cubo, nº de
     piezas + suma de visualizaciones + suma de interacciones + engagement medio. Las piezas
-    sin línea/origen caen en "Sin línea"/"Sin origen".
+    sin categoría/origen caen en "Sin categoría"/"Sin origen".
 
     `?marca=` (en forma `id_metricas`) acota; sin marca, todas. `?rango=` (preset o token).
     `?red=a,b` acota a esas redes y `?formato=a,b` a esos formatos canónicos (valor
@@ -448,11 +448,11 @@ async def lineas(request: Request) -> Response:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception(
-            "Fallo al generar la analítica por línea (rango=%s, marca=%s).",
+            "Fallo al generar la analítica por categoría (rango=%s, marca=%s).",
             rango, marca_metricas or "todas",
         )
         return JSONResponse(
-            {"error": "No se pudo generar la analítica por línea."}, status_code=500
+            {"error": "No se pudo generar la analítica por categoría."}, status_code=500
         )
     return JSONResponse(
         {

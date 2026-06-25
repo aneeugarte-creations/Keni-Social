@@ -256,9 +256,9 @@ def _opciones() -> dict[str, Any]:
             }
             for m in marcas.catalogo()
         ],
-        # `lineas`: catálogo plano de categorías (id→nombre) para RESOLVER el nombre de
-        # `pieza.categoria` en el editor; NO es un eje de filtro (el filtro es `categorias`).
-        "lineas": lineas,
+        # `categorias_catalogo`: catálogo plano de categorías (id→nombre) para RESOLVER el nombre
+        # de `pieza.categoria` en el editor; NO es un eje de filtro (el filtro es `categorias`).
+        "categorias_catalogo": lineas,
         # `categorias`: taxonomía del plan por marca (Última hora + líneas + Evergreen, con flag
         # `franja`). Única fuente de "líneas/categorías" para filtros y alta.
         "categorias": categorias,

@@ -10,7 +10,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { GrupoMesa, Historia, MesaLinea } from "@/types";
+import type { GrupoMesa, Historia, MesaCategoria } from "@/types";
 
 import {
   agruparPorMacro,
@@ -253,7 +253,7 @@ describe("chipsDeLineas", () => {
     en_pool: number,
     cupo: number,
     historias: Historia[] = [],
-  ): MesaLinea => ({
+  ): MesaCategoria => ({
     linea: clave,
     etiqueta,
     cupo,

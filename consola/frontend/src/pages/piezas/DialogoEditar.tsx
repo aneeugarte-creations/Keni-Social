@@ -66,15 +66,15 @@ function DialogoEditarInterno({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  // Catálogo de opciones (query cacheada del feed): da las `lineas` para nombrar la categoría de
-  // la pieza, cuyo `categoria` suele ser el ID de la categoría (un hash), no un slug legible.
+  // Catálogo de opciones (query cacheada del feed): da las `categorias_catalogo` para nombrar la
+  // categoría de la pieza, cuyo `categoria` suele ser el ID de la categoría (un hash), no un slug.
   const opcionesQuery = useQuery({
     queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     enabled: pieza !== null,
   });
   const nombreCategoria = pieza
-    ? etiquetaCategoriaPieza(pieza.categoria, opcionesQuery.data?.lineas)
+    ? etiquetaCategoriaPieza(pieza.categoria, opcionesQuery.data?.categorias_catalogo)
     : "";
   const [contenido, setPublicacion] = React.useState("");
   // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.

@@ -710,7 +710,7 @@ export default function Imagen() {
         foto_muestra: p.foto_muestra || undefined,
         titular_muestra: p.titular_muestra || undefined,
         etiqueta_muestra: p.etiqueta_muestra || undefined,
-        lineas: p.lineas,
+        categorias: p.categorias,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });

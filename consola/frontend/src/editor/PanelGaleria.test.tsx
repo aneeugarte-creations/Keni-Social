@@ -34,7 +34,7 @@ function activo(parcial: Partial<ActivoMarca>): ActivoMarca {
     nombre: "Activo",
     objeto: "media/a1.png",
     metadatos: {},
-    lineas: [],
+    categorias: [],
     aprobado: true,
     url: "/api/media/media/a1.png",
     marca_nombre: "UnoTV",

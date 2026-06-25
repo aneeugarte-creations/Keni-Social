@@ -13,7 +13,7 @@ _COLS_BLOQUES = (
     "marca",
     "nombre",
     "capas",
-    "lineas",
+    "categorias",
     "miniatura",
     "autor_id",
     "autor_nombre",
@@ -21,13 +21,13 @@ _COLS_BLOQUES = (
     "actualizado",
 )
 _SELECT_BLOQUES = f"SELECT {', '.join(_COLS_BLOQUES)} FROM bloques"
-_CAMPOS_EDITABLES_BLOQUES: tuple[str, ...] = ("nombre", "capas", "lineas", "miniatura")
+_CAMPOS_EDITABLES_BLOQUES: tuple[str, ...] = ("nombre", "capas", "categorias", "miniatura")
 
 
 def _fila_a_bloque(fila: Any) -> dict[str, Any]:
     item: dict[str, Any] = {col: fila[col] for col in _COLS_BLOQUES}
     item["capas"] = fila["capas"] or "[]"
-    item["lineas"] = fila["lineas"] or "[]"
+    item["categorias"] = fila["categorias"] or "[]"
     return item
 
 
@@ -36,7 +36,7 @@ def crear_bloque(
     marca: str = "",
     nombre: str = "",
     capas: str = "[]",
-    lineas: str = "[]",
+    categorias: str = "[]",
     miniatura: str = "",
     autor: dict[str, str] | None = None,
     id: str = "",
@@ -51,7 +51,7 @@ def crear_bloque(
         "marca": marca or "",
         "nombre": nombre or "",
         "capas": capas or "[]",
-        "lineas": lineas or "[]",
+        "categorias": categorias or "[]",
         "miniatura": miniatura or "",
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",

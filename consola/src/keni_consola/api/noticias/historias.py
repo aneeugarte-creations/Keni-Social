@@ -508,7 +508,7 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     # renderiza como top-N. Si el pool real supera la muestra, los conteos de la muestra
     # subestiman: se ESCALAN al total real (factor = total_pool / muestra) para que cada `en_pool`
     # sea representativo del pool entero y no del recorte (el "300 vs 13"). Sin tope (muestra ⊇
-    # pool) el factor es 1.0 y los conteos son exactos. `historias[]` sigue siendo top-N por línea.
+    # pool) el factor es 1.0 y los conteos son exactos. `historias[]` sigue siendo top-N por categoría.
     _factor = (total_pool / len(clusters)) if clusters else 1.0
 
     def _en_pool(n_muestra: int) -> int:
@@ -518,10 +518,10 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
     # Líneas (categoría) de la marca: el reparto al plan y la barra de grupos las reusan.
     cat_etiquetas = repos.listar_etiquetas(marca=marca, clase="categoria", solo_activas=True)
     grupos_orden = _grupos_ordenados(cat_etiquetas)
-    # Reparto por LÍNEA (el pool ya viene ordenado por score: cada lista queda rankeada). Una
-    # historia compite por la línea de su feed (id); si el slug del feed no cae en una línea del
-    # plan, se clasifica por CONTENIDO (keywords) — así un feed mixto (divulgación) reparte cada
-    # nota a su línea. Las marcas con grupos clasifican aparte (abajo) y aquí no reclasifican.
+    # Reparto por CATEGORÍA (el pool ya viene ordenado por score: cada lista queda rankeada). Una
+    # historia compite por la categoría de su feed (id); si el slug del feed no cae en una categoría
+    # del plan, se clasifica por CONTENIDO (keywords) — así un feed mixto (divulgación) reparte cada
+    # nota a su categoría. Las marcas con grupos clasifican aparte (abajo) y aquí no reclasifican.
     etiquetas_fallback = [] if grupos_orden else cat_etiquetas
     por_linea_pool: dict[str, list[dict[str, Any]]] = {}
     for c in clusters:
@@ -574,14 +574,14 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
 
     # Breaking primero (si el plan lo contempla), luego el orden del plan.
     orden = (["breaking"] if "breaking" in plan else []) + [c for c in plan if c != "breaking"]
-    lineas = []
+    categorias = []
     total_generados = 0
     for cat in orden:
         contadores = resumen_plan.get(cat, {})
         generados = int(contadores.get("generados", 0))
         total_generados += generados
         pool = por_linea_pool.get(cat, [])
-        lineas.append(
+        categorias.append(
             {
                 "linea": cat,
                 "etiqueta": _etiqueta_linea(cat),
@@ -607,12 +607,12 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
         # Líneas de cada grupo (2º nivel de navegación): id, nombre y candidatas en pool. Orden:
         # las que tienen candidatas primero (mayor conteo arriba), las vacías al final. `cat_etiquetas`
         # ya viene alfabético por nombre, así que el orden estable rompe empates alfabéticamente.
-        lineas_por_grupo: dict[str, list[dict[str, Any]]] = {}
+        categorias_por_grupo: dict[str, list[dict[str, Any]]] = {}
         for e in cat_etiquetas:
             g = e.get("grupo") or ""
             if not g:
                 continue
-            lineas_por_grupo.setdefault(g, []).append(
+            categorias_por_grupo.setdefault(g, []).append(
                 {
                     "linea": e["id"],
                     "nombre": e.get("nombre") or e["id"],
@@ -623,20 +623,20 @@ def _mesa(marca: str, por_linea: int) -> dict[str, Any]:
             {
                 "grupo": g,
                 "en_pool": _en_pool(conteo_grupo.get(g, 0)),
-                "lineas": sorted(lineas_por_grupo.get(g, []), key=lambda li: -li["en_pool"]),
+                "lineas": sorted(categorias_por_grupo.get(g, []), key=lambda li: -li["en_pool"]),
             }
             for g in grupos_orden
         ]
     return {
         "marca": marca,
         "plan": bool(plan),
-        "lineas": lineas,
+        "categorias": categorias,
         "fuera_de_plan": {
             "en_pool": _en_pool(len(fuera)),
             "historias": [] if grupos_orden else _historias(fuera),
         },
         # Tamaño REAL del pool (COUNT(*), no la muestra topada): el número honesto de candidatas
-        # vivas de la marca. Los `en_pool` por línea/grupo se escalan a este total.
+        # vivas de la marca. Los `en_pool` por categoría/grupo se escalan a este total.
         "en_pool_total": total_pool,
         "total_objetivo": sum(int(v) for v in plan.values()),
         "total_generados": total_generados,

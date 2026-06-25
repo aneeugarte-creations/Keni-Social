@@ -133,24 +133,24 @@ def agrupar_por_eje(
 def agrupar_categorias_y_origenes(
     piezas: list[dict[str, Any]],
     *,
-    linea_por_contenido: dict[str, str],
+    categoria_por_contenido: dict[str, str],
     origen_por_contenido: dict[str, str],
     enlace_por_id: dict[str, str],
     enlace_por_titulo: dict[str, str],
-    lineas_definidas: list[dict[str, str]],
+    categorias_definidas: list[dict[str, str]],
     origenes_definidos: list[dict[str, str]],
 ) -> dict[str, Any]:
     """Agrega el periodo por CATEGORÍA y por ORIGEN a la vez. PURA (sin BD).
 
     Combina dos llamadas a `agrupar_por_eje` (una por eje) sobre el MISMO listado de piezas.
-    Devuelve `{"lineas": [...], "origenes": [...]}` con la forma del contrato del endpoint.
+    Devuelve `{"categorias": [...], "origenes": [...]}` con la forma del contrato del endpoint.
     """
-    lineas = agrupar_por_eje(
+    categorias = agrupar_por_eje(
         piezas,
-        valor_por_contenido=linea_por_contenido,
+        valor_por_contenido=categoria_por_contenido,
         enlace_por_id=enlace_por_id,
         enlace_por_titulo=enlace_por_titulo,
-        etiquetas_definidas=lineas_definidas,
+        etiquetas_definidas=categorias_definidas,
         sin_valor=SIN_CATEGORIA,
     )
     origenes = agrupar_por_eje(
@@ -161,7 +161,7 @@ def agrupar_categorias_y_origenes(
         etiquetas_definidas=origenes_definidos,
         sin_valor=SIN_ORIGEN,
     )
-    return {"lineas": lineas, "origenes": origenes}
+    return {"categorias": categorias, "origenes": origenes}
 
 
 def _valor_por_contenido(
@@ -246,15 +246,15 @@ def categorias_por_pieza(
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
         if e.get("id")
     }
-    # Línea de PLAN por contenido (eje único `categoria`: Última hora · categorías · Evergreen).
-    linea_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
+    # Categoría de PLAN por contenido (eje único `categoria`: Última hora · categorías · Evergreen).
+    categoria_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
     salida: dict[str, str] = {}
     for p in piezas:
         pid = str(p.get("id") or "")
         if not pid:
             continue
         cid = enlace_por_id.get(pid) or enlace_por_titulo.get(_normalizar_titulo(p.get("titulo", "")))
-        nombre = (linea_por_contenido.get(cid or "") or "").strip()
+        nombre = (categoria_por_contenido.get(cid or "") or "").strip()
         if nombre:
             salida[pid] = nombre
     return salida
@@ -277,7 +277,7 @@ def categorias_y_origenes(
     `redes` acota a esas redes y `formatos` a esos formatos canónicos ANTES de agregar
     (vacío = todas/todos), igual que el resto del dashboard.
 
-    Devuelve `{"lineas": [...], "origenes": [...], "total": <piezas del periodo>,
+    Devuelve `{"categorias": [...], "origenes": [...], "total": <piezas del periodo>,
     "fuente": <muestra|real|…>}`. Best-effort/honesto: si nada enlaza, todas las piezas
     caen en "Sin categoría"/"Sin origen".
     """
@@ -294,7 +294,7 @@ def categorias_y_origenes(
     # mezcla con marca=''). Filtra por clase en la BD para no traer de más, y SOLO activas:
     # una categoría/origen retirado del plan no debe aparecer como cubo (las piezas antiguas que
     # lo tuvieran caen en "Sin categoría"/"Sin origen").
-    lineas_def = [
+    categorias_def = [
         {"id": e.get("id", ""), "nombre": e.get("nombre", "")}
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_CATEGORIA, solo_activas=True)
     ]
@@ -303,21 +303,21 @@ def categorias_y_origenes(
         for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_ORIGEN, solo_activas=True)
     ]
     # `etiqueta_id -> nombre` por clase, para resolver la etiqueta de cada contenido.
-    categoria_por_id = {e["id"]: e["nombre"] for e in lineas_def if e.get("id")}
+    categoria_por_id = {e["id"]: e["nombre"] for e in categorias_def if e.get("id")}
     origen_por_id = {e["id"]: e["nombre"] for e in origenes_def if e.get("id")}
 
     # La CATEGORÍA agrupa por la `categoria` de PLAN del contenido (eje ÚNICO: Última hora · categorías ·
     # Evergreen). El ORIGEN sí es una etiqueta de su clase (puente `publicacion_etiquetas`).
-    linea_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
+    categoria_por_contenido = _categorias_por_contenido(contenidos, categoria_por_id)
     origen_por_contenido = _valor_por_contenido(repos.etiquetas_por_contenido(), origen_por_id)
 
     agregados = agrupar_categorias_y_origenes(
         piezas,
-        linea_por_contenido=linea_por_contenido,
+        categoria_por_contenido=categoria_por_contenido,
         origen_por_contenido=origen_por_contenido,
         enlace_por_id=enlace_por_id,
         enlace_por_titulo=enlace_por_titulo,
-        lineas_definidas=lineas_def,
+        categorias_definidas=categorias_def,
         origenes_definidos=origenes_def,
     )
     return {**agregados, "total": len(piezas), "fuente": fuente}

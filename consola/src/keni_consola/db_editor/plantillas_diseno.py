@@ -19,7 +19,7 @@ _COLS_PLANTILLAS_DISENO = (
     "foto_muestra",
     "titular_muestra",
     "etiqueta_muestra",
-    "lineas",
+    "categorias",
     "activo",
     "rotar",
     "orden",
@@ -39,7 +39,7 @@ _CAMPOS_EDITABLES_PLANTILLAS_DISENO: tuple[str, ...] = (
     "foto_muestra",
     "titular_muestra",
     "etiqueta_muestra",
-    "lineas",
+    "categorias",
     "activo",
     "rotar",
 )
@@ -52,7 +52,7 @@ def _fila_a_plantilla_diseno(fila: Any) -> dict[str, Any]:
     item["rotar"] = bool(fila["rotar"])
     item["orden"] = int(fila["orden"] or 0)
     item["documento"] = fila["documento"] or "{}"
-    item["lineas"] = fila["lineas"] or "[]"
+    item["categorias"] = fila["categorias"] or "[]"
     item["categoria"] = fila["categoria"] or "general"
     item["tipo"] = fila["tipo"] if fila["tipo"] in ("foto", "miniatura") else "foto"
     return item
@@ -69,7 +69,7 @@ def crear_plantilla_diseno(
     foto_muestra: str = "",
     titular_muestra: str = "",
     etiqueta_muestra: str = "",
-    lineas: str = "[]",
+    categorias: str = "[]",
     activo: bool = True,
     rotar: bool = False,
     autor: dict[str, str] | None = None,
@@ -91,7 +91,7 @@ def crear_plantilla_diseno(
         "foto_muestra": foto_muestra or "",
         "titular_muestra": titular_muestra or "",
         "etiqueta_muestra": etiqueta_muestra or "",
-        "lineas": lineas or "[]",
+        "categorias": categorias or "[]",
         "activo": 1 if activo else 0,
         "rotar": 1 if rotar else 0,
         # `orden`=0: las nuevas nacen "sin ordenar" (recientes primero); entran en la secuencia

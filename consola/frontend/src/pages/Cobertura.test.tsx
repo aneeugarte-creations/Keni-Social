@@ -160,7 +160,7 @@ function mesaFixture(overrides: Partial<RespuestaMesa> = {}): RespuestaMesa {
   return {
     marca: "unotv",
     plan: true,
-    lineas: [
+    categorias: [
       {
         linea: "breaking", cupo: 1, generados: 0, publicados: 0, restante: 1,
         en_pool: 1, historias: [HISTORIA_BREAKING],
@@ -194,7 +194,7 @@ let mockCobertura: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockMesa: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockMesaLinea: any;
+let mockMesaPaginada: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockHistorias: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,7 +209,7 @@ beforeEach(() => {
   mockMesa = vi.spyOn(apiMod.api.noticias, "mesa").mockResolvedValue(mesaFixture());
   // Pulsar un chip/línea recorre TODO el pool de esa línea (lista paginada). Por defecto
   // devuelve una candidata; los tests que afinan la línea sobreescriben este stub.
-  mockMesaLinea = vi
+  mockMesaPaginada = vi
     .spyOn(apiMod.api.noticias, "mesaLinea")
     .mockResolvedValue({ historias: [historiaItem()], total: 1 });
   mockHistorias = vi
@@ -279,7 +279,7 @@ describe("Cobertura · Mesa", () => {
   it("una promovible muestra el indicador «Sale sola al feed» en la tarjeta", async () => {
     mockMesa.mockResolvedValue(
       mesaFixture({
-        lineas: [
+        categorias: [
           {
             linea: "mx", cupo: 2, generados: 0, publicados: 0, restante: 2, en_pool: 1,
             historias: [historiaItem({ promovible: true, promovible_motivo: "score 0.55 ≥ 0.35" })],
@@ -296,7 +296,7 @@ describe("Cobertura · Mesa", () => {
   it("«Fuera del plan» es un chip que recorre su pool paginado (todo, no solo el top-N)", async () => {
     // El chip de una línea abre su lista PAGINADA (GET mesa/linea con la clave de reparto): para
     // «Fuera del plan» eso es la clave '__fuera__'. El back devuelve el pool entero de la línea.
-    mockMesaLinea.mockResolvedValue({
+    mockMesaPaginada.mockResolvedValue({
       historias: [historiaItem({ id: "h-fuera", titulo: "Gaming sin línea", categoria: "gaming" })],
       total: 1,
     });
@@ -304,14 +304,14 @@ describe("Cobertura · Mesa", () => {
     await waitFor(() => expect(screen.getByTestId("chip-grupo-Fuera del plan")).toBeTruthy());
     fireEvent.click(screen.getByTestId("chip-grupo-Fuera del plan"));
     await waitFor(() => expect(screen.getByText("Gaming sin línea")).toBeTruthy());
-    expect(mockMesaLinea).toHaveBeenCalledWith(
+    expect(mockMesaPaginada).toHaveBeenCalledWith(
       expect.objectContaining({ marca: "unotv", linea: "__fuera__" }),
       expect.anything(),
     );
   });
 
   it("pulsar un chip de línea abre su lista PAGINADA (recorre TODO el pool, no solo el top-N)", async () => {
-    mockMesaLinea.mockResolvedValue({
+    mockMesaPaginada.mockResolvedValue({
       historias: [historiaItem(), historiaItem({ id: "h-2", titulo: "Otra nacional" })],
       total: 42,
     });
@@ -320,7 +320,7 @@ describe("Cobertura · Mesa", () => {
     fireEvent.click(screen.getByTestId("chip-grupo-Nacional"));
     // Pide el pool de la línea 'mx' (Nacional) y muestra su lista + el total real.
     await waitFor(() =>
-      expect(mockMesaLinea).toHaveBeenCalledWith(
+      expect(mockMesaPaginada).toHaveBeenCalledWith(
         expect.objectContaining({ marca: "unotv", linea: "mx" }),
         expect.anything(),
       ),

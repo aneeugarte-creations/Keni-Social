@@ -4,7 +4,7 @@ import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
-import type { MetricasLineas } from "@/types";
+import type { MetricasCategorias } from "@/types";
 
 import { MetricaPorCategoria } from "./MetricaPorCategoria";
 
@@ -18,11 +18,11 @@ beforeAll(() => {
   }
 });
 
-const RESP: MetricasLineas = {
+const RESP: MetricasCategorias = {
   marca: "unotv",
   rango: "semana",
   etiqueta_rango: "Últimos 7 días",
-  lineas: [
+  categorias: [
     {
       id: "deportes",
       nombre: "Deportes",
@@ -76,7 +76,7 @@ function renderConProviders(ui: React.ReactElement) {
 
 describe("MetricaPorCategoria", () => {
   it("muestra las dos tablas (por categoría y por origen) con sus encabezados y filas", async () => {
-    vi.spyOn(api, "metricasLineas").mockResolvedValue(RESP);
+    vi.spyOn(api, "metricasCategorias").mockResolvedValue(RESP);
     renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);
 
     // Espera al dato cargado (el título de la sección ya se pinta durante la carga).
@@ -103,7 +103,7 @@ describe("MetricaPorCategoria", () => {
   });
 
   it("dice con honestidad cuando un corte no trae filas pero el otro sí", async () => {
-    vi.spyOn(api, "metricasLineas").mockResolvedValue({ ...RESP, origenes: [] });
+    vi.spyOn(api, "metricasCategorias").mockResolvedValue({ ...RESP, origenes: [] });
     renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Deportes")).toBeInTheDocument();
@@ -115,9 +115,9 @@ describe("MetricaPorCategoria", () => {
   });
 
   it("muestra el vacío global honesto cuando no hay categorías ni orígenes", async () => {
-    vi.spyOn(api, "metricasLineas").mockResolvedValue({
+    vi.spyOn(api, "metricasCategorias").mockResolvedValue({
       ...RESP,
-      lineas: [],
+      categorias: [],
       origenes: [],
     });
     renderConProviders(<MetricaPorCategoria marcaActual="__todas__" rangoActual="semana" />);

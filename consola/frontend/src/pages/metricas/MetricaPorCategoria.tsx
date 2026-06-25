@@ -1,14 +1,14 @@
 /**
  * Métrica por CATEGORÍA de contenido y por ORIGEN.
  *
- * Consume `/api/metricas/lineas` y muestra dos tablas: rendimiento del periodo por categoría
+ * Consume `/api/metricas/categorias` y muestra dos tablas: rendimiento del periodo por categoría
  * y por origen, con piezas / vistas / interacciones / engagement (promedio por pieza:
  * media simple de porcentajes, como lo agrega el backend). Sigue el selector de marca +
  * rango global del dashboard (la marca viaja en forma `id_metricas`, que es justo lo que
  * devuelve `marcaParam` para el catálogo de Métricas).
  *
  * Ambas tablas comparten el mismo conjunto de métricas, así que comparten también el editor
- * de campos (`tablaId` "por-linea"): ocultar/reordenar columnas aplica a las dos a la vez.
+ * de campos (`tablaId` "por-categoria"): ocultar/reordenar columnas aplica a las dos a la vez.
  * La primera columna (dimensión) cambia de etiqueta por tabla (Categoría vs Origen).
  *
  * Estados honestos (carga / vacío / error) como el resto de Métricas: si la fuente no
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { numeroCompleto, porcentaje } from "@/lib/formato";
-import type { FilaMetricaLinea } from "@/types";
+import type { FilaMetricaCategoria } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import type { ColumnaMeta } from "./columnasMeta";
@@ -42,7 +42,7 @@ import { useOrdenTabla } from "./useOrdenTabla";
 import { columnasVisibles, useVistaConfig } from "./vistaConfig";
 
 /** Id de tabla compartido por las dos tablas (clave en `vistaConfig.columnas`). */
-const TABLA_POR_LINEA = "por-linea";
+const TABLA_POR_CATEGORIA = "por-categoria";
 
 type ClaveMetrica = "piezas" | "visualizaciones" | "interacciones" | "engagement_pct";
 
@@ -70,7 +70,7 @@ const ETIQUETA_METRICA: Record<ClaveMetrica, string> = {
 };
 
 /** Accesores de orden por columna (constante de módulo: referencia estable entre renders). */
-const ACCESORES: Record<ClaveMetrica, (f: FilaMetricaLinea) => number | null> = {
+const ACCESORES: Record<ClaveMetrica, (f: FilaMetricaCategoria) => number | null> = {
   piezas: (f) => f.piezas,
   visualizaciones: (f) => f.visualizaciones,
   interacciones: (f) => f.interacciones,
@@ -78,7 +78,7 @@ const ACCESORES: Record<ClaveMetrica, (f: FilaMetricaLinea) => number | null> = 
 };
 
 /** Formatea el valor de una columna métrica de una fila. */
-function valorCelda(f: FilaMetricaLinea, clave: ClaveMetrica): string {
+function valorCelda(f: FilaMetricaCategoria, clave: ClaveMetrica): string {
   if (clave === "piezas") {
     return String(f.piezas);
   }
@@ -100,19 +100,19 @@ export function MetricaPorCategoria({
   const formato = useVistaConfig((s) => s.formato);
 
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "lineas", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
+    queryKey: ["metricas", "categorias", rangoActual ?? "", marca_ ?? "todas", red ?? "todas", formato ?? "todos"],
     queryFn: ({ signal }) =>
-      api.metricasLineas({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
+      api.metricasCategorias({ rango: rangoActual, marca: marca_, red: red ?? undefined, formato: formato ?? undefined }, signal),
     enabled: Boolean(rangoActual),
     staleTime: 2 * 60_000,
   });
 
   return (
     <Seccion
-      id="por-linea"
+      id="por-categoria"
       titulo="Rendimiento por categoría"
       icono={GitBranch}
-      tablaId={TABLA_POR_LINEA}
+      tablaId={TABLA_POR_CATEGORIA}
       columnas={COLUMNAS}
       contentClassName="space-y-8"
     >
@@ -122,19 +122,19 @@ export function MetricaPorCategoria({
         <p className="py-10 text-center text-sm text-muted-foreground">
           No se pudo cargar el rendimiento por categoría.
         </p>
-      ) : data.lineas.length === 0 && data.origenes.length === 0 ? (
+      ) : data.categorias.length === 0 && data.origenes.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
           Aún no hay rendimiento por categoría u origen para este periodo.
         </p>
       ) : (
         <>
-          <TablaLineas
+          <TablaCategorias
             titulo="Por categoría de contenido"
-            filas={data.lineas}
+            filas={data.categorias}
             total={data.total}
             etiquetaPrimera="Categoría"
           />
-          <TablaLineas
+          <TablaCategorias
             titulo="Por origen"
             filas={data.origenes}
             total={data.total}
@@ -146,24 +146,24 @@ export function MetricaPorCategoria({
   );
 }
 
-function TablaLineas({
+function TablaCategorias({
   titulo,
   filas,
   total,
   etiquetaPrimera,
 }: {
   titulo: string;
-  filas: FilaMetricaLinea[];
-  total: FilaMetricaLinea;
+  filas: FilaMetricaCategoria[];
+  total: FilaMetricaCategoria;
   etiquetaPrimera: string;
 }) {
   // Config de columnas COMPARTIDA por las dos tablas: ambas leen la misma clave, así que
   // ocultar/reordenar campos en el editor se refleja en las dos a la vez.
-  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_POR_LINEA]);
+  const cfgGuardada = useVistaConfig((s) => s.columnas[TABLA_POR_CATEGORIA]);
   const cfg = cfgGuardada ?? { orden: IDS_BASE, ocultas: [] };
   const columnas = columnasVisibles(IDS_BASE, cfg);
 
-  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<FilaMetricaLinea, ClaveMetrica>(
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<FilaMetricaCategoria, ClaveMetrica>(
     filas,
     ACCESORES,
     { clave: "visualizaciones", direccion: "desc" },
@@ -195,7 +195,7 @@ function TablaLineas({
     );
   };
 
-  const celda = (f: FilaMetricaLinea, id: string) => {
+  const celda = (f: FilaMetricaCategoria, id: string) => {
     if (id === "dimension") {
       return (
         <TableCell key={id} className="pl-6 font-medium">

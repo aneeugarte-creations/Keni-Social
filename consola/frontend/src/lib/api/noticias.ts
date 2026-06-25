@@ -5,7 +5,7 @@ import type {
   Historia,
   RespuestaHistorias,
   RespuestaMesa,
-  RespuestaMesaLinea,
+  RespuestaMesaCategoria,
   RespuestaDescubrimiento,
   RespuestaNoticias,
   RespuestaStatsFuentes,
@@ -136,7 +136,7 @@ export const apiNoticias = {
       params: { marca: string; linea: string; offset?: number; limit?: number },
       signal?: AbortSignal,
     ) =>
-      peticion<RespuestaMesaLinea>(
+      peticion<RespuestaMesaCategoria>(
         `/noticias/mesa/linea${query({
           marca: params.marca,
           linea: params.linea,

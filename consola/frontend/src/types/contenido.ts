@@ -228,10 +228,10 @@ export interface RespuestaIdeaEvergreen {
   generacion?: Generacion;
 }
 
-// --- Métrica por línea (categoría) y por origen -------------------------------
+// --- Métrica por categoría y por origen ---------------------------------------
 
-/** Rendimiento agregado de una LÍNEA (o un ORIGEN) en el periodo. */
-export interface FilaMetricaLinea {
+/** Rendimiento agregado de una CATEGORÍA (o un ORIGEN) en el periodo. */
+export interface FilaMetricaCategoria {
   id: string;
   nombre: string;
   piezas: number;
@@ -240,13 +240,13 @@ export interface FilaMetricaLinea {
   engagement_pct: number;
 }
 
-export interface MetricasLineas {
+export interface MetricasCategorias {
   marca: string;
   rango: string;
   etiqueta_rango: string;
-  lineas: FilaMetricaLinea[];
-  origenes: FilaMetricaLinea[];
-  total: FilaMetricaLinea;
+  categorias: FilaMetricaCategoria[];
+  origenes: FilaMetricaCategoria[];
+  total: FilaMetricaCategoria;
   fuente: string;
 }
 

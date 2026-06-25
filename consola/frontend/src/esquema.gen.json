@@ -1445,7 +1445,7 @@
             }
           ]
         },
-        "linea": {
+        "categoria": {
           "anyOf": [
             {
               "type": "string"
@@ -1456,7 +1456,7 @@
           ]
         }
       },
-      "description": "Una pieza del listado COMPLETO del periodo (tabla \"Todas las piezas\").\n\nMisma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la\nLÍNEA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto\ncruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene\nlínea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra\n\"Sin línea\". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.",
+      "description": "Una pieza del listado COMPLETO del periodo (tabla \"Todas las piezas\").\n\nMisma forma que `PiezaMetrica` (granulares incluidos) MÁS `categoria`: el nombre de la\nCATEGORÍA editorial (etiqueta clase `categoria`) a la que pertenece la pieza, resuelto\ncruzándola con su contenido de la Consola. `categoria` es `null` cuando la pieza no tiene\ncategoría atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra\n\"Sin categoría\". Se separa de `PiezaMetrica` para no forzar `categoria` en top/peores.",
       "required": [
         "id",
         "plataforma",
@@ -1477,7 +1477,7 @@
         "formato",
         "cuenta",
         "rendimiento_relativo",
-        "linea"
+        "categoria"
       ]
     },
     "PiezasListado": {
@@ -1512,7 +1512,7 @@
           "type": "string"
         }
       },
-      "description": "Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.\n\nTODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única\n(`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae\nsu `id` (de Metricool), granulares, url y su `linea` editorial. Es el insumo de la\ntabla \"Todas las piezas del periodo\" (filtros + orden + paginación por día + detalle\npor pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.",
+      "description": "Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.\n\nTODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única\n(`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae\nsu `id` (de Metricool), granulares, url y su `categoria` editorial. Es el insumo de la\ntabla \"Todas las piezas del periodo\" (filtros + orden + paginación por día + detalle\npor pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.",
       "required": [
         "rango",
         "etiqueta_rango",

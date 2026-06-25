@@ -22,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaCategoria } from "@/lib/categorias";
 import { cn } from "@/lib/utils";
-import type { GrupoMesa, Historia, LineaGrupo, MesaLinea } from "@/types";
+import type { CategoriaGrupo, GrupoMesa, Historia, MesaCategoria } from "@/types";
 
 import { TarjetaHistoria } from "./TarjetaHistoria";
 
@@ -148,7 +148,7 @@ function MenuLineas({
   onSel,
 }: {
   grupo: string;
-  lineas: LineaGrupo[];
+  lineas: CategoriaGrupo[];
   total: number;
   lineaSel: string;
   left: number;
@@ -356,7 +356,7 @@ export function historiasDelGrupo(
  * cupo o candidatas.
  */
 export function chipsDeLineas(
-  lineas: MesaLinea[],
+  lineas: MesaCategoria[],
   fuera: { en_pool: number; historias: Historia[] },
 ): { chips: GrupoMesa[]; browse: Historia[] } {
   const chips: GrupoMesa[] = [];
@@ -597,7 +597,7 @@ function SeccionLinea({
   linea,
   onAbrirLinea,
 }: {
-  linea: MesaLinea;
+  linea: MesaCategoria;
   onAbrirLinea: (linea: string, etiqueta: string) => void;
 }) {
   const etiqueta = linea.etiqueta || etiquetaCategoria(linea.linea);
@@ -710,7 +710,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
     grupos.length > 0
       ? { chips: grupos, browse: data.historias_grupo ?? [] }
       : data.plan
-        ? chipsDeLineas(data.lineas, data.fuera_de_plan)
+        ? chipsDeLineas(data.categorias, data.fuera_de_plan)
         : { chips: [] as GrupoMesa[], browse: [] as Historia[] };
   if (chips.length > 0) {
     const total = chips.reduce((acc, g) => acc + g.en_pool, 0);
@@ -777,7 +777,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
 
   const fuera = data.fuera_de_plan;
   const vacia =
-    data.lineas.every((l) => l.en_pool === 0) && fuera.en_pool === 0;
+    data.categorias.every((l) => l.en_pool === 0) && fuera.en_pool === 0;
 
   return (
     <div className="space-y-6">
@@ -793,7 +793,7 @@ export function MesaNoticias({ marca }: { marca: string; nombre: string | null }
         />
       )}
 
-      {data.lineas
+      {data.categorias
         .filter((l) => l.cupo > 0 || l.en_pool > 0)
         .map((l) => (
           <SeccionLinea

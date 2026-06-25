@@ -954,8 +954,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
     # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en
     # S3/almacen (`objeto`, uuid+ext del servidor). `metadatos` (JSON) lleva datos por tipo (p.ej.
-    # familia/peso de una tipografia, lista de hex de una paleta); `lineas` (JSON de ids de
-    # `etiquetas` clase=categoria) etiqueta el activo por linea editorial. Para tipografias el
+    # familia/peso de una tipografia, lista de hex de una paleta); `categorias` (JSON de ids de
+    # `etiquetas` clase=categoria) etiqueta el activo por categoria editorial. Para tipografias el
     # `objeto` es el .woff2/.ttf y `metadatos.familia` el nombre a registrar en el render.
     """
     CREATE TABLE IF NOT EXISTS marca_activos (
@@ -965,7 +965,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         nombre       TEXT NOT NULL DEFAULT '',
         objeto       TEXT NOT NULL DEFAULT '',
         metadatos    TEXT NOT NULL DEFAULT '{}',
-        lineas       TEXT NOT NULL DEFAULT '[]',
+        categorias   TEXT NOT NULL DEFAULT '[]',
         aprobado     INTEGER NOT NULL DEFAULT 1,
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',
@@ -979,8 +979,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # un DOCUMENTO de capas completo (`documento`, JSON validado por `motores/estudio_imagen/
     # documento.py`). Se etiquetan por `categoria` (texto LIBRE normalizado a slug por la API:
     # ultima-hora | marcador | efemerides | …; "general" es el fallback y el legado "post" se trata
-    # como "general") y por `lineas` (JSON de ids de `etiquetas` clase=categoria) para filtrar por
-    # línea editorial.
+    # como "general") y por `categorias` (JSON de ids de `etiquetas` clase=categoria) para filtrar
+    # por categoria editorial.
     # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
     # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
     # `foto_muestra` es el objeto de media de una foto REPRESENTATIVA por plantilla (o ""): se hornea
@@ -1005,7 +1005,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         foto_muestra TEXT NOT NULL DEFAULT '',
         titular_muestra  TEXT NOT NULL DEFAULT '',
         etiqueta_muestra TEXT NOT NULL DEFAULT '',
-        lineas       TEXT NOT NULL DEFAULT '[]',
+        categorias   TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
         rotar        INTEGER NOT NULL DEFAULT 0,
         orden        INTEGER NOT NULL DEFAULT 0,
@@ -1041,14 +1041,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # BLOQUES (almacén de capas reutilizables): un bloque es un GRUPO de capas con sentido propio
     # (lower-third, módulo de infografía, pleca de marca) que se suelta en cualquier documento.
     # `capas` es un JSON con la lista de capas (mismo esquema que `documento.capas`). Se etiqueta
-    # por `marca` y `lineas` (ids de `etiquetas` clase=categoria). `miniatura` = objeto de media o "".
+    # por `marca` y `categorias` (ids de `etiquetas` clase=categoria). `miniatura` = objeto de media o "".
     """
     CREATE TABLE IF NOT EXISTS bloques (
         id           TEXT PRIMARY KEY,
         marca        TEXT NOT NULL DEFAULT '',
         nombre       TEXT NOT NULL DEFAULT '',
         capas        TEXT NOT NULL DEFAULT '[]',
-        lineas       TEXT NOT NULL DEFAULT '[]',
+        categorias   TEXT NOT NULL DEFAULT '[]',
         miniatura    TEXT NOT NULL DEFAULT '',
         autor_id     TEXT NOT NULL DEFAULT '',
         autor_nombre TEXT NOT NULL DEFAULT '',

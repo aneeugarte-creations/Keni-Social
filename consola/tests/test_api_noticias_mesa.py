@@ -84,8 +84,8 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     assert datos["plan"] is True
     assert datos["total_objetivo"] == 4
     # Breaking PRIMERO, luego el orden del plan (por id de línea).
-    assert [ln["linea"] for ln in datos["lineas"]] == ["breaking", nac, intl]
-    por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
+    assert [ln["linea"] for ln in datos["categorias"]] == ["breaking", nac, intl]
+    por_linea = {ln["linea"]: ln for ln in datos["categorias"]}
     assert por_linea[nac]["etiqueta"] == "Nacional"
     assert por_linea["breaking"]["etiqueta"] == "Última hora"
     assert por_linea[nac]["cupo"] == 2
@@ -120,7 +120,7 @@ def test_mesa_clasifica_por_contenido_si_el_feed_no_mapea(cliente, monkeypatch):
                  titulo="El equipo gana el partido en el último minuto")
 
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
-    por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
+    por_linea = {ln["linea"]: ln for ln in datos["categorias"]}
     assert [h["id"] for h in por_linea[intl]["historias"]] == ["sci"]
     assert datos["fuera_de_plan"]["en_pool"] == 1
     assert datos["fuera_de_plan"]["historias"][0]["id"] == "nada"
@@ -138,7 +138,7 @@ def test_mesa_extranjera_sin_traducir_se_ve_como_traduciendo(cliente, monkeypatc
     _inicializar("en-trad", score=0.7, categoria="mx", titulo="Foreign two",
                  idioma="en", traducido=1, titulo_es="Noticia traducida")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
-    linea = {ln["linea"]: ln for ln in datos["lineas"]}[nac]
+    linea = {ln["linea"]: ln for ln in datos["categorias"]}[nac]
     por_id = {h["id"]: h for h in linea["historias"]}
     assert set(por_id) == {"es-nativa", "en-cruda", "en-trad"}  # todas visibles
     # Extranjera sin traducir: placeholder, nunca el titular en idioma original.
@@ -159,7 +159,7 @@ def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
     datos = cliente.get(
         "/api/noticias/mesa", params={"marca": "unotv", "por_linea": 2}
     ).json()
-    linea = datos["lineas"][0]
+    linea = datos["categorias"][0]
     assert linea["en_pool"] == 4  # el conteo es del pool completo de la línea
     assert [h["id"] for h in linea["historias"]] == ["m0", "m1"]  # top-N rankeado
 
@@ -182,7 +182,7 @@ def test_mesa_conteo_honesto_escala_al_pool_real(cliente, monkeypatch):
     ).json()
     # Pool real honesto: 6 (no la muestra de 3).
     assert datos["en_pool_total"] == 6
-    linea = datos["lineas"][0]
+    linea = datos["categorias"][0]
     # `en_pool` escalado al pool real (3 de la muestra · factor 6/3 = 6), no el recorte.
     assert linea["en_pool"] == 6
     # `historias[]` sigue siendo top-N por línea (top-2 rankeado), no el pool entero.
@@ -195,7 +195,7 @@ def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
     _inicializar("c1", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["plan"] is False
-    assert datos["lineas"] == []
+    assert datos["categorias"] == []
     assert datos["total_objetivo"] == 0
     assert datos["fuera_de_plan"]["en_pool"] == 1
 
@@ -209,7 +209,7 @@ def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
     # es el "fantasma" que antes inflaba el plan (6 en el conteo con 5 posts visibles).
     repos.crear_publicacion(clase="contenido", titulo="Sin post", marca="unotv", categoria=nac)
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
-    linea = datos["lineas"][0]
+    linea = datos["categorias"][0]
     assert linea["generados"] == 1  # solo el que tiene post; el fantasma no cuenta
     assert linea["restante"] == 1
     assert datos["total_generados"] == 1
@@ -230,7 +230,7 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
     # De hoy (creado=ahora por defecto): SÍ cuenta.
     _contenido_con_post(categoria=nac, titulo="De hoy")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
-    linea = datos["lineas"][0]
+    linea = datos["categorias"][0]
     assert linea["generados"] == 1  # solo la de hoy
     assert linea["restante"] == 1
     assert datos["total_generados"] == 1
@@ -281,7 +281,7 @@ def test_mesa_claro_sports_navega_por_grupos(cliente, monkeypatch):
 
 
 def test_mesa_sin_grupos_no_trae_barra(cliente):
-    # UnoTV no usa grupos: el back NO emite `grupos`/`historias_grupo` (manda el plan en `lineas`).
+    # UnoTV no usa grupos: el back NO emite `grupos`/`historias_grupo` (manda el plan en `categorias`).
     # El front deriva de ahí los chips planos de navegación (sin desplegable), conservando el plan.
     bootstrap_categorias.inicializar_categorias()
     _inicializar("c1", marca="unotv", categoria="mx")

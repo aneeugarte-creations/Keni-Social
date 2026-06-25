@@ -889,7 +889,7 @@ def test_cobertura_x_no_conectada_usa_motivo_generico():
 
 
 # --------------------------------------------------------------------------- #
-# Filtro por red/formato en /piezas-por-etiqueta y /lineas (espejo del resto). #
+# Filtro por red/formato en /piezas-por-etiqueta y /categorias (espejo del resto). #
 # --------------------------------------------------------------------------- #
 #
 # Los valores esperados se DERIVAN del listado de la muestra (no se hardcodean): se cuenta
@@ -929,26 +929,26 @@ def test_piezas_por_etiqueta_formato_y_red_invalidos_devuelven_400(cliente):
     assert cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&red=linkedin").status_code == 400
 
 
-def test_lineas_filtra_por_formato(cliente):
+def test_categorias_filtra_por_formato(cliente):
     full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
     assert len({_canonico(p.get("formato")) for p in full["piezas"]}) >= 2
     fmt = _formato_presente(full["piezas"])
-    base = cliente.get("/api/metricas/lineas?rango=mes").json()
-    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&formato={fmt}").json()
+    base = cliente.get("/api/metricas/categorias?rango=mes").json()
+    filtrado = cliente.get(f"/api/metricas/categorias?rango=mes&formato={fmt}").json()
     esperado = sum(1 for p in full["piezas"] if _canonico(p.get("formato")) == fmt)
     assert 0 < esperado < base["total"]
     assert filtrado["total"] == esperado
-    # Cada pieza cae en exactamente un cubo de línea: la suma cuadra con el total filtrado.
-    assert sum(b["piezas"] for b in filtrado["lineas"]) == filtrado["total"]
+    # Cada pieza cae en exactamente un cubo de categoría: la suma cuadra con el total filtrado.
+    assert sum(b["piezas"] for b in filtrado["categorias"]) == filtrado["total"]
 
 
-def test_lineas_filtra_por_red(cliente):
+def test_categorias_filtra_por_red(cliente):
     full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
     redes = sorted({p["plataforma"] for p in full["piezas"]})
     assert len(redes) >= 2  # la muestra cubre varias redes
     red = redes[0]
-    base = cliente.get("/api/metricas/lineas?rango=mes").json()
-    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&red={red}").json()
+    base = cliente.get("/api/metricas/categorias?rango=mes").json()
+    filtrado = cliente.get(f"/api/metricas/categorias?rango=mes&red={red}").json()
     esperado = sum(1 for p in full["piezas"] if p["plataforma"] == red)
     assert 0 < esperado < base["total"]
     assert filtrado["total"] == esperado
@@ -956,13 +956,13 @@ def test_lineas_filtra_por_red(cliente):
     assert sum(b["piezas"] for b in filtrado["origenes"]) == filtrado["total"]
 
 
-def test_lineas_combina_red_y_formato(cliente):
+def test_categorias_combina_red_y_formato(cliente):
     full = cliente.get("/api/metricas/piezas-listado?rango=mes").json()
     fmt = _formato_presente(full["piezas"])
     redes = sorted({p["plataforma"] for p in full["piezas"] if _canonico(p.get("formato")) == fmt})
     assert redes
     red = redes[0]
-    filtrado = cliente.get(f"/api/metricas/lineas?rango=mes&red={red}&formato={fmt}").json()
+    filtrado = cliente.get(f"/api/metricas/categorias?rango=mes&red={red}&formato={fmt}").json()
     esperado = sum(
         1 for p in full["piezas"] if p["plataforma"] == red and _canonico(p.get("formato")) == fmt
     )
@@ -970,6 +970,6 @@ def test_lineas_combina_red_y_formato(cliente):
     assert filtrado["total"] == esperado
 
 
-def test_lineas_formato_y_red_invalidos_devuelven_400(cliente):
-    assert cliente.get("/api/metricas/lineas?rango=mes&formato=historia").status_code == 400
-    assert cliente.get("/api/metricas/lineas?rango=mes&red=linkedin").status_code == 400
+def test_categorias_formato_y_red_invalidos_devuelven_400(cliente):
+    assert cliente.get("/api/metricas/categorias?rango=mes&formato=historia").status_code == 400
+    assert cliente.get("/api/metricas/categorias?rango=mes&red=linkedin").status_code == 400
