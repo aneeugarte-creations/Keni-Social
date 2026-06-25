@@ -88,6 +88,32 @@ describe("Demografia", () => {
     expect(screen.getByText("Guadalajara")).toBeInTheDocument();
   });
 
+  it("muestra países por nombre (ISO→legible) y la edad en orden, sin el bucket «U»", async () => {
+    useVistaConfig.getState().setRed("instagram");
+    vi.spyOn(api, "metricasDemografia").mockResolvedValue({
+      red: "instagram",
+      distribuciones: {
+        country: [
+          { clave: "MX", valor: 71.2 },
+          { clave: "US", valor: 8.1 },
+        ],
+        age: [
+          { clave: "25-34", valor: 30 },
+          { clave: "U", valor: 5 },
+          { clave: "18-24", valor: 20 },
+        ],
+      },
+    });
+    renderConProviders(<Demografia marcaActual="claro_sports" />);
+
+    // Códigos ISO mapeados a nombre; nunca se ve el código crudo.
+    expect(await screen.findByText("Estados Unidos")).toBeInTheDocument();
+    expect(screen.getAllByText("México").length).toBeGreaterThan(0);
+    expect(screen.queryByText("MX")).not.toBeInTheDocument();
+    // El bucket de edad desconocida ("U") no se pinta.
+    expect(screen.queryByText("U")).not.toBeInTheDocument();
+  });
+
   it("degrada con honestidad cuando la red en foco no expone demografía", async () => {
     useVistaConfig.getState().setRed("instagram");
     vi.spyOn(api, "metricasDemografia").mockResolvedValue({ red: "instagram", distribuciones: {} });

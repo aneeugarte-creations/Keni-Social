@@ -39,6 +39,26 @@ const generoLegible = (c: string) => GENERO[c] ?? c;
 /** Copia ordenada de mayor a menor (sin mutar el original). */
 const ordenar = (p?: PuntoDistribucion[]) => [...(p ?? [])].sort((a, b) => b.valor - a.valor);
 
+/** Nombre legible de un país desde su código ISO 3166-1 alpha-2 (MX → México); si la clave no
+ * es un código reconocible (ya es un nombre, o una ciudad), se devuelve tal cual. */
+const PAISES_DN = new Intl.DisplayNames(["es-MX"], { type: "region" });
+function nombrePais(clave: string): string {
+  const c = clave.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return clave;
+  try {
+    return PAISES_DN.of(c) ?? clave;
+  } catch {
+    return clave;
+  }
+}
+
+/** Buckets de edad en orden cronológico; los desconocidos ("U") se descartan del histograma. */
+const ORDEN_EDAD = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+const idxEdad = (c: string) => {
+  const i = ORDEN_EDAD.indexOf(c.trim());
+  return i === -1 ? ORDEN_EDAD.length : i;
+};
+
 /** Color por dimensión: la misma paleta Tremor con nombre que usan los demás gráficos de
  * Métricas (alcance=sky, interacciones=violet, engagement=emerald, vistas=amber). El tono fuerte
  * marca el valor dominante; el suave (mismo hue translúcido) la cola, legible en claro y oscuro. */
@@ -92,7 +112,7 @@ function resumen(red: string, dist: Distribuciones): React.ReactNode {
     if (!pais) return null;
     return (
       <>
-        Seguidores concentrados en <Em>{pais.clave}</Em> (
+        Seguidores concentrados en <Em>{nombrePais(pais.clave)}</Em> (
         <span className="tabular-nums">{porcentaje(pais.valor)}</span>).
       </>
     );
@@ -120,7 +140,7 @@ function resumen(red: string, dist: Distribuciones): React.ReactNode {
   if (pais) {
     piezas.push(
       <React.Fragment key="p">
-        concentrada en <Em>{pais.clave}</Em>
+        concentrada en <Em>{nombrePais(pais.clave)}</Em>
       </React.Fragment>,
     );
   }
@@ -191,10 +211,15 @@ function BarraGenero({ puntos }: { puntos: PuntoDistribucion[] }) {
 
 /** Edad como histograma de columnas finas (eje x = edad ascendente); pico en sky fuerte. */
 function ColumnasEdad({ puntos }: { puntos: PuntoDistribucion[] }) {
-  if (!puntos.length) return <SinDatos />;
-  const max = Math.max(...puntos.map((b) => b.valor));
-  const dom = puntos.reduce((x, y) => (y.valor > x.valor ? y : x));
-  const aria = puntos.map((b) => `${b.clave} ${porcentaje(b.valor)}`).join(", ");
+  // Eje X cronológico (13-17 → 65+); la fuente los manda por valor y con un bucket "U"
+  // (edad desconocida) que no es un tramo real y se descarta.
+  const orden = [...puntos]
+    .filter((b) => b.clave.trim().toUpperCase() !== "U")
+    .sort((a, b) => idxEdad(a.clave) - idxEdad(b.clave));
+  if (!orden.length) return <SinDatos />;
+  const max = Math.max(...orden.map((b) => b.valor));
+  const dom = orden.reduce((x, y) => (y.valor > x.valor ? y : x));
+  const aria = orden.map((b) => `${b.clave} ${porcentaje(b.valor)}`).join(", ");
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
@@ -206,7 +231,7 @@ function ColumnasEdad({ puntos }: { puntos: PuntoDistribucion[] }) {
         </span>
       </div>
       <div className="flex h-20 items-end gap-1.5" role="img" aria-label={`Edad: ${aria}`}>
-        {puntos.map((b) => {
+        {orden.map((b) => {
           const dominante = b.clave === dom.clave;
           return (
             <div
@@ -218,7 +243,7 @@ function ColumnasEdad({ puntos }: { puntos: PuntoDistribucion[] }) {
         })}
       </div>
       <div className="flex gap-1.5">
-        {puntos.map((b) => (
+        {orden.map((b) => (
           <span
             key={b.clave}
             className={`flex-1 text-center text-[10px] tabular-nums ${
@@ -359,7 +384,10 @@ function Formatos({ puntos }: { puntos: PuntoDistribucion[] }) {
 function Cuerpo({ red, dist }: { red: string; dist: Distribuciones }) {
   const izquierda: React.ReactNode[] = [];
   const derecha: React.ReactNode[] = [];
-  const paises = dist.country?.length ? dist.country : dist.page_follows_country;
+  const paises = (dist.country?.length ? dist.country : dist.page_follows_country)?.map((p) => ({
+    ...p,
+    clave: nombrePais(p.clave),
+  }));
 
   if (red === "instagram") {
     if (dist.gender?.length) izquierda.push(<BarraGenero key="g" puntos={dist.gender} />);
