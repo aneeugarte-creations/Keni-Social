@@ -1147,6 +1147,9 @@ def test_mejores_horas_matriz_normalizada_y_convertida_a_cdmx():
     h18_cdmx = _hora_en_tz(18, "Europe/Madrid", "America/Mexico_City")
     assert matriz[0][h18_cdmx] == 1.0
     assert capturadas[0].url.params.get("userId") == "999"
+    # besttimes exige `start`/`end` (sin ellos devuelve data:[]); deben viajar como ISO datetime.
+    params = capturadas[0].url.params
+    assert "T00:00:00" in params.get("start") and "T00:00:00" in params.get("end")
 
 
 @respx.mock

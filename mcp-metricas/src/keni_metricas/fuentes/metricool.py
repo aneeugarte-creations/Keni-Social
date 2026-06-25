@@ -280,9 +280,12 @@ _ALIAS_MARCADORES = ("totalBookmarks", "bookmarks")
 ENDPOINT_SCHEDULER_POST = "/v2/scheduler/posts"
 
 # Mejores horas de publicación por red: `/v2/scheduler/besttimes/{provider}` (provider = nombre
-# Metricool de la red). Devuelve `{data:[{dayOfWeek:1-7, bestTimesByHour:[{hourOfDay:0-23,
-# value}]}]}`; `value` es un score SIN normalizar cuya magnitud varía por red.
+# Metricool de la red). Requiere `start`/`end` (ISO datetime) acotando la ventana histórica que
+# analiza; sin ellos devuelve `data:[]`. Responde `{data:[{dayOfWeek:1-7, bestTimesByHour:[{
+# hourOfDay:0-23, value}]}]}`; `value` es un score SIN normalizar cuya magnitud varía por red.
 ENDPOINT_BESTTIMES = "/v2/scheduler/besttimes"
+# Ventana histórica (días) que se le pide a besttimes para computar las franjas.
+_DIAS_BESTTIMES = 90
 
 
 def _hora_en_tz(hora: int, origen: str, destino: str) -> int:
@@ -1050,10 +1053,16 @@ class FuenteMetricool:
         if not provider:
             return matriz
         try:
+            hoy = date.today()
+            inicio = hoy - timedelta(days=_DIAS_BESTTIMES)
             datos = get_json(
                 self._cli,
                 f"{BASE}{ENDPOINT_BESTTIMES}/{provider}",
-                params=self._params_base(cuenta_id),
+                params={
+                    **self._params_base(cuenta_id),
+                    "start": inicio.isoformat() + "T00:00:00",
+                    "end": hoy.isoformat() + "T00:00:00",
+                },
                 headers=self._headers(cuenta_id),
             )
         except Exception as e:  # noqa: BLE001 — sin besttimes: matriz de ceros (honesto)
