@@ -58,12 +58,15 @@ CATEGORIAS: frozenset[str] = frozenset(
         "plantillas",   # assets del editor de plantillas + miniaturas (reusable)
         "logos",        # activos de marca: logos, tipografias, plecas (reusable)
         "artes",        # artes catalogadas (galeria) para reutilizar (reusable)
-        "originales",   # LEGADO: carpeta fisica antigua de las fotos de articulo del portal. Ya no
-                        # se promueve aqui (ahora a `portal/`); se conserva en CATEGORIAS para poder
-                        # leer/mover los objetos viejos hasta que la migracion los reubique a `portal/`
+        "originales",   # LEGADO: carpeta fisica antigua de las fotos de articulo. Ya no se promueve
+                        # aqui (el portal va a `portal/`, las externas a `fotos/`); se conserva en
+                        # CATEGORIAS solo para poder leer/mover los objetos viejos que aun queden.
         "fotografias",  # BIBLIOTECA UNIFICADA: fotos ORIGINALES del archivo fotografico del equipo
                         # (keni-fotos), guardadas a mano desde un dispositivo por partido (`grupo`).
                         # Catalogadas (fuente=fotografias); reusables/publicables (foto propia)
+        "subidas",      # BIBLIOTECA UNIFICADA: fotos SUBIDAS a mano por el equipo (`tipo='subida'`).
+                        # Carpeta fisica Y logica de la subida; catalogadas (fuente=subidas); reusables
+                        # (el GC las conserva mientras tengan fila o pieza que las use)
         "portal",       # BIBLIOTECA UNIFICADA: foto ORIGINAL del articulo de portal/marca propia
                         # (fuente=portal, tipo=original). Carpeta fisica Y logica de la foto del
                         # articulo; catalogada (el GC la conserva mientras tenga fila o pieza que la use)

@@ -71,11 +71,13 @@ def test_crear_arte_idempotente(cliente):
 
 
 def test_crear_arte_subida_es_fuente_subidas(cliente):
-    """Una SUBIDA manual (`tipo='subida'`) se cataloga en la carpeta `subidas` de la biblioteca."""
+    """Una SUBIDA manual (`tipo='subida'`) se cataloga en la carpeta `subidas` (física Y lógica)."""
     objeto = _subir_objeto(cliente, sufijo=b"sub")
     arte = cliente.post(
         "/api/artes", json={"objeto": objeto, "marca": "unotv", "tipo": "subida"},
     ).json()["arte"]
+    # La subida se promueve a la carpeta física `subidas/` (coincide con su carpeta lógica).
+    assert arte["objeto"] == "subidas/" + objeto.rsplit("/", 1)[-1]
     assert repos.obtener_media_catalogo(arte["id"])["fuente"] == "subidas"
 
 

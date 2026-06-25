@@ -46,6 +46,8 @@ from .migraciones_columnas import (
     _migrar_columnas_origen_fuente,
     _migrar_backfill_origen_catalogo,
     _migrar_reorg_originales_a_portal,
+    _migrar_reorg_subidas_a_subidas,
+    _migrar_reorg_externas_a_fotos,
     _migrar_clasificar_originales_portal,
     _migrar_fts_catalogo_media,
     _migrar_fuente_subidas,
@@ -541,6 +543,14 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # las referencias —catálogo + piezas—, verifica y borra el viejo). Idempotente; las externas/IA no
     # se mueven. Corre DESPUÉS del backfill (que ya sacó las externas de `fuente='portal'`).
     Migracion("0057-reorg-originales-a-portal", _migrar_reorg_originales_a_portal),
+    # REORG físico S3: lleva las fotos SUBIDAS a mano (`fuente='subidas'`) de `artes/` a `subidas/`,
+    # para que la carpeta física coincida con la lógica de la biblioteca. Copia, reapunta catálogo +
+    # piezas, verifica y borra. Idempotente (una subida ya en `subidas/` no entra al SELECT).
+    Migracion("0058-reorg-subidas", _migrar_reorg_subidas_a_subidas),
+    # REORG físico S3: vacía la carpeta legacy `originales/` llevando lo que quede (imágenes de
+    # artículo EXTERNAS, ya fuera de `fuente='portal'`) a `fotos/`. Así `originales/` desaparece del
+    # almacén. Copia, reapunta catálogo + piezas, verifica y borra. Corre DESPUÉS de `0057`. Idempotente.
+    Migracion("0059-reorg-externas-originales-a-fotos", _migrar_reorg_externas_a_fotos),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

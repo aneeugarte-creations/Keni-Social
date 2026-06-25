@@ -162,9 +162,6 @@ def _crear(
 ) -> tuple[int, dict]:
     if media.leer_media(objeto) is None:
         return 400, {"error": "Esa imagen no existe en el almacén."}
-    # Catalogar = conservar para reutilizar: promovemos el objeto a la carpeta `artes/` ANTES
-    # de la idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta protegida.
-    objeto = almacen_media.promover_objeto(objeto, "artes")
 
     marca, err = _validar_marca(marca_cruda)
     if err:
@@ -173,6 +170,13 @@ def _crear(
     tipo = tipo_crudo or _TIPO_DEFECTO
     if tipo not in _TIPOS:
         return 400, {"error": "Origen de arte no válido."}
+
+    # Catalogar = conservar para reutilizar: promovemos el objeto a su carpeta física ANTES de la
+    # idempotencia/insert, de modo que el catálogo guarda la key ya en su carpeta. Las fotos SUBIDAS
+    # a mano forman la carpeta `subidas/` de la biblioteca unificada; las demás vías (estudio/IA) van
+    # a `artes/`. La carpeta física coincide así con la carpeta lógica de la biblioteca.
+    categoria = "subidas" if tipo == "subida" else "artes"
+    objeto = almacen_media.promover_objeto(objeto, categoria)
 
     # Idempotente: el `objeto` es UNIQUE en la tabla. Si ya esta catalogado, devolvemos el
     # item existente (no duplicamos ni dejamos que el INSERT falle por la restriccion).

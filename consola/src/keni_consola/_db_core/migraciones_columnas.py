@@ -221,29 +221,18 @@ def _migrar_backfill_origen_catalogo(con: Any) -> None:
             )
 
 
-def _migrar_reorg_originales_a_portal(con: Any) -> None:
-    """REORG físico S3: mueve las fotos del PORTAL de la carpeta `originales/` a `portal/`.
+def _mover_objetos_de_catalogo(con: Any, filas: Any, categoria: str) -> None:
+    """Mueve FÍSICAMENTE en S3 cada objeto de `filas` (con `id` y `objeto`) a la carpeta `categoria`.
 
-    La foto del artículo se promovía a la carpeta física `originales/`; ahora su carpeta física
-    coincide con su carpeta lógica (`portal/`). Para cada `catalogo_media` portal-propio
-    (`fuente='portal'`) cuyo objeto siga en `originales/`: COPIA el binario a `portal/<base>`
-    (`promover_objeto`, idempotente), reapunta TODAS las referencias en la misma transacción
-    —`catalogo_media.objeto` + `pieza.imagen`/`foto` + las keys dentro de los JSON `pieza.fotos`
-    (collage) y `pieza.carrusel` (slides)—, VERIFICA que la copia existe y solo entonces borra el
-    objeto viejo. Si la copia no se puede verificar, NO toca refs ni borra (deja log).
+    Para cada fila: COPIA el binario a `<categoria>/<base>` (`promover_objeto`, idempotente),
+    reapunta TODAS las referencias en la misma transacción —`catalogo_media.objeto` +
+    `pieza.imagen`/`foto` + las keys dentro de los JSON `pieza.fotos` (collage) y `pieza.carrusel`
+    (slides)—, VERIFICA que la copia existe y solo entonces borra el objeto viejo. Si la copia no se
+    puede verificar, NO toca refs ni borra (deja log).
 
-    Las fotos EXTERNAS/IA no se mueven (el backfill ya las sacó de `fuente='portal'`). Idempotente:
-    una foto ya en `portal/` no entra al SELECT; un corte tras reapuntar deja la fila en `portal/`
-    (no se re-procesa) y a lo sumo un binario huérfano en `originales/` (sin referencias, inofensivo).
+    Idempotente: un objeto ya en `categoria/` se salta; un corte tras reapuntar deja la fila en su
+    nueva carpeta (no se re-procesa) y a lo sumo un binario huérfano en la vieja (sin refs, inofensivo).
     """
-    if not _tabla_existe(con, "catalogo_media"):
-        return
-    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
-        return
-    filas = con.execute(
-        "SELECT id, objeto FROM catalogo_media "
-        "WHERE fuente = 'portal' AND objeto LIKE 'originales/%%'"
-    ).fetchall()
     if not filas:
         return
     from .. import almacen_media
@@ -252,17 +241,19 @@ def _migrar_reorg_originales_a_portal(con: Any) -> None:
     for fila in filas:
         viejo = fila["objeto"] or ""
         base = viejo.split("/", 1)[1] if "/" in viejo else viejo
-        nuevo = f"portal/{base}"
+        nuevo = f"{categoria}/{base}"
+        if viejo == nuevo:
+            continue
         try:
-            destino = almacen_media.promover_objeto(viejo, "portal")
+            destino = almacen_media.promover_objeto(viejo, categoria)
         except Exception:  # noqa: BLE001 -- una copia fallida no debe abortar el resto del reorg
-            _log.warning("reorg portal: no se pudo copiar %s -> %s; se deja sin mover", viejo, nuevo)
+            _log.warning("reorg %s: no se pudo copiar %s; se deja sin mover", categoria, viejo)
             continue
         # Solo reapunta+borra si la copia EXISTE de verdad en su nueva carpeta (verificación).
         if destino != nuevo or not almacen_media.objeto_existe(nuevo):
             _log.warning(
-                "reorg portal: la copia de %s a %s no se pudo verificar; se conserva el original",
-                viejo, nuevo,
+                "reorg %s: la copia de %s a %s no se pudo verificar; se conserva el original",
+                categoria, viejo, nuevo,
             )
             continue
         con.execute("UPDATE catalogo_media SET objeto = ? WHERE id = ?", (nuevo, fila["id"]))
@@ -280,6 +271,65 @@ def _migrar_reorg_originales_a_portal(con: Any) -> None:
             )
         # Refs reapuntadas y copia verificada: ya es seguro borrar el binario viejo.
         almacen_media.borrar_objeto(viejo)
+
+
+def _migrar_reorg_originales_a_portal(con: Any) -> None:
+    """REORG físico S3: mueve las fotos del PORTAL de la carpeta `originales/` a `portal/`.
+
+    La foto del artículo se promovía a la carpeta física `originales/`; ahora su carpeta física
+    coincide con su carpeta lógica (`portal/`). Mueve cada `catalogo_media` portal-propio
+    (`fuente='portal'`) cuyo objeto siga en `originales/` con `_mover_objetos_de_catalogo` (copia +
+    reapunte de catálogo y piezas + verificación + borrado). Las fotos EXTERNAS/IA no se mueven (el
+    backfill ya las sacó de `fuente='portal'`). Idempotente: una foto ya en `portal/` no entra al SELECT.
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    filas = con.execute(
+        "SELECT id, objeto FROM catalogo_media "
+        "WHERE fuente = 'portal' AND objeto LIKE 'originales/%%'"
+    ).fetchall()
+    _mover_objetos_de_catalogo(con, filas, "portal")
+
+
+def _migrar_reorg_subidas_a_subidas(con: Any) -> None:
+    """REORG físico S3: mueve las fotos SUBIDAS a mano (`fuente='subidas'`) a la carpeta `subidas/`.
+
+    Antes una subida se promovía a `artes/` y solo se etiquetaba `fuente='subidas'` (carpeta lógica);
+    ahora su carpeta física coincide con la lógica. Mueve cada subida cuyo objeto NO esté ya en
+    `subidas/` con `_mover_objetos_de_catalogo`. Idempotente: una subida ya en `subidas/` no entra al
+    SELECT.
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    filas = con.execute(
+        "SELECT id, objeto FROM catalogo_media "
+        "WHERE fuente = 'subidas' AND objeto NOT LIKE 'subidas/%%'"
+    ).fetchall()
+    _mover_objetos_de_catalogo(con, filas, "subidas")
+
+
+def _migrar_reorg_externas_a_fotos(con: Any) -> None:
+    """REORG físico S3: vacía la carpeta legacy `originales/` moviendo lo que quede a `fotos/`.
+
+    Tras `0057` (que llevó el portal-propio a `portal/`), lo que sigue en `originales/` son imágenes
+    de artículo EXTERNAS (no propias): no son biblioteca, su sitio es la carpeta de imágenes
+    extraídas/efímeras `fotos/`. Así `originales/` queda vacía y desaparece del almacén. Mueve cada
+    objeto restante con `_mover_objetos_de_catalogo`. Idempotente: sin objetos en `originales/` no hace
+    nada.
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    # Excluye `fuente='portal'`: si la 0057 dejara un straggler del portal en `originales/` (copia no
+    # verificada), debe esperar a la 0057 (→ `portal/`), no acabar mal enrutado en `fotos/`.
+    filas = con.execute(
+        "SELECT id, objeto FROM catalogo_media "
+        "WHERE objeto LIKE 'originales/%%' AND (fuente IS NULL OR fuente <> 'portal')"
+    ).fetchall()
+    _mover_objetos_de_catalogo(con, filas, "fotos")
 
 
 def _migrar_fuente_subidas(con: Any) -> None:

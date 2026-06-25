@@ -7,6 +7,9 @@ Cubre las migraciones de datos del tracking de origen de las fotos del PORTAL:
   - REORG (`_migrar_reorg_originales_a_portal`): mueve el binario de `originales/` a `portal/`,
     reapunta TODAS las referencias (catálogo + piezas) y borra el viejo; idempotente.
   - CLASIFICACIÓN FINAL por tipo: `subida`→`subidas`, IA (`ia`) fuera de las 3 carpetas (`''`).
+  - REORG subidas (`_migrar_reorg_subidas_a_subidas`): lleva las subidas de `artes/` a `subidas/`.
+  - REORG externas (`_migrar_reorg_externas_a_fotos`): vacía la legacy `originales/` hacia `fotos/`
+    sin arrastrar stragglers del portal.
 
 OFFLINE: backend de media en DISCO (la fixture `entorno` borra las S3_*); DB en el Postgres de
 pruebas. Las migraciones de datos se invocan directamente con una conexión cruda.
@@ -20,7 +23,9 @@ from keni_consola import almacen_media, motor_db, repos
 from keni_consola._db_core.migraciones_columnas import (
     _migrar_backfill_origen_catalogo,
     _migrar_fuente_subidas,
+    _migrar_reorg_externas_a_fotos,
     _migrar_reorg_originales_a_portal,
+    _migrar_reorg_subidas_a_subidas,
 )
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00\x01\x02\x03" * 4
@@ -203,3 +208,84 @@ def test_subida_se_clasifica_en_subidas_e_ia_queda_fuera(entorno):
     # Una subida manual cae a la carpeta `subidas`; la foto de IA queda SIN carpeta de biblioteca.
     assert repos.obtener_media_catalogo(subida["id"])["fuente"] == "subidas"
     assert repos.obtener_media_catalogo(ia["id"])["fuente"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# Reorg físico S3: subidas (artes/ -> subidas/) y externas (originales/ -> fotos/) #
+# --------------------------------------------------------------------------- #
+
+
+def test_reorg_subidas_mueve_de_artes_a_subidas(entorno):
+    viejo = "artes/sub.jpg"
+    nuevo = "subidas/sub.jpg"
+    almacen_media.guardar_objeto(viejo, _PNG, content_type="image/jpeg")
+    cm = repos.crear_media_catalogo(objeto=viejo, tipo="subida", titulo="Sub", fuente="subidas")
+    pub = repos.crear_publicacion(titulo="Sub")
+    con = motor_db.conectar_cruda()
+    try:
+        _crear_pieza(con, id="p-sub", publicacion_id=pub["id"], foto=viejo, imagen=viejo)
+        con.commit()
+    finally:
+        con.close()
+
+    _aplicar(_migrar_reorg_subidas_a_subidas)
+
+    # El catálogo y la pieza apuntan a `subidas/`; el binario se movió y el viejo se borró.
+    assert repos.obtener_media_catalogo(cm["id"])["objeto"] == nuevo
+    assert almacen_media.objeto_existe(nuevo)
+    assert not almacen_media.objeto_existe(viejo)
+    con = motor_db.conectar_cruda()
+    try:
+        foto = con.execute("SELECT foto, imagen FROM pieza WHERE id = ?", ("p-sub",)).fetchone()
+    finally:
+        con.close()
+    assert foto["foto"] == nuevo and foto["imagen"] == nuevo
+
+
+def test_reorg_subidas_idempotente(entorno):
+    almacen_media.guardar_objeto("subidas/ya.jpg", _PNG, content_type="image/jpeg")
+    cm = repos.crear_media_catalogo(
+        objeto="subidas/ya.jpg", tipo="subida", titulo="Ya", fuente="subidas",
+    )
+    _aplicar(_migrar_reorg_subidas_a_subidas)
+    # Ya está en `subidas/`: no entra al SELECT -> no-op.
+    assert repos.obtener_media_catalogo(cm["id"])["objeto"] == "subidas/ya.jpg"
+    assert almacen_media.objeto_existe("subidas/ya.jpg")
+
+
+def test_reorg_externas_vacia_originales_a_fotos(entorno):
+    viejo = "originales/ext.jpg"
+    nuevo = "fotos/ext.jpg"
+    almacen_media.guardar_objeto(viejo, _PNG, content_type="image/jpeg")
+    cm = repos.crear_media_catalogo(objeto=viejo, tipo="original", titulo="Ext", fuente="")
+    pub = repos.crear_publicacion(titulo="Ext")
+    con = motor_db.conectar_cruda()
+    try:
+        _crear_pieza(con, id="p-ext", publicacion_id=pub["id"], foto=viejo, imagen=viejo)
+        con.commit()
+    finally:
+        con.close()
+
+    _aplicar(_migrar_reorg_externas_a_fotos)
+
+    # La externa pasa a `fotos/` con su pieza reapuntada; `originales/` queda vacía.
+    assert repos.obtener_media_catalogo(cm["id"])["objeto"] == nuevo
+    assert almacen_media.objeto_existe(nuevo)
+    assert not almacen_media.objeto_existe(viejo)
+    con = motor_db.conectar_cruda()
+    try:
+        foto = con.execute("SELECT foto, imagen FROM pieza WHERE id = ?", ("p-ext",)).fetchone()
+    finally:
+        con.close()
+    assert foto["foto"] == nuevo and foto["imagen"] == nuevo
+
+
+def test_reorg_externas_no_arrastra_straggler_del_portal(entorno):
+    """Un portal aún en `originales/` (la 0057 no lo verificó) NO se mal-enruta a `fotos/`."""
+    almacen_media.guardar_objeto("originales/p.jpg", _PNG, content_type="image/jpeg")
+    cm = repos.crear_media_catalogo(
+        objeto="originales/p.jpg", tipo="original", titulo="P", fuente="portal",
+    )
+    _aplicar(_migrar_reorg_externas_a_fotos)
+    # Se queda en `originales/` (lo moverá la 0057 a `portal/`), no acaba en `fotos/`.
+    assert repos.obtener_media_catalogo(cm["id"])["objeto"] == "originales/p.jpg"

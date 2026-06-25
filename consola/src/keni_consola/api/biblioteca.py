@@ -36,8 +36,8 @@ from ..seguridad import autor_de_peticion
 
 _log = logging.getLogger("keni_consola.biblioteca")
 
-# Carpetas de origen válidas de la biblioteca (la dimensión lógica `fuente`; la categoría FÍSICA
-# S3 de las subidas sigue siendo `originales/`, esto es solo la carpeta navegable de la biblioteca).
+# Carpetas de origen válidas de la biblioteca (la dimensión lógica `fuente`). Cada una coincide con
+# su carpeta FÍSICA S3 homónima: `portal/`, `subidas/`, `fotografias/`.
 _FUENTES = ("portal", "subidas", "fotografias")
 
 _MAX_TITULO = 120
