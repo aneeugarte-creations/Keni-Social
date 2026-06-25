@@ -45,6 +45,8 @@ import type {
   AnaliticaCampania,
   ComparativaKpi,
   DesgloseRedCampania,
+  InorganicoCampania,
+  KpisCampania,
   PiezaCampania,
   SeccionWebCampania,
 } from "@/types";
@@ -199,7 +201,7 @@ export function PanelCampania({
         />
       </div>
 
-      {!ocultarAds && <BloqueInorganico inorganico={inorganico} />}
+      {!ocultarAds && <BloqueOrganicoVsPagado kpis={kpis} inorganico={inorganico} />}
 
       {web && web.piezas > 0 && <BloqueWeb web={web} />}
 
@@ -216,36 +218,68 @@ export function PanelCampania({
   );
 }
 
-/** Resumen INORGÁNICO (Meta Ads): visualizaciones pagadas + gasto + nº de campañas.
- * Solo se muestra si hubo inversión; deja claro que es lo PAGADO, no lo orgánico. */
-function BloqueInorganico({ inorganico }: { inorganico: AnaliticaCampania["inorganico"] }) {
+/** Un dato suelto (etiqueta + valor) para los bloques de resumen. */
+function Dato({ etiqueta, valor, titulo }: { etiqueta: string; valor: string; titulo?: string }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs text-muted-foreground">{etiqueta}</p>
+      <p className="text-xl font-semibold tabular-nums" title={titulo ?? valor}>
+        {valor}
+      </p>
+    </div>
+  );
+}
+
+/** Orgánico vs PAGADO (Meta Ads) lado a lado: lo que consiguió el contenido por sí solo
+ * frente a lo que sumó la pauta. Solo se muestra si hubo inversión con entrega en el periodo;
+ * deja claro qué es orgánico y qué pagado (el cliente no debe confundirlos). */
+function BloqueOrganicoVsPagado({
+  kpis,
+  inorganico,
+}: {
+  kpis: KpisCampania;
+  inorganico: InorganicoCampania;
+}) {
   if (!inorganico || inorganico.visualizaciones <= 0) return null;
   const gasto = inorganico.gasto.toLocaleString("es-MX", { maximumFractionDigits: 0 });
   return (
-    <Card className="border-amber-300/60 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/5">
-      <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-2 p-5">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <span className="text-sm font-medium">Inorgánico (Meta Ads)</span>
+    <Bloque id="campania-pauta" titulo="Orgánico vs pagado">
+      <Seccion
+        id="campania-pauta"
+        titulo="Orgánico vs pagado"
+        descripcion="Lo que consiguió el contenido por sí solo frente a lo que sumó la pauta."
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Card>
+            <CardContent className="space-y-3 p-5">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Orgánico</span>
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <Dato etiqueta="Vistas" valor={numeroCompacto(kpis.visualizaciones)} titulo={numeroCompleto(kpis.visualizaciones)} />
+                <Dato etiqueta="Interacciones" valor={numeroCompacto(kpis.interacciones)} titulo={numeroCompleto(kpis.interacciones)} />
+                <Dato etiqueta="Engagement" valor={porcentaje(kpis.engagement_pct)} />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-amber-300/60 bg-amber-50/40 dark:border-amber-500/30 dark:bg-amber-500/5">
+            <CardContent className="space-y-3 p-5">
+              <div className="flex items-center gap-2">
+                <Megaphone className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm font-medium">Pagado (Meta Ads)</span>
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <Dato etiqueta="Vistas pagadas" valor={numeroCompacto(inorganico.visualizaciones)} titulo={numeroCompleto(inorganico.visualizaciones)} />
+                <Dato etiqueta="Gasto" valor={`${gasto} ${inorganico.moneda}`} />
+                <Dato etiqueta="Clics" valor={numeroCompacto(inorganico.clics)} />
+                <Dato etiqueta="Campañas" valor={String(inorganico.campanias)} />
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground">Vistas pagadas</p>
-          <p className="text-xl font-semibold tabular-nums" title={numeroCompleto(inorganico.visualizaciones)}>
-            {numeroCompacto(inorganico.visualizaciones)}
-          </p>
-        </div>
-        <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground">Gasto</p>
-          <p className="text-xl font-semibold tabular-nums">
-            {gasto} {inorganico.moneda}
-          </p>
-        </div>
-        <div className="space-y-0.5">
-          <p className="text-xs text-muted-foreground">Campañas</p>
-          <p className="text-xl font-semibold tabular-nums">{inorganico.campanias}</p>
-        </div>
-      </CardContent>
-    </Card>
+      </Seccion>
+    </Bloque>
   );
 }
 

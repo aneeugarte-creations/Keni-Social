@@ -55,6 +55,58 @@ export interface CampaniaAdsMetrica {
   inicio: string;
   fin: string;
   es_post_impulsado: boolean;
+  /** Campos de rendimiento OPCIONALES de la fuente (Meta Ads): pueden no venir según la
+   * cuenta/campaña. La UI los muestra solo cuando llegan (degradación elegante). */
+  ctr?: number | null;
+  cpc?: number | null;
+  cpm?: number | null;
+  conversiones?: number | null;
+  tasa_conversion?: number | null;
+  valor_conversiones?: number | null;
+  objetivo?: string | null;
+  estado?: string | null;
+  presupuesto_diario?: number | null;
+  /** Plataforma de origen tal cual la nombra el proveedor (p. ej. "facebook", "instagram"). */
+  network?: string | null;
+  /** Id de campaña en el proveedor: clave del drill-down a conjuntos de anuncios y anuncios. */
+  provider_campaign_id?: string | null;
+  /** Texto del anuncio/post impulsado, si la fuente lo trae. */
+  caption?: string | null;
+  /** Cuenta publicitaria de origen, si la fuente la trae. */
+  cuenta?: string | null;
+}
+
+/** Un conjunto de anuncios (adgroup) dentro de una campaña pagada. */
+export interface AdGroupAds {
+  nombre: string;
+  impresiones: number;
+  clics: number;
+  gasto: number;
+  ctr?: number | null;
+  cpc?: number | null;
+  conversiones?: number | null;
+  moneda?: string | null;
+}
+
+/** Un anuncio (creativo) dentro de un conjunto de anuncios. */
+export interface AdCreativoAds {
+  nombre: string;
+  adgroup?: string | null;
+  impresiones: number;
+  clics: number;
+  gasto: number;
+  thumbnail_url?: string | null;
+  ctr?: number | null;
+  cpc?: number | null;
+  conversiones?: number | null;
+  moneda?: string | null;
+}
+
+/** Respuesta de `GET /api/metricas/ads/{provider_campaign_id}/desglose`: el detalle de
+ * una campaña pagada en conjuntos de anuncios y anuncios. Puede no existir aún (404). */
+export interface DesgloseAds {
+  adgroups: AdGroupAds[];
+  ads: AdCreativoAds[];
 }
 
 /** Respuesta de `GET /api/metricas/ads`: el INORGÁNICO (Meta Ads) del periodo. */

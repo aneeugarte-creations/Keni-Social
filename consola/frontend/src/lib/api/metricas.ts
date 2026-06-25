@@ -3,6 +3,7 @@
 import { peticion, query, descargar } from "./_core";
 import type {
   AdsMetricas,
+  DesgloseAds,
   AnalisisDiario,
   AnaliticaPiezas,
   CompararMetricas,
@@ -94,6 +95,17 @@ export const apiMetricas = {
   // Campañas de publicidad PAGADA del periodo (Meta/TikTok Ads): el inorgánico a nivel marca.
   metricasAds: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
     peticion<AdsMetricas>(`/metricas/ads${query(params)}`, { signal }),
+  // Drill-down de UNA campaña pagada: sus conjuntos de anuncios y anuncios. Puede no existir
+  // (404) según el proveedor; la UI degrada y no pinta el desglose.
+  metricasAdsDesglose: (
+    providerCampaignId: string,
+    params: { marca?: string },
+    signal?: AbortSignal,
+  ) =>
+    peticion<DesgloseAds>(
+      `/metricas/ads/${encodeURIComponent(providerCampaignId)}/desglose${query(params)}`,
+      { signal },
+    ),
   // Canales (marca×red×formato) con la ingesta estancada (se quedaron atrás del feed).
   metricasIngesta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<IngestaMetricas>(`/metricas/ingesta${query(params)}`, { signal }),
