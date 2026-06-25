@@ -94,7 +94,6 @@ export async function descargarPresentacion(
   entradas: Array<[readonly unknown[], unknown]>,
   ctx: ContextoDeck,
   nombreArchivo: string,
-  opciones?: { breve?: boolean },
 ): Promise<void> {
   if (entradas.length === 0) throw new Error("No hay datos cargados para el PDF.");
 
@@ -116,7 +115,6 @@ export async function descargarPresentacion(
   }
 
   const props = desdeEntradas(entradas, ctx);
-  const breve = opciones?.breve ?? false;
 
   const [{ createRoot }, { Informe }, { toJpeg }, { jsPDF }] = await Promise.all([
     importarModulo(() => import("react-dom/client")),
@@ -132,7 +130,7 @@ export async function descargarPresentacion(
   const root = createRoot(host);
 
   try {
-    root.render(createElement(Informe, { data: props, breve }));
+    root.render(createElement(Informe, { data: props }));
     if (document.fonts?.ready) await document.fonts.ready;
     await esperarPintado();
 
@@ -185,7 +183,7 @@ export async function descargarPresentacion(
       // El lienzo del PDF es 1280×720 px = los mismos px CSS de la diapositiva (1:1).
       for (const e of enlaces[i]) doc.link(e.x, e.y, e.w, e.h, { url: e.url });
     }
-    doc.save(`informe${breve ? "-breve" : ""}-${nombreArchivo}.pdf`);
+    doc.save(`informe-${nombreArchivo}.pdf`);
   } finally {
     root.unmount();
     host.remove();

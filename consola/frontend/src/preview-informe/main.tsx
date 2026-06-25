@@ -22,7 +22,6 @@ function Vista() {
   const params = new URLSearchParams(location.search);
   const inicial = params.get("marca") ?? "unotv";
   const [clave, setClave] = React.useState(CLAVES.includes(inicial) ? inicial : "unotv");
-  const [breve, setBreve] = React.useState(params.get("breve") === "1");
   const muestra = MUESTRAS[clave];
   const data = React.useMemo(() => desdeEntradas(muestra.entradas, muestra.ctx), [muestra]);
 
@@ -65,7 +64,7 @@ function Vista() {
         ))}
         <button
           data-genpdf
-          onClick={() => void descargarPresentacion(muestra.entradas, muestra.ctx, clave, { breve })}
+          onClick={() => void descargarPresentacion(muestra.entradas, muestra.ctx, clave)}
           style={{
             fontFamily: "Geist, sans-serif",
             fontSize: 13,
@@ -80,28 +79,12 @@ function Vista() {
         >
           PDF
         </button>
-        <button
-          onClick={() => setBreve((b) => !b)}
-          style={{
-            fontFamily: "Geist, sans-serif",
-            fontSize: 13,
-            padding: "6px 12px",
-            borderRadius: 8,
-            border: "1px solid " + (breve ? "#ea580c" : "#e5e7eb"),
-            background: breve ? "#ea580c" : "#fff",
-            color: breve ? "#fff" : "#374151",
-            cursor: "pointer",
-            marginLeft: 8,
-          }}
-        >
-          {breve ? "Breve ✓" : "Breve"}
-        </button>
       </div>
 
       {/* Cada diapositiva del deck es 1280×720; las apilamos centradas con una sombra suave
           para distinguirlas, igual que se verían como páginas del PDF. */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
-        {React.Children.map(<Informe data={data} breve={breve} />, (n) => n)}
+        {React.Children.map(<Informe data={data} />, (n) => n)}
       </div>
     </div>
   );

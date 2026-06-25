@@ -17,7 +17,7 @@
  * deja sitio a los FILTROS (periodo, red) y a Configurar vista / Vistas guardadas.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, FileText, Presentation, Table2 } from "lucide-react";
+import { FileSpreadsheet, Presentation, Table2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ItemMenu } from "@/components/layout/MenuAcciones";
@@ -97,16 +97,15 @@ export function ItemsDescarga({
     toast.success("CSV completo descargado.");
   };
 
-  // breve=true → deck de 3 láminas (portada + veredicto + foco) para lectura ejecutiva.
-  const exportarPdf = async (breve: boolean) => {
+  const exportarPdf = async () => {
     const conDatos = entradasActivas();
     if (conDatos.length === 0) {
       toast.error("No hay datos cargados que exportar.");
       return;
     }
     try {
-      await descargarPresentacion(conDatos, ctx, nombre, { breve });
-      toast.success(breve ? "PDF breve descargado." : "PDF de presentación descargado.");
+      await descargarPresentacion(conDatos, ctx, nombre);
+      toast.success("PDF de presentación descargado.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo generar el PDF.");
     }
@@ -132,11 +131,8 @@ export function ItemsDescarga({
       <ItemMenu icono={FileSpreadsheet} onClick={descargarCsv}>
         Descargar CSV (todo)
       </ItemMenu>
-      <ItemMenu icono={Presentation} onClick={() => void exportarPdf(false)}>
+      <ItemMenu icono={Presentation} onClick={() => void exportarPdf()}>
         Descargar PDF (presentación)
-      </ItemMenu>
-      <ItemMenu icono={FileText} onClick={() => void exportarPdf(true)}>
-        Descargar PDF breve
       </ItemMenu>
     </>
   );

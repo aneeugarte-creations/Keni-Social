@@ -41,7 +41,6 @@ function hornearColoresSvg(raiz: HTMLElement): void {
 async function main() {
   const params = new URLSearchParams(location.search);
   const clave = params.get("marca") ?? "unotv";
-  const breve = params.get("breve") === "1";
   const muestra = MUESTRAS[clave] ?? MUESTRAS.unotv;
   const props = desdeEntradas(muestra.entradas, muestra.ctx);
 
@@ -49,7 +48,7 @@ async function main() {
   host.style.cssText = `position:fixed; left:-100000px; top:0; width:${W}px; background:${FONDO};`;
   document.body.appendChild(host);
   const root = createRoot(host);
-  root.render(createElement(Informe, { data: props, breve }));
+  root.render(createElement(Informe, { data: props }));
 
   if (document.fonts?.ready) await document.fonts.ready;
   await esperarPintado();
