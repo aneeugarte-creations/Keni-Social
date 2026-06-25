@@ -260,6 +260,14 @@ _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format", "vid
 # Seguidores ganados/atribuidos a UN post: casi seguro Metricool no lo expone a
 # nivel post; se captura si algún alias lo trae, si no queda None.
 _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
+# Granulares de pieza por red (None si la red no los trae): FB separa impresiones pagadas/
+# orgánicas y el gasto del post impulsado; TikTok da la tasa de visionado completo; Twitter
+# los marcadores (bookmarks).
+_ALIAS_IMPR_PAGADAS = ("impressionsPaid",)
+_ALIAS_IMPR_ORGANICAS = ("impressionsOrganic",)
+_ALIAS_GASTO_PIEZA = ("spend",)
+_ALIAS_TASA_VISIONADO = ("fullVideoWatchedRate",)
+_ALIAS_MARCADORES = ("totalBookmarks", "bookmarks")
 
 # --- PUENTE scheduler -> analítica ---------------------------------------------
 # El `id_post` que la Consola guarda (`pieza.id_post_metricool`) es el id del SCHEDULER
@@ -1610,6 +1618,7 @@ class FuenteMetricool:
             # Impresiones del reel: sus reproducciones (la métrica de volumen del vídeo).
             impresiones=vis,
             **gran,
+            **self._granulares_pieza(reel),
         )
 
     @staticmethod
@@ -1629,6 +1638,21 @@ class FuenteMetricool:
             "tiempo_medio_vis_s": _a_int_opt(_primero(post, _ALIAS_TIEMPO_VIS)),
             "clics_enlace": _a_int_opt(_primero(post, _ALIAS_CLICS)),
             "formato": _formato_opt(_primero(post, _ALIAS_FORMATO)),
+        }
+
+    @staticmethod
+    def _granulares_pieza(post: dict) -> dict:
+        """Granulares de pieza por red (paid/orgánico): None si la red no los trae.
+
+        Solo aplican a `Pieza` (no a `MetricaPieza`): FB separa impresiones pagadas/orgánicas y
+        el gasto del impulso; TikTok da la tasa de visionado completo; Twitter los marcadores.
+        """
+        return {
+            "impresiones_pagadas": _a_int_opt(_primero(post, _ALIAS_IMPR_PAGADAS)),
+            "impresiones_organicas": _a_int_opt(_primero(post, _ALIAS_IMPR_ORGANICAS)),
+            "gasto": _a_float_opt(_primero(post, _ALIAS_GASTO_PIEZA)),
+            "tasa_visionado_completo": _a_float_opt(_primero(post, _ALIAS_TASA_VISIONADO)),
+            "marcadores": _a_int_opt(_primero(post, _ALIAS_MARCADORES)),
         }
 
     def _pieza_desde_post(
@@ -1665,6 +1689,7 @@ class FuenteMetricool:
             alcance=_a_int_opt(_primero(post, _ALIAS_ALCANCE)),
             impresiones=_a_int_opt(_primero(post, _ALIAS_IMPRESIONES)),
             **gran,
+            **self._granulares_pieza(post),
         )
 
     def _resolver_post_scheduler(

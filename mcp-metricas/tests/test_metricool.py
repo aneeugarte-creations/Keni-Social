@@ -477,6 +477,35 @@ def test_mejores_piezas_mapea_posts():
     assert all(p.cuenta == "claro_sports" for p in piezas)
 
 
+def test_granulares_pieza_paid_organico_por_red():
+    """Pieza capta los granulares por red: FB impresiones pagadas/orgánicas + gasto; TikTok la
+    tasa de visionado completo; Twitter los marcadores. Ausentes -> None (no se inventan)."""
+    with httpx.Client() as cli:
+        f = _fuente(cli)
+        fb = f._pieza_desde_post(
+            {"id": "fb1", "publishedAt": "2026-05-20T12:00:00", "impressions": 5000,
+             "interactions": 100, "impressionsPaid": 3000, "impressionsOrganic": 2000,
+             "spend": 12.5},
+            Plataforma.facebook,
+        )
+        tk = f._pieza_desde_post(
+            {"id": "tk1", "createTime": "2026-05-20T12:00:00", "viewCount": 9000,
+             "interactions": 300, "fullVideoWatchedRate": 0.42},
+            Plataforma.tiktok,
+        )
+        tw = f._pieza_desde_post(
+            {"id": "tw1", "publishedAt": "2026-05-20T12:00:00", "impressions": 4000,
+             "interactions": 50, "totalBookmarks": 17},
+            Plataforma.x,
+        )
+
+    assert fb.impresiones_pagadas == 3000 and fb.impresiones_organicas == 2000
+    assert fb.gasto == 12.5
+    assert fb.tasa_visionado_completo is None and fb.marcadores is None
+    assert tk.tasa_visionado_completo == 0.42 and tk.impresiones_pagadas is None
+    assert tw.marcadores == 17 and tw.gasto is None
+
+
 @respx.mock
 def test_mejores_piezas_url_no_string_se_coacciona():
     """Un post con `url` no-string (p.ej. numérica) NO rompe la tool: se coacciona a str."""

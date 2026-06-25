@@ -217,6 +217,15 @@ class Pieza(BaseModel):
     clics_enlace: int | None = None
     # formato normalizado: 'reel'|'foto'|'carrusel'|'video'|'link'|'texto'|None.
     formato: str | None = None
+    # --- Granulares por red (paid/orgánico) ----------------------------------
+    # OPCIONALES (None si la red no los expone a nivel post): FB separa impresiones
+    # pagadas/orgánicas y el gasto del post impulsado; TikTok da la tasa de visionado
+    # completo (%); Twitter los marcadores (bookmarks). Nunca se inventan.
+    impresiones_pagadas: int | None = None
+    impresiones_organicas: int | None = None
+    gasto: float | None = None
+    tasa_visionado_completo: float | None = None
+    marcadores: int | None = None
     # texto COMPLETO del post (caption sin truncar). `titulo` es la etiqueta corta
     # (primeros ~120 chars) para pintar; `texto` conserva el caption íntegro para
     # análisis que necesitan el cuerpo entero —p.ej. detectar hashtags de campaña,

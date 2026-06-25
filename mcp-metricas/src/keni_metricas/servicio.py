@@ -390,6 +390,8 @@ def construir_listado_piezas(
             "url": p.url,
             # alcance (usuarios únicos): None salvo Meta (FB/IG); ver schema.
             "alcance": p.alcance,
+            # impresiones (veces mostrada, aditiva): None si la red no la expone por post.
+            "impresiones": p.impresiones,
             # Métricas granulares (None cuando la fuente no las trae; ver schema).
             "likes": p.likes,
             "comentarios": p.comentarios,
@@ -399,6 +401,12 @@ def construir_listado_piezas(
             "tiempo_medio_vis_s": p.tiempo_medio_vis_s,
             "clics_enlace": p.clics_enlace,
             "formato": p.formato,
+            # Granulares por red (paid/orgánico): None donde la red no los da.
+            "impresiones_pagadas": p.impresiones_pagadas,
+            "impresiones_organicas": p.impresiones_organicas,
+            "gasto": p.gasto,
+            "tasa_visionado_completo": p.tasa_visionado_completo,
+            "marcadores": p.marcadores,
             # cuenta (id_metricas) y rendimiento_relativo (vs la mediana del grupo):
             # None cuando la fuente no los aporta. Mismos campos que `Pieza`/`PiezaMetrica`.
             "cuenta": p.cuenta,
