@@ -17,6 +17,23 @@ cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ENVFILE="${1:-.env}"
 DC="docker compose --env-file $ENVFILE"
 PROYECTO="keni-social"   # nombre de proyecto de compose (`name:` en docker-compose.yml)
+
+# RED DE SEGURIDAD del cutover stop-the-world: si el deploy ABORTA (p.ej. la migración [4/6]
+# falla) mientras el back VIEJO sigue PARADO de [2/6], el rollback por salud de [5/6]-[6/6] aún
+# no aplica (no se ha hecho el `up`), así que sin esto prod quedaría CAÍDO. Este trap reanima el
+# back VIEJO (solo se paró, no se recreó: `start` levanta la MISMA imagen anterior). Es idempotente
+# y SEGURO en la salida exitosa: para entonces el `up` de [5b/6] ya dejó el back en marcha, así que
+# `start` es un no-op. `BACK_PARADO` solo vale 1 tras [2/6] (con `$DC` ya definido).
+BACK_PARADO=0
+_al_salir() {
+  rc=$?
+  if [ "${BACK_PARADO:-0}" = 1 ]; then
+    printf '\033[33m==> trap: el deploy sale (rc=%s) con el back parado -> reanimo el back VIEJO para no dejar prod caído\033[0m\n' "$rc" >&2
+    $DC start back >/dev/null 2>&1 || $DC up -d --no-deps back >/dev/null 2>&1 || true
+  fi
+  exit "$rc"
+}
+trap _al_salir EXIT
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
 REPO_VOL="keni-social_keni-repo"  # clon git del carril de auto-desarrollo (worker-dev/worker-ralph)
 
@@ -261,6 +278,7 @@ if [ "$BACK_CAMBIO" = 1 ]; then
   else
     echo "==> [2/6] stop back (blue-green OFF: breve indisponibilidad mientras se aplica el esquema)"
     $DC stop back || true
+    BACK_PARADO=1  # stop-the-world paró el back VIEJO: si [4/6] falla hay que reanimarlo (ver abajo)
   fi
 else
   echo "==> [2/6] back sin cambios — no se para (sin indisponibilidad)"
@@ -453,6 +471,10 @@ else
   echo "==> [5b/6] up (recrea SOLO los servicios cuya imagen o config cambió)"
   $DC up -d
 fi
+# El back ya está EN MARCHA tras el `up` (stop-the-world: el `up -d` de arriba lo recreó). A partir
+# de aquí el rollback por salud de [6/6] cubre el back; desarmamos la reanimación del trap para que
+# un fallo posterior no dispare un `start back` espurio.
+BACK_PARADO=0
 $DC ps
 
 espera_sano() {  # $1 = servicio compose ; $2 = timeout en segundos. 0 si llega a healthy.
