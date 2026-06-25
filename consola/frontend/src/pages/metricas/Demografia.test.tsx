@@ -69,6 +69,25 @@ describe("Demografia", () => {
     );
   });
 
+  it("lista las principales ciudades como línea fina bajo el ranking de lugar", async () => {
+    useVistaConfig.getState().setRed("instagram");
+    vi.spyOn(api, "metricasDemografia").mockResolvedValue({
+      red: "instagram",
+      distribuciones: {
+        country: [{ clave: "México", valor: 71.2 }],
+        city: [
+          { clave: "Ciudad de México", valor: 22.4 },
+          { clave: "Guadalajara", valor: 8.1 },
+        ],
+      },
+    });
+    renderConProviders(<Demografia marcaActual="claro_sports" />);
+
+    expect(await screen.findByText("Ciudades")).toBeInTheDocument();
+    expect(screen.getByText("Ciudad de México")).toBeInTheDocument();
+    expect(screen.getByText("Guadalajara")).toBeInTheDocument();
+  });
+
   it("degrada con honestidad cuando la red en foco no expone demografía", async () => {
     useVistaConfig.getState().setRed("instagram");
     vi.spyOn(api, "metricasDemografia").mockResolvedValue({ red: "instagram", distribuciones: {} });

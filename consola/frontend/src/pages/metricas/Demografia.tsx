@@ -233,8 +233,17 @@ function ColumnasEdad({ puntos }: { puntos: PuntoDistribucion[] }) {
   );
 }
 
-/** Lugar como ranking compacto (top 5 + "resto"); barra inline fina, #1 en emerald fuerte. */
-function ListaLugar({ puntos, titulo }: { puntos: PuntoDistribucion[]; titulo: string }) {
+/** Lugar como ranking compacto (top 5 + "resto"); barra inline fina, #1 en emerald fuerte.
+ * Las `ciudades` (cuando la red las expone) van como una línea fina debajo, sin otro gráfico. */
+function ListaLugar({
+  puntos,
+  titulo,
+  ciudades,
+}: {
+  puntos: PuntoDistribucion[];
+  titulo: string;
+  ciudades?: PuntoDistribucion[];
+}) {
   const orden = ordenar(puntos);
   if (!orden.length) return <SinDatos />;
   const top = orden.slice(0, 5);
@@ -242,6 +251,7 @@ function ListaLugar({ puntos, titulo }: { puntos: PuntoDistribucion[]; titulo: s
   const total = orden.reduce((s, p) => s + p.valor, 0);
   const restoN = orden.length - top.length;
   const restoPct = total - top.reduce((s, p) => s + p.valor, 0);
+  const topCiudades = ciudades?.length ? ordenar(ciudades).slice(0, 3) : [];
   const aria = top.map((p, i) => `${i + 1} ${p.clave} ${porcentaje(p.valor)}`).join(", ");
   return (
     <div className="space-y-3">
@@ -269,6 +279,22 @@ function ListaLugar({ puntos, titulo }: { puntos: PuntoDistribucion[]; titulo: s
         <p className="text-xs text-muted-foreground">
           +{restoN} más · resto <span className="tabular-nums">{porcentaje(restoPct)}</span>
         </p>
+      )}
+      {topCiudades.length > 0 && (
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-border pt-2.5 text-xs text-muted-foreground">
+          <span className="text-[10px] font-medium uppercase tracking-wider">Ciudades</span>
+          {topCiudades.map((c, i) => (
+            <span key={c.clave} className="inline-flex items-baseline gap-1">
+              {i > 0 && (
+                <span aria-hidden className="text-muted-foreground/50">
+                  ·
+                </span>
+              )}
+              <span className="text-foreground/80">{c.clave}</span>
+              <span className="tabular-nums">{porcentaje(c.valor)}</span>
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -337,7 +363,10 @@ function Cuerpo({ red, dist }: { red: string; dist: Distribuciones }) {
 
   if (red === "instagram") {
     if (dist.gender?.length) izquierda.push(<BarraGenero key="g" puntos={dist.gender} />);
-    if (paises?.length) izquierda.push(<ListaLugar key="l" puntos={paises} titulo="Lugar de la audiencia" />);
+    if (paises?.length)
+      izquierda.push(
+        <ListaLugar key="l" puntos={paises} titulo="Lugar de la audiencia" ciudades={dist.city} />,
+      );
     if (dist.age?.length) derecha.push(<ColumnasEdad key="e" puntos={dist.age} />);
     if (dist.postsTypes?.length) derecha.push(<Formatos key="f" puntos={dist.postsTypes} />);
   } else {
