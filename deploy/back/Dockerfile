@@ -98,21 +98,17 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --start-interval=5s 
 #   cualquier IP ("*"). Traefik puede correr en host-mode, pero alcanza al back por la red
 #   interna del compose, asi que la IP de origen cae en ese rango privado. OJO: si cambia la
 #   topologia de red (otra subred Docker, ingress en otra red, etc.) hay que ajustar este valor.
-# 2 workers uvicorn: el back NO ejecuta `claude -p` (eso es el servicio `worker`), pero SI
-#   es un proceso interactivo de cara al equipo: sirve /api (UI humana), /mcp (trafico de
-#   agentes Claude Code) y SSE de larga vida (generacion token a token) — todo en el mismo
-#   proceso. Con 1 solo worker eso es un cuello + micro-SPOF: una SSE colgada o un /mcp lento
-#   degrada la UI, y un reciclaje del proceso corta a todos. Subimos a 2 (resiliencia y
-#   concurrencia baratas). Es SEGURO multi-proceso: el back es STATELESS entre peticiones —
-#   sesiones y cola de jobs viven en Postgres compartido, no en memoria; arranca con
-#   KENI_WORKER_EXTERNO=1 (no levanta worker in-proceso) y NO corre daemons/scheduler
-#   in-proc (eso es el servicio `daemons`). El bootstrap y las migraciones del arranque son
-#   idempotentes y best-effort (correr 2 veces es inocuo). El lifespan del MCP (session
-#   manager + cliente in-proc) es por-proceso, asi que cada worker tiene el suyo: correcto.
-#   No subir mas alla de 2 sin re-presupuestar RAM (cada worker reimporta la app entera; el
-#   mem_limit/cpus del back en el compose estan dimensionados para 2). Concurrencia real de
-#   GENERACION = KENI_MAX_JOBS por proceso worker (el tope de admision lo respeta tambien el
-#   encolado del back).
+# 1 worker uvicorn: el back sirve /api (UI humana), /mcp (agentes Claude Code) y SSE de larga
+#   vida (generacion token a token, y el push de dispositivos del tunel keni-fotos) en el mismo
+#   proceso. Va a 1 worker A PROPOSITO: el TUNEL keni-fotos mantiene su registro de conexiones
+#   (el WebSocket de cada app + los suscriptores SSE) EN MEMORIA del proceso. Con 2 workers ese
+#   estado se PARTE: el WS de una app vive en un worker y las peticiones HTTP (buscar /
+#   dispositivos / eventos) rebotan entre workers, asi que la mitad no ve el dispositivo. El
+#   resto del back es stateless (sesiones y cola de jobs en Postgres compartido; arranca con
+#   KENI_WORKER_EXTERNO=1 y sin daemons in-proc), pero el tunel exige proceso unico. Si algun
+#   dia hace falta escalar a >1 worker, hay que mover el registro a un broker compartido y
+#   enrutar el RPC del WS al worker que lo tiene (ver CONTRATO-TUNEL.md). Trade-off asumido en
+#   el piloto: 1 worker = micro-SPOF (un reciclaje corta a todos), aceptable a esta escala.
 CMD ["uvicorn", "keni_consola.app:crear_app", "--factory", \
-     "--host", "0.0.0.0", "--port", "8765", "--workers", "2", \
+     "--host", "0.0.0.0", "--port", "8765", "--workers", "1", \
      "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]
