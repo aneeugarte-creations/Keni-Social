@@ -27,6 +27,11 @@ END
 \$\$;
 GRANT CONNECT ON DATABASE "$POSTGRES_DB" TO keni_app;
 GRANT USAGE, CREATE ON SCHEMA public TO keni_app;
+-- Extensiones que usa el esquema de la app (FTS/trigram de la biblioteca: pg_trgm). Se crean
+-- aqui, como superuser, porque keni_app NO tiene CREATE sobre la BD y `CREATE EXTENSION` la
+-- exige (incluso para extensiones trusted). El DDL/migraciones de la app hacen luego
+-- `CREATE EXTENSION IF NOT EXISTS pg_trgm`, un no-op sin privilegio una vez ya existe.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 EOSQL
 
 echo "initdb: rol keni_app (minimo privilegio) listo."
