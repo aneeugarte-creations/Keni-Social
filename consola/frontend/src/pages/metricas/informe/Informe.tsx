@@ -5,20 +5,14 @@
  * cada lámina es el INSIGHT (qué pasó), no la categoría; el gráfico debajo lo respalda.
  * Dirigido EXCLUSIVAMENTE por `InformeProps` (los insights se calculan en `desdeEntradas`).
  */
-import { AreaChart } from "@tremor/react";
 import qrcode from "qrcode-generator";
 import * as React from "react";
 
 import { nombreRed, numeroCompactoFijo, tituloLimpio } from "@/lib/formato";
 
+import { AreaBold } from "./graficas";
 import { LOGOS_MARCA } from "./logos";
-import type {
-  ConclusionInforme,
-  FilaRanking,
-  InformeProps,
-  KpiInforme,
-  PuntoTendencia,
-} from "./tipos";
+import type { ConclusionInforme, FilaRanking, InformeProps, KpiInforme } from "./tipos";
 
 import "./informe.css";
 
@@ -41,16 +35,30 @@ const TONO = {
 /** Overline / eyebrow ÚNICO del deck (mismo tracking en toda lámina). */
 const EYEBROW = "text-[11px] font-medium uppercase tracking-[0.18em]";
 
-/**
- * Doma de las gráficas Tremor (recharts por debajo) para serenidad: fuera rejilla, ejes y
- * rayitas de tick; ticks en gris fino; relleno del área a neblina. Mantiene los colores reales.
- */
-const CHART_SERENO =
-  "[&_.recharts-cartesian-grid]:hidden " +
-  "[&_.recharts-cartesian-axis-line]:stroke-transparent " +
-  "[&_.recharts-cartesian-axis-tick-line]:stroke-transparent " +
-  "[&_.recharts-cartesian-axis-tick_text]:fill-neutral-400 " +
-  "[&_.recharts-cartesian-axis-tick_text]:text-[11px]";
+/** Ancho útil de una lámina (1280 menos el padding horizontal px-20): las gráficas SVG lo usan
+ *  como ancho fijo para rasterizar 1:1 y nítido, sin medir el contenedor. */
+const ANCHO_GRAFICA = 1120;
+
+/** Naranja de marca (acento único) y verde/rojo semánticos, como HEX para los SVG inline. */
+const NARANJA = "#ea580c";
+const VERDE = "#059669";
+const ROJO = "#dc2626";
+const GRIS_SERIE = "#525252";
+
+/** Hex de la dirección de una serie (verde sube, rojo baja, gris neutro) para los SVG. */
+function hexSigno(signo?: "sube" | "baja" | "igual"): string {
+  return signo === "sube" ? VERDE : signo === "baja" ? ROJO : GRIS_SERIE;
+}
+
+/** Tinta legible sobre un fondo de color (blanco si es oscuro, gris-700 si es claro). */
+function textoSobre(hex: string): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#374151" : "#ffffff";
+}
 
 /** Estilo del "wordmark" de cada marca cuando no hay imagen de logo. */
 interface EstiloMarca {
@@ -254,82 +262,79 @@ function TileKpi({ kpi, mesAnterior }: { kpi: KpiInforme; mesAnterior: string })
   );
 }
 
-/** Fila de un ranking horizontal: punto de color, nombre, valor + %, y barra de progreso. */
-function FilaRank({ fila, max }: { fila: FilaRanking; max: number }) {
+/**
+ * Fila de ranking "rotunda": la CIFRA manda (grande, editorial, tabular) y la barra es un acento
+ * fino. El líder se sirve un punto mayor; el % acompaña a la cifra sin competir con ella.
+ */
+function FilaRankBold({
+  nombre,
+  cifra,
+  sub,
+  fraccion,
+  color,
+  destacado = false,
+  flecha,
+}: {
+  nombre: string;
+  /** Cifra dominante ya formateada (p. ej. "16.4 M" o "4.6 %"). */
+  cifra: string;
+  /** Apostilla pequeña junto a la cifra (p. ej. "34 %"); opcional. */
+  sub?: string;
+  /** Fracción 0..1 del valor sobre el máximo (largo de la barra). */
+  fraccion: number;
+  color: string;
+  destacado?: boolean;
+  /** Dirección frente a una referencia (verde sube, rojo baja); opcional. */
+  flecha?: "sube" | "baja";
+}) {
   return (
     <li>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="flex items-center gap-2.5 truncate text-sm text-neutral-700">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: fila.color }} />
-          {fila.nombre}
+      <div className="flex items-end justify-between gap-4">
+        <span className="flex items-center gap-3 truncate pb-1 text-[15px] text-neutral-600">
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+          {nombre}
         </span>
-        {/* whitespace-nowrap: cifra y % SIEMPRE en la misma línea. Al rasterizar a PDF
-            (html-to-image) un span encogido podía partir el % a otra línea por redondeo
-            subpíxel; fijarlo lo impide pase lo que pase. */}
-        <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-neutral-900">
-          {finos(numeroCompactoFijo(fila.valor))}
-          {/* El % en su propia caja de ancho fijo right-aligned: un % de un dígito ("6 %") no empuja
-              la cifra principal, así las cifras forman una columna vertical limpia. */}
-          <span className="ml-2 inline-block w-9 text-right text-xs text-neutral-600">{fila.pct}&#8239;%</span>
+        <span className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
+          <span
+            className={`${destacado ? "text-[34px]" : "text-[28px]"} font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900`}
+          >
+            {cifra}
+          </span>
+          {sub && <span className="text-sm tabular-nums text-neutral-400">{sub}</span>}
+          {flecha && (
+            <span className={`text-base ${flecha === "sube" ? "text-emerald-600" : "text-red-600"}`}>
+              {flecha === "sube" ? "↑" : "↓"}
+            </span>
+          )}
         </span>
       </div>
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
+      <div className="mt-3.5 h-[5px] w-full overflow-hidden rounded-full bg-neutral-100">
         <div
           className="h-full rounded-full"
-          style={{ width: `${max > 0 ? (fila.valor / max) * 100 : 0}%`, background: fila.color }}
+          style={{ width: `${Math.max(0, Math.min(1, fraccion)) * 100}%`, background: color }}
         />
       </div>
     </li>
   );
 }
 
-/** Lista de ranking horizontal ordenada (reparto por red, comparativa por marca). */
+/** Lista de ranking ordenada (reparto por red, comparativa por marca): cifra grande + barra fina. */
 function Ranking({ filas, columnas = 1 }: { filas: FilaRanking[]; columnas?: number }) {
   const max = filas.reduce((m, f) => Math.max(m, f.valor), 0);
   return (
-    <ul className={`grid gap-x-12 gap-y-8 ${columnas === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
-      {filas.map((f) => (
-        <FilaRank key={f.clave} fila={f} max={max} />
+    <ul className={`grid gap-x-16 ${columnas === 2 ? "grid-cols-2 gap-y-8" : "grid-cols-1 gap-y-9"}`}>
+      {filas.map((f, i) => (
+        <FilaRankBold
+          key={f.clave}
+          nombre={f.nombre}
+          cifra={finos(numeroCompactoFijo(f.valor))}
+          sub={`${f.pct}\u202f%`}
+          fraccion={max > 0 ? f.valor / max : 0}
+          color={f.color}
+          destacado={i === 0 && columnas === 1}
+        />
       ))}
     </ul>
-  );
-}
-
-/**
- * Un AreaChart Tremor ya domado (sin grid/ejes/tooltip/animación), color por hex. Sin eje X: las
- * etiquetas de los extremos las recorta el rasterizador (salían "i1 may"/"29 jui"); el rango de
- * fechas se pone como texto bajo la gráfica, donde no se corta.
- */
-function AreaSerena({
-  data,
-  categoria,
-  color,
-  alto,
-}: {
-  data: PuntoTendencia[];
-  categoria: "Vistas" | "Interacciones";
-  /** Nombre de color Tremor (mapea a clase Tailwind safelisteada; el hex no lo está). */
-  color: string;
-  alto: number;
-}) {
-  return (
-    <AreaChart
-      data={data}
-      index="fecha"
-      categories={[categoria]}
-      colors={[color]}
-      valueFormatter={numeroCompactoFijo}
-      showLegend={false}
-      showGridLines={false}
-      showYAxis={false}
-      showXAxis={false}
-      showTooltip={false}
-      showAnimation={false}
-      startEndOnly
-      curveType="monotone"
-      className={`w-full ${CHART_SERENO}`}
-      style={{ height: alto }}
-    />
   );
 }
 
@@ -365,6 +370,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
     redInsight,
     engPorRed,
     engInsight,
+    engMedia,
     seguidores,
     seguidoresNeto,
     desgloseMix,
@@ -618,7 +624,16 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
     ),
   });
 
-  // 3 · Tendencia diaria — small-multiple vistas + interacciones; el título marca el mejor día.
+  // 3 · Tendencia diaria — el área de vistas es la estrella: gradiente rico, curva gruesa, el PICO
+  // del titular marcado en la propia curva (disco + cifra + día) y la media como hairline. Las
+  // interacciones la acompañan como banda fina, su media y su cierre marcados.
+  const vistasSerie = tendencia.map((p) => p.Vistas);
+  const interSerie = tendencia.map((p) => p.Interacciones);
+  const idxPicoVistas = vistasSerie.length ? vistasSerie.indexOf(Math.max(...vistasSerie)) : -1;
+  const cierreVistas =
+    vistasSerie.length >= 2 ? { etiqueta: finos(numeroCompactoFijo(vistasSerie[vistasSerie.length - 1])) } : undefined;
+  const cierreInter =
+    interSerie.length >= 2 ? { etiqueta: finos(numeroCompactoFijo(interSerie[interSerie.length - 1])) } : undefined;
   slides.push({
     clave: "tendencia",
     nodo: (
@@ -635,30 +650,59 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
       >
         <div className="flex h-full flex-col justify-center gap-6">
           <div>
-            <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>
-              Visualizaciones
-              <span className="ml-3 font-normal normal-case tracking-normal text-neutral-500">
-                {mediaVistas > 0 && <>media {finos(numeroCompactoFijo(Math.round(mediaVistas)))} / día</>}
-                {picoVistas && (
-                  <>
-                    {mediaVistas > 0 && " · "}
-                    pico {finos(numeroCompactoFijo(picoVistas.valor))} el {picoVistas.fecha}
-                  </>
-                )}
-              </span>
-            </p>
-            <AreaSerena data={tendencia} categoria="Vistas" color="orange" alto={210} />
+            <p className={`mb-2 ${EYEBROW} ${TONO.kpiLabel}`}>Visualizaciones</p>
+            <AreaBold
+              valores={vistasSerie}
+              w={ANCHO_GRAFICA}
+              h={228}
+              id="grad-vistas"
+              color={NARANJA}
+              grosor={2.75}
+              padTop={48}
+              opacidadArea={0.34}
+              cierre={cierreVistas}
+              pico={
+                picoVistas && idxPicoVistas >= 0
+                  ? {
+                      idx: idxPicoVistas,
+                      cifra: finos(numeroCompactoFijo(picoVistas.valor)),
+                      sub: `${picoVistas.fecha} · ${finos(`${picoVistas.pct} %`)} del mes`,
+                    }
+                  : undefined
+              }
+              referencia={
+                mediaVistas > 0
+                  ? {
+                      valor: mediaVistas,
+                      etiqueta: `media ${finos(numeroCompactoFijo(Math.round(mediaVistas)))} / día`,
+                      lado: "izq",
+                    }
+                  : undefined
+              }
+            />
           </div>
           <div>
-            <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>
-              Interacciones
-              {mediaInteracciones > 0 && (
-                <span className="ml-3 font-normal normal-case tracking-normal text-neutral-500">
-                  media {finos(numeroCompactoFijo(Math.round(mediaInteracciones)))} / día
-                </span>
-              )}
-            </p>
-            <AreaSerena data={tendencia} categoria="Interacciones" color="neutral" alto={150} />
+            <p className={`mb-2 ${EYEBROW} ${TONO.kpiLabel}`}>Interacciones</p>
+            <AreaBold
+              valores={interSerie}
+              w={ANCHO_GRAFICA}
+              h={92}
+              id="grad-inter"
+              color={GRIS_SERIE}
+              grosor={2}
+              padTop={16}
+              opacidadArea={0.16}
+              cierre={cierreInter}
+              referencia={
+                mediaInteracciones > 0
+                  ? {
+                      valor: mediaInteracciones,
+                      etiqueta: `media ${finos(numeroCompactoFijo(Math.round(mediaInteracciones)))} / día`,
+                      lado: "izq",
+                    }
+                  : undefined
+              }
+            />
             <RangoFechas data={tendencia} />
           </div>
         </div>
@@ -689,7 +733,12 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
   // 4b · Dónde engancha mejor — engagement (interacción por vista) por red. Solo si hay dato:
   // alinea el cuerpo del deck con la tesis (no solo "dónde se ve", también "dónde conecta").
   if (engPorRed.length >= 2) {
-    const maxRate = engPorRed[0].rate || 1;
+    // La escala contiene también la media (el centroide ponderado nunca supera al líder, pero así
+    // la línea de referencia jamás se sale aunque el dato llegara raro).
+    const maxRate = Math.max(engPorRed[0].rate, engMedia) || 1;
+    // Posición de la media global en la escala de las barras: las que la rebasan conectan por
+    // encima de tu media; las que no, por debajo.
+    const posMedia = Math.max(2, Math.min(98, (engMedia / maxRate) * 100));
     slides.push({
       clave: "eng-red",
       nodo: (
@@ -698,29 +747,38 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
           periodo={periodo}
           etiqueta={etiqueta}
           titulo={engInsight || "Dónde engancha mejor"}
-          subtitulo="Interacción por vista · más vistas no es más conexión"
+          subtitulo="Interacción por vista · frente a tu media global del periodo"
         >
-          <div className="flex h-full items-center">
-            <div className="w-full">
-              <ul className="grid gap-y-8">
-                {engPorRed.map((r) => (
-                  <li key={r.clave}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="flex items-center gap-2.5 text-sm text-neutral-700">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} />
-                        {r.nombre}
-                      </span>
-                      <span className="shrink-0 text-sm tabular-nums text-neutral-900">{r.rate.toFixed(1)}&#8239;%</span>
-                    </div>
-                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${(r.rate / maxRate) * 100}%`, background: r.color }}
-                      />
-                    </div>
-                  </li>
+          <div className="flex h-full flex-col justify-center">
+            <div className="relative w-full">
+              <ul className="grid gap-y-9 pt-8">
+                {engPorRed.map((r, i) => (
+                  <FilaRankBold
+                    key={r.clave}
+                    nombre={r.nombre}
+                    cifra={`${r.rate.toFixed(1)}\u202f%`}
+                    fraccion={r.rate / maxRate}
+                    color={r.color}
+                    destacado={i === 0}
+                    flecha={engMedia > 0 ? (r.rate > engMedia ? "sube" : r.rate < engMedia ? "baja" : undefined) : undefined}
+                  />
                 ))}
               </ul>
+              {/* Media global: una sola línea de referencia sutil + su etiqueta (mínimo, sin rejilla). */}
+              {engMedia > 0 && (
+                <>
+                  <div
+                    className="pointer-events-none absolute bottom-1 top-7 border-l border-dashed border-neutral-400"
+                    style={{ left: `${posMedia}%` }}
+                  />
+                  <span
+                    className="pointer-events-none absolute top-0 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tabular-nums text-neutral-500"
+                    style={{ left: `${posMedia}%` }}
+                  >
+                    media {finos(`${engMedia.toFixed(1)} %`)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </Marco>
@@ -756,6 +814,8 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
 
   // 6 · Crecimiento de seguidores — neto como héroe + curva de GANANCIA ACUMULADA (0→neto):
   // la pendiente cuenta el mismo dato que el titular, sin el "casi plano" del nivel absoluto.
+  const ganadosSerie = seguidores.map((p) => p.Ganados);
+  const colorSeguidores = hexSigno(seguidoresNeto?.signo);
   slides.push({
     clave: "seguidores",
     nodo: (
@@ -772,11 +832,29 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         }
         subtitulo="Seguidores ganados, acumulado en el periodo"
       >
-        <div className="grid h-full grid-cols-5 items-center gap-12">
-          <div className="col-span-2">
+        {/* La curva ocupa la lámina entera (gana de 0 al neto); el número héroe se funde en el
+            hueco que deja la pendiente arriba a la izquierda. Cero lienzo muerto. */}
+        <div className="relative h-full">
+          <div className="absolute inset-x-0 bottom-5">
+            <AreaBold
+              valores={ganadosSerie}
+              w={ANCHO_GRAFICA}
+              h={332}
+              id="grad-seguidores"
+              color={colorSeguidores}
+              grosor={2.75}
+              padTop={40}
+              opacidadArea={0.24}
+              marcarFinal
+            />
+            <RangoFechas data={seguidores} />
+          </div>
+          <div className="absolute left-0 top-2 max-w-[42%]">
             {seguidoresNeto ? (
               <>
-                <p className={`text-[56px] font-light leading-none tracking-[-0.02em] tabular-nums ${colorSigno(seguidoresNeto.signo)}`}>
+                <p
+                  className={`text-[60px] font-light leading-none tracking-[-0.02em] tabular-nums ${colorSigno(seguidoresNeto.signo)}`}
+                >
                   {finos(seguidoresNeto.texto)}
                 </p>
                 <p className={`mt-3 ${EYEBROW} text-neutral-500`}>Seguidores netos</p>
@@ -788,27 +866,6 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             ) : (
               <p className="text-sm text-neutral-500">Sin datos de seguidores en el periodo.</p>
             )}
-          </div>
-          <div className="col-span-3">
-            <AreaChart
-              data={seguidores}
-              index="fecha"
-              categories={["Ganados"]}
-              colors={["emerald"]}
-              valueFormatter={numeroCompactoFijo}
-              showLegend={false}
-              showGridLines={false}
-              showYAxis={false}
-              showXAxis={false}
-              showTooltip={false}
-              showAnimation={false}
-              startEndOnly
-              curveType="linear"
-              minValue={0}
-              className={`w-full ${CHART_SERENO} [&_.recharts-area-area]:opacity-[0.2]`}
-              style={{ height: 300 }}
-            />
-            <RangoFechas data={seguidores} />
           </div>
         </div>
       </Marco>
@@ -834,23 +891,48 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             : "Composición de las interacciones del periodo"
         }
       >
-        <div className="flex h-full flex-col justify-center gap-10">
-          <div className="flex h-7 w-full gap-[2px] overflow-hidden rounded-lg">
-            {desgloseMix.segmentos.map((s) => (
-              <div key={s.label} style={{ width: `${s.pct}%`, background: s.color }} title={`${s.label} ${s.pct}%`} />
-            ))}
+        <div className="flex h-full flex-col justify-center gap-9">
+          <div>
+            {/* Barra 100 % alta y confiada; el % vive DENTRO de cada tramo lo bastante ancho. */}
+            <div className="flex h-[76px] w-full gap-[3px] overflow-hidden rounded-xl">
+              {desgloseMix.segmentos.map((s) => (
+                <div
+                  key={s.label}
+                  className="flex items-center justify-center"
+                  style={{ width: `${s.pct}%`, background: s.color }}
+                >
+                  {s.pct >= 8 && (
+                    <span className="text-base font-medium tabular-nums" style={{ color: textoSobre(s.color) }}>
+                      {s.pct}&#8239;%
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* El corchete abraza el tramo naranja (lo de alto valor) y nombra el dato del título. */}
+            {desgloseMix.altoValorPct > 0 && (
+              <div className="mt-2.5 flex w-full">
+                <div style={{ width: `${100 - desgloseMix.altoValorPct}%` }} />
+                <div className="flex flex-col items-center" style={{ width: `${desgloseMix.altoValorPct}%` }}>
+                  <div className="h-2 w-full border-x border-b border-neutral-300" />
+                  <span className="mt-2 whitespace-nowrap text-[11px] font-medium tabular-nums text-orange-600">
+                    Se comparte o se guarda · {desgloseMix.altoValorPct}&#8239;%
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-          <ul className="grid grid-cols-4 gap-8">
+          <ul className="grid grid-cols-4 gap-8 border-t border-neutral-100 pt-7">
             {desgloseMix.segmentos.map((s) => (
               <li key={s.label} className="flex flex-col">
                 <span className="flex items-center gap-2 text-xs text-neutral-500">
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} />
                   {s.label}
                 </span>
-                <span className="mt-2 text-[28px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
-                  {s.pct}&#8239;%
+                <span className="mt-2.5 text-[26px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
+                  {finos(numeroCompactoFijo(s.valor))}
                 </span>
-                <span className="mt-1.5 text-xs tabular-nums text-neutral-500">{finos(numeroCompactoFijo(s.valor))}</span>
+                <span className="mt-1.5 text-xs tabular-nums text-neutral-400">{s.pct}&#8239;% del total</span>
               </li>
             ))}
           </ul>

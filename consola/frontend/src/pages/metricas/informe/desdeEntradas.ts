@@ -355,6 +355,15 @@ export function desdeEntradas(
   const engInsight = engPorRed.length
     ? `${engPorRed[0].nombre} lidera la interacción por vista: ${engPorRed[0].rate} %`
     : "";
+  // Media global: Σ interacciones ÷ Σ vistas sobre las redes con vistas (mismo numerador/
+  // denominador que el rate por red), para una referencia honesta y comparable con las barras.
+  let sumInterEng = 0;
+  let sumVistasEng = 0;
+  for (const red of redesOrden) {
+    sumInterEng += interacPorRed.get(red) ?? 0;
+    sumVistasEng += vistasPorRed.get(red) ?? 0;
+  }
+  const engMedia = sumVistasEng > 0 ? Math.round((sumInterEng / sumVistasEng) * 1000) / 10 : 0;
 
   // --- Top piezas (las 8 mejores). `plataforma` ya es id de red; lo canonizamos. ---
   const piezasCrudo = (datos.get("piezas") ?? {}) as { top?: PiezaCruda[] };
@@ -422,6 +431,7 @@ export function desdeEntradas(
     redInsight,
     engPorRed,
     engInsight,
+    engMedia,
     seguidores,
     seguidoresNeto,
     desgloseMix,

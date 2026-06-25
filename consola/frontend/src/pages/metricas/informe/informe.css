@@ -1,3 +1,17 @@
+/* Geist self-hosted (mismo origen) para el deck. `html-to-image` rasteriza la diapositiva
+   clonándola a un SVG aislado que NO ve las fuentes de la página; embebe la fuente leyendo las
+   reglas @font-face de las hojas de estilo, pero NO puede leer las de una hoja CROSS-ORIGIN
+   (Google Fonts) — SecurityError al acceder a `cssRules` — y el PDF saldría en fuente fallback.
+   Sirviendo Geist desde el mismo origen, la regla SÍ se lee y la fuente se hornea en el PDF.
+   Es la fuente variable (un fichero cubre 300–700). */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/Geist-var.woff2") format("woff2");
+}
+
 /* Diapositiva del informe (1280×720): lienzo blanco a tamaño real, sin sombra ni redondeo
    porque se rasteriza a PDF (no es la previa interactiva, que sí flota sobre el fondo). */
 .informe-slide {

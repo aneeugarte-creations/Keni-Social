@@ -159,6 +159,8 @@ describe("desdeEntradas", () => {
     expect(props.engPorRed.map((r) => r.nombre)).toEqual(["Instagram"]);
     expect(props.engPorRed[0].rate).toBe(2);
     expect(norm(props.engInsight)).toContain("Instagram lidera la interacción por vista");
+    // Media global sobre TODAS las redes con vistas (instagram 12 + youtube 0) ÷ (600 + 400) = 1.2 %.
+    expect(props.engMedia).toBe(1.2);
   });
 
   it("seguidores: ganancia ACUMULADA desde 0 + neto honesto", () => {

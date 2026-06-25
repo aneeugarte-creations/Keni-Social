@@ -93,6 +93,8 @@ export interface InformeProps {
   engPorRed: Array<{ clave: string; nombre: string; rate: number; color: string }>;
   /** Insight de engagement por red (la red con más interacción por vista). */
   engInsight: string;
+  /** Engagement global del periodo (Σ interacciones ÷ Σ vistas × 100), comparable al rate por red. */
+  engMedia: number;
   // --- Seguidores: ganancia ACUMULADA desde 0 (la pendiente = el neto del titular) ---
   seguidores: Array<{ fecha: string; Ganados: number }>;
   /** Neto ganado en el periodo: cifra, %, por día y dirección. */
