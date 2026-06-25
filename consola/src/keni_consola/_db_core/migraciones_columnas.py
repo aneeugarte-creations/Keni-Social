@@ -58,6 +58,24 @@ def _migrar_columnas_catalogo_media(con: Any) -> None:
     )
 
 
+def _migrar_clasificar_originales_portal(con: Any) -> None:
+    """Clasifica como `fuente='portal'` las fotos de artículo ya catalogadas (S3 `originales/`).
+
+    Las fotos originales de artículo del portal se guardan en la carpeta física S3 `originales/` y
+    se catalogaron con su titular ANTES de existir la biblioteca, así que su `fuente` quedó sin
+    clasificar. La carpeta LÓGICA de esas fotos es `portal` (vienen del portal de noticias), así
+    que aparezcan en esa carpeta de la biblioteca. Idempotente: solo toca filas sin clasificar.
+    """
+    if not _tabla_existe(con, "catalogo_media"):
+        return
+    if "fuente" not in _columnas_existentes(con, "catalogo_media"):
+        return
+    con.execute(
+        "UPDATE catalogo_media SET fuente = 'portal' "
+        "WHERE objeto LIKE 'originales/%' AND (fuente IS NULL OR fuente = '')"
+    )
+
+
 def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
     """Anade `sugerida` a `noticias_algoritmo` si una BD ya creada no la tuviera (idempotente).
 

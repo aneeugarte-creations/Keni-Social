@@ -254,8 +254,10 @@ def _descargar_original_a_biblioteca(
     try:
         objeto = almacen_media.promover_objeto(objeto, "originales")
         repos.crear_media_catalogo(
+            # La foto viene del ARTÍCULO del portal (`imagen_fuente`): su carpeta lógica en la
+            # biblioteca es `portal` (la carpeta física S3 sigue siendo `originales`).
             objeto=objeto, tipo=TIPO_ARTE_ORIGINAL, marca=marca or "",
-            titulo=titulo or "", fuente="originales", autor=autor,
+            titulo=titulo or "", fuente="portal", autor=autor,
         )
     except Exception:  # noqa: BLE001 -- sin fila de catalogo la imagen sigue sirviendo en la pieza
         pass

@@ -43,6 +43,7 @@ from .migraciones_columnas import (
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_catalogo_media,
+    _migrar_clasificar_originales_portal,
     _migrar_columnas_config_franjas,
     _migrar_columnas_publicacion,
     _migrar_columnas_pieza,
@@ -497,6 +498,14 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     Migracion(
         "0049-columnas-catalogo-media",
         _migrar_columnas_catalogo_media,
+        re_aplicar_si_cambia=True,
+    ),
+    # PORTAL: las fotos de artículo ya catalogadas (S3 `originales/`, con su titular) son del
+    # portal; clasifícalas como `fuente='portal'` para que aparezcan en esa carpeta de la
+    # biblioteca. Re-aplicable e idempotente (solo toca filas sin clasificar).
+    Migracion(
+        "0050-clasificar-originales-portal",
+        _migrar_clasificar_originales_portal,
         re_aplicar_si_cambia=True,
     ),
 )
