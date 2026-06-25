@@ -13,6 +13,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Camera, Download } from "lucide-react";
 
+import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,17 +65,20 @@ export default function Fotos() {
             <Spinner className="h-5 w-5" />
           </div>
         ) : !hayDispositivos ? (
-          // Vacío: nadie ha conectado su app; solo icono, título y la descarga.
-          <section className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-keni/10 text-keni">
-              <Camera className="h-8 w-8" aria-hidden="true" />
-            </div>
-            <h2 className="text-lg font-semibold tracking-tight">Sin dispositivos conectados</h2>
-            <Button className="gap-2" onClick={() => api.descargarFotosApp()}>
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Descargar para macOS
-            </Button>
-          </section>
+          // Vacío: nadie ha conectado su app. Estado vacío sobrio (EstadoVacio) con la descarga.
+          <div className="py-12">
+            <EstadoVacio
+              icono={Camera}
+              titulo="Sin dispositivos conectados"
+              texto="Descarga la app keni-fotos en tu equipo y conéctala para ver aquí las galerías del equipo."
+              accion={
+                <Button variant="outline" className="gap-2" onClick={() => api.descargarFotosApp()}>
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Descargar para macOS
+                </Button>
+              }
+            />
+          </div>
         ) : (
           <div className="py-6">
             {/* Dispositivos conectados: dueño, marcas a las que comparte y galerías. */}
