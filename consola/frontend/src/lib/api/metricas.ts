@@ -9,8 +9,10 @@ import type {
   CompararMetricas,
   CorrelacionSeguidores,
   Crosstab,
+  Demografia,
   DesgloseInteracciones,
   EstadoMetricas,
+  FlujoAudiencia,
   HistoricoPieza,
   IngestaMetricas,
   MetricasCategorias,
@@ -19,6 +21,7 @@ import type {
   PiezasPorEtiqueta,
   PiezasRendimiento,
   ReporteMetricas,
+  SerieAlcance,
   SerieSeguidores,
   TendenciaDiaria,
 } from "@/types";
@@ -77,6 +80,18 @@ export const apiMetricas = {
   // Evolución de seguidores del periodo (total + por red) con el neto ganado/perdido.
   metricasSeguidores: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
     peticion<SerieSeguidores>(`/metricas/seguidores${query(params)}`, { signal }),
+  // Serie diaria de alcance de cuenta (total + por red). Solo Instagram aporta (el resto de
+  // redes no mide alcance de cuenta); `puntos` vacío = la fuente no lo expone.
+  metricasSerieAlcance: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
+    peticion<SerieAlcance>(`/metricas/serie-alcance${query(params)}`, { signal }),
+  // Flujo de audiencia del periodo por red: altas, bajas y neto. `altas`/`bajas` son null
+  // donde la red no las separa (TikTok/IG); FB y YouTube sí dan altas/bajas brutas.
+  metricasAudiencia: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
+    peticion<FlujoAudiencia>(`/metricas/audiencia${query(params)}`, { signal }),
+  // Distribuciones demográficas/de mezcla de UNA marca×red (marca y red obligatorias):
+  // género/edad/país/ciudad (%) + mezcla de formatos (postsTypes). `distribuciones` puede venir vacío.
+  metricasDemografia: (params: { marca?: string; red?: string }, signal?: AbortSignal) =>
+    peticion<Demografia>(`/metricas/demografia${query(params)}`, { signal }),
   // Desglose de interacciones (likes/comentarios/compartidos/guardados/video_views) por marca×red.
   metricasDesglose: (
     params: { rango?: string; marca?: string; red?: string; formato?: string },

@@ -6,6 +6,73 @@
 // (`index.ts`).
 // NOTA: `fuente` es REQUERIDO (el backend siempre lo emite; "" si es desconocida).
 
+import type { PeriodoMetricas, TotalMetricas } from "../types.gen";
+
+/** El total del reporte con `impresiones`: el VOLUMEN aditivo del periodo (impresiones en
+ * FB/IG/X, reproducciones en TikTok/YouTube). Es la cifra de cabecera del periodo. El campo
+ * es opcional porque solo está presente cuando la fuente lo aporta; la UI degrada si falta. */
+export type TotalConImpresiones = TotalMetricas & { impresiones?: number };
+
+/** Un día de la serie de alcance de cuenta: total + desglose por red. */
+export interface PuntoAlcance {
+  fecha: string;
+  total: number;
+  por_red: Record<string, number>;
+}
+
+/** Respuesta de `GET /api/metricas/serie-alcance`: alcance de cuenta día a día.
+ *
+ * Solo Instagram expone alcance de cuenta (reach diario), así que `por_red` solo trae
+ * `instagram`. El alcance es un FLUJO diario, no un stock: por eso no hay `neto`, solo la
+ * serie. `puntos` vacío = la fuente no expone alcance de cuenta (degradación honesta). */
+export interface SerieAlcance {
+  cuenta: string | null;
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  puntos: PuntoAlcance[];
+}
+
+/** Altas y bajas de seguidores de UNA red en el periodo.
+ *
+ * `altas`/`bajas` son `null` donde la red no las separa (TikTok/IG: solo `neto`); `neto`
+ * siempre viene. FB y YouTube sí dan altas/bajas brutas. */
+export interface AudienciaPorRed {
+  red: string;
+  altas: number | null;
+  bajas: number | null;
+  neto: number;
+}
+
+/** Respuesta de `GET /api/metricas/audiencia`: flujo de audiencia (altas/bajas/neto) por red.
+ *
+ * `por_red` vacío = la fuente no expone flujo de audiencia (degradación honesta). */
+export interface FlujoAudiencia {
+  por_red: AudienciaPorRed[];
+  etiqueta_rango: string;
+  generado_en: string;
+}
+
+/** Un punto de una distribución demográfica/de mezcla: clave + valor.
+ *
+ * `valor` es un porcentaje (float) en las distribuciones demográficas (gender/age/country/
+ * city) y un conteo (int) en la mezcla de formatos (`postsTypes`). */
+export interface PuntoDistribucion {
+  clave: string;
+  valor: number;
+}
+
+/** Respuesta de `GET /api/metricas/demografia`: distribuciones de UNA marca×red.
+ *
+ * IG trae `gender`/`age`/`country`/`city` (%) + `postsTypes` (conteos); FB
+ * `page_follows_country` (%) + `postsTypes`. `distribuciones` puede venir `{}` (la fuente no
+ * la expone o sin datos). */
+export interface Demografia {
+  red: string;
+  distribuciones: Record<string, PuntoDistribucion[]>;
+}
+
 /** Un grupo (valor de un eje) con su rendimiento agregado. */
 export interface GrupoPorEtiqueta {
   /** Valor del eje (p. ej. "reel", "Mundial 2026", "Sin clasificar"). */
