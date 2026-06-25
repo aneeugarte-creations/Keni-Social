@@ -1199,11 +1199,17 @@ services:
       KENI_KEEPER_MODELO: ${KENI_KEEPER_MODELO:-opus}
       KENI_KEEPER_INTERVALO: ${KENI_KEEPER_INTERVALO:-10}
       # Vigilancia de CI (réplica de ci-verde): 1 = arregla pipelines de `main` en rojo. DORMIDA
-      # por defecto (0). ci_watch.py lee el sqlite de Woodpecker montado read-only abajo.
+      # por defecto (0).
       KENI_KEEPER_CI: ${KENI_KEEPER_CI:-0}
       KENI_KEEPER_CI_WATCH: /keeper/ci_watch.py
-      KENI_WOODPECKER_DB: /woodpecker/woodpecker.sqlite
       KENI_KEEPER_REPO_ID: ${KENI_KEEPER_REPO_ID:-1}
+      # Fuente del estado del CI. Si KENI_WOODPECKER_API está definido, ci_watch.py habla con la API
+      # REST de Woodpecker (desacoplado del backend: vale igual con sqlite o postgres). Si está vacío,
+      # cae al sqlite montado read-only abajo (KENI_WOODPECKER_DB). El token es un PAT de un usuario
+      # de Woodpecker (se genera en su UI) y entra por secret.
+      KENI_WOODPECKER_API: ${KENI_WOODPECKER_API:-}
+      KENI_WOODPECKER_API_TOKEN_FILE: /run/secrets/woodpecker_api_token
+      KENI_WOODPECKER_DB: /woodpecker/woodpecker.sqlite
       # Flag de deploy (no actuar durante un deploy) e identidad de los commits del keeper.
       KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
       KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}
