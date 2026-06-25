@@ -91,11 +91,14 @@ INSTRUCCIONES = [
 # Dos artefactos descargables (Content-Disposition attachment):
 #  - keni-fotos.dmg : la app de escritorio Tauri (.dmg), vía principal de la página ("Descargar app").
 #  - keni-fotos.zip : el código, que usa el modo avanzado (montar con Claude). Ambos en `_fotos_bundle/`.
-# El binario del AUTO-UPDATE no se sirve por aquí: el JSON de `actualizacion` apunta a S3/Garage.
+# Binarios servidos desde aquí (Garage es interno, no tiene URL pública): el .dmg de descarga,
+# el zip del modo avanzado y el .app.tar.gz firmado del auto-update (al que apunta `release.json`).
 _NOMBRE_BUNDLE = "keni-fotos.zip"
+_NOMBRE_UPDATER = "keni-fotos.app.tar.gz"
 _DIR_BUNDLE = Path(__file__).parent / "_fotos_bundle"
 _APP_DEFECTO = _DIR_BUNDLE / "keni-fotos.dmg"
 _BUNDLE_DEFECTO = _DIR_BUNDLE / _NOMBRE_BUNDLE
+_UPDATER_DEFECTO = _DIR_BUNDLE / _NOMBRE_UPDATER
 
 # Manifiesto de la release actual (lo actualiza el release script de keni-fotos en cada versión).
 # Fuente única de verdad del auto-update: versión, notas, fecha y, por plataforma, firma + url.
@@ -115,6 +118,12 @@ def _ruta_bundle() -> Path:
     """Ruta del zip a servir: `KENI_FOTOS_BUNDLE` si está definida, si no la de por defecto."""
     env = (os.environ.get("KENI_FOTOS_BUNDLE") or "").strip()
     return Path(env) if env else _BUNDLE_DEFECTO
+
+
+def _ruta_updater() -> Path:
+    """Ruta del .app.tar.gz del auto-update: `KENI_FOTOS_UPDATER` si está, si no la de por defecto."""
+    env = (os.environ.get("KENI_FOTOS_UPDATER") or "").strip()
+    return Path(env) if env else _UPDATER_DEFECTO
 
 
 def _ruta_release() -> Path:
@@ -190,6 +199,11 @@ async def app_descarga(request: Request) -> Response:
 async def bundle(request: Request) -> Response:
     """GET /api/fotos/bundle: el código `keni-fotos.zip` (modo avanzado, montar con Claude)."""
     return _servir_descarga(_ruta_bundle(), _NOMBRE_BUNDLE, "application/zip")
+
+
+async def updater(request: Request) -> Response:
+    """GET /api/fotos/updater: el `.app.tar.gz` firmado del auto-update (lo descarga Tauri)."""
+    return _servir_descarga(_ruta_updater(), _NOMBRE_UPDATER, "application/gzip")
 
 
 async def actualizacion(request: Request) -> Response:
@@ -393,6 +407,7 @@ RUTAS = [
     Route("/api/fotos/info", info, methods=["GET"]),
     Route("/api/fotos/app", app_descarga, methods=["GET"]),
     Route("/api/fotos/bundle", bundle, methods=["GET"]),
+    Route("/api/fotos/updater", updater, methods=["GET"]),
     Route(
         "/api/fotos/actualizacion/{target}/{arch}/{version}",
         actualizacion,

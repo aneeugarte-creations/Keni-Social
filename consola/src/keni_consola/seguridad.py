@@ -366,20 +366,23 @@ def _es_publica_campania(metodo: str, ruta: str) -> bool:
 
 
 # GET del endpoint del AUTO-UPDATE de la app de escritorio keni-fotos (`tauri-plugin-updater`):
-# `/api/fotos/actualizacion/<target>/<arch>/<version>`. La app lo poletea al arrancar SIN sesion
-# (el login a keni-social es opcional), asi que debe pasar sin credencial. Solo expone metadatos
-# de la release publica (version, notas, y la firma+url del binario, ya hosteado en S3). El resto
-# de `/api/fotos` (info, descargas) sigue exigiendo sesion: solo se sirve desde la pagina logueada.
+# Auto-update de keni-fotos, SIN sesion (el login a keni-social es opcional y la app no manda cookie):
+#   - GET `/api/fotos/actualizacion/<target>/<arch>/<version>`: metadatos de la release publica
+#     (version, notas, firma+url del binario).
+#   - GET `/api/fotos/updater`: el `.app.tar.gz` firmado que Tauri descarga con un GET plano.
+# El binario lo sirve el propio back (Garage es interno, sin URL publica). El resto de `/api/fotos`
+# (info, descarga del .dmg, autorizar) sigue exigiendo sesion: solo desde la pagina logueada.
 _PREFIJO_FOTOS_ACTUALIZACION = "/api/fotos/actualizacion/"
+_RUTA_FOTOS_UPDATER = "/api/fotos/updater"
 
 
 def _es_fotos_actualizacion(metodo: str, ruta: str) -> bool:
-    """True si es el GET del endpoint publico del updater de keni-fotos (ver nota de arriba)."""
-    return (
-        metodo == "GET"
-        and ruta.startswith(_PREFIJO_FOTOS_ACTUALIZACION)
-        and len(ruta) > len(_PREFIJO_FOTOS_ACTUALIZACION)
-    )
+    """True si es un GET publico del auto-update de keni-fotos (manifiesto o binario; ver arriba)."""
+    if metodo != "GET":
+        return False
+    if ruta == _RUTA_FOTOS_UPDATER:
+        return True
+    return ruta.startswith(_PREFIJO_FOTOS_ACTUALIZACION) and len(ruta) > len(_PREFIJO_FOTOS_ACTUALIZACION)
 
 
 # GET de la validacion del token de escritorio keni-fotos (`/api/fotos/sesion`): la app de
