@@ -16,6 +16,13 @@ const nfCompacto = new Intl.NumberFormat("es-MX", {
   maximumFractionDigits: 1,
 });
 
+/** Compacto es-MX con SIEMPRE un decimal (ej. 5000000 → "5.0 M", 212000 → "212.0 k"). */
+const nfCompactoFijo = new Intl.NumberFormat("es-MX", {
+  notation: "compact",
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
 /**
  * Número compacto y legible. Para valores < 1000 muestra el entero tal cual;
  * a partir de ahí abrevia con "k" / "M" en español de México.
@@ -25,6 +32,17 @@ export function numeroCompacto(valor: number): string {
   if (!Number.isFinite(valor)) return "—";
   if (Math.abs(valor) < 1000) return nfEntero.format(valor);
   return nfCompacto.format(valor);
+}
+
+/**
+ * Compacto con un decimal fijo a partir de 1000 (5000000 → "5.0 M", 212000 → "212.0 k"). Para el
+ * deck del informe y tablas, donde las cifras hermanas deben llevar la misma precisión y no
+ * mezclar "5 M" con "5.9 M" (rompe la alineación tabular y la coherencia de las cifras grandes).
+ */
+export function numeroCompactoFijo(valor: number): string {
+  if (!Number.isFinite(valor)) return "—";
+  if (Math.abs(valor) < 1000) return nfEntero.format(valor);
+  return nfCompactoFijo.format(valor);
 }
 
 /** Número completo con separadores de miles (para tablas y tooltips). */

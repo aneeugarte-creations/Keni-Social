@@ -9,7 +9,7 @@ import { AreaChart } from "@tremor/react";
 import qrcode from "qrcode-generator";
 import * as React from "react";
 
-import { nombreRed, numeroCompacto } from "@/lib/formato";
+import { nombreRed, numeroCompactoFijo } from "@/lib/formato";
 
 import { LOGOS_MARCA } from "./logos";
 import type {
@@ -34,7 +34,7 @@ const TONO = {
   kpiValor: "text-neutral-900",
   tablaHeader: "text-neutral-500",
   tablaCelda: "text-neutral-900",
-  pie: "text-neutral-300",
+  pie: "text-neutral-500",
   coverCaption: "text-neutral-500",
 } as const;
 
@@ -131,13 +131,15 @@ const COVER_BG: Record<string, string> = {
 /** Portada de "Todas las marcas": fondo oscuro neutro (no favorece el color de ninguna marca). */
 const COVER_TODAS = "#17181C";
 /** Orden de los logos en la portada-portfolio de "Todas las marcas". */
-const MARCAS_PORTFOLIO = ["unotv", "claro-sports", "nacion-gamer", "piso-15", "fundacion"];
+// Orden que reparte los emblemas altos entre las dos filas (3+2) para que ninguna fila quede
+// solo con wordmarks bajos: fila 1 = Claro·UnoTV·Piso 15, fila 2 = Nación Gamer·Fundación.
+const MARCAS_PORTFOLIO = ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"];
 
 /** Color de la dirección de una variación (verde sube, rojo baja, gris neutro). */
 function colorSigno(signo?: "sube" | "baja" | "igual" | "nuevo" | "neutral"): string {
   if (signo === "sube") return "text-emerald-600";
   if (signo === "baja") return "text-red-600";
-  return "text-neutral-400";
+  return "text-neutral-500";
 }
 function flechaSigno(signo?: string): string {
   return signo === "sube" ? "↑" : signo === "baja" ? "↓" : "";
@@ -207,7 +209,7 @@ function Marco({
         {!portada && (
           <header className="mb-9">
             <p className={`${EYEBROW} ${TONO.topLabel}`}>{etiqueta}</p>
-            <h2 className={`mt-3 max-w-4xl text-[28px] font-light leading-tight tracking-[-0.01em] ${TONO.titulo}`}>
+            <h2 className={`mt-3 max-w-4xl text-balance text-[28px] font-light leading-tight tracking-[-0.01em] ${TONO.titulo}`}>
               {titulo}
             </h2>
             {subtitulo && <p className={`mt-1.5 text-sm font-normal ${TONO.subtitulo}`}>{subtitulo}</p>}
@@ -230,9 +232,9 @@ function Marco({
 }
 
 /** Tile de KPI: número grande y ligero, label en mayúsculas, lectura de contexto (delta/secundario). */
-function TileKpi({ kpi, mesAnterior, conDivisor }: { kpi: KpiInforme; mesAnterior: string; conDivisor: boolean }) {
+function TileKpi({ kpi, mesAnterior }: { kpi: KpiInforme; mesAnterior: string }) {
   return (
-    <div className={`flex min-h-[124px] flex-col ${conDivisor ? "border-l border-neutral-100 pl-8" : ""}`}>
+    <div className="flex min-h-[124px] flex-col">
       <p className={`${EYEBROW} ${TONO.kpiLabel}`}>{kpi.etiqueta}</p>
       <p className={`mt-4 text-[44px] font-light leading-none tracking-[-0.02em] tabular-nums ${TONO.kpiValor}`} title={kpi.titulo}>
         {finos(kpi.valor)}
@@ -241,10 +243,10 @@ function TileKpi({ kpi, mesAnterior, conDivisor }: { kpi: KpiInforme; mesAnterio
         <p className={`mt-3 text-xs font-medium tabular-nums ${colorSigno(kpi.delta.signo)}`}>
           {flechaSigno(kpi.delta.signo) && <span className="mr-1">{flechaSigno(kpi.delta.signo)}</span>}
           {kpi.delta.texto}
-          <span className="ml-1.5 font-normal text-neutral-400">vs. {mesAnterior}</span>
+          <span className="ml-1.5 font-normal text-neutral-500">vs. {mesAnterior}</span>
         </p>
       ) : kpi.secundario ? (
-        <p className="mt-3 text-xs font-normal tabular-nums text-neutral-400">{finos(kpi.secundario)}</p>
+        <p className="mt-3 text-xs font-normal tabular-nums text-neutral-500">{finos(kpi.secundario)}</p>
       ) : (
         <p className="mt-3 text-xs font-normal text-neutral-300">sin comparativa</p>
       )}
@@ -261,9 +263,11 @@ function FilaRank({ fila, max }: { fila: FilaRanking; max: number }) {
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: fila.color }} />
           {fila.nombre}
         </span>
-        <span className="shrink-0 text-sm tabular-nums text-neutral-500">
-          {numeroCompacto(fila.valor)}
-          <span className="ml-2 text-xs text-neutral-400">{fila.pct}&#8239;%</span>
+        <span className="shrink-0 text-sm tabular-nums text-neutral-900">
+          {finos(numeroCompactoFijo(fila.valor))}
+          {/* El % en su propia caja de ancho fijo right-aligned: un % de un dígito ("6 %") no empuja
+              la cifra principal, así las cifras forman una columna vertical limpia. */}
+          <span className="ml-2 inline-block w-9 text-right text-xs text-neutral-500">{fila.pct}&#8239;%</span>
         </span>
       </div>
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
@@ -311,7 +315,7 @@ function AreaSerena({
       index="fecha"
       categories={[categoria]}
       colors={[color]}
-      valueFormatter={numeroCompacto}
+      valueFormatter={numeroCompactoFijo}
       showLegend={false}
       showGridLines={false}
       showYAxis={false}
@@ -330,7 +334,7 @@ function AreaSerena({
 function RangoFechas({ data }: { data: Array<{ fecha: string }> }) {
   if (data.length < 2) return null;
   return (
-    <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-neutral-400">
+    <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-neutral-500">
       <span>{data[0].fecha}</span>
       <span>{data[data.length - 1].fecha}</span>
     </div>
@@ -353,6 +357,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
     tendencia,
     picoVistas,
     mediaVistas,
+    mediaInteracciones,
     porRed,
     redInsight,
     engPorRed,
@@ -379,15 +384,41 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
       <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
         <div className="flex h-full flex-col items-center justify-center text-center">
           {esTodas ? (
-            <div className="flex max-w-2xl flex-wrap items-center justify-center gap-x-16 gap-y-12">
+            // Portfolio: cada marca en una celda de tamaño UNIFORME (equilibra el peso óptico).
+            // Todas en blanco plano: los 4 logos blancos vía grayscale, y Piso 15 como wordmark
+            // blanco (su emblema es un disco para fondo oscuro y no admite calado a blanco sin
+            // perder el "15"; el wordmark mantiene el mismo tratamiento de tinta única que el resto).
+            <div className="flex max-w-3xl flex-wrap items-center justify-center gap-x-12 gap-y-10">
               {MARCAS_PORTFOLIO.filter((id) => LOGOS_MARCA[id]).map((id) => (
-                <img key={id} src={LOGOS_MARCA[id]} alt="" className="h-[84px] w-auto max-w-[240px] object-contain" />
+                <div key={id} className="flex h-[92px] w-[224px] items-center justify-center">
+                  {id === "piso-15" ? (
+                    <span
+                      style={{
+                        fontFamily: "'Montserrat'",
+                        fontWeight: 800,
+                        fontSize: 52,
+                        letterSpacing: "-0.02em",
+                        color: "#fff",
+                        lineHeight: 1,
+                      }}
+                    >
+                      Piso 15
+                    </span>
+                  ) : (
+                    <img
+                      src={LOGOS_MARCA[id]}
+                      alt=""
+                      className="max-h-[64px] max-w-[210px] object-contain"
+                      style={{ filter: "grayscale(1)" }}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           ) : (
             <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 300, w: 940 }} />
           )}
-          <p className={`mt-16 ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/70" : TONO.coverCaption}`}>
+          <p className={`mt-16 ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/90" : TONO.coverCaption}`}>
             Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
             {periodo}
           </p>
@@ -416,8 +447,6 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
     const kpisBreve = [porNombre("Alcance"), porNombre("Interacciones"), porNombre("Engagement"), tileSeguidores].filter(
       (k): k is KpiInforme => Boolean(k),
     );
-    const valorVerde = (k: KpiInforme) => k.etiqueta === "Seguidores netos" && seguidoresNeto?.signo === "sube";
-
     slides.push({
       clave: "breve-veredicto",
       nodo: (
@@ -443,28 +472,30 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                 </div>
                 <p className={`mt-3 ${EYEBROW} ${TONO.kpiLabel}`}>
                   {heroKpi.etiqueta}
-                  <span className="ml-2 font-normal normal-case tracking-normal text-neutral-400">vs. {mesAnterior}</span>
+                  <span className="ml-2 font-normal normal-case tracking-normal text-neutral-500">vs. {mesAnterior}</span>
                 </p>
               </div>
             )}
-            <div className="mt-14 grid grid-cols-4">
+            <div
+              className="mt-14 grid gap-x-8"
+              style={{ gridTemplateColumns: kpisBreve.map(() => "1fr").join(" 1px ") }}
+            >
               {kpisBreve.map((k, i) => (
-                <div key={k.etiqueta} className={`flex flex-col ${i > 0 ? "border-l border-neutral-100 pl-8" : "pr-8"}`}>
-                  <p className={`${EYEBROW} ${TONO.kpiLabel}`}>{k.etiqueta}</p>
-                  <p
-                    className={`mt-3 text-[30px] font-light leading-none tracking-[-0.02em] tabular-nums ${
-                      valorVerde(k) ? "text-emerald-600" : TONO.kpiValor
-                    }`}
-                  >
-                    {finos(k.valor)}
-                  </p>
-                  {k.delta && (
-                    <p className={`mt-2 text-xs font-medium tabular-nums ${colorSigno(k.delta.signo)}`}>
-                      {flechaSigno(k.delta.signo) && <span className="mr-1">{flechaSigno(k.delta.signo)}</span>}
-                      {k.delta.texto}
+                <React.Fragment key={k.etiqueta}>
+                  {i > 0 && <div className="self-stretch bg-neutral-100" />}
+                  <div className="flex flex-col">
+                    <p className={`${EYEBROW} ${TONO.kpiLabel}`}>{k.etiqueta}</p>
+                    <p className={`mt-3 text-[30px] font-light leading-none tracking-[-0.02em] tabular-nums ${TONO.kpiValor}`}>
+                      {finos(k.valor)}
                     </p>
-                  )}
-                </div>
+                    {k.delta && (
+                      <p className={`mt-2 text-xs font-medium tabular-nums ${colorSigno(k.delta.signo)}`}>
+                        {flechaSigno(k.delta.signo) && <span className="mr-1">{flechaSigno(k.delta.signo)}</span>}
+                        {k.delta.texto}
+                      </p>
+                    )}
+                  </div>
+                </React.Fragment>
               ))}
             </div>
           </div>
@@ -485,7 +516,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
           titulo={`Visualizaciones por ${esTodas ? "marca" : "red"}`}
         >
           <div className="flex h-full items-center pb-4">
-            <div className="w-full max-w-3xl">
+            <div className="w-full">
               <Ranking filas={filasReparto} />
             </div>
           </div>
@@ -513,10 +544,14 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                         {p.formato ? ` · ${FORMATO_LABEL[p.formato] ?? p.formato}` : ""}
                       </p>
                       <p className="mt-3 text-[40px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
-                        {finos(numeroCompacto(p.vistas))}
+                        {finos(numeroCompactoFijo(p.vistas))}
                       </p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-neutral-400">Visualizaciones</p>
-                      <p className="mt-4 text-sm leading-snug text-neutral-700">«{caption}»</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.14em] text-neutral-500">Visualizaciones</p>
+                      {/* Caja de 2 líneas con la cita centrada: una cita de 1 línea reparte el hueco
+                          arriba/abajo (ritmo homogéneo entre columnas) y los QR siguen a la misma altura. */}
+                      <div className="mt-4 flex min-h-[2.5rem] items-start">
+                        <p className="text-balance text-sm leading-snug text-neutral-700">«{caption}»</p>
+                      </div>
                       {/* Zona enlazable: el QR (escanear) + «Abrir el post» (tocar en el móvil).
                           `data-pdf-enlace` la convierte en enlace clicable que el exportador
                           superpone sobre la imagen rasterizada. */}
@@ -532,7 +567,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                         </div>
                         <span className="text-[13px] font-medium leading-snug text-orange-600">
                           Abrir el post ↗
-                          <span className="mt-0.5 block text-[11px] font-normal text-neutral-400">o escanea el QR</span>
+                          <span className="mt-0.5 block text-[11px] font-normal text-neutral-500">o escanea el QR</span>
                         </span>
                       </a>
                     </div>
@@ -559,9 +594,15 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         titulo={titularMes}
         subtitulo={`El periodo en cifras · frente a ${mesAnterior}`}
       >
-        <div className="grid h-full grid-cols-5 place-content-center gap-x-8">
+        <div
+          className="grid h-full place-content-center gap-x-8"
+          style={{ gridTemplateColumns: kpis.map(() => "1fr").join(" 1px ") }}
+        >
           {kpis.map((k, i) => (
-            <TileKpi key={k.etiqueta} kpi={k} mesAnterior={mesAnterior} conDivisor={i > 0} />
+            <React.Fragment key={k.etiqueta}>
+              {i > 0 && <div className="self-stretch bg-neutral-100" />}
+              <TileKpi kpi={k} mesAnterior={mesAnterior} />
+            </React.Fragment>
           ))}
         </div>
       </Marco>
@@ -587,12 +628,12 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
           <div>
             <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>
               Visualizaciones
-              <span className="ml-3 font-normal normal-case tracking-normal text-neutral-400">
-                {mediaVistas > 0 && <>media {finos(numeroCompacto(Math.round(mediaVistas)))} / día</>}
+              <span className="ml-3 font-normal normal-case tracking-normal text-neutral-500">
+                {mediaVistas > 0 && <>media {finos(numeroCompactoFijo(Math.round(mediaVistas)))} / día</>}
                 {picoVistas && (
                   <>
                     {mediaVistas > 0 && " · "}
-                    pico {finos(numeroCompacto(picoVistas.valor))} el {picoVistas.fecha}
+                    pico {finos(numeroCompactoFijo(picoVistas.valor))} el {picoVistas.fecha}
                   </>
                 )}
               </span>
@@ -600,8 +641,15 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             <AreaSerena data={tendencia} categoria="Vistas" color="orange" alto={210} />
           </div>
           <div>
-            <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>Interacciones</p>
-            <AreaSerena data={tendencia} categoria="Interacciones" color="violet" alto={150} />
+            <p className={`mb-1 ${EYEBROW} ${TONO.kpiLabel}`}>
+              Interacciones
+              {mediaInteracciones > 0 && (
+                <span className="ml-3 font-normal normal-case tracking-normal text-neutral-500">
+                  media {finos(numeroCompactoFijo(Math.round(mediaInteracciones)))} / día
+                </span>
+              )}
+            </p>
+            <AreaSerena data={tendencia} categoria="Interacciones" color="neutral" alto={150} />
             <RangoFechas data={tendencia} />
           </div>
         </div>
@@ -621,7 +669,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         subtitulo="Visualizaciones por plataforma"
       >
         <div className="flex h-full items-center">
-          <div className="w-full max-w-3xl">
+          <div className="w-full">
             <Ranking filas={porRed} />
           </div>
         </div>
@@ -644,7 +692,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
           subtitulo="Interacción por vista · más vistas no es más conexión"
         >
           <div className="flex h-full items-center">
-            <div className="w-full max-w-3xl">
+            <div className="w-full">
               <ul className="grid gap-y-8">
                 {engPorRed.map((r) => (
                   <li key={r.clave}>
@@ -653,7 +701,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} />
                         {r.nombre}
                       </span>
-                      <span className="shrink-0 text-sm tabular-nums text-neutral-500">{r.rate}&#8239;%</span>
+                      <span className="shrink-0 text-sm tabular-nums text-neutral-900">{r.rate.toFixed(1)}&#8239;%</span>
                     </div>
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-100">
                       <div
@@ -707,8 +755,10 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         periodo={periodo}
         etiqueta={etiqueta}
         titulo={
+          // El título cuantifica el crecimiento RELATIVO (%); el héroe muestra el neto ABSOLUTO
+          // (+k), así que no se duplica la misma cifra y el titular sigue siendo un insight.
           seguidoresNeto
-            ? `${finos(seguidoresNeto.texto)} seguidores ${seguidoresNeto.signo === "baja" ? "menos" : "nuevos"} este mes`
+            ? `La base de seguidores ${seguidoresNeto.signo === "baja" ? "cayó" : "creció"} un ${seguidoresNeto.pct.replace(/^[+−-]\s*/, "")} este mes`
             : "Crecimiento de seguidores"
         }
         subtitulo="Seguidores ganados, acumulado en el periodo"
@@ -720,14 +770,14 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                 <p className={`text-[56px] font-light leading-none tracking-[-0.02em] tabular-nums ${colorSigno(seguidoresNeto.signo)}`}>
                   {finos(seguidoresNeto.texto)}
                 </p>
-                <p className={`mt-3 ${EYEBROW} text-neutral-400`}>Seguidores netos</p>
+                <p className={`mt-3 ${EYEBROW} text-neutral-500`}>Seguidores netos</p>
                 <p className="mt-4 text-sm tabular-nums text-neutral-600">
                   {finos(seguidoresNeto.pct)}
-                  <span className="ml-2 text-neutral-400">· {seguidoresNeto.porDia}</span>
+                  <span className="ml-2 text-neutral-500">· {seguidoresNeto.porDia}</span>
                 </p>
               </>
             ) : (
-              <p className="text-sm text-neutral-400">Sin datos de seguidores en el periodo.</p>
+              <p className="text-sm text-neutral-500">Sin datos de seguidores en el periodo.</p>
             )}
           </div>
           <div className="col-span-3">
@@ -736,7 +786,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
               index="fecha"
               categories={["Ganados"]}
               colors={["emerald"]}
-              valueFormatter={numeroCompacto}
+              valueFormatter={numeroCompactoFijo}
               showLegend={false}
               showGridLines={false}
               showYAxis={false}
@@ -771,7 +821,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         }
         subtitulo={
           desgloseMix.total > 0
-            ? `Sobre ${finos(numeroCompacto(desgloseMix.total))} interacciones del periodo`
+            ? `Sobre ${finos(numeroCompactoFijo(desgloseMix.total))} interacciones del periodo`
             : "Composición de las interacciones del periodo"
         }
       >
@@ -791,7 +841,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                 <span className="mt-2 text-[28px] font-light leading-none tracking-[-0.02em] tabular-nums text-neutral-900">
                   {s.pct}&#8239;%
                 </span>
-                <span className="mt-1.5 text-xs tabular-nums text-neutral-400">{finos(numeroCompacto(s.valor))}</span>
+                <span className="mt-1.5 text-xs tabular-nums text-neutral-500">{finos(numeroCompactoFijo(s.valor))}</span>
               </li>
             ))}
           </ul>
@@ -835,7 +885,7 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
             {topPiezas.map((p, i) => (
               // La fila es enlace clicable al post (toca en el móvil); el exportador lo superpone.
               <tr key={i} className="border-b border-neutral-100" data-pdf-enlace={p.url}>
-                <td className={`py-3 text-left tabular-nums ${i === 0 ? "font-medium text-orange-600" : "text-neutral-400"}`}>
+                <td className={`py-3 text-left tabular-nums ${i === 0 ? "font-medium text-orange-600" : "text-neutral-500"}`}>
                   {i + 1}
                 </td>
                 <td className={`max-w-[380px] py-3 pr-4 ${i === 0 ? "font-medium text-neutral-900" : TONO.tablaCelda}`}>
@@ -847,9 +897,9 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
                 <td className="px-4 py-3 text-neutral-500">{nombreRed(p.red)}</td>
                 <td className="px-4 py-3 tabular-nums text-neutral-500">{p.publicado}</td>
                 <td className={`px-4 py-3 text-right tabular-nums ${i === 0 ? "font-medium text-neutral-900" : TONO.tablaCelda}`}>
-                  {finos(numeroCompacto(p.vistas))}
+                  {finos(numeroCompactoFijo(p.vistas))}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums text-neutral-600">{finos(numeroCompacto(p.interacciones))}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-neutral-600">{finos(numeroCompactoFijo(p.interacciones))}</td>
                 <td className="py-3 pl-4 text-right tabular-nums text-neutral-600">{p.engagement.toFixed(1)}&#8239;%</td>
               </tr>
             ))}
@@ -871,24 +921,30 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
         subtitulo={`Lo que dejó ${periodo} y qué hacer el próximo mes`}
       >
         <div className="flex h-full flex-col justify-center gap-12">
-          <div className="grid grid-cols-3 gap-10">
+          <div
+            className="grid gap-x-10"
+            style={{ gridTemplateColumns: conclusiones.map(() => "1fr").join(" 1px ") }}
+          >
             {conclusiones.map((c: ConclusionInforme, i) => (
-              <div key={c.label} className={`flex flex-col ${i === 0 ? "" : "border-l border-neutral-100 pl-10"}`}>
-                {/* Cifra neutra en tinta firme (neutral-800), no gris-400: dato, no "deshabilitado". */}
-                <p
-                  className={`text-[52px] font-light leading-none tracking-[-0.02em] tabular-nums ${
-                    c.signo === "sube" ? "text-emerald-600" : c.signo === "baja" ? "text-red-600" : "text-neutral-800"
-                  }`}
-                >
-                  {finos(c.valor)}
-                </p>
-                <p className={`mt-3 ${EYEBROW} text-neutral-400`}>{c.label}</p>
-                <p className="mt-3 text-[13px] leading-snug text-neutral-600">{c.nota}</p>
-              </div>
+              <React.Fragment key={c.label}>
+                {i > 0 && <div className="self-stretch bg-neutral-100" />}
+                <div className="flex flex-col">
+                  {/* Cifra neutra en tinta firme (neutral-800), no gris-400: dato, no "deshabilitado". */}
+                  <p
+                    className={`text-[52px] font-light leading-none tracking-[-0.02em] tabular-nums ${
+                      c.signo === "sube" ? "text-emerald-600" : c.signo === "baja" ? "text-red-600" : "text-neutral-800"
+                    }`}
+                  >
+                    {finos(c.valor)}
+                  </p>
+                  <p className={`mt-3 ${EYEBROW} text-neutral-500`}>{c.label}</p>
+                  <p className="mt-3 text-balance text-[13px] leading-snug text-neutral-600">{c.nota}</p>
+                </div>
+              </React.Fragment>
             ))}
           </div>
           <div className="border-t border-neutral-100 pt-6">
-            <p className={`${EYEBROW} text-neutral-400`}>Foco del próximo periodo</p>
+            <p className={`${EYEBROW} text-neutral-500`}>Foco del próximo periodo</p>
             <ul className="mt-4 space-y-3">
               {recomendaciones.map((r, i) => (
                 <li key={i} className="flex gap-3 text-[15px] font-light leading-snug text-neutral-800">

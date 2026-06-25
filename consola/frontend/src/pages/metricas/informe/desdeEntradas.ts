@@ -9,7 +9,7 @@
 import {
   REDES_CANONICAS,
   nombreRed,
-  numeroCompacto,
+  numeroCompactoFijo,
   numeroCompleto,
   porcentaje,
   redCanonica,
@@ -131,10 +131,16 @@ function aSlug(texto: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Fecha corta es-MX ("12 may") a partir de un ISO; cadena vacía si no parsea. */
+/**
+ * Fecha corta es-MX ("12 may") a partir de un ISO; cadena vacía si no parsea. Las fechas de las
+ * series son días de calendario (YYYY-MM-DD); `new Date("2026-06-01")` las interpreta como UTC y al
+ * formatear en hora local de México retrocederían un día ("31 may"). Construimos la fecha con sus
+ * componentes como fecha LOCAL para que el día mostrado sea el real del dato.
+ */
 function fechaCorta(iso: string | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 }
@@ -228,13 +234,20 @@ export function desdeEntradas(
     Interacciones: num(p.interacciones),
   }));
   const sumaVistasDiarias = tendencia.reduce((s, p) => s + p.Vistas, 0);
-  const mediaVistas = tendencia.length ? sumaVistasDiarias / tendencia.length : 0;
+  // Media y % del pico anclados al total CANÓNICO del mes (la KPI), no a la suma de la serie
+  // diaria: el titular dice "% de las vistas DEL MES", que es el total del periodo; así la lámina
+  // reconcilia con la de cifras aunque la serie diaria no sume exactamente el total.
+  const totalVistasMes = num(total.visualizaciones) || sumaVistasDiarias;
+  const mediaVistas = tendencia.length ? totalVistasMes / tendencia.length : 0;
+  const sumaInterDiarias = tendencia.reduce((s, p) => s + p.Interacciones, 0);
+  const totalInterMes = num(total.interacciones) || sumaInterDiarias;
+  const mediaInteracciones = tendencia.length ? totalInterMes / tendencia.length : 0;
   let picoVistas: InformeProps["picoVistas"] = null;
-  if (tendencia.length && sumaVistasDiarias > 0) {
+  if (tendencia.length && totalVistasMes > 0) {
     const mejor = tendencia.reduce((a, b) => (b.Vistas > a.Vistas ? b : a));
     picoVistas = {
       fecha: mejor.fecha,
-      pct: Math.round((mejor.Vistas / sumaVistasDiarias) * 100),
+      pct: Math.round((mejor.Vistas / totalVistasMes) * 100),
       valor: mejor.Vistas,
     };
   }
@@ -252,19 +265,19 @@ export function desdeEntradas(
     },
     {
       etiqueta: "Visualizaciones",
-      valor: numeroCompacto(num(total.visualizaciones)),
+      valor: numeroCompactoFijo(num(total.visualizaciones)),
       titulo: numeroCompleto(num(total.visualizaciones)),
       delta: deltaDe("visualizaciones"),
     },
     {
       etiqueta: "Alcance",
-      valor: numeroCompacto(num(total.alcance)),
+      valor: numeroCompactoFijo(num(total.alcance)),
       titulo: numeroCompleto(num(total.alcance)),
       delta: deltaDe("alcance"),
     },
     {
       etiqueta: "Interacciones",
-      valor: numeroCompacto(num(total.interacciones)),
+      valor: numeroCompactoFijo(num(total.interacciones)),
       titulo: numeroCompleto(num(total.interacciones)),
       delta: deltaDe("interacciones"),
     },
@@ -306,10 +319,10 @@ export function desdeEntradas(
     porRed.length === 0
       ? ""
       : porRed.length === 1
-        ? `Todo el tráfico viene de ${porRed[0].nombre}.`
+        ? `Todo el tráfico viene de ${porRed[0].nombre}`
         : porRed[0].pct >= 45
-          ? `${porRed[0].nombre} concentra el ${porRed[0].pct}\u202f% de las visualizaciones.`
-          : `${porRed[0].nombre} lidera el reparto con el ${porRed[0].pct}\u202f% de las visualizaciones.`;
+          ? `${porRed[0].nombre} concentra el ${porRed[0].pct}\u202f% de las visualizaciones`
+          : `${porRed[0].nombre} lidera el reparto con el ${porRed[0].pct}\u202f% de las visualizaciones`;
 
   // --- Mezcla de interacciones: AGREGADA a una barra 100 % (no una por celda). ---
   const desgloseMix = analizarMezcla(datos.get("desglose"));
@@ -339,7 +352,7 @@ export function desdeEntradas(
     color: colorRango(i),
   }));
   const engInsight = engPorRed.length
-    ? `${engPorRed[0].nombre} es donde más engancha tu audiencia: ${engPorRed[0].rate} % de interacción por vista.`
+    ? `${engPorRed[0].nombre} lidera la interacción por vista: ${engPorRed[0].rate} %`
     : "";
 
   // --- Top piezas (las 8 mejores). `plataforma` ya es id de red; lo canonizamos. ---
@@ -403,6 +416,7 @@ export function desdeEntradas(
     tendencia,
     picoVistas,
     mediaVistas,
+    mediaInteracciones,
     porRed,
     redInsight,
     engPorRed,
@@ -428,11 +442,14 @@ function analizarSeguidores(totales: Array<{ fecha: string; total: number }>): I
   const r = Math.round((neto / Math.max(1, primero)) * 1000) / 10;
   const signo: "sube" | "baja" | "igual" = neto > 0 ? "sube" : neto < 0 ? "baja" : "igual";
   const signoTxt = neto > 0 ? "+" : neto < 0 ? "−" : "";
-  const porDiaVal = Math.round(neto / (totales.length - 1));
+  // Ritmo por día sobre el nº de días del periodo (mismo divisor que media de vistas/piezas).
+  const porDiaVal = Math.round(neto / totales.length);
   return {
-    texto: `${signoTxt}${numeroCompacto(Math.abs(neto))}`,
-    pct: `${signoTxt}${Math.abs(r).toLocaleString("es-MX", { maximumFractionDigits: 1 })}\u202f%`,
-    porDia: `${signoTxt}${numeroCompacto(Math.abs(porDiaVal))} / día`,
+    texto: `${signoTxt}${numeroCompactoFijo(Math.abs(neto))}`,
+    // Espacio normal entre cifra y "%" (como el resto de deltas v\u00eda variacion); la l\u00e1mina de
+    // seguidores lo pasa por finos() para el espacio fino. Un decimal fijo: nunca "+3 %" junto a "+5.1 %".
+    pct: `${signoTxt}${Math.abs(r).toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`,
+    porDia: `${signoTxt}${numeroCompactoFijo(Math.abs(porDiaVal))} / día`,
     signo,
   };
 }
@@ -459,8 +476,8 @@ function analizarMezcla(crudo: unknown): InformeProps["desgloseMix"] {
   // barra ES el dato del titular "X % se comparte o se guarda". Me gusta (74 %) > Comentarios;
   // Compartidos (12 %) > Guardados.
   const defs: Array<{ label: string; color: string }> = [
-    { label: "Me gusta", color: "#cbced4" },
-    { label: "Comentarios", color: "#e2e3e6" },
+    { label: "Me gusta", color: "#a3a3a3" },
+    { label: "Comentarios", color: "#d4d4d4" },
     { label: "Compartidos", color: "#ea580c" },
     { label: "Guardados", color: "#fdba74" },
   ];
@@ -482,20 +499,20 @@ function construirTitular(
   mesAnterior: string,
 ): string {
   if (!hayComparar) {
-    return `${numeroCompacto(num(total.visualizaciones))} visualizaciones y ${porcentaje(
+    return `${numeroCompactoFijo(num(total.visualizaciones))} visualizaciones y ${porcentaje(
       num(total.engagement_pct),
-    )} de engagement en el periodo.`;
+    )} de engagement en el periodo`;
   }
   const vis = Math.round(num(comp.get("visualizaciones")?.variacion_pct) * 10) / 10;
   const inter = Math.round(num(comp.get("interacciones")?.variacion_pct) * 10) / 10;
   const subeVis = vis > 0;
   const subeInter = inter > 0;
-  if (subeVis && subeInter) return `Un mes al alza: más audiencia y más conexión que ${mesAnterior}.`;
+  if (subeVis && subeInter) return `Un mes al alza: más audiencia y más conexión que ${mesAnterior}`;
   if (subeVis && !subeInter)
-    return `Más alcance, menos conexión: llegó a más gente que ${mesAnterior}, pero enganchó menos.`;
+    return `Más alcance, menos conexión: llegó a más gente que ${mesAnterior}, pero enganchó menos`;
   if (!subeVis && subeInter)
-    return `Menos volumen pero mejor conexión: cayeron las vistas y subió la interacción.`;
-  return `Mes a la baja: menos vistas y menos interacción que ${mesAnterior}.`;
+    return `Menos volumen pero mejor conexión: cayeron las vistas y subió la interacción`;
+  return `Mes a la baja: menos vistas y menos interacción que ${mesAnterior}`;
 }
 
 /**
@@ -524,7 +541,7 @@ function construirConclusiones(
   const vistas = num(total.visualizaciones);
   if (piezas > 0 && vistas > 0) {
     out.push({
-      valor: numeroCompacto(Math.round(vistas / piezas)),
+      valor: numeroCompactoFijo(Math.round(vistas / piezas)),
       label: "Vistas por pieza",
       signo: "neutral",
       nota: `${numeroCompleto(piezas)} piezas publicadas en el periodo.`,
@@ -536,7 +553,7 @@ function construirConclusiones(
       valor: `${mix.altoValorPct}\u202f%`,
       label: "Interacción de alto valor",
       signo: mix.altoValorPct >= 20 ? "sube" : "neutral",
-      nota: "Se compartió o se guardó: contenido que la gente quiere conservar.",
+      nota: "Lo que la gente comparte y guarda.",
     });
   }
 

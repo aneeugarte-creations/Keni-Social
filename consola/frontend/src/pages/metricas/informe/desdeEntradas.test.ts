@@ -136,9 +136,10 @@ describe("desdeEntradas", () => {
       { fecha: fechaCortaEsperada("2026-06-01"), Vistas: 10, Interacciones: 1 },
       { fecha: fechaCortaEsperada("2026-06-02"), Vistas: 20, Interacciones: 3 },
     ]);
-    // Pico = día 2 (20 de 30 vistas → 67 %, valor 20); media = 15.
-    expect(props.picoVistas).toEqual({ fecha: fechaCortaEsperada("2026-06-02"), pct: 67, valor: 20 });
-    expect(props.mediaVistas).toBe(15);
+    // Pico y media se anclan al total CANÓNICO del mes (1000), no a la suma de la serie diaria:
+    // pico = 20 / 1000 = 2 %; media = 1000 / 2 días = 500.
+    expect(props.picoVistas).toEqual({ fecha: fechaCortaEsperada("2026-06-02"), pct: 2, valor: 20 });
+    expect(props.mediaVistas).toBe(500);
   });
 
   it("reparto por red = ranking ordenado desc con % que reparte a 100 y color de deck", () => {
@@ -148,7 +149,7 @@ describe("desdeEntradas", () => {
     expect(props.porRed.map((r) => r.valor)).toEqual([600, 400]);
     expect(props.porRed.map((r) => r.pct)).toEqual([60, 40]);
     expect(props.porRed[0].color).toMatch(/^#/);
-    expect(norm(props.redInsight)).toBe("Instagram concentra el 60 % de las visualizaciones.");
+    expect(norm(props.redInsight)).toBe("Instagram concentra el 60 % de las visualizaciones");
   });
 
   it("engagement por red = interacción por vista, ranking desc (dónde engancha)", () => {
@@ -157,7 +158,7 @@ describe("desdeEntradas", () => {
     // Solo instagram tiene desglose (12 interac / 600 vistas = 2 %); youtube sin celda → fuera.
     expect(props.engPorRed.map((r) => r.nombre)).toEqual(["Instagram"]);
     expect(props.engPorRed[0].rate).toBe(2);
-    expect(norm(props.engInsight)).toContain("Instagram es donde más engancha");
+    expect(norm(props.engInsight)).toContain("Instagram lidera la interacción por vista");
   });
 
   it("seguidores: ganancia ACUMULADA desde 0 + neto honesto", () => {
@@ -168,9 +169,9 @@ describe("desdeEntradas", () => {
       { fecha: fechaCortaEsperada("2026-06-01"), Ganados: 0 },
       { fecha: fechaCortaEsperada("2026-06-02"), Ganados: 20 },
     ]);
-    // +20 netos sobre 100 = +20 %.
+    // +20 netos sobre 100 = +20.0 % (un decimal fijo, coherente con los deltas del deck).
     expect(props.seguidoresNeto?.signo).toBe("sube");
-    expect(norm(props.seguidoresNeto?.pct ?? "")).toBe("+20 %");
+    expect(norm(props.seguidoresNeto?.pct ?? "")).toBe("+20.0 %");
   });
 
   it("mezcla de interacciones AGREGADA a 4 segmentos (no una barra por celda)", () => {
@@ -277,11 +278,20 @@ describe("desdeEntradas", () => {
 // --- Espejos de formato es-MX (deterministas) para no acoplar el test a la coma/locale exacta. ---
 
 function numeroCompactoEsperado(v: number): string {
-  return new Intl.NumberFormat("es-MX", { notation: "compact", maximumFractionDigits: 1 }).format(v);
+  // Espejo de `numeroCompactoFijo`: < 1000 entero; a partir de ahí compacto con un decimal fijo.
+  if (Math.abs(v) < 1000) return new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat("es-MX", {
+    notation: "compact",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(v);
 }
 
 function fechaCortaEsperada(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+  // Espejo de `fechaCorta`: fecha de calendario como fecha LOCAL (no UTC) para no retroceder un día.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
+  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 }
 
 /** Normaliza el espacio fino (U+202F) que el adaptador pone antes de "%" a un espacio normal. */

@@ -83,6 +83,8 @@ export interface InformeProps {
   picoVistas: { fecha: string; pct: number; valor: number } | null;
   /** Media diaria de vistas (ancla de escala honesta). */
   mediaVistas: number;
+  /** Media diaria de interacciones (caption simétrico al de vistas en la tendencia). */
+  mediaInteracciones: number;
   // --- Reparto por red (ranking horizontal ordenado desc) ---
   porRed: FilaRanking[];
   /** Insight del reparto (red dominante + su %). */
