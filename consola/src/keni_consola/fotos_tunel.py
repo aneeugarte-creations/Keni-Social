@@ -71,10 +71,12 @@ class Conexion:
         galerias = datos.get("galerias")
         self.galerias = [g for g in galerias if isinstance(g, dict)] if isinstance(galerias, list) else []
         self.marcas = _normalizar_marcas(datos.get("marcas"))
+        _notificar_cambio()
 
     def actualizar_marcas(self, valor: Any) -> None:
         """Reemplaza las marcas a las que comparte (mensaje `marcas`, sin reconectar)."""
         self.marcas = _normalizar_marcas(valor)
+        _notificar_cambio()
 
     def comparte(self, marca: str) -> bool:
         """True si esta app comparte su galería a `marca`."""
@@ -139,16 +141,50 @@ class Conexion:
 # Registro EN MEMORIA: todas las conexiones vivas. El filtro por marca lo hacen las consultas.
 _REGISTRO: set[Conexion] = set()
 
+# Pub/sub del registro: la página Galería NO sondea, se suscribe por SSE
+# (`GET /api/artes/propio/eventos`). Cada suscriptor es una Queue por la que se encola un aviso
+# ante cada alta/baja/cambio de marcas; el endpoint, al recibirlo, reenvía el snapshot vigente.
+# El túnel y el SSE corren en el mismo bucle de eventos de Starlette: notificar es `put_nowait`.
+_SUSCRIPTORES: set[asyncio.Queue[None]] = set()
+
+
+def _notificar_cambio() -> None:
+    """Avisa a los suscriptores SSE de que el registro cambió (alta/baja/marcas declaradas)."""
+    for cola in _SUSCRIPTORES:
+        try:
+            cola.put_nowait(None)
+        except asyncio.QueueFull:
+            # Ya tiene un aviso pendiente: uno basta para que reenvíe el snapshot vigente.
+            pass
+
+
+def suscribir() -> asyncio.Queue[None]:
+    """Da de alta un suscriptor del registro y devuelve su cola de avisos (cierra con `desuscribir`).
+
+    La cola es de tamaño 1: varios cambios seguidos colapsan en un único aviso pendiente, que
+    basta para reenviar el snapshot vigente. La consume el SSE de la Galería.
+    """
+    cola: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+    _SUSCRIPTORES.add(cola)
+    return cola
+
+
+def desuscribir(cola: asyncio.Queue[None]) -> None:
+    """Da de baja un suscriptor del registro. Idempotente."""
+    _SUSCRIPTORES.discard(cola)
+
 
 def registrar(conexion: Conexion) -> None:
-    """Da de alta una conexión."""
+    """Da de alta una conexión y avisa a los suscriptores."""
     _REGISTRO.add(conexion)
+    _notificar_cambio()
 
 
 def desregistrar(conexion: Conexion) -> None:
-    """Da de baja una conexión y falla sus RPC vivos. Idempotente."""
+    """Da de baja una conexión, falla sus RPC vivos y avisa a los suscriptores. Idempotente."""
     _REGISTRO.discard(conexion)
     conexion.cancelar_todo()
+    _notificar_cambio()
 
 
 def _conexiones_de_marca(marca: str | None) -> list[Conexion]:

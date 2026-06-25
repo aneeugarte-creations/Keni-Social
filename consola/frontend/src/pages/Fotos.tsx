@@ -22,7 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api } from "@/lib/api";
+import { api, BASE_API } from "@/lib/api";
+import type { DispositivoPropio, RespuestaDispositivosPropio } from "@/types";
 
 /** Buscador de EXPLORACIÓN de la galería local de una marca: candidatas en grid, sin adjuntar. */
 function BuscadorPropio({ marca }: { marca: string }) {
@@ -113,16 +114,32 @@ export default function Fotos() {
   const { marcaActiva } = useMarcaActiva();
   const marca = marcaActiva ?? undefined;
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["propio", "dispositivos", marca ?? ""],
-    queryFn: ({ signal }) => api.dispositivosPropio(marca, signal),
-    // Sondeo corto: cuando alguien abre la app y conecta el túnel, su equipo aparece casi al
-    // instante sin recargar. `keepPreviousData` evita que el contador parpadee a vacío en el
-    // refetch. Refresca también al volver a la pestaña.
-    refetchInterval: 5_000,
-    refetchOnWindowFocus: true,
-    placeholderData: keepPreviousData,
-  });
+  // Dispositivos conectados: PUSH en vivo por SSE (sin sondeo ni parpadeo). El back manda un
+  // snapshot inicial y reenvía la lista cada vez que alguien conecta/desconecta o cambia las
+  // marcas que comparte. EventSource reconecta solo si el canal se corta. Sin `EventSource`
+  // (SSR/test) la lista queda vacía y no se rompe nada.
+  const [dispositivos, setDispositivos] = React.useState<DispositivoPropio[]>([]);
+  const [cargandoDispositivos, setCargandoDispositivos] = React.useState(true);
+
+  useEffect(() => {
+    if (typeof EventSource === "undefined") {
+      setCargandoDispositivos(false);
+      return;
+    }
+    setCargandoDispositivos(true);
+    const params = marca ? `?marca=${encodeURIComponent(marca)}` : "";
+    const fuente = new EventSource(`${BASE_API}/artes/propio/eventos${params}`);
+    fuente.onmessage = (ev) => {
+      try {
+        const datos = JSON.parse(ev.data as string) as RespuestaDispositivosPropio;
+        setDispositivos(datos.dispositivos ?? []);
+      } catch {
+        // Snapshot ilegible: lo ignoramos y esperamos el siguiente.
+      }
+      setCargandoDispositivos(false);
+    };
+    return () => fuente.close();
+  }, [marca]);
 
   // Catálogo de marcas (id → nombre) para rotular a qué marcas comparte cada dispositivo.
   const { data: opciones } = useQuery({
@@ -132,7 +149,6 @@ export default function Fotos() {
   const nombreMarca = (id: string): string =>
     opciones?.marcas.find((m) => m.id === id)?.nombre ?? id;
 
-  const dispositivos = data?.dispositivos ?? [];
   const hayDispositivos = dispositivos.length > 0;
 
   return (
@@ -167,7 +183,7 @@ export default function Fotos() {
         )}
 
         {/* Dispositivos conectados: su parpadeo (conectar/desconectar) NO afecta al buscador. */}
-        {isLoading && !hayDispositivos ? (
+        {cargandoDispositivos && !hayDispositivos ? (
           <div className="flex h-32 items-center justify-center text-muted-foreground">
             <Spinner className="h-5 w-5" />
           </div>

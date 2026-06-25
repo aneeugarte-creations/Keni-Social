@@ -169,6 +169,50 @@ def test_dispositivos_por_marca_lleva_dueno_y_marcas():
         fotos_tunel._REGISTRO.clear()
 
 
+def test_pubsub_notifica_alta_cambio_marcas_y_baja():
+    """El SSE de la Galería se suscribe: alta, cambio de marcas y baja encolan un aviso."""
+    fotos_tunel._REGISTRO.clear()
+    cola = fotos_tunel.suscribir()
+    try:
+        assert cola.empty()  # aún sin cambios
+        conexion = _conexion("ale", marcas=("claro-sports",))
+        assert cola.get_nowait() is None  # alta -> aviso
+        assert cola.empty()
+        conexion.actualizar_marcas(["unotv"])
+        assert cola.get_nowait() is None  # cambio de marcas -> aviso
+        fotos_tunel.desregistrar(conexion)
+        assert cola.get_nowait() is None  # baja -> aviso
+    finally:
+        fotos_tunel.desuscribir(cola)
+        fotos_tunel._REGISTRO.clear()
+
+
+def test_pubsub_avisos_seguidos_colapsan_en_uno():
+    """Cola de tamaño 1: varios cambios seguidos dejan un único aviso pendiente."""
+    fotos_tunel._REGISTRO.clear()
+    cola = fotos_tunel.suscribir()
+    try:
+        _conexion("ale", marcas=("claro-sports",))
+        _conexion("ane", marcas=("unotv",))
+        assert cola.get_nowait() is None
+        assert cola.empty()  # el segundo aviso colapsó en el primero pendiente
+    finally:
+        fotos_tunel.desuscribir(cola)
+        fotos_tunel._REGISTRO.clear()
+
+
+def test_pubsub_snapshot_inicial_lista_la_marca():
+    """El snapshot que reenvía el SSE es el de `dispositivos(marca)` (la verdad del registro)."""
+    fotos_tunel._REGISTRO.clear()
+    try:
+        _conexion("ale", dispositivo="Mac de Ale", marcas=("claro-sports",))
+        snapshot = fotos_tunel.dispositivos("claro-sports")
+        assert [d["dispositivo"] for d in snapshot] == ["Mac de Ale"]
+        assert fotos_tunel.dispositivos("unotv") == []
+    finally:
+        fotos_tunel._REGISTRO.clear()
+
+
 def test_dispositivos_sin_marca_lista_todos_los_conectados():
     """La página Galería pide SIN marca: ve TODOS los conectados (aunque uno no comparta ninguna)."""
     fotos_tunel._REGISTRO.clear()

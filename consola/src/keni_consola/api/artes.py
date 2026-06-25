@@ -21,12 +21,14 @@ tablero es compartido, como Etiquetas/Tareas). SQL parametrizado en `repos`/`db`
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from typing import AsyncIterator
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .. import (
@@ -786,6 +788,53 @@ async def dispositivos_propio(request: Request) -> Response:
     return JSONResponse({"dispositivos": fotos_tunel.dispositivos(marca)})
 
 
+# Keepalive del SSE de dispositivos: un comentario `: ping` cada 20 s mantiene viva la conexión
+# inactiva para que el proxy (Traefik) no la corte. Menor que su idle timeout.
+_SSE_KEEPALIVE = 20.0
+
+
+def _frame_dispositivos(marca: str) -> str:
+    """Frame SSE (`data: <json>\\n\\n`) con el snapshot de dispositivos que comparten `marca`."""
+    cuerpo = json.dumps({"dispositivos": fotos_tunel.dispositivos(marca)}, ensure_ascii=False)
+    return f"data: {cuerpo}\n\n"
+
+
+async def _eventos_dispositivos(marca: str) -> AsyncIterator[str]:
+    """Stream SSE: snapshot inicial + un snapshot nuevo por cada cambio del registro del túnel.
+
+    Se suscribe al pub/sub de `fotos_tunel`; ante cada aviso (alta/baja/cambio de marcas) reenvía
+    el snapshot vigente. Sin cambios, emite un comentario keepalive cada `_SSE_KEEPALIVE` s. Se da
+    de baja del pub/sub al cerrarse el generador (cliente desconectado).
+    """
+    cola = fotos_tunel.suscribir()
+    try:
+        yield _frame_dispositivos(marca)
+        while True:
+            try:
+                await asyncio.wait_for(cola.get(), _SSE_KEEPALIVE)
+            except TimeoutError:
+                yield ": ping\n\n"
+                continue
+            yield _frame_dispositivos(marca)
+    finally:
+        fotos_tunel.desuscribir(cola)
+
+
+async def eventos_propio(request: Request) -> Response:
+    """GET /api/artes/propio/eventos?marca= -> stream SSE de dispositivos conectados (push en vivo).
+
+    Sustituye al sondeo: manda un snapshot inicial (`{dispositivos:[...]}`, misma forma que
+    `GET /api/artes/propio/dispositivos`) y reenvía el snapshot cada vez que un dispositivo
+    conecta/desconecta o cambia las marcas que comparte. Autenticado por la sesión del SPA (cookie).
+    """
+    marca = (request.query_params.get("marca") or "").strip()
+    return StreamingResponse(
+        _eventos_dispositivos(marca),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 RUTAS = [
     Route("/api/artes", listar, methods=["GET"]),
     Route("/api/artes", crear, methods=["POST"]),
@@ -799,5 +848,6 @@ RUTAS = [
     Route("/api/artes/propio/buscar", buscar_propio, methods=["GET"]),
     Route("/api/artes/propio/adjuntar", adjuntar_propio, methods=["POST"]),
     Route("/api/artes/propio/dispositivos", dispositivos_propio, methods=["GET"]),
+    Route("/api/artes/propio/eventos", eventos_propio, methods=["GET"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),
 ]
