@@ -6,7 +6,9 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import type { Demografia as DemografiaResp, MarcaDisponible } from "@/types";
 
+import type { PuntoGlobo } from "./globo/barras";
 import { MapaAlcance } from "./MapaAlcance";
+import { TarjetaDetalleAlcance } from "./TarjetaDetalleAlcance";
 
 // MapLibre toca WebGL (no existe en jsdom): se sustituye por stubs inertes para que el hijo
 // del mapa (MapaGlobo) si monte su DOM real (controles) sin pintar canvas. La CSS de MapLibre
@@ -141,5 +143,54 @@ describe("MapaAlcance", () => {
 
     expect(await screen.findByText(/no expone alcance geográfico/i)).toBeInTheDocument();
     expect(screen.queryByText(/en el mapa/)).not.toBeInTheDocument();
+  });
+});
+
+const PUNTO_CIUDAD: PuntoGlobo = {
+  lat: 19.4326,
+  lng: -99.1332,
+  valor: 35.5,
+  etiqueta: "Ciudad de México",
+  nivel: "ciudad",
+  intensidad: 1,
+};
+
+describe("TarjetaDetalleAlcance", () => {
+  it("muestra nombre, coordenadas, %, ranking y chip de tipo del lugar elegido", () => {
+    render(
+      <TarjetaDetalleAlcance
+        punto={PUNTO_CIUDAD}
+        rank={3}
+        total={48}
+        marcaNombre="Claro Sports"
+        redNombre="Instagram"
+        onCerrar={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Ciudad de México")).toBeInTheDocument();
+    expect(screen.getByText("19.433, -99.133")).toBeInTheDocument();
+    expect(screen.getByText("35.5 %")).toBeInTheDocument();
+    expect(screen.getByText("N.º 3 de 48 ciudades")).toBeInTheDocument();
+    expect(screen.getByText("Ciudad")).toBeInTheDocument();
+    expect(screen.getByText(/de la audiencia de Claro Sports en Instagram/)).toBeInTheDocument();
+  });
+
+  it("el botón de cerrar invoca onCerrar", async () => {
+    const onCerrar = vi.fn();
+    render(
+      <TarjetaDetalleAlcance
+        punto={{ ...PUNTO_CIUDAD, nivel: "pais", etiqueta: "México" }}
+        rank={1}
+        total={12}
+        marcaNombre="Claro Sports"
+        redNombre="Instagram"
+        onCerrar={onCerrar}
+      />,
+    );
+
+    expect(screen.getByText("País")).toBeInTheDocument();
+    screen.getByRole("button", { name: "Cerrar" }).click();
+    expect(onCerrar).toHaveBeenCalledTimes(1);
   });
 });

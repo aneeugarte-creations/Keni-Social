@@ -23,6 +23,8 @@ export interface PuntoGlobo {
 
 /** Propiedades que cada barra lleva a la capa (color/altura por `intensidad`, tooltip por el resto). */
 interface PropsBarra {
+  lat: number;
+  lng: number;
   intensidad: number;
   valor: number;
   etiqueta: string;
@@ -58,6 +60,8 @@ export function construirBarras(puntos: PuntoGlobo[]): FeatureCollection<Polygon
       coordinates: huella(p.lat, p.lng, p.nivel === "ciudad" ? LADO_CIUDAD_M : LADO_PAIS_M),
     },
     properties: {
+      lat: p.lat,
+      lng: p.lng,
       intensidad: p.intensidad,
       valor: p.valor,
       etiqueta: p.etiqueta,

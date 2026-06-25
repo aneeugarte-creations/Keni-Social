@@ -73,6 +73,41 @@ function registrarTooltip(map: maplibregl.Map, popup: maplibregl.Popup): void {
   });
 }
 
+/** Click en una torre emite su PuntoGlobo (reconstruido desde las props); click en vacio deselecciona. */
+function registrarSeleccion(
+  map: maplibregl.Map,
+  onSeleccionRef: React.MutableRefObject<((punto: PuntoGlobo | null) => void) | undefined>,
+): void {
+  map.on("mouseenter", CAPA_BARRAS, () => {
+    map.getCanvas().style.cursor = "pointer";
+  });
+  map.on("mouseleave", CAPA_BARRAS, () => {
+    map.getCanvas().style.cursor = "";
+  });
+  map.on("click", CAPA_BARRAS, (e: maplibregl.MapLayerMouseEvent) => {
+    const rasgo = e.features?.[0];
+    if (!rasgo) return;
+    const props = rasgo.properties as
+      | { lat: number; lng: number; valor: number; etiqueta: string; nivel: "pais" | "ciudad"; intensidad: number }
+      | null;
+    if (!props) return;
+    onSeleccionRef.current?.({
+      lat: Number(props.lat),
+      lng: Number(props.lng),
+      valor: Number(props.valor),
+      etiqueta: String(props.etiqueta),
+      nivel: props.nivel,
+      intensidad: Number(props.intensidad),
+    });
+  });
+  // Click sin torre bajo el cursor (mar/espacio) deselecciona; la query evita pisar la seleccion recien hecha.
+  map.on("click", (e: maplibregl.MapMouseEvent) => {
+    if (map.queryRenderedFeatures(e.point, { layers: [CAPA_BARRAS] }).length === 0) {
+      onSeleccionRef.current?.(null);
+    }
+  });
+}
+
 /** Miniatura de formato del popover: gradiente que evoca cada basemap + check si esta activo. */
 function OpcionFormato({
   activo,
@@ -103,16 +138,19 @@ export default function MapaGlobo({
   puntos,
   centro,
   nivel,
+  onSeleccion,
 }: {
   puntos: PuntoGlobo[];
   centro: { lat: number; lng: number };
   nivel: "pais" | "ciudad";
+  onSeleccion?: (punto: PuntoGlobo | null) => void;
 }) {
   const contenedorRef = React.useRef<HTMLDivElement | null>(null);
   const mapaRef = React.useRef<maplibregl.Map | null>(null);
   const popupRef = React.useRef<maplibregl.Popup | null>(null);
   const puntosRef = React.useRef(puntos);
   const centroRef = React.useRef(centro);
+  const onSeleccionRef = React.useRef(onSeleccion);
 
   const [formato, setFormato] = React.useState<FormatoMapa>("satelite");
   const [abierto, setAbierto] = React.useState(false);
@@ -123,6 +161,7 @@ export default function MapaGlobo({
   puntosRef.current = puntos;
   formatoRef.current = formato;
   centroRef.current = centro;
+  onSeleccionRef.current = onSeleccion;
 
   // Crea el mapa UNA vez: estilo satelite, centrado en la ubicacion lider, con halo de
   // espacio. El drag rota el globo y scroll/trackpad hacen zoom (nativo de MapLibre).
@@ -148,6 +187,7 @@ export default function MapaGlobo({
     const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
     popupRef.current = popup;
     registrarTooltip(map, popup);
+    registrarSeleccion(map, onSeleccionRef);
     map.on("load", () => sincronizarBarras(map, puntosRef.current));
 
     const ro = new ResizeObserver(() => map.resize());

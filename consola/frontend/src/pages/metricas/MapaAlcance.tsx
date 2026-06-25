@@ -33,6 +33,7 @@ import { centroideCiudad, centroidePais, type Centroide } from "./geo";
 import type { PuntoGlobo } from "./globo/barras";
 import { MARCA_TODAS } from "./Controles";
 import { Seccion } from "./Seccion";
+import { TarjetaDetalleAlcance } from "./TarjetaDetalleAlcance";
 
 // Carga diferida del globo: MapLibre/WebGL solo se descarga y monta cuando esta seccion es
 // visible y hay datos que situar; jsdom (tests) nunca llega a montarlo.
@@ -104,6 +105,8 @@ export function MapaAlcance({
   const [marcaSel, setMarcaSel] = React.useState(marcaInicial);
   const [redSel, setRedSel] = React.useState<string>(REDES_ALCANCE[0]);
   const [ciudades, setCiudades] = React.useState(false);
+  // Barra elegida en el globo (su tarjeta de detalle se pinta como overlay); null = ninguna.
+  const [seleccionado, setSeleccionado] = React.useState<PuntoGlobo | null>(null);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "alcance-mundial", marcaSel, redSel],
@@ -115,6 +118,12 @@ export function MapaAlcance({
   // Solo Instagram tiene ciudades: el toggle solo aplica ahi (en FB se ignora con honestidad).
   const usaCiudades = redSel === "instagram" && ciudades;
   const { clave, nivel } = distribucionActiva(redSel, usaCiudades);
+
+  // Al cambiar marca/red/granularidad el dataset cambia: olvida la barra elegida para no
+  // mostrar una tarjeta de detalle obsoleta.
+  React.useEffect(() => {
+    setSeleccionado(null);
+  }, [marcaSel, redSel, usaCiudades]);
 
   // Resuelve cada clave a coordenadas; las no ubicadas se cuentan aparte (no se inventan).
   const { ubicados, sinUbicar, totalCrudos } = React.useMemo(() => {
@@ -206,13 +215,37 @@ export function MapaAlcance({
               </div>
             }
           >
-            <MapaGlobo puntos={ubicados} centro={{ lat: top.lat, lng: top.lng }} nivel={nivel} />
+            <MapaGlobo
+              puntos={ubicados}
+              centro={{ lat: top.lat, lng: top.lng }}
+              nivel={nivel}
+              onSeleccion={setSeleccionado}
+            />
           </React.Suspense>
         ) : (
           <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/70">
             No se pudo situar ninguna ubicación en el mapa ({sinUbicar} sin ubicar).
           </div>
         )}
+
+        {/* Tarjeta de detalle (arriba-izquierda) de la barra elegida: no tapa el panel
+            (abajo-izq.), los controles (abajo-der.) ni la píldora Ciudades (abajo-centro). */}
+        {seleccionado ? (
+          <div className="absolute left-4 top-4 z-20">
+            <TarjetaDetalleAlcance
+              punto={seleccionado}
+              rank={
+                ubicados.findIndex(
+                  (p) => p.etiqueta === seleccionado.etiqueta && p.nivel === seleccionado.nivel,
+                ) + 1
+              }
+              total={ubicados.length}
+              marcaNombre={nombreMarca(marcaSel, marcas)}
+              redNombre={nombreRed(redSel)}
+              onCerrar={() => setSeleccionado(null)}
+            />
+          </div>
+        ) : null}
 
         {/* Panel flotante (abajo-izquierda): marca·red, dato lider, conteos y top-5. */}
         <div className="absolute bottom-4 left-4 z-10 w-64 rounded-xl bg-white/95 p-4 text-neutral-900 shadow-lg backdrop-blur">
