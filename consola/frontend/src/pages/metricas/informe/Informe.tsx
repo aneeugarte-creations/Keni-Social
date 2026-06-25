@@ -143,6 +143,46 @@ const COVER_TODAS = "#17181C";
 // solo con wordmarks bajos: fila 1 = Claro·UnoTV·Piso 15, fila 2 = Nación Gamer·Fundación.
 const MARCAS_PORTFOLIO = ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"];
 
+/**
+ * Caja del logo y colocación de la caption en la portada de una marca. Un mark ANCHO (UnoTV,
+ * ratio 3) llena su caja de ancho y ancla con presencia; un lockup casi cuadrado (Claro Sports,
+ * ratio 1.6) necesita más caja para igualar esa presencia, y la caption se ANCLA baja —desacoplada
+ * del logo— para gobernar el aire inferior. Las marcas sin entrada caen al DEFAULT (look común).
+ */
+type CoverLayout = {
+  /** Caja máxima del logo (object-contain encaja dentro manteniendo proporción). */
+  box: { h: number; w: number };
+  /** px que sube(−)/baja(+) el logo respecto al centro óptico del lienzo de portada. */
+  logoNudge?: number;
+  /** px que mueve el logo a la izquierda(−)/derecha(+) para centrarlo ÓPTICAMENTE (no por su caja):
+   *  un lockup asimétrico (el destello de Claro sobresale a la derecha) no comparte eje con la
+   *  caption hasta corregir su centro de masa. */
+  logoNudgeX?: number;
+  /** Modo por defecto: gap bajo el logo con el grupo (logo+caption) centrado. */
+  captionMt?: number;
+  /** Modo anclado: caption fijada a X px del borde inferior del lienzo (independiente del logo). */
+  captionBottom?: number;
+  /** Interletrado de la caption (em). */
+  captionTracking?: string;
+  /** Tinta de la caption sobre fondo de color (clase Tailwind); por defecto text-white/90. */
+  captionTinta?: string;
+};
+const COVER_LAYOUT_DEFAULT: CoverLayout = { box: { h: 140, w: 250 }, captionMt: 64, captionTracking: "0.24em" };
+/** Ajustes de portada por marca (sobre el DEFAULT). */
+const COVER_LAYOUT: Record<string, CoverLayout> = {
+  // ZÓCALO: logo +16% subido a su centro óptico (logoNudge), centrado horizontal por su masa
+  // (logoNudgeX corrige que el lockup parquea "sports" a la derecha) y caption anclada baja con el
+  // blanco asentado al 85% (sobre el rojo intenso vibra menos que el blanco puro).
+  "claro-sports": {
+    box: { h: 162, w: 285 },
+    logoNudge: -22,
+    logoNudgeX: -7,
+    captionBottom: 174,
+    captionTracking: "0.24em",
+    captionTinta: "text-white/85",
+  },
+};
+
 /** Color de la dirección de una variación (verde sube, rojo baja, gris neutro). */
 function colorSigno(signo?: "sube" | "baja" | "igual" | "nuevo" | "neutral"): string {
   if (signo === "sube") return "text-emerald-600";
@@ -236,6 +276,100 @@ function Marco({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Diapositiva-portada: la marca es la protagonista (logo sobre su color), con la caption del
+ * periodo debajo. En "Todas las marcas" muestra el portfolio de logos sobre fondo neutro.
+ * El `layout` (caja del logo + colocación de la caption) lo fija COVER_LAYOUT[marcaId]; se puede
+ * pasar explícito para iterar variantes en una vista previa.
+ */
+export function PortadaSlide({
+  marcaId,
+  marcaLabel,
+  esTodas,
+  periodo,
+  layout,
+}: {
+  marcaId: string | null;
+  marcaLabel: string;
+  esTodas: boolean;
+  periodo: string;
+  layout?: CoverLayout;
+}) {
+  const coverBg = esTodas ? COVER_TODAS : marcaId ? COVER_BG[marcaId] : undefined;
+  const lay = layout ?? (marcaId ? COVER_LAYOUT[marcaId] : undefined) ?? COVER_LAYOUT_DEFAULT;
+  const anclada = lay.captionBottom != null;
+  // Ancho completo (no encogido al texto): así el interletrado final nunca empuja la última
+  // palabra a otra línea. Cabe en una sola; text-balance reparte en dos solo si el periodo fuera
+  // larguísimo.
+  const caption = (
+    <p
+      className={`w-full text-balance ${EYEBROW} ${coverBg ? lay.captionTinta ?? "text-white/90" : TONO.coverCaption}`}
+      style={{ letterSpacing: lay.captionTracking ?? "0.24em" }}
+    >
+      Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
+      {periodo}
+    </p>
+  );
+  return (
+    <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
+      <div className="relative flex h-full flex-col items-center justify-center text-center">
+        {esTodas ? (
+          // Portfolio: cada marca en una celda de tamaño UNIFORME (equilibra el peso óptico). Todas
+          // en blanco plano: los 4 logos blancos vía grayscale, y Piso 15 como wordmark blanco (su
+          // emblema es un disco para fondo oscuro y no admite calado a blanco sin perder el "15").
+          <div className="flex max-w-3xl flex-wrap items-center justify-center gap-x-12 gap-y-10">
+            {MARCAS_PORTFOLIO.filter((id) => LOGOS_MARCA[id]).map((id) => (
+              <div key={id} className="flex h-[92px] w-[224px] items-center justify-center">
+                {id === "piso-15" ? (
+                  <span
+                    style={{
+                      fontFamily: "'Montserrat'",
+                      fontWeight: 800,
+                      fontSize: 52,
+                      letterSpacing: "-0.02em",
+                      color: "#fff",
+                      lineHeight: 1,
+                    }}
+                  >
+                    Piso 15
+                  </span>
+                ) : (
+                  <img
+                    src={LOGOS_MARCA[id]}
+                    alt=""
+                    className="max-h-[64px] max-w-[210px] object-contain"
+                    style={{ filter: "grayscale(1)" }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Logo de la marca centrado: object-contain lo encaja sea cual sea su proporción; logoNudge
+          // lo recoloca en su centro óptico (no el geométrico).
+          <div
+            style={{
+              marginTop: lay.logoNudge ?? 0,
+              transform: lay.logoNudgeX ? `translateX(${lay.logoNudgeX}px)` : undefined,
+            }}
+          >
+            <LogoOWordmark id={marcaId} nombre={marcaLabel} box={lay.box} />
+          </div>
+        )}
+        {anclada ? (
+          <div className="absolute inset-x-0" style={{ bottom: lay.captionBottom }}>
+            {caption}
+          </div>
+        ) : (
+          <div className="w-full" style={{ marginTop: lay.captionMt ?? 64 }}>
+            {caption}
+          </div>
+        )}
+      </div>
+    </Marco>
   );
 }
 
@@ -382,64 +516,13 @@ function diapositivas(data: InformeProps, breve: boolean): Slide[] {
     recomendaciones,
   } = data;
   const etiqueta = esTodas ? "Todas las marcas" : marcaLabel;
-  const coverBg = esTodas ? COVER_TODAS : marcaId ? COVER_BG[marcaId] : undefined;
   const slides: Slide[] = [];
 
   // 1 · Portada — la marca es la protagonista (logo sobre su color). En "Todas las marcas",
   // portada-portfolio: los 5 logos juntos sobre fondo oscuro neutro.
   slides.push({
     clave: "portada",
-    nodo: (
-      <Marco marca={marcaLabel} periodo={periodo} portada bg={coverBg}>
-        <div className="flex h-full flex-col items-center justify-center text-center">
-          {esTodas ? (
-            // Portfolio: cada marca en una celda de tamaño UNIFORME (equilibra el peso óptico).
-            // Todas en blanco plano: los 4 logos blancos vía grayscale, y Piso 15 como wordmark
-            // blanco (su emblema es un disco para fondo oscuro y no admite calado a blanco sin
-            // perder el "15"; el wordmark mantiene el mismo tratamiento de tinta única que el resto).
-            <div className="flex max-w-3xl flex-wrap items-center justify-center gap-x-12 gap-y-10">
-              {MARCAS_PORTFOLIO.filter((id) => LOGOS_MARCA[id]).map((id) => (
-                <div key={id} className="flex h-[92px] w-[224px] items-center justify-center">
-                  {id === "piso-15" ? (
-                    <span
-                      style={{
-                        fontFamily: "'Montserrat'",
-                        fontWeight: 800,
-                        fontSize: 52,
-                        letterSpacing: "-0.02em",
-                        color: "#fff",
-                        lineHeight: 1,
-                      }}
-                    >
-                      Piso 15
-                    </span>
-                  ) : (
-                    <img
-                      src={LOGOS_MARCA[id]}
-                      alt=""
-                      className="max-h-[64px] max-w-[210px] object-contain"
-                      style={{ filter: "grayscale(1)" }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Logo de la marca centrado en una caja sobria y común: presencia discreta con aire
-            // alrededor, no a sangre. object-contain lo encaja sea cual sea su proporción (UnoTV
-            // ancho, Fundación finísimo, Claro casi cuadrado) para un tamaño óptico parejo.
-            <LogoOWordmark id={marcaId} nombre={marcaLabel} box={{ h: 140, w: 250 }} />
-          )}
-          {/* Ancho completo (no encogido al texto): así el interletrado final nunca empuja la
-              última palabra a otra línea. Cabe en una sola; text-balance reparte en dos solo si
-              algún periodo llegara a ser larguísimo. */}
-          <p className={`mt-16 w-full text-balance ${EYEBROW} tracking-[0.24em] ${coverBg ? "text-white/90" : TONO.coverCaption}`}>
-            Informe de métricas · {esTodas ? "Todas las marcas · " : ""}
-            {periodo}
-          </p>
-        </div>
-      </Marco>
-    ),
+    nodo: <PortadaSlide marcaId={marcaId} marcaLabel={marcaLabel} esTodas={esTodas} periodo={periodo} />,
   });
 
   // Versión BREVE (lectura ejecutiva, SIN explicaciones): portada + 2 láminas de DATOS puros,
