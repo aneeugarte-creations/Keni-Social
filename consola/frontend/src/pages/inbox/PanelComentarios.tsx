@@ -4,7 +4,8 @@
  * comentada (texto recortado, miniatura y enlace), el comentario (autor, texto, fecha y
  * enlace permanente) y sus respuestas anidadas (un nivel).
  */
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Image as ImageIcon } from "lucide-react";
+import { useState } from "react";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
@@ -31,21 +32,42 @@ function nombreAutor(autor: AutorComentario | null): string {
   return n && n !== "" ? n : "Sin nombre";
 }
 
+/**
+ * Miniatura de la publicación comentada: la imagen si carga, o un icono neutro como
+ * respaldo. Las URLs de media de IG/FB caducan, así que si falla (o no hay) se muestra el
+ * placeholder, nunca el icono de imagen rota del navegador.
+ */
+function MiniaturaPost({ url }: { url: string | undefined }) {
+  const [fallo, setFallo] = useState(false);
+  if (url && !fallo) {
+    return (
+      <img
+        src={url}
+        alt="Publicación comentada"
+        className="h-12 w-12 shrink-0 rounded object-cover"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFallo(true)}
+      />
+    );
+  }
+  return (
+    <span
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground"
+      aria-hidden="true"
+    >
+      <ImageIcon className="h-5 w-5" />
+    </span>
+  );
+}
+
 function ContextoPublicacion({ comentario }: { comentario: Comentario }) {
   const tieneTexto = comentario.post_texto && comentario.post_texto.trim() !== "";
   const miniatura = comentario.post_media[0];
   if (!tieneTexto && !miniatura && !comentario.post_enlace) return null;
   return (
     <div className="flex items-start gap-3 rounded-md border bg-muted/40 p-2">
-      {miniatura && (
-        <img
-          src={miniatura}
-          alt="Publicación comentada"
-          className="h-12 w-12 shrink-0 rounded object-cover"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
-      )}
+      <MiniaturaPost url={miniatura} />
       <div className="min-w-0 flex-1 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">Publicación</span>
         {tieneTexto && (

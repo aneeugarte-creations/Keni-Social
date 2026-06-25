@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Comentario, ComentariosPorRed } from "@/types";
@@ -53,6 +53,26 @@ describe("PanelComentarios", () => {
     // Respuesta anidada.
     expect(screen.getByText("Caro")).toBeInTheDocument();
     expect(screen.getByText("Totalmente")).toBeInTheDocument();
+  });
+
+  it("cae a un placeholder cuando la miniatura de la publicación falla al cargar", () => {
+    const { container } = render(
+      <PanelComentarios porRed={[{ red: "instagram", comentarios: [comentario()] }]} />,
+    );
+    const miniatura = screen.getByAltText("Publicación comentada");
+    fireEvent.error(miniatura);
+    expect(screen.queryByAltText("Publicación comentada")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-image")).toBeInTheDocument();
+  });
+
+  it("muestra el placeholder cuando la publicación no trae miniatura (post_media vacío)", () => {
+    const { container } = render(
+      <PanelComentarios
+        porRed={[{ red: "instagram", comentarios: [comentario({ post_media: [] })] }]}
+      />,
+    );
+    expect(screen.queryByAltText("Publicación comentada")).not.toBeInTheDocument();
+    expect(container.querySelector(".lucide-image")).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando no hay redes con datos", () => {
