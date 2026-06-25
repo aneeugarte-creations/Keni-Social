@@ -106,6 +106,14 @@ const ARCHIVOS: ArchivoFuente[] = [
   { familia: "Nunito Sans", archivo: "NunitoSans-Regular.ttf", peso: "400" },
   { familia: "Nunito Sans", archivo: "NunitoSans-Bold.ttf", peso: "700" },
   { familia: "Nunito Sans", archivo: "NunitoSans-Black.ttf", peso: "900" },
+  // Jost (geométrica estilo Futura, OFL): 300..900 estáticos. Solo uprights (sin itálica oficial).
+  { familia: "Jost", archivo: "Jost-Light.ttf", peso: "300" },
+  { familia: "Jost", archivo: "Jost-Regular.ttf", peso: "400" },
+  { familia: "Jost", archivo: "Jost-Medium.ttf", peso: "500" },
+  { familia: "Jost", archivo: "Jost-SemiBold.ttf", peso: "600" },
+  { familia: "Jost", archivo: "Jost-Bold.ttf", peso: "700" },
+  { familia: "Jost", archivo: "Jost-ExtraBold.ttf", peso: "800" },
+  { familia: "Jost", archivo: "Jost-Black.ttf", peso: "900" },
 ];
 
 // Una sola promesa por familia: no recargamos en cada render.

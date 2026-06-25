@@ -106,10 +106,19 @@ const ARCHIVOS = [
   ["Nunito Sans", "NunitoSans-Regular.ttf"],
   ["Nunito Sans", "NunitoSans-Bold.ttf"],
   ["Nunito Sans", "NunitoSans-Black.ttf"],
+  // Jost (geométrica estilo Futura, OFL): 300..900 en caras estáticas instanciadas del TTF
+  // variable. Solo uprights (Jost no tiene itálica oficial) -> queda FUERA de FAMILIAS_CON_CURSIVA.
+  ["Jost", "Jost-Light.ttf"],
+  ["Jost", "Jost-Regular.ttf"],
+  ["Jost", "Jost-Medium.ttf"],
+  ["Jost", "Jost-SemiBold.ttf"],
+  ["Jost", "Jost-Bold.ttf"],
+  ["Jost", "Jost-ExtraBold.ttf"],
+  ["Jost", "Jost-Black.ttf"],
 ];
 
 // Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
-export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora", "Exo 2", "Lato", "Poppins", "Roboto Condensed", "Mulish", "Nunito Sans"];
+export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora", "Exo 2", "Lato", "Poppins", "Roboto Condensed", "Mulish", "Nunito Sans", "Jost"];
 
 let _registradas = false;
 

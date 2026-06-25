@@ -91,6 +91,17 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
     }
   });
 
+  // Jost (geométrica estilo Futura, OFL): 300..900 en caras estáticas (instancias del TTF
+  // variable). Solo uprights: no hay itálica oficial.
+  it("Jost registra 300..900 en caras estáticas", () => {
+    for (const cara of [
+      "Jost-Light.ttf", "Jost-Regular.ttf", "Jost-Medium.ttf", "Jost-SemiBold.ttf",
+      "Jost-Bold.ttf", "Jost-ExtraBold.ttf", "Jost-Black.ttf",
+    ]) {
+      expect(ttfs(front), cara).toContain(cara);
+    }
+  });
+
   // El nombre del archivo no basta: un TTF VARIABLE renombrado a "-Bold.ttf" colaría. Se abren
   // los BYTES de cada cara de las gemelas nuevas en AMBOS directorios (public/fonts del front y
   // motores/estudio_imagen/fuentes del back) y se comprueba que el espejo es byte-idéntico y que
@@ -106,9 +117,9 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
       return false;
     };
     const nuevas = ttfs(front).filter((t) =>
-      /^(Poppins|RobotoCondensed|Mulish|NunitoSans)-/.test(t),
+      /^(Poppins|RobotoCondensed|Mulish|NunitoSans|Jost)-/.test(t),
     );
-    expect(nuevas.length).toBe(23); // 14 Poppins + 3 + 3 + 3
+    expect(nuevas.length).toBe(30); // 14 Poppins + 3 + 3 + 3 + 7 Jost
     for (const cara of nuevas) {
       const enFront = readFileSync(resolve(dirFront, cara));
       const enBack = readFileSync(resolve(dirBack, cara));
@@ -122,7 +133,7 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
   // lado, el botón se deshabilita honesto en vez de sintetizar una oblicua solo en la previa).
   it("Poppins tiene cursiva; Roboto Condensed/Mulish/Nunito Sans quedan fuera (sin itálica registrada)", () => {
     expect(FAMILIAS_CON_CURSIVA).toContain("Poppins");
-    for (const familia of ["Roboto Condensed", "Mulish", "Nunito Sans"]) {
+    for (const familia of ["Roboto Condensed", "Mulish", "Nunito Sans", "Jost"]) {
       expect(FAMILIAS_CON_CURSIVA, familia).not.toContain(familia);
       expect(readFileSync(front, "utf-8")).not.toMatch(
         new RegExp(`familia: "${familia}", archivo: "[\\w-]*Italic`),
@@ -144,7 +155,7 @@ describe("espejo del registro de fuentes (front FontFace ↔ back Skia)", () => 
     const enSpec = catalogo(readFileSync(resolve(aqui, "../specPlantilla.ts"), "utf-8"));
     expect(enDocumento).toEqual(enBack);
     expect(enSpec).toEqual(enBack);
-    for (const familia of ["Poppins", "Roboto Condensed", "Mulish", "Nunito Sans"]) {
+    for (const familia of ["Poppins", "Roboto Condensed", "Mulish", "Nunito Sans", "Jost"]) {
       expect(enBack, familia).toContain(familia);
     }
   });

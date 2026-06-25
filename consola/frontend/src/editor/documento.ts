@@ -256,6 +256,7 @@ export const CATALOGO_FUENTES = [
   "Roboto Condensed",
   "Mulish",
   "Nunito Sans",
+  "Jost",
 ] as const;
 
 // ---------------------------------------------------------------------------

@@ -860,6 +860,7 @@ describe("cursiva (itálica real, nunca sintética)", () => {
     expect(tieneCursiva("Roboto Condensed")).toBe(false);
     expect(tieneCursiva("Mulish")).toBe(false);
     expect(tieneCursiva("Nunito Sans")).toBe(false);
+    expect(tieneCursiva("Jost")).toBe(false);
     expect(tieneCursiva("Mi Fuente De Marca")).toBe(false);
   });
 

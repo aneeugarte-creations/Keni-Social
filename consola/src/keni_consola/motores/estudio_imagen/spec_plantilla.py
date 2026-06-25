@@ -46,7 +46,7 @@ FORMATOS: dict[str, dict[str, int]] = {
 FAMILIAS = ("sans", "condensada")
 CATALOGO_FUENTES = (
     "Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora",
-    "Exo 2", "Lato", "Poppins", "Roboto Condensed", "Mulish", "Nunito Sans",
+    "Exo 2", "Lato", "Poppins", "Roboto Condensed", "Mulish", "Nunito Sans", "Jost",
 )
 
 _AJUSTES = ("cover", "contain")

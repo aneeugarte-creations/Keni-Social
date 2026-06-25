@@ -28,6 +28,7 @@ export const CATALOGO_FUENTES = [
   "Roboto Condensed",
   "Mulish",
   "Nunito Sans",
+  "Jost",
 ] as const;
 
 /** Normaliza la familia de un spec antiguo ("sans"/"condensada") al nombre real del catálogo. */
