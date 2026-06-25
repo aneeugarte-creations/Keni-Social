@@ -1,23 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api";
 import type { Demografia as DemografiaResp } from "@/types";
 
 import { Demografia } from "./Demografia";
 import { useVistaConfig } from "./vistaConfig";
-
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    };
-  }
-});
 
 beforeEach(() => {
   useVistaConfig.getState().reset();
@@ -44,30 +34,39 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("Demografia", () => {
-  it("con una red en foco, pinta solo esa red con sus distribuciones legibles", async () => {
+  it("con una red en foco, muestra esa red sin conmutador y con sus distribuciones", async () => {
     useVistaConfig.getState().setRed("instagram");
     vi.spyOn(api, "metricasDemografia").mockResolvedValue(RESP);
     renderConProviders(<Demografia marcaActual="claro_sports" />);
 
     expect(screen.getByText("Demografía de la audiencia")).toBeInTheDocument();
-    // Solo el panel de Instagram (sin panel de Facebook), con sus distribuciones legibles.
+    // La ficha encabeza con Instagram; con una sola red en foco no hay conmutador a Facebook.
     expect(await screen.findByText("Instagram")).toBeInTheDocument();
     expect(screen.queryByText("Facebook")).not.toBeInTheDocument();
-    // Las distribuciones aparecen cuando la consulta resuelve (el título y el panel son estáticos).
+    // Las dimensiones del nuevo diseño (etiquetas de la ficha única).
     expect(await screen.findByText("Género")).toBeInTheDocument();
     expect(screen.getByText("Edad")).toBeInTheDocument();
-    expect(screen.getByText("Mezcla de formatos")).toBeInTheDocument();
+    expect(screen.getByText("Formatos publicados")).toBeInTheDocument();
   });
 
-  it("sin foco de red, pinta un panel por cada red que expone demografía (IG y FB)", async () => {
-    vi.spyOn(api, "metricasDemografia").mockResolvedValue(RESP);
+  it("sin foco de red, arranca en Instagram y ofrece conmutar a Facebook (no apila redes)", async () => {
+    const spy = vi.spyOn(api, "metricasDemografia").mockResolvedValue(RESP);
     renderConProviders(<Demografia marcaActual="claro_sports" />);
 
-    // Un panel por red demográfica: Instagram y Facebook, cada uno con su distribución.
-    expect(await screen.findByText("Instagram")).toBeInTheDocument();
-    expect(screen.getByText("Facebook")).toBeInTheDocument();
-    // Cada panel resuelve su propia consulta: la distribución aparece una vez por red.
-    await waitFor(() => expect(screen.getAllByText("Género")).toHaveLength(2));
+    // Una sola red a la vez: "Género" aparece UNA vez, no duplicado por red.
+    expect(await screen.findByText("Género")).toBeInTheDocument();
+    expect(screen.getAllByText("Género")).toHaveLength(1);
+
+    // El conmutador ofrece Facebook; al pulsarlo, consulta esa red.
+    const botonFb = screen.getByRole("button", { name: /facebook/i });
+    expect(botonFb).toBeInTheDocument();
+    fireEvent.click(botonFb);
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ red: "facebook" }),
+        expect.anything(),
+      ),
+    );
   });
 
   it("degrada con honestidad cuando la red en foco no expone demografía", async () => {
@@ -75,9 +74,7 @@ describe("Demografia", () => {
     vi.spyOn(api, "metricasDemografia").mockResolvedValue({ red: "instagram", distribuciones: {} });
     renderConProviders(<Demografia marcaActual="claro_sports" />);
 
-    expect(
-      await screen.findByText(/no expone demografía de audiencia/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/no expone demografía de audiencia/i)).toBeInTheDocument();
     expect(screen.queryByText("Género")).not.toBeInTheDocument();
   });
 
