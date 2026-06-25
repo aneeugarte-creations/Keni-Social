@@ -1265,13 +1265,17 @@ services:
       - traefik.docker.network=keni-social_edge
       # Router PROPIO en /guardian, prioridad ALTA (gana a front/back). Auth PROPIA por basicauth
       # (htpasswd en KENI_GUARDIAN_HTPASSWD del .env), INDEPENDIENTE de la sesión del back (que
-      # puede estar caída). Sin htpasswd configurado => 401 a todos (cerrado por defecto).
+      # puede estar caída). El DEFAULT (si KENI_GUARDIAN_HTPASSWD está vacío/ausente) es una entrada
+      # BLOQUEADA con un hash aleatorio que nadie conoce: cierra el panel (401 a todos) SIN dejar el
+      # users vacío. IMPORTANTE: un basicauth con users VACÍO hace PANIC a Traefik (auth.NewBasic) y
+      # wedgea TODA su construcción de routers (se queda con la config previa, afecta a TODOS los
+      # servicios); por eso el default debe ser no-vacío. Pon tu htpasswd real con `htpasswd -nB <u>`.
       - traefik.http.routers.guardian.rule=Host(`${KENI_HOST}`) && PathPrefix(`/guardian`)
       - traefik.http.routers.guardian.priority=20
       - traefik.http.routers.guardian.entrypoints=websecure
       - traefik.http.routers.guardian.tls.certresolver=le
       - traefik.http.routers.guardian.middlewares=keni-guardian-auth
-      - traefik.http.middlewares.keni-guardian-auth.basicauth.users=${KENI_GUARDIAN_HTPASSWD:-}
+      - traefik.http.middlewares.keni-guardian-auth.basicauth.users=${KENI_GUARDIAN_HTPASSWD:-locked:$$apr1$$gimueJgn$$DwknY0jLhZtgeHphuGhgw.}
       - traefik.http.services.guardian.loadbalancer.server.port=8080
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/guardian/api/sesiones',timeout=4).status==200 else 1)\""]
