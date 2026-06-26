@@ -63,7 +63,7 @@ function DialogoEditarInterno({
   pieza: Pieza | null;
   onCerrar: () => void;
   /** Salta a la pieza HERMANA de la otra variante (foto/carrusel) si existe; devuelve si saltó. */
-  irAVariante: (variante: "foto" | "carrusel") => boolean;
+  irAVariante: (variante: "foto" | "carrusel") => Promise<boolean>;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -309,7 +309,7 @@ function DialogoEditarInterno({
     if (
       (nuevo === "foto" || nuevo === "carrusel") &&
       (formato === "foto" || formato === "carrusel") &&
-      irAVariante(nuevo)
+      (await irAVariante(nuevo))
     ) {
       return;
     }
@@ -962,12 +962,32 @@ export function DialogoEditar({
   // Abrir con una pieza distinta (cambia el prop) reinicia la pieza activa.
   React.useEffect(() => setActiva(pieza), [pieza]);
   const irAVariante = React.useCallback(
-    (variante: "foto" | "carrusel") => {
+    async (variante: "foto" | "carrusel") => {
       if (!activa) return false;
-      const hermana = buscarHermana(queryClient, activa, variante);
-      if (hermana) {
-        setActiva(hermana);
+      // 1) Caché del feed/lista (instantáneo, lo común). 2) Si no está (caché stale, otra página
+      // del feed, o recién creada), se PREGUNTA al backend por la idea: así nunca ofrecemos
+      // «crear» un carrusel que ya existe solo porque el cliente no lo tenía cargado.
+      const enCache = buscarHermana(queryClient, activa, variante);
+      if (enCache) {
+        setActiva(enCache);
         return true;
+      }
+      const pubId = activa.publicacion_id || "";
+      if (!pubId) return false;
+      try {
+        const r = await api.piezas({ publicacion_id: pubId, red: activa.red });
+        const hermana = r.piezas.find(
+          (p) =>
+            p.id !== activa.id &&
+            p.red === activa.red &&
+            (p.variante === "carrusel" ? "carrusel" : "foto") === variante,
+        );
+        if (hermana) {
+          setActiva(hermana);
+          return true;
+        }
+      } catch {
+        // Sin red/back: caemos al camino de «crear» (comportamiento previo); no rompemos el editor.
       }
       return false;
     },

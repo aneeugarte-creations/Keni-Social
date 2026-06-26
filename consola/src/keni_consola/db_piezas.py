@@ -427,6 +427,7 @@ def _filtros_publicacion(
     excluir_origen: str | None = None,
     busqueda: str | None = None,
     grupo: str | None = None,
+    publicacion_id: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -454,6 +455,12 @@ def _filtros_publicacion(
     if red:
         clausulas.append("cp.red = ?")
         params.append(red)
+    # Una IDEA concreta (todas sus piezas, ambas variantes): el editor lo usa para localizar la
+    # variante hermana (foto<->carrusel) de forma AUTORITATIVA, sin depender de lo que el feed
+    # tenga cacheado en el cliente.
+    if publicacion_id:
+        clausulas.append("cp.publicacion_id = ?")
+        params.append(publicacion_id)
     # ORIGEN del contenido padre (el clon «Portal» del feed pide `origen='portal'`): el
     # contenido `c` ya está en el JOIN del SELECT, así que se filtra directo (sin denormalizar).
     if origen:
@@ -566,6 +573,7 @@ def listar_piezas(
     excluir_origen: str | None = None,
     busqueda: str | None = None,
     grupo: str | None = None,
+    publicacion_id: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -585,6 +593,7 @@ def listar_piezas(
         marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
         excluir_origen=excluir_origen, busqueda=busqueda, grupo=grupo,
+        publicacion_id=publicacion_id,
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -628,12 +637,14 @@ def contar_piezas(
     excluir_origen: str | None = None,
     busqueda: str | None = None,
     grupo: str | None = None,
+    publicacion_id: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
         marca, red, estado, evergreen, responsable, desde, hasta, origen,
         categoria, tipo_contenido, fuente, fase, creado_antes,
         excluir_origen=excluir_origen, busqueda=busqueda, grupo=grupo,
+        publicacion_id=publicacion_id,
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "

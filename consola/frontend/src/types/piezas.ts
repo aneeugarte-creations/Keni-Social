@@ -201,6 +201,9 @@ export interface FiltrosPiezas {
   marca?: string;
   red?: string;
   estado?: string;
+  /** Foco en UNA idea (todas sus piezas, ambas variantes). Lo usa el editor para localizar la
+   *  variante hermana foto<->carrusel de forma autoritativa, sin fiarse de la caché del feed. */
+  publicacion_id?: string;
   /** Origen del contenido padre (el clon «Portal» del feed pide `origen='portal'`). */
   origen?: string;
   /** EXCLUSIÓN por origen (inverso de `origen`): el feed normal pide `excluir_origen='portal'`

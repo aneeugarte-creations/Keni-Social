@@ -108,6 +108,26 @@ def _crear_contenido(reds: list[str], copy: str) -> tuple[str, list[str]]:
     return tema["id"], ids
 
 
+def test_listar_piezas_filtra_por_publicacion(entorno, monkeypatch):
+    """`listar_piezas(publicacion_id=...)` devuelve TODAS las piezas de esa idea (ambas variantes)
+    y solo esas: es la consulta autoritativa que usa el editor para hallar la variante hermana."""
+    monkeypatch.setattr(
+        dom_copy, "_COMPONER_SLIDE",
+        lambda marca, titular, foto: {"objeto": f"media-{titular}", "foto": ""},
+    )
+    pid, foto_ids = _crear_contenido(["instagram"], "Cuerpo del post")
+    dom_carrusel.crear_variante_carrusel(pid, ["Uno", "Dos"])
+    # Otra idea distinta: NO debe colarse en el filtro.
+    otra_pid, _ = _crear_contenido(["instagram"], "Otra idea")
+
+    piezas = repos.listar_piezas(publicacion_id=pid)
+    assert {p["publicacion_id"] for p in piezas} == {pid}
+    variantes = sorted(p["variante"] for p in piezas)
+    assert variantes == ["carrusel", "foto"]  # la foto original + la variante carrusel hermana
+    assert otra_pid not in {p["publicacion_id"] for p in piezas}
+    assert repos.contar_piezas(publicacion_id=pid) == 2
+
+
 def test_aplicar_carrusel_escribe_identico_en_todas_las_gemelas(entorno, monkeypatch):
     monkeypatch.setattr(
         dom_copy, "_COMPONER_SLIDE",

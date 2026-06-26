@@ -357,6 +357,9 @@ async def listar(request: Request) -> Response:
     # GRUPO de líneas (`?grupo=`): casa las piezas cuya `categoria` es una línea de ese grupo. Lo
     # usa la barra agrupada del feed (marcas con grupos, p. ej. Claro Sports).
     grupo = qp.get("grupo") or None
+    # Foco en UNA idea (todas sus piezas, ambas variantes): el editor lo usa para localizar la
+    # variante hermana foto<->carrusel sin depender de la caché del feed en el cliente.
+    publicacion_id = qp.get("publicacion_id") or None
     creado_antes: str | None = None
     antiguedad_h = qp.get("antiguedad_h")
     if antiguedad_h:
@@ -400,6 +403,7 @@ async def listar(request: Request) -> Response:
         "origen": origen, "categoria": categoria, "tipo_contenido": tipo_contenido,
         "fuente": fuente, "fase": fase, "creado_antes": creado_antes,
         "excluir_origen": excluir_origen, "busqueda": busqueda, "grupo": grupo,
+        "publicacion_id": publicacion_id,
     }
     cuerpo = await run_in_threadpool(
         _listar, filtros, limite, desplazamiento, cursor, modo_feed, sin_limite

@@ -77,6 +77,7 @@ def listar_piezas(
     excluir_origen: str | None = None,
     busqueda: str | None = None,
     grupo: str | None = None,
+    publicacion_id: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -105,6 +106,7 @@ def listar_piezas(
         excluir_origen=excluir_origen,
         busqueda=busqueda,
         grupo=grupo,
+        publicacion_id=publicacion_id,
         limite=limite,
         desplazamiento=desplazamiento,
         cursor=cursor,
@@ -128,13 +130,14 @@ def contar_piezas(
     excluir_origen: str | None = None,
     busqueda: str | None = None,
     grupo: str | None = None,
+    publicacion_id: str | None = None,
 ) -> int:
     return db.contar_piezas(
         marca=marca, red=red, estado=estado, evergreen=evergreen,
         responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         categoria=categoria, tipo_contenido=tipo_contenido, fuente=fuente,
         fase=fase, creado_antes=creado_antes, excluir_origen=excluir_origen,
-        busqueda=busqueda, grupo=grupo,
+        busqueda=busqueda, grupo=grupo, publicacion_id=publicacion_id,
     )
 
 
