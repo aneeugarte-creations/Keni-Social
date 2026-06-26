@@ -4,11 +4,15 @@
  * Una campaña puede abarcar VARIAS marcas: se eligen con casillas (de las marcas a las que
  * la persona tiene acceso). Los hashtags se escriben separados por espacios o comas y se
  * previsualizan conservando su casing ('#Chihuahua') tal como los guardará el backend.
+ *
+ * Validación EN LÍNEA (design-system §8): al pulsar Guardar con un campo obligatorio vacío,
+ * el error sale bajo ese campo (y le marca el borde), no como toast.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +70,8 @@ export function DialogoCampania({
   const [hashtagsTexto, setHashtagsTexto] = React.useState("");
   const [etiquetaWeb, setEtiquetaWeb] = React.useState("");
   const [marcasSel, setMarcasSel] = React.useState<string[]>([]);
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Al abrir, inicializar el formulario: en edición, con los datos de la campaña; en alta,
   // preseleccionar la marca activa (si hay una concreta) como atajo.
@@ -75,12 +81,18 @@ export function DialogoCampania({
     setHashtagsTexto(campania ? campania.hashtags.map((h) => `#${h}`).join(" ") : "");
     setEtiquetaWeb(campania?.etiqueta_web ?? "");
     setMarcasSel(campania ? campania.marcas : marcaActiva ? [marcaActiva] : []);
+    setIntentado(false);
   }, [abierto, campania, marcaActiva]);
 
   const hashtags = parsearHashtags(hashtagsTexto);
 
   const alternarMarca = (id: string, marcada: boolean) =>
     setMarcasSel((prev) => (marcada ? [...prev, id] : prev.filter((m) => m !== id)));
+
+  const errNombre = !nombre.trim() ? "El nombre es obligatorio." : null;
+  const errMarcas = marcasSel.length === 0 ? "Elige al menos una marca." : null;
+  const errHashtags = hashtags.length === 0 ? "Añade al menos un hashtag." : null;
+  const hayErrores = Boolean(errNombre || errMarcas || errHashtags);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -102,11 +114,11 @@ export function DialogoCampania({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeGuardar =
-    marcasSel.length > 0 &&
-    Boolean(nombre.trim()) &&
-    hashtags.length > 0 &&
-    !guardar.isPending;
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -119,19 +131,22 @@ export function DialogoCampania({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="campania-nombre">Nombre</Label>
+          <Campo
+            etiqueta="Nombre"
+            htmlFor="campania-nombre"
+            error={intentado ? errNombre : null}
+          >
             <Input
               id="campania-nombre"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Campaña Chihuahua"
+              aria-invalid={(intentado && Boolean(errNombre)) || undefined}
               autoFocus
             />
-          </div>
+          </Campo>
 
-          <div className="space-y-1.5">
-            <Label>Marcas</Label>
+          <Campo etiqueta="Marcas" error={intentado ? errMarcas : null}>
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {marcasParaSwitch.map((m) => {
                 const marcada = marcasSel.includes(m.id);
@@ -150,22 +165,21 @@ export function DialogoCampania({
                 );
               })}
             </div>
-            {marcasSel.length === 0 && (
-              <p className="text-xs text-muted-foreground">Elige al menos una marca.</p>
-            )}
-          </div>
+          </Campo>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="campania-hashtags">Hashtags</Label>
+          <Campo
+            etiqueta="Hashtags"
+            htmlFor="campania-hashtags"
+            ayuda="Espacios o comas. Se buscan en cada publicación."
+            error={intentado ? errHashtags : null}
+          >
             <Input
               id="campania-hashtags"
               value={hashtagsTexto}
               onChange={(e) => setHashtagsTexto(e.target.value)}
               placeholder="#Chihuahua #Turismo"
+              aria-invalid={(intentado && Boolean(errHashtags)) || undefined}
             />
-            <p className="text-xs text-muted-foreground">
-              Espacios o comas. Se buscan en cada publicación.
-            </p>
             {hashtags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {hashtags.map((h) => (
@@ -175,28 +189,27 @@ export function DialogoCampania({
                 ))}
               </div>
             )}
-          </div>
+          </Campo>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="campania-etiqueta-web">Etiqueta web (URL o slug)</Label>
+          <Campo
+            etiqueta="Etiqueta web (URL o slug)"
+            htmlFor="campania-etiqueta-web"
+            ayuda="Opcional. Pega la URL de la etiqueta del sitio (p. ej. …/etiqueta/w-radio/) o solo el slug para cruzar el tráfico web de las notas en GA4."
+          >
             <Input
               id="campania-etiqueta-web"
               value={etiquetaWeb}
               onChange={(e) => setEtiquetaWeb(e.target.value)}
               placeholder="https://…/etiqueta/w-radio/"
             />
-            <p className="text-xs text-muted-foreground">
-              Opcional. Pega la URL de la etiqueta del sitio (p. ej. …/etiqueta/w-radio/) o solo
-              el slug para cruzar el tráfico web de las notas en GA4.
-            </p>
-          </div>
+          </Campo>
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          <Button onClick={onGuardar} disabled={guardar.isPending}>
             {guardar.isPending && <Spinner className="h-4 w-4" />}
             {editando ? "Guardar cambios" : "Crear campaña"}
           </Button>
