@@ -24,6 +24,20 @@ describe("centroideCiudad", () => {
     expect(centroideCiudad("CDMX")?.nombre).toBe("Mexico City");
   });
 
+  // Nombre corto de la API -> nombre oficial del diccionario.
+  it("resuelve por alias al nombre oficial de la ciudad", () => {
+    expect(centroideCiudad("León, Guanajuato")?.nombre).toBe("León de los Aldama");
+    expect(centroideCiudad("Querétaro, Querétaro Arteaga")?.nombre).toBe("Santiago de Querétaro");
+    expect(centroideCiudad("Naucalpan, State of Mexico")?.nombre).toBe("Naucalpan de Juárez");
+    expect(centroideCiudad("Apodaca, Nuevo León")?.nombre).toBe("Ciudad Apodaca");
+    expect(centroideCiudad("Santiago de Cali, Valle del Cauca")?.nombre).toBe("Cali");
+  });
+
+  it("sitúa las ciudades suplementarias (metro CDMX/GDL)", () => {
+    expect(centroideCiudad("Nezahualcóyotl, State of Mexico")?.nombre).toBe("Nezahualcóyotl");
+    expect(centroideCiudad("Tlajomulco de Zúñiga, Jalisco")?.nombre).toBe("Tlajomulco de Zúñiga");
+  });
+
   it("prefiere el pais indicado ante homonimos", () => {
     const mx = centroideCiudad("Mérida, Yucatán", "MX");
     expect(mx?.nombre).toBe("Mérida");

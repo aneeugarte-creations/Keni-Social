@@ -719,12 +719,18 @@ export function centroidePais(codigo: string): Centroide | undefined {
   return { lat: c.lat, lng: c.lng, nombre: c.nombre };
 }
 
+// Ciudades reales que la audiencia trae pero faltaban en el diccionario generado.
+const CIUDADES_EXTRA: { nombre: string; pais: string; lat: number; lng: number }[] = [
+  { nombre: "Nezahualcóyotl", pais: "MX", lat: 19.4061, lng: -99.0183 },
+  { nombre: "Tlajomulco de Zúñiga", pais: "MX", lat: 20.4736, lng: -103.4431 },
+];
+
 // Indice perezoso de ciudades por nombre normalizado.
 let indiceCiudades: Map<string, { nombre: string; pais: string; lat: number; lng: number }[]> | undefined;
 function indice(): Map<string, { nombre: string; pais: string; lat: number; lng: number }[]> {
   if (indiceCiudades) return indiceCiudades;
   const m = new Map<string, { nombre: string; pais: string; lat: number; lng: number }[]>();
-  for (const c of CIUDADES_CENTROIDES) {
+  for (const c of [...CIUDADES_CENTROIDES, ...CIUDADES_EXTRA]) {
     const k = normaliza(c.nombre);
     const arr = m.get(k);
     if (arr) arr.push(c);
@@ -743,6 +749,13 @@ const ALIAS_CIUDAD: Record<string, string> = {
   "distrito federal": "mexico city",
   "ciudad de guatemala": "guatemala city",
   "ciudad de panama": "panama city",
+  // Nombre corto de la API social -> nombre oficial del diccionario.
+  "santiago de cali": "cali",
+  leon: "leon de los aldama",
+  queretaro: "santiago de queretaro",
+  naucalpan: "naucalpan de juarez",
+  apodaca: "ciudad apodaca",
+  "lopez mateos": "ciudad lopez mateos",
 };
 
 // Busca una ciudad por su nombre normalizado (aplicando alias) en el indice.
