@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,8 @@ function SeccionImagenAdmin() {
 
   const [apiKey, setApiKey] = React.useState("");
   const [proveedor, setProveedor] = React.useState(PROVEEDORES[0].id);
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
   // Resultado de la última prueba (color verde/rojo según `ok`).
   const [resultadoPrueba, setResultadoPrueba] = React.useState<{ ok: boolean; mensaje: string } | null>(
     null,
@@ -58,6 +61,7 @@ function SeccionImagenAdmin() {
       toast.success(res.mensaje || "Clave guardada.");
       setApiKey(""); // El secreto nunca se conserva en cliente.
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -82,6 +86,7 @@ function SeccionImagenAdmin() {
       toast.success(res?.mensaje ?? "Clave eliminada.");
       setApiKey("");
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -110,6 +115,15 @@ function SeccionImagenAdmin() {
 
   const ocupado =
     guardar.isPending || probar.isPending || quitar.isPending || guardarModelo.isPending;
+
+  const errApiKey = apiKey.trim() === "" ? "Escribe una clave de API." : null;
+  const hayErrores = Boolean(errApiKey);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <SeccionColapsable
@@ -151,8 +165,7 @@ function SeccionImagenAdmin() {
             </div>
 
             {/* Proveedor */}
-            <div className="space-y-2">
-              <Label htmlFor="imagen-proveedor">Proveedor</Label>
+            <Campo etiqueta="Proveedor" htmlFor="imagen-proveedor">
               <Select value={proveedor} onValueChange={setProveedor} disabled={ocupado}>
                 <SelectTrigger id="imagen-proveedor">
                   <SelectValue placeholder="Elige un proveedor" />
@@ -165,7 +178,7 @@ function SeccionImagenAdmin() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Campo>
 
             {/* Modelo de imagen (lista curada; el cambio se guarda al instante) */}
             <div className="space-y-2">
@@ -192,8 +205,12 @@ function SeccionImagenAdmin() {
             </div>
 
             {/* Clave (write-only) */}
-            <div className="space-y-2">
-              <Label htmlFor="imagen-api-key">Clave de API</Label>
+            <Campo
+              etiqueta="Clave de API"
+              htmlFor="imagen-api-key"
+              ayuda="Pega una nueva para cambiarla."
+              error={intentado ? errApiKey : null}
+            >
               <Input
                 id="imagen-api-key"
                 type="password"
@@ -202,11 +219,9 @@ function SeccionImagenAdmin() {
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={data.configurado ? "•••••••••• (escribe para reemplazar)" : "sk-or-…"}
                 disabled={ocupado}
+                aria-invalid={(intentado && Boolean(errApiKey)) || undefined}
               />
-              <p className="text-xs text-muted-foreground">
-                Pega una nueva para cambiarla.
-              </p>
-            </div>
+            </Campo>
 
             {/* Resultado de la prueba */}
             {resultadoPrueba && (
@@ -229,7 +244,7 @@ function SeccionImagenAdmin() {
 
             {/* Acciones */}
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={() => guardar.mutate()} disabled={ocupado || apiKey.trim() === ""}>
+              <Button onClick={onGuardar} disabled={ocupado}>
                 <Save className={cn("h-4 w-4", guardar.isPending && "animate-pulse")} />
                 {guardar.isPending ? "Guardando…" : "Guardar"}
               </Button>

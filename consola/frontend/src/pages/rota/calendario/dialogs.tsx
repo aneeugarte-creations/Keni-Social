@@ -10,6 +10,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar, elegir } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -197,27 +197,24 @@ export function DialogEditarEvento({
               Forma parte de una serie recurrente: al guardar o borrar podrás elegir el alcance.
             </p>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="ce-titulo">Evento / transmisión</Label>
+          <Campo etiqueta="Evento / transmisión" htmlFor="ce-titulo">
             <Input
               id="ce-titulo"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
               maxLength={200}
             />
-          </div>
+          </Campo>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ce-fecha">Fecha</Label>
+            <Campo etiqueta="Fecha" htmlFor="ce-fecha">
               <Input
                 id="ce-fecha"
                 type="date"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ce-hora">Hora (CDMX)</Label>
+            </Campo>
+            <Campo etiqueta="Hora (CDMX)" htmlFor="ce-hora">
               <Input
                 id="ce-hora"
                 value={hora}
@@ -225,11 +222,10 @@ export function DialogEditarEvento({
                 placeholder="16:00"
                 maxLength={40}
               />
-            </div>
+            </Campo>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Cobertura</Label>
+            <Campo etiqueta="Cobertura">
               <Select
                 value={tipoCobertura}
                 onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
@@ -245,9 +241,8 @@ export function DialogEditarEvento({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Prioridad</Label>
+            </Campo>
+            <Campo etiqueta="Prioridad">
               <Select value={prioridad} onValueChange={(v) => setPrioridad(v as PrioridadEvento)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -260,10 +255,9 @@ export function DialogEditarEvento({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Campo>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ce-contenido">Qué sacar</Label>
+          <Campo etiqueta="Qué sacar" htmlFor="ce-contenido">
             <Textarea
               id="ce-contenido"
               value={contenido}
@@ -271,7 +265,7 @@ export function DialogEditarEvento({
               rows={3}
               maxLength={2000}
             />
-          </div>
+          </Campo>
           {/* Convertir un evento suelto en recurrente: configurar «Repetir» aquí lo vuelve serie
               al guardar. Un evento que YA es serie no lo muestra (se gestiona por alcance). */}
           {!esSerie && <SelectorRecurrencia fechaBase={fecha} onChange={setRecurrencia} />}
@@ -454,17 +448,15 @@ export function DialogEditarTurno({
         </DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="et-fecha">Fecha</Label>
+            <Campo etiqueta="Fecha" htmlFor="et-fecha">
               <Input
                 id="et-fecha"
                 type="date"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
+            </Campo>
+            <Campo etiqueta="Franja">
               <Select value={franjaId} onValueChange={setFranjaId}>
                 <SelectTrigger aria-label="Franja">
                   <SelectValue />
@@ -479,10 +471,9 @@ export function DialogEditarTurno({
                     ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Campo>
           </div>
-          <div className="space-y-1.5">
-            <Label>Horario</Label>
+          <Campo etiqueta="Horario">
             <div className="flex items-center gap-2">
               <Input
                 value={inicio}
@@ -503,9 +494,8 @@ export function DialogEditarTurno({
                 {turno.horario_propio ? "a medida" : "de la franja"}
               </span>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Persona</Label>
+          </Campo>
+          <Campo etiqueta="Persona">
             <Select value={miembroId} onValueChange={setMiembroId}>
               <SelectTrigger aria-label="Persona del turno">
                 <SelectValue placeholder="Sin asignar" />
@@ -518,9 +508,8 @@ export function DialogEditarTurno({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="et-motivo">Motivo</Label>
+          </Campo>
+          <Campo etiqueta="Motivo" htmlFor="et-motivo">
             <Input
               id="et-motivo"
               value={motivo}
@@ -528,9 +517,8 @@ export function DialogEditarTurno({
               placeholder="Opcional: cobertura forzada por evento crítico"
               maxLength={200}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="et-nota">Nota de relevo</Label>
+          </Campo>
+          <Campo etiqueta="Nota de relevo" htmlFor="et-nota">
             <Textarea
               id="et-nota"
               value={notaRelevo}
@@ -539,7 +527,7 @@ export function DialogEditarTurno({
               rows={3}
               maxLength={1000}
             />
-          </div>
+          </Campo>
           {pendienteOverride && (
             <div className="rounded-md border border-amber-300/60 bg-amber-50/40 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
               <p className="font-medium">{pendienteOverride.mensaje}</p>

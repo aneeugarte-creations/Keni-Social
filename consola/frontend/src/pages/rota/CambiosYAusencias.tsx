@@ -17,6 +17,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -613,6 +614,8 @@ export function FormularioNuevoSwap({
   const [miTurnoId, setMiTurnoId] = React.useState("");
   const [turnoDeseadoId, setTurnoDeseadoId] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
+  // El error solo se muestra tras un intento de solicitar (no mientras se rellena).
+  const [intentado, setIntentado] = React.useState(false);
 
   const miTurno = turnosMios.find((t) => t.id === miTurnoId);
   const turnoDeseado = turnosOtros.find((t) => t.id === turnoDeseadoId);
@@ -634,6 +637,7 @@ export function FormularioNuevoSwap({
       setMiTurnoId("");
       setTurnoDeseadoId("");
       setMotivo("");
+      setIntentado(false);
       onCreado?.();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -641,11 +645,17 @@ export function FormularioNuevoSwap({
 
   const cargando = semana1Q.isPending || semana2Q.isPending;
   const motivoExcedido = motivo.length > 500;
-  const puedeCrear =
-    miTurnoId !== "" &&
-    turnoDeseadoId !== "" &&
-    !motivoExcedido &&
-    !crear.isPending;
+  const errMiTurno = miTurnoId === "" ? "Elige tu turno." : null;
+  const errTurnoDeseado =
+    turnoDeseadoId === "" ? "Elige el turno con el que cambiar." : null;
+  const errMotivo = motivoExcedido ? "El motivo no puede pasar de 500 caracteres." : null;
+  const hayErrores = Boolean(errMiTurno || errTurnoDeseado || errMotivo);
+
+  const onCrear = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    crear.mutate();
+  };
 
   // Etiqueta de cada opcion: "Lun 8 jun · Mañana" o "Lun 8 jun · Mañana · un community manager"
   // segun si es opcion propia o de un compañero.
@@ -667,8 +677,7 @@ export function FormularioNuevoSwap({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Mi turno</Label>
+      <Campo etiqueta="Mi turno" error={intentado ? errMiTurno : null}>
         <Select value={miTurnoId} onValueChange={setMiTurnoId}>
           <SelectTrigger aria-label="Mi turno">
             <SelectValue placeholder="Elige uno de tus turnos" />
@@ -681,9 +690,8 @@ export function FormularioNuevoSwap({
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Turno deseado</Label>
+      </Campo>
+      <Campo etiqueta="Turno deseado" error={intentado ? errTurnoDeseado : null}>
         <Select value={turnoDeseadoId} onValueChange={setTurnoDeseadoId}>
           <SelectTrigger aria-label="Turno deseado">
             <SelectValue placeholder="Elige el turno con el que quieres cambiar" />
@@ -702,9 +710,8 @@ export function FormularioNuevoSwap({
             )}
           </SelectContent>
         </Select>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="swap-motivo">Motivo</Label>
+      </Campo>
+      <Campo etiqueta="Motivo" htmlFor="swap-motivo" error={errMotivo}>
         <Textarea
           id="swap-motivo"
           value={motivo}
@@ -712,13 +719,9 @@ export function FormularioNuevoSwap({
           placeholder="Opcional: cita médica, evento familiar, examen…"
           rows={2}
           maxLength={500}
+          aria-invalid={Boolean(errMotivo) || undefined}
         />
-        {motivoExcedido && (
-          <div className="text-xs text-destructive">
-            El motivo no puede pasar de 500 caracteres.
-          </div>
-        )}
-      </div>
+      </Campo>
       {miTurno && turnoDeseado && (
         // Cierra el bucle "¿qué estoy pidiendo?" antes de enviar, con el mismo lenguaje
         // de resultado que la tarjeta.
@@ -731,7 +734,7 @@ export function FormularioNuevoSwap({
         </p>
       )}
       <div className="flex justify-end">
-        <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
+        <Button variant="secondary" onClick={onCrear} disabled={crear.isPending}>
           {crear.isPending ? (
             <Spinner className="h-4 w-4" />
           ) : (
@@ -1043,8 +1046,7 @@ export function DialogAccionSwap({
             <DialogTitle>{meta.titulo}</DialogTitle>
             <DialogDescription>{meta.descripcion}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor={`resp-${swapId}-${accion}`}>Respuesta (opcional)</Label>
+          <Campo etiqueta="Respuesta (opcional)" htmlFor={`resp-${swapId}-${accion}`}>
             <Textarea
               id={`resp-${swapId}-${accion}`}
               value={respuesta}
@@ -1053,7 +1055,7 @@ export function DialogAccionSwap({
               rows={3}
               maxLength={500}
             />
-          </div>
+          </Campo>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setAbierto(false)}>
               Cancelar

@@ -10,9 +10,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 
@@ -53,8 +53,7 @@ export function SeccionCadenaAprobacion({ marcaActiva }: { marcaActiva: string |
         de programarse (cuatro ojos). Por defecto 2.
       </p>
       <div className="flex items-end gap-2">
-        <div className="space-y-1">
-          <Label htmlFor="cadena-likes">Likes para aprobar</Label>
+        <Campo etiqueta="Likes para aprobar" htmlFor="cadena-likes">
           <Input
             id="cadena-likes"
             type="number"
@@ -64,7 +63,7 @@ export function SeccionCadenaAprobacion({ marcaActiva }: { marcaActiva: string |
             onChange={(e) => setLikes(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
             disabled={guardar.isPending || catalogo.isPending}
           />
-        </div>
+        </Campo>
         <Button
           onClick={() => guardar.mutate(likes)}
           disabled={guardar.isPending || catalogo.isPending || likes === actual}

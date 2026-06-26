@@ -12,6 +12,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -289,6 +290,8 @@ function DialogoCrearWebhook({
   const [secreto, setSecreto] = React.useState("");
   const [formato, setFormato] = React.useState<FormatoWebhook>("slack");
   const [seleccion, setSeleccion] = React.useState<TipoEventoInterno[]>([]);
+  // El error solo se muestra tras un intento de crear (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const reset = () => {
     setNombre("");
@@ -296,6 +299,7 @@ function DialogoCrearWebhook({
     setSecreto("");
     setFormato("slack");
     setSeleccion([]);
+    setIntentado(false);
   };
 
   const crear = useMutation({
@@ -325,6 +329,15 @@ function DialogoCrearWebhook({
     );
   };
 
+  const errUrl = !url.trim() ? "La URL es obligatoria." : null;
+  const hayErrores = Boolean(errUrl);
+
+  const onCrear = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    crear.mutate();
+  };
+
   return (
     <Dialog open={abierto} onOpenChange={onAbierto}>
       <DialogContent>
@@ -336,26 +349,24 @@ function DialogoCrearWebhook({
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="wh-nombre">Nombre</Label>
+          <Campo etiqueta="Nombre" htmlFor="wh-nombre">
             <Input
               id="wh-nombre"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Canal de redes (Slack)"
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="wh-url">URL</Label>
+          </Campo>
+          <Campo etiqueta="URL" htmlFor="wh-url" error={intentado ? errUrl : null}>
             <Input
               id="wh-url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://hooks.slack.com/services/..."
+              aria-invalid={(intentado && Boolean(errUrl)) || undefined}
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Formato</Label>
+          </Campo>
+          <Campo etiqueta="Formato">
             <Select value={formato} onValueChange={(v) => setFormato(v as FormatoWebhook)}>
               <SelectTrigger>
                 <SelectValue />
@@ -368,12 +379,8 @@ function DialogoCrearWebhook({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Eventos</Label>
-            <p className="text-xs text-muted-foreground">
-              Opcional: déjalo en blanco para escuchar todos.
-            </p>
+          </Campo>
+          <Campo etiqueta="Eventos" ayuda="Opcional: déjalo en blanco para escuchar todos.">
             <div className="grid gap-2">
               {eventos.map((ev) => (
                 <Label key={ev} className="flex items-center gap-2 text-sm">
@@ -386,23 +393,19 @@ function DialogoCrearWebhook({
                 </Label>
               ))}
             </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="wh-secreto">Secreto (opcional)</Label>
+          </Campo>
+          <Campo etiqueta="Secreto (opcional)" htmlFor="wh-secreto">
             <Input
               id="wh-secreto"
               value={secreto}
               onChange={(e) => setSecreto(e.target.value)}
               placeholder="Para firmar cada entrega (X-Keni-Signature)"
             />
-          </div>
+          </Campo>
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={() => crear.mutate()}
-            disabled={crear.isPending || !url.trim()}
-          >
+          <Button onClick={onCrear} disabled={crear.isPending}>
             Crear webhook
           </Button>
         </DialogFooter>
