@@ -734,12 +734,36 @@ function indice(): Map<string, { nombre: string; pais: string; lat: number; lng:
   return m;
 }
 
+// Alias de ciudades cuyo nombre llega distinto al del diccionario (forma local vs comun en
+// ingles que usan las APIs sociales). Clave y valor van normalizados.
+const ALIAS_CIUDAD: Record<string, string> = {
+  "ciudad de mexico": "mexico city",
+  cdmx: "mexico city",
+  df: "mexico city",
+  "distrito federal": "mexico city",
+  "ciudad de guatemala": "guatemala city",
+  "ciudad de panama": "panama city",
+};
+
+// Busca una ciudad por su nombre normalizado (aplicando alias) en el indice.
+function buscaCiudad(clave: string): { nombre: string; pais: string; lat: number; lng: number }[] | undefined {
+  if (!clave) return undefined;
+  return indice().get(ALIAS_CIUDAD[clave] ?? clave);
+}
+
 // Centroide de una ciudad por nombre; si se da codigoPais prefiere ese pais. undefined si no hay match.
+// Las APIs sociales (Instagram/Metricool `audience_city`) entregan "Ciudad, Region" (a veces con
+// pais), asi que ademas del nombre completo se prueba cada segmento separado por coma y se toma el
+// primero que sea una ciudad conocida: tolera "Ciudad, Region", "Region, Ciudad" o "Ciudad, Region, Pais".
 export function centroideCiudad(nombre: string, codigoPais?: string): Centroide | undefined {
   if (!nombre) return undefined;
-  const candidatos = indice().get(normaliza(nombre));
-  if (!candidatos || candidatos.length === 0) return undefined;
+  const variantes = [nombre, ...nombre.split(",")].map((s) => normaliza(s)).filter(Boolean);
   const a2 = codigoPais ? aAlpha2(codigoPais) : undefined;
-  const elegido = (a2 && candidatos.find((c) => c.pais === a2)) || candidatos[0];
-  return { lat: elegido.lat, lng: elegido.lng, nombre: elegido.nombre };
+  for (const v of variantes) {
+    const candidatos = buscaCiudad(v);
+    if (!candidatos || candidatos.length === 0) continue;
+    const elegido = (a2 && candidatos.find((c) => c.pais === a2)) || candidatos[0];
+    return { lat: elegido.lat, lng: elegido.lng, nombre: elegido.nombre };
+  }
+  return undefined;
 }
