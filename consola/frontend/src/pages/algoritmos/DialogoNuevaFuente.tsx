@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { Campo } from "@/components/comunes/Campo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,6 +39,8 @@ export function DialogoNuevaFuente({
   const [url, setUrl] = React.useState("");
   const [plataforma, setPlataforma] = React.useState("general");
   const [tipo, setTipo] = React.useState("agregador");
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   React.useEffect(() => {
     if (abierto) {
@@ -46,8 +48,19 @@ export function DialogoNuevaFuente({
       setUrl("");
       setPlataforma("general");
       setTipo("agregador");
+      setIntentado(false);
     }
   }, [abierto]);
+
+  const errNombre = !nombre.trim() ? "El nombre es obligatorio." : null;
+  const errUrl = !url.trim() ? "La URL del feed es obligatoria." : null;
+  const hayErrores = Boolean(errNombre || errUrl);
+
+  const enviar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    onGuardar({ nombre, url, plataforma, tipo });
+  };
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
@@ -56,27 +69,26 @@ export function DialogoNuevaFuente({
           <DialogTitle>Nueva fuente de algoritmo</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="alg-nombre">Nombre</Label>
+          <Campo etiqueta="Nombre" htmlFor="alg-nombre" error={intentado ? errNombre : null}>
             <Input
               id="alg-nombre"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Meta Newsroom"
+              aria-invalid={(intentado && Boolean(errNombre)) || undefined}
             />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="alg-url">URL del feed</Label>
+          </Campo>
+          <Campo etiqueta="URL del feed" htmlFor="alg-url" error={intentado ? errUrl : null}>
             <Input
               id="alg-url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://about.fb.com/news/feed/"
+              aria-invalid={(intentado && Boolean(errUrl)) || undefined}
             />
-          </div>
+          </Campo>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label>Plataforma</Label>
+            <Campo etiqueta="Plataforma">
               <Select value={plataforma} onValueChange={setPlataforma}>
                 <SelectTrigger>
                   <SelectValue />
@@ -89,9 +101,8 @@ export function DialogoNuevaFuente({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1">
-              <Label>Tipo</Label>
+            </Campo>
+            <Campo etiqueta="Tipo">
               <Select value={tipo} onValueChange={setTipo}>
                 <SelectTrigger>
                   <SelectValue />
@@ -104,17 +115,14 @@ export function DialogoNuevaFuente({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Campo>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCerrar} disabled={guardando}>
             Cancelar
           </Button>
-          <Button
-            onClick={() => onGuardar({ nombre, url, plataforma, tipo })}
-            disabled={guardando || !nombre.trim() || !url.trim()}
-          >
+          <Button onClick={enviar} disabled={guardando}>
             Añadir fuente
           </Button>
         </DialogFooter>

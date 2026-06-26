@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -64,6 +64,8 @@ export function DialogoMarca({
   const [idMetricas, setIdMetricas] = React.useState("");
   const [tipo, setTipo] = React.useState<TipoMarca>("noticias");
   const [etiquetaInvestigacion, setEtiquetaInvestigacion] = React.useState("Noticias");
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   React.useEffect(() => {
     if (abierto) {
@@ -72,6 +74,7 @@ export function DialogoMarca({
       setIdMetricas(inicial?.id_metricas ?? "");
       setTipo(inicial?.tipo ?? "noticias");
       setEtiquetaInvestigacion(inicial?.etiqueta_investigacion || "Noticias");
+      setIntentado(false);
     }
   }, [abierto, inicial]);
 
@@ -130,7 +133,15 @@ export function DialogoMarca({
   };
 
   const ocupado = crear.isPending || editar.isPending || borrar.isPending;
-  const valido = etiqueta.trim() !== "";
+  const errNombre = etiqueta.trim() === "" ? "El nombre es obligatorio." : null;
+  const hayErrores = Boolean(errNombre);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    if (esEditar) editar.mutate();
+    else crear.mutate();
+  };
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -144,25 +155,23 @@ export function DialogoMarca({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="marca-etiqueta">Nombre</Label>
+          <Campo etiqueta="Nombre" htmlFor="marca-etiqueta" error={intentado ? errNombre : null}>
             <Input
               id="marca-etiqueta"
               value={etiqueta}
               onChange={(e) => setEtiqueta(e.target.value)}
               placeholder="Ej. Claro Sports"
               disabled={ocupado}
+              aria-invalid={(intentado && Boolean(errNombre)) || undefined}
               autoFocus
             />
-          </div>
+          </Campo>
           {esEditar ? (
-            <div className="space-y-1">
-              <Label>id</Label>
+            <Campo etiqueta="id">
               <Input value={inicial?.id ?? ""} disabled />
-            </div>
+            </Campo>
           ) : (
-            <div className="space-y-1">
-              <Label htmlFor="marca-id">id (opcional)</Label>
+            <Campo etiqueta="id (opcional)" htmlFor="marca-id">
               <Input
                 id="marca-id"
                 value={id}
@@ -170,10 +179,12 @@ export function DialogoMarca({
                 placeholder="se genera del nombre (claro-sports)"
                 disabled={ocupado}
               />
-            </div>
+            </Campo>
           )}
-          <div className="space-y-1">
-            <Label htmlFor="marca-id-metricas">id de métricas {esEditar ? "" : "(opcional)"}</Label>
+          <Campo
+            etiqueta={<>id de métricas {esEditar ? "" : "(opcional)"}</>}
+            htmlFor="marca-id-metricas"
+          >
             <Input
               id="marca-id-metricas"
               value={idMetricas}
@@ -181,9 +192,15 @@ export function DialogoMarca({
               placeholder="se genera del id (claro_sports)"
               disabled={ocupado}
             />
-          </div>
-          <div className="space-y-1">
-            <Label>Tipo</Label>
+          </Campo>
+          <Campo
+            etiqueta="Tipo"
+            ayuda={
+              tipo === "propio"
+                ? "Contenido propio: se salta la cadena de investigación y no tiene panel de Noticias."
+                : "Noticias: pasa por la investigación (recolección, clasificación, Mesa de Noticias)."
+            }
+          >
             <div className="flex gap-2">
               {(
                 [
@@ -203,15 +220,13 @@ export function DialogoMarca({
                 </Button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {tipo === "propio"
-                ? "Contenido propio: se salta la cadena de investigación y no tiene panel de Noticias."
-                : "Noticias: pasa por la investigación (recolección, clasificación, Mesa de Noticias)."}
-            </p>
-          </div>
+          </Campo>
           {tipo === "noticias" && (
-            <div className="space-y-1">
-              <Label htmlFor="marca-etiqueta-investigacion">Nombre del panel</Label>
+            <Campo
+              etiqueta="Nombre del panel"
+              htmlFor="marca-etiqueta-investigacion"
+              ayuda="Cómo se llama su panel de investigación (p.ej. “Curiosidades”, “Novedades”). Por defecto “Noticias”."
+            >
               <Input
                 id="marca-etiqueta-investigacion"
                 value={etiquetaInvestigacion}
@@ -219,11 +234,7 @@ export function DialogoMarca({
                 placeholder="Noticias"
                 disabled={ocupado}
               />
-              <p className="text-xs text-muted-foreground">
-                Cómo se llama su panel de investigación (p.ej. “Curiosidades”, “Novedades”). Por
-                defecto “Noticias”.
-              </p>
-            </div>
+            </Campo>
           )}
         </div>
 
@@ -245,7 +256,7 @@ export function DialogoMarca({
             <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
               Cancelar
             </Button>
-            <Button onClick={() => (esEditar ? editar.mutate() : crear.mutate())} disabled={ocupado || !valido}>
+            <Button onClick={onGuardar} disabled={ocupado}>
               {crear.isPending || editar.isPending ? <Spinner className="h-4 w-4" /> : null}
               {esEditar ? "Guardar" : "Crear"}
             </Button>

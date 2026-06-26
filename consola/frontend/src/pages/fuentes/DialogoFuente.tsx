@@ -3,6 +3,7 @@ import { Plus, Rss } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -108,6 +109,8 @@ function FormularioFuente({
   const lineas = lineasQuery.data?.etiquetas ?? [];
   // Relevancia. Alta nueva: "" = el back decide por el medio; al editar, la del feed.
   const [tier, setTier] = React.useState(fuente?.tier ?? "");
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -147,23 +150,29 @@ function FormularioFuente({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeGuardar =
-    nombre.trim().length > 0 && url.trim().length > 0 && !guardar.isPending;
+  const errNombre = !nombre.trim() ? "El nombre es obligatorio." : null;
+  const errUrl = !url.trim() ? "La URL del feed es obligatoria." : null;
+  const hayErrores = Boolean(errNombre || errUrl);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="fuente-nombre">Nombre</Label>
+      <Campo etiqueta="Nombre" htmlFor="fuente-nombre" error={intentado ? errNombre : null}>
         <Input
           id="fuente-nombre"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           placeholder="Ej. UnoTV Deportes"
           maxLength={120}
+          aria-invalid={(intentado && Boolean(errNombre)) || undefined}
         />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="fuente-url">URL del feed</Label>
+      </Campo>
+      <Campo etiqueta="URL del feed" htmlFor="fuente-url" error={intentado ? errUrl : null}>
         <Input
           id="fuente-url"
           value={url}
@@ -171,15 +180,14 @@ function FormularioFuente({
           placeholder="https://ejemplo.com/rss.xml"
           type="url"
           inputMode="url"
+          aria-invalid={(intentado && Boolean(errUrl)) || undefined}
         />
-      </div>
+      </Campo>
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Marca</Label>
+        <Campo etiqueta="Marca">
           <p className="text-sm text-muted-foreground pt-1.5">{nombreMarcaFuente}</p>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="fuente-linea">Línea</Label>
+        </Campo>
+        <Campo etiqueta="Línea" htmlFor="fuente-linea">
           <Select
             value={lineaId || "__sin__"}
             onValueChange={(v) => setLineaId(v === "__sin__" ? "" : v)}
@@ -198,10 +206,9 @@ function FormularioFuente({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </Campo>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="fuente-relevancia">Relevancia</Label>
+      <Campo etiqueta="Relevancia" htmlFor="fuente-relevancia">
         <Select value={tier} onValueChange={(v) => setTier(v)}>
           <SelectTrigger
             id="fuente-relevancia"
@@ -218,7 +225,7 @@ function FormularioFuente({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Campo>
       <div className="flex items-center gap-2">
         <Checkbox
           id="fuente-activo"
@@ -251,7 +258,7 @@ function FormularioFuente({
         <Button variant="outline" size="sm" onClick={onListo} disabled={guardar.isPending}>
           Cancelar
         </Button>
-        <Button size="sm" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+        <Button size="sm" onClick={onGuardar} disabled={guardar.isPending}>
           {guardar.isPending ? (
             <Spinner className="h-4 w-4" />
           ) : (

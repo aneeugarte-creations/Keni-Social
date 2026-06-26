@@ -3,6 +3,7 @@ import { CalendarDays, Check, Link2, ListChecks, Pencil, Sparkles, Upload } from
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -82,6 +83,8 @@ export function DialogoCrearTarea({
   const [pegado, setPegado] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [propuestaId, setPropuestaId] = React.useState<string | null>(null);
+  // El error solo se muestra tras un intento de crear (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const usuarios = catalogos?.usuarios ?? [];
   const prioridades = catalogos?.prioridades ?? ["alta", "media", "baja"];
@@ -111,6 +114,7 @@ export function DialogoCrearTarea({
     setArchivo(null);
     setArrastrando(false);
     setPropuestaId(null);
+    setIntentado(false);
   };
   const cerrar = () => {
     reiniciar();
@@ -200,14 +204,25 @@ export function DialogoCrearTarea({
     modo === "evento" && recurrencia !== null && recurrencia.dias_semana.length === 0;
   const incompletoManual =
     !titulo.trim() || (modo === "evento" && !fecha) || recurrenciaIncompleta;
+  const errTitulo = !titulo.trim()
+    ? modo === "evento"
+      ? "Escribe qué evento."
+      : "Escribe qué hay que hacer."
+    : null;
+  const errFecha = modo === "evento" && !fecha ? "Elige el día." : null;
   const nadaQueAnalizar = !archivo && !pegado.trim();
   const enRevision = propuestaId !== null;
+
+  const onCrear = () => {
+    setIntentado(true);
+    if (incompletoManual) return;
+    crear.mutate();
+  };
 
   // Selectores reutilizados: en evento la prioridad cabalga junto a Día/Hora (una fila
   // menos = el diálogo entra sin scroll); en tarea va junto a la fecha.
   const campoPrioridad = (
-    <div className="space-y-1.5">
-      <Label>Prioridad</Label>
+    <Campo etiqueta="Prioridad">
       <Select value={prioridad} onValueChange={setPrioridad}>
         <SelectTrigger>
           <SelectValue />
@@ -220,11 +235,10 @@ export function DialogoCrearTarea({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Campo>
   );
   const campoResponsable = (
-    <div className="space-y-1.5">
-      <Label>Asignar a</Label>
+    <Campo etiqueta="Asignar a">
       <Select value={responsable} onValueChange={setResponsable}>
         <SelectTrigger>
           <SelectValue />
@@ -238,7 +252,7 @@ export function DialogoCrearTarea({
           ))}
         </SelectContent>
       </Select>
-    </div>
+    </Campo>
   );
 
   return (
@@ -444,10 +458,11 @@ export function DialogoCrearTarea({
                 <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                 Escríbelo a mano
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tarea-titulo">
-                  {modo === "evento" ? "Qué evento" : "Qué hay que hacer"}
-                </Label>
+              <Campo
+                etiqueta={modo === "evento" ? "Qué evento" : "Qué hay que hacer"}
+                htmlFor="tarea-titulo"
+                error={intentado ? errTitulo : null}
+              >
                 <Input
                   id="tarea-titulo"
                   value={titulo}
@@ -457,29 +472,29 @@ export function DialogoCrearTarea({
                       ? "Final de la Copa, un concierto, una rueda de prensa…"
                       : "Editar el clip del gol, subir fotos del entreno…"
                   }
+                  aria-invalid={(intentado && Boolean(errTitulo)) || undefined}
                 />
-              </div>
+              </Campo>
 
               {modo === "evento" ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tarea-fecha">Día</Label>
+                  <Campo etiqueta="Día" htmlFor="tarea-fecha" error={intentado ? errFecha : null}>
                     <Input
                       id="tarea-fecha"
                       type="date"
                       value={fecha}
                       onChange={(e) => setFecha(e.target.value)}
+                      aria-invalid={(intentado && Boolean(errFecha)) || undefined}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tarea-hora">Hora (CDMX)</Label>
+                  </Campo>
+                  <Campo etiqueta="Hora (CDMX)" htmlFor="tarea-hora">
                     <Input
                       id="tarea-hora"
                       type="time"
                       value={hora}
                       onChange={(e) => setHora(e.target.value)}
                     />
-                  </div>
+                  </Campo>
                   {campoPrioridad}
                 </div>
               ) : (
@@ -487,24 +502,23 @@ export function DialogoCrearTarea({
                 // en vez de una fila aparte, para que el diálogo entre sin scroll (igual altura
                 // que Evento). Etiquetas cortas → los campos alinean.
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="tarea-fecha">Para cuándo</Label>
+                  <Campo etiqueta="Para cuándo" htmlFor="tarea-fecha">
                     <Input
                       id="tarea-fecha"
                       type="date"
                       value={fecha}
                       onChange={(e) => setFecha(e.target.value)}
                     />
-                  </div>
+                  </Campo>
                   {campoPrioridad}
                   {campoResponsable}
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="tarea-desc">
-                  {modo === "evento" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
-                </Label>
+              <Campo
+                etiqueta={modo === "evento" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
+                htmlFor="tarea-desc"
+              >
                 <Textarea
                   id="tarea-desc"
                   value={contenido}
@@ -516,7 +530,7 @@ export function DialogoCrearTarea({
                   }
                   rows={2}
                 />
-              </div>
+              </Campo>
 
               {modo === "evento" && (
                 <SelectorRecurrencia fechaBase={fecha} onChange={setRecurrencia} />
@@ -530,8 +544,8 @@ export function DialogoCrearTarea({
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => crear.mutate()}
-                disabled={crear.isPending || incompletoManual}
+                onClick={onCrear}
+                disabled={crear.isPending}
               >
                 {crear.isPending
                   ? "Añadiendo…"

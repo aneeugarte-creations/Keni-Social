@@ -21,8 +21,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AvisoZonaOperativa } from "@/components/comunes/AvisoZonaOperativa";
+import { Campo } from "@/components/comunes/Campo";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import type { Pieza } from "@/types";
 
@@ -40,16 +40,21 @@ export function DialogoReprogramar({
   onCerrar: () => void;
 }) {
   const [valor, setValor] = React.useState("");
+  // El error solo se muestra tras un intento de reprogramar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Al abrir, prellena el picker con la hora actual de la pieza (CDMX).
   React.useEffect(() => {
     if (!pieza) return;
     setValor(isoADatetimeLocal(pieza.fecha_programada));
+    setIntentado(false);
   }, [pieza]);
 
   const iso = datetimeLocalAIso(valor);
+  const errFecha = !iso ? "Elige una fecha y hora válidas." : null;
 
   function confirmar() {
+    setIntentado(true);
     if (!iso) return;
     onConfirmar(iso);
   }
@@ -69,22 +74,26 @@ export function DialogoReprogramar({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="reprog-fecha">Fecha y hora (CDMX)</Label>
+        <Campo
+          etiqueta="Fecha y hora (CDMX)"
+          htmlFor="reprog-fecha"
+          error={intentado ? errFecha : null}
+        >
           <Input
             id="reprog-fecha"
             type="datetime-local"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
+            aria-invalid={(intentado && Boolean(errFecha)) || undefined}
           />
           <AvisoZonaOperativa que="La hora de publicación" />
-        </div>
+        </Campo>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
             Cancelar
           </Button>
-          <Button onClick={confirmar} disabled={ocupado || !iso}>
+          <Button onClick={confirmar} disabled={ocupado}>
             {ocupado ? (
               <Spinner className="h-4 w-4" />
             ) : (

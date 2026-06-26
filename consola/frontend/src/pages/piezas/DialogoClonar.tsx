@@ -11,6 +11,7 @@ import { Copy } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { api, mensajeError } from "@/lib/api";
 import type { Pieza } from "@/types";
@@ -36,6 +36,8 @@ export function DialogoClonar({
 }) {
   const queryClient = useQueryClient();
   const [red, setRed] = React.useState("");
+  // El error solo se muestra tras un intento de clonar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Catálogo de redes desde la API (misma clave que el resto de superficies: se comparte caché).
   const opcionesQuery = useQuery({
@@ -48,6 +50,7 @@ export function DialogoClonar({
 
   React.useEffect(() => {
     setRed("");
+    setIntentado(false);
   }, [pieza]);
 
   const clonar = useMutation({
@@ -64,6 +67,15 @@ export function DialogoClonar({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const errRed = !red ? "Elige una red destino." : null;
+  const hayErrores = Boolean(errRed);
+
+  const onClonar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    clonar.mutate();
+  };
+
   return (
     <Dialog open={pieza !== null} onOpenChange={(o) => !o && onCerrar()}>
       <DialogContent>
@@ -74,8 +86,7 @@ export function DialogoClonar({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="clonar-red">Red destino</Label>
+        <Campo etiqueta="Red destino" htmlFor="clonar-red" error={intentado ? errRed : null}>
           <SelectorRed
             id="clonar-red"
             redes={redes}
@@ -85,13 +96,13 @@ export function DialogoClonar({
             ariaLabel="Red destino"
             className="w-full"
           />
-        </div>
+        </Campo>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCerrar} disabled={clonar.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => clonar.mutate()} disabled={clonar.isPending || !red}>
+          <Button onClick={onClonar} disabled={clonar.isPending}>
             {clonar.isPending ? (
               <Spinner className="h-4 w-4" />
             ) : (
