@@ -14,12 +14,12 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -57,6 +57,8 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
     ok: boolean;
     mensaje: string;
   } | null>(null);
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Sincroniza user_id/blog_id no secretos con lo que reporta el servidor.
   React.useEffect(() => {
@@ -98,6 +100,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
       setUserToken(""); // El token nunca se conserva en cliente.
       setPerfiles([]); // Las marcas descubiertas dependían del token recién borrado.
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -123,6 +126,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
       setUserToken("");
       setPerfiles([]);
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -147,7 +151,16 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
   // Para buscar marcas basta con token + userId.
   const puedeBuscar = userToken.trim() !== "" && userId.trim() !== "";
   // Para guardar hacen falta los tres campos (token + user_id + blog_id).
-  const puedeGuardar = puedeBuscar && blogId.trim() !== "";
+  const errToken = userToken.trim() === "" ? "Pega el token." : null;
+  const errUserId = userId.trim() === "" ? "Indica el User ID." : null;
+  const errBlogId = blogId.trim() === "" ? "Elige una marca." : null;
+  const hayErrores = Boolean(errToken || errUserId || errBlogId);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <div className="space-y-3 rounded-lg border border-border p-3">
@@ -160,10 +173,11 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={idTok} className="text-xs text-muted-foreground">
-          Token de Metricool
-        </Label>
+      <Campo
+        etiqueta="Token de Metricool"
+        htmlFor={idTok}
+        error={intentado ? errToken : null}
+      >
         <Input
           id={idTok}
           type="password"
@@ -177,13 +191,11 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             marca.conectado ? "•••••••••• (escribe para reemplazar)" : "Pega el token aquí"
           }
           disabled={ocupado}
+          aria-invalid={(intentado && Boolean(errToken)) || undefined}
         />
-      </div>
+      </Campo>
 
-      <div className="space-y-2">
-        <Label htmlFor={idUid} className="text-xs text-muted-foreground">
-          User ID
-        </Label>
+      <Campo etiqueta="User ID" htmlFor={idUid} error={intentado ? errUserId : null}>
         <div className="flex gap-2">
           <Input
             id={idUid}
@@ -192,6 +204,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             onChange={(e) => setUserId(e.target.value)}
             placeholder="userId (de Metricool)"
             disabled={ocupado}
+            aria-invalid={(intentado && Boolean(errUserId)) || undefined}
           />
           <Button
             size="sm"
@@ -209,14 +222,11 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
             {buscarMarcas.isPending ? "Buscando…" : "Buscar marcas"}
           </Button>
         </div>
-      </div>
+      </Campo>
 
       {/* Marca de Metricool: se elige del desplegable que devuelve «Buscar marcas»;
           el blogId se rellena solo. Antes de buscar, muestra el blogId ya guardado. */}
-      <div className="space-y-2">
-        <Label htmlFor={idMarca} className="text-xs text-muted-foreground">
-          Marca de Metricool
-        </Label>
+      <Campo etiqueta="Marca de Metricool" htmlFor={idMarca} error={intentado ? errBlogId : null}>
         {perfiles.length > 0 ? (
           <Select value={blogId} onValueChange={setBlogId} disabled={ocupado}>
             <SelectTrigger id={idMarca}>
@@ -237,7 +247,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
               : "Pulsa «Buscar marcas» para elegir la marca de Metricool."}
           </p>
         )}
-      </div>
+      </Campo>
 
       {resultadoPrueba && (
         <p
@@ -256,7 +266,7 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
+        <Button size="sm" onClick={onGuardar} disabled={ocupado}>
           {guardar.isPending ? (
             <Spinner className="h-4 w-4" />
           ) : (

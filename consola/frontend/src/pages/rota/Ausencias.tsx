@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -22,7 +23,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -65,6 +65,8 @@ export function NuevaAusencia({
   const [desde, setDesde] = React.useState("");
   const [hasta, setHasta] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
+  // El error solo se muestra tras un intento de registrar (no mientras se rellena).
+  const [intentado, setIntentado] = React.useState(false);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -79,6 +81,7 @@ export function NuevaAusencia({
       setDesde("");
       setHasta("");
       setMotivo("");
+      setIntentado(false);
       onCreada();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -86,15 +89,22 @@ export function NuevaAusencia({
 
   // Las fechas ISO se comparan como string (AAAA-MM-DD = orden cronológico).
   const rangoInvalido = desde !== "" && hasta !== "" && hasta < desde;
-  const puedeCrear =
-    miembroId !== "" && desde !== "" && hasta !== "" && !rangoInvalido && !crear.isPending;
+  const errMiembro = miembroId === "" ? "Elige a una persona." : null;
+  const errDesde = desde === "" ? "Indica la fecha de inicio." : null;
+  const errHasta = hasta === "" ? "Indica la fecha de fin." : null;
+  const hayErrores = Boolean(errMiembro || errDesde || errHasta || rangoInvalido);
+
+  const onCrear = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    crear.mutate();
+  };
 
   // Sin wrapper Card: lo aporta el caller (CambiosYAusencias monta el formulario
   // colapsable dentro de su propio recuadro y elige el titulo segun el tipo).
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label>Persona</Label>
+      <Campo etiqueta="Persona" error={intentado ? errMiembro : null}>
         {esAdmin ? (
           <Select value={miembroId} onValueChange={setMiembroId}>
             <SelectTrigger aria-label="Persona">
@@ -112,9 +122,8 @@ export function NuevaAusencia({
           // No-admin: solo su propia ausencia. Campo bloqueado a su nombre.
           <Input value={equipo.find((m) => m.id === miId)?.nombre ?? "Tú"} disabled readOnly />
         )}
-      </div>
-      <div className="space-y-1.5">
-        <Label>Tipo</Label>
+      </Campo>
+      <Campo etiqueta="Tipo">
         <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
           <SelectTrigger aria-label="Tipo de ausencia">
             <SelectValue />
@@ -127,24 +136,33 @@ export function NuevaAusencia({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Campo>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="au-desde">Desde</Label>
-          <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="au-hasta">Hasta</Label>
-          <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        </div>
+        <Campo etiqueta="Desde" htmlFor="au-desde" error={intentado ? errDesde : null}>
+          <Input
+            id="au-desde"
+            type="date"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            aria-invalid={(intentado && Boolean(errDesde)) || undefined}
+          />
+        </Campo>
+        <Campo etiqueta="Hasta" htmlFor="au-hasta" error={intentado ? errHasta : null}>
+          <Input
+            id="au-hasta"
+            type="date"
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            aria-invalid={(intentado && Boolean(errHasta)) || undefined}
+          />
+        </Campo>
       </div>
       {rangoInvalido && (
         <p className="text-xs text-destructive">
           La fecha de fin no puede ser anterior a la de inicio.
         </p>
       )}
-      <div className="space-y-1.5">
-        <Label htmlFor="au-motivo">Motivo</Label>
+      <Campo etiqueta="Motivo" htmlFor="au-motivo">
         <Input
           id="au-motivo"
           value={motivo}
@@ -152,9 +170,9 @@ export function NuevaAusencia({
           placeholder="Opcional: vacaciones, evento, etc."
           maxLength={200}
         />
-      </div>
+      </Campo>
       <div className="flex justify-end">
-        <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
+        <Button variant="secondary" onClick={onCrear} disabled={crear.isPending}>
           {crear.isPending ? (
             <Spinner className="h-4 w-4" />
           ) : (
@@ -283,6 +301,8 @@ export function DialogoEditarAusencia({
   const [desde, setDesde] = React.useState(ausencia.desde);
   const [hasta, setHasta] = React.useState(ausencia.hasta);
   const [motivo, setMotivo] = React.useState(ausencia.motivo);
+  // El error solo se muestra tras un intento de guardar (no mientras se edita).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Al (re)abrir, repuebla los campos con los valores vigentes de la ausencia.
   React.useEffect(() => {
@@ -291,6 +311,7 @@ export function DialogoEditarAusencia({
       setDesde(ausencia.desde);
       setHasta(ausencia.hasta);
       setMotivo(ausencia.motivo);
+      setIntentado(false);
     }
   }, [abierto, ausencia]);
 
@@ -310,7 +331,15 @@ export function DialogoEditarAusencia({
   });
 
   const rangoInvalido = desde !== "" && hasta !== "" && hasta < desde;
-  const puedeGuardar = desde !== "" && hasta !== "" && !rangoInvalido && !guardar.isPending;
+  const errDesde = desde === "" ? "Indica la fecha de inicio." : null;
+  const errHasta = hasta === "" ? "Indica la fecha de fin." : null;
+  const hayErrores = Boolean(errDesde || errHasta || rangoInvalido);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -319,12 +348,10 @@ export function DialogoEditarAusencia({
           <DialogTitle>Editar ausencia</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Persona</Label>
+          <Campo etiqueta="Persona">
             <Input value={ausencia.miembro_nombre || "—"} disabled readOnly />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Tipo</Label>
+          </Campo>
+          <Campo etiqueta="Tipo">
             <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
               <SelectTrigger aria-label="Tipo de ausencia">
                 <SelectValue />
@@ -337,34 +364,33 @@ export function DialogoEditarAusencia({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Campo>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="au-edit-desde">Desde</Label>
+            <Campo etiqueta="Desde" htmlFor="au-edit-desde" error={intentado ? errDesde : null}>
               <Input
                 id="au-edit-desde"
                 type="date"
                 value={desde}
                 onChange={(e) => setDesde(e.target.value)}
+                aria-invalid={(intentado && Boolean(errDesde)) || undefined}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="au-edit-hasta">Hasta</Label>
+            </Campo>
+            <Campo etiqueta="Hasta" htmlFor="au-edit-hasta" error={intentado ? errHasta : null}>
               <Input
                 id="au-edit-hasta"
                 type="date"
                 value={hasta}
                 onChange={(e) => setHasta(e.target.value)}
+                aria-invalid={(intentado && Boolean(errHasta)) || undefined}
               />
-            </div>
+            </Campo>
           </div>
           {rangoInvalido && (
             <p className="text-xs text-destructive">
               La fecha de fin no puede ser anterior a la de inicio.
             </p>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="au-edit-motivo">Motivo</Label>
+          <Campo etiqueta="Motivo" htmlFor="au-edit-motivo">
             <Input
               id="au-edit-motivo"
               value={motivo}
@@ -372,13 +398,13 @@ export function DialogoEditarAusencia({
               placeholder="Opcional: vacaciones, evento, etc."
               maxLength={200}
             />
-          </div>
+          </Campo>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button variant="secondary" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          <Button variant="secondary" onClick={onGuardar} disabled={guardar.isPending}>
             {guardar.isPending && <Spinner className="h-4 w-4" />}
             Guardar
           </Button>

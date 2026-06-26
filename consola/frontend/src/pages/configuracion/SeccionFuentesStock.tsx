@@ -4,11 +4,11 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -46,6 +46,8 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
 
   const configurado = proveedor.configurado ?? false;
   const id = `stock-${proveedor.proveedor}`;
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: CLAVE_FUENTES_STOCK });
 
@@ -55,6 +57,7 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
       toast.success(res.mensaje || `Clave de ${proveedor.nombre} guardada.`);
       setApiKey(""); // La clave nunca se conserva en cliente.
       setResultadoPrueba(null);
+      setIntentado(false);
       void invalidar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -79,6 +82,7 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
       toast.success(res.mensaje || `Clave de ${proveedor.nombre} borrada.`);
       setApiKey("");
       setResultadoPrueba(null);
+      setIntentado(false);
       void invalidar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -96,29 +100,42 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
   };
 
   const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
-  const puedeGuardar = apiKey.trim() !== "";
+  const errKey = apiKey.trim() === "" ? "Pega la API key." : null;
+  const hayErrores = Boolean(errKey);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={id} className="text-xs font-medium">
-          {proveedor.nombre}
-        </Label>
-        {configurado ? (
-          <Badge variant="ok">Configurada{proveedor.pista ? ` ${proveedor.pista}` : ""}</Badge>
-        ) : (
-          <Badge variant="secondary">Sin configurar</Badge>
-        )}
-      </div>
-      <Input
-        id={id}
-        type="password"
-        autoComplete="off"
-        value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
-        placeholder={configurado ? "•••••••••• (escribe para reemplazar)" : "Pega la API key aquí"}
-        disabled={ocupado}
-      />
+      <Campo
+        etiqueta={
+          <span className="flex w-full items-center justify-between gap-3">
+            {proveedor.nombre}
+            {configurado ? (
+              <Badge variant="ok">Configurada{proveedor.pista ? ` ${proveedor.pista}` : ""}</Badge>
+            ) : (
+              <Badge variant="secondary">Sin configurar</Badge>
+            )}
+          </span>
+        }
+        htmlFor={id}
+        error={intentado ? errKey : null}
+      >
+        <Input
+          id={id}
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={configurado ? "•••••••••• (escribe para reemplazar)" : "Pega la API key aquí"}
+          disabled={ocupado}
+          aria-invalid={(intentado && Boolean(errKey)) || undefined}
+        />
+      </Campo>
 
       {resultadoPrueba && (
         <p
@@ -137,7 +154,7 @@ function FilaClaveStock({ proveedor }: { proveedor: ProveedorStock }) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
+        <Button size="sm" onClick={onGuardar} disabled={ocupado}>
           {guardar.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
           {guardar.isPending ? "Guardando…" : configurado ? "Reemplazar" : "Guardar"}
         </Button>

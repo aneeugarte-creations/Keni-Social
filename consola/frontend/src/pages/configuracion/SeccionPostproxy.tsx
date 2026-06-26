@@ -3,11 +3,11 @@ import { Check, Info, Save, ShieldCheck, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -39,6 +39,8 @@ function SeccionPostproxyAdmin() {
   const [resultadoPrueba, setResultadoPrueba] = React.useState<{ ok: boolean; mensaje: string } | null>(
     null,
   );
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const { data } = useQuery({
     queryKey: CLAVE_POSTPROXY,
@@ -51,6 +53,7 @@ function SeccionPostproxyAdmin() {
       toast.success(res.mensaje || "API key de Postproxy guardada.");
       setApiKey(""); // La clave nunca se conserva en cliente.
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_POSTPROXY });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -75,6 +78,7 @@ function SeccionPostproxyAdmin() {
       toast.success(res?.mensaje ?? "Conexión de Postproxy eliminada.");
       setApiKey("");
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_POSTPROXY });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -94,7 +98,14 @@ function SeccionPostproxyAdmin() {
 
   const configurado = data?.configurado ?? false;
   const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
-  const puedeGuardar = apiKey.trim() !== "";
+  const errKey = apiKey.trim() === "" ? "Pega la API key." : null;
+  const hayErrores = Boolean(errKey);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
 
   return (
     <SeccionColapsable
@@ -112,29 +123,35 @@ function SeccionPostproxyAdmin() {
 
       {/* API key GLOBAL (write-only): solo se envía; del servidor llega el estado + una pista. */}
       <div className="space-y-2 rounded-lg border border-border p-3">
-        <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="pp-apikey" className="text-sm font-medium">
-            API key de Postproxy
-          </Label>
-          {configurado ? (
-            <Badge variant="ok">Configurada</Badge>
-          ) : (
-            <Badge variant="secondary">Sin configurar</Badge>
-          )}
-        </div>
-        <Input
-          id="pp-apikey"
-          type="password"
-          autoComplete="off"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={
-            configurado
-              ? `•••••••••• ${data?.pista ? `(${data.pista})` : ""} — escribe para reemplazar`
-              : "Pega la API key aquí"
+        <Campo
+          etiqueta={
+            <span className="flex w-full items-center justify-between gap-3">
+              API key de Postproxy
+              {configurado ? (
+                <Badge variant="ok">Configurada</Badge>
+              ) : (
+                <Badge variant="secondary">Sin configurar</Badge>
+              )}
+            </span>
           }
-          disabled={ocupado}
-        />
+          htmlFor="pp-apikey"
+          error={intentado ? errKey : null}
+        >
+          <Input
+            id="pp-apikey"
+            type="password"
+            autoComplete="off"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={
+              configurado
+                ? `•••••••••• ${data?.pista ? `(${data.pista})` : ""} — escribe para reemplazar`
+                : "Pega la API key aquí"
+            }
+            disabled={ocupado}
+            aria-invalid={(intentado && Boolean(errKey)) || undefined}
+          />
+        </Campo>
 
         {resultadoPrueba && (
           <p
@@ -153,7 +170,7 @@ function SeccionPostproxyAdmin() {
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
+          <Button size="sm" onClick={onGuardar} disabled={ocupado}>
             {guardar.isPending ? (
               <Spinner className="h-4 w-4" />
             ) : (

@@ -14,12 +14,12 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { Campo } from "@/components/comunes/Campo";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -64,6 +64,8 @@ function FilaGoogleAnalytics({
     ok: boolean;
     mensaje: string;
   } | null>(null);
+  // El error solo se muestra tras un intento de guardar (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   // Sincroniza el id de propiedad con lo que reporta el servidor.
   React.useEffect(() => {
@@ -76,6 +78,7 @@ function FilaGoogleAnalytics({
     onSuccess: (res) => {
       toast.success(res.mensaje || `${marca.etiqueta} conectada.`);
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_GOOGLE_ANALYTICS });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -100,6 +103,7 @@ function FilaGoogleAnalytics({
     onSuccess: (res) => {
       toast.success(res?.mensaje ?? `${marca.etiqueta} desconectada.`);
       setResultadoPrueba(null);
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_GOOGLE_ANALYTICS });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -119,7 +123,14 @@ function FilaGoogleAnalytics({
 
   const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
   const idProp = `ga-prop-${marca.marca}`;
-  const puedeGuardar = propertyId.trim() !== "";
+  const errProp = propertyId.trim() === "" ? "Indica la propiedad." : null;
+  const hayErrores = Boolean(errProp);
+
+  const onGuardar = () => {
+    setIntentado(true);
+    if (hayErrores) return;
+    guardar.mutate();
+  };
   // El desplegable solo se usa con la app conectada y la lista de propiedades cargada.
   const usarDesplegable = conectado && !propiedadesError && propiedades.length > 0;
 
@@ -134,10 +145,11 @@ function FilaGoogleAnalytics({
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor={idProp} className="text-xs text-muted-foreground">
-          Propiedad de Google Analytics
-        </Label>
+      <Campo
+        etiqueta="Propiedad de Google Analytics"
+        htmlFor={idProp}
+        error={intentado ? errProp : null}
+      >
         {usarDesplegable ? (
           <Select value={propertyId} onValueChange={setPropertyId} disabled={ocupado}>
             <SelectTrigger id={idProp}>
@@ -159,9 +171,10 @@ function FilaGoogleAnalytics({
             onChange={(e) => setPropertyId(e.target.value)}
             placeholder="ID de la propiedad (numérico)"
             disabled={ocupado}
+            aria-invalid={(intentado && Boolean(errProp)) || undefined}
           />
         )}
-      </div>
+      </Campo>
 
       {resultadoPrueba && (
         <p
@@ -180,7 +193,7 @@ function FilaGoogleAnalytics({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
+        <Button size="sm" onClick={onGuardar} disabled={ocupado}>
           {guardar.isPending ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
           {guardar.isPending ? "Guardando…" : marca.conectado ? "Reemplazar" : "Guardar"}
         </Button>
@@ -228,6 +241,8 @@ function SeccionGoogleAnalyticsAdmin() {
   const queryClient = useQueryClient();
   const [clientId, setClientId] = React.useState("");
   const [clientSecret, setClientSecret] = React.useState("");
+  // El error solo se muestra tras un intento de guardar la app (no mientras se escribe).
+  const [intentado, setIntentado] = React.useState(false);
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_GOOGLE_ANALYTICS,
@@ -256,6 +271,7 @@ function SeccionGoogleAnalyticsAdmin() {
     onSuccess: (res) => {
       toast.success(res.mensaje || "App de Google Analytics guardada.");
       setClientSecret(""); // El secret nunca se conserva en cliente.
+      setIntentado(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_GOOGLE_ANALYTICS });
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -314,7 +330,15 @@ function SeccionGoogleAnalyticsAdmin() {
   }
 
   const ocupadoApp = guardarApp.isPending || desconectar.isPending;
-  const puedeGuardarApp = clientId.trim() !== "" && clientSecret.trim() !== "";
+  const errClientId = clientId.trim() === "" ? "Indica el Client ID." : null;
+  const errClientSecret = clientSecret.trim() === "" ? "Pega el Client Secret." : null;
+  const hayErroresApp = Boolean(errClientId || errClientSecret);
+
+  const onGuardarApp = () => {
+    setIntentado(true);
+    if (hayErroresApp) return;
+    guardarApp.mutate();
+  };
 
   return (
     <SeccionColapsable
@@ -332,9 +356,7 @@ function SeccionGoogleAnalyticsAdmin() {
       {/* App OAuth: client_id (no secreto) + client_secret (write-only). */}
       <div className="space-y-3 rounded-lg border border-border p-3">
         <div className="flex items-center justify-between gap-3">
-          <Label htmlFor="ga-client-id" className="text-sm font-medium">
-            App de Google
-          </Label>
+          <span className="text-sm font-medium">App de Google</span>
           {appConfigurada ? (
             <Badge variant="ok">Configurada</Badge>
           ) : (
@@ -342,10 +364,7 @@ function SeccionGoogleAnalyticsAdmin() {
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="ga-client-id" className="text-xs text-muted-foreground">
-            Client ID
-          </Label>
+        <Campo etiqueta="Client ID" htmlFor="ga-client-id" error={intentado ? errClientId : null}>
           <Input
             id="ga-client-id"
             autoComplete="off"
@@ -353,13 +372,15 @@ function SeccionGoogleAnalyticsAdmin() {
             onChange={(e) => setClientId(e.target.value)}
             placeholder="ID de cliente de la app de Google"
             disabled={ocupadoApp}
+            aria-invalid={(intentado && Boolean(errClientId)) || undefined}
           />
-        </div>
+        </Campo>
 
-        <div className="space-y-2">
-          <Label htmlFor="ga-client-secret" className="text-xs text-muted-foreground">
-            Client Secret
-          </Label>
+        <Campo
+          etiqueta="Client Secret"
+          htmlFor="ga-client-secret"
+          error={intentado ? errClientSecret : null}
+        >
           <Input
             id="ga-client-secret"
             type="password"
@@ -370,14 +391,15 @@ function SeccionGoogleAnalyticsAdmin() {
               appConfigurada ? "•••••••••• (escribe para reemplazar)" : "Pega el secret aquí"
             }
             disabled={ocupadoApp}
+            aria-invalid={(intentado && Boolean(errClientSecret)) || undefined}
           />
-        </div>
+        </Campo>
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
-            onClick={() => guardarApp.mutate()}
-            disabled={ocupadoApp || !puedeGuardarApp}
+            onClick={onGuardarApp}
+            disabled={ocupadoApp}
           >
             {guardarApp.isPending ? (
               <Spinner className="h-4 w-4" />
