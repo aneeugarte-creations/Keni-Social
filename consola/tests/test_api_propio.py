@@ -475,6 +475,46 @@ def test_galeria_propio_sin_marca_vacio(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Etiquetas IA del túnel: se extraen del label y se conservan en el candidato   #
+# --------------------------------------------------------------------------- #
+
+
+def test_etiquetas_de_label_extrae_tags_equipos_y_contexto():
+    label = {
+        "tags": ["celebración", "afición"],
+        "equipos": ["Colombia"],
+        "deporte": "fútbol",
+        "momento": "post-gol",
+        "en_foco": "niño con pintura",
+    }
+    ets = artes._etiquetas_de_label(label)
+    assert "celebración" in ets and "Colombia" in ets and "fútbol" in ets
+    assert "niño con pintura" in ets
+
+
+def test_etiquetas_de_label_tolera_ausente_o_mal_formado():
+    assert artes._etiquetas_de_label(None) == []
+    assert artes._etiquetas_de_label("texto") == []
+    assert artes._etiquetas_de_label({"tags": "no-es-lista"}) == []
+
+
+def test_candidato_propio_conserva_etiquetas_del_label():
+    crudo = {
+        "galeria_id": "g1", "archivo": "k.jpg", "thumb_b64": "x",
+        "nombre": "Colombia", "fase": "in-game", "en_foco": "portero",
+        "label": {"tags": ["atajada"], "equipos": ["Colombia"]},
+    }
+    cand = artes._candidato_propio(crudo)
+    assert "atajada" in cand["etiquetas"]
+    assert "Colombia" in cand["etiquetas"]
+
+
+def test_candidato_propio_sin_label_etiquetas_vacias():
+    cand = artes._candidato_propio({"galeria_id": "g1", "archivo": "k.jpg"})
+    assert cand["etiquetas"] == []
+
+
+# --------------------------------------------------------------------------- #
 # Adjuntar: pide el original por el túnel (de un dispositivo que comparte marca) #
 # --------------------------------------------------------------------------- #
 

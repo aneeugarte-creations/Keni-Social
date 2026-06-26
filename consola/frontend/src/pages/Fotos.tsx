@@ -87,7 +87,7 @@ function deCandidata(c: CandidataStock): FotoVista {
     titulo: c.titulo || c.archivo || "Foto",
     thumb: c.thumb || c.url,
     url: c.url || c.thumb,
-    etiquetas: [],
+    etiquetas: c.etiquetas ?? [],
     galeria_id: c.galeria_id,
     archivo: c.archivo,
     dispositivo: c.dispositivo,
@@ -511,6 +511,9 @@ export default function Fotos() {
         archivo: foto.archivo!,
         dispositivo: foto.dispositivo,
         marca,
+        // Conserva el título y las etiquetas IA que ya trae keni-fotos.
+        titulo: foto.titulo,
+        etiquetas: foto.etiquetas,
       }),
     onSuccess: () => {
       toast.success("Foto guardada en Fotografías.");

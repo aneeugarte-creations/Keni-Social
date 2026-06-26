@@ -140,6 +140,8 @@ export interface CandidataStock {
   archivo?: string;
   /** Dispositivo conectado que sirvió la candidata. */
   dispositivo?: string;
+  /** Etiquetas IA (de keni-fotos): solo la fuente «propio» las trae; se conservan al guardar. */
+  etiquetas?: string[];
 }
 
 /** Respuesta de `GET /api/artes/stock/buscar`. */

@@ -286,8 +286,13 @@ export function VisorFoto({
             )}
           </div>
 
-          {/* En modo ráfaga sin más frames: el disparo fue único. */}
-          {modoRafaga && !rafaga.isLoading && frames.length <= 1 && (
+          {/* Modo ráfaga: distinguir «no se pudo cargar» (0 frames / error) de «disparo único» (1). */}
+          {modoRafaga && !rafaga.isLoading && (rafaga.isError || frames.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              No se pudo cargar la ráfaga. Reintenta en un momento.
+            </p>
+          )}
+          {modoRafaga && !rafaga.isLoading && frames.length === 1 && (
             <p className="text-xs text-muted-foreground">
               Disparo único: no hay más fotos en esta ráfaga.
             </p>

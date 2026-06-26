@@ -687,6 +687,35 @@ def _proveedor_propio(*, disponible: bool, dispositivos: int, motivo: str = "") 
     }
 
 
+def _etiquetas_de_label(label: object) -> list[str]:
+    """Etiquetas BUSCABLES a partir del label IA de keni-fotos: tags + equipos + deporte/momento/en_foco.
+
+    Son las que se conservan al GUARDAR una foto del túnel en la biblioteca, para que aparezca en la
+    búsqueda por las mismas palabras que keni-fotos ya le puso. Normaliza (recorta, dedup
+    case-insensitive) y trocea a 12. Tolera un label ausente o de otra forma (devuelve []).
+    """
+    if not isinstance(label, dict):
+        return []
+    out: list[str] = []
+    vistas: set[str] = set()
+
+    def _add(valor: object) -> None:
+        if isinstance(valor, str):
+            et = valor.strip()
+            if et and et.lower() not in vistas and len(out) < 12:
+                out.append(et)
+                vistas.add(et.lower())
+
+    for clave in ("tags", "equipos"):
+        valor = label.get(clave)
+        if isinstance(valor, list):
+            for item in valor:
+                _add(item)
+    for clave in ("deporte", "momento", "en_foco"):
+        _add(label.get(clave))
+    return out
+
+
 def _candidato_propio(crudo: dict) -> dict:
     """Convierte un candidato del túnel (forma del contrato §1) a la forma de candidato de stock §2."""
     thumb = crudo.get("thumb_b64") or ""
@@ -703,6 +732,8 @@ def _candidato_propio(crudo: dict) -> dict:
         "licencia": "Propio",
         "credito_url": "",
         "titulo": " · ".join(partes),
+        # Etiquetas IA (de keni-fotos): se conservan al guardar para que la foto sea buscable por ellas.
+        "etiquetas": _etiquetas_de_label(crudo.get("label")),
         "galeria_id": crudo.get("galeria_id") or "",
         "archivo": crudo.get("archivo") or "",
         "dispositivo": crudo.get("dispositivo") or "",
