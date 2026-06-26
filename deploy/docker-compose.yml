@@ -1204,12 +1204,13 @@ services:
       KENI_KEEPER_CI_WATCH: /keeper/ci_watch.py
       KENI_KEEPER_REPO_ID: ${KENI_KEEPER_REPO_ID:-1}
       # Fuente del estado del CI: la API REST de Woodpecker (desacoplado del backend; Woodpecker
-      # corre sobre Postgres). ci_watch.py consulta pipelines/steps/logs por HTTP. Para ACTIVAR
-      # la vigilancia basta pegar un PAT de un usuario de Woodpecker (su UI -> Settings -> CLI and
-      # API) en KENI_WOODPECKER_API_TOKEN del .env; sin token, las llamadas dan 401 y el keeper no
-      # ve nada (inocuo: ademas esta DORMIDO por KENI_KEEPER_CI=0).
+      # corre sobre Postgres). ci_watch.py consulta pipelines/steps/logs por HTTP. El PAT se lee de
+      # un FICHERO (volumen `keeper-secrets`, ro) que el guardian-ui escribe: asi se pone/ROTA el
+      # token desde el panel (avatar -> Sistema/Guardián), sin tocar el .env. ci_watch lo relee en
+      # cada ciclo, asi que rotar = sobrescribir el fichero. Sin token, las llamadas dan 401 y el
+      # keeper no ve nada (inocuo; ademas DORMIDO por KENI_KEEPER_CI=0).
       KENI_WOODPECKER_API: ${KENI_WOODPECKER_API:-https://ci-social.kenitech.io}
-      KENI_WOODPECKER_API_TOKEN: ${KENI_WOODPECKER_API_TOKEN:-}
+      KENI_WOODPECKER_API_TOKEN_FILE: /secrets/woodpecker_token
       # Flag de deploy (no actuar durante un deploy) e identidad de los commits del keeper.
       KENI_GUARDIAN_FLAG_DEPLOY: /estado/desplegando
       KENI_GIT_AUTHOR_NAME: ${KENI_GIT_AUTHOR_NAME:-keni incident-keeper}
@@ -1221,6 +1222,7 @@ services:
       - keni-repo:/repo                # clon git (worktrees del fix)
       - ./incident-keeper:/keeper:ro   # ROL.md + keeper.sh + ci_watch.py (bind-mount; sin imagen propia)
       - ./estado:/estado               # rw: lee el trigger del guardian y lo archiva al procesarlo
+      - keeper-secrets:/secrets:ro     # PAT de Woodpecker (lo escribe guardian-ui; ro aqui)
     secrets:
       - anthropic_api_key
       - mcp_bearer
@@ -1257,9 +1259,11 @@ services:
     command: ["python", "-m", "uvicorn", "--app-dir", "/guardian-ui", "app:app", "--host", "0.0.0.0", "--port", "8080"]
     environment:
       KENI_KEEPER_DATA: /data/keeper
+      KENI_WOODPECKER_TOKEN_FILE: /secrets/woodpecker_token   # donde guarda el PAT que pega el humano
     volumes:
       - keni-data:/data:ro              # SOLO lectura del rastro del keeper
       - ./guardian-ui:/guardian-ui:ro   # app.py + index.html (bind-mount; sin imagen propia)
+      - keeper-secrets:/secrets         # rw: el panel escribe/ROTA el PAT de Woodpecker aqui
     networks:
       - edge                            # lo enruta Traefik; NO data/internal (no usa db ni egress)
     labels:
@@ -1427,6 +1431,9 @@ volumes:
   # en /repo crean worktrees+ramas y promueven a main tras checkpoint humano. Se siembra una vez
   # (clone si está vacío); ver deploy.sh. uid 10001 (keni) debe poder escribirlo (chown en deploy.sh).
   keni-repo:
+  # PAT de Woodpecker para el keeper: lo escribe guardian-ui (rw), lo lee incident-keeper (ro).
+  # Volumen propio y aislado (no toca keni-data con las credenciales de claude/gh).
+  keeper-secrets:
   pgdata:
   garage-meta:
   garage-data:

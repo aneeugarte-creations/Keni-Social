@@ -47,6 +47,7 @@
 <header>
   <h1>Guardián <small>· incident-keeper</small></h1>
   <div class="vig" id="vig">…</div>
+  <button id="btok" class="pill off" style="cursor:pointer;border:none;font:inherit;margin-left:14px" title="Token de Woodpecker (poner / rotar)">token</button>
 </header>
 <main>
   <div id="lista"></div>
@@ -135,8 +136,28 @@ async function refrescarLista() {
     if (sel === null && d.sesiones && d.sesiones.length) seleccionar(d.sesiones[0].id);
   } catch {}
 }
+async function refrescarToken() {
+  try {
+    const r = await fetch("/guardian/api/token"); if (!r.ok) return;
+    const d = await r.json(); const b = document.getElementById("btok");
+    b.className = "pill " + (d.set ? "on" : "off");
+    b.innerHTML = `<span class="dot" style="background:${d.set?'var(--verde)':'var(--ambar)'}"></span>token ${d.set?'✓':'—'}`;
+  } catch {}
+}
+document.getElementById("btok").onclick = async () => {
+  const t = prompt("PAT de Woodpecker para el keeper (poner / rotar).\nGenéralo en ci-social.kenitech.io → avatar → Settings → CLI and API.\nDeja vacío para cancelar:");
+  if (!t || !t.trim()) return;
+  try {
+    const r = await fetch("/guardian/api/token", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token: t.trim()})});
+    if (r.ok) { alert("Token guardado. El keeper lo tomará en el próximo ciclo."); refrescarToken(); }
+    else { const e = await r.json().catch(()=>({})); alert("Error: " + (e.error || r.status)); }
+  } catch { alert("Error de red al guardar el token."); }
+};
+refrescarToken();
+
 refrescarLista();
 setInterval(refrescarLista, 2500);
+setInterval(refrescarToken, 15000);
 </script>
 </body>
 </html>

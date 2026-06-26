@@ -21,6 +21,10 @@ from starlette.routing import Route
 
 DATA = Path(os.environ.get("KENI_KEEPER_DATA", "/data/keeper"))
 AQUI = Path(__file__).resolve().parent
+# Fichero del PAT de Woodpecker que usa el keeper (KENI_WOODPECKER_API_TOKEN_FILE). Volumen
+# compartido `keeper-secrets`: el guardian-ui lo escribe (rw), el keeper lo lee (ro) en cada ciclo.
+# Asi el token se pone/ROTA desde este panel (tras el basicauth de Traefik), sin tocar el .env.
+TOKEN = Path(os.environ.get("KENI_WOODPECKER_TOKEN_FILE", "/secrets/woodpecker_token"))
 
 # Tipos de bloque del stream-json de claude -> etiqueta para la UI.
 _TIPO = {"text": "texto", "thinking": "razonamiento", "tool_use": "accion"}
@@ -110,6 +114,34 @@ async def sesion(request: Request) -> JSONResponse:
     return JSONResponse({"meta": meta, "transcript": _transcript(DATA / f"{sid}.jsonl")})
 
 
+def _token_puesto() -> bool:
+    try:
+        return bool(TOKEN.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
+async def token(request: Request) -> JSONResponse:
+    """GET: ¿hay token? (nunca devuelve el valor). POST {token}: lo guarda/ROTA."""
+    if request.method == "POST":
+        try:
+            cuerpo = await request.json()
+        except (ValueError, TypeError):
+            return JSONResponse({"error": "json inválido"}, status_code=400)
+        tok = (cuerpo.get("token") or "").strip() if isinstance(cuerpo, dict) else ""
+        if not tok or len(tok) > 4096:
+            return JSONResponse({"error": "token vacío o demasiado largo"}, status_code=400)
+        try:
+            TOKEN.parent.mkdir(parents=True, exist_ok=True)
+            tmp = TOKEN.with_name(TOKEN.name + ".tmp")
+            tmp.write_text(tok, encoding="utf-8")
+            os.chmod(tmp, 0o644)  # volumen aislado; el keeper (otro uid) debe poder leerlo
+            os.replace(tmp, TOKEN)
+        except OSError as e:
+            return JSONResponse({"error": f"no se pudo guardar: {e}"}, status_code=500)
+    return JSONResponse({"set": _token_puesto()})
+
+
 async def indice(_request: Request) -> FileResponse:
     return FileResponse(AQUI / "index.html")
 
@@ -122,5 +154,6 @@ app = Starlette(
         Route("/guardian/", indice),
         Route("/guardian/api/sesiones", sesiones),
         Route("/guardian/api/sesiones/{id}", sesion),
+        Route("/guardian/api/token", token, methods=["GET", "POST"]),
     ]
 )
