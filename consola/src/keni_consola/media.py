@@ -13,7 +13,8 @@ SEGURIDAD:
     del cliente. Asi un nombre malicioso (`../../etc/passwd`) jamas se usa.
   - En disco, `resolver_media` valida ANTI-TRAVERSAL que el archivo caiga DENTRO del dir; en
     S3 el almacen rechaza cualquier nombre con separadores (defensa en profundidad).
-  - Limite de tamano para subidas de imagen (15 MB) y solo mimes de imagen.
+  - Las subidas de imagen no se limitan por peso (fotos de agencia ~20 MB): las grandes se
+    recomprimen a un objetivo razonable antes de ir al almacen. Solo se aceptan mimes de imagen.
 
 GENERACION POR IA (inyectable / mockeable):
   - `proveedor_configurado()` decide si HAY proveedor (clave presente). Si no, el
@@ -78,8 +79,16 @@ _MIME_A_EXT: dict[str, str] = {
     "image/webp": "webp",
 }
 
-# Limite de tamano de una imagen subida o generada (bytes).
+# Limite de tamano de una imagen GENERADA/compuesta por nosotros (bytes). Las subidas del equipo
+# NO usan este tope: se admiten grandes y se recomprimen (ver `guardar_subida`).
 LIMITE_IMAGEN = 15 * 1024 * 1024  # 15 MB
+
+# SUBIDAS del equipo: no se rechazan por pesar (fotos de agencia tipo AFP rondan los 20 MB). Si una
+# subida supera `OBJETIVO_COMPRESION_IMAGEN` se RECOMPRIME a ese objetivo antes de ir al almacen
+# (S3); `LIMITE_SUBIDA_IMAGEN` es solo un techo anti-OOM (el archivo se bufferea en memoria), no un
+# limite de producto: holgado para que cualquier foto real pase.
+OBJETIVO_COMPRESION_IMAGEN = 15 * 1024 * 1024  # 15 MB
+LIMITE_SUBIDA_IMAGEN = 64 * 1024 * 1024  # 64 MB
 
 # VIDEO (piezas de formato video): mimes aceptados -> extension canonica del archivo en el
 # almacen. Misma lista que `transcripcion._MIME_A_EXT` (la parte de video; reusamos el contrato
@@ -422,6 +431,57 @@ def _guardar_contenido(datos: bytes, *, ext: str, categoria: str, mime: str) -> 
     return clave
 
 
+def _recomprimir_a_objetivo(datos: bytes, ext: str, objetivo: int) -> tuple[bytes, str]:
+    """Recomprime una imagen pesada a <= `objetivo` bytes como JPEG; devuelve `(bytes, ext)`.
+
+    Mejor esfuerzo, sin rechazar nunca: baja primero la CALIDAD y, si no basta, el TAMAÑO (lado
+    largo) en pasos, con un piso de 1080 px (lado largo de las redes). Aplana la transparencia
+    sobre blanco (JPEG no la soporta). Devuelve `(bytes, "jpg")` con la mejor versión lograda.
+    Si la imagen ya cabe, está animada (GIF/WEBP) o PIL no la puede abrir, devuelve los bytes y
+    la extensión SIN tocar: una subida nunca falla por no poder comprimirla.
+    """
+    if len(datos) <= objetivo:
+        return datos, ext
+    from PIL import Image, ImageOps
+
+    try:
+        img = Image.open(io.BytesIO(datos))
+        if getattr(img, "is_animated", False):
+            return datos, ext  # no aplanamos una animación a un JPEG estático
+        img = ImageOps.exif_transpose(img)  # respeta la orientación EXIF antes de re-codificar
+        img.load()
+    except Exception:  # noqa: BLE001 -- ilegible para PIL: se guarda tal cual, no rompemos la subida
+        return datos, ext
+
+    if img.mode in ("RGBA", "LA", "P"):
+        rgba = img.convert("RGBA")
+        fondo = Image.new("RGB", rgba.size, (255, 255, 255))
+        fondo.paste(rgba, mask=rgba.split()[-1])
+        img = fondo
+    else:
+        img = img.convert("RGB")
+
+    def _codificar(im, calidad: int) -> bytes:
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=calidad, optimize=True, progressive=True)
+        return buf.getvalue()
+
+    piso = 1080
+    mejor = _codificar(img, 85)
+    while True:
+        for calidad in range(85, 39, -5):
+            data = _codificar(img, calidad)
+            if len(data) < len(mejor):
+                mejor = data
+            if len(data) <= objetivo:
+                return data, "jpg"
+        if max(img.size) <= piso:
+            return mejor, "jpg"  # ya en el piso: la mejor versión lograda
+        img = img.resize(
+            (max(1, round(img.size[0] * 0.85)), max(1, round(img.size[1] * 0.85))), Image.LANCZOS
+        )
+
+
 async def guardar_subida(
     archivo, *, content_type: str | None = None, categoria: str = "fotos"
 ) -> str:  # noqa: ANN001
@@ -432,12 +492,13 @@ async def guardar_subida(
     - DEDUP: la key es CONTENT-ADDRESSED (`<categoria>/<sha256>.<ext>`), asi subir la misma foto
       varias veces guarda UN solo objeto. La `categoria` (carpeta) la fija el llamante segun el
       contexto de subida (def `fotos`; el editor de plantillas sube como `plantillas`).
-    - Lee en trozos MIDIENDO el tamano; si supera `LIMITE_IMAGEN`, aborta antes de
-      escribir nada. Se bufferea en memoria (acotado por el limite de 15 MB) para tener
-      UN solo camino de guardado valido en disco y en S3 (S3 no escribe en streaming).
+    - NO se limita por peso: una foto de agencia (~20 MB) se admite. Si supera
+      `OBJETIVO_COMPRESION_IMAGEN` se RECOMPRIME (JPEG) a ese objetivo antes de guardarla. Lee en
+      trozos midiendo el tamano y se bufferea en memoria; el unico tope es `LIMITE_SUBIDA_IMAGEN`
+      (techo anti-OOM, no de producto), holgado para que cualquier foto real pase.
 
     Devuelve la KEY del objeto (con su carpeta). Lanza `MediaError` (en espanol) ante
-    mime no permitido, archivo vacio o demasiado grande.
+    mime no permitido, archivo vacio o un peso absurdo (mayor que el techo anti-OOM).
     """
     ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
     ext = _ext_desde_content_type(ct) or _ext_desde_nombre(getattr(archivo, "filename", None))
@@ -452,9 +513,9 @@ async def guardar_subida(
             if not trozo:
                 break
             total += len(trozo)
-            if total > LIMITE_IMAGEN:
+            if total > LIMITE_SUBIDA_IMAGEN:
                 raise MediaError(
-                    "La imagen es demasiado grande (máximo 15 MB); sube una más pequeña."
+                    "La imagen es enorme (más de 64 MB); sube una versión más ligera."
                 )
             trozos.append(trozo)
     except MediaError:
@@ -464,6 +525,10 @@ async def guardar_subida(
     if total == 0:
         raise MediaError("La imagen está vacía.")
     datos = b"".join(trozos)
+    # Subidas pesadas (fotos de agencia ~20 MB): no se rechazan, se recomprimen a un objetivo
+    # razonable antes de ir al almacen. Una imagen que ya cabe (o que PIL no puede recomprimir)
+    # pasa intacta.
+    datos, ext = _recomprimir_a_objetivo(datos, ext, OBJETIVO_COMPRESION_IMAGEN)
     try:
         return _guardar_contenido(datos, ext=ext, categoria=categoria, mime=_EXT_A_MIME[ext])
     except MediaError:
